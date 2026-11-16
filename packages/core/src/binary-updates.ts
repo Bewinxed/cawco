@@ -356,7 +356,7 @@ const HOLD_WORDS: Record<RestartHoldReason, (n: number) => string> = {
 export const holdPhrases = (holds: readonly RestartHold[]): string[] =>
   holds.map(({ reason, ids }) =>
     (
-      (HOLD_WORDS as Partial<typeof HOLD_WORDS>)[reason] ??
+      HOLD_WORDS[reason] ??
       ((n: number) => counted(n, "piece of work", "pieces of work"))
     )(ids.length)
   );

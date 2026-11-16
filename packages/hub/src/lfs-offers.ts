@@ -24,16 +24,13 @@ import {
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { LfsOfferRow } from "./db/lfs-offers";
+import type { MachineCall } from "./machine-answers";
 
 const MB = 1024 * 1024;
 
 export interface LfsOffersDeps {
   /** A machine-scoped daemon function, answered or thrown in the machine's own words. */
-  readonly call: (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ) => Promise<unknown>;
+  readonly call: MachineCall;
   readonly db: Pick<DbShape, "lfsOffers" | "project">;
   /** A note to the person in the project's conversation, waking no one (caw.ts `notice`). */
   readonly notice: (projectId: string, note: ProjectNote) => void;
@@ -75,10 +72,7 @@ export const createLfsOffers = ({ call, db, notice }: LfsOffersDeps) => {
     // The machine's own words are the refusal the card shows.
     let made: PlaceLfsMade;
     try {
-      made = (await call(row.machineId, CONTROL_PLACE_LFS, [
-        row.root,
-        row.rows,
-      ])) as PlaceLfsMade;
+      made = await call(row.machineId, CONTROL_PLACE_LFS, [row.root, row.rows]);
     } catch (error) {
       return problem(409, {
         code: "lfs-offer-track-refused",

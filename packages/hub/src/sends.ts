@@ -10,6 +10,7 @@ import {
   attachedPictureLine,
   pictureName,
 } from "@cawco/core/attachments";
+import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { FramePayload } from "@cawco/core/frames";
 import { byPerson } from "@cawco/core/harness";
@@ -45,10 +46,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { SEND_STATES } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
-import {
-  transcriptWindowOf,
-  type WindowAsk,
-} from "@cawco/core/transcript-types";
+import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { noticeWords } from "@cawco/core/words/notices";
 import { ElysiaStatus, problem } from "elysia";
 import type { PersonsSend } from "./caw";
@@ -61,7 +59,7 @@ import type { SendHold, StoredSendRefusal } from "./db/stored-types";
 import type { Unstored } from "./hub-shapes";
 import { isKeepAlive } from "./keep-alive";
 import { sessionLabel } from "./labels";
-import type { Unanswered } from "./machine-answers";
+import type { CallAnswer, ControlAnswer, Unanswered } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages, mediaNameOf } from "./media";
 import { talksWithPerson } from "./roles";
@@ -846,7 +844,7 @@ export const createSends = (ctx: SendsContext) => {
    */
   const settleWindows = async (
     row: InstanceRow & { sessionId: string }
-  ): Promise<Awaited<ReturnType<typeof ctx.readAgent>>> => {
+  ): Promise<Bounded<CallAnswer<SessionMessage[]>>> => {
     const unread = ctx.db.sendsIn(row.id, ["pending"]);
     const since =
       unread.length > 0
@@ -856,36 +854,31 @@ export const createSends = (ctx: SendsContext) => {
     const windows: SessionMessage[][] = [];
     let ask: WindowAsk = { end: "newest", limit: STORED_TAIL };
     for (;;) {
-      const answer = await ctx.readAgent(
+      const answer: Bounded<
+        ControlAnswer<typeof CONTROL_READ_TRANSCRIPT_WINDOW>
+      > = await ctx.readAgent(
         row.machineId,
         CONTROL_READ_TRANSCRIPT_WINDOW,
         [row.sessionId, { dir: row.cwd || undefined, window: ask }],
         READ_TIMEOUT_MS,
         row.harness
       );
-      if (answer.kind !== "answered" || !answer.value.ok) {
+      if (answer.kind !== "answered") {
         return answer;
       }
-      // An answer that is no window is no read of the store: never taken as
-      // a transcript that holds none of the sends (core `transcriptWindowOf`).
-      const read = transcriptWindowOf(answer.value.result);
-      if (!read) {
-        return {
-          ...answer,
-          value: {
-            ...answer.value,
-            ok: false,
-            error: `${ctx.machineName(row.machineId)} answered the read of this conversation with no window of it`,
-          },
-        };
+      // An answer that is no window (not its type) is no read of the store:
+      // never taken as a transcript that holds none of the sends.
+      if (!answer.value.ok) {
+        return { kind: "answered", value: answer.value };
       }
+      const read: TranscriptWindow = answer.value.result;
       const { entries, older } = read;
       windows.unshift(entries);
       const first = entries.find((entry) => entry.timestamp)?.timestamp;
       if (older === null || !first || Date.parse(first) < since) {
         return {
-          ...answer,
-          value: { ...answer.value, result: windows.flat() },
+          kind: "answered",
+          value: { ok: true, result: windows.flat() },
         };
       }
       ask = { before: older, limit: HISTORY_WINDOW };
@@ -953,7 +946,7 @@ export const createSends = (ctx: SendsContext) => {
     // and the session's anchor seeded when the hub has heard nothing of it
     // since it started — so a send this fails goes after what the session
     // last said, not at the conversation's start.
-    const entries = answer.value.result as SessionMessage[];
+    const entries = answer.value.result;
     const { last } = linkEntries(instanceId, entries);
     if (last && !anchors.has(instanceId)) {
       anchors.set(instanceId, last);

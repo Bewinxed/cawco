@@ -443,11 +443,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
             answer.value.error ?? `${ctx.machineName(machineId)} gave no reason`
           );
         }
-        return new Map(
-          Object.entries(
-            answer.value.result as Record<string, CarrySessionOutcome>
-          )
-        );
+        return new Map(Object.entries(answer.value.result));
       default:
         throw unreachable(answer);
     }
@@ -526,8 +522,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
             default:
               throw unreachable(answer);
           }
-          const info = answer.value.result as
-            { cwd?: string } | null | undefined;
+          const info = answer.value.result;
           ctx.db.settleLaunchDir(
             row.id,
             info?.cwd ? ctx.reportedMachinePath(machineId, info.cwd) : undefined

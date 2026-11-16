@@ -1,8 +1,4 @@
-import type {
-  HomeCredential,
-  HomeLogin,
-  HomeStore,
-} from "@cawco/core/accounts";
+import type { HomeLogin, HomeStore } from "@cawco/core/accounts";
 import {
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
@@ -100,16 +96,14 @@ export const accountHomeLoginRoutes = (
               }
               return silentProblem(awayWords(query.machineId, claude));
             case "answered":
-              home = claude.value.ok
-                ? (claude.value.result as HomeLogin)
-                : null;
+              home = claude.value.ok ? claude.value.result : null;
               break;
             default:
               throw unreachable(claude);
           }
           return {
             claude: home,
-            credentials: others.value.result as HomeCredential[],
+            credentials: others.value.result,
           };
         }
       )

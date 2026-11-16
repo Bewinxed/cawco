@@ -130,6 +130,21 @@ export interface PreviewElement {
   text: string;
   url: string;
 }
+/** What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`). {@link PREVIEW_WEIGHT}'s answer. */
+export interface FolderWeight {
+  bytes: number;
+  /** `<img>` on the start page whose file is wider than `DESK_CAPTURE_WIDTH`. */
+  captures: number;
+  files: number;
+  js: number;
+  wasm: number;
+}
+
+/** What {@link PREVIEW_START} answers: the port the preview's server listens on, on its machine. */
+export interface PreviewStarted {
+  port: number;
+}
+
 export const PREVIEW_START = "previewStart";
 export const PREVIEW_STOP = "previewStop";
 /** The daemon's control method that weighs a folder preview's folder on its machine (core preview-proxy `folderWeight`). */

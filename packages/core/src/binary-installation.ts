@@ -285,7 +285,7 @@ async function removeFoldersBut(
   keep: ReadonlySet<string>
 ): Promise<void> {
   const present = await readdir(dir, { withFileTypes: true }).catch(
-    () => [] as Dirent[]
+    (): Dirent[] => []
   );
   await Promise.all(
     present

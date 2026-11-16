@@ -29,15 +29,13 @@ import type { ProjectSettingChange } from "@cawco/core/permission-presentation";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import {
-  CONTROL_PLACE_PUSH,
-  type PlacePush,
-} from "@cawco/core/workspace/controls";
+import { CONTROL_PLACE_PUSH } from "@cawco/core/workspace/controls";
 import { startedPath } from "@cawco/core/workspace-needs";
 import { ElysiaStatus, problem } from "elysia";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { PlaceRow, ProjectRow } from "./db/projects";
+import type { MachineCall } from "./machine-answers";
 import type { PlaceRepos } from "./place-repo";
 
 /** GitHub's rule for a repository's name. */
@@ -53,11 +51,7 @@ export interface RepoPublishDeps {
   /** The hub's bare repository of one of a project's repositories (git-remote.ts `bareRepoPath`). */
   readonly bare: (key: HubRepoKey) => string;
   /** A machine-scoped daemon function, answered or thrown in the machine's words. */
-  readonly call: (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ) => Promise<unknown>;
+  readonly call: MachineCall;
   readonly connections: Pick<Connections, "githubClient" | "list">;
   readonly db: Pick<DbShape, "projectLinkPublishedFrom">;
   readonly places: Pick<PlaceRepos, "ensure">;
@@ -198,11 +192,11 @@ export const createRepoPublish = ({
       machineId: place.machineId,
       path: place.path,
     });
-    const tree = (await call(place.machineId, CONTROL_PLACE_PUSH, [
+    const tree = await call(place.machineId, CONTROL_PLACE_PUSH, [
       place.path,
       project.id,
       true,
-    ])) as PlacePush;
+    ]);
     const published = unpublished(project, tree.hub);
     if (published) {
       return published;
@@ -294,11 +288,11 @@ export const createRepoPublish = ({
     if (place instanceof ElysiaStatus) {
       return place;
     }
-    const pushed = (await call(place.machineId, CONTROL_PLACE_PUSH, [
+    const pushed = await call(place.machineId, CONTROL_PLACE_PUSH, [
       place.path,
       project.id,
       false,
-    ])) as PlacePush;
+    ]);
     const { hub } = pushed;
     if (!hub) {
       return problem(502, {

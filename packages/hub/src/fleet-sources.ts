@@ -1,4 +1,5 @@
 import type { Bounded } from "@cawco/core/bounded";
+import type { FsOp } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
 import type {
   FleetPlugin,
@@ -16,12 +17,7 @@ import type { FleetItems } from "@cawco/core/fleet-items";
 import { fleetItemsOf } from "@cawco/core/fleet-items";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { FleetHook } from "@cawco/core/hooks";
-import type {
-  ControlPayload,
-  Envelope,
-  FsMedia,
-  FsPayload,
-} from "@cawco/core/protocol";
+import type { ControlPayload, Envelope, FsPayload } from "@cawco/core/protocol";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
 import { CONTROL_MCP_FLEET_CHANGED } from "@cawco/core/session/controls";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
@@ -34,7 +30,7 @@ import { refreshOf, skillVersion } from "./fleet-versions";
 import type { HubContext } from "./hub-context";
 import { hubHttpUrl } from "./hub-self";
 import type { FetchedCopy } from "./hub-shapes";
-import type { ControlResult } from "./machine-answers";
+import type { CallAnswer, FsAnswer } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { ResolvedPlugin } from "./plugins";
 import {
@@ -58,14 +54,12 @@ import type { MachineSocket } from "./wire-socket";
 export const FLEET_MCP_TAKE_MS = 150_000;
 
 /** A session's answer to a fleet MCP take or heal, as connect asks read it: its servers, or none. */
-export const tookOf = (answer: Bounded<ControlResult>): FleetMcpTook => {
-  const servers =
-    answer.kind === "answered" && answer.value.ok
-      ? (answer.value.result as Partial<FleetMcpTakeAnswer> | undefined)
-          ?.servers
-      : undefined;
-  return servers ? { kind: "taken", servers } : { kind: "unanswered" };
-};
+export const tookOf = (
+  answer: Bounded<CallAnswer<FleetMcpTakeAnswer>>
+): FleetMcpTook =>
+  answer.kind === "answered" && answer.value.ok
+    ? { kind: "taken", servers: answer.value.result.servers }
+    : { kind: "unanswered" };
 /** How often the hub reads every skill's and plugin's source for an update. */
 export const UPDATE_CHECK_MS = 6 * HOUR_MS;
 
@@ -78,6 +72,7 @@ type SkillFetch = "changed" | "same" | "failed";
 export type FleetSourcesContext = Pick<
   HubContext,
   | "asRead"
+  | "awaitFs"
   | "awaitReply"
   | "callAgent"
   | "connectAsks"
@@ -357,14 +352,14 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * same `waiting` map routes the reply and no dashboard is broadcast a write
    * it never asked for.
    */
-  const callFs = (
+  const callFs = <O extends FsOp>(
     machineId: string,
     agent: MachineSocket,
-    op: Omit<FsPayload, "requestId">
-  ): Promise<Bounded<ControlResult>> => {
+    op: Omit<FsPayload, "requestId" | "op"> & { op: O }
+  ): Promise<Bounded<FsAnswer<O>>> => {
     const requestId = crypto.randomUUID();
     const payload: FsPayload = { requestId, ...op };
-    return ctx.awaitReply(machineId, requestId, READ_TIMEOUT_MS, () =>
+    return ctx.awaitFs(machineId, op.op, requestId, READ_TIMEOUT_MS, () =>
       ctx.sendAnswerable(agent, {
         verb: "fs",
         machineId,
@@ -411,7 +406,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       default:
         throw unreachable(answer);
     }
-    const { base64, mediaType } = answer.value.result as FsMedia;
+    const { base64, mediaType } = answer.value.result;
     // Copied into a fresh ArrayBuffer-backed view: a Buffer's `ArrayBufferLike`
     // backing is not what `Response` and `Blob` accept as a body.
     const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
@@ -555,14 +550,16 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   };
 
   /**
-   * The skill and plugin fetches running at the hub, by `skill:<name>` and
-   * `plugin:<id>`. A fetch never runs inside the request that asked for it: a
+   * The skill fetches running at the hub, by `skill:<name>` (the plugins'
+   * by `plugin:<id>`, {@link pluginFetches}). A fetch never runs inside the request that asked for it: a
    * large repo's download outlasts any HTTP idle timeout, so the request
    * answers with the row marked `fetching` and the outcome reaches every
    * dashboard as a `fleet.fetch` frame. A second ask for a row already being
    * fetched joins the fetch under way.
    */
-  const fetches = new Map<string, Promise<unknown>>();
+  const skillFetches = new Map<string, Promise<SkillFetch | undefined>>();
+  /** The plugin fetches running at the hub, as {@link skillFetches}: each resolves with whether a fleet copy changed. */
+  const pluginFetches = new Map<string, Promise<boolean>>();
   /** What an ambiguous source's last fetch could have meant, by skill name. */
   const skillChoices = new Map<string, string[]>();
 
@@ -571,13 +568,13 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     const choices = skillChoices.get(row.name);
     return {
       ...row,
-      ...(fetches.has(`skill:${row.name}`) ? { fetching: true } : {}),
+      ...(skillFetches.has(`skill:${row.name}`) ? { fetching: true } : {}),
       ...(choices ? { choices } : {}),
     };
   };
   /** A plugin row as the dashboard reads it: the stored row, and its fetch. */
   const pluginRow = (row: FleetPlugin): FleetPlugin =>
-    fetches.has(`plugin:${row.id}`) ? { ...row, fetching: true } : row;
+    pluginFetches.has(`plugin:${row.id}`) ? { ...row, fetching: true } : row;
 
   const announceFetch = (news: FetchNews): void => {
     ctx.registry.broadcast({
@@ -659,9 +656,9 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     source: string
   ): Promise<SkillFetch | undefined> => {
     const key = `skill:${name}`;
-    const running = fetches.get(key);
+    const running = skillFetches.get(key);
     if (running !== undefined) {
-      return running as Promise<SkillFetch | undefined>;
+      return running;
     }
     skillChoices.delete(name);
     const work = (async (): Promise<SkillFetch | undefined> => {
@@ -709,10 +706,10 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
         );
       })
       .finally(() => {
-        fetches.delete(key);
+        skillFetches.delete(key);
         announceSkill(name, source);
       });
-    fetches.set(key, work);
+    skillFetches.set(key, work);
     announceSkill(name, source);
     return work;
   };
@@ -724,10 +721,10 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * came to files what its source holds now.
    */
   const fetchPlugins = async (ids: readonly string[]): Promise<boolean> => {
-    const fresh = ids.filter((id) => !fetches.has(`plugin:${id}`));
+    const fresh = ids.filter((id) => !pluginFetches.has(`plugin:${id}`));
     const joined = ids
-      .filter((id) => fetches.has(`plugin:${id}`))
-      .map((id) => fetches.get(`plugin:${id}`));
+      .filter((id) => pluginFetches.has(`plugin:${id}`))
+      .map((id) => pluginFetches.get(`plugin:${id}`));
     const announce = (id: string): void => {
       const row = ctx.db.listPlugins().find((plugin) => plugin.id === id);
       announceFetch(
@@ -764,12 +761,12 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
         return false;
       });
     for (const id of fresh) {
-      fetches.set(`plugin:${id}`, work);
+      pluginFetches.set(`plugin:${id}`, work);
       announce(id);
     }
     const changed = await work;
     for (const id of fresh) {
-      fetches.delete(`plugin:${id}`);
+      pluginFetches.delete(`plugin:${id}`);
       announce(id);
     }
     await Promise.all(joined);
@@ -1031,7 +1028,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       if (ctx.lifetime.closed()) {
         return;
       }
-      if (fetches.has(`skill:${row.name}`)) {
+      if (skillFetches.has(`skill:${row.name}`)) {
         continue;
       }
       if (!watched({ skill: row.name })) {
@@ -1065,7 +1062,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   const pluginsByMarketplace = (): Map<string, string[]> => {
     const grouped = new Map<string, string[]>();
     for (const { id } of ctx.db.listPlugins()) {
-      if (!fetches.has(`plugin:${id}`)) {
+      if (!pluginFetches.has(`plugin:${id}`)) {
         const marketplace = id.split("@")[1] ?? "";
         grouped.set(marketplace, [...(grouped.get(marketplace) ?? []), id]);
       }

@@ -96,12 +96,11 @@ export const enforceRowSessionKey = (
   if (!row.sessionId) {
     return `instance ${row.id} has no session key on record; refusing to resume it under "${asked}"`;
   }
-  if (asked !== row.sessionId) {
+  if (asked !== row.sessionId && payload.resume) {
     console.warn(
       `[hub] spawn ${row.id} asked to resume "${asked}"; using the row's session key "${row.sessionId}"`
     );
-    (payload as { resume: { sessionKey: string } }).resume.sessionKey =
-      row.sessionId;
+    payload.resume.sessionKey = row.sessionId;
   }
   return undefined;
 };
@@ -129,10 +128,9 @@ export const peekKind = (payload: unknown): InstanceKind => {
   if (typeof payload !== "object" || payload === null) {
     return "mainline";
   }
-  const { scratch, persistSession } = payload as {
-    scratch?: unknown;
-    persistSession?: unknown;
-  };
+  const scratch = "scratch" in payload && payload.scratch;
+  const persistSession =
+    "persistSession" in payload ? payload.persistSession : undefined;
   return scratch || persistSession === false ? "scratch" : "mainline";
 };
 
@@ -143,14 +141,12 @@ export const peekParent = (
   if (typeof payload !== "object" || payload === null) {
     return {};
   }
-  const { parent } = payload as { parent?: unknown };
+  const parent = "parent" in payload ? payload.parent : undefined;
   if (typeof parent !== "object" || parent === null) {
     return {};
   }
-  const { instanceId, toolUseId } = parent as {
-    instanceId?: unknown;
-    toolUseId?: unknown;
-  };
+  const instanceId = "instanceId" in parent ? parent.instanceId : undefined;
+  const toolUseId = "toolUseId" in parent ? parent.toolUseId : undefined;
   return {
     ...(typeof instanceId === "string" ? { parentInstanceId: instanceId } : {}),
     ...(typeof toolUseId === "string" ? { parentToolUseId: toolUseId } : {}),
@@ -334,8 +330,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
                 );
                 return "unanswered" as const;
               }
-              const info = answer.value.result as
-                { sessionId?: string; cwd?: string } | undefined | null;
+              const info = answer.value.result;
               return info?.sessionId
                 ? { harness, sessionId: info.sessionId, info }
                 : null;

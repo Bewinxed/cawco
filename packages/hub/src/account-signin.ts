@@ -2,12 +2,9 @@ import type {
   Account,
   AccountIdentity,
   AccountJoined,
-  AccountJoinedOn,
   AccountKind,
   AccountProvider,
   AccountSigninResult,
-  HomeCredential,
-  HomeLogin,
   HomeStore,
   MachineProviderLists,
   ProviderInfo,
@@ -29,23 +26,36 @@ import {
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
+import type { Bounded } from "@cawco/core/bounded";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import { accountsWords } from "@cawco/core/words/accounts";
-import { problem } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
+import { z } from "zod";
 import {
   accountOfIdentity,
   keepProbe,
   uncompared,
   withOrgIdFrom,
 } from "./accounts";
-import type { ClosureContext, HomeCredentialFound } from "./closure-context";
+import type {
+  ClosureContext,
+  HomeCredentialFound,
+  SigninFinished,
+} from "./closure-context";
 import type { LoginMove } from "./db/accounts";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
-import type { Unanswered } from "./machine-answers";
-import { awayProblem, silentProblem } from "./machine-answers";
+import {
+  answerAs,
+  awayProblem,
+  type CallAnswer,
+  silentProblem,
+  type Unanswered,
+} from "./machine-answers";
 import { unreachable } from "./unreachable";
 
+/** The account stores a machine named at register (core stream.ts), each read as it came. */
+const REGISTER_STORES = z.object({ accountStores: z.array(z.unknown()) });
 export type AccountSigninContext = Pick<
   ClosureContext,
   | "advanceMove"
@@ -131,41 +141,42 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     storeProvider: string | undefined
   ) => {
     const machine = ctx.machineName(machineId);
-    const asked =
-      traitsOf(store).homeLogin === "dir"
-        ? await ctx.readAgent(
-            machineId,
-            CONTROL_READ_HOME_LOGIN,
-            [],
-            SIGNIN_TIMEOUT_MS,
-            store
-          )
-        : await ctx.readAgent(
-            machineId,
-            CONTROL_READ_HOME_CREDENTIALS,
-            [],
-            SIGNIN_TIMEOUT_MS
-          );
-    switch (asked.kind) {
-      case "unanswered":
-        return asked.reason === "dead"
-          ? awayProblem(machineId, awayWords(machineId, asked))
-          : silentProblem(awayWords(machineId, asked));
-      case "answered":
-        break;
-      default:
-        throw unreachable(asked);
-    }
-    const read = asked.value;
-    if (!read.ok) {
-      return problem(502, {
-        code: "home-login-refused",
-        detail: read.error ?? `${machine} could not say what its stores hold.`,
-      });
-    }
+    /** What the machine's stores hold, or why it did not say. */
+    const said = <T>(asked: Bounded<CallAnswer<T>>) => {
+      switch (asked.kind) {
+        case "unanswered":
+          return asked.reason === "dead"
+            ? awayProblem(machineId, awayWords(machineId, asked))
+            : silentProblem(awayWords(machineId, asked));
+        case "answered":
+          break;
+        default:
+          throw unreachable(asked);
+      }
+      const read = asked.value;
+      return read.ok
+        ? { held: read.result }
+        : problem(502, {
+            code: "home-login-refused",
+            detail:
+              read.error ?? `${machine} could not say what its stores hold.`,
+          });
+    };
     const traits = traitsOf(store);
     if (traits.homeLogin === "dir") {
-      const home = read.result as HomeLogin;
+      const read = said(
+        await ctx.readAgent(
+          machineId,
+          CONTROL_READ_HOME_LOGIN,
+          [],
+          SIGNIN_TIMEOUT_MS,
+          store
+        )
+      );
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      const home = read.held;
       return home.loggedIn && home.identity
         ? ({
             identity: home.identity,
@@ -178,7 +189,18 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
             detail: `${accountsWords.harnesses[store]} on ${machine} isn't signed in, so there is no login to move.`,
           });
     }
-    const found = (read.result as HomeCredential[]).find(
+    const read = said(
+      await ctx.readAgent(
+        machineId,
+        CONTROL_READ_HOME_CREDENTIALS,
+        [],
+        SIGNIN_TIMEOUT_MS
+      )
+    );
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const found = read.held.find(
       (one) => one.store === store && one.storeProvider === storeProvider
     );
     return found
@@ -333,7 +355,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
       default:
         throw unreachable(read);
     }
-    for (const found of read.value.result as HomeCredential[]) {
+    for (const found of read.value.result) {
       const started = await startMove(machineId, found.store, found);
       if ("error" in started) {
         console.log(`[hub] ${started.error}`);
@@ -372,10 +394,11 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     machineId: string,
     payload: unknown
   ): string[] | undefined => {
-    const stores = (payload as { accountStores?: unknown }).accountStores;
-    if (!Array.isArray(stores)) {
+    const read = REGISTER_STORES.safeParse(payload);
+    if (!read.success) {
       return undefined;
     }
+    const stores = read.data.accountStores;
     const unheld = stores.filter(
       (id): id is string => typeof id === "string" && !ctx.db.accounts.get(id)
     );
@@ -470,7 +493,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
         error: `${ctx.machineName(machineId)} signed in as ${identity.email}, already ${existingName}, but could not make it that account's: ${answer.error ?? "it gave no reason"}`,
       };
     }
-    const joined = answer.result as AccountJoinedOn;
+    const joined = answer.result;
     console.log(
       `[accounts] A new sign-in on ${ctx.machineName(machineId)} is ${identity.email}, which this hub already has as ${existingName}, so the two are one account there: ${joined.outcome === "kept" ? `${existingName}'s login on ${ctx.machineName(machineId)} is kept, and the new one is dropped` : `the new login is ${existingName}'s on ${ctx.machineName(machineId)} from now on`}.`
     );
@@ -626,36 +649,41 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
    * (`signinId`), as the account it now finishes into: it must come out as
    * that account's identity ({@link expectedOf}).
    */
-  const completeOn = (
+  const completeOn = async (
     account: Account,
     signinId: string,
     machineId: string,
     code: string | undefined
-  ) =>
+  ): Promise<Bounded<CallAnswer<SigninFinished>>> =>
     account.provider === CLAUDE_PROVIDER
-      ? ctx.callAgent(
-          machineId,
-          CONTROL_COMPLETE_ACCOUNT_LOGIN,
-          [code, signinId, expectedOf(account)],
-          SIGNIN_TIMEOUT_MS,
-          "claude"
+      ? answerAs(
+          await ctx.callAgent(
+            machineId,
+            CONTROL_COMPLETE_ACCOUNT_LOGIN,
+            [code, signinId, expectedOf(account)],
+            SIGNIN_TIMEOUT_MS,
+            "claude"
+          ),
+          (result): SigninFinished => ({ kind: "account", result })
         )
-      : ctx.callAgent(
-          machineId,
-          CONTROL_COMPLETE_PROVIDER_LOGIN,
-          [code ?? null, signinId, expectedOf(account)],
-          SIGNIN_TIMEOUT_MS
+      : answerAs(
+          await ctx.callAgent(
+            machineId,
+            CONTROL_COMPLETE_PROVIDER_LOGIN,
+            [code ?? null, signinId, expectedOf(account)],
+            SIGNIN_TIMEOUT_MS
+          ),
+          (result): SigninFinished => ({ kind: "provider", result })
         );
 
   /** Who a finished sign-in, of either kind, came out as. */
   const signedInAs = (
-    account: Account,
-    result: AccountSigninResult | ProviderSigninResult
+    finished: SigninFinished
   ): AccountIdentity | null | undefined => {
-    if (account.provider === CLAUDE_PROVIDER) {
-      return (result as AccountSigninResult).probe?.identity;
+    if (finished.kind === "account") {
+      return finished.result.probe?.identity;
     }
-    const provider = result as ProviderSigninResult;
+    const provider = finished.result;
     return provider.state === "signed-in" ? provider.identity : undefined;
   };
 
@@ -663,15 +691,11 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
   const settleSignin = (
     account: Account,
     machineId: string,
-    result: AccountSigninResult | ProviderSigninResult
+    finished: SigninFinished
   ) =>
-    account.provider === CLAUDE_PROVIDER
-      ? settleClaudeSignin(account, machineId, result as AccountSigninResult)
-      : settleProviderSignin(
-          account,
-          machineId,
-          result as ProviderSigninResult
-        );
+    finished.kind === "account"
+      ? settleClaudeSignin(account, machineId, finished.result)
+      : settleProviderSignin(account, machineId, finished.result);
 
   /**
    * A sign-in begun for `signinId`, an account a sign-in on another machine
@@ -681,9 +705,10 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     signinId: string,
     into: Account,
     machineId: string,
-    result: AccountSigninResult | ProviderSigninResult
+    finished: SigninFinished
   ) => {
-    const identity = signedInAs(into, result);
+    const identity = signedInAs(finished);
+    const { result } = finished;
     if (result.state !== "signed-in" || !identity) {
       return result;
     }

@@ -233,7 +233,7 @@ export const valueAt = (value: unknown, path: string): unknown =>
     .reduce<unknown>(
       (into, part) =>
         into !== null && typeof into === "object"
-          ? (into as Record<string, unknown>)[part]
+          ? new Map<string, unknown>(Object.entries(into)).get(part)
           : undefined,
       value
     );
@@ -278,6 +278,8 @@ const same = (a: string | null, b: string | null) =>
 const defined = <T extends object>(
   fields: T
 ): { [K in keyof T]?: Exclude<T[K], undefined> } =>
+  // Library gap (casts inventory): `Object.fromEntries` drops the keys it is
+  // given, https://github.com/microsoft/TypeScript/issues/35745
   Object.fromEntries(
     Object.entries(fields).filter(([, value]) => value !== undefined)
   ) as { [K in keyof T]?: Exclude<T[K], undefined> };
@@ -442,17 +444,20 @@ const pollView = (row: ConnectorPollRow): ConnectorPollView => ({
   createdAt: row.createdAt.getTime(),
 });
 
-const eventView = (row: InboundEventRow): InboundEventView => ({
-  id: row.id,
-  source: row.source,
-  key: row.deliveryKey,
-  kind: row.kind,
-  via: row.via,
-  event: JSON.parse(row.payload) as unknown,
-  receivedAt: row.receivedAt.getTime(),
-  routedTo: row.routedTo,
-  handledAt: row.handledAt?.getTime() ?? null,
-});
+const eventView = (row: InboundEventRow): InboundEventView => {
+  const event: unknown = JSON.parse(row.payload);
+  return {
+    id: row.id,
+    source: row.source,
+    key: row.deliveryKey,
+    kind: row.kind,
+    via: row.via,
+    event,
+    receivedAt: row.receivedAt.getTime(),
+    routedTo: row.routedTo,
+    handledAt: row.handledAt?.getTime() ?? null,
+  };
+};
 
 const wordsOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -924,7 +929,7 @@ export const createIngress = ({
         throw new Error("its answer had no text or structured content");
       }
       try {
-        answer = JSON.parse(text.text) as unknown;
+        answer = JSON.parse(text.text);
       } catch (error) {
         throw new Error("its answer's text is not JSON", { cause: error });
       }

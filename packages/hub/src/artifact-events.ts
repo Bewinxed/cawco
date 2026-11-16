@@ -1,6 +1,7 @@
 import { waitsOnYou } from "@cawco/core/activity";
 import type { SendAttachment } from "@cawco/core/attachments";
 import { COMMENT_LIMITS } from "@cawco/core/comments/model";
+import type { ControlName, ControlReply } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
 import { byPerson } from "@cawco/core/harness";
 import { ARTIFACT_ORIGIN } from "@cawco/core/harness/kinds";
@@ -736,7 +737,11 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
    * own, or the one a sheet was made in), with the workspace and `arg`: its
    * answer, or a refusal saying why the stage can't be reached or said no.
    */
-  const onStage = async (at: StageAt, method: string, arg: unknown) => {
+  const onStage = async <K extends ControlName>(
+    at: StageAt,
+    method: K,
+    arg: unknown
+  ) => {
     const where = stageWhere(at);
     if (!where) {
       // Only a sheet's names one that can be gone: a session always has a place.
@@ -787,7 +792,11 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         detail: answer.error ?? "The stage said no.",
       });
     }
-    const staged: { machineId: string; result: unknown; workspace: string } = {
+    const staged: {
+      machineId: string;
+      result: ControlReply<K>;
+      workspace: string;
+    } = {
       machineId,
       workspace: workspace.id,
       result: answer.result,

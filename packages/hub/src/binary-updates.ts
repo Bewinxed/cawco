@@ -48,7 +48,10 @@ import {
   readRecordSync,
   writeStateFileSync,
 } from "@cawco/core/state-file";
-import { BinaryUpdatePolicySchema } from "@cawco/core/stored-shapes";
+import {
+  BinaryUpdatePolicySchema,
+  BinaryUpdateStateSchema,
+} from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { damagedHubRecordWords } from "@cawco/core/words/damaged";
 import { Elysia, problem, t } from "elysia";
@@ -87,11 +90,15 @@ interface OnlineMachine {
 function databaseSchemaVersion(dbPath: string): number {
   const db = new Database(dbPath, { readonly: true });
   try {
-    return (
-      db.query("SELECT count(*) AS n FROM __drizzle_migrations").get() as {
-        n: number;
-      }
-    ).n;
+    const counted = db
+      .query<{ n: number }, []>(
+        "SELECT count(*) AS n FROM __drizzle_migrations"
+      )
+      .get();
+    if (!counted) {
+      throw new Error(`${dbPath} counted no migrations`);
+    }
+    return counted.n;
   } finally {
     db.close();
   }
@@ -411,7 +418,14 @@ export function createBinaryUpdates(options: Options) {
       "/api/binary-updates/machines/:machineId/state",
       { body: t.Any() },
       ({ params, body }) => {
-        options.setState(params.machineId, body as BinaryUpdateState);
+        const state = BinaryUpdateStateSchema.safeParse(body);
+        if (!state.success) {
+          return problem(400, {
+            code: "binary-update-state-unread",
+            detail: `The machine's update state is not one: ${z.prettifyError(state.error)}`,
+          });
+        }
+        options.setState(params.machineId, state.data);
         return { ok: true };
       }
     )

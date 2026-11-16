@@ -1,8 +1,3 @@
-import type {
-  AccountSigninResult,
-  ProviderSigninChallenge,
-  ProviderSigninResult,
-} from "@cawco/core/accounts";
 import { accountNameAmong, CLAUDE_PROVIDER } from "@cawco/core/accounts";
 import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
@@ -160,7 +155,7 @@ export const accountSigninRoutes = ({
                   detail: answer.value.error ?? "The sign-in did not start.",
                 });
               }
-              const challenge = answer.value.result as ProviderSigninChallenge;
+              const challenge = answer.value.result;
               keepPending(params.id, params.machineId, challenge);
               return challenge;
             }
@@ -224,17 +219,18 @@ export const accountSigninRoutes = ({
               detail: answer.error ?? "The sign-in did not finish.",
             });
           }
-          const result = answer.result as
-            AccountSigninResult | ProviderSigninResult;
+          const finished = answer.result;
           // Ended, one way or another; a code still waited on, or one that
           // did not take, leaves the same link or code standing.
-          if (["signed-in", "mismatch", "expired"].includes(result.state)) {
+          if (
+            ["signed-in", "mismatch", "expired"].includes(finished.result.state)
+          ) {
             pendingSignins.delete(pendingKey(params.id, params.machineId));
           }
           const settled =
             now.id === params.id
-              ? await settleSignin(now, params.machineId, result)
-              : await finishJoined(params.id, now, params.machineId, result);
+              ? await settleSignin(now, params.machineId, finished)
+              : await finishJoined(params.id, now, params.machineId, finished);
           return "error" in settled
             ? problem(409, {
                 code: "signin-not-settled",
@@ -290,7 +286,7 @@ export const accountSigninRoutes = ({
                 default:
                   throw unreachable(answer);
               }
-              const result = answer.value.result as ProviderSigninResult;
+              const { result } = answer.value;
               // Another machine's write already joined the key into the
               // account it already was: this one joins it there too.
               const now = accountOf(account.id);

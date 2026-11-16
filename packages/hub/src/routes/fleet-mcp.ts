@@ -3,7 +3,6 @@
  */
 
 import {
-  type ConfigInspection,
   INSPECT_CONFIG,
   isFleetMcpConfig,
   MCP_PLATFORMS,
@@ -136,7 +135,7 @@ export const fleetMcpCalls = (
         detail: asked.value.error ?? "the machine could not read its config",
       });
     }
-    const found = (asked.value.result as ConfigInspection).mcp.find(
+    const found = asked.value.result.mcp.find(
       (row) => row.name === name && !row.managed
     );
     return found

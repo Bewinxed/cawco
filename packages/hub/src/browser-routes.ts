@@ -56,8 +56,7 @@ import { answered } from "./browser-answered";
 import type { ArtifactRow } from "./db/artifacts";
 import { hidden } from "./hidden";
 import type { Caller } from "./hub-auth";
-import type { AwayProblem } from "./machine-answers";
-import type { RelayCall } from "./stream-relay";
+import type { AgentCall, AwayProblem } from "./machine-answers";
 
 /** How long a viewer's stream relay credential lasts (Projects spec item 4). */
 const VIEWER_RELAY_TTL_MS = 12 * HOUR_MS;
@@ -78,7 +77,7 @@ const REASON_BYTES = 123;
 export interface BrowserStreamDeps {
   /** The artifact `id`, when there is one. */
   artifact: (id: string) => ArtifactRow | undefined;
-  call: RelayCall;
+  call: AgentCall;
   /** An HTTP route's caller, as the hub's gate classified its request (hub-auth.ts `callerOf`). */
   callerOf: (request: Request) => Caller;
   /** A socket's caller at its open, read as a dashboard socket's is (hub-auth.ts `classify`). */
@@ -258,7 +257,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
   /** The machine's browser listener started and reached, or the refusal of either. */
   const listenOn = async (machineId: string) => {
     const token = randomUUID();
-    const listened = answered<{ port: number }>(
+    const listened = answered(
       await deps.call(machineId, BROWSER_LISTEN, [{ token }], LISTEN_MS),
       machineId,
       deps.machineName(machineId),
@@ -315,7 +314,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
 
   /** A neko session of `place`'s browser for one viewer, or its machine's refusal. */
   const sessionOf = async (place: Place) =>
-    answered<BrowserViewerSession>(
+    answered(
       await deps.call(
         place.machineId,
         BROWSER_VIEWER_TOKEN,

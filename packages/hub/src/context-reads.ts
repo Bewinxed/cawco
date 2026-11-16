@@ -2,11 +2,7 @@ import {
   CONTINUATION_CANCELLED,
   estimateTokens,
 } from "@cawco/core/continuation";
-import type {
-  HarnessKind,
-  ModelInfo,
-  PermissionMode,
-} from "@cawco/core/harness/kinds";
+import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { GitChanges } from "@cawco/core/session/controls";
@@ -18,10 +14,7 @@ import {
   CONTROL_MODEL_CATALOG,
   CONTROL_READ_SESSION_CONTEXT,
 } from "@cawco/core/session/controls";
-import type {
-  NeutralSessionInfo,
-  SessionMessage,
-} from "@cawco/core/session-messages";
+import type { SessionMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { ElysiaStatus, problem } from "elysia";
@@ -32,6 +25,7 @@ import type { ContinuationSource } from "./db/stored-types";
 import type { SessionLocation } from "./hub-shapes";
 import type { KeepAliveRow } from "./keep-alive";
 import {
+  failedProblem,
   MachineProblem,
   silentProblem,
   type Unanswered,
@@ -216,14 +210,14 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     const answer = asked.value;
     if (!answer.ok) {
       throw new MachineProblem(
-        problem(502, {
-          code: "machine-call-failed",
-          detail: answer.error ?? `${harness} could not list its models`,
-        })
+        failedProblem(
+          answer,
+          "machine-call-failed",
+          `${harness} could not list its models`
+        )
       );
     }
-    return (answer.result as ModelInfo[]).find((row) => row.value === model)
-      ?.contextWindow;
+    return answer.result.find((row) => row.value === model)?.contextWindow;
   };
 
   /**
@@ -237,10 +231,11 @@ export const createContextReads = (ctx: ContextReadsContext) => {
   ): Promise<
     { tokens: number; readAt: number } | { reason: string } | Unanswered
   > => {
-    if (row.contextTokens !== null) {
+    // Written together on every result: a row with its tokens has their time.
+    if (row.contextTokens !== null && row.contextReadAt !== null) {
       return {
         tokens: row.contextTokens,
-        readAt: (row.contextReadAt as Date).getTime(),
+        readAt: row.contextReadAt.getTime(),
       };
     }
     if (!traitsOf(row.harness).readsStoredContext) {
@@ -271,8 +266,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     if (!answer.value.ok) {
       return { reason: answer.value.error ?? "transcript read failed" };
     }
-    const reading = answer.value.result as
-      { tokens: number; readAt: number } | { reason: string } | undefined;
+    const reading = answer.value.result;
     if (!reading) {
       return { reason: "agent has no context reader" };
     }
@@ -281,17 +275,17 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     }
     // A live result that arrived during this read is newer than the stored transcript.
     const [current] = ctx.db.getInstancesByIds([row.id]);
-    if (current.contextTokens === null) {
-      ctx.db.updateKeepAlive(row.id, {
-        contextTokens: reading.tokens,
-        contextReadAt: new Date(reading.readAt),
-      });
+    if (current.contextTokens !== null && current.contextReadAt !== null) {
+      return {
+        tokens: current.contextTokens,
+        readAt: current.contextReadAt.getTime(),
+      };
     }
-    const [measured] = ctx.db.getInstancesByIds([row.id]);
-    return {
-      tokens: measured.contextTokens as number,
-      readAt: (measured.contextReadAt as Date).getTime(),
-    };
+    ctx.db.updateKeepAlive(row.id, {
+      contextTokens: reading.tokens,
+      contextReadAt: new Date(reading.readAt),
+    });
+    return { tokens: reading.tokens, readAt: reading.readAt };
   };
 
   /**
@@ -339,14 +333,14 @@ export const createContextReads = (ctx: ContextReadsContext) => {
       case "answered":
         if (!answer.value.ok) {
           throw new MachineProblem(
-            problem(502, {
-              code: "machine-call-failed",
-              detail:
-                answer.value.error ?? "the session could not read its context",
-            })
+            failedProblem(
+              answer.value,
+              "machine-call-failed",
+              "the session could not read its context"
+            )
           );
         }
-        return (answer.value.result as { totalTokens: number }).totalTokens;
+        return answer.value.result.totalTokens;
       default:
         throw unreachable(answer);
     }
@@ -372,7 +366,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         if (!answer.value.ok) {
           throw new MachineProblem(
             problem(502, {
-              code: "machine-call-failed",
+              code: answer.value.code ?? "machine-call-failed",
               detail: `${ctx.machineName(where.machineId)} could not say when session ${where.sessionId} started: ${answer.value.error ?? "it gave no reason"}`,
             })
           );
@@ -381,8 +375,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
       default:
         throw unreachable(answer);
     }
-    const created = (answer.value.result as NeutralSessionInfo | null)
-      ?.createdAt;
+    const created = answer.value.result?.createdAt;
     if (!created) {
       throw new MachineProblem(
         problem(502, {
@@ -416,12 +409,12 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         if (!answer.value.ok) {
           throw new MachineProblem(
             problem(502, {
-              code: "machine-call-failed",
+              code: answer.value.code ?? "machine-call-failed",
               detail: `${ctx.machineName(where.machineId)} could not read git in ${where.cwd}: ${answer.value.error ?? "it gave no reason"}`,
             })
           );
         }
-        return answer.value.result as GitChanges;
+        return answer.value.result;
       default:
         throw unreachable(answer);
     }
@@ -452,15 +445,14 @@ export const createContextReads = (ctx: ContextReadsContext) => {
       case "answered":
         if (!answer.value.ok) {
           throw new MachineProblem(
-            problem(502, {
-              code: "machine-call-failed",
-              detail: answer.value.error ?? "the transcript could not be read",
-            })
+            failedProblem(
+              answer.value,
+              "machine-call-failed",
+              "the transcript could not be read"
+            )
           );
         }
-        return (
-          Array.isArray(answer.value.result) ? answer.value.result : []
-        ) as SessionMessage[];
+        return answer.value.result;
       default:
         throw unreachable(answer);
     }

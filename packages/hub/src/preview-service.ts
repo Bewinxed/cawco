@@ -1,6 +1,4 @@
-import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
-import type { ControlRefusal } from "@cawco/core/frames";
 import { PREVIEW_START, PREVIEW_STOP } from "@cawco/core/preview/protocol";
 import {
   type ServingPreview,
@@ -14,6 +12,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { isFolderGone, startRefused } from "@cawco/preview/proxy";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
 import { artifactOrigin, originOfKey } from "./db/previews";
+import type { AgentCall } from "./machine-answers";
 import {
   loadedOnce,
   type MachineRow,
@@ -22,14 +21,6 @@ import {
 } from "./preview";
 import type { PreviewUnloaded } from "./preview-stops";
 
-/** What a machine's agent answered a control call. */
-interface Answered {
-  error?: string;
-  ok: boolean;
-  refusal?: ControlRefusal;
-  result?: unknown;
-}
-
 /** What the preview service needs of the hub. */
 export interface PreviewServiceDeps {
   /** Machine `machineId`'s socket's address; undefined while it is away. */
@@ -37,12 +28,7 @@ export interface PreviewServiceDeps {
   /** How long a machine has to answer a listener's start or stop. */
   busyMs: number;
   /** Asks machine `machineId`'s agent: its answer, or that it gave none within `timeoutMs`. */
-  call: (
-    machineId: string,
-    method: string,
-    args: unknown[],
-    timeoutMs: number
-  ) => Promise<Bounded<Answered>>;
+  call: AgentCall;
   /** Whether machine `machineId` is reached through the hub's SSH connection to it. */
   carried: (machineId: string) => boolean;
   /** A machine port carried to one on the hub's own loopback, for a machine added over SSH (ssh-tunnels.ts). */
@@ -239,7 +225,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
       const { down, why } = startRefused(answer);
       return { ok: false, down, error: why, stop: { kind: "failed" } };
     }
-    const { port } = answer.result as { port: number };
+    const { port } = answer.result;
     return await upstreamAt(machineId, key, port, start);
   };
 

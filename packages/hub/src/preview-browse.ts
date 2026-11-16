@@ -1,8 +1,4 @@
-import {
-  ARTIFACT_PICTURE,
-  PICTURE_LIMITS,
-  type PictureCut,
-} from "@cawco/core/artifact-picture";
+import { ARTIFACT_PICTURE, PICTURE_LIMITS } from "@cawco/core/artifact-picture";
 import {
   placeAtLink,
   previewEnterUrl,
@@ -11,7 +7,6 @@ import {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { secondsOf } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
-import type { WorkspaceSaved } from "@cawco/core/workspace/controls";
 import { CONTROL_WORKSPACE_SAVE } from "@cawco/core/workspace/controls";
 import { ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
@@ -277,8 +272,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       default:
         throw unreachable(asked);
     }
-    const told = asked.value.result as
-      { png?: unknown; cut?: PictureCut } | undefined;
+    const told = asked.value.result;
     const png = told?.png;
     if (!asked.value.ok || typeof png !== "string") {
       return problem(502, {
@@ -332,7 +326,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       default:
         throw unreachable(asked);
     }
-    const saved = asked.value.result as WorkspaceSaved | undefined;
+    const saved = asked.value.result;
     if (!(asked.value.ok && saved)) {
       return problem(502, {
         code: "picture-save-failed",

@@ -7,6 +7,7 @@ import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import type { ControlRefusal } from "@cawco/core/frames";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import {
+  type FolderWeight,
   PREVIEW_DOWN_META,
   PREVIEW_DOWNS,
   PREVIEW_WHY_META,
@@ -772,15 +773,8 @@ export async function folderKey(root: string): Promise<string> {
   return BigInt(`0x${hasher.digest("hex").slice(0, 24)}`).toString(36);
 }
 
-/** What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`). */
-export interface FolderWeight {
-  bytes: number;
-  /** `<img>` on the start page whose file is wider than `DESK_CAPTURE_WIDTH`. */
-  captures: number;
-  files: number;
-  js: number;
-  wasm: number;
-}
+// The machine's own reader of a folder's weight: its answer's type is core's, as the hub reads it.
+export type { FolderWeight } from "@cawco/core/preview/protocol";
 
 const JS_FILE = /\.[cm]?js$/u;
 const WASM_FILE = /\.wasm$/u;

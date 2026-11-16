@@ -26,7 +26,7 @@
 import { hostname, networkInterfaces } from "node:os";
 import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
 import { readInstallation } from "@cawco/core/binary-installation";
-import { DRAFT_LIMITS, type InstallSignIn } from "@cawco/core/install";
+import { DRAFT_LIMITS } from "@cawco/core/install";
 import {
   generateInstallScript,
   type InstallJoin,
@@ -270,7 +270,7 @@ export const joinRoutes = ({
             ? installs.startSsh({
                 target: body.target,
                 port: body.port,
-                signIn: body.signIn as InstallSignIn,
+                signIn: body.signIn,
                 password: body.password,
                 stamp: body.stamp,
               })
@@ -303,7 +303,7 @@ export const joinRoutes = ({
       return "status" in stopped && typeof stopped.status === "number"
         ? problem(stopped.status, {
             code: "ssh-stop-refused",
-            detail: (stopped as { message: string }).message,
+            detail: stopped.message,
           })
         : installs.read();
     })

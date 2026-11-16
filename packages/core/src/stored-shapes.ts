@@ -38,6 +38,7 @@ import type {
 import { HARNESSES, WIRE_PERMISSION_MODES } from "./harness/kinds";
 import { HARNESS_CONFIG_KINDS } from "./harness-config";
 import type { DeviceKind as DeviceKindType } from "./hub-auth";
+import { IMAGE_FORMATS, IMAGE_PROVIDERS } from "./image-generation";
 import { LANDS_MODES } from "./injected";
 import { COMMAND_STEPS, INSTALL_CHECKS, SSH_STEPS } from "./install";
 import type { MachinePath as MachinePathType } from "./machine-path";
@@ -59,8 +60,9 @@ import type {
   RuleTiming as RuleTimingType,
   RuleWatch as RuleWatchType,
 } from "./rules";
+import type { SendWithdrawal as SendWithdrawalType } from "./session/controls";
 import type { SendMode as SendModeType } from "./session-messages";
-import { INTERACTIONS } from "./stage";
+import { INTERACTIONS, STAGE_TOOLCHAINS } from "./stage";
 import type { StarterOutcome as StarterOutcomeType } from "./starters";
 import { declared } from "./stored-types";
 import { COMMAND_ACK_STAGES } from "./stream";
@@ -68,6 +70,25 @@ import type { TrackerSyncState as TrackerSyncStateType } from "./trackers";
 import { TRACKERS } from "./trackers";
 import { WORK_ITEM_STATES } from "./work-items";
 import type { WorkspaceKind as WorkspaceKindType } from "./workspace/controls";
+
+const AccountCheckShape = declared(
+  z.union([
+    z.object({ kind: z.literal("answered") }),
+    z.object({ kind: z.literal("error"), error: z.string(), text: z.string() }),
+  ]),
+  "AccountCheck",
+  "packages/core/src/accounts.ts"
+);
+export const AccountCheckSchema = AccountCheckShape;
+export type AccountCheckOutput = z.output<typeof AccountCheckShape>;
+
+const AccountJoinedOnShape = declared(
+  z.object({ outcome: z.enum(["kept", "moved"]) }),
+  "AccountJoinedOn",
+  "packages/core/src/accounts.ts"
+);
+export const AccountJoinedOnSchema = AccountJoinedOnShape;
+export type AccountJoinedOnOutput = z.output<typeof AccountJoinedOnShape>;
 
 const AccountKindShape = declared(
   z.enum(["subscription", "console", "oauth", "api_key"]),
@@ -275,12 +296,106 @@ const AccountMoveShape = declared(
 export const AccountMoveSchema = AccountMoveShape;
 export type AccountMoveOutput = z.output<typeof AccountMoveShape>;
 
+const AccountIdentityShape = declared(
+  z.object({
+    email: z.string(),
+    organization: z.string(),
+    orgId: z.string().nullable(),
+  }),
+  "AccountIdentity",
+  "packages/core/src/accounts.ts"
+);
+export type AccountIdentityOutput = z.output<typeof AccountIdentityShape>;
+
+const SessionAccountReadShape = declared(
+  z.object({
+    identity: AccountIdentityShape.optional(),
+    subscriptionType: z.string().optional(),
+  }),
+  "SessionAccountRead",
+  "packages/core/src/accounts.ts"
+);
+export type SessionAccountReadOutput = z.output<typeof SessionAccountReadShape>;
+
+const ModelInfoShape = declared(
+  z.object({
+    contextWindow: z.number().optional(),
+    defaultEffort: z.string().nullable().optional(),
+    description: z.string().optional(),
+    displayName: z.string(),
+    released: z.string().optional(),
+    resolvedModel: z.string().optional(),
+    supportedEffortLevels: z.array(z.string()).optional(),
+    supportsAdaptiveThinking: z.boolean().optional(),
+    supportsAutoMode: z.boolean().optional(),
+    supportsEffort: z.boolean().optional(),
+    supportsFastMode: z.boolean().optional(),
+    supportsThinkingOff: z.boolean().optional(),
+    value: z.string(),
+  }),
+  "ModelInfo",
+  "packages/core/src/harness/kinds.ts"
+);
+export const ModelInfoSchema = ModelInfoShape;
+export type ModelInfoOutput = z.output<typeof ModelInfoShape>;
+
+const AccountProbeShape = declared(
+  SessionAccountReadShape.extend({ models: z.array(ModelInfoShape) }),
+  "AccountProbe",
+  "packages/core/src/accounts.ts"
+);
+export const AccountProbeSchema = AccountProbeShape;
+export type AccountProbeOutput = z.output<typeof AccountProbeShape>;
+
+const AccountJoinedShape = declared(
+  z.object({ accountId: z.string(), note: z.string() }),
+  "AccountJoined",
+  "packages/core/src/accounts.ts"
+);
+export type AccountJoinedOutput = z.output<typeof AccountJoinedShape>;
+
+const SigninStateShape = declared(
+  z.enum(["signed-in", "signed-out", "mismatch"]),
+  "SigninState",
+  "packages/core/src/accounts.ts"
+);
+export const SigninStateSchema: z.ZodType<SigninStateType> = SigninStateShape;
+export type SigninStateOutput = z.output<typeof SigninStateShape>;
+
+const AccountSigninResultShape = declared(
+  z.object({
+    joined: AccountJoinedShape.optional(),
+    probe: AccountProbeShape.optional(),
+    state: SigninStateShape,
+  }),
+  "AccountSigninResult",
+  "packages/core/src/accounts.ts"
+);
+export const AccountSigninResultSchema = AccountSigninResultShape;
+export type AccountSigninResultOutput = z.output<
+  typeof AccountSigninResultShape
+>;
+
 export const AuthStateShape = declared(
   z.enum(["authenticated", "unauthenticated", "unreadable-credentials"]),
   "AuthState",
   "packages/core/src/session-messages.ts"
 );
 export type AuthStateOutput = z.output<typeof AuthStateShape>;
+
+const AgentBusyReportShape = declared(
+  z.object({
+    busy: z.number(),
+    error: z.string().optional(),
+    instances: z.array(z.string()),
+    ready: z.boolean(),
+    recovery: z.enum(["recovering", "ready", "failed"]),
+  }),
+  "AgentBusyReport",
+  "packages/core/src/harness.ts"
+);
+export const AgentBusyReportSchema = AgentBusyReportShape;
+export type AgentBusyReportOutput = z.output<typeof AgentBusyReportShape>;
 
 const DownloadProgressShape = declared(
   z.object({ received: z.number(), total: z.number() }),
@@ -512,6 +627,14 @@ const BinaryUpdateStateShape = declared(
 export const BinaryUpdateStateSchema = BinaryUpdateStateShape;
 export type BinaryUpdateStateOutput = z.output<typeof BinaryUpdateStateShape>;
 
+const BrowserAskedPageShape = declared(
+  z.object({ targetId: z.string() }),
+  "BrowserAskedPage",
+  "packages/core/src/browser.ts"
+);
+export const BrowserAskedPageSchema = BrowserAskedPageShape;
+export type BrowserAskedPageOutput = z.output<typeof BrowserAskedPageShape>;
+
 const BrowserHostKindShape = declared(
   z.enum(["container", "local"]),
   "BrowserHostKind",
@@ -520,24 +643,6 @@ const BrowserHostKindShape = declared(
 export const BrowserHostKindSchema: z.ZodType<BrowserHostKindType> =
   BrowserHostKindShape;
 export type BrowserHostKindOutput = z.output<typeof BrowserHostKindShape>;
-
-export const MediaPathShape = declared(
-  z.enum(["udp+tcp", "tcp", "none"]),
-  "MediaPath",
-  "packages/core/src/capabilities.ts"
-);
-export type MediaPathOutput = z.output<typeof MediaPathShape>;
-
-export const BrowserPortsShape = declared(
-  z.object({
-    devtools: z.number(),
-    http: z.number().optional(),
-    media: z.number().optional(),
-  }),
-  "BrowserPorts",
-  "packages/core/src/browser.ts"
-);
-export type BrowserPortsOutput = z.output<typeof BrowserPortsShape>;
 
 export const BrowserKeyShape = declared(
   z.union([
@@ -549,28 +654,16 @@ export const BrowserKeyShape = declared(
 );
 export type BrowserKeyOutput = z.output<typeof BrowserKeyShape>;
 
-const BrowserRelayReachShape = declared(
+export const BrowserPortsShape = declared(
   z.object({
-    lan: z.array(z.string()),
-    machineId: z.string(),
-    tailnet: z.array(z.string()),
+    devtools: z.number(),
+    http: z.number().optional(),
+    media: z.number().optional(),
   }),
-  "BrowserRelayReach",
+  "BrowserPorts",
   "packages/core/src/browser.ts"
 );
-export type BrowserRelayReachOutput = z.output<typeof BrowserRelayReachShape>;
-
-export const BrowserRelayShape = declared(
-  z.object({
-    credential: z.string(),
-    reach: BrowserRelayReachShape.optional(),
-    urls: z.array(z.string()),
-    username: z.string(),
-  }),
-  "BrowserRelay",
-  "packages/core/src/browser.ts"
-);
-export type BrowserRelayOutput = z.output<typeof BrowserRelayShape>;
+export type BrowserPortsOutput = z.output<typeof BrowserPortsShape>;
 
 const BrowserStateShape = declared(
   z.enum([
@@ -616,6 +709,103 @@ export const BrowserRowShape = declared(
 );
 export type BrowserRowOutput = z.output<typeof BrowserRowShape>;
 
+const PasskeyRelayCapabilityShape = declared(
+  z.object({ hasBle: z.boolean(), hasVhci: z.boolean() }),
+  "PasskeyRelayCapability",
+  "packages/core/src/browser.ts"
+);
+export type PasskeyRelayCapabilityOutput = z.output<
+  typeof PasskeyRelayCapabilityShape
+>;
+
+const BrowserRuntimeShape = declared(
+  z.union([
+    z.object({
+      kind: z.enum(["docker", "podman"]),
+      endpoint: z.string(),
+      version: z.string(),
+    }),
+    z.object({ missing: z.string() }),
+  ]),
+  "BrowserRuntime",
+  "packages/core/src/browser.ts"
+);
+export type BrowserRuntimeOutput = z.output<typeof BrowserRuntimeShape>;
+
+const BrowserFrameShape = declared(
+  z.object({
+    browsers: z.array(BrowserRowShape),
+    kind: z.literal("browsers"),
+    machineId: z.string(),
+    passkeyRelay: PasskeyRelayCapabilityShape.optional(),
+    runtime: BrowserRuntimeShape,
+  }),
+  "BrowserFrame",
+  "packages/core/src/browser.ts"
+);
+export const BrowserFrameSchema = BrowserFrameShape;
+export type BrowserFrameOutput = z.output<typeof BrowserFrameShape>;
+
+const BrowserHandbackShape = declared(
+  z.object({
+    key: BrowserKeyShape,
+    origin: z.string().nullable(),
+    requestId: z.string().optional(),
+  }),
+  "BrowserHandback",
+  "packages/core/src/browser.ts"
+);
+export const BrowserHandbackSchema = BrowserHandbackShape;
+export type BrowserHandbackOutput = z.output<typeof BrowserHandbackShape>;
+
+const BrowserListeningShape = declared(
+  z.object({ port: z.number() }),
+  "BrowserListening",
+  "packages/core/src/browser.ts"
+);
+export const BrowserListeningSchema = BrowserListeningShape;
+export type BrowserListeningOutput = z.output<typeof BrowserListeningShape>;
+
+export const MediaPathShape = declared(
+  z.enum(["udp+tcp", "tcp", "none"]),
+  "MediaPath",
+  "packages/core/src/capabilities.ts"
+);
+export type MediaPathOutput = z.output<typeof MediaPathShape>;
+
+const BrowserRelayReachShape = declared(
+  z.object({
+    lan: z.array(z.string()),
+    machineId: z.string(),
+    tailnet: z.array(z.string()),
+  }),
+  "BrowserRelayReach",
+  "packages/core/src/browser.ts"
+);
+export type BrowserRelayReachOutput = z.output<typeof BrowserRelayReachShape>;
+
+export const BrowserRelayShape = declared(
+  z.object({
+    credential: z.string(),
+    reach: BrowserRelayReachShape.optional(),
+    urls: z.array(z.string()),
+    username: z.string(),
+  }),
+  "BrowserRelay",
+  "packages/core/src/browser.ts"
+);
+export type BrowserRelayOutput = z.output<typeof BrowserRelayShape>;
+
+const BrowserViewerSessionShape = declared(
+  z.object({ session: z.string(), token: z.string() }),
+  "BrowserViewerSession",
+  "packages/core/src/browser.ts"
+);
+export const BrowserViewerSessionSchema = BrowserViewerSessionShape;
+export type BrowserViewerSessionOutput = z.output<
+  typeof BrowserViewerSessionShape
+>;
+
 const BuildInfoShape = declared(
   z.object({
     commit: z.string().optional(),
@@ -637,6 +827,53 @@ const CapPeriodShape = declared(
 );
 export const CapPeriodSchema: z.ZodType<CapPeriodType> = CapPeriodShape;
 export type CapPeriodOutput = z.output<typeof CapPeriodShape>;
+
+const EndedTaskShape = declared(
+  z.object({
+    description: z.string(),
+    output: z.string().optional(),
+    outputUnread: z.object({ after: z.number() }).optional(),
+    taskId: z.string(),
+    type: z.string(),
+  }),
+  "EndedTask",
+  "packages/core/src/session/controls.ts"
+);
+export type EndedTaskOutput = z.output<typeof EndedTaskShape>;
+
+const MoveEndedShape = declared(
+  z.object({ tasks: z.array(EndedTaskShape), wakeups: z.number() }),
+  "MoveEnded",
+  "packages/core/src/session/controls.ts"
+);
+export const MoveEndedSchema = MoveEndedShape;
+export type MoveEndedOutput = z.output<typeof MoveEndedShape>;
+
+const CarrySessionOutcomeShape = declared(
+  z.union([
+    z.object({
+      state: z.literal("carried"),
+      entries: z.number(),
+      ended: MoveEndedShape.optional(),
+    }),
+    z.object({
+      state: z.literal("live"),
+      why: z.string(),
+      later: z.literal(true).optional(),
+    }),
+    z.object({
+      state: z.literal("failed"),
+      error: z.string(),
+      clash: z.literal(true).optional(),
+    }),
+  ]),
+  "CarrySessionOutcome",
+  "packages/core/src/session/controls.ts"
+);
+export const CarrySessionOutcomeSchema = CarrySessionOutcomeShape;
+export type CarrySessionOutcomeOutput = z.output<
+  typeof CarrySessionOutcomeShape
+>;
 
 const CarryRestoredShape = declared(
   z.union([
@@ -683,6 +920,140 @@ const ClaudeModelUsageShape = declared(
 );
 export const ClaudeModelUsageSchema = ClaudeModelUsageShape;
 export type ClaudeModelUsageOutput = z.output<typeof ClaudeModelUsageShape>;
+
+const CommandResultShape = declared(
+  z.object({
+    cancelled: z.literal(true).optional(),
+    exitCode: z.number(),
+    stderr: z.string(),
+    stdout: z.string(),
+  }),
+  "CommandResult",
+  "packages/core/src/commands/controls.ts"
+);
+export const CommandResultSchema = CommandResultShape;
+export type CommandResultOutput = z.output<typeof CommandResultShape>;
+
+const McpStdioServerConfigShape = declared(
+  z.object({
+    alwaysLoad: z.boolean().optional(),
+    args: z.array(z.string()).optional(),
+    command: z.string(),
+    env: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().optional(),
+    type: z.literal("stdio").optional(),
+  }),
+  "McpStdioServerConfig",
+  "packages/core/src/session-messages.ts"
+);
+export type McpStdioServerConfigOutput = z.output<
+  typeof McpStdioServerConfigShape
+>;
+
+const McpSSEServerConfigShape = declared(
+  z.object({
+    alwaysLoad: z.boolean().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().optional(),
+    type: z.literal("sse"),
+    url: z.string(),
+  }),
+  "McpSSEServerConfig",
+  "packages/core/src/session-messages.ts"
+);
+export type McpSSEServerConfigOutput = z.output<typeof McpSSEServerConfigShape>;
+
+const McpHttpServerConfigShape = declared(
+  z.object({
+    alwaysLoad: z.boolean().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().optional(),
+    type: z.literal("http"),
+    url: z.string(),
+  }),
+  "McpHttpServerConfig",
+  "packages/core/src/session-messages.ts"
+);
+export type McpHttpServerConfigOutput = z.output<
+  typeof McpHttpServerConfigShape
+>;
+
+const FleetMcpConfigShape = declared(
+  z.union([
+    McpSSEServerConfigShape,
+    McpHttpServerConfigShape,
+    McpStdioServerConfigShape,
+  ]),
+  "FleetMcpConfig",
+  "packages/core/src/fleet.ts"
+);
+export const FleetMcpConfigSchema = FleetMcpConfigShape;
+export type FleetMcpConfigOutput = z.output<typeof FleetMcpConfigShape>;
+
+const FleetScopeShape = declared(
+  z.enum(["user", "project", "local"]),
+  "FleetScope",
+  "packages/core/src/fleet-placement.ts"
+);
+export const FleetScopeSchema: z.ZodType<FleetScopeType> = FleetScopeShape;
+export type FleetScopeOutput = z.output<typeof FleetScopeShape>;
+
+const DiscoveredMcpShape = declared(
+  z.object({
+    config: FleetMcpConfigShape,
+    managed: z.boolean(),
+    name: z.string(),
+    scope: FleetScopeShape,
+    shadowedBy: FleetScopeShape.optional(),
+  }),
+  "DiscoveredMcp",
+  "packages/core/src/fleet.ts"
+);
+export type DiscoveredMcpOutput = z.output<typeof DiscoveredMcpShape>;
+
+const DiscoveredSkillShape = declared(
+  z.object({
+    description: z.string().optional(),
+    managed: z.boolean(),
+    name: z.string(),
+    path: z.string(),
+    scope: z.union([FleetScopeShape, z.literal("plugin")]),
+  }),
+  "DiscoveredSkill",
+  "packages/core/src/fleet.ts"
+);
+export type DiscoveredSkillOutput = z.output<typeof DiscoveredSkillShape>;
+
+const ConfigInspectionShape = declared(
+  z.object({
+    at: z.number(),
+    cwd: z.string().optional(),
+    marketplaces: z.array(z.string()),
+    mcp: z.array(DiscoveredMcpShape),
+    memory: z
+      .object({
+        hash: z.string(),
+        bytes: z.number(),
+        managed: z.boolean(),
+        docs: z.array(
+          z.object({
+            path: z.string(),
+            hash: z.string(),
+            bytes: z.number(),
+            managed: z.boolean(),
+          })
+        ),
+      })
+      .nullable()
+      .optional(),
+    plugins: z.array(z.string()),
+    skills: z.array(DiscoveredSkillShape),
+  }),
+  "ConfigInspection",
+  "packages/core/src/fleet.ts"
+);
+export const ConfigInspectionSchema = ConfigInspectionShape;
+export type ConfigInspectionOutput = z.output<typeof ConfigInspectionShape>;
 
 const ConnectAccessShape = declared(
   z.enum(["read", "write"]),
@@ -752,6 +1123,14 @@ const ContextLineShape = declared(
 );
 export const ContextLineSchema = ContextLineShape;
 export type ContextLineOutput = z.output<typeof ContextLineShape>;
+
+const ContextUsageShape = declared(
+  z.object({ totalTokens: z.number() }),
+  "ContextUsage",
+  "packages/core/src/session/controls.ts"
+);
+export const ContextUsageSchema = ContextUsageShape;
+export type ContextUsageOutput = z.output<typeof ContextUsageShape>;
 
 const ContinuationJobShape = declared(
   z.object({
@@ -1056,6 +1435,14 @@ export const PermissionModeShape = declared(
 );
 export type PermissionModeOutput = z.output<typeof PermissionModeShape>;
 
+const CustodyPresenceShape = declared(
+  z.object({ id: z.string(), present: z.boolean().nullable() }),
+  "CustodyPresence",
+  "packages/core/src/session/controls.ts"
+);
+export const CustodyPresenceSchema = CustodyPresenceShape;
+export type CustodyPresenceOutput = z.output<typeof CustodyPresenceShape>;
+
 const DelegateAskStatusShape = declared(
   z.enum(["pending", "answered", "denied"]),
   "DelegateAskStatus",
@@ -1309,6 +1696,14 @@ const FiledRecordsShape = declared(
 export const FiledRecordsSchema = FiledRecordsShape;
 export type FiledRecordsOutput = z.output<typeof FiledRecordsShape>;
 
+const FleetAckShape = declared(
+  z.object({ convergedGeneration: z.number(), observedGeneration: z.number() }),
+  "FleetAck",
+  "packages/core/src/fleet.ts"
+);
+export const FleetAckSchema = FleetAckShape;
+export type FleetAckOutput = z.output<typeof FleetAckShape>;
+
 export const HarnessConfigKindShape = declared(
   z.enum(HARNESS_CONFIG_KINDS),
   "HarnessConfigKind",
@@ -1464,61 +1859,42 @@ const FleetItemStatusShape = declared(
 export const FleetItemStatusSchema = FleetItemStatusShape;
 export type FleetItemStatusOutput = z.output<typeof FleetItemStatusShape>;
 
-const McpStdioServerConfigShape = declared(
-  z.object({
-    alwaysLoad: z.boolean().optional(),
-    args: z.array(z.string()).optional(),
-    command: z.string(),
-    env: z.record(z.string(), z.string()).optional(),
-    timeout: z.number().optional(),
-    type: z.literal("stdio").optional(),
-  }),
-  "McpStdioServerConfig",
-  "packages/core/src/session-messages.ts"
-);
-export type McpStdioServerConfigOutput = z.output<
-  typeof McpStdioServerConfigShape
->;
-
-const McpSSEServerConfigShape = declared(
-  z.object({
-    alwaysLoad: z.boolean().optional(),
-    headers: z.record(z.string(), z.string()).optional(),
-    timeout: z.number().optional(),
-    type: z.literal("sse"),
-    url: z.string(),
-  }),
-  "McpSSEServerConfig",
-  "packages/core/src/session-messages.ts"
-);
-export type McpSSEServerConfigOutput = z.output<typeof McpSSEServerConfigShape>;
-
-const McpHttpServerConfigShape = declared(
-  z.object({
-    alwaysLoad: z.boolean().optional(),
-    headers: z.record(z.string(), z.string()).optional(),
-    timeout: z.number().optional(),
-    type: z.literal("http"),
-    url: z.string(),
-  }),
-  "McpHttpServerConfig",
-  "packages/core/src/session-messages.ts"
-);
-export type McpHttpServerConfigOutput = z.output<
-  typeof McpHttpServerConfigShape
->;
-
-const FleetMcpConfigShape = declared(
-  z.union([
-    McpSSEServerConfigShape,
-    McpHttpServerConfigShape,
-    McpStdioServerConfigShape,
+const FleetMcpChangeKindShape = declared(
+  z.enum([
+    "signed-in",
+    "signed-out",
+    "config",
+    "added",
+    "removed",
+    "enabled",
+    "disabled",
   ]),
-  "FleetMcpConfig",
-  "packages/core/src/fleet.ts"
+  "FleetMcpChangeKind",
+  "packages/core/src/session/controls.ts"
 );
-export const FleetMcpConfigSchema = FleetMcpConfigShape;
-export type FleetMcpConfigOutput = z.output<typeof FleetMcpConfigShape>;
+export type FleetMcpChangeKindOutput = z.output<typeof FleetMcpChangeKindShape>;
+
+const FleetMcpTakenShape = declared(
+  z.object({
+    error: z.string().optional(),
+    holds: z.boolean(),
+    kind: FleetMcpChangeKindShape,
+    name: z.string(),
+    status: z.string(),
+    tools: z.number().optional(),
+  }),
+  "FleetMcpTaken",
+  "packages/core/src/session/controls.ts"
+);
+export type FleetMcpTakenOutput = z.output<typeof FleetMcpTakenShape>;
+
+const FleetMcpTakeAnswerShape = declared(
+  z.object({ servers: z.array(FleetMcpTakenShape) }),
+  "FleetMcpTakeAnswer",
+  "packages/core/src/session/controls.ts"
+);
+export const FleetMcpTakeAnswerSchema = FleetMcpTakeAnswerShape;
+export type FleetMcpTakeAnswerOutput = z.output<typeof FleetMcpTakeAnswerShape>;
 
 const FleetRefreshOutcomeShape = declared(
   z.enum(["updated", "unchanged", "failed"]),
@@ -1530,14 +1906,6 @@ export const FleetRefreshOutcomeSchema: z.ZodType<FleetRefreshOutcomeType> =
 export type FleetRefreshOutcomeOutput = z.output<
   typeof FleetRefreshOutcomeShape
 >;
-
-const FleetScopeShape = declared(
-  z.enum(["user", "project", "local"]),
-  "FleetScope",
-  "packages/core/src/fleet-placement.ts"
-);
-export const FleetScopeSchema: z.ZodType<FleetScopeType> = FleetScopeShape;
-export type FleetScopeOutput = z.output<typeof FleetScopeShape>;
 
 const FleetSyncOutcomeShape = declared(
   z.union([
@@ -1685,6 +2053,157 @@ const FleetSyncReportShape = declared(
 export const FleetSyncReportSchema = FleetSyncReportShape;
 export type FleetSyncReportOutput = z.output<typeof FleetSyncReportShape>;
 
+const FolderRemovedShape = declared(
+  z.object({ removed: z.boolean() }),
+  "FolderRemoved",
+  "packages/core/src/workspace/controls.ts"
+);
+export const FolderRemovedSchema = FolderRemovedShape;
+export type FolderRemovedOutput = z.output<typeof FolderRemovedShape>;
+
+const FolderWeightShape = declared(
+  z.object({
+    bytes: z.number(),
+    captures: z.number(),
+    files: z.number(),
+    js: z.number(),
+    wasm: z.number(),
+  }),
+  "FolderWeight",
+  "packages/core/src/preview/protocol.ts"
+);
+export const FolderWeightSchema = FolderWeightShape;
+export type FolderWeightOutput = z.output<typeof FolderWeightShape>;
+
+const ForgeWriteShape = declared(
+  z.union([
+    z.object({ body: z.string(), op: z.literal("issue"), title: z.string() }),
+    z.object({
+      base: z.string(),
+      body: z.string(),
+      head: z.string(),
+      op: z.literal("pull_request"),
+      title: z.string(),
+    }),
+    z.object({
+      body: z.string(),
+      number: z.number(),
+      on: z.enum(["issue", "pull_request"]),
+      op: z.literal("comment"),
+    }),
+  ]),
+  "ForgeWrite",
+  "packages/core/src/forge-post.ts"
+);
+export type ForgeWriteOutput = z.output<typeof ForgeWriteShape>;
+
+const ForgeAskShape = declared(
+  z.object({ repo: z.string(), write: ForgeWriteShape }),
+  "ForgeAsk",
+  "packages/core/src/forge-post.ts"
+);
+export const ForgeAskSchema = ForgeAskShape;
+export type ForgeAskOutput = z.output<typeof ForgeAskShape>;
+
+const PostMadeShape = declared(
+  z.object({
+    existing: z.boolean().optional(),
+    ok: z.boolean(),
+    said: z.string(),
+    url: z.string().optional(),
+  }),
+  "PostMade",
+  "packages/core/src/forge-post.ts"
+);
+
+const ForgeVerdictShape = declared(
+  z.union([
+    z.object({ kind: z.literal("made"), made: PostMadeShape }),
+    z.object({ kind: z.literal("refused"), why: z.string() }),
+  ]),
+  "ForgeVerdict",
+  "packages/core/src/forge-post.ts"
+);
+export const ForgeVerdictSchema = ForgeVerdictShape;
+export type ForgeVerdictOutput = z.output<typeof ForgeVerdictShape>;
+
+const FsMediaShape = declared(
+  z.object({ base64: z.string(), mediaType: z.string() }),
+  "FsMedia",
+  "packages/core/src/protocol.ts"
+);
+export const FsMediaSchema = FsMediaShape;
+export type FsMediaOutput = z.output<typeof FsMediaShape>;
+
+const ImageFormatShape = declared(
+  z.enum(IMAGE_FORMATS),
+  "ImageFormat",
+  "packages/core/src/image-generation.ts"
+);
+export type ImageFormatOutput = z.output<typeof ImageFormatShape>;
+
+const ImageProviderIdShape = declared(
+  z.enum(IMAGE_PROVIDERS),
+  "ImageProviderId",
+  "packages/core/src/image-generation.ts"
+);
+export type ImageProviderIdOutput = z.output<typeof ImageProviderIdShape>;
+
+const GeneratedImageShape = declared(
+  z.object({
+    asked: z.string().optional(),
+    format: ImageFormatShape,
+    height: z.number(),
+    model: z.string(),
+    notes: z.array(z.string()).optional(),
+    path: z.string(),
+    provider: ImageProviderIdShape,
+    width: z.number(),
+  }),
+  "GeneratedImage",
+  "packages/core/src/image-generation.ts"
+);
+export const GeneratedImageSchema = GeneratedImageShape;
+export type GeneratedImageOutput = z.output<typeof GeneratedImageShape>;
+
+const GhAccountShape = declared(
+  z.object({
+    active: z.boolean(),
+    host: z.string(),
+    login: z.string(),
+    scopes: z.array(z.string()),
+  }),
+  "GhAccount",
+  "packages/core/src/connections.ts"
+);
+export const GhAccountSchema = GhAccountShape;
+export type GhAccountOutput = z.output<typeof GhAccountShape>;
+
+const GhTokenShape = declared(
+  z.object({ token: z.string() }),
+  "GhToken",
+  "packages/core/src/connections.ts"
+);
+export const GhTokenSchema = GhTokenShape;
+export type GhTokenOutput = z.output<typeof GhTokenShape>;
+
+const GitChangesShape = declared(
+  z.union([
+    z.object({ repo: z.literal(false) }),
+    z.object({ repo: z.literal(true), status: z.string(), log: z.string() }),
+    z.object({
+      repo: z.literal("unread"),
+      command: z.enum(["status", "log"]),
+      exitCode: z.number(),
+      limitMs: z.number().optional(),
+    }),
+  ]),
+  "GitChanges",
+  "packages/core/src/session/controls.ts"
+);
+export const GitChangesSchema = GitChangesShape;
+export type GitChangesOutput = z.output<typeof GitChangesShape>;
+
 const StatusOptionShape = declared(
   z.object({ id: z.string(), name: z.string() }),
   "StatusOption",
@@ -1707,17 +2226,6 @@ const GithubProjectShape = declared(
 );
 export const GithubProjectSchema = GithubProjectShape;
 export type GithubProjectOutput = z.output<typeof GithubProjectShape>;
-
-const AccountIdentityShape = declared(
-  z.object({
-    email: z.string(),
-    organization: z.string(),
-    orgId: z.string().nullable(),
-  }),
-  "AccountIdentity",
-  "packages/core/src/accounts.ts"
-);
-export type AccountIdentityOutput = z.output<typeof AccountIdentityShape>;
 
 const AccountProviderShape = declared(
   z.string(),
@@ -1777,28 +2285,6 @@ export type HarnessCapabilitiesOutput = z.output<
   typeof HarnessCapabilitiesShape
 >;
 
-const ModelInfoShape = declared(
-  z.object({
-    contextWindow: z.number().optional(),
-    defaultEffort: z.string().nullable().optional(),
-    description: z.string().optional(),
-    displayName: z.string(),
-    released: z.string().optional(),
-    resolvedModel: z.string().optional(),
-    supportedEffortLevels: z.array(z.string()).optional(),
-    supportsAdaptiveThinking: z.boolean().optional(),
-    supportsAutoMode: z.boolean().optional(),
-    supportsEffort: z.boolean().optional(),
-    supportsFastMode: z.boolean().optional(),
-    supportsThinkingOff: z.boolean().optional(),
-    value: z.string(),
-  }),
-  "ModelInfo",
-  "packages/core/src/harness/kinds.ts"
-);
-export const ModelInfoSchema = ModelInfoShape;
-export type ModelInfoOutput = z.output<typeof ModelInfoShape>;
-
 const SignInFaultShape = declared(
   z.object({ at: z.number(), provider: z.string(), words: z.string() }),
   "SignInFault",
@@ -1828,6 +2314,47 @@ const HarnessReportShape = declared(
 );
 export const HarnessReportSchema = HarnessReportShape;
 export type HarnessReportOutput = z.output<typeof HarnessReportShape>;
+
+const HomeStoreShape = declared(
+  HarnessKindShape,
+  "HomeStore",
+  "packages/core/src/accounts.ts"
+);
+export type HomeStoreOutput = z.output<typeof HomeStoreShape>;
+
+const HomeCredentialShape = declared(
+  z.object({
+    identity: AccountIdentityShape,
+    kind: z.enum(["oauth", "api_key"]),
+    provider: AccountProviderShape,
+    store: HomeStoreShape.exclude(["claude"]),
+    storeProvider: z.string(),
+  }),
+  "HomeCredential",
+  "packages/core/src/accounts.ts"
+);
+export const HomeCredentialSchema = HomeCredentialShape;
+export type HomeCredentialOutput = z.output<typeof HomeCredentialShape>;
+
+const HomeLoginShape = declared(
+  z.object({
+    identity: AccountIdentityShape.optional(),
+    kind: AccountKindShape.optional(),
+    loggedIn: z.boolean(),
+  }),
+  "HomeLogin",
+  "packages/core/src/accounts.ts"
+);
+export const HomeLoginSchema = HomeLoginShape;
+export type HomeLoginOutput = z.output<typeof HomeLoginShape>;
+
+const HomeLoginMovedShape = declared(
+  z.object({ expired: z.string().optional(), store: z.string() }),
+  "HomeLoginMoved",
+  "packages/core/src/accounts.ts"
+);
+export const HomeLoginMovedSchema = HomeLoginMovedShape;
+export type HomeLoginMovedOutput = z.output<typeof HomeLoginMovedShape>;
 
 const FleetPlacementShape = declared(
   z.object({
@@ -1866,6 +2393,91 @@ const HookDraftShape = declared(
 );
 export const HookDraftSchema = HookDraftShape;
 export type HookDraftOutput = z.output<typeof HookDraftShape>;
+
+const WorkspaceOutputsShape = declared(
+  z.object({
+    files: z.array(z.object({ content: z.string(), path: z.string() })),
+  }),
+  "WorkspaceOutputs",
+  "packages/core/src/workspace/controls.ts"
+);
+export const WorkspaceOutputsSchema = WorkspaceOutputsShape;
+export type WorkspaceOutputsOutput = z.output<typeof WorkspaceOutputsShape>;
+
+const HostOutputListedShape = declared(
+  z.object({ link: z.boolean(), path: z.string(), size: z.number() }),
+  "HostOutputListed",
+  "packages/core/src/workspace/controls.ts"
+);
+export type HostOutputListedOutput = z.output<typeof HostOutputListedShape>;
+
+const HostOutputsListedShape = declared(
+  z.object({ listed: z.array(HostOutputListedShape) }),
+  "HostOutputsListed",
+  "packages/core/src/workspace/controls.ts"
+);
+export type HostOutputsListedOutput = z.output<typeof HostOutputsListedShape>;
+
+const HostOutputsShape = declared(
+  z.union([WorkspaceOutputsShape, HostOutputsListedShape]),
+  "HostOutputs",
+  "packages/core/src/workspace/controls.ts"
+);
+export const HostOutputsSchema = HostOutputsShape;
+export type HostOutputsOutput = z.output<typeof HostOutputsShape>;
+
+const InputNamedShape = declared(
+  z.object({
+    from: z.string(),
+    mode: z.number(),
+    name: z.string(),
+    size: z.number(),
+  }),
+  "InputNamed",
+  "packages/core/src/workspace/controls.ts"
+);
+export type InputNamedOutput = z.output<typeof InputNamedShape>;
+
+const InputsAdmittedShape = declared(
+  z.union([
+    z.object({
+      files: z.array(InputNamedShape),
+      folder: z.string().optional(),
+    }),
+    z.object({ refused: z.string() }),
+  ]),
+  "InputsAdmitted",
+  "packages/core/src/workspace/controls.ts"
+);
+export const InputsAdmittedSchema = InputsAdmittedShape;
+export type InputsAdmittedOutput = z.output<typeof InputsAdmittedShape>;
+
+const InputsLandedShape = declared(
+  z.object({ folder: z.string() }),
+  "InputsLanded",
+  "packages/core/src/workspace/controls.ts"
+);
+export const InputsLandedSchema = InputsLandedShape;
+export type InputsLandedOutput = z.output<typeof InputsLandedShape>;
+
+const InputsReadShape = declared(
+  z.union([
+    z.object({ contents: z.array(z.string()) }),
+    z.object({ refused: z.string() }),
+  ]),
+  "InputsRead",
+  "packages/core/src/workspace/controls.ts"
+);
+export const InputsReadSchema = InputsReadShape;
+export type InputsReadOutput = z.output<typeof InputsReadShape>;
+
+const InputsRoomShape = declared(
+  InputsLandedShape.extend({ free: z.number() }),
+  "InputsRoom",
+  "packages/core/src/workspace/controls.ts"
+);
+export const InputsRoomSchema = InputsRoomShape;
+export type InputsRoomOutput = z.output<typeof InputsRoomShape>;
 
 const InstallRouteShape = declared(
   z.enum(["ssh", "command"]),
@@ -2121,6 +2733,33 @@ const LinkModeShape = declared(
 export const LinkModeSchema: z.ZodType<LinkModeType> = LinkModeShape;
 export type LinkModeOutput = z.output<typeof LinkModeShape>;
 
+const MachineHookScriptShape = declared(
+  z.object({ content: z.string(), hash: z.string() }),
+  "MachineHookScript",
+  "packages/core/src/fleet.ts"
+);
+export const MachineHookScriptSchema = MachineHookScriptShape;
+export type MachineHookScriptOutput = z.output<typeof MachineHookScriptShape>;
+
+const MachineMemoryDocShape = declared(
+  z.object({ content: z.string(), hash: z.string(), path: z.string() }),
+  "MachineMemoryDoc",
+  "packages/core/src/fleet.ts"
+);
+export type MachineMemoryDocOutput = z.output<typeof MachineMemoryDocShape>;
+
+const MachineMemorySetShape = declared(
+  z.object({
+    content: z.string(),
+    docs: z.array(MachineMemoryDocShape),
+    hash: z.string(),
+  }),
+  "MachineMemorySet",
+  "packages/core/src/fleet.ts"
+);
+export const MachineMemorySetSchema = MachineMemorySetShape;
+export type MachineMemorySetOutput = z.output<typeof MachineMemorySetShape>;
+
 const MachineStateShape = declared(
   z.enum(["active", "idle", "locked", "asleep"]),
   "MachineState",
@@ -2137,27 +2776,6 @@ const McpPlatformShape = declared(
 );
 export const McpPlatformSchema: z.ZodType<McpPlatformType> = McpPlatformShape;
 export type McpPlatformOutput = z.output<typeof McpPlatformShape>;
-
-const EndedTaskShape = declared(
-  z.object({
-    description: z.string(),
-    output: z.string().optional(),
-    outputUnread: z.object({ after: z.number() }).optional(),
-    taskId: z.string(),
-    type: z.string(),
-  }),
-  "EndedTask",
-  "packages/core/src/session/controls.ts"
-);
-export type EndedTaskOutput = z.output<typeof EndedTaskShape>;
-
-const MoveEndedShape = declared(
-  z.object({ tasks: z.array(EndedTaskShape), wakeups: z.number() }),
-  "MoveEnded",
-  "packages/core/src/session/controls.ts"
-);
-export const MoveEndedSchema = MoveEndedShape;
-export type MoveEndedOutput = z.output<typeof MoveEndedShape>;
 
 export const MoveLargeFileShape = declared(
   z.object({ bytes: z.number(), path: z.string() }),
@@ -2198,6 +2816,14 @@ export const MoveLfsResultShape = declared(
   "packages/core/src/move.ts"
 );
 export type MoveLfsResultOutput = z.output<typeof MoveLfsResultShape>;
+
+const MoveRemoteAuthShape = declared(
+  z.object({ remoteBasic: z.string().optional() }),
+  "MoveRemoteAuth",
+  "packages/core/src/move.ts"
+);
+export const MoveRemoteAuthSchema = MoveRemoteAuthShape;
+export type MoveRemoteAuthOutput = z.output<typeof MoveRemoteAuthShape>;
 
 const HubRepoKeyShape = declared(
   z.object({ projectId: z.string(), root: z.string().optional() }),
@@ -2623,6 +3249,7 @@ const PermissionRequestFrameShape = declared(
   "PermissionRequestFrame",
   "packages/core/src/frames.ts"
 );
+export const PermissionRequestFrameSchema = PermissionRequestFrameShape;
 export type PermissionRequestFrameOutput = z.output<
   typeof PermissionRequestFrameShape
 >;
@@ -2640,6 +3267,43 @@ export const ParkedAskShape = declared(
 );
 export type ParkedAskOutput = z.output<typeof ParkedAskShape>;
 
+const PermissionModeSetShape = declared(
+  z.object({ permissionMode: z.string() }),
+  "PermissionModeSet",
+  "packages/core/src/session/controls.ts"
+);
+export const PermissionModeSetSchema = PermissionModeSetShape;
+export type PermissionModeSetOutput = z.output<typeof PermissionModeSetShape>;
+
+const PictureCutShape = declared(
+  z.object({ drawn: z.number(), of: z.number() }),
+  "PictureCut",
+  "packages/core/src/artifact-picture.ts"
+);
+export type PictureCutOutput = z.output<typeof PictureCutShape>;
+
+const PictureTakenShape = declared(
+  z.object({ cut: PictureCutShape.optional(), png: z.string() }),
+  "PictureTaken",
+  "packages/core/src/artifact-picture.ts"
+);
+export const PictureTakenSchema = PictureTakenShape;
+export type PictureTakenOutput = z.output<typeof PictureTakenShape>;
+
+const PlaceLfsMadeShape = declared(
+  z.object({
+    bytes: z.number(),
+    commit: z.string(),
+    files: z.number(),
+    hooks: z.boolean(),
+    patterns: z.array(z.string()),
+  }),
+  "PlaceLfsMade",
+  "packages/core/src/workspace/controls.ts"
+);
+export const PlaceLfsMadeSchema = PlaceLfsMadeShape;
+export type PlaceLfsMadeOutput = z.output<typeof PlaceLfsMadeShape>;
+
 const PlaceLfsRowShape = declared(
   z.object({
     bytes: z.number(),
@@ -2652,6 +3316,50 @@ const PlaceLfsRowShape = declared(
 );
 export const PlaceLfsRowSchema = PlaceLfsRowShape;
 export type PlaceLfsRowOutput = z.output<typeof PlaceLfsRowShape>;
+
+const PlaceLeftOutShape = declared(
+  z.object({ path: z.string(), why: z.string() }),
+  "PlaceLeftOut",
+  "packages/core/src/workspace/controls.ts"
+);
+export type PlaceLeftOutOutput = z.output<typeof PlaceLeftOutShape>;
+
+const PlacePushShape = declared(
+  z.object({
+    branch: z.string(),
+    bytes: z.number(),
+    commit: z.string(),
+    files: z.number(),
+    hub: HubRepoKeyShape.optional(),
+    leftOut: z.array(PlaceLeftOutShape),
+    pushed: z.boolean(),
+    root: z.string(),
+  }),
+  "PlacePush",
+  "packages/core/src/workspace/controls.ts"
+);
+export const PlacePushSchema = PlacePushShape;
+export type PlacePushOutput = z.output<typeof PlacePushShape>;
+
+const PlaceRepoShape = declared(
+  z.union([
+    z.object({ state: z.literal("checkout"), root: z.string() }),
+    z.object({
+      state: z.literal("made"),
+      root: z.string(),
+      commit: z.string(),
+      files: z.number(),
+      bytes: z.number(),
+      staged: z.array(z.string()),
+      leftOut: z.array(PlaceLeftOutShape),
+      lfs: z.array(PlaceLfsRowShape),
+    }),
+  ]),
+  "PlaceRepo",
+  "packages/core/src/workspace/controls.ts"
+);
+export const PlaceRepoSchema = PlaceRepoShape;
+export type PlaceRepoOutput = z.output<typeof PlaceRepoShape>;
 
 const PolicyShape = declared(
   z.object({
@@ -2676,6 +3384,14 @@ export const PresenceClientShape = declared(
   "packages/core/src/notifications.ts"
 );
 export type PresenceClientOutput = z.output<typeof PresenceClientShape>;
+
+const PreviewStartedShape = declared(
+  z.object({ port: z.number() }),
+  "PreviewStarted",
+  "packages/core/src/preview/protocol.ts"
+);
+export const PreviewStartedSchema = PreviewStartedShape;
+export type PreviewStartedOutput = z.output<typeof PreviewStartedShape>;
 
 const RoutineScheduleShape = declared(
   z.object({
@@ -2852,6 +3568,44 @@ export const ProjectOfferReasonSchema: z.ZodType<ProjectOfferReasonType> =
   ProjectOfferReasonShape;
 export type ProjectOfferReasonOutput = z.output<typeof ProjectOfferReasonShape>;
 
+const ProviderSigninChallengeShape = declared(
+  z.union([
+    z.object({
+      expiresAt: z.number(),
+      userCode: z.string(),
+      verificationUrl: z.string(),
+    }),
+    z.object({ url: z.string() }),
+  ]),
+  "ProviderSigninChallenge",
+  "packages/core/src/accounts.ts"
+);
+export const ProviderSigninChallengeSchema = ProviderSigninChallengeShape;
+export type ProviderSigninChallengeOutput = z.output<
+  typeof ProviderSigninChallengeShape
+>;
+
+const ProviderSigninResultShape = declared(
+  z.union([
+    z.object({
+      state: z.literal("signed-in"),
+      email: z.string().nullable(),
+      identity: AccountIdentityShape.nullable(),
+      joined: AccountJoinedShape.optional(),
+      plan: z.string().nullable(),
+    }),
+    z.object({ state: z.literal("mismatch"), email: z.string().nullable() }),
+    z.object({ state: z.literal("expired") }),
+    z.object({ state: z.literal("pending") }),
+  ]),
+  "ProviderSigninResult",
+  "packages/core/src/accounts.ts"
+);
+export const ProviderSigninResultSchema = ProviderSigninResultShape;
+export type ProviderSigninResultOutput = z.output<
+  typeof ProviderSigninResultShape
+>;
+
 const RefusalReachShape = declared(
   z.enum(["machine", "account"]),
   "RefusalReach",
@@ -2860,6 +3614,14 @@ const RefusalReachShape = declared(
 export const RefusalReachSchema: z.ZodType<RefusalReachType> =
   RefusalReachShape;
 export type RefusalReachOutput = z.output<typeof RefusalReachShape>;
+
+const RelayCertifiedShape = declared(
+  z.object({ expiresAt: z.number() }),
+  "RelayCertified",
+  "packages/core/src/stream-relay.ts"
+);
+export const RelayCertifiedSchema = RelayCertifiedShape;
+export type RelayCertifiedOutput = z.output<typeof RelayCertifiedShape>;
 
 const RelayPortsShape = declared(
   z.object({ tcp: z.boolean(), tls: z.boolean(), udp: z.boolean() }),
@@ -2876,6 +3638,61 @@ const RelayReachShape = declared(
 );
 export const RelayReachSchema = RelayReachShape;
 export type RelayReachOutput = z.output<typeof RelayReachShape>;
+
+const StreamRelayStateShape = declared(
+  z.union([
+    BrowserStateShape.extract(["pulling", "starting", "live", "failed"]),
+    z.literal("stopped"),
+  ]),
+  "StreamRelayState",
+  "packages/core/src/stream-relay.ts"
+);
+export const StreamRelayStateSchema = StreamRelayStateShape;
+export type StreamRelayStateOutput = z.output<typeof StreamRelayStateShape>;
+
+const RelayFrameShape = declared(
+  z.object({
+    command: z.string().optional(),
+    hostname: z.string().optional(),
+    kind: z.literal("stream_relay"),
+    machineId: z.string(),
+    ports: RelayPortsShape,
+    progress: z.object({ done: z.number(), total: z.number() }).optional(),
+    reach: RelayReachShape.optional(),
+    state: StreamRelayStateShape,
+    why: z.string().optional(),
+  }),
+  "RelayFrame",
+  "packages/core/src/stream-relay.ts"
+);
+export const RelayFrameSchema = RelayFrameShape;
+export type RelayFrameOutput = z.output<typeof RelayFrameShape>;
+
+const RelayRenewedShape = declared(
+  z.object({ expiresAt: z.number(), renewed: z.boolean() }),
+  "RelayRenewed",
+  "packages/core/src/stream-relay.ts"
+);
+export const RelayRenewedSchema = RelayRenewedShape;
+export type RelayRenewedOutput = z.output<typeof RelayRenewedShape>;
+
+const RelayRuntimeNeedShape = declared(
+  z.object({ command: z.string(), why: z.string() }),
+  "RelayRuntimeNeed",
+  "packages/core/src/stream-relay.ts"
+);
+export type RelayRuntimeNeedOutput = z.output<typeof RelayRuntimeNeedShape>;
+
+const RelayRuntimeReadShape = declared(
+  z.object({
+    need: RelayRuntimeNeedShape.nullable(),
+    stepApplies: z.boolean(),
+  }),
+  "RelayRuntimeRead",
+  "packages/core/src/stream-relay.ts"
+);
+export const RelayRuntimeReadSchema = RelayRuntimeReadShape;
+export type RelayRuntimeReadOutput = z.output<typeof RelayRuntimeReadShape>;
 
 const RelayProviderShape = declared(
   z.enum(RELAY_PROVIDERS),
@@ -3160,6 +3977,15 @@ const SendModeShape = declared(
 export const SendModeSchema: z.ZodType<SendModeType> = SendModeShape;
 export type SendModeOutput = z.output<typeof SendModeShape>;
 
+const SendWithdrawalShape = declared(
+  z.enum(["withdrawn", "started"]),
+  "SendWithdrawal",
+  "packages/core/src/session/controls.ts"
+);
+export const SendWithdrawalSchema: z.ZodType<SendWithdrawalType> =
+  SendWithdrawalShape;
+export type SendWithdrawalOutput = z.output<typeof SendWithdrawalShape>;
+
 const SessionCommandsShape = declared(
   z.object({ names: z.array(z.string()), skills: z.array(z.string()) }),
   "SessionCommands",
@@ -3167,6 +3993,61 @@ const SessionCommandsShape = declared(
 );
 export const SessionCommandsSchema = SessionCommandsShape;
 export type SessionCommandsOutput = z.output<typeof SessionCommandsShape>;
+
+const SessionContextReadShape = declared(
+  z.union([
+    z.object({ readAt: z.number(), tokens: z.number() }),
+    z.object({ reason: z.string() }),
+  ]),
+  "SessionContextRead",
+  "packages/core/src/session/controls.ts"
+);
+export const SessionContextReadSchema = SessionContextReadShape;
+export type SessionContextReadOutput = z.output<typeof SessionContextReadShape>;
+
+const SessionCredentialInstallShape = declared(
+  z.object({
+    changedServers: z
+      .array(
+        z.object({ name: z.string(), before: z.string(), after: z.string() })
+      )
+      .optional(),
+    harness: HarnessKindShape,
+    installed: z.literal(true),
+    instanceId: z.string(),
+  }),
+  "SessionCredentialInstall",
+  "packages/core/src/harness.ts"
+);
+export const SessionCredentialInstallSchema = SessionCredentialInstallShape;
+export type SessionCredentialInstallOutput = z.output<
+  typeof SessionCredentialInstallShape
+>;
+
+const SessionCustodyShape = declared(
+  z.union([
+    z.object({
+      state: z.literal("available"),
+      instances: z.array(z.string()),
+      opencode: z.boolean(),
+      readStartedAt: z.number().optional(),
+      stopSequence: z.number().optional(),
+      pending: z.array(z.string()).optional(),
+    }),
+    z.object({ state: z.literal("unavailable"), error: z.string() }),
+  ]),
+  "SessionCustody",
+  "packages/core/src/protocol.ts"
+);
+export type SessionCustodyOutput = z.output<typeof SessionCustodyShape>;
+
+const SessionCustodyReadShape = declared(
+  z.object({ attached: z.array(z.string()), custody: SessionCustodyShape }),
+  "SessionCustodyRead",
+  "packages/core/src/session/controls.ts"
+);
+export const SessionCustodyReadSchema = SessionCustodyReadShape;
+export type SessionCustodyReadOutput = z.output<typeof SessionCustodyReadShape>;
 
 const SessionEndIntentShape = declared(
   z.enum(["stop", "discard", "delete", "delete-transcript"]),
@@ -3176,6 +4057,31 @@ const SessionEndIntentShape = declared(
 export const SessionEndIntentSchema: z.ZodType<SessionEndIntentType> =
   SessionEndIntentShape;
 export type SessionEndIntentOutput = z.output<typeof SessionEndIntentShape>;
+
+const SessionMessageShape = declared(
+  z.object({
+    compactSummary: z.literal(true).optional(),
+    error: z.string().optional(),
+    joined: z.number().optional(),
+    keepAlive: z.literal(true).optional(),
+    keptFrom: z.string().optional(),
+    message: z.unknown(),
+    parent_agent_id: z.string().nullable(),
+    parent_tool_use_id: z.string().nullable(),
+    queued: z.literal(true).optional(),
+    sends: z.array(z.string()).optional(),
+    session_id: z.string(),
+    sourceUuid: z.string().optional(),
+    timestamp: z.string().optional(),
+    turnEnd: z.literal(true).optional(),
+    type: z.enum(["user", "assistant", "system"]),
+    uuid: z.string(),
+  }),
+  "SessionMessage",
+  "packages/core/src/session-messages.ts"
+);
+export const SessionMessageSchema = SessionMessageShape;
+export type SessionMessageOutput = z.output<typeof SessionMessageShape>;
 
 const SessionOriginShape = declared(
   z.enum(["person", "delegate", "project", "check"]),
@@ -3462,14 +4368,6 @@ const SheetWrittenShape = declared(
 export const SheetWrittenSchema = SheetWrittenShape;
 export type SheetWrittenOutput = z.output<typeof SheetWrittenShape>;
 
-const SigninStateShape = declared(
-  z.enum(["signed-in", "signed-out", "mismatch"]),
-  "SigninState",
-  "packages/core/src/accounts.ts"
-);
-export const SigninStateSchema: z.ZodType<SigninStateType> = SigninStateShape;
-export type SigninStateOutput = z.output<typeof SigninStateShape>;
-
 const SkillFileShape = declared(
   z.object({
     contentBase64: z.string(),
@@ -3515,6 +4413,7 @@ const WorkspaceRefShape = declared(
   "WorkspaceRef",
   "packages/core/src/workspace/controls.ts"
 );
+export const WorkspaceRefSchema = WorkspaceRefShape;
 export type WorkspaceRefOutput = z.output<typeof WorkspaceRefShape>;
 
 const SpawnPayloadShape = declared(
@@ -3580,6 +4479,114 @@ const SpawnPayloadShape = declared(
 export const SpawnPayloadSchema = SpawnPayloadShape;
 export type SpawnPayloadOutput = z.output<typeof SpawnPayloadShape>;
 
+const StageStatusShape = declared(
+  z.enum(["starting", "waking", "live", "error", "asleep"]),
+  "StageStatus",
+  "packages/core/src/stage.ts"
+);
+export type StageStatusOutput = z.output<typeof StageStatusShape>;
+
+const StageStateOfShape = declared(
+  z.object({
+    at: z.string(),
+    dir: z.string(),
+    errors: z.array(StageErrorShape),
+    message: z.string().optional(),
+    status: StageStatusShape,
+  }),
+  "StageStateOf",
+  "packages/core/src/stage.ts"
+);
+
+const StageToolchainShape = declared(
+  z.enum(STAGE_TOOLCHAINS),
+  "StageToolchain",
+  "packages/core/src/stage.ts"
+);
+export type StageToolchainOutput = z.output<typeof StageToolchainShape>;
+
+const SheetStageStateShape = declared(
+  StageStateOfShape.extend({
+    runs: z.literal("sheet"),
+    toolchain: StageToolchainShape,
+  }),
+  "SheetStageState",
+  "packages/core/src/stage.ts"
+);
+
+const ServerStageStateShape = declared(
+  StageStateOfShape.extend({ runs: z.literal("serve") }),
+  "ServerStageState",
+  "packages/core/src/stage.ts"
+);
+
+const StageStateShape = declared(
+  z.union([SheetStageStateShape, ServerStageStateShape]),
+  "StageState",
+  "packages/core/src/stage.ts"
+);
+export const StageStateSchema = StageStateShape;
+export type StageStateOutput = z.output<typeof StageStateShape>;
+
+const StageOpenedShape = declared(
+  z.object({
+    dir: z.string(),
+    file: z.string(),
+    port: z.number(),
+    report: RenderReportShape,
+    sheet: SheetReadShape,
+    state: StageStateShape,
+    weight: SheetWeightShape.nullable(),
+  }),
+  "StageOpened",
+  "packages/core/src/stage.ts"
+);
+export const StageOpenedSchema = StageOpenedShape;
+export type StageOpenedOutput = z.output<typeof StageOpenedShape>;
+
+const SweepStepShape = declared(
+  z.enum(["load", "draw", "probe", "move", "post"]),
+  "SweepStep",
+  "packages/core/src/stage.ts"
+);
+export type SweepStepOutput = z.output<typeof SweepStepShape>;
+
+const SweepAtShape = declared(
+  z.object({
+    file: z.string(),
+    step: SweepStepShape,
+    story: z.string().optional(),
+  }),
+  "SweepAt",
+  "packages/core/src/stage.ts"
+);
+export type SweepAtOutput = z.output<typeof SweepAtShape>;
+
+const SectionUndrawnShape = declared(
+  z.object({
+    asked: z.boolean(),
+    at: SweepAtShape.nullable(),
+    file: z.string(),
+    first: z.string().nullable(),
+  }),
+  "SectionUndrawn",
+  "packages/core/src/stage.ts"
+);
+export type SectionUndrawnOutput = z.output<typeof SectionUndrawnShape>;
+
+const StageRenderedShape = declared(
+  z.object({
+    plansUnread: z.literal(true).optional(),
+    png: z.string().optional(),
+    report: RenderReportShape,
+    undrawn: z.array(SectionUndrawnShape),
+  }),
+  "StageRendered",
+  "packages/core/src/stage.ts"
+);
+export const StageRenderedSchema = StageRenderedShape;
+export type StageRenderedOutput = z.output<typeof StageRenderedShape>;
+
 const StarterOutcomeShape = declared(
   z.enum(["picked", "edited", "ignored"]),
   "StarterOutcome",
@@ -3630,16 +4637,35 @@ export const ModeAskShape = declared(
 );
 export type ModeAskOutput = z.output<typeof ModeAskShape>;
 
-const StreamRelayStateShape = declared(
-  z.union([
-    BrowserStateShape.extract(["pulling", "starting", "live", "failed"]),
-    z.literal("stopped"),
-  ]),
-  "StreamRelayState",
-  "packages/core/src/stream-relay.ts"
+const SlashCommandShape = declared(
+  z.object({
+    aliases: z.array(z.string()).optional(),
+    argumentHint: z.string(),
+    builtin: z.boolean().optional(),
+    description: z.string(),
+    kind: z.enum(["builtin", "custom", "skill", "mcp"]).optional(),
+    name: z.string(),
+  }),
+  "SlashCommand",
+  "packages/core/src/session-messages.ts"
 );
-export const StreamRelayStateSchema = StreamRelayStateShape;
-export type StreamRelayStateOutput = z.output<typeof StreamRelayStateShape>;
+export type SlashCommandOutput = z.output<typeof SlashCommandShape>;
+
+const SupportedCommandsShape = declared(
+  z.array(SlashCommandShape),
+  "SupportedCommands",
+  "packages/core/src/session-messages.ts"
+);
+export const SupportedCommandsSchema = SupportedCommandsShape;
+export type SupportedCommandsOutput = z.output<typeof SupportedCommandsShape>;
+
+const TaskOutputShape = declared(
+  z.object({ output: z.string().optional() }),
+  "TaskOutput",
+  "packages/core/src/session/controls.ts"
+);
+export const TaskOutputSchema = TaskOutputShape;
+export type TaskOutputOutput = z.output<typeof TaskOutputShape>;
 
 const ToolCopyShape = declared(
   z.union([
@@ -3655,6 +4681,16 @@ const ToolCopyShape = declared(
 );
 export const ToolCopySchema = ToolCopyShape;
 export type ToolCopyOutput = z.output<typeof ToolCopyShape>;
+
+const ToolSigninChallengeShape = declared(
+  z.object({ expiresAt: z.number(), url: z.string() }),
+  "ToolSigninChallenge",
+  "packages/core/src/tools.ts"
+);
+export const ToolSigninChallengeSchema = ToolSigninChallengeShape;
+export type ToolSigninChallengeOutput = z.output<
+  typeof ToolSigninChallengeShape
+>;
 
 const ToolWantsShape = declared(
   z.object({ orNewer: z.boolean(), version: z.string() }),
@@ -3672,6 +4708,178 @@ const TrackerSyncStateShape = declared(
 export const TrackerSyncStateSchema: z.ZodType<TrackerSyncStateType> =
   TrackerSyncStateShape;
 export type TrackerSyncStateOutput = z.output<typeof TrackerSyncStateShape>;
+
+const DocAuthorShape = declared(
+  z.enum(["owner", "agent", "report", "injected"]),
+  "DocAuthor",
+  "packages/jsonl-parser/src/text.ts"
+);
+export type DocAuthorOutput = z.output<typeof DocAuthorShape>;
+
+const TranscriptAuthorShape = declared(
+  DocAuthorShape,
+  "TranscriptAuthor",
+  "packages/core/src/find.ts"
+);
+
+const TranscriptMomentShape = declared(
+  z.object({
+    author: TranscriptAuthorShape,
+    context: z.string().optional(),
+    docId: z.string(),
+    role: z.string(),
+    score: z.number(),
+    snippet: z.string(),
+    timestamp: z.string().nullable(),
+  }),
+  "TranscriptMoment",
+  "packages/core/src/find.ts"
+);
+
+const TranscriptConversationShape = declared(
+  z.object({
+    cwd: z.string().nullable(),
+    harness: z.string(),
+    model: z.string().nullable(),
+    moments: z.array(TranscriptMomentShape),
+    score: z.number(),
+    sessionId: z.string(),
+    sidechain: z.boolean(),
+  }),
+  "TranscriptConversation",
+  "packages/core/src/find.ts"
+);
+
+const TranscriptAnswerShape = declared(
+  z.object({
+    catchingUp: z.boolean(),
+    conversations: z.array(TranscriptConversationShape),
+    dropped: z.string().optional(),
+    indexedThrough: z.number(),
+    queryMs: z.number(),
+    syncMs: z.number(),
+    unreadTranscripts: z.number().optional(),
+  }),
+  "TranscriptAnswer",
+  "packages/core/src/find.ts"
+);
+export const TranscriptAnswerSchema = TranscriptAnswerShape;
+export type TranscriptAnswerOutput = z.output<typeof TranscriptAnswerShape>;
+
+const TranscriptPlaceShape = declared(
+  z.object({
+    author: TranscriptAuthorShape,
+    column: z.enum(["output", "text", "thinking"]),
+    docId: z.string(),
+    excerpt: z.string(),
+    timestamp: z.string().nullable(),
+  }),
+  "TranscriptPlace",
+  "packages/core/src/find.ts"
+);
+export const TranscriptPlaceSchema = TranscriptPlaceShape;
+export type TranscriptPlaceOutput = z.output<typeof TranscriptPlaceShape>;
+
+const TranscriptTurnShape = declared(
+  z.object({
+    author: TranscriptAuthorShape,
+    docId: z.string(),
+    output: z.string().nullable(),
+    role: z.string(),
+    sidechain: z.boolean(),
+    text: z.string(),
+    thinking: z.string().nullable(),
+    timestamp: z.string().nullable(),
+    tools: z.string().nullable(),
+  }),
+  "TranscriptTurn",
+  "packages/core/src/find.ts"
+);
+export type TranscriptTurnOutput = z.output<typeof TranscriptTurnShape>;
+
+const TranscriptTurnsShape = declared(
+  z.union([
+    z.object({
+      centre: z.number(),
+      earlier: z.boolean(),
+      later: z.boolean(),
+      turns: z.array(TranscriptTurnShape),
+    }),
+    z.object({ missing: z.string() }),
+  ]),
+  "TranscriptTurns",
+  "packages/core/src/find.ts"
+);
+export const TranscriptTurnsSchema = TranscriptTurnsShape;
+export type TranscriptTurnsOutput = z.output<typeof TranscriptTurnsShape>;
+
+const TranscriptWindowShape = declared(
+  z.object({
+    entries: z.array(SessionMessageShape),
+    newer: z.string().nullable(),
+    older: z.string().nullable(),
+  }),
+  "TranscriptWindow",
+  "packages/core/src/transcript-types.ts"
+);
+export const TranscriptWindowSchema = TranscriptWindowShape;
+export type TranscriptWindowOutput = z.output<typeof TranscriptWindowShape>;
+
+const UpdateReportShape = declared(
+  z.object({
+    built: z.boolean(),
+    changed: z.array(z.string()),
+    from: z.string().optional(),
+    installed: z.boolean(),
+    pulled: z.string(),
+    restarted: z.array(z.string()),
+    skipped: z.string().optional(),
+    to: z.string().optional(),
+  }),
+  "UpdateReport",
+  "packages/core/src/protocol.ts"
+);
+export const UpdateReportSchema = UpdateReportShape;
+export type UpdateReportOutput = z.output<typeof UpdateReportShape>;
+
+const WorkInFlightShape = declared(
+  z.object({ since: z.number().nullable(), why: z.string() }),
+  "WorkInFlight",
+  "packages/core/src/session/controls.ts"
+);
+export const WorkInFlightSchema = WorkInFlightShape;
+export type WorkInFlightOutput = z.output<typeof WorkInFlightShape>;
+
+const ChangeVersionShape = declared(
+  z.union([
+    z.object({ kind: z.literal("text"), text: z.string() }),
+    z.object({ kind: z.enum(["binary", "large"]), bytes: z.number() }),
+    z.object({ kind: z.literal("link"), target: z.string() }),
+    z.object({ kind: z.enum(["folder", "gone"]) }),
+  ]),
+  "ChangeVersion",
+  "packages/core/src/workspace/controls.ts"
+);
+export type ChangeVersionOutput = z.output<typeof ChangeVersionShape>;
+
+const WorkspaceConflictShape = declared(
+  z.object({
+    delegate: ChangeVersionShape,
+    path: z.string(),
+    yours: ChangeVersionShape,
+  }),
+  "WorkspaceConflict",
+  "packages/core/src/workspace/controls.ts"
+);
+export type WorkspaceConflictOutput = z.output<typeof WorkspaceConflictShape>;
+
+const WorkspaceAppliedShape = declared(
+  z.object({ applied: z.number(), conflicts: z.array(WorkspaceConflictShape) }),
+  "WorkspaceApplied",
+  "packages/core/src/workspace/controls.ts"
+);
+export const WorkspaceAppliedSchema = WorkspaceAppliedShape;
+export type WorkspaceAppliedOutput = z.output<typeof WorkspaceAppliedShape>;
 
 const WorkspaceCutShape = declared(
   z.object({
@@ -3713,6 +4921,25 @@ const WorkspaceArchivedShape = declared(
 export const WorkspaceArchivedSchema = WorkspaceArchivedShape;
 export type WorkspaceArchivedOutput = z.output<typeof WorkspaceArchivedShape>;
 
+const ChangedPathShape = declared(
+  z.object({ change: z.enum(["write", "delete"]), path: z.string() }),
+  "ChangedPath",
+  "packages/core/src/workspace/controls.ts"
+);
+export type ChangedPathOutput = z.output<typeof ChangedPathShape>;
+
+const WorkspaceChangesShape = declared(
+  z.object({
+    changed: z.array(ChangedPathShape),
+    conflicts: z.array(WorkspaceConflictShape),
+    folder: z.string(),
+  }),
+  "WorkspaceChanges",
+  "packages/core/src/workspace/controls.ts"
+);
+export const WorkspaceChangesSchema = WorkspaceChangesShape;
+export type WorkspaceChangesOutput = z.output<typeof WorkspaceChangesShape>;
+
 const WorkspaceKindShape = declared(
   z.enum(["repo", "folder"]),
   "WorkspaceKind",
@@ -3738,3 +4965,19 @@ const WorkspaceCheckoutShape = declared(
 );
 export const WorkspaceCheckoutSchema = WorkspaceCheckoutShape;
 export type WorkspaceCheckoutOutput = z.output<typeof WorkspaceCheckoutShape>;
+
+const WorkspaceCommitShape = declared(
+  z.object({ bundle: z.string().nullable(), head: z.string() }),
+  "WorkspaceCommit",
+  "packages/core/src/workspace/controls.ts"
+);
+export const WorkspaceCommitSchema = WorkspaceCommitShape;
+export type WorkspaceCommitOutput = z.output<typeof WorkspaceCommitShape>;
+
+const WorkspaceSavedShape = declared(
+  z.union([z.object({ path: z.string() }), z.object({ refused: z.string() })]),
+  "WorkspaceSaved",
+  "packages/core/src/workspace/controls.ts"
+);
+export const WorkspaceSavedSchema = WorkspaceSavedShape;
+export type WorkspaceSavedOutput = z.output<typeof WorkspaceSavedShape>;

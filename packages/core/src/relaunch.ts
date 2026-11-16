@@ -54,17 +54,15 @@ export const startRefused = (row: {
 }): boolean => row.status === "error" && row.lastErrorKind === "start-refused";
 
 /** Every {@link LastErrorKind}, for a reader of one off the wire. */
-const LAST_ERROR_KINDS: ReadonlySet<string> = new Set<LastErrorKind>([
+const LAST_ERROR_KINDS: readonly LastErrorKind[] = [
   "conversation-gone",
   "restart-lost",
   "start-refused",
-]);
+];
 
 /** `value` as a {@link LastErrorKind}, when it is one. */
 export const asLastErrorKind = (value: unknown): LastErrorKind | undefined =>
-  typeof value === "string" && LAST_ERROR_KINDS.has(value)
-    ? (value as LastErrorKind)
-    : undefined;
+  LAST_ERROR_KINDS.find((kind) => kind === value);
 
 /** The {@link LastErrorKind} an error carries, when its maker typed it. */
 export const lastErrorKindOf = (error: unknown): LastErrorKind | undefined =>

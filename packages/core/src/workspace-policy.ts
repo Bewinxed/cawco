@@ -143,8 +143,8 @@ export const excludedPaths = (
   const fields = rules.split("\0");
   const excluded: string[] = [];
   for (let at = 0; at + 3 < fields.length; at += 4) {
-    const source = fields[at] as string;
-    const path = fields[at + 3] as string;
+    const source = fields[at];
+    const path = fields[at + 3];
     const bare = path.replace(TRAILING_SLASH, "");
     if (!(
       committed.has(source) ||

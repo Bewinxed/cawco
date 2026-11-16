@@ -1458,10 +1458,7 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
         notifications.presence(
           body,
           notifications.machineAt(
-            askedFrom(
-              request.headers,
-              addressOf(server as Parameters<typeof addressOf>[0], request)
-            )
+            askedFrom(request.headers, addressOf(server, request))
           )
         );
         return { ok: true };
@@ -1488,10 +1485,7 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
     .get("/api/person", ({ request, server }): PersonRead => ({
       ...notifications.view(),
       thisMachine: notifications.machineAt(
-        askedFrom(
-          request.headers,
-          addressOf(server as Parameters<typeof addressOf>[0], request)
-        )
+        askedFrom(request.headers, addressOf(server, request))
       ),
     }))
     .post(

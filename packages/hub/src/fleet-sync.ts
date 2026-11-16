@@ -32,9 +32,10 @@
  * whether or not it moved, and the agent keeps it forced until a converge
  * has written it, whatever delta comes meanwhile.
  */
+
 import {
   FLEET_ACK_MS,
-  type FleetAck,
+  type FLEET_DELTA,
   type FleetDelta,
   type FleetDeltaItem,
   type FleetHeld,
@@ -42,8 +43,8 @@ import {
   type FleetSyncOutcome,
 } from "@cawco/core/fleet";
 import { type FleetItems, itemHash } from "@cawco/core/fleet-items";
-import type { ControlResultFrame } from "@cawco/core/frames";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { ControlAnswer } from "./machine-answers";
 
 /** How long fleet changes gather before each machine's delta is built. */
 const DEBOUNCE_MS = 250;
@@ -327,7 +328,10 @@ export class FleetSync {
    * (READY for a welcome), or its refusal in its own words. Answers whether
    * the hub waited on it. Either way the changes that waited behind it go.
    */
-  answered(requestId: string, result: ControlResultFrame): boolean {
+  answered(
+    requestId: string,
+    result: ControlAnswer<typeof FLEET_DELTA>
+  ): boolean {
     const sent = [...this.#inFlight.values()].find(
       (one) => one.requestId === requestId
     );
@@ -340,13 +344,8 @@ export class FleetSync {
     const name = this.#deps.name(machineId);
     const took = seconds(Date.now() - sentAt);
     const what = `${delta.welcome ? "welcome" : "delta"} gen ${delta.generation}`;
-    const observed = (result.result as Partial<FleetAck> | undefined)
-      ?.observedGeneration;
-    if (
-      !result.ok ||
-      typeof observed !== "number" ||
-      observed < delta.generation
-    ) {
+    const observed = result.ok ? result.result.observedGeneration : undefined;
+    if (!result.ok || observed === undefined || observed < delta.generation) {
       const error = result.ok
         ? `the machine answered gen ${delta.generation} keeping gen ${String(observed)}`
         : (result.error ??

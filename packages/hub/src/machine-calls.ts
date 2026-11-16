@@ -1,6 +1,11 @@
 import type { Bounded } from "@cawco/core/bounded";
 import { readWithin } from "@cawco/core/bounded";
 import type { CommandQueue } from "@cawco/core/commands/controls";
+import {
+  type ControlName,
+  type FsOp,
+  SPAWN_REPLY,
+} from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
 import type { FleetSkillMeta } from "@cawco/core/fleet";
 import { READ_SKILL_FOLDER } from "@cawco/core/fleet";
@@ -10,7 +15,6 @@ import type {
   ControlPayload,
   Envelope,
   InstanceRow,
-  SendPayload,
 } from "@cawco/core/protocol";
 import { CONTROL_ABANDON } from "@cawco/core/session/controls";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
@@ -18,8 +22,15 @@ import { problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import { SPAWN_START_TIMEOUT_MS } from "./config";
 import type { FolderSkillBody, SessionLocation } from "./hub-shapes";
-import type { ControlResult } from "./machine-answers";
-import { machineSkillFiles } from "./machine-answers";
+import {
+  answerOf,
+  type CallAnswer,
+  type ControlAnswer,
+  type ControlResult,
+  type FsAnswer,
+  fsAnswerOf,
+  parsedAs,
+} from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { peek } from "./payload-peeks";
 
@@ -142,9 +153,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
         const { envelope } = send;
         ctx.sendToMachine(
           agent,
-          envelope.verb === "send"
-            ? ctx.presenced(envelope as Envelope<SendPayload>)
-            : envelope
+          envelope.verb === "send" ? ctx.presenced(envelope) : envelope
         );
         again += 1;
       }
@@ -270,14 +279,14 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * will not answer is unanswered, reason "timeout"; an answered frame with
    * `ok: false` is the machine's refusal.
    */
-  const callAgent = (
+  const callAgent = <K extends ControlName>(
     machineId: string,
-    method: string,
+    method: K,
     args: unknown[],
     timeoutMs: number,
     harness?: HarnessKind,
     instanceId?: string
-  ): Promise<Bounded<ControlResult>> => {
+  ): Promise<Bounded<ControlAnswer<K>>> => {
     const agent = ctx.registry.agent(machineId);
     if (!agent && ctx.machinePresence(machineId).kind !== "reconnecting") {
       return Promise.resolve({ kind: "unanswered", reason: "dead", after: 0 });
@@ -291,7 +300,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       ...(harness && { harness }),
       ...(instanceId && { instanceId }),
     };
-    return awaitReply(machineId, requestId, timeoutMs, () => {
+    return awaitReply(machineId, method, requestId, timeoutMs, () => {
       const frame = {
         verb: "control",
         machineId,
@@ -317,7 +326,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * Why: a dashboard's transcript read asked as the hub came back, its
    * machine 18 s behind it, toasted that sentence (j1-check-in, 2026-10-22).
    */
-  const asRead = (answer: Bounded<ControlResult>): Bounded<ControlResult> =>
+  const asRead = <T>(answer: Bounded<CallAnswer<T>>): Bounded<CallAnswer<T>> =>
     answer.kind === "answered" &&
     !answer.value.ok &&
     answer.value.error === MACHINE_DISCONNECTED
@@ -325,26 +334,43 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       : answer;
 
   /** Asks a session's process `method` directly and reads its answer ({@link asRead}). */
-  const readSessionProcess = async (
+  const readSessionProcess = async <K extends ControlName>(
     row: { id: string; machineId: string },
-    method: string,
+    method: K,
     args: unknown[]
-  ): Promise<Bounded<ControlResult>> => {
+  ): Promise<Bounded<ControlAnswer<K>>> => {
     const requestId = crypto.randomUUID();
     return asRead(
-      await awaitReply(row.machineId, requestId, READ_TIMEOUT_MS, () => {
-        const agent = ctx.registry.agent(row.machineId);
-        return agent
-          ? sendAnswerable(agent, sessionControl(row, requestId, method, args))
-          : undefined;
-      })
+      await awaitReply(
+        row.machineId,
+        method,
+        requestId,
+        READ_TIMEOUT_MS,
+        () => {
+          const agent = ctx.registry.agent(row.machineId);
+          return agent
+            ? sendAnswerable(
+                agent,
+                sessionControl(row, requestId, method, args)
+              )
+            : undefined;
+        }
+      )
     );
   };
 
   /** {@link callAgent} for a method that only reads: its answer {@link asRead}. */
-  const readAgent = async (
-    ...ask: Parameters<typeof callAgent>
-  ): Promise<Bounded<ControlResult>> => asRead(await callAgent(...ask));
+  const readAgent = async <K extends ControlName>(
+    machineId: string,
+    method: K,
+    args: unknown[],
+    timeoutMs: number,
+    harness?: HarnessKind,
+    instanceId?: string
+  ): Promise<Bounded<ControlAnswer<K>>> =>
+    asRead(
+      await callAgent(machineId, method, args, timeoutMs, harness, instanceId)
+    );
 
   /**
    * The machine a skill folder's source names by its host (skills.ts
@@ -515,7 +541,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
           `${ctx.machineName(machineId)} could not read ${path}`
       );
     }
-    return machineSkillFiles(asked.value.result);
+    return asked.value.result;
   };
 
   /**
@@ -528,13 +554,13 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * by the same id) is read back to its caller. Answers `null` when its asker
    * let it go.
    */
-  const readStoppable = async (
+  const readStoppable = async <K extends ControlName>(
     machineId: string,
-    method: string,
+    method: K,
     args: unknown[],
     timeoutMs: number,
     ask: { caller: string; signal?: AbortSignal | undefined }
-  ): Promise<Bounded<ControlResult> | null> => {
+  ): Promise<Bounded<ControlAnswer<K>> | null> => {
     if (
       !ctx.registry.agent(machineId) &&
       ctx.machinePresence(machineId).kind !== "reconnecting"
@@ -562,6 +588,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       const answer = asRead(
         await awaitReply(
           machineId,
+          method,
           requestId,
           timeoutMs,
           () => {
@@ -607,7 +634,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * away answers MACHINE_DISCONNECTED; one that passes with it there is
    * unanswered, a machine that did not answer.
    */
-  const awaitReply = async (
+  const awaitFrame = async (
     machineId: string,
     requestId: string,
     timeoutMs: number,
@@ -699,6 +726,46 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       : reply;
   };
 
+  /** `reply`'s frame read by `read` (machine-answers.ts `answerOf`), once it came. */
+  const parsedReply = <T>(
+    reply: Bounded<ControlResult>,
+    read: (frame: ControlResult) => CallAnswer<T>
+  ): Bounded<CallAnswer<T>> =>
+    reply.kind === "answered"
+      ? { kind: "answered", value: read(reply.value) }
+      : reply;
+
+  /**
+   * {@link awaitFrame} for control `method`: its answer parsed against its
+   * reply's schema where it arrives (machine-answers.ts `answerOf`), a reply
+   * that is not its type failed on this call alone.
+   */
+  const awaitReply = async <K extends ControlName>(
+    machineId: string,
+    method: K,
+    requestId: string,
+    timeoutMs: number,
+    send: () => Envelope | undefined,
+    letGo?: AbortSignal
+  ): Promise<Bounded<ControlAnswer<K>>> =>
+    parsedReply(
+      await awaitFrame(machineId, requestId, timeoutMs, send, letGo),
+      (frame) => answerOf(method, frame, ctx.machineName(machineId))
+    );
+
+  /** {@link awaitFrame} for `fs` op `op`: its answer parsed against its reply's schema (machine-answers.ts `fsAnswerOf`). */
+  const awaitFs = async <O extends FsOp>(
+    machineId: string,
+    op: O,
+    requestId: string,
+    timeoutMs: number,
+    send: () => Envelope | undefined
+  ): Promise<Bounded<FsAnswer<O>>> =>
+    parsedReply(
+      await awaitFrame(machineId, requestId, timeoutMs, send),
+      (frame) => fsAnswerOf(op, frame, ctx.machineName(machineId))
+    );
+
   /**
    * Each credential the hub revokes, named by its hash to every machine
    * connected ({@link CONTROL_FORGET_CREDENTIALS}): any of them may hold it
@@ -721,10 +788,10 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     instanceId: string,
     requestId: string,
     send: () => Envelope | undefined
-  ): Promise<Bounded<ControlResult>> => {
+  ): Promise<Bounded<CallAnswer<unknown>>> => {
     const sentAt = Date.now();
     let sent: Envelope | undefined;
-    let reply = await awaitReply(
+    let reply = await awaitFrame(
       machineId,
       requestId,
       SPAWN_START_TIMEOUT_MS,
@@ -739,14 +806,16 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
         .machineLinesOf(instanceId)
         .some((line) => line.kind === "room" && line.at >= sentAt)
     ) {
-      reply = await awaitReply(
+      reply = await awaitFrame(
         machineId,
         requestId,
         SPAWN_START_TIMEOUT_MS,
         () => sent
       );
     }
-    return reply;
+    return parsedReply(reply, (frame) =>
+      parsedAs(SPAWN_REPLY, frame, ctx.machineName(machineId), "its start")
+    );
   };
 
   return {
@@ -769,6 +838,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     readSkillFolder,
     readStoppable,
     awaitReply,
+    awaitFs,
     FORGET_CREDENTIALS_TIMEOUT_MS,
     awaitStart,
   };

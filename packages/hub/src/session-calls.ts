@@ -1,25 +1,9 @@
-/**
- * THE CALLS a session's tools make that are not a work item's
- * (work-item-calls.ts), each the same function its route calls
- * (routes/followup-state.ts, routes/continuations.ts, routes/machines.ts and
- * the rest): a tool calls it directly, as the session the MCP gateway
- * authenticated, never over the hub's own HTTP, and a route after its own
- * checks of who calls and what the body holds. What stops a call is a
- * returned problem with its status, code and words.
- *
- * Imports nothing of the hub's context (hub-context.ts): what the calls act
- * through is {@link SessionCallsDeps}, and the context's members are typed
- * from it.
- */
-import type { Bounded } from "@cawco/core/bounded";
 import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
 import type { ForgeWrite } from "@cawco/core/forge-post";
 import { readForgeAsk } from "@cawco/core/forge-post";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
   effectiveImageChoice,
   GENERATE_IMAGE,
-  type GeneratedImage,
   IMAGE_GENERATION_TIMEOUT_MS,
   type ImageGenerationRequest,
   imageProviderOf,
@@ -51,7 +35,7 @@ import type {
   ContinueOutcome,
 } from "./hub-shapes";
 import type { KeepAliveRow } from "./keep-alive";
-import type { ControlResult, Unanswered } from "./machine-answers";
+import type { AgentCall, Unanswered } from "./machine-answers";
 import { awayProblem, silentProblem } from "./machine-answers";
 import { machineOut } from "./machine-out";
 import type { MachinePause, PauseCaller } from "./machine-pause";
@@ -68,14 +52,7 @@ import type { Unlanded } from "./workspaces";
 /** What the session calls act through (server.ts's hub context holds each). */
 export interface SessionCallsDeps {
   readonly artifacts: Artifacts;
-  readonly callAgent: (
-    machineId: string,
-    method: string,
-    args: unknown[],
-    timeoutMs: number,
-    harness?: HarnessKind,
-    instanceId?: string
-  ) => Promise<Bounded<ControlResult>>;
+  readonly callAgent: AgentCall;
   readonly cloneForContinuation: (
     sourceId: string
   ) => Promise<(() => void) | ContinuationUnplaced>;
@@ -454,7 +431,7 @@ export const mediaCalls = ({
             );
       case "answered":
         return answer.value.ok
-          ? (answer.value.result as GeneratedImage)
+          ? answer.value.result
           : problem(502, {
               code: "image-not-generated",
               detail: answer.value.error ?? "Image generation failed.",

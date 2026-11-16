@@ -7,6 +7,7 @@
  * What a harness or CawCo put under the person's role (a notice, a hook's
  * output) is no one's words here, and is left out.
  */
+
 import type { Bounded } from "@cawco/core/bounded";
 import type {
   FindPlace,
@@ -15,11 +16,11 @@ import type {
   TranscriptPlace,
 } from "@cawco/core/find";
 import { unmarked } from "@cawco/core/find-match";
-import type { ControlResultFrame } from "@cawco/core/frames";
 import {
   CONTROL_TRANSCRIPT_PLACES,
   unknownControlWords,
 } from "@cawco/core/session/controls";
+import type { ControlAnswer } from "./machine-answers";
 import { secretRangesOf } from "./secret-filter";
 
 /**
@@ -61,17 +62,6 @@ function placeOf(place: TranscriptPlace): FindPlace[] {
   ];
 }
 
-/** Whether `value` reads as a machine's places answer: a list of places. */
-const isPlaces = (value: unknown): value is TranscriptPlace[] =>
-  Array.isArray(value) &&
-  value.every(
-    (each) =>
-      typeof each === "object" &&
-      each !== null &&
-      typeof (each as TranscriptPlace).docId === "string" &&
-      typeof (each as TranscriptPlace).excerpt === "string"
-  );
-
 /**
  * How the machine took the places read (core `PlacesHeard`), and its places
  * when it answered: an agent from before the read was added says it has no
@@ -80,7 +70,7 @@ const isPlaces = (value: unknown): value is TranscriptPlace[] =>
  * does. `null`: the asker let the read go.
  */
 export function placesHeard(
-  answer: Bounded<ControlResultFrame> | null
+  answer: Bounded<ControlAnswer<typeof CONTROL_TRANSCRIPT_PLACES>> | null
 ):
   | { heard: "answered"; places: TranscriptPlace[] }
   | { heard: Exclude<PlacesHeard, "answered"> } {
@@ -88,7 +78,7 @@ export function placesHeard(
     return { heard: "silent" };
   }
   const { value } = answer;
-  if (value.ok && isPlaces(value.result)) {
+  if (value.ok) {
     return { heard: "answered", places: value.result };
   }
   return value.error?.includes(unknownControlWords(CONTROL_TRANSCRIPT_PLACES))

@@ -7,6 +7,7 @@
  * proposed (asks.ts), and kept on the ask, so the card reads the same
  * after a restart.
  */
+
 import type { SourceFacts } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
@@ -14,6 +15,7 @@ import type { FleetMarketplace } from "@cawco/core/fleet";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { Octokit } from "@octokit/rest";
+import { z } from "zod";
 import {
   FOLDER_CHANGED,
   folderOf,
@@ -90,8 +92,19 @@ const marketplaceOrigin = (source: string): Origin => {
   };
 };
 
-/** One JSON read within {@link READ_MS}, its body included. */
-const read = (url: string): Promise<Bounded<unknown>> =>
+/** What npm's registry says of a package, as far as its facts read it. */
+const NPM_DOCUMENT = z.object({
+  time: z.object({ created: z.string().optional() }).optional(),
+});
+
+/** What npm's downloads API says of a package's last week. */
+const NPM_DOWNLOADS = z.object({ downloads: z.number().optional() });
+
+/** One JSON read within {@link READ_MS}, its body included, parsed as `schema`'s type (thrown when it is not). */
+const read = <S extends z.ZodType>(
+  url: string,
+  schema: S
+): Promise<Bounded<z.output<S>>> =>
   readWithin(READ_MS, async (signal) => {
     const response = await fetch(url, {
       headers: { accept: "application/json", "user-agent": "cawco-hub" },
@@ -100,7 +113,7 @@ const read = (url: string): Promise<Bounded<unknown>> =>
     if (!response.ok) {
       throw new Error(`${new URL(url).host} answered ${response.status}`);
     }
-    return (await response.json()) as unknown;
+    return schema.parse(await response.json());
   });
 
 /** The words for a read the registry did not answer in time. */
@@ -151,8 +164,11 @@ const npmFacts = async (pkg: string): Promise<SourceFacts> => {
   const name = pkg.replace("/", "%2f");
   try {
     const [documentRead, downloadsRead] = await Promise.all([
-      read(`https://registry.npmjs.org/${name}`),
-      read(`https://api.npmjs.org/downloads/point/last-week/${pkg}`),
+      read(`https://registry.npmjs.org/${name}`, NPM_DOCUMENT),
+      read(
+        `https://api.npmjs.org/downloads/point/last-week/${pkg}`,
+        NPM_DOWNLOADS
+      ),
     ]);
     switch (documentRead.kind) {
       case "answered":
@@ -170,8 +186,8 @@ const npmFacts = async (pkg: string): Promise<SourceFacts> => {
       default:
         unhandled("read", downloadsRead);
     }
-    const document = documentRead.value as { time?: { created?: string } };
-    const downloads = downloadsRead.value as { downloads?: number };
+    const document = documentRead.value;
+    const downloads = downloadsRead.value;
     return {
       at,
       ...(document.time?.created ? { since: document.time.created } : {}),

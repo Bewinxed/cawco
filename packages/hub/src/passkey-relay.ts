@@ -27,6 +27,7 @@ import {
   type PasskeyStatusFrame,
 } from "@cawco/core/browser";
 import type { AgentRow } from "@cawco/core/protocol";
+import type { AgentCall } from "./machine-answers";
 
 /** How long the relay waits for a BLE advert before timing out. */
 const PASSKEY_RELAY_TIMEOUT_MS = 30_000;
@@ -48,12 +49,7 @@ export interface PasskeyRelayDeps {
   /** Tells every dashboard something. */
   broadcast: (frame: PasskeyStatusFrame) => void;
   /** Sends a command to a machine's daemon; scanning is best-effort, so its answer is not read. */
-  call: (
-    machineId: string,
-    method: string,
-    args: unknown[],
-    timeoutMs: number
-  ) => Promise<unknown>;
+  call: AgentCall;
   /** Whether the machine reported a BLE adapter (browsers.ts). */
   hasBle: (machineId: string) => boolean;
   /** Every machine the hub knows. */

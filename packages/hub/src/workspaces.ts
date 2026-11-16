@@ -1,4 +1,5 @@
 import type { CommandResult } from "@cawco/core/commands/controls";
+import type { ControlName, ControlReply } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { ownCommitsShell } from "@cawco/core/own-commits";
@@ -9,10 +10,7 @@ import { knowsNotControl } from "@cawco/core/session/controls";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
 import type { StageCloneFrame } from "@cawco/core/stage";
-import {
-  WorkspaceArchivedSchema,
-  WorkspaceCheckoutSchema,
-} from "@cawco/core/stored-shapes";
+import { WorkspaceCheckoutSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { workWords } from "@cawco/core/words/work";
 import { holdingWords, sizeWords } from "@cawco/core/words/workspace-holding";
@@ -32,9 +30,7 @@ import {
   CONTROL_WORKSPACE_WORK_END,
   OUTPUTS_DIR,
   type WorkspaceArchive,
-  type WorkspaceChanges,
   type WorkspaceCheckout,
-  type WorkspaceCommit,
   type WorkspaceCut,
   type WorkspaceFirstSession,
   type WorkspaceHolding,
@@ -55,12 +51,12 @@ import {
   type WorkspaceRow,
 } from "./db/project-work";
 import { soon } from "./lifetime";
+import type { MachineCall } from "./machine-answers";
 import { thrownAgain } from "./machine-answers";
 import { machineName } from "./machine-name";
 import type { CommandOptions } from "./machine-pause";
 import { handle } from "./presenters/words";
 import { makeProjectFolder, writeFolderFiles } from "./project-folder";
-import { received } from "./stored-json";
 import { LIVE, type Parent } from "./work-item-state";
 
 /**
@@ -393,11 +389,7 @@ export interface WorkspacesHub {
 
 export interface WorkspacesDeps extends WorkspacesHub {
   /** Runs a machine-scoped daemon function; throws the machine's own words. */
-  readonly call: (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ) => Promise<unknown>;
+  readonly call: MachineCall;
   /**
    * Runs a command on a machine, in a directory — inside `workspace`'s
    * boundary when one is named; throws when the machine cannot. Its limit
@@ -689,9 +681,9 @@ export const createWorkspaces = ({
     try {
       const read = isHostFolder(workspace)
         ? await hostOutputsRead(workspace)
-        : ((await call(workspace.machineId, CONTROL_WORKSPACE_OUTPUTS, [
+        : await call(workspace.machineId, CONTROL_WORKSPACE_OUTPUTS, [
             refOf(workspace),
-          ])) as WorkspaceOutputs);
+          ]);
       const files = read.files.map((one) => ({
         path: `${folder}/${one.path}`,
         content: Buffer.from(one.content, "base64"),
@@ -726,14 +718,14 @@ export const createWorkspaces = ({
    * ({@link knowsNotControl}): that agent gave the session no scratch dir,
    * so it holds nothing to read or remove.
    */
-  const onHostScratch = async <T>(
+  const onHostScratch = async <K extends ControlName>(
     workspace: WorkspaceRow,
-    method: string,
+    method: K,
     args: unknown[],
-    none: T
-  ): Promise<T> => {
+    none: ControlReply<K>
+  ): Promise<ControlReply<K>> => {
     try {
-      return (await call(workspace.machineId, method, args)) as T;
+      return await call(workspace.machineId, method, args);
     } catch (error) {
       if (knowsNotControl(error, method)) {
         return none;
@@ -750,7 +742,14 @@ export const createWorkspaces = ({
       CONTROL_HOST_OUTPUTS,
       [{ id: workspace.id, read: true }],
       { files: [] }
-    );
+    ).then((read) => {
+      if ("listed" in read) {
+        throw new Error(
+          `${machineName(db, workspace.machineId)} answered a read of ${workspace.id}'s outputs with their listing`
+        );
+      }
+      return read;
+    });
   /**
    * A workspace closed on its machine ({@link CONTROL_WORKSPACE_ARCHIVE}):
    * its boundary killed first and never started, then what it holds that is
@@ -786,16 +785,12 @@ export const createWorkspaces = ({
       skip,
       ...(landed.length > 0 ? { landed } : {}),
     };
-    // The machine's answer, taken into CawCo's type: what it holds and where
-    // its HEAD was are kept on the workspace's row.
-    const { carry, head, held } = received(
-      WorkspaceArchivedSchema,
-      await call(
-        workspace.machineId,
-        discard ? CONTROL_WORKSPACE_DISCARD : CONTROL_WORKSPACE_ARCHIVE,
-        [request]
-      ),
-      "a machine's workspace archive"
+    // The machine's answer, as its type: what it holds and where its HEAD
+    // was are kept on the workspace's row.
+    const { carry, head, held } = await call(
+      workspace.machineId,
+      discard ? CONTROL_WORKSPACE_DISCARD : CONTROL_WORKSPACE_ARCHIVE,
+      [request]
     );
     if (held) {
       const holding =
@@ -1300,11 +1295,7 @@ export const createWorkspaces = ({
     machineId: string
   ): Promise<ReadonlySet<MachinePath> | undefined> => {
     try {
-      const folders = (await call(
-        machineId,
-        CONTROL_WORKSPACE_CLONES,
-        []
-      )) as string[];
+      const folders = await call(machineId, CONTROL_WORKSPACE_CLONES, []);
       listFailures.delete(machineId);
       return new Set(
         folders.flatMap((folder) => {
@@ -1815,11 +1806,11 @@ export const createWorkspaces = ({
       }
       // A folder's unlanded work is its change set (agent layer.ts).
       if (workspaceOf(workspace).kind === "folderOverlay") {
-        const changes = (await call(
+        const changes = await call(
           workspace.machineId,
           CONTROL_WORKSPACE_CHANGES,
           [refOf(workspace)]
-        )) as WorkspaceChanges;
+        );
         const changed = changes.changed.length;
         return { workspaceId: id, changed, dirty: changed, ahead: 0 };
       }
@@ -2317,11 +2308,11 @@ export const createWorkspaces = ({
     ) {
       return;
     }
-    const boundaryPid = (await call(
+    const boundaryPid = await call(
       workspace.machineId,
       CONTROL_WORKSPACE_BOUNDARY,
       [refOf(workspace)]
-    )) as number;
+    );
     db.updateWorkspace(workspace.id, { boundaryPid });
   };
   /**
@@ -2609,10 +2600,10 @@ export const createWorkspaces = ({
         });
       }
       try {
-        return (await call(source.machineId, CONTROL_WORKSPACE_BUNDLE, [
+        return await call(source.machineId, CONTROL_WORKSPACE_BUNDLE, [
           refOf(source),
           source.base,
-        ])) as WorkspaceCommit;
+        ]);
       } finally {
         if (source.state === "held") {
           const closed = await closeWorkspace(

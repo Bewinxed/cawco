@@ -328,7 +328,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
         if (read.kind !== "answered" || !read.value.ok) {
           return;
         }
-        const said = read.value.result as (string | null)[];
+        const said = read.value.result;
         for (const [n, one] of asking.entries()) {
           ctx.artifacts.sourceSeen(one.id, said[n] ?? null);
         }
@@ -464,7 +464,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
             unansweredIn(origin.machineId, read, MACHINE_UNANSWERED)
           );
         case "answered":
-          return read.value.ok ? (read.value.result as string) : undefined;
+          return read.value.ok ? read.value.result : undefined;
         default:
           throw unreachable(read);
       }
@@ -477,7 +477,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     if (page.kind === "unanswered") {
       return unansweredIn(origin.machineId, page, MACHINE_UNANSWERED);
     }
-    const source = page.value.ok ? (page.value.result as string) : undefined;
+    const source = page.value.ok ? page.value.result : undefined;
     if (source === undefined) {
       return problem(404, {
         code: "page-source-missing",
@@ -681,7 +681,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
         return unansweredIn(row.machineId, read, MACHINE_UNANSWERED);
       }
       const inDir: (ImageAt & { text: string }) | undefined = read.value.ok
-        ? { text: read.value.result as string, dir: from.dir }
+        ? { text: read.value.result, dir: from.dir }
         : undefined;
       return inDir;
     }

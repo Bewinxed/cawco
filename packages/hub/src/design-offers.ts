@@ -33,6 +33,7 @@ import type { StagesTemplate } from "@cawco/core/views";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import { projectDesign } from "./landed";
+import type { MachineCall } from "./machine-answers";
 import { projectRoot } from "./project-folder";
 
 import type { TaskActor, TaskEvent, Tasks, TaskView } from "./tasks";
@@ -53,11 +54,7 @@ const DESIGN_SKILL = "design-system";
 
 export interface DesignOffersDeps {
   /** Runs a machine-scoped daemon function; throws the machine's own words (landed.ts). */
-  call: (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ) => Promise<unknown>;
+  call: MachineCall;
   db: DbShape;
   /** The person said Not now: the project's starters stop suggesting one (project-starters.ts). */
   declined: (projectId: string) => void;

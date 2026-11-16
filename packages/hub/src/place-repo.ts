@@ -26,25 +26,19 @@
 
 import { LARGE_FILE_BYTES } from "@cawco/core/move";
 import type { ProjectNote } from "@cawco/core/project-conversation";
-import { PlaceLfsRowSchema } from "@cawco/core/stored-shapes";
 import {
   CONTROL_PLACE_REPO,
   type PlaceLeftOut,
   type PlaceRepo,
 } from "@cawco/core/workspace/controls";
-import { z } from "zod";
 import type { DbShape } from "./db";
+import type { MachineCall } from "./machine-answers";
 import { machineName } from "./machine-name";
-import { received } from "./stored-json";
 
 /** What {@link createPlaceRepos} needs of the hub. */
 export interface PlaceRepoDeps {
   /** Runs a machine-scoped daemon function; throws the machine's own words. */
-  readonly call: (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ) => Promise<unknown>;
+  readonly call: MachineCall;
   readonly db: Pick<DbShape, "lfsOffers" | "listAgents" | "project">;
   /**
    * A note to the person in the project's conversation, waking no model
@@ -111,21 +105,16 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
         projectId: place.projectId,
         machineId: place.machineId,
         root: made.root,
-        // The machine's rows, taken into CawCo's type as they are kept.
-        rows: received(
-          z.array(PlaceLfsRowSchema),
-          made.lfs,
-          "a machine's place repository (its LFS rows)"
-        ),
+        rows: made.lfs,
         offeredAt: new Date(),
       });
     }
   };
 
   const make = async (place: PlaceRef): Promise<PlaceRepo> => {
-    const answer = (await call(place.machineId, CONTROL_PLACE_REPO, [
+    const answer = await call(place.machineId, CONTROL_PLACE_REPO, [
       place.path,
-    ])) as PlaceRepo;
+    ]);
     if (answer.state === "made") {
       noteMade(place, answer);
     }

@@ -52,7 +52,6 @@ import {
   BROWSER_START,
   BROWSER_STOP,
   type BrowserFrame,
-  type BrowserHandback,
   type BrowserHandedBackFrame,
   type BrowserInjectAdvertArgs,
   type BrowserKey,
@@ -81,7 +80,7 @@ import { answered } from "./browser-answered";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
 import type { BrowsersDb, StoredBrowser } from "./db/browsers";
-import type { RelayCall } from "./stream-relay";
+import type { AgentCall } from "./machine-answers";
 
 /** How a take-over came to end, as the hub's log says it. */
 const HANDED_BACK_BY: Record<BrowserHandedBackFrame["why"], string> = {
@@ -108,7 +107,7 @@ export type LiveBrowserFacts = Pick<BrowserRow, "why" | "progress" | "origin">;
 export interface BrowsersDeps {
   /** The browser asks waiting on the person (browser-tools.ts), made after this. */
   asks: () => BrowserAsks;
-  call: RelayCall;
+  call: AgentCall;
   db: { artifacts: ArtifactsDb; browsers: BrowsersDb };
   instance: (id: string) => InstanceRow | undefined;
   /** Whether the session's work item ended: its browser artifact went with it (server.ts `endBrowserOf`), and listing makes none again while it stays ended. */
@@ -263,7 +262,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
   };
 
   const shield = async (machineId: string, args: BrowserShieldArgs) => {
-    const row = answered<BrowserRow>(
+    const row = answered(
       await deps.call(machineId, BROWSER_SHIELD, [args], BROWSER_CALL_MS),
       machineId,
       deps.machineName(machineId),
@@ -491,7 +490,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
      * hub kept while it was away.
      */
     async connected(machineId: string) {
-      const frame = answered<BrowserFrame>(
+      const frame = answered(
         await deps.call(machineId, BROWSER_ROWS, [], BROWSER_CALL_MS),
         machineId,
         deps.machineName(machineId),
@@ -557,7 +556,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       if (machineId instanceof ElysiaStatus) {
         return machineId;
       }
-      const back = answered<BrowserHandback>(
+      const back = answered(
         await deps.call(
           machineId,
           BROWSER_HANDBACK,
@@ -581,7 +580,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         return machineId;
       }
       const relay = deps.mint(`browser:${key}`, RELAY_TTL_MS);
-      const row = answered<BrowserRow>(
+      const row = answered(
         await deps.call(
           machineId,
           BROWSER_START,
@@ -611,7 +610,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
           return back;
         }
       }
-      const row = answered<BrowserRow | null>(
+      const row = answered(
         await deps.call(machineId, BROWSER_STOP, [{ key }], BROWSER_CALL_MS),
         machineId,
         deps.machineName(machineId),
@@ -642,7 +641,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
             "You have control of this browser now. Hand it back first, then forget its sign-ins.",
         });
       }
-      const removed = answered<null>(
+      const removed = answered(
         await deps.call(machineId, BROWSER_REMOVE, [{ key }], BROWSER_CALL_MS),
         machineId,
         deps.machineName(machineId),
@@ -691,7 +690,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       if (machineId instanceof ElysiaStatus) {
         return machineId;
       }
-      const sent = answered<null>(
+      const sent = answered(
         await deps.call(
           machineId,
           BROWSER_INJECT_ADVERT,

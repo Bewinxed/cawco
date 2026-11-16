@@ -52,6 +52,7 @@ import { ElysiaStatus, problem } from "elysia";
 import type { Browsers } from "./browsers";
 import type { DbShape } from "./db";
 import type { HeldSession, HeldWorkspace } from "./db/project-work";
+import type { MachineCall } from "./machine-answers";
 import { deleteProjectFolder } from "./project-folder";
 import {
   type DiskPlace,
@@ -113,11 +114,7 @@ interface Removal {
 
 export interface ProjectDeleteDeps {
   /** A machine call's answer, or its failure thrown in words. */
-  call: (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ) => Promise<unknown>;
+  call: MachineCall;
   db: Pick<
     DbShape,
     | "browsers"
@@ -187,7 +184,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
 
   /** A clone removed on its machine, nothing read or carried. */
   const dropClone = async (workspace: HeldWorkspace): Promise<void> => {
-    const answer = (await deps.call(
+    const answer = await deps.call(
       workspace.machineId,
       CONTROL_WORKSPACE_ARCHIVE,
       [
@@ -197,8 +194,8 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
           unlanded: "drop",
         } satisfies WorkspaceArchive,
       ]
-    )) as { held?: unknown } | null;
-    if (answer?.held) {
+    );
+    if (answer.held) {
       throw new AgentTooOld();
     }
   };

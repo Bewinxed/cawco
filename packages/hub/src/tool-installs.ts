@@ -6,11 +6,15 @@ import { traitsOf } from "@cawco/core/harness/traits";
 import type { ControlPayload, Envelope } from "@cawco/core/protocol";
 import { toolUpdateOf } from "@cawco/core/tool-updates";
 import type { ToolSpec, ToolStatus, ToolWants } from "@cawco/core/tools";
-import { isToolStatus, TOOL_CATALOG, toolSpec } from "@cawco/core/tools";
+import {
+  INSTALL_TOOL,
+  LIST_TOOLS,
+  TOOL_CATALOG,
+  toolSpec,
+} from "@cawco/core/tools";
 import { configurePage } from "@cawco/core/words/configure";
 import type { HubContext } from "./hub-context";
-import type { ControlResult } from "./machine-answers";
-import { peekToolStatus } from "./machine-answers";
+import type { ControlAnswer } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { keptReleases, releaseTarget } from "./tool-releases";
 import type { MachineSocket } from "./wire-socket";
@@ -379,7 +383,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
   const installAwaited = (
     machineId: string,
     toolId: string
-  ): Promise<Bounded<ControlResult>> => {
+  ): Promise<Bounded<ControlAnswer<typeof INSTALL_TOOL>>> => {
     const agent = ctx.registry.agent(machineId);
     if (!agent) {
       return Promise.resolve({ kind: "unanswered", reason: "dead", after: 0 });
@@ -403,19 +407,25 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       at: Date.now(),
     });
     ctx.publishInstances(machineId);
-    return ctx.awaitReply(machineId, requestId, TOOL_INSTALL_MS, () => {
-      const frame = {
-        verb: "control",
-        machineId,
-        payload: {
-          requestId,
-          method: "installTool",
-          args: installArgs(toolId, ask, false, "cawco"),
-        },
-      } satisfies Envelope<ControlPayload>;
-      ctx.sendToMachine(agent, frame);
-      return frame;
-    });
+    return ctx.awaitReply(
+      machineId,
+      INSTALL_TOOL,
+      requestId,
+      TOOL_INSTALL_MS,
+      () => {
+        const frame = {
+          verb: "control",
+          machineId,
+          payload: {
+            requestId,
+            method: INSTALL_TOOL,
+            args: installArgs(toolId, ask, false, "cawco"),
+          },
+        } satisfies Envelope<ControlPayload>;
+        ctx.sendToMachine(agent, frame);
+        return frame;
+      }
+    );
   };
 
   /**
@@ -561,7 +571,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
         failed: `${name} didn't answer while ${spec.name} was being put on (${ctx.silentWords(machineId, answer)}), so whether it finished isn't known.`,
       };
     }
-    const status = peekToolStatus({ result: answer.value.result });
+    const status = answer.value.ok ? answer.value.result : undefined;
     if (status?.state === "installed") {
       say(
         `${spec.name}${status.version ? ` ${status.version}` : ""} runs on ${name}`
@@ -585,7 +595,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
     const name = ctx.machineName(machineId);
     const listed = await ctx.callAgent(
       machineId,
-      "listTools",
+      LIST_TOOLS,
       [],
       READ_TIMEOUT_MS
     );
@@ -599,9 +609,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
         said: `${name} didn't say which tools it has (${listed.value.error ?? "its agent refused the ask"}).`,
       };
     }
-    return Array.isArray(listed.value.result)
-      ? listed.value.result.filter(isToolStatus)
-      : [];
+    return listed.value.result;
   };
 
   /**

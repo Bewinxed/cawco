@@ -129,12 +129,10 @@ const stable = (value: unknown): string => {
     return `[${value.map(stable).join(",")}]`;
   }
   if (value && typeof value === "object") {
-    return `{${Object.keys(value)
+    const fields = new Map<string, unknown>(Object.entries(value));
+    return `{${[...fields.keys()]
       .sort()
-      .map(
-        (key) =>
-          `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`
-      )
+      .map((key) => `${JSON.stringify(key)}:${stable(fields.get(key))}`)
       .join(",")}}`;
   }
   return value === undefined ? "" : JSON.stringify(value);
@@ -167,9 +165,9 @@ const resultText = (content: unknown): string => {
   }
   if (Array.isArray(content)) {
     return content
-      .map((part) =>
+      .map((part: unknown) =>
         part && typeof part === "object" && "text" in part
-          ? String((part as { text: unknown }).text)
+          ? String(part.text)
           : ""
       )
       .join("\n");
@@ -300,7 +298,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
   const queue: Queued[] = [];
 
   const rowOf = (id: string): InstanceRow | undefined =>
-    db.listedInstancesByIds([id])[0] as InstanceRow | undefined;
+    db.listedInstancesByIds([id])[0];
 
   const log = (row: InstanceRow | undefined, id: string, words: string) =>
     console.log(`[fleet-watch] ${row ? deps.name(row) : id}: ${words}`);

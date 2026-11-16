@@ -1,5 +1,7 @@
 /** The control verbs the hub calls on a live session or on its machine for that session, with their answers. */
 
+import type { SessionCustody } from "../protocol";
+
 /**
  * The neutral names the `control` verb understands for a *live session*.
  * Identical to Claude Code's `Query` methods, so the claude adapter passes them
@@ -25,6 +27,38 @@ export const CONTROL_RELOAD_SKILLS = "reloadSkills";
 export const CONTROL_MCP_STATUS = "mcpServerStatus";
 export const CONTROL_MCP_RECONNECT = "reconnectMcpServer";
 export const CONTROL_MCP_TOGGLE = "toggleMcpServer";
+
+/** What {@link CONTROL_WITHDRAW_SEND} answers: the send taken back before its turn began, or its turn already begun. */
+export type SendWithdrawal = "withdrawn" | "started";
+
+/** What {@link CONTROL_SET_PERMISSION_MODE} answers once the harness is in the mode: the mode, as it was asked. */
+export interface PermissionModeSet {
+  permissionMode: string;
+}
+
+/** What {@link CONTROL_CONTEXT_USAGE} answers, as far as the hub reads it: the tokens the session's context holds. */
+export interface ContextUsage {
+  totalTokens: number;
+}
+
+/**
+ * What {@link CONTROL_READ_SESSION_CONTEXT} answers: the tokens a stored
+ * conversation's last request sent and when they were read, or why none
+ * were; nothing from a harness with no context reader.
+ */
+export type SessionContextRead =
+  { readAt: number; tokens: number } | { reason: string };
+
+/** A background task's output, read off the session's process: args `[taskId]`; answers {@link TaskOutput}. */
+export const GET_TASK_OUTPUT = "getTaskOutput";
+
+/** What {@link GET_TASK_OUTPUT} answers. */
+export interface TaskOutput {
+  output?: string;
+}
+
+/** A stored conversation deleted by the harness that keeps it: args `[sessionKey, dir?]`. Machine-scoped. */
+export const DELETE_SESSION = "deleteSession";
 
 /** What became of one fleet MCP server at the hub. */
 export type FleetMcpChangeKind =
@@ -144,6 +178,31 @@ export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
 ]);
+
+/**
+ * The sessions a machine holds and the ones its daemon attached, read now:
+ * no args; answers {@link SessionCustodyRead}. Machine-scoped.
+ */
+export const SESSION_CUSTODY = "sessionCustody";
+
+/** What {@link SESSION_CUSTODY} answers. */
+export interface SessionCustodyRead {
+  attached: string[];
+  custody: SessionCustody;
+}
+
+/**
+ * Whether each session of a removed machine's rows is still there: args
+ * `[rows, claimed]`; answers one {@link CustodyPresence} per row.
+ * Machine-scoped.
+ */
+export const REMOVED_SESSION_CUSTODY = "removedSessionCustody";
+
+/** One row of {@link REMOVED_SESSION_CUSTODY}'s answer: its session there, gone, or not known (null). */
+export interface CustodyPresence {
+  id: string;
+  present: boolean | null;
+}
 
 /** Machine-scoped session-catalog controls, answered by whichever harness owns the id. */
 export const CONTROL_LIST_SESSIONS = "listSessions";

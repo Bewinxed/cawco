@@ -287,6 +287,11 @@ export interface BrowserViewerSession {
  * Answers `{ port }`.
  */
 export const BROWSER_LISTEN = "browser.listen";
+
+/** What {@link BROWSER_LISTEN} answers: the port the machine's browser listener is on. */
+export interface BrowserListening {
+  port: number;
+}
 export interface BrowserListenArgs {
   token: string;
 }

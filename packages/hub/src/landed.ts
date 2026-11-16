@@ -36,6 +36,7 @@ import { judgedWords } from "@cawco/core/words/judged";
 import { CONTROL_REPO_ROOT } from "@cawco/core/workspace/controls";
 import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
+import type { MachineCall } from "./machine-answers";
 import { projectRoot } from "./project-folder";
 
 /** A fetch of origin's default branch and a read of it; past this the machine is not going to answer. */
@@ -44,11 +45,7 @@ const LAST_NEWLINE = /\n$/u;
 
 export interface LandedDeps {
   /** Runs a machine-scoped daemon function; throws the machine's own words. */
-  call: (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ) => Promise<unknown>;
+  call: MachineCall;
   db: Pick<DbShape, "project">;
   online: (machineId: string) => boolean;
   run: (

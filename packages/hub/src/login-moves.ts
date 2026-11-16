@@ -7,6 +7,7 @@ import {
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_MOVE_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
+import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { CONTROL_RESTLESS, CONTROL_SLEEP } from "@cawco/core/session/controls";
@@ -15,7 +16,7 @@ import type { ClosureContext } from "./closure-context";
 import type { LoginMove } from "./db/accounts";
 import type { LoginMoveResults } from "./hub-shapes";
 import type { HubTimer } from "./lifetime";
-import type { Unanswered } from "./machine-answers";
+import type { CallAnswer, Unanswered } from "./machine-answers";
 import { unreachable } from "./unreachable";
 
 /** An account sign-in step on a machine (core `ACCOUNT_RULES.signinWaitMs`). */
@@ -129,7 +130,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
    */
   const settleMove = async (
     move: LoginMove,
-    answer: Awaited<ReturnType<typeof ctx.callAgent>>,
+    answer: Bounded<CallAnswer<HomeLoginMoved>>,
     ranFrom: string[],
     lentBy?: string
   ): Promise<void> => {
@@ -166,7 +167,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       default:
         throw unreachable(answer);
     }
-    const kept = (answer.value.result as HomeLoginMoved).store;
+    const kept = answer.value.result.store;
     const repinned =
       traitsOf(store).homeLogin === "dir" ? ranOnHomeLogin(move) : [];
     ctx.db.accounts.putSignin({
@@ -226,7 +227,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     move: LoginMove,
     expired: string
   ): Promise<{
-    answer: Awaited<ReturnType<typeof ctx.callAgent>>;
+    answer: Bounded<CallAnswer<HomeLoginMoved>>;
     lender?: string;
   }> => {
     const lenders = lendersOf(move.accountId, move.machineId);
@@ -283,17 +284,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     const error = [`The account did not answer: ${expired}.`, ...failures].join(
       " "
     );
-    return {
-      answer: {
-        kind: "answered",
-        value: {
-          kind: "control_result",
-          ok: false,
-          requestId: "",
-          error,
-        },
-      },
-    };
+    return { answer: { kind: "answered", value: { ok: false, error } } };
   };
 
   /**
@@ -611,8 +602,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
         case "answered":
           if (
             !restless.value.ok ||
-            Object.keys(restless.value.result as Record<string, string>)
-              .length > 0 ||
+            Object.keys(restless.value.result).length > 0 ||
             liveFrom(move).some((id) => !ranFrom.includes(id))
           ) {
             // Asked again at the next tick.
@@ -640,7 +630,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
           );
     const expired =
       answer.kind === "answered" && answer.value.ok
-        ? (answer.value.result as HomeLoginMoved).expired
+        ? answer.value.result.expired
         : undefined;
     if (expired === undefined) {
       await settleMove(move, answer, ranFrom);

@@ -5,13 +5,8 @@
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
 import { maskInspection } from "@cawco/core/fleet-secrets";
 import { traitsOf } from "@cawco/core/harness/traits";
-import {
-  AGENT_BUSY,
-  UPDATE_CAWCO,
-  type UpdateReport,
-} from "@cawco/core/protocol";
+import { AGENT_BUSY, UPDATE_CAWCO } from "@cawco/core/protocol";
 import { CONTROL_FOLDER_COMMANDS } from "@cawco/core/session/controls";
-import type { SupportedCommands } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
@@ -71,7 +66,7 @@ export const agentUpdate =
             );
       case "answered":
         return answer.value.ok
-          ? (answer.value.result as UpdateReport)
+          ? answer.value.result
           : problem(502, {
               code: "update-failed",
               detail: answer.value.error ?? "the update failed",
@@ -108,7 +103,7 @@ export const agentControlRoutes = (
             return unansweredProblem(ctx, params.machineId, answer);
           case "answered":
             return answer.value.ok
-              ? (answer.value.result as { busy: number; instances: string[] })
+              ? answer.value.result
               : problem(502, {
                   code: "busy-probe-failed",
                   detail: answer.value.error ?? "the busy probe failed",
@@ -143,10 +138,7 @@ export const agentControlRoutes = (
             case "answered":
               return answer.value.ok
                 ? // A machine's own connectors carry their keys: said as set.
-                  maskInspection(
-                    answer.value
-                      .result as import("@cawco/core/fleet").ConfigInspection
-                  )
+                  maskInspection(answer.value.result)
                 : problem(502, {
                     code: "config-unread",
                     detail:
@@ -190,7 +182,7 @@ export const agentControlRoutes = (
               return unansweredProblem(ctx, params.machineId, answer);
             case "answered":
               return answer.value.ok
-                ? (answer.value.result as SupportedCommands)
+                ? answer.value.result
                 : problem(502, {
                     code: "config-not-written",
                     detail:

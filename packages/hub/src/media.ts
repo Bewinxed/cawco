@@ -15,9 +15,11 @@
  * Paths that answer a session or a tool (a route awaiting a control, the
  * agent-facing tools) are not rewritten: they get what the machine sent.
  */
+
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { isObject } from "@cawco/core/comments/model";
 import { makeFolderSync } from "@cawco/core/folders";
 import { writeStateFile } from "@cawco/core/state-file";
 import { DB_PATH } from "./config";
@@ -109,9 +111,10 @@ const isBase64Image = (
   if (value.type !== "image") {
     return false;
   }
-  const source = value.source as Record<string, unknown> | undefined;
+  const { source } = value;
   return (
-    source?.type === "base64" &&
+    isObject(source) &&
+    source.type === "base64" &&
     typeof source.data === "string" &&
     typeof source.media_type === "string" &&
     source.media_type in EXTENSIONS
@@ -130,15 +133,14 @@ export function externalizeImages<T>(value: T): T {
     }
     return value;
   }
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    if (isBase64Image(record)) {
-      const { media_type, data } = record.source;
-      record.source = {
-        type: "url",
-        url: store(media_type, data),
-        media_type,
-      } as unknown as Base64Image["source"];
+  if (isObject(value)) {
+    // Read as its block, written as the record it is: its source becomes a
+    // stored reference, a shape no base64 block has.
+    const record: Record<string, unknown> = value;
+    const block: Record<string, unknown> = value;
+    if (isBase64Image(block)) {
+      const { media_type, data } = block.source;
+      record.source = { type: "url", url: store(media_type, data), media_type };
       return value;
     }
     for (const child of Object.values(record)) {

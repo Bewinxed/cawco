@@ -45,14 +45,12 @@ import {
   RELAY_START,
   RELAY_STOP,
   type RelayCandidate,
-  type RelayCertified,
   type RelayCertifyArgs,
   type RelayFrame,
   type RelayPortHealth,
   type RelayPortName,
   type RelayReach,
   type RelayRenewArgs,
-  type RelayRenewed,
   type RelayStartArgs,
   STREAM_RELAY_PORT,
   STREAM_RELAY_PORTS,
@@ -66,12 +64,14 @@ import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
 import {
+  type AgentCall,
   type AwayProblem,
   awayProblem,
+  type CallAnswer,
   type SilentProblem,
   silentProblem,
 } from "./machine-answers";
-import { received } from "./stored-json";
+import { keptAs } from "./stored-json";
 
 /** How long a STUN binding request has to be answered. */
 const STUN_MS = 3000;
@@ -136,16 +136,8 @@ export interface RelayFleetMachine {
   seen?: string;
 }
 
-/** A call to a machine's agent, answered or not in time. */
-export type RelayCall = (
-  machineId: string,
-  method: string,
-  args: unknown[],
-  timeoutMs: number
-) => Promise<Bounded<{ ok: boolean; result?: unknown; error?: string }>>;
-
 export interface StreamRelayDeps {
-  call: RelayCall;
+  call: AgentCall;
   /** The record changed: the journey's view follows. */
   changed: () => void;
   /** The person's Cloudflare token, for the renewal by DNS; null without one. */
@@ -259,7 +251,7 @@ const probeRelay = (
           [
             "tls 5349",
             `stuns:${tlsName}:${STREAM_RELAY_TLS_PORT}?transport=tcp`,
-          ] as [RelayPortName, string],
+          ] satisfies [RelayPortName, string],
         ]
       : []),
   ];
@@ -278,7 +270,7 @@ const ACT: Record<string, string> = {
 
 /** The relay's machine's answer (machine `machineId`, `machine` by name), or its refusal in its own words. */
 const answered = <T>(
-  read: Bounded<{ ok: boolean; result?: unknown; error?: string }>,
+  read: Bounded<CallAnswer<T>>,
   machineId: string,
   machine: string,
   what: string
@@ -296,7 +288,7 @@ const answered = <T>(
       detail: read.value.error ?? `The stream relay was not ${what}.`,
     });
   }
-  return read.value.result as T;
+  return read.value.result;
 };
 
 /** What the journey hands a start: the machine, where it is reached, its name. */
@@ -404,7 +396,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return failed(args);
     }
     const read = await call(relay.machineId, RELAY_START, [args], START_MS);
-    const frame = answered<RelayFrame>(
+    const frame = answered(
       read,
       relay.machineId,
       machineName(relay.machineId),
@@ -436,12 +428,12 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     // The machine's word on its relay, taken into CawCo's types as it is kept.
     update({
       ...(state.success ? { state: state.data } : {}),
-      ports: received(RelayPortsSchema, frame.ports, "a machine's relay frame"),
+      ports: keptAs(RelayPortsSchema, frame.ports, "a machine's relay frame"),
       why: frame.why ?? null,
       whyCommand: frame.command ?? null,
       ...(frame.reach
         ? {
-            reach: received(
+            reach: keptAs(
               RelayReachSchema,
               frame.reach,
               "a machine's relay frame"
@@ -486,7 +478,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       [args],
       RENEW_CALL_MS
     );
-    const done = answered<RelayRenewed>(
+    const done = answered(
       read,
       relay.machineId,
       machineName(relay.machineId),
@@ -530,7 +522,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     },
     certify: async (machineId, args) => {
       const read = await call(machineId, RELAY_CERTIFY, [args], CERTIFY_MS);
-      const certified = answered<RelayCertified>(
+      const certified = answered(
         read,
         machineId,
         machineName(machineId),
@@ -582,7 +574,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         });
       }
       const read = await call(relay.machineId, RELAY_STOP, [], STOP_MS);
-      const frame = answered<RelayFrame>(
+      const frame = answered(
         read,
         relay.machineId,
         machineName(relay.machineId),

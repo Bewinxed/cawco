@@ -29,7 +29,7 @@ import { DASHBOARD_PORT, LOCAL_DASHBOARD_PORT, PREVIEW_PORTS } from "../config";
 import { MACHINE_LINE_SUBTYPE } from "../cut-turns";
 import type { MachineLineKind } from "../db/schema";
 import type { SendSignal } from "../sends";
-import { received } from "../stored-json";
+import { keptAs } from "../stored-json";
 import type { TailnetHttpsService } from "../tailnet-https";
 
 export const registerAck = (
@@ -129,7 +129,7 @@ export const heldProcesses = (custody: SessionCustody | undefined): string[] =>
 export const keptBuild = (
   build: BuildInfo | undefined
 ): BuildInfo | undefined =>
-  build && received(BuildInfoSchema, build, "a machine's register (its build)");
+  build && keptAs(BuildInfoSchema, build, "a machine's register (its build)");
 
 /** The `system` subtypes an agent asks a relaunch at rest with, each with what it is for (`relaunchAtRest`). */
 export const RELAUNCH_SUBTYPES: ReadonlyMap<string, RelaunchFor> = new Map([

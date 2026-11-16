@@ -25,6 +25,12 @@ export interface PictureCut {
   of: number;
 }
 
+/** What {@link ARTIFACT_PICTURE} answers: the picture, base64 PNG, and how much of a long page it drew. */
+export interface PictureTaken {
+  cut?: PictureCut;
+  png: string;
+}
+
 /**
  * What scrolls a decision page (dashboard decisions host Decisions.svelte): the
  * page is the window's height, so its length is this element's, and a picture

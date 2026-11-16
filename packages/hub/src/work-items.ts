@@ -94,12 +94,8 @@ import { workWords } from "@cawco/core/words/work";
 import type {
   InputNamed,
   InputPiece,
-  InputsAdmitted,
   InputsPlace,
-  InputsRead,
-  InputsRoom,
   InputWant,
-  WorkspaceChanges,
   WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import {
@@ -3297,11 +3293,9 @@ export const createWorkItems = ({
 
   /** A retry's workspace `here`, its clone there, filed active again with its boundary started (a held one's hold ends). */
   const filedActive = async (workspace: WorkspaceRow, here: WorkspaceRow) => {
-    const boundaryPid = (await call(
-      here.machineId,
-      CONTROL_WORKSPACE_BOUNDARY,
-      [refOf(here)]
-    )) as number;
+    const boundaryPid = await call(here.machineId, CONTROL_WORKSPACE_BOUNDARY, [
+      refOf(here),
+    ]);
     // Awaited above: the one-writer check again, in the step that files the item.
     return (
       busyProblem(workspace) ??
@@ -3447,11 +3441,11 @@ export const createWorkItems = ({
         detail: inputsLine(older),
       });
     }
-    const judged = (await call(reader.machineId, CONTROL_INPUTS_ADMIT, [
+    const judged = await call(reader.machineId, CONTROL_INPUTS_ADMIT, [
       paths,
       bound,
       reader.projectId ?? null,
-    ])) as InputsAdmitted;
+    ]);
     if ("refused" in judged) {
       return problem(400, {
         code: "work-item-inputs-unadmitted",
@@ -3686,9 +3680,7 @@ export const createWorkItems = ({
       (sum, file) => sum + file.size,
       0
     );
-    const room = (await call(machineId, CONTROL_INPUTS_ROOM, [
-      place,
-    ])) as InputsRoom;
+    const room = await call(machineId, CONTROL_INPUTS_ROOM, [place]);
     if (needed > room.free) {
       return problem(400, {
         code: "work-item-inputs-no-room",
@@ -3763,12 +3755,12 @@ export const createWorkItems = ({
       return;
     }
     if (machineId === inputs.machineId) {
-      const copied = (await call(machineId, CONTROL_INPUTS_COPY, [
+      const copied = await call(machineId, CONTROL_INPUTS_COPY, [
         inputs.paths,
         inputs.bound,
         place,
         inputs.project,
-      ])) as InputsAdmitted;
+      ]);
       if (!("refused" in copied)) {
         return;
       }
@@ -3779,7 +3771,7 @@ export const createWorkItems = ({
       });
     }
     for (const batch of inputBatches(inputs.admitted)) {
-      const read = (await call(inputs.machineId, CONTROL_INPUTS_READ, [
+      const read = await call(inputs.machineId, CONTROL_INPUTS_READ, [
         inputs.bound,
         inputs.project,
         batch.map(({ file, at, length }): InputWant => ({
@@ -3788,7 +3780,7 @@ export const createWorkItems = ({
           length,
           size: file.size,
         })),
-      ])) as InputsRead;
+      ]);
       if ("refused" in read) {
         await clear();
         return problem(400, {
@@ -3921,10 +3913,7 @@ export const createWorkItems = ({
       ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
     ].find((one) => ownCopy(one) && inside(one.path));
     const held =
-      filed ??
-      ((await call(machineId, CONTROL_CLONE_HOLDING, [
-        path,
-      ])) as WorkspaceRef | null);
+      filed ?? (await call(machineId, CONTROL_CLONE_HOLDING, [path]));
     return held
       ? workWords.hostRefused([
           `cwd ${path}: it is inside workspace ${handle(held.id)}'s clone ${held.path} on ${machineName(db, machineId)}, where a session runs inside that workspace's boundary. Name a folder outside every clone, or leave cwd out for the agent user's home.`,
@@ -5082,11 +5071,11 @@ export const createWorkItems = ({
     }
     // A folder's work since is its change set not yet in its folder.
     if (isFolderOverlay(workspace)) {
-      const changes = (await call(
+      const changes = await call(
         workspace.machineId,
         CONTROL_WORKSPACE_CHANGES,
         [refOf(workspace)]
-      )) as WorkspaceChanges;
+      );
       return changes.changed.length > 0;
     }
     const read = await command(

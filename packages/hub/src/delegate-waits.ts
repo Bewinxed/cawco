@@ -53,18 +53,21 @@
  */
 
 import type { AskAnswer, AskRecord } from "@cawco/core/asks";
-import type { PermissionRequestFrame } from "@cawco/core/frames";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import { PermissionRequestFrameSchema } from "@cawco/core/stored-shapes";
 import { delegateWaitWords } from "@cawco/core/words/delegates";
+import { z } from "zod";
 
 /** The payload fields of the asks the hub raises and settles itself: only the person answers them. */
-const PERSON_ONLY = [
-  "browserAsk",
-  "connectAsk",
-  "designProposal",
-  "memoryProposal",
-  "move",
-] as const;
+const PERSON_ONLY_READ = z
+  .object({
+    browserAsk: z.unknown(),
+    connectAsk: z.unknown(),
+    designProposal: z.unknown(),
+    memoryProposal: z.unknown(),
+    move: z.unknown(),
+  })
+  .partial();
 
 /** What a notice tells of its ask, by which its send is named: each is told once. */
 export type NoticeMark =
@@ -123,8 +126,34 @@ export interface DelegateWaitsDeps {
   readonly title: (row: InstanceRow) => string;
 }
 
-const payloadOf = (ask: Envelope): Partial<PermissionRequestFrame> =>
-  (ask.payload ?? {}) as Partial<PermissionRequestFrame>;
+/** What a wait reads of an ask's payload: its permission request's fields, each as its type. */
+const ASK_READ = PermissionRequestFrameSchema.pick({
+  browserAsk: true,
+  connectAsk: true,
+  originInstanceId: true,
+  presentation: true,
+  requestKind: true,
+  routedTo: true,
+  toolName: true,
+}).partial();
+
+/**
+ * What a wait reads of `ask`'s payload, parsed as its permission request's
+ * fields: a payload that is not one reads as one that says none of them,
+ * as an ask with no payload did.
+ */
+const payloadOf = (ask: Envelope): z.output<typeof ASK_READ> => {
+  const read = ASK_READ.safeParse(ask.payload ?? {});
+  return read.success ? read.data : {};
+};
+
+/** Whether `ask`'s payload holds a field only the person answers: an ask the hub raised and settles itself. */
+const personsAsk = (ask: Envelope): boolean => {
+  const read = PERSON_ONLY_READ.safeParse(ask.payload);
+  return (
+    read.success && Object.values(read.data).some((one) => one !== undefined)
+  );
+};
 
 /** What the ask asks, in one line, as every surface says it. */
 export const askWhat = (ask: Envelope): string => {
@@ -249,8 +278,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       if (owned) {
         return owned === "approve";
       }
-      const payload = payloadOf(ask) as Record<string, unknown>;
-      return PERSON_ONLY.some((field) => payload[field] !== undefined);
+      return personsAsk(ask);
     },
 
     /**
@@ -333,8 +361,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       // that went to them (its routing taken off). The sessions above were
       // told it waits, and hear it end.
       const persons =
-        waits.personOnly(ask) ||
-        (payloadOf(ask) as { routedTo?: string }).routedTo !== "parent";
+        waits.personOnly(ask) || payloadOf(ask).routedTo !== "parent";
       tellUp(
         pair,
         {

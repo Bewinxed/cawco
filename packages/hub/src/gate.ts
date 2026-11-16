@@ -419,7 +419,7 @@ export const createGate = ({
         commit ??= call(workspace.machineId, CONTROL_WORKSPACE_BUNDLE, [
           refOf(workspace),
           workspace.base,
-        ]) as Promise<WorkspaceCommit>;
+        ]);
         const made = await commit;
         await call(machineId, CONTROL_WORKSPACE_AT, [
           refOf(at),

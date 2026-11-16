@@ -46,6 +46,7 @@
  * Jev's own words. Every open dashboard hears a new set at once
  * (`starters.changed`).
  */
+
 import { createHash } from "node:crypto";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import {
@@ -65,6 +66,7 @@ import { jevAccess } from "./jev";
 import { JevFailed, jevStarters, startersOff } from "./jev-placement";
 import { projectDesign } from "./landed";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { MachineCall } from "./machine-answers";
 import { AGENTS_FILE, fileOr } from "./memory";
 import { KNOWLEDGE_DIR } from "./memory-facts";
 import { folderFilePaths } from "./project-folder";
@@ -108,11 +110,7 @@ export interface ProjectStartersDeps {
   /** Every open dashboard hears a project's new set. */
   broadcast: (frame: StartersChangedFrame) => void;
   /** Runs a machine-scoped daemon function; throws the machine's own words (landed.ts). */
-  call: (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ) => Promise<unknown>;
+  call: MachineCall;
   db: DbShape;
   /** The hub's lifetime: each project's quiet runs on it. */
   lifetime: HubLifetimeShape;

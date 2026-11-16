@@ -1,6 +1,4 @@
 import type {
-  AccountCheck,
-  AccountProbe,
   AccountReport,
   PendingAccountSignin,
   ProviderSigninChallenge,
@@ -164,7 +162,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
           return;
         }
         noteCatalogFault(machineId, account, undefined);
-        return answer.value.result as AccountProbe;
+        return answer.value.result;
       default:
         throw unreachable(answer);
     }
@@ -216,7 +214,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
             };
           case "answered":
             return answer.value.ok
-              ? (answer.value.result as AccountCheck)
+              ? answer.value.result
               : {
                   kind: "unread",
                   why: answer.value.error

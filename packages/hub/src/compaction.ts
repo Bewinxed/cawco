@@ -18,6 +18,7 @@ import { ContextLineSchema } from "@cawco/core/stored-shapes";
 import { contextWords } from "@cawco/core/words/context";
 import { noticeWords } from "@cawco/core/words/notices";
 import { ElysiaStatus } from "elysia";
+import { z } from "zod";
 import type { ClosureContext } from "./closure-context";
 import type { LimitCompaction, MovedLine } from "./db/at-limit";
 import { fileDue } from "./limit-decision";
@@ -40,6 +41,20 @@ export type HubLineMessage = NeutralSystemMessage & { uuid: string };
  * keeps it (`content` the line as JSON): the same on the live stream and a
  * later transcript read.
  */
+
+/** What a compaction's own line says of it, as a harness writes it (Claude Code's `compact_boundary`, OpenCode's failure). */
+const COMPACTION_LINE = z.object({
+  compact_metadata: z
+    .object({
+      pre_tokens: z.number().optional(),
+      trigger: z.string().optional(),
+    })
+    .optional(),
+  compact_result: z.string().optional(),
+  subtype: z.string().optional(),
+  type: z.string().optional(),
+  uuid: z.string().optional(),
+});
 export const contextLine = (
   row: { sessionId: string | null },
   line: { at: number; id: string; content: string }
@@ -694,13 +709,11 @@ export const createCompaction = (ctx: CompactionContext) => {
    * compact is not asked to file again until its next boundary.
    */
   const observeCompaction = (instanceId: string, message: unknown): void => {
-    const frame = message as {
-      compact_metadata?: { pre_tokens?: number; trigger?: string };
-      compact_result?: string;
-      subtype?: string;
-      type?: string;
-      uuid?: string;
-    };
+    const read = COMPACTION_LINE.safeParse(message);
+    if (!read.success) {
+      return;
+    }
+    const frame = read.data;
     if (frame.type !== "system") {
       return;
     }
@@ -772,7 +785,7 @@ export const createCompaction = (ctx: CompactionContext) => {
     noteContext(row, lineId, {
       kind: "compacted",
       filed: rise ? filedBy(row.id, rise.lineId) : null,
-      harness: row.harness as HarnessKind,
+      harness: row.harness,
       tokens: frame.compact_metadata?.pre_tokens ?? null,
       trigger: trigger === "auto" || trigger === "manual" ? trigger : null,
     });
@@ -837,7 +850,7 @@ export const createCompaction = (ctx: CompactionContext) => {
    * stood (`at`, when it was first said).
    */
   const noteContext = (
-    row: { harness: string; id: string; sessionId: string | null },
+    row: { harness: HarnessKind; id: string; sessionId: string | null },
     id: string,
     line: ContextLine,
     at: number = Date.now()
@@ -846,11 +859,7 @@ export const createCompaction = (ctx: CompactionContext) => {
     if (!ctx.db.noteContextLine(row.id, kept)) {
       return;
     }
-    ctx.transcripts.line(
-      row.id,
-      contextLine(row, kept),
-      row.harness as HarnessKind
-    );
+    ctx.transcripts.line(row.id, contextLine(row, kept), row.harness);
     console.info(
       `[context] ${row.id.slice(0, 8)}: ${contextWords.line(line).title}`
     );
@@ -899,7 +908,7 @@ export const createCompaction = (ctx: CompactionContext) => {
       {
         kind: "filing",
         fill: plan.fill,
-        harness: row.harness as HarnessKind,
+        harness: row.harness,
         stage,
         ...(wrote ? { wrote } : {}),
       },
@@ -1074,7 +1083,7 @@ export const createCompaction = (ctx: CompactionContext) => {
     noteContext(row, lineId, {
       kind: "filing",
       fill,
-      harness: row.harness as HarnessKind,
+      harness: row.harness,
       stage: "filing",
     });
     const plan: LimitCompaction = {
