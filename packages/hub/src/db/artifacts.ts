@@ -35,7 +35,8 @@ type SourceColumn =
   | "sourceStageDir"
   | "sourceStageFile"
   | "sourceServeCommand"
-  | "sourceServeCwd";
+  | "sourceServeCwd"
+  | "sourcePin";
 
 /**
  * A project's page, by its row: the project's by its name, whichever
@@ -82,6 +83,7 @@ const sourceColumnsOf = (
   sourceStageFile: "port" in source ? (source.stage?.file ?? null) : null,
   sourceServeCommand: "port" in source ? (source.serve?.command ?? null) : null,
   sourceServeCwd: "port" in source ? (source.serve?.cwd ?? null) : null,
+  sourcePin: "page" in source ? null : (source.pin ?? null),
 });
 
 /** A stored artifact with its source whole again. */
@@ -96,9 +98,11 @@ const artifactOf = ({
   sourceStageFile,
   sourceServeCommand,
   sourceServeCwd,
+  sourcePin,
   ...row
 }: StoredArtifact): ArtifactRow => {
   const path = sourcePath === null ? {} : { path: sourcePath };
+  const pin = sourcePin === null ? {} : { pin: sourcePin };
   const workspace = sourceWorkspace ?? sourcePlace;
   const port = (): PreviewSource => ({
     port: sourcePort ?? 0,
@@ -110,9 +114,10 @@ const artifactOf = ({
       ? {}
       : { serve: { command: sourceServeCommand, cwd: sourceServeCwd ?? "." } }),
     ...(workspace === null ? {} : { workspace }),
+    ...pin,
   });
   const folder = (): PreviewSource =>
-    sourceDir === null ? port() : { dir: sourceDir, ...path };
+    sourceDir === null ? port() : { dir: sourceDir, ...path, ...pin };
   return {
     ...row,
     source: sourcePage === null ? folder() : { page: sourcePage },
@@ -257,6 +262,8 @@ export interface ArtifactsDb {
    * (shown_previews) is one of these rows, so this covers what panels show.
    * A held next version is one too: a server it shows stays up for it.
    */
+  /** The artifacts served from pin `pin` (core `PreviewSource.pin`), held next versions too: the one that cut it, or one a held version was opened onto. */
+  readonly pinnedBy: (pin: string) => ArtifactRow[];
   readonly previewing: (workspace: {
     id: string;
     machineId: string;
@@ -315,7 +322,10 @@ export interface ArtifactsDb {
 /** An artifact row that went, and the preview origin it pointed at (schema.ts `artifacts.origin`). */
 export interface GoneArtifact {
   id: string;
+  /** The machine that served it, and the pin it was served from (core `PreviewSource.pin`): let go once no row names it. */
+  machineId: string | null;
   origin: string;
+  pin: string | null;
 }
 
 /** What deletes rows: the database, or a transaction of it. */
@@ -339,7 +349,12 @@ const dropArtifactRows = (
   }
   const named = tx.select({ id: artifacts.id }).from(artifacts).where(where);
   const gone = tx
-    .select({ id: artifacts.id, origin: artifacts.origin })
+    .select({
+      id: artifacts.id,
+      origin: artifacts.origin,
+      machineId: artifacts.machineId,
+      pin: artifacts.sourcePin,
+    })
     .from(artifacts)
     .where(or(where, inArray(artifacts.heldFor, named)))
     .all();
@@ -600,6 +615,13 @@ export const artifactsDb = (
       .get();
     return row && artifactOf(row);
   },
+  pinnedBy: (pin) =>
+    db
+      .select()
+      .from(artifacts)
+      .where(eq(artifacts.sourcePin, pin))
+      .all()
+      .map(artifactOf),
   previewing: ({ id, machineId, path }) =>
     db
       .select()
@@ -769,8 +791,8 @@ export const artifactEvents = (db: BunSQLiteDatabase): ArtifactEvents => {
   /** Who hears of the artifacts that went ({@link DbShape.onArtifactsGone}). */
   const goneListeners = new Set<(gone: GoneArtifact[]) => void>();
 
-  /** Artifacts a write deleted, not yet told: each one's preview origin by its id. */
-  let goneNoted: Map<string, string> | undefined;
+  /** Artifacts a write deleted, not yet told, by id. */
+  let goneNoted: Map<string, GoneArtifact> | undefined;
 
   /**
    * The artifacts noted gone, told once the write is done (a microtask:
@@ -778,10 +800,7 @@ export const artifactEvents = (db: BunSQLiteDatabase): ArtifactEvents => {
    * only those no row answers to: a write rolled back deleted nothing.
    */
   const tellGone = (): void => {
-    const noted = [...(goneNoted ?? [])].map(([id, origin]) => ({
-      id,
-      origin,
-    }));
+    const noted = [...(goneNoted?.values() ?? [])];
     goneNoted = undefined;
     const kept = new Set<string>();
     for (let at = 0; at < noted.length; at += 500) {
@@ -827,8 +846,8 @@ export const artifactEvents = (db: BunSQLiteDatabase): ArtifactEvents => {
       goneNoted = new Map();
       queueMicrotask(tellGone);
     }
-    for (const { id, origin } of gone) {
-      goneNoted.set(id, origin);
+    for (const one of gone) {
+      goneNoted.set(one.id, one);
     }
   };
 

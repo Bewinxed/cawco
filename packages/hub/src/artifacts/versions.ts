@@ -1,4 +1,5 @@
 import { docMeta, getMeta } from "@cawco/core/doc-meta";
+import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
 import type { SheetRead, StageState } from "@cawco/core/stage";
@@ -13,7 +14,7 @@ import { stateOf, stillThere } from "./facts";
 import { unheardKeys } from "./needs";
 import { answersKept } from "./overwrite";
 import type { createPageStore } from "./page-store";
-import { servedOf } from "./served";
+import { pinnedAt, servedOf, servedPin, sheetOf } from "./served";
 import type { Making, WarmPreviews } from "./shapes";
 
 /** What createVersions reads of the artifact service: its deps, and the service's parts it calls, each read when called. */
@@ -90,19 +91,23 @@ export const createVersions = (ctx: VersionsContext) => {
    * next version ({@link holdNext}): once the parent (or the person) has
    * opened it, so it is no longer waiting on the parent as handed, every
    * change its maker makes waits for the parent's artifact_show, whether the
-   * panel shows it now or the person can open it from the panel's list. Not
-   * the owner's own change, nor a sheet's (its stage serves the workspace's
-   * files live).
+   * panel shows it now or the person can open it from the panel's list.
+   * Every kind alike: what a machine serves of it (a sheet's stage, a
+   * served preview's server, a folder) is served from the version's own pin
+   * (core `PreviewSource.pin`), never from the files its maker goes on
+   * editing. Not the owner's own change.
    */
   const holdsChange = (maker: InstanceRow, row: ArtifactRow): boolean =>
     row.instanceId !== maker.id &&
-    row.kind !== "component" &&
     (db.heldOf(row.id) !== undefined || !isHanded(row));
   /**
    * Where a maker's change to its parent's artifact `row` goes when it
    * {@link holdsChange}: its next version, a hidden row of its own (`heldFor`)
    * made from it whole (its doc forked, its files copied), which no list
-   * holds and nothing shows, so what the panel shows stays. One already held
+   * holds and nothing shows, so what the panel shows stays. What a machine
+   * serves of it is its own pin, named by its own id (core
+   * `PreviewSource.pin`), cut by the change it holds, or from its source at
+   * the first request that meets none: never the pin the panel is served. One already held
    * takes every change after. `fresh` when this call made it; null when the
    * change is not held.
    */
@@ -118,9 +123,14 @@ export const createVersions = (ctx: VersionsContext) => {
       return { fresh: false, next: holding };
     }
     const now = new Date();
+    const id = crypto.randomUUID();
     const next = db.create({
       ...row,
-      id: crypto.randomUUID(),
+      id,
+      source:
+        servedPin(row.source) === undefined
+          ? row.source
+          : pinnedAt(row.source, id),
       heldFor: row.id,
       madeBy: maker.id,
       seq: 0,
@@ -142,6 +152,45 @@ export const createVersions = (ctx: VersionsContext) => {
       meta.set("forkedAt", row.seq);
     });
     return { fresh: true, next };
+  };
+  /** Pin `pin` of `source` cut on machine `machineId` ({@link cutVersion}): the refusal, or `unpinned` for a source nothing pins. */
+  const cutOn = (machineId: string, source: PreviewSource, pin: string) => {
+    if ("dir" in source) {
+      return deps.pinFolder(machineId, source.dir, pin);
+    }
+    return "port" in source &&
+      source.workspace !== undefined &&
+      (source.stage !== undefined || source.serve !== undefined)
+      ? deps.pin({ workspace: source.workspace }, pin)
+      : Promise.resolve("unpinned" as const);
+  };
+  /**
+   * The version of `row` its author hands up, cut (core
+   * `PreviewSource.pin`): for a sheet or a workspace preview, its pin's
+   * clone of the workspace or place it was made in, cut or brought in step
+   * with it once; for a folder, its pin's copy made again. Its pin is the
+   * one its source names, else one of its own id, which its source then
+   * names. A page or a host's port pins nothing. The refusal when its
+   * machine could not cut it.
+   */
+  const cutVersion = async (row: ArtifactRow) => {
+    const { machineId, source } = row;
+    const pin = servedPin(source) ?? row.id;
+    if (!machineId) {
+      return row;
+    }
+    const refused = await cutOn(machineId, source, pin);
+    if (refused === "unpinned") {
+      return row;
+    }
+    if (refused) {
+      return refused;
+    }
+    if (servedPin(source) === pin) {
+      return row;
+    }
+    db.resource(row.id, { machineId, source: pinnedAt(source, pin) });
+    return stillThere(db.get(row.id), row.id);
   };
   /**
    * An owner's own create of an artifact its maker's next version is held
@@ -362,9 +411,10 @@ export const createVersions = (ctx: VersionsContext) => {
     // left it in the version's doc ({@link staged}): the row's doc holds its
     // own source's, set beside it since the fork, and the merge keeps
     // whichever of two such sets its client id ranks last, never the newer.
-    const stage = servedOf(next)
-      ? getMeta(docs.doc(next.id), "stage")
-      : undefined;
+    const stage =
+      servedOf(next) || sheetOf(next)
+        ? getMeta(docs.doc(next.id), "stage")
+        : undefined;
     mergeKeepingAnswers(row, next);
     // What serves it is the version's: its one write, which the preview
     // that serves its origin follows, and which lets the server it moved
@@ -413,6 +463,7 @@ export const createVersions = (ctx: VersionsContext) => {
 
   return {
     changedBy,
+    cutVersion,
     handOver,
     handing,
     heldAnswer,

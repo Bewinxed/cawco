@@ -994,8 +994,21 @@ export const SERVE_COMMAND_LIMIT = 2000;
 /** The daemon's control method that starts a workspace preview's server or wakes it ({@link ServeSpec}), answering its state. */
 export const STAGE_SERVE = "stageServe";
 
-/** The daemon's control method that stops a workspace preview's server: its last artifact went. */
-export const STAGE_UNSERVE = "stageUnserve";
+/**
+ * The daemon's control method that cuts the version of an artifact its
+ * author hands up (core preview/protocol.ts `PreviewSource.pin`): `[ref,
+ * pin]` for a workspace's or place's sheet or served preview, the clone
+ * `pin` cut from that tree, or brought in step with it once when it stands
+ * (agent stage-clone.ts `pinClone`); `[null, pin, dir]` for a folder, a copy
+ * of `dir` (`pinFolder`). Answers once the version stands.
+ */
+export const STAGE_PIN = "stagePin";
+
+/** The daemon's control method that lets a pin go once no artifact is served from it: its stages stopped, its copy removed. */
+export const STAGE_UNPIN = "stageUnpin";
+
+/** How long a pin may take to cut: a clone's fetch and mirror ({@link STAGE_CLONE_GIT_MS}), or a folder's copy. Ours. */
+export const STAGE_PIN_MS = 120_000;
 
 /** The agent's log line, after a stage's name, once a stage it carried across its restart answers again (agent stage.ts `resumeStages`). */
 export const STAGE_RESUMED_SAID = "started again after the agent's restart";

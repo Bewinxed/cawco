@@ -7,8 +7,8 @@ import type { StageWarm } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
-import { servedOf, sheetOf } from "../served";
-import type { ArtifactInput, Making, Placed, WarmPreviews } from "../shapes";
+import { servedOf, servedPin, sheetOf } from "../served";
+import type { ArtifactInput, Making, StageAt, WarmPreviews } from "../shapes";
 import type { KindContext } from "./context";
 
 /** Why a preview's fields do not go together, or nothing. */
@@ -71,6 +71,20 @@ const servedSource = (input: ArtifactInput, workspace: string) => {
   return source;
 };
 
+/** The stage a sheet is served the person on (its pin's, core `PreviewSource.pin`), by its key, and how a call reaches it. */
+const stageOf = (
+  sheet: NonNullable<ReturnType<typeof sheetOf>>
+): { at: StageAt; key: string } =>
+  sheet.pin === undefined
+    ? {
+        key: `${sheet.workspace}:${sheet.dir}`,
+        at: { workspace: sheet.workspace },
+      }
+    : {
+        key: `${sheet.pin}:${sheet.dir}`,
+        at: { workspace: sheet.workspace, pin: sheet.pin },
+      };
+
 /** What PreviewKind reads of the artifact service ({@link KindContext}). */
 export type PreviewKindContext = Pick<
   KindContext,
@@ -107,7 +121,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         waits &&
         deps.workspaces(served.workspace).some((one) => one.state === "active")
       ) {
-        servers.set(`${served.workspace}@${served.port}`, row);
+        servers.set(`${served.pin ?? served.workspace}@${served.port}`, row);
       }
     }
     return servers;
@@ -200,55 +214,37 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    */
   const serveFirst = (source: PreviewSource, machineId: string | null) =>
     "port" in source && source.serve && source.workspace && machineId
-      ? deps.serve(machineId, source.workspace, {
-          ...source.serve,
-          port: source.port,
-        })
+      ? deps.serve(
+          machineId,
+          source.workspace,
+          { ...source.serve, port: source.port },
+          source.pin
+        )
       : Promise.resolve(undefined);
   /**
-   * Artifact `id`'s source moved off `before` (db artifacts.ts `resource`):
-   * the server `before` named let go once nothing else shows it, unless the
-   * row names that same server again now (on another start page, or put
-   * back). Told by the preview service once the new source answers or no
-   * screen waits on it (server.ts `onSourceMoved`).
+   * Pin `pin` on machine `machineId` let go once no artifact is served from
+   * it (core `PreviewSource.pin`): its stages and server stop with it, and
+   * its copy goes. Its life is its artifacts'.
    */
-  const letGoMoved = (id: string, before: ArtifactServed): void => {
-    const row = db.get(id);
-    const was = row && servedOf({ kind: row.kind, source: before.source });
-    if (!(row && was && before.machineId)) {
-      return;
+  const releasePin = (machineId: string | null, pin: string | null): void => {
+    if (machineId && pin && db.pinnedBy(pin).length === 0) {
+      deps.unpin(machineId, pin);
     }
-    const now = servedOf(row);
-    if (
-      now?.port === was.port &&
-      now.workspace === was.workspace &&
-      row.machineId === before.machineId
-    ) {
-      return;
-    }
-    releaseServed({ id, kind: row.kind, name: row.name, ...before });
   };
   /**
-   * The server `row` previewed (core `ServeSpec`) is stopped once no other
-   * artifact previews that port of its workspace: its life is its artifacts'.
+   * Artifact `id`'s source moved off `before` (db artifacts.ts `resource`):
+   * the pin `before` was served from let go once nothing else is served from
+   * it, unless the row names it again now. Told by the preview service once
+   * the new source answers or no screen waits on it (server.ts
+   * `onSourceMoved`).
    */
-  const releaseServed = (row: Placed & { id?: string }) => {
-    const served = servedOf(row);
-    if (!(served && row.machineId)) {
+  const letGoMoved = (id: string, before: ArtifactServed): void => {
+    const was = servedPin(before.source);
+    const row = db.get(id);
+    if (was === undefined || (row && servedPin(row.source) === was)) {
       return;
     }
-    const still = db
-      .previewing({
-        id: served.workspace,
-        machineId: row.machineId,
-        path: "//",
-      })
-      .some(
-        (other) => other.id !== row.id && servedOf(other)?.port === served.port
-      );
-    if (!still) {
-      deps.unserve(row.machineId, served.workspace, served.port);
-    }
+    releasePin(before.machineId, was);
   };
   /**
    * The stages decision page `page`'s Previews run on, warmed as the page
@@ -266,22 +262,21 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         .filter((one) => one.component === "Preview")
         .flatMap((one) => ctx.mediaSeen(page, one.id) ?? [])
     );
-    const sheets = new Map<string, StageWarm & { workspace: string }>();
+    const sheets = new Map<string, { at: StageAt; warm: StageWarm }>();
     const servers = new Map<string, ArtifactRow>();
     for (const media of shown) {
       const sheet = sheetOf(media);
       const served = servedOf(media);
       if (sheet) {
-        const key = `${sheet.workspace}:${sheet.dir}`;
-        const warm = sheets.get(key) ?? {
-          workspace: sheet.workspace,
-          by: `decision page ${page.name}`,
-          canvases: [],
+        const { key, at } = stageOf(sheet);
+        const one = sheets.get(key) ?? {
+          at,
+          warm: { by: `decision page ${page.name}`, canvases: [] },
         };
-        warm.canvases.push(sheet.files);
-        sheets.set(key, warm);
+        one.warm.canvases.push(sheet.files);
+        sheets.set(key, one);
       } else if (served) {
-        servers.set(`${served.workspace}@${served.port}`, media);
+        servers.set(`${served.pin ?? served.workspace}@${served.port}`, media);
       }
     }
     // A refused one is said as a failed one is.
@@ -290,8 +285,8 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         console.warn(`[stage warm-up] failed: ${refused.response.detail}`);
       }
     };
-    for (const { workspace, ...warm } of sheets.values()) {
-      detach(deps.warmStage({ workspace }, warm).then(warmed), "stage warm-up");
+    for (const { at, warm } of sheets.values()) {
+      detach(deps.warmStage(at, warm).then(warmed), "stage warm-up");
     }
     for (const media of servers.values()) {
       detach(
@@ -412,7 +407,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     makingFrom,
     makingIn,
     previewSource,
-    releaseServed,
+    releasePin,
     serveFirst,
     waitingServers,
     warmPreviews,

@@ -195,9 +195,10 @@ import type {
 import {
   STAGE_COMPONENTS,
   STAGE_ENSURE,
+  STAGE_PIN,
   STAGE_RENDER,
   STAGE_SERVE,
-  STAGE_UNSERVE,
+  STAGE_UNPIN,
   STAGE_WARM,
   STAGE_WRITE,
 } from "./stage";
@@ -568,7 +569,8 @@ const CONTROLS = {
   [STAGE_WARM]: UNREAD,
   [STAGE_COMPONENTS]: reply<DesignMap>(DesignMapSchema),
   [STAGE_SERVE]: reply<StageState>(StageStateSchema),
-  [STAGE_UNSERVE]: UNREAD,
+  [STAGE_PIN]: UNREAD,
+  [STAGE_UNPIN]: UNREAD,
   // A machine's browsers and the passkey scans for them (browser.ts).
   [BROWSER_START]: reply<BrowserRow>(BrowserRowShape),
   [BROWSER_STOP]: reply<BrowserRow | null>(BrowserRowShape.nullable()),

@@ -731,6 +731,9 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         }
       : undefined;
   };
+  /** A call on a pinned version names its pin after its argument (core `PreviewSource.pin`). */
+  const pinArgs = (at: StageAt): string[] =>
+    "pin" in at && at.pin !== undefined ? [at.pin] : [];
   /**
    * A stage method (core stage.ts) on a workspace's machine (a session's
    * own, or the one a sheet was made in), with the workspace and `arg`: its
@@ -763,7 +766,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     const asked = await ctx.callAgent(
       machineId,
       method,
-      [workspace, arg],
+      [workspace, arg, ...pinArgs(at)],
       STAGE_READY_MS +
         (isPlace(workspace.id) ? STAGE_CLONE_MS : STAGE_INSTALL_MS) +
         (method === STAGE_RENDER ? STAGE_RENDER_MS : 0) +

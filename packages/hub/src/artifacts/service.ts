@@ -136,7 +136,7 @@ import { decidesWords } from "@cawco/core/words/decides";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import type { Doc } from "yjs";
-import type { ArtifactRow } from "../db/artifacts";
+import type { ArtifactRow, GoneArtifact } from "../db/artifacts";
 import {
   type BuiltProgram,
   keptLinks,
@@ -185,7 +185,7 @@ import {
 import { answersReplaced } from "./overwrite";
 import { createPageStore } from "./page-store";
 import { type Question, stillAsked } from "./questions";
-import { type ServedOwed, servedOf, sheetOf } from "./served";
+import { onPinOf, type ServedOwed, servedOf, sheetOf } from "./served";
 import {
   type ArtifactInput,
   type ArtifactList,
@@ -899,7 +899,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     makingFrom,
     makingIn,
     previewSource,
-    releaseServed,
+    releasePin,
     serveFirst,
     waitingServers,
     warmPreviews,
@@ -1005,6 +1005,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
   const {
     changedBy,
+    cutVersion,
     handOver,
     handing,
     heldAnswer,
@@ -1182,7 +1183,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     db.remove(row.id);
     store.remove(row.id);
     deps.removed?.(row);
-    releaseServed(row);
     if (row.heldFor !== null) {
       versionMoved(row);
     }
@@ -1435,11 +1435,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     get askedOf() {
       return askedOf;
     },
+    cutVersion,
     db,
     deps,
     discard,
     docs,
     handOver,
+    heldId,
+    holdNext,
     inPanel,
     get marked() {
       return marked;
@@ -1447,6 +1450,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     get openedOf() {
       return openedOf;
     },
+    openNextFirst,
     get read() {
       return read;
     },
@@ -2287,7 +2291,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (before) {
       const holding = holdNext(maker, before);
       const target = holding?.next ?? before;
-      db.resource(target.id, at);
+      // Made again where it stands: on the pin it is served from, cut again (cutVersion); a held one's own.
+      db.resource(target.id, {
+        machineId: at.machineId,
+        source: onPinOf(at.source, target),
+      });
       const row = stillThere(
         db.update(target.id, {
           ...asked,
@@ -2334,11 +2342,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * A create's server started ({@link serveFirst}) and its row placed
-   * ({@link placed}), a held next version opened first ({@link
-   * openNextFirst}); its workspace held from the server's start until the
-   * row names it ({@link makingFrom}), as a retirement in between would end
-   * the server under the create.
+   * A create's row placed ({@link placed}), a held next version opened
+   * first ({@link openNextFirst}), the version it hands up cut (its pin,
+   * {@link cutVersion}) and its server started there ({@link serveFirst});
+   * its workspace held from the create's start until the row names it
+   * ({@link makingFrom}), as a retirement in between would end its source
+   * under the create. A cut or a server that refuses lets the placement go
+   * ({@link unplace}), and nothing is kept.
    */
   const servedAndPlaced = async (
     making: Making,
@@ -2347,10 +2357,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ) => {
     const madeFrom = makingFrom(at.source);
     try {
-      const stage = await serveFirst(at.source, at.machineId);
-      if (stage instanceof ElysiaStatus) {
-        return stage;
-      }
       const unopened = await openNextFirst(making, input.kind, input.name);
       if (unopened) {
         return unopened;
@@ -2359,9 +2365,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (placement instanceof ElysiaStatus) {
         return placement;
       }
+      const cut = await cutVersion(placement.row);
+      if (cut instanceof ElysiaStatus) {
+        unplace(placement);
+        return cut;
+      }
+      const stage = await serveFirst(cut.source, cut.machineId);
+      if (stage instanceof ElysiaStatus) {
+        unplace({ ...placement, row: cut });
+        return stage;
+      }
       const served: { placement: Placement; stage: StageState | undefined } = {
         stage,
-        placement,
+        placement: { ...placement, row: cut },
       };
       return served;
     } finally {
@@ -3483,6 +3499,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /** The server artifact `id`'s source moved off, let go once nothing else shows it ({@link letGoMoved}). */
     letGoMoved,
+    /** Artifact rows gone (db `onArtifactsGone`, every way a row goes): each pin one was served from let go once no row is served from it ({@link releasePin}). */
+    letGoPins: (gone: readonly GoneArtifact[]): void => {
+      for (const { machineId, pin } of gone) {
+        releasePin(machineId, pin);
+      }
+    },
 
     /** Whether a create is making a preview from workspace `id` now, its row not yet written ({@link makingIn}). */
     makingFrom: (id: string): boolean => makingIn.has(id),
@@ -4559,17 +4581,29 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row instanceof ElysiaStatus) {
         return row;
       }
-      const written = await writeSheet(
-        row,
-        change,
-        "agent",
-        row.instanceId === instance.id
-      );
-      if (written instanceof ElysiaStatus) {
-        return written;
+      // Written in its workspace, then handed up as the version it is now
+      // (its pin cut, cutVersion); a maker's change to one its parent opened
+      // is its next version (changedBy).
+      const answer = await changedBy(instance, row, async (target) => {
+        const written = await writeSheet(
+          target,
+          change,
+          "agent",
+          target.instanceId === instance.id
+        );
+        if (written instanceof ElysiaStatus) {
+          return written;
+        }
+        const cut = await cutVersion(target);
+        if (cut instanceof ElysiaStatus) {
+          return cut;
+        }
+        return await componentWritten(cut, change, written);
+      });
+      if (!(answer instanceof ElysiaStatus)) {
+        askedNow(instance, row.id);
       }
-      askedNow(instance, row.id);
-      return await componentWritten(row, change, written);
+      return answer;
     },
 
     /**
@@ -4610,30 +4644,47 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         dials: input.dials ?? sheet.spec.dials,
       });
       const { files } = canvasOf(row.source.path ?? "");
-      db.resource(row.id, {
-        machineId: row.machineId,
-        source: { ...row.source, path: canvasPath(files, spec) },
+      // Handed up as the version its files are now (its pin cut,
+      // cutVersion); a maker's change to one its parent opened is its next
+      // version (changedBy).
+      const answer = await changedBy(instance, row, async (target) => {
+        db.resource(target.id, {
+          machineId: target.machineId,
+          source: { ...target.source, path: canvasPath(files, spec) },
+        });
+        const cut = await cutVersion(stillThere(db.get(target.id), target.id));
+        if (cut instanceof ElysiaStatus) {
+          return cut;
+        }
+        const next = stillThere(
+          db.update(cut.id, {
+            revision: cut.revision + 1,
+            updatedAt: new Date(),
+          }),
+          cut.id
+        );
+        stampMeta(next, null);
+        // An update of what the panel shows, not a show of it: a tab that
+        // closed it stays closed (dashboard preview/closed-here.ts).
+        if (inPanel(next)) {
+          await show(next, next.instanceId, null, true);
+        }
+        const changed: {
+          held?: string;
+          id: string;
+          revision: number;
+          spec: CanvasSpec;
+        } = {
+          ...heldId(next),
+          revision: next.revision,
+          spec,
+        };
+        return changed;
       });
-      const next = stillThere(
-        db.update(row.id, {
-          revision: row.revision + 1,
-          updatedAt: new Date(),
-        }),
-        row.id
-      );
-      stampMeta(next, null);
-      // An update of what the panel shows, not a show of it: a tab that
-      // closed it stays closed (dashboard preview/closed-here.ts).
-      if (inPanel(next)) {
-        await show(next, next.instanceId, null, true);
+      if (!(answer instanceof ElysiaStatus)) {
+        askedNow(instance, row.id);
       }
-      askedNow(instance, next.id);
-      const changed: { id: string; revision: number; spec: CanvasSpec } = {
-        id: next.id,
-        revision: next.revision,
-        spec,
-      };
-      return changed;
+      return answer;
     },
 
     /**
@@ -4844,16 +4895,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     },
 
+    /**
+     * A stage's state, kept in the doc of each artifact served from it: the
+     * person is served a pinned version (core `PreviewSource.pin`), so a
+     * frame of a pin's stage or server is its artifacts', by its toolchain
+     * root or its port; the workspace's own stages serve its author's reads,
+     * which say their own state.
+     */
     staged: (machineId: string, frame: StageFrame): void => {
-      // A port preview naming the workspace; no folder matches "//".
-      const rows = db.previewing({
-        id: frame.workspace,
-        machineId,
-        path: "//",
-      });
-      for (const row of rows) {
-        const port = sheetOf(row) || servedOf(row) ? row.source : null;
-        if (!(port && "port" in port && port.port === frame.port)) {
+      for (const row of db.pinnedBy(frame.workspace)) {
+        const sheet = sheetOf(row);
+        const served = servedOf(row);
+        const ours =
+          row.machineId === machineId &&
+          (sheet
+            ? frame.state.runs === "sheet" && frame.state.dir === sheet.dir
+            : served?.port === frame.port);
+        if (!ours) {
           continue;
         }
         writeStage(row, frame.state);
@@ -5064,7 +5122,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         by === "agent" && opens.instanceId === instance.id
           ? db.heldOf(opens.id)
           : undefined;
-      const row = next ? await promote(opens, next) : opens;
+      // Its author's own show hands it up again: what a machine serves of
+      // it is cut from its source as it is now (cutVersion). Anyone else's
+      // opens the version that stands, or the next one held (promote).
+      const authors =
+        by === "agent" &&
+        opens.instanceId === instance.id &&
+        opens.madeBy === instance.id;
+      const opening = () => {
+        if (next) {
+          return promote(opens, next);
+        }
+        return authors ? cutVersion(opens) : Promise.resolve(opens);
+      };
+      const row = await opening();
       if (row instanceof ElysiaStatus) {
         return row;
       }

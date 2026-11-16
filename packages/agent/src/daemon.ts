@@ -147,9 +147,10 @@ import {
   type SheetWrite,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
+  STAGE_PIN,
   STAGE_RENDER,
   STAGE_SERVE,
-  STAGE_UNSERVE,
+  STAGE_UNPIN,
   STAGE_WARM,
   STAGE_WRITE,
   type StageWarm,
@@ -353,12 +354,16 @@ import {
   closingStages,
   ensureServed,
   ensureStage,
+  pinArg,
+  pinFolderOf,
+  pinTreeOf,
   renderStage,
   resumeStages,
+  StagePinArgsSchema,
   StageRefusal,
   stageComponents,
-  stopServed,
   tellStages,
+  unpin,
   warmStage,
   writeSheet,
 } from "./stage";
@@ -3980,19 +3985,42 @@ const startDaemon = (rediscover = false) =>
           );
     });
     // A stage warmed for a decision page as it goes out: answered at once, the warm-up run after and never failing (stage.ts `warmStage`).
-    supervisor.declareControl(STAGE_WARM, (ref, warm) => {
+    // With a pin, the stage of the version the page's Previews are served (core `PreviewSource.pin`).
+    supervisor.declareControl(STAGE_WARM, (ref, warm, pin) => {
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
-      warmStage(ports, ref as WorkspaceRef, warm as StageWarm);
+      warmStage(ports, ref as WorkspaceRef, warm as StageWarm, pinArg(pin));
       return Promise.resolve();
     });
-    // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved.
-    supervisor.declareControl(STAGE_WRITE, (ref, write) =>
+    // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved; the person's in the pinned version he is served, copied to the workspace.
+    supervisor.declareControl(STAGE_WRITE, (ref, write, pin) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : writeSheet(ports, ref as WorkspaceRef, write as SheetWrite)
+        : writeSheet(
+            ports,
+            ref as WorkspaceRef,
+            write as SheetWrite,
+            pinArg(pin)
+          )
     );
+    // The version an author hands up, cut: a tree's clone (`[ref, pin]`) or a folder's copy (`[null, pin, dir]`).
+    supervisor.declareControl(STAGE_PIN, (...args) => {
+      if (fenced()) {
+        return Promise.reject(new Error(AGENT_RESTARTING));
+      }
+      const asked = StagePinArgsSchema.parse(args);
+      return asked[0] === null
+        ? pinFolderOf(asked[2], asked[1])
+        : pinTreeOf(asked[0], asked[1]);
+    });
+    // A pin no artifact is served from any more, let go.
+    supervisor.declareControl(STAGE_UNPIN, (pin) => {
+      const named = pinArg(pin);
+      return named === undefined
+        ? Promise.reject(new Error("An unpin names the pin it lets go."))
+        : unpin(named);
+    });
     // A canvas drawn by the daemon's own Chromium when no panel has drawn it (stage-render.ts).
     supervisor.declareControl(STAGE_RENDER, (ref, ask) =>
       fenced()
@@ -4010,7 +4038,8 @@ const startDaemon = (rediscover = false) =>
           )
     );
     // A workspace preview's server, started or woken and kept up there (stage.ts).
-    supervisor.declareControl(STAGE_SERVE, async (workspace, serve) => {
+    // With a pin, the server of the version the person is served (core `PreviewSource.pin`).
+    supervisor.declareControl(STAGE_SERVE, async (workspace, serve, pin) => {
       if (fenced()) {
         throw new Error(AGENT_RESTARTING);
       }
@@ -4018,11 +4047,14 @@ const startDaemon = (rediscover = false) =>
       if (!ref) {
         throw new StageRefusal(`No workspace ${workspace} is on this machine.`);
       }
-      return ensureServed(ports, ref, serve as ServeSpec);
+      return ensureServed(
+        ports,
+        ref,
+        serve as ServeSpec,
+        undefined,
+        pinArg(pin)
+      );
     });
-    supervisor.declareControl(STAGE_UNSERVE, (workspace, port) =>
-      stopServed(String(workspace), Number(port))
-    );
     // A check that names another machine: the commit leaves here, and arrives there.
     supervisor.declareControl(
       CONTROL_WORKSPACE_BUNDLE,

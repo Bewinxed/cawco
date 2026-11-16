@@ -155,7 +155,7 @@ function framesListed(
  * all `unseen`: no draw of them as they stand yet, one within moments. A
  * read waits on them a moment, and says those that outlast it.
  */
-export const drawingUnseen = (report: RenderReport): string[] =>
+const drawingUnseen = (report: RenderReport): string[] =>
   report.sections
     .filter(
       (section) =>

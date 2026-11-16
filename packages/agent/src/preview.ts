@@ -59,12 +59,14 @@ import {
 import {
   networkOf,
   StageRefusal,
+  servedPort,
   sourceUp,
   sourceViewer,
   sourceWakes,
   WorkspaceNotHere,
   wakeSource,
 } from "./stage";
+import { pinFolder, pinnedFolder } from "./stage-clone";
 
 /**
  * The listeners this process serves, each with the hub's token for the
@@ -287,7 +289,7 @@ export function stopPreview({
  */
 const upstreamOf = async (
   instanceId: string,
-  source: { port: number; stage?: unknown; workspace?: string }
+  source: { pin?: string; port: number; stage?: unknown; workspace?: string }
 ): Promise<{ unix: string } | "host"> => {
   const network = networkOf(source);
   if (network === undefined) {
@@ -658,14 +660,30 @@ const portSource = (
   port: number,
   parts: Pick<
     Parameters<typeof startPreview>[0],
-    "serve" | "stage" | "workspace"
+    "pin" | "serve" | "stage" | "workspace"
   >
 ): Extract<PreviewSource, { port: number }> => ({
   port,
   ...(parts.workspace === undefined ? {} : { workspace: parts.workspace }),
+  ...(parts.pin === undefined ? {} : { pin: parts.pin }),
   ...(parts.stage === undefined ? {} : { stage: parts.stage }),
   ...(parts.serve === undefined ? {} : { serve: parts.serve }),
 });
+
+/**
+ * The folder a folder preview serves: with `pin` (core `PreviewSource.pin`)
+ * its pin's copy, made from `dir` now when the pin has none here (one cut
+ * before this machine kept pins); else `dir` itself.
+ */
+async function pinnedRoot(dir: string, pin: string | undefined) {
+  if (pin === undefined) {
+    return await folderRoot(dir);
+  }
+  return await folderRoot(
+    (await pinnedFolder(pin)) ??
+      (await pinFolder(await folderRoot(dir), pin, false))
+  );
+}
 
 /** The system's codes for a path that is not there, or not a folder on the way to it. */
 const NOT_THERE = new Set(["ENOENT", "ENOTDIR"]);
@@ -740,6 +758,8 @@ export function startPreview(
     serve?: { command: string; cwd: string };
     /** The workspace whose network the port is in; none, the host's. */
     workspace?: string;
+    /** The version the person is served (core `PreviewSource.pin`): its pin's copy of the folder, or its pin's stage or server, answers in place of the source's own. */
+    pin?: string;
     /**
      * The hub's name for this start, which a stop of it alone names, and the
      * one credential the listener answers (core `RELAY_HEADER`).
@@ -836,7 +856,8 @@ async function start(
   options: Parameters<typeof startPreview>[0],
   ports: Pick<AgentPorts, "stage" | "stageClone">
 ): Promise<{ port: number }> {
-  const { instanceId, port, dir, workspace, token, stage, serve } = options;
+  const { instanceId, port, dir, workspace, token, stage, serve, pin } =
+    options;
   if ((port === undefined) === (dir === undefined)) {
     throw new Error("Pass exactly one of port or dir.");
   }
@@ -858,11 +879,13 @@ async function start(
   }
   let source: Exclude<PreviewSource, { page: string }>;
   if (dir !== undefined) {
-    source = { dir: await folderRoot(dir) };
+    source = { dir: await pinnedRoot(dir, pin) };
   } else if (port === undefined) {
     throw new Error("Pass exactly one of port or dir.");
   } else {
-    source = portSource(port, { workspace, stage, serve });
+    const named = portSource(port, { workspace, stage, serve, pin });
+    // A pinned sheet answers on its pin's stage's own port.
+    source = { ...named, port: servedPort(named) };
   }
   await stopNow(instanceId);
   // A workspace no boundary runs refuses the preview in so many words. A

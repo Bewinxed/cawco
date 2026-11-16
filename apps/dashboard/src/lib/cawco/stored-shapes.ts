@@ -85,8 +85,13 @@ const PreviewSourceShape = z.union([
     stage: z.object({ dir: z.string(), file: z.string() }).optional(),
     serve: z.object({ command: z.string(), cwd: z.string() }).optional(),
     workspace: z.string().optional(),
+    pin: z.string().optional(),
   }),
-  z.object({ dir: z.string(), path: z.string().optional() }),
+  z.object({
+    dir: z.string(),
+    path: z.string().optional(),
+    pin: z.string().optional(),
+  }),
   z.object({ page: z.string() }),
 ]);
 export type PreviewSourceOutput = z.output<typeof PreviewSourceShape>;
