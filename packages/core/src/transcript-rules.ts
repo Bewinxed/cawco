@@ -9,6 +9,7 @@
  * (`transcript.ts`) applies it.
  */
 
+import { isRecord } from "./is-record";
 import { answersOf, dismissedOf, parseAskAnswered } from "./asks";
 import { attachedFiles, withoutPictureLines } from "./attachments";
 import type { ContextLine } from "./context-filing";
@@ -54,6 +55,7 @@ import type {
   NeutralMessage,
   NeutralOrigin,
   NeutralStatus,
+  NeutralSystemMessage,
   SendRecord,
   SessionMessage,
   SlashCommand,
@@ -272,14 +274,9 @@ export function getToolGlance(
  * answered instead. The SDK does not type this message, so it is recognised by
  * its shape rather than by narrowing a union it is not in.
  */
-const modelFallback = (sdk: {
-  subtype: string;
-}): { content: string; model: string } | null => {
-  const frame = sdk as {
-    subtype: string;
-    content?: unknown;
-    fallback_model?: unknown;
-  };
+const modelFallback = (
+  frame: NeutralSystemMessage
+): { content: string; model: string } | null => {
   if (frame.subtype !== "model_fallback") {
     return null;
   }
@@ -291,6 +288,14 @@ const modelFallback = (sdk: {
   }
   return { content: frame.content, model: frame.fallback_model };
 };
+
+/** A `status` frame's own word, as the session's state names it; none for any other. */
+const neutralStatusOf = (
+  status: string | null | undefined
+): NeutralStatus | undefined =>
+  status === "compacting" || status === "requesting" || status === null
+    ? status
+    : undefined;
 
 /**
  * What a partial says about the phase of the turn, beyond the text delta that
@@ -320,17 +325,10 @@ function streamPhase(
   }
 
   if (event.type === "content_block_start") {
-    if (
-      typeof event.content_block !== "object" ||
-      event.content_block === null
-    ) {
+    const block = event.content_block;
+    if (!isRecord(block)) {
       return null;
     }
-    const block = event.content_block as {
-      type?: unknown;
-      id?: unknown;
-      name?: unknown;
-    };
     // Redacted reasoning streams no deltas at all, and is still reasoning.
     if (block.type === "thinking" || block.type === "redacted_thinking") {
       return { blockStart: "thinking" };
@@ -354,10 +352,10 @@ function streamPhase(
   if (event.type !== "content_block_delta") {
     return null;
   }
-  if (typeof event.delta !== "object" || event.delta === null) {
+  const { delta } = event;
+  if (!isRecord(delta)) {
     return null;
   }
-  const delta = event.delta as { type?: unknown; thinking?: unknown };
   if (delta.type === "thinking_delta" && typeof delta.thinking === "string") {
     return { thinkingDelta: delta.thinking };
   }
@@ -496,11 +494,7 @@ function blockOf(
       // left. Recognised by the tool's name — structured, not by its text.
       const handoff = HANDOFF_TOOLS[block.name];
       if (handoff) {
-        const input = (block.input ?? {}) as {
-          target?: unknown;
-          cwd?: unknown;
-          prompt?: unknown;
-        };
+        const input = isRecord(block.input) ? block.input : {};
         return {
           ...base,
           type: "tool.handoff",
@@ -512,11 +506,7 @@ function blockOf(
             toolInput: block.input,
             toolStatus: "pending",
             handoffKind: handoff,
-            handoffBrief: String(
-              input.prompt ??
-                (block.input as { message?: unknown }).message ??
-                ""
-            ),
+            handoffBrief: String(input.prompt ?? input.message ?? ""),
           },
         };
       }
@@ -550,14 +540,10 @@ function blockOf(
 function subagentSpawn(
   input: unknown
 ): { subagentType: string; description?: string; model?: string } | null {
-  if (typeof input !== "object" || input === null) {
+  if (!isRecord(input)) {
     return null;
   }
-  const {
-    subagent_type: type,
-    description,
-    model,
-  } = input as Record<string, unknown>;
+  const { subagent_type: type, description, model } = input;
   if (typeof type !== "string") {
     return null;
   }
@@ -621,10 +607,7 @@ export function spawnsSubagent(
   const input = call?.metadata?.toolInput;
   return (
     SUBAGENT_CALLS.has(call?.metadata?.toolName ?? "") ||
-    (typeof input === "object" &&
-      input !== null &&
-      !Array.isArray(input) &&
-      typeof (input as Record<string, unknown>).subagent_type === "string")
+    (isRecord(input) && typeof input.subagent_type === "string")
   );
 }
 
@@ -764,6 +747,9 @@ export function mapFrame(
     ...(agentId ? { parentToolUseId: agentId } : {}),
   };
 
+  // Read apart from the switch: a type the union does not name reaches its
+  // default, where the union says no message is left.
+  const type: string = sdk.type;
   switch (sdk.type) {
     case "assistant": {
       // An error the harness wrote in the model's place, which failed the
@@ -796,7 +782,9 @@ export function mapFrame(
         mapping.currentTool = {
           toolId: block.id,
           name: block.name,
-          glance: getToolGlance(block.input as Record<string, unknown>),
+          glance: getToolGlance(
+            isRecord(block.input) ? block.input : undefined
+          ),
         };
         const spawn = subagentSpawn(block.input);
         if (spawn) {
@@ -946,7 +934,7 @@ export function mapFrame(
         case CONVERSATION_RESET:
           break;
         case "status":
-          mapping.status = sdk.status as NeutralStatus | undefined;
+          mapping.status = neutralStatusOf(sdk.status);
           if (sdk.compact_result) {
             mapping.compaction = {
               result: sdk.compact_result,
@@ -1237,12 +1225,7 @@ export function mapFrame(
           // an auto-mode classifier. Nothing else renders it, so name the tool
           // and the deciding component's own reason rather than hiding it behind
           // the generic `system.permission_denied` line.
-          const denied = sdk as {
-            tool_name?: string;
-            decision_reason_type?: string;
-            decision_reason?: string;
-            message?: string;
-          };
+          const denied = sdk;
           const tool = denied.tool_name ?? "a tool";
           const reason =
             denied.decision_reason ?? denied.message ?? "no reason given";
@@ -1286,11 +1269,7 @@ export function mapFrame(
     // names what arrived, and any words it carries are shown behind a fold
     // rather than lost.
     case "raw": {
-      const inner = (
-        sdk as unknown as {
-          message?: { type?: unknown; content?: unknown; message?: unknown };
-        }
-      ).message;
+      const inner = isRecord(sdk.message) ? sdk.message : undefined;
       const innerType = typeof inner?.type === "string" ? inner.type : "";
       const text = [inner?.content, inner?.message].find(
         (value): value is string => typeof value === "string"
@@ -1309,7 +1288,6 @@ export function mapFrame(
     // A type the union does not name: the harness's SDK sends message types
     // newer than this build's union, off the wire. Its own line.
     default: {
-      const { type } = sdk as { type: string };
       unnamedLine(mapping, type, () =>
         systemLine(base, `system.${type}`, type.replace(/_/gu, " "))
       );
@@ -1470,10 +1448,10 @@ export function interruptLine(text: string | null): boolean {
  * The words of a user-role message: a send's body, or a stored user entry.
  */
 export function transcriptUserText(message: unknown): string | null {
-  if (typeof message !== "object" || message === null) {
+  if (!isRecord(message)) {
     return null;
   }
-  const { content } = message as { content?: unknown };
+  const { content } = message;
   if (typeof content === "string") {
     return content;
   }
@@ -1481,8 +1459,11 @@ export function transcriptUserText(message: unknown): string | null {
     return null;
   }
   const text = content
-    .filter((block: unknown) => (block as { type?: string }).type === "text")
-    .map((block: unknown) => String((block as { text?: unknown }).text ?? ""))
+    .flatMap((block: unknown) =>
+      isRecord(block) && block.type === "text"
+        ? [String(block.text ?? "")]
+        : []
+    )
     .join("\n");
   return text || null;
 }
@@ -1492,21 +1473,25 @@ export function transcriptUserText(message: unknown): string | null {
  * shows what was actually sent, loading the bytes only when it is on screen.
  */
 function transcriptUserImages(message: unknown): BlockMetadata["images"] {
-  const content = (message as { content?: unknown } | null)?.content;
+  const content = isRecord(message) ? message.content : undefined;
   if (!Array.isArray(content)) {
     return undefined;
   }
-  const images = content
-    .filter((block: unknown) => (block as { type?: string }).type === "image")
-    .map((block: unknown) => {
-      const { source } = block as {
-        source?: { media_type?: string; url?: string };
-      };
-      return {
-        mediaType: source?.media_type ?? "image/png",
-        src: source?.url,
-      };
-    });
+  const images = content.flatMap((block: unknown) => {
+    if (!isRecord(block) || block.type !== "image") {
+      return [];
+    }
+    const source = isRecord(block.source) ? block.source : undefined;
+    return [
+      {
+        mediaType:
+          typeof source?.media_type === "string"
+            ? source.media_type
+            : "image/png",
+        src: typeof source?.url === "string" ? source.url : undefined,
+      },
+    ];
+  });
   return images.length ? images : undefined;
 }
 
@@ -1628,8 +1613,19 @@ const HARNESS_NOTE_KIND: Record<HarnessNote["kind"], string> = {
 };
 
 /** The typed notice its harness's normaliser put on a user message ({@link HarnessNote}), when it did. */
-const harnessNoteOf = (message: unknown): HarnessNote | undefined =>
-  (message as { harnessNote?: HarnessNote } | null | undefined)?.harnessNote;
+const harnessNoteOf = (message: unknown): HarnessNote | undefined => {
+  const note = isRecord(message) ? message.harnessNote : undefined;
+  return isHarnessNote(note) ? note : undefined;
+};
+
+/** Whether `value` is a harness's notice as its normaliser typed it ({@link HarnessNote}). */
+const isHarnessNote = (value: unknown): value is HarnessNote =>
+  isRecord(value) &&
+  (value.kind === "task-notification" || value.kind === "system-reminder") &&
+  typeof value.body === "string" &&
+  typeof value.status === "string" &&
+  typeof value.title === "string" &&
+  (value.toolUseId === undefined || typeof value.toolUseId === "string");
 
 /**
  * Harness-injected content arrives with role "user" but is not the human. A
@@ -1987,9 +1983,11 @@ const spawnedOf = (
 ): { id: string; title: string } | undefined => {
   let text: unknown = result;
   if (Array.isArray(result)) {
-    text = (result as { type?: unknown; text?: unknown }[]).find(
-      (block) => block.type === "text" && typeof block.text === "string"
-    )?.text;
+    const blocks: unknown[] = result;
+    text = blocks
+      .filter(isRecord)
+      .find((block) => block.type === "text" && typeof block.text === "string")
+      ?.text;
   }
   if (typeof text !== "string") {
     return;
@@ -2116,7 +2114,12 @@ export const newer = (
 function sendRow(
   record: SendRecord,
   sdkUuid: string | undefined = record.harnessId
-): TranscriptBlock {
+): TranscriptBlock[] {
+  const { state } = record;
+  // A replaced record is never drawn (see `placeSends`).
+  if (state === "replaced") {
+    return [];
+  }
   const { message, origin } = record.body;
   const text = transcriptUserText(message) ?? "";
   const said = sentRow(text, message, {
@@ -2145,13 +2148,14 @@ function sendRow(
       ? { continuation: true as const }
       : {}),
   };
-  return {
-    ...row,
-    // A replaced record is never drawn (see `placeSends`).
-    state: record.state as Exclude<SendRecord["state"], "replaced">,
-    queued: record.state === "pending",
-    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-  };
+  return [
+    {
+      ...row,
+      state,
+      queued: state === "pending",
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    },
+  ];
 }
 
 /**
@@ -2190,11 +2194,10 @@ function cawcoRow(
   // Your answer to one of its asks says how it went: as its marker said
   // when it was sent, unless the hub has written its line since (a permit's
   // grant that lapsed, hub asks.ts `turnEnded`).
+  const { content } = said;
   const answered =
-    origin.name === ASK_ORIGIN &&
-    !origin.line &&
-    typeof said.content === "string"
-      ? parseAskAnswered(said.content)
+    origin.name === ASK_ORIGIN && !origin.line && typeof content === "string"
+      ? { said: content, as: parseAskAnswered(content) }
       : null;
   return {
     type: "ui.system_note",
@@ -2203,8 +2206,8 @@ function cawcoRow(
       ...carried,
       subtype: CAWCO_NOTICE,
       noteKind: "CawCo",
-      noteTitle: answered
-        ? askAnsweredTitle(answered, said.content as string)
+      noteTitle: answered?.as
+        ? askAnsweredTitle(answered.as, answered.said)
         : noticeLine(origin),
       notice: origin.name ?? "",
     },
@@ -2367,23 +2370,23 @@ export function placeSends(
 
   const placed: TranscriptBlock[] = first
     .sort(byAcceptance)
-    .map((r) => sendRow(r));
+    .flatMap((r) => sendRow(r));
   rows.forEach((row, index) => {
     if (isSendRef(row)) {
       const record = records[row.id];
       if (record?.state === "read" || record?.state === "failed") {
-        placed.push(sendRow(record, row.sdkUuid));
+        placed.push(...sendRow(record, row.sdkUuid));
       }
     } else {
       placed.push(row);
     }
     const failed = after.get(index);
     if (failed) {
-      placed.push(...failed.sort(byAcceptance).map((r) => sendRow(r)));
+      placed.push(...failed.sort(byAcceptance).flatMap((r) => sendRow(r)));
     }
   });
   return {
     blocks: placed,
-    queued: waiting.sort(byAcceptance).map((r) => sendRow(r)),
+    queued: waiting.sort(byAcceptance).flatMap((r) => sendRow(r)),
   };
 }
