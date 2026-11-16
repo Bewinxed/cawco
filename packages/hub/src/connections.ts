@@ -113,7 +113,7 @@ import {
   McpError,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createAppAuth } from "@octokit/auth-app";
+import { createAppAuth, type StrategyOptions } from "@octokit/auth-app";
 import { Octokit } from "@octokit/rest";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
@@ -763,15 +763,24 @@ export const createConnections = (deps: ConnectionsDeps) => {
       installationId: Number(app.installationId),
       privateKey: app.privateKey,
     };
+    // The app's one auth: Octokit makes it through its `authStrategy`, with
+    // its own request, and signs its requests with it; it is kept here as
+    // made, because Octokit's own `auth` is typed `unknown`
+    // (@octokit/core: "TODO: type `octokit.auth` based on passed
+    // options.authStrategy"). Its requests and `auth({ type: "installation" })`
+    // share its one installation-token cache.
+    const signer: { auth?: ReturnType<typeof createAppAuth> } = {};
     const octokit = new Octokit({
-      authStrategy: createAppAuth,
+      authStrategy: (options: StrategyOptions) => {
+        signer.auth = createAppAuth(options);
+        return signer.auth;
+      },
       auth: strategy,
       baseUrl: GITHUB_API,
       userAgent: "CawCo-hub",
     });
-    // Octokit's own `auth()` is typed `unknown`; the same app's auth, made
-    // through its request, answers an installation token typed.
-    const appAuth = createAppAuth({ ...strategy, request: octokit.request });
+    const appAuth =
+      signer.auth ?? misfit(`${r.name}'s GitHub App auth wasn't made.`);
     const kept = { auth: appAuth, made, octokit };
     githubApps.set(r.id, kept);
     return kept;
@@ -1248,16 +1257,26 @@ export const createConnections = (deps: ConnectionsDeps) => {
       : new StreamableHTTPClientTransport(url, options);
   };
 
-  const connect = async (r: ConnectionRow): Promise<Bounded<Client>> => {
-    // An access token past its time is refreshed before it is sent.
-    // A refresh that would need the person has marked the row; nothing is sent.
+  /**
+   * An `oauth` connection's row once its access token is fresh: one within a
+   * minute of its end is refreshed first by the SDK's `auth()`, which keeps
+   * the new pair; a refresh that would need the person has marked the row,
+   * and nothing is sent.
+   */
+  const oauthRefreshed = async (r: ConnectionRow): Promise<ConnectionRow> => {
     if (
-      r.auth === "oauth" &&
       r.tokensExpireAt &&
       r.tokensExpireAt.getTime() <= Date.now() + 60_000 &&
       (await auth(provider(r.id), { serverUrl: r.url ?? "" })) !== "AUTHORIZED"
     ) {
       misfit(`${r.name} is not signed in: its sign-in ran out. Sign in again.`);
+    }
+    return db.byId(r.id) ?? r;
+  };
+
+  const connect = async (r: ConnectionRow): Promise<Bounded<Client>> => {
+    if (r.auth === "oauth") {
+      await oauthRefreshed(r);
     }
     const client = new Client(
       { name: "CawCo hub", version: "1.0.0" },
@@ -2722,6 +2741,45 @@ export const createConnections = (deps: ConnectionsDeps) => {
   };
 
   /**
+   * A `github` connection's token as it is now, for what an Octokit can't
+   * carry (`git push` to a repository just made): a machine's gh token, a
+   * code sign-in's or an MCP sign-in's access token refreshed near its end, a
+   * GitHub App installation's from the one cache its Octokit signs with, or a
+   * personal access token. A connection that holds none is refused in words.
+   */
+  const githubToken = async (name: string): Promise<string> => {
+    const r = row(name);
+    if (appServiceOf(r.service) !== "github") {
+      return misfit(`${name} is a ${r.service} connection, not a GitHub one.`);
+    }
+    const sealed = opened(r);
+    switch (r.auth) {
+      case "gh":
+        return await ghToken(r);
+      case "device":
+        return await deviceAccess(r);
+      case "oauth":
+        return (
+          opened(await oauthRefreshed(r)).tokens?.access_token ??
+          misfit(
+            `${name} is not signed in: ${r.reason ?? connectionsWords.saidSignIn}`
+          )
+        );
+      case "app":
+        return sealed.app?.service === "github"
+          ? (await appToken(r)).token
+          : misfit(`${name} needs its GitHub App: sign in to register it.`);
+      case "bearer":
+        return sealed.key ?? misfit(`${name} needs its key: ${NO_SECRET}.`);
+      case "header":
+      case "none":
+        return misfit(
+          `${name} signs in with ${r.auth}, which holds no GitHub token: connect it through gh on a machine, a code sign-in, a GitHub App or a fine-grained personal access token.`
+        );
+    }
+  };
+
+  /**
    * What a GitHub App connection's installation may do, as GitHub says now
    * (`GET /app/installations/{id}`, its `permissions`), asked with the app's
    * JWT: a tracker that files issues through it needs `issues: write`, which
@@ -2862,6 +2920,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     toolNamed,
     listConnectionTools,
     githubClient,
+    githubToken,
     githubAppPermissions,
     linearClient,
     refusedBy,

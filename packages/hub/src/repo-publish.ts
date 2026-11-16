@@ -53,7 +53,10 @@ export interface RepoPublishDeps {
   readonly bare: (key: HubRepoKey) => string;
   /** A machine-scoped daemon function, answered or thrown in the machine's words. */
   readonly call: MachineCall;
-  readonly connections: Pick<Connections, "githubClient" | "list">;
+  readonly connections: Pick<
+    Connections,
+    "githubClient" | "githubToken" | "list"
+  >;
   readonly db: Pick<DbShape, "projectLinkPublishedFrom">;
   readonly places: Pick<PlaceRepos, "ensure">;
 }
@@ -321,6 +324,9 @@ export const createRepoPublish = ({
     if (published) {
       return published;
     }
+    // The connection's token as it is now, taken before the repository is
+    // made so a connection that holds none makes nothing on GitHub.
+    const token = await connections.githubToken(change.connection);
     const octokit = connections.githubClient(change.connection);
     const asked = await readWithin(API_MS, async (signal) => {
       try {
@@ -348,18 +354,6 @@ export const createRepoPublish = ({
     const { made, refused } = asked.value;
     if (!made) {
       throw new Error(`GitHub did not create ${change.name}: ${refused}`);
-    }
-    // The token the connection's Octokit signs in with (@octokit/auth-token
-    // and @octokit/auth-app: `auth()` answers `{ token }`).
-    const signedIn = await octokit.auth();
-    const token =
-      isRecord(signedIn) && typeof signedIn.token === "string"
-        ? signedIn.token
-        : undefined;
-    if (!token) {
-      throw new Error(
-        `GitHub created ${made.full_name}, but the connection ${change.connection} holds no token to push to it with.`
-      );
     }
     await pushFromHub(hub, pushed.branch, made.clone_url, token);
     console.log(
