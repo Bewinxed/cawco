@@ -2,9 +2,10 @@
   /**
    * A session card's account and model pickers to use (LimitPicker.stories
    * `Live`), on mock data and a mocked provider, with no store read. The
-   * card stands in for SessionDetails' body: its settings chips (the real
-   * chip recipe), its held feedback line and its provider limit (the real
-   * ProviderLimit). Both lists open in the real NsPopover, its hover ghost
+   * card stands in for SessionDetails' body, mounting what SessionDetails
+   * mounts: NsPopover for the model and account chips, ToolChips for effort
+   * and permission (as SessionDetails passes them), ProviderLimit, LiveDot
+   * on its held feedback line. Both lists open in the real NsPopover, its hover ghost
    * and morph its own, every row a PickRow in a PickList, their tooltip
    * gliding row to row. The popovers' and tooltips' portal draws into a
    * layer inside the frame (bits-ui `BitsConfig` `defaultPortalTo`), where
@@ -22,6 +23,11 @@
    * pressing Start over (`again`) derives each one from its prop again.
    */
   import type { AccountHue } from "@cawco/core/accounts/kinds";
+  import {
+    EFFORT_LEVELS,
+    type EffortLevel,
+    type PermissionMode,
+  } from "@cawco/core/harness/kinds";
   import { limitPickWords as words } from "@cawco/core/words/limit-picks";
   import { type MoveWait, owedMoveWords } from "@cawco/core/words/owed-moves";
   import { BitsConfig } from "bits-ui";
@@ -30,7 +36,9 @@
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChevronDown as Down } from "#lib/icons.js";
+  import { permissionModesFor } from "../permission-modes";
   import NsPopover from "../spawn/NsPopover.svelte";
+  import ToolChips from "../spawn/ToolChips.svelte";
   import ProviderLimit from "../usage/ProviderLimit.svelte";
   import { hueVar } from "./model.svelte";
   import PickList from "./PickList.svelte";
@@ -156,6 +164,9 @@
   let moveWait = $derived(fresh(again, { kind: "turn" } as MoveWait));
   /** The model it runs, or the one picked to ride the move. */
   let model = $derived(fresh(again, RUNS_MODEL));
+  /** Its effort and permission, picked on the real ToolChips. */
+  let effort = $derived(fresh(again, "high" as EffortLevel));
+  let permission = $derived(fresh(again, "acceptEdits" as PermissionMode));
   /** A check's answer still to come: Start over drops it. */
   let answer: ReturnType<typeof setTimeout> | undefined;
 
@@ -394,8 +405,28 @@
             {/snippet}
             {@render modelList()}
           </NsPopover>
-          <span class={chip} data-variant="static">high</span>
-          <span class={chip} data-variant="static">Accept edits</span>
+          <ToolChips
+            closeOnCommit
+            id="limit-live"
+            size="compact"
+            tools={{
+              efforts: [...EFFORT_LEVELS],
+              effort,
+              oneffort: (level) => {
+                effort = level;
+              },
+              modes: permissionModesFor("claude").map((mode) => ({
+                value: mode.value,
+                disabled: false,
+              })),
+              harness: "claude",
+              permission,
+              onpermission: (mode) => {
+                permission = mode;
+              },
+              restartsOnFullSend: true,
+            }}
+          />
           <NsPopover
             haspopup="listbox"
             id="limit-live-account"
