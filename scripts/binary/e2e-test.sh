@@ -1520,7 +1520,7 @@ workspace_opens() {
   start_session "$jid" wsparent-1 > /dev/null
   wait_until 60 'session_running wsparent-1'
   # Its prompt names the wait the delegate declares in its first turn, which holds its item open (WS_WAIT_LINE).
-  answer=$(ws_post /api/work-items "{\"parentInstanceId\":\"wsparent-1\",\"title\":\"Open the workspace boundary\",\"prompt\":$(printf '%s\n%s' "The end-to-end test's workspace." "$WS_WAIT_LINE" | json_string),\"harness\":\"claude\",\"model\":\"default\",\"cwd\":\"$WS_REPO\",\"machineId\":\"$jid\",\"lands\":\"none\"}")
+  answer=$(ws_post /api/work-items "{\"parentInstanceId\":\"wsparent-1\",\"title\":\"Open the workspace boundary\",\"prompt\":$(printf '%s\n%s' "The end-to-end test's workspace." "$WS_WAIT_LINE" | json_string),\"harness\":\"claude\",\"model\":\"claude-sonnet-5\",\"cwd\":\"$WS_REPO\",\"machineId\":\"$jid\",\"lands\":\"none\"}")
   echo "the hub answered the delegation: $answer"
   [[ "$answer" == *"HTTP 200" ]]
   body=$(sed '$d' <<< "$answer")
