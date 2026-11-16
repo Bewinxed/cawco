@@ -85,6 +85,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import type { FleetMcpConfig } from "@cawco/core/fleet";
 import { makeFolderSync } from "@cawco/core/folders";
+import { HOSTED_PREFIX } from "@cawco/core/gateway-paths";
 import {
   type JsonRpcMessage,
   JsonRpcMessageSchema,
@@ -120,7 +121,10 @@ interface Launch {
 }
 
 /** The path a harness dials a shared server on, under the gateway. */
-export const HOSTED_PATH = /^\/mcp\/local\/([^/]+)$/u;
+export const HOSTED_PATH = new RegExp(
+  `^${RegExp.escape(HOSTED_PREFIX)}([^/]+)$`,
+  "u"
+);
 
 /** Each list method, and the key its result carries the items under. */
 const LIST_METHODS: Record<string, { items: string; capability: string }> = {
