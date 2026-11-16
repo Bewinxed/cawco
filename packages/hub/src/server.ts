@@ -710,7 +710,7 @@ import { createSshTunnels } from "./ssh-tunnels";
 import { templateOf } from "./stages";
 import { createStartHolds } from "./start-holds";
 import { sessionStartingSet } from "./starting-set";
-import { keptAs } from "./stored-json";
+import { isStoredShapeError, keptAs } from "./stored-json";
 import { createStoredRecent } from "./stored-recent";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
@@ -5712,26 +5712,33 @@ export const createServer = (
   };
   /**
    * THE ONE SOCKET ERROR POLICY for an agent frame whose handling threw,
-   * each failure traced: one that carried custody closes its socket, so its
-   * machine reconnects and retries custody ({@link carriesCustody}); a
-   * correlated request is answered failed ({@link requestFailed}); anything
-   * else is logged.
+   * each failure logged naming its machine, its verb and frame kind, and the
+   * stored field a refused write named: one that carried custody closes its
+   * socket, so its machine reconnects and retries custody
+   * ({@link carriesCustody}); a correlated request is answered failed
+   * ({@link requestFailed}); any other is refused back to its machine with
+   * the reason, which its daemon logs (agent daemon.ts `refusedByHub`).
    */
   const agentFrameFailed = (
-    ws: { close: (code?: number, reason?: string) => unknown },
+    ws: MachineSocket & { close: (code?: number, reason?: string) => unknown },
     message: unknown,
     error: unknown
   ): void => {
     const reason = error instanceof Error ? error.message : String(error);
+    const field = isStoredShapeError(error)
+      ? ` field=${error.table}.${error.column}`
+      : "";
     const addressed = addressedOf(message);
     const read = addressed && readMachineEnvelope(addressed);
     if (!(read && "envelope" in read)) {
-      console.error(`[hub] malformed agent frame failed: ${reason}`);
+      console.error(`[hub] malformed agent frame failed${field}: ${reason}`);
+      sendToMachine(ws, refusalFrame(message, reason));
       return;
     }
     const { envelope } = read;
+    const kind = envelope.verb === "frames" ? ` ${envelope.payload.kind}` : "";
     console.error(
-      `[hub] ${envelope.verb} for ${envelope.instanceId ?? "the machine"} failed: ${reason}`
+      `[hub] ${envelope.verb}${kind} from machine ${envelope.machineId} for ${envelope.instanceId ?? "the machine"} failed${field}: ${reason}`
     );
     if (carriesCustody(envelope)) {
       ws.close(
@@ -5747,7 +5754,9 @@ export const createServer = (
         : undefined);
     if (requestId) {
       requestFailed(envelope, requestId, reason);
+      return;
     }
+    sendToMachine(ws, refusalFrame(envelope, reason, envelope.verb));
   };
   const guardedAgentMessage =
     <
