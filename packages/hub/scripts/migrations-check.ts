@@ -20,7 +20,10 @@
  * names a column through its table ({@link qualifiedChecks}). Once the hub has
  * started, no row names a row that is not there (`PRAGMA
  * foreign_key_check`): a hub that kept a port for a project no longer there
- * died at every start (nightly 4627).
+ * died at every start (nightly 4627). Every stored send on the artifact
+ * origin reads as an artifact notice ({@link artifactNotices}): sends whose
+ * tags named the kind `sheet` after migration 0255 renamed it were drawn as
+ * the person's words (nightly 8128).
  *
  * `--db <path>`: the same over a copy of that database instead (a live
  * hub's, or a copy of one), taken by `VACUUM INTO`; the given file is never
@@ -46,6 +49,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { choiceEntryProblem } from "@cawco/core/choices";
+import { ARTIFACT_ORIGIN } from "@cawco/core/harness/kinds";
+import { parseArtifactNotice } from "@cawco/core/injected";
 import {
   type AppliedRow,
   appliedRows,
@@ -53,6 +58,7 @@ import {
   journalEntries,
   migrationState,
 } from "@cawco/core/migration-state";
+import { transcriptUserText } from "@cawco/core/transcript-rules";
 import { getTableName, is } from "drizzle-orm";
 import {
   getTableConfig,
@@ -102,6 +108,38 @@ const docChoices = (
   }
   sqlite.close();
   return { checked, failures };
+};
+
+/**
+ * Every stored send on the artifact origin read as the transcript reads it
+ * (core injected.ts `parseArtifactNotice`, through transcript-rules.ts
+ * `sendRow`): how many, and each one no artifact notice reads, which a
+ * transcript would draw as the person's words (the `artifact-notice-drawn`
+ * law). A notice's tag names its artifact's kind, and the reader takes only
+ * a kind in `ARTIFACT_KINDS`: a kind renamed or dropped there without a
+ * once-step renaming it in the stored sends' tags (db/sheet-notices.ts did
+ * it for `sheet`) fails here, on the fixtures and on the live database's
+ * copy before a release.
+ */
+const artifactNotices = (
+  dbPath: string
+): { checked: number; failures: string[] } => {
+  const sqlite = new Database(dbPath, { readonly: true });
+  const sends = sqlite
+    .query<{ instance: string; message: string; uuid: string }, [string]>(
+      "SELECT uuid, instance_id AS instance, json_extract(body, '$.message') AS message FROM sent_messages WHERE json_extract(body, '$.origin.kind') = 'system' AND json_extract(body, '$.origin.name') = ?"
+    )
+    .all(ARTIFACT_ORIGIN);
+  sqlite.close();
+  const failures = sends.flatMap(({ uuid, instance, message }) => {
+    const text = transcriptUserText(JSON.parse(message)) ?? "";
+    return parseArtifactNotice(text)
+      ? []
+      : [
+          `send ${uuid} to session ${instance}: "${text.split("\n")[0].slice(0, 200)}"`,
+        ];
+  });
+  return { checked: sends.length, failures };
 };
 
 /**
@@ -1821,6 +1859,15 @@ try {
       `Picks in page docs that are not a choice's shape: a pass over the docs is missing.\n${choices.failures.slice(0, 10).join("\n")}`
     );
   }
+  // Every send on the artifact origin reads as an artifact notice once the
+  // hub started (its once-steps over the stored sends ran): a notice no
+  // reader takes would be drawn as the person's words.
+  const notices = artifactNotices(dbPath);
+  if (notices.failures.length > 0) {
+    throw new Error(
+      `${notices.failures.length} stored send${notices.failures.length === 1 ? "" : "s"} on the artifact origin that no artifact notice reads (core injected.ts \`parseArtifactNotice\`), so a transcript would draw each as the person's words: a kind renamed or dropped from ARTIFACT_KINDS (core artifact-kinds.ts) needs a once-step that renames it in the stored sends' tags, as db/sheet-notices.ts did for \`sheet\`.\n${notices.failures.slice(0, 10).join("\n")}`
+    );
+  }
   // Every artifact made before titles took its title from the start's one
   // pass, the source its words came from counted; none is left untitled.
   const titles = titlesAfter(dbPath);
@@ -1860,7 +1907,7 @@ try {
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(`migrations:check: ${cases.join("; ")}; ${thawed.said}`);
   console.log(
-    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : `${FIXTURE_NAME} fixture rows`}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored rows in ${shapes.columns} columns (${shapes.sets} of them closed sets of text) are their shape; ${choices.checked} picks in page docs are a choice's shape; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`
+    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : `${FIXTURE_NAME} fixture rows`}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored rows in ${shapes.columns} columns (${shapes.sets} of them closed sets of text) are their shape; ${choices.checked} picks in page docs are a choice's shape; ${notices.checked} sends on the artifact origin read as artifact notices; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });

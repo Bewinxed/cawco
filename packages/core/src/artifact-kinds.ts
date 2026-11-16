@@ -1,9 +1,11 @@
 /**
- * Every kind of artifact ({@link ArtifactKind}): the hub's artifacts table
- * and the artifact notices' reader (injected.ts `namedOf`) take only these. A
- * kind renamed or dropped is renamed in the stored sends' notice tags too, as
- * `sheet` was (hub db/sheet-notices.ts), or the notices naming it are read as
- * the person's words.
+ * Every kind of artifact ({@link ArtifactKind}): the one list the hub's
+ * artifacts table (a closed set, hub db/schema.ts), every artifact notice's
+ * builder and the notices' reader (injected.ts `namedOf`) take. A kind
+ * renamed or dropped here is renamed in the stored sends' notice tags by a
+ * once-step, as `sheet` was (hub db/sheet-notices.ts): hub migrations:check
+ * fails on any stored send on the artifact origin no notice reads, on the
+ * fixtures and on the live database's copy before a release.
  */
 export const ARTIFACT_KINDS = [
   "page",
