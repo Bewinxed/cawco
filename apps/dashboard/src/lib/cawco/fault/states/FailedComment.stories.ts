@@ -3,7 +3,7 @@
  * Format 3, live components): its row fails as one line in its place
  * (RegionBoundary), the others standing (FailedComment).
  */
-import FailedComment from "./FailedComment.svelte";
+import FailedComment from "./failed-comment-frame.svelte";
 import { desk, phone } from "./windows";
 
 export default {

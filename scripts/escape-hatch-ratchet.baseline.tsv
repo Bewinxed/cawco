@@ -243,7 +243,7 @@ as-cast	Anchorable	packages/preview/src/overlay/anchor-names.ts	1
 as-cast	AnsweredCall[] | undefined	packages/agent/src/harnesses/opencode-transcript.ts	1
 as-cast	AppState["zoom"]["value"]	packages/agent/src/canvas-host/scene.ts	1
 as-cast	ArrayBuffer | string | Uint8Array<ArrayBuffer>	packages/preview/src/overlay/doc-worker.ts	1
-as-cast	ArtifactSummary	apps/dashboard/src/lib/cawco/transcript/InlineBlockConversation.svelte	1
+as-cast	ArtifactSummary	apps/dashboard/src/lib/cawco/transcript/inline-block-conversation-frame.svelte	1
 as-cast	AssistantMessage	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	Astro	packages/agent/src/stage-host/host.ts	1
 as-cast	AsyncIterator<V2Event>	packages/agent/src/harnesses/opencode.ts	1
@@ -793,7 +793,7 @@ as-unknown-as	HookFrame	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	MetaMap	packages/core/src/doc-meta.ts	1
 as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
 as-unknown-as	NeutralMessage	packages/agent/src/harnesses/claude.ts	7
-as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
+as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/failed-comment-frame.svelte	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/pin-thread.svelte.ts	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	Pin	packages/preview/src/overlay/page.ts	1

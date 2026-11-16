@@ -7,7 +7,7 @@
 import mergeChecksPage from "./block-fixtures/merge-checks.html?raw";
 import paywallStory from "./block-fixtures/paywall-story.mp4?url";
 import releaseNarration from "./block-fixtures/release-narration.mp3?url";
-import InlineBlockConversation from "./InlineBlockConversation.svelte";
+import InlineBlockConversation from "./inline-block-conversation-frame.svelte";
 
 /** A reply's fence for block `name` holding `program`. */
 const fence = (name: string, program: string): string =>

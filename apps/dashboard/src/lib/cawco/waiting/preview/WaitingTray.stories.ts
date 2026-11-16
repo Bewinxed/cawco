@@ -3,15 +3,29 @@
  * Format 3, live): the chip before the plan's ring says how many, and
  * pressed, its list rises over the row. The chip, the card, the list, the
  * ring and the composer are the product's; the screen round them is
- * SessionWaitingFixture. Rows as the hub answers them (fixtures.ts).
+ * SessionWaitingFixture. Rows as the hub answers them (fixtures.ts); the
+ * delegate tray is the product's DelegateTray, its one running delegate
+ * seeded in the meta's `beforeEach` through the work-items store's writer,
+ * so each story's runner holds its own.
  */
-import { ASKED, STATES } from "./fixtures";
+import { ASKED, ORCHESTRATOR, RUNNING, STATES } from "./fixtures";
 import SessionWaitingFixture from "./SessionWaitingFixture.svelte";
 
 export default {
   title: "Needs you/Tray",
   component: SessionWaitingFixture,
   args: { rows: STATES.all, opened: true, height: 900 },
+  async beforeEach() {
+    const work = await import("../../stores/work-items.svelte");
+    const tray = await import("../../transcript/tray.svelte");
+    work.takeWorkItem({
+      kind: "work_item",
+      instanceId: ORCHESTRATOR,
+      item: RUNNING,
+    });
+    // It was running before the page loaded: its chip is simply there.
+    tray.admit(RUNNING.instanceId, "none");
+  },
 };
 
 /** On a desk: the list open, every kind waiting, the agent's question folded to its bar. */

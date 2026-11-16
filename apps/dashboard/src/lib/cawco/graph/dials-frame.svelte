@@ -15,7 +15,7 @@
     IconTuning,
   } from "#lib/icons.js";
   import Dials from "./Dials.svelte";
-  import RoomFaces from "./RoomFaces.svelte";
+  import RoomFaces from "./room-faces-switch.svelte";
 
   let {
     width,

@@ -4,7 +4,7 @@
  * place, every element through the one fault boundary (OpenUiRenderer,
  * FaultBoundary), the page's other cards working (FailedDecision).
  */
-import FailedDecision from "./FailedDecision.svelte";
+import FailedDecision from "./failed-decision-frame.svelte";
 import { desk, phone } from "./windows";
 
 export default {

@@ -6,7 +6,7 @@
  * start), the title, the line and the button centred as one block.
  */
 import { inProjectPane } from "#lib/cawco/project/pane-frame.js";
-import EmptyOnAxis from "./EmptyOnAxis.svelte";
+import EmptyOnAxis from "./empty-on-axis-frame.svelte";
 
 const starters = [
   { glyph: "stages", text: "Set up the stages this project moves through" },

@@ -6,7 +6,7 @@
  * where he can't. Once Caw sets it up, his draft takes the board's place
  * (SetupDraft).
  */
-import EmptyOnAxis from "#lib/cawco/EmptyOnAxis.svelte";
+import EmptyOnAxis from "#lib/cawco/empty-on-axis-frame.svelte";
 import { inProjectPane } from "./pane-frame";
 
 export default {

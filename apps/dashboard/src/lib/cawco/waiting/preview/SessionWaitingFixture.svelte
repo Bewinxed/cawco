@@ -13,10 +13,11 @@
    * floating over its turns.
    *
    * The composer, the chip, the card, the list and the ring are the
-   * product's; the composer's fleet is the app's (composer-fleet.ts), its
-   * delegate tray the one part drawn here (`FixtureTray`: the live tray
-   * reads the hub's store). `asked`: the agent's question folded to its bar
-   * on the tray row (minimized-asks.svelte.ts), the chip beside it.
+   * product's; the composer's fleet is the app's (composer-fleet.ts), and
+   * its delegate tray (DelegateTray) reads the work items the states file
+   * seeds for ORCHESTRATOR (fixtures.ts). `asked`: the agent's question
+   * folded to its bar on the tray row (minimized-asks.svelte.ts), the chip
+   * beside it.
    *
    * A row's press lands where the pane sends it (session-waiting.svelte.ts
    * `open`): a question's or a permission's row puts the list away and the
@@ -70,7 +71,7 @@
   import { isAsk, type WaitingRow } from "../rows";
   import WaitingCard from "../WaitingCard.svelte";
   import WaitingChip from "../WaitingChip.svelte";
-  import FixtureTray from "./FixtureTray.svelte";
+  import { ORCHESTRATOR } from "./fixtures";
 
   let {
     rows,
@@ -122,7 +123,6 @@
 
   /** A press the fixture answers with nothing: the plan's ring and the composer's send are another screen's. */
   const nothing = () => undefined;
-  const fleet = { ...composerFleet, DelegateTray: FixtureTray };
   const draft = new ComposerDraft();
   const phone = new MediaQuery(PHONE_QUERY);
 
@@ -269,13 +269,13 @@
         agentName={caw ? "Caw" : "Claude Code"}
         {ask}
         {draft}
-        {fleet}
+        fleet={composerFleet}
         onstop={nothing}
         onsubmit={nothing}
         placeholder={caw ? conversationWords.placeholder.short : undefined}
         planRing={trailing}
         showing={SESSION}
-        trayRows={[{ delegatesOf: SESSION, id: SESSION }]}
+        trayRows={[{ delegatesOf: ORCHESTRATOR, id: SESSION }]}
       />
     </div>
   </div>

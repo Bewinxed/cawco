@@ -8,7 +8,7 @@
  * mark its one glyph (DESIGN.md, Empty). The meta's args are every story's;
  * a story's own args are what it changes.
  */
-import EmptyStarts from "./EmptyStarts.svelte";
+import EmptyStarts from "./empty-starts-frame.svelte";
 
 /** A name three times the usual length, for the narrow frames. */
 const LONG =

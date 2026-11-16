@@ -6,7 +6,7 @@
  * part comes back; on a stuck one it throws the same way at once and the
  * face turns to Reload page.
  */
-import FailedParts from "./FailedParts.svelte";
+import FailedParts from "./failed-parts-frame.svelte";
 import { desk, phone } from "./windows";
 
 export default {

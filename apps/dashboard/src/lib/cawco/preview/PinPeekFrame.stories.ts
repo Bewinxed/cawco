@@ -8,7 +8,7 @@
  * drew it.
  */
 import type { Pin } from "@cawco/core/comments/model";
-import PinPeekFrame from "./PinPeekFrame.svelte";
+import PinPeekFrame from "./pin-peek-frame.svelte";
 
 /** Pin 1 on the design graph spec, as the hub keeps it: seven entries. */
 const PIN_1: Pin = {

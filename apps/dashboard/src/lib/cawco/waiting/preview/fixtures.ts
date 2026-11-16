@@ -5,6 +5,7 @@
  * sign-in, its own and a delegate's): the states the session's list
  * reaches.
  */
+import type { WorkItemSummary } from "@cawco/core/protocol";
 import type { SessionQuestion } from "@cawco/core/session-questions";
 import { type WaitingAsk, type WaitingRow, waitingRows } from "../rows";
 
@@ -164,4 +165,36 @@ export const STATES: Record<
   several: waitingRows(SEVERAL, [...ASK, ...PARKED]),
   delegate: waitingRows([...ONE_PAGE, ...DELEGATE], []),
   all: waitingRows([...SEVERAL, ...DELEGATE], [...ASK, ...PARKED]),
+};
+
+/**
+ * The orchestrator whose delegate tray stands on the composer: one id for
+ * every frame, so a story's `beforeEach` can seed its tray (each frame's
+ * pane keeps its own id for its composer layer).
+ */
+export const ORCHESTRATOR = "s-orchestrator";
+
+/** Its one delegate at work, as the hub's `work_item` frame carries it. */
+export const RUNNING: WorkItemSummary = {
+  id: "wi-rail",
+  instanceId: "s-rail",
+  parentInstanceId: ORCHESTRATOR,
+  title: "Design the Comments rail and sheet whole",
+  state: "running",
+  createdAt: Date.parse("2026-11-16T09:40:00.000Z"),
+  endedAt: null,
+  dismissedAt: null,
+  dismissReason: null,
+  replacedBy: null,
+  firstLines: {
+    brief: "Design the Comments rail and sheet whole, at 1440 and at 390.",
+    result: "",
+    error: "",
+  },
+  machinePaused: null,
+  stalled: null,
+  queued: null,
+  checkQueue: null,
+  waitReason: null,
+  waitUntil: null,
 };

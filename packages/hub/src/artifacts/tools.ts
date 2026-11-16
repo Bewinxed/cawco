@@ -171,7 +171,7 @@ export const artifactCreate = {
     kind: z
       .enum(MADE_ARTIFACT_KINDS)
       .describe(
-        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: `file`, every story drawn live and read back with artifact_read: how you look at UI you build (component-canvas skill). preview: a server on `port`, or a folder (`dir`), at `path`, for the person to use; the app holds no CawCo sign-in. canvas: `elements`, `mermaid`, or empty."
+        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: `file`, stories drawn live and read back with artifact_read (component-canvas skill): he operates one live story; a story per state is yours. preview: a server on `port`, or a folder (`dir`), at `path`, for the person to use; the app holds no CawCo sign-in. canvas: `elements`, `mermaid`, or empty."
       ),
     does: does.describe(
       "pick: a page with decision cards. judge: a component, a kept block, or a preview or page judged whole. try: a preview. draw: a canvas."
@@ -203,7 +203,7 @@ export const artifactCreate = {
       ])
       .optional()
       .describe(
-        "CSF 3 states files from your workspace's root; a list for a surface of several."
+        "CSF 3 states files from your workspace's root; a list for your own reading."
       ),
     ...canvasFields,
     dir: z.string().startsWith("/").max(4096).optional().describe("Absolute."),

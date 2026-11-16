@@ -5,7 +5,7 @@
  * left edge, and Caw or a glyph stands over the middle of what is drawn
  * under him.
  */
-import AlignedPlaces from "./AlignedPlaces.svelte";
+import AlignedPlaces from "./aligned-places-frame.svelte";
 
 export default {
   title: "Alignment/Places brought to the rule",

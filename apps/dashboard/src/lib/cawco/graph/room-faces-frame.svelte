@@ -17,7 +17,7 @@
     IconStructure,
     IconTuning,
   } from "#lib/icons.js";
-  import RoomFaces from "./RoomFaces.svelte";
+  import RoomFaces from "./room-faces-switch.svelte";
 
   type Face = "states" | "map" | "move" | "dials";
 
