@@ -82,6 +82,7 @@ export type CompactionContext = Pick<
   | "openItems"
   | "owedMoves"
   | "publishStalls"
+  | "refuseMove"
   | "registry"
   | "releaseOne"
   | "releaseOwed"
@@ -291,7 +292,9 @@ export const createCompaction = (ctx: CompactionContext) => {
     row: { id: string; machineId: string },
     line: string,
     move: MovedLine,
-    stopped: false | "limit" | "signin"
+    stopped: false | "limit" | "signin",
+    /** A model picked to go with the move: the row takes it as the move lands ({@link moveCompacted}). */
+    picked?: string
   ): void => {
     const plan: LimitCompaction = {
       instanceId: row.id,
@@ -305,6 +308,7 @@ export const createCompaction = (ctx: CompactionContext) => {
       compactUuid: crypto.randomUUID(),
       compacted: false,
       endedStep: null,
+      picked: picked ?? null,
     };
     ctx.db.atLimit.putCompaction(plan);
     const first = move.compactFirst === true;
@@ -400,6 +404,9 @@ export const createCompaction = (ctx: CompactionContext) => {
       step: "start",
       reason: why,
     });
+    // Its account line says it stays, where it stays and why; a model
+    // picked to go with the move went with it, the row never having taken it.
+    ctx.refuseMove(row, move.to.id, why);
     const [listed] = ctx.db.listedInstancesByIds([row.id]);
     if (listed?.parentInstanceId) {
       ctx.reportToParent(
@@ -580,8 +587,28 @@ export const createCompaction = (ctx: CompactionContext) => {
    * where it is owes the move to its turn's end ({@link owedMoves}), its
    * line written as it lands.
    */
+  /**
+   * A compacted move whose carry its process kept back, owed again to the
+   * end of what keeps it ({@link owedMoves}): a model picked to go with it
+   * still riding it.
+   */
+  const oweCompactedAgain = (
+    instanceId: string,
+    said: Extract<AccountMove, { kind: "moved" }>,
+    later: boolean,
+    picked: string | null
+  ): void => {
+    ctx.owedMoves.set(instanceId, {
+      to: said.to.id,
+      move: said,
+      waits: later ? "work" : "turn",
+      ...(said.asked ? { byHand: true as const } : {}),
+      ...(picked === null ? {} : { model: picked }),
+    });
+  };
+
   const moveCompacted = async (
-    plan: { instanceId: string; lineId: string },
+    plan: { instanceId: string; lineId: string; picked: string | null },
     move: Extract<AccountMove, { kind: "moved" }>
   ): Promise<void> => {
     const [row] = ctx.db.getInstancesByIds([plan.instanceId]);
@@ -606,16 +633,12 @@ export const createCompaction = (ctx: CompactionContext) => {
       move.to.id,
       false,
       undefined,
-      undefined
+      undefined,
+      plan.picked ?? undefined
     );
     if ("kept" in done) {
       ctx.unnoteAtLimit(row, plan.lineId);
-      ctx.owedMoves.set(row.id, {
-        to: move.to.id,
-        move: said,
-        waits: done.kept.later ? "work" : "turn",
-        ...(move.asked ? { byHand: true as const } : {}),
-      });
+      oweCompactedAgain(row.id, said, Boolean(done.kept.later), plan.picked);
       console.info(
         `[at-limit] ${ctx.sessionName(row)} can't move to ${ctx.accountWords(move.to.id)} yet: ${done.kept.why}. It moves when that ends.`
       );
@@ -1099,6 +1122,7 @@ export const createCompaction = (ctx: CompactionContext) => {
       compactUuid: null,
       compacted: false,
       endedStep: null,
+      picked: null,
     };
     ctx.db.atLimit.putCompaction(plan);
     console.info(

@@ -34,8 +34,10 @@ export interface SwatchWords {
 }
 
 export const accountsWords = {
-  /** A session moved to another account, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
-  notMovedThen: "so the session stayed on its account.",
+  /** A session moved to another account, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`), naming the account it stays on. */
+  notMovedThen: (account: string) => `so the session stayed on ${account}.`,
+  /** The account a session runs on, where its name isn't known yet. */
+  itsAccount: "its account",
   /** A session's transcript line once it moved off an account a person removed (core `AccountMove` `removed`). */
   removedMove: (to: string, from: string) =>
     `Moved to ${to}: ${from} was removed`,

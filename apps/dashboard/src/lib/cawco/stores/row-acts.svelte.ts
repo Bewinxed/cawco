@@ -121,15 +121,18 @@ export async function discardSession(
  * Moves a session whole to another account of its provider
  * (`POST /api/instances/:id/account`): now when it is at rest, else at its
  * next turn boundary. A refusal is thrown in the hub's own sentence; an
- * answer that is not a sentence (a route's JSON) is named by its status.
+ * answer that is not a sentence (a route's JSON) is named by its status,
+ * and that the session stayed on `stays`.
  */
 export async function moveInstanceAccount(
   instanceId: string,
-  accountId: string
+  accountId: string,
+  /** The account it runs on now, by name: where a refusal says it stayed. */
+  stays: string
 ): Promise<void> {
   await hubDone(
     hub.api.instances({ id: instanceId }).account.post({ accountId }),
-    (refused) => hubRefusal(refused, accountsWords.notMovedThen)
+    (refused) => hubRefusal(refused, accountsWords.notMovedThen(stays))
   );
 }
 

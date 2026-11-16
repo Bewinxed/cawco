@@ -440,7 +440,8 @@ export interface ClosureContext {
     accountId: string,
     stopped: false | "limit" | "signin",
     compact: { line: string; move: MovedLine } | undefined,
-    laterSince: number | undefined
+    laterSince: number | undefined,
+    picked?: string
   ) => Promise<{ kept: Kept } | { ended?: MoveEnded | undefined }>;
   catalogFaults: Map<string, string>;
   caw: ReturnType<typeof createCaw>;
@@ -543,6 +544,8 @@ export interface ClosureContext {
   followupState: SessionCallsDeps["followupState"];
   forgePosts: ReturnType<typeof createForgePosts>;
   forgetInstances: (ids: readonly string[]) => void;
+  /** A move of a session was asked again: the one that didn't happen is no longer said (limit-moves.ts). */
+  forgetMoveRefusal: (instanceId: string) => void;
   forgetOn: (
     account: Pick<Account, "id" | "provider">,
     machineId: string,
@@ -811,6 +814,11 @@ export interface ClosureContext {
     store,
     storeProvider,
   }: Pick<LoginMove, "machineId" | "store" | "storeProvider">) => string;
+  /** What a session's account line says of a move that didn't happen, while it runs where it stayed (limit-moves.ts). */
+  moveRefusalOf: (row: {
+    accountId?: string | null;
+    id: string;
+  }) => string | undefined;
   moveResults: LoginMoveResults;
   moveRowsToAccount: (
     machineId: string,
@@ -1044,6 +1052,12 @@ export interface ClosureContext {
     machineId: string,
     harness: HarnessKind
   ) => string | undefined;
+  /** A session's move that was shown waiting didn't happen: its account line says so (limit-moves.ts). */
+  refuseMove: (
+    row: { accountId?: string | null; id: string; machineId: string },
+    to: string,
+    why: string
+  ) => void;
   registry: RegistryShape;
   relaunchAtRest: (
     machineId: string,
@@ -1246,7 +1260,8 @@ export interface ClosureContext {
     row: { id: string; machineId: string },
     line: string,
     move: MovedLine,
-    stopped: false | "limit" | "signin"
+    stopped: false | "limit" | "signin",
+    picked?: string
   ) => void;
   startContinuation: SessionCallsDeps["startContinuation"];
   startHold: (

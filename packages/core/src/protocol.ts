@@ -1225,6 +1225,13 @@ export interface InstanceRow {
   mayStart: MayStart;
   model?: string | null;
   /**
+   * A move of it that was shown waiting and didn't happen, in the hub's
+   * words: the account it stays on, the one it was not moved to, and why.
+   * Said while it still runs on that account, until a move of it is asked
+   * again. Absent otherwise.
+   */
+  moveRefused?: string;
+  /**
    * Who started it ({@link SessionOrigin}), as the hub stamped it at its
    * start. A row the hub sends always has it.
    */

@@ -1584,6 +1584,9 @@ export const createServer = (
     openInstance: () => openInstance,
     owedOn: () => owedOn,
     pickWithMove: () => pickWithMove,
+    refuseMove: () => refuseMove,
+    moveRefusalOf: () => moveRefusalOf,
+    forgetMoveRefusal: () => forgetMoveRefusal,
     piDefaultFor: () => piDefaultFor,
     refusedHarness: () => refusedHarness,
     sendSpawn: () => sendSpawn,
@@ -1793,6 +1796,9 @@ export const createServer = (
     owedCarries,
     owedOn,
     pickWithMove,
+    refuseMove,
+    moveRefusalOf,
+    forgetMoveRefusal,
     relaunchOnAccount,
     removalOf,
     removeWithSessions,
@@ -7769,6 +7775,8 @@ export const createServer = (
     has: db.owedMoves.has,
     list: db.owedMoves.list,
     set: (instanceId: string, owed: OwedMove): void => {
+      // A move asked again: the one that didn't happen is no longer news.
+      forgetMoveRefusal(instanceId);
       db.owedMoves.set(instanceId, owed);
       publishInstances("");
     },

@@ -46147,6 +46147,10 @@
           "model": {
             "type": "string"
           },
+          "moveRefused": {
+            "description": "A move of it that was shown waiting and didn't happen, in the hub's\nwords: the account it stays on, the one it was not moved to, and why.\nSaid while it still runs on that account, until a move of it is asked\nagain. Absent otherwise.",
+            "type": "string"
+          },
           "origin": {
             "$ref": "#/components/schemas/SessionOrigin",
             "description": "Who started it ({@link SessionOrigin}), as the hub stamped it at its\nstart. A row the hub sends always has it."
@@ -85609,6 +85613,10 @@
             },
             "modelUsageSeen": {
               "type": "object"
+            },
+            "moveRefused": {
+              "description": "A move of it that was shown waiting and didn't happen, in the hub's\nwords: the account it stays on, the one it was not moved to, and why.\nSaid while it still runs on that account, until a move of it is asked\nagain. Absent otherwise.",
+              "type": "string"
             },
             "namedAccount": {
               "type": "string"

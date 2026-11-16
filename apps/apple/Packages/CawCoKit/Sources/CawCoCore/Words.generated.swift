@@ -145,8 +145,13 @@ public enum Words {
 
     public enum Accounts {
         // packages/core/src/words/accounts.ts `accountsWords`
-        /// A session moved to another account, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
-        public static let notMovedThen = "so the session stayed on its account."
+        /// A session moved to another account, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`), naming the account it stays on.
+        public static func notMovedThen(account: String) -> String {
+            "so the session stayed on \(account)."
+        }
+
+        /// The account a session runs on, where its name isn't known yet.
+        public static let itsAccount = "its account"
 
         /// A session's transcript line once it moved off an account a person removed (core `AccountMove` `removed`).
         public static func removedMove(to: String, from: String) -> String {
@@ -670,6 +675,11 @@ public enum Words {
         public enum AtLimit {
             public static let head = "When a session hits its limit and another account is free"
 
+            /// The block's notice while the provider's saved policy can't be read (core `ProviderRouting.atLimitUnread`: its fields that don't, as the code): the settings shown are the restrictive policy the hub acts on.
+            public static func unread(fields: String) -> String {
+                "Saved at-limit policy unreadable (\(fields)). No automatic moves, compaction or filing until saved."
+            }
+
             public static let move = "Move running sessions between accounts"
 
             public static let wait = "Wait if the window resets within"
@@ -774,6 +784,11 @@ public enum Words {
             /// The same, held on a refused sign-in.
             public static func staleSignedOut(from: String, day: String) -> String {
                 "Stopped: \(from)’s sign-in was refused on \(day); carries on once written to"
+            }
+
+            /// Any of the above, held on an account whose provider's saved at-limit policy does not read (hub db/accounts.ts `atLimitUnread`): the hub acts on the restrictive policy (core `RESTRICTIVE_AT_LIMIT`) until it is saved again.
+            public static func policyUnread(stalled: String) -> String {
+                "\(stalled) · Saved at-limit policy unreadable: no automatic moves, compaction or filing until saved in Configure › Accounts"
             }
         }
 
@@ -914,7 +929,6 @@ public enum Words {
         ]
 
         // packages/core/src/accounts.ts `ACCOUNT_RULES`
-        /// The rules that shape Configure › Accounts, which the native app follows from here too (`bun run words` writes them as `Words.Accounts.Rules`): when a provider's routing is offered, which providers' limits CawCo reads (their accounts have a Limits section, an At the limit step and every strategy), what the others offer, the routing each starts from, and the at-limit policy a routing starts with.
         public enum Rules {
             /// A provider's routing is a choice among its accounts: it is offered from this many.
             public static let routingFrom = 2
@@ -2501,7 +2515,7 @@ public enum Words {
             "the hub's database is back as it was before the update; what it stored during the trial is in \(file)"
         }
 
-        /// A rollback whose copy could not be put back (no room for it beside the database, the hub still holding it): said after the reason. The rollback goes on, and the build rolled back to runs on the database the trial left. `stopped`: that database holds migrations `previous` lacks, so its hub does not start on it (core migrations-ahead.ts).
+        /// A rollback whose copy could not be put back (no room for it beside the database, the hub still holding it): said after the reason. The rollback goes on, and the build rolled back to runs on the database the trial left. `stopped`: that database holds migrations `previous` lacks, so its hub does not start on it (core migration-state.ts).
         public static func databaseNotPutBack(database: String, why: String, copy: String, previous: String, stopped: Bool) -> String {
             "the hub's database was not put back (\(why)), so \(database) still holds what the hub stored during the trial; the copy from before the update is \(copy)\(stopped ? ". The trial migrated it, so \(previous)'s hub doesn't start on it: put that copy in its place to start the hub, which loses what it stored during the trial" : "")"
         }
@@ -4060,6 +4074,9 @@ public enum Words {
 
         /// A row's sign-in, for a server that signs in with OAuth.
         public static let signIn = "Sign in"
+
+        /// The row's line while its saved platforms don't read (core `FleetMcpServer.platformsUnread`): no machine is sent it.
+        public static let platformsUnread = "On no machine: saved platforms unreadable."
 
         /// The row's line while a sign-in is under way: where it is finished.
         public static func signingIn(name: String) -> String {

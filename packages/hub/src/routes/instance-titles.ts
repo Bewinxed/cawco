@@ -29,6 +29,7 @@ const TITLE_WINDOW = 40;
 export const instanceTitleRoutes = ({
   db,
   firstTurnOf,
+  forgetMoveRefusal,
   handMoveRefusal,
   laws,
   moveByHand,
@@ -45,6 +46,7 @@ export const instanceTitleRoutes = ({
   HubContext,
   | "db"
   | "firstTurnOf"
+  | "forgetMoveRefusal"
   | "handMoveRefusal"
   | "laws"
   | "moveByHand"
@@ -88,6 +90,8 @@ export const instanceTitleRoutes = ({
           // a second carry of the conversation meanwhile, and this one
           // starts from where that one left the row.
           await owedCarries.get(params.id)?.catch(() => undefined);
+          // A move asked again: the one that didn't happen is no longer news.
+          forgetMoveRefusal(params.id);
           const [row] = db.getInstancesByIds([params.id]);
           if (!row) {
             return problem(404, {

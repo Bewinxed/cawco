@@ -47,10 +47,10 @@
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
   import {
+    accountFault,
     movingTo,
     movingWords,
     pickWords,
-    stopWords,
   } from "../accounts/switch.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import HarnessLogo from "../HarnessLogo.svelte";
@@ -534,11 +534,12 @@
     return "Applying change…";
   }
   function failure(slot: Slot) {
-    // A refused move is moveTo's toast, the one place the menu and the card
-    // both say it. Stopped at its account's limit, the account line is the
-    // error and its way out: the picker right above it.
+    // A move refused as it was asked is moveTo's toast, the one place the
+    // menu and the card both say it. A move shown waiting that then didn't
+    // happen, or a stop at its account's limit, is the account line's error,
+    // and its way out the picker right above it.
     if (slot === "account") {
-      return row ? (stopWords(row) ?? null) : null;
+      return row ? (accountFault(row) ?? null) : null;
     }
     if (slot === "permission" && relaunchFailure) {
       return relaunchFailure;

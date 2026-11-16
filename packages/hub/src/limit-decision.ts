@@ -863,6 +863,12 @@ export interface MoveHow {
   cause: StopCause | "hand";
   line: string;
   move: Extract<AccountMove, { kind: "moved" }>;
+  /**
+   * A model a person picked to go with the move (an owed move's `model`):
+   * the row takes it only as the move lands, so a move that never does
+   * leaves it running what it ran.
+   */
+  picked?: string;
   plan: CompactionPlan;
 }
 

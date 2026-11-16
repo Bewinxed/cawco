@@ -64,6 +64,12 @@ interface CompactionSteps {
   instanceId: string;
   /** Its line, said again as it goes: a move's `limit_events` id, a filing's `session_lines` id. */
   lineId: string;
+  /**
+   * A model a person picked to go with the move (owed_moves `picked_model`
+   * as it was taken up): the row takes it only as the move lands. Null for
+   * none, and for a filing's.
+   */
+  picked: string | null;
   stage: LimitCompactionStage;
 }
 
@@ -333,6 +339,7 @@ const toCompaction = (
     filingUuid: row.filingUuid,
     compacted: row.compacted,
     endedStep: row.endedStep,
+    picked: row.picked,
   };
   // A plan whose move or reading did not read (`move_unread`,
   // `fill_unread`) is neither: it drives no move and holds nothing back.

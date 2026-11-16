@@ -3582,6 +3582,13 @@ export const limitCompactions = sqliteTable(
      * `recoverCompaction`). Null until a step's turn ends.
      */
     endedStep: text("ended_step"),
+    /**
+     * A model a person picked to go with a move's compaction (owed_moves
+     * `picked_model` as the move was taken up): the row takes it only as the
+     * move lands, so one that never does leaves it running what it ran.
+     * Null for none, and for a filing's.
+     */
+    picked: text("move_picked_model"),
     createdAt: stampedNow("created_at"),
   },
   () => [

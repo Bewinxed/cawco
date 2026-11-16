@@ -773,6 +773,55 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   };
 
   /**
+   * Each session's move that was shown waiting and then didn't happen, by
+   * session: the account it stays on, and the hub's words for it
+   * ({@link owedMoveWords} `notMoved`). Its account line says it (InstanceRow
+   * `moveRefused`) while the session still runs on that account, until it
+   * is asked to move again ({@link owedMoves}). Held for the hub's life: the
+   * log keeps it past a restart.
+   */
+  const moveRefusals = new Map<
+    string,
+    { from: string | null; words: string }
+  >();
+
+  /** `row`'s move to `to` didn't happen, for `why`: its account line says so. */
+  const refuseMove = (
+    row: { accountId?: string | null; id: string; machineId: string },
+    to: string,
+    why: string
+  ): void => {
+    const [named] = ctx.db.getInstancesByIds([row.id]);
+    const words = owedMoveWords.notMoved(
+      named ? ctx.sessionName(named) : row.id,
+      ctx.accountWords(row.accountId),
+      ctx.accountWords(to),
+      why.replace(SENTENCE_STOP, "")
+    );
+    moveRefusals.set(row.id, { from: row.accountId ?? null, words });
+    console.warn(`[accounts] ${words}`);
+    ctx.publishInstances(row.machineId);
+  };
+
+  /** What `row`'s account line says of a move that didn't happen, while it still runs where it stayed. */
+  const moveRefusalOf = (row: {
+    accountId?: string | null;
+    id: string;
+  }): string | undefined => {
+    const refused = moveRefusals.get(row.id);
+    return refused && refused.from === (row.accountId ?? null)
+      ? refused.words
+      : undefined;
+  };
+
+  /** A move of `instanceId` was asked again: the one that didn't happen is no longer news. */
+  const forgetMoveRefusal = (instanceId: string): void => {
+    if (moveRefusals.delete(instanceId)) {
+      ctx.publishInstances("");
+    }
+  };
+
+  /**
    * An owed move whose carry did not land ({@link takeUpOwedMove}), its
    * record still its own (`mine`): one whose process still runs owes it at
    * its turn's end; one whose machine went away under the carry owes it to
@@ -796,7 +845,12 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     } else if (mine && away) {
       ctx.owedMoves.set(stored.id, { ...now, waits: "machine" });
     } else if (mine) {
+      // Dropped, and a model picked to go with it with it: the person who
+      // was shown it waiting is shown it didn't happen.
       ctx.owedMoves.delete(stored.id);
+      if (now.byHand || now.model !== undefined) {
+        refuseMove(stored, to, why.why);
+      }
     }
     const next = away
       ? `It moves as soon as ${ctx.machineName(stored.machineId)} is connected again.`
@@ -917,24 +971,22 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     stopped: "limit" | "signin" | undefined
   ): Promise<void> => {
     const mine = () => ctx.owedMoves.get(stored.id)?.to === to;
-    // Its record goes as it is taken up, so a model picked while it waited
-    // is its row's now: the move relaunches it, or goes on from a summary,
-    // on it. One kept back runs what it ran, the pick waiting with it again.
+    // Its record goes as it is taken up. A model picked while it waited goes
+    // with the move, and the row takes it only as the move lands (a carry,
+    // a compaction's move after it, a summary's continuation on it): a move
+    // that never lands leaves it running what it ran.
     const owing = mine() ? ctx.owedMoves.get(stored.id) : undefined;
     if (owing) {
-      landOwed(stored.id);
+      ctx.owedMoves.delete(stored.id);
     }
     const picked = owing?.model;
     const done = await moveAs(
       picked === undefined ? stored : { ...stored, model: picked },
       to,
       stopped ?? false,
-      how
+      picked === undefined ? how : { ...how, picked }
     );
     if ("kept" in done) {
-      if (picked !== undefined && stored.model) {
-        ctx.db.patchInstance(stored.id, { model: stored.model });
-      }
       ctx.owedMoves.set(stored.id, owing ?? owed);
       keepUncarried(stored, owing ?? owed, to, done.kept, true);
       return;
@@ -1410,7 +1462,9 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     accountId: string,
     stopped: false | "limit" | "signin",
     compact: { line: string; move: MovedLine } | undefined,
-    laterSince: number | undefined
+    laterSince: number | undefined,
+    /** A model picked to go with the move: the row takes it as the carry lands, before it relaunches there. */
+    picked?: string
   ): Promise<{ kept: Kept } | { ended?: MoveEnded }> => {
     if (!(ctx.registry.agent(row.machineId) && row.sessionId)) {
       return {
@@ -1434,6 +1488,9 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     const why = kept.get(row.id);
     if (why) {
       return { kept: why };
+    }
+    if (picked !== undefined) {
+      ctx.db.patchInstance(row.id, { model: picked });
     }
     const agent = ctx.registry.agent(row.machineId);
     const [now] = ctx.db.getInstancesByIds([row.id]);
@@ -1490,7 +1547,14 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       return { later: true };
     }
     if (!asked || asked.plan.method === "whole") {
-      return carryTo(row, accountId, stopped, undefined, laterSince);
+      return carryTo(
+        row,
+        accountId,
+        stopped,
+        undefined,
+        laterSince,
+        asked?.picked
+      );
     }
     const how = asked;
     if (how.plan.method === "summary") {
@@ -1516,7 +1580,8 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       accountId,
       stopped,
       { line: how.line, move: how.move },
-      laterSince
+      laterSince,
+      how.picked
     );
     return done;
   };
@@ -1529,7 +1594,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    */
   const compactFirst = (row: MoverRow, how: MoveHow): void => {
     ctx.noteAtLimit(row, how.move, how.line);
-    ctx.startCompaction(row, how.line, how.move, false);
+    ctx.startCompaction(row, how.line, how.move, false, how.picked);
   };
 
   /** Who writes `row`'s summaries: its provider's policy (core `Compaction.summarizer`), the default's on no account. */
@@ -1953,6 +2018,9 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     takeOwedMove,
     owedOn,
     pickWithMove,
+    refuseMove,
+    moveRefusalOf,
+    forgetMoveRefusal,
     landSessionDir,
     handMoveRefusal,
     moveByHand,

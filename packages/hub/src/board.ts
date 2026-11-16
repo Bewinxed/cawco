@@ -39,6 +39,7 @@ export type BoardContext = Pick<
   | "lifetime"
   | "machineCustody"
   | "machinePresence"
+  | "moveRefusalOf"
   | "moves"
   | "noticesSeen"
   | "owedAfterBoard"
@@ -300,6 +301,14 @@ export const createBoard = (ctx: BoardContext) => {
       },
     };
   };
+  /** A move of `row` that didn't happen, as its account line says it (InstanceRow `moveRefused`). */
+  const moveRefusedOf = (row: {
+    accountId?: string | null;
+    id: string;
+  }): Pick<InstanceRow, "moveRefused"> => {
+    const words = ctx.moveRefusalOf(row);
+    return words === undefined ? {} : { moveRefused: words };
+  };
   /**
    * Rows as every reader of the board is handed them: what the database
    * does not hold laid over each (presence, damage, running delegates,
@@ -327,6 +336,7 @@ export const createBoard = (ctx: BoardContext) => {
         ...row,
         ...(queued > 0 ? { queuedSends: queued } : {}),
         ...owedMoveOf(row, one),
+        ...moveRefusedOf(row),
         ...(stall ? { stalled: stall } : {}),
       };
     });
@@ -511,6 +521,7 @@ export const createBoard = (ctx: BoardContext) => {
       row.runningDelegates,
       row.keepAlive,
       "owedMove" in row ? row.owedMove : null,
+      "moveRefused" in row ? row.moveRefused : null,
       "stalled" in row ? row.stalled : null,
       "queuedSends" in row ? row.queuedSends : null,
     ]);

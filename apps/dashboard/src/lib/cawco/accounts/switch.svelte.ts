@@ -9,6 +9,7 @@
  * says so.
  */
 import type { Account, AccountProvider } from "@cawco/core/accounts";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { type MoveWait, owedMoveWords } from "@cawco/core/words/owed-moves";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
@@ -157,6 +158,19 @@ export function pickWords(instance: AccountHolder): string | undefined {
 }
 
 /**
+ * What a session's account line says when it isn't moving: a move of it
+ * that was shown waiting and didn't happen, in the hub's words (its row's
+ * `moveRefused`: the account it stays on, the one it wasn't moved to, and
+ * why), else its stop at its account's limit ({@link stopWords}).
+ */
+export function accountFault(instance: BoardRow): string | undefined {
+  if (movingTo(instance) !== undefined) {
+    return;
+  }
+  return instance.moveRefused ?? stopWords(instance);
+}
+
+/**
  * A session stopped at its account's limit, as an error says it (DESIGN.md's
  * error formula): what happened and when it carries on, in the hub's words
  * (its row's `stalled`), then the way out while one is open, another
@@ -193,7 +207,14 @@ export async function moveTo(
   }
   moving.set(instance.id, accountId);
   try {
-    await moveInstanceAccount(instance.id, accountId);
+    const runsOn = accountsStore.accounts?.accounts.find(
+      (one) => one.id === instance.accountId
+    );
+    await moveInstanceAccount(
+      instance.id,
+      accountId,
+      runsOn ? nameOf(runsOn) : accountsWords.itsAccount
+    );
   } catch (error) {
     moving.delete(instance.id);
     faultOn(instance.id, {
