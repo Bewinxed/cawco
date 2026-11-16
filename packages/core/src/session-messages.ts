@@ -988,6 +988,12 @@ export interface NeutralResultMessage {
     Partial<ClaudeModelUsage> & { contextWindow?: number }
   >;
   num_turns?: number;
+  /**
+   * pi and OpenCode: the provider refused the turn for want of credit, by
+   * the structured refusal its harness handed over (core `outOfCredit`).
+   * Claude's is its assistant frame's `error` (`billing_error`).
+   */
+  outOfCredit?: true;
   raw?: unknown;
   /** Read from stored history during recovery, rather than a newly completed turn. */
   recovered?: boolean;

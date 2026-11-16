@@ -65,6 +65,9 @@ export const accountsListed = (
     ).map((one) => db.accounts.routing(one)),
     readings: mine(db.accounts.readings()),
     bench: mine(db.accounts.bench()),
+    // Accounts a provider refused for want of credit (credit.ts), by the
+    // model provider: a model the hub picks keeps off them.
+    credit: mine(db.accounts.credit()),
     catalogs: mine(db.accounts.catalogs()),
     catalogFaults: mine(
       [...catalogFaults].map(([accountId, reason]): AccountCatalogFault => ({

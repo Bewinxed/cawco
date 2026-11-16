@@ -89,6 +89,19 @@ export const spawnWords = {
     notAllowed: (by: "project" | "task") =>
       `left out by the ${by}'s account list`,
     benched: "benched",
+    /** Its provider refused it for want of credit: "out of credit for opencode since 23:41". */
+    outOfCredit: (provider: string, since: string) =>
+      `out of credit for ${provider} since ${since}`,
+    /**
+     * An account's row in Configure › Accounts while a provider has refused
+     * it for want of credit, above its Check again, which acknowledges a
+     * top-up.
+     */
+    creditProblem: (provider: string, since: string) =>
+      `Out of credit for ${provider} since ${since}. A model CawCo picks keeps off it until a turn on ${provider} is answered; top it up, then press Check again.`,
+    /** When a mark began: its clock time today, else its day and time ("2 Oct 23:41"). */
+    since: (day: string | null, clock: string) =>
+      day ? `${day} ${clock}` : clock,
     pastReserve: (percent: number) => `past its ${percent}% reserve`,
     atLimit: "at its limit",
     /** At its limit, with its extra usage off for `reason` (Claude Code's words: "out of credits"). */
@@ -128,7 +141,7 @@ export const spawnWords = {
       [
         `No ${harness} model on ${machine} can start now: none was picked, and no account can take one it lists.`,
         ...reasons,
-        `Pick a model, sign in another account in ${configurePage("accounts")}${first ? `, or start it again ${first}` : ""}. Nothing was started.`,
+        `Pick a model, sign in another account or top one up in ${configurePage("accounts")}${first ? `, or start it again ${first}` : ""}. Nothing was started.`,
       ].join(" "),
     /** The harness there has not listed its models yet (`why`, the machine's words), so none can be named. */
     unread: (harness: string, machine: string, why: string | undefined) =>
@@ -136,6 +149,20 @@ export const spawnWords = {
     /** The harness there lists no models, and names no default of its own. */
     noneListed: (harness: string, machine: string) =>
       `${harness} on ${machine} lists no models, so a start that picks none has none to run. Sign an account in to it in ${configurePage("accounts")}. Nothing was started.`,
+    /**
+     * A session that stays on its account (`account`), whose start picked
+     * no model, where every model of it the harness lists is a provider's
+     * that refused the account for want of credit (`why`, as an account line
+     * says it).
+     */
+    heldOutOfCredit: (
+      session: string,
+      account: string,
+      why: string,
+      harness: string,
+      machine: string
+    ) =>
+      `${session} runs on ${account}, which is ${why}, and every model ${harness} on ${machine} lists for it is that provider's. Pick a model for it, or top the account up and press Check again in ${configurePage("accounts")}. Nothing was started.`,
     /**
      * A session that stays on its account (`account`), whose start picked
      * no model, where the harness lists none that account runs.

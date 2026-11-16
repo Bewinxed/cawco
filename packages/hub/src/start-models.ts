@@ -1,6 +1,10 @@
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { type ModelListing, modelRun } from "@cawco/core/model-names";
-import { clockWords, spanWords } from "@cawco/core/words/account-lines";
+import {
+  clockWords,
+  dayWords,
+  spanWords,
+} from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { spawnWords } from "@cawco/core/words/spawn";
 import type { Standing } from "./placement";
@@ -105,6 +109,8 @@ const accountLine = (
       return words.account(name, words.signedOut(machine), null);
     case "not-allowed":
       return words.account(name, words.notAllowed(standing.by), null);
+    case "out-of-credit":
+      return words.account(name, creditWhy(standing, now), null);
     case "benched":
       return words.account(name, words.benched, back(standing.backAt));
     case "past-reserve":
@@ -123,6 +129,19 @@ const accountLine = (
       throw unreachable(standing);
   }
 };
+
+/** "out of credit for opencode since 23:41": an account a provider refused for want of credit. */
+export const creditWhy = (
+  mark: { provider: string; since: number },
+  now: number
+): string =>
+  spawnWords.startModel.outOfCredit(
+    mark.provider,
+    spawnWords.startModel.since(
+      dayWords(mark.since) === dayWords(now) ? null : dayWords(mark.since),
+      clockWords(mark.since)
+    )
+  );
 
 /**
  * Why no model a harness lists on a machine can start for a start that

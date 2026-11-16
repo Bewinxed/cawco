@@ -27,7 +27,11 @@ import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import type { ProviderRefusal } from "@cawco/core/accounts";
-import { atProviderLimit } from "@cawco/core/accounts";
+import {
+  atProviderLimit,
+  outOfCredit,
+  providerErrorCode,
+} from "@cawco/core/accounts";
 import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import { type AskAnswer, FULL_SEND_ANSWER } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -666,15 +670,70 @@ const missedTurnEnd = (
 
 /**
  * How a turn closes when not as `success`: its subtype and errors, and
- * `atLimit` when the provider refused it at the account's limit.
+ * `atLimit` when the provider refused it at the account's limit,
+ * `outOfCredit` when for want of credit.
  */
 interface TurnClosing {
   atLimit?: true;
   errors?: string[];
   is_error: boolean;
+  outOfCredit?: true;
   serverStopped?: true;
   subtype: string;
 }
+
+/** Why the provider refused an account's turn, which ends it: its limit, or its credit (core `atProviderLimit`, `outOfCredit`). */
+type AccountRefusal = "limit" | "credit";
+
+/**
+ * A refusal as OpenCode structures it, read as the provider's: its sort,
+ * status and the provider's own error code in the body it answered.
+ */
+const providerRefusal = (error: {
+  response?: { body: string };
+  status?: number;
+  type: string;
+}): ProviderRefusal => {
+  const code = providerErrorCode(error.response?.body);
+  return {
+    type: error.type,
+    ...(error.status === undefined ? {} : { status: error.status }),
+    ...(code === undefined ? {} : { code }),
+  };
+};
+
+/** How a turn the provider's refusal of its account ended closes: an error, flagged by why. */
+const refusedClosing = (refusal: {
+  kind: AccountRefusal;
+  words: string;
+}): TurnClosing => ({
+  subtype: "error_during_execution",
+  is_error: true,
+  errors: [refusal.words],
+  ...(refusal.kind === "credit"
+    ? { outOfCredit: true as const }
+    : { atLimit: true as const }),
+});
+
+/** Why a refusal with these flags ends an account's turn; none when it doesn't. */
+const refusedFor = (
+  flags: Pick<TurnClosing, "atLimit" | "outOfCredit">
+): AccountRefusal | undefined => {
+  if (flags.outOfCredit) {
+    return "credit";
+  }
+  return flags.atLimit ? "limit" : undefined;
+};
+
+/** The flags a turn's result carries for the provider's refusal of it. */
+const refusalFlags = (
+  refusal: ProviderRefusal
+): Pick<TurnClosing, "atLimit" | "outOfCredit"> => {
+  if (outOfCredit(refusal)) {
+    return { outOfCredit: true };
+  }
+  return atProviderLimit(refusal) ? { atLimit: true } : {};
+};
 
 /** A message's blocks, by their key (`text:<n>`, `reasoning:<n>`, `tool:<id>`), in the order they began. */
 interface MessageBlocks {
@@ -1026,8 +1085,11 @@ export class OpencodeSession implements HarnessSession {
     return this.#sleepAfterRecoveryValue;
   }
   #open = false;
-  /** The provider's usage-limit refusal the open turn ends on, once asked to stop. */
-  #limitRefusal: string | undefined;
+  /**
+   * The provider's refusal the open turn ends on, once asked to stop: at
+   * the account's usage limit, or for want of credit.
+   */
+  #limitRefusal: { kind: AccountRefusal; words: string } | undefined;
   /** Armed while a turn is open without any server event; see STALLED_TURN_MS. */
   #stallTimer: ReturnType<typeof setTimeout> | undefined;
   /** Sends held while the config gate is up, each under the message id it will become. */
@@ -1658,7 +1720,7 @@ export class OpencodeSession implements HarnessSession {
           subtype: "error_during_execution",
           is_error: true,
           errors: [errorText(event.data.error)],
-          ...(atProviderLimit(event.data.error) ? { atLimit: true } : {}),
+          ...refusalFlags(providerRefusal(event.data.error)),
         });
         break;
       case "session.execution.interrupted":
@@ -2000,11 +2062,21 @@ export class OpencodeSession implements HarnessSession {
 
   /**
    * A provider retry, said once per distinct note; at the account's limit
-   * (its error's type or status, core `atProviderLimit`), the turn ends on it.
+   * (its error's type or status, core `atProviderLimit`), or out of its
+   * credit (core `outOfCredit`, which no retry mends), the turn ends on it.
    */
-  #retry(error: ProviderRefusal & { message: string }, next: number): void {
+  #retry(
+    error: {
+      message: string;
+      response?: { body: string };
+      status?: number;
+      type: string;
+    },
+    next: number
+  ): void {
     const { message } = error;
-    const atLimit = atProviderLimit(error);
+    const flags = refusalFlags(providerRefusal(error));
+    const atLimit = flags.atLimit === true;
     this.#turnRevision += 1;
     this.#busyValue = true;
     this.#turnOpen = true;
@@ -2025,8 +2097,9 @@ export class OpencodeSession implements HarnessSession {
         },
       });
     }
-    if (this.account !== undefined && atLimit) {
-      this.refuseAtLimit(message).catch((cause: unknown) =>
+    const kind = refusedFor(flags);
+    if (this.account !== undefined && kind) {
+      this.refuseAtLimit(message, kind).catch((cause: unknown) =>
         console.warn(
           `[opencode] ${this.instanceId}: could not end the turn at its limit: ${errorText(cause)}`
         )
@@ -2042,15 +2115,8 @@ export class OpencodeSession implements HarnessSession {
   #flushResult(closing?: TurnClosing): void {
     const refusal = this.#limitRefusal;
     this.#limitRefusal = undefined;
-    const result: TurnClosing | undefined =
-      refusal && this.#turnOpen
-        ? {
-            subtype: "error_during_execution",
-            is_error: true,
-            errors: [refusal],
-            atLimit: true,
-          }
-        : closing;
+    const result =
+      refusal && this.#turnOpen ? refusedClosing(refusal) : closing;
     this.#closeThinking();
     // As read back: a Code Mode call whose answer never came ended with nothing kept.
     for (const key of this.#codeModeOpen) {
@@ -2093,6 +2159,7 @@ export class OpencodeSession implements HarnessSession {
       is_error: result?.is_error ?? false,
       ...(result?.errors ? { errors: result.errors } : {}),
       ...(result?.atLimit ? { atLimit: true } : {}),
+      ...(result?.outOfCredit ? { outOfCredit: true } : {}),
       ...(result?.serverStopped ? { serverStopped: true } : {}),
       total_cost_usd: this.#costBase + turnCost,
       turnUsage,
@@ -3658,13 +3725,16 @@ export class OpencodeSession implements HarnessSession {
    * limit: the open turn is stopped now and closes on that refusal, so the
    * hub's at-limit decision runs at once instead of after OpenCode's retries.
    */
-  async refuseAtLimit(error: string): Promise<void> {
+  async refuseAtLimit(
+    error: string,
+    kind: AccountRefusal = "limit"
+  ): Promise<void> {
     if (!this.#turnOpen || this.#limitRefusal) {
       return;
     }
-    this.#limitRefusal = error;
+    this.#limitRefusal = { kind, words: error };
     console.info(
-      `[opencode] ${this.instanceId}: its account's usage limit refused the request; ending the turn on it`
+      `[opencode] ${this.instanceId}: its account's ${kind === "credit" ? "credit" : "usage limit"} refused the request; ending the turn on it`
     );
     await this.interrupt();
   }

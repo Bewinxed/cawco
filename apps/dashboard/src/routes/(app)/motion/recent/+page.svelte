@@ -705,6 +705,7 @@
         })),
         bench: [],
         catalogFaults: [],
+        credit: [],
         catalogs: [],
         pending: [],
         readings: [],

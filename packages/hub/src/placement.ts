@@ -1,6 +1,7 @@
 import {
   type Account,
   type AccountBench,
+  type AccountCredit,
   type AccountReading,
   type AccountSignin,
   accountNameAmong,
@@ -86,6 +87,13 @@ export interface PlacementInput {
   machineName?: string;
   model?: string;
   now: number;
+  /**
+   * The accounts its model's provider refused for want of credit (core
+   * `AccountCredit`, hub credit.ts), which it keeps off: given only where
+   * the hub picks the model of a start that picked none (spawns.ts
+   * `modelFor`). A person's pick still runs on one.
+   */
+  outOfCredit?: readonly AccountCredit[];
   /**
    * Each account's window paces (forecast.ts `accountPaces`), for
    * soonest-reset's carry test; absent: no forecast, the order alone decides.
@@ -544,8 +552,13 @@ class Usage {
   room = (account: Account): boolean =>
     !(
       (this.benched(account.id) && !this.onExtraUsage(account)) ||
-      this.pastReserve(account)
+      this.pastReserve(account) ||
+      this.creditOut(account.id) !== undefined
     ) && this.headroom(account);
+
+  /** The mark the start keeps off the account by, when its provider refused it for want of credit ({@link PlacementInput.outOfCredit}). */
+  creditOut = (id: string): AccountCredit | undefined =>
+    this.#input.outOfCredit?.find((one) => one.accountId === id);
 
   /**
    * When an account with no room takes a session again: the latest of its
@@ -1067,6 +1080,9 @@ const choose = (
   const outNote = allowed
     .filter((account) => !candidates.includes(account))
     .map((account) => {
+      if (usage.creditOut(account.id)) {
+        return `${usage.name(account)} is out of credit`;
+      }
       if (usage.creditsWait(account)) {
         return `${usage.name(account)} is past its plan, and its extra usage is used only when no account has plan room`;
       }
@@ -1272,13 +1288,16 @@ export const accountRows = (
 /**
  * Why an account of a start's provider can't take it now, as placement
  * reads it ({@link place}): not signed in on its machine, left out by the
- * project's or task's list, or without room (benched, past its reserve, at
- * its limit, with Claude Code's words when its extra usage is off), with
- * when it is back where a reading says. `room`: it can take it.
+ * project's or task's list, out of credit for the start's model's provider
+ * since a refusal ({@link PlacementInput.outOfCredit}), or without room
+ * (benched, past its reserve, at its limit, with Claude Code's words when
+ * its extra usage is off), with when it is back where a reading says.
+ * `room`: it can take it.
  */
 export type Standing =
   | { kind: "signed-out" }
   | { kind: "not-allowed"; by: "project" | "task" }
+  | { kind: "out-of-credit"; provider: string; reason: string; since: number }
   | {
       kind: "benched" | "past-reserve" | "at-limit";
       backAt: number | null;
@@ -1305,6 +1324,15 @@ export const standings = (
       return {
         kind: "not-allowed",
         by: listed(input.projectAccounts, account.id) ? "task" : "project",
+      };
+    }
+    const credit = usage.creditOut(account.id);
+    if (credit) {
+      return {
+        kind: "out-of-credit",
+        provider: credit.provider,
+        reason: credit.reason,
+        since: credit.since,
       };
     }
     if (usage.room(account)) {

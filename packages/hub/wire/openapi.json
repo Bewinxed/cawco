@@ -32510,6 +32510,33 @@
           "reason"
         ]
       },
+      "AccountCredit": {
+        "description": "An account a provider refused for want of credit ({@link outOfCredit}),\nfor the models of one provider its credential opens: an OpenCode Go key\nout of Zen's balance (`opencode`) still runs Go's models. Kept until a\nturn on that provider succeeds, the account is signed in again through\nCawCo, or a person acknowledges a top-up (Check again in Configure ›\nAccounts). A model the hub picks for a start that picked none keeps off\nit; a person's pick still runs it.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "provider": {
+            "description": "The model's provider the refusal was for, as its harness names it (`opencode`, `anthropic`).",
+            "type": "string"
+          },
+          "reason": {
+            "description": "The provider's own words, as its harness handed them over.",
+            "type": "string"
+          },
+          "since": {
+            "description": "When the refusal came, epoch ms.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "accountId",
+          "provider",
+          "reason",
+          "since"
+        ]
+      },
       "AccountForecast": {
         "type": "object",
         "properties": {
@@ -49014,6 +49041,11 @@
           },
           "num_turns": {
             "type": "number"
+          },
+          "outOfCredit": {
+            "description": "pi and OpenCode: the provider refused the turn for want of credit, by\nthe structured refusal its harness handed over (core `outOfCredit`).\nClaude's is its assistant frame's `error` (`billing_error`).",
+            "const": true,
+            "type": "boolean"
           },
           "raw": {},
           "recovered": {
@@ -76373,6 +76405,12 @@
               "$ref": "#/components/schemas/AccountCatalog"
             }
           },
+          "credit": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountCredit"
+            }
+          },
           "pending": {
             "type": "array",
             "items": {
@@ -76409,6 +76447,7 @@
           "bench",
           "catalogFaults",
           "catalogs",
+          "credit",
           "pending",
           "readings",
           "rebalances",

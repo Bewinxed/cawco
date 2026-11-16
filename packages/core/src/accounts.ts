@@ -15,6 +15,7 @@
  * Browser-safe: types and pure functions only.
  */
 
+import { nullable, object, optional, safeParse, string } from "valibot";
 import {
   type AccountHue,
   type CompactMethod,
@@ -642,6 +643,25 @@ export interface AccountReading {
   windows: LimitWindow[];
 }
 
+/**
+ * An account a provider refused for want of credit ({@link outOfCredit}),
+ * for the models of one provider its credential opens: an OpenCode Go key
+ * out of Zen's balance (`opencode`) still runs Go's models. Kept until a
+ * turn on that provider succeeds, the account is signed in again through
+ * CawCo, or a person acknowledges a top-up (Check again in Configure ›
+ * Accounts). A model the hub picks for a start that picked none keeps off
+ * it; a person's pick still runs it.
+ */
+export interface AccountCredit {
+  accountId: string;
+  /** The model's provider the refusal was for, as its harness names it (`opencode`, `anthropic`). */
+  provider: AccountProvider;
+  /** The provider's own words, as its harness handed them over. */
+  reason: string;
+  /** When the refusal came, epoch ms. */
+  since: number;
+}
+
 /** An account taken out of placement until its window resets. */
 export interface AccountBench {
   accountId: string;
@@ -918,9 +938,61 @@ export type ProviderSigninResult =
  * `SDKAssistantMessageError`, `rate_limit`).
  */
 export interface ProviderRefusal {
+  /** The provider's own error code in its answer's body ({@link providerErrorCode}). */
+  code?: string;
   status?: number;
   type?: string;
 }
+
+/**
+ * The harnesses' sorts of a provider refusing for want of credit: Claude
+ * Code's assistant message `error` (agent SDK 0.3.325
+ * `SDKAssistantMessageError`, `billing_error`).
+ */
+const CREDIT_TYPES: ReadonlySet<string> = new Set(["billing_error"]);
+
+/**
+ * Providers' own error codes for an account with no credit left: OpenAI's
+ * `insufficient_quota`, which it answers with a 429 ("You exceeded your
+ * current quota, please check your plan and billing details").
+ */
+const CREDIT_CODES: ReadonlySet<string> = new Set(["insufficient_quota"]);
+
+/**
+ * Whether a provider refused for want of credit: a 402 (OpenCode Zen's
+ * "Insufficient balance"), the credit sort its harness put the answer in,
+ * or the provider's own credit code. Read before {@link atProviderLimit}:
+ * OpenAI's no-credit answer is a 429 too. Its words are never read.
+ */
+export const outOfCredit = ({ code, status, type }: ProviderRefusal): boolean =>
+  status === 402 ||
+  (type !== undefined && CREDIT_TYPES.has(type)) ||
+  (code !== undefined && CREDIT_CODES.has(code));
+
+/** A provider's error answer as OpenAI-shaped APIs give it: `{"error":{"code":…}}`. */
+const ERROR_BODY = object({
+  error: object({ code: optional(nullable(string())) }),
+});
+
+/**
+ * The provider's own error code in the body of its error answer, when that
+ * is JSON that names one; undefined for any other body.
+ */
+export const providerErrorCode = (
+  body: string | undefined
+): string | undefined => {
+  if (!body) {
+    return;
+  }
+  let read: unknown;
+  try {
+    read = JSON.parse(body);
+  } catch {
+    return;
+  }
+  const parsed = safeParse(ERROR_BODY, read);
+  return parsed.success ? (parsed.output.error.code ?? undefined) : undefined;
+};
 
 /** The harnesses' sorts of a provider refusing at the account's limits: OpenCode's, then Claude Code's. */
 const LIMIT_TYPES: ReadonlySet<string> = new Set([
@@ -934,8 +1006,10 @@ const LIMIT_TYPES: ReadonlySet<string> = new Set([
  * sorts its harness put the provider's answer in. The one test every
  * harness's refusal goes through; its words are never read.
  */
-export const atProviderLimit = ({ status, type }: ProviderRefusal): boolean =>
-  status === 429 || (type !== undefined && LIMIT_TYPES.has(type));
+export const atProviderLimit = (refusal: ProviderRefusal): boolean =>
+  !outOfCredit(refusal) &&
+  (refusal.status === 429 ||
+    (refusal.type !== undefined && LIMIT_TYPES.has(refusal.type)));
 
 /**
  * One reading of an account's windows on a machine, made by its agent from
