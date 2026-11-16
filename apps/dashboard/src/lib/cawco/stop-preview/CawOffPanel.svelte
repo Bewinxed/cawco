@@ -130,6 +130,7 @@
       ? conversationWords.status.offFinishing(away)
       : conversationWords.status.off;
   });
+  // golar-ignore-next-line house/fixture-mounts -- the phone sheet's head is drawn here until calls-1031-evening is picked: the kit's Drawer stands on the window's foot, or fills its box, never at its content's height in a frame
   const head = sheetHeadVariants();
 </script>
 
@@ -145,6 +146,7 @@
     )}
   >
     {#if form === "phone"}
+      <!-- golar-ignore-next-line house/fixture-mounts -- the phone sheet's grabber is drawn here with its head, for the same reason -->
       <div class={cn(grabberVariants(), "mt-0")}></div>
       <div class={head.head()}>
         <p class={cn(head.title(), "m-0")}>Caw, {projectName}</p>

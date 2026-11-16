@@ -12,19 +12,22 @@
     held: _held = false,
     parentId: _parentId,
   }: { held?: boolean; parentId: string } = $props();
+
+  // golar-ignore-next-line house/fixture-mounts -- DelegateTray reads its chips from the work-items store by its parent's id, and a `preview/` fixture may import no store (biome.jsonc, "The fleet store is the live app"), so its one chip is drawn here on the tray's recipe
+  const chip = chipVariants({
+    variant: "tray",
+    class: "touch-hit min-w-c-tray-chip-min max-w-c-tray-chip-max flex-initial",
+  });
 </script>
 
 <div class="pointer-events-none pe-(--ring-room,0px)">
   <div
     class="pointer-events-auto flex flex-nowrap items-center gap-space-2 pb-c-tray-gap"
   >
+    <!-- golar-ignore-next-line house/fixture-mounts -- the chip's own button, for the same reason -->
     <button
       aria-label="Design the Comments rail and sheet whole, working"
-      class={chipVariants({
-        variant: "tray",
-        class:
-          "touch-hit min-w-c-tray-chip-min max-w-c-tray-chip-max flex-initial",
-      })}
+      class={chip}
       data-tray-chip
       type="button"
     >

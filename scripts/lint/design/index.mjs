@@ -11,6 +11,7 @@ import { barSymbols } from "./bar-symbol.mjs";
 import { classJoins } from "./class-join.mjs";
 import { clipWithMove } from "./clip-move.mjs";
 import { countBadges } from "./count-badge.mjs";
+import { fixtureMounts } from "./fixture-mounts.mjs";
 import { followsProps } from "./follows-props.mjs";
 import { groupNotNeedsAncestor } from "./group-not.mjs";
 import { DASHBOARD, ignored, modelOf, reportAt } from "./model.mjs";
@@ -329,6 +330,7 @@ const FIND = {
   "house/no-raw-class-values": rawClassValues,
   "house/no-raw-motion": rawMotion,
   "house/follows-props": followsProps,
+  "house/fixture-mounts": fixtureMounts,
   "house/bar-item-in-kit": barItemsOutsideKit,
   "house/count-in-badge": countBadges,
   "house/bar-symbol-linear": barSymbols,

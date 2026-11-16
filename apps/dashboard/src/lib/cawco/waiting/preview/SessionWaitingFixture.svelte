@@ -4,8 +4,9 @@
   /**
    * A session's screen as the person meets it, for the canvas to draw the
    * list of what waits on him in each state: the session's tab and the
-   * bar's glass floating over the conversation, its turns, and the real
-   * composer (Composer) with its tray row, where the list's chip
+   * bar's glass floating over the conversation, its turns as the transcript
+   * draws an answer (Turn, Who, MessageBody), and the real composer
+   * (Composer) with its tray row, where the list's chip
    * (WaitingChip) stands before the plan's ring and its card (WaitingCard)
    * rises over the row. `caw`: the same conversation as Caw's docked panel
    * on a project's page (CawFloat, ProjectConversation), its own bar
@@ -28,6 +29,7 @@
    */
   import { untrack } from "svelte";
   import { MediaQuery, SvelteSet } from "svelte/reactivity";
+  import CawFace from "#lib/cawco/home/CawFace.svelte";
   import { provideHub } from "#lib/cawco/hub-seam.js";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
   import { minimizedAsks } from "#lib/cawco/minimized-asks.svelte.js";
@@ -40,6 +42,9 @@
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import type { ComposerAsk } from "#lib/cawco/transcript/grown-ask.svelte.js";
+  import Turn from "#lib/cawco/turn/Turn.svelte";
+  import { setVoice } from "#lib/cawco/turn/voice.js";
+  import Who from "#lib/cawco/turn/Who.svelte";
   import {
     BarFloat,
     BarGlass,
@@ -106,6 +111,13 @@
         apply: () => Promise.reject(new Error("The canvas reaches no hub.")),
       })
     ),
+  });
+
+  // A project's conversation: its agent is Caw, his face on its turns, as its pane says (SessionPane).
+  setVoice({
+    get face() {
+      return caw ? face : undefined;
+    },
   });
 
   /** A press the fixture answers with nothing: the plan's ring and the composer's send are another screen's. */
@@ -206,6 +218,10 @@
   );
 </script>
 
+{#snippet face(live: boolean)}
+  <CawFace size={18} status={live ? "working" : "ready"} />
+{/snippet}
+
 {#snippet trailing()}
   <WaitingChip
     onopen={() => {
@@ -239,16 +255,12 @@
         caw && "pbs-c-top-bar-h",
       ]}
     >
-      <div
-        class="mx-auto flex max-w-c-measure flex-col gap-space-5 pbs-space-4"
-      >
+      <div class="mx-auto max-w-c-measure">
         {#each TURNS as turn, n (n)}
-          <article class="flex flex-col gap-space-2">
-            <p class="type-label m-0 text-ink-row">
-              {caw ? "Caw" : "Claude Code"}
-            </p>
+          <Turn>
+            <Who name={caw ? "Caw" : "Claude Code"} />
             <MessageBody source={turn} wrap="pretty" />
-          </article>
+          </Turn>
         {/each}
       </div>
     </div>

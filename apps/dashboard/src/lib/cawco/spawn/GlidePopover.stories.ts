@@ -23,7 +23,7 @@ export const Project = {
   parameters: { viewport: 390 },
 };
 
-/** The machines chip's popover: two chosen machines joined as one block, then one more. */
+/** The machines chip's popover: two chosen machines joined as one block, one more, then Connect a machine. */
 export const Machines = {
   args: { which: "machines" },
   parameters: { viewport: 390 },

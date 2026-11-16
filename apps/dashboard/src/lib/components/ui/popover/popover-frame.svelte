@@ -2,14 +2,14 @@
   /**
    * The kit's Popover in a frame of its own (its states file's): open under
    * its trigger, drawn in place (the portal off) in a box that holds it
-   * (`contain: layout`, so floating-ui places it in the frame), holding the
-   * rows a popover's site gives it: buttons on the menu item recipe, the
-   * floating surface's own rows (DESIGN.md, Menu item).
+   * (`contain: layout`, so floating-ui places it in the frame), under the
+   * kit's Button as its trigger and holding the kit's Command list, as the
+   * model combobox composes them: its rows are the kit's items on the menu
+   * item recipe (DESIGN.md, Menu item).
    */
-  import { buttonVariants } from "#lib/components/ui/button/index.js";
-  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Command from "#lib/components/ui/command/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { cn } from "#lib/utils.js";
 
   let {
     rows,
@@ -27,28 +27,27 @@
   style:--frame-h={`${height}px`}
 >
   <Popover.Root open>
-    <Popover.Trigger class={buttonVariants({ variant: "outline" })}
-      >Open</Popover.Trigger
-    >
+    <Popover.Trigger>
+      {#snippet child({ props })}
+        <Button {...props} variant="outline">Open</Button>
+      {/snippet}
+    </Popover.Trigger>
     <Popover.Content
       align="start"
       forceMount
       onOpenAutoFocus={(event) => event.preventDefault()}
+      pad="none"
       portalProps={{ disabled: true }}
       side="bottom"
       trapFocus={false}
-      gap="none"
     >
-      {#each rows as row (row)}
-        <button
-          class={cn(
-            menuItemVariants(),
-            "flex w-full items-center border-none bg-transparent px-space-3 text-start text-ink-strong type-label can-hover:hover:bg-surface-hover"
-          )}
-          data-menu-item
-          type="button">{row}</button
-        >
-      {/each}
+      <Command.Root>
+        <Command.List>
+          {#each rows as row (row)}
+            <Command.Item value={row}>{row}</Command.Item>
+          {/each}
+        </Command.List>
+      </Command.Root>
     </Popover.Content>
   </Popover.Root>
 </div>

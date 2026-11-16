@@ -74,6 +74,11 @@ scripts/lint/fixtures/design/planted-render-dom.svelte:21:24 house/no-render-dom
 scripts/lint/fixtures/design/planted-props.svelte:12:16 house/follows-props
 scripts/lint/fixtures/design/planted-props.svelte:13:14 house/follows-props
 scripts/lint/fixtures/design/planted-fixture-drawn.svelte:11:16 house/follows-props
+scripts/lint/fixtures/design/planted-mounts-frame.svelte:13:16 house/fixture-mounts
+scripts/lint/fixtures/design/planted-mounts-frame.svelte:17:3 house/fixture-mounts
+scripts/lint/fixtures/design/planted-mounts-frame.svelte:18:3 house/fixture-mounts
+scripts/lint/fixtures/design/planted-mounts-frame.svelte:19:8 house/fixture-mounts
+scripts/lint/fixtures/design/planted-mounts-part.svelte:6:1 house/fixture-mounts
 scripts/lint/fixtures/design/planted-bar-item.svelte:13:49 house/bar-item-in-kit
 scripts/lint/fixtures/design/planted-bar-item.svelte:18:3 house/bar-item-in-kit
 scripts/lint/fixtures/design/planted-count-badge.svelte:14:10 house/count-in-badge

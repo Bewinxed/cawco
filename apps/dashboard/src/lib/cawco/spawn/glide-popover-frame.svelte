@@ -3,22 +3,22 @@
    * The glide popover (`roomy`, the new-session form's own popovers) open
    * in a frame of its own (its states file's), holding the rows its chips
    * hold, so their corners are read against the surface's (The Concentric
-   * Rule). The lifetime and project chips are the real ones; the permission
-   * list is the real PermissionSection, embedded as ModePick embeds it; the
-   * machines list stands in for MachinesChip, which reads the fleet store,
-   * with its rows' own markup and corners (`machineRowRadius`). Each opens
-   * its surface on the page (bits-ui's portal), under its chip.
+   * Rule). The lifetime, project and machines chips are the real ones, fed
+   * the rows the form hands them; the permission list is the real
+   * PermissionSection, embedded as ModePick embeds it. Each opens its
+   * surface on the page (bits-ui's portal), under its chip. A press on a
+   * machine's row checks or unchecks it, as the form's own handler does.
    */
   import type { PermissionMode } from "@cawco/core/harness/kinds";
-  import { MachineRow } from "#lib/components/ui/machine-row/index.js";
+  import { spawnWords } from "@cawco/core/words/spawn";
   import {
     IconChevronDown as Down,
     IconServerSquare as Server,
   } from "#lib/icons.js";
   import LifetimeChip from "./LifetimeChip.svelte";
-  import { machineRowRadius } from "./machine-rows";
+  import MachinesChip from "./MachinesChip.svelte";
   import NsPopover from "./NsPopover.svelte";
-  import type { ProjectItem } from "./ns-types";
+  import type { MachineItem, ProjectItem } from "./ns-types";
   import PermissionSection from "./PermissionSection.svelte";
   import ProjectChip from "./ProjectChip.svelte";
 
@@ -48,11 +48,31 @@
       machineId: "studio",
     },
   ];
-  const MACHINES = [
-    { id: "studio", name: "studio", meta: "macOS · Idle", on: true },
-    { id: "tower", name: "tower", meta: "Linux · Idle", on: true },
-    { id: "laptop", name: "laptop", meta: "macOS · 2 sessions", on: false },
+  const machine = (
+    id: string,
+    os: string,
+    load: string = spawnWords.machines.idle
+  ): MachineItem => ({
+    id,
+    name: id,
+    os,
+    load,
+    online: true,
+    icon: Server,
+    hue: "var(--color-mark-6)",
+  });
+  const MACHINES: MachineItem[] = [
+    machine("studio", "macOS"),
+    machine("tower", "Linux"),
+    machine("laptop", "macOS", spawnWords.machines.running(2)),
   ];
+  /** The machines the form holds checked: the fixture keeps what the form would. */
+  let chosen = $state(["studio", "tower"]);
+  const toggle = (id: string) => {
+    chosen = chosen.includes(id)
+      ? chosen.filter((one) => one !== id)
+      : [...chosen, id];
+  };
   const MODES: { value: PermissionMode; disabled: boolean }[] = [
     { value: "default", disabled: false },
     { value: "acceptEdits", disabled: false },
@@ -79,35 +99,13 @@
       projects={PROJECTS}
     />
   {:else if which === "machines"}
-    <NsPopover id="frame-machines" label="Machines" onchange={still} open>
-      {#snippet trigger()}
-        <Server />
-        <span>studio, tower</span>
-        <Down />
-      {/snippet}
-      {#each MACHINES as row, index (row.id)}
-        <button
-          data-slot="row"
-          aria-pressed={row.on}
-          class="relative flex h-c-row-h w-full select-none items-center gap-space-3 border-none bg-transparent rounded-(--row-r) px-space-2 py-space-2 text-start text-ink-strong aria-pressed:bg-selected-bg"
-          style:--row-r={machineRowRadius(
-            row.on,
-            MACHINES[index - 1]?.on ?? false,
-            MACHINES[index + 1]?.on ?? false
-          )}
-          type="button"
-        >
-          <MachineRow
-            hue="var(--color-mark-6)"
-            icon={Server}
-            ink={row.on}
-            meta={row.meta}
-            name={row.name}
-            presence="online"
-          />
-        </button>
-      {/each}
-    </NsPopover>
+    <MachinesChip
+      machines={MACHINES}
+      onchange={still}
+      ontoggle={toggle}
+      open
+      selected={chosen}
+    />
   {:else}
     <NsPopover
       id="frame-permission"

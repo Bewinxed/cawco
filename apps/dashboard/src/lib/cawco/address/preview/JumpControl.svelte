@@ -9,6 +9,7 @@
    * Where the advisor named a pose no file holds yet, it says which pose
    * stands in.
    */
+  import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import {
     NativeSelect,
@@ -189,11 +190,12 @@
         >Hub can't see the phone's first visit (Done is a press)</label
       >
     </span>
-    <button
-      class="press-tint focus-inset rounded-xs type-meta text-link-ink hover:underline"
+    <Button
       data-jump="restart"
       onclick={() => tray.restart()}
-      type="button">Start again from the row</button
+      pad="none"
+      size="xs"
+      variant="link">Start again from the row</Button
     >
   </div>
   {#if tray.pose.toDraw}

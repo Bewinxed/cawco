@@ -6,7 +6,6 @@
    * its items, a checkbox item and a separator: the floating surface round
    * the menu item recipe (DESIGN.md, Popover, dropdown; Menu item).
    */
-  import { buttonVariants } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
 
   let {
@@ -30,9 +29,7 @@
   style:--frame-h={`${height}px`}
 >
   <DropdownMenu.Root open>
-    <DropdownMenu.Trigger class={buttonVariants({ variant: "outline" })}
-      >Open</DropdownMenu.Trigger
-    >
+    <DropdownMenu.Trigger variant="outline">Open</DropdownMenu.Trigger>
     <DropdownMenu.Content
       forceMount
       onOpenAutoFocus={(event) => event.preventDefault()}
