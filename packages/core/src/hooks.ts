@@ -746,9 +746,8 @@ export interface HookPromptHandler extends HookHandlerBase {
   type: "prompt";
 }
 
+/** A subagent that decides, by `prompt` (Claude Code's `AgentHookSchema`). */
 export interface HookAgentHandler extends HookHandlerBase {
-  /** Which subagent runs it. Absent inherits Claude Code's default. */
-  agent?: string;
   prompt: string;
   type: "agent";
 }

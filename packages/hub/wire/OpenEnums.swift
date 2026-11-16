@@ -4631,6 +4631,8 @@ public enum OpenEnums {
     /// `#/components/schemas/ImageMediaType`.
     public enum ImageMediaType: OpenEnum {
         case imageGif
+        case imageHeic
+        case imageHeif
         case imageJpeg
         case imagePng
         case imageWebp
@@ -4640,6 +4642,8 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "image/gif": self = .imageGif
+            case "image/heic": self = .imageHeic
+            case "image/heif": self = .imageHeif
             case "image/jpeg": self = .imageJpeg
             case "image/png": self = .imagePng
             case "image/webp": self = .imageWebp
@@ -4650,6 +4654,8 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .imageGif: "image/gif"
+            case .imageHeic: "image/heic"
+            case .imageHeif: "image/heif"
             case .imageJpeg: "image/jpeg"
             case .imagePng: "image/png"
             case .imageWebp: "image/webp"
@@ -4661,7 +4667,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.imageGif, .imageJpeg, .imagePng, .imageWebp]
+        public static let allCases: [Self] = [.imageGif, .imageHeic, .imageHeif, .imageJpeg, .imagePng, .imageWebp]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

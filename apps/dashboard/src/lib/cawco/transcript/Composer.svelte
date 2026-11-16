@@ -617,6 +617,11 @@
   const recalled = $derived(
     fleet && recallOf ? fleet.sessionsStore.session(recallOf) : null
   );
+  // The pictures the draft takes are its session's harness's (composer-draft
+  // `harness`).
+  $effect(() => {
+    draft.harness = recalled?.harness ?? undefined;
+  });
 
   /* ---- recall: what you sent, and your queued message ----------------- */
 

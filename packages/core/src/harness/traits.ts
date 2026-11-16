@@ -11,6 +11,11 @@
  * one", never as a failure ({@link UNKNOWN_TRAITS}).
  */
 
+import {
+  CLAUDE_IMAGE_MEDIA_TYPES,
+  IMAGE_MEDIA_TYPES,
+  type ImageMediaType,
+} from "../attachments";
 import { HOUR_MS } from "../time";
 import { harnessWords } from "../words/harness";
 import { HARNESSES, type HarnessKind, harnessNamed } from "./kinds";
@@ -67,6 +72,12 @@ interface HarnessTraitsBase {
   readonly ownProviderIds: boolean;
   /** Whether it takes a permission mode at all. */
   readonly permissionModes: boolean;
+  /**
+   * The picture types a send to it can carry (core attachments.ts): Claude
+   * Code's are Anthropic's four; a harness that hands a picture on to its
+   * provider as it is takes any a provider takes.
+   */
+  readonly pictureTypes: readonly ImageMediaType[];
   /**
    * The longest its prompt cache lives after a request, for a harness whose
    * results report the cache's use; null for one whose don't. The hub times
@@ -146,6 +157,7 @@ const CLAUDE_TRAITS = {
   homeLogin: "dir",
   soleProvider: "anthropic",
   ownProviderIds: false,
+  pictureTypes: CLAUDE_IMAGE_MEDIA_TYPES,
   providerLimit: "account",
   costMeaning: "estimated",
   modelCatalog: "account",
@@ -172,6 +184,7 @@ const OPENCODE_TRAITS = {
   homeLogin: "credentials",
   soleProvider: null,
   ownProviderIds: true,
+  pictureTypes: IMAGE_MEDIA_TYPES,
   providerLimit: "go",
   costMeaning: "real",
   modelCatalog: "machine",
@@ -198,6 +211,7 @@ const PI_TRAITS = {
   homeLogin: "credentials",
   soleProvider: null,
   ownProviderIds: false,
+  pictureTypes: IMAGE_MEDIA_TYPES,
   providerLimit: "none",
   costMeaning: "real",
   modelCatalog: "machine",
@@ -238,6 +252,7 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   homeLogin: "credentials", // as a compare with a name it isn't
   soleProvider: null, // nothing claimed
   ownProviderIds: false, // nothing claimed
+  pictureTypes: IMAGE_MEDIA_TYPES, // as a compare with a name it isn't
   providerLimit: "none", // as a compare with a name it isn't
   costMeaning: "real", // as a compare with a name it isn't
   modelCatalog: "machine", // as a compare with a name it isn't

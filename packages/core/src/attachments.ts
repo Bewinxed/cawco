@@ -24,21 +24,42 @@ export interface FileAttachment {
 export type SendAttachment = TextAttachment | FileAttachment;
 
 /**
- * The pictures a turn can carry, by media type: what Anthropic's API takes
- * in an image block (`Base64ImageSource.media_type`, `@anthropic-ai/sdk`
- * 0.129.0), which Claude Code hands the model as it is. OpenCode and pi hand
- * any media type on to their provider, and OpenAI's take these four too. A
- * picture of another type is refused where it enters ({@link isImageMediaType}).
+ * The pictures a turn can carry, by media type: those any provider a
+ * session runs on takes.
+ * - Anthropic's API (Claude Code, and OpenCode and pi on Anthropic): JPEG,
+ *   PNG, GIF, WebP (`Base64ImageSource.media_type`, `@anthropic-ai/sdk`
+ *   0.129.0), {@link CLAUDE_IMAGE_MEDIA_TYPES}.
+ * - OpenAI's: "PNG (`.png`), JPEG (`.jpeg` or `.jpg`), WEBP (`.webp`), and
+ *   non-animated GIF (`.gif`)" (developers.openai.com/api/docs/guides/images-vision).
+ * - Gemini's: "PNG - `image/png`, JPEG - `image/jpeg`, WEBP - `image/webp`,
+ *   HEIC - `image/heic`, HEIF - `image/heif`"
+ *   (ai.google.dev/gemini-api/docs/image-understanding).
+ * OpenCode and pi hand a picture on to their provider as it is; Claude Code
+ * takes Anthropic's four alone, and its harness refuses the rest. A picture
+ * of no type here is refused where it enters ({@link isImageMediaType}).
  */
 export const IMAGE_MEDIA_TYPES = [
   "image/jpeg",
   "image/png",
   "image/gif",
   "image/webp",
+  "image/heic",
+  "image/heif",
 ] as const;
 
 /** One of the {@link IMAGE_MEDIA_TYPES}. */
 export type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number];
+
+/** The pictures Claude Code takes: Anthropic's API's four ({@link IMAGE_MEDIA_TYPES}). */
+export const CLAUDE_IMAGE_MEDIA_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+] as const satisfies readonly ImageMediaType[];
+
+/** One of the {@link CLAUDE_IMAGE_MEDIA_TYPES}. */
+export type ClaudeImageMediaType = (typeof CLAUDE_IMAGE_MEDIA_TYPES)[number];
 
 /** A picture a turn carries: its bytes base64, with no `data:` URI prefix, and its type. */
 export interface TurnImage {
@@ -49,6 +70,12 @@ export interface TurnImage {
 /** Whether `value` is a picture's media type a turn can carry ({@link IMAGE_MEDIA_TYPES}). */
 export const isImageMediaType = (value: unknown): value is ImageMediaType =>
   IMAGE_MEDIA_TYPES.some((type) => type === value);
+
+/** Whether `value` is a picture's media type Claude Code takes ({@link CLAUDE_IMAGE_MEDIA_TYPES}). */
+export const isClaudeImageMediaType = (
+  value: unknown
+): value is ClaudeImageMediaType =>
+  CLAUDE_IMAGE_MEDIA_TYPES.some((type) => type === value);
 
 const KB = 1024;
 
@@ -214,3 +241,15 @@ export function shownAttachments(paths: string[]): string[] {
   );
   return once.filter((path) => !captions.has(path));
 }
+
+/** A picture as a message's image block carries it: base64, its type its media type. */
+export const imageBlockOf = <M extends string>({
+  data,
+  mediaType,
+}: {
+  data: string;
+  mediaType: M;
+}) => ({
+  type: "image" as const,
+  source: { type: "base64" as const, media_type: mediaType, data },
+});

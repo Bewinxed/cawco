@@ -1,17 +1,16 @@
-import { IMAGE_MEDIA_TYPES } from "../attachments";
-
-/** The formats a picture a turn carries can be in, as a person reads them. */
-const FORMATS = "JPEG, PNG, GIF or WebP";
+import { andList } from "./helpers";
 
 /**
- * What a picture of a type no session takes is refused with (core
- * `IMAGE_MEDIA_TYPES`): where it is attached in the dashboard, and where
- * the hub takes a send, a continuation or a move that carries one.
+ * What a picture is refused with where it enters (the composer's attach, the
+ * hub's send, continuation and move routes, the Claude harness's send): one
+ * of a type no provider takes (core `IMAGE_MEDIA_TYPES`), or one the
+ * session's harness does not take (its traits' `pictureTypes`).
  */
 export const pictureWords = {
-  /** A picture of `type` (its media type; empty when it named none). */
-  typeRefused: (type: string) =>
-    `${type ? `A ${type} picture` : "This picture"} can't be sent: a session takes ${FORMATS} pictures.`,
-  /** The media types a picture can be, for a route's own refusal. */
-  taken: IMAGE_MEDIA_TYPES.join(", "),
+  /** A picture of `type` (its media type; empty when it named none) sent to a `harness` session, which takes `takes`. */
+  typeRefused: (type: string, harness: string, takes: readonly string[]) =>
+    `${type ? `A ${type} picture` : "This picture"} can't be sent to ${harness}: it takes ${andList(takes)} pictures.`,
+  /** A picture of `type` no session's provider takes. */
+  noProviderTakes: (type: string) =>
+    `${type ? `A ${type} picture` : "This picture"} can't be sent: pictures go as JPEG, PNG, GIF, WebP, HEIC or HEIF.`,
 };

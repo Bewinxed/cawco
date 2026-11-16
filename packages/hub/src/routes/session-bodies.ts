@@ -61,7 +61,7 @@ export const continueBody = t.Object({
     t.Array(
       t.Object({
         mediaType: t.UnionEnum(IMAGE_MEDIA_TYPES, {
-          error: pictureWords.typeRefused(""),
+          error: pictureWords.noProviderTakes(""),
         }),
         data: t.String(),
       })

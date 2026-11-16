@@ -23,8 +23,10 @@ import {
   STAGE_WRITE,
 } from "@cawco/core/stage";
 import { PermissionResultSchema } from "@cawco/core/stored-shapes";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { unshownAskMessage } from "@cawco/core/words/ask-lines";
 import { turnCutWords } from "@cawco/core/words/cuts";
+import { pictureWords } from "@cawco/core/words/pictures";
 import { turnWords } from "@cawco/core/words/turns";
 import {
   CONTROL_HOST_OUTPUTS,
@@ -48,7 +50,7 @@ import {
   CONTROL_WORKSPACE_SAVE,
   CONTROL_WORKSPACE_WORK_END,
 } from "@cawco/core/workspace/controls";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { answeredWithOriginal } from "./ask-presentation";
 import type { ClosureContext } from "./closure-context";
 import type { ControlResult } from "./machine-answers";
@@ -207,6 +209,25 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         provenance?.presenceId,
         message.payload.instanceId
       );
+    }
+    // A picture its session's harness does not take (Claude Code takes
+    // Anthropic's four alone), refused before it is taken, in the words its
+    // composer says it in; one that hands its pictures on to its provider
+    // takes any a provider takes.
+    const [row] = ctx.db.getInstancesByIds([message.payload.instanceId]);
+    const { pictureTypes } = traitsOf(row?.harness);
+    const unsent = (message.payload.images ?? []).find(
+      ({ mediaType }) => !pictureTypes.includes(mediaType)
+    );
+    if (unsent && row) {
+      return problem(422, {
+        code: "picture-type-refused",
+        detail: pictureWords.typeRefused(
+          unsent.mediaType,
+          accountsWords.harnesses[row.harness],
+          pictureTypes
+        ),
+      });
     }
     const record = ctx.deliverSend(message);
     const taken =

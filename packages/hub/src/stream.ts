@@ -456,8 +456,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         fail(socket, commandId, refusedOriginWords);
         return;
       }
-      // A picture of a type no session takes is refused here, where it
-      // enters, in the words its composer says it in.
+      // A picture of a type no provider takes is refused here, where it
+      // enters; one a Claude Code session does not take is refused as it is
+      // relayed (relay-control.ts `relaySend`).
       const picture = (
         Array.isArray(payload.images) ? payload.images : []
       ).find(
@@ -469,7 +470,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         fail(
           socket,
           commandId,
-          pictureWords.typeRefused(typeof said === "string" ? said : "")
+          pictureWords.noProviderTakes(typeof said === "string" ? said : "")
         );
         return;
       }

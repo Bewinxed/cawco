@@ -13,7 +13,10 @@
 import { type ImageMediaType, isImageMediaType } from "@cawco/core/attachments";
 import { eachFileOnce } from "@cawco/core/comments/model";
 import { detach } from "@cawco/core/detach";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { traitsOf } from "@cawco/core/harness/traits";
 import type { StarterPlace } from "@cawco/core/starters";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { pictureWords } from "@cawco/core/words/pictures";
 import { SvelteSet } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
@@ -175,6 +178,12 @@ export class ComposerDraft {
    * pictures and small texts inline.
    */
   readonly byReference: boolean;
+  /**
+   * The harness of the session it is written to, when it is one session's:
+   * a Claude Code session takes Anthropic's four picture types alone, and a
+   * picture of another is refused as it is attached.
+   */
+  harness = $state<HarnessKind | undefined>();
   constructor({ byReference = false }: { byReference?: boolean } = {}) {
     this.byReference = byReference;
   }
@@ -390,13 +399,25 @@ export class ComposerDraft {
     }
     for (const file of files) {
       const { type } = file;
+      // A picture no provider takes, or one its session's harness does not
+      // (Claude Code takes Anthropic's four alone), is refused as it is
+      // attached.
+      const { harness } = this;
+      const takes = traitsOf(harness).pictureTypes;
+      if (harness && isImageMediaType(type) && !takes.includes(type)) {
+        this.notice = pictureWords.typeRefused(
+          type,
+          accountsWords.harnesses[harness],
+          takes
+        );
+        continue;
+      }
       if (isImageMediaType(type)) {
         this.images = [...this.images, await readImage(file, type)];
         continue;
       }
-      // A picture no session takes is refused as it is attached.
       if (type.startsWith("image/")) {
-        this.notice = pictureWords.typeRefused(type);
+        this.notice = pictureWords.noProviderTakes(type);
         continue;
       }
       const text = await textOf(file);

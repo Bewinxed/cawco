@@ -1,6 +1,10 @@
 import { waitsOnYou } from "@cawco/core/activity";
 import type { SendAttachment } from "@cawco/core/attachments";
-import { isImageMediaType, type TurnImage } from "@cawco/core/attachments";
+import {
+  imageBlockOf,
+  isImageMediaType,
+  type TurnImage,
+} from "@cawco/core/attachments";
 import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
@@ -203,17 +207,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         content:
           images.length === 0
             ? text
-            : [
-                ...images.map(({ mediaType, data }) => ({
-                  type: "image" as const,
-                  source: {
-                    type: "base64" as const,
-                    media_type: mediaType,
-                    data,
-                  },
-                })),
-                { type: "text" as const, text },
-              ],
+            : [...images.map(imageBlockOf), { type: "text" as const, text }],
       },
       parent_tool_use_id: null,
       origin: { kind: "system", name: ARTIFACT_ORIGIN },

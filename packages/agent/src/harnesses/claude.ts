@@ -62,7 +62,13 @@ import {
 } from "@cawco/core/accounts/controls";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { FULL_SEND_ANSWER } from "@cawco/core/asks";
-import { isImageMediaType } from "@cawco/core/attachments";
+import {
+  CLAUDE_IMAGE_MEDIA_TYPES,
+  type ClaudeImageMediaType,
+  imageBlockOf,
+  isClaudeImageMediaType,
+  type TurnImage,
+} from "@cawco/core/attachments";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
@@ -129,7 +135,7 @@ import {
   sessionConfigDir,
 } from "@cawco/core/paths/claude";
 import { mcpGatewayPort } from "@cawco/core/ports";
-import type { SendPayload, SpawnPayload } from "@cawco/core/protocol";
+import type { SpawnPayload } from "@cawco/core/protocol";
 import { conversationGone } from "@cawco/core/relaunch";
 import type {
   EndedTask,
@@ -187,6 +193,7 @@ import { HOUR_MS } from "@cawco/core/time";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
 import { harnessWords } from "@cawco/core/words/harness";
 import { pictureWords } from "@cawco/core/words/pictures";
@@ -1117,8 +1124,14 @@ const wireBlock = (block: NeutralContentBlock): ContentBlock => {
     switch (source.type) {
       case "base64": {
         const { data, media_type: mediaType } = source;
-        if (!isImageMediaType(mediaType)) {
-          throw new Error(pictureWords.typeRefused(mediaType));
+        if (!isClaudeImageMediaType(mediaType)) {
+          throw new Error(
+            pictureWords.typeRefused(
+              mediaType,
+              accountsWords.harnesses.claude,
+              CLAUDE_IMAGE_MEDIA_TYPES
+            )
+          );
         }
         return {
           type: "image",
@@ -1178,26 +1191,36 @@ const wireMessage = (message: SentMessage): ClaudeWireUserMessage => {
  * Images lead, so the model has seen them by the time it reads what was said
  * about them, and each paste is tagged.
  */
+/** A send's pictures as Claude Code takes them: Anthropic's four types, any other refused in words. */
+const claudeImages = (
+  images: readonly TurnImage[]
+): { data: string; mediaType: ClaudeImageMediaType }[] =>
+  images.map(({ data, mediaType }) => {
+    if (!isClaudeImageMediaType(mediaType)) {
+      throw new Error(
+        pictureWords.typeRefused(
+          mediaType,
+          accountsWords.harnesses.claude,
+          CLAUDE_IMAGE_MEDIA_TYPES
+        )
+      );
+    }
+    return { data, mediaType };
+  });
+
 function withExtras(
   message: ClaudeWireUserMessage,
   attachments: TurnExtras["attachments"],
-  images: SendPayload["images"]
+  images: readonly { data: string; mediaType: ClaudeImageMediaType }[]
 ): ClaudeWireUserMessage {
-  if (!(attachments?.length || images?.length)) {
+  if (!(attachments?.length || images.length)) {
     return message;
   }
 
   const typed =
     typeof message.message.content === "string" ? message.message.content : "";
   const content: ContentBlock[] = [
-    ...(images ?? []).map(({ mediaType, data }) => ({
-      type: "image" as const,
-      source: {
-        type: "base64" as const,
-        media_type: mediaType,
-        data,
-      },
-    })),
+    ...images.map(imageBlockOf),
     { type: "text" as const, text: withPastedText(typed, attachments ?? []) },
   ];
 
@@ -4071,8 +4094,10 @@ class ClaudeSession implements HarnessSession {
       );
     }
     let wire: ClaudeWireUserMessage;
+    let images: { data: string; mediaType: ClaudeImageMediaType }[];
     try {
       wire = wireMessage(message);
+      images = claudeImages(extras.images ?? []);
     } catch (error) {
       this.#ctx.rejected(
         message.uuid,
@@ -4087,7 +4112,7 @@ class ClaudeSession implements HarnessSession {
         ...(note || waits ? {} : SEND_NOW),
       },
       extras.attachments,
-      extras.images
+      images
     );
     this.#delivery.set(message.uuid, Promise.withResolvers<void>());
     if (note) {

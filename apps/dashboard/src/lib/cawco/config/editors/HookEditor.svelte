@@ -663,25 +663,6 @@
               bind:value={draft.handler.prompt}
             />
           </Field>
-          {#if draft.handler.type === "agent"}
-            <div
-              data-slot="fold"
-              class="flex flex-col gap-space-2"
-              in:unfold
-              out:unfold
-            >
-              <Field id="hook-agent" label="Subagent (optional)">
-                <Input
-                  autocomplete="off"
-                  face="mono"
-                  id="hook-agent"
-                  placeholder="Inherits Claude Code's default"
-                  spellcheck="false"
-                  bind:value={draft.handler.agent}
-                />
-              </Field>
-            </div>
-          {/if}
         </div>
       {/if}
     </div>
