@@ -900,10 +900,12 @@ const registerProviderAccounts = (
       return { forgotten: true };
     })()
   );
-  supervisor.declareControl(
-    CONTROL_READ_ACCOUNT_USAGE,
-    async (id) => (await readAccountUsage(id as string, ports)) ?? null
-  );
+  supervisor.declareControl(CONTROL_READ_ACCOUNT_USAGE, async (id) => {
+    if (typeof id !== "string") {
+      throw new Error("readAccountUsage names one account by its id");
+    }
+    return (await readAccountUsage(id, ports)) ?? null;
+  });
   supervisor.declareControl(CONTROL_READ_HOME_CREDENTIALS, () =>
     readHomeCredentials(ports)
   );
