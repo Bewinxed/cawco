@@ -276,17 +276,16 @@ export class UsageCounter {
   }
 
   observe(instanceId: string, message: NeutralMessage): void {
-    const frame = message;
-    if (frame.type === "system" && frame.subtype === "init") {
-      this.#skills.set(instanceId, new Set(frame.skills ?? []));
+    if (message.type === "system" && message.subtype === "init") {
+      this.#skills.set(instanceId, new Set(message.skills ?? []));
       return;
     }
     let uses: CapabilityUse[] = [];
-    if (frame.type === "assistant") {
-      uses = usesInBlocks(frame.message.content, this.#reading(instanceId));
-    } else if (frame.type === "user") {
+    if (message.type === "assistant") {
+      uses = usesInBlocks(message.message.content, this.#reading(instanceId));
+    } else if (message.type === "user") {
       const skill = turnSkill(
-        frame.message.content,
+        message.message.content,
         this.#skills.get(instanceId) ?? new Set(),
         this.#reading(instanceId).harness
       );

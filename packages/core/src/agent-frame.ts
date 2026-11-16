@@ -603,17 +603,31 @@ const MACHINE_VERBS = "register, heartbeat, frames or usage";
  * {@link MachineEnvelope} its verb names: a register's, a beat's and a usage
  * report's fields each read by itself ({@link FieldReader}), a launch's ask,
  * a frame by its `kind`. A verb no machine sends, a payload that is no JSON
- * object, and a frame of no kind this hub knows are no message a machine
- * sends: each comes back as its fault, for the hub to refuse the message
- * with, and nothing of it is read.
+ * object (a launch's aside, which is always answered), and a frame of no
+ * kind this hub knows are no message a machine sends: each comes back as its
+ * fault, for the hub to refuse the message with, and nothing of it is read.
  */
 export const readMachineEnvelope = (message: Addressed): MachineRead => {
-  const { verb, payload, ...address } = message;
-  if (!isRecord(payload)) {
+  const { verb, payload: sent, ...address } = message;
+  // A launch is answered whatever it carries: its machine waits on the
+  // answer to start its process, and one that names nothing is refused by
+  // its grant ({@link launchOf}).
+  if (verb === "launch") {
+    return {
+      envelope: {
+        ...address,
+        verb,
+        payload: launchOf(isRecord(sent) ? sent : {}),
+      },
+      dropped: [],
+    };
+  }
+  if (!isRecord(sent)) {
     return {
       fault: `${verb} refused: its payload is not a JSON object`,
     };
   }
+  const payload = sent;
   switch (verb) {
     case "register": {
       const fields = new FieldReader(verb, payload);
@@ -639,11 +653,6 @@ export const readMachineEnvelope = (message: Addressed): MachineRead => {
         dropped: fields.dropped,
       };
     }
-    case "launch":
-      return {
-        envelope: { ...address, verb, payload: launchOf(payload) },
-        dropped: [],
-      };
     case "frames":
       return isFramePayload(payload)
         ? { envelope: { ...address, verb, payload }, dropped: [] }
