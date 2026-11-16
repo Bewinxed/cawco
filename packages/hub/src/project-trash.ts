@@ -32,7 +32,11 @@
  *   project they live in (`tasksIn`); one with no task files can't be told
  *   either, and is listed as it is;
  * - a folded duplicate's entry since carries a record that says so, and is
- *   never listed: its rows live on in the project that kept them.
+ *   never listed: its rows live on in the project that kept them;
+ * - an entry with a folder and a record that does not read is listed with
+ *   what its folder holds, under the name its record holds: a restore
+ *   refuses it in words (restore-record-unreadable), and asking for a name
+ *   would only lead there.
  *
  * Nothing in the trash is erased: a restore moves its folder back and drops
  * its record, whose rows are live again. A restore that held rows back
@@ -73,6 +77,15 @@ import {
 import { unhandled } from "@cawco/core/unhandled";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { ElysiaStatus, problem } from "elysia";
+import {
+  minLength,
+  object,
+  parseJson,
+  pipe,
+  safeParse,
+  string,
+  trim,
+} from "valibot";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import {
@@ -227,8 +240,11 @@ const isProjectId = (id: string): boolean =>
   !(projectRoot(id) instanceof ElysiaStatus);
 
 /** Every entry the trash holds, newest first; none when there is no trash. */
-const entries = async (): Promise<Entry[]> => {
-  const names = await readdir(PROJECT_TRASH_DIR, { withFileTypes: true }).catch(
+const entries = (): Promise<Entry[]> => entriesIn(PROJECT_TRASH_DIR);
+
+/** Every entry the trash at `dir` holds, newest first. */
+const entriesIn = async (dir: string): Promise<Entry[]> => {
+  const names = await readdir(dir, { withFileTypes: true }).catch(
     (error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") {
         return [];
@@ -267,6 +283,77 @@ const recordOf = async (entry: Entry) =>
   entry.record
     ? await readRecord(recordPath(entry.entry), EntryRecordSchema)
     : undefined;
+
+/**
+ * The name a record holds when it does not read whole: its own `name`, read
+ * alone. A record outlives the schema it was written to, and a field beside
+ * the name that no longer reads takes nothing from the name it names.
+ */
+const RecordNameSchema = pipe(
+  string(),
+  parseJson(),
+  object({ name: pipe(string(), trim(), minLength(1)) })
+);
+
+/** The name the record at `path` holds, read alone; null when not even its name reads. */
+const nameAt = async (path: string): Promise<string | null> => {
+  const read = safeParse(
+    RecordNameSchema,
+    await readFile(path, "utf8").catch(() => undefined)
+  );
+  return read.success ? read.output.name : null;
+};
+
+/** The name the entry's record holds, read alone; null when it has no record, or not even its name reads. */
+const recordName = (entry: Entry): Promise<string | null> =>
+  entry.record ? nameAt(recordPath(entry.entry)) : Promise.resolve(null);
+
+/** How one trash entry names its project ({@link trashNaming}). */
+export interface EntryNaming {
+  entry: string;
+  /** Whether it holds the project's folder. */
+  folder: boolean;
+  id: string;
+  /** The name its record holds, read alone; null: it holds none. */
+  name: string | null;
+  /**
+   * Its record's kind as it reads; `unread`: a record that does not read
+   * whole; `none`: no record (a folder forgotten before the hub kept them,
+   * or a fold of then).
+   */
+  record: "folded" | "forgotten" | "held" | "none" | "unread";
+}
+
+/**
+ * How each entry of the trash at `dir` names its project, read as the list
+ * reads it, newest first: a copy of a hub's trash is counted by it
+ * (scripts/forgotten-names-places.ts).
+ */
+export const trashNaming = async (dir: string): Promise<EntryNaming[]> => {
+  /** The kind of the record at `path` as it reads. */
+  const kindAt = async (path: string): Promise<EntryNaming["record"]> => {
+    try {
+      return (await readRecord(path, EntryRecordSchema))?.kind ?? "none";
+    } catch (error) {
+      if (isDamagedRecord(error)) {
+        return "unread";
+      }
+      throw error;
+    }
+  };
+  const named: EntryNaming[] = [];
+  for (const entry of await entriesIn(dir)) {
+    const path = join(dir, `${entry.entry}${RECORD}`);
+    named.push({
+      entry: entry.entry,
+      folder: entry.folder,
+      id: entry.id,
+      name: entry.record ? await nameAt(path) : null,
+      record: entry.record ? await kindAt(path) : "none",
+    });
+  }
+  return named;
+};
 
 /** How many task files the folder at `root` holds. */
 const taskFiles = async (root: string): Promise<number> =>
@@ -707,6 +794,10 @@ const heldIn = async (mine: readonly Entry[]): Promise<TrashedProject> => {
   for (const entry of mine) {
     const record = await recordOf(entry).catch(() => undefined);
     if (!(record?.kind === "forgotten" || record?.kind === "held")) {
+      if (!record) {
+        // A record that does not read still names its project.
+        held.name ??= await recordName(entry);
+      }
       continue;
     }
     held.name ??= record.name;
@@ -1017,6 +1108,34 @@ export const projectTrash = (
     };
   };
 
+  /**
+   * An entry with no record that reads, listed by what its folder alone
+   * holds, under the name its record still holds; none for one with no
+   * folder, or a fold's folder, which is none a person forgot.
+   */
+  const folderListed = async (
+    entry: Entry,
+    merges: () => ReturnType<typeof mergesOf>
+  ) => {
+    const alone = entry.folder ? await folderAlone(entry, merges) : undefined;
+    if (alone instanceof ElysiaStatus) {
+      return alone;
+    }
+    if (!alone || alone.foldedInto) {
+      return;
+    }
+    const name = await recordName(entry);
+    const listed: Omit<ForgottenProject, "places"> = {
+      id: entry.id,
+      name,
+      forgottenAt: entry.at,
+      by: null,
+      brings: alone.brings,
+      hints: name === null ? await hintsOf(entry.entry, alone.tasks) : null,
+    };
+    return listed;
+  };
+
   /** A folder with no record brought back under a new row named `name`, unless it was a fold; refused in words. */
   const restoreFolder = async (entry: Entry, asked: { name?: string }) => {
     const { id } = entry;
@@ -1155,22 +1274,12 @@ export const projectTrash = (
         });
         continue;
       }
-      // A record that does not read lists what its folder alone holds; a
-      // fold's folder is none a person forgot.
-      const alone = entry.folder ? await folderAlone(entry, merges) : undefined;
-      if (alone instanceof ElysiaStatus) {
-        return alone;
+      const folder = await folderListed(entry, merges);
+      if (folder instanceof ElysiaStatus) {
+        return folder;
       }
-      if (alone && !alone.foldedInto) {
-        out.push({
-          id: entry.id,
-          name: null,
-          forgottenAt: entry.at,
-          by: null,
-          brings: alone.brings,
-          hints: await hintsOf(entry.entry, alone.tasks),
-          places: await placesFor(entry.id),
-        });
+      if (folder) {
+        out.push({ ...folder, places: await placesFor(entry.id) });
       }
     }
     return out;

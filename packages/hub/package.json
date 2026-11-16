@@ -21,6 +21,7 @@
     "fixture-db": "bun scripts/fixture-db.ts",
     "fleet-machine-columns": "bun scripts/fleet-machine-columns.ts",
     "fmt": "bun ../../scripts/fmt.ts .",
+    "forgotten-names-places": "bun scripts/forgotten-names-places.ts",
     "lifted-columns": "bun scripts/lifted-columns.ts",
     "migrations:check": "bun scripts/migrations-check.ts && bun scripts/migrations-check.ts --fixture lists",
     "openapi": "bun scripts/openapi.ts",
