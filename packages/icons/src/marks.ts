@@ -4,9 +4,8 @@
  * No product icon (DESIGN.md's Solar Duotone Rule covers those, through the
  * barrel and this package's index): a mark is the company's, in its colours.
  * `Logo*` is a mark's component; `Svg*` its SVG source (`?raw`), which
- * Accounts masks into a silhouette (accounts/marks.ts). A `?raw` module's
- * type is still the component's (the icons' module types name one), so its
- * reader casts it to the string it is.
+ * Accounts masks into a silhouette (accounts/marks.ts), typed a string in
+ * raw.d.ts.
  *
  * An entry of its own: the dev server pre-bundles it as one module apart
  * from the icons (the dashboard's vite.config.ts `optimizeDeps.include`),

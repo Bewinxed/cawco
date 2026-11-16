@@ -7,14 +7,17 @@
    * transcript gives it: the newest under its name `latest` (or `promoted`
    * once kept), every earlier one a frozen `fossil`.
    */
-  import type { ArtifactSummary } from "@cawco/core/protocol";
   import MessageBody from "../MessageBody.svelte";
   import { provideMarkdownBlocks } from "../markdown-blocks";
   import Turn from "../turn/Turn.svelte";
   import Who from "../turn/Who.svelte";
   import type { Message } from "../types";
   import { provideBlockSources } from "../views/openui/block-media";
-  import { type FixturePage, fixtureSources } from "./block-fixture";
+  import {
+    type FixturePage,
+    fixtureArtifact,
+    fixtureSources,
+  } from "./block-fixture";
   import InlineBlock from "./InlineBlock.svelte";
   import {
     ConversationBlocks,
@@ -62,14 +65,7 @@
       () => ({ instanceId: session, messages, streaming: "" }),
       (slug) => {
         const one = kept.find((each) => each.slug === slug);
-        return one
-          ? ({
-              id: `artifact-${slug}`,
-              kind: "page",
-              name: slug,
-              title: one.title,
-            } as ArtifactSummary)
-          : undefined;
+        return one ? fixtureArtifact(slug, one.title) : undefined;
       }
     )
   );

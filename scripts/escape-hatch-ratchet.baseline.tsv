@@ -33,7 +33,6 @@ as-cast	[ string, string, string, string, string, ]	scripts/codemods/type-roles.
 as-cast	[(typeof floors)[0], (typeof floors)[0]]	scripts/codemods/theme-audit.ts	1
 as-cast	[drawing: number, length: number]	site/vite.config.ts	1
 as-cast	[number, number]	packages/preview/src/overlay/ink.ts	2
-as-cast	[Radius, Radius, Radius, Radius]	apps/dashboard/src/lib/components/ui/highlight/highlight.svelte.ts	1
 as-cast	[string, string, string]	scripts/lib/ratchet.ts	1
 as-cast	[string, string]	packages/hub/scripts/agent-calls.ts	1
 as-cast	[string, string]	packages/hub/scripts/shipped.ts	1
@@ -45,7 +44,6 @@ as-cast	{ agent?: string; description?: string } | undefined	packages/agent/src/
 as-cast	{ anchor?: unknown; elements?: unknown; inkId?: unknown; point?: { x?: u	packages/preview/src/overlay/page.ts	1
 as-cast	{ anchors?: unknown; box?: unknown; seq?: unknown; type?: unknown; near?	packages/preview/src/overlay/embeds.ts	1
 as-cast	{ answers?: unknown } | undefined	packages/agent/src/harnesses/opencode-transcript.ts	1
-as-cast	{ areaId?: unknown } | undefined	apps/dashboard/src/lib/cawco/home/areas.svelte.ts	1
 as-cast	{ artifact: Parameters<typeof artifact.join>[0]; sync: Parameters<typeof	packages/preview/src/overlay/page.ts	1
 as-cast	{ assistantMessageEvent?: { type?: string; delta?: string } }	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	{ at: number; }	scripts/binary/e2e-db-rows.ts	1
@@ -74,7 +72,6 @@ as-cast	{ content?: unknown; status?: unknown; subtype?: unknown; task_id?: unkn
 as-cast	{ contexts?: Record<string, ContextCondition> } | undefined	packages/design-tokens/src/dtcg-resolver.ts	1
 as-cast	{ cooked?: string }	apps/dashboard/scripts/specificity-trap.ts	1
 as-cast	{ cwd?: unknown; id?: unknown; type?: unknown } | undefined	packages/jsonl-parser/src/pi.ts	1
-as-cast	{ default: { args: Record<string, unknown>; title: string }; } & Record<	apps/dashboard/src/lib/cawco/graph/bench/GraphBench.svelte	1
 as-cast	{ default: { packages: Record<string, [string, ...unknown[]]> }; }	scripts/patched-dependencies-check.ts	1
 as-cast	{ default: { patchedDependencies?: Record<string, string> }; }	scripts/patched-dependencies-check.ts	1
 as-cast	{ definitions?: Record<string, Schema> }	packages/hub/scripts/openapi.ts	1
@@ -160,7 +157,6 @@ as-cast	{ origin?: unknown; auth?: unknown }	site/src/oauth/handoff.ts	1
 as-cast	{ parameters?: Schema[] }	packages/hub/scripts/openapi.ts	1
 as-cast	{ parent_tool_use_id?: string | null }	packages/agent/src/harnesses/claude.ts	2
 as-cast	{ parse: (source: string, options: { modern: true }) => { css: unknown }	scripts/style-residual-check.ts	1
-as-cast	{ payload?: FramePayload }	apps/dashboard/src/lib/cawco/hub/socket.svelte.ts	2
 as-cast	{ permissionMode?: string }	packages/agent/src/harnesses/claude.ts	1
 as-cast	{ products: { productID: string; type: string; displayPrice: string }[];	site/vite.config.ts	1
 as-cast	{ propertyName?: string } | undefined	packages/hub/scripts/openapi-order.ts	1
@@ -170,7 +166,6 @@ as-cast	{ questions?: unknown } | undefined	packages/agent/src/harnesses/opencod
 as-cast	{ questions?: unknown; answers?: unknown; response?: unknown; annotation	packages/agent/src/harnesses/claude.ts	1
 as-cast	{ reason?: unknown }	packages/agent/src/harnesses/opencode-client.ts	1
 as-cast	{ recurring?: unknown } | null	packages/agent/src/harnesses/claude.ts	1
-as-cast	{ requestId: string; result: PermissionResult; }	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
 as-cast	{ requestId?: unknown } | undefined	packages/agent/src/session.ts	1
 as-cast	{ result?: { width: number; height: number; wasResized: boolean }; }	scripts/binary/smoke-runtime.ts	1
 as-cast	{ role?: string }	packages/agent/src/harnesses/pi-runtime.ts	1
@@ -192,7 +187,6 @@ as-cast	{ tables: Record< string, { checkConstraints: Record<string, { name: str
 as-cast	{ tail?: number; whole?: boolean } | undefined	packages/agent/src/session.ts	1
 as-cast	{ targetId: string }	scripts/takeover-bench.ts	1
 as-cast	{ targetInfos: { targetId: string; type: string }[]; }	scripts/takeover-bench.ts	1
-as-cast	{ text: string }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
 as-cast	{ text: unknown }	packages/agent/src/harnesses/pi-services.ts	1
 as-cast	{ timestamp?: string }	packages/agent/src/harnesses/claude.ts	1
 as-cast	{ timestamp?: unknown }	packages/agent/src/harnesses/claude.ts	1
@@ -207,8 +201,6 @@ as-cast	{ type?: string; text?: string; data?: string; mimeType?: string; uri?: 
 as-cast	{ type?: string; text?: string; thinking?: string; id?: string; name?: s	packages/agent/src/harnesses/pi-services.ts	1
 as-cast	{ type?: string; url?: string; headers?: Record<string, string>; command	packages/agent/src/harnesses/claude.ts	1
 as-cast	{ type?: unknown }	scripts/lib/parse-source.ts	1
-as-cast	{ type?: unknown } | null	apps/dashboard/src/lib/cawco/preview/frame-links.svelte.ts	1
-as-cast	{ type?: unknown } | null	apps/dashboard/src/lib/cawco/views/openui/BlockPreview.svelte	1
 as-cast	{ type?: unknown } | null	packages/preview/src/overlay/host-origin.ts	1
 as-cast	{ type?: unknown } | null | undefined	packages/agent/src/harnesses/opencode-session.ts	1
 as-cast	{ type?: unknown; message?: unknown; status?: unknown; }	packages/agent/src/harnesses/opencode-client.ts	1
@@ -243,7 +235,6 @@ as-cast	Anchorable	packages/preview/src/overlay/anchor-names.ts	1
 as-cast	AnsweredCall[] | undefined	packages/agent/src/harnesses/opencode-transcript.ts	1
 as-cast	AppState["zoom"]["value"]	packages/agent/src/canvas-host/scene.ts	1
 as-cast	ArrayBuffer | string | Uint8Array<ArrayBuffer>	packages/preview/src/overlay/doc-worker.ts	1
-as-cast	ArtifactSummary	apps/dashboard/src/lib/cawco/transcript/inline-block-conversation-frame.svelte	1
 as-cast	AssistantMessage	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	Astro	packages/agent/src/stage-host/host.ts	1
 as-cast	AsyncIterator<V2Event>	packages/agent/src/harnesses/opencode.ts	1
@@ -260,7 +251,6 @@ as-cast	Baseline	packages/hub/scripts/openapi.ts	1
 as-cast	Baseline	packages/hub/scripts/shipped.ts	1
 as-cast	boolean	packages/agent/src/fleet-converger.ts	4
 as-cast	Box	packages/preview/src/overlay/embeds.ts	1
-as-cast	Branch	apps/dashboard/src/lib/cawco/home/session-branches.ts	1
 as-cast	BrowserDoor	packages/agent/src/harnesses/pi-host.ts	1
 as-cast	BrowserDoor | undefined	packages/agent/src/harnesses/pi-runtime.ts	2
 as-cast	BrowserInjectAdvertArgs	packages/agent/src/daemon.ts	1
@@ -277,8 +267,6 @@ as-cast	ChildNode[]	scripts/codemods/theme-prune.ts	1
 as-cast	ChildProcessWithoutNullStreams	packages/sessiond/src/server.ts	1
 as-cast	CommandAck	apps/dashboard/src/lib/cawco/stream.ts	1
 as-cast	CommentAttachment[]	packages/preview/src/overlay/page.ts	2
-as-cast	Component<ElementProps>	apps/dashboard/src/lib/cawco/references.ts	1
-as-cast	ComponentProps<typeof Decision>["props"]	apps/dashboard/src/lib/cawco/fault/states/ThrowingDecision.svelte	1
 as-cast	Config	scripts/lint/biome-plugins.ts	1
 as-cast	Container	scripts/codemods/lib/token-merge.ts	2
 as-cast	Container	scripts/codemods/theme-prune.ts	3
@@ -290,7 +278,6 @@ as-cast	CSSFontFaceRule	packages/preview/src/overlay/picture.ts	1
 as-cast	CSSGroupingRule	packages/preview/src/overlay/picture.ts	1
 as-cast	CSSImportRule	packages/preview/src/overlay/picture.ts	1
 as-cast	CustomEvent	packages/preview/src/overlay/ink.ts	1
-as-cast	CustomEvent<{ faces?: unknown } | null>	apps/dashboard/src/lib/cawco/decisions/host/references.svelte.ts	1
 as-cast	CustomEvent<{ pageHash?: unknown } | null>	packages/preview/src/overlay/page.ts	1
 as-cast	CustomEvent<object>	packages/preview/src/overlay/page.ts	3
 as-cast	CustomEvent<unknown>	packages/preview/src/overlay/faults.ts	1
@@ -307,7 +294,6 @@ as-cast	DtcgColour	packages/design-tokens/src/dtcg-values.ts	1
 as-cast	E	packages/agent/src/daemon.ts	1
 as-cast	EffortLevel	packages/agent/src/harnesses/claude.ts	1
 as-cast	EffortLevel	packages/agent/src/harnesses/opencode-session.ts	2
-as-cast	Element	apps/dashboard/src/lib/cawco/transcript/InlineBlock.svelte	1
 as-cast	Element	packages/preview/src/overlay/changes.ts	2
 as-cast	Element	packages/preview/src/overlay/file-spot.ts	1
 as-cast	Element	packages/preview/src/overlay/ink.ts	2
@@ -340,7 +326,6 @@ as-cast	Found	scripts/fixed-ports-check.ts	1
 as-cast	Frame	scripts/css-scope-check.ts	1
 as-cast	FsPayload	packages/agent/src/session.ts	1
 as-cast	Handler	scripts/escape-hatch-ratchet.ts	1
-as-cast	HarnessKind	apps/dashboard/src/lib/cawco/stores/transcripts.svelte.ts	1
 as-cast	HarnessKind	packages/agent/src/fleet-converger.ts	2
 as-cast	Holder | undefined	scripts/release.ts	1
 as-cast	HomeCredential["store"]	packages/agent/src/daemon.ts	2
@@ -351,21 +336,12 @@ as-cast	HTMLButtonElement	site/src/oauth/callback.ts	1
 as-cast	HTMLCanvasElement	packages/preview/src/overlay/schemes.ts	1
 as-cast	HTMLDivElement	packages/preview/src/overlay/changes.ts	1
 as-cast	HTMLDivElement | null	packages/preview/src/overlay/changes.ts	1
-as-cast	HTMLElement	apps/dashboard/src/lib/cawco/graph/DialRow.svelte	1
-as-cast	HTMLElement	apps/dashboard/src/lib/cawco/preview/BrowserView.svelte	1
-as-cast	HTMLElement	apps/dashboard/src/lib/components/ui/highlight/highlight.svelte.ts	1
-as-cast	HTMLElement	apps/dashboard/src/lib/platform/motion/branch.svelte.ts	3
-as-cast	HTMLElement	apps/dashboard/src/lib/platform/motion/echo.svelte.ts	2
-as-cast	HTMLElement	apps/dashboard/src/lib/platform/motion/share.svelte.ts	1
 as-cast	HTMLElement	packages/agent/src/file-viewer/viewer.ts	1
 as-cast	HTMLElement	packages/preview/src/overlay/fields.ts	1
 as-cast	HTMLElement	packages/preview/src/overlay/picture.ts	3
 as-cast	HTMLElement	packages/preview/src/overlay/radial.ts	1
 as-cast	HTMLElement	packages/preview/src/overlay/scrollers.ts	1
-as-cast	HTMLElement | null	apps/dashboard/src/lib/components/ui/bar-glass/bar-segments.svelte	1
 as-cast	HTMLElement | null	packages/preview/src/overlay/radial.ts	1
-as-cast	HTMLElement[]	apps/dashboard/src/lib/cawco/preview/PreviewTools.svelte	1
-as-cast	HTMLInputElement	apps/dashboard/src/lib/cawco/graph/DialRow.svelte	2
 as-cast	HTMLInputElement	packages/preview/src/overlay/page.ts	2
 as-cast	HTMLScriptElement | null	packages/preview/src/overlay/overlay.ts	1
 as-cast	HTMLSelectElement	packages/preview/src/overlay/schemes.ts	1
@@ -378,7 +354,6 @@ as-cast	Json	packages/design-tokens/src/dtcg-resolver.ts	2
 as-cast	Json | undefined	packages/design-tokens/src/design-tokens.ts	5
 as-cast	Json | undefined	packages/design-tokens/src/dtcg-resolver.ts	1
 as-cast	KeeperHarnessKind	packages/agent/src/daemon.ts	3
-as-cast	keyof CawcoDebug	apps/dashboard/src/lib/cawco/dev-debug.ts	1
 as-cast	keyof CSSStyleDeclaration	packages/preview/src/overlay/page.ts	1
 as-cast	keyof typeof overflow	packages/preview/src/overlay/pins.ts	1
 as-cast	Kind	scripts/escape-hatch-ratchet.ts	1
@@ -394,7 +369,6 @@ as-cast	Map<string, McpServerConfig>	packages/agent/src/harnesses/claude.ts	1
 as-cast	Marked	packages/preview/src/overlay/boot.ts	1
 as-cast	McpServerConfig	packages/agent/src/harnesses/claude.ts	1
 as-cast	MediaQueryList	packages/agent/src/stage-host/canvas/runtime.ts	1
-as-cast	MemberProject[]	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
 as-cast	Merge	scripts/codemods/lib/token-merge.ts	2
 as-cast	MessageData	packages/agent/src/harnesses/opencode-docs.ts	1
 as-cast	NeutralMessage	packages/agent/src/harnesses/claude.ts	1
@@ -472,7 +446,6 @@ as-cast	Parameters<typeof startPreview>[0]	packages/agent/src/session.ts	1
 as-cast	Parameters<typeof stopPreview>[0]	packages/agent/src/session.ts	1
 as-cast	Parameters<typeof titleFor>[0]	packages/hub/scripts/migrations-check.ts	1
 as-cast	parser.Pseudo	apps/dashboard/group-selectors.ts	1
-as-cast	Part	apps/dashboard/src/lib/components/ui/highlight/highlight.svelte.ts	6
 as-cast	Partial<ArtifactRef> | null | undefined	packages/preview/src/overlay/artifact.ts	1
 as-cast	Partial<Box> | null	packages/preview/src/overlay/embeds.ts	1
 as-cast	Partial<BrowserPageArgs>	packages/agent/src/daemon.ts	1
@@ -491,9 +464,6 @@ as-cast	Partial<RelayStartArgs> | null	packages/agent/src/daemon.ts	1
 as-cast	Partial<T>	packages/core/src/without-undefined.ts	1
 as-cast	Partial<WorkspaceWorkEnd>	packages/agent/src/daemon.ts	1
 as-cast	PerformanceResourceTiming	packages/preview/src/overlay/embeds.ts	1
-as-cast	PermissionMode	apps/dashboard/src/lib/cawco/stores/session-start.svelte.ts	1
-as-cast	PermissionMode	apps/dashboard/src/lib/cawco/stores/sessions.svelte.ts	1
-as-cast	PermissionMode	apps/dashboard/src/lib/cawco/stores/stored.svelte.ts	1
 as-cast	PermissionMode	packages/agent/src/harnesses/opencode-session.ts	1
 as-cast	PermissionMode | undefined	packages/agent/src/harnesses/claude.ts	1
 as-cast	PermissionName	apps/dashboard/src/lib/cawco/presence.ts	1
@@ -505,8 +475,6 @@ as-cast	Pick<ReleaseManifest, "protocol">	scripts/release/steps/build-info.ts	1
 as-cast	Pick<T, K>	apps/dashboard/src/lib/cawco/first-paint.ts	1
 as-cast	Pid	packages/core/src/signal-wall.ts	1
 as-cast	PiHostState	packages/agent/src/harnesses/pi-sessiond.ts	3
-as-cast	Pin	apps/dashboard/src/lib/cawco/preview/pane-doc.svelte.ts	2
-as-cast	Pin["anchor"]	apps/dashboard/src/routes/(app)/motion/pin-working/+page.svelte	1
 as-cast	Pin[]	packages/preview/src/overlay/artifact.ts	1
 as-cast	PinnedElement[]	packages/preview/src/overlay/page.ts	1
 as-cast	PiPlan | undefined	packages/agent/src/harnesses/pi-services.ts	1
@@ -523,12 +491,10 @@ as-cast	Promise<StoreAnswer<K>>	packages/agent/src/stores/client.ts	1
 as-cast	Promise<T> | undefined	packages/agent/src/harnesses/claude-transcript.ts	1
 as-cast	ProviderRefusal	packages/agent/src/harnesses/opencode-session.ts	1
 as-cast	QueuedCommand | undefined	packages/agent/src/harnesses/claude-transcript.ts	1
-as-cast	Radius	apps/dashboard/src/lib/components/ui/highlight/highlight.svelte.ts	1
 as-cast	ReadableStream	scripts/binary-tests.ts	1
 as-cast	ReadableStream	scripts/release.ts	1
 as-cast	ReadableStream	scripts/release/steps/shared.ts	1
 as-cast	readonly [ string, TokenProperty?, ]	packages/preview/src/overlay/radial.ts	1
-as-cast	readonly string[]	apps/dashboard/src/lib/cawco/home/grouping.svelte.ts	1
 as-cast	readonly string[]	packages/cli/src/binary-install.ts	1
 as-cast	readonly string[]	packages/hub/scripts/openapi-order.ts	1
 as-cast	readonly string[]	packages/hub/scripts/openapi.ts	2
@@ -569,7 +535,6 @@ as-cast	Record<string, unknown>	packages/sessiond/src/server.ts	1
 as-cast	Record<string, unknown>	scripts/escape-hatch-ratchet.ts	1
 as-cast	Record<string, unknown>	scripts/lib/tool-call.ts	2
 as-cast	Record<string, unknown>	scripts/words-swift.ts	1
-as-cast	Record<string, unknown> | null	apps/dashboard/src/lib/cawco/preview/PasskeyQr.svelte	1
 as-cast	Record<string, unknown> | undefined	packages/agent/src/harnesses/claude.ts	1
 as-cast	Record<string, unknown> | undefined	packages/agent/src/harnesses/opencode-session.ts	1
 as-cast	Record<string, unknown> | undefined	packages/preview/src/overlay/page.ts	1
@@ -605,9 +570,7 @@ as-cast	SendPayload	packages/agent/src/session.ts	2
 as-cast	ServerIdentity[]	packages/agent/src/harnesses/opencode.ts	1
 as-cast	ServeSpec	packages/agent/src/daemon.ts	1
 as-cast	ServiceAction	packages/cli/src/service.ts	1
-as-cast	SessionEntry	apps/dashboard/src/lib/cawco/home/RecentList.svelte	1
 as-cast	SessionMessage	packages/agent/src/harnesses/opencode-transcript.ts	1
-as-cast	SetChangeTable	apps/dashboard/src/lib/cawco/transcript/set-change-fixture.ts	1
 as-cast	SettingsJson	packages/agent/src/fleet.ts	1
 as-cast	SheetWrite	packages/agent/src/daemon.ts	1
 as-cast	SheetWrite	packages/agent/src/stage-host/host.ts	1
@@ -625,7 +588,6 @@ as-cast	State	packages/preview/src/overlay/artifact.ts	1
 as-cast	Step[]	packages/jsonl-parser/src/fts5.ts	1
 as-cast	StopPayload	packages/agent/src/session.ts	2
 as-cast	StoredHookError | undefined	packages/agent/src/harnesses/claude-transcript.ts	1
-as-cast	Story	apps/dashboard/src/lib/cawco/graph/bench/GraphBench.svelte	1
 as-cast	StreamBacklog	apps/dashboard/src/lib/cawco/stream.ts	1
 as-cast	StreamDelta	apps/dashboard/src/lib/cawco/stream.ts	1
 as-cast	StreamReset	apps/dashboard/src/lib/cawco/stream.ts	1
@@ -636,9 +598,6 @@ as-cast	string	apps/dashboard/scripts/outro-reads-check.ts	22
 as-cast	string	apps/dashboard/scripts/role-order.ts	2
 as-cast	string	apps/dashboard/scripts/specificity-trap.ts	2
 as-cast	string	apps/dashboard/scripts/tab-icon-art.ts	1
-as-cast	string	apps/dashboard/src/lib/cawco/accounts/marks.ts	1
-as-cast	string	apps/dashboard/src/lib/cawco/views/openui/ViewTaskTable.svelte	1
-as-cast	string	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
 as-cast	string	packages/agent/src/daemon.ts	20
 as-cast	string	packages/agent/src/harnesses/claude.ts	15
 as-cast	string	packages/agent/src/harnesses/opencode-session.ts	3
@@ -710,8 +669,6 @@ as-cast	string[] | undefined	packages/hub/scripts/openapi.ts	3
 as-cast	string[] | undefined	packages/hub/scripts/wire-compat.ts	2
 as-cast	SVGElement	packages/preview/src/overlay/picture.ts	1
 as-cast	SVGSVGElement	packages/preview/src/overlay/picture.ts	1
-as-cast	T	apps/dashboard/src/lib/cawco/config/drafts.svelte.ts	1
-as-cast	T	apps/dashboard/src/lib/cawco/home/grouping.svelte.ts	1
 as-cast	T	apps/dashboard/src/lib/cawco/hub/socket.svelte.ts	1
 as-cast	T	apps/dashboard/src/lib/cawco/stores/machines.ts	1
 as-cast	T	packages/agent/src/stage-host/docgen.ts	1
@@ -722,8 +679,6 @@ as-cast	T	scripts/lib/workspace-imports.ts	1
 as-cast	T	scripts/tailwind-draws-check.ts	1
 as-cast	T | undefined	packages/agent/src/json-file.ts	1
 as-cast	T | undefined	scripts/release.ts	1
-as-cast	T[]	apps/dashboard/src/lib/cawco/views/openui/context.ts	1
-as-cast	Token[]	apps/dashboard/src/lib/cawco/plain-markdown.ts	1
 as-cast	TokenType[]	packages/design-tokens/src/design-tokens.ts	1
 as-cast	ToolDefinition	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	ToolEnvelope	scripts/lib/tool-call.ts	1
@@ -743,8 +698,6 @@ as-cast	ts.PropertyAssignment	scripts/words-swift.ts	1
 as-cast	ts.StringLiteral	scripts/codemods/closure-context.ts	2
 as-cast	ts.StringLiteral	scripts/lib/check-inputs.ts	1
 as-cast	ts.TypeNode	scripts/codemods/closure-context.ts	1
-as-cast	TunedRecord[] | undefined	apps/dashboard/src/lib/cawco/preview/artifact-doc.ts	1
-as-cast	typeof fetch	apps/dashboard/src/lib/cawco/ReferenceLine.fixture.svelte	1
 as-cast	typeof import("../packages/core/src/words/configure")	scripts/words-swift.ts	1
 as-cast	typeof import("svelte2tsx")	packages/agent/src/stage-host/docgen.ts	1
 as-cast	typeof WebSocket & { new (url: string, options: Bun.WebSocketOptions): W	packages/preview/src/proxy.ts	1
@@ -761,12 +714,10 @@ as-cast	UserQuestion["options"]	packages/agent/src/harnesses/opencode-transcript
 as-cast	UserQuestionAnswered["annotations"]	packages/agent/src/harnesses/claude.ts	1
 as-cast	UserRecord	packages/jsonl-parser/src/text.ts	1
 as-cast	UserRecord | AssistantRecord	packages/jsonl-parser/src/text.ts	1
-as-cast	ViewTaskRow	apps/dashboard/src/lib/cawco/views/openui/ViewTaskCard.svelte	1
 as-cast	Vite	packages/agent/src/stage-host/host.ts	1
 as-cast	WebSocket & { ping: () => void }	packages/agent/src/daemon.ts	1
 as-cast	WebSocket & { terminate: () => void }	packages/agent/src/daemon.ts	1
 as-cast	Window["cawco"]["on"]	packages/preview/src/overlay/page.ts	1
-as-cast	Words | null	apps/dashboard/src/lib/components/ui/tooltip/glide-tip.svelte	1
 as-cast	WorkerMessage	packages/jsonl-parser/src/pool.ts	1
 as-cast	WorkerTask	packages/jsonl-parser/src/worker.ts	1
 as-cast	WorkspaceRef	packages/agent/src/daemon.ts	6
@@ -794,8 +745,6 @@ as-unknown-as	MetaMap	packages/core/src/doc-meta.ts	1
 as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
 as-unknown-as	NeutralMessage	packages/agent/src/harnesses/claude.ts	7
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/failed-comment-frame.svelte	1
-as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/pin-thread.svelte.ts	1
-as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	Pin	packages/preview/src/overlay/page.ts	1
 as-unknown-as	RawRecord	packages/agent/src/harnesses/claude-transcript.ts	5
 as-unknown-as	ReadableWritablePair< Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer> >	packages/core/src/compress-answer.ts	1
@@ -806,7 +755,6 @@ as-unknown-as	SessionStoreEntry	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Slot["holder"]	packages/hub/scripts/openapi.ts	2
 as-unknown-as	StoredPiEntry | undefined	packages/agent/src/harnesses/pi-services.ts	1
 as-unknown-as	ToolDefinition	packages/agent/src/harnesses/pi-runtime.ts	2
-as-unknown-as	typeof RTCPeerConnection	apps/dashboard/src/routes/dev/browser-panel/+page.svelte	1
 as-unknown-as	typeof WebSocket	packages/preview/src/overlay/doc-worker.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/config/editors/RuleEditor.svelte	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/connect/installs.svelte.ts	1

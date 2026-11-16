@@ -322,15 +322,14 @@ const lengthOf = (value: string, of: number): number =>
  * 3 §5.5: a capsule's 999px is half its height).
  */
 const cornersOf = (style: CSSStyleDeclaration, w: number, h: number): Radii => {
-  const [tl, tr, br, bl] = [
-    style.borderTopLeftRadius,
-    style.borderTopRightRadius,
-    style.borderBottomRightRadius,
-    style.borderBottomLeftRadius,
-  ].map((corner): Radius => {
+  const radius = (corner: string): Radius => {
     const [x = "0px", y = x] = corner.split(" ");
     return [lengthOf(x, w), lengthOf(y, h)];
-  }) as [Radius, Radius, Radius, Radius];
+  };
+  const tl = radius(style.borderTopLeftRadius);
+  const tr = radius(style.borderTopRightRadius);
+  const br = radius(style.borderBottomRightRadius);
+  const bl = radius(style.borderBottomLeftRadius);
   const fit = (size: number, a: number, b: number) =>
     a + b > size ? size / (a + b) : 1;
   const f = Math.min(
@@ -550,18 +549,18 @@ const draw = (
     at.scaled ? { ...at, w: whole(at.w), h: whole(at.h) } : at
   );
   for (const [i, el] of layer.parts.entries()) {
-    const at = laid[i] as Part;
+    const at = laid[i];
     if (at.w !== null) {
       el.style.width = `${at.w}px`;
     }
     if (at.h !== null) {
       el.style.height = `${at.h}px`;
     }
-    el.style.transform = transformOf(drawn[i] as Part, at);
+    el.style.transform = transformOf(drawn[i], at);
   }
   for (const [i, name] of CORNERS.entries()) {
-    const [rx, ry] = box.r[i] as Radius;
-    const el = layer.parts.at(i - CORNERS.length) as HTMLElement;
+    const [rx, ry] = box.r[i];
+    const el = layer.parts[layer.parts.length - CORNERS.length + i];
     el.style[SIDES[name]] = `${rx}px ${ry}px`;
   }
   layer.drawn = box;
@@ -583,8 +582,8 @@ const draw = (
     anims: layer.parts.map((el, i) =>
       el.animate(
         [
-          { transform: transformOf(leaving[i] as Part, laid[i] as Part) },
-          { transform: transformOf(drawn[i] as Part, laid[i] as Part) },
+          { transform: transformOf(leaving[i], laid[i]) },
+          { transform: transformOf(drawn[i], laid[i]) },
         ],
         timing
       )

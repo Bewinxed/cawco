@@ -14,6 +14,7 @@ import {
   type PermissionMode,
   WIRE_PERMISSION_MODES,
 } from "@cawco/core/harness/kinds";
+import { isOneOf } from "@cawco/core/one-of";
 import type { StoredRecent, StoredTranscript } from "@cawco/core/protocol";
 import { CONTROL_STORED_RUN } from "@cawco/core/session/controls";
 import type {
@@ -225,7 +226,7 @@ function planOf(key: string): ResumePlan {
     permissionMode:
       picks.permissionMode ??
       ranValue(run?.permissionMode, (one): one is PermissionMode =>
-        WIRE_PERMISSION_MODES.includes(one as PermissionMode)
+        isOneOf(WIRE_PERMISSION_MODES, one)
       ),
   };
 }

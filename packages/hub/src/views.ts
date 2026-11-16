@@ -29,7 +29,7 @@ import {
   type ViewRemoved,
   viewTitle,
 } from "@cawco/core/blocks";
-import type { TaskSummary } from "@cawco/core/task-views";
+import type { TaskSummary, ViewTaskRow } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import {
   type ProjectView,
@@ -111,9 +111,6 @@ const datesOf = (task: TaskSummary): Record<string, number> => {
   }
   return dates;
 };
-
-/** One task as the `tasks` tool answers it: the board's row, and its dates. */
-export type ViewTaskRow = TaskSummary & { dates: Record<string, number> };
 
 const draftPath = (name: string) => `${DRAFTS}/${name}${EXT}`;
 const keptPath = (name: string) => `${KEPT}/${name}${EXT}`;

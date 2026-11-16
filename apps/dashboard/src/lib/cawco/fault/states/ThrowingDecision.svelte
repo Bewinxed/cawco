@@ -6,9 +6,9 @@
    */
   import type { ComponentProps } from "svelte";
   import Decision from "../../decisions/host/Decision.svelte";
-  import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
 
-  let { props, renderNode, statementId }: OpenUIRenderProps = $props();
+  let { props, renderNode, statementId }: ComponentProps<typeof Decision> =
+    $props();
 
   if (props.id === "throws") {
     throw new TypeError(
@@ -17,8 +17,4 @@
   }
 </script>
 
-<Decision
-  props={props as ComponentProps<typeof Decision>["props"]}
-  {renderNode}
-  {statementId}
-/>
+<Decision {props} {renderNode} {statementId} />

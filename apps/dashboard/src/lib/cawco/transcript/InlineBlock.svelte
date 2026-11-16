@@ -149,7 +149,10 @@
       gone = true;
       watch.disconnect();
       clearTimeout(cap);
-      const drawn = body.cloneNode(true) as Element;
+      const drawn = body.cloneNode(true);
+      if (!(drawn instanceof Element)) {
+        return;
+      }
       for (const live of drawn.querySelectorAll(
         "[data-open-ui-renderer-class]"
       )) {

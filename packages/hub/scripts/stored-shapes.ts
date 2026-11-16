@@ -813,6 +813,17 @@ const intersectionOf = (node: ts.IntersectionTypeNode, scope: Scope): string =>
         : `z.intersection(${left.schema}, ${right.schema})`,
     })).schema;
 
+/** `typeof words.x`: the one string the value is, or any string. */
+const queriedOf = (node: ts.TypeQueryNode): string => {
+  const type = checker.getTypeFromTypeNode(node);
+  if (type.isStringLiteral()) {
+    return `z.literal(${JSON.stringify(type.value)})`;
+  }
+  return checker.isTypeAssignableTo(type, checker.getStringType())
+    ? "z.string()"
+    : refuse(node, "a typeof that is no string");
+};
+
 const schemaOf = (node: ts.TypeNode, scope: Scope): string => {
   const primitive = PRIMITIVE[node.kind];
   if (primitive) {
@@ -855,6 +866,9 @@ const schemaOf = (node: ts.TypeNode, scope: Scope): string => {
   }
   if (ts.isTypeReferenceNode(node) || ts.isExpressionWithTypeArguments(node)) {
     return referenceOf(node, scope);
+  }
+  if (ts.isTypeQueryNode(node)) {
+    return queriedOf(node);
   }
   if (ts.isImportTypeNode(node) && node.qualifier) {
     const [declaration] = declarationsOf(node.qualifier);

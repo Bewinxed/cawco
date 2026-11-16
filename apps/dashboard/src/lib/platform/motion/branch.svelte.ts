@@ -210,7 +210,7 @@ const ROW = "[data-line-row]";
 const START = ":scope > [data-tree-line] > [data-line-down]";
 
 const depthOf = (row: Element): number =>
-  Number((row as HTMLElement).dataset.lineDepth ?? 0);
+  Number(row.getAttribute("data-line-depth") ?? 0);
 
 /**
  * The rows that open or fold under one parent in one update: the parent's
@@ -241,7 +241,7 @@ function parentOf(node: HTMLElement): HTMLElement | null {
     at = at.previousElementSibling
   ) {
     if (at.matches(ROW) && depthOf(at) < depth) {
-      return depthOf(at) === depth - 1 ? (at as HTMLElement) : null;
+      return depthOf(at) === depth - 1 && at instanceof HTMLElement ? at : null;
     }
   }
   return null;
@@ -256,8 +256,8 @@ function childrenOf(parent: HTMLElement): HTMLElement[] {
     at?.matches(ROW) && depthOf(at) > depth;
     at = at.nextElementSibling
   ) {
-    if (depthOf(at) === depth + 1) {
-      kids.push(at as HTMLElement);
+    if (depthOf(at) === depth + 1 && at instanceof HTMLElement) {
+      kids.push(at);
     }
   }
   return kids;

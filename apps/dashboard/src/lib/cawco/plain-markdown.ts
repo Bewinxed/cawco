@@ -7,15 +7,22 @@
  * an image as its alt text, a table row as its cells joined by two spaces.
  * Blocks stay a blank line apart, as they were written.
  */
+import { isRecord } from "@cawco/core/is-record";
 import { lex, parseIncompleteMarkdown } from "svelte-streamdown";
 
 /** The token fields this reads; svelte-streamdown's union carries more. */
 interface Token {
   raw?: string;
   text?: string;
-  tokens?: Token[];
+  tokens?: readonly unknown[];
   type: string;
 }
+
+const isToken = (value: unknown): value is Token =>
+  isRecord(value) && typeof value.type === "string";
+
+/** A token's own tokens: svelte-streamdown types a table cell's as `unknown[]`. */
+const kids = (token: Token): Token[] => (token.tokens ?? []).filter(isToken);
 
 function inline(tokens: Token[]): string {
   let out = "";
@@ -25,8 +32,8 @@ function inline(tokens: Token[]): string {
     } else if (token.type === "math") {
       // As the transcript draws it (markdown.svelte's `math` snippet).
       out += token.raw ?? "";
-    } else if (token.tokens?.length && token.type !== "image") {
-      out += inline(token.tokens);
+    } else if (kids(token).length > 0 && token.type !== "image") {
+      out += inline(kids(token));
     } else {
       out += token.text ?? "";
     }
@@ -45,20 +52,20 @@ function blocks(tokens: Token[], depth: number): string[] {
         out.push(token.text ?? "");
         break;
       case "list":
-        out.push(items(token.tokens ?? [], depth).join("\n"));
+        out.push(items(kids(token), depth).join("\n"));
         break;
       case "table":
-        out.push(rows(token.tokens ?? []).join("\n"));
+        out.push(rows(kids(token)).join("\n"));
         break;
       case "paragraph":
       case "heading":
       case "text":
-        out.push(token.tokens ? inline(token.tokens) : (token.text ?? ""));
+        out.push(token.tokens ? inline(kids(token)) : (token.text ?? ""));
         break;
       default:
         // Blockquotes, alerts and the like: their contents, flat.
         if (token.tokens) {
-          out.push(...blocks(token.tokens, depth));
+          out.push(...blocks(kids(token), depth));
         } else if (token.text) {
           out.push(token.text);
         }
@@ -71,7 +78,7 @@ function blocks(tokens: Token[], depth: number): string[] {
 function items(tokens: Token[], depth: number): string[] {
   const indent = "  ".repeat(depth);
   return tokens.map((item) => {
-    const [head = "", ...rest] = blocks(item.tokens ?? [], depth + 1);
+    const [head = "", ...rest] = blocks(kids(item), depth + 1);
     return [`${indent}• ${head}`, ...rest].join("\n");
   });
 }
@@ -79,8 +86,10 @@ function items(tokens: Token[], depth: number): string[] {
 /** A table's rows, header first: each row's cells joined by two spaces. */
 function rows(tokens: Token[]): string[] {
   return tokens.flatMap((section) =>
-    (section.tokens ?? []).map((row) =>
-      (row.tokens ?? []).map((cell) => inline(cell.tokens ?? [])).join("  ")
+    kids(section).map((row) =>
+      kids(row)
+        .map((cell) => inline(kids(cell)))
+        .join("  ")
     )
   );
 }
@@ -90,7 +99,7 @@ const LAST_WORD = /\S*$/u;
 
 /** A finished reply, flat. */
 export function plainMarkdown(source: string): string {
-  return blocks(lex(source) as Token[], 0).join("\n\n");
+  return blocks(lex(source), 0).join("\n\n");
 }
 
 /**

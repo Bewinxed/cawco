@@ -14,8 +14,8 @@ export function devDebug(parts: Partial<CawcoDebug>): () => void {
   window.__cawcoDebug = Object.assign(window.__cawcoDebug ?? {}, parts);
   return () => {
     const debug = window.__cawcoDebug;
-    for (const key of Object.keys(parts)) {
-      if (debug?.[key] === parts[key as keyof CawcoDebug]) {
+    for (const [key, part] of Object.entries(parts)) {
+      if (debug?.[key] === part) {
         delete debug[key];
       }
     }

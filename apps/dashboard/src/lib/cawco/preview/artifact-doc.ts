@@ -37,7 +37,7 @@ import {
   keepTuned,
   TUNED_MAP,
   type TunedRecord,
-  tunedEntryOf,
+  tunedRecords,
 } from "@cawco/core/tuned";
 import { commentWords } from "@cawco/core/words/comments";
 import { IndexeddbPersistence } from "y-indexeddb";
@@ -189,9 +189,7 @@ const viewOf = (doc: Doc): ArtifactView => {
     pins: pins.sort((a, b) => a.number - b.number),
     revisedAt: meta.get("revisedAt") ?? null,
     stage: meta.get("stage") ?? null,
-    tuned:
-      (tunedEntryOf(doc.getMap(TUNED_MAP).toJSON())?.value as
-        TunedRecord[] | undefined) ?? [],
+    tuned: tunedRecords(doc.getMap(TUNED_MAP).toJSON()),
   };
 };
 

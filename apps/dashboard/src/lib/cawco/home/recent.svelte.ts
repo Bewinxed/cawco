@@ -325,7 +325,7 @@ function groupOf(
         : { key: "", label: sidebarWords.noProject };
     }
     case "area": {
-      const id = areaIdOf(projectOf(entry) ?? undefined);
+      const id = areaIdOf(projectOf(entry));
       const name = id ? areas.nameOf(id) : null;
       return id && name
         ? { key: id, label: name }

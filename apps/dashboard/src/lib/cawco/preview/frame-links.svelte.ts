@@ -20,6 +20,7 @@
  * press: the artifact's own tab never reaches the conversation's code
  * (page-imports-check.ts), and a page that names none never loads it.
  */
+import { isRecord } from "@cawco/core/is-record";
 import { type PageLinks, REFERENCE_FACES } from "@cawco/core/reference-faces";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { untrack } from "svelte";
@@ -162,7 +163,7 @@ export class FrameLinks {
    * host to hear too.
    */
   heard(data: unknown): boolean {
-    const type = (data as { type?: unknown } | null)?.type;
+    const type = isRecord(data) ? data.type : undefined;
     if (typeof type === "string" && READ_AGAIN.has(type)) {
       this.#read();
       return false;

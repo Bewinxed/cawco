@@ -42,7 +42,7 @@ import { route } from "#lib/platform/motion/route.svelte.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
-import { offerBringBack } from "./project-end.svelte";
+import { type EndKind, offerBringBack } from "./project-end.svelte";
 import { asksStore } from "./stores/asks.svelte";
 import {
   cawOf,
@@ -61,10 +61,7 @@ type StopPhase =
   "none" | "list" | "armed" | "stopping" | "fail" | "ending" | "done";
 
 /** What a job ends in once nothing it stops still runs. */
-export type StopKind = "forget" | "delete" | "caw-off";
-
-/** The ends of a project itself: forgotten (undoable) or deleted for good. */
-export type EndKind = Exclude<StopKind, "caw-off">;
+export type StopKind = EndKind | "caw-off";
 
 /** A listed session and how far its stop has got. */
 export interface StopRow {

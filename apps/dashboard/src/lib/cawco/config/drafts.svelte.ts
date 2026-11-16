@@ -19,6 +19,7 @@ import { transcriptWords } from "@cawco/core/words/transcript";
 import { untrack } from "svelte";
 import { on } from "svelte/events";
 import { SvelteSet } from "svelte/reactivity";
+import type { ZodType } from "zod";
 import { toast } from "#lib/platform/toasts.js";
 import { result } from "../idb";
 import { keepsDrafts } from "../reload.svelte";
@@ -216,7 +217,8 @@ export const sameFields = (a: unknown, b: unknown): boolean =>
 
 /**
  * Keeps an editor's unsaved fields under `path` while it is open, and puts
- * a stored draft back when it opens. `unsaved` returns the fields to keep,
+ * a stored draft back when it opens, read with `shape` (one that no longer
+ * reads is not put back). `unsaved` returns the fields to keep,
  * or null while they are what is saved (reading them all, so any edit is
  * heard); `restore` takes stored fields back into the form. Called while
  * the editor is created. `restored` turns true once the stored draft is
@@ -225,6 +227,7 @@ export const sameFields = (a: unknown, b: unknown): boolean =>
  */
 export function keepDraft<T>(
   path: string,
+  shape: ZodType<T>,
   unsaved: () => T | null,
   restore: (fields: T) => void
 ): { drop: () => void; readonly restored: boolean } {
@@ -232,10 +235,10 @@ export function keepDraft<T>(
   let dropped = false;
 
   const bringBack = () => {
-    const stored = drafts.get(path);
+    const stored = shape.safeParse(drafts.get(path));
     // Edits made while the stored drafts were being read are the newer ones.
-    if (stored !== undefined && unsaved() === null) {
-      restore(stored as T);
+    if (stored.success && unsaved() === null) {
+      restore(stored.data);
     }
     restored = true;
   };

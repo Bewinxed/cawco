@@ -4,28 +4,33 @@
    * rows the view gives it (a Query of the tasks tool, or part of one),
    * drawn in the ledger's markup. A row opens its task.
    */
+  import { isRecord } from "@cawco/core/is-record";
+  import type { ViewTaskRow } from "@cawco/core/task-views";
   import { createTable, tableFeatures } from "@tanstack/svelte-table";
   import * as Table from "#lib/components/ui/table/index.js";
   import { plainClick } from "#lib/platform/plain-click.js";
-  import { fieldText, rowsOf, type ViewTaskRow, viewContext } from "./context";
+  import { fieldText, rowsOf, taskRowsOf, viewContext } from "./context";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
 
   let { props }: OpenUIRenderProps<{ rows: unknown; columns: unknown }> =
     $props();
   const view = viewContext();
 
-  const data = $derived(rowsOf<ViewTaskRow>(props.rows));
+  const data = $derived(taskRowsOf(props.rows));
   const columnList = $derived(
-    rowsOf<{ label: unknown; field: unknown }>(props.columns)
-      .filter((column) => typeof column?.field === "string")
-      .map((column) => {
-        const field = column.field as string;
-        return {
+    rowsOf(props.columns).flatMap((column) => {
+      if (!(isRecord(column) && typeof column.field === "string")) {
+        return [];
+      }
+      const { field } = column;
+      return [
+        {
           id: field,
           header: typeof column.label === "string" ? column.label : field,
           accessorFn: (task: ViewTaskRow) => fieldText(task, field),
-        };
-      })
+        },
+      ];
+    })
   );
   const features = tableFeatures({});
   const table = createTable({

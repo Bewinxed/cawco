@@ -95,9 +95,9 @@
   import { dragToDismiss } from "#lib/platform/motion/drag.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
+  import DialogOverlay from "./dialog-overlay.svelte";
   import DialogPortal from "./dialog-portal.svelte";
   import { HeadRoom, provideHeadRoom } from "./head-room.svelte.js";
-  import * as Dialog from "./index.js";
 
   let {
     ref = $bindable(null),
@@ -177,7 +177,7 @@
 
 <DialogPortal {...portalProps}>
   {#if modal}
-    <Dialog.Overlay bind:ref={scrim} />
+    <DialogOverlay bind:ref={scrim} />
   {/if}
   <!-- Drawn through `child`: bits-ui then holds the body's lock only while it
        is open, and clears it at once (floating-presence). The sheet's slide

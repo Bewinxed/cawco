@@ -105,13 +105,17 @@
     play?: unknown;
     tags?: string[];
   }
-  /** The routine form's states file, every export of it, as the stage loads it. */
-  const [written] = Object.values(
-    import.meta.glob("../../routines/RoutineForm.stories.ts", { eager: true })
-  );
-  const { default: meta, ...exports } = written as {
+  /** A states file's exports: its meta, and a story under each other name. */
+  type StatesFile = {
     default: { args: Record<string, unknown>; title: string };
   } & Record<string, Written>;
+  /** The routine form's states file, every export of it, as the stage loads it. */
+  const [written] = Object.values(
+    import.meta.glob<StatesFile>("../../routines/RoutineForm.stories.ts", {
+      eager: true,
+    })
+  );
+  const { default: meta, ...exports } = written;
   /** The file's own text: its exports in its order (a module's exports come back sorted by name). */
   const [source = ""] = Object.values(
     import.meta.glob<string>("../../routines/RoutineForm.stories.ts", {
@@ -219,20 +223,22 @@
     } else if ("add" in change.story) {
       const { add, args = {} } = change.story;
       const last = next.at(-1);
-      next = [
-        ...next,
-        {
-          ...(last as Story),
-          name: add,
-          display: null,
-          label: null,
-          from: null,
-          play: false,
-          tags: [],
-          line: (last?.line ?? 0) + 8,
-          args,
-        },
-      ];
+      if (last) {
+        next = [
+          ...next,
+          {
+            ...last,
+            name: add,
+            display: null,
+            label: null,
+            from: null,
+            play: false,
+            tags: [],
+            line: last.line + 8,
+            args,
+          },
+        ];
+      }
     }
     file = { ...now, stories: next };
     console.info(`[bench] states file ${JSON.stringify(change)}`);

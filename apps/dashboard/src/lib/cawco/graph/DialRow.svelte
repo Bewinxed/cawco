@@ -172,8 +172,7 @@
         <Input
           {id}
           measure="shrink"
-          onchange={(event: Event) =>
-            onchange((event.currentTarget as HTMLInputElement).value)}
+          onchange={(event) => onchange(event.currentTarget.value)}
           type={INPUT_TYPE[dial.format]}
           value={String(value ?? "")}
         />
@@ -186,8 +185,7 @@
           {id}
           look="inline"
           measure="shrink"
-          onchange={(event: Event) =>
-            onchange((event.currentTarget as HTMLInputElement).value)}
+          onchange={(event) => onchange(event.currentTarget.value)}
           type={dial.format === "url" ? "url" : "text"}
           value={String(value ?? "")}
         />
@@ -252,7 +250,7 @@
   <div
     class="col-span-full min-w-0 scroll-mb-space-5"
     data-vaul-no-drag
-    onintroend={(event) => bringIntoView(event.currentTarget as HTMLElement)}
+    onintroend={(event) => bringIntoView(event.currentTarget)}
     transition:unfold
   >
     <ColourPicker

@@ -7,11 +7,13 @@
 
 import type { AvailableCommand } from "@cawco/core/fleet";
 import type { BrowserAskFrame, ConnectAskFrame } from "@cawco/core/frames";
-import type {
-  HarnessKind,
-  PermissionMode,
-  SessionEffort,
+import {
+  type HarnessKind,
+  type PermissionMode,
+  type SessionEffort,
+  WIRE_PERMISSION_MODES,
 } from "@cawco/core/harness/kinds";
+import { isOneOf } from "@cawco/core/one-of";
 import type { PermissionPresentation } from "@cawco/core/permission-presentation";
 import type { SessionTooling } from "@cawco/core/protocol";
 import type {
@@ -487,8 +489,11 @@ export function hydrate(target: SessionState): void {
 function adoptSettings(target: SessionState, row: BoardRow): void {
   // Only a spawn, a confirmed switch or an init ever wrote the column, so its
   // word on a mode is the SDK's — which is wider than the picker's four.
-  if (target.permissionMode === null && row.permissionMode) {
-    target.permissionMode = row.permissionMode as PermissionMode;
+  if (
+    target.permissionMode === null &&
+    isOneOf(WIRE_PERMISSION_MODES, row.permissionMode)
+  ) {
+    target.permissionMode = row.permissionMode;
   }
   if (target.model === null && row.model) {
     target.model = row.model;

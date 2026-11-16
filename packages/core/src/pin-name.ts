@@ -1,6 +1,33 @@
-import { type PinnedElement, wholePage } from "./comments/anchor";
-import type { Pin } from "./comments/model";
+import { wholePage } from "./comments/anchor";
 import { fileSpotName, readFileSpot } from "./file-spot";
+import { isRecord } from "./is-record";
+
+/**
+ * What {@link pinName} reads of a pin, or of a spot a composer may stand on
+ * (the page's `cawco:compose` chain, read loosely): its title, what it
+ * stands on, and the elements under it.
+ */
+interface Named {
+  anchor:
+    | { element: string }
+    | { file?: unknown; name?: unknown; selector: string; text?: unknown };
+  elements: readonly unknown[];
+  title?: string;
+}
+
+/** An element as {@link elementName} reads it. */
+interface ElementNamed {
+  classes: readonly string[];
+  id?: string | null;
+  tag: string;
+}
+
+const isElementNamed = (value: unknown): value is ElementNamed =>
+  isRecord(value) &&
+  typeof value.tag === "string" &&
+  Array.isArray(value.classes) &&
+  value.classes.every((one) => typeof one === "string") &&
+  (value.id === undefined || value.id === null || typeof value.id === "string");
 
 /** A pin on the page as a whole (core `wholePage`), by name. Our call. */
 const PAGE_WORDS = "Whole page";
@@ -53,7 +80,7 @@ function words(name: string): string {
 }
 
 /** The element itself, when it says nothing: its id, its first class, else what it is. */
-function elementWords(element: PinnedElement | undefined): string {
+function elementWords(element: ElementNamed | undefined): string {
   return element ? elementName(element) : "Element";
 }
 
@@ -83,11 +110,7 @@ const KIND_FIRST: ReadonlySet<string> = new Set([
  * class, else its kind. What a change line names it by (core comments.ts
  * `ChangedItem.element`).
  */
-export function elementName(element: {
-  classes: readonly string[];
-  id?: string | null;
-  tag: string;
-}): string {
+export function elementName(element: ElementNamed): string {
   const kind = TAG_WORDS[element.tag];
   if (kind && KIND_FIRST.has(element.tag)) {
     return kind;
@@ -118,7 +141,7 @@ function shortText(text: string): string {
  * selector, which is the head's tooltip. A pin on the page as a whole is
  * the page; one in a file CawCo's viewer shows, its place in the file.
  */
-export function pinName(pin: Pin): string {
+export function pinName(pin: Named): string {
   if (pin.title) {
     return pin.title;
   }
@@ -134,13 +157,16 @@ export function pinName(pin: Pin): string {
   if (wholePage(anchor)) {
     return PAGE_WORDS;
   }
-  if (anchor.name) {
+  if (typeof anchor.name === "string" && anchor.name) {
     return anchor.name;
   }
-  const text = anchor.text?.replace(SPACES, " ").trim();
+  const text =
+    typeof anchor.text === "string"
+      ? anchor.text.replace(SPACES, " ").trim()
+      : undefined;
   if (text) {
     return shortText(text);
   }
   const [first] = pin.elements;
-  return elementWords(typeof first === "string" ? undefined : first);
+  return elementWords(isElementNamed(first) ? first : undefined);
 }

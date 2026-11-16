@@ -100,7 +100,7 @@ const thing = (kind: ThingKind): ReferenceElement => ({
     return null;
   },
   get element() {
-    return ThingReference as Component<ElementProps>;
+    return ThingReference;
   },
 });
 

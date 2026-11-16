@@ -5,16 +5,12 @@
  * around the view (ViewOpenUI) sets this, so a card in a drawn view opens
  * the same sheet as the board's.
  */
+import type { ViewTaskRow } from "@cawco/core/task-views";
 import type { StageKind } from "@cawco/core/views";
 import { getContext, setContext } from "svelte";
-import { stageLabel, type TaskSummary } from "#lib/cawco/project-tasks.js";
+import { stageLabel } from "#lib/cawco/project-tasks.js";
+import { ViewTaskRowSchema } from "#lib/cawco/stored-shapes.js";
 import { dateTimeText } from "#lib/cawco/usage.js";
-
-/** One row of the `tasks` view tool: the board's task, its file's own fields and its dates (hub views.ts `ViewTaskRow`). */
-export type ViewTaskRow = TaskSummary & {
-  dates: Record<string, number>;
-  fields: Record<string, string>;
-};
 
 /** One row of the `stages` view tool's `stages`. */
 export interface ViewStageRow {
@@ -36,8 +32,16 @@ export const setViewContext = (context: ViewContext): ViewContext =>
 export const viewContext = (): ViewContext => getContext<ViewContext>(KEY);
 
 /** A value's rows, when it is a list of them; none when a Query has not answered yet. */
-export const rowsOf = <T>(value: unknown): T[] =>
-  Array.isArray(value) ? (value as T[]) : [];
+export const rowsOf = (value: unknown): unknown[] =>
+  Array.isArray(value) ? value : [];
+
+/** Whether a view's value is a row of the `tasks` view tool. */
+export const isViewTaskRow = (value: unknown): value is ViewTaskRow =>
+  ViewTaskRowSchema.safeParse(value).success;
+
+/** A value's task rows: each of its rows the `tasks` view tool answers. */
+export const taskRowsOf = (value: unknown): ViewTaskRow[] =>
+  rowsOf(value).filter(isViewTaskRow);
 
 /**
  * A value at a path inside a task ("dates.updatedAt", "fields.post_at",

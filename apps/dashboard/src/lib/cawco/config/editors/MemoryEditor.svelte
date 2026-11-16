@@ -63,6 +63,7 @@
   import RolloutChip from "../RolloutChip.svelte";
   import ShowAllVersions from "../ShowAllVersions.svelte";
   import { configStore, upsert } from "../store.svelte";
+  import { EDITOR_FIELDS } from "./editor-fields";
 
   /**
    * One memory file: the editor, then what it used to say, then what each
@@ -119,12 +120,9 @@
       base = saved?.hash;
     }
   });
-  const kept = keepDraft<{
-    text: string;
-    base: string | undefined;
-    scope?: MemoryScope;
-  }>(
+  const kept = keepDraft(
     untrack(() => fileHref(path)),
+    EDITOR_FIELDS.memory,
     () => (dirty ? { text, base, scope } : null),
     (back) => {
       ({ text, base } = back);

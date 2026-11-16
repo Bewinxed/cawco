@@ -7,6 +7,7 @@
  */
 import { detach } from "@cawco/core/detach";
 import { todoProgress } from "@cawco/core/plan";
+import type { ViewTaskRow } from "@cawco/core/task-views";
 import type { ProjectView } from "@cawco/core/views";
 import {
   archiveTask,
@@ -24,7 +25,6 @@ import {
 import type { TaskFind } from "#lib/cawco/tasks/task-find.svelte.js";
 import { clearPicks, selection } from "#lib/cawco/tasks/task-select.svelte.js";
 import { taskShare } from "#lib/cawco/tasks/task-share.js";
-import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
 import { discardView, keepView, viewsOf } from "#lib/cawco/views-api.js";
 import { hub } from "#lib/platform/hub.js";
 import {

@@ -69,6 +69,7 @@
   import RolloutChip from "../RolloutChip.svelte";
   import SwitchField from "../SwitchField.svelte";
   import { configStore, upsert } from "../store.svelte";
+  import { EDITOR_FIELDS } from "./editor-fields";
 
   const WHITESPACE = /\s+/u;
 
@@ -179,6 +180,7 @@
   const baseline = $derived(fieldsOf(hook ? draftOf(hook) : blankHook()));
   const kept = keepDraft(
     page.url.pathname,
+    EDITOR_FIELDS.hook,
     () => {
       const now = {
         draft: { ...draft, handler: { ...draft.handler, args: undefined } },
@@ -186,7 +188,7 @@
       };
       return sameFields(now, baseline) ? null : { draft, commandArgs };
     },
-    (stored: { draft: HookDraft; commandArgs: string }) => {
+    (stored) => {
       ({ draft, commandArgs } = stored);
     }
   );

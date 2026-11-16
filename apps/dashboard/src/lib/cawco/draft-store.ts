@@ -21,6 +21,7 @@ import { toast } from "#lib/platform/toasts.js";
 import { database, done, result, DRAFTS as STORE } from "./idb";
 import type {
   DraftCanvas,
+  DraftContent,
   PendingFile,
   PendingImage,
   PendingText,
@@ -74,15 +75,6 @@ function base64Of(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });
-}
-
-/** What a stored draft is made of: the composer's own pieces. */
-export interface DraftContent {
-  canvas: DraftCanvas | null;
-  files: PendingFile[];
-  images: PendingImage[];
-  text: string;
-  texts: PendingText[];
 }
 
 /** The draft stored for a conversation, or null. */

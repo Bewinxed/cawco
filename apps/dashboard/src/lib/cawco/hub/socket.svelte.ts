@@ -10,15 +10,11 @@
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { GATED_PAGE_MARK, GATED_PAGE_PARAM } from "@cawco/core/browser-gate";
 import { detach } from "@cawco/core/detach";
-import type {
-  FramePayload,
-  HarnessFailed,
-  HarnessUnanswered,
-} from "@cawco/core/frames";
+import type { HarnessFailed, HarnessUnanswered } from "@cawco/core/frames";
+import { isRecord } from "@cawco/core/is-record";
 import type { Envelope, NamedSpawn } from "@cawco/core/protocol";
 import type { ModeAsk } from "@cawco/core/session-messages";
 import {
-  type CommandKind,
   HEARTBEAT_DEADLINE_MS,
   HEARTBEAT_INTERVAL_MS,
   HUB_TAKE_MEASURE,
@@ -38,6 +34,7 @@ import {
 import { mustPair, readAuth } from "../hub-auth.svelte";
 import { checkServedBuild, newerBuild } from "../served-build.svelte";
 import { ahead } from "../stores/clock.svelte";
+import type { CommandRequest } from "../stores/command-request";
 import type { FrameOf } from "./frames";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
@@ -126,8 +123,7 @@ export const inflight = new Map<string, Waiter>();
  */
 export type BenchHub = (
   instanceId: string,
-  kind: CommandKind,
-  intent: unknown,
+  request: CommandRequest,
   /** The id it goes under: a send's is its row's, and its record's once the hub has it. */
   commandId: string
 ) => void;
@@ -486,6 +482,15 @@ function hubReached(): void {
 }
 
 /**
+ * The board snapshot's payload (`kind: "instances"`), read off a message
+ * from the socket before the stores read it; null for any other message.
+ */
+function boardOf(message: unknown): Record<string, unknown> | null {
+  const payload = isRecord(message) ? message.payload : null;
+  return isRecord(payload) && payload.kind === "instances" ? payload : null;
+}
+
+/**
  * Whether this page was built for an older wire than the hub's, settled on
  * the board snapshot before anything in it is applied. The snapshot is the
  * first message on every socket, reconnects included, and the hub sends it
@@ -503,11 +508,11 @@ function hubReached(): void {
  * so those tabs never reloaded.
  */
 function olderThanHub(message: unknown): boolean {
-  const { payload } = message as { payload?: FramePayload };
-  if (payload?.kind !== "instances") {
+  const board = boardOf(message);
+  if (typeof board?.protocol !== "number") {
     return connectionState.older;
   }
-  connectionState.older = payload.protocol > WIRE_PROTOCOL;
+  connectionState.older = board.protocol > WIRE_PROTOCOL;
   if (connectionState.older && newerBuild() === null) {
     detach(checkServedBuild(), "checkServedBuild");
   }
@@ -655,9 +660,9 @@ function takeMessage(message: unknown): void {
   // applied in this same turn, before anything reads the status. Its run is
   // the numbering this socket's streams count in, read before the
   // connection's follows are.
-  const board = (message as { payload?: FramePayload }).payload;
-  if (connectionState.status !== "connected" && board?.kind === "instances") {
-    socketRun = board.hubRun;
+  const board = boardOf(message);
+  if (connectionState.status !== "connected" && board) {
+    socketRun = typeof board.hubRun === "string" ? board.hubRun : null;
     hubReached();
   }
   if (olderThanHub(message)) {

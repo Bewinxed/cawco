@@ -21,26 +21,33 @@ export interface FixturePage {
 /** When a fixture's artifacts were made: one fixed moment, so every frame draws them alike. */
 const FIXTURE_AT = "2026-11-01T09:00:00.000Z";
 
+/** A story's page artifact `name`, titled `title`, as the session's artifacts list it. */
+export const fixtureArtifact = (
+  name: string,
+  title: string
+): ArtifactSummary => ({
+  ask: "",
+  createdAt: FIXTURE_AT,
+  does: "judge",
+  id: `artifact-${name}`,
+  kind: "page",
+  name,
+  pending: null,
+  promoted: null,
+  sent: false,
+  shownAt: null,
+  thumbnail: null,
+  title,
+  updatedAt: FIXTURE_AT,
+  waiting: false,
+});
+
 export const fixtureSources = (
   files: () => Record<string, string>,
   pages: () => readonly FixturePage[]
 ): BlockSources => {
-  const summary = (page: FixturePage): ArtifactSummary => ({
-    ask: "",
-    createdAt: FIXTURE_AT,
-    does: "judge",
-    id: `artifact-${page.name}`,
-    kind: "page",
-    name: page.name,
-    pending: null,
-    promoted: null,
-    sent: false,
-    shownAt: null,
-    thumbnail: null,
-    title: page.title,
-    updatedAt: FIXTURE_AT,
-    waiting: false,
-  });
+  const summary = (page: FixturePage): ArtifactSummary =>
+    fixtureArtifact(page.name, page.title);
   const named = (page: ArtifactSummary) =>
     pages().find((one) => one.name === page.name);
   return {

@@ -40,6 +40,7 @@
   } from "../stores/subscriptions.svelte";
   import { readTranscript } from "../stores/transcript-reads.svelte";
   import type { Message } from "../types";
+  import Self from "./Delegate.svelte";
   import { disclosure } from "./disclosure.svelte";
   import InlineTranscript from "./InlineTranscript.svelte";
   import {
@@ -635,6 +636,9 @@
 
     <Collapsible.Content reveal>
       <InlineTranscript afterCount={report ? 1 : 0} {agentName} {id} {open}>
+        {#snippet delegate(child: Message)}
+          <Self message={child} />
+        {/snippet}
         <!-- The report closes the card: drawn after the last of its rows. -->
         {#snippet after()}
           {#if report}

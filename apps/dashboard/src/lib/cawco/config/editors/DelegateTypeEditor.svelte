@@ -29,6 +29,7 @@
   import Field from "../Field.svelte";
   import { configStore, upsert } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
+  import { type DelegateTypeFields, EDITOR_FIELDS } from "./editor-fields";
 
   /**
    * The delegate-type editor. The description is the whole of how a calling
@@ -49,7 +50,7 @@
 
   const name = $derived(type?.name ?? null);
 
-  const fieldsOf = (from: DelegateType) => ({
+  const fieldsOf = (from: DelegateType): DelegateTypeFields => ({
     draft: from,
     skillsText: (from.skills ?? []).join(", "),
     denyToolsText: (from.denyTools ?? []).join(", "),
@@ -57,7 +58,6 @@
     startSkillsText: (from.startingSet?.skills ?? []).join(", "),
     startServersText: (from.startingSet?.servers ?? []).join(", "),
   });
-  type Fields = ReturnType<typeof fieldsOf>;
 
   /** The type as saved, by its content: a list read again with it unchanged is the same. */
   const savedAs = $derived(JSON.stringify(type));
@@ -82,7 +82,7 @@
   let startServersText = $derived(baseline.startServersText);
 
   /** Puts every field back to `fields`. */
-  const takeFields = (fields: Fields) => {
+  const takeFields = (fields: DelegateTypeFields) => {
     reopened = fields.draft;
     ({
       skillsText,
@@ -95,8 +95,9 @@
 
   const kept = keepDraft(
     page.url.pathname,
+    EDITOR_FIELDS.delegateType,
     () => {
-      const now = {
+      const now: DelegateTypeFields = {
         draft,
         skillsText,
         denyToolsText,

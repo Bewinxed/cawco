@@ -16,7 +16,7 @@
   import { untrack } from "svelte";
   import { placeOpen } from "./list-place";
   import type { Review } from "./model";
-  import type { StateCard } from "./StateNode.svelte";
+  import type { StateCard } from "./state-card";
   import WholeCard from "./WholeCard.svelte";
 
   let {

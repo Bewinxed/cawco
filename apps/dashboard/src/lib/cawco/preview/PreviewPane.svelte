@@ -800,10 +800,7 @@
     <Composer
       action="Comment"
       chain={pinComposer.composing.chain.map((one) =>
-        pinName({
-          anchor: one.anchor,
-          elements: one.elements,
-        } as unknown as Pin)
+        pinName({ anchor: one.anchor, elements: one.elements })
       )}
       chosen={pinComposer.composing.chosen}
       draft={commentKit.nextDraft}
