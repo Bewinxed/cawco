@@ -205,7 +205,7 @@
     },
     "packages/cli": {
       "name": "@cawco/cli",
-      "version": "0.1.12",
+      "version": "0.1.13",
       "bin": {
         "cawco": "./src/cli.ts",
       },
