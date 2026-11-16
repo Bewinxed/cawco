@@ -1447,12 +1447,6 @@ export const createServer = (
     stopProjectBrowsers: () => stopProjectBrowsers,
     tasks: () => tasks,
     pulses: () => pulses,
-    say: () => (payload) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload,
-      } satisfies Envelope<FramePayload>),
     online: () => (machineId) => Boolean(registry.agent(machineId)),
     accountWords: () => accountWords,
     advanceCompaction: () => advanceCompaction,
@@ -2500,11 +2494,6 @@ export const createServer = (
     },
   });
   /**
-   * Its parent knows while a delegate waits on an ask, whatever door the ask
-   * came in by, and hears how it ended (delegate-waits.ts): every door below
-   * tells it, as each ask starts waiting and as it leaves the ledger.
-   */
-  /**
    * The card of the ask parked under `requestId`, as it leaves the hub
    * (ask-presentation.ts `AskCard`): made from the ledger's copy, which
    * `pending.remember` read the envelope into before anything shows it. One
@@ -2519,6 +2508,11 @@ export const createServer = (
     }
     return AskCard.of(parked);
   };
+  /**
+   * Its parent knows while a delegate waits on an ask, whatever door the ask
+   * came in by, and hears how it ended (delegate-waits.ts): every door below
+   * tells it, as each ask starts waiting and as it leaves the ledger.
+   */
   const delegateWaits = createDelegateWaits({
     // A parent read `unknown` (its machine not yet registered since a hub's
     // start, or away within its window) hears too: the send path keeps a

@@ -179,8 +179,8 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       );
     } else if (kind === "permission_request") {
       // A parked ask goes out as its card, its secrets hidden
-      // (`AskCard`); the ledger keeps the call as it was asked. One that is not parked is
-      // a fault in the stages before this one.
+      // (`AskCard`); the ledger keeps the call as it was asked. One that is
+      // not parked is a fault in the stages before this one.
       const ask = message.requestId
         ? ctx.pending.get(message.requestId)
         : undefined;

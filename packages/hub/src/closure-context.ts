@@ -1150,7 +1150,6 @@ export interface ClosureContext {
     plan: ReturnType<DbShape["atLimit"]["compaction"]>,
     to: string
   ) => void;
-  say: (payload: ClientPayload) => void;
   sayCompaction: (
     plan: { instanceId: string; lineId: string; move: MovedLine | null },
     stage: CompactStage
