@@ -10,10 +10,17 @@ export default {
   title: "Accounts/Limit picker clicked",
   component: LimitPickerBench,
   args: { reading: "fresh", check: "still", pending: false, again: 0 },
+  parameters: { viewport: 1440 },
 };
 
 /** The card at rest. */
 export const Rest = {};
+
+/** The context still being read. */
+export const ContextReading = { args: { context: "reading" } };
+
+/** The context's read refused, in the harness's words. */
+export const ContextRefused = { args: { context: "refused" } };
 
 interface Play {
   canvas: {

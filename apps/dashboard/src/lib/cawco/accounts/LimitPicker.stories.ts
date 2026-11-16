@@ -11,6 +11,7 @@ export default {
   title: "Accounts/Limit picker",
   component: LimitPickerBench,
   args: { reading: "fresh", check: "still", pending: false, again: 0 },
+  parameters: { viewport: 1440 },
 };
 
 /** The session card, its account and model pickers ready to use. */

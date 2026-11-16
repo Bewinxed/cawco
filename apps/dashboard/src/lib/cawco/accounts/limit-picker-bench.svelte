@@ -70,6 +70,7 @@
     reading,
     check,
     pending,
+    context = "read",
     room = "lists",
     again = 0,
   }: {
@@ -79,6 +80,8 @@
     check: "cleared" | "still" | "unread";
     /** A move to Research ops already waits for the turn to end. */
     pending: boolean;
+    /** The conversation's context: read, being read, or its read refused. */
+    context?: "read" | "reading" | "refused";
     /** The frame's height: room for the open lists, or the card alone. */
     room?: "lists" | "card";
     /** Start over: each press seeds the stores again. */
@@ -275,13 +278,21 @@
     live.model = "claude-opus-5-5";
     live.effort = "high";
     live.permissionMode = "acceptEdits";
-    live.context = {
-      categories: [],
-      maxTokens: 200_000,
-      percentage: 38,
-      readAt: NOW - MINUTE_MS,
-      totalTokens: 76_000,
-    };
+    live.context =
+      context === "read"
+        ? {
+            categories: [],
+            maxTokens: 200_000,
+            percentage: 38,
+            readAt: NOW - MINUTE_MS,
+            totalTokens: 76_000,
+          }
+        : null;
+    live.contextPending = context === "reading";
+    live.contextError =
+      context === "refused"
+        ? "the Claude Agent SDK didn't answer within 30 s"
+        : null;
     accountsState.accounts = {
       accounts: ACCOUNTS,
       bench: [],
@@ -426,8 +437,8 @@
   // its row owes the move, and the row says it.
   onDestroy(startSwitch());
   const seedOn = (..._dials: unknown[]): void => untrack(seed);
-  // Start over, a move waiting, or the readings' age: seeded again.
-  $effect(() => seedOn(again, pending, reading));
+  // Start over, a move waiting, the readings' age or the context's: seeded again.
+  $effect(() => seedOn(again, pending, reading, context));
 
   /** The portal's target: the popovers and tooltips draw inside the frame. */
   let layer = $state<HTMLElement>();
@@ -438,7 +449,7 @@
 </script>
 
 <div
-  class="relative bg-surface-recess"
+  class="relative w-full bg-surface-recess"
   {@attach frameSize(
     (node) => node.clientWidth,
     (next) => {
