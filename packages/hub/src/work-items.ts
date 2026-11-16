@@ -2009,6 +2009,7 @@ export const createWorkItems = ({
    */
   const standIn = (item: WorkItemRow): InstanceRow => {
     const [workspace] = db.workspacesNamed(item.workspaceId);
+    // Cast stays: the report path (ask-routing.ts reportToParent, server.ts) takes a whole InstanceRow; typing it by the fields it reads is outside G5.
     return {
       id: item.instanceId,
       machineId: workspace?.machineId ?? "",
