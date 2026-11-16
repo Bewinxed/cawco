@@ -9,6 +9,7 @@
  * community, and the thread's further parts. A plan or notes beside it is
  * markdown; both are listed in the task's `outputs`.
  */
+import { isRecord } from "./is-record";
 import { madeWords } from "./words/made";
 
 /** A social post as its writer leaves it: `<task>.post.json`. */
@@ -66,17 +67,17 @@ export function parsePost(
       ),
     };
   }
-  if (!value || typeof value !== "object") {
+  if (!isRecord(value)) {
     return { ok: false, problem: madeWords.noObject };
   }
-  const post = value as Record<string, unknown>;
+  const post = value;
   if (post.kind !== "x-post") {
     return { ok: false, problem: madeWords.notXPost };
   }
   if (typeof post.text !== "string" || typeof post.account !== "string") {
     return { ok: false, problem: madeWords.noText };
   }
-  const media = post.media as Record<string, unknown> | undefined;
+  const { media } = post;
   return {
     ok: true,
     post: {
@@ -87,7 +88,7 @@ export function parsePost(
       community:
         typeof post.community === "string" ? post.community : undefined,
       media:
-        media && typeof media.plan === "string"
+        isRecord(media) && typeof media.plan === "string"
           ? { plan: media.plan, files: strings(media.files) }
           : undefined,
       thread: strings(post.thread),

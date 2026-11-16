@@ -85,23 +85,20 @@ const capOf = (own: OwnSettings): CapAmount | null =>
     ? { usd: own.capUsd, period: own.capPeriod }
     : null;
 
-/** The first of project, area and fleet that sets a value (`set` says whether one does). */
-const first = <T>(
-  project: T,
-  area: T | undefined,
-  fleet: T,
-  set: (value: T) => boolean
-): Sourced<T> => {
-  if (set(project)) {
+/** The first of project, area and fleet that sets a value: one that is not null. */
+const first = <T, F>(
+  project: T | null,
+  area: T | null | undefined,
+  fleet: F
+): Sourced<T | F> => {
+  if (project !== null) {
     return { value: project, from: "project" };
   }
-  if (area !== undefined && set(area)) {
+  if (area !== undefined && area !== null) {
     return { value: area, from: "area" };
   }
   return { value: fleet, from: "fleet" };
 };
-
-const isSet = <T>(value: T | null): boolean => value !== null;
 
 /**
  * A project's settings in effect: its own where it sets one, else its
@@ -112,12 +109,7 @@ export const settingsInEffect = (
   area: OwnSettings | null,
   fleet: FleetSettings
 ): SettingsInEffect => {
-  const account = first<string | null>(
-    project.account,
-    area?.account,
-    null,
-    isSet
-  );
+  const account = first(project.account, area?.account, null);
   let atLimit: ProjectAtLimit = "wait";
   if (account.from === "project") {
     atLimit = project.accountAtLimit;
@@ -127,14 +119,9 @@ export const settingsInEffect = (
   return {
     account,
     accountAtLimit: { value: atLimit, from: account.from },
-    cawMode: first(project.cawMode, area?.cawMode, fleet.cawMode, isSet),
-    cap: first(capOf(project), area ? capOf(area) : undefined, null, isSet),
-    onCap: first<OnCap | null>(
-      project.onCap,
-      area?.onCap,
-      fleet.onCap,
-      isSet
-    ) as Sourced<OnCap>,
+    cawMode: first(project.cawMode, area?.cawMode, fleet.cawMode),
+    cap: first(capOf(project), area ? capOf(area) : undefined, null),
+    onCap: first(project.onCap, area?.onCap, fleet.onCap),
   };
 };
 

@@ -73,11 +73,7 @@ import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { todoProgress } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { markdownLink, taskLink } from "@cawco/core/references";
-import {
-  type ProjectStarter,
-  STARTER_PLACES,
-  type StarterPlace,
-} from "@cawco/core/starters";
+import type { ProjectStarter, StarterPlace } from "@cawco/core/starters";
 import type { TaskEdge } from "@cawco/core/task-edges";
 import type {
   BuiltOn,
@@ -1784,10 +1780,13 @@ export const createTasks = (store: TaskStore) => {
   /** One change to a project's tasks at a time, around the folder's own commits. */
   const inTurn = turnTaker();
   /** The project's starters, each place's, as the stages view carries them. */
-  const startersOf = (projectId: string) =>
-    Object.fromEntries(
-      STARTER_PLACES.map((place) => [place, store.starters(projectId, place)])
-    ) as Record<StarterPlace, ProjectStarter[]>;
+  const startersOf = (
+    projectId: string
+  ): Record<StarterPlace, ProjectStarter[]> => ({
+    board: store.starters(projectId, "board"),
+    routines: store.starters(projectId, "routines"),
+    decisions: store.starters(projectId, "decisions"),
+  });
   /** Who hears about changes (dispatch.ts); told after the change has landed. */
   const listeners = new Set<(event: TaskEvent) => void>();
   const emit = (event: TaskEvent): void => {
@@ -2121,7 +2120,7 @@ export const createTasks = (store: TaskStore) => {
    * its last commit. Only a row the index saw change after that commit can
    * hold one, so git is asked about the working copy only then, once per
    * commit and change. Also answers the tasks the history shows taken out of
-   * tasks/.
+   * tasks/. `times` holds each row's in the order of `rows`.
    */
   const timesOf = async (
     projectId: string,
@@ -2180,9 +2179,9 @@ export const createTasks = (store: TaskStore) => {
         ...lifeOf(events, stages, kindIn(stages, row.stage)),
       };
     };
-    const read: { gone: ReadonlySet<string>; times: Map<string, TaskTimes> } = {
+    const read: { gone: ReadonlySet<string>; times: TaskTimes[] } = {
       gone: goneTasks(folder),
-      times: new Map(rows.map((row) => [row.path, recordOf(row)])),
+      times: rows.map(recordOf),
     };
     return read;
   };
@@ -3492,7 +3491,7 @@ export const createTasks = (store: TaskStore) => {
             })) ??
           null,
       },
-      times.get(path) as TaskTimes,
+      times[0],
       resultOf(
         store
           .attempts(projectId)
@@ -3586,7 +3585,7 @@ export const createTasks = (store: TaskStore) => {
       return now ? [now] : [];
     };
     const written = numbered.map(({ file, was }, index) => {
-      const number = numbers[index] as number;
+      const number = numbers[index];
       const old = taskId(was);
       const doc = new TaskDoc(file.path, file.content);
       const { fields } = doc.read();
@@ -4288,13 +4287,8 @@ export const createTasks = (store: TaskStore) => {
     const { gone, times } = timed;
     const context = contextOf(projectId, board, stages, gone);
     const kept = rows
-      .map((row) =>
-        summaryOf(
-          row,
-          stages,
-          flagsOf(projectId, row, context),
-          times.get(row.path) as TaskTimes
-        )
+      .map((row, index) =>
+        summaryOf(row, stages, flagsOf(projectId, row, context), times[index])
       )
       .filter(
         (task) =>

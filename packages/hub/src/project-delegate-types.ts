@@ -47,11 +47,12 @@ import {
   delegateTypeProblem,
   mayStartProblem,
   SESSION_ROLES,
-  type SessionRole,
   type StartingSet,
 } from "@cawco/core/delegate-types";
 import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
+import { harnessNamed, isEffortLevel } from "@cawco/core/harness/kinds";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
+import { isOneOf } from "@cawco/core/one-of";
 import { delegateTypesWords } from "@cawco/core/words/delegate-types";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import type { DelegateTypesShape } from "./db/delegate-types";
@@ -139,10 +140,10 @@ const budgetOf = (line: FrontMatterLine): DelegateBudget | string => {
     }
     const [, key, value] = pair;
     if (key === "per") {
-      if (!(BUDGET_PERIODS as readonly string[]).includes(value)) {
+      if (!isOneOf(BUDGET_PERIODS, value)) {
         return `budget: per is one of ${BUDGET_PERIODS.join(", ")}, not “${value}”`;
       }
-      budget.per = value as DelegateBudget["per"];
+      budget.per = value;
     } else if (key === "usd" || key === "turns" || key === "minutes") {
       if (!(NUMBER.test(value) && Number(value) > 0)) {
         return `budget: ${key} is a positive number, not “${value}”`;
@@ -203,10 +204,6 @@ const fieldsOf = (lines: FrontMatterLine[]) => {
   };
 };
 
-/** Whether `value` is absent or one of `allowed`. */
-const oneOf = (value: string | undefined, allowed: readonly string[]) =>
-  value === undefined || allowed.includes(value);
-
 /** The fields only a project type has, or why one of them is wrong. */
 const projectFieldsOf = (
   fields: ReturnType<typeof fieldsOf>
@@ -223,11 +220,11 @@ const projectFieldsOf = (
   if (role === "trimmer") {
     return delegateTypesWords.problemTrimmerRole;
   }
-  if (!oneOf(role, TYPE_ROLES)) {
+  if (!(role === undefined || isOneOf(TYPE_ROLES, role))) {
     return `role is one of ${TYPE_ROLES.join(", ")}, not “${role}”`;
   }
   const lands = fields.scalar("lands");
-  if (!oneOf(lands, LANDS_MODES)) {
+  if (!(lands === undefined || isOneOf(LANDS_MODES, lands))) {
     return `lands is one of ${LANDS_MODES.join(", ")}, not “${lands}”`;
   }
   // `may_start: any` reads as the list `[any]`.
@@ -251,9 +248,9 @@ const projectFieldsOf = (
   const connections = fields.list("mcp");
   return {
     ...(connections?.length ? { connections } : {}),
-    ...(role ? { role: role as SessionRole } : {}),
+    ...(role ? { role } : {}),
     ...(budget && Object.keys(budget).length > 0 ? { budget } : {}),
-    ...(lands ? { lands: lands as LandsMode } : {}),
+    ...(lands ? { lands } : {}),
     ...(mayStart?.length ? { mayStart } : {}),
     ...(startingSet ? { startingSet } : {}),
   };
@@ -280,12 +277,16 @@ const parseTypeFile = (
   }
   const fields = fieldsOf(block.lines);
   const { ignored } = fields;
-  const harness = fields.scalar("harness");
-  if (!harness) {
+  const named = fields.scalar("harness");
+  if (!named) {
     return {
       problem: "the front matter names no harness: claude, opencode or pi",
       ignored,
     };
+  }
+  const harness = harnessNamed(named);
+  if (!harness) {
+    return { problem: delegateTypesWords.problemHarness(named), ignored };
   }
   const extra = projectFieldsOf(fields);
   if (typeof extra === "string") {
@@ -293,15 +294,18 @@ const parseTypeFile = (
   }
   const body = block.body.trim();
   const effort = fields.scalar("effort");
+  if (!(effort === undefined || isEffortLevel(effort))) {
+    return { problem: `“${effort}” is not an effort level`, ignored };
+  }
   const skills = fields.list("skills");
   const deny = fields.list("deny");
   const account = fields.scalar("account");
-  const draft: Partial<DelegateType> = {
+  const draft: DelegateType = {
     name,
     description: fields.scalar("description") ?? body,
-    harness: harness as DelegateType["harness"],
+    harness,
     model: fields.scalar("model") ?? "",
-    ...(effort ? { effort: effort as DelegateType["effort"] } : {}),
+    ...(effort ? { effort } : {}),
     ...(skills?.length ? { skills } : {}),
     ...(deny?.length ? { denyTools: deny } : {}),
     ...(account ? { account } : {}),
@@ -315,7 +319,7 @@ const parseTypeFile = (
   }
   return {
     type: {
-      ...(draft as DelegateType),
+      ...draft,
       ...extra,
       source: "project",
       path,

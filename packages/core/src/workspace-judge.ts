@@ -29,7 +29,9 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { errnoCode } from "./absent";
 import type { HarnessKind } from "./harness/kinds";
+import { isRecord } from "./is-record";
 
 type Access = "read" | "write";
 
@@ -204,7 +206,7 @@ const resolve = (path: string, asWritten: ReadonlySet<string>): string => {
     try {
       current = realpathSync(next);
     } catch (error) {
-      const { code } = error as NodeJS.ErrnoException;
+      const code = errnoCode(error);
       if (!(code && asWritten.has(code))) {
         throw error;
       }
@@ -487,7 +489,7 @@ export const workspaceArea = (
   }
   return match[1]
     ? { kind: "scratch", id8: match[1] }
-    : { kind: "clone", id8: match[2] as string };
+    : { kind: "clone", id8: match[2] };
 };
 
 /**
@@ -663,14 +665,10 @@ interface Target {
 
 /** Every path a call names, with the access it asks. */
 const targets = (policy: Policy, call: Call): Target[] => {
-  if (
-    !call.input ||
-    typeof call.input !== "object" ||
-    Array.isArray(call.input)
-  ) {
+  const { input } = call;
+  if (!isRecord(input)) {
     throw new Error("its input is not an object");
   }
-  const input = call.input as Record<string, unknown>;
   const fields = BUILT_INS[call.harness][call.tool];
   if (!fields) {
     // An MCP tool: every path it names is judged against the call's
@@ -697,7 +695,7 @@ const targets = (policy: Policy, call: Call): Target[] => {
   }
   const base =
     typeof input.path === "string" && input.path !== ""
-      ? (against(input.path, [call.cwd], policy.home)[0] as string)
+      ? against(input.path, [call.cwd], policy.home)[0]
       : call.cwd;
   return fields.flatMap((field) => {
     const value = input[field.key];

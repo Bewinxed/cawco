@@ -51,7 +51,7 @@ import { rmSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { ARTIFACT_NAME } from "@cawco/core/artifact-kinds";
-import type { BrowserKey } from "@cawco/core/browser";
+import { isBrowserKey } from "@cawco/core/browser";
 import { makeFolderSync } from "@cawco/core/folders";
 import type {
   ForgottenBrings,
@@ -984,8 +984,8 @@ export const projectTrash = (
   };
   /** The record's browsers its machines still keep: one the person removed since is gone with its profile. */
   const stillKept = (browsers: readonly KeptBrowser[]): number =>
-    browsers.filter((one) =>
-      db.browsers.get(one.machineId, one.key as BrowserKey)
+    browsers.filter(
+      (one) => isBrowserKey(one.key) && db.browsers.get(one.machineId, one.key)
     ).length;
   /** The folds the live projects hold, read once per call and only when asked. */
   const mergesOnce = () => {

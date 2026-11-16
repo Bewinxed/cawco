@@ -59,6 +59,7 @@ import type {
   StageMove,
   StageView,
 } from "@cawco/core/task-views";
+import { isOneOf } from "@cawco/core/one-of";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import {
   STAGE_KINDS as KINDS,
@@ -111,14 +112,11 @@ const MS: Record<string, number> = {
   w: 7 * DAY_MS,
 };
 
-const isKind = (word: string): word is StageKind =>
-  (KINDS as readonly string[]).includes(word);
-const isMover = (word: string): word is Mover =>
-  (MOVERS as readonly string[]).includes(word);
+const isKind = (word: string): word is StageKind => isOneOf(KINDS, word);
+const isMover = (word: string): word is Mover => isOneOf(MOVERS, word);
 const isColor = (word: string): word is StageColor =>
-  (STAGE_COLORS as readonly string[]).includes(word);
-const isIcon = (word: string): word is StageIcon =>
-  (STAGE_ICONS as readonly string[]).includes(word);
+  isOneOf(STAGE_COLORS, word);
+const isIcon = (word: string): word is StageIcon => isOneOf(STAGE_ICONS, word);
 
 /** What a stage line takes beside its name and kind. */
 const STAGE_KEYS = "runs:, until:, after:, by:, color: and icon:";
@@ -297,7 +295,7 @@ const readMove = (reader: Reader, at: string, text: string): void => {
     );
     return;
   }
-  reader.moves.push({ from, to, who: who as Mover[] });
+  reader.moves.push({ from, to, who: who.filter(isMover) });
 };
 
 const readView = (reader: Reader, at: string, text: string): void => {
@@ -400,7 +398,7 @@ export const readStages = (content: string): StagesReading => {
     }
     const header = INDENTED.test(raw) ? undefined : SECTION.exec(text);
     if (header) {
-      section = header[1] as "moves" | "views";
+      section = header[1] === "moves" ? "moves" : "views";
       reader.hasMoves ||= section === "moves";
       continue;
     }
@@ -415,8 +413,9 @@ export const readStages = (content: string): StagesReading => {
     } else if (section === "moves") {
       const before = reader.moves.length;
       readMove(reader, at, text);
-      if (reader.moves.length > before) {
-        moveLines.set(reader.moves.at(-1) as StageMove, at);
+      const read = reader.moves.at(-1);
+      if (read && reader.moves.length > before) {
+        moveLines.set(read, at);
       }
     } else {
       readView(reader, at, text);
@@ -457,8 +456,7 @@ export const readStages = (content: string): StagesReading => {
 
 /** Where a new task starts: the first stage of kind todo, else the first stage. */
 export const firstStage = (stages: Stages): Stage =>
-  stages.stages.find((stage) => stage.kind === "todo") ??
-  (stages.stages[0] as Stage);
+  stages.stages.find((stage) => stage.kind === "todo") ?? stages.stages[0];
 
 export const stageNamed = (stages: Stages, name: string): Stage | undefined =>
   stages.stages.find((stage) => stage.name === name);
@@ -623,8 +621,9 @@ export const startProblem = (
   if (!to) {
     return unknownStage(stages, stage);
   }
-  if (!mayEnter(to, who)) {
-    return `Only ${moverPhrase(to.hooks.by as Mover)} moves a task to ${stage}.`;
+  const { by } = to.hooks;
+  if (by && by !== who) {
+    return `Only ${moverPhrase(by)} moves a task to ${stage}.`;
   }
 };
 
@@ -646,9 +645,11 @@ export const moveProblem = (
   if (mayEnter(target, who) && covers(stages, from, to, who)) {
     return;
   }
-  const why = mayEnter(target, who)
-    ? `${moverPhrase(who)} may not make that move`
-    : `only ${moverPhrase(target.hooks.by as Mover)} moves a task to ${to}`;
+  const { by } = target.hooks;
+  const why =
+    !by || by === who
+      ? `${moverPhrase(who)} may not make that move`
+      : `only ${moverPhrase(by)} moves a task to ${to}`;
   const open = movesFrom(stages, from, who);
   const instead =
     open.length > 0
@@ -897,7 +898,7 @@ export const templateOf = (
   const best = Math.max(...named);
   const winners = candidates.filter((_, index) => named[index] === best);
   return best > 0 && winners.length === 1
-    ? { template: winners[0] as StagesTemplate }
+    ? { template: winners[0] }
     : { candidates };
 };
 
@@ -1031,7 +1032,7 @@ export const withRetiredMoverAsSession = (content: string): string | null => {
     const text = raw.replace(COMMENT, "").trim();
     const header = INDENTED.test(raw) ? undefined : SECTION.exec(text);
     if (header) {
-      section = header[1] as "moves" | "views";
+      section = header[1] === "moves" ? "moves" : "views";
       continue;
     }
     const next =

@@ -55,6 +55,7 @@ import {
   type StarterPlace,
   type StartersChangedFrame,
 } from "@cawco/core/starters";
+import { isOneOf } from "@cawco/core/one-of";
 import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import { CLOSED_STAGE_KINDS, type StageKind } from "@cawco/core/views";
@@ -125,8 +126,7 @@ export interface ProjectStartersDeps {
 }
 
 /** A task still to do, under way or waiting: its stage's kind is none of the closed ones. */
-const isOpen = (kind: StageKind): boolean =>
-  !(CLOSED_STAGE_KINDS as readonly StageKind[]).includes(kind);
+const isOpen = (kind: StageKind): boolean => !isOneOf(CLOSED_STAGE_KINDS, kind);
 /** The tasks Jev reads first: waiting on you, then failed, then under way, then the newest changed. */
 const weight = (task: TaskSummary): number =>
   (task.needsYou ? 4 : 0) +

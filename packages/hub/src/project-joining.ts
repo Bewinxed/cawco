@@ -102,7 +102,7 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
   const madeFrom = (project: ProjectRow): PlaceRow =>
     checkoutOf(project) ??
     project.places.find((each) => each.kind === "hub") ??
-    (project.places[0] as PlaceRow);
+    project.places[0];
 
   /**
    * A project made, or a folder joined to the one it belongs to. The same

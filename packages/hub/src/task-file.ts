@@ -78,6 +78,7 @@ import {
 } from "@cawco/core/external-items";
 import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
+import { isOneOf } from "@cawco/core/one-of";
 import type { TaskTodo } from "@cawco/core/plan";
 import { TASK_EDGES } from "@cawco/core/task-edges";
 import { TASK_MOVERS, type TaskMover } from "@cawco/core/views";
@@ -237,6 +238,12 @@ const PROMOTED = /(?:^|\s)(?:→|->)\s*#(\d{1,9})\s*$/u;
 const PROPOSED = /^\(proposed\)\s*/iu;
 /** An acceptance criterion's line: a list item, its box ticked, open or absent; its indent, bullet and words. */
 const CRITERION_LINE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.+)$/u;
+/** The keys of a {@link WorkBudget}, as `budget:` names them. */
+const BUDGET_KEYS = [
+  "usd",
+  "turns",
+  "minutes",
+] as const satisfies readonly (keyof WorkBudget)[];
 const BUDGET_ENTRY =
   /^\s*(usd|turns|minutes)\s*:\s*\$?([0-9]+(?:\.[0-9]+)?)\s*$/u;
 const SECTION = /^##\s+(.*?)(?:\s+#+)?\s*$/u;
@@ -624,8 +631,6 @@ const readList = (
   return listOf(line) ?? [];
 };
 
-const LANDS: ReadonlySet<string> = new Set(LANDS_MODES);
-
 /** `lands:` — one of the modes; anything else goes to `problems`. */
 const readLands = (
   line: FrontMatterLine,
@@ -635,8 +640,8 @@ const readLands = (
   if (value === null) {
     return null;
   }
-  if (LANDS.has(value)) {
-    return value as LandsMode;
+  if (isOneOf(LANDS_MODES, value)) {
+    return value;
   }
   problems.push(`lands: “${value}” is not one of ${LANDS_MODES.join(", ")}.`);
   return null;
@@ -670,8 +675,12 @@ const readBudget = (
   for (const entry of entries) {
     const found = BUDGET_ENTRY.exec(entry);
     const amount = Number(found?.[2]);
-    const key = found?.[1] as keyof WorkBudget | undefined;
-    if (!key || amount <= 0 || (key !== "usd" && !Number.isInteger(amount))) {
+    const key = found?.[1];
+    if (
+      !(key && isOneOf(BUDGET_KEYS, key)) ||
+      amount <= 0 ||
+      (key !== "usd" && !Number.isInteger(amount))
+    ) {
       problems.push(
         `budget: “${entry.trim()}” is not one of usd (dollars), turns or minutes (whole numbers) with a value above 0.`
       );
@@ -703,21 +712,21 @@ const GOVERNING_LISTS: ReadonlySet<string> = new Set([
   "waits_on",
 ] satisfies readonly TaskField[]);
 
-const LIST_FIELDS: ReadonlySet<string> = new Set([
+const LIST_FIELDS = [
   "checks",
   "outputs",
   "context",
   "owns",
   "labels",
   "accounts",
-] satisfies readonly TaskField[]);
-const SCALAR_FIELDS: ReadonlySet<string> = new Set([
+] as const satisfies readonly TaskField[];
+const SCALAR_FIELDS = [
   "stage",
   "issue",
   "type",
   "group",
   "rank",
-] satisfies readonly TaskField[]);
+] as const satisfies readonly TaskField[];
 
 /** Reads one known field into `fields`; false for a key a task file does not know. */
 const readField = (
@@ -736,20 +745,10 @@ const readField = (
     fields.foundIn = readFoundIn(line, problems);
   } else if (field === "duplicate_of") {
     fields.duplicateOf = readEdge(field, line, problems);
-  } else if (LIST_FIELDS.has(field)) {
-    fields[
-      field as keyof Pick<
-        TaskFields,
-        "checks" | "outputs" | "context" | "owns" | "labels" | "accounts"
-      >
-    ] = readList(field, line, problems);
-  } else if (SCALAR_FIELDS.has(field)) {
-    fields[
-      field as keyof Pick<
-        TaskFields,
-        "stage" | "issue" | "type" | "group" | "rank"
-      >
-    ] = scalarOf(line);
+  } else if (isOneOf(LIST_FIELDS, field)) {
+    fields[field] = readList(field, line, problems);
+  } else if (isOneOf(SCALAR_FIELDS, field)) {
+    fields[field] = scalarOf(line);
   } else if (field === "budget") {
     fields.budget = readBudget(line, problems);
   } else if (field === "lands") {
@@ -1241,7 +1240,9 @@ export class TaskDoc {
     const order = TASK_FIELDS.indexOf(field);
     let after = -1;
     for (const [index, other] of lines.entries()) {
-      const rank = TASK_FIELDS.indexOf(other.key as TaskField);
+      const rank = isOneOf(TASK_FIELDS, other.key)
+        ? TASK_FIELDS.indexOf(other.key)
+        : -1;
       if (rank !== -1 && rank < order) {
         after = index;
       }

@@ -64,6 +64,7 @@
  * land, and finish_item names every problem.
  */
 import { machineCalled } from "@cawco/core/machine-names";
+import { isOneOf } from "@cawco/core/one-of";
 import type {
   DeclaredStep,
   ProjectGate,
@@ -88,7 +89,12 @@ export type GateReading =
 const INDENTED = /^\s/u;
 const OPTION = /^([a-z-]+):\s*(.*)$/u;
 const DURATION = /^(\d{1,5})(s|m|h)$/u;
-const SECONDS = { s: 1, m: 60, h: 3600 } as const;
+/** Each duration unit `DURATION` reads, in seconds. */
+const SECONDS = new Map([
+  ["s", 1],
+  ["m", 60],
+  ["h", 3600],
+]);
 /** A day: no landing gate step waits longer. */
 const MOST_SEC = 86_400;
 const GLOB = /[*?[\]{}]/u;
@@ -165,15 +171,15 @@ const applyOption = (
       return;
     }
     case "needs":
-      if (!(RUNS_ON_CAPABILITIES as string[]).includes(value)) {
+      if (!isOneOf(RUNS_ON_CAPABILITIES, value)) {
         return `needs: “${value}” under “${step.command}” is not a capability; it is ${RUNS_ON_CAPABILITIES.join(" or ")}.`;
       }
-      step.needs = value as RunsOnCapability;
+      step.needs = value;
       return;
     case "timeout": {
       const match = DURATION.exec(value);
       const seconds = match
-        ? Number(match[1]) * SECONDS[match[2] as keyof typeof SECONDS]
+        ? Number(match[1]) * (SECONDS.get(match[2]) ?? 0)
         : 0;
       if (!(seconds > 0 && seconds <= MOST_SEC)) {
         return `timeout: “${value}” under “${step.command}” is not a duration from 1s to 24h, like 90s, 10m or 1h.`;
@@ -204,8 +210,8 @@ const optionLine = (
     return `“${text}” is indented before any step: an option goes under the step it belongs to.`;
   }
   const option = OPTION.exec(text);
-  const key = option?.[1] as Key | undefined;
-  if (!(option && key && (KEYS as readonly string[]).includes(key))) {
+  const key = option?.[1];
+  if (!(option && key && isOneOf(KEYS, key))) {
     return `“${text}” under “${step.command}” is not an option; options are ${KEYS.map((each) => `${each}:`).join(", ")}.`;
   }
   if (seen.has(key)) {

@@ -26,6 +26,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import { type HubRepoKey, hubRepoSegment } from "@cawco/core/hub-repo";
 import type { ProjectSettingChange } from "@cawco/core/permission-presentation";
+import { isRecord } from "@cawco/core/is-record";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
@@ -56,6 +57,22 @@ export interface RepoPublishDeps {
   readonly db: Pick<DbShape, "projectLinkPublishedFrom">;
   readonly places: Pick<PlaceRepos, "ensure">;
 }
+
+/**
+ * GitHub's refusal of a create in words: its status and GitHub's own
+ * message. Octokit throws it as a RequestError (@octokit/request-error): its
+ * `status`, and the answer's `message` under `response.data`.
+ */
+const refusalOf = (error: unknown): string => {
+  const failed = isRecord(error) ? error : {};
+  const { response } = failed;
+  const answer = isRecord(response) ? response.data : undefined;
+  const said = isRecord(answer) ? answer.message : undefined;
+  const status =
+    typeof failed.status === "number" ? failed.status : "no answer";
+  const message = typeof failed.message === "string" ? failed.message : "";
+  return `${status} ${typeof said === "string" ? said : message}`.trim();
+};
 
 /** A publish done: the repository made, `owner/name`, and the hub repository it is the copy of. */
 export interface Published {
@@ -315,16 +332,7 @@ export const createRepoPublish = ({
         });
         return { made: data };
       } catch (error) {
-        const failed = error as {
-          message?: string;
-          response?: { data?: { message?: unknown } };
-          status?: number;
-        };
-        const said = failed.response?.data?.message;
-        return {
-          refused:
-            `${failed.status ?? "no answer"} ${typeof said === "string" ? said : (failed.message ?? "")}`.trim(),
-        };
+        return { refused: refusalOf(error) };
       }
     });
     switch (asked.kind) {
@@ -341,9 +349,18 @@ export const createRepoPublish = ({
     if (!made) {
       throw new Error(`GitHub did not create ${change.name}: ${refused}`);
     }
-    // The token the connection's Octokit signs in with (@octokit/auth-token:
-    // `auth()` answers `{ token }`).
-    const { token } = (await octokit.auth()) as { token: string };
+    // The token the connection's Octokit signs in with (@octokit/auth-token
+    // and @octokit/auth-app: `auth()` answers `{ token }`).
+    const signedIn = await octokit.auth();
+    const token =
+      isRecord(signedIn) && typeof signedIn.token === "string"
+        ? signedIn.token
+        : undefined;
+    if (!token) {
+      throw new Error(
+        `GitHub created ${made.full_name}, but the connection ${change.connection} holds no token to push to it with.`
+      );
+    }
     await pushFromHub(hub, pushed.branch, made.clone_url, token);
     console.log(
       `[repo-publish] ${project.name}: ${place.path}'s ${pushed.branch} at ${pushed.commit.slice(0, 9)} published to ${made.full_name}`

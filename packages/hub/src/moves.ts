@@ -22,6 +22,7 @@ import { posix } from "node:path";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { ControlName, ControlReply } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
+import { isRecord } from "@cawco/core/is-record";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { ArrivingAsk, ParkedAsk } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
@@ -57,6 +58,7 @@ import {
   type NamedMoveRequest,
 } from "@cawco/core/move";
 import type { SpawnPayload } from "@cawco/core/protocol";
+import { isOneOf } from "@cawco/core/one-of";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";
@@ -157,8 +159,9 @@ const PUBLISH_EVERY_MS = 250;
 const MOVE_IT = spawnWords.moveIt;
 const DONT_MOVE = spawnWords.dontMove;
 
-/** The stages a job does work in. */
-const WORKING = new Set<MoveStage>(MOVE_JOB_STEPS);
+/** Whether a job stands at a stage it does work in. */
+const isWorking = (stage: MoveStage): stage is MoveStep =>
+  isOneOf(MOVE_JOB_STEPS, stage);
 
 const sizeWords = moveSize;
 
@@ -200,11 +203,12 @@ const choiceOf = (result: PermissionResult, question: string): string => {
   if (result.behavior !== "allow") {
     return "";
   }
-  const input = (result.updatedInput ?? {}) as {
-    answers?: Record<string, string | string[]>;
-  };
-  const answer = input.answers?.[question];
-  return Array.isArray(answer) ? (answer[0] ?? "") : (answer ?? "");
+  const answers = isRecord(result.updatedInput)
+    ? result.updatedInput.answers
+    : undefined;
+  const answer = isRecord(answers) ? answers[question] : undefined;
+  const first: unknown = Array.isArray(answer) ? answer[0] : answer;
+  return typeof first === "string" ? first : "";
 };
 
 /** A step's failure, split as the machine said it: its words, then the tool's last line. */
@@ -373,7 +377,7 @@ export const createMoves = (deps: MovesDeps) => {
         "error",
         row.state.error?.message ?? "The move failed."
       );
-    } else if (WORKING.has(row.stage)) {
+    } else if (isWorking(row.stage)) {
       changed = db.settleMovingInstance(id, "moving");
     }
     if (changed) {
@@ -1142,10 +1146,10 @@ export const createMoves = (deps: MovesDeps) => {
 
   /** What a job's current step does, and what it learned. */
   const runStep = async (
-    row: MoveRow
+    row: MoveRow,
+    stage: MoveStep
   ): Promise<Partial<MoveState> | SpawnProblem> => {
     const { state } = row;
-    const stage = row.stage as MoveStep;
     const target = deps.machineName(state.targetMachineId);
     const hub = { projectId: row.projectId };
     switch (stage) {
@@ -1353,7 +1357,7 @@ export const createMoves = (deps: MovesDeps) => {
   const runSteps = async (id: string): Promise<SpawnProblem | undefined> => {
     for (;;) {
       const row = db.moveRow(id);
-      if (!(row && WORKING.has(row.stage))) {
+      if (!(row && isWorking(row.stage))) {
         return;
       }
       if (row.stage === "approval" && !row.state.approved) {
@@ -1363,8 +1367,8 @@ export const createMoves = (deps: MovesDeps) => {
       if (!allHere(row)) {
         return;
       }
-      const stage = row.stage as MoveStep;
-      const learned = await runStep(row);
+      const { stage } = row;
+      const learned = await runStep(row, stage);
       if (learned instanceof ElysiaStatus) {
         return learned;
       }
@@ -1388,14 +1392,14 @@ export const createMoves = (deps: MovesDeps) => {
    */
   const stepFailed = (id: string, error: unknown): boolean => {
     const row = db.moveRow(id);
-    if (!(row && WORKING.has(row.stage))) {
+    if (!(row && isWorking(row.stage))) {
       return false;
     }
     if (error instanceof MachineAway || !allHere(row)) {
       console.log(`[moves] ${id}: ${row.stage} waits for its machine`);
       return true;
     }
-    const failure = errorOf(row.stage as MoveStep, error);
+    const failure = errorOf(row.stage, error);
     console.warn(
       `[moves] ${id}: ${row.stage} failed: ${failure.message}${failure.detail ? ` (${failure.detail})` : ""}`
     );
@@ -1494,9 +1498,7 @@ export const createMoves = (deps: MovesDeps) => {
     const machine = machineFor(row);
     const { askId } = row.state;
     const stoppedAt =
-      row.stage === "failed"
-        ? (row.state.error?.stage ?? "start")
-        : (row.stage as MoveStep);
+      row.stage === "failed" ? (row.state.error?.stage ?? "start") : row.stage;
     const moved = update(id, "cancelled", (state) => ({
       ...state,
       kept: words,
@@ -1612,10 +1614,7 @@ export const createMoves = (deps: MovesDeps) => {
         db.updateMove(row.id, {
           state: { ...row.state, stopOn: undefined },
         });
-      } else if (
-        WORKING.has(row.stage) &&
-        machinesFor(row).includes(machineId)
-      ) {
+      } else if (isWorking(row.stage) && machinesFor(row).includes(machineId)) {
         goOn(row.id);
       }
     }
@@ -1671,7 +1670,7 @@ export const createMoves = (deps: MovesDeps) => {
       }
       holdRow(row);
       followRow(row);
-      if (WORKING.has(row.stage)) {
+      if (isWorking(row.stage)) {
         goOn(row.id);
       }
     }

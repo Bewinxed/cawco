@@ -29,7 +29,6 @@ import {
   type CapPeriod,
   type OnCap,
   type SettingSource,
-  type SettingsInEffect,
 } from "@cawco/core/areas";
 import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/kinds";
 import { type AreaSettingName, areaWords } from "@cawco/core/words/areas";
@@ -112,22 +111,30 @@ const AREA_NAME = t.String({
   error: schemaRefusal(areaWords.name(AREA_NAME_LIMIT)),
 });
 
-/** The row settings by the name a note gives each. */
-const ROW_SETTINGS = [
-  ["account", "account"],
-  ["cawMode", "cawMode"],
-  ["cap", "cap"],
-  ["onCap", "onCap"],
-] as const satisfies readonly [keyof SettingsInEffect, AreaSettingName][];
-
 /** Where each setting a note names came from for one project. */
 type Sources = Record<AreaSettingName, SettingSource>;
 
+/** Every setting a note names, in the order a move's notes list them. */
+const AREA_SETTINGS = [
+  "account",
+  "cawMode",
+  "cap",
+  "onCap",
+  "decides",
+  "types",
+] as const satisfies readonly AreaSettingName[];
+
+/** The kinds of fleet row a delete counts, in the order its sentence lists them. */
+const FLEET_ROW_KINDS = [
+  "skills",
+  "mcp",
+  "hooks",
+  "settings",
+] as const satisfies readonly (keyof AreaDeleted["fleetRows"])[];
+
 /** The fleet rows a delete took, in a sentence; none when it took none. */
 const fleetRowsWords = (rows: AreaDeleted["fleetRows"]): string[] => {
-  const kinds = (Object.keys(rows) as (keyof typeof rows)[]).filter(
-    (kind) => rows[kind] > 0
-  );
+  const kinds = FLEET_ROW_KINDS.filter((kind) => rows[kind] > 0);
   return kinds.length > 0
     ? [
         areaWords.fleetRowsGone(
@@ -170,12 +177,14 @@ export const createAreas = ({
     if (folder instanceof ElysiaStatus) {
       return folder;
     }
-    const sources = {} as Sources;
-    for (const [field, name] of ROW_SETTINGS) {
-      sources[name] = project.inEffect[field].from;
-    }
-    sources.decides = folder.decides.includes("area") ? "area" : "fleet";
-    sources.types = folder.types.includes("area") ? "area" : "fleet";
+    const sources: Sources = {
+      account: project.inEffect.account.from,
+      cawMode: project.inEffect.cawMode.from,
+      cap: project.inEffect.cap.from,
+      onCap: project.inEffect.onCap.from,
+      decides: folder.decides.includes("area") ? "area" : "fleet",
+      types: folder.types.includes("area") ? "area" : "fleet",
+    };
     return sources;
   };
 
@@ -196,15 +205,15 @@ export const createAreas = ({
       });
     }
     const asked: AreaSettingsChange = {
-      account: ask.account,
-      accountAtLimit: ask.accountAtLimit,
-      cawMode: ask.cawMode,
-      onCap: ask.onCap,
+      ...(ask.account === undefined ? {} : { account: ask.account }),
+      ...(ask.accountAtLimit === undefined
+        ? {}
+        : { accountAtLimit: ask.accountAtLimit }),
+      ...(ask.cawMode === undefined ? {} : { cawMode: ask.cawMode }),
+      ...(ask.onCap === undefined ? {} : { onCap: ask.onCap }),
       ...capColumns(ask.cap),
     };
-    return Object.fromEntries(
-      Object.entries(asked).filter(([, value]) => value !== undefined)
-    ) as AreaSettingsChange;
+    return asked;
   };
 
   /**
@@ -280,7 +289,7 @@ export const createAreas = ({
     if (is instanceof ElysiaStatus) {
       return is;
     }
-    const said = (Object.keys(is) as AreaSettingName[]).flatMap((setting) =>
+    const said = AREA_SETTINGS.flatMap((setting) =>
       is[setting] === "area" || was[setting] === "area"
         ? [
             areaWords.takes(
@@ -311,10 +320,9 @@ export const createAreas = ({
       if (sources instanceof ElysiaStatus) {
         return sources;
       }
-      for (const [setting, from] of Object.entries(sources)) {
-        if (from === "area") {
-          const name = setting as AreaSettingName;
-          counts.set(name, (counts.get(name) ?? 0) + 1);
+      for (const setting of AREA_SETTINGS) {
+        if (sources[setting] === "area") {
+          counts.set(setting, (counts.get(setting) ?? 0) + 1);
         }
       }
     }

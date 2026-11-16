@@ -108,8 +108,7 @@ export const holdsBut = <T extends ItemHold>(
   ...left: readonly T[]
 ): Exclude<ItemHold, T>[] =>
   HOLD_ORDER.filter(
-    (hold): hold is Exclude<ItemHold, T> =>
-      !(left as readonly ItemHold[]).includes(hold)
+    (hold): hold is Exclude<ItemHold, T> => !left.some((one) => one === hold)
   );
 
 const isRowHold = (hold: ItemHold): hold is Exclude<ItemHold, FactHold> =>

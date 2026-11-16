@@ -674,7 +674,7 @@ export const createGate = ({
     ) {
       db.dropGatePasses(item.id, taken);
     }
-    const ran = [...run.outcomes];
+    let next = 0;
     return {
       declared: gate.declared,
       outcomes: steps.map((step, at) => {
@@ -682,9 +682,12 @@ export const createGate = ({
           return notRun(step, { nothing: step.nothing }, true);
         }
         const skipped = prior[at];
-        return skipped === undefined
-          ? (ran.shift() as StepOutcome)
-          : notRun(step, { skipped }, true);
+        if (skipped !== undefined) {
+          return notRun(step, { skipped }, true);
+        }
+        const outcome = run.outcomes[next];
+        next += 1;
+        return outcome;
       }),
     };
   };

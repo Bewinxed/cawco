@@ -10,6 +10,18 @@ export const placeOut = (place: PlaceRow) => ({
   createdAt: place.createdAt.toISOString(),
 });
 
+/** A project's place as {@link createProjectOut} answers it. */
+type ProjectPlaceOut = ReturnType<typeof placeOut> & {
+  held: BridgedHeldPlace | null;
+  within: ReturnType<typeof placeNesting>["within"];
+};
+
+/** The fields kept for shipped apps that require them, read by nothing else. */
+interface KeptForShippedApps {
+  appleGate: boolean;
+  remote: string | null;
+}
+
 /**
  * A project as the API answers it, its times the ISO strings they are sent
  * as: its places, and its primary checkout's
@@ -28,28 +40,31 @@ export const createProjectOut =
   (project: ProjectRow, live: readonly ProjectRow[] = db.listProjects()) => {
     const { budgetMinutes, budgetTurns, budgetUnread, budgetUsd, ...shown } =
       project;
+    const kept: KeptForShippedApps = {
+      // Read by nothing: the Apple build is a step a project declares in its
+      // gate.md (gate-file.ts). Kept for the shipped apps that require it
+      // (TestFlight 20261015.3 to 20261018); it goes once none is installable.
+      appleGate: false,
+      // Read by nothing: a project links a repository each (`links`). Kept
+      // for the shipped apps that require it (every TestFlight build before
+      // 2026-11-03), as their one link; it goes once none is installable.
+      remote: project.links[0] ?? null,
+    };
     return {
       ...shown,
       budget: budgetOf({ budgetMinutes, budgetTurns, budgetUnread, budgetUsd }),
       createdAt: project.createdAt.toISOString(),
       moveDeclinedAt: project.moveDeclinedAt?.toISOString() ?? null,
-      places: project.places.map((place) => ({
+      places: project.places.map((place): ProjectPlaceOut => ({
         ...placeOut(place),
-        held: null as BridgedHeldPlace | null,
+        held: null,
         within:
           place.kind === "checkout"
             ? placeNesting(project.id, place, live).within
             : [],
       })),
       primaryPlaceId: checkoutOf(project)?.id ?? null,
-      // Read by nothing: the Apple build is a step a project declares in its
-      // gate.md (gate-file.ts). Kept for the shipped apps that require it
-      // (TestFlight 20261015.3 to 20261018); it goes once none is installable.
-      appleGate: false as boolean,
-      // Read by nothing: a project links a repository each (`links`). Kept
-      // for the shipped apps that require it (every TestFlight build before
-      // 2026-11-03), as their one link; it goes once none is installable.
-      remote: (project.links[0] ?? null) as string | null,
+      ...kept,
     };
   };
 

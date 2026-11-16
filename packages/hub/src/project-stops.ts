@@ -41,6 +41,16 @@ import type { HubLifetimeShape } from "./lifetime";
 
 type Row = ReturnType<DbShape["sessionOwnership"]>[number];
 
+/** A session a forget asked to stop, until its end is confirmed. */
+interface Asked {
+  /** Ends the wait for its machine's answer, while one is waited for. */
+  answer: (() => void) | undefined;
+  /** Reported deferred: owed to its machine's next register. */
+  deferred?: boolean;
+  machineId: string;
+  projectId: string;
+}
+
 /** One running session of a project, in tree order (parents first). */
 export interface RunningSession {
   cwd: string;
@@ -78,17 +88,7 @@ export const createProjectStops = (ports: {
   timeoutMs: number;
 }) => {
   /** Sessions a forget asked to stop, by id, until their end is confirmed. */
-  const asked = new Map<
-    string,
-    {
-      /** Ends the wait for its machine's answer, while one is waited for. */
-      answer: (() => void) | undefined;
-      machineId: string;
-      projectId: string;
-      /** Reported deferred: owed to its machine's next register. */
-      deferred?: boolean;
-    }
-  >();
+  const asked = new Map<string, Asked>();
 
   /** Its process may still be alive. */
   const mayRun = (row: Row): boolean => {
@@ -216,10 +216,10 @@ export const createProjectStops = (ports: {
   const stopOne = (projectId: string, row: Row): void => {
     const { id } = row;
     asked.get(id)?.answer?.();
-    const entry = {
+    const entry: Asked = {
       machineId: row.machineId,
       projectId,
-      answer: undefined as (() => void) | undefined,
+      answer: undefined,
     };
     asked.set(id, entry);
     // Its machine's answer: confirmed, refused, or deferred as it goes away.
@@ -273,7 +273,16 @@ export const createProjectStops = (ports: {
    */
   const stop = (projectId: string, ids: string[]) => {
     const mine = new Map(members(projectId).map((row) => [row.id, row]));
-    const foreign = ids.filter((id) => !mine.has(id)).length;
+    const rows: Row[] = [];
+    let foreign = 0;
+    for (const id of ids) {
+      const row = mine.get(id);
+      if (row) {
+        rows.push(row);
+      } else {
+        foreign += 1;
+      }
+    }
     if (foreign > 0) {
       return problem(400, {
         code: "project-not-edited",
@@ -283,8 +292,8 @@ export const createProjectStops = (ports: {
             : `${foreign} sessions named here are not this project's. Refresh, then retry.`,
       });
     }
-    for (const id of ids) {
-      const row = mine.get(id) as Row;
+    for (const row of rows) {
+      const { id } = row;
       if (!mayRun(row)) {
         settle(id, { projectId, instanceId: id, outcome: "stopped" });
       } else if (ports.online(row.machineId)) {

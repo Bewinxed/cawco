@@ -1644,7 +1644,7 @@ export const createWorkItems = ({
     item: WorkItemRow,
     minutes: number,
     reason: string
-  ): WorkItemRow => {
+  ): WorkItemRow & { waitUntil: Date } => {
     clearWait(item);
     const waitUntil = new Date(Date.now() + minutes * 60_000);
     const waiting = update(item.id, {
@@ -1652,9 +1652,12 @@ export const createWorkItems = ({
       waitUntil,
       waitReason: reason,
       waitCount: (db.workItem(item.id) ?? item).waitCount + 1,
-    }) as WorkItemRow;
+    });
+    if (!waiting) {
+      throw new Error(`Work item ${item.id} is gone; it can't wait.`);
+    }
     armWait(waiting);
-    return waiting;
+    return { ...waiting, waitUntil };
   };
 
   // --- the project's conversation: co-parent of its project's items -----------------
@@ -2509,12 +2512,13 @@ export const createWorkItems = ({
     if (!Array.isArray(listed)) {
       return listed;
     }
-    const open = listed.filter(
-      (todo) =>
-        !todo.done &&
-        todo.id &&
-        (completed.has(todo.id) ||
-          (todo.proposed && said.has(planWords(todo.text))))
+    const open = listed.flatMap((todo) =>
+      !todo.done &&
+      todo.id &&
+      (completed.has(todo.id) ||
+        (todo.proposed && said.has(planWords(todo.text))))
+        ? [todo.id]
+        : []
     );
     if (open.length === 0) {
       return undefined;
@@ -2522,7 +2526,7 @@ export const createWorkItems = ({
     return await ledger.write(
       task.projectId,
       task.taskId,
-      { tick: open.map((todo) => todo.id as string) },
+      { tick: open },
       `attempt ${item.id.slice(0, 8)}'s plan completed them`
     );
   };
@@ -4902,7 +4906,10 @@ export const createWorkItems = ({
     clearWait(item);
     if (row && live) {
       const resumeBy = new Date(Date.now() + WAIT_RESUME_GRACE_MS);
-      const resuming = update(id, { waitResumeBy: resumeBy }) as WorkItemRow;
+      const resuming = update(id, { waitResumeBy: resumeBy });
+      if (!resuming) {
+        throw new Error(`Work item ${id} is gone; its wait can't resume.`);
+      }
       armWait(resuming);
       tell(
         row,
@@ -5601,7 +5608,7 @@ export const createWorkItems = ({
       }
       const waitReason = reason.trim().replace(/\s+/gu, " ");
       const waiting = declareWait(item, minutes, waitReason);
-      const clock = waitClock(waiting.waitUntil as Date);
+      const clock = waitClock(waiting.waitUntil);
       const line = `${item.title} is waiting until ${clock}: ${waitReason}`;
       return `${line}\n\nEnd your turn. The hub will wake you when the wait ends.`;
     },

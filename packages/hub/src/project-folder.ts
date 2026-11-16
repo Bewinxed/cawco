@@ -40,6 +40,7 @@ import {
 } from "node:fs/promises";
 import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { errnoCode } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import { freeBytes } from "@cawco/core/free-bytes";
@@ -197,7 +198,7 @@ const TRAILING_DOT = /\.$/u;
 const MIB = 1024 * 1024;
 
 const isMissing = (error: unknown): boolean => {
-  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  const code = errnoCode(error);
   return code === "ENOENT" || code === "ENOTDIR";
 };
 
@@ -1114,7 +1115,10 @@ export const readFolderFileAt = async (
   }
   const content = shown.code === 0 ? shown.stdout : undefined;
   if (readAt.size >= READ_AT_LIMIT) {
-    readAt.delete(readAt.keys().next().value as string);
+    const oldest = readAt.keys().next();
+    if (!oldest.done) {
+      readAt.delete(oldest.value);
+    }
   }
   readAt.set(key, content);
   return content;
@@ -1187,7 +1191,7 @@ const placeOnly = async (
   const placed = await placeWhole(root, abs, bytes, true).then(
     () => true,
     (error: unknown) => {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      if (errnoCode(error) === "EEXIST") {
         return false;
       }
       throw error;
@@ -1430,7 +1434,7 @@ const fileToDelete = async (root: string, rel: string) => {
 /** Makes the folder `rel` (at `abs`) is written in; refused when a file sits where it would be. */
 const parentFolder = (abs: string, rel: string) =>
   makeFolder(dirname(abs)).catch((error: unknown) => {
-    const { code } = error as NodeJS.ErrnoException;
+    const code = errnoCode(error);
     if (code === "EEXIST" || code === "ENOTDIR") {
       return problem(409, {
         code: "folder-write-under-file",
@@ -2106,8 +2110,8 @@ const applyLog = (
   ever: Set<string>,
   out: string
 ): void => {
-  /** The paths whose entry this pass made, so it may grow in place. */
-  const own = new Set<string>();
+  /** The paths whose entry this pass made, each with its changes, which may grow in place. */
+  const own = new Map<string, FolderFileChange[]>();
   for (const record of out.split(RECORD)) {
     const [header = "", ...changes] = record.split("\n");
     const made = commitOf(header);
@@ -2144,7 +2148,7 @@ const movesByName = (lines: string[]): string[] => {
   for (const [name, [from, ...others]] of deleted) {
     const to = added.get(name);
     if (from && others.length === 0 && to?.length === 1) {
-      moved.set(from, to[0] as string);
+      moved.set(from, to[0]);
     }
   }
   if (moved.size === 0) {
@@ -2165,7 +2169,7 @@ const movesByName = (lines: string[]): string[] => {
 const applyChange = (
   times: Map<string, FolderFileTimes>,
   ever: Set<string>,
-  own: Set<string>,
+  own: Map<string, FolderFileChange[]>,
   line: string,
   made: FolderLogCommit
 ): void => {
@@ -2197,16 +2201,13 @@ const applyChange = (
     };
   }
   // An entry this pass made grows in place; one an earlier read holds is copied.
-  const changes =
-    was && own.has(from)
-      ? (was.changes as FolderFileChange[])
-      : [...(was?.changes ?? [])];
+  const changes = own.get(from) ?? [...(was?.changes ?? [])];
   changes.push(change);
   if (renamed) {
     times.delete(from);
     own.delete(from);
   }
-  own.add(path);
+  own.set(path, changes);
   times.set(path, {
     created: was?.created ?? made.at,
     updated: deleted ? (was?.updated ?? made.at) : made.at,
