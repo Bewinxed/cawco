@@ -171,7 +171,7 @@ export const createArtifact = async (
   if (kind === "sheet") {
     return problem(400, {
       code: "artifact-kind-sheet",
-      detail: `A component's states are a component canvas now: kind "component", with does and ask. Example: ${COMPONENT_EXAMPLE}.`,
+      detail: `A sheet is a component canvas now: kind "component", with does and ask, its file the live story the person operates, a dial for each situation no press reaches. Example: ${COMPONENT_EXAMPLE}.`,
     });
   }
   if (body.draft && kind !== "canvas") {
