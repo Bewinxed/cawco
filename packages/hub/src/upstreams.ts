@@ -10,15 +10,6 @@ import { CONNECTION_SERVICES } from "@cawco/core/words/connections";
 export const GITHUB_API = "https://api.github.com";
 
 /**
- * The REST API version a call names in `X-GitHub-Api-Version`. A call that
- * names none is served `2022-11-28`, which GitHub retires on 2028-03-10 and
- * answers with `Deprecation` and `Sunset` headers that Octokit warns about
- * (docs.github.com/en/rest/about-the-rest-api/api-versions; what this version
- * breaks: .../breaking-changes#version-2026-03-10).
- */
-export const GITHUB_API_VERSION = "2026-03-10";
-
-/**
  * GitHub's own site: a code sign-in's `/login/device/code` and
  * `/login/oauth/access_token`, the manifest form a GitHub App is registered
  * through (`/settings/apps/new`), and an app's installation page.

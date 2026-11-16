@@ -34,6 +34,7 @@ import {
 } from "@cawco/core/accounts";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
+import { GITHUB_API_VERSION_HEADER } from "@cawco/core/github-api";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
   accountCredentialPath,
@@ -406,7 +407,7 @@ const githubIdentity = async (
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
         "User-Agent": "CawCo",
-        "X-GitHub-Api-Version": "2022-11-28",
+        ...GITHUB_API_VERSION_HEADER,
       },
       signal,
     });

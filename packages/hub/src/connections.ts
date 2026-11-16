@@ -74,6 +74,7 @@ import {
   parseConnectionTool,
 } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
+import { GitHubOctokit } from "@cawco/core/github-api";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
@@ -114,7 +115,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createAppAuth, type StrategyOptions } from "@octokit/auth-app";
-import { Octokit } from "@octokit/rest";
+import type { Octokit } from "@octokit/rest";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import {
@@ -770,7 +771,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     // options.authStrategy"). Its requests and `auth({ type: "installation" })`
     // share its one installation-token cache.
     const signer: { auth?: ReturnType<typeof createAppAuth> } = {};
-    const octokit = new Octokit({
+    const octokit = new GitHubOctokit({
       authStrategy: (options: StrategyOptions) => {
         signer.auth = createAppAuth(options);
         return signer.auth;
@@ -2171,7 +2172,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     };
     try {
       made = (
-        await new Octokit({
+        await new GitHubOctokit({
           baseUrl: GITHUB_API,
           userAgent: "CawCo-hub",
         }).rest.apps.createFromManifest({ code })
@@ -2241,7 +2242,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       );
     }
     try {
-      await new Octokit({
+      await new GitHubOctokit({
         authStrategy: createAppAuth,
         auth: { appId: app.appId, privateKey: app.privateKey },
         baseUrl: GITHUB_API,
@@ -2709,7 +2710,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (r.auth === "gh" || r.auth === "device") {
       // Each request is signed with the token as it is then: a gh token
       // read again once a minute old, a code sign-in's refreshed near its end.
-      const octokit = new Octokit({
+      const octokit = new GitHubOctokit({
         baseUrl: GITHUB_API,
         userAgent: "CawCo-hub",
       });
@@ -2729,7 +2730,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       return octokit;
     }
     if (r.auth === "bearer") {
-      return new Octokit({
+      return new GitHubOctokit({
         auth: sealed.key ?? misfit(`${name} needs its key: ${NO_SECRET}.`),
         baseUrl: GITHUB_API,
         userAgent: "CawCo-hub",
@@ -2798,7 +2799,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     )) {
       return misfit(`${name} is no installed GitHub App.`);
     }
-    const { data } = await new Octokit({
+    const { data } = await new GitHubOctokit({
       authStrategy: createAppAuth,
       auth: { appId: app.appId, privateKey: app.privateKey },
       baseUrl: GITHUB_API,

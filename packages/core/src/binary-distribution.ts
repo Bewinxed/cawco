@@ -1,10 +1,11 @@
 /** Signed release discovery and immutable archive verification. */
 import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { Octokit } from "@octokit/rest";
+import type { Octokit } from "@octokit/rest";
 import type { BinaryUpdatePolicy } from "./binary-updates";
 import { readWithin } from "./bounded";
 import { makeFolder } from "./folders";
+import { GitHubOctokit } from "./github-api";
 import { type ReleaseManifest, verifyManifest } from "./release-manifest";
 import {
   type Answered,
@@ -112,7 +113,7 @@ function fetchUncached(url: string, signal: AbortSignal): Promise<Response> {
  * 6119, which the hub then served for its 15-minute release cache.
  */
 function uncachedOctokit(): Octokit {
-  const octokit = new Octokit({ userAgent: "CawCo" });
+  const octokit = new GitHubOctokit({ userAgent: "CawCo" });
   octokit.hook.before("request", (options) => {
     // A GET's parameters that fill no part of its path go to its query.
     options.uncached = crypto.randomUUID();
