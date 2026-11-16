@@ -3,6 +3,7 @@ import type { SendAttachment } from "@cawco/core/attachments";
 import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import type { ControlName, ControlReply } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import { byPerson } from "@cawco/core/harness";
 import { ARTIFACT_ORIGIN } from "@cawco/core/harness/kinds";
 import {
@@ -12,11 +13,7 @@ import {
   parseArtifactComments,
   parseArtifactResponses,
 } from "@cawco/core/injected";
-import type {
-  HubEnvelope,
-  InstanceRow,
-  SendPayload,
-} from "@cawco/core/protocol";
+import type { InstanceRow, SendPayload } from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
 import {
@@ -114,7 +111,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   };
   /** The base64 pictures a held send's envelope carries, in order. */
   const picturesOf = (
-    whole: HubEnvelope<"send"> | null
+    whole: Pick<HubEnvelope<"send">, "payload"> | null
   ): { data: string; mediaType: string }[] => {
     const content = whole ? whole.payload.message.message.content : "";
     return typeof content === "string"
@@ -126,8 +123,9 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         );
   };
   /** The texts and files a stored send carried (`SendPayload.attachments`). */
-  const attachmentsOf = (whole: HubEnvelope<"send"> | null): SendAttachment[] =>
-    whole?.payload.attachments ?? [];
+  const attachmentsOf = (
+    whole: Pick<HubEnvelope<"send">, "payload"> | null
+  ): SendAttachment[] => whole?.payload.attachments ?? [];
   /**
    * Withdraws each of the session's unread artifact events `same` names
    * (by its words), in order: the words, pictures, texts and files of each

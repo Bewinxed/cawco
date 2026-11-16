@@ -39,6 +39,7 @@ import type {
 } from "@cawco/core/commands/controls";
 import type { FsOp } from "@cawco/core/control-replies";
 import type { StartingSet } from "@cawco/core/delegate-types";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import type {
   FleetPlugin,
   FleetSkillMeta,
@@ -70,7 +71,6 @@ import type {
   ContinuationJob,
   DelegateEvent,
   FsPayload,
-  HubEnvelope,
   InstanceRow,
   KeepAlive,
   NamedSpawn,
@@ -156,6 +156,7 @@ import type {
   AuthSocket,
   FetchedCopy,
   FolderSkillBody,
+  Forwarded,
   Located,
   LoginMoveResults,
   MachineAway,
@@ -559,7 +560,7 @@ export interface ClosureContext {
   forkedFromOf: (payload: SpawnPayload) => { forkedFrom?: string };
   forkNoticeFor: (instanceId: string) => string | undefined;
   forward: (
-    envelope: HubEnvelope<"control" | "fs" | "spawn" | "stop">,
+    envelope: Forwarded,
     dashboard: ClientSocket,
     remember?: boolean
   ) => boolean;

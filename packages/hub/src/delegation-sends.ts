@@ -9,10 +9,10 @@
  */
 
 import { RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { PermissionMode } from "@cawco/core/harness/kinds";
 import type {
   ControlPayload,
-  HubEnvelope,
   InstanceRow,
   SpawnPayload,
 } from "@cawco/core/protocol";

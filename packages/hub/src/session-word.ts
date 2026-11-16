@@ -2,7 +2,8 @@
  * A word from the hub to a session it runs: the send's envelope, its message
  * the hub's own turn with the origin naming what said it.
  */
-import type { HubEnvelope, SendPayload } from "@cawco/core/protocol";
+import type { HubEnvelope } from "@cawco/core/envelopes";
+import type { SendPayload } from "@cawco/core/protocol";
 
 export const sessionWord = (
   row: { id: string; machineId: string },

@@ -1,5 +1,6 @@
+import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
 import { isRecord } from "@cawco/core/is-record";
-import type { HubEnvelope, FrameEnvelope, Verb } from "@cawco/core/protocol";
+import type { Verb } from "@cawco/core/protocol";
 import { Context, Effect, Layer } from "effect";
 import type { AskCard } from "./ask-presentation";
 import { HubLifetime, type HubLifetimeShape } from "./lifetime";

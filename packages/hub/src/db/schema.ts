@@ -37,7 +37,12 @@ import {
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
 } from "@cawco/core/plan";
-import { DELEGATE_EVENT_KINDS, type HubEnvelope } from "@cawco/core/protocol";
+import {
+  DELEGATE_EVENT_KINDS,
+  type Envelope,
+  type SendPayload,
+  type SpawnPayload,
+} from "@cawco/core/protocol";
 import { RELAY_PROVIDERS, RELAY_STATES } from "@cawco/core/relays";
 import {
   ROUTINE_OUTCOMES,
@@ -301,16 +306,16 @@ const sealedJson = <S extends z.ZodType>(schema: S) =>
     open: (raw) => openOrNull(raw),
   });
 
-/** A send as its machine is handed it (`HubEnvelope<"send">`). */
-const SendEnvelopeSchema: z.ZodType<HubEnvelope<"send">> = EnvelopeShape.extend(
-  { payload: SendPayloadShape, verb: z.literal("send") }
-);
-/** A session's start as its machine is handed it (`HubEnvelope<"spawn">`). */
-const SpawnEnvelopeSchema: z.ZodType<HubEnvelope<"spawn">> =
-  EnvelopeShape.extend({
-    payload: SpawnPayloadSchema,
-    verb: z.literal("spawn"),
-  });
+/**
+ * A send as its machine is handed it, as its column keeps it: under any verb,
+ * as the column always took one (a row is a send the hub wrote; db sends.ts
+ * reads it back as one).
+ */
+const SendEnvelopeSchema: z.ZodType<Envelope<SendPayload>> =
+  EnvelopeShape.extend({ payload: SendPayloadShape });
+/** A session's start as its machine is handed it, as its column keeps it (db instances.ts reads it back as one). */
+const SpawnEnvelopeSchema: z.ZodType<Envelope<SpawnPayload>> =
+  EnvelopeShape.extend({ payload: SpawnPayloadSchema });
 
 /**
  * One harness conversation a session had before the one it runs now

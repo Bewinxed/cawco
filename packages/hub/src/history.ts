@@ -1,5 +1,3 @@
-import { SessionMessageSchema } from "@cawco/core/stored-shapes";
-import { isRecord } from "@cawco/core/is-record";
 import type { AccountMove } from "@cawco/core/accounts";
 import {
   ACCOUNT_MOVE,
@@ -12,15 +10,17 @@ import {
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { harnessSpec } from "@cawco/core/harness-refusal";
+import { isRecord } from "@cawco/core/is-record";
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { CONTROL_READ_TRANSCRIPT_WINDOW } from "@cawco/core/session/controls";
 import type { SendRecord, SessionMessage } from "@cawco/core/session-messages";
+import { SessionMessageSchema } from "@cawco/core/stored-shapes";
 import type { ToolStatus } from "@cawco/core/tools";
-import {
-  type TranscriptWhere,
-  type TranscriptWindow,
-  type WindowAsk,
+import type {
+  TranscriptWhere,
+  TranscriptWindow,
+  WindowAsk,
 } from "@cawco/core/transcript-types";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import type { ClosureContext } from "./closure-context";

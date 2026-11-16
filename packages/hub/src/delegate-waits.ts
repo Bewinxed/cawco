@@ -52,8 +52,8 @@
  * then, and the marks keep what was told from going twice.
  */
 
-import type { ArrivingAsk } from "@cawco/core/frames";
 import type { AskAnswer, AskRecord } from "@cawco/core/asks";
+import type { ArrivingAsk } from "@cawco/core/frames";
 import type { InstanceRow } from "@cawco/core/protocol";
 
 import { delegateWaitWords } from "@cawco/core/words/delegates";

@@ -35,6 +35,8 @@
  *
  * Browser-safe: no Node or Bun imports.
  */
+
+import { isRecord } from "./is-record";
 import {
   encodeJson,
   JsonDecoder,
@@ -43,7 +45,6 @@ import {
   surrogateSafeEnd,
   textPieces,
 } from "./json-stream";
-import { isRecord } from "./is-record";
 
 /**
  * Characters of a message's JSON per part. Our choice: one deflated part costs

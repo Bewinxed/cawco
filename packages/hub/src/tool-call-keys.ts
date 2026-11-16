@@ -22,9 +22,10 @@
  * {@link TOOL_CALL_KEY_KEPT_MS} past each key's answer; a key running is
  * kept as long as it runs.
  */
-import { isRecord } from "@cawco/core/is-record";
+
 import { createHash } from "node:crypto";
 import { TOOL_CALL_KEY_HEADER } from "@cawco/core/binary-updates";
+import { isRecord } from "@cawco/core/is-record";
 import {
   type CallToolResult,
   CallToolResultSchema,

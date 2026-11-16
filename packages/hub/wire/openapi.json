@@ -37897,6 +37897,18 @@
           "method": {
             "type": "string"
           },
+          "provenance": {
+            "description": "Which page and tab asked it (the dashboard's `submitCommand`), as a\nsend's {@link SendPayload.provenance}: an interrupt's line names it.",
+            "type": "object",
+            "properties": {
+              "clientId": {
+                "type": "string"
+              },
+              "presenceId": {
+                "type": "string"
+              }
+            }
+          },
           "requestId": {
             "type": "string"
           }
@@ -40152,7 +40164,7 @@
         ]
       },
       "Envelope": {
-        "description": "Every message on every hop. `payload` is whatever the verb carries — a neutral\nmessage, a harness option object, a control call — passed through. The hub\nroutes on the envelope fields and peeks only what harness.ts names.",
+        "description": "Every message on every hop, as a machine's daemon writes and reads it\n(packages/agent): `payload` is whatever the verb carries, its type the\ndaemon's to say. The hub and its clients read the same message typed by\nits verb (envelopes.ts): `MachineEnvelope` as a machine sends it, parsed\nwhere it enters the hub (agent-frame.ts `readMachineEnvelope`);\n`ClientEnvelope` as a client sends it; `HubEnvelope` as the hub sends it.",
         "type": "object",
         "properties": {
           "instanceId": {
@@ -48282,6 +48294,21 @@
               },
               "model": {
                 "type": "string"
+              },
+              "usage": {
+                "description": "Claude: the request's own tokens, as its API answered them.",
+                "type": "object",
+                "properties": {
+                  "cache_creation_input_tokens": {
+                    "type": "number"
+                  },
+                  "cache_read_input_tokens": {
+                    "type": "number"
+                  },
+                  "input_tokens": {
+                    "type": "number"
+                  }
+                }
               }
             },
             "required": [
@@ -48769,6 +48796,10 @@
             "description": "Agent receive time of the last main-loop requesting status, epoch ms.",
             "type": "number"
           },
+          "modelUsage": {
+            "type": "object",
+            "description": "Claude: what the session's process has spent so far, by model (the SDK\nresult's `modelUsage`), each field as Claude sent it, and the model's\ncontext window."
+          },
           "num_turns": {
             "type": "number"
           },
@@ -48813,6 +48844,15 @@
             "enum": [
               "result"
             ]
+          },
+          "usage": {
+            "description": "Claude: the turn's last request's own tokens (the SDK result's `usage`): what it read uncached.",
+            "type": "object",
+            "properties": {
+              "input_tokens": {
+                "type": "number"
+              }
+            }
           },
           "uuid": {
             "type": "string"
@@ -49114,6 +49154,12 @@
           "cwd": {
             "type": "string"
           },
+          "decision_reason": {
+            "type": "string"
+          },
+          "decision_reason_type": {
+            "type": "string"
+          },
           "description": {
             "type": "string"
           },
@@ -49138,6 +49184,51 @@
           "last_tool_name": {
             "type": "string"
           },
+          "leak": {
+            "description": "What a `leak_found` frame found (agent leak-watch.ts), as the facts its\nrow's line is made of (core words/notices.ts): how many processes were\nleft running, or which process climbs in memory and how high.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "number"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "left"
+                    ]
+                  }
+                },
+                "required": [
+                  "count",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "memory"
+                    ]
+                  },
+                  "resident": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "command",
+                  "kind",
+                  "resident"
+                ]
+              }
+            ]
+          },
           "mcp_server": {
             "type": "string"
           },
@@ -49158,6 +49249,9 @@
                 "status"
               ]
             }
+          },
+          "message": {
+            "type": "string"
           },
           "message_id": {
             "type": "string"
@@ -49786,6 +49880,9 @@
             "type": "string"
           },
           "timestamp": {
+            "type": "string"
+          },
+          "tool_name": {
             "type": "string"
           },
           "tool_use_id": {
@@ -91567,7 +91664,7 @@
               "$ref": "#/components/schemas/ParkedAsk"
             },
             {
-              "description": "Every message on every hop. `payload` is whatever the verb carries — a neutral\nmessage, a harness option object, a control call — passed through. The hub\nroutes on the envelope fields and peeks only what harness.ts names.",
+              "description": "Every message on every hop, as a machine's daemon writes and reads it\n(packages/agent): `payload` is whatever the verb carries, its type the\ndaemon's to say. The hub and its clients read the same message typed by\nits verb (envelopes.ts): `MachineEnvelope` as a machine sends it, parsed\nwhere it enters the hub (agent-frame.ts `readMachineEnvelope`);\n`ClientEnvelope` as a client sends it; `HubEnvelope` as the hub sends it.",
               "type": "object",
               "properties": {
                 "instanceId": {

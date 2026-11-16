@@ -1,4 +1,3 @@
-import { isRecord } from "@cawco/core/is-record";
 import {
   atProviderLimit,
   CLAUDE_PROVIDER,
@@ -13,6 +12,7 @@ import {
 } from "@cawco/core/attachments";
 import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { FramePayload } from "@cawco/core/frames";
 import { byPerson } from "@cawco/core/harness";
 import {
@@ -31,12 +31,9 @@ import {
   withReminder,
 } from "@cawco/core/injected";
 import { invariant } from "@cawco/core/invariant";
+import { isRecord } from "@cawco/core/is-record";
 import { planWaitsOf } from "@cawco/core/plan";
-import type {
-  HubEnvelope,
-  InstanceRow,
-  SendPayload,
-} from "@cawco/core/protocol";
+import type { InstanceRow, SendPayload } from "@cawco/core/protocol";
 import { relaunchOf } from "@cawco/core/relaunch";
 import { CONTROL_READ_TRANSCRIPT_WINDOW } from "@cawco/core/session/controls";
 import type {
@@ -57,7 +54,7 @@ import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
 import type { PublicInstanceRow } from "./db/instances";
 import type { WorkItemRow } from "./db/project-work";
-import type { SentMessageRow } from "./db/sends";
+import { keptSend, type SentMessageRow } from "./db/sends";
 import type { SendHold, StoredSendRefusal } from "./db/stored-types";
 import type { Unstored } from "./hub-shapes";
 import { isKeepAlive } from "./keep-alive";
@@ -201,6 +198,10 @@ const SETTLE_SKEW_MS = 10 * 60 * 1000;
  * (2026-10-23 19:28:56, obelisk, the hub's own machine).
  */
 const SETTLE_READS_PER_MACHINE = 4;
+/** A stored entry's message's words, as it holds them: any value, or none. */
+const storedContent = ({ message }: SessionMessage): unknown =>
+  isRecord(message) ? message.content : undefined;
+
 /** After a settle read its machine left unanswered, the session's next waits this long, doubling each time. */
 const SETTLE_BACKOFF_FIRST_MS = 15_000;
 /** The longest a session's next settle read waits. Our call: eight heartbeats. */
@@ -1781,7 +1782,7 @@ export const createSends = (ctx: SendsContext) => {
 
   /** A send's words as the harness was handed them, when they are words alone. */
   const sentWords = (send: SentMessageRow): string | null => {
-    const content = send.body.message.content;
+    const { content } = send.body.message;
     return typeof content === "string" ? content : null;
   };
 
@@ -1799,7 +1800,7 @@ export const createSends = (ctx: SendsContext) => {
     entry: SessionMessage,
     last: SentMessageRow
   ): SentMessageRow[] => {
-    const stored = isRecord(entry.message) ? entry.message.content : undefined;
+    const stored = storedContent(entry);
     const own = sentWords(last);
     if (!(typeof stored === "string" && own && stored.endsWith(`\n${own}`))) {
       return [];
@@ -3099,7 +3100,7 @@ export const createSends = (ctx: SendsContext) => {
     // envelope did not read when migration 0421 folded it into `envelope`
     // (its record's `owed_unread`). It stays owed, never handed or carried
     // on with an envelope made up for it.
-    const { envelope } = send;
+    const envelope = send.envelope && keptSend(send.envelope);
     if (!envelope) {
       return false;
     }

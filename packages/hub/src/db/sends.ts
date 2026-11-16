@@ -1,6 +1,7 @@
 /** Messages sent to a session: recorded, owed, held, answered. */
 
-import type { HubEnvelope } from "@cawco/core/protocol";
+import type { HubEnvelope } from "@cawco/core/envelopes";
+import type { Envelope, SendPayload } from "@cawco/core/protocol";
 import type { NeutralUserMessage } from "@cawco/core/session-messages";
 import {
   and,
@@ -28,6 +29,17 @@ export type SentMessageRow = typeof sentMessages.$inferSelect;
  * transcript's word, not the hub's.
  */
 export const TURN_UNRECORDED = -1;
+
+/**
+ * A send its record kept (`sent_messages.envelope`), as the hub hands it to
+ * its machine: the column keeps any verb, as it always took one, and one
+ * kept under another verb is no send the hub wrote.
+ */
+export const keptSend = ({
+  verb,
+  ...kept
+}: Envelope<SendPayload>): HubEnvelope<"send"> | undefined =>
+  verb === "send" ? { ...kept, verb } : undefined;
 
 export interface SendsDb {
   /** The session's turn ended. */

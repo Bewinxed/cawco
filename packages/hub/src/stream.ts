@@ -21,12 +21,12 @@
  */
 
 import { RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import { everyOf } from "@cawco/core/every-of";
 import type { PlanSnapshot } from "@cawco/core/plan";
 import type {
   ControlPayload,
   DeliveryMark,
-  HubEnvelope,
   IngestMark,
 } from "@cawco/core/protocol";
 import { SessionRing } from "@cawco/core/ring";
@@ -107,6 +107,13 @@ const COMMAND_KINDS = everyOf<CommandKind>()([
   "set-permission-mode",
   "set-effort",
 ]);
+
+/** A command as the stream takes it: its id and kind read, the rest as it came. */
+interface AskedCommand {
+  commandId: string;
+  kind: CommandKind;
+  raw: Record<string, unknown>;
+}
 
 /** A command's word on which page and tab sent it (`SendPayload.provenance`). */
 const ProvenanceSchema = z.object({
@@ -402,12 +409,8 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * general-purpose remote call. A kind may only ever become its own method.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every command kind (send vs. each control method) through one shared validate-then-relay pipeline; splitting it would scatter the ordering guarantees documented above across several functions.
-  const command = (
-    socket: ClientSocket,
-    message: Record<string, unknown>,
-    commandId: string,
-    kind: CommandKind
-  ): void => {
+  const command = (socket: ClientSocket, asked: AskedCommand): void => {
+    const { raw: message, commandId, kind } = asked;
     const { sessionId, machineId } = message;
     // Known by id from here on, and with the newest handle: an `applied` ack
     // arrives later, off an agent socket, and has to find a socket to land on
@@ -762,7 +765,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         fail(socket, raw.commandId, `unknown command kind ${String(raw.kind)}`);
         return true;
       }
-      command(socket, raw, raw.commandId, kind);
+      command(socket, { raw, commandId: raw.commandId, kind });
       return true;
     }
 

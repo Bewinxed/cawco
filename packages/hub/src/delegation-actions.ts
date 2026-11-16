@@ -12,6 +12,7 @@
 
 import { readWithin } from "@cawco/core/bounded";
 import type { DelegateType, MayStart } from "@cawco/core/delegate-types";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { ForgeWrite } from "@cawco/core/forge-post";
 import {
   type HarnessKind,
@@ -33,7 +34,6 @@ import {
 } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type {
-  HubEnvelope,
   InstanceRow,
   SendPayload,
   SpawnPayload,

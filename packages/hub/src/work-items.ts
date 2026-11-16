@@ -49,6 +49,7 @@ import {
   narrowMayStart,
   startsAny,
 } from "@cawco/core/delegate-types";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { BriefTarget } from "@cawco/core/fleet";
 import { byPerson } from "@cawco/core/harness";
 import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
@@ -69,7 +70,6 @@ import type { MachinePath } from "@cawco/core/machine-path";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import type { PlanStep } from "@cawco/core/plan";
 import type {
-  HubEnvelope,
   InstanceRow,
   NamedSpawn,
   SpawnPayload,

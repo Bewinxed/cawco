@@ -7,21 +7,18 @@ import {
   SPAWN_REPLY,
 } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
+import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
 import type { FleetSkillMeta } from "@cawco/core/fleet";
 import { READ_SKILL_FOLDER } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
-import type {
-  ControlPayload,
-  FrameEnvelope,
-  HubEnvelope,
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { ControlPayload, InstanceRow } from "@cawco/core/protocol";
 import { CONTROL_ABANDON } from "@cawco/core/session/controls";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import { SPAWN_START_TIMEOUT_MS } from "./config";
+import { keptSend } from "./db/sends";
 import type { FolderSkillBody, SessionLocation } from "./hub-shapes";
 import {
   answerOf,
@@ -150,11 +147,11 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
         if (send.owedHeld || send.held || !(send.delivery && send.envelope)) {
           continue;
         }
-        const { envelope } = send;
-        ctx.sendToMachine(
-          agent,
-          envelope.verb === "send" ? ctx.presenced(envelope) : envelope
-        );
+        const envelope = keptSend(send.envelope);
+        if (!envelope) {
+          continue;
+        }
+        ctx.sendToMachine(agent, ctx.presenced(envelope));
         again += 1;
       }
     }

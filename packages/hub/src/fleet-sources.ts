@@ -1,6 +1,7 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { FsOp } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import type {
   FleetPlugin,
   FleetSkillMeta,
@@ -17,11 +18,7 @@ import type { FleetItems } from "@cawco/core/fleet-items";
 import { fleetItemsOf } from "@cawco/core/fleet-items";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { FleetHook } from "@cawco/core/hooks";
-import type {
-  ControlPayload,
-  FsPayload,
-  HubEnvelope,
-} from "@cawco/core/protocol";
+import type { ControlPayload, FsPayload } from "@cawco/core/protocol";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
 import { CONTROL_MCP_FLEET_CHANGED } from "@cawco/core/session/controls";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";

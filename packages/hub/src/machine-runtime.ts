@@ -1,7 +1,8 @@
 /**
  * What the hub holds in memory about each machine a register rebuilds ({@link createMachineRuntime}).
  */
-import type { BinaryUpdatePhaseDropped } from "@cawco/core/agent-frame";
+
+import type { BinaryUpdatePhaseDropped } from "@cawco/core/agent-reads";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import type { BuildInfo, SessionCustody } from "@cawco/core/protocol";
 

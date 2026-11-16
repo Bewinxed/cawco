@@ -1,4 +1,5 @@
-import type { HubEnvelope, SpawnPayload } from "@cawco/core/protocol";
+import type { HubEnvelope } from "@cawco/core/envelopes";
+import type { SpawnPayload } from "@cawco/core/protocol";
 import { updatesWords } from "@cawco/core/words/updates";
 import { ElysiaStatus } from "elysia";
 import type { ClosureContext } from "./closure-context";

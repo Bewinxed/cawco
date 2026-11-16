@@ -1,11 +1,7 @@
+import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
 import type { FramePayload } from "@cawco/core/frames";
 import { invariant } from "@cawco/core/invariant";
-import type {
-  AgentRow,
-  HubEnvelope,
-  FrameEnvelope,
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import { personsOwn } from "@cawco/core/protocol";
 import { WIRE_PROTOCOL } from "@cawco/core/stream";
 import { sessionLimitsReader } from "./accounts";

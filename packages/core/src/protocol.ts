@@ -76,9 +76,9 @@ export type LaunchGrant =
  * Every message on every hop, as a machine's daemon writes and reads it
  * (packages/agent): `payload` is whatever the verb carries, its type the
  * daemon's to say. The hub and its clients read the same message typed by
- * its verb: {@link MachineEnvelope} as a machine sends it, parsed where it
- * enters the hub (agent-frame.ts `readMachineEnvelope`); {@link ClientEnvelope}
- * as a client sends it; {@link HubEnvelope} as the hub sends it.
+ * its verb (envelopes.ts): `MachineEnvelope` as a machine sends it, parsed
+ * where it enters the hub (agent-frame.ts `readMachineEnvelope`);
+ * `ClientEnvelope` as a client sends it; `HubEnvelope` as the hub sends it.
  *
  * @socketFrame toHub
  */
@@ -98,86 +98,6 @@ export interface EnvelopeAddress {
   /** The `requestId` when the payload correlates to a permission or control reply. */
   requestId?: string;
 }
-
-/** An envelope of each verb `Payloads` names, its payload that verb's. */
-type EnvelopesOf<Payloads> = {
-  [V in keyof Payloads]: EnvelopeAddress & { payload: Payloads[V]; verb: V };
-};
-
-/**
- * Each verb a machine's daemon sends the hub, its payload as the hub reads it
- * once parsed (agent-frame.ts): a register's, a beat's and a usage report's
- * fields each read as tolerantly as the wire needs, a frame by its `kind`.
- */
-export interface MachinePayloads {
-  frames: import("./frames").FramePayload;
-  heartbeat: import("./agent-frame").HeartbeatReads;
-  /** A launch's ask; one that names no process generation is refused by its grant, which its machine waits on. */
-  launch: Partial<LaunchAsk>;
-  register: import("./agent-frame").RegisterReads;
-  usage: import("./agent-frame").UsageReport;
-}
-
-/** A verb a machine's daemon sends the hub. */
-export type MachineVerb = keyof MachinePayloads;
-
-/** A message a machine's daemon sent the hub, typed by its verb. */
-export type MachineEnvelope<V extends MachineVerb = MachineVerb> =
-  EnvelopesOf<MachinePayloads>[V];
-
-/**
- * Each verb a client (the dashboard, the apps, the Chrome extension) sends
- * the hub on its socket, with its payload: `frames` is the extension's BLE
- * advert alone.
- */
-export interface ClientPayloads {
-  control: ControlPayload;
-  frames: import("./browser").PasskeyAdvertFrame;
-  fs: FsPayload;
-  spawn: ClientSpawn;
-  stop: StopRequest;
-}
-
-/**
- * A start as a client sends it: any harness it names, read where the start
- * is named (hub spawns.ts `namedSpawn`), which refuses one CawCo does not run.
- */
-export type ClientSpawn = Omit<SpawnPayload, "harness"> & { harness?: string };
-
-/** A verb a client sends the hub. */
-export type ClientVerb = keyof ClientPayloads;
-
-/** A message a client sent the hub, typed by its verb. */
-export type ClientEnvelope<V extends ClientVerb = ClientVerb> =
-  EnvelopesOf<ClientPayloads>[V];
-
-/** Each verb the hub sends, to a machine or to a client, with its payload. */
-export interface HubPayloads {
-  admission: AdmissionPayload;
-  control: ControlPayload;
-  frames: import("./frames").FramePayload;
-  fs: FsPayload;
-  heartbeat: HeartbeatAckPayload;
-  launch: LaunchGrant;
-  register: import("./stream").RegisterAckPayload;
-  send: SendPayload;
-  spawn: SpawnPayload;
-  stop: StopPayload;
-}
-
-/** A verb the hub sends. */
-export type HubVerb = keyof HubPayloads;
-
-/** A message the hub sends, typed by its verb. */
-export type HubEnvelope<V extends HubVerb = HubVerb> =
-  EnvelopesOf<HubPayloads>[V];
-
-/** A `frames` message, its frame of the kinds `K`. */
-export type FrameEnvelope<K extends import("./frames").FramePayload["kind"]> =
-  EnvelopeAddress & {
-    payload: Extract<import("./frames").FramePayload, { kind: K }>;
-    verb: "frames";
-  };
 
 /**
  * `spawn`: start a session on a harness. `harness` chooses the adapter; `options`
@@ -428,6 +348,20 @@ const DOT_GIT_SUFFIX = /\.git$/u;
 const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\/\/\S+$/iu;
 /** git's scp-like form, `[<user>@]<host>:<path>`: "only recognized if there are no slashes before the first colon". */
 const SCP_LIKE_URL = /^[^/\s:]+:\S+$/u;
+
+/**
+ * The session a `spawn` resumes, so the instance row records what it re-opened.
+ * A fork is the exception: it *reads* the origin conversation but creates a new
+ * one, so claiming the origin's id here would trip openInstance's
+ * one-conversation-one-row guard. Left blank, the fork's own init frame stamps
+ * the real id via noteInstanceSession.
+ */
+export const resumedKey = (
+  payload: Pick<SpawnPayload, "resume">
+): string | undefined =>
+  payload.resume && !payload.resume.fork
+    ? payload.resume.sessionKey
+    : undefined;
 
 /**
  * Whether `repo` is a git URL, in git's own syntaxes (git-scm.com/docs/git-clone,

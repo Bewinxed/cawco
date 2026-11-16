@@ -1,11 +1,8 @@
 import { modelScope } from "@cawco/core/accounts";
 import { detach } from "@cawco/core/detach";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import { traitsOf } from "@cawco/core/harness/traits";
-import {
-  type HubEnvelope,
-  type KeepAlive,
-  OVER_STATUSES,
-} from "@cawco/core/protocol";
+import { type KeepAlive, OVER_STATUSES } from "@cawco/core/protocol";
 import {
   cacheHit,
   type NeutralResultMessage,

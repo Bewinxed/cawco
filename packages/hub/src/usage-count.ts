@@ -1,6 +1,6 @@
-import { isRecord } from "@cawco/core/is-record";
 import { existsSync, statSync } from "node:fs";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { isRecord } from "@cawco/core/is-record";
 import { listClaudeFiles } from "@cawco/core/paths/claude";
 import type { NeutralMessage } from "@cawco/core/session-messages";
 import type { CapabilityKind } from "@cawco/core/suggest";

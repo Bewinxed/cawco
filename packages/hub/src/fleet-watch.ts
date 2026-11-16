@@ -50,6 +50,7 @@
  */
 
 import { Gone, readWithin } from "@cawco/core/bounded";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import {
   FLEET_WATCH_LIMITS,
   FLEET_WATCH_WAITS,
@@ -63,11 +64,7 @@ import { fleetWatchNudge } from "@cawco/core/injected";
 import { isMachineSilence } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
-import type {
-  HubEnvelope,
-  InstanceRow,
-  SpawnPayload,
-} from "@cawco/core/protocol";
+import type { InstanceRow, SpawnPayload } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import type { NeutralMessage } from "@cawco/core/session-messages";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";

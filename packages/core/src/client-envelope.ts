@@ -8,8 +8,8 @@
 
 import { z } from "zod";
 import type { Addressed } from "./agent-frame";
+import type { ClientEnvelope, ClientSpawn } from "./envelopes";
 import { isRecord } from "./is-record";
-import type { ClientEnvelope, ClientSpawn } from "./protocol";
 import {
   ControlPayloadSchema,
   FsPayloadSchema,

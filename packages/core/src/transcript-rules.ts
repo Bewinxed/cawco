@@ -9,7 +9,6 @@
  * (`transcript.ts`) applies it.
  */
 
-import { isRecord } from "./is-record";
 import { answersOf, dismissedOf, parseAskAnswered } from "./asks";
 import { attachedFiles, withoutPictureLines } from "./attachments";
 import type { ContextLine } from "./context-filing";
@@ -45,6 +44,7 @@ import {
   parseUndelivered,
 } from "./injected";
 import { invariant } from "./invariant";
+import { isRecord } from "./is-record";
 import { CAW_EVENT_NOTE, type ProjectNote } from "./project-conversation";
 import { parseReference } from "./references";
 import { parseRuleMarker } from "./rules";
