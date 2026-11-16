@@ -2,13 +2,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AccountProvider } from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
+import type { ClientSpawn, HubEnvelope } from "@cawco/core/envelopes";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { HARNESSES, harnessNamed } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import type {
-  ClientSpawn,
-  HubEnvelope,
   InstanceRow,
   NamedSpawn,
   SendPayload,
@@ -16,6 +15,7 @@ import type {
   SpawnPayload,
   TabNamed,
 } from "@cawco/core/protocol";
+import { resumedKey } from "@cawco/core/protocol";
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
@@ -68,20 +68,6 @@ export const MACHINE_DISCONNECTED =
 export const awaitsItsName = (
   payload: Pick<SpawnPayload, "resume" | "title">
 ): boolean => !(resumedKey(payload) || payload.title);
-
-/**
- * The session a `spawn` resumes, so the instance row records what it re-opened.
- * A fork is the exception: it *reads* the origin conversation but creates a new
- * one, so claiming the origin's id here would trip openInstance's
- * one-conversation-one-row guard. Left blank, the fork's own init frame stamps
- * the real id via noteInstanceSession.
- */
-export const resumedKey = (
-  payload: Pick<SpawnPayload, "resume">
-): string | undefined =>
-  payload.resume && !payload.resume.fork
-    ? payload.resume.sessionKey
-    : undefined;
 
 /**
  * The hub row is the single authority for an instance's session key. A spawn

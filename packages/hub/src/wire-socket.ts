@@ -32,9 +32,10 @@
  * session's frames resume (server.ts `registerAck`).
  */
 
-import { isRecord } from "@cawco/core/is-record";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { FramePayload } from "@cawco/core/frames";
-import type { HubEnvelope } from "@cawco/core/protocol";
+import { isRecord } from "@cawco/core/is-record";
+
 import {
   announcesParts,
   Inbox,

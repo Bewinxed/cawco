@@ -1,7 +1,7 @@
 import type { AccountMove } from "@cawco/core/accounts";
-import type { LeakFound } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { ProjectNote } from "@cawco/core/project-conversation";
+import type { LeakFound } from "@cawco/core/session-messages";
 import { accountMoveSentence } from "@cawco/core/words/account-lines";
 import { containerWords } from "@cawco/core/words/containers";
 import { leakWords } from "@cawco/core/words/leaks";

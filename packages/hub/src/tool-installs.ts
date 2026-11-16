@@ -1,9 +1,10 @@
 import type { Bounded } from "@cawco/core/bounded";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import { HARNESS_TOOL } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import type { HubEnvelope } from "@cawco/core/protocol";
+
 import { toolUpdateOf } from "@cawco/core/tool-updates";
 import type { ToolSpec, ToolStatus, ToolWants } from "@cawco/core/tools";
 import {

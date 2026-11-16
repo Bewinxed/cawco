@@ -1,16 +1,12 @@
-import { PermissionResultSchema } from "@cawco/core/stored-shapes";
 import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
 import type { AskAnswer } from "@cawco/core/asks";
 import { detach } from "@cawco/core/detach";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
 import type { ArrivingAsk } from "@cawco/core/frames";
 import { isEffortLevel } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import type {
-  ControlPayload,
-  HubEnvelope,
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { ControlPayload, InstanceRow } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import {
   CONTROL_INTERRUPT,
@@ -26,6 +22,7 @@ import {
   STAGE_WARM,
   STAGE_WRITE,
 } from "@cawco/core/stage";
+import { PermissionResultSchema } from "@cawco/core/stored-shapes";
 import { unshownAskMessage } from "@cawco/core/words/ask-lines";
 import { turnCutWords } from "@cawco/core/words/cuts";
 import { turnWords } from "@cawco/core/words/turns";

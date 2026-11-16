@@ -1,5 +1,6 @@
 import type { Bounded } from "@cawco/core/bounded";
-import type { HubEnvelope, InstanceRow } from "@cawco/core/protocol";
+import type { HubEnvelope } from "@cawco/core/envelopes";
+import type { InstanceRow } from "@cawco/core/protocol";
 import type { Rule, RuleFacts, RuleTiming } from "@cawco/core/rules";
 import {
   RULE_FIRE_CEILING,

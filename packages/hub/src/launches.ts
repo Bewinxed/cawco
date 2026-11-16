@@ -16,6 +16,7 @@ import type {
   SessionCustody,
   SpawnPayload,
 } from "@cawco/core/protocol";
+import { resumedKey } from "@cawco/core/protocol";
 import type { Relaunch } from "@cawco/core/relaunch";
 import { relaunchOf } from "@cawco/core/relaunch";
 import type { ModeAsk } from "@cawco/core/session-messages";
@@ -31,7 +32,6 @@ import type { StoredSendRefusal } from "./db/stored-types";
 import type { AccountUse, SettledSpawn } from "./hub-shapes";
 import { documentFacts, sessionInstructions } from "./memory-scopes";
 import { makesRoutines } from "./roles";
-import { resumedKey } from "./spawns";
 
 /** A frame of a session's that may name its settings: a control's answer, or a line of its own. */
 const SETTINGS_FRAME = z.object({

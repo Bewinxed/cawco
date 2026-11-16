@@ -7,6 +7,7 @@ import {
   type FsOp,
   type FsReply,
 } from "@cawco/core/control-replies";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import type {
   ControlRefusal,
   FramePayload,
@@ -14,7 +15,7 @@ import type {
   HarnessUnanswered,
 } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type { HubEnvelope } from "@cawco/core/protocol";
+
 import { HTTPError, problem } from "elysia";
 import type { z } from "zod";
 import { received } from "./stored-json";

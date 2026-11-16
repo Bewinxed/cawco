@@ -17,12 +17,13 @@
  * the same spawn every hub-started session takes.
  */
 
-import type { ArrivingAsk } from "@cawco/core/frames";
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { ControlName, ControlReply } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
+import type { HubEnvelope } from "@cawco/core/envelopes";
+import type { ArrivingAsk } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import {
@@ -55,7 +56,7 @@ import {
   moveSize,
   type NamedMoveRequest,
 } from "@cawco/core/move";
-import type { HubEnvelope, SpawnPayload } from "@cawco/core/protocol";
+import type { SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";

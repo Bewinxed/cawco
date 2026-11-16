@@ -1,5 +1,6 @@
 /** What the agent socket reads of its own: the hub's constants and pure reads the stages share. */
 
+import type { HubEnvelope, MachineEnvelope } from "@cawco/core/envelopes";
 import { everyOf } from "@cawco/core/every-of";
 import type { FleetSyncReport } from "@cawco/core/fleet";
 import type { FramePayload } from "@cawco/core/frames";
@@ -13,9 +14,7 @@ import type { HubPreviewOrigins } from "@cawco/core/preview/hub-previews";
 import type {
   BuildInfo,
   DeliveryMark,
-  HubEnvelope,
   IngestMark,
-  MachineEnvelope,
   SessionCustody,
   SessionLimits,
 } from "@cawco/core/protocol";

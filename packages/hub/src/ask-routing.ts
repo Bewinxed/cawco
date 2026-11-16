@@ -1,6 +1,5 @@
-import { isRecord } from "@cawco/core/is-record";
-import type { ArrivingAsk } from "@cawco/core/frames";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
+import type { ArrivingAsk } from "@cawco/core/frames";
 import { DELEGATE_WAIT_ORIGIN } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { DelegateWaitAbout } from "@cawco/core/injected";
@@ -9,6 +8,7 @@ import {
   delegateWaitNotice,
   reportMarker,
 } from "@cawco/core/injected";
+import { isRecord } from "@cawco/core/is-record";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 
@@ -327,11 +327,10 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
    * `reportees`), as the ask's record names it
    * ({@link deliverDelegateAsk}). Undefined for an ask not routed.
    */
-  const routedRecipient = (parked: ArrivingAsk): string | undefined => {
-    return parked.payload.routedTo === "parent" && parked.requestId
+  const routedRecipient = (parked: ArrivingAsk): string | undefined =>
+    parked.payload.routedTo === "parent" && parked.requestId
       ? ctx.db.delegateAsk(parked.requestId)?.parentInstanceId
       : undefined;
-  };
 
   /**
    * A session just died — a parent, or a project's conversation — while an ask routed

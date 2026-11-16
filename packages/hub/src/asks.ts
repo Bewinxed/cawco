@@ -52,7 +52,6 @@
  * person, however recently the mode was set.
  */
 
-import type { ArrivingAsk } from "@cawco/core/frames";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import {
   type AskedPermit,
@@ -72,6 +71,7 @@ import {
 } from "@cawco/core/asks";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
+import type { ArrivingAsk } from "@cawco/core/frames";
 import { ASK_ORIGIN, type PermissionMode } from "@cawco/core/harness/kinds";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { settledQuestionResult } from "@cawco/core/question";

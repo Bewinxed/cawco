@@ -4,9 +4,11 @@
  * stage that takes the frame in whole says stop and no later stage reads it.
  */
 
-import type { FrameReads } from "@cawco/core/agent-frame";
+import type { FrameReads } from "@cawco/core/agent-reads";
+import type { MachineEnvelope } from "@cawco/core/envelopes";
+
 import type { FramePayload } from "@cawco/core/frames";
-import type { MachineEnvelope } from "@cawco/core/protocol";
+
 import type { DbShape } from "../db";
 import type { AuthSocket } from "../hub-shapes";
 import type { MachineSocket } from "../wire-socket";

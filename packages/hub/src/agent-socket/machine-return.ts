@@ -4,8 +4,10 @@
  * what it waits behind, a thing fixed by incident more than once).
  */
 
-import type { RegisterReads } from "@cawco/core/agent-frame";
-import type { MachineEnvelope, SessionCustody } from "@cawco/core/protocol";
+import type { RegisterReads } from "@cawco/core/agent-reads";
+import type { MachineEnvelope } from "@cawco/core/envelopes";
+
+import type { SessionCustody } from "@cawco/core/protocol";
 import type { DbShape } from "../db";
 import type { AuthSocket } from "../hub-shapes";
 import type { MachineSocket } from "../wire-socket";

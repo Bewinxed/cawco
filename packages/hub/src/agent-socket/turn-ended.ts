@@ -6,7 +6,8 @@
  */
 
 import type { ArtifactNeed } from "@cawco/core/artifact-needs";
-import type { InstanceRow, MachineEnvelope } from "@cawco/core/protocol";
+import type { MachineEnvelope } from "@cawco/core/envelopes";
+import type { InstanceRow } from "@cawco/core/protocol";
 import type { NeutralResultMessage } from "@cawco/core/session-messages";
 import type { DbShape } from "../db";
 

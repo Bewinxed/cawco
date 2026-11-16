@@ -3,10 +3,11 @@
  */
 
 import type { AccountProvider, HomeStore } from "@cawco/core/accounts";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { FleetVersioned } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { MachinePath } from "@cawco/core/machine-path";
-import type { NamedSpawn } from "@cawco/core/protocol";
+import type { NamedSpawn, Verb } from "@cawco/core/protocol";
 import type { problem } from "elysia";
 import type { DbShape } from "./db";
 import { awayProblem, MachineProblem } from "./machine-answers";
@@ -169,3 +170,12 @@ export type AuthSocket<S extends HubSocket = HubSocket> = S & {
   readonly headers?: Record<string, string | undefined>;
   readonly remoteAddress?: string;
 };
+
+/**
+ * A client's request the hub carries to its machine as asked (server.ts
+ * `forward`), its answer routed back to the client that asked: a control
+ * call, a file request, a start, a stop.
+ */
+export type Forwarded = HubEnvelope<
+  Extract<Verb, "control" | "fs" | "spawn" | "stop">
+>;

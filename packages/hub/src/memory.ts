@@ -104,7 +104,6 @@
  *   Find, over every machine's transcripts: no store of its own here.
  */
 
-import type { ArrivingAsk } from "@cawco/core/frames";
 import {
   cardRef,
   decidedOf,
@@ -112,6 +111,7 @@ import {
   recordPath,
 } from "@cawco/core/decisions";
 import { frontMatterBlock } from "@cawco/core/fleet";
+import type { ArrivingAsk } from "@cawco/core/frames";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import {
   DELEGATE_TYPE_PROPOSAL_TOOL,

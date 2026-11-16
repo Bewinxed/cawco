@@ -11,10 +11,9 @@ import {
   binaryUpdateOf,
   envelopeFault,
   frameReads,
-  type HeartbeatReads,
   readMachineEnvelope,
 } from "@cawco/core/agent-frame";
-import { readClientEnvelope } from "@cawco/core/client-envelope";
+import type { HeartbeatReads } from "@cawco/core/agent-reads";
 import type { ArchiveView } from "@cawco/core/archive";
 import { unparked } from "@cawco/core/artifact-needs";
 import {
@@ -45,6 +44,7 @@ import {
 } from "@cawco/core/canvas";
 import type { NamedMachineCapabilities } from "@cawco/core/capabilities";
 import type { ChoiceEntry } from "@cawco/core/choices";
+import { readClientEnvelope } from "@cawco/core/client-envelope";
 import { compressAnswer } from "@cawco/core/compress-answer";
 import {
   CONTROL_GH_ACCOUNTS,
@@ -57,6 +57,14 @@ import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { docMeta } from "@cawco/core/doc-meta";
+import type {
+  ClientEnvelope,
+  ClientVerb,
+  FrameEnvelope,
+  HubEnvelope,
+  MachineEnvelope,
+  MachineVerb,
+} from "@cawco/core/envelopes";
 import type { ExternalRef } from "@cawco/core/external-items";
 import type { FleetSyncReport } from "@cawco/core/fleet";
 import { FLEET_DELTA, machinePlatform, mcpRunsOn } from "@cawco/core/fleet";
@@ -108,8 +116,8 @@ import {
 import { harnessRefusal, harnessSpec } from "@cawco/core/harness-refusal";
 import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
-import { isRecord } from "@cawco/core/is-record";
 import { parseDelegateWaitNotice } from "@cawco/core/injected";
+import { isRecord } from "@cawco/core/is-record";
 import { doing } from "@cawco/core/loop-watch";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
@@ -136,15 +144,9 @@ import { previewEnterUrl } from "@cawco/core/preview/routes";
 import type {
   AgentRow,
   BuildInfo,
-  ClientEnvelope,
-  ClientVerb,
   ControlPayload,
   DelegateEvent,
   EnvelopeAddress,
-  HubEnvelope,
-  FrameEnvelope,
-  MachineEnvelope,
-  MachineVerb,
   InstanceRow,
   InstanceStatus,
   LaunchGrant,
@@ -162,6 +164,7 @@ import {
   CONFIGURE_BINARY_UPDATES,
   ENDED_STATUSES,
   OVER_STATUSES,
+  resumedKey,
   type StoppedCommands,
 } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
@@ -450,7 +453,7 @@ import { hubId } from "./hub-id";
 import { recordHubEvent } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
-import { type AuthSocket, MachineAway } from "./hub-shapes";
+import { type AuthSocket, type Forwarded, MachineAway } from "./hub-shapes";
 import { createHubTools, installBuild } from "./hub-tools";
 import { createIngress, type Ingress, ingressRoutes } from "./ingress";
 import { createInstalls } from "./installs";
@@ -682,7 +685,6 @@ import {
   namedSpawn,
   peekKind,
   peekParent,
-  resumedKey,
 } from "./spawns";
 import {
   CLIENT_ADDRESS_HEADER,
@@ -6278,7 +6280,7 @@ export const createServer = (
 
   /** Registers a socket's correlation before dispatch; Ledger commands own their ack route. */
   const forward = (
-    envelope: HubEnvelope<"control" | "fs" | "spawn" | "stop">,
+    envelope: Forwarded,
     dashboard: ClientSocket,
     remember = true
   ): boolean => {

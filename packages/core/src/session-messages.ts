@@ -982,6 +982,15 @@ export interface CompactionFailure {
 }
 
 /**
+ * What a `leak_found` frame found (agent leak-watch.ts), as the facts its
+ * row's line is made of (core words/notices.ts): how many processes were
+ * left running, or which process climbs in memory and how high.
+ */
+export type LeakFound =
+  | { kind: "left"; count: number }
+  | { kind: "memory"; command: string; resident: string };
+
+/**
  * A `system` frame. One loose interface rather than a subtype union: the folding
  * layer switches on `subtype` and reads the fields each subtype carries, and a
  * harness that emits a subtype nothing here names degrades to a generic line.
@@ -1013,6 +1022,11 @@ export interface NeutralSystemMessage {
   // model_fallback
   content?: string;
   cwd?: string;
+  // permission_denied — the tool the SDK denied without asking, the
+  // component that decided (`decision_reason_type`) and its reason, or the
+  // SDK's own words
+  decision_reason?: string;
+  decision_reason_type?: string;
   description?: string;
   // effort ({@link EFFORT_READ}) — the level the session sends, null for none
   effort?: EffortLevel | null;
@@ -1024,18 +1038,12 @@ export interface NeutralSystemMessage {
   // transcript draws (its output is otherwise startup noise, and never stored)
   hook_name?: string;
   last_tool_name?: string;
-  // leak_found ({@link import("./harness").LEAK_FOUND}) — what was found leaking
-  leak?: import("./harness").LeakFound;
-  // permission_denied — the tool the SDK denied without asking, the
-  // component that decided (`decision_reason_type`) and its reason, or the
-  // SDK's own words
-  decision_reason?: string;
-  decision_reason_type?: string;
-  message?: string;
-  tool_name?: string;
+  // leak_found — what was found leaking ({@link LeakFound})
+  leak?: LeakFound;
   // mcp_not_connected ({@link MCP_NOT_CONNECTED}) — the server that did not connect
   mcp_server?: string;
   mcp_servers?: { name: string; status: string }[];
+  message?: string;
   // stream_so_far ({@link STREAM_SO_FAR}) — the id the harness stores the
   // message being written under, when it stores it while it is written
   message_id?: string;
@@ -1087,6 +1095,7 @@ export interface NeutralSystemMessage {
   task_id?: string;
   text?: string;
   timestamp?: string;
+  tool_name?: string;
   // task_started / task_progress / task_notification / task_updated
   tool_use_id?: string;
   tools?: string[];

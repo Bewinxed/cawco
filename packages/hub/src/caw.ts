@@ -49,6 +49,7 @@ import {
   BOARD_ONLY_DENIED_TOOLS,
   CURATOR_DENIED_TOOLS,
 } from "@cawco/core/delegate-types";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import {
   ACT_ORIGIN,
   type ARTIFACT_ORIGIN,
@@ -69,7 +70,6 @@ import {
   type ProjectSpend,
 } from "@cawco/core/project-conversation";
 import type {
-  HubEnvelope,
   InstanceRow,
   SendPayload,
   SpawnPayload,

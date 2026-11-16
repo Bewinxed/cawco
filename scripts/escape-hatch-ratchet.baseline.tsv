@@ -10,7 +10,6 @@ as-unknown-as	{ fragment: Node; instance: { content: Node } | null; }	apps/dashb
 as-unknown-as	{ getSettings: () => Promise<{ applied?: { effort?: EffortLevel | null }	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	{ getTaskOutput?: (taskId: string) => Promise<{ output: string }>; }	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	{ instance: { content: Node } | null }	apps/dashboard/scripts/outro-reads-check.ts	1
-as-unknown-as	{ message?: { type?: unknown; content?: unknown; message?: unknown }; }	packages/core/src/transcript-rules.ts	1
 as-unknown-as	{ raw: RawSocket }	packages/hub/src/browser-routes.ts	1
 as-unknown-as	{ raw: RawSocket }	packages/hub/src/wire-socket.ts	1
 as-unknown-as	{ request: (request: { subtype: "cancel_async_message"; message_uuid: st	packages/agent/src/harnesses/claude.ts	1
@@ -22,6 +21,7 @@ as-unknown-as	{ webkit?: { messageHandlers?: { cawco?: unknown } }; }	packages/p
 as-unknown-as	BuildInfo	packages/core/src/agent-frame.ts	1
 as-unknown-as	ClaudeModelUsage	packages/hub/src/turn-usage.ts	1
 as-unknown-as	CommandEnvelope	packages/hub/src/stream.ts	1
+as-unknown-as	AbstractType< YEvent<AbstractType<unknown>> >	packages/hub/src/artifacts/docs.ts	2
 as-unknown-as	CommandLifecycle	packages/agent/src/harnesses/claude.ts	2
 as-unknown-as	DocMap<T>	packages/preview/src/overlay/mirror.ts	1
 as-unknown-as	FleetHarnessConfig	packages/hub/src/server.ts	1
@@ -30,7 +30,6 @@ as-unknown-as	HookFrame	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Libc	packages/core/src/flock.ts	1
 as-unknown-as	MetaMap	packages/core/src/doc-meta.ts	1
 as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
-as-unknown-as	NeutralAssistantMessage	packages/hub/src/sends.ts	1
 as-unknown-as	NeutralMessage	packages/agent/src/harnesses/claude.ts	7
 as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
@@ -41,10 +40,8 @@ as-unknown-as	RawRecord	packages/agent/src/harnesses/claude-transcript.ts	5
 as-unknown-as	ReadableWritablePair< Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer> >	packages/core/src/compress-answer.ts	1
 as-unknown-as	Record< string, (...a: unknown[]) => unknown >	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
-as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	RuleDraft	packages/hub/src/routes/rules.ts	2
 as-unknown-as	SDKUserMessage	packages/agent/src/harnesses/claude.ts	1
-as-unknown-as	SendPayload	packages/hub/src/stream.ts	1
 as-unknown-as	SentMessage	packages/hub/src/server.ts	1
 as-unknown-as	ServerWebSocket<ArtifactSocket>	packages/hub/src/preview-routes.ts	1
 as-unknown-as	ServerWebSocket<PreviewSocket>	packages/hub/src/browser-routes.ts	1
@@ -311,7 +308,6 @@ suppression	biome-ignore lint/security/useIframeSandbox	apps/dashboard/src/route
 suppression	biome-ignore lint/style/noDescendingSpecificity	apps/dashboard/src/app.css	1
 suppression	biome-ignore lint/style/noNamespace	apps/dashboard/src/app.d.ts	1
 suppression	biome-ignore lint/style/noNestedTernary	packages/agent/src/harnesses/opencode-docs.ts	1
-suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/ask-routing.ts	1
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/history.ts	1
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/rules.ts	2
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/stream.ts	1

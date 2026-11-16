@@ -6,6 +6,7 @@ import {
   type StartingSet,
   startsAny,
 } from "@cawco/core/delegate-types";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import {
   EFFORT_NONE,
   type EffortLevel,
@@ -16,7 +17,6 @@ import {
 import { harnessesWith, traitsOf } from "@cawco/core/harness/traits";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type {
-  HubEnvelope,
   InstanceStatus,
   SessionCommands,
   SessionEndIntent,
@@ -2404,9 +2404,15 @@ export const instancesDb = (core: DbCore): InstancesDb => {
         )
         .orderBy(asc(instances.owedAt), asc(instances.id))
         .all()
-        .flatMap((row) =>
-          row.envelope ? [{ id: row.id, envelope: row.envelope }] : []
-        ),
+        .flatMap(({ id, envelope }) => {
+          // The column keeps any verb, as it always took one: one kept
+          // under another is no start the hub wrote.
+          if (envelope?.verb !== "spawn") {
+            return [];
+          }
+          const { verb, ...kept } = envelope;
+          return [{ id, envelope: { ...kept, verb } }];
+        }),
     takeOwedSpawn: (id) =>
       db
         .update(instances)

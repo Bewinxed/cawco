@@ -1,6 +1,5 @@
 /** Named frame shapes keep schema and generated-client names independent of union order. */
 
-import { everyOf } from "./every-of";
 import type { AccountBorrowFrame } from "./accounts";
 import type { ActionsFrame } from "./actions";
 import type { ArtifactKind } from "./artifact-kinds";
@@ -593,7 +592,7 @@ export interface ControlResultFrame {
   unanswered?: HarnessUnanswered[];
 }
 
-export interface ErrorFrame {
+interface ErrorFrame {
   /** Internal end-reconciliation evidence; never relayed to a client. */
   endReason?: string;
   instanceId?: string;
@@ -925,80 +924,3 @@ export type FramePayload =
   | StoredFrame
   /** Daemon-originated: the machine's stored transcripts moved. */
   | CatalogMovedFrame;
-
-/** Every frame's `kind`, checked to name each {@link FramePayload} kind. */
-const FRAME_KINDS: ReadonlySet<string> = new Set(
-  everyOf<FramePayload["kind"]>()([
-    "fleet_mcp",
-    "fleet_report",
-    "fleet_converge",
-    "preview",
-    "frame",
-    "send",
-    "rejected",
-    "held_send",
-    "taken_send",
-    "instances",
-    "instances_delta",
-    "permission_request",
-    "permission_settled",
-    "usage",
-    "stopped",
-    "asleep",
-    "recovery_unavailable",
-    "control_result",
-    "error",
-    "session_address",
-    "scratch_worktree",
-    "pulse",
-    "work_item",
-    "project_offer",
-    "tasks.changed",
-    "questions.moved",
-    "decisions.changed",
-    "blocks.changed",
-    "starters.changed",
-    "projects.changed",
-    "hub.restart",
-    "tailnet.https",
-    "fleet.fetch",
-    "project.cap",
-    "actions",
-    "hub_auth",
-    "installs",
-    "project.stop",
-    "delegate_event",
-    "fleet_watch.notices",
-    "artifact.needs",
-    "laws.broken",
-    "person",
-    "desk_alert",
-    "moves",
-    "move_progress",
-    "command_queue",
-    "stage",
-    "stage-clone",
-    "account_borrow",
-    "browsers",
-    "browser_handback",
-    "passkey_advert",
-    "passkey_qr",
-    "browser_list",
-    "passkey_status",
-    "stream_relay",
-    "stream_relay.journey",
-    "stored",
-    "catalog_moved",
-  ])
-);
-
-/**
- * Whether `value` is a frame: a JSON object whose `kind` is one a
- * {@link FramePayload} names. Its other fields are its sender's, read where
- * its kind is handled: a session's own words keep their shape from the
- * harness (core agent-frame.ts).
- */
-export const isFramePayload = (value: object): value is FramePayload =>
-  "kind" in value &&
-  typeof value.kind === "string" &&
-  FRAME_KINDS.has(value.kind);

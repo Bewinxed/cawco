@@ -50,12 +50,12 @@
  * design/ (memory.ts `personsTier`).
  */
 
-import type { ArrivingAsk } from "@cawco/core/frames";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
+import type { ArrivingAsk } from "@cawco/core/frames";
 import { DESIGN_PROPOSAL_TOOL } from "@cawco/core/permission-presentation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";

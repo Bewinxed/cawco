@@ -33,7 +33,7 @@ import {
   permissionModeNamed,
 } from "./harness/kinds";
 import { traitsOf } from "./harness/traits";
-import type { AuthState, NeutralOrigin } from "./session-messages";
+import type { AuthState, LeakFound, NeutralOrigin } from "./session-messages";
 import { harnessWords } from "./words/harness";
 
 /**
@@ -309,14 +309,9 @@ export const LEAK_FOUND = "leak_found";
  */
 export const LEAK_ENDED = "leak_ended";
 
-/**
- * What a {@link LEAK_FOUND} frame found, as the facts its row's line is
- * made of (the frame's `leak`; core words/notices.ts): how many processes
- * were left running, or which process climbs in memory and how high.
- */
-export type LeakFound =
-  | { kind: "left"; count: number }
-  | { kind: "memory"; command: string; resident: string };
+// What a LEAK_FOUND frame found: the type of the frame's `leak`
+// (session-messages.ts), named here too for the agent that sends it.
+export type { LeakFound } from "./session-messages";
 
 /**
  * A session ended, and the containers its work started were stopped with it
