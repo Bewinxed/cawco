@@ -62,9 +62,11 @@ import { tv } from "#lib/utils.js";
  * `size` (setting chips): `regular`, or `compact` for the session card's
  * settings group (the session tabs' surface brief, Session card: "the four settings (model,
  * effort, permission, account) as one group of equal chips `--spacing-space-1`
- * apart"): a compact row's height, and on a phone a finger's 44px with the
- * chevron gone (an account chip, `data-account-chip`, keeps its own, the
- * only hint it opens anything).
+ * apart"): a compact row's height at every width. Under a finger its 44px
+ * is the `touch-hit` area every setting chip carries, never a taller chip
+ * (the row sets its gaps for it); on a phone its chevron is gone (an
+ * account chip, `data-account-chip`, keeps its own, the only hint it opens
+ * anything).
  * `tone` (setting chips): `muted` (nothing chosen), `fail` (a pick that
  * fails), `grant` (a wider grant than asked, DESIGN.md, The Consequential
  * Grant Rule: "drawn in the warning tint with warning ink … and a real
@@ -85,7 +87,7 @@ export const chipVariants = tv({
     size: {
       regular: "",
       compact:
-        "h-(--row-compact-h) gap-space-1 max-phone:h-c-btn-h-lg max-phone:not-data-account-chip:*:data-[slot=chevron]:hidden",
+        "h-(--row-compact-h) gap-space-1 max-phone:not-data-account-chip:*:data-[slot=chevron]:hidden",
     },
     /** A setting chip's tone; its classes are the setting chip's own (below). */
     tone: { muted: "", fail: "", grant: "" },

@@ -1058,7 +1058,11 @@
              group: the same chip height and the same gap across and down,
              wrapping as a unit when the card runs out of row. The model chip
              gives up room first (its name ellipsized) before anything
-             wraps. -->
+             wraps. Under a finger the rows stand 16px apart, as a row of
+             chips does (ui/chip `chipsVariants`), so each chip's 44px
+             area (`touch-hit`, 28 drawn + 8 above + 8 below) meets the next
+             row's at the midpoint; the chip itself stays the compact row's
+             height. -->
         <!-- The card's width holds the longest names whole ("Fable 5.1 (1M context)",
              "medium", "Accept edits") with the chips' insides drawn in a little;
              a phone's row is ~350px, so the three chips fit it whole, the
@@ -1068,7 +1072,7 @@
              only hint that it opens anything. -->
         <div
           data-slot="settings"
-          class="session-details-chips flex min-w-0 flex-wrap items-center gap-space-1"
+          class="session-details-chips flex min-w-0 flex-wrap items-center gap-space-1 hit-gap-x-space-1 hit-gap-y-space-1 coarse:gap-y-space-4 coarse:hit-gap-y-space-4"
         >
           {#if settable || kept}
             <NsPopover
