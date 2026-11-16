@@ -23,12 +23,12 @@ import type {
   SessionOrigin,
   SessionTooling,
 } from "@cawco/core/protocol";
-import {
-  CLAUDE_CONVERSATION_GONE,
-  type LastErrorKind,
-} from "@cawco/core/relaunch";
+import type { LastErrorKind } from "@cawco/core/relaunch";
 import { DAY_MS } from "@cawco/core/time";
-import { RESTART_LOST } from "@cawco/core/words/session-ends";
+import {
+  CONVERSATION_GONE,
+  RESTART_LOST,
+} from "@cawco/core/words/session-ends";
 import {
   and,
   asc,
@@ -2447,7 +2447,7 @@ export const instancesDb = (core: DbCore): InstancesDb => {
         db.update(instances)
           .set({
             status: "error",
-            lastError: CLAUDE_CONVERSATION_GONE,
+            lastError: CONVERSATION_GONE,
             lastErrorKind: "conversation-gone",
           })
           .where(

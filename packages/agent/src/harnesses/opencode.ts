@@ -68,6 +68,7 @@ import {
   workspaceSpillDir,
 } from "@cawco/core/paths/workspace";
 import type { SpawnPayload } from "@cawco/core/protocol";
+import { conversationGone } from "@cawco/core/relaunch";
 import {
   CONTROL_FOLDER_COMMANDS,
   CONTROL_MODEL_CATALOG,
@@ -1270,6 +1271,25 @@ const sessionsOnMachine = async (
       unhandled("read", read);
   }
 };
+
+/**
+ * Why a resume or a fork of `sessionKey` failed, from the error its server
+ * answered. A server that holds no such session (`notFound`), when no
+ * OpenCode database on the machine holds it either ({@link sessionsOnMachine}
+ * reads every one by the id, root or not), is the conversation gone from
+ * OpenCode's store (core `conversationGone`): the hub files it so, and never
+ * starts it on that conversation again. Any other failure, and a session a
+ * database here still holds that its server did not answer for, is `what`
+ * with the server's words.
+ */
+const missingSession = async (
+  sessionKey: string,
+  error: unknown,
+  what: string
+): Promise<Error> =>
+  notFound(error) && (await sessionsOnMachine({ id: sessionKey })).length === 0
+    ? conversationGone()
+    : new Error(`${what}: ${errorText(error)}`, { cause: error });
 
 const sessionToInfo = (
   session: StoredSession,
@@ -5902,15 +5922,24 @@ class OpencodeHarness implements Harness<"opencode"> {
       assertOpencodeKey(spec.resume.sessionKey, "fork");
       const source = await this.#homeClient(spec.resume.sessionKey);
       const { sessionKey, atMessage } = spec.resume;
-      const forked = await ask(`the fork of ${sessionKey}`, (options) =>
-        source.session.fork(
-          {
-            sessionID: sessionKey,
-            ...(atMessage ? { before: atMessage } : {}),
-          },
-          options
-        )
-      );
+      let forked: SessionInfo;
+      try {
+        forked = await ask(`the fork of ${sessionKey}`, (options) =>
+          source.session.fork(
+            {
+              sessionID: sessionKey,
+              ...(atMessage ? { before: atMessage } : {}),
+            },
+            options
+          )
+        );
+      } catch (error) {
+        throw await missingSession(
+          sessionKey,
+          error,
+          `opencode has no session ${sessionKey} to fork`
+        );
+      }
       sessionId = forked.id;
       await setHome(
         [sessionId],
@@ -5930,9 +5959,10 @@ class OpencodeHarness implements Harness<"opencode"> {
           client.session.get({ sessionID: sessionKey }, options)
         );
       } catch (error) {
-        throw new Error(
-          `opencode has no session ${sessionKey} to resume: ${errorText(error)}`,
-          { cause: error }
+        throw await missingSession(
+          sessionKey,
+          error,
+          `opencode has no session ${sessionKey} to resume`
         );
       }
       switch (found.kind) {
