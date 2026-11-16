@@ -32,14 +32,14 @@
   data-box
 >
   <b
-    class="type-label overflow-clip text-ellipsis whitespace-nowrap text-ink-strong group-data-wrap:overflow-visible group-data-wrap:whitespace-normal group-data-wrap:wrap-anywhere"
+    class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong group-data-wrap:overflow-visible group-data-wrap:whitespace-normal group-data-wrap:wrap-anywhere"
     >{account.label || account.email
       ? nameOf(account)
       : accountsWords.notSignedInYet}</b
   >
   {#if account.label && account.email}
     <small
-      class="type-meta overflow-clip text-ellipsis whitespace-nowrap text-ink-muted group-data-wrap:overflow-visible group-data-wrap:whitespace-normal group-data-wrap:wrap-anywhere"
+      class="type-meta min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted group-data-wrap:overflow-visible group-data-wrap:whitespace-normal group-data-wrap:wrap-anywhere"
       >{account.email}</small
     >
   {/if}
