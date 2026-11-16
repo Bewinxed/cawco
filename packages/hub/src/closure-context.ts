@@ -506,6 +506,8 @@ export interface ClosureContext {
   ) => void;
   dropMarketplaceLink: (source: string) => boolean;
   embedKeyOf: (id: string) => string | undefined;
+  /** Ends the notices owed to a session nothing will wake (sends.ts `endOwedNotices`, owed-ends.ts). */
+  endOwedNotices: (of: { instanceId: string } | "every") => void;
   endSession: (
     instanceId: string,
     intent: SessionEndIntent,

@@ -227,7 +227,7 @@ import {
 import type { CommandAck } from "@cawco/core/stream";
 import { type StreamHeartbeat, WIRE_PROTOCOL } from "@cawco/core/stream";
 import type { AttemptStart } from "@cawco/core/task-views";
-import { DAY_MS, secondsOf } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type { ReportedToolStatus } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
@@ -1463,6 +1463,7 @@ export const createServer = (
     advanceCompaction: () => advanceCompaction,
     atLimit: () => atLimit,
     credentialTurns: () => credentialTurns,
+    endOwedNotices: () => endOwedNotices,
     forgetPending: () => forgetPending,
     forkNoticeFor: () => forkNoticeFor,
     hubStep: () => hubStep,
@@ -1763,6 +1764,7 @@ export const createServer = (
     decideCustody,
     deliverSend,
     deliverToSession,
+    endOwedNotices,
     failOwedAway,
     failSend,
     handoffs,
@@ -11316,6 +11318,10 @@ export const createServer = (
   };
   pruneTurnUsage();
   lifetime.every(DAY_MS, pruneTurnUsage);
+  // What is owed to a session nothing will wake ends (owed-ends.ts): the
+  // notices this hub kept before it started, then each hour's.
+  endOwedNotices("every");
+  lifetime.every(HOUR_MS, () => endOwedNotices("every"));
 
   const keepAliveScheduler = createKeepAliveScheduler({
     lifetime,

@@ -26,6 +26,9 @@ const WATCH_LINES_KEPT = 20;
 /** How many of a session's lines about its context are kept ({@link DbShape.noteContextLine}). */
 const CONTEXT_LINES_KEPT = 20;
 
+/** How many of a session's lines about notices that ended undelivered are kept ({@link DbShape.noteUnsentLine}). */
+const UNSENT_LINES_KEPT = 20;
+
 /** A session's move line ({@link DbShape.noteMovedHere}). */
 interface MovedHere {
   at: number;
@@ -55,8 +58,16 @@ export interface SessionLinesDb {
   ) => boolean;
   /** Records that a session started where its project was moved to for it: the move's ready line. */
   readonly noteMovedHere: (id: string, line: MovedHere) => void;
+  /**
+   * Keeps the line for notices owed to the session that ended undelivered
+   * (core `NOTICES_ENDED`) on its row, the last {@link UNSENT_LINES_KEPT}.
+   * False when the hub keeps no row for the session.
+   */
+  readonly noteUnsentLine: (id: string, line: LimitNote) => boolean;
   /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
   readonly noteWatchLine: (id: string, line: WatchLine) => void;
+  /** The lines for notices that ended undelivered kept on the session's row, oldest first. */
+  readonly unsentLinesOf: (id: string) => LimitNote[];
   /** The fleet-watch lines kept on the session's row, oldest first. */
   readonly watchLinesOf: (id: string) => WatchLine[];
 }
@@ -173,6 +184,14 @@ export const sessionLinesDb = (core: DbCore): SessionLinesDb => {
       })),
     watchLinesOf: (id) =>
       linesOf(id, "watch").map(({ id: lineId, at, content }) => ({
+        id: lineId,
+        at,
+        content,
+      })),
+    noteUnsentLine: (id, line) =>
+      keepLine(id, "unsent", line, UNSENT_LINES_KEPT),
+    unsentLinesOf: (id) =>
+      linesOf(id, "unsent").map(({ id: lineId, at, content }) => ({
         id: lineId,
         at,
         content,

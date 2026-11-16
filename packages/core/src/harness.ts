@@ -407,6 +407,14 @@ export const SESSION_STOPPED = "session_stopped";
 export const FLEET_WATCH = "fleet_watch";
 
 /**
+ * The hub's line in a session's transcript for the notices owed to it that
+ * ended undelivered in one look (hub owed-ends.ts): `content` is the line
+ * (core words/unsent.ts), how many and why. Drawn as a note; never sent to
+ * the session.
+ */
+export const NOTICES_ENDED = "notices_ended";
+
+/**
  * The hub's line in a project conversation's transcript for one of its
  * notes to the person (hub caw.ts `notice`, core project-conversation.ts `ProjectNote`):
  * `content` is the note as JSON, drawn as a note titled by its title, its

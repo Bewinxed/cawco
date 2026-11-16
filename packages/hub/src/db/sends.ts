@@ -12,6 +12,7 @@ import {
   isNotNull,
   isNull,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import type { DbCore } from "./core";
@@ -118,9 +119,9 @@ export interface SendsDb {
    * pending or kept none (a record from before envelopes were kept).
    */
   readonly oweAgain: (uuid: string) => boolean;
-  /** The sends still owed to their machine ({@link sentMessages.owedHeld}), pending, in the order accepted: a session's, or a machine's. */
+  /** The sends still owed to their machine ({@link sentMessages.owedHeld}), pending, in the order accepted: a session's, a machine's, or every one. */
   readonly owedSends: (
-    of: { instanceId: string } | { machineId: string }
+    of: { instanceId: string } | { machineId: string } | "every"
   ) => SentMessageRow[];
   /**
    * The sessions with a send owed to their machine whose hold is one of
@@ -193,6 +194,29 @@ export interface SendsDb {
 export const sendsDb = (core: DbCore): SendsDb => {
   const { db } = core;
 
+  /**
+   * Whose owed sends {@link SendsDb.owedSends} reads: a session's; a
+   * machine's, by its sessions' ids, so SQLite finds each one's pending
+   * sends by its index (`sent_messages_state`) (joined to its sessions, it
+   * read every send the hub ever kept, at each register: hub-restart-load);
+   * or every one, for the look that ends the notices nothing will wake
+   * (owed-ends.ts), at the hub's start and each hour after.
+   */
+  const owedOf = (of: Parameters<SendsDb["owedSends"]>[0]): SQL | undefined => {
+    if (of === "every") {
+      return;
+    }
+    return "instanceId" in of
+      ? eq(sentMessages.instanceId, of.instanceId)
+      : inArray(
+          sentMessages.instanceId,
+          db
+            .select({ id: instances.id })
+            .from(instances)
+            .where(eq(instances.machineId, of.machineId))
+        );
+  };
+
   return {
     migrateSendsOnce: (name, rewrite) =>
       db.transaction((tx) => {
@@ -261,24 +285,13 @@ export const sendsDb = (core: DbCore): SendsDb => {
         )
         .all()
         .map((row) => row.instanceId),
-    // By the sessions' ids, so SQLite finds each one's pending sends by its
-    // index (`sent_messages_state`): joined to its sessions, it read every
-    // send the hub ever kept, at each register (hub-restart-load).
     owedSends: (of) =>
       db
         .select()
         .from(sentMessages)
         .where(
           and(
-            "instanceId" in of
-              ? eq(sentMessages.instanceId, of.instanceId)
-              : inArray(
-                  sentMessages.instanceId,
-                  db
-                    .select({ id: instances.id })
-                    .from(instances)
-                    .where(eq(instances.machineId, of.machineId))
-                ),
+            owedOf(of),
             eq(sentMessages.state, "pending"),
             eq(sentMessages.owedHeld, true)
           )

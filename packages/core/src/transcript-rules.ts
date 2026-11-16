@@ -24,6 +24,7 @@ import {
   firstSentence,
   LIMIT_REACHED,
   MOVED_HERE,
+  NOTICES_ENDED,
   PROJECT_NOTE,
   ROOM_HELD,
   SESSION_STOPPED,
@@ -80,6 +81,7 @@ import { contextWords } from "./words/context";
 import { delegateWaitWords } from "./words/delegates";
 import { FRESH_START_LINE } from "./words/harness-lines";
 import { noticeLine, noticeWords } from "./words/notices";
+import { unsentWords } from "./words/unsent";
 
 type AssistantBlock = NeutralAssistantMessage["message"]["content"][number];
 
@@ -1144,6 +1146,17 @@ export function mapFrame(
           );
           break;
         }
+        // The hub's line for the notices owed to the session that ended
+        // undelivered in one look: the line alone, how many and why.
+        case NOTICES_ENDED:
+          mapping.blocks.push(
+            systemLine(base, "ui.system_note", "", {
+              subtype: NOTICES_ENDED,
+              noteKind: unsentWords.noteKind,
+              noteTitle: sdk.content ?? "",
+            })
+          );
+          break;
         // The hub's line that opens a session started where its project was
         // moved to for it: what moved, titled, and what stayed under it.
         case MOVED_HERE: {
