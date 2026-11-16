@@ -1,14 +1,22 @@
 /**
- * A StoreKit 2 transaction (`Transaction.jwsRepresentation`) proves Pro or
- * the free week, and App Store Server Notifications V2 report purchases and
- * refunds. Apple's own verifier checks both offline: the x5c chain to the
- * pinned Apple Root CA G3, the ES256 signature, the bundle id and the
- * environment. Here: which environment to check against, and what the
- * transaction must grant.
+ * A StoreKit 2 transaction (`Transaction.jwsRepresentation`) proves a Pro
+ * subscription, and App Store Server Notifications V2 report what happens to
+ * it after (renewals, billing failures, expiry, refunds). Apple's own
+ * verifier checks both offline: the x5c chain to the pinned Apple Root CA G3,
+ * the ES256 signature, the bundle id and the environment. Here: which
+ * environment to check against; what the transaction grants is
+ * entitlement.ts's to decide.
  */
 import { Buffer } from "node:buffer";
-import type { SignedDataVerifier } from "@apple/app-store-server-library";
-import { DAY_MS } from "@cawco/core/time";
+import type {
+  JWSRenewalInfoDecodedPayload,
+  SignedDataVerifier,
+} from "@apple/app-store-server-library";
+import {
+  type Entitlement,
+  type Notice,
+  transactionEntitlement,
+} from "./entitlement";
 
 /** https://www.apple.com/certificateauthority/AppleRootCA-G3.cer, sha256 63343abf…3e9179. */
 const APPLE_ROOT_CA_G3 = Buffer.from(
@@ -24,10 +32,10 @@ export type TransactionEnvironment = "Production" | "Sandbox";
 export type Purchase =
   | {
       readonly ok: true;
-      /** When the free week ends; null for Pro. */
-      readonly endsAt: number | null;
+      /** What the subscription's transaction says it is entitled to; null for a TestFlight install's app transaction, which no subscription stands behind. */
+      readonly entitlement: Entitlement | null;
       readonly environment: TransactionEnvironment;
-      /** The purchase's devices are counted under this: environment and original transaction id. */
+      /** The subscription's devices are counted under this: environment and original transaction id. */
       readonly seat: string;
     }
   | { readonly ok: false; readonly error: string };
@@ -76,19 +84,20 @@ const verifierFor = async (env: Env, environment: TransactionEnvironment) => {
 };
 
 export type Notification =
-  | {
+  | (Notice & {
       readonly ok: true;
       readonly environment: TransactionEnvironment;
-      /** Apple's signing time, ms epoch. */
-      readonly signedAt: number;
-      /** The signed transaction inside, verified the same way; absent on a TEST. */
-      readonly transaction: Transaction | undefined;
+      readonly subtype: string | undefined;
       readonly type: string;
       readonly uuid: string;
-    }
+    })
   | { readonly ok: false; readonly error: string };
 
-/** An App Store Server Notification V2 (`signedPayload`), verified, with the transaction it carries verified too. */
+/** The Pro products, from `PRO_PRODUCT_IDS`. */
+export const proProducts = (env: Env): string[] =>
+  env.PRO_PRODUCT_IDS.split(",").map((id) => id.trim());
+
+/** An App Store Server Notification V2 (`signedPayload`), verified, with the transaction and renewal info it carries verified too. */
 export const verifyNotification = async (
   env: Env,
   signedPayload: string
@@ -133,10 +142,26 @@ export const verifyNotification = async (
       };
     }
   }
+  let renewalInfo: JWSRenewalInfoDecodedPayload | undefined;
+  const signedRenewal = notice.data?.signedRenewalInfo;
+  if (signedRenewal) {
+    try {
+      renewalInfo = await verifier.verifyAndDecodeRenewalInfo(signedRenewal);
+    } catch {
+      return {
+        ok: false,
+        error:
+          "Apple's signature on the notification's renewal info does not hold.",
+      };
+    }
+  }
   return {
     ok: true,
     environment,
+    renewalInfo,
     signedAt: notice.signedDate ?? Date.now(),
+    status: notice.data?.status,
+    subtype: notice.subtype,
     transaction,
     type: notice.notificationType,
     uuid: notice.notificationUUID,
@@ -202,7 +227,7 @@ export const verifyAppTransaction = async (
     ok: true,
     environment: "Sandbox",
     seat: `Sandbox:app:${transaction.appTransactionId}`,
-    endsAt: null,
+    entitlement: null,
   };
 };
 
@@ -230,22 +255,13 @@ export const verifyPurchase = async (
       error: "Apple's signature on the purchase does not hold.",
     };
   }
-  const products = env.PRO_PRODUCT_IDS.split(",").map((id) => id.trim());
-  const trial = transaction.productId === env.TRIAL_PRODUCT_ID;
-  if (!(
-    trial ||
-    (transaction.productId && products.includes(transaction.productId))
-  )) {
-    return { ok: false, error: "The purchase is not CawCo Pro." };
-  }
-  if (transaction.revocationDate !== undefined) {
-    return { ok: false, error: "The purchase was refunded." };
-  }
-  if (
-    typeof transaction.expiresDate === "number" &&
-    transaction.expiresDate <= Date.now()
-  ) {
-    return { ok: false, error: "The subscription has expired." };
+  const accepted = transactionEntitlement(
+    transaction,
+    proProducts(env),
+    Date.now()
+  );
+  if (!accepted.ok) {
+    return accepted;
   }
   if (!transaction.originalTransactionId) {
     return {
@@ -253,21 +269,10 @@ export const verifyPurchase = async (
       error: "The purchase carries no original transaction id.",
     };
   }
-  const seat = `${environment}:${transaction.originalTransactionId}`;
-  if (!trial) {
-    return { ok: true, environment, seat, endsAt: null };
-  }
-  if (typeof transaction.purchaseDate !== "number") {
-    return { ok: false, error: "The purchase carries no purchase date." };
-  }
-  // A restore gets a new purchaseDate; the week runs from the first purchase.
-  const startedAt = Math.min(
-    transaction.purchaseDate,
-    transaction.originalPurchaseDate ?? transaction.purchaseDate
-  );
-  const endsAt = startedAt + Number(env.TRIAL_DAYS) * DAY_MS;
-  if (!(endsAt > Date.now())) {
-    return { ok: false, error: "The free week on this purchase has ended." };
-  }
-  return { ok: true, environment, seat, endsAt };
+  return {
+    ok: true,
+    environment,
+    seat: `${environment}:${transaction.originalTransactionId}`,
+    entitlement: accepted.entitlement,
+  };
 };

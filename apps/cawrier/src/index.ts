@@ -1,9 +1,11 @@
 /**
- * Cawrier: the one holder of CawCo's APNs key. A phone with Pro, a live free
- * week, or a TestFlight install before the App Store has products enrolls a
- * pairing (its device token, under a secret it gives its hub); the hub pushes
- * through the pairing with that secret. No hub holds the key. One purchase
- * holds at most {@link SEATS_PER_PURCHASE} live pairings.
+ * Cawrier: the one holder of CawCo's APNs key. A phone with a live Caw&Co Pro
+ * subscription (its free trial included), or a TestFlight install before the
+ * App Store has products, enrolls a pairing (its device token, under a secret
+ * it gives its hub); the hub pushes through the pairing with that secret. No
+ * hub holds the key. One subscription holds at most
+ * {@link SEATS_PER_PURCHASE} live pairings, each living while the
+ * subscription does (entitlement.ts).
  *
  * POST /v1/enroll  { pairingId, secret, deviceToken, apnsEnvironment, proof }
  * POST /v1/push    Authorization: Bearer <secret>; { pairingId, collapseId?, expiration?, pushType?: "alert" | "background", payload }
@@ -21,10 +23,12 @@ import {
   type PushType,
   sendApns,
 } from "./apns";
+import { notificationEntitlement } from "./entitlement";
 import { SEATS_PER_PURCHASE } from "./seats";
 import {
   type Notification,
   type Purchase,
+  proProducts,
   verifyAppTransaction,
   verifyNotification,
   verifyPurchase,
@@ -217,20 +221,20 @@ const enroll = async (request: Request, env: Env): Promise<Response> => {
     apnsEnvironment: enrollment.apnsEnvironment,
     transactionEnvironment: purchase.environment,
     seat: purchase.seat,
-    endsAt: purchase.endsAt,
+    entitlement: purchase.entitlement,
   });
   if (enrolled === "held") {
     return refuse(409, "This pairing is held under another secret.");
   }
-  if (enrolled === "revoked") {
-    console.log("enroll 403: the purchase was refunded");
-    return refuse(403, "This purchase was refunded.");
+  if (enrolled === "ended") {
+    console.log("enroll 403: the subscription has ended");
+    return refuse(403, "This subscription has ended.");
   }
   if (enrolled === "full") {
-    console.log("enroll 409: every seat on the purchase is taken");
+    console.log("enroll 409: every seat on the subscription is taken");
     return refuse(
       409,
-      `This purchase is already on ${SEATS_PER_PURCHASE} devices. Remove one in CawCo on another device, or contact support.`
+      `This subscription is already on ${SEATS_PER_PURCHASE} devices. Remove one in CawCo on another device, or contact support.`
     );
   }
   return json(200, { ok: true });
@@ -311,30 +315,44 @@ const seats = (env: Env, seat: string) =>
 type Verified = Extract<Notification, { ok: true }>;
 
 /**
- * A refund or revocation: terminal, in whatever order it arrives. The
- * purchase is marked revoked under its seats, and every pairing on it is
- * wiped (each gives its seat back as it goes, so a retry finds the rest).
+ * What the notification says of the subscription's entitlement
+ * (entitlement.ts), kept under its seat when Apple signed it later than what
+ * the seat holds; then every pairing on the seat moves to the end that
+ * stands: a renewal extends each, an ended subscription wipes each (each
+ * gives its seat back as it goes, so a retry finds the rest).
  */
-const revoked = async (env: Env, notice: Verified): Promise<string> => {
+const settled = async (env: Env, notice: Verified): Promise<string> => {
+  const decision = notificationEntitlement(notice, proProducts(env));
+  if (decision.kind === "leave") {
+    return `left: ${decision.reason}`;
+  }
   const original = notice.transaction?.originalTransactionId;
   if (!original) {
-    return "no transaction";
+    return "left: no original transaction id";
   }
-  const transactionKey = `${notice.environment}:${original}`;
-  const pairings = await seats(env, transactionKey).revoke();
+  const seat = `${notice.environment}:${original}`;
+  const { until, pairings } = await seats(env, seat).settle(
+    decision.entitlement
+  );
   await Promise.all(
     pairings.map((id) =>
-      env.PAIRING.get(env.PAIRING.idFromString(id)).revoked()
+      env.PAIRING.get(env.PAIRING.idFromString(id)).entitled(seat, until)
     )
   );
-  return `revoked, ${pairings.length} pairing(s) wiped`;
+  const state =
+    until > Date.now()
+      ? `entitled until ${new Date(until).toISOString()}`
+      : "ended";
+  return `${state}, ${pairings.length} pairing(s) moved`;
 };
 
 /**
  * App Store Server Notifications V2. The signed payload and the transaction
- * inside it are verified against Apple's root, for bundle dev.cawco.app, in
- * Production or the sandbox; anything else is refused. Types not handled
- * here answer 200 so Apple does not retry them.
+ * and renewal info inside it are verified against Apple's root, for bundle
+ * dev.cawco.app, in Production or the sandbox; anything else is refused.
+ * Every notification about a Pro subscription is read for the status Apple
+ * reports with it ({@link settled}); the rest answer 200 so Apple does not
+ * retry them.
  *
  * Apple allows one notification URL per app, so once a notification has
  * verified and been applied here, its exact body goes on to Yield (the
@@ -357,14 +375,10 @@ const appleNotification = async (
     console.log(`notification 400: ${notice.error}`);
     return refuse(400, notice.error);
   }
-  let outcome = "ignored";
-  if (notice.type === "REFUND" || notice.type === "REVOKE") {
-    outcome = await revoked(env, notice);
-  } else if (notice.type === "TEST") {
-    outcome = "verified";
-  }
+  const outcome =
+    notice.type === "TEST" ? "verified" : await settled(env, notice);
   console.log(
-    `notification ${notice.type} ${notice.environment} ${notice.uuid}: ${outcome}`
+    `notification ${notice.type}${notice.subtype ? `/${notice.subtype}` : ""} ${notice.environment} ${notice.uuid}: ${outcome}`
   );
   ctx.waitUntil(forward(env, raw, notice.uuid));
   return json(200, { ok: true });

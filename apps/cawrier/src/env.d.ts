@@ -11,11 +11,7 @@ interface Env {
   readonly ASSN_FORWARD_URL: string;
   readonly ENROLL_LIMIT: RateLimit;
   readonly PAIRING: DurableObjectNamespace<import("./pairing").Pairing>;
-  /** Comma-separated product ids that grant Pro. */
+  /** Comma-separated product ids of the Pro auto-renewable subscriptions. */
   readonly PRO_PRODUCT_IDS: string;
   readonly SEATS: DurableObjectNamespace<import("./seats").Seats>;
-  /** Days the free week's purchase grants from its purchase date. */
-  readonly TRIAL_DAYS: string;
-  /** The product id of the free week. */
-  readonly TRIAL_PRODUCT_ID: string;
 }

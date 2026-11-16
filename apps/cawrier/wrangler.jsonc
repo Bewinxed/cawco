@@ -30,10 +30,9 @@
   ],
   "vars": {
     "APNS_TOPIC": "dev.cawco.app",
-    "PRO_PRODUCT_IDS": "dev.cawco.app.pro",
-    // The free week: valid until its purchase date plus TRIAL_DAYS.
-    "TRIAL_PRODUCT_ID": "dev.cawco.app.trial7",
-    "TRIAL_DAYS": "7",
+    // Pro: the two auto-renewable subscriptions of one subscription group, each
+    // with a 14-day free introductory offer.
+    "PRO_PRODUCT_IDS": "dev.cawco.app.pro.monthly,dev.cawco.app.pro.yearly",
     // The App Store app record; Apple's verifier requires it for Production.
     "APP_APPLE_ID": "6819139448",
     // Apple allows one notification URL per app: every verified notification's

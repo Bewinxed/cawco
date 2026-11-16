@@ -1,23 +1,24 @@
 /**
- * One pairing: a phone with Pro or the free week and the hub it gave its
+ * One pairing: a phone with a Pro subscription and the hub it gave its
  * secret to. A SQLite-backed Durable Object named by the pairing id, holding
- * one row; it takes a seat under its purchase ({@link Seats}). Each enroll
- * keeps it 30 more days, or to the free week's end when that is sooner; then
- * its alarm wipes it and gives the seat back (as does removing the device in
- * CawCo, through `/v1/unenroll`). A refunded purchase stops at once: Apple's
- * notification wipes its pairings ({@link Pairing.revoked}). A free week stops
- * when it ends, and an active buyer, re-enrolling on every launch, never lapses.
+ * one row; it takes a seat under its subscription ({@link Seats}). It ends at
+ * the earlier of 30 days after its last enroll and the end of what Apple says
+ * the subscription is entitled to (entitlement.ts `pairingEnd`); then its
+ * alarm wipes it and gives the seat back (as does removing the device in
+ * CawCo, through `/v1/unenroll`). Apple's notifications move that end without
+ * the phone enrolling again ({@link Pairing.entitled}): a renewal extends it,
+ * and an expiry, a refund or a revocation ends the pairing at once.
  */
 import { DurableObject } from "cloudflare:workers";
 import { DAY_MS } from "@cawco/core/time";
 import type { ApnsEnvironment } from "./apns";
+import { type Entitlement, pairingEnd } from "./entitlement";
 import type { TransactionEnvironment } from "./storekit";
 
-const LIFE_MS = 30 * DAY_MS;
 /** Home Assistant's companion relay allows the same per day. */
 const PUSHES_PER_DAY = 500;
 
-/** The one row; `day` and `pushes` count today's pushes; `seat` names the purchase's {@link Seats}. */
+/** The one row; `enrolled_at` is the last enroll; `day` and `pushes` count today's pushes; `seat` names the subscription's {@link Seats}. */
 const TABLE = `CREATE TABLE IF NOT EXISTS enrolment (
   secret_hash TEXT NOT NULL,
   device_token TEXT NOT NULL,
@@ -33,6 +34,7 @@ interface Row extends Record<string, SqlStorageValue> {
   apns_environment: ApnsEnvironment;
   day: number;
   device_token: string;
+  /** The last enroll, ms epoch. */
   enrolled_at: number;
   pushes: number;
   seat: string;
@@ -44,15 +46,15 @@ interface Row extends Record<string, SqlStorageValue> {
 export interface Enrollment {
   readonly apnsEnvironment: ApnsEnvironment;
   readonly deviceToken: string;
-  /** When the free week ends; null for Pro. */
-  readonly endsAt: number | null;
+  /** What the enrolling transaction says of the subscription; null for a TestFlight install's app transaction. */
+  readonly entitlement: Entitlement | null;
   readonly seat: string;
   readonly secretHash: string;
   readonly transactionEnvironment: TransactionEnvironment;
 }
 
-/** `held`: under another secret; `full`: the purchase has no seat left; `revoked`: it was refunded. */
-export type Enrolled = "enrolled" | "held" | "full" | "revoked";
+/** `held`: under another secret; `full`: the subscription has no seat left; `ended`: the subscription has ended. */
+export type Enrolled = "enrolled" | "held" | "full" | "ended";
 
 export type Claim =
   | {
@@ -100,10 +102,10 @@ export class Pairing extends DurableObject<Env> {
       if (held && !same(held.secret_hash, next.secretHash)) {
         return "held";
       }
-      // Taken on every enroll, held already or not: a refunded purchase refuses its own devices too.
-      const taken = await this.seats(next.seat).take(this.me);
-      if (taken !== "taken") {
-        return taken;
+      // Taken on every enroll, held already or not: an ended subscription refuses its own devices too.
+      const taken = await this.seats(next.seat).take(this.me, next.entitlement);
+      if (taken.kind !== "taken") {
+        return taken.kind;
       }
       if (held && held.seat !== next.seat) {
         await this.seats(held.seat).release(this.me);
@@ -111,11 +113,12 @@ export class Pairing extends DurableObject<Env> {
       const now = Date.now();
       if (held) {
         this.sql.exec(
-          "UPDATE enrolment SET device_token = ?, apns_environment = ?, transaction_environment = ?, seat = ?",
+          "UPDATE enrolment SET device_token = ?, apns_environment = ?, transaction_environment = ?, seat = ?, enrolled_at = ?",
           next.deviceToken,
           next.apnsEnvironment,
           next.transactionEnvironment,
-          next.seat
+          next.seat,
+          now
         );
       } else {
         this.sql.exec(
@@ -128,9 +131,7 @@ export class Pairing extends DurableObject<Env> {
           now
         );
       }
-      await this.ctx.storage.setAlarm(
-        Math.min(now + LIFE_MS, next.endsAt ?? Number.POSITIVE_INFINITY)
-      );
+      await this.ctx.storage.setAlarm(pairingEnd(now, taken.until));
       return "enrolled";
     });
   }
@@ -175,9 +176,25 @@ export class Pairing extends DurableObject<Env> {
     });
   }
 
-  /** Its purchase was refunded or revoked (Apple's notification): the pairing goes now. */
-  async revoked(): Promise<void> {
-    await this.ctx.blockConcurrencyWhile(() => this.wipe());
+  /**
+   * Apple's notification moved the end of the subscription behind `seat` to
+   * `until`: the alarm moves to the pairing's new end, or the pairing goes
+   * now when that end has passed (an expiry, a refund, a revocation). A
+   * pairing that has since enrolled under another seat is not moved.
+   */
+  async entitled(seat: string, until: number): Promise<void> {
+    await this.ctx.blockConcurrencyWhile(async () => {
+      const held = this.held();
+      if (held?.seat !== seat) {
+        return;
+      }
+      const end = pairingEnd(held.enrolled_at, until);
+      if (end <= Date.now()) {
+        await this.wipe();
+      } else {
+        await this.ctx.storage.setAlarm(end);
+      }
+    });
   }
 
   override async alarm(): Promise<void> {
