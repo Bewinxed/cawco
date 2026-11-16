@@ -1,7 +1,6 @@
 import type { SuggestCandidate } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevCost, jevUnanswered } from "./jev";
 import type { JevResult } from "./jev-types";
@@ -153,11 +152,12 @@ export async function suggest(
     console.warn(`[suggest] route=${access.route} failed: ${words}`);
     return { error: words };
   }
-  if (HUB_DEBUG) {
-    console.debug(
-      `[suggest] route=${access.route} ${asked.length} of ${candidates.length} candidates asked, ${result.usage.inputTokens} input tokens, cost=${jevCost(result.usage)}`
-    );
-  }
+  // Each paid Jev call logs its cost once, as jev-placement.ts `askRow` and
+  // fleet-watch.ts do: the composer asks once per typing pause
+  // (dashboard suggest.svelte.ts `SUGGEST_PAUSE_MS`), not per keystroke.
+  console.log(
+    `[suggest] route=${access.route} ${asked.length} of ${candidates.length} candidates asked, ${result.usage.inputTokens} input tokens, cost=${jevCost(result.usage)}`
+  );
   // One chip per capability: a name offered as both an MCP server and a skill
   // (claude-in-chrome) keeps only its likelier entry.
   const named = new Set<string>();
