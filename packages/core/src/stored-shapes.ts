@@ -1704,12 +1704,40 @@ const FleetAckShape = declared(
 export const FleetAckSchema = FleetAckShape;
 export type FleetAckOutput = z.output<typeof FleetAckShape>;
 
+const FleetPlacementShape = declared(
+  z.object({
+    areaId: z.string().optional(),
+    cwd: z.string().optional(),
+    placeId: z.string().optional(),
+    projectId: z.string().optional(),
+    scope: FleetScopeShape.optional(),
+  }),
+  "FleetPlacement",
+  "packages/core/src/fleet-placement.ts"
+);
+export type FleetPlacementOutput = z.output<typeof FleetPlacementShape>;
+
 export const HarnessConfigKindShape = declared(
   z.enum(HARNESS_CONFIG_KINDS),
   "HarnessConfigKind",
   "packages/core/src/harness-config.ts"
 );
 export type HarnessConfigKindOutput = z.output<typeof HarnessConfigKindShape>;
+
+const FleetHarnessConfigShape = declared(
+  FleetPlacementShape.extend({
+    enabled: z.boolean(),
+    kind: HarnessConfigKindShape,
+    module: z.string().optional(),
+    name: z.string(),
+    package: z.string().optional(),
+    settings: z.record(z.string(), z.unknown()).optional(),
+  }),
+  "FleetHarnessConfig",
+  "packages/core/src/harness-config.ts"
+);
+export const FleetHarnessConfigSchema = FleetHarnessConfigShape;
+export type FleetHarnessConfigOutput = z.output<typeof FleetHarnessConfigShape>;
 
 export const HookEventShape = declared(
   z.enum([
@@ -1838,6 +1866,24 @@ export const HookMatchTestShape = declared(
 );
 export type HookMatchTestOutput = z.output<typeof HookMatchTestShape>;
 
+const FleetHookShape = declared(
+  FleetPlacementShape.extend({
+    enabled: z.boolean(),
+    event: HookEventShape,
+    force: z.boolean().optional(),
+    handler: HookHandlerShape,
+    hash: z.string(),
+    id: z.string(),
+    matcher: z.string().optional(),
+    name: z.string(),
+    script: z.string().optional(),
+  }),
+  "FleetHook",
+  "packages/core/src/hooks.ts"
+);
+export const FleetHookSchema = FleetHookShape;
+export type FleetHookOutput = z.output<typeof FleetHookShape>;
+
 const FleetConvergeStateShape = declared(
   z.enum(["pending", "running", "ok", "failed"]),
   "FleetConvergeState",
@@ -1858,6 +1904,47 @@ const FleetItemStatusShape = declared(
 );
 export const FleetItemStatusSchema = FleetItemStatusShape;
 export type FleetItemStatusOutput = z.output<typeof FleetItemStatusShape>;
+
+const FleetMarketplaceShape = declared(
+  FleetPlacementShape.extend({ name: z.string(), source: z.string() }),
+  "FleetMarketplace",
+  "packages/core/src/fleet.ts"
+);
+export const FleetMarketplaceSchema = FleetMarketplaceShape;
+export type FleetMarketplaceOutput = z.output<typeof FleetMarketplaceShape>;
+
+const McpPlatformShape = declared(
+  z.enum(MCP_PLATFORMS),
+  "McpPlatform",
+  "packages/core/src/fleet.ts"
+);
+export const McpPlatformSchema: z.ZodType<McpPlatformType> = McpPlatformShape;
+export type McpPlatformOutput = z.output<typeof McpPlatformShape>;
+
+const FleetMcpServerShape = declared(
+  FleetPlacementShape.extend({
+    auth: z
+      .object({
+        mode: z.enum(["direct", "oauth"]),
+        state: z.enum(["signed-in", "needs-auth", "failed"]),
+        detail: z.string().optional(),
+        ended: z.object({ at: z.number(), why: z.string() }).optional(),
+        as: z.string().optional(),
+      })
+      .optional(),
+    config: FleetMcpConfigShape,
+    enabled: z.boolean(),
+    name: z.string(),
+    platforms: z.array(McpPlatformShape).optional(),
+    platformsUnread: z.literal(true).optional(),
+    proxied: z.boolean().optional(),
+    shared: z.boolean().optional(),
+  }),
+  "FleetMcpServer",
+  "packages/core/src/fleet.ts"
+);
+export const FleetMcpServerSchema = FleetMcpServerShape;
+export type FleetMcpServerOutput = z.output<typeof FleetMcpServerShape>;
 
 const FleetMcpChangeKindShape = declared(
   z.enum([
@@ -1896,6 +1983,46 @@ const FleetMcpTakeAnswerShape = declared(
 export const FleetMcpTakeAnswerSchema = FleetMcpTakeAnswerShape;
 export type FleetMcpTakeAnswerOutput = z.output<typeof FleetMcpTakeAnswerShape>;
 
+const FleetMemoryDocShape = declared(
+  z.object({
+    content: z.string(),
+    force: z.boolean().optional(),
+    hash: z.string(),
+    path: z.string(),
+  }),
+  "FleetMemoryDoc",
+  "packages/core/src/fleet.ts"
+);
+export const FleetMemoryDocSchema = FleetMemoryDocShape;
+export type FleetMemoryDocOutput = z.output<typeof FleetMemoryDocShape>;
+
+const FleetMemoryShape = declared(
+  z.object({
+    content: z.string(),
+    docs: z.array(FleetMemoryDocShape),
+    force: z.boolean().optional(),
+    hash: z.string(),
+  }),
+  "FleetMemory",
+  "packages/core/src/fleet.ts"
+);
+export const FleetMemorySchema = FleetMemoryShape;
+export type FleetMemoryOutput = z.output<typeof FleetMemoryShape>;
+
+const FleetPlacedMemoryDocShape = declared(
+  FleetPlacementShape.extend({
+    content: z.string(),
+    hash: z.string(),
+    path: z.string(),
+  }),
+  "FleetPlacedMemoryDoc",
+  "packages/core/src/fleet.ts"
+);
+export const FleetPlacedMemoryDocSchema = FleetPlacedMemoryDocShape;
+export type FleetPlacedMemoryDocOutput = z.output<
+  typeof FleetPlacedMemoryDocShape
+>;
+
 const FleetRefreshOutcomeShape = declared(
   z.enum(["updated", "unchanged", "failed"]),
   "FleetRefreshOutcome",
@@ -1906,6 +2033,91 @@ export const FleetRefreshOutcomeSchema: z.ZodType<FleetRefreshOutcomeType> =
 export type FleetRefreshOutcomeOutput = z.output<
   typeof FleetRefreshOutcomeShape
 >;
+
+const FleetRefreshShape = declared(
+  z.object({
+    at: z.number(),
+    error: z.string().optional(),
+    fromHash: z.string().optional(),
+    fromVersion: z.string().optional(),
+    outcome: FleetRefreshOutcomeShape,
+    toHash: z.string().optional(),
+    toVersion: z.string().optional(),
+  }),
+  "FleetRefresh",
+  "packages/core/src/fleet.ts"
+);
+export type FleetRefreshOutput = z.output<typeof FleetRefreshShape>;
+
+const FleetVersionedShape = declared(
+  z.object({
+    checkError: z.string().optional(),
+    checkedAt: z.number().optional(),
+    lastRefresh: FleetRefreshShape.optional(),
+    latestHash: z.string().optional(),
+    latestVersion: z.string().optional(),
+    updateAvailable: z.boolean().optional(),
+    version: z.string().optional(),
+  }),
+  "FleetVersioned",
+  "packages/core/src/fleet.ts"
+);
+export type FleetVersionedOutput = z.output<typeof FleetVersionedShape>;
+
+const FleetPluginShape = declared(
+  FleetPlacementShape.extend(FleetVersionedShape.shape).extend({
+    bytes: z.number().optional(),
+    enabled: z.boolean(),
+    error: z.string().optional(),
+    fetching: z.boolean().optional(),
+    hash: z.string().optional(),
+    id: z.string(),
+  }),
+  "FleetPlugin",
+  "packages/core/src/fleet.ts"
+);
+export const FleetPluginSchema = FleetPluginShape;
+export type FleetPluginOutput = z.output<typeof FleetPluginShape>;
+
+const SkillFileShape = declared(
+  z.object({
+    contentBase64: z.string(),
+    executable: z.boolean(),
+    path: z.string(),
+  }),
+  "SkillFile",
+  "packages/core/src/fleet.ts"
+);
+export const SkillFileSchema = SkillFileShape;
+export type SkillFileOutput = z.output<typeof SkillFileShape>;
+
+const FleetPluginPayloadShape = declared(
+  z.object({
+    bytes: z.number(),
+    files: z.array(SkillFileShape).optional(),
+    hash: z.string(),
+    marketplace: z.string(),
+    name: z.string(),
+    version: z.string().optional(),
+  }),
+  "FleetPluginPayload",
+  "packages/core/src/fleet.ts"
+);
+export const FleetPluginPayloadSchema = FleetPluginPayloadShape;
+export type FleetPluginPayloadOutput = z.output<typeof FleetPluginPayloadShape>;
+
+const FleetSkillPayloadShape = declared(
+  FleetPlacementShape.extend({
+    files: z.array(SkillFileShape).optional(),
+    force: z.boolean().optional(),
+    hash: z.string(),
+    name: z.string(),
+  }),
+  "FleetSkillPayload",
+  "packages/core/src/fleet.ts"
+);
+export const FleetSkillPayloadSchema = FleetSkillPayloadShape;
+export type FleetSkillPayloadOutput = z.output<typeof FleetSkillPayloadShape>;
 
 const FleetSyncOutcomeShape = declared(
   z.union([
@@ -2356,36 +2568,6 @@ const HomeLoginMovedShape = declared(
 export const HomeLoginMovedSchema = HomeLoginMovedShape;
 export type HomeLoginMovedOutput = z.output<typeof HomeLoginMovedShape>;
 
-const FleetPlacementShape = declared(
-  z.object({
-    areaId: z.string().optional(),
-    cwd: z.string().optional(),
-    placeId: z.string().optional(),
-    projectId: z.string().optional(),
-    scope: FleetScopeShape.optional(),
-  }),
-  "FleetPlacement",
-  "packages/core/src/fleet-placement.ts"
-);
-export type FleetPlacementOutput = z.output<typeof FleetPlacementShape>;
-
-const FleetHookShape = declared(
-  FleetPlacementShape.extend({
-    enabled: z.boolean(),
-    event: HookEventShape,
-    force: z.boolean().optional(),
-    handler: HookHandlerShape,
-    hash: z.string(),
-    id: z.string(),
-    matcher: z.string().optional(),
-    name: z.string(),
-    script: z.string().optional(),
-  }),
-  "FleetHook",
-  "packages/core/src/hooks.ts"
-);
-export type FleetHookOutput = z.output<typeof FleetHookShape>;
-
 const HookDraftShape = declared(
   FleetHookShape.omit({ id: true, hash: true }),
   "HookDraft",
@@ -2768,14 +2950,6 @@ const MachineStateShape = declared(
 export const MachineStateSchema: z.ZodType<MachineStateType> =
   MachineStateShape;
 export type MachineStateOutput = z.output<typeof MachineStateShape>;
-
-const McpPlatformShape = declared(
-  z.enum(MCP_PLATFORMS),
-  "McpPlatform",
-  "packages/core/src/fleet.ts"
-);
-export const McpPlatformSchema: z.ZodType<McpPlatformType> = McpPlatformShape;
-export type McpPlatformOutput = z.output<typeof McpPlatformShape>;
 
 export const MoveLargeFileShape = declared(
   z.object({ bytes: z.number(), path: z.string() }),
@@ -4367,18 +4541,6 @@ const SheetWrittenShape = declared(
 );
 export const SheetWrittenSchema = SheetWrittenShape;
 export type SheetWrittenOutput = z.output<typeof SheetWrittenShape>;
-
-const SkillFileShape = declared(
-  z.object({
-    contentBase64: z.string(),
-    executable: z.boolean(),
-    path: z.string(),
-  }),
-  "SkillFile",
-  "packages/core/src/fleet.ts"
-);
-export const SkillFileSchema = SkillFileShape;
-export type SkillFileOutput = z.output<typeof SkillFileShape>;
 
 const IngestMarkShape = declared(
   z.object({ epoch: z.string(), srcSeq: z.number() }),

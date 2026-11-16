@@ -239,11 +239,20 @@ export const parsedAs = <S extends z.ZodType>(
   what: string
 ): CallAnswer<z.output<S>> => {
   if (!frame.ok) {
-    return {
-      ok: false,
-      error: frame.error,
-      ...(frame.refusal ? { refusal: frame.refusal } : {}),
-    };
+    // A failure that says nothing of why is no failure the house reads: it
+    // fails at its own code, in words that say so.
+    return frame.error === undefined
+      ? {
+          ok: false,
+          code: MALFORMED_REPLY,
+          error: `${machine} answered ${what} with a failure that gave no reason`,
+          ...(frame.refusal ? { refusal: frame.refusal } : {}),
+        }
+      : {
+          ok: false,
+          error: frame.error,
+          ...(frame.refusal ? { refusal: frame.refusal } : {}),
+        };
   }
   const read = received(schema, frame.result, `${machine}'s answer to ${what}`);
   return read.ok

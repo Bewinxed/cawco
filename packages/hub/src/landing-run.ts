@@ -19,7 +19,7 @@ import {
   OUTPUTS_DIR,
   type WorkspaceConflict,
 } from "@cawco/core/workspace/controls";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type {
@@ -51,6 +51,7 @@ import {
   reportedDiffstat,
   reportedRange,
 } from "./landing";
+import { MALFORMED_REPLY, MachineProblem } from "./machine-answers";
 import { machineName } from "./machine-name";
 import { CommandStopped, WouldWait } from "./machine-pause";
 import { handle } from "./presenters/words";
@@ -1392,9 +1393,14 @@ export const createLandingRun = ({
         [{ id: workspace.id, read: false }],
         { listed: [] }
       );
+      // Bytes where a listing was asked are not its reply: the machine's
+      // malformed answer, as every call answers one (machine-answers.ts).
       if (!("listed" in read)) {
-        throw new Error(
-          `${SCRATCH_OUTPUTS} of ${workspace.id} could not be listed: its machine answered their bytes`
+        throw new MachineProblem(
+          problem(502, {
+            code: MALFORMED_REPLY,
+            detail: `${SCRATCH_OUTPUTS} of ${workspace.id} could not be listed: its machine answered their bytes`,
+          })
         );
       }
       return read.listed;
