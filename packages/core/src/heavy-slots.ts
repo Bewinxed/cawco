@@ -139,7 +139,7 @@ export function runInBackground(): void {
     process.platform === "linux"
       ? ["ionice", "-c3", "-p", ...tids.map(String)]
       : ["taskpolicy", "-B", "-p", String(process.pid)];
-  if (Bun.which(io[0] as string)) {
+  if (Bun.which(io[0])) {
     Bun.spawnSync(io, {
       env: process.env,
       stdout: "ignore",

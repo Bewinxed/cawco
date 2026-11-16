@@ -20,13 +20,14 @@ import {
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { decidedByLine } from "@cawco/core/words/decides-lines";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
-import type { movesSaid, renderSaid } from "../artifacts/component";
+import type { renderSaid } from "../artifacts/component";
 import type {
   ArtifactList,
   ArtifactRead,
   ArtifactStatus,
   Browsed,
   CommentRead,
+  ComponentRead,
   ComponentWritten,
   Created,
   DecisionAnswer,
@@ -299,30 +300,13 @@ const findingLines = (render: ReturnType<typeof renderSaid>): string[] => [
 ];
 
 /** A component canvas's read: its frames, stories, moves and the person's dials, each a line. */
-const componentLines = (read: ArtifactRead): string[] => {
-  // Type-the-source, left: a component canvas's read (artifacts/kinds/component.ts `readSheet`) answers these fields, but artifacts/shapes.ts `ArtifactRead` has no variant that names them; no upstream issue, the fix is that type.
-  const extra = read as ArtifactRead & {
-    dials?: unknown;
-    errors?: { file: string; line: number | null; message?: string }[];
-    frame?: Record<string, unknown>;
-    hint?: string;
-    moves?: ReturnType<typeof movesSaid>;
-    render?: ReturnType<typeof renderSaid>;
-    stories?: {
-      argsChanged: string[];
-      interactions: string[];
-      label: string | null;
-      name: string;
-    }[];
-    story?: { args: unknown; code: unknown; name: string };
-    tuned?: unknown;
-  };
-  const { render } = extra;
+const componentLines = (read: ComponentRead): string[] => {
+  const { render } = read;
   return [
-    ...(extra.errors?.length
+    ...(read.errors?.length
       ? [
           "Compile errors:",
-          ...extra.errors.map(
+          ...read.errors.map(
             (one) =>
               `- ${one.file}${one.line === null ? "" : `:${one.line}`}: ${one.message ?? "no message"}`
           ),
@@ -352,36 +336,36 @@ const componentLines = (read: ArtifactRead): string[] => {
       : [
           "No browser has drawn it since its files changed: read with render: true.",
         ]),
-    ...(extra.stories?.length
+    ...(read.stories?.length
       ? [
           "Stories:",
-          ...extra.stories.map(
+          ...read.stories.map(
             (story) =>
               `- ${story.name}${story.label ? ` ${quote(story.label, 60)}` : ""}: ${story.interactions.join(", ") || "not drawn"}${story.argsChanged.length > 0 ? `; sets ${story.argsChanged.join(", ")}` : ""}`
           ),
         ]
       : []),
-    ...(extra.moves?.length
+    ...(read.moves?.length
       ? [
           "Moves:",
-          ...extra.moves.map(
+          ...read.moves.map(
             (move) =>
               `- ${move.from} → ${move.to}: ${count(move.animations.length, "animation")}${move.error ? `; ${pageErrorWords(move.error)}` : ""}`
           ),
         ]
       : []),
-    ...(extra.dials === undefined
+    ...(read.dials === undefined
       ? []
-      : [`The person's dials: ${valueWords(extra.dials, 600)}`]),
-    ...(extra.tuned === undefined
+      : [`The person's dials: ${valueWords(read.dials, 600)}`]),
+    ...(read.tuned === undefined
       ? []
-      : [`What they tuned: ${valueWords(extra.tuned, 600)}`]),
-    ...(extra.frame
-      ? [`The frame asked: ${valueWords(extra.frame, 2000)}`]
+      : [`What they tuned: ${valueWords(read.tuned, 600)}`]),
+    ...(read.frame
+      ? [`The frame asked: ${valueWords(read.frame, 2000)}`]
       : []),
-    ...(extra.story
+    ...(read.story
       ? [
-          `Story ${extra.story.name}: args ${valueWords(extra.story.args, 1500)}; code ${valueWords(extra.story.code, 1500)}`,
+          `Story ${read.story.name}: args ${valueWords(read.story.args, 1500)}; code ${valueWords(read.story.code, 1500)}`,
         ]
       : []),
     ...(read.weight
@@ -390,7 +374,7 @@ const componentLines = (read: ArtifactRead): string[] => {
         ]
       : []),
     ...(read.verify ? [read.verify] : []),
-    ...(extra.hint ? [extra.hint] : []),
+    ...(read.hint ? [read.hint] : []),
   ];
 };
 
@@ -468,7 +452,9 @@ const writeLines = (read: ArtifactRead): string[] => [
 ];
 
 /** `artifact_read`: what the person did on it, in words, its picture beside them. */
-export const artifactReadWords = (read: ArtifactRead): Presented => {
+export const artifactReadWords = (
+  read: ArtifactRead | ComponentRead
+): Presented => {
   const now = Date.now();
   const text = lines(
     `${named(read)}, revision ${read.revision}.`,
@@ -486,7 +472,7 @@ export const artifactReadWords = (read: ArtifactRead): Presented => {
     read.workspace &&
       `It previews a server of workspace ${handle(read.workspace)}.`,
     stageWords(read),
-    read.kind === "component" && componentLines(read),
+    "errors" in read && componentLines(read),
     read.program !== undefined &&
       'Its program is in response_format: "detailed"; artifact_update\'s statements revise it.',
     `Read at seq ${read.seq}: since: ${read.seq} reads only what changes after this.`,

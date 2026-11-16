@@ -21,7 +21,9 @@
  * WHOLE transcript by code, so identifiers are copied, never paraphrased, and
  * what a compaction forgot about files is still there.
  */
+import { isRecord } from "./is-record";
 import type { NeutralContentBlock, SessionMessage } from "./session-messages";
+import { NeutralContentBlockSchema } from "./stored-shapes";
 import { FILE_CHANGE_TOOLS, toolNamesOf } from "./tool-names";
 import { askedWords } from "./transcript-rules";
 
@@ -125,15 +127,30 @@ const WHITESPACE = /\s+/gu;
 interface StoredMessage {
   content: string | NeutralContentBlock[];
   model?: string;
-  role: "user" | "assistant";
 }
 
 type ToolUse = Extract<NeutralContentBlock, { type: "tool_use" }>;
 type ToolResult = Extract<NeutralContentBlock, { type: "tool_result" }>;
 
-const messageOf = (entry: SessionMessage): StoredMessage =>
-  // Left a cast: a full parse of every transcript entry's content blocks risks emptying continuation summaries.
-  entry.message as StoredMessage;
+/**
+ * A user or assistant entry's message as the read takes it: its words, or
+ * each content block that reads as one (a block that does not is left out,
+ * never the entry), and its model.
+ */
+const messageOf = (entry: SessionMessage): StoredMessage => {
+  const message = isRecord(entry.message) ? entry.message : {};
+  const { content, model } = message;
+  return {
+    content:
+      typeof content === "string"
+        ? content
+        : (Array.isArray(content) ? content : []).flatMap((block: unknown) => {
+            const read = NeutralContentBlockSchema.safeParse(block);
+            return read.success ? [read.data] : [];
+          }),
+    ...(typeof model === "string" ? { model } : {}),
+  };
+};
 
 /**
  * A user or assistant entry's content blocks. A `system` entry carries a

@@ -16,6 +16,10 @@
  *   (`x as unknown as T`), which TypeScript accepts whatever the two types.
  *   Found by the Grit plugin scripts/lint/as-unknown-as.grit; only the count
  *   per file is this ratchet's.
+ * - **as-cast**: any other assertion (`x as T`, `<T>x`), which TypeScript
+ *   takes on the writer's word wherever the two types overlap: counted by
+ *   its asserted type. `as const` asserts nothing and is not counted, nor is
+ *   either half of an `as unknown as`, which is the kind above.
  * - **suppression**: a comment that silences a check where it stands
  *   (`biome-ignore`, `@ts-expect-error`, `@ts-ignore`, `@ts-nocheck`,
  *   `eslint-disable`, `oxlint-disable`, `svelte-ignore`), in code, a
@@ -55,6 +59,8 @@ const KINDS = {
   "empty-catch": "a catch block does something with what it caught",
   "as-unknown-as":
     "no assertion through unknown: parse the value (a schema) or type it",
+  "as-cast":
+    "no new assertion: parse the value (a schema), narrow it with a check, or type it where it is made",
   suppression:
     "no new silenced check: meet the rule, or take its exception to the owner",
 };
@@ -203,6 +209,38 @@ const rejectionHandler = (
   return method === "then" ? node.arguments[1] : undefined;
 };
 
+/** Whether `type` is the `unknown` keyword. */
+const isUnknown = (type: ts.TypeNode): boolean =>
+  type.kind === ts.SyntaxKind.UnknownKeyword;
+
+/** Whether `type` is `const` (`as const`). */
+const isConst = (type: ts.TypeNode): boolean =>
+  ts.isTypeReferenceNode(type) &&
+  ts.isIdentifier(type.typeName) &&
+  type.typeName.text === "const";
+
+/**
+ * Whether `node` is an assertion the as-cast kind counts: not `as const`,
+ * and neither half of an `as unknown as` (the as-unknown-as kind's).
+ */
+const isCast = (
+  node: ts.Node
+): node is ts.AsExpression | ts.TypeAssertion => {
+  if (ts.isTypeAssertionExpression(node)) {
+    return true;
+  }
+  if (!ts.isAsExpression(node) || isConst(node.type)) {
+    return false;
+  }
+  const through =
+    ts.isAsExpression(node.expression) && isUnknown(node.expression.type);
+  const inner =
+    isUnknown(node.type) &&
+    ts.isAsExpression(node.parent) &&
+    node.parent.expression === node;
+  return !(through || inner);
+};
+
 /**
  * The kind `node` is, when it is one, with what the ratchet counts of it:
  * read off the occurrence alone, so a rename around it changes nothing.
@@ -219,6 +257,9 @@ const kindOf = (node: ts.Node): { kind: Kind; shape: string } | undefined => {
   }
   if (ts.isCatchClause(node) && node.block.statements.length === 0) {
     return { kind: "empty-catch", shape: "" };
+  }
+  if (isCast(node)) {
+    return { kind: "as-cast", shape: node.type.getText() };
   }
 };
 

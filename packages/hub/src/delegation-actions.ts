@@ -1147,8 +1147,7 @@ function resolveDelegate(
  * was once the request went as JSON.
  */
 const asRouteReadsIt = <T extends object>(request: T): T =>
-  // Library gap (casts inventory): `Object.fromEntries` drops the keys it is
-  // given, https://github.com/microsoft/TypeScript/issues/35745
+  // Library gap: `Object.fromEntries` answers `{ [k: string]: V }`, never the keys it is given (https://github.com/microsoft/TypeScript/issues/35745).
   Object.fromEntries(
     Object.entries(request).filter(([, value]) => value !== undefined)
   ) as T;

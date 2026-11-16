@@ -152,11 +152,12 @@ export async function versionsInUse(root: string): Promise<Set<string>> {
   const used = new Set<string>();
   const others = (await liveProcesses()).filter((p) => p.pid !== process.pid);
   for (const one of others) {
+    const { settingsFile } = one;
     const texts = [
       one.command,
       ...one.images,
-      ...(one.settingsFile
-        ? [readOr(() => readFileSync(one.settingsFile as string, "utf8")) ?? ""]
+      ...(settingsFile
+        ? [readOr(() => readFileSync(settingsFile, "utf8")) ?? ""]
         : []),
     ];
     for (const text of texts) {

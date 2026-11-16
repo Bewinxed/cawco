@@ -12,7 +12,7 @@ import {
   type FleetSyncReport,
 } from "@cawco/core/fleet";
 import { type ReadFault, readFault } from "@cawco/core/fleet-fault-reason";
-import { itemKind, projectItemOf } from "@cawco/core/fleet-items";
+import { itemKindOf, projectItemOf } from "@cawco/core/fleet-items";
 import { isHarnessConfigKind } from "@cawco/core/harness-config";
 import type { AgentRow, BuildInfo } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
@@ -159,7 +159,7 @@ function harnessConfigWords(key: string): string {
  * `FleetItemKind` fails the types here until it has its words.
  */
 function itemWords(id: string): string {
-  const kind = itemKind(id);
+  const kind = itemKindOf(id);
   const key =
     projectItemOf(id)?.key ??
     (id.includes(":") ? id.slice(id.indexOf(":") + 1) : "");
@@ -193,6 +193,9 @@ function itemWords(id: string): string {
       return "the fleet's denied tools";
     case "hubOnly":
       return "the hub-only marketplaces";
+    // A kind this build does not know (a newer machine's): its id as it is.
+    case undefined:
+      return id;
   }
 }
 

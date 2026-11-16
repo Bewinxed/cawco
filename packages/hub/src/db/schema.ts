@@ -1898,7 +1898,7 @@ export const workItems = sqliteTable(
      * what a poller watches to move its task on when it merges.
      */
     prUrl: text("pr_url"),
-    harness: text("harness").notNull(),
+    harness: storedEnum(z.enum(HARNESSES))("harness").notNull(),
     model: text("model"),
     effort: text("effort"),
     state: storedEnum(z.enum(WORK_ITEM_STATES))("state")

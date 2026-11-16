@@ -58,7 +58,13 @@ import {
   zoneOf,
 } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
-import { Elysia, ElysiaStatus, problem, t } from "elysia";
+import {
+  Elysia,
+  ElysiaStatus,
+  problem,
+  type Server,
+  t,
+} from "elysia";
 import {
   addRecord,
   isCloudflareAddress,
@@ -146,6 +152,9 @@ type RelayActRefusal =
 
 /** What an act answers: nothing, or its refusal. */
 type ActAnswer = undefined | RelayActRefusal;
+
+/** Act `K` as a screen sends it, by its name: one of the acts each name stands for. */
+type ActOf<K extends RelayAct["act"]> = { [P in K]: RelayAct & { act: P } }[K];
 
 export interface RelayJourney {
   act: (act: RelayAct, asker: RelayAsker) => Promise<ActAnswer>;
@@ -1089,7 +1098,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   const ACTS: {
     [K in RelayAct["act"]]: (
       journey: StoredJourney,
-      act: Extract<RelayAct, { act: K }>,
+      act: ActOf<K>,
       asker: RelayAsker
     ) => ActAnswer | Promise<ActAnswer>;
   } = {
@@ -1202,15 +1211,15 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         detail: "The stream relay is not set up yet: press Set up first.",
       });
     }
-    // Legitimate (casts inventory): `ACTS[one.act]` and `one` are a correlated
-    // union TypeScript does not tie, https://github.com/microsoft/TypeScript/issues/30581
-    const run = ACTS[one.act] as (
-      journey: StoredJourney,
-      act: RelayAct,
-      asker: RelayAsker
-    ) => ActAnswer | Promise<ActAnswer>;
-    return await run(journey, one, asker);
+    return await runAct(journey, one, asker);
   };
+
+  /** One act by its own handler: `one` and `ACTS[one.act]` tied by the act's name (TypeScript's correlated-union pattern, microsoft/TypeScript#47109). */
+  const runAct = <K extends RelayAct["act"]>(
+    journey: StoredJourney,
+    one: ActOf<K>,
+    asker: RelayAsker
+  ) => ACTS[one.act](journey, one, asker);
 
   /**
    * Whether a screen asked from outside the relay's network: the public
@@ -1376,7 +1385,7 @@ const ACT_BODY = t.Union([
 export const relayJourneyRoutes = (
   journey: RelayJourney,
   askerOf: (request: Request, socket: string | null) => RelayAsker,
-  socketOf: (request: Request, server: unknown) => string | null
+  socketOf: (request: Request, server: Server | null) => string | null
 ) => {
   const answer = (asker: RelayAsker): RelayAnswer => ({
     domain: asker.domain,

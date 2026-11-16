@@ -97,6 +97,20 @@ import { areaWords } from "@cawco/core/words/areas";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { projectSettingsWords } from "@cawco/core/words/project-settings";
 import { ElysiaStatus, problem } from "elysia";
+import {
+  array,
+  boolean,
+  type GenericSchema,
+  literal,
+  nullable,
+  number,
+  object,
+  optional,
+  picklist,
+  safeParse,
+  string,
+  variant,
+} from "valibot";
 import { z } from "zod";
 import type { Areas } from "./areas";
 import type { Connections } from "./connections";
@@ -221,6 +235,79 @@ const PROJECT_SETTINGS_DEFINITION = defineTool(
 
 /** The tool as a listing reads it, before any session's call is bound. */
 export const projectSettingsListed = PROJECT_SETTINGS_DEFINITION.listed();
+
+/**
+ * One change as a parked ask's input keeps it (core `ProjectSettingChange`),
+ * read back when the person answers.
+ */
+const ParkedChange: GenericSchema<unknown, ProjectSettingChange> = variant(
+  "kind",
+  [
+    object({
+      account: optional(string()),
+      connection: string(),
+      kind: literal("grant_connection"),
+      service: optional(string()),
+    }),
+    object({ github: string(), kind: literal("link_repo") }),
+    object({ kind: literal("set_lands"), lands: picklist(PROJECT_LANDS) }),
+    object({ kind: literal("set_runs_on"), runsOn: nullable(string()) }),
+    object({ kind: literal("rename"), name: string() }),
+    object({ kind: literal("set_review"), review: boolean() }),
+    object({ dispatch: boolean(), kind: literal("set_dispatch") }),
+    object({ kind: literal("set_max_attempts"), maxAttempts: number() }),
+    object({ kind: literal("set_review_limit"), reviewLimit: number() }),
+    object({
+      budget: nullable(
+        object({
+          minutes: optional(number()),
+          turns: optional(number()),
+          usd: optional(number()),
+        })
+      ),
+      kind: literal("set_budget"),
+    }),
+    object({ events: boolean(), kind: literal("set_events") }),
+    object({ hearsTasks: boolean(), kind: literal("set_hears_tasks") }),
+    object({
+      attemptsHearComments: boolean(),
+      kind: literal("set_attempts_hear_comments"),
+    }),
+    object({
+      account: nullable(string()),
+      kind: literal("set_account"),
+      name: nullable(string()),
+    }),
+    object({
+      atLimit: picklist(PROJECT_AT_LIMIT),
+      kind: literal("set_account_at_limit"),
+    }),
+    object({
+      area: nullable(string()),
+      kind: literal("set_area"),
+      name: nullable(string()),
+    }),
+    object({
+      kind: literal("set_starting_set"),
+      startingSet: nullable(
+        object({ servers: array(string()), skills: array(string()) })
+      ),
+    }),
+    object({
+      account: optional(string()),
+      bytes: number(),
+      connection: string(),
+      files: number(),
+      folder: optional(string()),
+      kind: literal("create_repo"),
+      leftOut: array(object({ path: string(), why: string() })),
+      name: string(),
+      private: boolean(),
+    }),
+  ]
+);
+/** A parked ask's card: its changes. */
+const ParkedChanges = array(ParkedChange);
 
 /** A stored change as the tool takes it: an ask approved after a restart is checked again from it. */
 const askedOf = (change: ProjectSettingChange): AskedChange => {
@@ -1215,12 +1302,13 @@ export const createProjectSettings = ({
       return changeSettings(actor, input, toolUseId);
     });
 
-  /** The card's changes, as the ask's input holds them, checked then. */
-  const cardOf = (input: Record<string, unknown>): ProjectSettingChange[] =>
-    // Cast stays until valibot is a dependency (G7 adds it): then a schema of ProjectSettingChange parses it.
-    (Array.isArray(input.changes)
-      ? input.changes
-      : []) as ProjectSettingChange[];
+  /** The card's changes, as the ask's input holds them, checked then; undefined when they do not read as changes. */
+  const cardOf = (
+    input: Record<string, unknown>
+  ): ProjectSettingChange[] | undefined => {
+    const parked = safeParse(ParkedChanges, input.changes);
+    return parked.success ? parked.output : undefined;
+  };
 
   /** The asker's own words on why, as the ask's input holds them. */
   const reasonIn = (input: Record<string, unknown>): string =>
@@ -1234,6 +1322,13 @@ export const createProjectSettings = ({
     // The ask's input carries the card's changes, as checked then: each
     // is checked again as the tool takes it.
     const card = cardOf(input);
+    if (!card) {
+      return problem(422, {
+        code: "project-settings-unread",
+        detail:
+          "The approved changes no longer read, so nothing changed. If they are still wanted, ask again.",
+      });
+    }
     const said = await approved(
       actor,
       card.map(askedOf),
@@ -1252,6 +1347,12 @@ export const createProjectSettings = ({
     input: Record<string, unknown>
   ): void => {
     const card = cardOf(input);
+    if (!card) {
+      console.warn(
+        `[project-settings] a declined ask of ${actor.id} names changes that do not read: nothing noted`
+      );
+      return;
+    }
     note(actor, {
       title: "You declined a project setting",
       body: noteBody(card.map(projectSettingWords), card, reasonIn(input)),

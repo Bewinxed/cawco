@@ -8,6 +8,7 @@ import { CHOICE_LIMITS } from "@cawco/core/choices";
 import {
   COMMENT_LIMITS,
   isSendControl,
+  type MarkPicture,
   type MarkPictures,
   SEND_BODY_MAX,
   SEND_CONTROLS,
@@ -42,42 +43,70 @@ const PICTURES_SHAPE = "Pictures take JSON: { pictures, url? }.";
 const isRecord = (body: unknown): body is Record<string, unknown> =>
   !!body && typeof body === "object" && !Array.isArray(body);
 
-/** Why a send's body is not one, or its fields; null when it is. */
-const sendBodyProblem = (body: unknown): string | null => {
+/** Whether a post's pin list is one: absent, or 1 to the most pins, each a pin's id. */
+const isPinIds = (value: unknown): value is string[] | undefined =>
+  value === undefined ||
+  (Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= COMMENT_LIMITS.pins &&
+    value.every(
+      (pin) =>
+        typeof pin === "string" && pin.length > 0 && pin.length <= MARK_ID_MAX
+    ));
+
+/** Whether `writes` is a Send's carried writes (core `SendBody.writes`): absent, or a bounded base64 Yjs update. */
+const isSentWrites = (writes: unknown): writes is string | undefined =>
+  writes === undefined ||
+  (typeof writes === "string" &&
+    writes.length <= SEND_WRITES_MAX &&
+    BASE64.test(writes));
+
+/** A send's body as it reads, only the fields it holds; why it is not one, or its fields. */
+const sendBodyRead = (body: unknown): SendBody | string => {
   if (!isRecord(body)) {
     return SEND_SHAPE;
   }
-  const { text } = body;
+  const { text, control, pins, again, writes } = body;
   if (
     text !== undefined &&
     !(typeof text === "string" && text.length <= CHOICE_LIMITS.note)
   ) {
     return `text is a string of at most ${CHOICE_LIMITS.note} characters.`;
   }
-  const { control } = body;
   if (control !== undefined && !isSendControl(control)) {
     return `control is one of ${Object.keys(SEND_CONTROLS).join(", ")}.`;
   }
-  const ids = (value: unknown) =>
-    value === undefined ||
-    (Array.isArray(value) &&
-      value.length > 0 &&
-      value.length <= COMMENT_LIMITS.pins &&
-      value.every(
-        (pin) =>
-          typeof pin === "string" && pin.length > 0 && pin.length <= MARK_ID_MAX
-      ));
-  if (!ids(body.pins)) {
+  if (!isPinIds(pins)) {
     return `pins is a list of 1 to ${COMMENT_LIMITS.pins} pin ids.`;
   }
-  if (!ids(body.again)) {
+  if (!isPinIds(again)) {
     return `again is a list of 1 to ${COMMENT_LIMITS.pins} pin ids.`;
   }
-  return sentWritesProblem(body.writes);
+  if (!isSentWrites(writes)) {
+    return `writes is a base64 Yjs update of at most ${SEND_WRITES_MAX.toLocaleString()} characters.`;
+  }
+  return {
+    ...(text === undefined ? {} : { text }),
+    ...(control === undefined ? {} : { control }),
+    ...(pins ? { pins } : {}),
+    ...(again ? { again } : {}),
+    ...(writes === undefined ? {} : { writes }),
+  };
 };
 
-/** Why a pictures post's body is not one, or its fields; null when it is. */
-const picturesBodyProblem = (body: unknown): string | null => {
+/** A picture a pictures post carries, when it is one: a mark's id and a bounded base64 PNG. */
+const pictureOf = (picture: unknown): MarkPicture | undefined =>
+  isRecord(picture) &&
+  typeof picture.mark === "string" &&
+  picture.mark.length <= MARK_ID_MAX &&
+  typeof picture.png === "string" &&
+  picture.png.length <= COMMENT_LIMITS.pictureChars &&
+  PNG_BASE64.test(picture.png)
+    ? { mark: picture.mark, png: picture.png }
+    : undefined;
+
+/** A pictures post's body as it reads, only the fields it holds; why it is not one, or its fields. */
+const picturesBodyRead = (body: unknown): MarkPictures | string => {
   if (!isRecord(body)) {
     return PICTURES_SHAPE;
   }
@@ -93,19 +122,15 @@ const picturesBodyProblem = (body: unknown): string | null => {
   )) {
     return `pictures is a list of at most ${COMMENT_LIMITS.pictures}.`;
   }
-  for (const picture of pictures as (Record<string, unknown> | null)[]) {
-    if (!(
-      picture &&
-      typeof picture.mark === "string" &&
-      picture.mark.length <= MARK_ID_MAX &&
-      typeof picture.png === "string" &&
-      picture.png.length <= COMMENT_LIMITS.pictureChars &&
-      PNG_BASE64.test(picture.png)
-    )) {
+  const read: MarkPicture[] = [];
+  for (const picture of pictures) {
+    const one = pictureOf(picture);
+    if (!one) {
       return `A picture is { mark, png }: a mark's id and a base64 PNG of at most ${COMMENT_LIMITS.pictureChars.toLocaleString()} characters.`;
     }
+    read.push(one);
   }
-  return null;
+  return { pictures: read, ...(url === undefined ? {} : { url }) };
 };
 
 /**
@@ -145,11 +170,11 @@ export const artifactPictures =
         detail: PICTURES_SHAPE,
       });
     }
-    const why = picturesBodyProblem(body);
-    if (why) {
-      return problemResponse({ status: 400, code: "refused", detail: why });
+    const read = picturesBodyRead(body);
+    if (typeof read === "string") {
+      return problemResponse({ status: 400, code: "refused", detail: read });
     }
-    const kept = keep(instanceId, artifactId, body as MarkPictures);
+    const kept = keep(instanceId, artifactId, read);
     return "response" in kept ? problemOf(kept) : Response.json(kept);
   };
 
@@ -160,15 +185,6 @@ const sentBody = ({ text, pins, again, control }: SendBody): SendBody => ({
   ...(again ? { again } : {}),
   ...(control ? { control } : {}),
 });
-
-/** Why `writes` is not a Send's carried writes (core `SendBody.writes`), or null. */
-const sentWritesProblem = (writes: unknown): string | null =>
-  writes === undefined ||
-  (typeof writes === "string" &&
-    writes.length <= SEND_WRITES_MAX &&
-    BASE64.test(writes))
-    ? null
-    : `writes is a base64 Yjs update of at most ${SEND_WRITES_MAX.toLocaleString()} characters.`;
 
 /**
  * The person sends their picks (`cawco.send`): `raw`, the body as JSON text,
@@ -201,11 +217,11 @@ export const artifactSend =
     } catch {
       return problem(400, { code: "refused", detail: SEND_SHAPE });
     }
-    const bodyProblem = sendBodyProblem(body);
-    if (bodyProblem) {
-      return problem(400, { code: "refused", detail: bodyProblem });
+    const read = sendBodyRead(body);
+    if (typeof read === "string") {
+      return problem(400, { code: "refused", detail: read });
     }
-    const { writes } = body as SendBody;
+    const { writes } = read;
     if (writes) {
       const refused = takeSentWrites(docs, artifactId, writes);
       if (refused) {
@@ -215,7 +231,7 @@ export const artifactSend =
     const sent = await send(
       instanceId,
       artifactId,
-      sentBody(body as SendBody),
+      sentBody(read),
       route
     );
     if (!("response" in sent)) {

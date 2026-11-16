@@ -12939,6 +12939,14 @@
       "account"
     ]
   },
+  "work_items.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
   "work_items.landing_phase": {
     "type": "string",
     "enum": [

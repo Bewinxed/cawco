@@ -40,24 +40,26 @@ import { unhandled } from "./unhandled";
  * {@link projectItemOf}): the machine places each at every place of the
  * project it has.
  */
-export type FleetItemKind =
-  | "policy"
-  | "mcp"
-  | "skill"
-  | "marketplace"
-  | "plugin"
-  | "pluginPayload"
-  | "hubOnly"
-  | "memory"
-  | "memoryDoc"
-  | "hook"
-  | "harnessConfig"
-  | "projectCheckout"
-  | "projectSkill"
-  | "projectMcp"
-  | "projectMemory"
-  | "projectHook"
-  | "projectHarnessConfig";
+export const FLEET_ITEM_KINDS = [
+  "policy",
+  "mcp",
+  "skill",
+  "marketplace",
+  "plugin",
+  "pluginPayload",
+  "hubOnly",
+  "memory",
+  "memoryDoc",
+  "hook",
+  "harnessConfig",
+  "projectCheckout",
+  "projectSkill",
+  "projectMcp",
+  "projectMemory",
+  "projectHook",
+  "projectHarnessConfig",
+] as const;
+export type FleetItemKind = (typeof FLEET_ITEM_KINDS)[number];
 
 /** One item: its id (`<kind>:<key>`, or the kind alone for a singular one) and its value. */
 export type FleetItems = Map<string, unknown>;
@@ -197,14 +199,24 @@ export const harnessConfigKey = (
   row: Pick<FleetHarnessConfig, "kind" | "name" | "placeId">
 ): string => `${row.kind}:${row.name}${row.placeId ? `@${row.placeId}` : ""}`;
 
-/** The kind an item id names. */
-export const itemKind = (id: string): FleetItemKind => {
+/** The kind an item id names; undefined for one this build does not know (a newer build's). */
+export const itemKindOf = (id: string): FleetItemKind | undefined => {
   const project = projectItemOf(id);
   if (project) {
     return PROJECT_KINDS[project.part];
   }
   const colon = id.indexOf(":");
-  return (colon < 0 ? id : id.slice(0, colon)) as FleetItemKind;
+  const named = colon < 0 ? id : id.slice(0, colon);
+  return FLEET_ITEM_KINDS.find((one) => one === named);
+};
+
+/** The kind an item id names, for a reader that acts on it: one this build does not know throws, naming the item. */
+export const itemKind = (id: string): FleetItemKind => {
+  const kind = itemKindOf(id);
+  if (kind === undefined) {
+    throw new Error(`fleet item ${id} is of a kind this build does not know`);
+  }
+  return kind;
 };
 
 /**
@@ -404,7 +416,7 @@ const stable = (value: unknown): string =>
   JSON.stringify(value, (_, inner: unknown) =>
     inner && typeof inner === "object" && !Array.isArray(inner)
       ? Object.fromEntries(
-          Object.entries(inner as Record<string, unknown>)
+          Object.entries(inner)
             .filter(([key]) => key !== "force")
             .sort(([a], [b]) => (a < b ? -1 : 1))
         )

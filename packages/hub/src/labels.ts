@@ -11,13 +11,15 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
  * (`harness#id8`), and never by that folder. A routine or a design check
  * runs on no harness (work-item-state.ts `Parent`): it is a `session`.
  */
-export interface LabelledRow {
-  cwd: string;
+export type LabelledRow = {
   harness: HarnessKind | null;
   id: string;
-  launchDir: "known" | "unread" | "unknown";
   title?: string | null;
-}
+} & (
+  | { cwd: string; launchDir: "known" | "unread" }
+  /** Its folder is never read: `cwd` may be one its CLI wandered into, or none known at all. */
+  | { cwd?: string; launchDir: "unknown" }
+);
 
 /** The last segment of a path. */
 export const leafOf = (path: string): string =>

@@ -13,6 +13,86 @@ import { andList } from "./helpers";
  */
 export type Figure = string & { readonly figure: true };
 
+/** {@link graphWords}`.how`, by its key: any other key reads as none. */
+const CLIP_HOW: Record<string, string> = {
+  height: "unfolds",
+  "block-size": "unfolds",
+  transform: "moves",
+  translate: "moves",
+  scale: "scales",
+  rotate: "turns",
+  width: "widens",
+  "inline-size": "widens",
+  "clip-path": "opens",
+  opacity: "fades",
+  filter: "blurs",
+  "background-color": "tints",
+  color: "tints",
+  "border-color": "tints",
+  "box-shadow": "lifts",
+};
+
+/** {@link graphWords}`.curves`, by its key: any other key reads as none. */
+const CURVE_NAMES: Record<string, string> = {
+  "--ease-out": "Ease-out",
+  "--ease-in-out": "Ease-in-out",
+  "--ease-drawer": "Drawer",
+  "--ease-crossfade": "Crossfade",
+  "--ease-goo": "Goo",
+  linear: "Linear",
+};
+
+/** {@link graphWords}`.durations`, by its key: any other key reads as none. */
+const DURATION_NAMES: Record<string, string> = {
+  "--duration-control": "Control",
+  "--duration-menu": "Menu",
+  "--duration-toggle": "Toggle",
+  "--duration-exit": "Exit",
+  "--duration-morph": "Morph",
+  "--duration-fade": "Fade",
+  "--duration-panel-exit": "Panel exit",
+  "--duration-pop": "Pop",
+  "--duration-panel": "Panel",
+  "--duration-glide": "Glide",
+  "--duration-settle": "Settle",
+};
+
+/** {@link graphWords}`.clipRepeats`, by its key: any other key reads as none. */
+const CLIP_REPEATS: Record<string, string> = {
+  once: "Once",
+  repeat: "Repeat",
+  mirror: "Back and forth",
+};
+
+/** {@link graphWords}`.properties`, by its key: any other key reads as none. */
+const PROPERTY_NAMES: Record<string, string> = {
+  opacity: "Opacity",
+  transform: "Position",
+  translate: "Position",
+  scale: "Size",
+  rotate: "Turn",
+  height: "Height",
+  "block-size": "Height",
+  width: "Width",
+  "inline-size": "Width",
+  "clip-path": "Reveal",
+  filter: "Blur",
+  "background-color": "Fill",
+  color: "Text colour",
+  "border-color": "Edge colour",
+  "box-shadow": "Shadow",
+};
+
+/** {@link graphWords}`.kinds`, by its key: any other key reads as none. */
+const KIND_NAMES: Record<string, string> = {
+  size: "Size",
+  move: "Position",
+  fade: "Opacity",
+  tint: "Colour",
+  effect: "Effect",
+  other: "Other",
+};
+
 export const graphWords = {
   /** What the pane left out of a message to or from the page, each for being past a bound: the few it names by their start. */
   leftOut: (
@@ -166,48 +246,13 @@ export const graphWords = {
   moveFailed: (why: string) => `The animation didn't play: ${why}`,
 
   /** How a clip moves its element, by the property it animates; any other property is named as it is. */
-  how: {
-    height: "unfolds",
-    "block-size": "unfolds",
-    transform: "moves",
-    translate: "moves",
-    scale: "scales",
-    rotate: "turns",
-    width: "widens",
-    "inline-size": "widens",
-    "clip-path": "opens",
-    opacity: "fades",
-    filter: "blurs",
-    "background-color": "tints",
-    color: "tints",
-    "border-color": "tints",
-    "box-shadow": "lifts",
-  } as Record<string, string>,
+  how: CLIP_HOW,
   /** How a clip moves when its property is none of those (a custom property's). */
   changes: "changes",
   /** A curve named by its token. */
-  curves: {
-    "--ease-out": "Ease-out",
-    "--ease-in-out": "Ease-in-out",
-    "--ease-drawer": "Drawer",
-    "--ease-crossfade": "Crossfade",
-    "--ease-goo": "Goo",
-    linear: "Linear",
-  } as Record<string, string>,
+  curves: CURVE_NAMES,
   /** The design system's durations, by token: the lengths a drag settles on. */
-  durations: {
-    "--duration-control": "Control",
-    "--duration-menu": "Menu",
-    "--duration-toggle": "Toggle",
-    "--duration-exit": "Exit",
-    "--duration-morph": "Morph",
-    "--duration-fade": "Fade",
-    "--duration-panel-exit": "Panel exit",
-    "--duration-pop": "Pop",
-    "--duration-panel": "Panel",
-    "--duration-glide": "Glide",
-    "--duration-settle": "Settle",
-  } as Record<string, string>,
+  durations: DURATION_NAMES,
   /** The curve the agent wrote, when it is none of the design system's: offered to go back to. */
   agentsCurve: "Agent's curve",
   /** A curve he drew by its two control points: his own, off the design system's. */
@@ -232,11 +277,7 @@ export const graphWords = {
   resetValues: "Reset values to as written",
   /** How a clip runs on past its first time through. */
   clipRepeat: "Repeats",
-  clipRepeats: {
-    once: "Once",
-    repeat: "Repeat",
-    mirror: "Back and forth",
-  } as Record<string, string>,
+  clipRepeats: CLIP_REPEATS,
   resetRepeat: (to: string) => `Reset repeats to ${to}`,
   /** A clip of several legs (A to B to C): where one ends and the next begins, for a reader. */
   legEnds: (clip: string, at: number, of: number) =>
@@ -276,37 +317,14 @@ export const graphWords = {
   runOf: (clip: string, at: number, of: number) =>
     `${clip}, run ${at} of ${of}`,
   /** What an animation changes, by its CSS property, for the rows under a row; any other is said from its own name. */
-  properties: {
-    opacity: "Opacity",
-    transform: "Position",
-    translate: "Position",
-    scale: "Size",
-    rotate: "Turn",
-    height: "Height",
-    "block-size": "Height",
-    width: "Width",
-    "inline-size": "Width",
-    "clip-path": "Reveal",
-    filter: "Blur",
-    "background-color": "Fill",
-    color: "Text colour",
-    "border-color": "Edge colour",
-    "box-shadow": "Shadow",
-  } as Record<string, string>,
+  properties: PROPERTY_NAMES,
   /** A row under a row that moves several parts of its thing at once (a morphed text's letters): how many. */
   partsCount: (n: number) => `${n} parts`,
   /** A drawn curve's two handles, for a reader. */
   curvePoint: (n: number) => `Control point ${n}`,
   /** What each bar's colour means, under the rows: the kinds of change it shows. */
   kindsKey: "Bar colours",
-  kinds: {
-    size: "Size",
-    move: "Position",
-    fade: "Opacity",
-    tint: "Colour",
-    effect: "Effect",
-    other: "Other",
-  } as Record<string, string>,
+  kinds: KIND_NAMES,
   /** Reset all taken back, while nothing has changed since. */
   undoReset: "Undo reset",
   /** With reduced motion on, Play lands the move at its end without playing it: said beside the time. */

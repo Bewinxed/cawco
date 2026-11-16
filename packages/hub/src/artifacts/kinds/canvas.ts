@@ -10,7 +10,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { ElysiaStatus, problem } from "elysia";
-import type { ArtifactRow } from "../../db/artifacts";
+import { type ArtifactRow, isSessionArtifact } from "../../db/artifacts";
 
 import {
   canvasEntries,
@@ -182,6 +182,13 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
   >();
   /** The hub machine's screen opened on canvas `row`, once its page joined the doc; the refusal of its open, or of a page that didn't join in time. */
   const joinedScreen = async (row: ArtifactRow) => {
+    // A canvas is always its session's: only a project's page outlives one.
+    if (!isSessionArtifact(row)) {
+      return problem(502, {
+        code: "artifact-screen-unopened",
+        detail: `The canvas ${row.name} wasn't drawn: it belongs to no session to open it in.`,
+      });
+    }
     const one = await deps.screen(row, routeOf(row.id));
     if (one instanceof ElysiaStatus) {
       return one;

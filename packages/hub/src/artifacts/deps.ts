@@ -20,7 +20,11 @@ import type {
 import type { FolderWeight } from "@cawco/preview/proxy";
 import type { problem } from "elysia";
 import type { Caw } from "../caw";
-import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
+import type {
+  ArtifactRow,
+  ArtifactsDb,
+  SessionArtifact,
+} from "../db/artifacts";
 import type { DecisionLinks, DecisionProblem } from "../decision-problems";
 import type { ArtifactNamed } from "../decision-program";
 import type { HubLifetimeShape } from "../lifetime";
@@ -415,7 +419,7 @@ export interface ArtifactServiceDeps {
    * write, and what lets it go; refused saying why when none can open.
    */
   screen: (
-    artifact: ArtifactRow,
+    artifact: SessionArtifact,
     sync: string
   ) => Promise<
     | CanvasScreen

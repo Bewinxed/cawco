@@ -78,7 +78,7 @@ import { SHIELD_WORDS } from "@cawco/core/words/browser";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { answered } from "./browser-answered";
 import type { BrowserAsks } from "./browser-tools";
-import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
+import type { ArtifactsDb, SessionArtifact } from "./db/artifacts";
 import type { BrowsersDb, StoredBrowser } from "./db/browsers";
 import type { AgentCall } from "./machine-answers";
 
@@ -121,7 +121,7 @@ export interface BrowsersDeps {
     ttlMs: number
   ) => import("@cawco/core/browser").BrowserRelay | null;
   /** Brings an artifact to the front of its session's panel (artifact-pages.ts `openPreview`). */
-  open: (artifact: ArtifactRow) => Promise<{ ok: boolean; error?: string }>;
+  open: (artifact: SessionArtifact) => Promise<{ ok: boolean; error?: string }>;
   /** Sends every dashboard the fleet's browsers, whole (core `BrowserListFrame`). */
   publish: (frame: BrowserListFrame) => void;
   /** Says something to a session, as the hub. */
@@ -191,16 +191,8 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     live.set(liveKey(machineId, row.key), facts);
   };
 
-  /** `instance`'s browser artifact, made the first time it is listed or asked about. */
-  const artifactFor = (instance: InstanceRow, key: BrowserKey): ArtifactRow => {
-    const kept = db.artifacts.byName(
-      instance.id,
-      "browser",
-      BROWSER_ARTIFACT_NAME
-    );
-    if (kept) {
-      return kept;
-    }
+  /** `instance`'s browser artifact, made. */
+  const madeFor = (instance: InstanceRow, key: BrowserKey) => {
     const now = new Date();
     return db.artifacts.create({
       id: crypto.randomUUID(),
@@ -225,6 +217,19 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       updatedAt: now,
       shownAt: null,
     });
+  };
+
+  /** `instance`'s browser artifact, made the first time it is listed or asked about: the session's own, found and made under its id. */
+  const artifactFor = (
+    instance: InstanceRow,
+    key: BrowserKey
+  ): SessionArtifact => {
+    const kept = db.artifacts.byName(
+      instance.id,
+      "browser",
+      BROWSER_ARTIFACT_NAME
+    );
+    return { ...(kept ?? madeFor(instance, key)), instanceId: instance.id };
   };
 
   /** The machine a route means: the one named, else the only one with `key`. */

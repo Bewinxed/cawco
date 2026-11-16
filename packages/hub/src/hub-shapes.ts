@@ -7,9 +7,10 @@ import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { FleetVersioned } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { MachinePath } from "@cawco/core/machine-path";
-import type { NamedSpawn, Verb } from "@cawco/core/protocol";
+import type { InstanceRow, NamedSpawn, Verb } from "@cawco/core/protocol";
 import type { problem } from "elysia";
 import type { DbShape } from "./db";
+import type { LabelledRow } from "./labels";
 import { awayProblem, MachineProblem } from "./machine-answers";
 import type { HubSocket } from "./wire-socket";
 
@@ -83,6 +84,17 @@ export interface ReportTold {
   /** The folder paths its finish copied its outputs to. */
   outputs?: string[];
 }
+
+/**
+ * A delegate as its report reads it (ask-routing.ts `reportToParent`): who
+ * it is and where it runs, the parent and item it reports for, and how it
+ * is named. A session whose row is gone is reported from its item
+ * (work-items.ts `standIn`), with these alone.
+ */
+export type ReportingSession = LabelledRow &
+  Pick<InstanceRow, "machineId" | "parentInstanceId" | "workItemId"> & {
+    derivedTitle?: string | null;
+  };
 
 /** A folder-sourced skill's PUT body, as the route has read it and the install reads it (`installFromFolder`). */
 export interface FolderSkillBody {
