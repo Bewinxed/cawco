@@ -59,8 +59,6 @@ as-cast	{ default: { packages: Record<string, [string, ...unknown[]]> }; }	scrip
 as-cast	{ default: { patchedDependencies?: Record<string, string> }; }	scripts/patched-dependencies-check.ts	1
 as-cast	{ definitions?: Record<string, Schema> }	packages/hub/scripts/openapi.ts	1
 as-cast	{ diagnostics: Diagnostic[] }	scripts/lib/biome-run.ts	1
-as-cast	{ disallowedTools?: string[] } | undefined	packages/agent/src/harnesses/claude.ts	1
-as-cast	{ directory?: unknown }[]	packages/agent/src/harnesses/opencode-server.ts	1
 as-cast	{ ds: { candidatesToCss: (c: string[]) => (string | null)[]; theme: { va	scripts/codemods/type-roles.ts	1
 as-cast	{ ds: DesignSystem }	scripts/codemods/lib/tailwind-reads.ts	1
 as-cast	{ ds: DesignSystem }	scripts/codemods/theme-prune.ts	1
@@ -94,14 +92,8 @@ as-cast	{ instanceId?: string; payload?: { kind?: string; message?: string }; }	
 as-cast	{ instanceId?: string; payload?: { kind?: string; message?: string }; }	scripts/binary/e2e-start-session.ts	1
 as-cast	{ instanceId?: string; payload?: { kind?: string; message?: string }; }	scripts/binary/e2e-stop-session.ts	1
 as-cast	{ jsonrpc?: unknown; id?: unknown; result?: unknown; } | null	packages/preview/src/overlay/page.ts	1
-as-cast	{ label?: unknown; description?: unknown }	packages/agent/src/harnesses/claude.ts	1
 as-cast	{ lightSelector?: string; selector?: string; }	packages/design-tokens/src/design-tokens.ts	1
 as-cast	{ links?: { syntheticOrigin?: TS.Symbol } }	packages/agent/src/stage-host/docgen.ts	1
-as-cast	{ mcpServers?: Record<string, McpServerConfig> } | undefined	packages/agent/src/harnesses/claude.ts	1
-as-cast	{ kind?: string; message?: string } | undefined	packages/agent/src/daemon.ts	1
-as-cast	{ lightSelector?: string; selector?: string; }	packages/design-tokens/src/design-tokens.ts	1
-as-cast	{ links?: { syntheticOrigin?: TS.Symbol } }	packages/agent/src/stage-host/docgen.ts	1
-as-cast	{ message: string; status?: number; }	packages/agent/src/harnesses/opencode-session.ts	1
 as-cast	{ message?: { role?: unknown; timestamp?: unknown }; timestamp?: unknown	packages/agent/src/harnesses/pi-services.ts	1
 as-cast	{ messages?: { errorMessage?: string }[] }	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	{ method: string; path: string }[]	packages/hub/scripts/openapi.ts	1
@@ -116,13 +108,6 @@ as-cast	{ parameters?: Schema[] }	packages/hub/scripts/openapi.ts	1
 as-cast	{ parse: (source: string, options: { modern: true }) => { css: unknown }	scripts/style-residual-check.ts	1
 as-cast	{ products: { productID: string; type: string; displayPrice: string }[];	site/vite.config.ts	1
 as-cast	{ propertyName?: string } | undefined	packages/hub/scripts/openapi-order.ts	1
-as-cast	{ question?: unknown; header?: unknown; options?: unknown; multiSelect?:	packages/agent/src/harnesses/claude.ts	1
-as-cast	{ questions?: unknown; answers?: unknown; response?: unknown; annotation	packages/agent/src/harnesses/claude.ts	1
-as-cast	{ recurring?: unknown } | null	packages/agent/src/harnesses/claude.ts	1
-as-cast	{ question?: unknown; header?: unknown; options?: unknown; multiple?: un	packages/agent/src/harnesses/opencode-transcript.ts	1
-as-cast	{ questions?: unknown } | undefined	packages/agent/src/harnesses/opencode-transcript.ts	1
-as-cast	{ reason?: unknown }	packages/agent/src/harnesses/opencode-client.ts	1
-as-cast	{ requestId?: unknown } | undefined	packages/agent/src/session.ts	1
 as-cast	{ result?: { width: number; height: number; wasResized: boolean }; }	scripts/binary/smoke-runtime.ts	1
 as-cast	{ role?: string }	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	{ role?: string; content?: unknown; }	packages/agent/src/harnesses/pi-runtime.ts	1
@@ -138,19 +123,10 @@ as-cast	{ targetInfos: { targetId: string; type: string }[]; }	scripts/takeover-
 as-cast	{ text: unknown }	packages/agent/src/harnesses/pi-services.ts	1
 as-cast	{ token: string }	scripts/codemods/type-roles.ts	1
 as-cast	{ toolCallId?: string; isError?: boolean }	packages/agent/src/harnesses/pi-services.ts	1
-as-cast	{ type: string }	packages/agent/src/harnesses/claude.ts	2
-as-cast	{ type?: string }	packages/agent/src/harnesses/claude-transcript.ts	1
-as-cast	{ type?: string }	packages/agent/src/harnesses/claude.ts	1
-as-cast	{ top: number | null; } | null	packages/agent/src/harnesses/opencode-docs.ts	1
-as-cast	{ type?: string; text?: string; data?: string; mimeType?: string; uri?: 	packages/agent/src/harnesses/opencode-transcript.ts	1
 as-cast	{ type?: string; text?: string; thinking?: string; id?: string; name?: s	packages/agent/src/harnesses/pi-services.ts	1
 as-cast	{ type?: unknown }	scripts/lib/parse-source.ts	1
 as-cast	{ type?: unknown } | null	packages/preview/src/overlay/host-origin.ts	1
 as-cast	{ typeParameters?: readonly Node[] }	scripts/lint/switch-exhaustiveness.ts	1
-as-cast	{ url?: string } | undefined	packages/agent/src/harnesses/claude.ts	1
-as-cast	{ usage?: { cache_creation_input_tokens?: number; cache_read_input_token	packages/agent/src/harnesses/claude.ts	1
-as-cast	{ usage?: { input_tokens: number; cache_read_input_tokens?: number; cach	packages/agent/src/harnesses/claude-transcript.ts	1
-as-cast	{ updatedInput?: { answers?: UserAnswers } }	packages/agent/src/harnesses/opencode-session.ts	1
 as-cast	{ usage?: { totalTokens?: number } } | undefined	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	{ usage?: unknown }	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	{ v: number; } | null	packages/jsonl-parser/src/fts5.ts	1
@@ -160,9 +136,6 @@ as-cast	{ value?: unknown } | undefined	packages/agent/src/browser/cdp-takeover.
 as-cast	{ version: string; format: (code: string, options: object) => Promise<st	packages/agent/src/stage-host/host.ts	1
 as-cast	{ willRetry?: boolean }	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	| (Css & { children: Css[]; comments: { end: number; start: number; valu	scripts/style-residual-check.ts	1
-as-cast	| { emailAddress?: unknown; organizationName?: unknown; organizationUuid	packages/agent/src/harnesses/claude-stored-run.ts	1
-as-cast	| { type?: unknown; permissionMode?: unknown; message?: { model?: unknow	packages/agent/src/harnesses/claude-stored-run.ts	1
-as-cast	| { cawco?: unknown; words?: unknown; server?: unknown; line?: unknown; 	packages/agent/src/harnesses/opencode-transcript.ts	1
 as-cast	Action	packages/cli/src/browser.ts	1
 as-cast	Anchorable	packages/preview/src/overlay/anchor-names.ts	1
 as-cast	AppState["zoom"]["value"]	packages/agent/src/canvas-host/scene.ts	1
@@ -183,8 +156,6 @@ as-cast	boolean	packages/agent/src/fleet-converger.ts	4
 as-cast	Box	packages/preview/src/overlay/embeds.ts	1
 as-cast	Buffer	scripts/republish.ts	1
 as-cast	Bun.Build.CompileTarget	scripts/build-binary.ts	1
-as-cast	CallerOptions | undefined	packages/agent/src/harnesses/claude.ts	1
-as-cast	Catalog	packages/agent/src/harnesses/opencode-models.ts	1
 as-cast	Checkpoint | null	packages/jsonl-parser/src/fts5.ts	1
 as-cast	ChildNode[]	scripts/codemods/theme-prune.ts	1
 as-cast	ChildProcessWithoutNullStreams	packages/sessiond/src/server.ts	1
@@ -225,8 +196,6 @@ as-cast	ExtensionAPI	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	Figure	apps/dashboard/src/lib/cawco/graph/figures.ts	1
 as-cast	FileId	packages/agent/src/canvas-host/images.ts	1
 as-cast	FileStoreClass	packages/agent/src/harnesses/pi-accounts.ts	1
-as-cast	FlagHookEntry["hooks"][number]	packages/agent/src/harnesses/claude.ts	1
-as-cast	FleetItemState	packages/agent/src/harnesses/opencode.ts	1
 as-cast	FleetMcpConfig	packages/agent/src/harnesses/pi-services.ts	1
 as-cast	Font	scripts/house-faces.ts	1
 as-cast	Found	scripts/fixed-ports-check.ts	1
@@ -267,11 +236,6 @@ as-cast	Manifest	scripts/lib/workspace-imports.ts	1
 as-cast	Marked	packages/preview/src/overlay/boot.ts	1
 as-cast	MediaQueryList	packages/agent/src/stage-host/canvas/runtime.ts	1
 as-cast	Merge	scripts/codemods/lib/token-merge.ts	2
-as-cast	NeutralMessage	packages/agent/src/harnesses/claude.ts	1
-as-cast	NeutralSystemMessage	packages/agent/src/harnesses/claude-transcript.ts	1
-as-cast	MessageData	packages/agent/src/harnesses/opencode-docs.ts	1
-as-cast	NeutralMessage	packages/agent/src/harnesses/opencode.ts	1
-as-cast	never	apps/dashboard/src/lib/cawco/hub/frames.ts	1
 as-cast	never	apps/dashboard/src/lib/components/ui/select/select.svelte	1
 as-cast	never	apps/dashboard/src/lib/components/ui/toggle-group/toggle-group.svelte	1
 as-cast	never	packages/agent/src/harnesses/pi-runtime.ts	2
@@ -361,9 +325,6 @@ as-cast	PointerEvent	packages/preview/src/overlay/page.ts	2
 as-cast	Prepared	scripts/build-binary.ts	1
 as-cast	PreviewElement["styles"]	packages/preview/src/overlay/page.ts	1
 as-cast	Promise<StoreAnswer<K>>	packages/agent/src/stores/client.ts	1
-as-cast	Promise<T> | undefined	packages/agent/src/harnesses/claude-transcript.ts	1
-as-cast	QueuedCommand | undefined	packages/agent/src/harnesses/claude-transcript.ts	1
-as-cast	ProviderRefusal	packages/agent/src/harnesses/opencode-session.ts	1
 as-cast	ReadableStream	scripts/binary-tests.ts	1
 as-cast	ReadableStream	scripts/release.ts	1
 as-cast	ReadableStream	scripts/release/steps/shared.ts	1
@@ -392,9 +353,6 @@ as-cast	Record<string, unknown>	apps/cawrier/src/storekit.ts	1
 as-cast	Record<string, unknown>	apps/dashboard/scripts/specificity-trap.ts	1
 as-cast	Record<string, unknown>	packages/agent/src/claude-settings-file.ts	1
 as-cast	Record<string, unknown>	packages/agent/src/fleet.ts	1
-as-cast	Record<string, unknown>	packages/agent/src/harnesses/claude.ts	2
-as-cast	Record<string, unknown>	packages/agent/src/harnesses/opencode-transcript.ts	2
-as-cast	Record<string, unknown>	packages/agent/src/harnesses/opencode.ts	2
 as-cast	Record<string, unknown>	packages/agent/src/harnesses/pi-runtime.ts	1
 as-cast	Record<string, unknown>	packages/cli/src/tools.ts	1
 as-cast	Record<string, unknown>	packages/design-tokens/src/dtcg-values.ts	1
@@ -406,8 +364,6 @@ as-cast	Record<string, unknown>	packages/sessiond/src/server.ts	1
 as-cast	Record<string, unknown>	scripts/escape-hatch-ratchet.ts	1
 as-cast	Record<string, unknown>	scripts/lib/tool-call.ts	2
 as-cast	Record<string, unknown>	scripts/words-swift.ts	1
-as-cast	Record<string, unknown> | undefined	packages/agent/src/harnesses/claude.ts	1
-as-cast	Record<string, unknown> | undefined	packages/agent/src/harnesses/opencode-session.ts	1
 as-cast	Record<string, unknown> | undefined	packages/preview/src/overlay/page.ts	1
 as-cast	Record<string, unknown>[]	scripts/words-swift.ts	1
 as-cast	Record<string, unknown>[][]	scripts/words-swift.ts	1
@@ -430,8 +386,6 @@ as-cast	Schema[] | undefined	packages/hub/scripts/openapi.ts	1
 as-cast	Selector[]	apps/dashboard/scripts/specificity-trap.ts	1
 as-cast	SelNode	apps/dashboard/scripts/specificity-trap.ts	1
 as-cast	SelNode[]	apps/dashboard/scripts/specificity-trap.ts	1
-as-cast	SendPayload	packages/agent/src/session.ts	2
-as-cast	ServerIdentity[]	packages/agent/src/harnesses/opencode.ts	1
 as-cast	ServiceAction	packages/cli/src/service.ts	1
 as-cast	SettingsJson	packages/agent/src/fleet.ts	1
 as-cast	SheetWrite	packages/agent/src/stage-host/host.ts	1
@@ -442,11 +396,6 @@ as-cast	SourceKey	packages/core/src/preview/upstream.ts	1
 as-cast	State	packages/agent/src/fleet-converger.ts	1
 as-cast	State	packages/preview/src/overlay/artifact.ts	1
 as-cast	Step[]	packages/jsonl-parser/src/fts5.ts	1
-as-cast	StoredHookError | undefined	packages/agent/src/harnesses/claude-transcript.ts	1
-as-cast	StopPayload	packages/agent/src/session.ts	2
-as-cast	StreamBacklog	apps/dashboard/src/lib/cawco/stream.ts	1
-as-cast	StreamDelta	apps/dashboard/src/lib/cawco/stream.ts	1
-as-cast	StreamReset	apps/dashboard/src/lib/cawco/stream.ts	1
 as-cast	string	apps/dashboard/first-paint-chunks.ts	2
 as-cast	string	apps/dashboard/scripts/class-strings.ts	4
 as-cast	string	apps/dashboard/scripts/css-layers-check.ts	1
@@ -494,10 +443,6 @@ as-cast	string	scripts/words-swift.ts	1
 as-cast	string | ArrayBuffer	packages/preview/src/proxy.ts	2
 as-cast	string | undefined	apps/dashboard/scripts/outro-reads-check.ts	2
 as-cast	string | undefined	packages/hub/scripts/openapi.ts	1
-as-cast	string[]	packages/agent/src/harnesses/claude.ts	1
-as-cast	string[]	packages/agent/src/harnesses/opencode-plugin.ts	2
-as-cast	string[]	packages/agent/src/harnesses/opencode-server.ts	2
-as-cast	string[]	packages/agent/src/harnesses/opencode-transcript.ts	1
 as-cast	string[]	packages/agent/src/harnesses/pi-services.ts	1
 as-cast	string[]	packages/hub/scripts/openapi.ts	4
 as-cast	string[]	packages/jsonl-parser/src/pool.ts	1
@@ -544,9 +489,6 @@ as-cast	unknown[]	packages/hub/scripts/openapi-order.ts	1
 as-cast	unknown[]	packages/hub/scripts/openapi.ts	4
 as-cast	unknown[]	packages/hub/scripts/wire-compat.ts	1
 as-cast	unknown[] | undefined	packages/hub/scripts/openapi.ts	1
-as-cast	UserAnswers	packages/agent/src/harnesses/claude.ts	1
-as-cast	UserQuestionAnswered["annotations"]	packages/agent/src/harnesses/claude.ts	1
-as-cast	UserQuestion["options"]	packages/agent/src/harnesses/opencode-transcript.ts	1
 as-cast	UserRecord	packages/jsonl-parser/src/text.ts	1
 as-cast	UserRecord | AssistantRecord	packages/jsonl-parser/src/text.ts	1
 as-cast	Vite	packages/agent/src/stage-host/host.ts	1
