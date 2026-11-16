@@ -96,17 +96,11 @@
    *
    * The card hangs from its folder tab (HangCard `tab`, hang-card-tab-frame),
    * as PaneTabs hangs it, at the bench's width: the desk's 416px card, or
-   * a phone's margin to margin. Its popovers and tooltips portal into a
-   * layer over the frame (bits-ui `BitsConfig` `defaultPortalTo`, as
-   * DialsRoot does), so the
-   * stage frames them. The layer contains its layout (`contain: layout`):
-   * the surfaces bits-ui places `fixed` are placed in it, never in the
-   * stage's own canvas, a size container whose layout containment made
-   * them part of its scrollable overflow, so an open popover grew the page
-   * and its scrollbar shifted the card. Its overflow is clipped, inside a
-   * frame tall enough for every list. It stands on the floating layer, as
-   * the app's popovers stand over a hung card: the card is on it too
-   * (HangCard), and the list opened from it had drawn under its foot.
+   * a phone's margin to margin. Its popovers and tooltips portal to the
+   * page's body, as the app's do: the card's outline (HangCard's outline
+   * layer, hang-outline) stands there on the floating layer, so a list
+   * portaled anywhere under it, the frame's own layer once, drew under the
+   * card's foot.
    */
   import { type Account, CLAUDE_PROVIDER } from "@cawco/core/accounts";
   import type { AccountHue } from "@cawco/core/accounts/kinds";
@@ -119,7 +113,6 @@
   import type { InstanceRow } from "@cawco/core/protocol";
   import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
   import type { ClaudeLimits, LimitWindow } from "@cawco/core/usage/types";
-  import { BitsConfig } from "bits-ui";
   import { onDestroy, untrack } from "svelte";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import { benchClaudeReport } from "../bench-reports";
@@ -490,8 +483,6 @@
   // Start over, a move waiting, the readings' age or the context's: seeded again.
   $effect(() => seedOn(again, pending, reading, context));
 
-  /** The portal's target: the popovers and tooltips draw inside the frame. */
-  let layer = $state<HTMLElement>();
   /** The bench's width: the frame's, so the card takes the desk's or the phone's form. */
   let width = $state(0);
   /** The frame's height: room for the open lists, or the card alone. */
@@ -499,7 +490,7 @@
 </script>
 
 <div
-  class="relative w-full bg-surface-recess"
+  class="w-full bg-surface-recess"
   {@attach frameSize(
     (node) => node.clientWidth,
     (next) => {
@@ -507,26 +498,19 @@
     }
   )}
 >
-  <BitsConfig defaultPortalTo={layer}>
-    {#if width > 0}
-      <HangCardTabFrame
-        height={FRAME_H[room]}
-        tabs={[TITLE, "Release notes"]}
-        {width}
-      >
-        <SessionDetails
-          dir={1}
-          href={`/session/${ID}`}
-          onclose={() => undefined}
-          sessionId={ID}
-          title={TITLE}
-        />
-      </HangCardTabFrame>
-    {/if}
-  </BitsConfig>
-  <div
-    bind:this={layer}
-    class="pointer-events-none absolute inset-0 z-(--layer-float) overflow-clip contain-layout *:pointer-events-auto"
-    data-slot="layer"
-  ></div>
+  {#if width > 0}
+    <HangCardTabFrame
+      height={FRAME_H[room]}
+      tabs={[TITLE, "Release notes"]}
+      {width}
+    >
+      <SessionDetails
+        dir={1}
+        href={`/session/${ID}`}
+        onclose={() => undefined}
+        sessionId={ID}
+        title={TITLE}
+      />
+    </HangCardTabFrame>
+  {/if}
 </div>
