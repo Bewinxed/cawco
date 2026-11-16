@@ -1,4 +1,4 @@
-import type { PictureCut } from "@cawco/core/artifact-picture";
+import type { PictureCut, PictureTaken } from "@cawco/core/artifact-picture";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Member } from "@cawco/core/decides";
 import type { DecisionCard } from "@cawco/core/decisions";
@@ -9,6 +9,7 @@ import type {
   CanvasSpec,
   DesignMap,
   DesignQuery,
+  ServedPicture,
   ServeSpec,
   SheetWrite,
   SheetWritten,
@@ -281,6 +282,8 @@ export interface ArtifactServiceDeps {
         typeof problem<400, { code: "picture-save-refused"; detail: string }>
       >
   >;
+  /** Machine `machineId` told the pins its artifacts are served from, as it registers: it lets go of every other one (agent stage.ts `keepPins`). Never throws. */
+  keepPins: (machineId: string, pins: string[]) => void;
   /**
    * The projects session `instance` is the conversation of (their Caw): an ended writer's
    * marks are routed to him, and he answers them in their pins' threads.
@@ -491,6 +494,17 @@ export interface ArtifactServiceDeps {
         >
       >
   >;
+  /**
+   * A served preview's page as its author has it now, for its author's
+   * `artifact_read` with `png`: its workspace's own server, started by
+   * CawCo as `artifact_create` starts it, drawn in that machine's own
+   * Chromium (agent stage.ts `drawServed`), never the pin the person is
+   * served. Refused saying why it can't.
+   */
+  servedPicture: (
+    at: StageAt,
+    ask: ServedPicture
+  ) => Promise<PictureTaken | StageRefused>;
   /** Whether project `projectId` is set up (tasks.ts `isSetUp`): where its setup page lands (core `setupLanding`). */
   setUp: (projectId: string) => boolean;
   /** The artifact a session's panel shows now, if any. */

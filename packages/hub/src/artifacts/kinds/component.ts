@@ -37,7 +37,7 @@ import {
   weightSaid,
 } from "../component";
 import { stillThere } from "../facts";
-import { onPinOf, sheetOf } from "../served";
+import { sheetOf } from "../served";
 import type {
   ArtifactInput,
   ArtifactRead,
@@ -67,7 +67,6 @@ const storyOfOp = (op: StoryOp): string | null => {
 export type ComponentKindContext = Pick<
   KindContext,
   | "askedOf"
-  | "cutVersion"
   | "db"
   | "deps"
   | "discard"
@@ -79,6 +78,7 @@ export type ComponentKindContext = Pick<
   | "marked"
   | "openedOf"
   | "openNextFirst"
+  | "pinnedSource"
   | "read"
   | "relistOf"
   | "stampMeta"
@@ -87,7 +87,6 @@ export type ComponentKindContext = Pick<
 /** A component canvas: a states file's stories drawn live on its machine's stage, the draws and the sheet the hub keeps of them in the doc, and a read that waits for what a browser drew. */
 export const createComponentKind = (ctx: ComponentKindContext) => {
   const {
-    cutVersion,
     db,
     deps,
     discard,
@@ -95,6 +94,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     handOver,
     holdNext,
     inPanel,
+    pinnedSource,
     relistOf,
     stampMeta,
   } = ctx;
@@ -161,8 +161,6 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       const meta = docMeta(doc);
       const mine = sheetState(row, state);
       meta.set("stage", mine);
-      // The stage was reached: by a read, or by the daemon's word of it.
-      meta.delete("unreached");
       if (sheet) {
         meta.set("sheet", sheet);
       }
@@ -248,7 +246,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     } else if (error instanceof Error) {
       why = error.message;
     }
-    return { down, why, since: new Date().toISOString() };
+    return { down, why };
   };
   /** One write as the session reads of it: where, and what. */
   const saveSection = (change: SheetChange, edit: SheetWritten): string => {
@@ -412,11 +410,10 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     return said instanceof ElysiaStatus ? said : { asked, said };
   };
   /**
-   * A component canvas's row placed in its owner's panel: the one of that
-   * name made again where it stands, on the pin it is served from (cut
-   * again by the create, versions.ts `cutVersion`), or its next version
-   * when its maker re-creates one its parent opened (versions.ts
-   * `holdNext`), or a new one.
+   * A component canvas's row placed in its owner's panel on the version its
+   * create cut (`at`, its pin): the one of that name made again where it
+   * stands, or its next version when its maker re-creates one its parent
+   * opened (versions.ts `holdNext`), or a new one.
    */
   const placeSheet = (
     { owner, maker }: Making,
@@ -429,10 +426,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const holding = before ? holdNext(maker, before) : null;
     const target = holding?.next ?? before;
     if (target) {
-      db.resource(target.id, {
-        machineId: at.machineId,
-        source: onPinOf(at.source, target),
-      });
+      db.resource(target.id, at);
     }
     const placed = target
       ? stillThere(
@@ -463,7 +457,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
           updatedAt: now,
           shownAt: null,
         });
-    return { before, holding, target, placed };
+    return { before, holding, row: placed };
   };
   /**
    * Makes a component canvas in `owner`'s panel (or opens the one of that
@@ -497,20 +491,15 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     if (unopened) {
       return unopened;
     }
-    const { before, holding, target, placed } = placeSheet(
-      making,
-      input.name,
-      said,
-      { machineId, source }
-    );
-    // The version handed up: its workspace's files as they are now, cut as its pin (core `PreviewSource.pin`).
-    const row = await cutVersion(placed);
-    if (row instanceof ElysiaStatus) {
-      if (!target || holding?.fresh) {
-        discard(placed);
-      }
-      return row;
+    // The version handed up: its workspace's files as they are now, cut as a pin of its own (core `PreviewSource.pin`); a refusal leaves the person's as it was.
+    const cut = await pinnedSource(machineId, source);
+    if (cut instanceof ElysiaStatus) {
+      return cut;
     }
+    const { before, holding, row } = placeSheet(making, input.name, said, {
+      machineId,
+      source: cut.source,
+    });
     stampMeta(row, null);
     writeStage(row, opened.state, opened.sheet);
     const shown = await handOver(making, before, row, undefined, holding);

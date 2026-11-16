@@ -32,7 +32,7 @@ import {
 } from "@cawco/core/doc-link";
 import type { ArtifactChanges } from "@cawco/core/doc-meta";
 import { docMeta, getMeta } from "@cawco/core/doc-meta";
-import type { StageState, StageUnreached } from "@cawco/core/stage";
+import type { StageState } from "@cawco/core/stage";
 import {
   keepTuned,
   TUNED_MAP,
@@ -94,8 +94,6 @@ export interface ArtifactView extends ArtifactChoices {
   stage: StageState | null;
   /** A component's tuned timing, every move's records (the doc's `tuned` map, core tuned.ts). */
   tuned: TunedRecord[];
-  /** The hub's last read couldn't reach the stage (`meta.unreached`): which hop, why, since when. */
-  unreached: StageUnreached | null;
 }
 
 /**
@@ -191,7 +189,6 @@ const viewOf = (doc: Doc): ArtifactView => {
     pins: pins.sort((a, b) => a.number - b.number),
     revisedAt: meta.get("revisedAt") ?? null,
     stage: meta.get("stage") ?? null,
-    unreached: meta.get("unreached") ?? null,
     tuned:
       (tunedEntryOf(doc.getMap(TUNED_MAP).toJSON())?.value as
         TunedRecord[] | undefined) ?? [],

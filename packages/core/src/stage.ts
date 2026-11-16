@@ -996,13 +996,34 @@ export const STAGE_SERVE = "stageServe";
 
 /**
  * The daemon's control method that cuts the version of an artifact its
- * author hands up (core preview/protocol.ts `PreviewSource.pin`): `[ref,
- * pin]` for a workspace's or place's sheet or served preview, the clone
- * `pin` cut from that tree, or brought in step with it once when it stands
- * (agent stage-clone.ts `pinClone`); `[null, pin, dir]` for a folder, a copy
- * of `dir` (`pinFolder`). Answers once the version stands.
+ * author hands up (core preview/protocol.ts `PreviewSource.pin`), a pin of
+ * its own beside the one the person is served: `[ref, pin]` for a
+ * workspace's or place's sheet or served preview, that tree as it is now
+ * (agent stage-clone.ts `cutPin`: a clone of its repository, or a copy of a
+ * tree in none); `[null, pin, dir]` for a folder, a copy of `dir`
+ * (`pinFolder`). Answers once the version stands.
  */
 export const STAGE_PIN = "stagePin";
+
+/** The daemon's control method that takes the pins the hub serves from, `[pins]`, as the machine registers: every other pin it holds is let go (agent stage.ts `keepPins`). Answers how many went. */
+export const STAGE_PINS = "stagePins";
+
+/**
+ * The daemon's control method that draws a served preview's page as its
+ * author has it now, for the author's `artifact_read` with `png` ({@link
+ * ServedPicture}): `[ref, ask]`, the workspace's own server (never the pin
+ * the person is served) started or woken, and its page drawn in the
+ * machine's own Chromium (agent stage.ts `drawServed`).
+ */
+export const STAGE_PICTURE = "stagePicture";
+
+/** What {@link STAGE_PICTURE} draws: the server, the page on it, at what width, and the artifact's name for its words. */
+export interface ServedPicture {
+  name: string;
+  path: string;
+  serve: ServeSpec;
+  width: number;
+}
 
 /** The daemon's control method that lets a pin go once no artifact is served from it: its stages stopped, its copy removed. */
 export const STAGE_UNPIN = "stageUnpin";
@@ -1381,16 +1402,14 @@ export interface DesignMap {
 }
 
 /**
- * The hub's word that a canvas's stage couldn't be reached by its last read
- * (the doc's `meta.unreached`, which the panel and the agent's read both
- * say): the hop that failed, in the preview proxy's kinds; why, in the hub's
- * words; and since when, the first read that failed since one that reached
- * it. A read that reaches the stage, or the daemon's next word of it, takes
- * it away.
+ * An author's read of its component canvas that couldn't reach its
+ * workspace's stage (hub component.ts `stageRead`): the hop that failed, in
+ * the preview proxy's kinds, and why, in the hub's words. Said in that read
+ * alone: the person's panel is served the version handed up (core
+ * `PreviewSource.pin`), whose own load says what it meets.
  */
 export interface StageUnreached {
   down: PreviewDown;
-  since: string;
   why: string;
 }
 

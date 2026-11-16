@@ -195,7 +195,9 @@ import type {
 import {
   STAGE_COMPONENTS,
   STAGE_ENSURE,
+  STAGE_PICTURE,
   STAGE_PIN,
+  STAGE_PINS,
   STAGE_RENDER,
   STAGE_SERVE,
   STAGE_UNPIN,
@@ -570,6 +572,8 @@ const CONTROLS = {
   [STAGE_COMPONENTS]: reply<DesignMap>(DesignMapSchema),
   [STAGE_SERVE]: reply<StageState>(StageStateSchema),
   [STAGE_PIN]: UNREAD,
+  [STAGE_PINS]: reply<number>(z.number()),
+  [STAGE_PICTURE]: reply<PictureTaken>(PictureTakenSchema),
   [STAGE_UNPIN]: UNREAD,
   // A machine's browsers and the passkey scans for them (browser.ts).
   [BROWSER_START]: reply<BrowserRow>(BrowserRowShape),

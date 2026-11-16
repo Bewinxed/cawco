@@ -48,7 +48,6 @@
   } from "#lib/icons.js";
   import { appear, revealOn } from "#lib/platform/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
-  import { formatTimestamp } from "#lib/utils/time.js";
   import AskHere from "../AskHere.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import DesignGraph from "../graph/DesignGraph.svelte";
@@ -1417,28 +1416,28 @@
       </EmptyState>
     </div>
   {/if}
-  {#if stageCover.shownDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
+  {#if previewFrame.down && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
     <!-- What happened, why and the way back, where the page would be; a stage in error says it above. -->
     <div
       data-slot="down"
-      data-down={stageCover.shownDown}
+      data-down={previewFrame.down}
       class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
       role="alert"
       transition:appear
     >
       <!-- A version whose workspace is gone is no fault that may pass: it is archived, and says so. -->
       <EmptyState
-        icon={stageCover.shownDown === "gone" ? IconArchive : IconAlert}
+        icon={previewFrame.down === "gone" ? IconArchive : IconAlert}
         title={stageCover.downTitle}
-        action={stageCover.shownDown === "gone" ? goneAsk : frameRetry}
+        action={previewFrame.down === "gone" ? goneAsk : frameRetry}
       >
         {#snippet line()}
-          {#if stageCover.shownDown === "gone"}
+          {#if previewFrame.down === "gone"}
             {previewWords.goneLine}
-          {:else if stageCover.shownDown === "workspace"}
+          {:else if previewFrame.down === "workspace"}
             Its server can't be reached until the workspace runs again. Once a
             session there is back, try again.
-          {:else if stageCover.shownDown === "server"}
+          {:else if previewFrame.down === "server"}
             {paneSubject.downPort
               ? `${previewWords.nothingOnPort(paneSubject.downPort)} on ${paneSubject.ownerMachine}, so the page can't load.`
               : `The page's server on ${paneSubject.ownerMachine} isn't running, so the page can't load.`}
@@ -1449,39 +1448,29 @@
             {:else}
               Start it again, then try again.
             {/if}
-          {:else if stageCover.shownDown === "reach"}
-            The way to the page's server on {paneSubject.ownerMachine} didn't open{stageCover.shownWhy
-              ? `: ${stageCover.shownWhy}`
+          {:else if previewFrame.down === "reach"}
+            The way to the page's server on {paneSubject.ownerMachine} didn't open{previewFrame.downWhy
+              ? `: ${previewFrame.downWhy}`
               : "."}
             Try again; if it fails again, start the server again from its session.
-          {:else if stageCover.shownDown === "closed"}
+          {:else if previewFrame.down === "closed"}
             Its session shows something else now, or has ended, so there is no
             page here. Open its session to show it again.
-          {:else if stageCover.shownDown === "error"}
-            {previewWords.errorLine(stageCover.shownWhy ?? "with an error")}
-          {:else if stageCover.shownDown === "crashed"}
-            {previewWords.crashedLine(stageCover.shownWhy ?? "no message")}
+          {:else if previewFrame.down === "error"}
+            {previewWords.errorLine(previewFrame.downWhy ?? "with an error")}
+          {:else if previewFrame.down === "crashed"}
+            {previewWords.crashedLine(previewFrame.downWhy ?? "no message")}
           {:else}
             The preview comes from {paneSubject.ownerMachine}, which isn't
-            answering the hub{stageCover.shownWhy
-              ? `: ${stageCover.shownWhy}`
+            answering the hub{previewFrame.downWhy
+              ? `: ${previewFrame.downWhy}`
               : "."} Once it answers, try again.
-          {/if}
-          {#if !previewFrame.down && stageCover.docDown}
-            <span
-              class="block mt-space-2 text-ink-muted type-meta"
-              data-slot="unreached"
-              >{sheetWords.unreachedSince(
-                formatTimestamp(new Date(stageCover.docDown.since)),
-                stageCover.docDown.why
-              )}</span
-            >
           {/if}
         {/snippet}
       </EmptyState>
     </div>
   {/if}
-  {#if previewFrame.notLoaded && !stageCover.shownDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
+  {#if previewFrame.notLoaded && !previewFrame.down && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
     <!-- The browser's own error page stands in the frame: said in words, with the way back. -->
     <div
       data-slot="down"

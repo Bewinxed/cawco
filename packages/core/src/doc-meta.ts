@@ -16,7 +16,6 @@ import type {
   SectionRender,
   SheetRead,
   StageState,
-  StageUnreached,
 } from "./stage";
 
 /**
@@ -207,8 +206,6 @@ export interface DocMeta {
   stage: StageState;
   /** Its title, as the session last named it. */
   title: string;
-  /** A served artifact whose stage could not be reached, and why. */
-  unreached: StageUnreached;
   /** When the agent's last write to a canvas landed (hub artifacts/canvas.ts): a picture posted before it (`pictureAt`) shows the drawing as it was before that write. */
   wroteAt: string;
 }
@@ -262,7 +259,6 @@ export const META_WRITERS = {
   sourceGone: "hub",
   stage: "hub",
   title: "hub",
-  unreached: "hub",
   wroteAt: "hub",
 } as const satisfies { [K in DocMetaKey]-?: "hub" | "person" | "canvas" };
 

@@ -147,7 +147,9 @@ import {
   type SheetWrite,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
+  STAGE_PICTURE,
   STAGE_PIN,
+  STAGE_PINS,
   STAGE_RENDER,
   STAGE_SERVE,
   STAGE_UNPIN,
@@ -156,6 +158,7 @@ import {
   type StageWarm,
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
+import { WorkspaceRefSchema } from "@cawco/core/stored-shapes";
 import type { RegisterAckPayload } from "@cawco/core/stream";
 import {
   RELAY_CERTIFY,
@@ -352,14 +355,18 @@ import { resumableSessions, SessionSupervisor } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
 import {
   closingStages,
+  drawServed,
   ensureServed,
   ensureStage,
+  keepPins,
   pinArg,
   pinFolderOf,
   pinTreeOf,
   renderStage,
   resumeStages,
+  ServedPictureSchema,
   StagePinArgsSchema,
+  StagePinsSchema,
   StageRefusal,
   stageComponents,
   tellStages,
@@ -4014,6 +4021,20 @@ const startDaemon = (rediscover = false) =>
         ? pinFolderOf(asked[2], asked[1])
         : pinTreeOf(asked[0], asked[1]);
     });
+    // The pins the hub serves from, as this machine registers: every other one let go.
+    supervisor.declareControl(STAGE_PINS, (served) =>
+      keepPins(StagePinsSchema.parse(served))
+    );
+    // A served preview's page as its author has it, drawn on its workspace's own server.
+    supervisor.declareControl(STAGE_PICTURE, (ref, ask) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : drawServed(
+            ports,
+            WorkspaceRefSchema.parse(ref),
+            ServedPictureSchema.parse(ask)
+          )
+    );
     // A pin no artifact is served from any more, let go.
     supervisor.declareControl(STAGE_UNPIN, (pin) => {
       const named = pinArg(pin);

@@ -19,6 +19,7 @@ import { relaunchOf } from "@cawco/core/relaunch";
 import {
   STAGE_CLONE_MS,
   STAGE_INSTALL_MS,
+  STAGE_PICTURE,
   STAGE_READY_MS,
   STAGE_RENDER,
   STAGE_RENDER_MS,
@@ -769,7 +770,9 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       [workspace, arg, ...pinArgs(at)],
       STAGE_READY_MS +
         (isPlace(workspace.id) ? STAGE_CLONE_MS : STAGE_INSTALL_MS) +
-        (method === STAGE_RENDER ? STAGE_RENDER_MS : 0) +
+        (method === STAGE_RENDER || method === STAGE_PICTURE
+          ? STAGE_RENDER_MS
+          : 0) +
         15_000
     );
     switch (asked.kind) {

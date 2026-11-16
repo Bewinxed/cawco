@@ -678,23 +678,33 @@ export const copyBack = async (
 /*
  * A pin: the version of an artifact its author handed up, as its machine
  * serves it to the person (core preview/protocol.ts `PreviewSource.pin`).
- * A sheet's or a served preview's is a clone of the tree it was made in,
- * cut as a place's stage clone is ({@link cut}) under the pin's own id, but
- * never kept in step: only the next hand-up brings it in step, once
- * ({@link pinClone}). Its stage or server runs in its own boundary, as any
- * workspace's does (stage.ts `treeOf`). A folder's is a copy of the folder
- * ({@link pinFolder}). The hub lets a pin go once no artifact names it
- * (stage.ts `unpin`), and a workspace's archive lets go every pin cut from
- * it (stage.ts `closingStages`): a pin lives no longer than its source.
+ * Each hand-up cuts a pin of its own beside the one the person is served,
+ * and the hub moves the artifact onto it only once it stands (and its
+ * server serves, for a served preview), so a cut or a server that fails
+ * leaves him the version he had. A pin never changes after its cut.
+ * - A sheet's or a served preview's is its tree as it is now
+ *   ({@link cutPin}): a clone cut at its repository's HEAD with its
+ *   uncommitted changes, as a place's stage clone is ({@link cut}), or for
+ *   a tree in no repository (a macOS copy of a folder) a copy of it without
+ *   what an install makes ({@link REMADE}). Its stage or server runs in its
+ *   own boundary, as any workspace's does, installed as a stage clone is
+ *   (stage.ts `treeOf`).
+ * - A folder's is a copy of the folder ({@link pinFolder}).
+ * The hub lets a pin go once no artifact names it (stage.ts `unpin`), sends
+ * the pins it serves from as the machine registers so the rest go
+ * (stage.ts `keepPins`), and a workspace's archive lets go every pin cut
+ * from it (stage.ts `closingStages`): a pin lives no longer than its
+ * source.
  */
 
-/** What the agent keeps of a pin in its state dir: the tree or folder it was cut from. */
+/** What the agent keeps of a pin in its state dir, written once its cut stands whole: what it was cut from. */
 const PinSchema = z.discriminatedUnion("kind", [
   z.object({
-    kind: z.literal("clone"),
+    /** A clone of a repository's checkout (`clone`), or a copy of a tree in none (`tree`). */
+    kind: z.enum(["clone", "tree"]),
     /** The workspace or place it was cut from. */
     from: z.string(),
-    /** That tree's folder in its repository, from the repository's root: what the source's paths are from. */
+    /** That tree's folder in the pin's root: what the source's paths are from. */
     sub: z.string(),
   }),
   z.object({
@@ -710,24 +720,36 @@ const PIN = "stage-pin.json";
 /** Where a folder's pin keeps its copy, in the pin's state dir. */
 const PINNED_FOLDER = "folder";
 
+/**
+ * What a tree's pin leaves out of its copy: what the project's install or
+ * its toolchain makes again in the pin (stage-install.ts), never the
+ * author's own work.
+ */
+const REMADE: ReadonlySet<string> = new Set([
+  "node_modules",
+  ".svelte-kit",
+  ".astro",
+  ".nuxt",
+  ".output",
+  ".next",
+  ".turbo",
+  ".vite",
+]);
+
 const pinOf = async (pin: string): Promise<Pin | undefined> =>
   await readRecord(join(workspaceStateDir(pin), PIN), PinSchema).catch(
     () => undefined
   );
 
-/** Whether id `id` names a pin this machine cut (read synchronously): a sheet's stage key or a server's names it as its workspace. */
+/** Whether id `id` names a pin this machine cut whole (read synchronously): a sheet's stage key or a server's names it as its workspace. */
 export const isPin = (id: string): boolean =>
   existsSync(join(workspaceStateDir(id), PIN));
 
-/** Pin `pin`'s clone as it stands, when it is cut whole; nothing otherwise. */
+/** Pin `pin`'s tree as it stands, when it was cut whole; nothing otherwise. */
 export const pinnedTree = (pin: string): Promise<StageClone | undefined> =>
   inCloneTurn(pin, async () => {
-    const [kept, record, path] = await Promise.all([
-      keptOf(pin),
-      pinOf(pin),
-      recordedPath(pin),
-    ]);
-    if (!(kept && record?.kind === "clone" && path)) {
+    const [record, path] = await Promise.all([pinOf(pin), recordedPath(pin)]);
+    if (!(record && record.kind !== "folder" && path && existsSync(path))) {
       return;
     }
     return {
@@ -736,67 +758,102 @@ export const pinnedTree = (pin: string): Promise<StageClone | undefined> =>
     };
   });
 
+/** `from` copied whole to `to` (a new folder), links as links, leaving out every entry `left` names. */
+const copyTree = (
+  from: string,
+  to: string,
+  left: ReadonlySet<string> = new Set()
+): Promise<void> =>
+  cp(from, to, {
+    recursive: true,
+    verbatimSymlinks: true,
+    preserveTimestamps: true,
+    filter: (source) => source === from || !left.has(basename(source)),
+  });
+
+/** The repository root `folder` is in, as a real path; nothing when it is in none. */
+const repoAt = (folder: string): Promise<string | undefined> =>
+  gitRaw(folder, ["rev-parse", "--show-toplevel"]).then(
+    (top) => realpath(top.trim()),
+    () => undefined
+  );
+
 /**
- * Pin `pin` of tree `from` (a workspace's clone or a place's folder): its
- * clone cut at the tree's HEAD with its uncommitted changes when it has none
- * whole, else brought in step once when `again` (a new hand-up), else left
- * as it stands. Where its stage or server runs.
+ * Cuts pin `pin`'s tree from `from` at `boundary.path`: a copy of `from`
+ * without what an install makes ({@link REMADE}), its boundary started.
+ * For a tree in no repository, which {@link cut} cannot clone.
  */
-export const pinClone = (
-  from: WorkspaceRef,
-  pin: string,
-  again: boolean
-): Promise<StageClone> =>
+const copyCut = async (boundary: WorkspaceRef, from: string): Promise<void> => {
+  const state = workspaceStateDir(boundary.id);
+  await makeFolder(state);
+  // Written before the copy: the boundary and every scan of this machine's clones find it by this record.
+  await writeStateFile(
+    join(state, "create.json"),
+    JSON.stringify({ path: boundary.path })
+  );
+  await makeFolder(dirname(boundary.path));
+  await copyTree(from, boundary.path, REMADE);
+  await ensureBoundary(boundary);
+};
+
+/**
+ * Pin `pin` of tree `from` (a workspace's clone or a place's folder) cut as
+ * the tree is now: a clone of its repository at HEAD with its uncommitted
+ * changes ({@link cut}), or a copy of a tree in none ({@link copyCut}), the
+ * one cut either way. One cut already whole stands as it is. A cut that
+ * fails leaves nothing of the pin. Where its stage or server runs.
+ */
+export const cutPin = (from: WorkspaceRef, pin: string): Promise<StageClone> =>
   inCloneTurn(pin, async () => {
-    const repo = await repoOf(from.path);
-    const sub = relative(repo, await realpath(from.path));
-    const kept = await keptOf(pin);
-    const path =
-      (await recordedPath(pin)) ??
-      expandHome(`~/.worktrees/${basename(repo)}-pin-${pin.slice(0, 8)}`);
-    const boundary: WorkspaceRef = { id: pin, path };
-    const whole = await wholeAt(path, repo, kept);
-    if (!whole) {
-      copied.delete(pin);
-      await cut(boundary, repo, from);
-    } else if (again) {
-      await step(boundary, whole);
+    const record = await pinOf(pin);
+    const standing = await recordedPath(pin);
+    if (record && record.kind !== "folder" && standing) {
+      return {
+        boundary: { id: pin, path: standing },
+        folder: record.sub ? join(standing, record.sub) : standing,
+      };
     }
-    await writeStateFile(
-      join(workspaceStateDir(pin), PIN),
-      `${JSON.stringify({ kind: "clone", from: from.id, sub } satisfies Pin)}\n`
+    const real = await realpath(from.path);
+    const repo = await repoAt(real);
+    const path = expandHome(
+      `~/.worktrees/${basename(repo ?? real)}-pin-${pin.slice(0, 8)}`
     );
+    const boundary: WorkspaceRef = { id: pin, path };
+    const sub = repo ? relative(repo, real) : "";
+    try {
+      if (repo) {
+        await cut(boundary, repo, from);
+      } else {
+        await copyCut(boundary, real);
+      }
+      await writeStateFile(
+        join(workspaceStateDir(pin), PIN),
+        `${JSON.stringify({ kind: repo ? "clone" : "tree", from: from.id, sub } satisfies Pin)}\n`
+      );
+    } catch (error) {
+      await dropped(pin, path);
+      throw error;
+    }
     return { boundary, folder: sub ? join(path, sub) : path };
   });
 
 /**
- * Pin `pin` of folder `dir`: a copy of it, made when the pin has none or
- * made again when `again` (a new hand-up), each in whole beside the one it
- * replaces and renamed over it, so a request never meets half a copy.
- * Answers the copy's root.
+ * Pin `pin` of folder `dir`: a copy of it, made beside where it goes and
+ * renamed there whole, so nothing serves half a copy. One already made
+ * stands as it is. Answers the copy's root.
  */
-export const pinFolder = (
-  dir: string,
-  pin: string,
-  again: boolean
-): Promise<string> =>
+export const pinFolder = (dir: string, pin: string): Promise<string> =>
   inCloneTurn(pin, async () => {
     const state = workspaceStateDir(pin);
     const copy = join(state, PINNED_FOLDER);
-    const record = await pinOf(pin);
-    if (record?.kind === "folder" && existsSync(copy) && !again) {
+    if ((await pinOf(pin))?.kind === "folder" && existsSync(copy)) {
       return copy;
     }
     const from = await realpath(dir);
     await makeFolder(state);
     const fresh = join(state, `.${PINNED_FOLDER}-${crypto.randomUUID()}`);
     try {
-      // Links are copied as links, as the folder serves them.
-      await cp(from, fresh, {
-        recursive: true,
-        verbatimSymlinks: true,
-        preserveTimestamps: true,
-      });
+      await copyTree(from, fresh);
       await removeTree(copy);
       await rename(fresh, copy);
     } finally {
@@ -819,6 +876,17 @@ export const pinnedFolder = async (
     : undefined;
 };
 
+/** Everything of pin `pin` removed: its boundary stopped, its tree at `path` (when it has one) and its state dir deleted. */
+const dropped = async (pin: string, path: string | undefined) => {
+  if (path) {
+    await stopWorkspaceBoundary({ id: pin, path });
+    await removeTree(path);
+  }
+  copied.delete(pin);
+  await forgetInstalls(pin);
+  await removeTree(workspaceStateDir(pin));
+};
+
 /**
  * Pin `pin` removed whole, in its turn: its boundary stopped, its clone or
  * copy and its state dir deleted. Its stages are stopped first by the
@@ -829,16 +897,28 @@ export const dropPin = (pin: string): Promise<void> =>
     if (!isPin(pin)) {
       return;
     }
-    const path = await recordedPath(pin);
-    if (path) {
-      await stopWorkspaceBoundary({ id: pin, path });
-      await removeTree(path);
-    }
-    copied.delete(pin);
-    await forgetInstalls(pin);
-    await removeTree(workspaceStateDir(pin));
+    await dropped(pin, await recordedPath(pin));
     console.info(`[stage] pin ${pin.slice(0, 8)}: let go`);
   });
+
+/**
+ * Every pin this machine holds, with when its cut stood: what the hub's
+ * list of the pins it serves from is squared against (stage.ts
+ * `keepPins`). One whose cut is under way now is none yet.
+ */
+export const pinsHeld = async (): Promise<{ at: number; pin: string }[]> => {
+  const ids = await readdir(workspacesDir()).catch(() => []);
+  const each = await Promise.all(
+    ids.map(async (pin) => {
+      const at = await stat(join(workspaceStateDir(pin), PIN)).then(
+        (found) => found.mtimeMs,
+        () => undefined
+      );
+      return at === undefined || turns.has(pin) ? undefined : { at, pin };
+    })
+  );
+  return each.filter((one) => one !== undefined);
+};
 
 /** The pins cut from workspace or place `from`: its archive lets them go. */
 export const pinsFrom = async (from: string): Promise<string[]> => {
@@ -846,7 +926,9 @@ export const pinsFrom = async (from: string): Promise<string[]> => {
   const each = await Promise.all(
     ids.map(async (id) => {
       const record = isPin(id) ? await pinOf(id) : undefined;
-      return record?.kind === "clone" && record.from === from ? id : undefined;
+      return record && record.kind !== "folder" && record.from === from
+        ? id
+        : undefined;
     })
   );
   return each.filter((id): id is string => id !== undefined);

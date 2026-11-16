@@ -207,8 +207,8 @@ const openToLength = async (page: Page, width: number): Promise<number> => {
   return view + hidden;
 };
 
-/** The picture of `ask.url`, base64 PNG. Throws in words a tool answers when it can't be drawn. */
-export async function drawArtifact(
+/** The picture of `ask.url`, base64 PNG, its overlay greeted as the pane greets it. Throws in words a tool answers when it can't be drawn. */
+export function drawArtifact(
   ask: PictureAsk
 ): Promise<{ png: string; cut?: PictureCut }> {
   if (!(isHelloArtifact(ask) && URL.canParse(ask.url))) {
@@ -216,7 +216,22 @@ export async function drawArtifact(
       "A picture names the page's URL and the artifact: its id, kind, name and sync path."
     );
   }
-  const { width } = ask;
+  return drawPage(ask.url, ask.width, ask.artifact.name, ask);
+}
+
+/**
+ * The picture of the page at `url`, `width` px wide, base64 PNG: with
+ * `hello`, a page served with the overlay, greeted as the pane greets it
+ * so it draws the person's pins ({@link drawArtifact}); without, a page as
+ * its server answers it (stage.ts `drawServed`). `name` names it in the
+ * words a tool answers when it can't be drawn.
+ */
+export async function drawPage(
+  url: string,
+  width: number,
+  name: string,
+  hello?: HelloArtifact
+): Promise<{ png: string; cut?: PictureCut }> {
   if (
     !Number.isInteger(width) ||
     width < PICTURE_LIMITS.minWidth ||
@@ -226,11 +241,10 @@ export async function drawArtifact(
       `A picture's width is a whole number of px from ${PICTURE_LIMITS.minWidth} to ${PICTURE_LIMITS.maxWidth}.`
     );
   }
-  const { name } = ask.artifact;
   // The load and the page's readiness share one bound.
   const deadline = Date.now() + PICTURE_LIMITS.loadMs;
   const browser = await launchChromium(
-    `${name} wasn't drawn: the hub's machine has no Chromium browser to draw it with. Install Google Chrome or Chromium there (the machine's capability report names the command), then call again.`
+    `${name} wasn't drawn: the machine drawing it has no Chromium browser to draw it with. Install Google Chrome or Chromium there (the machine's capability report names the command), then call again.`
   );
   try {
     const page = await browser.newPage({
@@ -243,7 +257,7 @@ export async function drawArtifact(
     // says so to its host; the panel draws its own words for either.
     await page.addInitScript(hearHost, PREVIEW_LOCKED_MESSAGE);
     await page
-      .goto(ask.url, { timeout: PICTURE_LIMITS.loadMs, waitUntil: "load" })
+      .goto(url, { timeout: PICTURE_LIMITS.loadMs, waitUntil: "load" })
       .catch((error: unknown) => {
         throw new Error(
           timedOut(error)
@@ -260,9 +274,11 @@ export async function drawArtifact(
     if (heard.down) {
       throw new Error(downWords(name, heard.down));
     }
-    await greet(page, ask);
-    // The hello places the person's pins: the quiet counts from it too.
-    await page.evaluate(markChanged);
+    if (hello) {
+      await greet(page, hello);
+      // The hello places the person's pins: the quiet counts from it too.
+      await page.evaluate(markChanged);
+    }
     await ready(page, Math.max(0, deadline - Date.now()));
     const scrolled = await openToLength(page, width);
     await framesReady(page, deadline);
