@@ -48,8 +48,10 @@ import type {
   PermissionMode,
 } from "@cawco/core/harness/kinds";
 import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
+import { isRecord } from "@cawco/core/is-record";
 import { machineLabel } from "@cawco/core/machine-names";
 import { unlistedModelRefusal } from "@cawco/core/model-names";
+import { isUserAnswers } from "@cawco/core/question";
 import type {
   FleetMcpChange,
   FleetMcpTakeAnswer,
@@ -124,6 +126,7 @@ import {
   type OpencodeClient,
   opencodeSlashCommands,
   SEND_NOW_METADATA,
+  sessionIdOf,
 } from "./opencode-client";
 import {
   forgetOpencodeCredential,
@@ -232,10 +235,8 @@ export const splitModel = (
  * session error, `{ type, message }`: `provider.no-route`, `provider.auth`,
  * …); none for anything else.
  */
-const refusalType = (error: unknown): string | undefined => {
-  const type = (error as { type?: unknown } | null | undefined)?.type;
-  return typeof type === "string" ? type : undefined;
-};
+const refusalType = (error: unknown): string | undefined =>
+  isRecord(error) && typeof error.type === "string" ? error.type : undefined;
 
 const WHITESPACE_RE = /\s+/u;
 const MCP_USAGE = "Usage: /mcp connect|disconnect <server>";
@@ -1352,11 +1353,10 @@ export class OpencodeSession implements HarnessSession {
   /** Routes one event of this session into neutral frames. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one switch over 2.0's session event union
   handle(event: V2Event): void {
-    const data = event.data as { sessionID?: string } | undefined;
     const sid =
       event.type === "form.created"
         ? event.data.form.sessionID
-        : data?.sessionID;
+        : sessionIdOf(event.data);
     if (sid !== this.sessionId) {
       return;
     }
@@ -1648,10 +1648,7 @@ export class OpencodeSession implements HarnessSession {
         break;
       case "session.execution.failed":
         if (this.#turnProvider && event.data.error.type === "provider.auth") {
-          const { message, status } = event.data.error as {
-            message: string;
-            status?: number;
-          };
+          const { message, status } = event.data.error;
           this.#turnOutcome(
             this.#turnProvider,
             status ? `${status} ${message}` : message
@@ -1661,9 +1658,7 @@ export class OpencodeSession implements HarnessSession {
           subtype: "error_during_execution",
           is_error: true,
           errors: [errorText(event.data.error)],
-          ...(atProviderLimit(event.data.error as ProviderRefusal)
-            ? { atLimit: true }
-            : {}),
+          ...(atProviderLimit(event.data.error) ? { atLimit: true } : {}),
         });
         break;
       case "session.execution.interrupted":
@@ -2152,9 +2147,7 @@ export class OpencodeSession implements HarnessSession {
     this.#ctx.permission({
       requestId: asked.id,
       toolName: asked.action,
-      input: (asked.metadata as Record<string, unknown> | undefined) ?? {
-        resources: asked.resources,
-      },
+      input: asked.metadata ?? { resources: asked.resources },
       requestKind: "tool",
       ...(asked.source ? { toolUseId: asked.source.id } : {}),
     });
@@ -2173,14 +2166,15 @@ export class OpencodeSession implements HarnessSession {
     this.#seenGates.add(form.id);
     const { questions, keys } = formQuestions(form);
     this.#questions.set(form.id, { form, keys });
-    const tool = (form.metadata as { tool?: { id?: unknown } } | undefined)
-      ?.tool;
+    const tool = form.metadata?.tool;
     this.#ctx.permission({
       requestId: form.id,
       toolName: ASK_USER_QUESTION,
       input: { questions },
       requestKind: "question",
-      ...(typeof tool?.id === "string" ? { toolUseId: tool.id } : {}),
+      ...(isRecord(tool) && typeof tool.id === "string"
+        ? { toolUseId: tool.id }
+        : {}),
     });
   }
 
@@ -2431,9 +2425,10 @@ export class OpencodeSession implements HarnessSession {
             );
             return;
           }
-          const given =
-            (result as { updatedInput?: { answers?: UserAnswers } })
-              .updatedInput?.answers ?? {};
+          const sent = isRecord(result.updatedInput)
+            ? result.updatedInput.answers
+            : undefined;
+          const given: UserAnswers = isUserAnswers(sent) ? sent : {};
           const answer: Record<string, string | number | boolean | string[]> =
             {};
           for (const [question, field] of asked.keys) {
@@ -2489,16 +2484,20 @@ export class OpencodeSession implements HarnessSession {
     }
     this.#boundCalls.add(callID);
     const info = this.#childInfo.get(childId);
-    const input = this.#toolInputs.get(callID) as
-      { agent?: string; description?: string } | undefined;
+    const asked = this.#toolInputs.get(callID);
+    const input = isRecord(asked) ? asked : {};
     this.#ctx.frame({
       type: "system",
       subtype: "task_started",
       session_id: this.sessionId ?? undefined,
       tool_use_id: callID,
       task_id: childId,
-      subagent_type: info?.agent ?? input?.agent ?? "subagent",
-      description: info?.title ?? input?.description ?? "",
+      subagent_type:
+        info?.agent ??
+        (typeof input.agent === "string" ? input.agent : "subagent"),
+      description:
+        info?.title ??
+        (typeof input.description === "string" ? input.description : ""),
     });
     this.#registerChild(childId, callID);
   }
@@ -2870,12 +2869,12 @@ export class OpencodeSession implements HarnessSession {
       this.#toolNames.set(block.id, block.name);
       this.#toolInputs.set(block.id, block.state.input);
       blockIndex(this.#blocksOf(message.id), `tool:${block.id}`);
-      if (block.state.status === "streaming") {
+      const { state } = block;
+      if (state.status === "streaming") {
         continue;
       }
       this.#toolUse(message.id, block.id);
-      const { state } = block;
-      const { metadata } = state as { metadata?: Record<string, unknown> };
+      const { metadata } = state;
       const settled = state.status === "completed" || state.status === "error";
       this.#toolProgress(
         message.id,

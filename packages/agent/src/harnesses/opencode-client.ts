@@ -15,11 +15,12 @@
  */
 
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { isRecord } from "@cawco/core/is-record";
 import type { SlashCommand } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import { unhandled } from "@cawco/core/unhandled";
-import { OpenCode, type OpenCodeClient } from "@opencode/client";
+import { ClientError, OpenCode, type OpenCodeClient } from "@opencode/client";
 import { toolBinary } from "../tools";
 
 export type OpencodeClient = OpenCodeClient;
@@ -147,15 +148,17 @@ export const opencodeSlashCommands = async (
 
 /** The server's `_tag` for a declared error (`SessionNotFoundError`, …), or the client's reason. */
 export const errorTag = (error: unknown): string | undefined => {
-  if (!(error instanceof Error)) {
-    return;
+  if (error instanceof ClientError) {
+    return error.reason;
   }
-  const { reason } = error as { reason?: unknown };
-  if (error.name === "ClientError" && typeof reason === "string") {
-    return reason;
-  }
-  return error.name;
+  return error instanceof Error ? error.name : undefined;
 };
+
+/** The session an event's data names (`data.sessionID`), when it names one. */
+export const sessionIdOf = (data: unknown): string | undefined =>
+  isRecord(data) && typeof data.sessionID === "string"
+    ? data.sessionID
+    : undefined;
 
 /** The request never reached the server: refused, reset, timed out or aborted on the way. */
 export const unreachable = (error: unknown): boolean =>
@@ -163,9 +166,11 @@ export const unreachable = (error: unknown): boolean =>
 
 /** The status a server answered outside what its route declares, if that is what this is. */
 const unexpectedStatus = (error: unknown): number | undefined => {
-  const cause = (error as { cause?: { status?: unknown } } | undefined)?.cause;
-  return errorTag(error) === "UnexpectedStatus" &&
-    typeof cause?.status === "number"
+  if (!(error instanceof ClientError && error.reason === "UnexpectedStatus")) {
+    return;
+  }
+  const { cause } = error;
+  return isRecord(cause) && typeof cause.status === "number"
     ? cause.status
     : undefined;
 };
@@ -174,6 +179,18 @@ const unexpectedStatus = (error: unknown): number | undefined => {
 export const notFound = (error: unknown): boolean =>
   (errorTag(error) ?? "").endsWith("NotFoundError") ||
   unexpectedStatus(error) === 404;
+
+/** A structured session error in its words (`type status: message`), or any other object as its JSON. */
+const structuredText = (error: object): string => {
+  const structured: Record<string, unknown> = isRecord(error) ? error : {};
+  if (typeof structured.message !== "string") {
+    return JSON.stringify(error);
+  }
+  const kind = typeof structured.type === "string" ? structured.type : "";
+  const status =
+    typeof structured.status === "number" ? ` ${structured.status}` : "";
+  return `${kind}${status}${kind || status ? ": " : ""}${structured.message}`;
+};
 
 /**
  * An error in its own words, whole: a structured session error
@@ -185,18 +202,7 @@ export const errorText = (error: unknown): string => {
     return error;
   }
   if (error && typeof error === "object" && !(error instanceof Error)) {
-    const structured = error as {
-      type?: unknown;
-      message?: unknown;
-      status?: unknown;
-    };
-    if (typeof structured.message === "string") {
-      const kind = typeof structured.type === "string" ? structured.type : "";
-      const status =
-        typeof structured.status === "number" ? ` ${structured.status}` : "";
-      return `${kind}${status}${kind || status ? ": " : ""}${structured.message}`;
-    }
-    return JSON.stringify(error);
+    return structuredText(error);
   }
   if (!(error instanceof Error)) {
     return String(error);
@@ -252,9 +258,8 @@ export const assertPluginLoaded = async (
           return;
         }
         if (ours) {
-          const failed = ours.state as { error?: string };
           throw new Error(
-            `OpenCode at ${directory} failed to load CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: ${failed.error ?? ours.state.status}`
+            `OpenCode at ${directory} failed to load CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: ${ours.state.error}`
           );
         }
         await Bun.sleep(250);

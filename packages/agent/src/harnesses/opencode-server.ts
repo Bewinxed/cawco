@@ -5,6 +5,10 @@ import { dirname, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import {
+  opencodeV1Sessions,
+  opencodeV1Statuses,
+} from "@cawco/core/harness/opencode-wire";
+import {
   commandLines,
   listeningPorts,
   processStart as osProcessStart,
@@ -141,10 +145,7 @@ export const readV1Activity = async (
               reason: `its status of ${directory} answered HTTP ${status.status}`,
             };
           }
-          const states = (await status.json()) as Record<
-            string,
-            { type?: string }
-          >;
+          const states = opencodeV1Statuses(await status.json());
           running.push(
             ...Object.entries(states)
               .filter(([, state]) => state.type !== "idle")
@@ -189,7 +190,7 @@ const v1Directories = async (
     if (!page.ok) {
       return `its session inventory answered HTTP ${page.status}`;
     }
-    const sessions = (await page.json()) as { directory?: unknown }[];
+    const sessions = opencodeV1Sessions(await page.json());
     for (const session of sessions) {
       if (typeof session.directory === "string") {
         directories.add(session.directory);
@@ -365,8 +366,8 @@ const writeRecord = async (path: string, record: unknown): Promise<void> => {
  */
 const recordedServers = async (): Promise<Set<string>> => {
   const dir = join(homedir(), ".cawco");
-  const files = (await readdir(dir).catch(() => [] as string[])).filter(
-    (file) => ANY_RECORD.test(file)
+  const files = (await readdir(dir).catch((): string[] => [])).filter((file) =>
+    ANY_RECORD.test(file)
   );
   const named = new Set<string>();
   for (const file of files) {
@@ -448,7 +449,7 @@ const strayServer = async (
 const recordsLike = async (pattern: RegExp): Promise<RegExpMatchArray[]> => {
   const stem = recordStem();
   const files = await readdir(join(homedir(), ".cawco")).catch(
-    () => [] as string[]
+    (): string[] => []
   );
   return files.flatMap((file) => {
     const match = file.match(pattern);
