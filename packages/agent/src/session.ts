@@ -2642,9 +2642,13 @@ export class SessionSupervisor {
         "A start names the harness it runs on; this one named none."
       );
     }
-    // A launch runs on the model the hub named (hub start-models.ts); a
-    // reattach launches nothing, and its process runs on what it runs on.
-    if (!(payload.reattachOnly || payload.model)) {
+    // A launch runs on the model the hub named (hub start-models.ts), never
+    // on `default`, which is no model named; a reattach launches nothing,
+    // and its process runs on what it runs on.
+    if (!(
+      payload.reattachOnly ||
+      (payload.model && payload.model !== "default")
+    )) {
       throw new Error(spawnWords.startModel.unnamedAtMachine);
     }
     const adapter = adapterFor(kind);
