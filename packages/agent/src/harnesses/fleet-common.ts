@@ -12,6 +12,7 @@
  */
 
 import { readOwnJson } from "../json-file";
+import { FleetSidecarSchema } from "../stored-shapes";
 
 /** What this harness's fleet directory was last synced to, by skill hash. */
 export interface FleetSidecar {
@@ -28,7 +29,10 @@ export interface FleetSidecar {
 }
 
 export const readSidecar = async (path: string): Promise<FleetSidecar> => {
-  const stored = await readOwnJson<Partial<FleetSidecar>>(path);
+  const stored = await readOwnJson(
+    path,
+    (value) => FleetSidecarSchema.partial().safeParse(value).data
+  );
   return {
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),

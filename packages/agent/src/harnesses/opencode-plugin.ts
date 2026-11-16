@@ -13,6 +13,7 @@ import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { GATE_PREFIX } from "@cawco/core/gateway-paths";
+import { opencodeConfigOf } from "@cawco/core/harness/opencode-wire";
 import {
   fleetHarnessSetFile,
   fleetMcpSetFile,
@@ -212,8 +213,9 @@ export const retireV1Plugins = async (
     files.map((file) => rm(join(plugins, file), { force: true }))
   );
   const configPath = join(directory, "opencode.json");
-  const config = await readJsonOrLeave<Record<string, unknown>>(
+  const config = await readJsonOrLeave(
     configPath,
+    opencodeConfigOf,
     "taking OpenCode 1.x's CawCo plugin out of it"
   );
   if (Array.isArray(config?.plugin)) {

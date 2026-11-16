@@ -10,12 +10,15 @@ import {
   BrowserRelayShape,
   BrowserRowShape,
   BrowserStateSchema,
+  FleetItemStateShape,
   FleetMcpConfigSchema,
+  FleetScopeSchema,
   HarnessConfigKindShape,
   HookEventShape,
   HookHandlerSchema,
   HookMatchTestShape,
   MediaPathShape,
+  ModelInfoSchema,
 } from "@cawco/core/stored-shapes";
 import { declared } from "@cawco/core/stored-types";
 import { z } from "zod";
@@ -80,6 +83,57 @@ const BrowserRecordShape = declared(
 export const BrowserRecordSchema = BrowserRecordShape;
 export type BrowserRecordOutput = z.output<typeof BrowserRecordShape>;
 
+const ManagedHookShape = declared(
+  z.object({
+    command: z.string(),
+    cwd: z.string().optional(),
+    event: HookEventShape,
+    hash: z.string(),
+    note: z.string().optional(),
+    placed: z.literal(true).optional(),
+    scope: FleetScopeSchema,
+    script: z.string().optional(),
+  }),
+  "ManagedHook",
+  "packages/agent/src/fleet.ts"
+);
+
+const PlacedRecordShape = declared(
+  z.object({ cwd: z.string(), name: z.string() }),
+  "PlacedRecord",
+  "packages/agent/src/fleet.ts"
+);
+
+const ClaudeFleetSidecarShape = declared(
+  z.object({
+    deniedTools: z.array(z.string()).optional(),
+    harnessConfigFailed: z.record(z.string(), FleetItemStateShape),
+    hooks: z.record(z.string(), ManagedHookShape),
+    hubOnlyMarketplaces: z.array(z.string()),
+    marketplaces: z.array(z.string()),
+    mcp: z.array(z.string()).optional(),
+    mcpServers: z.array(z.string()),
+    memory: z.string().optional(),
+    memoryDocs: z.record(z.string(), z.string()),
+    placedMcp: z.record(z.string(), PlacedRecordShape).optional(),
+    placedMemory: z.record(
+      z.string(),
+      PlacedRecordShape.extend({ hash: z.string() })
+    ),
+    placedSkills: z.record(
+      z.string(),
+      PlacedRecordShape.extend({ hash: z.string() })
+    ),
+    plugins: z.array(z.string()),
+    skills: z.record(z.string(), z.string()),
+    vendoredPlugins: z.record(z.string(), z.string()).optional(),
+  }),
+  "ClaudeFleetSidecar",
+  "packages/agent/src/fleet.ts"
+);
+export const ClaudeFleetSidecarSchema = ClaudeFleetSidecarShape;
+export type ClaudeFleetSidecarOutput = z.output<typeof ClaudeFleetSidecarShape>;
+
 const SetHarnessConfigShape = declared(
   z.object({
     cwd: z.string().optional(),
@@ -140,6 +194,27 @@ export const FleetPlaceSetShape = declared(
 );
 export type FleetPlaceSetOutput = z.output<typeof FleetPlaceSetShape>;
 
+const FleetSidecarShape = declared(
+  z.object({
+    mcp: z.array(z.string()).optional(),
+    memory: z.string().optional(),
+    planAgentDisabled: z.literal(true).optional(),
+    skills: z.record(z.string(), z.string()),
+  }),
+  "FleetSidecar",
+  "packages/agent/src/harnesses/fleet-common.ts"
+);
+export const FleetSidecarSchema = FleetSidecarShape;
+export type FleetSidecarOutput = z.output<typeof FleetSidecarShape>;
+
+const LegacyFleetSidecarShape = declared(
+  z.object({ mcp: z.array(z.string()).optional() }),
+  "LegacyFleetSidecar",
+  "packages/agent/src/fleet-sidecar-move.ts"
+);
+export const LegacyFleetSidecarSchema = LegacyFleetSidecarShape;
+export type LegacyFleetSidecarOutput = z.output<typeof LegacyFleetSidecarShape>;
+
 const MediaMeasurementShape = declared(
   z.object({
     at: z.number(),
@@ -152,6 +227,49 @@ const MediaMeasurementShape = declared(
 );
 export const MediaMeasurementSchema = MediaMeasurementShape;
 export type MediaMeasurementOutput = z.output<typeof MediaMeasurementShape>;
+
+const OpencodeServerFactsShape = declared(
+  z.object({
+    inputs: z.string(),
+    models: z.array(ModelInfoSchema),
+    providers: z.array(z.object({ id: z.string(), name: z.string() })),
+  }),
+  "OpencodeServerFacts",
+  "packages/agent/src/harnesses/opencode.ts"
+);
+export const OpencodeServerFactsSchema = OpencodeServerFactsShape;
+export type OpencodeServerFactsOutput = z.output<
+  typeof OpencodeServerFactsShape
+>;
+
+const ServerIdentityShape = declared(
+  z.object({
+    epoch: z.string(),
+    launch: z.string().optional(),
+    password: z.string().optional(),
+    pid: z.number(),
+    procId: z.string(),
+    startedAt: z.string(),
+    url: z.string(),
+    v1: z.literal(true).optional(),
+  }),
+  "ServerIdentity",
+  "packages/agent/src/harnesses/opencode-server.ts"
+);
+export type ServerIdentityOutput = z.output<typeof ServerIdentityShape>;
+
+const OpencodeServerRecordShape = declared(
+  z.object({
+    active: ServerIdentityShape.nullable(),
+    retired: z.array(ServerIdentityShape),
+  }),
+  "OpencodeServerRecord",
+  "packages/agent/src/harnesses/opencode-server.ts"
+);
+export const OpencodeServerRecordSchema = OpencodeServerRecordShape;
+export type OpencodeServerRecordOutput = z.output<
+  typeof OpencodeServerRecordShape
+>;
 
 const ToolInstallRecordShape = declared(
   z.object({
@@ -200,3 +318,18 @@ const ToolInstallsShape = declared(
 );
 export const ToolInstallsSchema = ToolInstallsShape;
 export type ToolInstallsOutput = z.output<typeof ToolInstallsShape>;
+
+const WorktreeShape = declared(
+  z.object({
+    announce: z
+      .object({ cwd: z.string(), base: z.string().optional() })
+      .optional(),
+    dir: z.string(),
+    path: z.string(),
+    root: z.string(),
+  }),
+  "Worktree",
+  "packages/agent/src/spin-offs.ts"
+);
+export const WorktreeSchema = WorktreeShape;
+export type WorktreeOutput = z.output<typeof WorktreeShape>;

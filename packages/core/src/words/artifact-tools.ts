@@ -168,6 +168,16 @@ export const artifactToolWords = {
   /** A canvas read with nothing drawn on it. */
   canvasEmpty:
     "The canvas is empty. Draw on it with artifact_update (elements or mermaid), or wait for the person to draw.",
+  /**
+   * A skeleton element with no `x` or `y` that replaces nothing on the
+   * canvas: Excalidraw places every element but a frame at the `x` and `y`
+   * it carries (core canvas-skeleton.ts).
+   */
+  skeletonUnplaced: (element: string) =>
+    `Element ${element} needs its x and y. Only a frame goes to 0, 0 without them, and only an element whose id names one on the canvas takes them from that one.`,
+  /** A skeleton element not in the shape Excalidraw draws (core canvas-skeleton.ts), with what broke it. */
+  skeletonUnread: (element: string, why: string) =>
+    `Element ${element} isn't an element Excalidraw draws: ${why}.`,
   /** The hub's log: marks the person made that no session took. */
   marksOwed: (id: string, reason: string) =>
     `[artifacts] ${id}: the person's marks reached no one, and stay owed: ${reason}`,

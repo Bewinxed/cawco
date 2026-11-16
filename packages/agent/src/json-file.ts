@@ -1,4 +1,5 @@
 import { unhandled } from "@cawco/core/unhandled";
+import { toolWords } from "@cawco/core/words/tools";
 import { readJsonOnDisk, writeOnDisk } from "./json-on-disk";
 
 /**
@@ -16,35 +17,51 @@ export class UnreadJson extends Error {
   }
 }
 
+/** How a JSON file's value is read: its value as the type it holds, or undefined when it is not one. */
+export type JsonReader<T> = (value: unknown) => T | undefined;
+
 /**
- * The JSON file at `path`: its value, or undefined when nothing is there (or
- * the file is empty). One that is there and could not be read (a pipe, a
- * folder, a link to nothing or a loop, past {@link JSON_FILE_LIMIT}, not
- * readable, not JSON) throws {@link UnreadJson}: it is never answered as
- * nothing there, which a caller would write over. Read stat first, as every
- * JSON file is (json-on-disk.ts), so a pipe is never opened.
+ * The JSON file at `path`, as `read` reads it: its value, or undefined when
+ * nothing is there (or the file is empty). One that is there and could not
+ * be read (a pipe, a folder, a link to nothing or a loop, past
+ * {@link JSON_FILE_LIMIT}, not readable, not JSON, or JSON `read` does not
+ * read) throws {@link UnreadJson}: it is never answered as nothing there,
+ * which a caller would write over. Read stat first, as every JSON file is
+ * (json-on-disk.ts), so a pipe is never opened.
  */
-export const readJson = async <T>(path: string): Promise<T | undefined> => {
-  const read = await readJsonOnDisk(path, JSON_FILE_LIMIT);
-  switch (read.state) {
+export const readJson = async <T>(
+  path: string,
+  read: JsonReader<T>
+): Promise<T | undefined> => {
+  const found = await readJsonOnDisk(path, JSON_FILE_LIMIT);
+  switch (found.state) {
     case "absent":
       return undefined;
-    case "read":
-      return read.value as T | undefined;
+    case "read": {
+      if (found.value === undefined) {
+        return undefined;
+      }
+      const value = read(found.value);
+      if (value === undefined) {
+        throw new UnreadJson(path, toolWords.jsonNotItsShape);
+      }
+      return value;
+    }
     case "unread":
-      throw new UnreadJson(path, read.why);
+      throw new UnreadJson(path, found.why);
     default:
-      unhandled("read", read);
+      unhandled("read", found);
   }
 };
 
 /** {@link readJson}, with a file there and unread said on the log (`said` after why) and answered as undefined. */
 const readOrSay = async <T>(
   path: string,
+  read: JsonReader<T>,
   said: string
 ): Promise<T | undefined> => {
   try {
-    return await readJson<T>(path);
+    return await readJson(path, read);
   } catch (error) {
     if (!(error instanceof UnreadJson)) {
       throw error;
@@ -59,8 +76,10 @@ const readOrSay = async <T>(
  * record, a cache): one there and unread is as never written, said on the
  * log with why, and the next write puts a whole one in its place.
  */
-export const readOwnJson = <T>(path: string): Promise<T | undefined> =>
-  readOrSay<T>(path, "read as never written");
+export const readOwnJson = <T>(
+  path: string,
+  read: JsonReader<T>
+): Promise<T | undefined> => readOrSay(path, read, "read as never written");
 
 /**
  * {@link readJson} of a file that is the person's (or another program's)
@@ -71,8 +90,9 @@ export const readOwnJson = <T>(path: string): Promise<T | undefined> =>
  */
 export const readJsonOrLeave = <T>(
   path: string,
+  read: JsonReader<T>,
   step: string
-): Promise<T | undefined> => readOrSay<T>(path, `${step} left it as it is`);
+): Promise<T | undefined> => readOrSay(path, read, `${step} left it as it is`);
 
 /**
  * Written whole and moved into place — a half-written config is a broken

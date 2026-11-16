@@ -31,13 +31,22 @@ export interface PiSession {
   id: string;
 }
 
-/** `record` as a session file's header, or null when it is not one. */
+/**
+ * `record` as a session file's header, or null when it is not one: `type`
+ * `"session"` and a non-empty `id` (pi's `SessionHeader`), and its `cwd`
+ * where that is a string. Every record type holds any other key as
+ * `unknown` (types.ts `RecordEnvelope`), so each is narrowed where it is
+ * read; this package imports no schema library.
+ */
 export function piSessionOf(record: TranscriptRecord | undefined): PiSession | null {
-  const header = record as { cwd?: unknown; id?: unknown; type?: unknown } | undefined;
-  if (header?.type !== "session" || typeof header.id !== "string" || header.id === "") {
+  if (record?.type !== "session") {
     return null;
   }
-  return { id: header.id, ...(typeof header.cwd === "string" ? { cwd: header.cwd } : {}) };
+  const { cwd, id } = record;
+  if (typeof id !== "string" || id === "") {
+    return null;
+  }
+  return { id, ...(typeof cwd === "string" ? { cwd } : {}) };
 }
 
 /** An `AgentMessage` as a session file holds it: each role's own fields. */

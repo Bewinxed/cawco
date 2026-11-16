@@ -28,6 +28,7 @@ import { readOwnJson, writeJson } from "./json-file";
 import { gaugeTables } from "./memory";
 import { repoTop } from "./repo-top";
 import { warn } from "./session-log";
+import { WorktreeSchema } from "./stored-shapes";
 
 /** What the spin-offs say to the hub and read of the sessions around them. */
 export interface SpinOffHost {
@@ -44,12 +45,16 @@ export interface Worktree {
    * repository with no remote), until the opening message says whose
    * worktree this is.
    */
-  announce?: { cwd: string; base: string | undefined };
+  announce?: { cwd: string; base?: string };
   /** Where the session runs: `path`, or the same subdirectory of it. */
   dir: string;
   path: string;
   root: string;
 }
+
+/** A worktree record as it was written, or undefined when it is not one. */
+const worktreeOf = (value: unknown): Worktree | undefined =>
+  WorktreeSchema.safeParse(value).data;
 
 /**
  * A spin-off's transcript, kept out of the catalogs the rails read. The tag
@@ -209,7 +214,7 @@ export class SpinOffs {
     baseCwd: string,
     processGeneration: string | undefined
   ): Promise<string> {
-    const recorded = await readOwnJson<Worktree>(worktreeRecord(instanceId));
+    const recorded = await readOwnJson(worktreeRecord(instanceId), worktreeOf);
     if (recorded) {
       this.#worktrees.set(instanceId, recorded);
       this.#recordWorktree(instanceId, processGeneration, recorded);
@@ -298,7 +303,7 @@ export class SpinOffs {
   async #worktreeOf(instanceId: string): Promise<Worktree | undefined> {
     return (
       this.#worktrees.get(instanceId) ??
-      (await readOwnJson<Worktree>(worktreeRecord(instanceId))) ??
+      (await readOwnJson(worktreeRecord(instanceId), worktreeOf)) ??
       undefined
     );
   }

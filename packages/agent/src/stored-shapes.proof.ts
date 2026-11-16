@@ -9,6 +9,7 @@ import type {
   BrowserRecord as BrowserRecordType,
   MachineNetwork as MachineNetworkType,
 } from "./browser/state";
+import type { ClaudeFleetSidecar as ClaudeFleetSidecarType } from "./fleet";
 import type { FleetHarnessSet as FleetHarnessSetType } from "./fleet-harness-set";
 import type { FleetMcpSet as FleetMcpSetType } from "./fleet-mcp-set";
 import type { FleetPlaceSet as FleetPlaceSetType } from "./fleet-place-set";
@@ -16,18 +17,33 @@ import type {
   SetHarnessConfig as SetHarnessConfigType,
   SetHook as SetHookType,
 } from "./fleet-set-rows";
+import type { LegacyFleetSidecar as LegacyFleetSidecarType } from "./fleet-sidecar-move";
+import type { FleetSidecar as FleetSidecarType } from "./harnesses/fleet-common";
+import type { OpencodeServerFacts as OpencodeServerFactsType } from "./harnesses/opencode";
+import type {
+  OpencodeServerRecord as OpencodeServerRecordType,
+  ServerIdentity as ServerIdentityType,
+} from "./harnesses/opencode-server";
+import type { Worktree as WorktreeType } from "./spin-offs";
 import type {
   BrowserRecordOutput,
+  ClaudeFleetSidecarOutput,
   FleetHarnessSetOutput,
   FleetMcpSetOutput,
   FleetPlaceSetOutput,
+  FleetSidecarOutput,
+  LegacyFleetSidecarOutput,
   MachineNetworkOutput,
   MediaMeasurementOutput,
+  OpencodeServerFactsOutput,
+  OpencodeServerRecordOutput,
+  ServerIdentityOutput,
   SetHarnessConfigOutput,
   SetHookOutput,
   ToolInstallRecordOutput,
   ToolInstallsOutput,
   ToolInstallUnderwayOutput,
+  WorktreeOutput,
 } from "./stored-shapes";
 import type {
   ToolInstallRecord as ToolInstallRecordType,
@@ -59,14 +75,21 @@ prove<
   [
     Same<MachineNetworkOutput, MachineNetworkType>,
     Same<BrowserRecordOutput, BrowserRecordType>,
+    Same<ClaudeFleetSidecarOutput, ClaudeFleetSidecarType>,
     Same<SetHarnessConfigOutput, SetHarnessConfigType>,
     Same<SetHookOutput, SetHookType>,
     Same<FleetHarnessSetOutput, FleetHarnessSetType>,
     Same<FleetMcpSetOutput, FleetMcpSetType>,
     Same<FleetPlaceSetOutput, FleetPlaceSetType>,
+    Same<FleetSidecarOutput, FleetSidecarType>,
+    Same<LegacyFleetSidecarOutput, LegacyFleetSidecarType>,
     Same<MediaMeasurementOutput, MediaMeasurementType>,
+    Same<OpencodeServerFactsOutput, OpencodeServerFactsType>,
+    Same<ServerIdentityOutput, ServerIdentityType>,
+    Same<OpencodeServerRecordOutput, OpencodeServerRecordType>,
     Same<ToolInstallRecordOutput, ToolInstallRecordType>,
     Same<ToolInstallUnderwayOutput, ToolInstallUnderwayType>,
     Same<ToolInstallsOutput, ToolInstallsType>,
+    Same<WorktreeOutput, WorktreeType>,
   ]
 >();

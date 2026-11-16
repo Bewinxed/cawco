@@ -4,6 +4,7 @@ import {
   canvasOutline,
   excalidrawFile,
 } from "@cawco/core/canvas";
+import { sentSkeletonsRefusal } from "@cawco/core/canvas-skeleton";
 import type { MapChange } from "@cawco/core/doc-maps";
 import { type ChangedItem, docMeta, setMeta } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -21,6 +22,7 @@ import {
   pictureShowsWrite,
   screenJoined,
   stampWrote,
+  unconverted,
 } from "../canvas";
 import { stateOf, stillThere } from "../facts";
 import { sceneChanges } from "../page-changes";
@@ -301,6 +303,10 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
           code: "artifact-canvas-elements-many",
           detail: `One call writes at most ${CANVAS_LIMITS.elementsPerCall} elements; send the rest in another.`,
         });
+      }
+      const refusal = sentSkeletonsRefusal(change.elements);
+      if (refusal !== undefined) {
+        return unconverted(refusal);
       }
     } else if (change.mermaid.length > CANVAS_LIMITS.mermaid) {
       return problem(413, {

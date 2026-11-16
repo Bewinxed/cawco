@@ -29,6 +29,7 @@ import {
   unknown,
   variant,
 } from "valibot";
+import { readerOf, wholeReaderOf } from "../reader-of";
 
 /** A JSON value, as OpenCode's `Schema.Json` holds one. */
 type JsonValue =
@@ -236,3 +237,50 @@ const CREDENTIAL_VALUE = variant("type", [
 export const opencodeCredentialValue = (
   value: unknown
 ): InferOutput<typeof CREDENTIAL_VALUE> => parse(CREDENTIAL_VALUE, value);
+
+// ------------------------------------------------------------- config
+
+/**
+ * The person's `opencode.json`, as far as CawCo reads it to take back out
+ * what it once wrote there: its `plugin` list (1.x's bridge), its `mcp`
+ * servers (2.0's `mcp.servers` and 1.x's flat `mcp.<name>`), and its
+ * `agents` (the plan agent CawCo once turned off). Each is an object, or a
+ * list for `plugin`, as CawCo wrote them there (`@opencode/client` exports
+ * no type of the config file); every other key, and every key inside them,
+ * is the person's and is kept as it was written.
+ */
+const CONFIG = looseObject({
+  agents: optional(record(string(), unknown())),
+  mcp: optional(record(string(), unknown())),
+  plugin: optional(array(unknown())),
+});
+
+/**
+ * The person's `opencode.json`, the very object read (its keys in their
+ * order, as CawCo writes it back); undefined for one not in its shape.
+ */
+export const opencodeConfigOf = wholeReaderOf(CONFIG);
+
+// ------------------------------------------------------------- CawCo's records
+
+/**
+ * A record CawCo keeps beside OpenCode's files that maps each key to a
+ * word: the hash of each place's servers by its folder
+ * (`cawco-placed-mcp.seen.json`), each session's tag by its id
+ * (`cawco-tags.json`), and the server each session's database is on by its
+ * id (`cawco-session-homes.json`).
+ */
+const WORDS_BY_KEY = record(string(), string());
+
+/** A record of {@link WORDS_BY_KEY}; undefined for one not in its shape. */
+export const opencodeWordsByKeyOf = readerOf(WORDS_BY_KEY);
+
+/**
+ * The fleet's MCP servers as CawCo writes them for OpenCode
+ * (`cawco-fleet-mcp.json`), by name, each in the shape OpenCode's
+ * `mcp.servers` takes, which a server's launch config carries whole.
+ */
+const FLEET_MCP = record(string(), unknown());
+
+/** The fleet's MCP servers for OpenCode ({@link FLEET_MCP}); undefined for a record not in its shape. */
+export const opencodeFleetMcpOf = readerOf(FLEET_MCP);

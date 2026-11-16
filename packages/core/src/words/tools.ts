@@ -154,6 +154,8 @@ export const toolWords = {
   /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file larger than any CawCo reads. */
   settingsTooLarge: (bytes: number, limit: number) =>
     `it is ${bytes} bytes, and CawCo reads a settings file of up to ${limit}`,
+  /** Why a JSON file the agent reads (agent json-file.ts `readJson`) was not read: its JSON is not in the shape its reader reads. */
+  jsonNotItsShape: "its JSON isn't in the shape CawCo reads it in",
   /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file whose text is not one JSON object. */
   settingsNotAnObject: "it doesn't hold one JSON object",
   /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file the tool's own engine left out of what it read. */

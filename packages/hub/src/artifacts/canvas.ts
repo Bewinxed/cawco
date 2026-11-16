@@ -223,6 +223,13 @@ export const pictureOfWrite = async (
   }
 };
 
+/** The refusal of a write no screen could convert, or that the hub refused before any did: why, in words a session acts on. */
+export const unconverted = (why: string) =>
+  problem(422, {
+    code: "artifact-canvas-unconverted",
+    detail: `The canvas wasn't changed: ${why} Fix it, then try again.`,
+  });
+
 /**
  * Hands the agent's write to a screen and waits for it: the ids it wrote.
  * Refused with {@link NO_SCREEN} when the screen it was handed to has left,
@@ -283,10 +290,7 @@ export const convertOnScreen = async (
         unhandled("read", drawn);
     }
     if ("error" in result) {
-      return problem(422, {
-        code: "artifact-canvas-unconverted",
-        detail: `The canvas wasn't changed: ${result.error} Fix it, then try again.`,
-      });
+      return unconverted(result.error);
     }
     return result.ids;
   } finally {
