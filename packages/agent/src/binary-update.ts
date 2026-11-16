@@ -131,6 +131,24 @@ const thisTarget = (): string => `${process.platform}-${process.arch}`;
 
 const POLL_MS = 60_000;
 /**
+ * A failure with no sequence that a later install outlived: builds before
+ * `failedSequence` wrote `failedVersion` without it and never cleared it, so a
+ * machine said a build from many installs ago failed (2026-11-17: the hub,
+ * niftybot and uwucloud said 6829 failed, on 8198). Without its sequence its
+ * order is not known, so the last landing decides: an install of another
+ * build landed after it (a rollback or an undecided trial of the failed build
+ * leaves the landing on that build). Dropped as the agent starts, which, for
+ * the states those builds left, is once; a failure written since carries its
+ * sequence (unless its manifest could not be read) and ends at the confirm of
+ * a build at or above it (core binary-updates.ts `failureAfterInstall`).
+ */
+const outlivedFailure = (state: BinaryUpdateState): boolean =>
+  state.failedVersion !== undefined &&
+  state.failedSequence === undefined &&
+  state.landed?.outcome === "installed" &&
+  state.landed.version !== state.failedVersion;
+
+/**
  * The update state's fields earlier builds wrote that nothing reads now
  * ({@link BinaryUpdater}'s `#load`), read on their own: the state's schema
  * leaves out every key it does not declare as it reads (core
@@ -831,12 +849,16 @@ export class BinaryUpdater {
       readUpdateState(),
       readRecord(updateStatePath(), RETIRED_FIELDS),
     ]);
+    const outlived = saved !== undefined && outlivedFailure(saved);
     this.#state = {
       ...(saved ?? this.#state),
+      ...(outlived
+        ? { failedVersion: undefined, hubSilentTrials: undefined }
+        : {}),
       installedVersion: runtimeVersion,
       hostsHub: this.#hostsHub,
     };
-    if (retired && Object.keys(retired).length > 0) {
+    if (outlived || (retired && Object.keys(retired).length > 0)) {
       await writeJsonAtomic(updateStatePath(), this.#state);
     }
     this.#report(this.#state);

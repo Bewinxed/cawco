@@ -614,6 +614,7 @@ const BinaryUpdateStateShape = declared(
     cut: z.array(RestartHoldShape).optional(),
     download: BinaryDownloadShape.optional(),
     error: z.string().optional(),
+    failedSequence: z.number().optional(),
     failedVersion: z.string().optional(),
     heldChildren: z.number().optional(),
     hostsHub: z.boolean(),
