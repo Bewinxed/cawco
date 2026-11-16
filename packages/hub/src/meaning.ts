@@ -183,12 +183,16 @@ export class MeaningJudge {
       );
       return { kind: "answered", value: new Set() };
     }
+    // One line per call, its cost once, as every Jev caller logs it.
+    console.log(
+      `[meaning] ${instanceId}: route=${access.route} rules=${asked.length} cost=${jevCost(result.usage)}`
+    );
     const yes = new Set<string>();
     for (const { rule } of asked) {
       const { probability } = result.answers[rule.id];
       if (HUB_DEBUG) {
         console.debug(
-          `[meaning] ${instanceId}: rule ${rule.id} route=${access.route} probability=${probability} cost=${jevCost(result.usage)}`
+          `[meaning] ${instanceId}: rule ${rule.id} probability=${probability}`
         );
       }
       if (probability >= MEANING_THRESHOLD) {
