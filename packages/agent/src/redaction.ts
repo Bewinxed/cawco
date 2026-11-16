@@ -9,10 +9,10 @@
  * still grant something is replaced there with {@link REDACTED}. The agent's
  * own log lines go through {@link redactText} too.
  *
- * The values are kept, owner-only, in {@link sessionIdentityDir} (hidden from
- * every workspace boundary), so a transcript read after an agent restart is
- * still redacted. The harness's own transcript on this machine is left as the
- * harness wrote it.
+ * The values are kept, owner-only, in {@link redactionStoreFile} on disk
+ * (hidden from every workspace boundary), so a transcript read after an agent
+ * restart or a reboot is still redacted. The harness's own transcript on
+ * this machine is left as the harness wrote it.
  *
  * WHAT THE STORE HOLDS: every credential that still grants something, live
  * or not yet confirmed revoked by the hub. A revoked one grants nothing, so
@@ -23,7 +23,6 @@
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { makeFolderSync } from "@cawco/core/folders";
 import {
   encodeJson,
@@ -31,7 +30,7 @@ import {
   jsonSizeEstimate,
   textPieces,
 } from "@cawco/core/json-stream";
-import { sessionIdentityDir } from "@cawco/core/paths/cawco";
+import { redactionStoreDir, redactionStoreFile } from "@cawco/core/paths/cawco";
 import type { Envelope } from "@cawco/core/protocol";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { WIRE_PART_CHARS } from "@cawco/core/wire";
@@ -42,10 +41,7 @@ import { gauge } from "./memory";
 const REDACTED = "[cawco credential]";
 
 const storeFile = (): string =>
-  join(
-    sessionIdentityDir(),
-    `redact-${new URL(delegationHubUrl()).host.replaceAll(":", "_")}.json`
-  );
+  redactionStoreFile(new URL(delegationHubUrl()).host);
 
 /**
  * The store as read, by its path: the hub this agent serves names it.
@@ -77,7 +73,7 @@ const saveStore = (values: Set<string>): void => {
   if (known) {
     known.version += 1;
   }
-  makeFolderSync(sessionIdentityDir(), { mode: 0o700 });
+  makeFolderSync(redactionStoreDir(), { mode: 0o700 });
   writeStateFileSync(storeFile(), JSON.stringify([...values]), {
     mode: 0o600,
   });

@@ -1,21 +1,26 @@
 /**
- * Each account's OpenCode data home moved, once, from the runtime dir to the
- * harness stores' root on disk (core paths/harnesses.ts `harnessStoresDir`).
+ * The stores the agent kept in the runtime dir moved, once, to disk, as the
+ * agent starts: the redaction stores to their own dir (core paths/cawco.ts
+ * `redactionStoreDir`, {@link moveRedactionStores}), and each account's
+ * OpenCode data home to the harness stores' root (core paths/harnesses.ts
+ * `harnessStoresDir`, {@link moveOpencodeAccountHomes}).
  *
- * Until this move an account's OpenCode server kept its data home, and so its
- * database (`opencode/opencode.db`, every session of the account), at
- * `opencode-accounts/<id>` in the session credentials' dir (core
+ * Until this move both lived in the session credentials' dir (core
  * paths/cawco.ts `sessionIdentityDir`), which on Linux is under
  * `$XDG_RUNTIME_DIR`, a tmpfs: the reboot of 2026-11-11 emptied it, and 32
- * sessions went with it. The agent runs this as it starts, before anything
- * can start a harness server ({@link moveOpencodeAccountHomes}); from then on
- * nothing reads the old place.
+ * OpenCode sessions went with their account databases. Each runs before
+ * anything reads its store; from then on nothing reads the old place.
  */
+import { lstatSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { cp, lstat, open, readdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
-import { makeFolder } from "@cawco/core/folders";
-import { sessionIdentityDir } from "@cawco/core/paths/cawco";
+import { makeFolder, makeFolderSync } from "@cawco/core/folders";
+import {
+  isRedactionStoreName,
+  redactionStoreDir,
+  sessionIdentityDir,
+} from "@cawco/core/paths/cawco";
 import {
   harnessStoresDir,
   opencodeAccountHome,
@@ -30,6 +35,7 @@ import {
   signalGroup,
   signal as signalPid,
 } from "@cawco/core/signal";
+import { writeStateFileSync } from "@cawco/core/state-file";
 
 /** The database an OpenCode 2.0 data home holds: what makes a home a store. */
 const DATABASE = join("opencode", "opencode.db");
@@ -222,5 +228,41 @@ export const moveOpencodeAccountHomes = async (): Promise<void> => {
     console.info(
       `[opencode] moved account ${account}'s data home from ${from} to ${to}`
     );
+  }
+};
+
+/**
+ * Each hub's redaction store in the runtime dir moved to
+ * {@link redactionStoreDir} when none is there: written whole, owner-only and
+ * flushed (core state-file.ts `writeStateFileSync`: a temporary file, fsync,
+ * rename, the dir flushed), then the old file removed, one line said for
+ * each. One whose new place already holds a store is left where it is, said.
+ *
+ * Synchronous, and the first thing the agent does (daemon.ts `runDaemon`):
+ * the redaction module reads its store once, at the first line it redacts,
+ * and keeps what it read, so the store is in its new place before the first
+ * log line, or the agent would redact with none of the values and write its
+ * next value over the moved store.
+ */
+export const moveRedactionStores = (): void => {
+  const old = sessionIdentityDir();
+  const names = (
+    lstatSync(old, { throwIfNoEntry: false })?.isDirectory()
+      ? readdirSync(old)
+      : []
+  ).filter(isRedactionStoreName);
+  for (const name of names) {
+    const from = join(old, name);
+    const to = join(redactionStoreDir(), name);
+    if (lstatSync(to, { throwIfNoEntry: false })) {
+      console.warn(
+        `[redaction] the store ${name} is at ${to} already; the copy left at ${from} is not read`
+      );
+      continue;
+    }
+    makeFolderSync(redactionStoreDir(), { mode: 0o700 });
+    writeStateFileSync(to, readFileSync(from), { mode: 0o600 });
+    rmSync(from, { force: true });
+    console.info(`[redaction] moved the store ${name} from ${from} to ${to}`);
   }
 };

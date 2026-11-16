@@ -25,6 +25,29 @@ export const sessionIdentityDir = (): string =>
   );
 
 /**
+ * The agent's redaction store's dir: every session credential that may still
+ * grant something, one file per hub ({@link redactionStoreFile}), kept until
+ * the hub says each is revoked (agent redaction.ts). On disk, so a reboot
+ * keeps it, never in {@link sessionIdentityDir}, a tmpfs every reboot
+ * empties. Owner-only, as every folder in the data dir is (core folders.ts),
+ * and hidden from every workspace boundary in its own right (host-policy.ts
+ * `credentialStores`).
+ */
+export const redactionStoreDir = (): string =>
+  join(cawcoDataDir(), "redaction");
+
+/** A redaction store's file name: the hub's host, its port's colon a `_`. */
+const REDACTION_STORE = /^redact-[^/]+\.json$/u;
+
+/** Whether `name` is a redaction store's file name ({@link redactionStoreFile}). */
+export const isRedactionStoreName = (name: string): boolean =>
+  REDACTION_STORE.test(name);
+
+/** The redaction store of the hub at `hubHost` (`host[:port]`). */
+export const redactionStoreFile = (hubHost: string): string =>
+  join(redactionStoreDir(), `redact-${hubHost.replaceAll(":", "_")}.json`);
+
+/**
  * Each live Claude session's scheduled wake-ups as its last turn ended, one
  * file per session named by its instance id, kept for as long as its
  * process runs (agent `wakeups.ts`).
