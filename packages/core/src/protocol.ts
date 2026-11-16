@@ -124,8 +124,9 @@ export interface SpawnPayload {
    * runtime whose `openai-codex` sign-in is the account's
    * `~/.cawco/accounts/<id>/pi/auth.json`; OpenCode in the account's own
    * server, whose `XDG_DATA_HOME` (and so OpenCode's own store, holding the
-   * account's credential alone) is `opencode-accounts/<id>` beside the
-   * session credentials, hidden from every workspace boundary.
+   * account's credential alone) is `opencode-accounts/<id>` in the harness
+   * stores' root on disk (core paths/harnesses.ts `harnessStoresDir`),
+   * hidden from every workspace boundary.
    * A launch learns it as it starts, from the hub's {@link LaunchGrant}, and
    * runs on that alone; a reattach is sent it, as the account its process
    * already runs on. Never set by a client. A Claude launch without one (or

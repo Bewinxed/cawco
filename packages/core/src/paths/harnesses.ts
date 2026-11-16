@@ -4,8 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { sessionIdentityDir } from "./cawco";
-import { xdgDataHome } from "./roots";
+import { cawcoDataDir, xdgDataHome } from "./roots";
 
 /**
  * pi's agent dir: its login, its settings, and what the fleet writes for it.
@@ -47,14 +46,33 @@ export const piMemoryFile = (): string => join(piAgentDir(), "AGENTS.md");
 export const opencodeDataDir = (): string => join(xdgDataHome(), "opencode");
 
 /**
+ * The one root of every harness store CawCo keeps for itself: what a harness
+ * server writes into a data home CawCo gives it (a database, conversations,
+ * settings, a session index), which must outlive a reboot. On disk, under
+ * CawCo's data dir, never under the runtime dir: `$XDG_RUNTIME_DIR`, and
+ * paths/cawco.ts `sessionIdentityDir` in it, is a tmpfs that every reboot
+ * empties, and the reboot of 2026-11-11 took 32 OpenCode sessions with the
+ * account databases kept there. The runtime dir holds only what may vanish: sockets
+ * and credentials that are short-lived. Owner-only, as every folder in the
+ * data dir is (core folders.ts), and hidden from every workspace boundary in
+ * its own right (host-policy.ts `credentialStores`), as the session
+ * credentials' dir is.
+ */
+export const harnessStoresDir = (): string =>
+  join(cawcoDataDir(), "harness-stores");
+
+/** Where every account's OpenCode server keeps its data home, one dir per account ({@link opencodeAccountHome}). */
+const opencodeAccountsDir = (): string =>
+  join(harnessStoresDir(), "opencode-accounts");
+
+/**
  * The data home (`XDG_DATA_HOME`) of an account's own OpenCode server: 2.0
  * keeps its database there (`<data>/opencode/opencode.db`), so this server's
  * sessions and its one credential are this account's and nothing else's.
- * Beside the session credentials, hidden as they are from every workspace
- * boundary.
+ * A store that must last, so in {@link harnessStoresDir}.
  */
 export const opencodeAccountHome = (accountId: string): string =>
-  join(sessionIdentityDir(), "opencode-accounts", accountId);
+  join(opencodeAccountsDir(), accountId);
 
 /**
  * Where the data homes of OpenCode servers that workspaces' Linux views run
@@ -93,7 +111,7 @@ const opencodeViewHomes = (): string[] => {
 
 /** Every OpenCode database on the machine: the machine server's, each account server's, then each view's server's. */
 export const opencodeDatabases = (): string[] => {
-  const accounts = join(sessionIdentityDir(), "opencode-accounts");
+  const accounts = opencodeAccountsDir();
   const homes = existsSync(accounts) ? readdirSync(accounts) : [];
   return [
     join(opencodeDataDir(), "opencode.db"),
