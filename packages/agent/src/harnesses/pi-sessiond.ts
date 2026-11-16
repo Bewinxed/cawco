@@ -7,6 +7,7 @@ import { BOUNDARY_RELAUNCH, GATEWAY_RELAUNCH } from "@cawco/core/harness";
 import { workspaceSpillDir } from "@cawco/core/paths/workspace";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SpawnPayload } from "@cawco/core/protocol";
+import { KindedError, type LastErrorKind } from "@cawco/core/relaunch";
 import { standalone } from "@cawco/core/runtime";
 import type {
   FleetMcpChange,
@@ -136,9 +137,31 @@ export type PiHostEvent =
   | { type: "frame"; message: NeutralMessage }
   | { type: "busy"; active: boolean }
   | { type: "session"; sessionId: string }
-  | { type: "failed"; error: string }
+  | ({ type: "failed" } & HostFailure)
   | { type: "rejected"; uuid: string; error: string }
-  | { type: "reply"; id: string; value?: unknown; error?: string };
+  | ({ type: "reply"; id: string; value?: unknown } & Partial<HostFailure>);
+
+/**
+ * A failure as the host says it on its line: its words, and its kind when
+ * its maker typed it (core relaunch.ts), which a thrown error loses on the
+ * way out of the host's process.
+ */
+interface HostFailure {
+  error: string;
+  lastErrorKind?: LastErrorKind;
+}
+
+/** `error` as the host says it. */
+export const hostFailure = (error: unknown): HostFailure =>
+  error instanceof KindedError
+    ? { error: error.message, lastErrorKind: error.lastErrorKind }
+    : { error: String(error) };
+
+/** A failure the host said, as the error it was. */
+const saidFailure = (said: HostFailure): Error =>
+  said.lastErrorKind
+    ? new KindedError(said.lastErrorKind, said.error)
+    : new Error(said.error);
 
 /** Why a pi session takes no answer: it raises no permission prompt and has no question tool. */
 export const PI_ASKS_NOTHING = "pi puts no call to the hub.";
@@ -289,7 +312,7 @@ class PiRemoteSession implements HarnessSession {
               ctx.session(event.sessionId);
               break;
             case "failed":
-              ctx.failed(new Error(event.error));
+              ctx.failed(saidFailure(event));
               break;
             case "rejected":
               this.#unread.delete(event.uuid);
@@ -299,7 +322,7 @@ class PiRemoteSession implements HarnessSession {
               const pending = this.#pending.get(event.id);
               this.#pending.delete(event.id);
               if (event.error) {
-                pending?.reject(new Error(event.error));
+                pending?.reject(saidFailure({ ...event, error: event.error }));
               } else {
                 // Apply in socket order, before a later busy delta can arrive.
                 if (pending?.snapshot) {
@@ -651,7 +674,7 @@ export async function piSnapshot(instanceId: string): Promise<PiHostState> {
         }
         stop();
         if (event.error) {
-          reject(new Error(event.error));
+          reject(saidFailure({ ...event, error: event.error }));
         } else {
           resolve(event.value as PiHostState);
         }
