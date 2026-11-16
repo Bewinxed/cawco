@@ -66,6 +66,9 @@
     // A folder is made through packages/core/src/folders.ts, which gives
     // each of CawCo's own its mode whatever the umask.
     "./scripts/lint/one-folder-maker.grit",
+    // A model's API is called through the AI SDK alone: no vendor SDK, no
+    // hand-rolled request to an inference path.
+    "./scripts/lint/model-calls.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

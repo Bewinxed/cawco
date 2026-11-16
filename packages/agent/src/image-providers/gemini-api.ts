@@ -1,7 +1,8 @@
+import { createGoogle } from "@ai-sdk/google";
 import { credentialAccountIds } from "@cawco/core/paths/claude";
 import { cutShort } from "@cawco/core/words/helpers";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
-import { GoogleGenAI } from "@google/genai";
+import { APICallError, generateText } from "ai";
 import { readHeld } from "../provider-accounts";
 import { ratioOf, sizeOf } from "./aspect";
 import type { ImageJob, ImageProvider, MadeImage } from "./provider";
@@ -9,8 +10,10 @@ import type { ImageJob, ImageProvider, MadeImage } from "./provider";
 /**
  * Gemini on a Gemini API key, the official route billed per image
  * ("Direct use of the Gemini API … is billed and managed separately",
- * https://ai.google.dev/gemini-api/docs/google-ai-plans), through Google's
- * own SDK, `@google/genai`, as published, on the Interactions API: "Use the
+ * https://ai.google.dev/gemini-api/docs/google-ai-plans), through the AI
+ * SDK's Google provider, `@ai-sdk/google`, as published (every call CawCo
+ * makes to a model goes through the AI SDK: scripts/lint/model-calls.grit),
+ * on the Interactions API (`google.interactions`): "Use the
  * Interactions API (`client.interactions`) as the default across all
  * workflows. `generateContent` is still supported for existing
  * integrations, but is considered a legacy API"
@@ -71,14 +74,22 @@ const MODEL_SIZES: Readonly<Record<string, readonly ImageSize[]>> = {
 };
 
 /**
- * Where the SDK sends its requests: Google's own address unless
- * `CAWCO_GEMINI_BASE_URL` names another (a probe's mock), as
- * `CAWCO_CHATGPT_BASE_URL` does for ChatGPT. The interactions client takes
- * it from the client's `httpOptions.baseUrl` (SDK
- * `getGoogleGenAIServerURL`).
+ * Where the provider sends its requests: Google's own address
+ * (`https://generativelanguage.googleapis.com/v1beta`, the provider's
+ * default) unless `CAWCO_GEMINI_BASE_URL` names another server (a probe's
+ * mock), as `CAWCO_CHATGPT_BASE_URL` does for ChatGPT. That variable names
+ * the server alone, so the API's version is added to it: the provider's
+ * `baseURL` holds the version, and `google.interactions` posts to
+ * `${baseURL}/interactions`.
  */
-const baseUrl = (): string | undefined =>
-  process.env.CAWCO_GEMINI_BASE_URL || undefined;
+const API_VERSION = "v1beta";
+const TRAILING_SLASHES = /\/+$/u;
+const baseUrl = (): string | undefined => {
+  const server = process.env.CAWCO_GEMINI_BASE_URL;
+  return server
+    ? `${server.replace(TRAILING_SLASHES, "")}/${API_VERSION}`
+    : undefined;
+};
 
 /** The Gemini API keys CawCo accounts on this machine hold. */
 const heldKeys = (): string[] =>
@@ -131,22 +142,26 @@ const NO_IMAGE_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The SDK's error for an HTTP refusal: `status` the HTTP status and `error`
- * the response body, "an `error` object containing a `code` and `message`"
- * (api-errors.md). The SDK's interactions `APIError` is not exported by
- * name, so it is read by shape.
+ * The provider's refusal of an HTTP request (the AI SDK's `APICallError`,
+ * with the status the API answered): its body is "an `error` object
+ * containing a `code` and `message`" (api-errors.md). The provider parses
+ * the body only as Google's RPC error, whose `code` is a number, so the
+ * API's own string code is read from the body as the API sent it. An
+ * `APICallError` with no status (no answer: a connection lost) is no
+ * refusal.
  */
 const httpRefusal = (
   error: unknown
 ): { code: string; message: string; status: number } | null => {
-  if (!(error instanceof Error && "status" in error)) {
+  if (!APICallError.isInstance(error) || error.statusCode === undefined) {
     return null;
   }
-  const { status } = error;
-  if (typeof status !== "number") {
-    return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(error.responseBody ?? "");
+  } catch {
+    body = undefined;
   }
-  const body = "error" in error ? error.error : undefined;
   const said =
     body && typeof body === "object" && "error" in body ? body.error : body;
   const field = (name: "code" | "message"): string => {
@@ -157,14 +172,14 @@ const httpRefusal = (
     return typeof value === "string" ? value : "";
   };
   return {
-    status,
+    status: error.statusCode,
     code: field("code"),
     message: cutShort(field("message") || error.message, 1000),
   };
 };
 
 /**
- * The SDK's refusal as words, by api-errors.md's codes: a block or no image;
+ * The refusal as words, by api-errors.md's codes: a block or no image;
  * 401 `authentication` or 403 `permission_denied`, the key refused; 429
  * (`rate_limit_exceeded`, `quota_exceeded`, `too_many_requests`), a limit
  * met; anything else in the API's own words. Not an HTTP refusal (an abort,
@@ -189,17 +204,41 @@ const refusal = (error: unknown): Error => {
 };
 
 /**
- * One `interactions.create`, as image-generation.md's samples make it: the
- * prompt as text then the references as images in `input`, and
- * `response_format` `{type: "image", aspect_ratio, image_size}`, an image
- * format alone so the answer is the image without conversational text
- * ("You can configure the response to return only the generated images …
- * by specifying an image format in the `response_format` parameter"), and
- * `store: false` so Google keeps neither the prompt nor the images. Not
- * streamed and not in the background, the call returns the finished
- * interaction. Its image is the SDK's `output_image`, "the last generated
- * image block" of the model's output (thought images are not output); none,
- * and the refusal says the interaction's error codes or status.
+ * The interaction's first error, as the API sent it in the response body
+ * (`errors[0]`: its `code` and `message`), which the provider does not
+ * carry into the result's parts; none when it holds no error.
+ */
+const interactionFault = (
+  body: unknown
+): { code: string; message: string } | null => {
+  const errors =
+    body && typeof body === "object" && "errors" in body
+      ? body.errors
+      : undefined;
+  const [first]: unknown[] = Array.isArray(errors) ? errors : [];
+  if (!(first && typeof first === "object")) {
+    return null;
+  }
+  const field = (name: "code" | "message"): string => {
+    const value = name in first ? Reflect.get(first, name) : undefined;
+    return typeof value === "string" ? value : "";
+  };
+  return { code: field("code"), message: field("message") };
+};
+
+/**
+ * One interaction through the AI SDK (`generateText` on
+ * `google.interactions`), as image-generation.md's samples make it: the
+ * prompt as text then the references as images in one user turn, and
+ * `response_format` `[{type: "image", aspect_ratio, image_size}]`
+ * (`providerOptions.google.responseFormat`), an image format alone so the
+ * answer is the image without conversational text ("You can configure the
+ * response to return only the generated images … by specifying an image
+ * format in the `response_format` parameter"), and `store: false` so
+ * Google keeps neither the prompt nor the images. Not streamed and not in
+ * the background, the call returns the finished interaction. Its image is
+ * the last image the model output (thought images are not output); none,
+ * and the refusal says the interaction's error code or its status.
  */
 const askGemini = async (
   key: string,
@@ -207,9 +246,9 @@ const askGemini = async (
   signal: AbortSignal
 ): Promise<MadeImage> => {
   const url = baseUrl();
-  const ai = new GoogleGenAI({
+  const google = createGoogle({
     apiKey: key,
-    ...(url ? { httpOptions: { baseUrl: url } } : {}),
+    ...(url ? { baseURL: url } : {}),
   });
   const sizes = MODEL_SIZES[job.model];
   if (!sizes) {
@@ -217,23 +256,30 @@ const askGemini = async (
   }
   const aspectRatio = ratioOf(job.size);
   const imageSize = imageSizeOf(job.size, sizes);
-  const interaction = await ai.interactions
-    .create(
+  const result = await generateText({
+    model: google.interactions(job.model),
+    messages: [
       {
-        model: job.model,
-        input: [
+        role: "user",
+        content: [
           { type: "text", text: job.prompt },
           ...job.references.map((reference) => ({
-            type: "image" as const,
-            mime_type: reference.mime,
-            data: reference.bytes.toString("base64"),
+            type: "file" as const,
+            mediaType: reference.mime,
+            data: new Uint8Array(reference.bytes),
           })),
         ],
-        response_format: {
-          type: "image",
-          ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-          ...(imageSize ? { image_size: imageSize } : {}),
-        },
+      },
+    ],
+    providerOptions: {
+      google: {
+        responseFormat: [
+          {
+            type: "image",
+            ...(aspectRatio ? { aspectRatio } : {}),
+            ...(imageSize ? { imageSize } : {}),
+          },
+        ],
         // Kept nowhere: "By default, the API stores all Interaction objects
         // (`store=true`)", 55 days on the Paid Tier; "you can set
         // `store=false` in your request … `store=false` is incompatible with
@@ -241,35 +287,37 @@ const askGemini = async (
         // for subsequent turns"
         // (https://aistudio.google.com/docs/interactions-overview.md, "Data
         // storage and retention", read 2026-11-05), neither of which this
-        // one synchronous call uses. The SDK's automatic continuation still
-        // runs: with `store: false` it resends the input with the
-        // `continuation_token` (`continuationBody`).
+        // one synchronous call uses.
         store: false,
       },
-      // One attempt: a failed image is said, never sent again by itself.
-      // The interactions client retries 408, 409, 429 and 5XX four times
-      // unless told otherwise, and does not read `httpOptions.retryOptions`.
-      { retries: { strategy: "none" }, signal }
-    )
-    .catch((error: unknown) => {
-      throw refusal(error);
-    });
-  const image = interaction.output_image?.data;
+    },
+    // One attempt: a failed image is said, never sent again by itself. With
+    // no retries the AI SDK throws the provider's own error, unwrapped.
+    maxRetries: 0,
+    abortSignal: signal,
+    // The response body holds the interaction's errors, read when it made no image.
+    include: { responseBody: true },
+  }).catch((error: unknown) => {
+    throw refusal(error);
+  });
+  const image = result.files
+    .filter((file) => file.mediaType.startsWith("image/"))
+    .at(-1);
   if (!image) {
-    const [fault] = interaction.errors ?? [];
+    const fault = interactionFault(result.response.body);
     const text = cutShort(
-      [interaction.output_text ?? "", fault?.message ?? ""].join(" ").trim(),
+      [result.text, fault?.message ?? ""].join(" ").trim(),
       600
     );
     throw new Error(
       imageGenerationWords.geminiNoImage(
-        fault?.code || interaction.status,
+        fault?.code || result.rawFinishReason || "",
         text
       )
     );
   }
   return {
-    bytes: Buffer.from(image, "base64"),
+    bytes: Buffer.from(image.uint8Array),
     notes:
       job.quality === "auto"
         ? []

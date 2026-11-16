@@ -1,0 +1,61 @@
+language js
+
+// Every call CawCo makes to an AI model's API goes through the Vercel AI SDK
+// (`ai` and its `@ai-sdk/*` providers), at their latest releases: never a
+// hand-rolled HTTP request, never a vendor's own SDK beside it (the owner's
+// rule: "any openrouter/any actual api call to ai models should run through
+// the ai sdk, no handrolled code"). Across every package's and the
+// dashboard's source, this refuses:
+//
+// - an import, re-export, dynamic `import()` or `require` of a model
+//   vendor's SDK (Google's, OpenAI's, Anthropic's API SDK, OpenRouter's,
+//   Mistral's, Groq's, Cohere's, Together's, Replicate's, fal's, Ollama's,
+//   Hugging Face's inference client). `@anthropic-ai/claude-agent-sdk` and
+//   `@anthropic-ai/sandbox-runtime` run Claude Code, not a model API, and
+//   stand;
+// - a string or template naming a model-inference path on a model vendor's
+//   API host (`/chat/completions`, `/completions`, `/messages`, `/images`,
+//   `/responses`, `/systemone`, `/interactions`, `/embeddings`, `/audio`,
+//   `:generateContent`, `:streamGenerateContent`, `:predict`), or Codex's
+//   own inference paths on ChatGPT's backend (`/codex/images`,
+//   `/codex/responses`), whose host the URL is joined to elsewhere. A URL
+//   is refused where it is written, so one kept in a constant and sent
+//   later is caught too. An account or auth endpoint on those hosts
+//   (OpenRouter's `/api/v1/auth/keys`, ChatGPT's `/wham/usage`) names no
+//   inference path and stands.
+//
+// Allowed by file, each with its reason, never by an inline suppression:
+// - packages/agent/src/image-providers/chatgpt.ts: Codex's image edits take
+//   a JSON body; @ai-sdk/openai 4.0.118 sends edits as multipart
+//   (openai-image-model.ts). Waits on the owner's choice.
+// - packages/hub/src/jev.ts: moves with the Jev AI-SDK branch.
+// - packages/hub/src/upstreams.ts: TYPESAFE_URL, the endpoint jev.ts posts
+//   to; moves with the Jev AI-SDK branch.
+or {
+  or {
+    `import $clause from $source` as $hit,
+    `import $source` as $hit,
+    `export { $names } from $source` as $hit,
+    `export * from $source` as $hit,
+    `export * as $_ from $source` as $hit,
+    `import($source)` as $hit,
+    `require($source)` as $hit
+  } where {
+    $filename <: or { includes "packages/", includes "apps/dashboard/" },
+    $source <: r"[\"'](?:@google/genai|@google/generative-ai|@google-cloud/vertexai|openai|@openai/[^\"']+|@anthropic-ai/(?:sdk|bedrock-sdk|vertex-sdk)|@openrouter/[^\"']+|@mistralai/[^\"']+|groq-sdk|cohere-ai|together-ai|replicate|@fal-ai/[^\"']+|ollama|@huggingface/inference)(?:/[^\"']*)?[\"']",
+    register_diagnostic(span=$hit, message="A model's API is called through the AI SDK (`ai` and its `@ai-sdk/*` provider), never a vendor's own SDK (scripts/lint/model-calls.grit).")
+  },
+  or { JsStringLiteralExpression(), JsTemplateExpression() } as $literal where {
+    $filename <: or { includes "packages/", includes "apps/dashboard/" },
+    $filename <: not or {
+      includes "packages/agent/src/image-providers/chatgpt.ts",
+      includes "packages/hub/src/jev.ts",
+      includes "packages/hub/src/upstreams.ts"
+    },
+    $literal <: or {
+      r"(?s).*https?://(?:api\.openai\.com|chatgpt\.com|api\.anthropic\.com|openrouter\.ai|generativelanguage\.googleapis\.com|[a-z0-9-]*aiplatform\.googleapis\.com|api\.typesafe\.ai|api\.mistral\.ai|api\.groq\.com|api\.together\.xyz|api\.deepseek\.com|api\.x\.ai|api\.cohere\.(?:com|ai)|api\.fireworks\.ai|api\.perplexity\.ai)[^\"'`\s]*(?:/chat/completions|/completions|/messages|/images|/responses|/systemone|/interactions|/embeddings|/audio/|:generateContent|:streamGenerateContent|:predict).*",
+      r"(?s).*/codex/(?:images|responses)\b.*"
+    },
+    register_diagnostic(span=$literal, message="A model's API is called through the AI SDK (`ai` and its `@ai-sdk/*` provider, pointed at another host by its `baseURL`), never by a hand-rolled request to its inference path (scripts/lint/model-calls.grit).")
+  }
+}
