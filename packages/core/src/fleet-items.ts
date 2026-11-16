@@ -251,40 +251,65 @@ const rowsOf = (
 };
 
 /**
- * Each item kind's content, parsed as its type and keeping every key the
- * type does not declare (`force`, which a machine sets on a forced item, and
- * any a newer hub sends): what the harnesses converge is the item as held.
+ * Each item kind's content as its type. An item is checked against it and
+ * converged whole, as held: every key its type does not declare, at any
+ * depth, is kept (`force`, which a machine sets on a forced item, and any a
+ * newer hub sends).
  */
 const ITEMS = {
-  policy: z.looseObject({ deniedTools: z.array(z.string()) }),
-  hubOnly: z.array(z.string()),
-  mcp: FleetMcpServerSchema.loose(),
-  skill: FleetSkillPayloadSchema.loose(),
-  marketplace: FleetMarketplaceSchema.loose(),
-  plugin: FleetPluginSchema.loose(),
-  pluginPayload: FleetPluginPayloadSchema.loose(),
-  memory: FleetMemorySchema.omit({ docs: true }).loose(),
-  memoryDoc: FleetMemoryDocSchema.loose(),
-  hook: FleetHookSchema.loose(),
-  harnessConfig: FleetHarnessConfigSchema.loose(),
-  projectCheckout: z.looseObject({ path: z.string() }),
-  placedMemoryDoc: FleetPlacedMemoryDocSchema.loose(),
+  policy: z.object({ deniedTools: z.array(z.string()) }),
+  mcp: FleetMcpServerSchema,
+  skill: FleetSkillPayloadSchema,
+  marketplace: FleetMarketplaceSchema,
+  plugin: FleetPluginSchema,
+  pluginPayload: FleetPluginPayloadSchema,
+  memory: FleetMemorySchema.omit({ docs: true }),
+  memoryDoc: FleetMemoryDocSchema,
+  hook: FleetHookSchema,
+  harnessConfig: FleetHarnessConfigSchema,
+  projectCheckout: z.object({ path: z.string() }),
+  placedMemoryDoc: FleetPlacedMemoryDocSchema,
 };
 
 /**
- * Item `id`'s content as `schema`'s type. One that is not is thrown, naming
- * it: a converge of the rest would take away what the item holds.
+ * The hub-only marketplaces' names. A machine that holds the item forced
+ * spreads the list into an object beside `force` (agent fleet-desired.ts
+ * `config`): read back as the list it was, in its order.
  */
-const itemAs = <S extends z.ZodType>(
-  id: string,
-  schema: S,
-  value: unknown
-): z.output<S> => {
-  const read = schema.safeParse(value);
+const HUB_ONLY = z.union([
+  z.array(z.string()),
+  z
+    .looseObject({ force: z.literal(true) })
+    .transform((forced) =>
+      Object.entries(forced).flatMap(([key, name]) =>
+        key !== "force" && typeof name === "string" ? [name] : []
+      )
+    ),
+]);
+
+/** Why item `id` is not its kind's content, thrown: a converge of the rest would take away what the item holds. */
+const notItsContent = (id: string, error: z.ZodError): Error =>
+  new Error(
+    `fleet item ${id} is not its kind's content: ${z.prettifyError(error)}`
+  );
+
+/**
+ * Item `id`'s content, checked as `schema`'s type and given back whole
+ * ({@link ITEMS}); one that is not its type is thrown ({@link notItsContent}).
+ */
+const itemAs = <T>(id: string, schema: z.ZodType<T>, value: unknown): T => {
+  const checked = schema.safeParse(value);
+  if (!checked.success) {
+    throw notItsContent(id, checked.error);
+  }
+  return z.custom<T>((held) => schema.safeParse(held).success).parse(value);
+};
+
+/** The hub-only marketplaces item's names ({@link HUB_ONLY}); one that is not is thrown ({@link notItsContent}). */
+const hubOnlyOf = (id: string, value: unknown): string[] => {
+  const read = HUB_ONLY.safeParse(value);
   if (!read.success) {
-    throw new Error(
-      `fleet item ${id} is not its kind's content: ${z.prettifyError(read.error)}`
-    );
+    throw notItsContent(id, read.error);
   }
   return read.data;
 };
@@ -314,7 +339,7 @@ export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
         config.deniedTools = itemAs(id, ITEMS.policy, value).deniedTools;
         break;
       case "hubOnly":
-        config.hubOnlyMarketplaces = itemAs(id, ITEMS.hubOnly, value);
+        config.hubOnlyMarketplaces = hubOnlyOf(id, value);
         break;
       case "mcp":
         config.mcp.push(itemAs(id, ITEMS.mcp, value));
