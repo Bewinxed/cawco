@@ -233,7 +233,12 @@ const IMAGE_TYPES = [
   MIME_TYPES.gif,
 ] as const;
 
-/** A file's id in the doc's `files`: 40 hex digits, as Excalidraw's own are. */
+/**
+ * A file's id in the doc's `files`: 40 hex digits, as Excalidraw's own are.
+ * Library gap: Excalidraw brands `FileId` (element/types.d.ts `string & {
+ * _brand: "FileId" }`) and its package entry exports no maker of one
+ * (`generateIdFromFile` sits in a subpath its `exports` give types alone).
+ */
 const newFileId = () =>
   [...crypto.getRandomValues(new Uint8Array(20))]
     .map((n) => n.toString(16).padStart(2, "0"))

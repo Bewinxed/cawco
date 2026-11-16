@@ -19,7 +19,6 @@
 import {
   type BytePrefilter,
   fileStamp,
-  type LocatedRecord,
   ReverseReader,
   type TranscriptRecord,
 } from "@cawco/jsonl-parser";
@@ -89,7 +88,7 @@ async function newestPrompt(
     const step = reader.records;
     reader.records = [];
     for (let i = step.length - 1; i >= 0; i -= 1) {
-      const at = promptAt((step[i] as LocatedRecord).record);
+      const at = promptAt(step[i].record);
       if (at !== undefined) {
         return at;
       }

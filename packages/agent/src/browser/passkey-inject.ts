@@ -22,6 +22,7 @@ import {
   openSync,
   writeSync,
 } from "node:fs";
+import { errnoCode } from "@cawco/core/absent";
 
 const DEV_VHCI = "/dev/vhci";
 
@@ -242,8 +243,7 @@ const wrapLeMetaEvent = (subevent: number, body: Buffer): Buffer => {
 };
 
 /** Whether the error is EAGAIN (nothing ready on a non-blocking fd). */
-const isEagain = (err: unknown): boolean =>
-  (err as NodeJS.ErrnoException).code === "EAGAIN";
+const isEagain = (err: unknown): boolean => errnoCode(err) === "EAGAIN";
 
 const POLL_TIMEOUT = new Error("Timed out waiting for vhci creation response");
 
@@ -366,7 +366,7 @@ class PasskeyInjector {
     try {
       writeSync(this.#fd, packet);
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code === "ENXIO") {
+      if (errnoCode(err) === "ENXIO") {
         // The kernel took the adapter away: close it, so the next call
         // makes it again.
         console.warn("[browser] passkey-inject: adapter lost (ENXIO), closing");

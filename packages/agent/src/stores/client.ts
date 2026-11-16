@@ -40,8 +40,17 @@ interface Asked {
 let thread: Worker | undefined;
 let nextId = 0;
 const asked = new Map<number, Asked>();
-/** Reads asked and not yet answered, by op and argument. */
-const reading = new Map<string, Promise<unknown>>();
+/** Reads asked and not yet answered, by op, then by argument: each op's own, so its answer keeps its type. */
+const reading: { [K in StoreOp]: Map<string, Promise<StoreAnswer<K>>> } = {
+  "opencode.ownRows": new Map(),
+  "opencode.ownChanges": new Map(),
+  "opencode.ownSignInTypes": new Map(),
+  "opencode.ownIntegrations": new Map(),
+  "opencode.ownCredentials": new Map(),
+  "opencode.sessions": new Map(),
+  "opencode.backupV1": new Map(),
+  "usage.scan": new Map(),
+};
 
 /** Every ask thread `ended` held, failed as gone, and the thread let go; a thread already let go is nothing more. */
 const lost = (ended: Worker, why: string): void => {
@@ -111,6 +120,12 @@ const ask = <K extends StoreOp>(
     nextId += 1;
     const id = nextId;
     asked.set(id, {
+      // Platform gap: the answer crosses the thread's boundary as a
+      // structured clone, typed by no message (`MessageEvent<StoreSaid>`
+      // carries it as `unknown`), and the asks of every op wait in one map
+      // by id, whose op TypeScript cannot correlate with the answer
+      // (microsoft/TypeScript#30581). The thread answers id `id` with op
+      // `op`'s own answer (stores/worker.ts `storeOps`).
       resolve: resolve as (value: unknown) => void,
       reject,
       ...(tell ? { tell } : {}),
@@ -129,13 +144,14 @@ export const storeRead = <K extends StoreOp>(
   arg: StoreArg<K>,
   ms: number
 ): Promise<Bounded<StoreAnswer<K>>> => {
-  const key = `${op}\0${String(JSON.stringify(arg))}`;
-  let read = reading.get(key);
+  const key = String(JSON.stringify(arg));
+  const held = reading[op];
+  let read = held.get(key);
   if (!read) {
-    read = ask(op, arg).finally(() => reading.delete(key));
-    reading.set(key, read);
+    read = ask(op, arg).finally(() => held.delete(key));
+    held.set(key, read);
   }
-  const shared = read as Promise<StoreAnswer<K>>;
+  const shared = read;
   return readWithin(ms, () => shared);
 };
 

@@ -5,7 +5,7 @@
  * account's one credential (`~/.cawco/accounts/<id>/credential.json`, the
  * agent's), every other provider the machine's own `~/.pi/agent/auth.json`,
  * so a session on an account still sees the proxy and key models it always
- * did. pi 1.0.1's `ModelRuntime.create({ credentials })` takes the store
+ * did. pi's `ModelRuntime.create({ credentials })` takes the store
  * (dist/core/model-runtime.d.ts: `credentials?: CredentialStore`).
  *
  * pi never writes the account's credential: when pi wants it refreshed (its
@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { providersOpenedBy } from "@cawco/core/accounts";
 import { readWithin } from "@cawco/core/bounded";
+import { isRecord } from "@cawco/core/is-record";
 import {
   accountCredentialPath,
   credentialAccountIds,
@@ -40,7 +41,7 @@ import { CredentialSchema } from "../provider-accounts";
 const machineAuthPath = (): string => join(getAgentDir(), "auth.json");
 
 /**
- * pi's own file-backed store class. pi 1.0.1 exports no constructor for it
+ * pi's own file-backed store class. pi 1.5.2 exports no constructor for it
  * (its package `exports` stop at `.`); the runtime pi builds with no
  * `credentials` holds one (`new RuntimeCredentials(AuthStorage.create(path))`,
  * dist/core/model-runtime.js:79, its `store`, dist/core/runtime-credentials.js:3),
@@ -49,6 +50,16 @@ const machineAuthPath = (): string => join(getAgentDir(), "auth.json");
 interface FileStoreClass {
   create: (authPath?: string) => CredentialStore;
 }
+/**
+ * Whether `value` is that class, by the one member read off it. pi keeps the
+ * store on the runtime's private `credentials` (model-runtime.d.ts `private
+ * readonly credentials`, untyped), so what is read off it is unknown until
+ * this check.
+ */
+const isFileStoreClass = (value: unknown): value is FileStoreClass =>
+  typeof value === "function" &&
+  "create" in value &&
+  typeof value.create === "function";
 let fileStoreClass: Promise<FileStoreClass> | undefined;
 const machineStore = async (): Promise<CredentialStore> => {
   fileStoreClass ??= (async () => {
@@ -57,18 +68,15 @@ const machineStore = async (): Promise<CredentialStore> => {
       modelsPath: null,
       authPath: machineAuthPath(),
     });
-    const store = (
-      runtime as unknown as {
-        credentials?: { store?: { constructor?: unknown } };
-      }
-    ).credentials?.store;
-    const cls = store?.constructor as Partial<FileStoreClass> | undefined;
-    if (typeof cls?.create !== "function") {
+    const credentials: unknown = Reflect.get(runtime, "credentials");
+    const store = isRecord(credentials) ? credentials.store : undefined;
+    const cls = isRecord(store) ? store.constructor : undefined;
+    if (!isFileStoreClass(cls)) {
       throw new Error(
         "This pi build keeps its credentials in a shape CawCo does not know, so its sessions cannot run on CawCo accounts."
       );
     }
-    return cls as FileStoreClass;
+    return cls;
   })();
   return (await fileStoreClass).create(machineAuthPath());
 };

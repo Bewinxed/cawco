@@ -43,17 +43,19 @@ const root = process.cwd();
 /** The project's own packages, from the toolchain root up, as Node resolves them. */
 const project = createRequire(join(root, "package.json"));
 
-/** A peer of the docgen tools, the project's; null when it has none. */
-const peer = <T>(name: string): T | null => {
+/**
+ * TypeScript, the project's: the checker every typed read runs on; null when
+ * the project has none. Node's `require` answers any module untyped, so it is
+ * typed as TypeScript's own module (`typeof import("typescript")`).
+ */
+const typescript = (): Ts | null => {
   try {
-    return project(name) as T;
+    const ts: Ts = project("typescript");
+    return ts;
   } catch {
     return null;
   }
 };
-
-/** TypeScript, the project's: the checker every typed read runs on. */
-const typescript = (): Ts | null => peer<Ts>("typescript");
 
 const NO_TS =
   "Types unknown: add TypeScript to the project (or type the props with JSDoc and add TypeScript), and its checker reads them.";
@@ -300,10 +302,17 @@ function svelteKind(
  * One the component names again (its `oncancel`) is its own, read by its
  * own declaration, never as the intersection with the element's.
  */
-const ownDeclaration = (symbol: TS.Symbol): TS.Declaration | undefined => {
-  const origin = (symbol as { links?: { syntheticOrigin?: TS.Symbol } }).links
-    ?.syntheticOrigin;
-  return [...(symbol.declarations ?? []), ...(origin?.declarations ?? [])].find(
+const ownDeclaration = (
+  checker: TS.TypeChecker,
+  symbol: TS.Symbol
+): TS.Declaration | undefined => {
+  // The symbols a mapped type's property was made from (its synthetic
+  // origin, an `Omit` or `Pick` of the props), by the checker's own API.
+  const roots = checker.getRootSymbols(symbol);
+  return [
+    ...(symbol.declarations ?? []),
+    ...roots.flatMap((origin) => origin.declarations ?? []),
+  ].find(
     (one) =>
       !one
         .getSourceFile()
@@ -352,8 +361,7 @@ async function svelteDoc(
   if (!ts) {
     return { props: [], types: "unknown", note: NO_TS };
   }
-  const { svelte2tsx, internalHelpers } =
-    (await import("svelte2tsx/index.js")) as typeof import("svelte2tsx");
+  const { svelte2tsx, internalHelpers } = await import("svelte2tsx/index.js");
   const target = `${file}.tsx`;
   svelteCache.options ??= svelteOptions(ts, file);
   const program = ts.createProgram({
@@ -386,7 +394,7 @@ async function svelteDoc(
   const props = propsType
     .getProperties()
     .flatMap((symbol) => {
-      const own = ownDeclaration(symbol);
+      const own = ownDeclaration(checker, symbol);
       return own ? [{ symbol, own }] : [];
     })
     .map(({ symbol, own }) => {

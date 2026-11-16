@@ -34,12 +34,12 @@ import {
 import { gauge } from "../memory.ts";
 
 /** One file's index. */
-export interface LineIndex<N> {
+export interface LineIndex<N, M = unknown> {
   /** Estimated heap: {@link NODE_BYTES} a node. */
   bytes: number;
   checkpoint: Checkpoint;
   /** What readers derived from the nodes (a walk, a plan), dropped when they change. */
-  memo: Map<string, unknown>;
+  memo: Map<string, M>;
   mtimeMs: number;
   nodes: N[];
   /** When a reader last asked for it (ms epoch): what {@link IDLE_MS} counts from. */
@@ -88,11 +88,11 @@ const stampOf = async (
   return now.size === checkpoint.size ? now.mtimeMs : -1;
 };
 
-export class LineIndexes<N> {
+export class LineIndexes<N, M = unknown> {
   /** LRU map — iteration order = insertion/touch order. */
-  private readonly entries = new Map<string, LineIndex<N>>();
+  private readonly entries = new Map<string, LineIndex<N, M>>();
   /** Single-flight: a read joins the scan of its file already running. */
-  private readonly inflight = new Map<string, Promise<LineIndex<N>>>();
+  private readonly inflight = new Map<string, Promise<LineIndex<N, M>>>();
   private totalBytes = 0;
   private budgetBytes = DEFAULT_BUDGET_BYTES;
   private scanning = 0;
@@ -111,7 +111,7 @@ export class LineIndexes<N> {
   }
 
   /** The file's index, brought up to date with it; a file no longer there drops its index. */
-  get(path: string): Promise<LineIndex<N>> {
+  get(path: string): Promise<LineIndex<N, M>> {
     const pending = this.inflight.get(path);
     if (pending) {
       return pending;
@@ -134,7 +134,7 @@ export class LineIndexes<N> {
     this.enforceBudget(undefined);
   }
 
-  private async refresh(path: string): Promise<LineIndex<N>> {
+  private async refresh(path: string): Promise<LineIndex<N, M>> {
     const held = this.entries.get(path);
     const stamp = await fileStamp(path);
     if (held) {
@@ -174,7 +174,7 @@ export class LineIndexes<N> {
   }
 
   /** A whole file scanned into a new index, {@link SCANS_AT_ONCE} at a time. */
-  private async scanWhole(path: string): Promise<LineIndex<N>> {
+  private async scanWhole(path: string): Promise<LineIndex<N, M>> {
     if (this.scanning >= SCANS_AT_ONCE) {
       await new Promise<void>((resolve) => this.scanTurns.push(resolve));
     } else {
@@ -192,12 +192,12 @@ export class LineIndexes<N> {
     }
   }
 
-  private async scan(path: string): Promise<LineIndex<N>> {
+  private async scan(path: string): Promise<LineIndex<N, M>> {
     const scan = await scanFile(path, {
       prefilter: this.prefilter,
       pick: this.pick,
     });
-    const index: LineIndex<N> = {
+    const index: LineIndex<N, M> = {
       nodes: scan.items,
       checkpoint: scan.checkpoint,
       mtimeMs: await stampOf(path, scan.checkpoint),

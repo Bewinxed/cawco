@@ -1022,6 +1022,8 @@ const REDISCOVERY_FAILURE_WINDOW = Duration.minutes(2);
  */
 const reconnecting = <E extends { readonly reason: string }, R>(
   session: (markLive: () => void) => Effect.Effect<never, E, R>,
+  /** The failure a connection that threw ends in, said as `reason`. */
+  failed: (reason: string) => E,
   options?: {
     readonly healthyAfter?: Duration.Duration;
     readonly schedule?: typeof reconnect;
@@ -1109,9 +1111,11 @@ const reconnecting = <E extends { readonly reason: string }, R>(
         // left the agent running with no hub link and nothing more said (run
         // A, 2026-10-15, after an EMFILE from a file watch).
         Effect.catchDefect((defect) =>
-          Effect.fail({
-            reason: `the hub connection threw: ${defect instanceof Error ? (defect.stack ?? defect.message) : String(defect)}`,
-          } as E)
+          Effect.fail(
+            failed(
+              `the hub connection threw: ${defect instanceof Error ? (defect.stack ?? defect.message) : String(defect)}`
+            )
+          )
         ),
         Effect.tapError((error) => {
           const at = now();
@@ -3000,7 +3004,7 @@ const attach = (
         return;
       }
       const asked = Date.now();
-      (socket as WebSocket & { ping: () => void }).ping();
+      socket.ping();
       setTimeout(() => {
         if (lastHeard >= asked || socket.readyState !== WebSocket.OPEN) {
           return;
@@ -3011,7 +3015,7 @@ const attach = (
           )
         );
         // Not `close()`: its handshake waits on the peer that went silent.
-        (socket as WebSocket & { terminate: () => void }).terminate();
+        socket.terminate();
       }, HUB_SILENT_MS);
     }, Duration.toMillis(HEARTBEAT_INTERVAL));
     socket.addEventListener("close", () => clearInterval(ping), {
@@ -3881,6 +3885,7 @@ const startDaemon = (rediscover = false) =>
             markLive
           )
         ),
+      (reason) => new ConnectionLost({ url: hubUrl, reason }),
       {
         hubAnswers: () =>
           Effect.promise(async () => {

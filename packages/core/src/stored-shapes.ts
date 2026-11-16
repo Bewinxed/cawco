@@ -3926,6 +3926,186 @@ const PolicyShape = declared(
 export const PolicySchema = PolicyShape;
 export type PolicyOutput = z.output<typeof PolicyShape>;
 
+const RenderedByShape = declared(
+  z.enum(["panel", "stage"]),
+  "RenderedBy",
+  "packages/core/src/stage.ts"
+);
+export type RenderedByOutput = z.output<typeof RenderedByShape>;
+
+const PageErrorShape = declared(
+  z.object({
+    column: z.number().nullable(),
+    file: z.string().nullable(),
+    line: z.number().nullable(),
+    message: z.string(),
+  }),
+  "PageError",
+  "packages/core/src/stage.ts"
+);
+export type PageErrorOutput = z.output<typeof PageErrorShape>;
+
+const AnimationReadShape = declared(
+  z.object({
+    delay: z.number(),
+    duration: z.number(),
+    easing: z.string(),
+    kind: z.enum(["transition", "animation", "web"]),
+    property: z.string(),
+    start: z.number(),
+    target: z.string(),
+  }),
+  "AnimationRead",
+  "packages/core/src/stage.ts"
+);
+export type AnimationReadOutput = z.output<typeof AnimationReadShape>;
+
+const StyleDeltaShape = declared(
+  z.object({
+    changed: z.record(z.string(), z.tuple([z.string(), z.string()])),
+    selector: z.string(),
+    source: z.string().nullable(),
+  }),
+  "StyleDelta",
+  "packages/core/src/stage.ts"
+);
+export type StyleDeltaOutput = z.output<typeof StyleDeltaShape>;
+
+const PartUseShape = declared(
+  z.object({ at: z.string().nullable(), file: z.string(), name: z.string() }),
+  "PartUse",
+  "packages/core/src/stage.ts"
+);
+export type PartUseOutput = z.output<typeof PartUseShape>;
+
+const SchemeShape = declared(
+  z.enum(["light", "dark"]),
+  "Scheme",
+  "packages/core/src/stage.ts"
+);
+export type SchemeOutput = z.output<typeof SchemeShape>;
+
+const FrameStateShape = declared(
+  z.enum(["drawn", "empty", "failed", "unseen", "unshown"]),
+  "FrameState",
+  "packages/core/src/stage.ts"
+);
+
+const FrameRenderShape = declared(
+  z.object({
+    box: z.object({
+      h: z.number(),
+      w: z.number(),
+      x: z.number(),
+      y: z.number(),
+    }),
+    delta: z
+      .object({
+        animations: z.array(AnimationReadShape),
+        changed: z.array(StyleDeltaShape),
+        more: z.number().optional(),
+      })
+      .optional(),
+    elements: z.object({ of: z.number(), read: z.number() }).optional(),
+    error: PageErrorShape.optional(),
+    form: z.string(),
+    interaction: InteractionShape,
+    label: z.string().nullable(),
+    look: z.string().optional(),
+    parts: z.array(PartUseShape),
+    scheme: SchemeShape,
+    state: FrameStateShape,
+    story: z.string(),
+    text: z.string(),
+    width: z.number(),
+  }),
+  "FrameRender",
+  "packages/core/src/stage.ts"
+);
+export type FrameRenderOutput = z.output<typeof FrameRenderShape>;
+
+const MoveRenderShape = declared(
+  z.object({
+    animations: z.array(AnimationReadShape),
+    error: PageErrorShape.optional(),
+    from: z.string(),
+    stillRunning: z.number().optional(),
+    to: z.string(),
+  }),
+  "MoveRender",
+  "packages/core/src/stage.ts"
+);
+export type MoveRenderOutput = z.output<typeof MoveRenderShape>;
+
+const SectionRenderShape = declared(
+  z.object({
+    drawn: z.object({ at: z.string(), by: RenderedByShape }).optional(),
+    file: z.string(),
+    frames: z.array(FrameRenderShape),
+    hash: z.string(),
+    moves: z.array(MoveRenderShape),
+    notForced: z.array(z.string()),
+    title: z.string(),
+  }),
+  "SectionRender",
+  "packages/core/src/stage.ts"
+);
+export type SectionRenderOutput = z.output<typeof SectionRenderShape>;
+
+const RenderReportShape = declared(
+  z.object({
+    at: z.string(),
+    by: RenderedByShape,
+    codeNamed: z
+      .array(z.object({ story: z.string(), word: z.string() }))
+      .optional(),
+    drawing: z.array(z.string()).optional(),
+    page: z.object({ errors: z.array(PageErrorShape) }),
+    sections: z.array(SectionRenderShape),
+    unnamed: z.array(z.string()),
+    widthOnly: z.array(z.array(z.string())).optional(),
+  }),
+  "RenderReport",
+  "packages/core/src/stage.ts"
+);
+export type RenderReportOutput = z.output<typeof RenderReportShape>;
+
+const PageSectionShape = declared(
+  SectionRenderShape.omit({ drawn: true, hash: true }),
+  "PageSection",
+  "packages/core/src/stage.ts"
+);
+export type PageSectionOutput = z.output<typeof PageSectionShape>;
+
+const PageReportShape = declared(
+  RenderReportShape.omit({
+    sections: true,
+    widthOnly: true,
+    codeNamed: true,
+  }).extend({ sections: z.array(PageSectionShape) }),
+  "PageReport",
+  "packages/core/src/stage.ts"
+);
+export type PageReportOutput = z.output<typeof PageReportShape>;
+
+const SectionUnloadedShape = declared(
+  z.object({ error: PageErrorShape, file: z.string() }),
+  "SectionUnloaded",
+  "packages/core/src/stage.ts"
+);
+export type SectionUnloadedOutput = z.output<typeof SectionUnloadedShape>;
+
+const PostedReportShape = declared(
+  PageReportShape.extend({
+    drawing: z.array(z.string()),
+    unloaded: z.array(SectionUnloadedShape),
+  }),
+  "PostedReport",
+  "packages/core/src/stage.ts"
+);
+export const PostedReportSchema = PostedReportShape;
+export type PostedReportOutput = z.output<typeof PostedReportShape>;
+
 export const PresenceClientShape = declared(
   z.enum(["web", "ios", "mac"]),
   "PresenceClient",
@@ -4375,150 +4555,6 @@ const ReleaseManifestShape = declared(
 );
 export const ReleaseManifestSchema = ReleaseManifestShape;
 export type ReleaseManifestOutput = z.output<typeof ReleaseManifestShape>;
-
-const RenderedByShape = declared(
-  z.enum(["panel", "stage"]),
-  "RenderedBy",
-  "packages/core/src/stage.ts"
-);
-export type RenderedByOutput = z.output<typeof RenderedByShape>;
-
-const PageErrorShape = declared(
-  z.object({
-    column: z.number().nullable(),
-    file: z.string().nullable(),
-    line: z.number().nullable(),
-    message: z.string(),
-  }),
-  "PageError",
-  "packages/core/src/stage.ts"
-);
-export type PageErrorOutput = z.output<typeof PageErrorShape>;
-
-const AnimationReadShape = declared(
-  z.object({
-    delay: z.number(),
-    duration: z.number(),
-    easing: z.string(),
-    kind: z.enum(["transition", "animation", "web"]),
-    property: z.string(),
-    start: z.number(),
-    target: z.string(),
-  }),
-  "AnimationRead",
-  "packages/core/src/stage.ts"
-);
-export type AnimationReadOutput = z.output<typeof AnimationReadShape>;
-
-const StyleDeltaShape = declared(
-  z.object({
-    changed: z.record(z.string(), z.tuple([z.string(), z.string()])),
-    selector: z.string(),
-    source: z.string().nullable(),
-  }),
-  "StyleDelta",
-  "packages/core/src/stage.ts"
-);
-export type StyleDeltaOutput = z.output<typeof StyleDeltaShape>;
-
-const PartUseShape = declared(
-  z.object({ at: z.string().nullable(), file: z.string(), name: z.string() }),
-  "PartUse",
-  "packages/core/src/stage.ts"
-);
-export type PartUseOutput = z.output<typeof PartUseShape>;
-
-const SchemeShape = declared(
-  z.enum(["light", "dark"]),
-  "Scheme",
-  "packages/core/src/stage.ts"
-);
-export type SchemeOutput = z.output<typeof SchemeShape>;
-
-const FrameStateShape = declared(
-  z.enum(["drawn", "empty", "failed", "unseen", "unshown"]),
-  "FrameState",
-  "packages/core/src/stage.ts"
-);
-
-const FrameRenderShape = declared(
-  z.object({
-    box: z.object({
-      h: z.number(),
-      w: z.number(),
-      x: z.number(),
-      y: z.number(),
-    }),
-    delta: z
-      .object({
-        animations: z.array(AnimationReadShape),
-        changed: z.array(StyleDeltaShape),
-        more: z.number().optional(),
-      })
-      .optional(),
-    elements: z.object({ of: z.number(), read: z.number() }).optional(),
-    error: PageErrorShape.optional(),
-    form: z.string(),
-    interaction: InteractionShape,
-    label: z.string().nullable(),
-    look: z.string().optional(),
-    parts: z.array(PartUseShape),
-    scheme: SchemeShape,
-    state: FrameStateShape,
-    story: z.string(),
-    text: z.string(),
-    width: z.number(),
-  }),
-  "FrameRender",
-  "packages/core/src/stage.ts"
-);
-export type FrameRenderOutput = z.output<typeof FrameRenderShape>;
-
-const MoveRenderShape = declared(
-  z.object({
-    animations: z.array(AnimationReadShape),
-    error: PageErrorShape.optional(),
-    from: z.string(),
-    stillRunning: z.number().optional(),
-    to: z.string(),
-  }),
-  "MoveRender",
-  "packages/core/src/stage.ts"
-);
-export type MoveRenderOutput = z.output<typeof MoveRenderShape>;
-
-const SectionRenderShape = declared(
-  z.object({
-    drawn: z.object({ at: z.string(), by: RenderedByShape }).optional(),
-    file: z.string(),
-    frames: z.array(FrameRenderShape),
-    hash: z.string(),
-    moves: z.array(MoveRenderShape),
-    notForced: z.array(z.string()),
-    title: z.string(),
-  }),
-  "SectionRender",
-  "packages/core/src/stage.ts"
-);
-export type SectionRenderOutput = z.output<typeof SectionRenderShape>;
-
-const RenderReportShape = declared(
-  z.object({
-    at: z.string(),
-    by: RenderedByShape,
-    codeNamed: z
-      .array(z.object({ story: z.string(), word: z.string() }))
-      .optional(),
-    drawing: z.array(z.string()).optional(),
-    page: z.object({ errors: z.array(PageErrorShape) }),
-    sections: z.array(SectionRenderShape),
-    unnamed: z.array(z.string()),
-    widthOnly: z.array(z.array(z.string())).optional(),
-  }),
-  "RenderReport",
-  "packages/core/src/stage.ts"
-);
-export type RenderReportOutput = z.output<typeof RenderReportShape>;
 
 const StageErrorKindShape = declared(
   z.enum(["missing", "compile", "page"]),
@@ -5005,6 +5041,39 @@ const SheetWeightShape = declared(
 );
 export const SheetWeightSchema = SheetWeightShape;
 export type SheetWeightOutput = z.output<typeof SheetWeightShape>;
+
+const StoryOpShape = declared(
+  z.union([
+    z.object({ as: z.string(), duplicate: z.string() }),
+    z.object({ before: z.string().nullable(), move: z.string() }),
+    z.object({
+      add: z.string(),
+      args: z.record(z.string(), z.unknown()).optional(),
+    }),
+    z.object({ remove: z.string() }),
+  ]),
+  "StoryOp",
+  "packages/core/src/stage.ts"
+);
+export type StoryOpOutput = z.output<typeof StoryOpShape>;
+
+const SheetWriteShape = declared(
+  z.union([
+    z.object({
+      args: z.object({
+        story: z.string(),
+        unset: z.array(z.string()).optional(),
+        values: z.record(z.string(), z.unknown()),
+      }),
+      file: z.string(),
+    }),
+    z.object({ file: z.string(), story: StoryOpShape }),
+  ]),
+  "SheetWrite",
+  "packages/core/src/stage.ts"
+);
+export const SheetWriteSchema = SheetWriteShape;
+export type SheetWriteOutput = z.output<typeof SheetWriteShape>;
 
 const SheetWrittenShape = declared(
   z.object({

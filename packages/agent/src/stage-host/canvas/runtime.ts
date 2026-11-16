@@ -651,14 +651,32 @@ export function boot(options: BootOptions): void {
     return holds;
   };
 
+  /**
+   * A list for `query` whose `matches` the canvas answers, its listeners
+   * the window's own list's (`listened`): a native list's members are its
+   * prototype's, so none of them is copied off it.
+   */
+  const answered = (
+    query: string,
+    listened: MediaQueryList,
+    matches: () => boolean
+  ): MediaQueryList => ({
+    get matches() {
+      return matches();
+    },
+    media: query,
+    onchange: null,
+    addEventListener: listened.addEventListener.bind(listened),
+    removeEventListener: listened.removeEventListener.bind(listened),
+    addListener: listened.addListener.bind(listened),
+    removeListener: listened.removeListener.bind(listened),
+    dispatchEvent: listened.dispatchEvent.bind(listened),
+  });
+
   window.matchMedia = (query: string) => {
     if (view.motion === "reduce" && REDUCED_QUERY.test(query)) {
       const reduce = query.includes("reduce");
-      return {
-        ...media(query),
-        matches: reduce,
-        media: query,
-      } as MediaQueryList;
+      return answered(query, media(query), () => reduce);
     }
     const split = splitWidth(query);
     if (split.kind !== "frame") {
@@ -671,21 +689,12 @@ export function boot(options: BootOptions): void {
       document.documentElement.getBoundingClientRect().width;
     // What the window still answers (a media type, a hover), and where its changes are heard.
     const rest = media(split.media || query);
-    return {
-      get matches() {
-        const held = holdsAt(split.container, widthNow());
-        return held === null
-          ? media(query).matches
-          : held && (!split.media || rest.matches);
-      },
-      media: query,
-      onchange: null,
-      addEventListener: rest.addEventListener.bind(rest),
-      removeEventListener: rest.removeEventListener.bind(rest),
-      addListener: rest.addListener.bind(rest),
-      removeListener: rest.removeListener.bind(rest),
-      dispatchEvent: rest.dispatchEvent.bind(rest),
-    };
+    return answered(query, rest, () => {
+      const held = holdsAt(split.container, widthNow());
+      return held === null
+        ? media(query).matches
+        : held && (!split.media || rest.matches);
+    });
   };
 
   /* --- Sections ----------------------------------------------------------- */

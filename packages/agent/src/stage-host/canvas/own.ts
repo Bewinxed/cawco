@@ -32,7 +32,9 @@
  * stage's map of that module takes it to the source (host.ts `sourced`).
  */
 
+import { isRecord } from "@cawco/core/is-record";
 import { MODULES_PATH, OWN_PATH } from "@cawco/core/stage";
+import { type OwnAnswer, ownAnswer } from "@cawco/core/stage-own";
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
 import type {
   ModuleRunner,
@@ -42,19 +44,6 @@ import type {
 
 /** The Vite module the stage serves as `cawco:stage/module-runner.js`. */
 export type RunnerModule = typeof import("vite/module-runner");
-
-/** A private module's code as the stage made it for runners, or why it couldn't (host.ts `OwnCode`). */
-type OwnCode = { code: string; etag: string; map: unknown } | { error: string };
-
-/** What the stage answers at `OWN_PATH` (host.ts `OwnAnswer`). */
-interface OwnAnswer {
-  /** The states file's address, the runner's entry. */
-  entry: string;
-  modules: Record<string, OwnCode>;
-  stories: string[];
-  unreached: Record<string, string>;
-  urls: string[];
-}
 
 /** A section's own stories once their runners stand. */
 export interface OwnModules {
@@ -185,8 +174,31 @@ async function ownAnswerOf(file: string): Promise<OwnAnswer> {
         : `The stage answered ${answer.status} for ${file}'s own modules.`;
     throw new Error(said);
   }
-  return body as OwnAnswer;
+  return ownAnswer(file, body);
 }
+
+/**
+ * A runner's `fetchModule(url, importer, options)` call, read off its
+ * payload's `data`, which Vite types any (vite types/hmrPayload.d.ts
+ * `CustomPayload`): the address asked, whether the runner holds it cached,
+ * and where its code starts. None when it names no address.
+ */
+const fetchArgs = (
+  data: unknown
+): { asked: string; cached: boolean; offset: number } | undefined => {
+  const [asked, , options]: unknown[] = Array.isArray(data) ? data : [];
+  if (typeof asked !== "string") {
+    return;
+  }
+  return {
+    asked,
+    cached: isRecord(options) && options.cached === true,
+    offset:
+      isRecord(options) && typeof options.startOffset === "number"
+        ? options.startOffset
+        : 0,
+  };
+};
 
 /**
  * Story runners' transport: a private module's code from the page's copy,
@@ -219,11 +231,13 @@ function transportOf(
           },
         });
       }
-      const [asked, , options] = call.data as [
-        string,
-        string | undefined,
-        { cached?: boolean; startOffset?: number } | undefined,
-      ];
+      const fetched = fetchArgs(call.data);
+      if (!fetched) {
+        return Promise.resolve({
+          error: { message: "A story's runner asked for no module." },
+        });
+      }
+      const { asked, cached, offset } = fetched;
       const url = asked
         .replace(TIME_QUERY, "$1")
         .replace(IMPORT_QUERY, "$1")
@@ -239,9 +253,9 @@ function transportOf(
       }
       const place = places.get(shared.place);
       if (place) {
-        place.offset = options?.startOffset ?? 0;
+        place.offset = offset;
       }
-      if (options?.cached && known.get(url) === shared.etag) {
+      if (cached && known.get(url) === shared.etag) {
         return Promise.resolve({ result: { cache: true } });
       }
       // Asked by another address of it (an `import()` of an expression, with Vite's `?import`): the runner finds the module it holds by its id, and keeps it.
