@@ -30,8 +30,8 @@ import type { PublicInstanceRow } from "./db/instances";
 import type { StoredSendRefusal } from "./db/stored-types";
 import type { AccountUse, SettledSpawn } from "./hub-shapes";
 import { documentFacts, sessionInstructions } from "./memory-scopes";
-import { peekResume } from "./payload-peeks";
 import { makesRoutines } from "./roles";
+import { resumedKey } from "./spawns";
 
 /** A frame of a session's that may name its settings: a control's answer, or a line of its own. */
 const SETTINGS_FRAME = z.object({
@@ -243,7 +243,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
   const grantLaunch = (
     machineId: string,
     instanceId: string | undefined,
-    asked: LaunchAsk | undefined
+    asked: Partial<LaunchAsk>
   ): LaunchGrant => {
     const read = askingLaunch(machineId, instanceId, asked);
     if ("refusal" in read) {
@@ -301,7 +301,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
   const askingLaunch = (
     machineId: string,
     instanceId: string | undefined,
-    asked: LaunchAsk | undefined
+    asked: Partial<LaunchAsk>
   ):
     | ReturnType<typeof ctx.db.getInstancesByIds>[number]
     | { refusal: string } => {
@@ -317,7 +317,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
     }
     const launch = launches.get(read.id);
     const current =
-      asked?.processGeneration === ctx.processGeneration(read) &&
+      asked.processGeneration === ctx.processGeneration(read) &&
       (!launch ||
         (launch.machineId === machineId &&
           launch.generation === asked.processGeneration));
@@ -639,7 +639,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
     if (unclean) {
       return { refusal: unclean };
     }
-    const unlisted = peekResume(payload)
+    const unlisted = resumedKey(payload)
       ? undefined
       : ctx.modelRefusal(machineId, harness, payload.model);
     if (unlisted) {

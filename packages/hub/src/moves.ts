@@ -17,6 +17,7 @@
  * the same spawn every hub-started session takes.
  */
 
+import type { ArrivingAsk } from "@cawco/core/frames";
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
@@ -54,7 +55,10 @@ import {
   moveSize,
   type NamedMoveRequest,
 } from "@cawco/core/move";
-import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
+import type {
+  HubEnvelope,
+  SpawnPayload,
+} from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";
@@ -75,7 +79,7 @@ import type { SpawnProblem } from "./spawn-problems";
 
 export interface MovesDeps {
   /** Every ask parked now, the ones kept across a hub restart included (server.ts `pending`). */
-  readonly asks: () => Envelope[];
+  readonly asks: () => ArrivingAsk[];
   /**
    * A machine's control: its result, or {@link MachineAway} thrown when the
    * machine is not connected (or went while it answered), which a job waits
@@ -115,7 +119,7 @@ export interface MovesDeps {
    * hub restart: its answer is read against the job's record (`answer`), so
    * the hub that comes back carries it out, and the ask rings once.
    */
-  readonly park: (envelope: Envelope) => void;
+  readonly park: (envelope: ArrivingAsk) => void;
   /** Whether an ask is parked now. */
   readonly parked: (requestId: string) => boolean;
   /** The project gained a checkout place on a machine. */
@@ -125,7 +129,7 @@ export interface MovesDeps {
   /** A session row on `machineId` changed: every board hears it (board.ts `publishInstances`). */
   readonly rowsChanged: (machineId: string) => void;
   /** Puts the first prompt into the started session (sends.ts `deliverSend`). */
-  readonly send: (envelope: Envelope<SendPayload>) => void;
+  readonly send: (envelope: HubEnvelope<"send">) => void;
   /** Takes a parked ask off the ledger, answered or withdrawn. */
   readonly settle: (
     requestId: string,
@@ -772,7 +776,7 @@ export const createMoves = (deps: MovesDeps) => {
    * The approval as a parked question, "Don't move" or "Move it", on the
    * session's own row: it reads "Needs you" until the person answers.
    */
-  const parkedAsk = (row: MoveRow): Envelope | undefined => {
+  const parkedAsk = (row: MoveRow): ArrivingAsk | undefined => {
     const { ask, askId, targetInstanceId: instanceId } = row.state;
     if (!(ask && askId)) {
       return undefined;
@@ -1320,7 +1324,7 @@ export const createMoves = (deps: MovesDeps) => {
           origin: { kind: "human" },
         },
       },
-    } satisfies Envelope<SendPayload>);
+    } satisfies HubEnvelope<"send">);
   };
 
   /** The ready line's words: what moved, and what stayed. */
@@ -1648,9 +1652,8 @@ export const createMoves = (deps: MovesDeps) => {
     // move's end and its ask's) is settled: never left on a screen with
     // nothing to carry out its answer.
     for (const envelope of deps.asks()) {
-      const jobId = (envelope.payload as { move?: { jobId?: unknown } }).move
-        ?.jobId;
-      if (typeof jobId !== "string" || !envelope.requestId) {
+      const jobId = envelope.payload.move?.jobId;
+      if (jobId === undefined || !envelope.requestId) {
         continue;
       }
       const row = db.moveRow(jobId);

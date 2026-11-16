@@ -22,8 +22,8 @@ export type IngestLedgerContext = Pick<
 
 export const ingestLedgerStagesOf = (ctx: IngestLedgerContext) => {
   const ingestLedger = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind } = agentFrame;
+    const { message } = run;
+    const { kind } = message.payload;
     // THE INGEST LEDGER (design §7): a line becomes a hub frame AT MOST
     // ONCE per (instanceId, epoch, srcSeq). A returning agent replays
     // the gap this hub named on its register ack, and an overshoot —
@@ -47,12 +47,12 @@ export const ingestLedgerStagesOf = (ctx: IngestLedgerContext) => {
   };
 
   const admittedFrameRead = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // What a memory note written now is tainted by (memory.ts): every
     // admitted frame, before any path below leaves early, so a
     // keep-alive's result ends its turn too.
-    if (kind === "frame" && message.instanceId) {
+    if (body.kind === "frame" && message.instanceId) {
       const admitted = body;
       ctx.memoryWatch.frame(
         message.instanceId,
@@ -77,13 +77,13 @@ export const ingestLedgerStagesOf = (ctx: IngestLedgerContext) => {
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
   const keepAliveFrame = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // Pings share admission and send receipts, then leave before every
     // consumer that makes a turn into work, attention or activity.
-    if (message.instanceId && (kind === "frame" || kind === "pulse")) {
+    if (message.instanceId && (body.kind === "frame" || body.kind === "pulse")) {
       const [row] = ctx.db.getInstancesByIds([message.instanceId]);
-      const frame = kind === "frame" ? body : undefined;
+      const frame = body.kind === "frame" ? body : undefined;
       const signal = frame ? peekSendSignal(frame) : undefined;
       const quiet = !!row?.keepAliveTurn || frame?.keepAlive === true;
       if (quiet && row) {

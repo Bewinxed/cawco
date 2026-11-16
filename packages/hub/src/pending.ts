@@ -1,7 +1,12 @@
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { AskAnswer, AskRecord } from "@cawco/core/asks";
-import type { ParkedAsk } from "@cawco/core/frames";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type {
+  ArrivingAsk,
+  ParkedAsk,
+} from "@cawco/core/frames";
+import type {
+  InstanceRow,
+} from "@cawco/core/protocol";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { ParkedAskShape } from "@cawco/core/stored-shapes";
 import { Context, Effect, Layer } from "effect";
@@ -48,7 +53,7 @@ export interface PendingShape {
    */
   readonly remember: (
     requestId: string,
-    envelope: Envelope,
+    envelope: ArrivingAsk,
     outlivesHub?: boolean
   ) => boolean;
   /** `said`: what the hub can say of how the ask ended ({@link Settlement}). */
@@ -85,13 +90,13 @@ interface Settlement {
 
 /** Hears every parked ask that leaves, with what the hub could say of it. */
 type SettledListener = (
-  envelope: Envelope,
+  envelope: ParkedAsk,
   outcome: "answered" | "cancelled",
   said?: Settlement
 ) => void;
 
 /** Stamps a parked ask's presentation onto its payload. */
-type Presenter = (envelope: Envelope) => void;
+type Presenter = (envelope: ArrivingAsk) => void;
 
 /**
  * An ask the hub owns (core asks.ts) as the `permission_request` every
@@ -107,7 +112,7 @@ type Presenter = (envelope: Envelope) => void;
 export const askEnvelope = (
   ask: AskRecord,
   asker: Pick<InstanceRow, "harness" | "id" | "machineId">
-): Envelope => {
+): ArrivingAsk => {
   const where = {
     askId: ask.id,
     raisedAt: ask.raisedAt,
@@ -143,8 +148,8 @@ export const askEnvelope = (
  * ({@link askEnvelope}). No process waits on it; it goes only when its
  * session ends for good (asks.ts `withdrawEnded`).
  */
-export const outlivesSession = (envelope: Envelope): boolean =>
-  (envelope.payload as { askId?: unknown } | undefined)?.askId !== undefined;
+export const outlivesSession = (envelope: ArrivingAsk): boolean =>
+  envelope.payload.askId !== undefined;
 
 export class Pending extends Context.Service<Pending, PendingShape>()(
   "Pending"
@@ -180,14 +185,11 @@ export const answerPermission = (
 };
 
 /** The payload field the hub stamps; see `raisedAt` on `permission_request`. */
-const raisedAtOf = (envelope: Envelope | undefined): number | undefined => {
-  const at = (envelope?.payload as { raisedAt?: unknown } | undefined)
-    ?.raisedAt;
-  return typeof at === "number" ? at : undefined;
-};
+const raisedAtOf = (envelope: ArrivingAsk | undefined): number | undefined =>
+  envelope?.payload.raisedAt;
 
 /** The open asks the hub owns, as envelopes; one whose session is gone is withdrawn at boot (asks.ts). */
-const ownedAsks = (db: DbShape): Envelope[] => {
+const ownedAsks = (db: DbShape): ArrivingAsk[] => {
   const open = db.asks.open();
   const askers = new Map(
     db
@@ -205,7 +207,7 @@ const ownedAsks = (db: DbShape): Envelope[] => {
  * stamped beside its declared keys is left out, and one that is not a
  * permission request throws, so it is never parked or broadcast.
  */
-const taken = (envelope: Envelope): ParkedAsk => ParkedAskShape.parse(envelope);
+const taken = (envelope: ArrivingAsk): ParkedAsk => ParkedAskShape.parse(envelope);
 
 /** A session process's ask as it arrives, before the hub stamps its `presentation`: that field is the hub's to write. */
 const ArrivingAskShape = ParkedAskShape.extend({
@@ -217,7 +219,7 @@ const ArrivingAskShape = ParkedAskShape.extend({
  * (`payload.toolName`); none when `remember` can take it. Reads the ask
  * untouched, so an unreadable one is never stamped, parked or broadcast.
  */
-export const unreadFields = (envelope: Envelope): string[] | undefined => {
+export const unreadFields = (envelope: ArrivingAsk): string[] | undefined => {
   const read = ArrivingAskShape.safeParse(envelope);
   return read.success
     ? undefined
@@ -288,8 +290,7 @@ const make = (db: DbShape): PendingShape => {
         );
       }
       present(envelope);
-      const payload = envelope.payload as Record<string, unknown>;
-      payload.raisedAt =
+      envelope.payload.raisedAt =
         raisedAtOf(requests.get(requestId)) ??
         raisedAtOf(envelope) ??
         Date.now();

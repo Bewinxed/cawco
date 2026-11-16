@@ -5,7 +5,7 @@ import type { Kind } from "@cawco/core/decides";
 import { ANY_TYPE, parseConnectionTool } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { LONG_CALLS } from "@cawco/core/long-calls";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type { HubEnvelope, InstanceRow } from "@cawco/core/protocol";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -1079,7 +1079,7 @@ export function createDelegationMcp(options: {
   const actionDeps = (
     actor: InstanceRow,
     name: string,
-    emitted: Envelope[],
+    emitted: HubEnvelope[],
     callId?: string,
     cut?: AbortSignal
   ): HandoffDeps => {
@@ -1120,7 +1120,7 @@ export function createDelegationMcp(options: {
     callId?: string,
     cut?: AbortSignal
   ): Promise<CallToolResult> => {
-    const emitted: Envelope[] = [];
+    const emitted: HubEnvelope[] = [];
     const deps = actionDeps(actor, name, emitted, callId, cut);
     const entry = tools(viewOf(actor)).find((tool) => tool.name === name);
     if (!entry) {

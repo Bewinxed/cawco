@@ -12,7 +12,11 @@ import {
   parseArtifactComments,
   parseArtifactResponses,
 } from "@cawco/core/injected";
-import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
+import type {
+  HubEnvelope,
+  InstanceRow,
+  SendPayload,
+} from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
 import {
@@ -42,7 +46,6 @@ import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
 import { awayProblem, silentProblem } from "./machine-answers";
 import { externalizeImages } from "./media";
-import { peek } from "./payload-peeks";
 import { handle as idHandle } from "./presenters/words";
 import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
@@ -111,7 +114,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   };
   /** The base64 pictures a held send's envelope carries, in order. */
   const picturesOf = (
-    whole: Envelope<SendPayload> | null
+    whole: HubEnvelope<"send"> | null
   ): { data: string; mediaType: string }[] => {
     const content = whole ? whole.payload.message.message.content : "";
     return typeof content === "string"
@@ -124,7 +127,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   };
   /** The texts and files a stored send carried (`SendPayload.attachments`). */
   const attachmentsOf = (
-    whole: Envelope<SendPayload> | null
+    whole: HubEnvelope<"send"> | null
   ): SendAttachment[] => whole?.payload.attachments ?? [];
   /**
    * Withdraws each of the session's unread artifact events `same` names
@@ -602,7 +605,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       asks: ctx.pending.list().map((envelope) => ({
         envelope,
         instanceId: envelope.instanceId,
-        routedTo: peek(envelope.payload, "routedTo"),
+        routedTo: envelope.payload.routedTo,
       })),
       artifacts: ctx.artifactLane.now().needs,
     });

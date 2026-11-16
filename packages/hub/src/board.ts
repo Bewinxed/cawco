@@ -1,6 +1,11 @@
 import type { FramePayload } from "@cawco/core/frames";
 import { invariant } from "@cawco/core/invariant";
-import type { AgentRow, Envelope, InstanceRow } from "@cawco/core/protocol";
+import type {
+  AgentRow,
+  HubEnvelope,
+  FrameEnvelope,
+  InstanceRow,
+} from "@cawco/core/protocol";
 import { personsOwn } from "@cawco/core/protocol";
 import { WIRE_PROTOCOL } from "@cawco/core/stream";
 import { sessionLimitsReader } from "./accounts";
@@ -415,7 +420,7 @@ export const createBoard = (ctx: BoardContext) => {
   const instancesFrame = (
     machineId: string,
     rows: ReturnType<typeof boardRows> = boardRows()
-  ): Envelope => ({
+  ): FrameEnvelope<"instances"> => ({
     verb: "frames",
     machineId,
     payload: {
@@ -447,7 +452,7 @@ export const createBoard = (ctx: BoardContext) => {
           verb: "frames",
           machineId: "hub",
           payload,
-        } satisfies Envelope<FramePayload>);
+        } satisfies HubEnvelope<"frames">);
       }
       // Then Recent's stored transcripts, whole (stored-recent.ts).
       const stored = ctx.laws.hold(ctx.storedRecent.now);
@@ -456,7 +461,7 @@ export const createBoard = (ctx: BoardContext) => {
           verb: "frames",
           machineId: "hub",
           payload: { kind: "stored", stored },
-        } satisfies Envelope<FramePayload>);
+        } satisfies HubEnvelope<"frames">);
       }
     }
     if (!older) {
@@ -464,7 +469,7 @@ export const createBoard = (ctx: BoardContext) => {
         verb: "frames",
         machineId: "hub",
         payload: { kind: "browser_list", browsers: ctx.browsers.list() },
-      } satisfies Envelope<FramePayload>);
+      } satisfies HubEnvelope<"frames">);
       // Then each passkey QR still in time, so a page opened or reloaded
       // after the prompt appeared still shows it over the take-over.
       for (const payload of ctx.browsers.passkeyQrs()) {
@@ -472,7 +477,7 @@ export const createBoard = (ctx: BoardContext) => {
           verb: "frames",
           machineId: "hub",
           payload,
-        } satisfies Envelope<FramePayload>);
+        } satisfies HubEnvelope<"frames">);
       }
     }
   };

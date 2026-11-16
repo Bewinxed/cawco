@@ -32,12 +32,15 @@
 import { CONNECT_ASK_TOOL } from "@cawco/core/ask-tools";
 import { mcpServerDeniedBy } from "@cawco/core/delegate-types";
 import type {
+  ArrivingAsk,
   ConnectAccess,
   ConnectAccessSet,
   ConnectAnswer,
   ConnectAskFrame,
 } from "@cawco/core/frames";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type {
+  InstanceRow,
+} from "@cawco/core/protocol";
 import type {
   FleetMcpChange,
   FleetMcpTaken,
@@ -85,7 +88,7 @@ export interface ConnectAsksDeps {
    */
   readonly heal: (actor: InstanceRow, server: string) => Promise<FleetMcpTook>;
   /** Parks the ask for the person: the pending ledger, every screen, push. */
-  readonly park: (envelope: Envelope) => void;
+  readonly park: (envelope: ArrivingAsk) => void;
   /** The fleet's MCP servers that sign in with OAuth and reach `actor`'s sessions, by name. */
   readonly servers: (actor: InstanceRow) => string[];
   /** Takes an answered ask off the pending ledger. */

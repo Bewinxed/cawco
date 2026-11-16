@@ -52,8 +52,11 @@
  * then, and the marks keep what was told from going twice.
  */
 
+import type { ArrivingAsk } from "@cawco/core/frames";
 import type { AskAnswer, AskRecord } from "@cawco/core/asks";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type {
+  InstanceRow,
+} from "@cawco/core/protocol";
 import { PermissionRequestFrameSchema } from "@cawco/core/stored-shapes";
 import { delegateWaitWords } from "@cawco/core/words/delegates";
 import { z } from "zod";
@@ -89,7 +92,7 @@ export interface DelegateWaitsDeps {
   readonly hand: (
     asker: InstanceRow,
     parent: InstanceRow,
-    ask: Envelope
+    ask: ArrivingAsk
   ) => void;
   /** Whether the ask `requestId` was handed to a parent as its own to answer (its `delegate_events` ask). */
   readonly handed: (requestId: string) => boolean;
@@ -142,13 +145,13 @@ const ASK_READ = PermissionRequestFrameSchema.pick({
  * fields: a payload that is not one reads as one that says none of them,
  * as an ask with no payload did.
  */
-const payloadOf = (ask: Envelope): z.output<typeof ASK_READ> => {
+const payloadOf = (ask: ArrivingAsk): z.output<typeof ASK_READ> => {
   const read = ASK_READ.safeParse(ask.payload ?? {});
   return read.success ? read.data : {};
 };
 
 /** Whether `ask`'s payload holds a field only the person answers: an ask the hub raised and settles itself. */
-const personsAsk = (ask: Envelope): boolean => {
+const personsAsk = (ask: ArrivingAsk): boolean => {
   const read = PERSON_ONLY_READ.safeParse(ask.payload);
   return (
     read.success && Object.values(read.data).some((one) => one !== undefined)
@@ -156,7 +159,7 @@ const personsAsk = (ask: Envelope): boolean => {
 };
 
 /** What the ask asks, in one line, as every surface says it. */
-export const askWhat = (ask: Envelope): string => {
+export const askWhat = (ask: ArrivingAsk): string => {
   const payload = payloadOf(ask);
   return (
     payload.presentation?.summary?.trim() ||
@@ -181,7 +184,7 @@ const byOf = (answer: AskAnswer | undefined): string => {
 
 export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
   /** The session that made the ask: its own row, or the one it names as its origin. */
-  const askerOf = (ask: Envelope): InstanceRow | undefined => {
+  const askerOf = (ask: ArrivingAsk): InstanceRow | undefined => {
     const payload = payloadOf(ask);
     return deps.instance(payload.originInstanceId ?? ask.instanceId ?? "");
   };
@@ -235,7 +238,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
   };
 
   /** How `end` reads, for the ask `ask`. */
-  const howOf = (ask: Envelope, end: AskEnd): string => {
+  const howOf = (ask: ArrivingAsk, end: AskEnd): string => {
     if (end.kind === "withdrawn") {
       return withdrawnHow(end.closed);
     }
@@ -273,7 +276,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
      * memory or design proposal). A question and a session's own prompt its
      * parent may answer.
      */
-    personOnly(ask: Envelope): boolean {
+    personOnly(ask: ArrivingAsk): boolean {
       const owned = deps.owned(ask.requestId ?? "");
       if (owned) {
         return owned === "approve";
@@ -286,7 +289,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
      * ask handed to the parent went to the person: the parent is told, as
      * the rule says, once.
      */
-    asked(ask: Envelope, escalated = false): void {
+    asked(ask: ArrivingAsk, escalated = false): void {
       const asker = askerOf(ask);
       const pair = asker ? pairOf(asker.id) : undefined;
       if (!pair) {
@@ -332,7 +335,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
      * because it no longer applied, which the parent hears with it.
      */
     ended(
-      ask: Envelope,
+      ask: ArrivingAsk,
       outcome: "answered" | "cancelled",
       answer: AskAnswer | undefined,
       shown: boolean,

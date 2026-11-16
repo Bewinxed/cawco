@@ -69,7 +69,7 @@ import {
   type ProjectSpend,
 } from "@cawco/core/project-conversation";
 import type {
-  Envelope,
+  HubEnvelope,
   InstanceRow,
   SendPayload,
   SpawnPayload,
@@ -601,7 +601,7 @@ export interface CawDeps {
     | ProblemsOf<ReturnType<ReturnType<typeof createProjectEdits>["edit"]>>
   >;
   /** Delivers one message to a session through the hub's one send path: its record, `pending` when the hub took it, else why not. */
-  readonly send: (envelope: Envelope<SendPayload>) => {
+  readonly send: (envelope: HubEnvelope<"send">) => {
     reason: string | null;
     refusal: StoredSendRefusal | null;
     state: string;

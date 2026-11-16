@@ -7,9 +7,13 @@
  * memory write's diff is the change from what the fleet held at that moment.
  */
 
-import type { SourceFacts } from "@cawco/core/asks";
+
 import { maskMcpConfig, openUrl } from "@cawco/core/fleet-secrets";
-import type { ParkedAsk, PermissionRequestFrame } from "@cawco/core/frames";
+import type {
+  ArrivingAsk,
+  ParkedAsk,
+  PermissionRequestFrame,
+} from "@cawco/core/frames";
 import {
   type AdminGroup,
   presentPermission,
@@ -17,7 +21,7 @@ import {
   type SetOwner,
   type SetStanding,
 } from "@cawco/core/permission-presentation";
-import type { Envelope } from "@cawco/core/protocol";
+
 import { questionsOf } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import type { DbShape } from "./db";
@@ -239,11 +243,8 @@ export const createAskPresenter = (
       : db.getFleetMemoryDoc(path)?.content;
 
   /** Stamps the ask's presentation onto its payload, read from what the hub holds now. */
-  return (envelope: Envelope): void => {
-    const payload = envelope.payload as PermissionRequestFrame & {
-      proposer?: unknown;
-      sourceFacts?: SourceFacts;
-    };
+  return (envelope: ArrivingAsk): void => {
+    const { payload } = envelope;
     const instanceId = envelope.instanceId ?? payload.instanceId;
     const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
     payload.presentation = presentPermission(payload.toolName, payload.input, {

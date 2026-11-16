@@ -1,5 +1,6 @@
 /** Named frame shapes keep schema and generated-client names independent of union order. */
 
+import { everyOf } from "./every-of";
 import type { AccountBorrowFrame } from "./accounts";
 import type { ActionsFrame } from "./actions";
 import type { ArtifactKind } from "./artifact-kinds";
@@ -434,6 +435,36 @@ export type DaemonPermissionRequestFrame = Omit<
   PermissionRequestFrame,
   "presentation" | "raisedAt"
 >;
+
+/**
+ * An ask as it comes to be parked (hub pending.ts `remember`): a session
+ * process's prompt, which says nothing of what the hub stamps on it as it
+ * parks it (`presentation`, `raisedAt`), or one the hub raises itself,
+ * which may carry its own first stamp.
+ */
+export interface ArrivingAsk extends Omit<ParkedAsk, "payload"> {
+  payload: DaemonPermissionRequestFrame &
+    HubAskFields &
+    Partial<Pick<PermissionRequestFrame, "presentation" | "raisedAt">>;
+}
+
+/**
+ * What an ask the hub raises itself carries beside its frame as it arrives:
+ * read as it is presented, and left out of the ask once parked
+ * ({@link ParkedAsk} declares none of it).
+ */
+interface HubAskFields {
+  /** A design-system proposal's id (hub design-system.ts). */
+  designProposal?: string;
+  /** A memory or delegate-type proposal's id (hub memory.ts). */
+  memoryProposal?: string;
+  /** A project move's approval: its job, and the git terms of what it runs (hub moves.ts). */
+  move?: { details: string[]; jobId: string };
+  /** The project a proposal is for. */
+  projectId?: string;
+  /** Who made a proposal, in the card's words. */
+  proposer?: string;
+}
 
 interface PermissionSettledFrame {
   /** What won, and where, when the ask was answered (`outcome: answered`) and the hub knows. */
@@ -894,3 +925,80 @@ export type FramePayload =
   | StoredFrame
   /** Daemon-originated: the machine's stored transcripts moved. */
   | CatalogMovedFrame;
+
+/** Every frame's `kind`, checked to name each {@link FramePayload} kind. */
+const FRAME_KINDS: ReadonlySet<string> = new Set(
+  everyOf<FramePayload["kind"]>()([
+    "fleet_mcp",
+    "fleet_report",
+    "fleet_converge",
+    "preview",
+    "frame",
+    "send",
+    "rejected",
+    "held_send",
+    "taken_send",
+    "instances",
+    "instances_delta",
+    "permission_request",
+    "permission_settled",
+    "usage",
+    "stopped",
+    "asleep",
+    "recovery_unavailable",
+    "control_result",
+    "error",
+    "session_address",
+    "scratch_worktree",
+    "pulse",
+    "work_item",
+    "project_offer",
+    "tasks.changed",
+    "questions.moved",
+    "decisions.changed",
+    "blocks.changed",
+    "starters.changed",
+    "projects.changed",
+    "hub.restart",
+    "tailnet.https",
+    "fleet.fetch",
+    "project.cap",
+    "actions",
+    "hub_auth",
+    "installs",
+    "project.stop",
+    "delegate_event",
+    "fleet_watch.notices",
+    "artifact.needs",
+    "laws.broken",
+    "person",
+    "desk_alert",
+    "moves",
+    "move_progress",
+    "command_queue",
+    "stage",
+    "stage-clone",
+    "account_borrow",
+    "browsers",
+    "browser_handback",
+    "passkey_advert",
+    "passkey_qr",
+    "browser_list",
+    "passkey_status",
+    "stream_relay",
+    "stream_relay.journey",
+    "stored",
+    "catalog_moved",
+  ])
+);
+
+/**
+ * Whether `value` is a frame: a JSON object whose `kind` is one a
+ * {@link FramePayload} names. Its other fields are its sender's, read where
+ * its kind is handled: a session's own words keep their shape from the
+ * harness (core agent-frame.ts).
+ */
+export const isFramePayload = (value: object): value is FramePayload =>
+  "kind" in value &&
+  typeof value.kind === "string" &&
+  FRAME_KINDS.has(value.kind);

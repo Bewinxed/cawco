@@ -20,9 +20,9 @@ export type SessionGateContext = Pick<
 
 export const sessionGateStagesOf = (ctx: SessionGateContext) => {
   const scratchWorktreeFiled = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
-    if (kind === "scratch_worktree" && message.instanceId) {
+    const { message } = run;
+    const body = message.payload;
+    if (body.kind === "scratch_worktree" && message.instanceId) {
       const row = ctx.db.ownedInstance(message.instanceId, message.machineId);
       const frame = body;
       const dir =
@@ -47,7 +47,7 @@ export const sessionGateStagesOf = (ctx: SessionGateContext) => {
 
   const sessionAddressed = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame, ws } = run;
-    const { kind } = agentFrame;
+    const { kind } = message.payload;
     if (kind === "session_address" && message.instanceId) {
       ctx.recordSessionAddress(ws, message.machineId, {
         instanceId: message.instanceId,
@@ -60,8 +60,8 @@ export const sessionGateStagesOf = (ctx: SessionGateContext) => {
   };
 
   const sessionOwned = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind } = agentFrame;
+    const { message } = run;
+    const { kind } = message.payload;
     run.ownedSession = message.instanceId
       ? ctx.db.ownedInstance(message.instanceId, message.machineId)
       : undefined;
@@ -72,8 +72,8 @@ export const sessionGateStagesOf = (ctx: SessionGateContext) => {
   };
 
   const containersSaid = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // What its machine said of its containers (agent
     // session-containers.ts): they stopped as it ended, its parent,
     // else it, is told; or what it starts at a runtime with no door
@@ -81,7 +81,7 @@ export const sessionGateStagesOf = (ctx: SessionGateContext) => {
     // before an ended session's frames are dropped: the agent says
     // it once their stop timeouts have run, after its stop was
     // confirmed (r180: the agent's line was there, the hub's never).
-    if (kind === "frame" && message.instanceId) {
+    if (body.kind === "frame" && message.instanceId) {
       const said = body.message;
       if (
         said.type === "system" &&
@@ -101,8 +101,7 @@ export const sessionGateStagesOf = (ctx: SessionGateContext) => {
   };
 
   const endedSessionDropped = (run: FrameRun): FrameAnswer => {
-    const { agentFrame } = run;
-    const { kind } = agentFrame;
+    const { kind } = run.message.payload;
     if (
       run.ownedSession?.endConfirmedAt &&
       (kind === "frame" ||
@@ -117,17 +116,17 @@ export const sessionGateStagesOf = (ctx: SessionGateContext) => {
 
   const stopFailed = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const body = message.payload;
     // Reconciliation keeps failed end delivery pending; it is not a session failure.
     if (
-      kind === "error" &&
+      body.kind === "error" &&
       agentFrame.errorVerb === "stop" &&
       message.instanceId
     ) {
       ctx.lifecycle.deliveryFailed(message.instanceId);
     }
     if (
-      kind === "error" &&
+      body.kind === "error" &&
       agentFrame.errorVerb === "stop" &&
       run.ownedSession?.endIntent &&
       agentFrame.processGeneration === ctx.processGeneration(run.ownedSession)
@@ -138,7 +137,7 @@ export const sessionGateStagesOf = (ctx: SessionGateContext) => {
       }
     }
     if (
-      kind === "error" &&
+      body.kind === "error" &&
       agentFrame.errorVerb === "stop" &&
       run.ownedSession?.endIntent
     ) {

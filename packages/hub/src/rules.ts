@@ -1,5 +1,8 @@
 import type { Bounded } from "@cawco/core/bounded";
-import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
+import type {
+  HubEnvelope,
+  InstanceRow,
+} from "@cawco/core/protocol";
 import type { Rule, RuleFacts, RuleTiming } from "@cawco/core/rules";
 import {
   RULE_FIRE_CEILING,
@@ -56,7 +59,7 @@ import { memoryRoleOf } from "./roles";
 
 /** What the engine needs from the socket registry to reach a machine. */
 export interface RuleSender {
-  send: (envelope: Envelope<SendPayload>) => void;
+  send: (envelope: HubEnvelope<"send">) => void;
 }
 
 export interface RuleEngineDeps {

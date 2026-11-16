@@ -104,6 +104,7 @@
  *   Find, over every machine's transcripts: no store of its own here.
  */
 
+import type { ArrivingAsk } from "@cawco/core/frames";
 import {
   cardRef,
   decidedOf,
@@ -117,7 +118,9 @@ import {
   MEMORY_PROPOSAL_TOOL,
 } from "@cawco/core/permission-presentation";
 import type { ProjectNote } from "@cawco/core/project-conversation";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type {
+  InstanceRow,
+} from "@cawco/core/protocol";
 import type {
   NeutralMessage,
   NeutralOrigin,
@@ -1787,7 +1790,7 @@ export interface MemoryDeps {
   /** A note to the person in the project's conversation (caw.ts `notice`); wakes no model. */
   readonly notice: (projectId: string, note: ProjectNote) => void;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
-  readonly park: (envelope: Envelope) => void;
+  readonly park: (envelope: ArrivingAsk) => void;
   /**
    * Takes a settled ask off the pending ledger: answered, or (`closed`, a
    * sentence with no stop) closed by the hub because it no longer applies.
@@ -2864,7 +2867,7 @@ export const createMemory = ({
   // --- proposals ------------------------------------------------------------------------
 
   /** The proposal as the person's ask: drawn as a diff per file, answered by Approve or Reject. */
-  const envelopeOf = (proposal: Proposal, projectName: string): Envelope => ({
+  const envelopeOf = (proposal: Proposal, projectName: string): ArrivingAsk => ({
     verb: "frames",
     machineId: "hub",
     instanceId: proposal.id,

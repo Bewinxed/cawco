@@ -6197,19 +6197,7 @@
       },
       "verb": {
         "type": "string",
-        "enum": [
-          "register",
-          "heartbeat",
-          "spawn",
-          "send",
-          "stop",
-          "control",
-          "frames",
-          "fs",
-          "usage",
-          "launch",
-          "admission"
-        ]
+        "const": "spawn"
       }
     },
     "required": [
@@ -12126,19 +12114,7 @@
       },
       "verb": {
         "type": "string",
-        "enum": [
-          "register",
-          "heartbeat",
-          "spawn",
-          "send",
-          "stop",
-          "control",
-          "frames",
-          "fs",
-          "usage",
-          "launch",
-          "admission"
-        ]
+        "const": "send"
       }
     },
     "required": [

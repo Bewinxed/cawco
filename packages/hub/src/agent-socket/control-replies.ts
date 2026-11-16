@@ -6,7 +6,7 @@ import { AskCard } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
 import { answerOf, type ControlResult } from "../machine-answers";
 import { externalizeImages } from "../media";
-import type { TranscriptPayload } from "../transcripts";
+
 import type { FrameAnswer, FrameRun } from "./frame-run";
 
 export type ControlRepliesContext = Pick<
@@ -32,19 +32,19 @@ export type ControlRepliesContext = Pick<
 
 export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
   const installAnswered = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
+    const { message } = run;
     // An install answering, whoever asked for it: the cell is the hub's
     // to keep, and the reply still goes wherever it was going.
     const install = message.requestId
       ? ctx.pendingInstalls.get(message.requestId)
       : undefined;
-    if (install && agentFrame.kind === "control_result" && message.requestId) {
+    if (install && message.payload.kind === "control_result" && message.requestId) {
       ctx.pendingInstalls.delete(message.requestId);
       // Each press that joined it is answered with this answer, under its
       // own request id, where it waits (relay-control.ts).
       for (const joined of install.joined ?? []) {
         const result: ControlResult = {
-          ...(message.payload as ControlResult),
+          ...message.payload,
           requestId: joined.requestId,
         };
         if (joined.replyAsFrame) {
@@ -64,7 +64,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       // not a tool's status changes no cell, and the frame goes on.
       const status = answerOf(
         INSTALL_TOOL,
-        agentFrame.body,
+        message.payload,
         ctx.machineName(message.machineId)
       );
       if (status.ok) {
@@ -80,7 +80,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
   };
 
   const syncAnswered = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
+    const { message } = run;
     // A transcript delete answering: once the machine says it is gone,
     // every row that named it goes with it, through the one
     // per-session delete, and every dashboard sees it leave.
@@ -90,14 +90,14 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     // A refusal is kept too, in the machine's words, on its row.
     if (
       message.requestId &&
-      agentFrame.kind === "control_result" &&
+      message.payload.kind === "control_result" &&
       ctx.fleetSyncs.has(message.requestId)
     ) {
       // Read as a delta's ACK where it arrives: one that is not its type
       // is the machine's refusal of the delta, and the frame goes on.
       const ack = answerOf(
         FLEET_DELTA,
-        agentFrame.body,
+        message.payload,
         ctx.machineName(message.machineId)
       );
       ctx.fleetSyncs.answered(message.requestId, ack);
@@ -107,11 +107,11 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
   };
 
   const controlAnswered = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // A control a route is waiting on: the reply is that request's
     // answer and nobody else's news.
-    if (kind === "control_result" && message.requestId) {
+    if (body.kind === "control_result" && message.requestId) {
       ctx.lifecycle.answered(message.requestId, body.ok);
       const answering = ctx.waiting.get(message.requestId);
       if (answering) {
@@ -124,7 +124,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       // transcript's pictures were stored one by one on the hub's
       // thread, and three such answers held it past its updater's
       // 3 s (nightly 5575, obelisk, 2026-10-24 22:53:59).
-      if (ctx.lateAnswer(message)) {
+      if (ctx.lateAnswer({ ...message, payload: body })) {
         return "stop";
       }
     }
@@ -133,8 +133,8 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
   const fanOut = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // From here on the message is bound for dashboards, which get
     // images as references to fetch when shown, not as bytes.
     externalizeImages(message.payload);
@@ -143,27 +143,27 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     // but allowed to preempt nothing: if a dashboard is also waiting on
     // this request id the old way, it still gets its reply.
     const settled =
-      kind === "control_result" &&
+      body.kind === "control_result" &&
       message.requestId !== undefined &&
       ctx.streams.settleCommand(message.requestId, body);
     // A rewind that never started: its transcript was never cut.
     const rewound =
-      kind === "control_result" && message.requestId
+      body.kind === "control_result" && message.requestId
         ? ctx.rewinds.get(message.requestId)
         : undefined;
     if (rewound && message.requestId) {
       ctx.rewinds.delete(message.requestId);
-      if (kind === "control_result" && !body.ok) {
+      if (body.kind === "control_result" && !body.ok) {
         ctx.transcripts.reread(rewound);
       }
     }
     // A control's reply belongs to the dashboard that asked; the rest is fan-out.
     const requester =
-      message.requestId && kind === "control_result"
+      message.requestId && body.kind === "control_result"
         ? ctx.registry.takeRequester(message.requestId)
         : undefined;
-    if (requester) {
-      ctx.sendToClient(requester, message);
+    if (body.kind === "control_result" && requester) {
+      ctx.sendToClient(requester, { ...message, payload: body });
     }
     // An acknowledged command's reply is that command's news and nobody
     // else's — the same rule as the line above, in the newer dialect.
@@ -172,14 +172,14 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     // dashboard would draw an error for a command it never sent.
     else if (settled) {
       return "stop";
-    } else if (kind === "control_result") {
+    } else if (body.kind === "control_result") {
       // A reply without a live requester is not fleet news. This
       // includes late answers after a socket closed or a read timed out.
       if (!run.hubReply) {
-        ctx.logUnroutedReply(message);
+        ctx.logUnroutedReply({ ...message, payload: body });
       }
       return "stop";
-    } else if (kind === "frame" && message.instanceId) {
+    } else if (body.kind === "frame" && message.instanceId) {
       // Folded into the session's transcript here, for every frame and
       // whether or not anyone follows it: what it changed is sequenced
       // onto the session's stream, so the ring can answer a resume from
@@ -187,11 +187,8 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       // permission_request, instances, delegate_event, usage, pulse,
       // error, and any kind a future build adds — broadcasts, so an
       // unknown kind is never silently dropped.
-      ctx.transcripts.ingest(
-        message.instanceId,
-        message.payload as TranscriptPayload
-      );
-    } else if (kind === "permission_request") {
+      ctx.transcripts.ingest(message.instanceId, body);
+    } else if (body.kind === "permission_request") {
       // A parked ask goes out as its card, its secrets hidden
       // (`AskCard`); the ledger keeps the call as it was asked. One that is
       // not parked is a fault in the stages before this one.
@@ -205,7 +202,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       }
       ctx.registry.broadcast(AskCard.of(ask));
     } else {
-      ctx.registry.broadcast(message);
+      ctx.registry.broadcast({ ...message, payload: body });
     }
     return "continue";
   };

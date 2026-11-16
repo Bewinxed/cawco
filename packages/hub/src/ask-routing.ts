@@ -1,3 +1,5 @@
+import { isRecord } from "@cawco/core/is-record";
+import type { ArrivingAsk } from "@cawco/core/frames";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { DELEGATE_WAIT_ORIGIN } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
@@ -7,7 +9,9 @@ import {
   delegateWaitNotice,
   reportMarker,
 } from "@cawco/core/injected";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type {
+  InstanceRow,
+} from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
@@ -22,7 +26,6 @@ import type { SentMessageRow } from "./db/sends";
 import type { StoredSendRefusal } from "./db/stored-types";
 import type { ReportTold } from "./hub-shapes";
 import { boardTitle, sessionLabel } from "./labels";
-import { peek } from "./payload-peeks";
 import { outlivesSession } from "./pending";
 import type { createSends } from "./sends";
 import { sessionWord } from "./session-word";
@@ -42,22 +45,25 @@ const withContext = (text: string, line: string | undefined): string => {
  * summary. The parent reads this off a peer message and answers with the
  * `answer_delegate` tool, so the phrasing has to carry every choice it needs.
  */
-const renderDelegateAsk = (payload: unknown): string => {
-  const toolName = peek(payload, "toolName");
-  const input = (payload as { input?: unknown } | null)?.input;
-  const questions = (input as { questions?: unknown } | null)?.questions;
+const renderDelegateAsk = ({
+  input,
+  requestKind,
+  toolName,
+}: ArrivingAsk["payload"]): string => {
+  const { questions } = input;
   if (
-    (peek(payload, "requestKind") === "question" ||
-      toolName === ASK_USER_QUESTION) &&
+    (requestKind === "question" || toolName === ASK_USER_QUESTION) &&
     Array.isArray(questions) &&
     questions.length > 0
   ) {
     return questions
-      .map((question, index) => {
-        const q = question as { question?: unknown; options?: unknown };
+      .map((question: unknown, index) => {
+        const q = isRecord(question) ? question : {};
         const options = Array.isArray(q.options)
           ? q.options
-              .map((option) => (option as { label?: unknown }).label)
+              .map((option: unknown) =>
+                isRecord(option) ? option.label : undefined
+              )
               .filter((label): label is string => typeof label === "string")
               .map((label) => `- ${label}`)
               .join("\n")
@@ -67,14 +73,8 @@ const renderDelegateAsk = (payload: unknown): string => {
       })
       .join("\n");
   }
-  const summary =
-    input === undefined || input === null
-      ? ""
-      : // biome-ignore lint/style/noNestedTernary: input is either a string or an arbitrary value to stringify — two mutually exclusive shapes, not a simplifiable condition.
-        typeof input === "string"
-        ? input
-        : JSON.stringify(input);
-  return `${toolName ?? "a tool"}${summary ? ` — ${summary}` : ""}`;
+  const summary = JSON.stringify(input);
+  return `${toolName}${summary ? ` — ${summary}` : ""}`;
 };
 
 export type AskRoutingContext = Pick<
@@ -303,7 +303,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
   /** Why an ask arriving from a machine is not this row's live process's; none when it is. */
   const askRefusal = (
     owner: ReturnType<DbShape["getInstancesByIds"]>[number] | undefined,
-    ask: Envelope
+    ask: ArrivingAsk
   ): string | undefined => {
     if (!owner) {
       return "no such session";
@@ -314,12 +314,12 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     if (!["running", "starting", "unknown"].includes(owner.status)) {
       return `the session is ${owner.status}`;
     }
-    if (peek(ask.payload, "processGeneration") !== processGeneration(owner)) {
+    if (ask.payload.processGeneration !== processGeneration(owner)) {
       return "an earlier launch asked it";
     }
     return undefined;
   };
-  const ownsPermission = (parked: Envelope): boolean => {
+  const ownsPermission = (parked: ArrivingAsk): boolean => {
     const [row] = ctx.db.getInstancesByIds([parked.instanceId ?? ""]);
     return askRefusal(row, parked) === undefined;
   };
@@ -329,10 +329,8 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
    * `reportees`), as the ask's record names it
    * ({@link deliverDelegateAsk}). Undefined for an ask not routed.
    */
-  const routedRecipient = (parked: Envelope): string | undefined => {
-    const payload = parked.payload as { kind?: unknown; routedTo?: unknown };
-    return payload.kind === "permission_request" &&
-      payload.routedTo === "parent" &&
+  const routedRecipient = (parked: ArrivingAsk): string | undefined => {
+    return parked.payload.routedTo === "parent" &&
       parked.requestId
       ? ctx.db.delegateAsk(parked.requestId)?.parentInstanceId
       : undefined;
@@ -453,7 +451,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
         `[asks] a delegate's question was not handed to its parent: ${sent.response.detail}`
       );
     }
-    const toolName = peek(ask.payload, "toolName");
+    const { toolName } = ask.payload;
     ctx.publishDelegateEvent(
       delegate.machineId,
       ctx.db.recordDelegateEvent({
@@ -463,7 +461,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
         requestId: ask.requestId,
         toolName,
         requestKind:
-          peek(ask.payload, "requestKind") === "question" ||
+          ask.payload.requestKind === "question" ||
           toolName === ASK_USER_QUESTION
             ? "question"
             : "tool",

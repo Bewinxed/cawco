@@ -39,9 +39,7 @@ import {
 } from "@cawco/core/plan";
 import {
   DELEGATE_EVENT_KINDS,
-  type Envelope,
-  type SendPayload,
-  type SpawnPayload,
+  type HubEnvelope,
 } from "@cawco/core/protocol";
 import { RELAY_PROVIDERS, RELAY_STATES } from "@cawco/core/relays";
 import {
@@ -306,12 +304,15 @@ const sealedJson = <S extends z.ZodType>(schema: S) =>
     open: (raw) => openOrNull(raw),
   });
 
-/** A send as its machine is handed it (`Envelope<SendPayload>`). */
-const SendEnvelopeSchema: z.ZodType<Envelope<SendPayload>> =
-  EnvelopeShape.extend({ payload: SendPayloadShape });
-/** A session's start as its machine is handed it (`Envelope<SpawnPayload>`). */
-const SpawnEnvelopeSchema: z.ZodType<Envelope<SpawnPayload>> =
-  EnvelopeShape.extend({ payload: SpawnPayloadSchema });
+/** A send as its machine is handed it (`HubEnvelope<"send">`). */
+const SendEnvelopeSchema: z.ZodType<HubEnvelope<"send">> =
+  EnvelopeShape.extend({ payload: SendPayloadShape, verb: z.literal("send") });
+/** A session's start as its machine is handed it (`HubEnvelope<"spawn">`). */
+const SpawnEnvelopeSchema: z.ZodType<HubEnvelope<"spawn">> =
+  EnvelopeShape.extend({
+    payload: SpawnPayloadSchema,
+    verb: z.literal("spawn"),
+  });
 
 /**
  * One harness conversation a session had before the one it runs now
@@ -2461,7 +2462,7 @@ export const sentMessages = sqliteTable(
      */
     hold: storedEnum(SendHoldSchema)("hold"),
     /**
-     * The send whole, as its machine is handed it (`Envelope<SendPayload>`),
+     * The send whole, as its machine is handed it (`HubEnvelope<"send">`),
      * kept while it is pending: a process that went away before reading it
      * leaves the hub what to hand the session's next process, and an owed
      * send ({@link sentMessages.owedHeld}) is handed this once its hold

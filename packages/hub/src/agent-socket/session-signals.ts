@@ -123,8 +123,8 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
   );
 
   const settingsFiled = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind } = agentFrame;
+    const { message } = run;
+    const { kind } = message.payload;
     // Applied settings are filed before a control reply is consumed
     // by REST or turned into a dashboard acknowledgement.
     if (

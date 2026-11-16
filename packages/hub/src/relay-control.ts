@@ -1,15 +1,17 @@
+import { PermissionResultSchema } from "@cawco/core/stored-shapes";
 import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
 import type { AskAnswer } from "@cawco/core/asks";
 import { detach } from "@cawco/core/detach";
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
-import type { PermissionRequestFrame } from "@cawco/core/frames";
+import type {
+  ArrivingAsk,
+} from "@cawco/core/frames";
 import { isEffortLevel } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type {
   ControlPayload,
-  Envelope,
+  HubEnvelope,
   InstanceRow,
-  SendPayload,
 } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import {
@@ -56,7 +58,7 @@ import { answeredWithOriginal } from "./ask-presentation";
 import type { ClosureContext } from "./closure-context";
 import type { ControlResult } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
-import { peek } from "./payload-peeks";
+
 import type { AnswerFrom } from "./pending";
 import { answerPermission } from "./pending";
 import type { AnyProblem } from "./refusal";
@@ -117,31 +119,33 @@ const hubOwnedControl = (method: string): string | undefined => {
   }
 };
 
+/** Why a permission's answer that names no ask, or says neither allow nor deny, is not given. */
+export const ANSWER_UNREAD =
+  "This answer names no ask, or says neither allow nor deny.";
+
 /** The first argument of a `control` of `method`, when it is a string. */
-const peekControlArg = (
-  payload: unknown,
+const controlArg = (
+  control: ControlPayload,
   method: string
 ): string | undefined => {
-  if (peek(payload, "method") !== method) {
-    return undefined;
-  }
-  const { args } = payload as { args?: unknown };
-  const id = Array.isArray(args) ? args[0] : undefined;
+  const id = control.method === method ? control.args?.[0] : undefined;
   return typeof id === "string" ? id : undefined;
 };
 
-/** A `control` answering a permission, and the ask it answers with what it says. */
-export const peekAnswer = (
-  payload: unknown
-): { requestId: string; result: unknown } | undefined => {
-  if (peek(payload, "method") !== RESOLVE_PERMISSION) {
+/**
+ * A `control` answering a permission: the ask it answers, and what it says,
+ * read as a permission's answer. None when it names no ask, or says
+ * neither allow nor deny.
+ */
+export const answerOfControl = (
+  control: ControlPayload
+): { requestId: string; result: PermissionResult } | undefined => {
+  const [requestId, said] = control.args ?? [];
+  if (control.method !== RESOLVE_PERMISSION || typeof requestId !== "string") {
     return undefined;
   }
-  const { args } = payload as { args?: unknown };
-  if (!Array.isArray(args) || typeof args[0] !== "string") {
-    return undefined;
-  }
-  return { requestId: args[0], result: args[1] };
+  const result = PermissionResultSchema.safeParse(said);
+  return result.success ? { requestId, result: result.data } : undefined;
 };
 
 export type RelayControlContext = Pick<
@@ -191,7 +195,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
    * (stream.ts), else the tab that sent it waits on a record that never
    * comes.
    */
-  const relaySend = (message: Envelope<SendPayload>) => {
+  const relaySend = (message: HubEnvelope<"send">) => {
     // Provenance (NEW.md, cross-session delivery incident): which tab it
     // believed it was sending from. It is the one thing that makes "a send
     // landed on the wrong session" provable after the fact instead of merely
@@ -370,13 +374,13 @@ export const createRelayControl = (ctx: RelayControlContext) => {
   };
 
   /** A prompt a permit granted, allowed at its process as asked; said in the log either way. */
-  const allowGranted = async (ask: Envelope): Promise<void> => {
+  const allowGranted = async (ask: ArrivingAsk): Promise<void> => {
     const requestId = ask.requestId ?? "";
-    const { input } = ask.payload as Partial<PermissionRequestFrame>;
+    const { input } = ask.payload;
     const allowed = await ctx.callAgent(
       ask.machineId,
       RESOLVE_PERMISSION,
-      [requestId, { behavior: "allow", updatedInput: input ?? {} }],
+      [requestId, { behavior: "allow", updatedInput: input }],
       READ_TIMEOUT_MS,
       undefined,
       ask.instanceId
@@ -404,10 +408,10 @@ export const createRelayControl = (ctx: RelayControlContext) => {
    * that asked it: denied in words saying it could not be shown and why, so
    * its turn goes on instead of waiting on a question nobody was shown.
    */
-  const withdrawUnshown = async (ask: Envelope, why: string): Promise<void> => {
+  const withdrawUnshown = async (ask: ArrivingAsk, why: string): Promise<void> => {
     const requestId = ask.requestId ?? "";
-    const { toolName, input } = ask.payload as Partial<PermissionRequestFrame>;
-    const question = questionsOf(toolName ?? "", input ?? {}) !== null;
+    const { toolName, input } = ask.payload;
+    const question = questionsOf(toolName, input) !== null;
     const withdrawn = await ctx.callAgent(
       ask.machineId,
       WITHDRAW_PERMISSION,
@@ -435,34 +439,14 @@ export const createRelayControl = (ctx: RelayControlContext) => {
   };
 
   const relayPermissionAnswer = (
-    message: Envelope<ControlPayload>,
+    message: HubEnvelope<"control">,
     dashboard: ClientSocket,
     replyAsFrame: boolean
   ): boolean => {
-    const answer = peekAnswer(message.payload);
     if (message.payload.method !== RESOLVE_PERMISSION) {
       return false;
     }
-    // The correlation id belongs to the control; args[0] belongs to the ask.
-    // A receipt is sent only after delivery AND the pending ledger settlement.
-    answerPermission(
-      ctx.pending,
-      message.instanceId ?? message.payload.instanceId ?? "",
-      answer?.requestId ?? "",
-      answer?.result as PermissionResult,
-      ctx.answeredFrom(dashboard)
-    ).then(
-      (refused) =>
-        refused
-          ? failed(refused.response.detail)
-          : reply({
-              kind: "control_result",
-              requestId: correlationId,
-              ok: true,
-            }),
-      (error: unknown) =>
-        failed(error instanceof Error ? error.message : String(error))
-    );
+    const answer = answerOfControl(message.payload);
     const correlationId = message.requestId ?? message.payload.requestId;
     const reply = (frame: ControlResult): void => {
       if (replyAsFrame) {
@@ -486,6 +470,30 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         error: reason,
       });
     };
+    if (!answer) {
+      failed(ANSWER_UNREAD);
+      return true;
+    }
+    // The correlation id belongs to the control; args[0] belongs to the ask.
+    // A receipt is sent only after delivery AND the pending ledger settlement.
+    answerPermission(
+      ctx.pending,
+      message.instanceId ?? message.payload.instanceId ?? "",
+      answer.requestId,
+      answer.result,
+      ctx.answeredFrom(dashboard)
+    ).then(
+      (refused) =>
+        refused
+          ? failed(refused.response.detail)
+          : reply({
+              kind: "control_result",
+              requestId: correlationId,
+              ok: true,
+            }),
+      (error: unknown) =>
+        failed(error instanceof Error ? error.message : String(error))
+    );
     return true;
   };
 
@@ -547,7 +555,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
    * other control, which goes on to the machine.
    */
   const relayModelCrossing = (
-    message: Envelope<ControlPayload>,
+    message: HubEnvelope<"control">,
     dashboard: ClientSocket,
     replyAsFrame: boolean
   ): boolean => {
@@ -610,7 +618,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
   };
 
   const relayControl = (
-    asked: Envelope<ControlPayload>,
+    asked: HubEnvelope<"control">,
     dashboard: ClientSocket,
     replyAsFrame = true
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
@@ -648,7 +656,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       return true;
     }
     // A `control` asking a machine to delete a transcript names its session.
-    const deleted = peekControlArg(message.payload, "deleteSession");
+    const deleted = controlArg(message.payload, "deleteSession");
     if (deleted && ctx.registry.agent(message.machineId)) {
       const rows = ctx.db
         .sessionOwnership(message.machineId)
@@ -697,7 +705,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     // fleet's pin as the hub holds it, whatever the pressing surface had,
     // else the release to reach, so a copy its updater leaves older answers
     // why and keeps its Retry. A press is no automatic update.
-    const toolId = peekControlArg(message.payload, "installTool");
+    const toolId = controlArg(message.payload, "installTool");
     // One install of a tool on a machine at a time: a press while one runs
     // (another dashboard's press, Update all, CawCo's own pass) joins it and
     // is answered with its answer, never sent as a second install.
@@ -766,7 +774,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
   };
 
   /** A control that interrupts a session's turn cuts into it ({@link noteInterrupt}). */
-  const noteControl = (message: Envelope<ControlPayload>): void => {
+  const noteControl = (message: HubEnvelope<"control">): void => {
     // The operator's effort for the session, which every later launch of it
     // asks for ({@link bounded}); the CLI's reading of it only moves the chip.
     const effort = message.payload.args?.[0];
@@ -780,9 +788,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     if (message.payload.method === CONTROL_INTERRUPT && message.instanceId) {
       // Who stopped the turn, as a send's line says who sent it: the tab it
       // came from, read against its presence's lines.
-      const { provenance } = message.payload as {
-        provenance?: { clientId?: string; presenceId?: string };
-      };
+      const { provenance } = message.payload;
       saidInterrupt(
         message.instanceId,
         provenance

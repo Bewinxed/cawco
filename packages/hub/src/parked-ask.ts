@@ -1,4 +1,7 @@
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type { ArrivingAsk } from "@cawco/core/frames";
+import type {
+  InstanceRow,
+} from "@cawco/core/protocol";
 
 /**
  * `actor`'s call to `toolName` as an ask parked for the person: its
@@ -10,7 +13,7 @@ export const parkedToolAsk = (
   toolName: string,
   input: Record<string, unknown>,
   fields: Record<string, unknown>
-): Envelope => ({
+): ArrivingAsk => ({
   verb: "frames",
   machineId: actor.machineId,
   instanceId: actor.id,

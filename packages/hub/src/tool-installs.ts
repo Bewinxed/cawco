@@ -3,7 +3,9 @@ import { HARNESS_TOOL } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import type { ControlPayload, Envelope } from "@cawco/core/protocol";
+import type {
+  HubEnvelope,
+} from "@cawco/core/protocol";
 import { toolUpdateOf } from "@cawco/core/tool-updates";
 import type { ToolSpec, ToolStatus, ToolWants } from "@cawco/core/tools";
 import {
@@ -172,7 +174,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
         method: "installTool",
         args: installArgs(install.toolId, install, automatic, startedBy),
       },
-    } satisfies Envelope<ControlPayload>);
+    } satisfies HubEnvelope<"control">);
     ctx.db.setAgentToolCell(machineId, {
       id: install.toolId,
       state: "installing",
@@ -421,7 +423,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
             method: INSTALL_TOOL,
             args: installArgs(toolId, ask, false, "cawco"),
           },
-        } satisfies Envelope<ControlPayload>;
+        } satisfies HubEnvelope<"control">;
         ctx.sendToMachine(agent, frame);
         return frame;
       }

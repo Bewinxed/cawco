@@ -31,7 +31,7 @@ import { traitsOf } from "@cawco/core/harness/traits";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { ElysiaStatus, problem } from "elysia";
-import { z } from "zod";
+
 import {
   accountOfIdentity,
   keepProbe,
@@ -54,8 +54,6 @@ import {
 } from "./machine-answers";
 import { unreachable } from "./unreachable";
 
-/** The account stores a machine named at register (core stream.ts), each read as it came. */
-const REGISTER_STORES = z.object({ accountStores: z.array(z.unknown()) });
 export type AccountSigninContext = Pick<
   ClosureContext,
   | "advanceMove"
@@ -392,16 +390,12 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
    */
   const unknownAccountsOf = (
     machineId: string,
-    payload: unknown
+    stores: string[] | undefined
   ): string[] | undefined => {
-    const read = REGISTER_STORES.safeParse(payload);
-    if (!read.success) {
+    if (stores === undefined) {
       return undefined;
     }
-    const stores = read.data.accountStores;
-    const unheld = stores.filter(
-      (id): id is string => typeof id === "string" && !ctx.db.accounts.get(id)
-    );
+    const unheld = stores.filter((id) => !ctx.db.accounts.get(id));
     // A store a process there still runs in stays until none does: its
     // sign-out is `leaveAccounts`'s.
     const leaving = new Set(

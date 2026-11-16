@@ -272,6 +272,12 @@ export interface SessionMessage {
    */
   error?: string;
   /**
+   * On an error entry ({@link error}) that answered sends whose turns it
+   * failed: those sends, set by the hub as it reads the transcript (as the
+   * live frame's {@link NeutralAssistantMessage.failedSends}).
+   */
+  failedSends?: string[];
+  /**
    * How many sends this entry holds the words of, when the harness joined
    * several into one: Claude takes up the prompts queued behind a turn
    * together and stores them as one user record under the last one's uuid,

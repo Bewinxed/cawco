@@ -13,7 +13,8 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import type {
   ControlPayload,
-  Envelope,
+  FrameEnvelope,
+  HubEnvelope,
   InstanceRow,
 } from "@cawco/core/protocol";
 import { CONTROL_ABANDON } from "@cawco/core/session/controls";
@@ -32,7 +33,6 @@ import {
   parsedAs,
 } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
-import { peek } from "./payload-peeks";
 
 import { sessionControl } from "./session-word";
 import type { CheckedFolder, SkillFolderReader } from "./skills";
@@ -83,7 +83,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
   const waitingMachines = new Map<
     string,
     {
-      again: Envelope | undefined;
+      again: HubEnvelope | undefined;
       machineId: string;
       socketId: string | undefined;
     }
@@ -194,8 +194,8 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     }
   };
   /** Whether `message` answers a call of the hub's that lapsed: said once, as late, when it does. */
-  const lateAnswer = (message: Envelope): boolean => {
-    const requestId = message.requestId ?? peek(message.payload, "requestId");
+  const lateAnswer = (message: FrameEnvelope<"control_result">): boolean => {
+    const requestId = message.requestId ?? message.payload.requestId;
     const call = requestId ? lapsed.get(requestId) : undefined;
     if (!(requestId && call)) {
       return false;
@@ -213,14 +213,13 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     return true;
   };
   const unroutedReplies = new Set<string>();
-  const logUnroutedReply = (message: Envelope): void => {
+  const logUnroutedReply = (message: FrameEnvelope<"control_result">): void => {
     if (lateAnswer(message)) {
       return;
     }
-    const requestId = message.requestId ?? peek(message.payload, "requestId");
-    const instanceId =
-      message.instanceId ?? peek(message.payload, "instanceId");
-    const kind = peek(message.payload, "kind") ?? "unknown";
+    const requestId = message.requestId ?? message.payload.requestId;
+    const instanceId = message.instanceId ?? message.payload.instanceId;
+    const { kind } = message.payload;
     const key = `${message.machineId}:${instanceId}:${requestId}:${kind}`;
     if (unroutedReplies.has(key)) {
       return;
@@ -259,7 +258,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
   const keptOn = new Map<string, Set<string>>();
 
   /** Sends `frame` on `socket` and gives it back: what {@link awaitReply} sends again. */
-  const sendAnswerable = <T extends Envelope>(
+  const sendAnswerable = <T extends HubEnvelope>(
     socket: MachineSocket,
     frame: T
   ): T => {
@@ -306,7 +305,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
         machineId,
         ...(instanceId && { instanceId }),
         payload,
-      } satisfies Envelope<ControlPayload>;
+      } satisfies HubEnvelope<"control">;
       // Away: held, with no socket, for its machine's next register.
       if (agent) {
         ctx.sendToMachine(agent, frame);
@@ -601,7 +600,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
                 method,
                 args,
               } satisfies ControlPayload,
-            } satisfies Envelope<ControlPayload>;
+            } satisfies HubEnvelope<"control">;
             if (agent) {
               ctx.sendToMachine(agent, frame);
             }
@@ -638,7 +637,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     machineId: string,
     requestId: string,
     timeoutMs: number,
-    send: () => Envelope | undefined,
+    send: () => HubEnvelope | undefined,
     /** Aborts once its asker stops waiting: the wait ends there, thrown as the abort. */
     letGo?: AbortSignal
   ): Promise<Bounded<ControlResult>> => {
@@ -709,7 +708,10 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     forget();
     noteLapsed(requestId, {
       machineId,
-      what: peek(call?.again?.payload, "method") ?? call?.again?.verb,
+      what:
+        call?.again?.verb === "control"
+          ? call.again.payload.method
+          : call?.again?.verb,
       sentAt,
       timeoutMs,
     });
@@ -745,7 +747,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     method: K,
     requestId: string,
     timeoutMs: number,
-    send: () => Envelope | undefined,
+    send: () => HubEnvelope | undefined,
     letGo?: AbortSignal
   ): Promise<Bounded<ControlAnswer<K>>> =>
     parsedReply(
@@ -759,7 +761,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     op: O,
     requestId: string,
     timeoutMs: number,
-    send: () => Envelope | undefined
+    send: () => HubEnvelope | undefined
   ): Promise<Bounded<FsAnswer<O>>> =>
     parsedReply(
       await awaitFrame(machineId, requestId, timeoutMs, send),
@@ -787,10 +789,10 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     machineId: string,
     instanceId: string,
     requestId: string,
-    send: () => Envelope | undefined
+    send: () => HubEnvelope | undefined
   ): Promise<Bounded<CallAnswer<unknown>>> => {
     const sentAt = Date.now();
-    let sent: Envelope | undefined;
+    let sent: HubEnvelope | undefined;
     let reply = await awaitFrame(
       machineId,
       requestId,

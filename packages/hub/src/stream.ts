@@ -21,13 +21,13 @@
  */
 
 import { RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
+import { everyOf } from "@cawco/core/every-of";
 import type { PlanSnapshot } from "@cawco/core/plan";
 import type {
   ControlPayload,
   DeliveryMark,
-  Envelope,
+  HubEnvelope,
   IngestMark,
-  SendPayload,
 } from "@cawco/core/protocol";
 import { SessionRing } from "@cawco/core/ring";
 import {
@@ -36,11 +36,11 @@ import {
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
 } from "@cawco/core/session/controls";
+import { SendPayloadShape } from "@cawco/core/stored-shapes";
 import {
   alreadyDelivered,
   alreadyIngested,
   type CommandAck,
-  type CommandEnvelope,
   type CommandKind,
   type FrameProvenance,
   type SessionStreamEvent,
@@ -51,6 +51,7 @@ import {
   type StreamReset,
   type StreamSubscribe,
 } from "@cawco/core/stream";
+import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
 import { refusalFrame } from "./registry";
 import type { createRelayControl } from "./relay-control";
@@ -96,11 +97,22 @@ const CONTROL_METHOD: Readonly<
   "set-effort": CONTROL_SET_EFFORT,
 };
 
-const COMMAND_KINDS = new Set<string>([
+/** Every command a client may send ({@link CommandKind}). */
+const COMMAND_KINDS = everyOf<CommandKind>()([
   "send",
   "send.withdraw",
-  ...Object.keys(CONTROL_METHOD),
+  "permission.answer",
+  "interrupt",
+  "set-model",
+  "set-permission-mode",
+  "set-effort",
 ]);
+
+/** A command's word on which page and tab sent it (`SendPayload.provenance`). */
+const ProvenanceSchema = z.object({
+  clientId: z.string().optional(),
+  presenceId: z.string().optional(),
+});
 
 /**
  * What this module needs from the hub it lives in. Narrow on purpose: the
@@ -130,7 +142,7 @@ export interface StreamPorts {
   ) => void;
   /** The dashboard `control` relay, verbatim — false when the relay refused it. */
   readonly relayControl: (
-    envelope: Envelope<ControlPayload>,
+    envelope: HubEnvelope<"control">,
     dashboard: ClientSocket
   ) => boolean;
   /**
@@ -390,8 +402,13 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * general-purpose remote call. A kind may only ever become its own method.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every command kind (send vs. each control method) through one shared validate-then-relay pipeline; splitting it would scatter the ordering guarantees documented above across several functions.
-  const command = (socket: ClientSocket, message: CommandEnvelope): void => {
-    const { commandId, kind, sessionId, machineId } = message;
+  const command = (
+    socket: ClientSocket,
+    message: Record<string, unknown>,
+    commandId: string,
+    kind: CommandKind
+  ): void => {
+    const { sessionId, machineId } = message;
     // Known by id from here on, and with the newest handle: an `applied` ack
     // arrives later, off an agent socket, and has to find a socket to land on
     // even when this dashboard never subscribed to anything.
@@ -437,18 +454,30 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       // A send the hub refuses outright (a Claude conversation gone, which
       // keeps no record) is answered `failed` with why: unanswered, the client
       // reads silence, keeps the send and offers it again on every connection.
+      // The envelope's session is authoritative: the payload's own copy is
+      // normalised onto it so the two can never disagree on the wire.
+      // and the person is who a page speaks for.
+      const send = SendPayloadShape.safeParse({
+        ...payload,
+        instanceId: sessionId,
+        message: { ...payload.message, origin: { kind: "human" } },
+      });
+      if (!send.success) {
+        const fields = [
+          ...new Set(send.error.issues.map((issue) => issue.path.join("."))),
+        ];
+        fail(
+          socket,
+          commandId,
+          `a send command's payload is not a send (${fields.join(", ")})`
+        );
+        return;
+      }
       const refused = ports.relaySend({
         verb: "send",
         machineId,
         instanceId: sessionId,
-        // The envelope's session is authoritative: the payload's own copy is
-        // normalised onto it so the two can never disagree on the wire.
-        // and the person is who a page speaks for.
-        payload: {
-          ...payload,
-          instanceId: sessionId,
-          message: { ...payload.message, origin: { kind: "human" } },
-        } as unknown as SendPayload,
+        payload: send.data,
       });
       if (refused) {
         console.warn(
@@ -536,12 +565,13 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       return;
     }
 
+    const provenance = ProvenanceSchema.safeParse(payload.provenance);
     const control: ControlPayload = {
-      ...payload,
       instanceId: sessionId,
       requestId,
       method,
-      args: (payload.args as unknown[] | undefined) ?? [],
+      args: Array.isArray(payload.args) ? payload.args : [],
+      ...(provenance.success ? { provenance: provenance.data } : {}),
     };
 
     // Registered BEFORE dispatch: the daemon is free to answer inside the same
@@ -727,11 +757,12 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         malformed(socket, raw, "command refused: `commandId` is missing");
         return true;
       }
-      if (!COMMAND_KINDS.has(raw.kind as string)) {
+      const kind = COMMAND_KINDS.find((known) => known === raw.kind);
+      if (!kind) {
         fail(socket, raw.commandId, `unknown command kind ${String(raw.kind)}`);
         return true;
       }
-      command(socket, raw as unknown as CommandEnvelope);
+      command(socket, raw, raw.commandId, kind);
       return true;
     }
 
