@@ -30,6 +30,7 @@ import {
   CHOICE_LIMITS,
   type ChoiceEntry,
   choiceEntryProblem,
+  isChoiceEntry,
   settledWriteProblem,
 } from "@cawco/core/choices";
 import {
@@ -80,6 +81,7 @@ import {
 import {
   type ArtifactClient,
   type ArtifactDocs,
+  elementIdOf,
   elementsOf,
   MAPS,
 } from "./docs";
@@ -154,8 +156,8 @@ const SCREEN_REQUEST_KEY = /^(claim-\d+|result)$/u;
 
 /** Why a screen's change to a canvas's `requests` may not be kept, or null. */
 const requestsProblem = (
-  before: YMap<YMap<unknown>>,
-  after: YMap<YMap<unknown>>
+  before: YMap<unknown>,
+  after: YMap<unknown>
 ): string | null => {
   if (!same([...before.keys()].sort(), [...after.keys()].sort())) {
     return "A screen claims or answers the agent's requests; it does not add or remove them.";
@@ -191,6 +193,10 @@ const CLIENT_META: { [K in ClientMetaKey]: (value: unknown) => string | null } =
     penMode: (value) => penProblem("penMode", value),
   };
 
+/** Whether a client writes `key` of `meta` ({@link CLIENT_META}). */
+const isClientMetaKey = (key: string): key is ClientMetaKey =>
+  Object.hasOwn(CLIENT_META, key);
+
 /** Why a canvas screen's pen key `key` may not hold `value`, or null. */
 const penProblem = (key: string, value: unknown): string | null =>
   value === undefined || typeof value === "boolean"
@@ -216,12 +222,15 @@ const metaProblem = (
       continue;
     }
     const writer = metaWriter(key);
-    if (!(writer === "person" || (canvas && writer === "canvas"))) {
+    if (!(
+      isClientMetaKey(key) &&
+      (writer === "person" || (canvas && writer === "canvas"))
+    )) {
       return canvas
         ? "A screen keeps only penMode, penDetected and heldNote in a canvas's meta."
         : "A page changes its artifact's meta only by its held note.";
     }
-    const why = CLIENT_META[key as ClientMetaKey](value);
+    const why = CLIENT_META[key](value);
     if (why) {
       return why;
     }
@@ -234,12 +243,8 @@ const entryProblem = (entry: unknown): string | null => {
   if (!(entry instanceof YMap)) {
     return "An element is a map of el, pos and by.";
   }
-  const el = entry.get("el") as { id?: unknown } | null | undefined;
   if (!(
-    el &&
-    typeof el === "object" &&
-    typeof el.id === "string" &&
-    typeof entry.get("pos") === "string"
+    elementIdOf(entry) !== undefined && typeof entry.get("pos") === "string"
   )) {
     return "An element is a map of el, an Excalidraw element with its id, and pos.";
   }
@@ -263,15 +268,10 @@ const madeProblem = (
   after: YArray<YMap<unknown>>
 ): string | null => {
   const made = new Map(
-    before
-      .toArray()
-      .map((entry) => [
-        (entry.get("el") as { id: string }).id,
-        entry.get("made"),
-      ])
+    before.toArray().map((entry) => [elementIdOf(entry), entry.get("made")])
   );
   const changed = after.toArray().find((entry) => {
-    const was = made.get((entry.get("el") as { id: string }).id);
+    const was = made.get(elementIdOf(entry));
     return was !== undefined && entry.get("made") !== was;
   });
   return changed ? "Who made an element never changes." : null;
@@ -338,10 +338,7 @@ const canvasProblem = (doc: Doc, trial: Doc): string | null => {
       .find((why) => why !== null) ??
     madeProblem(elementsOf(doc), elements) ??
     filesProblem(doc.getMap("files"), trial.getMap("files")) ??
-    requestsProblem(
-      doc.getMap("requests") as YMap<YMap<unknown>>,
-      trial.getMap("requests") as YMap<YMap<unknown>>
-    ) ??
+    requestsProblem(doc.getMap("requests"), trial.getMap("requests")) ??
     inkMapsProblem(doc, trial)
   );
 };
@@ -377,15 +374,13 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
   if (state.size > CHOICE_LIMITS.perArtifact) {
     return `An artifact keeps at most ${CHOICE_LIMITS.perArtifact} ids.`;
   }
-  const before = doc.getMap("state");
+  // What the doc keeps is a choice entry: this check let it in.
+  const before = doc.getMap<ChoiceEntry>("state");
   for (const [key, value] of state.entries()) {
     if (JSON.stringify(value) !== JSON.stringify(before.get(key))) {
-      const why =
-        choiceEntryProblem(key, value) ??
-        settledWriteProblem(
-          before.get(key) as ChoiceEntry | undefined,
-          value as ChoiceEntry
-        );
+      const why = isChoiceEntry(key, value)
+        ? settledWriteProblem(before.get(key), value)
+        : choiceEntryProblem(key, value);
       if (why) {
         return why;
       }
@@ -481,9 +476,7 @@ const noteClaims = (
   artifactId: string,
   client: ArtifactClient
 ) => {
-  const requests = docs.doc(artifactId).getMap("requests") as YMap<
-    YMap<unknown>
-  >;
+  const requests = docs.doc(artifactId).getMap<YMap<unknown>>("requests");
   let mine = claimedOn.get(artifactId);
   for (const request of requests.values()) {
     if (!(request instanceof YMap) || request.get("result") !== undefined) {
@@ -527,9 +520,7 @@ const releaseClaims = (
   if (mine.size === 0) {
     claimedOn.delete(artifactId);
   }
-  const requests = docs.doc(artifactId).getMap("requests") as YMap<
-    YMap<unknown>
-  >;
+  const requests = docs.doc(artifactId).getMap<YMap<unknown>>("requests");
   docs.transact(artifactId, "hub", () => {
     for (const request of requests.values()) {
       if (!(request instanceof YMap) || request.get("result") !== undefined) {
@@ -557,9 +548,7 @@ const releaseClaims = (
  * leaves before answering is let go ({@link releaseClaims}).
  */
 const holdClaims = (docs: ArtifactDocs, artifactId: string) => {
-  const requests = docs.doc(artifactId).getMap("requests") as YMap<
-    YMap<unknown>
-  >;
+  const requests = docs.doc(artifactId).getMap<YMap<unknown>>("requests");
   const claimed = [...requests.values()].filter(
     (request) =>
       request instanceof YMap &&

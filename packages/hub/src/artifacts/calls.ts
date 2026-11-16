@@ -119,6 +119,7 @@ const oneChange = (body: {
     return { html: body.html };
   }
   if (body.patch !== undefined) {
+    // Cast kept: the route's schema (bodies.ts `operation`) is one object with `from` and `value` optional for every op, which rfc6902's per-op `Operation` union does not take; typing it means a union per op in the schema, a change to the API's shape.
     return { patch: body.patch as Operation[] };
   }
   if (body.elements !== undefined) {

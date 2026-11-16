@@ -199,7 +199,7 @@ export function parseReference(
     return null;
   }
   try {
-    return { kind: match[1] as string, id: decodeURI(match[2] as string) };
+    return { kind: match[1], id: decodeURI(match[2]) };
   } catch {
     return null;
   }

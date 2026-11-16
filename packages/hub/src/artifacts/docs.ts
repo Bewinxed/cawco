@@ -59,14 +59,18 @@ export const MAPS = [
  * Whether it moved any.
  */
 function moveTunedOut(doc: Doc): boolean {
-  const state = doc.getMap("state");
-  const entry = state.get(TUNED_MAP) as ChoiceEntry | undefined;
+  const state = doc.getMap<ChoiceEntry>("state");
+  const entry = state.get(TUNED_MAP);
   if (!entry || getMeta(doc, "kind") !== "component") {
     return false;
   }
   const records = Array.isArray(entry.value)
-    ? (entry.value as TunedRecord[]).filter(
-        (one) => typeof one?.move === "string"
+    ? entry.value.filter(
+        (one: unknown): one is TunedRecord =>
+          typeof one === "object" &&
+          one !== null &&
+          "move" in one &&
+          typeof one.move === "string"
       )
     : [];
   keepTuned(doc, records, entry.pageHash, entry.at);
@@ -144,18 +148,39 @@ export interface ArtifactDocs {
 
 /** The joined client an update came from; none for the hub's own. */
 const clientOf = (origin: unknown): ArtifactClient | undefined =>
-  origin && typeof origin === "object" && "client" in origin
-    ? (origin as { client: ArtifactClient }).client
+  origin &&
+  typeof origin === "object" &&
+  "client" in origin &&
+  isClient(origin.client)
+    ? origin.client
     : undefined;
+
+/** Whether `value` is a joined client: what a socket's origin carries (sync.ts). */
+const isClient = (value: unknown): value is ArtifactClient =>
+  typeof value === "object" &&
+  value !== null &&
+  "send" in value &&
+  typeof value.send === "function";
+
+/** The id of the element a canvas element's map holds; none when it holds none. */
+export const elementIdOf = (map: YMap<unknown>): string | undefined => {
+  const el = map.get("el");
+  return typeof el === "object" &&
+    el !== null &&
+    "id" in el &&
+    typeof el.id === "string"
+    ? el.id
+    : undefined;
+};
 
 /** The id and author of a canvas element's map, when it holds one. */
 const elementOf = (
   map: YMap<unknown>
 ): { id: string; by: CanvasAuthor } | null => {
-  const el = map.get("el") as { id?: unknown } | undefined;
-  return typeof el?.id === "string"
-    ? { id: el.id, by: map.get("by") === "person" ? "person" : "agent" }
-    : null;
+  const id = elementIdOf(map);
+  return id === undefined
+    ? null
+    : { id, by: map.get("by") === "person" ? "person" : "agent" };
 };
 
 /** The canvas elements a deep event on `elements` added or changed. */
@@ -166,8 +191,8 @@ const elementsIn = (
   events
     .flatMap((event) =>
       event.target === elements
-        ? [...event.changes.added].flatMap(
-            (item) => item.content.getContent() as unknown[]
+        ? [...event.changes.added].flatMap((item): unknown[] =>
+            item.content.getContent()
           )
         : [event.target]
     )
@@ -262,35 +287,35 @@ export const createArtifactDocs = (deps: {
     }
     const entry: Loaded = { doc, clients: new Set() };
     // What a transaction changed, read before its update is emitted.
-    let changed = {
-      keys: [] as string[],
-      elements: new Map<string, CanvasAuthor>(),
+    let changed: { keys: string[]; elements: Map<string, CanvasAuthor> } = {
+      keys: [],
+      elements: new Map(),
     };
-    const state = doc.getMap("state") as unknown as AbstractType<
-      YEvent<AbstractType<unknown>>
-    >;
+    // What a transaction changed, heard before its `afterTransaction`
+    // (Yjs calls observers first): the `state` keys, whether the tuned
+    // timing changed, and the elements it added or changed.
+    let stateKeys: string[] = [];
+    doc.getMap("state").observe((event) => {
+      stateKeys = [...event.keysChanged];
+    });
     // A component's tuned timing reads as the one `tuned` entry of its state (core tuned.ts `tunedEntryOf`): a change to it is that key's.
-    const tuned = doc.getMap(TUNED_MAP) as unknown as AbstractType<
-      YEvent<AbstractType<unknown>>
-    >;
-    // The elements a transaction added or changed, heard before its
-    // `afterTransaction` (Yjs calls observers first).
+    let tunedChanged = false;
+    doc.getMap(TUNED_MAP).observe(() => {
+      tunedChanged = true;
+    });
     let touched = new Map<string, CanvasAuthor>();
     elements.observeDeep((events) => {
       for (const element of elementsIn(elements, events)) {
         touched.set(element.id, element.by);
       }
     });
-    doc.on("afterTransaction", (transaction) => {
+    doc.on("afterTransaction", () => {
       changed = {
-        keys: [
-          ...[...(transaction.changed.get(state) ?? [])].filter(
-            (key): key is string => key !== null
-          ),
-          ...(transaction.changed.has(tuned) ? [TUNED_MAP] : []),
-        ],
+        keys: [...stateKeys, ...(tunedChanged ? [TUNED_MAP] : [])],
         elements: touched,
       };
+      stateKeys = [];
+      tunedChanged = false;
       touched = new Map();
     });
     doc.on("update", (update: Uint8Array, origin: unknown) => {

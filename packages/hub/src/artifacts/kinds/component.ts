@@ -37,6 +37,7 @@ import {
   unseen,
   weightSaid,
 } from "../component";
+import { stillThere } from "../facts";
 import { sheetOf } from "../served";
 import type {
   ArtifactInput,
@@ -45,7 +46,6 @@ import type {
   ComponentWritten,
   Created,
   Making,
-  ReadEntry,
   SheetChange,
   StageAt,
 } from "../shapes";
@@ -317,7 +317,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ctx.marked(row.id);
     }
     const read: ArtifactRead = {
-      ...ctx.read(db.get(row.id) as ArtifactRow, undefined, ownersRead),
+      ...ctx.read(stillThere(db.get(row.id), row.id), undefined, ownersRead),
       sheet: edit.sheet,
       edit: { file: edit.file, lines: edit.lines, formatted: edit.formatted },
     };
@@ -343,11 +343,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       const at: StageAt = { workspace: sheet.workspace };
       const deadline = Date.now() + PANEL_DRAW_MS;
       for (;;) {
-        const staged = await deps.stage(
-          at,
-          sheet.files[0] as string,
-          sheet.files
-        );
+        const staged = await deps.stage(at, sheet.files[0], sheet.files);
         if (staged instanceof ElysiaStatus) {
           return staged;
         }
@@ -395,7 +391,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       Date.now() < deadline
     ) {
       await Bun.sleep(PANEL_DRAW_POLL_MS);
-      const staged = await deps.stage(at, files[0] as string, files);
+      const staged = await deps.stage(at, files[0], files);
       if (staged instanceof ElysiaStatus) {
         return staged;
       }
@@ -425,7 +421,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const deadline = Date.now() + PANEL_DRAW_MS;
     while (drawingUnseen(now).length > 0 && Date.now() < deadline) {
       await Bun.sleep(PANEL_DRAW_POLL_MS);
-      const staged = await deps.stage(at, files[0] as string, files);
+      const staged = await deps.stage(at, files[0], files);
       if (staged instanceof ElysiaStatus) {
         return staged;
       }
@@ -463,7 +459,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const { asked, said } = sheetAsk;
     const at: StageAt = { session: maker };
     // A canvas opened on nothing is refused: "Write it, then call again."
-    const staged = await deps.stage(at, asked[0] as string, asked, true);
+    const staged = await deps.stage(at, asked[0], asked, true);
     if (staged instanceof ElysiaStatus) {
       return staged;
     }
@@ -482,12 +478,15 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       db.resource(before.id, { machineId, source });
     }
     const row = before
-      ? (db.update(before.id, {
-          madeBy: maker.id,
-          ...said,
-          revision: before.revision + 1,
-          updatedAt: now,
-        }) as ArtifactRow)
+      ? stillThere(
+          db.update(before.id, {
+            madeBy: maker.id,
+            ...said,
+            revision: before.revision + 1,
+            updatedAt: now,
+          }),
+          before.id
+        )
       : db.create({
           id: crypto.randomUUID(),
           instanceId: owner.id,
@@ -558,7 +557,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     try {
       const staged = await deps.stage(
         { workspace: sheet.workspace },
-        sheet.files[0] as string,
+        sheet.files[0],
         sheet.files
       );
       if (staged instanceof ElysiaStatus) {
@@ -636,12 +635,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const unreached = meta.get("unreached");
     const sheetNow = meta.get("sheet");
     const base = ctx.read(row, since, ownersRead);
-    const {
-      dials,
-      tuned,
-      layout: _layout,
-      ...picks
-    }: Record<string, ReadEntry | undefined> = base.state;
+    const { dials, tuned, layout: _layout, ...picks } = base.state;
     const story = ask.story
       ? sheetNow?.stories.find((one) => one.name === ask.story)
       : undefined;
@@ -666,8 +660,8 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
           }
         : {}),
       ...(opened ? { weight: opened.weight } : {}),
-      ...(dials === undefined ? {} : { dials: dials.value }),
-      ...(tuned === undefined ? {} : { tuned: tuned.value }),
+      ...(Object.hasOwn(base.state, "dials") ? { dials: dials.value } : {}),
+      ...(Object.hasOwn(base.state, "tuned") ? { tuned: tuned.value } : {}),
       ...(story && ask.detail === "story"
         ? {
             story: {
@@ -680,7 +674,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         : {}),
       ...(ask.png ? { png: png ?? null } : {}),
       hint: READ_HINT,
-    } as ArtifactRead;
+    };
   };
   /** A design system round on component canvas `row`, asked by `requester`: what the ask did. */
   const askVerify = (requester: InstanceRow, row: ArtifactRow) => {

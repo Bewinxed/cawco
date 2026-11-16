@@ -106,7 +106,11 @@ function bodyOf(html: string): Node | null {
           }
           return;
         }
-        const parent = stack.at(-1) as Node;
+        // The root stays at the bottom of the stack: there is always a parent.
+        const parent = stack.at(-1);
+        if (!parent) {
+          return;
+        }
         const node: Node = {
           tag,
           attrs: [...el.attributes]
@@ -134,8 +138,8 @@ function bodyOf(html: string): Node | null {
         }
       },
       text(chunk) {
-        if (unseen === 0) {
-          const node = stack.at(-1) as Node;
+        const node = stack.at(-1);
+        if (unseen === 0 && node) {
           node.text += chunk.text;
         }
       },
@@ -272,10 +276,10 @@ function commonRun(before: Node[], after: Node[]): [number, number][] {
   const runs: number[][] = Array.from({ length: n + 1 }, () =>
     new Array<number>(m + 1).fill(0)
   );
-  const at = (i: number, j: number) => (runs[i] as number[])[j] as number;
+  const at = (i: number, j: number) => runs[i][j];
   for (let i = n - 1; i >= 0; i -= 1) {
     for (let j = m - 1; j >= 0; j -= 1) {
-      (runs[i] as number[])[j] =
+      runs[i][j] =
         before[i]?.sig === after[j]?.sig
           ? at(i + 1, j + 1) + 1
           : Math.max(at(i + 1, j), at(i, j + 1));
@@ -312,7 +316,7 @@ function pairGap(
       continue;
     }
     into.removed.push(...left.slice(0, at));
-    into.pairs.push([left[at] as Node, node]);
+    into.pairs.push([left[at], node]);
     left = left.slice(at + 1);
   }
   into.removed.push(...left);
@@ -328,10 +332,10 @@ function pair(
   before: Node[],
   after: Node[]
 ): { added: Node[]; pairs: [Node, Node][]; removed: Node[] } {
-  const out = {
-    pairs: [] as [Node, Node][],
-    added: [] as Node[],
-    removed: [] as Node[],
+  const out: { added: Node[]; pairs: [Node, Node][]; removed: Node[] } = {
+    pairs: [],
+    added: [],
+    removed: [],
   };
   const byIdentity = new Map(
     before.filter((node) => node.identity).map((node) => [node.identity, node])
@@ -353,10 +357,10 @@ function pair(
     [restBefore.length, restAfter.length],
   ];
   for (let k = 0; k < bounds.length - 1; k += 1) {
-    const [i0, j0] = bounds[k] as [number, number];
-    const [i1, j1] = bounds[k + 1] as [number, number];
+    const [i0, j0] = bounds[k];
+    const [i1, j1] = bounds[k + 1];
     if (k > 0) {
-      out.pairs.push([restBefore[i0] as Node, restAfter[j0] as Node]);
+      out.pairs.push([restBefore[i0], restAfter[j0]]);
     }
     pairGap(restBefore.slice(i0 + 1, i1), restAfter.slice(j0 + 1, j1), out);
   }
@@ -404,17 +408,17 @@ function reordered(
     let hi = tails.length;
     while (lo < hi) {
       const mid = Math.floor((lo + hi) / 2);
-      if ((rank[tails[mid] as number] as number) < (rank[i] as number)) {
+      if (rank[tails[mid]] < rank[i]) {
         lo = mid + 1;
       } else {
         hi = mid;
       }
     }
-    back[i] = lo > 0 ? (tails[lo - 1] as number) : -1;
+    back[i] = lo > 0 ? tails[lo - 1] : -1;
     tails[lo] = i;
   }
   const kept = new Set<number>();
-  for (let i = tails.at(-1) ?? -1; i !== -1; i = back[i] as number) {
+  for (let i = tails.at(-1) ?? -1; i !== -1; i = back[i]) {
     kept.add(i);
   }
   return sorted.filter((_, i) => !kept.has(i));
@@ -484,8 +488,8 @@ export function htmlChanges(
         continue;
       }
       const [then] = gone.splice(at, 1);
-      oldOf.set(added, then as Node);
-      moved(then as Node, added);
+      oldOf.set(added, then);
+      moved(then, added);
     }
     for (const out of gone) {
       const holder = holderOf(node);

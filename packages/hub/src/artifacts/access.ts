@@ -131,12 +131,11 @@ export const createAccess = (ctx: AccessContext) => {
     instance: InstanceRow
   ): { artifacts: ArtifactRow[]; row: InstanceRow }[] => {
     const others = [...deps.tree(instance)].filter((id) => id !== instance.id);
-    const held = Map.groupBy(
-      db.ofInstances(others),
-      (row) => row.instanceId as string
-    );
+    const held = Map.groupBy(db.ofInstances(others), (row) => row.instanceId);
     const rows = new Map(
-      deps.instances([...held.keys()]).map((row) => [row.id, row])
+      deps
+        .instances([...held.keys()].filter((id): id is string => id !== null))
+        .map((row) => [row.id, row])
     );
     return others.flatMap((id) => {
       const row = rows.get(id);
@@ -368,7 +367,7 @@ export const createAccess = (ctx: AccessContext) => {
         .instances([
           ...new Set(
             rows.flatMap((row) => [
-              row.instanceId as string,
+              ...(row.instanceId === null ? [] : [row.instanceId]),
               ...(row.madeBy ? [row.madeBy] : []),
             ])
           ),

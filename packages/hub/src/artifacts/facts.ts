@@ -24,6 +24,17 @@ import type { ArtifactServiceDeps } from "./deps";
 import type { ArtifactFacts, ArtifactSessions } from "./needs";
 import { answersOf, noneOpen, type Question, questionsOf } from "./questions";
 
+/** Artifact `id` read back after a write: it stands, or the caller lost it mid-write. */
+export const stillThere = (
+  row: ArtifactRow | undefined,
+  id: string
+): ArtifactRow => {
+  if (!row) {
+    throw new Error(`Artifact ${id} went while it was being written.`);
+  }
+  return row;
+};
+
 /** The doc's `state`, read as entries. */
 /**
  * An artifact's choices as everything reads them: its doc's `state`, and a
@@ -32,7 +43,7 @@ import { answersOf, noneOpen, type Question, questionsOf } from "./questions";
  * does.
  */
 export const stateOf = (doc: Doc): Record<string, ChoiceEntry> => {
-  const state = doc.getMap("state").toJSON() as Record<string, ChoiceEntry>;
+  const state = Object.fromEntries(doc.getMap<ChoiceEntry>("state").entries());
   const tuned = tunedEntryOf(doc.getMap(TUNED_MAP).toJSON());
   return tuned ? { ...state, tuned } : state;
 };

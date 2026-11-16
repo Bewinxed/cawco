@@ -365,7 +365,7 @@ const hrefOf = (
 ): string =>
   row.projectId !== null && isSetupPage(row)
     ? setupLanding(row.projectId, setUp, "card" in stop ? stop.card : null)
-    : artifactStopHref(row.instanceId as string, row.id, stop);
+    : artifactStopHref(String(row.instanceId), row.id, stop);
 
 /** Its pending state as its own list reads it (Files, the panel's menu): null when it asks nothing now. */
 export const pendingOf = (

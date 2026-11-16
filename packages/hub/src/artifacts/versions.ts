@@ -9,7 +9,7 @@ import { readKept } from "../decision-program";
 import type { OpenStop } from "../preview-stops";
 import { boardOf } from "./access";
 import type { ArtifactServiceDeps } from "./deps";
-import { stateOf } from "./facts";
+import { stateOf, stillThere } from "./facts";
 import { unheardKeys } from "./needs";
 import { answersKept } from "./overwrite";
 import type { createPageStore } from "./page-store";
@@ -383,7 +383,7 @@ export const createVersions = (ctx: VersionsContext) => {
     // Its preview origin, where its address was handed out, is the
     // artifact's now; the artifact's own goes with the version's row.
     db.handOrigin(next.id, row.id);
-    const promoted = db.get(row.id) as ArtifactRow;
+    const promoted = stillThere(db.get(row.id), row.id);
     ctx.discard(next);
     ctx.versionMoved(promoted);
     // Its server's state written after the merge, so it stands over both
