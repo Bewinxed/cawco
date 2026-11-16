@@ -10,8 +10,7 @@ import {
   sessionChain,
   waitingOnYou,
 } from "@cawco/core/activity";
-import type { FramePayload } from "@cawco/core/frames";
-import type { Envelope } from "@cawco/core/protocol";
+import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { PERMISSION_DENIED } from "@cawco/core/words/permission-lines";
 import { sessionActivity } from "../activity";
@@ -97,6 +96,16 @@ export const hearSettled = (requestId: string): void => {
 };
 
 /**
+ * An ask as the hub hands it a page, on its socket (a `frames` envelope) or
+ * as `/api/pending` lists it: its frame, its request, and the machine whose
+ * it is.
+ */
+type FramedAsk = Pick<
+  HubEnvelope<"frames">,
+  "machineId" | "payload" | "requestId"
+>;
+
+/**
  * The hub's parked asks as `/api/pending` answered, read when `readFrom` was
  * heard. The read is the whole truth as of then: an ask settled while this
  * tab was away sent its `permission_settled` to nobody listening. What the
@@ -104,10 +113,7 @@ export const hearSettled = (requestId: string): void => {
  * restarted hub hearing its agents replay theirs) stays, and one settled
  * meanwhile is not put back.
  */
-export function adoptPending(
-  pending: Envelope<FramePayload>[],
-  readFrom: number
-): void {
+export function adoptPending(pending: FramedAsk[], readFrom: number): void {
   const parked = new Set(pending.map((envelope) => envelope.requestId));
   const stands = (p: PendingPermission): boolean =>
     parked.has(p.requestId) || p.heard > readFrom;
@@ -130,7 +136,7 @@ export function adoptPending(
  * memory proposal, hub memory.ts): its answer names the envelope's machine,
  * since no row says one.
  */
-export function adoptAskMachine(envelope: Envelope<FramePayload>): void {
+export function adoptAskMachine(envelope: FramedAsk): void {
   const frame = envelope.payload;
   if (
     frame.kind !== "permission_request" ||

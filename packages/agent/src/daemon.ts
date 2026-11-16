@@ -18,10 +18,7 @@ import {
   UNLOCK_KEYCHAIN,
 } from "@cawco/core/accounts/controls";
 import { readInstallation } from "@cawco/core/binary-installation";
-import {
-  AGENT_RESTARTING,
-  type BinaryUpdateState,
-} from "@cawco/core/binary-updates";
+import { AGENT_RESTARTING } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   BROWSER_HANDBACK,
@@ -49,8 +46,14 @@ import {
 } from "@cawco/core/commands/controls";
 import { CONTROL_GH_ACCOUNTS, CONTROL_GH_TOKEN } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
+import type {
+  DaemonFrame,
+  MachineIdentity,
+  MachineInbound,
+  MachineSend,
+  RegisterPayload,
+} from "@cawco/core/envelopes";
 import { sayFetchCap } from "@cawco/core/fetch-cap";
-import type { FleetHeld } from "@cawco/core/fleet";
 import { keepFoldersPrivate } from "@cawco/core/folders";
 import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
 import {
@@ -65,7 +68,6 @@ import {
 } from "@cawco/core/handover";
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import { MACHINE_PART_MS } from "@cawco/core/harness";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
   KEEPER_HARNESSES,
   type KeeperHarnessKind,
@@ -82,6 +84,10 @@ import {
   watchLoop,
 } from "@cawco/core/loop-watch";
 import { machineId } from "@cawco/core/machine-id";
+import {
+  type InboundRefusal,
+  readMachineInbound,
+} from "@cawco/core/machine-inbound";
 import {
   machineKeyPath,
   machineRefusalPath,
@@ -100,15 +106,12 @@ import {
   CONTROL_MOVE_SNAPSHOT,
 } from "@cawco/core/move";
 import type { MachineActivity } from "@cawco/core/notifications";
+import { isOneOf } from "@cawco/core/one-of";
 import { userLayerPath } from "@cawco/core/paths/claude";
 import { CAWCO_HUB_PORT } from "@cawco/core/ports";
 import type {
   AdmissionPayload,
-  BuildInfo,
-  Envelope,
-  HeartbeatAckPayload,
   HeartbeatPayload,
-  LaunchAsk,
   LaunchGrant,
   NamedSpawn,
   SessionCustody,
@@ -275,7 +278,6 @@ import {
   savePicture,
   writeInputs,
 } from "./inputs";
-import { fieldOf } from "./json-field";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
@@ -498,9 +500,9 @@ class LaunchAsks {
   readonly #machineId: string;
   readonly #pending = new Map<
     string,
-    { envelope: Envelope<LaunchAsk>; settle: (grant: LaunchGrant) => void }
+    { envelope: MachineSend<"launch">; settle: (grant: LaunchGrant) => void }
   >();
-  #send: ((envelope: Envelope) => void) | undefined;
+  #send: ((envelope: MachineSend) => void) | undefined;
 
   constructor(machine: string) {
     this.#machineId = machine;
@@ -514,7 +516,7 @@ class LaunchAsks {
       });
     }
     const requestId = crypto.randomUUID();
-    const envelope: Envelope<LaunchAsk> = {
+    const envelope: MachineSend<"launch"> = {
       verb: "launch",
       machineId: this.#machineId,
       instanceId,
@@ -533,7 +535,7 @@ class LaunchAsks {
   }
 
   /** A connection registered: every ask not yet answered goes on it, and every one after. */
-  connected(carry: (envelope: Envelope) => void): void {
+  connected(carry: (envelope: MachineSend) => void): void {
     this.#send = carry;
     for (const { envelope } of this.#pending.values()) {
       carry(envelope);
@@ -541,21 +543,31 @@ class LaunchAsks {
   }
 
   /** That connection ended: what is asked from here waits for the next. */
-  disconnected(carry: (envelope: Envelope) => void): void {
+  disconnected(carry: (envelope: MachineSend) => void): void {
     if (this.#send === carry) {
       this.#send = undefined;
     }
   }
 
+  /** The hub's answer to an ask that did not read as a grant ({@link readMachineInbound}): the ask settled refused with why; whether it was one. */
+  unread(refusal: InboundRefusal): boolean {
+    const pending =
+      refusal.verb === "launch" && refusal.requestId
+        ? this.#pending.get(refusal.requestId)
+        : undefined;
+    pending?.settle({ refusal: refusal.error });
+    return pending !== undefined;
+  }
+
   /** The hub's answer to an ask, settled; whether `envelope` was one. */
-  answer(envelope: Envelope): boolean {
+  answer(envelope: MachineInbound): boolean {
     if (envelope.verb !== "launch") {
       return false;
     }
     const pending = envelope.requestId
       ? this.#pending.get(envelope.requestId)
       : undefined;
-    pending?.settle(envelope.payload as LaunchGrant);
+    pending?.settle(envelope.payload);
     return true;
   }
 }
@@ -869,116 +881,6 @@ const registerProviderAccounts = (
   );
 };
 
-/**
- * How the hub identifies this machine in its registry. Nothing in it is
- * probed: the machine's word on Claude rides Claude's harness report, which
- * follows the register ({@link HeartbeatPayload.harnesses}).
- */
-interface MachineIdentity {
-  /**
-   * The daemon's home folder, absolute: the hub resolves a place named under
-   * `~` on this machine against it, so every place it stores is absolute.
-   */
-  home: string;
-  hostname: string;
-  machineId: string;
-  os: string;
-}
-
-/**
- * What `register` carries. The supervisor outlives any one connection, so a
- * register is not a promise of zero sessions — `instances` names the ones still
- * running and the hub marks every other row it calls running as unknown.
- *
- * Only what the daemon can say without spawning anything. The register is the
- * moment the hub puts this machine back in its registry — `online` is read
- * from nowhere else — so every millisecond spent before sending it is a
- * millisecond a healthy machine reads offline. Harnesses, tools and the
- * machine's capabilities, whose probes start processes (a `claude` that took
- * 30 s to answer `--version` and `auth status` kept a machine offline for
- * 31 s), follow on beats of their own: see {@link HeartbeatPayload}.
- */
-interface RegisterPayload extends MachineIdentity {
-  /**
-   * The machine agent's account stores: every id under `~/.cawco/accounts/`,
-   * Claude dirs and provider credential stores alike. The hub's ack names
-   * the ones it has no account for ({@link RegisterAckPayload.unknownAccounts}),
-   * which the machine forgets. Absent from an agent that is not the
-   * machine's: it shares the machine's stores with the machine's own hub,
-   * and another hub's accounts are not its to judge.
-   */
-  accountStores?: string[];
-  /** This machine's binary update state at register, as the updater last saw it. */
-  binaryUpdate?: BinaryUpdateState;
-  /**
-   * The cawco this daemon is running (NEW.md §12), as it reported at register.
-   */
-  build?: BuildInfo;
-  /**
-   * The hub's name (a SHA-256 hex digest) for each credential this agent's
-   * redaction store holds (redaction.ts `storedHashes`): the ack names the
-   * ones the hub has revoked ({@link RegisterAckPayload.revokedCredentials}),
-   * and the store lets them go, so one revoked while this machine was away
-   * goes too.
-   */
-  credentialHashes: string[];
-  /** Custody is not attachment: these still need a handle before being listed live. */
-  custody: SessionCustody;
-  /**
-   * What this agent holds of the fleet (core fleet.ts `FleetHeld`): the
-   * hub's welcome carries only what differs. Absent from an agent that has
-   * held nothing since it started.
-   */
-  fleetHeld?: FleetHeld;
-  /**
-   * The id this machine last registered as with this hub, when its id has
-   * moved since (it follows the hostname, core machine-id.ts): the hub moves
-   * what it held for that id to this one once the register proves it is
-   * that machine (hub server.ts `takeFormerId`). Absent when it has not moved.
-   */
-  formerMachineId?: string;
-  /**
-   * The harnesses whose reports follow this register, each on a beat of its
-   * own: the adapters this daemon has (harnesses/index.ts), named without
-   * probing any. The hub holds the connection's first fleet sync until each
-   * has reported, so a starting machine is synced once, on its whole set.
-   */
-  harnessKinds: HarnessKind[];
-  instances: string[];
-  /**
-   * The preview listeners this process is serving. A hub that restarted has
-   * no targets and takes these as they are; one that only lost the socket
-   * points its targets at them again.
-   */
-  previews: ReturnType<typeof servingPreviews>;
-  /**
-   * This connection's answer to the hub's challenge with the machine's key
-   * ({@link keyProof}); absent before the person admitted the machine.
-   */
-  proof?: string;
-  /**
-   * This machine's workspaces reach the hub's own preview origins through
-   * their relays (proxy-relay.ts, hub-previews.ts), from the origins the ack
-   * names: the hub hands a workspace here a pass to one of them. Absent from
-   * an agent from before it, whose workspaces reach none.
-   */
-  relaysHubPreviews: true;
-  /**
-   * The sessions this machine could resume, so the rows the daemon no
-   * longer carries settle as sleeping or as lost rather than all alike. Absent
-   * when the catalog could not be read.
-   */
-  resumable?: string[];
-  /**
-   * When each of those conversations last changed, ms epoch, by session id.
-   * The hub writes it onto the rows it is not being told are live, so a
-   * sleeping session's age is when the session last said something rather than
-   * when this register ran. Absent alongside `resumable`.
-   */
-  resumableAt?: Record<string, number>;
-  sessionAddresses: import("@cawco/core/protocol").SessionAddress[];
-}
-
 class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
   readonly url: string;
   readonly reason: string;
@@ -1274,7 +1176,7 @@ const heldSockets = new WeakSet<WebSocket>();
  * socket's line (`@cawco/core/wire`) a long message goes as parts, one per
  * turn of the loop, in order, never dropped.
  */
-const send = (socket: WebSocket, envelope: Envelope): void => {
+const send = (socket: WebSocket, envelope: MachineSend): void => {
   // A connection the hub holds (`admission` `waiting`) carries a register and
   // nothing else: every other frame on it the hub refuses ("register first").
   if (heldSockets.has(socket) && envelope.verb !== "register") {
@@ -1299,7 +1201,7 @@ class HubLine {
     this.#open = { socket, machine };
   }
 
-  send(envelope: Envelope): void {
+  send(envelope: MachineSend): void {
     if (this.#open?.socket.readyState !== WebSocket.OPEN) {
       return;
     }
@@ -1334,14 +1236,11 @@ const challengeIn = (data: unknown): Challenge | undefined => {
   } catch {
     return;
   }
-  const envelope = frame as Envelope<Partial<AdmissionPayload>> | null;
-  const payload = envelope?.payload as
-    { hubId?: unknown; kind?: unknown; nonce?: unknown } | undefined;
-  return envelope?.verb === "admission" &&
-    payload?.kind === "challenge" &&
-    typeof payload.nonce === "string" &&
-    typeof payload.hubId === "string"
-    ? { nonce: payload.nonce, hubId: payload.hubId }
+  const read = readMachineInbound(frame);
+  return read.ok &&
+    read.envelope.verb === "admission" &&
+    read.envelope.payload.kind === "challenge"
+    ? { nonce: read.envelope.payload.nonce, hubId: read.envelope.payload.hubId }
     : undefined;
 };
 
@@ -1519,6 +1418,9 @@ const closed = (socket: WebSocket, url: string) =>
     return Effect.sync(() => socket.removeEventListener("close", onClose));
   });
 
+/** A start held for the register's ack, its harness one whose keeper may hold it ({@link adoptable}). */
+type HeldSpawn = MachineInbound<"spawn"> & { payload: NamedSpawn };
+
 /**
  * A hub restore this daemon could take custody of instead of re-spawning.
  *
@@ -1526,11 +1428,8 @@ const closed = (socket: WebSocket, url: string) =>
  * has to clone a repository or cut a worktree first is not a session that
  * already exists to be adopted — both go straight to the supervisor.
  */
-const adoptable = (payload: SpawnPayload | undefined): payload is NamedSpawn =>
-  payload !== undefined &&
-  typeof payload.instanceId === "string" &&
+const adoptable = (payload: SpawnPayload): payload is NamedSpawn =>
   payload.instanceId.length > 0 &&
-  typeof payload.cwd === "string" &&
   payload.cwd.length > 0 &&
   KEEPER_HARNESSES.some((kind) => kind === payload.harness) &&
   payload.bootstrap === undefined &&
@@ -1600,12 +1499,9 @@ const readCustody = async (
  */
 const reconnectAfterHubRestart = async (
   url: string,
-  ackPayload: unknown
+  ack: RegisterAckPayload
 ): Promise<void> => {
-  const epoch = (ackPayload as { hubEpoch?: unknown } | undefined)?.hubEpoch;
-  if (typeof epoch !== "string") {
-    return;
-  }
+  const epoch = ack.hubEpoch;
   const file = join(
     dirname(machineEndpoint()),
     `hub-epoch-${new URL(url).host.replaceAll(":", "_")}`
@@ -1867,7 +1763,7 @@ const attach = (
       }
     };
     /** This connection's way to ask the hub what a launch runs on, once it has registered. */
-    const askHub = (envelope: Envelope): void => {
+    const askHub = (envelope: MachineSend): void => {
       if (socket.readyState === WebSocket.OPEN) {
         send(socket, envelope);
       }
@@ -2457,7 +2353,7 @@ const attach = (
      * operator's spawn, a delegate's, and every later `reannounce` ack go
      * straight through.
      */
-    const heldSpawns: Envelope<NamedSpawn>[] = [];
+    const heldSpawns: HeldSpawn[] = [];
     /**
      * WHAT IS SENT TO A SESSION WHILE ITS CUSTODY IS TAKEN WAITS FOR IT, AND
      * FOR NOTHING ELSE.
@@ -2473,7 +2369,7 @@ const attach = (
      * server answering HTTP 500 to every request held every Claude wake on
      * obelisk for 4.5 hours (2026-10-10).
      */
-    const undecided = new Map<string, Envelope[]>();
+    const undecided = new Map<string, MachineInbound[]>();
     /** One session's custody is decided: what waited for it goes to the supervisor, in order. */
     const release = (instanceId: string): void => {
       const waiting = undecided.get(instanceId);
@@ -2502,7 +2398,7 @@ const attach = (
      * session's envelopes in order; a reattach that fails is settled
      * unavailable there, its sends owed (`recovery_unavailable`).
      */
-    const reattaching: Envelope[] = [];
+    const reattaching: MachineInbound<"spawn">[] = [];
     supervisor.declareControl(SESSION_CUSTODY, async () => ({
       custody: await readCustody(supervisor.stopSequence, [
         ...supervisor.custodyInstanceIds,
@@ -2534,8 +2430,8 @@ const attach = (
      * ({@link reattaching}).
      */
     const takeCustody = (
-      ackPayload: unknown,
-      spawns: Envelope<NamedSpawn>[]
+      ack: RegisterAckPayload,
+      spawns: HeldSpawn[]
     ): void => {
       clearTimeout(registrationDeadline);
       const units = new Map(
@@ -2552,7 +2448,7 @@ const attach = (
       // waited for that session goes behind it ({@link reattaching}).
       for (const envelope of reattaching.splice(0)) {
         supervisor.dispatch(envelope);
-        release((envelope.payload as SpawnPayload).instanceId);
+        release(envelope.payload.instanceId);
       }
       const takeover = new AbortController();
       recoveryController = takeover;
@@ -2560,10 +2456,7 @@ const attach = (
       const ended = (): boolean =>
         takeover.signal.aborted || socket.readyState !== WebSocket.OPEN;
       const byId = new Map(
-        spawns.map((envelope) => [
-          (envelope.payload as SpawnPayload).instanceId,
-          envelope,
-        ])
+        spawns.map((envelope) => [envelope.payload.instanceId, envelope])
       );
       /** Each keeper's listing of each harness's children, this custody: what a `hold` takes. */
       const listings = new Map<string, HeldProc[]>();
@@ -2580,55 +2473,59 @@ const attach = (
           obeyCustody(command);
         }
       };
+      /** A keeper of a harness that keeps children, read for its word on them. */
+      const readKeeper = (
+        command: Extract<HandoverCommand, { kind: "read-keeper" }>
+      ): void => {
+        const kind = command.unit;
+        if (!isOneOf(KEEPER_HARNESSES, kind)) {
+          return;
+        }
+        supervisor
+          .custodyReader(kind)
+          ?.read(command.keeper)
+          .then((answer) => {
+            if (answer.kind === "listed") {
+              listings.set(listed(command.unit, command.keeper), answer.procs);
+            }
+            custodyStep({
+              kind: "keeper-word",
+              epoch: command.epoch,
+              unit: command.unit,
+              keeper: command.keeper,
+              word: custodyWord(kind, answer),
+              now: Date.now(),
+            });
+          })
+          .catch((problem: unknown) => supervisor.failCustody(epoch, problem));
+      };
+      /** A held spawn whose child its keeper listed alive, taken into custody. */
+      const hold = (
+        command: Extract<HandoverCommand, { kind: "hold" }>
+      ): void => {
+        const kind = command.unit;
+        const envelope = byId.get(command.id);
+        if (!(envelope && isOneOf(KEEPER_HARNESSES, kind))) {
+          return;
+        }
+        const proc = listings
+          .get(listed(kind, command.keeper))
+          ?.find(
+            (one) => one.alive && one.procId === procIdFor(kind, command.id)
+          );
+        if (proc) {
+          supervisor.takeHeld(kind, ack, envelope.payload, proc);
+          adopted.push(command.id);
+        }
+      };
       const obeyCustody = (command: HandoverCommand): void => {
         switch (command.kind) {
-          case "read-keeper": {
-            const kind = command.unit as KeeperHarnessKind;
-            const reader = supervisor.custodyReader(kind);
-            reader
-              ?.read(command.keeper)
-              .then((answer) => {
-                if (answer.kind === "listed") {
-                  listings.set(
-                    listed(command.unit, command.keeper),
-                    answer.procs
-                  );
-                }
-                custodyStep({
-                  kind: "keeper-word",
-                  epoch: command.epoch,
-                  unit: command.unit,
-                  keeper: command.keeper,
-                  word: custodyWord(kind, answer),
-                  now: Date.now(),
-                });
-              })
-              .catch((problem: unknown) =>
-                supervisor.failCustody(epoch, problem)
-              );
+          case "read-keeper":
+            readKeeper(command);
             return;
-          }
-          case "hold": {
-            const envelope = byId.get(command.id);
-            const proc = listings
-              .get(listed(command.unit, command.keeper))
-              ?.find(
-                (one) =>
-                  one.alive &&
-                  one.procId ===
-                    procIdFor(command.unit as KeeperHarnessKind, command.id)
-              );
-            if (envelope && proc) {
-              supervisor.takeHeld(
-                command.unit as KeeperHarnessKind,
-                ackPayload,
-                envelope.payload as SpawnPayload,
-                proc
-              );
-              adopted.push(command.id);
-            }
+          case "hold":
+            hold(command);
             return;
-          }
           case "start": {
             // A held spawn whose session has no child to take back starts
             // one, ahead of what waited for it.
@@ -2694,10 +2591,7 @@ const attach = (
             )
           );
         }
-        detach(
-          reconnectAfterHubRestart(url, ackPayload),
-          "reconnectAfterHubRestart"
-        );
+        detach(reconnectAfterHubRestart(url, ack), "reconnectAfterHubRestart");
       };
 
       /** Every unit settled: the machine's custody, read fresh, is complete. */
@@ -2743,8 +2637,8 @@ const attach = (
                 keepers:
                   (await supervisor.custodyReader(kind)?.keepers()) ?? [],
                 rows: mine.map((envelope) => ({
-                  id: (envelope.payload as SpawnPayload).instanceId,
-                  fresh: !(envelope.payload as SpawnPayload).reattachOnly,
+                  id: envelope.payload.instanceId,
+                  fresh: !envelope.payload.reattachOnly,
                 })),
               }))(),
             ];
@@ -2767,27 +2661,24 @@ const attach = (
      * The hub refused a frame this daemon sent and says why: logged, since a
      * `frames` envelope is never work for the supervisor. Whether it was one.
      */
-    const refusedByHub = (envelope: Envelope): boolean => {
-      const refused = envelope.payload as
-        { kind?: string; message?: string } | undefined;
-      if (envelope.verb !== "frames" || refused?.kind !== "error") {
+    const refusedByHub = (envelope: MachineInbound): boolean => {
+      if (envelope.verb !== "frames") {
         return false;
       }
       Effect.runFork(
         Effect.logWarning(
-          `hub refused a frame from this machine: ${refused.message ?? "no reason given"}`
+          `hub refused a frame from this machine: ${envelope.payload.message}`
         )
       );
       return true;
     };
 
     /** A stop is logged and its sequence noted the moment it arrives, before it is routed. */
-    const receiveStop = (envelope: Envelope): void => {
+    const receiveStop = (envelope: MachineInbound): void => {
       if (envelope.verb !== "stop") {
         return;
       }
-      const stop =
-        envelope.payload as import("@cawco/core/protocol").StopPayload;
+      const stop = envelope.payload;
       Effect.runFork(
         Effect.logInfo(
           `[agent] stop session=${stop.instanceId} request=${stop.requestId ?? "none"} machine=${identity.machineId} outcome=received elapsedMs=0`
@@ -2860,8 +2751,9 @@ const attach = (
     };
 
     /** What arrives ahead of the register ack: custody, taken on the ack. Whether it was taken. */
-    const beforeAck = (envelope: Envelope): boolean => {
+    const beforeAck = (envelope: MachineInbound): boolean => {
       if (envelope.verb === "register") {
+        const ack = envelope.payload;
         agentStep({ kind: "register-ack" });
         recordRegistered();
         // A machine waiting for its hub's build looks again: the hub may
@@ -2870,45 +2762,33 @@ const attach = (
         // What each session is owed goes first, ahead of anything this ack
         // sets off: every frame the hub has not taken, then each running
         // reply so far (outbox.ts).
-        supervisor.linkUp(envelope.payload);
+        supervisor.linkUp(ack);
         // Each stage's state now: a frame dropped while no connection was open is said again.
         tellStages();
-        takeSessionLimits(
-          (envelope.payload as RegisterAckPayload).sessionLimits
-        );
+        takeSessionLimits(ack.sessionLimits);
         // localhost on this computer is the hub this connection reached.
         carryHub(
           url,
-          {
-            dashboard: (envelope.payload as RegisterAckPayload).dashboardPorts,
-            previews: (envelope.payload as RegisterAckPayload).previewPorts,
-          },
-          (envelope.payload as RegisterAckPayload).hostsHub,
-          (envelope.payload as RegisterAckPayload).tailnetHttps
+          { dashboard: ack.dashboardPorts, previews: ack.previewPorts },
+          ack.hostsHub,
+          ack.tailnetHttps
         );
         // The hub's own preview origins, which this machine's workspaces
         // reach through their relays from the host (hub-previews.ts).
-        keepHubPreviews(
-          (envelope.payload as RegisterAckPayload).previewOrigins,
-          (envelope.payload as RegisterAckPayload).hostsHub
-        ).catch((error: unknown) =>
-          console.warn(
-            `[agent] the hub's preview origins were not kept, so this machine's workspaces reach none: ${error instanceof Error ? error.message : String(error)}`
-          )
+        keepHubPreviews(ack.previewOrigins, ack.hostsHub).catch(
+          (error: unknown) =>
+            console.warn(
+              `[agent] the hub's preview origins were not kept, so this machine's workspaces reach none: ${error instanceof Error ? error.message : String(error)}`
+            )
         );
         // What the hub no longer honours of what the register named leaves
         // the redaction store: it grants nothing, so nothing it shows leaks.
-        forgetRevoked(
-          (envelope.payload as RegisterAckPayload).revokedCredentials ?? []
-        );
+        forgetRevoked(ack.revokedCredentials ?? []);
         // This connection's credential for the hub's git remote, in memory only.
-        setHubCredential(
-          identity.machineId,
-          (envelope.payload as RegisterAckPayload).machineCredential
-        );
+        setHubCredential(identity.machineId, ack.machineCredential);
         // Every address the hub's git remote answers at: a clone made by
         // another machine names the hub as that machine reached it.
-        setHubGitOrigins((envelope.payload as RegisterAckPayload).gitOrigins);
+        setHubGitOrigins(ack.gitOrigins);
         // Registered: launches ask on this connection from here, the held
         // spawns below among them, and what went unanswered before goes now.
         launchAsks.connected(askHub);
@@ -2919,27 +2799,26 @@ const attach = (
           )
         );
         const spawns = heldSpawns.splice(0);
-        takeCustody(envelope.payload, spawns);
-        sweepAccounts(envelope.payload as RegisterAckPayload);
+        takeCustody(ack, spawns);
+        sweepAccounts(ack);
         // The welcome read whole: the doors of sessions it no longer has go.
-        sweepBrowserDoors(envelope.payload);
+        sweepBrowserDoors(ack);
         // And the containers of sessions that ended while no agent was here.
-        supervisor.sweepContainers(envelope.payload);
+        supervisor.sweepContainers(ack);
         return true;
       }
       if (envelope.verb !== "spawn") {
         return false;
       }
-      const spawn = envelope.payload as SpawnPayload | undefined;
-      const reattachOnly = spawn?.reattachOnly;
-      const serverSpawn = traitsOf(spawn?.harness).custody === "server";
-      const instanceId = spawn?.instanceId;
+      const spawn = envelope.payload;
+      const serverSpawn = traitsOf(spawn.harness).custody === "server";
+      const { instanceId } = spawn;
       if (adoptable(spawn)) {
         heldSpawns.push({ ...envelope, payload: spawn });
-        undecided.set(spawn.instanceId, undecided.get(spawn.instanceId) ?? []);
+        undecided.set(instanceId, undecided.get(instanceId) ?? []);
         return true;
       }
-      if (reattachOnly || serverSpawn) {
+      if (spawn.reattachOnly || serverSpawn) {
         reattaching.push(envelope);
         if (instanceId) {
           undecided.set(instanceId, undecided.get(instanceId) ?? []);
@@ -2950,7 +2829,7 @@ const attach = (
     };
 
     /** An envelope for a session whose custody is not decided waits for it; whether this one does. */
-    const waitsForCustody = (envelope: Envelope): boolean => {
+    const waitsForCustody = (envelope: MachineInbound): boolean => {
       const waiting = envelope.instanceId
         ? undecided.get(envelope.instanceId)
         : undefined;
@@ -3024,14 +2903,14 @@ const attach = (
       }
     };
 
-    const onEnvelope = (envelope: Envelope): void => {
+    const onEnvelope = (envelope: MachineInbound): void => {
       if (launchAsks.answer(envelope) || refusedByHub(envelope)) {
         return;
       }
       receiveStop(envelope);
       if (
         envelope.verb === "control" &&
-        fieldOf(envelope.payload, "method") === CONTROL_ACKNOWLEDGE_ADDRESS
+        envelope.payload.method === CONTROL_ACKNOWLEDGE_ADDRESS
       ) {
         supervisor.dispatch(envelope);
         return;
@@ -3042,17 +2921,16 @@ const attach = (
       }
       // The hub's answer to a beat: the sessions it keeps awake.
       if (envelope.verb === "heartbeat") {
-        const ack = envelope.payload as
-          Partial<HeartbeatAckPayload> | undefined;
-        supervisor.keepAwake(ack?.keepAwake);
-        liveWorkItems(ack?.liveWorkspaces);
+        const ack = envelope.payload;
+        supervisor.keepAwake(ack.keepAwake);
+        liveWorkItems(ack.liveWorkspaces);
         // Once the hub has said which workspaces are live: the clones cuts of
         // an earlier build left behind are cleared (workspace.ts). Once per
         // agent; it never throws.
-        clearUnmarkedHusks(ack?.liveWorkspaces);
-        takeSessionLimits(ack?.sessionLimits);
-        followHub(ack?.tailnetHttps);
-        reportActivity(ack?.reportActivity === true);
+        clearUnmarkedHusks();
+        takeSessionLimits(ack.sessionLimits);
+        followHub(ack.tailnetHttps);
+        reportActivity(ack.reportActivity === true);
         supervisor.acknowledged(ack);
         return;
       }
@@ -3064,10 +2942,20 @@ const attach = (
     // per turn of the loop; a message too long for one frame arrives as parts.
     const line = clientLine(socket);
     // The hub's word on this machine's admission is its own ({@link admission}).
+    // Each message is read once, here, by its verb (core
+    // machine-inbound.ts): one that is not the hub's is refused, and its
+    // caller answered when it named its request.
     line.listen((message) => {
-      const envelope = message as Envelope;
+      const read = readMachineInbound(message);
+      if (!read.ok) {
+        if (!launchAsks.unread(read)) {
+          supervisor.refuse(read);
+        }
+        return;
+      }
+      const { envelope } = read;
       if (envelope.verb === "admission") {
-        admission(envelope.payload as AdmissionPayload);
+        admission(envelope.payload);
       } else {
         onEnvelope(envelope);
       }
@@ -3323,7 +3211,7 @@ const startDaemon = (rediscover = false) =>
     // What the modules send through, built before any of them starts; every
     // frame leaves on the hub connection that is up (`HubLine`).
     const hubLine = new HubLine();
-    const framed = (frame: unknown): void =>
+    const framed = (frame: DaemonFrame): void =>
       hubLine.send({ verb: "frames", machineId: "", payload: frame });
     const ports: AgentPorts = {
       borrowAsk: framed,
@@ -4085,14 +3973,7 @@ export const runDaemon = (rediscover = false): void => {
     )
   );
   const drain = (signal: NodeJS.Signals): void => {
-    // bun-types' `NodeJS.Process` merge redeclares `off` for its own
-    // `"memoryPressure"` event only, which shadows @types/node's generic
-    // `EventEmitter.off(event: string | symbol, listener)` instead of
-    // overloading it — so `process.off(signal, drain)` type-checks against
-    // that one unrelated overload and never against a signal. Going through
-    // `EventEmitter` directly reaches the generic signature `process.off`
-    // itself no longer offers.
-    (process as NodeJS.EventEmitter).off(signal, drain);
+    process.off(signal, drain);
     detach(
       Effect.runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0)),
       "runPromise"

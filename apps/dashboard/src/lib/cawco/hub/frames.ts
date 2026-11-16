@@ -15,23 +15,33 @@ export type FrameKind = FramePayload["kind"];
 /** The frame of the kind `K`. */
 export type FrameOf<K extends FrameKind> = Extract<FramePayload, { kind: K }>;
 
-/** What takes the frames of one kind. */
+/** What takes the frames of one kind: any frame the router hands it, taken when it is of `kind`. */
 export interface FrameRoute<K extends FrameKind> {
   readonly kind: K;
-  readonly take: (frame: FrameOf<K>) => void;
+  readonly take: (frame: FramePayload) => void;
 }
 
 /** A route of any kind, as the router holds it. */
-interface AnyRoute {
-  readonly kind: FrameKind;
-  readonly take: (frame: never) => void;
-}
+type AnyRoute = FrameRoute<FrameKind>;
 
-/** The frames of kind `kind` go to `take`. */
+/** Whether `frame` is of the kind `kind`. */
+const isOf = <K extends FrameKind>(
+  kind: K,
+  frame: FramePayload
+): frame is FrameOf<K> => frame.kind === kind;
+
+/** The frames of kind `kind` go to `take`, each narrowed to its kind. */
 export const onFrame = <K extends FrameKind>(
   kind: K,
   take: (frame: FrameOf<K>) => void
-): FrameRoute<K> => ({ kind, take });
+): FrameRoute<K> => ({
+  kind,
+  take: (frame) => {
+    if (isOf(kind, frame)) {
+      take(frame);
+    }
+  },
+});
 
 /** Kinds that travel machine → hub only: no page is sent one, and none takes it. */
 export const hubOnly = <K extends FrameKind>(...kinds: K[]): FrameRoute<K>[] =>
@@ -74,7 +84,7 @@ export function routeFrames<const R extends readonly AnyRoute[]>(
 
 /** One frame, to the route its kind has. */
 export function takeFrame(frame: FramePayload): void {
-  routes.get(frame.kind)?.(frame as never);
+  routes.get(frame.kind)?.(frame);
 }
 
 /** The board, whole (`instances`) or as what moved (`instances_delta`). */

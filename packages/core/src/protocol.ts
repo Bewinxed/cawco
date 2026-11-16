@@ -73,12 +73,15 @@ export type LaunchGrant =
   | { refusal: string };
 
 /**
- * Every message on every hop, as a machine's daemon writes and reads it
- * (packages/agent): `payload` is whatever the verb carries, its type the
- * daemon's to say. The hub and its clients read the same message typed by
- * its verb (envelopes.ts): `MachineEnvelope` as a machine sends it, parsed
- * where it enters the hub (agent-frame.ts `readMachineEnvelope`);
- * `ClientEnvelope` as a client sends it; `HubEnvelope` as the hub sends it.
+ * A message's wire shape under any verb, as a hub column keeps one it sent
+ * (a send, a start: hub db/schema.ts) and `/api/pending` lists the asks it
+ * parked. Every hop reads and writes the message typed by its verb instead
+ * (envelopes.ts): `MachineSend` as a machine's daemon writes it, and
+ * `MachineEnvelope` as the hub reads it, parsed where it enters
+ * (agent-frame.ts `readMachineEnvelope`); `ClientEnvelope` as a client sends
+ * it; `HubEnvelope` as the hub sends it, and `MachineInbound` as a machine
+ * reads that, parsed where it arrives (machine-inbound.ts
+ * `readMachineInbound`).
  *
  * @socketFrame toHub
  */

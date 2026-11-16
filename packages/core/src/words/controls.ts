@@ -14,8 +14,6 @@ export const controlWords = {
   /** A machine's answer to a call that is not the call's reply, by the fields that broke it. */
   replyMalformed: (call: string, fields: string) =>
     `The machine answered ${call} with something that is not its answer (${fields}). Nothing it said was taken; ask again.`,
-  /** An argument a stored type's schema did not read, by the fields it broke. */
-  notStored: (what: string, fields: string) => `is not ${what} (${fields})`,
   /** What an argument or an answer is meant to be, as a refusal of one that is not names it. */
   meant: {
     discardHolds: "what a discard would take",

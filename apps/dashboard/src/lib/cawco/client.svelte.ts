@@ -10,8 +10,7 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import type { FramePayload } from "@cawco/core/frames";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { hub } from "#lib/platform/hub.js";
 import { hubData } from "#lib/platform/hub-read.js";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
@@ -25,6 +24,7 @@ import {
   routeFrames,
   takeFrame,
 } from "./hub/frames";
+import { readHubMessage } from "./hub/hub-message";
 import { load } from "./hub/load";
 import {
   type BenchControl,
@@ -418,25 +418,25 @@ function takeControlResult(frame: FrameOf<"control_result">): void {
   }
 }
 
-/** One message off the hub's socket, taken into the stores. */
-function takeHubMessage(message: unknown): void {
+/** One message off the hub's socket, read once (hub-message.ts), taken into the stores. */
+function takeHubMessage(raw: unknown): void {
+  const message = readHubMessage(raw);
+  if (message === undefined) {
+    return;
+  }
   // A session's own frames are sequenced; everything else — the board,
   // pulses, permissions, replies — is broadcast as an envelope.
-  if (handleStreamMessage(streamState, streamHost, message)) {
-    sweepOnTraffic();
-    return;
-  }
-  if (
+  if (!("verb" in message)) {
+    if (handleStreamMessage(streamState, streamHost, message)) {
+      sweepOnTraffic();
+      return;
+    }
     handlePlanMessage(plansState.plans, message, (instanceId) =>
       streamHost.sendToHub({ type: "plan.resync", instanceId })
-    )
-  ) {
+    );
     return;
   }
-  const envelope = message as Envelope<FramePayload>;
-  if (envelope.verb !== "frames") {
-    return;
-  }
+  const envelope = message;
   const { payload } = envelope;
   adoptAskMachine(envelope);
   // The hub's own refusal names the request it answers on the envelope

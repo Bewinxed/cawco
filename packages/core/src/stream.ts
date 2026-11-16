@@ -419,6 +419,33 @@ export type SessionStreamFrame =
   | Extract<import("./frames").FramePayload, { kind: "preview" }>;
 
 /**
+ * Whether `value` is a frame a session's stream carries
+ * ({@link SessionStreamFrame}), by its kind: a transcript's changes, its
+ * preview's state, or a keep-alive's own frame or send. What else it
+ * carries is read where its kind is handled.
+ */
+export const isSessionStreamFrame = (
+  value: unknown
+): value is SessionStreamFrame => {
+  if (!isRecord(value)) {
+    return false;
+  }
+  switch (value.kind) {
+    case "transcript":
+      return (
+        typeof value.instanceId === "string" && Array.isArray(value.events)
+      );
+    case "preview":
+      return true;
+    case "frame":
+    case "send":
+      return value.keepAlive === true;
+    default:
+      return false;
+  }
+};
+
+/**
  * One event on a session's canonical stream. `seq` is hub-assigned, monotonic
  * per session, starting at 1 — and NO GAP is ever delivered: a client that
  * observes `seq > lastSeq + 1` re-subscribes with `afterSeq = lastSeq` instead
@@ -762,25 +789,6 @@ export const readSent = (message: unknown): DeliveryMark | undefined => {
     : undefined;
 };
 
-/** The delivery marks off a register or heartbeat ack, by instance; malformed entries are dropped. */
-export const readDelivered = (
-  payload: unknown
-): Record<string, DeliveryMark> => {
-  const marks = record(record(payload)?.delivered) ?? {};
-  const read: Record<string, DeliveryMark> = {};
-  for (const [instanceId, value] of Object.entries(marks)) {
-    const mark = record(value);
-    if (
-      typeof mark?.epoch === "string" &&
-      typeof mark.seq === "number" &&
-      Number.isInteger(mark.seq)
-    ) {
-      read[instanceId] = { epoch: mark.epoch, seq: mark.seq };
-    }
-  }
-  return read;
-};
-
 /**
  * AT MOST ONCE, per (instanceId, agent epoch, seq): whether the hub already
  * took this frame. Asked by the hub before sequencing, beside
@@ -794,29 +802,6 @@ export const alreadyDelivered = (
   mark !== undefined &&
   mark.epoch === sent.epoch &&
   sent.seq <= mark.seq;
-
-/**
- * The ledger off a register ack, each mark read off the wire: a malformed one
- * is dropped, which leaves its instance following from head (design §7's
- * honest-loss rule).
- */
-export const readIngested = (payload: unknown): Record<string, IngestMark> => {
-  const marks = record(record(payload)?.ingested) ?? {};
-  const read: Record<string, IngestMark> = {};
-  for (const [instanceId, value] of Object.entries(marks)) {
-    const mark = record(value);
-    const epoch = mark?.epoch;
-    const srcSeq = mark?.srcSeq;
-    if (typeof epoch !== "string" || epoch.length === 0) {
-      continue;
-    }
-    if (typeof srcSeq !== "number" || !Number.isInteger(srcSeq) || srcSeq < 0) {
-      continue;
-    }
-    read[instanceId] = { epoch, srcSeq };
-  }
-  return read;
-};
 
 /**
  * THE HONEST-LOSS RULE (design §7), as one function both ends read.

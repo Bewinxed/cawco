@@ -5626,6 +5626,7 @@ class OpencodeHarness implements Harness<"opencode"> {
             instanceId: ctx.instanceId,
             payload: {
               kind: "frame",
+              instanceId: ctx.instanceId,
               harness: "opencode",
               message: { type: "system", subtype: CUSTODY_HELD },
             },

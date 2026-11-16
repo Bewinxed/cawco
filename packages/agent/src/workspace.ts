@@ -601,9 +601,9 @@ let unmarkedSwept = false;
  * source's place denied each one: 4,342 of them stopped cockpit's Caw on
  * 2026-10-23. Anything else is kept, and said with why. Never throws.
  */
-export const clearUnmarkedHusks = (liveWorkspaces: unknown): void => {
-  // Only once the hub's answer names the live workspaces (`heldBy`).
-  if (Array.isArray(liveWorkspaces) && !unmarkedSwept) {
+export const clearUnmarkedHusks = (): void => {
+  // Every beat's answer names the live workspaces (`heldBy`): the first does.
+  if (!unmarkedSwept) {
     unmarkedSwept = true;
     sweepUnmarked();
   }

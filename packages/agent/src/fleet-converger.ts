@@ -9,6 +9,7 @@
 
 import { existsSync } from "node:fs";
 import { detach } from "@cawco/core/detach";
+import type { MachineSend } from "@cawco/core/envelopes";
 import type {
   FleetAck,
   FleetConvergeFrame,
@@ -32,7 +33,6 @@ import { secretValuesOf, withoutSecrets } from "@cawco/core/fleet-secrets";
 import type { FleetReportFrame } from "@cawco/core/frames";
 import { HOSTED_PREFIX } from "@cawco/core/gateway-paths";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type { Envelope } from "@cawco/core/protocol";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
 import {
   CONTROL_FLEET_SETTINGS,
@@ -76,7 +76,7 @@ export interface FleetHost {
   /** The folder a live session runs in, as its spawn named it. */
   cwdOf: (instanceId: string) => string | undefined;
   /** An envelope on the daemon's hub socket. */
-  emit: (envelope: Envelope) => void;
+  emit: (envelope: MachineSend) => void;
   /** The harness process of each session this agent carries, by instance id. */
   sessions: ReadonlyMap<string, HarnessSession>;
 }

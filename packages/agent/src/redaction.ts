@@ -23,6 +23,7 @@
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import type { MachineSend } from "@cawco/core/envelopes";
 import { makeFolderSync } from "@cawco/core/folders";
 import {
   encodeJson,
@@ -31,7 +32,6 @@ import {
   textPieces,
 } from "@cawco/core/json-stream";
 import { redactionStoreDir, redactionStoreFile } from "@cawco/core/paths/cawco";
-import type { Envelope } from "@cawco/core/protocol";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { WIRE_PART_CHARS } from "@cawco/core/wire";
 import { z } from "zod";
@@ -233,7 +233,7 @@ interface Delta {
 }
 
 /** A streamed piece of one content block, if `envelope` is one. */
-const deltaOf = (envelope: Envelope): Delta | undefined => {
+const deltaOf = (envelope: MachineSend): Delta | undefined => {
   if (envelope.verb !== "frames") {
     return undefined;
   }
@@ -251,8 +251,8 @@ const deltaOf = (envelope: Envelope): Delta | undefined => {
   return undefined;
 };
 
-/** The same delta envelope, carrying `text` instead. */
-const withText = (envelope: Envelope, delta: Delta, text: string): Envelope => {
+/** The same delta envelope, carrying `text` instead: what is written to the socket. */
+const withText = (envelope: MachineSend, delta: Delta, text: string) => {
   const { payload } = delta;
   return {
     ...envelope,
@@ -289,7 +289,7 @@ const heldTail = (text: string, credential: string | undefined): number => {
 /** Streamed text a delta held back, by session, until the next piece. */
 const carries = new Map<
   string,
-  { envelope: Envelope; delta: Delta; text: string }
+  { envelope: MachineSend; delta: Delta; text: string }
 >();
 gauge("redaction.carries", () => carries.size);
 
@@ -349,7 +349,7 @@ const redactPieces = (source: JsonPieces): JsonPieces => {
  * session's credential holds that tail back and sends it with the next
  * piece, or ahead of the next frame about that session.
  */
-export const outbound = (envelope: Envelope): OutboundMessage[] => {
+export const outbound = (envelope: MachineSend): OutboundMessage[] => {
   const out: OutboundMessage[] = [];
   const key = envelope.instanceId;
   const delta = deltaOf(envelope);

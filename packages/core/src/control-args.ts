@@ -27,7 +27,6 @@ import {
   optional,
   picklist,
   pipe,
-  rawTransform,
   record,
   regex,
   safeParse,
@@ -41,7 +40,6 @@ import {
   union,
   unknown,
 } from "valibot";
-import type { z } from "zod";
 import { ACCOUNT_KINDS, type LentAccess } from "./accounts";
 import { CONTROL_ACCOUNT_LENT } from "./accounts/controls";
 import { type BrowserKey as BrowserKeyType, isBrowserKey } from "./browser";
@@ -77,6 +75,7 @@ import {
   type StoredRun,
 } from "./session-messages";
 import { canvasSpecOf, INTERACTIONS } from "./stage";
+import { storedAs } from "./stored-as";
 import {
   BinaryUpdatePolicySchema,
   ForgeAskSchema,
@@ -85,27 +84,6 @@ import {
 } from "./stored-shapes";
 import { controlWords } from "./words/controls";
 import { WORKSPACE_UNLANDED } from "./workspace/controls";
-
-/** A value read by `schema`, a stored type's own (stored-shapes.ts, its output that type exactly): its output, or its issues said. */
-const storedAs = <T>(schema: z.ZodType<T>, what: string) =>
-  pipe(
-    unknown(),
-    rawTransform<unknown, T>(({ dataset, addIssue, NEVER }) => {
-      const read = schema.safeParse(dataset.value);
-      if (read.success) {
-        return read.data;
-      }
-      addIssue({
-        message: controlWords.notStored(
-          what,
-          read.error.issues
-            .map((issue) => issue.path.join(".") || issue.message)
-            .join(", ")
-        ),
-      });
-      return NEVER;
-    })
-  );
 
 // The shapes the arguments are made of, each its type's.
 const text = string();
@@ -832,7 +810,7 @@ export const readCall = (
     : { ok: false, error: unknownControlWords(method) };
 
 /** What {@link readControl} read: the control, or why it is none, with the request and session it answers to when they could be read. */
-export type ControlRead =
+type ControlRead =
   | { ok: true; control: AddressedControl }
   | {
       ok: false;

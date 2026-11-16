@@ -34,6 +34,7 @@ import type {
   StreamClientMessage,
   StreamDelta,
   StreamReset,
+  StreamServerMessage,
 } from "@cawco/core/stream";
 import { COMMAND_ACK_STAGES } from "@cawco/core/stream";
 
@@ -509,13 +510,6 @@ export function noteDisconnect(
  * Ingestion
  * ------------------------------------------------------------------ */
 
-const STREAM_MESSAGE_TYPES = new Set([
-  "stream.event",
-  "stream.backlog",
-  "stream.reset",
-  "command.ack",
-]);
-
 /**
  * Takes one inbound socket message if it belongs to this protocol, and says so.
  * A message it does not take is a broadcast envelope — the board, a pulse, a
@@ -524,30 +518,24 @@ const STREAM_MESSAGE_TYPES = new Set([
 export function handleStreamMessage(
   state: StreamState,
   host: StreamHost,
-  message: unknown
+  message: StreamServerMessage
 ): boolean {
-  if (typeof message !== "object" || message === null) {
-    return false;
-  }
-  const type = "type" in message ? message.type : undefined;
-  if (typeof type !== "string" || !STREAM_MESSAGE_TYPES.has(type)) {
-    return false;
-  }
-
-  switch (type) {
+  switch (message.type) {
     case "stream.event":
-      applyDelta(state, host, message as StreamDelta);
+      applyDelta(state, host, message);
       return true;
     case "stream.backlog":
-      applyBacklog(state, host, message as StreamBacklog);
+      applyBacklog(state, host, message);
       return true;
     case "stream.reset":
-      applyReset(state, host, message as StreamReset);
+      applyReset(state, host, message);
       return true;
     case "command.ack":
-      noteCommandAck(state, message as CommandAck, host.now(), host);
+      noteCommandAck(state, message, host.now(), host);
       return true;
-    default:
+    case "heartbeat":
+    case "plan.delta":
+    case "plan.snapshot":
       return false;
   }
 }

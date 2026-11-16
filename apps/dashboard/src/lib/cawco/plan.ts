@@ -6,13 +6,12 @@
  * for the plan whole (`plan.resync`), once per gap.
  */
 import {
-  type PlanDelta,
-  type PlanSnapshot,
   type PlanStepStatus,
   type SessionPlan,
   todoGroups,
   todoProgress,
 } from "@cawco/core/plan";
+import type { StreamServerMessage } from "@cawco/core/stream";
 import { applyPatch } from "rfc6902";
 import { SessionPlanSchema } from "#lib/cawco/stored-shapes.js";
 
@@ -38,23 +37,19 @@ const gap = (instanceId: string, resync: (instanceId: string) => void) => {
  */
 export function handlePlanMessage(
   plans: Record<string, HeldPlan>,
-  message: unknown,
+  message: StreamServerMessage,
   resync: (instanceId: string) => void
 ): boolean {
-  if (typeof message !== "object" || message === null) {
-    return false;
-  }
-  const type = "type" in message ? message.type : undefined;
-  if (type === "plan.snapshot") {
-    const { type: _type, instanceId, rev, ...plan } = message as PlanSnapshot;
+  if (message.type === "plan.snapshot") {
+    const { type: _type, instanceId, rev, ...plan } = message;
     asked.delete(instanceId);
     plans[instanceId] = { rev, plan };
     return true;
   }
-  if (type !== "plan.delta") {
+  if (message.type !== "plan.delta") {
     return false;
   }
-  const { instanceId, rev, patch } = message as PlanDelta;
+  const { instanceId, rev, patch } = message;
   const held = plans[instanceId];
   if (held && rev <= held.rev) {
     return true;

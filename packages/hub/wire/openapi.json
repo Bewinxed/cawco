@@ -40211,7 +40211,7 @@
         ]
       },
       "Envelope": {
-        "description": "Every message on every hop, as a machine's daemon writes and reads it\n(packages/agent): `payload` is whatever the verb carries, its type the\ndaemon's to say. The hub and its clients read the same message typed by\nits verb (envelopes.ts): `MachineEnvelope` as a machine sends it, parsed\nwhere it enters the hub (agent-frame.ts `readMachineEnvelope`);\n`ClientEnvelope` as a client sends it; `HubEnvelope` as the hub sends it.",
+        "description": "A message's wire shape under any verb, as a hub column keeps one it sent\n(a send, a start: hub db/schema.ts) and `/api/pending` lists the asks it\nparked. Every hop reads and writes the message typed by its verb instead\n(envelopes.ts): `MachineSend` as a machine's daemon writes it, and\n`MachineEnvelope` as the hub reads it, parsed where it enters\n(agent-frame.ts `readMachineEnvelope`); `ClientEnvelope` as a client sends\nit; `HubEnvelope` as the hub sends it, and `MachineInbound` as a machine\nreads that, parsed where it arrives (machine-inbound.ts\n`readMachineInbound`).",
         "type": "object",
         "properties": {
           "instanceId": {
@@ -91829,7 +91829,7 @@
               "$ref": "#/components/schemas/ParkedAsk"
             },
             {
-              "description": "Every message on every hop, as a machine's daemon writes and reads it\n(packages/agent): `payload` is whatever the verb carries, its type the\ndaemon's to say. The hub and its clients read the same message typed by\nits verb (envelopes.ts): `MachineEnvelope` as a machine sends it, parsed\nwhere it enters the hub (agent-frame.ts `readMachineEnvelope`);\n`ClientEnvelope` as a client sends it; `HubEnvelope` as the hub sends it.",
+              "description": "A message's wire shape under any verb, as a hub column keeps one it sent\n(a send, a start: hub db/schema.ts) and `/api/pending` lists the asks it\nparked. Every hop reads and writes the message typed by its verb instead\n(envelopes.ts): `MachineSend` as a machine's daemon writes it, and\n`MachineEnvelope` as the hub reads it, parsed where it enters\n(agent-frame.ts `readMachineEnvelope`); `ClientEnvelope` as a client sends\nit; `HubEnvelope` as the hub sends it, and `MachineInbound` as a machine\nreads that, parsed where it arrives (machine-inbound.ts\n`readMachineInbound`).",
               "type": "object",
               "properties": {
                 "instanceId": {
