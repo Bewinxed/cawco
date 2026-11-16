@@ -262,6 +262,7 @@ import {
   removeCawcoSessionConfigs,
 } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
+import { moveHookFields } from "./hook-fields-move";
 import { ghAccounts, ghAccountToken } from "./host-gh";
 import { hostOutputs, removeHostScratch } from "./host-scratch";
 import { cancelCommand, runFollowedCommand } from "./hub-command";
@@ -3957,6 +3958,11 @@ export const runDaemon = (rediscover = false): void => {
       // moved to disk (runtime-dir-move.ts). One that cannot move fails the
       // start below, and its service manager starts the agent again.
       Effect.andThen(Effect.promise(() => moveOpencodeAccountHomes())),
+      // Before anything can start a session: the machine's copies of the
+      // fleet's hooks in the shape their readers read (hook-fields-move.ts),
+      // so no session starts without them. One that cannot be written fails
+      // the start below.
+      Effect.andThen(Effect.promise(() => moveHookFields())),
       Effect.andThen(startDaemon(rediscover)),
       Effect.catchDefect((error) =>
         Effect.logError(

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import {
   fileHash,
-  isImageMediaType,
+  isClaudeImageMediaType,
   type SendAttachment,
   type TurnImage,
 } from "@cawco/core/attachments";
@@ -95,11 +95,12 @@ function carryOne(
   bytes: Buffer,
   images: TurnImage[]
 ): { attachment?: SendAttachment; carried: Carried } {
-  // A picture of a type no session takes rides as a file.
+  // A picture of a type every session takes (Claude Code's four) rides as a
+  // picture; any other as a file, which reaches a session on any harness.
   const { mediaType } = one;
   if (
     one.kind === "image" &&
-    isImageMediaType(mediaType) &&
+    isClaudeImageMediaType(mediaType) &&
     images.length < COMMENT_LIMITS.pictures
   ) {
     const data = bytes.toString("base64");

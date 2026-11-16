@@ -15897,9 +15897,11 @@
                           "type": "string"
                         },
                         "mediaType": {
-                          "error": "This picture can't be sent: a session takes JPEG, PNG, GIF or WebP pictures.",
+                          "error": "This picture can't be sent: pictures go as JPEG, PNG, GIF, WebP, HEIC or HEIF.",
                           "enum": [
                             "image/gif",
+                            "image/heic",
+                            "image/heif",
                             "image/jpeg",
                             "image/png",
                             "image/webp"
@@ -23357,9 +23359,11 @@
                           "type": "string"
                         },
                         "mediaType": {
-                          "error": "This picture can't be sent: a session takes JPEG, PNG, GIF or WebP pictures.",
+                          "error": "This picture can't be sent: pictures go as JPEG, PNG, GIF, WebP, HEIC or HEIF.",
                           "enum": [
                             "image/gif",
+                            "image/heic",
+                            "image/heif",
                             "image/jpeg",
                             "image/png",
                             "image/webp"
@@ -44828,12 +44832,9 @@
         ]
       },
       "HookAgentHandler": {
+        "description": "A subagent that decides, by `prompt` (Claude Code's `AgentHookSchema`).",
         "type": "object",
         "properties": {
-          "agent": {
-            "description": "Which subagent runs it. Absent inherits Claude Code's default.",
-            "type": "string"
-          },
           "if": {
             "description": "A single permission rule narrowing when this runs, like `Bash(git *)`.\nOnly consulted on tool events; on any other event a handler carrying one\nnever runs at all, which is why {@link hookProblem} refuses the pairing\nrather than letting it be saved as a hook that silently does nothing.",
             "type": "string"
@@ -45315,6 +45316,8 @@
         "type": "string",
         "enum": [
           "image/gif",
+          "image/heic",
+          "image/heif",
           "image/jpeg",
           "image/png",
           "image/webp"

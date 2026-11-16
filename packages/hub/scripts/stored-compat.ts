@@ -107,22 +107,22 @@ const REWRITES: readonly Rewrite[] = [
   {
     column: "continuations.request",
     migration: "0437_picture_types",
-    why: "a picture whose media type no session takes is dropped from the request's images, every other picture and field kept; no row is deleted",
+    why: "a picture whose media type no provider takes is dropped from the request's images, every other picture and field kept; no row is deleted",
   },
   {
     column: "moves.request",
     migration: "0437_picture_types",
-    why: "a picture whose media type no session takes is dropped from the request's images, every other picture and field kept; no row is deleted",
+    why: "a picture whose media type no provider takes is dropped from the request's images, every other picture and field kept; no row is deleted",
   },
   {
     column: "fleet_hooks.handler",
     migration: "0438_hook_mcp_tool_fields",
-    why: "an MCP tool handler's mcp_server_name and tool_name are renamed server and tool, as Claude Code's settings read them; every other field and handler kept, no row deleted",
+    why: "an MCP tool handler's mcp_server_name and tool_name are renamed server and tool, and an agent handler's agent, which Claude Code never read, is dropped; every other field and handler kept, no row deleted",
   },
   {
     column: "fleet_hook_history.handler",
     migration: "0438_hook_mcp_tool_fields",
-    why: "the same rename in each kept version of an MCP tool handler",
+    why: "the same rename and drop in each kept version of a handler",
   },
 ];
 

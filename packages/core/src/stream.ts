@@ -403,8 +403,10 @@ import type { TailnetServing } from "./tailnet-https";
  *    frame's role may be `assistant` or `system`, its content any of
  *    Claude's blocks (`HARNESS_BLOCK_TYPES`, an image by a file id), and its
  *    origin any kind Claude Code stamps (`channel`, `task-notification`,
- *    `unclassified`, …); a `peer` origin always names its `from`. A page
- *    built for 80 reads those closed, so it reloads first.
+ *    `unclassified`, …); a `peer` origin always names its `from`; a send's
+ *    pictures are of a type a provider takes (core `IMAGE_MEDIA_TYPES`),
+ *    and an MCP tool hook names its `server` and `tool`. A page built for 80
+ *    reads those closed, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries

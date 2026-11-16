@@ -1939,11 +1939,7 @@ const HookPromptHandlerShape = declared(
 export type HookPromptHandlerOutput = z.output<typeof HookPromptHandlerShape>;
 
 const HookAgentHandlerShape = declared(
-  HookHandlerBaseShape.extend({
-    agent: z.string().optional(),
-    prompt: z.string(),
-    type: z.literal("agent"),
-  }),
+  HookHandlerBaseShape.extend({ prompt: z.string(), type: z.literal("agent") }),
   "HookAgentHandler",
   "packages/core/src/hooks.ts"
 );

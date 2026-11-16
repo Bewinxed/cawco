@@ -4133,7 +4133,9 @@
                 "image/jpeg",
                 "image/png",
                 "image/gif",
-                "image/webp"
+                "image/webp",
+                "image/heic",
+                "image/heif"
               ]
             }
           },
@@ -4850,9 +4852,6 @@
           "timeout": {
             "type": "number"
           },
-          "agent": {
-            "type": "string"
-          },
           "prompt": {
             "type": "string"
           },
@@ -5011,9 +5010,6 @@
           },
           "timeout": {
             "type": "number"
-          },
-          "agent": {
-            "type": "string"
           },
           "prompt": {
             "type": "string"
@@ -8332,7 +8328,9 @@
                 "image/jpeg",
                 "image/png",
                 "image/gif",
-                "image/webp"
+                "image/webp",
+                "image/heic",
+                "image/heif"
               ]
             }
           },
@@ -11810,7 +11808,9 @@
                     "image/jpeg",
                     "image/png",
                     "image/gif",
-                    "image/webp"
+                    "image/webp",
+                    "image/heic",
+                    "image/heif"
                   ]
                 }
               },
