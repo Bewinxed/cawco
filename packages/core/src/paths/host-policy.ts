@@ -7,7 +7,7 @@ import { hostEnvironment } from "../session-env";
 import { systemProgram } from "../workspace-needs";
 import { sessionIdentityDir } from "./cawco";
 import { accountsRoot, claudeConfigDirs, claudeHomeJson } from "./claude";
-import { piAgentDir } from "./harnesses";
+import { harnessStoresDir, piAgentDir } from "./harnesses";
 import { hubDbPath } from "./hub";
 import {
   cawcoConfigDir,
@@ -162,6 +162,10 @@ export const credentialStores = (): string[] => {
     accountsRoot(),
     // Session credentials, OpenCode's bridge credentials, redaction values.
     sessionIdentityDir(),
+    // The harness stores CawCo keeps (each account's OpenCode server's data
+    // home, its database and credential in it): denied in their own right,
+    // as the session credentials are, not only as a part of the data dir.
+    harnessStoresDir(),
     // The hub's env file, the release signing key, the
     // machine's key the hub admitted it with (machine-key.ts).
     cawcoConfigDir(),

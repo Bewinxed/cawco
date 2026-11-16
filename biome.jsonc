@@ -66,6 +66,10 @@
     // A folder is made through packages/core/src/folders.ts, which gives
     // each of CawCo's own its mode whatever the umask.
     "./scripts/lint/one-folder-maker.grit",
+    // The runtime dir and the session credentials' dir in it hold only what
+    // may vanish, from the modules the rule names; a store that must last
+    // goes under core paths/harnesses.ts `harnessStoresDir`.
+    "./scripts/lint/runtime-dir-vanishes.grit",
     // A model's API is called through the AI SDK alone: no vendor SDK, no
     // hand-rolled request to an inference path.
     "./scripts/lint/model-calls.grit",

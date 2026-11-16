@@ -276,6 +276,7 @@ import {
   opencodeAccounts,
   removeCawcoSessionConfigs,
 } from "./harnesses/opencode";
+import { moveOpencodeAccountHomes } from "./harnesses/opencode-homes-move";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { ghAccounts, ghAccountToken } from "./host-gh";
 import { hostOutputs, removeHostScratch } from "./host-scratch";
@@ -4226,6 +4227,11 @@ export const runDaemon = (rediscover = false): void => {
     Effect.promise(() => endOrphanedSignIns()).pipe(
       // Never rejects: what it cannot judge it leaves and says.
       Effect.andThen(Effect.promise(() => removeCawcoSessionConfigs())),
+      // Before anything can start a harness server: each account's OpenCode
+      // data home still in the runtime dir, a tmpfs every reboot empties,
+      // moved to disk (opencode-homes-move.ts). One that cannot move fails
+      // the start below, and its service manager starts the agent again.
+      Effect.andThen(Effect.promise(() => moveOpencodeAccountHomes())),
       Effect.andThen(startDaemon(rediscover)),
       Effect.catchDefect((error) =>
         Effect.logError(
