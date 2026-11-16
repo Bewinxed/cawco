@@ -31,14 +31,17 @@ import {
   continuationStageWords,
   type SessionDraft,
 } from "../continue.svelte";
-import { type DraftContent, loadDraft, saveDraft } from "../draft-store";
+import { loadDraft, saveDraft } from "../draft-store";
 import { boardStore } from "../stores/board.svelte";
 import {
   continuationsStore,
   followContinuations,
 } from "../stores/continuations.svelte";
 import { sendFirstPrompt } from "../stores/session-start.svelte";
-import { ComposerDraft } from "../transcript/composer-draft.svelte";
+import {
+  ComposerDraft,
+  type DraftContent,
+} from "../transcript/composer-draft.svelte";
 import { type SpawnPrefill, spawning } from "./new-session.svelte";
 
 /** One session a spawn asks for: its id, minted first, and how far its ask came. */

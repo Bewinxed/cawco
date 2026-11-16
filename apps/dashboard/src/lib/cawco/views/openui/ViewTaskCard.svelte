@@ -1,17 +1,13 @@
 <script lang="ts">
   /** One task: the board's own card, and the values `fields` names under it. */
   import TaskCard from "#lib/cawco/tasks/TaskCard.svelte";
-  import { fieldText, type ViewTaskRow, viewContext } from "./context";
+  import { fieldText, isViewTaskRow, viewContext } from "./context";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
 
   let { props }: OpenUIRenderProps<{ task: unknown; fields?: unknown }> =
     $props();
   const view = viewContext();
-  const task = $derived(
-    typeof props.task === "object" && props.task !== null && "id" in props.task
-      ? (props.task as ViewTaskRow)
-      : null
-  );
+  const task = $derived(isViewTaskRow(props.task) ? props.task : null);
   const extra = $derived(
     task && Array.isArray(props.fields)
       ? props.fields.map((path) => fieldText(task, path)).filter(Boolean)

@@ -5,11 +5,18 @@
  * package's tsconfig `include`.
  */
 import type {
+  AccountIdentity as AccountIdentityType,
+  AccountKind as AccountKindType,
+  AccountProvider as AccountProviderType,
+  AccountSetupStep as AccountSetupStepType,
+  Account as AccountType,
   AtLimit as AtLimitType,
+  AtPlanLimit as AtPlanLimitType,
   Compaction as CompactionType,
   StrategyChoice as StrategyChoiceType,
 } from "@cawco/core/accounts";
 import type {
+  AccountHue as AccountHueType,
   CompactMethod as CompactMethodType,
   PlacementStrategy as PlacementStrategyType,
 } from "@cawco/core/accounts/kinds";
@@ -32,6 +39,33 @@ import type {
   ThreadEntry as ThreadEntryType,
 } from "@cawco/core/comments/model";
 import type {
+  DelegateType as DelegateTypeType,
+  MayStart as MayStartType,
+  SessionRole as SessionRoleType,
+  StartingSet as StartingSetType,
+} from "@cawco/core/delegate-types";
+import type {
+  AttemptResult as AttemptResultType,
+  ResultArtifact as ResultArtifactType,
+} from "@cawco/core/deliverables";
+import type {
+  ExternalActor as ExternalActorType,
+  ExternalKind as ExternalKindType,
+  ExternalRef as ExternalRefType,
+  ExternalSource as ExternalSourceType,
+  ExternalState as ExternalStateType,
+  LinkMode as LinkModeType,
+  TaskLinkSummary as TaskLinkSummaryType,
+} from "@cawco/core/external-items";
+import type {
+  MemoryRole as MemoryRoleType,
+  MemoryScope as MemoryScopeType,
+} from "@cawco/core/fleet";
+import type {
+  FleetPlacement as FleetPlacementType,
+  FleetScope as FleetScopeType,
+} from "@cawco/core/fleet-placement";
+import type {
   RestoreHeldRow as RestoreHeldRowType,
   RestoreHeldWhy as RestoreHeldWhyType,
 } from "@cawco/core/forgotten-project";
@@ -45,6 +79,17 @@ import type {
   HarnessKind as HarnessKindType,
   PermissionMode as PermissionModeType,
 } from "@cawco/core/harness/kinds";
+import type {
+  FleetHook as FleetHookType,
+  HookAgentHandler as HookAgentHandlerType,
+  HookCommandHandler as HookCommandHandlerType,
+  HookDraft as HookDraftType,
+  HookEvent as HookEventType,
+  HookHandler as HookHandlerType,
+  HookHttpHandler as HookHttpHandlerType,
+  HookMcpToolHandler as HookMcpToolHandlerType,
+  HookPromptHandler as HookPromptHandlerType,
+} from "@cawco/core/hooks";
 import type { PlaceProject as PlaceProjectType } from "@cawco/core/place-nesting";
 import type {
   OrphanedComments as OrphanedCommentsType,
@@ -61,6 +106,14 @@ import type {
 } from "@cawco/core/plan";
 import type { PreviewSource as PreviewSourceType } from "@cawco/core/preview/protocol";
 import type { SendPayload as SendPayloadType } from "@cawco/core/protocol";
+import type {
+  RuleDraft as RuleDraftType,
+  RuleMatchKind as RuleMatchKindType,
+  RuleScope as RuleScopeType,
+  RuleTiming as RuleTimingType,
+  Rule as RuleType,
+  RuleWatch as RuleWatchType,
+} from "@cawco/core/rules";
 import type {
   HarnessNote as HarnessNoteType,
   NeutralContentBlock as NeutralContentBlockType,
@@ -85,6 +138,33 @@ import type {
 } from "@cawco/core/stage";
 import type { TailnetOrigin as TailnetOriginType } from "@cawco/core/tailnet-https";
 import type {
+  BuiltOn as BuiltOnType,
+  TaskAttempt as TaskAttemptType,
+  TaskFlags as TaskFlagsType,
+  TaskHistoryActor as TaskHistoryActorType,
+  TaskLife as TaskLifeType,
+  TaskSummary as TaskSummaryType,
+  TaskTimes as TaskTimesType,
+  TaskWait as TaskWaitType,
+  ViewTaskRow as ViewTaskRowType,
+  WaitState as WaitStateType,
+  WaitWitness as WaitWitnessType,
+} from "@cawco/core/task-views";
+import type {
+  StageKind as StageKindType,
+  TaskMover as TaskMoverType,
+} from "@cawco/core/views";
+import type { WaitKind as WaitKindType } from "@cawco/core/wait-targets";
+import type { WorkItemState as WorkItemStateType } from "@cawco/core/work-items";
+import type {
+  AccountFields as AccountFieldsType,
+  DelegateTypeFields as DelegateTypeFieldsType,
+  HookFields as HookFieldsType,
+  McpFields as McpFieldsType,
+  MemoryFields as MemoryFieldsType,
+  SubagentFields as SubagentFieldsType,
+} from "./config/editors/editor-fields";
+import type {
   ContinueSource as ContinueSourceType,
   SessionDraft as SessionDraftType,
 } from "./continue.svelte";
@@ -93,6 +173,7 @@ import type {
   DraftRecord as DraftRecordType,
   StoredFile as StoredFileType,
 } from "./draft-store";
+import type { Pair as PairType } from "./fleet";
 import type {
   GraphKept as GraphKeptType,
   KeptState as KeptStateType,
@@ -104,6 +185,7 @@ import type {
 import type { ArtifactSessionHeard as ArtifactSessionHeardType } from "./preview/artifact-session.svelte";
 import type { CalledArtifact as CalledArtifactType } from "./preview/source";
 import type { ComposeTarget as ComposeTargetType } from "./preview/wire";
+import type { EndKind as EndKindType } from "./project-end.svelte";
 import type { RailLayout as RailLayoutType } from "./rail.svelte";
 import type { CommandRefusal as CommandRefusalType } from "./refusals.svelte";
 import type {
@@ -130,16 +212,26 @@ import type {
   StopRow as StopRowType,
 } from "./stop-work.svelte";
 import type {
+  AccountFieldsOutput,
+  AccountHueOutput,
+  AccountIdentityOutput,
+  AccountKindOutput,
+  AccountOutput,
+  AccountProviderOutput,
+  AccountSetupStepOutput,
   ArtifactKindOutput,
   ArtifactSessionFrameOutput,
   ArtifactSessionHeardOutput,
   AtLimitOutput,
+  AtPlanLimitOutput,
+  AttemptResultOutput,
   BesideOutput,
   BinaryUpdatePolicyOutput,
   BrowserAskFrameOutput,
   BrowserHostKindOutput,
   BrowserKeyOutput,
   BrowserStateOutput,
+  BuiltOnOutput,
   CalledArtifactOutput,
   CanvasShapesOutput,
   CommandRefusalOutput,
@@ -151,28 +243,55 @@ import type {
   ConnectSignInOutput,
   ContinueSourceOutput,
   DecisionMediaOutput,
+  DelegateTypeFieldsOutput,
+  DelegateTypeOutput,
   DraftCanvasOutput,
   DraftRecordOutput,
   EffortLevelOutput,
   EmbedShapeOutput,
+  EndKindOutput,
+  ExternalActorOutput,
+  ExternalKindOutput,
+  ExternalRefOutput,
+  ExternalSourceOutput,
+  ExternalStateOutput,
   FileAttachmentOutput,
+  FleetHookOutput,
+  FleetPlacementOutput,
+  FleetScopeOutput,
   ForkSourceOutput,
   GraphKeptOutput,
   HarnessKindOutput,
   HarnessNoteOutput,
+  HookAgentHandlerOutput,
+  HookCommandHandlerOutput,
+  HookDraftOutput,
+  HookEventOutput,
+  HookFieldsOutput,
+  HookHandlerOutput,
+  HookHttpHandlerOutput,
+  HookMcpToolHandlerOutput,
+  HookPromptHandlerOutput,
   KeptFormOutput,
   KeptPairingOutput,
   KeptSendOutput,
   KeptStateOutput,
   KeptUpdatesOutput,
+  LinkModeOutput,
   ListedBrowserOutput,
+  MayStartOutput,
+  McpFieldsOutput,
   MediaArtifactOutput,
+  MemoryFieldsOutput,
+  MemoryRoleOutput,
+  MemoryScopeOutput,
   ModelUseOutput,
   NeutralContentBlockOutput,
   NeutralOriginOutput,
   NeutralUserMessageOutput,
   OrphanedCommentsOutput,
   PairingStageOutput,
+  PairOutput,
   ParkedAskOutput,
   ParkedStartOutput,
   PasskeyRelayCapabilityOutput,
@@ -195,8 +314,15 @@ import type {
   RefusalOutput,
   RestoreHeldRowOutput,
   RestoreHeldWhyOutput,
+  ResultArtifactOutput,
   RoutineActOutput,
   RoutineRefusalOutput,
+  RuleDraftOutput,
+  RuleMatchKindOutput,
+  RuleOutput,
+  RuleScopeOutput,
+  RuleTimingOutput,
+  RuleWatchOutput,
   RunningSessionOutput,
   SendAttachmentOutput,
   SendExtrasOutput,
@@ -205,20 +331,33 @@ import type {
   SessionContextOutput,
   SessionDraftOutput,
   SessionPlanOutput,
+  SessionRoleOutput,
   SpawnPrefillOutput,
   SpawnPrefsOutput,
   StageErrorKindOutput,
   StageErrorOutput,
+  StageKindOutput,
   StageStateOutput,
   StageStatusOutput,
   StageToolchainOutput,
+  StartingSetOutput,
   StopJobOutput,
   StopKindOutput,
   StopRowOutput,
   StoredFileOutput,
   StrategyChoiceOutput,
+  SubagentFieldsOutput,
   TailnetOriginOutput,
+  TaskAttemptOutput,
+  TaskFlagsOutput,
+  TaskHistoryActorOutput,
+  TaskLifeOutput,
+  TaskLinkSummaryOutput,
+  TaskMoverOutput,
+  TaskSummaryOutput,
+  TaskTimesOutput,
   TaskTodoOutput,
+  TaskWaitOutput,
   TextAttachmentOutput,
   ThreadEntryOutput,
   UserAnswersOutput,
@@ -226,7 +365,12 @@ import type {
   UserQuestionDismissedOutput,
   UserQuestionOutput,
   UserQuestionResultOutput,
+  ViewTaskRowOutput,
   VisitOutput,
+  WaitKindOutput,
+  WaitStateOutput,
+  WaitWitnessOutput,
+  WorkItemStateOutput,
 } from "./stored-shapes";
 import type { RunningSession as RunningSessionType } from "./stores/projects.svelte";
 import type { ForkSource as ForkSourceType } from "./stores/session-start.svelte";
@@ -267,6 +411,14 @@ const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
 /** Every schema of an exported type, proved against that type. */
 prove<
   [
+    Same<AtPlanLimitOutput, AtPlanLimitType>,
+    Same<AccountHueOutput, AccountHueType>,
+    Same<AccountIdentityOutput, AccountIdentityType>,
+    Same<AccountKindOutput, AccountKindType>,
+    Same<AccountProviderOutput, AccountProviderType>,
+    Same<AccountSetupStepOutput, AccountSetupStepType>,
+    Same<AccountOutput, AccountType>,
+    Same<AccountFieldsOutput, AccountFieldsType>,
     Same<BrowserKeyOutput, BrowserKeyType>,
     Same<BrowserAskFrameOutput, BrowserAskFrameType>,
     Same<BrowserHostKindOutput, BrowserHostKindType>,
@@ -295,6 +447,12 @@ prove<
     Same<ConnectFaultOutput, ConnectFaultType>,
     Same<ConnectSignInOutput, ConnectSignInType>,
     Same<ContinueSourceOutput, ContinueSourceType>,
+    Same<EffortLevelOutput, EffortLevelType>,
+    Same<MayStartOutput, MayStartType>,
+    Same<SessionRoleOutput, SessionRoleType>,
+    Same<StartingSetOutput, StartingSetType>,
+    Same<DelegateTypeOutput, DelegateTypeType>,
+    Same<DelegateTypeFieldsOutput, DelegateTypeFieldsType>,
     Same<DraftCanvasOutput, DraftCanvasType>,
     Same<PendingFileOutput, PendingFileType>,
     Same<StoredFileOutput, StoredFileType>,
@@ -302,6 +460,18 @@ prove<
     Same<DraftRecordOutput, DraftRecordType>,
     Same<KeptStateOutput, KeptStateType>,
     Same<GraphKeptOutput, GraphKeptType>,
+    Same<FleetScopeOutput, FleetScopeType>,
+    Same<FleetPlacementOutput, FleetPlacementType>,
+    Same<HookEventOutput, HookEventType>,
+    Same<HookCommandHandlerOutput, HookCommandHandlerType>,
+    Same<HookHttpHandlerOutput, HookHttpHandlerType>,
+    Same<HookMcpToolHandlerOutput, HookMcpToolHandlerType>,
+    Same<HookPromptHandlerOutput, HookPromptHandlerType>,
+    Same<HookAgentHandlerOutput, HookAgentHandlerType>,
+    Same<HookHandlerOutput, HookHandlerType>,
+    Same<FleetHookOutput, FleetHookType>,
+    Same<HookDraftOutput, HookDraftType>,
+    Same<HookFieldsOutput, HookFieldsType>,
     Same<ForkSourceOutput, ForkSourceType>,
     Same<TextAttachmentOutput, TextAttachmentType>,
     Same<FileAttachmentOutput, FileAttachmentType>,
@@ -326,13 +496,17 @@ prove<
     Same<RefusalOutput, RefusalType>,
     Same<BinaryUpdatePolicyOutput, BinaryUpdatePolicyType>,
     Same<KeptUpdatesOutput, KeptUpdatesType>,
+    Same<PairOutput, PairType>,
+    Same<McpFieldsOutput, McpFieldsType>,
     Same<EmbedShapeOutput, EmbedShapeType>,
     Same<CanvasShapesOutput, CanvasShapesType>,
     Same<DecisionMediaOutput, DecisionMediaType>,
     Same<MediaArtifactOutput, MediaArtifactType>,
+    Same<MemoryRoleOutput, MemoryRoleType>,
+    Same<MemoryScopeOutput, MemoryScopeType>,
+    Same<MemoryFieldsOutput, MemoryFieldsType>,
     Same<ModelUseOutput, ModelUseType>,
     Same<ParkedAskOutput, ParkedAskType>,
-    Same<EffortLevelOutput, EffortLevelType>,
     Same<PermissionModeOutput, PermissionModeType>,
     Same<SessionDraftOutput, SessionDraftType>,
     Same<ParkedStartOutput, ParkedStartType>,
@@ -341,6 +515,12 @@ prove<
     Same<RestoreHeldRowOutput, RestoreHeldRowType>,
     Same<RoutineActOutput, RoutineActType>,
     Same<RoutineRefusalOutput, RoutineRefusalType>,
+    Same<RuleMatchKindOutput, RuleMatchKindType>,
+    Same<RuleScopeOutput, RuleScopeType>,
+    Same<RuleTimingOutput, RuleTimingType>,
+    Same<RuleWatchOutput, RuleWatchType>,
+    Same<RuleOutput, RuleType>,
+    Same<RuleDraftOutput, RuleDraftType>,
     Same<SessionContextOutput, SessionContextType>,
     Same<PlanEditKindOutput, PlanEditKindType>,
     Same<PlanReceiverOutput, PlanReceiverType>,
@@ -354,6 +534,7 @@ prove<
     Same<TaskTodoOutput, TaskTodoType>,
     Same<SessionPlanOutput, SessionPlanType>,
     Same<SpawnPrefsOutput, SpawnPrefsType>,
+    Same<EndKindOutput, EndKindType>,
     Same<StopKindOutput, StopKindType>,
     Same<PlaceProjectOutput, PlaceProjectType>,
     Same<RunningSessionOutput, RunningSessionType>,
@@ -361,8 +542,33 @@ prove<
     Same<StopJobOutput, StopJobType>,
     Same<PlacementStrategyOutput, PlacementStrategyType>,
     Same<StrategyChoiceOutput, StrategyChoiceType>,
+    Same<SubagentFieldsOutput, SubagentFieldsType>,
     Same<CommentAttachmentOutput, CommentAttachmentType>,
     Same<ThreadEntryOutput, ThreadEntryType>,
+    Same<ResultArtifactOutput, ResultArtifactType>,
+    Same<AttemptResultOutput, AttemptResultType>,
+    Same<WorkItemStateOutput, WorkItemStateType>,
+    Same<WaitWitnessOutput, WaitWitnessType>,
+    Same<TaskAttemptOutput, TaskAttemptType>,
+    Same<BuiltOnOutput, BuiltOnType>,
+    Same<WaitKindOutput, WaitKindType>,
+    Same<WaitStateOutput, WaitStateType>,
+    Same<TaskWaitOutput, TaskWaitType>,
+    Same<TaskFlagsOutput, TaskFlagsType>,
+    Same<TaskLifeOutput, TaskLifeType>,
+    Same<TaskMoverOutput, TaskMoverType>,
+    Same<TaskHistoryActorOutput, TaskHistoryActorType>,
+    Same<TaskTimesOutput, TaskTimesType>,
+    Same<StageKindOutput, StageKindType>,
+    Same<ExternalSourceOutput, ExternalSourceType>,
+    Same<ExternalActorOutput, ExternalActorType>,
+    Same<ExternalKindOutput, ExternalKindType>,
+    Same<LinkModeOutput, LinkModeType>,
+    Same<ExternalStateOutput, ExternalStateType>,
+    Same<ExternalRefOutput, ExternalRefType>,
+    Same<TaskLinkSummaryOutput, TaskLinkSummaryType>,
+    Same<TaskSummaryOutput, TaskSummaryType>,
+    Same<ViewTaskRowOutput, ViewTaskRowType>,
     Same<VisitOutput, VisitType>,
   ]
 >();

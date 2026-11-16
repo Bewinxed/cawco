@@ -36,7 +36,7 @@
   import type { Attachment } from "svelte/attachments";
   import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import MorphText from "../morph-text/morph-text.svelte";
-  import type { Glide, GlideWords as Words } from "./glide";
+  import { type Glide, isGlideWords, type GlideWords as Words } from "./glide";
   import Root from "./tooltip.svelte";
   import Content from "./tooltip-content.svelte";
 
@@ -63,7 +63,10 @@
 
   /** The item it stands at, and its words: bits-ui's registry of the tethered triggers. */
   const item = $derived(tether.state.registry.activeTriggerNode);
-  const words = $derived(tether.state.registry.activePayload as Words | null);
+  const words = $derived.by(() => {
+    const payload = tether.state.registry.activePayload;
+    return isGlideWords(payload) ? payload : null;
+  });
   /** The item and words it was drawn for: a change of either glides. */
   let drawnFor: { at: Element; said: string } | null = null;
   const sayingOf = (said: Words) =>

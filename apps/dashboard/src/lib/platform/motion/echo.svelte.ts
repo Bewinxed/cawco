@@ -76,7 +76,8 @@ const keyedEnds = new Map<string, { end: number; status: string }>();
 
 /** When `echo`'s last cycle ends, if it was ever started. */
 function endOf(echo: Element): number | undefined {
-  const { echoKey, echoStatus = "" } = (echo as HTMLElement).dataset;
+  const echoKey = echo.getAttribute("data-echo-key") ?? undefined;
+  const echoStatus = echo.getAttribute("data-echo-status") ?? "";
   if (echoKey === undefined) {
     return ends.get(echo);
   }
@@ -85,7 +86,8 @@ function endOf(echo: Element): number | undefined {
 }
 
 function setEnd(echo: Element, end: number): void {
-  const { echoKey, echoStatus = "" } = (echo as HTMLElement).dataset;
+  const echoKey = echo.getAttribute("data-echo-key") ?? undefined;
+  const echoStatus = echo.getAttribute("data-echo-status") ?? "";
   if (echoKey === undefined) {
     ends.set(echo, end);
   } else {

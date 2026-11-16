@@ -15,6 +15,7 @@ import {
   goneOf,
   headsOf,
   isObject,
+  type Pin,
   readPins,
   type ThreadEntry,
   threadBytes,
@@ -89,16 +90,26 @@ const entryProblem = (entry: unknown): string | null => {
   return null;
 };
 
+/**
+ * Whether `value` holds a pin's parts (its id, number, kind, anchor and
+ * thread), its bounds unread: a pin the hub refused for breaking one is
+ * still a pin to list.
+ */
+export const hasPinParts = (value: unknown): value is Pin =>
+  isObject(value) &&
+  typeof value.id === "string" &&
+  typeof value.number === "number" &&
+  value.kind === "comment" &&
+  isObject(value.anchor) &&
+  Array.isArray(value.thread);
+
+/** Whether `value` is a pin within the hub's bounds ({@link pinProblem}). */
+export const isPin = (value: unknown): value is Pin =>
+  pinProblem(value) === null;
+
 /** Why a pin, read whole ({@link readPin}), may not be kept; null when it may. */
 export function pinProblem(value: unknown): string | null {
-  if (!(
-    isObject(value) &&
-    typeof value.id === "string" &&
-    typeof value.number === "number" &&
-    value.kind === "comment" &&
-    isObject(value.anchor) &&
-    Array.isArray(value.thread)
-  )) {
+  if (!(hasPinParts(value) && isObject(value.anchor))) {
     return "A pin is an object with its id, number, kind, anchor and thread.";
   }
   if (fileSpotProblem(value.anchor)) {

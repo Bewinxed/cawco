@@ -65,10 +65,8 @@
   import MachineNode from "./MachineNode.svelte";
   import { holesOf, type Review } from "./model";
   import RouteEdge, { type RouteData } from "./RouteEdge.svelte";
-  import StateNode, {
-    type StateCard,
-    type StateMark,
-  } from "./StateNode.svelte";
+  import StateNode from "./StateNode.svelte";
+  import type { StateCard, StateMark } from "./state-card";
   import WholeFade, { type PastEdges } from "./WholeFade.svelte";
   import WholeList from "./WholeList.svelte";
   import WholeMeasure from "./WholeMeasure.svelte";

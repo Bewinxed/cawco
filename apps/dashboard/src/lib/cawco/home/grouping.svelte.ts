@@ -7,6 +7,7 @@
  * home read the one answer. Which group parents are folded is kept here
  * too, by their path: Older starts folded, every other group open.
  */
+import { isOneOf } from "@cawco/core/one-of";
 import { z } from "zod";
 import { parseJson, stored, writeJson } from "../../platform/storage";
 import { drawnFrom } from "../kept.svelte";
@@ -41,11 +42,7 @@ function levelsOf<T extends string>(
   if (kept.length !== fallback.length) {
     return fallback;
   }
-  return kept.map((by) =>
-    by !== null && (options as readonly string[]).includes(by)
-      ? (by as T)
-      : null
-  );
+  return kept.map((by) => (isOneOf(options, by) ? by : null));
 }
 
 const recentOf = (raw: string | null) =>

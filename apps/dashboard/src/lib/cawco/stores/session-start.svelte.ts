@@ -7,11 +7,13 @@
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { MachineHarnessReport } from "@cawco/core/harness";
-import type {
-  EffortLevel,
-  HarnessKind,
-  PermissionMode,
+import {
+  type EffortLevel,
+  type HarnessKind,
+  type PermissionMode,
+  WIRE_PERMISSION_MODES,
 } from "@cawco/core/harness/kinds";
+import { isOneOf } from "@cawco/core/one-of";
 import type { NamedSpawn, SpawnPayload } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
@@ -455,10 +457,11 @@ export async function forkSession({
   // A branch is a new session nobody picked a mode for, so a Full Send
   // source branches on Bypass (`unpickedMode`): Full Send is only ever a
   // confirmed choice, the form's.
+  const sourceMode = source?.permissionMode;
   const mode =
     permissionMode ??
-    (source?.permissionMode
-      ? unpickedMode(source.permissionMode as PermissionMode)
+    (isOneOf(WIRE_PERMISSION_MODES, sourceMode)
+      ? unpickedMode(sourceMode)
       : undefined);
   if (!mode) {
     const report = await reportOf(machineId, harness);

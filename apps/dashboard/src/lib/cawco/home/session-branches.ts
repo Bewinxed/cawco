@@ -59,7 +59,7 @@ export function branchOf(
       (listed.has(child.row.id) ? node.recent : node.older).push(child);
     }
   }
-  return byId.get(row.id) ?? (roots[0] as Branch);
+  return byId.get(row.id) ?? roots[0];
 }
 
 /** Whether the conversation in front is one of `trees`, or under one. */

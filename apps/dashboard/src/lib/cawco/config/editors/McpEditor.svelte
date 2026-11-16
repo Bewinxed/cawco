@@ -43,6 +43,7 @@
   import RolloutChip from "../RolloutChip.svelte";
   import { configStore, upsert } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
+  import { EDITOR_FIELDS, type McpFields } from "./editor-fields";
 
   /**
    * One MCP server: how every machine starts it, and what sessions call it.
@@ -56,7 +57,7 @@
   const store = configStore();
   const HUE = "var(--color-mark-6)";
 
-  type Mode = "bunx" | "command" | "remote";
+  type Mode = McpFields["mode"];
   const HOW: Record<Mode, string> = {
     bunx: words.howBunx,
     command: words.howCommand,
@@ -147,7 +148,8 @@
   );
   const kept = keepDraft(
     page.url.pathname,
-    () =>
+    EDITOR_FIELDS.mcp,
+    (): McpFields | null =>
       sameFields(
         { name: serverName.trim(), config: build(), projectId },
         baseline

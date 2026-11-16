@@ -9,6 +9,7 @@ import { hub } from "#lib/platform/hub.js";
 import { hubRead } from "#lib/platform/hub-read.js";
 import { devDebug } from "../dev-debug";
 import { connectionStore } from "../hub/socket.svelte";
+import type { ProjectRow } from "../projects";
 import type { Area } from "../served-board";
 import { boardStore } from "../stores/board.svelte";
 import { projectsStore } from "../stores/projects.svelte";
@@ -43,10 +44,9 @@ async function read(): Promise<void> {
 }
 
 /** The project's area, read off its row (the hub sends `areaId` on it). */
-export const areaIdOf = (project: object | undefined): string | null => {
-  const id = (project as { areaId?: unknown } | undefined)?.areaId;
-  return typeof id === "string" ? id : null;
-};
+export const areaIdOf = (
+  project: ProjectRow | null | undefined
+): string | null => project?.areaId ?? null;
 
 export const areas = {
   /** Every area, in the person's order; read again as the projects change. */

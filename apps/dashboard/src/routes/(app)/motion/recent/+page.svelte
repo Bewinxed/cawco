@@ -1,9 +1,6 @@
 <script lang="ts">
   import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
-  import {
-    type MemberProject,
-    projectAt,
-  } from "@cawco/core/project-membership";
+  import { projectAt } from "@cawco/core/project-membership";
   import type {
     InstanceRow,
     NamedSpawn,
@@ -26,6 +23,7 @@
   import Home from "#lib/cawco/home/Home.svelte";
   import type { ProjectRow } from "#lib/cawco/projects.js";
   import type { Machine } from "#lib/cawco/stores/board.svelte.js";
+  import type { CommandRequest } from "#lib/cawco/stores/command-request.js";
   import { MINI, OBELISK, STORED, storedListing } from "./stored-listing";
 
   /**
@@ -306,7 +304,7 @@
     ["Check it at 390", "error"],
   ].map(([title, how], n) => ({
     ...rowOf(idOf(50 + n), {
-      title: title as string,
+      title,
       project: "p-cawco-dev",
       doing: "yours",
       ago: (9 - 4 * n) * MINUTE_MS,
@@ -449,12 +447,10 @@
   const SPAWN_MS = 1500;
   /** What the page asked the bench's hub to do: each start, and each command after it. */
   const spawns: { machineId: string; spawn: NamedSpawn }[] = [];
-  const commands: {
+  const commands: (CommandRequest & {
     commandId: string;
     instanceId: string;
-    intent: unknown;
-    kind: string;
-  }[] = [];
+  })[] = [];
   const controls: { machineId: string; method: string; args: unknown[] }[] = [];
 
   /** Moves a session to one of the list's words, as the hub's frames would. */
@@ -510,7 +506,7 @@
     const held = real ? [] : [...olderRows, olderCheck];
     const wrapped = new Set([...rows, ...held].map((row) => row.sessionId));
     const listed = new Set(rows.map((row) => row.id));
-    const projects = debug.projectsState.projects as MemberProject[];
+    const { projects } = debug.projectsState;
     debug.standStored({
       rows: real ? [] : olderRows.filter((row) => !listed.has(row.id)),
       transcripts: Object.entries(listing).flatMap(([machineId, infos]) =>
@@ -598,15 +594,19 @@
         ),
         // What the session was sent since, as the hub has taken it: each
         // under its send's own id, the row this tab drew for it.
-        ...commands
-          .filter((one) => one.instanceId === id && one.kind === "send")
-          .map((one): TranscriptBlock => ({
-            id: one.commandId,
-            instanceId: id,
-            type: "user",
-            content: (one.intent as { text: string }).text,
-            timestamp: new Date().toISOString(),
-          })),
+        ...commands.flatMap((one): TranscriptBlock[] =>
+          one.instanceId === id && one.kind === "send"
+            ? [
+                {
+                  id: one.commandId,
+                  instanceId: id,
+                  type: "user",
+                  content: one.intent.text,
+                  timestamp: new Date().toISOString(),
+                },
+              ]
+            : []
+        ),
       ],
       branches: [],
       cursor: null,
@@ -791,8 +791,8 @@
         fetchWas(input, init),
     });
     debug.standHub(
-      (instanceId, kind, intent, commandId) => {
-        commands.push({ instanceId, kind, intent, commandId });
+      (instanceId, request, commandId) => {
+        commands.push({ ...request, instanceId, commandId });
       },
       async (machineId, spawn) => {
         // The hub opens the row a start asks for, once its machine has

@@ -51,7 +51,8 @@
   let thread = $state<ThreadEntry[]>([...FIRST]);
   let live = $state(true);
   const pin = $derived({
-    anchor: {} as Pin["anchor"],
+    // What it stands on: nothing here draws it (the card is named by `name`).
+    anchor: { element: "hero-headline" },
     at: AT,
     by: "person",
     elements: [],

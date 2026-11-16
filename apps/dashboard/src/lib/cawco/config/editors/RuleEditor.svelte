@@ -50,6 +50,7 @@
   import SwitchField from "../SwitchField.svelte";
   import { sectionOf } from "../sections";
   import { configStore, upsert, withStats } from "../store.svelte";
+  import { EDITOR_FIELDS } from "./editor-fields";
 
   /**
    * The rule editor. A rule is a sentence, and this screen is that sentence
@@ -69,6 +70,7 @@
   const baseline = $derived(rule ? draftOf(rule) : blankRule());
   const kept = keepDraft(
     page.url.pathname,
+    EDITOR_FIELDS.rule,
     () => (sameFields(draft, baseline) ? null : draft),
     (stored: RuleDraft) => {
       draft = stored;

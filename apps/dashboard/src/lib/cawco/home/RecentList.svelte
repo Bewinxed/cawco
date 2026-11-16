@@ -146,13 +146,9 @@
    */
   type Node =
     | { kind: "group"; group: RecentGroup }
-    | {
-        kind: "session";
-        count: number;
-        entry: SessionEntry | null;
-        node: Branch | null;
-        row: BoardRow;
-      }
+    | ({ kind: "session"; count: number; row: BoardRow } & (
+        { entry: SessionEntry; node: null } | { entry: null; node: Branch }
+      ))
     | { kind: "older"; node: Branch }
     | { kind: "stored"; entry: StoredEntry };
 
@@ -200,8 +196,10 @@
         ? group.groups.map(groupNode)
         : group.entries.map(entryNode);
     }
-    const entry = node.entry as SessionEntry;
-    const own = node.node ?? branchOf(entry.row, entry.under, reading);
+    const own =
+      node.node === null
+        ? branchOf(node.entry.row, node.entry.under, reading)
+        : node.node;
     return [
       ...own.recent.map(branchNode),
       ...(own.older.length > 0 ? [{ kind: "older" as const, node: own }] : []),

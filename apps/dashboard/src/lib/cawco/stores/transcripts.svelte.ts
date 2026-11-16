@@ -6,7 +6,7 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { harnessNamed } from "@cawco/core/harness/kinds";
 import type { SendRecord } from "@cawco/core/session-messages";
 import type {
   TranscriptBlock,
@@ -294,8 +294,9 @@ function applyFacts(
   facts: Partial<TranscriptFacts>,
   live: boolean
 ): void {
-  if (facts.harness) {
-    target.harness = facts.harness as HarnessKind;
+  const harness = harnessNamed(facts.harness);
+  if (harness) {
+    target.harness = harness;
   }
   if (facts.sessionId) {
     target.sessionId = facts.sessionId;

@@ -3,7 +3,12 @@
  * from the types CawCo stores as JSON: never edited by hand. Each schema's
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
+import { ACCOUNT_SETUP_STEPS } from "@cawco/core/accounts";
+import { ACCOUNT_HUES } from "@cawco/core/accounts/kinds";
 import { ARTIFACT_KINDS } from "@cawco/core/artifact-kinds";
+import { SESSION_ROLES } from "@cawco/core/delegate-types";
+import { EXTERNAL_KINDS, EXTERNAL_SOURCES } from "@cawco/core/external-items";
+import { MEMORY_ROLES } from "@cawco/core/fleet";
 import { HARNESSES, WIRE_PERMISSION_MODES } from "@cawco/core/harness/kinds";
 import {
   PLAN_EDIT_KINDS,
@@ -11,7 +16,62 @@ import {
   PLAN_STEP_STATUSES,
 } from "@cawco/core/plan";
 import { STAGE_TOOLCHAINS } from "@cawco/core/stage";
+import { STAGE_KINDS, TASK_MOVERS } from "@cawco/core/views";
+import { WORK_ITEM_STATES } from "@cawco/core/work-items";
 import { z } from "zod";
+
+const AtPlanLimitShape = z.enum(["move", "extra-usage"]);
+export type AtPlanLimitOutput = z.output<typeof AtPlanLimitShape>;
+
+const AccountHueShape = z.enum(ACCOUNT_HUES);
+export type AccountHueOutput = z.output<typeof AccountHueShape>;
+
+const AccountIdentityShape = z.object({
+  email: z.string(),
+  organization: z.string(),
+  orgId: z.string().nullable(),
+});
+export type AccountIdentityOutput = z.output<typeof AccountIdentityShape>;
+
+const AccountKindShape = z.enum([
+  "subscription",
+  "console",
+  "oauth",
+  "api_key",
+]);
+export type AccountKindOutput = z.output<typeof AccountKindShape>;
+
+const AccountProviderShape = z.string();
+export type AccountProviderOutput = z.output<typeof AccountProviderShape>;
+
+const AccountSetupStepShape = z.enum(ACCOUNT_SETUP_STEPS);
+export type AccountSetupStepOutput = z.output<typeof AccountSetupStepShape>;
+
+const AccountShape = z.object({
+  atPlanLimit: AtPlanLimitShape,
+  createdAt: z.number(),
+  email: z.string().nullable(),
+  hue: AccountHueShape,
+  id: z.string(),
+  identity: AccountIdentityShape.nullable(),
+  kind: AccountKindShape,
+  label: z.string().nullable(),
+  neverBackup: z.boolean(),
+  order: z.number(),
+  provider: AccountProviderShape,
+  reservePct: z.number().nullable(),
+  setupStep: AccountSetupStepShape.optional(),
+});
+export type AccountOutput = z.output<typeof AccountShape>;
+
+const AccountFieldsShape = z.object({
+  hue: AccountShape.shape.hue,
+  neverBackup: z.boolean(),
+  nickname: z.string(),
+  reserve: z.string(),
+});
+export const AccountFieldsSchema = AccountFieldsShape;
+export type AccountFieldsOutput = z.output<typeof AccountFieldsShape>;
 
 const BrowserKeyShape = z.union([
   z.templateLiteral(["project:", z.string()]),
@@ -303,6 +363,48 @@ const ContinueSourceShape = z.object({
 export const ContinueSourceSchema = ContinueSourceShape;
 export type ContinueSourceOutput = z.output<typeof ContinueSourceShape>;
 
+const EffortLevelShape = z.enum(["low", "medium", "high", "xhigh", "max"]);
+export type EffortLevelOutput = z.output<typeof EffortLevelShape>;
+
+const MayStartShape = z.array(z.string());
+export type MayStartOutput = z.output<typeof MayStartShape>;
+
+const SessionRoleShape = z.enum(SESSION_ROLES);
+export type SessionRoleOutput = z.output<typeof SessionRoleShape>;
+
+const StartingSetShape = z.object({
+  servers: z.array(z.string()),
+  skills: z.array(z.string()),
+});
+export type StartingSetOutput = z.output<typeof StartingSetShape>;
+
+const DelegateTypeShape = z.object({
+  account: z.string().optional(),
+  connections: z.array(z.string()).optional(),
+  denyTools: z.array(z.string()).optional(),
+  description: z.string(),
+  effort: EffortLevelShape.optional(),
+  harness: HarnessKindShape,
+  mayStart: MayStartShape.optional(),
+  model: z.string(),
+  name: z.string(),
+  role: SessionRoleShape.optional(),
+  skills: z.array(z.string()).optional(),
+  startingSet: StartingSetShape.optional(),
+});
+export type DelegateTypeOutput = z.output<typeof DelegateTypeShape>;
+
+const DelegateTypeFieldsShape = z.object({
+  denyToolsText: z.string(),
+  draft: DelegateTypeShape,
+  mayStartText: z.string(),
+  skillsText: z.string(),
+  startServersText: z.string(),
+  startSkillsText: z.string(),
+});
+export const DelegateTypeFieldsSchema = DelegateTypeFieldsShape;
+export type DelegateTypeFieldsOutput = z.output<typeof DelegateTypeFieldsShape>;
+
 const DraftCanvasShape = z.object({
   folded: z.boolean(),
   id: z.string(),
@@ -374,6 +476,127 @@ const GraphKeptShape = z.object({
 });
 export const GraphKeptSchema = GraphKeptShape;
 export type GraphKeptOutput = z.output<typeof GraphKeptShape>;
+
+const FleetScopeShape = z.enum(["user", "project", "local"]);
+export type FleetScopeOutput = z.output<typeof FleetScopeShape>;
+
+const FleetPlacementShape = z.object({
+  areaId: z.string().optional(),
+  cwd: z.string().optional(),
+  placeId: z.string().optional(),
+  projectId: z.string().optional(),
+  scope: FleetScopeShape.optional(),
+});
+export type FleetPlacementOutput = z.output<typeof FleetPlacementShape>;
+
+const HookEventShape = z.enum([
+  "SessionStart",
+  "Setup",
+  "InstructionsLoaded",
+  "UserPromptSubmit",
+  "UserPromptExpansion",
+  "MessageDisplay",
+  "PreToolUse",
+  "PermissionRequest",
+  "PostToolUse",
+  "PostToolUseFailure",
+  "PostToolBatch",
+  "PermissionDenied",
+  "Notification",
+  "SubagentStart",
+  "SubagentStop",
+  "TaskCreated",
+  "TaskCompleted",
+  "Stop",
+  "StopFailure",
+  "TeammateIdle",
+  "ConfigChange",
+  "CwdChanged",
+  "DirectoryAdded",
+  "FileChanged",
+  "WorktreeCreate",
+  "WorktreeRemove",
+  "PreCompact",
+  "PostCompact",
+  "SessionEnd",
+  "Elicitation",
+  "ElicitationResult",
+]);
+export type HookEventOutput = z.output<typeof HookEventShape>;
+
+const HookHandlerBaseShape = z.object({
+  if: z.string().optional(),
+  statusMessage: z.string().optional(),
+  timeout: z.number().optional(),
+});
+
+const HookCommandHandlerShape = HookHandlerBaseShape.extend({
+  args: z.array(z.string()).optional(),
+  async: z.boolean().optional(),
+  asyncRewake: z.boolean().optional(),
+  command: z.string().optional(),
+  shell: z.enum(["bash", "powershell"]).optional(),
+  type: z.literal("command"),
+});
+export type HookCommandHandlerOutput = z.output<typeof HookCommandHandlerShape>;
+
+const HookHttpHandlerShape = HookHandlerBaseShape.extend({
+  type: z.literal("http"),
+  url: z.string(),
+});
+export type HookHttpHandlerOutput = z.output<typeof HookHttpHandlerShape>;
+
+const HookMcpToolHandlerShape = HookHandlerBaseShape.extend({
+  mcp_server_name: z.string(),
+  tool_name: z.string(),
+  type: z.literal("mcp_tool"),
+});
+export type HookMcpToolHandlerOutput = z.output<typeof HookMcpToolHandlerShape>;
+
+const HookPromptHandlerShape = HookHandlerBaseShape.extend({
+  prompt: z.string(),
+  type: z.literal("prompt"),
+});
+export type HookPromptHandlerOutput = z.output<typeof HookPromptHandlerShape>;
+
+const HookAgentHandlerShape = HookHandlerBaseShape.extend({
+  agent: z.string().optional(),
+  prompt: z.string(),
+  type: z.literal("agent"),
+});
+export type HookAgentHandlerOutput = z.output<typeof HookAgentHandlerShape>;
+
+const HookHandlerShape = z.union([
+  HookCommandHandlerShape,
+  HookHttpHandlerShape,
+  HookMcpToolHandlerShape,
+  HookPromptHandlerShape,
+  HookAgentHandlerShape,
+]);
+export type HookHandlerOutput = z.output<typeof HookHandlerShape>;
+
+const FleetHookShape = FleetPlacementShape.extend({
+  enabled: z.boolean(),
+  event: HookEventShape,
+  force: z.boolean().optional(),
+  handler: HookHandlerShape,
+  hash: z.string(),
+  id: z.string(),
+  matcher: z.string().optional(),
+  name: z.string(),
+  script: z.string().optional(),
+});
+export type FleetHookOutput = z.output<typeof FleetHookShape>;
+
+const HookDraftShape = FleetHookShape.omit({ id: true, hash: true });
+export type HookDraftOutput = z.output<typeof HookDraftShape>;
+
+const HookFieldsShape = z.object({
+  commandArgs: z.string(),
+  draft: HookDraftShape,
+});
+export const HookFieldsSchema = HookFieldsShape;
+export type HookFieldsOutput = z.output<typeof HookFieldsShape>;
 
 const ForkSourceShape = z.object({
   at: z.string().optional(),
@@ -650,6 +873,31 @@ const KeptUpdatesShape = z.object({
 export const KeptUpdatesSchema = KeptUpdatesShape;
 export type KeptUpdatesOutput = z.output<typeof KeptUpdatesShape>;
 
+const PairShape = z.object({
+  held: z.boolean().optional(),
+  key: z.string(),
+  value: z.string(),
+});
+export type PairOutput = z.output<typeof PairShape>;
+
+const McpFieldsShape = z.object({
+  argsLine: z.string(),
+  clearUrlKey: z.boolean(),
+  command: z.string(),
+  env: z.array(PairShape),
+  headers: z.array(PairShape),
+  mode: z.enum(["bunx", "command", "remote"]),
+  named: z.boolean(),
+  pkg: z.string(),
+  pkgArgs: z.string(),
+  projectId: z.string(),
+  serverName: z.string(),
+  transport: z.enum(["http", "sse"]),
+  url: z.string(),
+});
+export const McpFieldsSchema = McpFieldsShape;
+export type McpFieldsOutput = z.output<typeof McpFieldsShape>;
+
 const EmbedShapeShape = z.object({ h: z.number(), w: z.number().nullable() });
 export type EmbedShapeOutput = z.output<typeof EmbedShapeShape>;
 
@@ -675,6 +923,27 @@ const MediaArtifactShape = DecisionMediaShape;
 export const MediaArtifactSchema = MediaArtifactShape;
 export type MediaArtifactOutput = z.output<typeof MediaArtifactShape>;
 
+const MemoryRoleShape = z.enum(MEMORY_ROLES);
+export type MemoryRoleOutput = z.output<typeof MemoryRoleShape>;
+
+const MemoryScopeShape = z.object({
+  areaIds: z.array(z.string()).optional(),
+  briefer: z.literal(true).optional(),
+  delegateTypes: z.array(z.string()).optional(),
+  model: z.string().optional(),
+  projectIds: z.array(z.string()).optional(),
+  role: MemoryRoleShape.optional(),
+});
+export type MemoryScopeOutput = z.output<typeof MemoryScopeShape>;
+
+const MemoryFieldsShape = z.object({
+  base: z.string().optional(),
+  scope: MemoryScopeShape.optional(),
+  text: z.string(),
+});
+export const MemoryFieldsSchema = MemoryFieldsShape;
+export type MemoryFieldsOutput = z.output<typeof MemoryFieldsShape>;
+
 const ModelUseShape = z.object({
   lastSpawnAt: z.string().optional(),
   lastUsedAt: z.record(z.string(), z.string()),
@@ -689,9 +958,6 @@ const ParkedAskShape = z.object({
   sent: z.boolean(),
 });
 export type ParkedAskOutput = z.output<typeof ParkedAskShape>;
-
-const EffortLevelShape = z.enum(["low", "medium", "high", "xhigh", "max"]);
-export type EffortLevelOutput = z.output<typeof EffortLevelShape>;
 
 const PermissionModeShape = z.enum(WIRE_PERMISSION_MODES);
 export type PermissionModeOutput = z.output<typeof PermissionModeShape>;
@@ -784,6 +1050,47 @@ const RoutineRefusalShape = z.object({
 });
 export const RoutineRefusalSchema = RoutineRefusalShape;
 export type RoutineRefusalOutput = z.output<typeof RoutineRefusalShape>;
+
+const RuleMatchKindShape = z.enum(["phrase", "regex", "meaning"]);
+export type RuleMatchKindOutput = z.output<typeof RuleMatchKindShape>;
+
+const RuleScopeShape = z.object({
+  areaId: z.string().optional(),
+  delegateType: z.string().optional(),
+  harness: HarnessKindShape.optional(),
+  machineId: z.string().optional(),
+  model: z.string().optional(),
+  projectId: z.string().optional(),
+  role: MemoryRoleShape.optional(),
+});
+export type RuleScopeOutput = z.output<typeof RuleScopeShape>;
+
+const RuleTimingShape = z.enum(["turn", "message", "immediate"]);
+export type RuleTimingOutput = z.output<typeof RuleTimingShape>;
+
+const RuleWatchShape = z.enum(["text", "thinking", "both"]);
+export type RuleWatchOutput = z.output<typeof RuleWatchShape>;
+
+const RuleShape = z.object({
+  caseSensitive: z.boolean(),
+  createdAt: z.number(),
+  enabled: z.boolean(),
+  id: z.string(),
+  matchKind: RuleMatchKindShape,
+  name: z.string(),
+  pattern: z.string(),
+  repeat: z.boolean(),
+  reply: z.string(),
+  scope: RuleScopeShape,
+  timing: RuleTimingShape,
+  watch: RuleWatchShape,
+  wholeWord: z.boolean(),
+});
+export type RuleOutput = z.output<typeof RuleShape>;
+
+const RuleDraftShape = RuleShape.omit({ id: true, createdAt: true });
+export const RuleDraftSchema = RuleDraftShape;
+export type RuleDraftOutput = z.output<typeof RuleDraftShape>;
 
 const SessionContextShape = z.object({
   cwd: z.string(),
@@ -878,7 +1185,10 @@ export const SpawnPrefsShape = z.object({
 });
 export type SpawnPrefsOutput = z.output<typeof SpawnPrefsShape>;
 
-const StopKindShape = z.enum(["forget", "delete", "caw-off"]);
+const EndKindShape = z.enum(["forget", "delete"]);
+export type EndKindOutput = z.output<typeof EndKindShape>;
+
+const StopKindShape = z.union([EndKindShape, z.literal("caw-off")]);
 export type StopKindOutput = z.output<typeof StopKindShape>;
 
 const StopPhaseShape = z.enum([
@@ -960,6 +1270,10 @@ const StrategyChoiceShape = z.object({
 export const StrategyChoiceSchema = StrategyChoiceShape;
 export type StrategyChoiceOutput = z.output<typeof StrategyChoiceShape>;
 
+const SubagentFieldsShape = z.object({ base: z.string(), draft: z.string() });
+export const SubagentFieldsSchema = SubagentFieldsShape;
+export type SubagentFieldsOutput = z.output<typeof SubagentFieldsShape>;
+
 const CommentAttachmentShape = z.object({
   height: z.number().optional(),
   kind: z.enum(["image", "text", "file"]),
@@ -984,6 +1298,216 @@ const ThreadEntryShape = z.object({
 });
 export const ThreadEntrySchema = ThreadEntryShape;
 export type ThreadEntryOutput = z.output<typeof ThreadEntryShape>;
+
+const ArtifactBaseShape = z.object({
+  name: z.string().optional(),
+  primary: z.boolean().optional(),
+});
+
+const ResultArtifactShape = z.union([
+  ArtifactBaseShape.extend({
+    kind: z.enum(["file", "post"]),
+    path: z.string(),
+  }),
+  ArtifactBaseShape.extend({ kind: z.literal("link"), url: z.string() }),
+  ArtifactBaseShape.extend({
+    kind: z.literal("artifact"),
+    artifactId: z.string(),
+  }),
+]);
+export type ResultArtifactOutput = z.output<typeof ResultArtifactShape>;
+
+const AttemptResultShape = z.object({
+  artifacts: z.array(ResultArtifactShape),
+  at: z.number(),
+  check: z.array(z.string()),
+  summary: z.string(),
+});
+export type AttemptResultOutput = z.output<typeof AttemptResultShape>;
+
+const WorkItemStateShape = z.enum(WORK_ITEM_STATES);
+export type WorkItemStateOutput = z.output<typeof WorkItemStateShape>;
+
+const WaitWitnessShape = z.object({ target: z.string(), value: z.string() });
+export type WaitWitnessOutput = z.output<typeof WaitWitnessShape>;
+
+const TaskAttemptShape = z.object({
+  endedAt: z.number().nullable(),
+  endedHow: z.string().nullable(),
+  headline: z.string().nullable(),
+  instanceId: z.string(),
+  result: AttemptResultShape.nullable(),
+  startedAt: z.number(),
+  state: WorkItemStateShape,
+  waitedOn: z.array(WaitWitnessShape),
+  workItemId: z.string(),
+});
+export type TaskAttemptOutput = z.output<typeof TaskAttemptShape>;
+
+const BuiltOnShape = z.object({
+  href: z.string(),
+  label: z.string(),
+  since: z.union([
+    z.literal("decided differently"),
+    z.literal("reopened"),
+    z.literal("maybe decided differently"),
+  ]),
+  target: z.string(),
+});
+export type BuiltOnOutput = z.output<typeof BuiltOnShape>;
+
+const WaitKindShape = z.enum(["task", "card", "pin", "pr", "run", "session"]);
+export type WaitKindOutput = z.output<typeof WaitKindShape>;
+
+const WaitStateShape = z.object({
+  dropped: z.boolean(),
+  flag: z.string().nullable(),
+  href: z.string(),
+  kind: WaitKindShape,
+  label: z.string(),
+  settled: z.boolean(),
+  state: z.string(),
+  target: z.string(),
+  value: z.string().nullable(),
+});
+export type WaitStateOutput = z.output<typeof WaitStateShape>;
+
+const TaskWaitShape = WaitStateShape.extend({ via: z.string().nullable() });
+export type TaskWaitOutput = z.output<typeof TaskWaitShape>;
+
+const TaskFlagsShape = z.object({
+  attempts: z.array(TaskAttemptShape),
+  builtOn: z.array(BuiltOnShape),
+  heldBy: z.string().nullable(),
+  lastAttemptFailed: z.boolean(),
+  lastAttemptStopped: z.boolean(),
+  liveAttempt: z.boolean(),
+  parts: z.array(z.string()),
+  queuedStart: z.boolean(),
+  ready: z.boolean(),
+  startProblem: z.string().nullable(),
+  unblocks: z.array(z.string()),
+  waits: z.array(TaskWaitShape),
+});
+export type TaskFlagsOutput = z.output<typeof TaskFlagsShape>;
+
+const TaskLifeShape = z.object({
+  archivedAt: z.number().nullable(),
+  closeReason: z.string().nullable(),
+  completedAt: z.number().nullable(),
+  droppedAt: z.number().nullable(),
+  startedAt: z.number().nullable(),
+});
+export type TaskLifeOutput = z.output<typeof TaskLifeShape>;
+
+const TaskMoverShape = z.enum(TASK_MOVERS);
+export type TaskMoverOutput = z.output<typeof TaskMoverShape>;
+
+const TaskHistoryActorShape = z.object({
+  id: z.string().nullable(),
+  mover: TaskMoverShape.nullable(),
+  name: z.string(),
+});
+export type TaskHistoryActorOutput = z.output<typeof TaskHistoryActorShape>;
+
+const TaskTimesShape = TaskLifeShape.extend({
+  createdAt: z.number(),
+  createdBy: TaskHistoryActorShape.nullable(),
+  updatedAt: z.number(),
+  updatedBy: TaskHistoryActorShape.nullable(),
+});
+export type TaskTimesOutput = z.output<typeof TaskTimesShape>;
+
+const StageKindShape = z.enum(STAGE_KINDS);
+export type StageKindOutput = z.output<typeof StageKindShape>;
+
+const ExternalSourceShape = z.enum(EXTERNAL_SOURCES);
+export type ExternalSourceOutput = z.output<typeof ExternalSourceShape>;
+
+const ExternalActorShape = z.object({
+  avatarUrl: z.string().nullable(),
+  kind: z.enum(["person", "bot", "app"]),
+  login: z.string(),
+  memberId: z.string().nullable(),
+  name: z.string().nullable(),
+  source: ExternalSourceShape,
+  url: z.string().nullable(),
+});
+export type ExternalActorOutput = z.output<typeof ExternalActorShape>;
+
+const ExternalKindShape = z.enum(EXTERNAL_KINDS);
+export type ExternalKindOutput = z.output<typeof ExternalKindShape>;
+
+const LinkModeShape = z.enum(["record", "closes", "refs", "related"]);
+export type LinkModeOutput = z.output<typeof LinkModeShape>;
+
+const ExternalStateShape = z.enum([
+  "open",
+  "draft",
+  "merged",
+  "closed",
+  "canceled",
+]);
+export type ExternalStateOutput = z.output<typeof ExternalStateShape>;
+
+const ExternalRefShape = z.object({
+  author: ExternalActorShape.nullable(),
+  baselineUnread: z.literal(true).optional(),
+  id: z.string(),
+  kind: ExternalKindShape,
+  labels: z.array(z.string()),
+  mode: LinkModeShape,
+  number: z.number().nullable(),
+  problem: z.string().nullable(),
+  ref: z.string(),
+  source: ExternalSourceShape,
+  state: ExternalStateShape.nullable(),
+  stateName: z.string(),
+  syncedAt: z.number().nullable(),
+  title: z.string(),
+  updatedAt: z.number().nullable(),
+  url: z.string(),
+});
+export type ExternalRefOutput = z.output<typeof ExternalRefShape>;
+
+const TaskLinkSummaryShape = ExternalRefShape.pick({
+  kind: true,
+  mode: true,
+  ref: true,
+  source: true,
+  state: true,
+  url: true,
+});
+export type TaskLinkSummaryOutput = z.output<typeof TaskLinkSummaryShape>;
+
+const TaskSummaryShape = TaskFlagsShape.extend(TaskTimesShape.shape).extend({
+  duplicateOf: z.string().nullable(),
+  fields: z.record(z.string(), z.string()),
+  foundIn: z.string().nullable(),
+  id: z.string(),
+  kind: StageKindShape.nullable(),
+  labels: z.array(z.string()),
+  links: z.array(TaskLinkSummaryShape),
+  needsYou: z.boolean(),
+  number: z.number(),
+  outputs: z.array(z.string()),
+  partOf: z.string().nullable(),
+  path: z.string(),
+  problem: z.string().nullable(),
+  rank: z.string().nullable(),
+  stage: z.string(),
+  title: z.string(),
+  todos: z.object({ done: z.number(), total: z.number() }),
+  type: z.string().nullable(),
+  waitsOn: z.array(z.string()),
+});
+export type TaskSummaryOutput = z.output<typeof TaskSummaryShape>;
+
+const ViewTaskRowShape = TaskSummaryShape.extend({
+  dates: z.record(z.string(), z.number()),
+});
+export const ViewTaskRowSchema = ViewTaskRowShape;
+export type ViewTaskRowOutput = z.output<typeof ViewTaskRowShape>;
 
 const VisitShape = z.object({
   at: z.number(),

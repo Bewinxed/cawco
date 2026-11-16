@@ -12,6 +12,7 @@
    */
   import type { BrowserKey, PasskeyQrFrame } from "@cawco/core/browser";
   import { PASSKEY_QR_TTL_MS } from "@cawco/core/browser";
+  import { isRecord } from "@cawco/core/is-record";
   import { passkeyWords } from "@cawco/core/words/browser";
   import { IconKey } from "#lib/icons.js";
   import { appear } from "#lib/platform/motion/curves.svelte.js";
@@ -64,8 +65,8 @@
       if (event.source !== window || event.origin !== window.location.origin) {
         return;
       }
-      const data = event.data as Record<string, unknown> | null;
-      if (data?.type !== "cawco:passkey_advert") {
+      const data: unknown = event.data;
+      if (!isRecord(data) || data.type !== "cawco:passkey_advert") {
         return;
       }
       const { serviceData, rssi, capturedAt } = data;

@@ -15,19 +15,17 @@
   import { Portal } from "bits-ui";
   import { numberOf } from "#lib/platform/motion/curves.svelte.js";
   import { chipPeek } from "./chip-peek.svelte";
+  import type { ElementProps } from "./markdown-fleet";
   import ReferenceFace, { referenceChipClass } from "./ReferenceFace.svelte";
   import { REFERENCE_LOOKS } from "./reference-looks";
   import { openThing } from "./reference-open.svelte";
-  import { type ThingKind, thingNamed } from "./reference-things.svelte";
+  import { isThingKind, thingNamed } from "./reference-things.svelte";
 
-  let {
-    id,
-    kind,
-    label = "",
-  }: { id: string; kind: ThingKind; label?: string } = $props();
+  let { id, kind, label = "" }: ElementProps = $props();
 
-  const thing = $derived(thingNamed(kind, id));
-  const look = $derived(REFERENCE_LOOKS[kind]);
+  // The registry draws this element for a thing's kind alone (references.ts `thing`).
+  const thing = $derived(isThingKind(kind) ? thingNamed(kind, id) : null);
+  const look = $derived(isThingKind(kind) ? REFERENCE_LOOKS[kind] : null);
   const words = $derived(thing?.label || label);
   const name = $derived(thing?.state ? `${words}, ${thing.state}` : words);
 
@@ -47,30 +45,30 @@
   );
 </script>
 
-<button
-  aria-label={name}
-  class={referenceChipClass(!!look.mark)}
-  data-reference-chip={kind}
-  data-reference-id={id}
-  onblur={peek.leave}
-  onclick={() => {
-    peek.leave();
-    if (thing) {
-      openThing(thing);
-    }
-  }}
-  onpointerenter={peek.rest}
-  onpointerleave={peek.leave}
-  type="button"
-  bind:this={chip}
->
-  <ReferenceFace
-    glyph={look.mark ?? undefined}
-    state={thing?.state}
-    stateClass={look.state}
-    {words}
-  />
-</button><Portal>
+{#if look}<button
+    aria-label={name}
+    class={referenceChipClass(!!look.mark)}
+    data-reference-chip={kind}
+    data-reference-id={id}
+    onblur={peek.leave}
+    onclick={() => {
+      peek.leave();
+      if (thing) {
+        openThing(thing);
+      }
+    }}
+    onpointerenter={peek.rest}
+    onpointerleave={peek.leave}
+    type="button"
+    bind:this={chip}
+  >
+    <ReferenceFace
+      glyph={look.mark ?? undefined}
+      state={thing?.state}
+      stateClass={look.state}
+      {words}
+    />
+  </button>{/if}<Portal>
   {#if peek.at && thing}
     <!-- The viewport is its room: a transcript's rows clip what stands inside them. -->
     <div

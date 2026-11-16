@@ -25,6 +25,7 @@
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import { configStore, upsert } from "../store.svelte";
+  import { EDITOR_FIELDS } from "./editor-fields";
 
   /**
    * One subagent, edited as what it is: a markdown file. There is no form —
@@ -76,15 +77,15 @@ You are a <role>, working in one repository at a time.
   });
   /** A new subagent was just created: its draft is over, and a second Save would write it again. */
   let created = false;
-  const kept = keepDraft<{ draft: string; base: string }>(
+  // A draft kept before it carried its base was the bare text: it does not
+  // read as the fields, and is not brought back, since no save could name
+  // what it started from.
+  const kept = keepDraft(
     page.url.pathname,
+    EDITOR_FIELDS.subagent,
     () => (dirty ? { draft, base } : null),
-    // A draft kept before it carried its base was the bare text: not
-    // brought back, since no save could name what it started from.
     (stored) => {
-      if (typeof stored === "object") {
-        ({ draft, base } = stored);
-      }
+      ({ draft, base } = stored);
     }
   );
 

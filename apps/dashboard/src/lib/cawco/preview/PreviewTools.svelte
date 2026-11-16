@@ -40,7 +40,9 @@
   /** The row's need: each group at its own width (spread, none shrinks), the gaps between them and the inset. */
   const needOf = (row: HTMLElement): number => {
     const style = getComputedStyle(row);
-    const groups = [...row.children] as HTMLElement[];
+    const groups = [...row.children].filter(
+      (child) => child instanceof HTMLElement
+    );
     const gap = Number.parseFloat(style.columnGap) || 0;
     const across = groups.reduce((sum, group) => sum + group.offsetWidth, 0);
     return Math.ceil(

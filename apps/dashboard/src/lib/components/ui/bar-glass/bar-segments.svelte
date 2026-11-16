@@ -70,10 +70,11 @@
 
   /** One pair of handlers for every segment, each reading which it stands on. */
   const enter = (event: PointerEvent) => {
+    const { currentTarget } = event;
     const at = segments.find(
       (one) =>
-        one.value ===
-        (event.currentTarget as HTMLElement | null)?.dataset.segment
+        currentTarget instanceof HTMLElement &&
+        one.value === currentTarget.dataset.segment
     );
     if (at && event.pointerType !== "touch") {
       onpreview?.(at.value);

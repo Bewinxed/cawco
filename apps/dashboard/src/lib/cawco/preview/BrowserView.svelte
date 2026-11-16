@@ -1177,7 +1177,9 @@
   });
 
   /** A press on the overview: the view moved to centre there. */
-  function overviewAt(event: PointerEvent) {
+  function overviewAt(
+    event: PointerEvent & { currentTarget: EventTarget & HTMLElement }
+  ) {
     const box = overviewCanvas?.getBoundingClientRect();
     if (!(box && box.width > 0 && box.height > 0)) {
       return;
@@ -1185,7 +1187,7 @@
     event.preventDefault();
     event.stopPropagation();
     if (event.type === "pointerdown") {
-      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+      event.currentTarget.setPointerCapture(event.pointerId);
     } else if (event.buttons === 0) {
       return;
     }

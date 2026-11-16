@@ -6,6 +6,7 @@
  * with no face (none said, the dashboard knows nothing by it, or no
  * dashboard frames the page) draws as its label alone.
  */
+import { isRecord } from "@cawco/core/is-record";
 import {
   REFERENCE_FACES,
   type ReferenceFace,
@@ -24,9 +25,8 @@ const faces = new SvelteMap<string, ReferenceFace | null>();
  */
 export const startReferenceFaces = (): (() => void) =>
   on(window, REFERENCE_FACES, (event) => {
-    const said = referenceFacesOf(
-      (event as CustomEvent<{ faces?: unknown } | null>).detail?.faces
-    );
+    const detail: unknown = event instanceof CustomEvent ? event.detail : null;
+    const said = referenceFacesOf(isRecord(detail) ? detail.faces : undefined);
     for (const [href, face] of Object.entries(said)) {
       faces.set(href, face);
     }

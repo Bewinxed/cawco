@@ -15,7 +15,7 @@
   import type { Snippet } from "svelte";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconError, IconWarningTriangle } from "#lib/icons.js";
-  import type { StateCard } from "./StateNode.svelte";
+  import type { StateCard } from "./state-card";
 
   let {
     card,

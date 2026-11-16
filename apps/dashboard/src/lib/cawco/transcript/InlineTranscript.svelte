@@ -24,10 +24,10 @@
     readTranscript,
     reconnectingNow,
   } from "../stores/transcript-reads.svelte";
+  import type { Message } from "../types";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
   import Behind from "./Behind.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
-  import Delegate from "./Delegate.svelte";
   import MessageRow from "./MessageRow.svelte";
   import NoticeRun from "./NoticeRun.svelte";
   import { foldMessages, newestCompaction, wellRuns } from "./rows";
@@ -41,6 +41,7 @@
     agentName,
     after,
     afterCount = 0,
+    delegate,
   }: {
     /** The session drawn; null while it is still being started. */
     id: string | null;
@@ -50,6 +51,8 @@
     /** One more unit drawn after the last row (a delegate's report). */
     after?: Snippet;
     afterCount?: number;
+    /** A delegate's card among the rows, drawn by the delegate's own card, which this well sits inside. */
+    delegate: Snippet<[Message]>;
   } = $props();
 
   const branch = $derived(id ? sessionsStore.session(id) : null);
@@ -199,7 +202,7 @@
         {:else if r.kind === "question"}
           <ToolGroup messages={[r.message]} />
         {:else if r.kind === "delegate"}
-          <Delegate message={r.message} />
+          {@render delegate(r.message)}
         {:else if r.kind === "compaction"}
           <CompactionDivider row={r} />
         {:else if r.kind === "account"}

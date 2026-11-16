@@ -80,7 +80,7 @@ import {
   rectOf,
   sizesIn,
 } from "./frames";
-import type { Pins } from "./pins";
+import type { Pins } from "./pins-types";
 import type { InkChrome, Pick } from "./radial";
 import { scrollerRound, scrollsContent } from "./scrollers";
 

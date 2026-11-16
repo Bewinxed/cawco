@@ -315,6 +315,9 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   waitsOn: string[];
 }
 
+/** One task as the `tasks` tool answers it: the board's row, and its dates. */
+export type ViewTaskRow = TaskSummary & { dates: Record<string, number> };
+
 export interface TaskList {
   /** Files in tasks/ the hub could not list as tasks, one sentence each. */
   problems: string[];

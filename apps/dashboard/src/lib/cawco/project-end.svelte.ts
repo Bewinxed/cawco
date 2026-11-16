@@ -29,13 +29,15 @@ import { goto } from "$app/navigation";
 import type { ProjectRow } from "./projects";
 import { refusals } from "./refusals.svelte";
 import { restoreHeld } from "./restore-held.svelte";
-import type { EndKind } from "./stop-work.svelte";
 import {
   discardHeldRows,
   restoreProject,
   retryHeldRows,
   StandingRefusal,
 } from "./stores/projects.svelte";
+
+/** The ends of a project itself: forgotten (undoable) or deleted for good. */
+export type EndKind = "forget" | "delete";
 
 let asked = $state<{
   at: string;

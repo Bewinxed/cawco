@@ -127,6 +127,18 @@ export function tunedProblem(moves: [string, unknown][]): string | null {
   return null;
 }
 
+/** The map's moves that hold a record. */
+const tunedMoves = (moves: Readonly<Record<string, unknown>>): TunedMove[] =>
+  Object.values(moves).filter(
+    (one): one is TunedMove =>
+      isRecord(one) && Array.isArray(one.records) && one.records.length > 0
+  );
+
+/** Every move's records in the map, in order; none while no move is tuned. */
+export const tunedRecords = (
+  moves: Readonly<Record<string, unknown>>
+): TunedRecord[] => tunedMoves(moves).flatMap((one) => one.records);
+
 /**
  * The map read as the one `tuned` entry the hub answers and counts (its
  * picks' `tuned`): every move's records in order, the newest move's moment
@@ -135,10 +147,7 @@ export function tunedProblem(moves: [string, unknown][]): string | null {
 export function tunedEntryOf(
   moves: Readonly<Record<string, unknown>>
 ): ChoiceEntry | null {
-  const kept = Object.values(moves).filter(
-    (one): one is TunedMove =>
-      isRecord(one) && Array.isArray(one.records) && one.records.length > 0
-  );
+  const kept = tunedMoves(moves);
   if (kept.length === 0) {
     return null;
   }

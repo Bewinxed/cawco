@@ -480,7 +480,10 @@
         this.connectionState = "closed";
       }
     }
-    window.RTCPeerConnection = BenchPeer as unknown as typeof RTCPeerConnection;
+    // Every peer the view makes is the stand-in, through the real constructor's own type.
+    window.RTCPeerConnection = new Proxy(window.RTCPeerConnection, {
+      construct: () => new BenchPeer(),
+    });
     // Only the view's socket: the dev server's own (Vite's) stays the browser's.
     const Real = window.WebSocket;
     window.WebSocket = new Proxy(Real, {

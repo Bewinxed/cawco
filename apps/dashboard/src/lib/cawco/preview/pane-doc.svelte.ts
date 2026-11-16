@@ -9,7 +9,7 @@ import {
   type RefusedWrites,
   withKeptReplies,
 } from "@cawco/core/comments/model";
-import { pinProblem } from "@cawco/core/comments/validate";
+import { hasPinParts, isPin } from "@cawco/core/comments/validate";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { untrack } from "svelte";
 import { z } from "zod";
@@ -410,14 +410,7 @@ export class PaneDoc {
   /** Pin `id` as the page says it now (a valid pin), or gone from it (null). */
   pageSays(id: string, now: unknown) {
     const { [id]: _was, ...rest } = this.pagePins;
-    this.pagePins =
-      typeof now === "object" &&
-      now !== null &&
-      "id" in now &&
-      now.id === id &&
-      pinProblem(now) === null
-        ? { ...rest, [id]: now as Pin }
-        : rest;
+    this.pagePins = isPin(now) && now.id === id ? { ...rest, [id]: now } : rest;
   }
 
   /**
@@ -460,15 +453,8 @@ export class PaneDoc {
         continue;
       }
       // One the hub refused breaks a bound by its nature (the hub's reason says which): it is listed whole, so its words stay in reach.
-      if (
-        "notSent" in pin &&
-        pin.notSent &&
-        "number" in pin &&
-        typeof pin.number === "number" &&
-        "thread" in pin &&
-        Array.isArray(pin.thread)
-      ) {
-        this.pagePins = { ...this.pagePins, [pin.id]: pin as Pin };
+      if (hasPinParts(pin) && pin.notSent) {
+        this.pagePins = { ...this.pagePins, [pin.id]: pin };
       } else {
         this.pageSays(pin.id, pin);
       }

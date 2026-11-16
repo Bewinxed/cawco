@@ -409,33 +409,29 @@
     });
   };
 
-  /** What a setting command's intent names. */
-  const BenchIntent = z.object({
-    effort: z.string().optional(),
-    mode: z.string().optional(),
-    model: z.string().optional(),
-  });
-
   standSocket({
     control: null,
     spawn: null,
-    hub: (_instanceId, kind, intent, commandId) => {
+    hub: (_instanceId, request, commandId) => {
       const live = session(ID);
-      const said = BenchIntent.parse(intent);
-      if (kind === "set-model" && said.model) {
+      if (request.kind === "set-model" && request.intent.model) {
+        const picked = request.intent.model;
         // A pick while a move waits rides the move (hub `pickWithMove`).
         if (owed) {
-          owed = { ...owed, model: said.model };
+          owed = { ...owed, model: picked };
           adoptRows([row(owed.to, owed.model)]);
         } else {
-          live.model = said.model;
+          live.model = picked;
         }
-      } else if (kind === "set-effort" && isEffortLevel(said.effort)) {
-        live.effort = said.effort;
-      } else if (kind === "set-permission-mode") {
+      } else if (
+        request.kind === "set-effort" &&
+        isEffortLevel(request.intent.effort)
+      ) {
+        live.effort = request.intent.effort;
+      } else if (request.kind === "set-permission-mode") {
+        const { mode: said } = request.intent;
         live.permissionMode =
-          PERMISSION_MODES.find((mode) => mode === said.mode) ??
-          live.permissionMode;
+          PERMISSION_MODES.find((mode) => mode === said) ?? live.permissionMode;
       }
       applied(commandId);
     },

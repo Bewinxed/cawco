@@ -172,7 +172,7 @@ export const ANCHOR_IDENTITIES = [
 const PAGE_ROOTS = new Set(["html", "body"]);
 
 /** Whether a mark stands on the page as a whole ({@link PAGE_ROOTS}), not on an element of it. */
-export const wholePage = (anchor: PageAnchor): boolean =>
+export const wholePage = (anchor: Pick<PageAnchor, "selector">): boolean =>
   PAGE_ROOTS.has(anchor.selector);
 
 /**

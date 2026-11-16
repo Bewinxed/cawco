@@ -11,6 +11,9 @@
     "./marks": {
       "types": "./src/marks.ts",
       "default": "./src/marks.ts"
+    },
+    "./raw": {
+      "types": "./src/raw.d.ts"
     }
   },
   "scripts": {

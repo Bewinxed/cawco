@@ -684,8 +684,9 @@ export function regroup(
     before.add(key);
     // Moved only (`landRegroup`): its corner's radius is never read.
     departBox(key, box, true, rect, "");
-    if (box.matches(PARENT) && motionOk.current) {
-      parents.push({ key, copy: box.cloneNode(true) as HTMLElement, rect });
+    const copy = box.matches(PARENT) && motionOk.current && box.cloneNode(true);
+    if (copy instanceof HTMLElement) {
+      parents.push({ key, copy, rect });
     }
   }
   // Every list a grouping draws regroups with it (the rail's Recent and the

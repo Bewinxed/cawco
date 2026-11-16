@@ -21,6 +21,7 @@
   (decisions/host/Preview.svelte), which the page's media resolve.
 -->
 <script lang="ts">
+  import { isRecord } from "@cawco/core/is-record";
   import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/preview/routes";
   import type { ArtifactSummary } from "@cawco/core/protocol";
   import { transcriptWords } from "@cawco/core/words/transcript";
@@ -132,8 +133,8 @@
       if (
         event.source !== frame?.contentWindow ||
         event.origin !== at.origin ||
-        (event.data as { type?: unknown } | null)?.type !==
-          PREVIEW_LOCKED_MESSAGE
+        !isRecord(event.data) ||
+        event.data.type !== PREVIEW_LOCKED_MESSAGE
       ) {
         return;
       }

@@ -17,6 +17,10 @@
   import { EditorQuestion } from "#lib/cawco/config/EditorFooter.svelte";
   import EditorFrame from "#lib/cawco/config/EditorFrame.svelte";
   import EditorSection from "#lib/cawco/config/EditorSection.svelte";
+  import {
+    type AccountFields,
+    EDITOR_FIELDS,
+  } from "#lib/cawco/config/editors/editor-fields.js";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import TitleInput from "#lib/cawco/config/TitleInput.svelte";
   import {
@@ -46,25 +50,19 @@
 
   let { account }: { account: Account } = $props();
 
-  interface Fields {
-    hue: Account["hue"];
-    neverBackup: boolean;
-    nickname: string;
-    /** The field's text: empty is no reserve. */
-    reserve: string;
-  }
-  const saved = (): Fields => ({
+  const saved = (): AccountFields => ({
     nickname: account.label ?? "",
     hue: account.hue,
     neverBackup: account.neverBackup,
     reserve: account.reservePct === null ? "" : String(account.reservePct),
   });
-  let fields = $state<Fields>(untrack(saved));
+  let fields = $state<AccountFields>(untrack(saved));
   const dirty = $derived(JSON.stringify(fields) !== JSON.stringify(saved()));
   const kept = keepDraft(
     page.url.pathname,
+    EDITOR_FIELDS.account,
     () => (dirty ? $state.snapshot(fields) : null),
-    (stored: Fields) => {
+    (stored: AccountFields) => {
       fields = stored;
     }
   );

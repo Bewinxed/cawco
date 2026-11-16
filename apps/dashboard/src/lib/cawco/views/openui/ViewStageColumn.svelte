@@ -6,12 +6,7 @@
    */
   import { stageLabel } from "#lib/cawco/project-tasks.js";
   import TaskColumn from "#lib/cawco/tasks/TaskColumn.svelte";
-  import {
-    rowsOf,
-    type ViewStageRow,
-    type ViewTaskRow,
-    viewContext,
-  } from "./context";
+  import { taskRowsOf, type ViewStageRow, viewContext } from "./context";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
 
   let {
@@ -20,7 +15,7 @@
     $props();
   const view = viewContext();
   const name = $derived(props.stage?.name ?? "");
-  const rows = $derived(rowsOf<ViewTaskRow>(props.tasks));
+  const rows = $derived(taskRowsOf(props.tasks));
   const cards = $derived(rows.filter((task) => task.stage === name));
 </script>
 

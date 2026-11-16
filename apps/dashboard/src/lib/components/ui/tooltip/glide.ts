@@ -10,16 +10,35 @@
  * (DESIGN.md, Tooltip); only moving along it glides, its place, size and
  * words together (glide-tip.svelte).
  */
+
+import { isRecord } from "@cawco/core/is-record";
+import { isOneOf } from "@cawco/core/one-of";
 import { Tooltip as TooltipPrimitive } from "bits-ui";
 import { createContext } from "svelte";
+
+const SIDES = ["top", "right", "bottom", "left"] as const;
 
 /** What one item's tip says: its words, the strong line over them, its keys, and the side it stands on. */
 export interface GlideWords {
   keys?: string;
   label: string;
-  side: "top" | "right" | "bottom" | "left";
+  side: (typeof SIDES)[number];
   title?: string;
 }
+
+const textOrNone = (value: unknown): boolean =>
+  value === undefined || typeof value === "string";
+
+/**
+ * Whether the tether's active payload is an item's words: bits-ui types it
+ * `{} | null` whatever the tether's own payload type.
+ */
+export const isGlideWords = (payload: unknown): payload is GlideWords =>
+  isRecord(payload) &&
+  typeof payload.label === "string" &&
+  isOneOf(SIDES, payload.side) &&
+  textOrNone(payload.keys) &&
+  textOrNone(payload.title);
 
 export type Glide = TooltipPrimitive.Tether<GlideWords>;
 

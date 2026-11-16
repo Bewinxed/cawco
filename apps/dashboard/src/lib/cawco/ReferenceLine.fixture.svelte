@@ -84,38 +84,40 @@
     });
 
   const real = globalThis.fetch;
-  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(
-      input instanceof Request ? input.url : String(input),
-      location.href
-    );
-    const path = url.pathname;
-    if (path === "/api/find") {
-      return Promise.resolve(json({ results: SESSIONS }));
-    }
-    const task = path.match(TASK_PATH)?.[1];
-    if (task) {
-      const one = TASKS[task];
-      return Promise.resolve(
-        one
-          ? json({
-              ...one,
-              id: task,
-              description: "",
-              todos: [],
-              comments: [],
-            })
-          : json({ error: "No such task." }, 404)
+  globalThis.fetch = new Proxy(real, {
+    apply: (_fetch, _this, [input, init]: Parameters<typeof fetch>) => {
+      const url = new URL(
+        input instanceof Request ? input.url : String(input),
+        location.href
       );
-    }
-    if (PLAN_PATH.test(path)) {
-      return Promise.resolve(json(PLAN));
-    }
-    if (path.startsWith("/api/")) {
-      return Promise.resolve(json({ error: "Not found." }, 404));
-    }
-    return real(input, init);
-  }) as typeof fetch;
+      const path = url.pathname;
+      if (path === "/api/find") {
+        return Promise.resolve(json({ results: SESSIONS }));
+      }
+      const task = path.match(TASK_PATH)?.[1];
+      if (task) {
+        const one = TASKS[task];
+        return Promise.resolve(
+          one
+            ? json({
+                ...one,
+                id: task,
+                description: "",
+                todos: [],
+                comments: [],
+              })
+            : json({ error: "No such task." }, 404)
+        );
+      }
+      if (PLAN_PATH.test(path)) {
+        return Promise.resolve(json(PLAN));
+      }
+      if (path.startsWith("/api/")) {
+        return Promise.resolve(json({ error: "Not found." }, 404));
+      }
+      return real(input, init);
+    },
+  });
 
   const named = (title: string, kind: ArtifactKind) => ({
     instanceId: SESSION,

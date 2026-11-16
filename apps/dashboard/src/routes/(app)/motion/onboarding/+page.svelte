@@ -332,12 +332,9 @@
       }, STAGE_BEAT_MS);
     }
   }
-  debug.standHub((_instanceId, kind, intent) => {
-    if (kind === "permission.answer") {
-      const { requestId, result } = intent as {
-        requestId: string;
-        result: PermissionResult;
-      };
+  debug.standHub((_instanceId, request) => {
+    if (request.kind === "permission.answer") {
+      const { requestId, result } = request.intent;
       answered(requestId, result);
     }
   });

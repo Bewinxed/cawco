@@ -12,6 +12,7 @@
  */
 
 import { machineLabel } from "@cawco/core/machine-names";
+import { isOneOf } from "@cawco/core/one-of";
 import type { SessionPlan } from "@cawco/core/plan";
 import { type ReferenceKind, referenceParts } from "@cawco/core/references";
 import { planWords } from "@cawco/core/words/plan";
@@ -26,10 +27,20 @@ import { projectsStore } from "./stores/projects.svelte";
 import { tickersStore } from "./stores/tickers.svelte";
 
 /** The kinds this module names. */
-export type ThingKind = Extract<
-  ReferenceKind,
-  "task" | "todo" | "plan" | "step" | "routine" | "project" | "machine"
->;
+const THING_KINDS = [
+  "task",
+  "todo",
+  "plan",
+  "step",
+  "routine",
+  "project",
+  "machine",
+] as const satisfies readonly ReferenceKind[];
+export type ThingKind = (typeof THING_KINDS)[number];
+
+/** Whether a reference's kind is one this module names. */
+export const isThingKind = (kind: ReferenceKind): kind is ThingKind =>
+  isOneOf(THING_KINDS, kind);
 
 /** Where a press opens a thing: a page of the app, a session's plan (at a step), or the machines' list. */
 type ThingPlace =

@@ -10,14 +10,11 @@ import type { SendAttachment } from "@cawco/core/attachments";
 import { detach } from "@cawco/core/detach";
 import {
   EFFORT_LEVELS,
-  type EffortLevel,
-  type PermissionMode,
   WIRE_PERMISSION_MODES,
 } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ControlPayload, SendPayload } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
-import type { PermissionResult } from "@cawco/core/session-messages";
 import type { CommandKind } from "@cawco/core/stream";
 import { unhandled } from "@cawco/core/unhandled";
 import { SvelteMap } from "svelte/reactivity";
@@ -56,6 +53,7 @@ import { speakerName } from "../transcript/speaker";
 import type { Message } from "../types";
 import { hearSettled } from "./asks.svelte";
 import { instanceIndex } from "./board.svelte";
+import type { CommandRequest } from "./command-request";
 import {
   commandRecord,
   sendFailureNotices,
@@ -548,36 +546,6 @@ function answeredHere(requestId: string): boolean {
   return record !== null && record.stage !== "failed";
 }
 
-/** What each command kind carries, in the shape the caller already has to hand. */
-interface CommandIntents {
-  interrupt: Record<string, never>;
-  "permission.answer": { requestId: string; result: PermissionResult };
-  /** `replaces`: the failed send this one retries, which the hub then retires. */
-  send: { text: string; extras?: SendExtras; replaces?: string };
-  /**
-   * Takes back a queued or failed send. `replace`: the words that go in its
-   * place once it is withdrawn (a queued message's edit), under
-   * `replacementId`, known before it goes so the words can fly into its row;
-   * none, the message is removed (Remove from queue, a failed send's Remove).
-   */
-  "send.withdraw": {
-    sendId: string;
-    replace?: {
-      extras: SendExtras;
-      replacement: string;
-      replacementId: string;
-    };
-  };
-  "set-effort": { effort: EffortLevel };
-  "set-model": { model: string };
-  "set-permission-mode": { mode: PermissionMode };
-}
-
-/** One command to submit: its kind, and the intent that kind takes. */
-export type CommandRequest = {
-  [K in CommandKind]: { kind: K; intent: CommandIntents[K] };
-}[CommandKind];
-
 /**
  * The wire payload for a kind: exactly what the hub's relay operation for it
  * takes. `requestId` is the command id — the correlation the control path
@@ -652,7 +620,7 @@ function benchTook(
     const { text, extras, replaces } = request.intent;
     noteSendSubmitted(instanceId, text, extras ?? {}, commandId, replaces);
   }
-  bench.hub(instanceId, request.kind, request.intent, commandId);
+  bench.hub(instanceId, request, commandId);
   return true;
 }
 

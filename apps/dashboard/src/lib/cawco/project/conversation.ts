@@ -12,7 +12,6 @@ import { detach } from "@cawco/core/detach";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { newId } from "#lib/platform/id.js";
 import { continuationStageWords } from "../continue.svelte";
-import type { DraftContent } from "../draft-store";
 import { answeredOr } from "../hub/control";
 import type { SendExtras } from "../send-store";
 import {
@@ -30,6 +29,7 @@ import {
   spawnSession,
   withdrawFirstPrompt,
 } from "../stores/session-start.svelte";
+import type { DraftContent } from "../transcript/composer-draft.svelte";
 
 /**
  * Starts it; its session's id. Throws the hub's refusal, or why it can't

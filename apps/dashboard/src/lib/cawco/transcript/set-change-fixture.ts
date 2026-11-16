@@ -137,7 +137,7 @@ const STANDING: SetStanding = {
 
 /** The one table a change draws that moves items one way. */
 const oneTable = (standing: SetStanding, after: StartingSet): SetChangeTable =>
-  setTablesOf(standing, after)[0] as SetChangeTable;
+  setTablesOf(standing, after)[0];
 
 /** What leaves, as the approval draws it. */
 export const UNLISTED: SetChangeTable = oneTable(STANDING, TRIMMED);

@@ -7,7 +7,7 @@
    */
   import type { Component, Snippet } from "svelte";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
-  import type { MachinePresence } from "./index.js";
+  import type { MachinePresence } from "./presence.js";
 
   let {
     icon: Icon,

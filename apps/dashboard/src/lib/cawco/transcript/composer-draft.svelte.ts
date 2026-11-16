@@ -16,7 +16,6 @@ import type { StarterPlace } from "@cawco/core/starters";
 import { SvelteSet } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
-import type { DraftContent } from "../draft-store";
 import type { SendExtras } from "../send-store";
 import { uploadFile } from "./file-upload";
 
@@ -124,6 +123,15 @@ export interface DraftCanvas {
   name: string;
   /** Its picture as the chip shows it, base64 PNG; null until drawn. */
   thumb: string | null;
+}
+
+/** What a stored draft is made of: the composer's own pieces. */
+export interface DraftContent {
+  canvas: DraftCanvas | null;
+  files: PendingFile[];
+  images: PendingImage[];
+  text: string;
+  texts: PendingText[];
 }
 
 /**

@@ -1,7 +1,7 @@
 /**
  * A pin's thread: which is open and drawn, its card beside the pill or in the rail's sheet, J and K stepping through the pins, and the rail's list.
  */
-import { newAnswer, type Pin, pinHeld } from "@cawco/core/comments/model";
+import { newAnswer, pinHeld } from "@cawco/core/comments/model";
 import { pinName } from "@cawco/core/pin-name";
 import { tick, untrack } from "svelte";
 import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
@@ -728,10 +728,7 @@ export class PinThread {
         name:
           parent &&
           !("selector" in parent.anchor && parent.anchor.selector === "body")
-            ? pinName({
-                anchor: parent.anchor,
-                elements: parent.elements,
-              } as unknown as Pin)
+            ? pinName({ anchor: parent.anchor, elements: parent.elements })
             : null,
       };
     }

@@ -1,4 +1,5 @@
 /// <reference types="unplugin-icons/types/svelte" />
+/// <reference types="@cawco/icons/raw" />
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
