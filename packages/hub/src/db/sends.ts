@@ -1,6 +1,8 @@
 /** Messages sent to a session: recorded, owed, held, answered. */
 
-import type { Envelope, SendPayload } from "@cawco/core/protocol";
+import type {
+  HubEnvelope,
+} from "@cawco/core/protocol";
 import type { NeutralUserMessage } from "@cawco/core/session-messages";
 import {
   and,
@@ -43,7 +45,7 @@ export interface SendsDb {
   /** Keeps a pending send whole, as its machine was handed it. */
   readonly keepEnvelope: (
     uuid: string,
-    envelope: Envelope<SendPayload>
+    envelope: HubEnvelope<"send">
   ) => void;
   /**
    * The newest send to session `to` that session `from` sent it as a peer

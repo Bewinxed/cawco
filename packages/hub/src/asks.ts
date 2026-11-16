@@ -52,6 +52,7 @@
  * person, however recently the mode was set.
  */
 
+import type { ArrivingAsk } from "@cawco/core/frames";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import {
   type AskedPermit,
@@ -72,7 +73,9 @@ import {
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
 import { ASK_ORIGIN, type PermissionMode } from "@cawco/core/harness/kinds";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type {
+  InstanceRow,
+} from "@cawco/core/protocol";
 import { settledQuestionResult } from "@cawco/core/question";
 import type {
   PermissionResult,
@@ -193,7 +196,7 @@ export interface AsksDeps {
    * (server.ts `parkForPerson`, delegate-waits.ts): a question it may
    * answer with `answer_delegate`, an approval as the person's alone.
    */
-  readonly park: (envelope: Envelope) => void;
+  readonly park: (envelope: ArrivingAsk) => void;
   /**
    * Writes again the line the person's transcript says of the send `uuid`
    * (its origin's `line`, core harness.ts); what the agent read stays.
@@ -257,11 +260,8 @@ const ASKED_AGAIN_WHY = "its session asked the same call again";
 const answerSend = (askId: string): string => uuidOf(`${askId}\u0000answer`);
 
 /** A parked prompt's tool call, as its frame carries it. */
-const callOf = (envelope: Envelope): AskedPermit => {
-  const { toolName, input } = envelope.payload as {
-    toolName: string;
-    input: Record<string, unknown>;
-  };
+const callOf = (envelope: ArrivingAsk): AskedPermit => {
+  const { toolName, input } = envelope.payload;
   return { kind: "permit", tool: toolName, input };
 };
 
@@ -587,12 +587,8 @@ export const createAsks = (deps: AsksDeps) => {
      * The prompt's own frame is replaced, not settled; a prompt routed to
      * its session's parent stays routed there.
      */
-    keep(prompt: Envelope, asker: InstanceRow): void {
-      const { raisedAt, routedTo, toolUseId } = prompt.payload as {
-        raisedAt?: number;
-        routedTo?: string;
-        toolUseId?: string;
-      };
+    keep(prompt: ArrivingAsk, asker: InstanceRow): void {
+      const { raisedAt, routedTo, toolUseId } = prompt.payload;
       const asked = callOf(prompt);
       const ask: AskRecord = {
         id: prompt.requestId ?? newAskId(),
@@ -616,7 +612,7 @@ export const createAsks = (deps: AsksDeps) => {
      * prompt for the same call with no grant takes the open permit's place,
      * which is withdrawn: the live prompt is the one to answer.
      */
-    granted(asker: InstanceRow, prompt: Envelope): boolean {
+    granted(asker: InstanceRow, prompt: ArrivingAsk): boolean {
       const call = callOf(prompt);
       const permitted = (ask: AskRecord): boolean =>
         ask.asked.kind === "permit" && sameCall(ask.asked, call);

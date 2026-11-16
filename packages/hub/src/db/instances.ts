@@ -16,13 +16,12 @@ import {
 import { harnessesWith, traitsOf } from "@cawco/core/harness/traits";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type {
-  Envelope,
+  HubEnvelope,
   InstanceStatus,
   SessionCommands,
   SessionEndIntent,
   SessionOrigin,
   SessionTooling,
-  SpawnPayload,
 } from "@cawco/core/protocol";
 import {
   CLAUDE_CONVERSATION_GONE,
@@ -801,7 +800,7 @@ export interface InstancesDb {
   /** What a machine is owed, in the order it was asked for. */
   readonly owedSpawns: (
     machineId: string
-  ) => { envelope: Envelope<SpawnPayload>; id: string }[];
+  ) => { envelope: HubEnvelope<"spawn">; id: string }[];
   /**
    * The returning daemon's word on its machine: `liveIds` are the sessions it
    * still carries, `resumable` the SDK sessions it could pick back up. A daemon
@@ -820,7 +819,7 @@ export interface InstancesDb {
   /** Keeps a start the machine could not be sent yet, on the row already written for it. */
   readonly oweSpawn: (
     id: string,
-    envelope: Envelope<SpawnPayload>,
+    envelope: HubEnvelope<"spawn">,
     at: number
   ) => void;
   /** Whether the session's start is still owed to its machine ({@link oweSpawn}). */

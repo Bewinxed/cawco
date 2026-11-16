@@ -17,7 +17,11 @@ import type { FleetItems } from "@cawco/core/fleet-items";
 import { fleetItemsOf } from "@cawco/core/fleet-items";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { FleetHook } from "@cawco/core/hooks";
-import type { ControlPayload, Envelope, FsPayload } from "@cawco/core/protocol";
+import type {
+  ControlPayload,
+  FsPayload,
+  HubEnvelope,
+} from "@cawco/core/protocol";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
 import { CONTROL_MCP_FLEET_CHANGED } from "@cawco/core/session/controls";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
@@ -232,7 +236,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
           instanceId: row.id,
           requestId,
           payload,
-        } satisfies Envelope<ControlPayload>);
+        } satisfies HubEnvelope<"control">);
       }
     }
   };
@@ -365,7 +369,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
         machineId,
         requestId,
         payload,
-      } satisfies Envelope<FsPayload>)
+      } satisfies HubEnvelope<"fs">)
     );
   };
 

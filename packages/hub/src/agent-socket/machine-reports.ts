@@ -31,9 +31,8 @@ export type MachineReportsContext = Pick<
 export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   // What a machine says on its socket, read in this order (agent-socket/frame-run.ts).
   const commandQueue = (run: FrameRun): FrameAnswer => {
-    const { agentFrame } = run;
-    const { kind, body } = agentFrame;
-    if (kind === "command_queue") {
+    const body = run.message.payload;
+    if (body.kind === "command_queue") {
       const { runId, queue } = body;
       ctx.commandQueues.get(runId)?.(queue);
       return "stop";
@@ -42,10 +41,10 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const stageChanged = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // A workspace's stage changed: each of its sheets keeps the state.
-    if (kind === "stage") {
+    if (body.kind === "stage") {
       const frame = body;
       ctx.artifacts.staged(message.machineId, frame);
       ctx.stageHeard(message.machineId, frame);
@@ -55,10 +54,10 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const stageCloneFiled = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // A place's stage clone is cut and in step: filed as a workspace.
-    if (kind === "stage-clone") {
+    if (body.kind === "stage-clone") {
       const frame = body;
       const by = ctx.db
         .listInstances()
@@ -84,12 +83,12 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const browsersHeard = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // A machine's browsers, whole: kept by the hub's browser registry
     // (browsers.ts, Projects spec §5.11), which tells every
     // dashboard the fleet's browsers whole (`browser_list`).
-    if (kind === "browsers") {
+    if (body.kind === "browsers") {
       ctx.browsers.heard(message.machineId, body);
       ctx.browserStream.heard(message.machineId, body);
       return "stop";
@@ -98,12 +97,12 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const fleetReported = (run: FrameRun): FrameAnswer => {
-    const { message, ws, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message, ws } = run;
+    const body = message.payload;
     // The machine's fleet report, sent unasked as a converge ends or
     // a reading moved with no fleet change: kept, and the fleet MCP
     // changes its last delta carried go to the sessions there.
-    if (kind === "fleet_report") {
+    if (body.kind === "fleet_report") {
       const { report, generation, convergedGeneration } = body;
       ctx.welcomeConverge.reported(message.machineId, convergedGeneration);
       if (isFleetReport(report)) {
@@ -120,11 +119,11 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const catalogMoved = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // Its stored transcripts moved (agent catalog-index.ts): Recent's
     // stored list reads its catalog again when they may move it.
-    if (kind === "catalog_moved") {
+    if (body.kind === "catalog_moved") {
       const { sessions } = body;
       if (Array.isArray(sessions)) {
         detach(
@@ -138,10 +137,10 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const fleetConverging = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // Its items as they converge (fleet-sync.ts): kept on its row.
-    if (kind === "fleet_converge") {
+    if (body.kind === "fleet_converge") {
       const { items, generation } = body;
       if (Array.isArray(items)) {
         ctx.fleetSyncs.converged(message.machineId, items);
@@ -153,10 +152,10 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const browserHandedBack = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // A take-over its machine ended itself: the ask's call answers.
-    if (kind === "browser_handback") {
+    if (body.kind === "browser_handback") {
       ctx.browsers.heardHandback({
         ...body,
         machineId: message.machineId,
@@ -168,12 +167,12 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const passkeyHeard = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // A FIDO URI the daemon made for a take-over's ceremony: kept for dashboards that
     // connect later, shown to every dashboard now, and the relay picks the
     // machines that scan for the phone's advert (passkey-relay.ts).
-    if (kind === "passkey_qr") {
+    if (body.kind === "passkey_qr") {
       const qr = { ...body, machineId: message.machineId };
       ctx.browsers.heardPasskeyQr(qr);
       ctx.registry.broadcast({ verb: "frames", machineId: "hub", payload: qr });
@@ -182,7 +181,7 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     }
     // The advert a scanning machine caught goes to the take-over browsers
     // of the other machines (browsers.ts); the scan that caught it stops.
-    if (kind === "passkey_advert") {
+    if (body.kind === "passkey_advert") {
       const { serviceData, rssi, capturedAt } = body;
       detach(
         ctx.browsers.relayPasskeyAdvert(
@@ -201,10 +200,10 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const streamRelayHeard = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // The stream relay on its machine: the relay's record follows it.
-    if (kind === "stream_relay") {
+    if (body.kind === "stream_relay") {
       ctx.streamRelay.heard({
         ...body,
         machineId: message.machineId,
@@ -215,9 +214,9 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const moveProgressed = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
-    if (kind === "move_progress") {
+    const { message } = run;
+    const body = message.payload;
+    if (body.kind === "move_progress") {
       ctx.moves.progress(message.machineId, body);
       return "stop";
     }
@@ -225,9 +224,9 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   };
 
   const accountBorrowed = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
-    if (kind === "account_borrow") {
+    const { message } = run;
+    const body = message.payload;
+    if (body.kind === "account_borrow") {
       ctx.answerBorrow(message.machineId, body).catch(console.error);
       return "stop";
     }
@@ -236,7 +235,7 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
 
   const controlResultNamed = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
-    const { kind } = agentFrame;
+    const { kind } = message.payload;
     if (kind === "control_result" && !message.requestId) {
       message.requestId = agentFrame.requestId;
     }

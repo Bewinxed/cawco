@@ -69,10 +69,9 @@ import type { MachinePath } from "@cawco/core/machine-path";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import type { PlanStep } from "@cawco/core/plan";
 import type {
-  Envelope,
+  HubEnvelope,
   InstanceRow,
   NamedSpawn,
-  SendPayload,
   SpawnPayload,
   WorkItemSummary,
 } from "@cawco/core/protocol";
@@ -809,7 +808,7 @@ interface WorkItemDeps extends Pick<
   /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts), an item's assets one by one as they are asked for; or its refusal in its words. */
   readonly resolveHanded: HandedInputs["resolve"];
   /** The one send path; its record says whether the machine took it, and what refused it when one did. */
-  readonly send: (envelope: Envelope<SendPayload>) => {
+  readonly send: (envelope: HubEnvelope<"send">) => {
     reason: string | null;
     refusal: StoredSendRefusal | null;
     state: string;
@@ -1130,7 +1129,7 @@ const messageOf = (
   machineId: string,
   parent: Parent,
   content: string
-): Envelope<SendPayload> => ({
+): HubEnvelope<"send"> => ({
   verb: "send",
   machineId,
   instanceId,

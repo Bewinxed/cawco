@@ -6,10 +6,15 @@ import { join } from "node:path";
 import type { EndedBy } from "@cawco/core/accounts";
 import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
 import {
-  type AgentFrame,
+  type Addressed,
+  addressedOf,
   binaryUpdateOf,
-  decodeAgentFrame,
+  envelopeFault,
+  frameReads,
+  type HeartbeatReads,
+  readMachineEnvelope,
 } from "@cawco/core/agent-frame";
+import { readClientEnvelope } from "@cawco/core/client-envelope";
 import type { ArchiveView } from "@cawco/core/archive";
 import { unparked } from "@cawco/core/artifact-needs";
 import {
@@ -58,10 +63,9 @@ import { FLEET_DELTA, machinePlatform, mcpRunsOn } from "@cawco/core/fleet";
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
 import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
 import type {
+  ArrivingAsk,
   ArtifactSessionFrame,
-  ErrorFrame,
   FramePayload,
-  PermissionRequestFrame,
 } from "@cawco/core/frames";
 import {
   type HandoverCommand,
@@ -104,6 +108,7 @@ import {
 import { harnessRefusal, harnessSpec } from "@cawco/core/harness-refusal";
 import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
+import { isRecord } from "@cawco/core/is-record";
 import { parseDelegateWaitNotice } from "@cawco/core/injected";
 import { doing } from "@cawco/core/loop-watch";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
@@ -129,25 +134,27 @@ import {
 import { PREVIEW_WEIGHT } from "@cawco/core/preview/protocol";
 import { previewEnterUrl } from "@cawco/core/preview/routes";
 import type {
-  AdmissionPayload,
   AgentRow,
   BuildInfo,
+  ClientEnvelope,
+  ClientVerb,
   ControlPayload,
   DelegateEvent,
-  Envelope,
-  HeartbeatAckPayload,
+  EnvelopeAddress,
+  HubEnvelope,
+  FrameEnvelope,
+  MachineEnvelope,
+  MachineVerb,
   InstanceRow,
   InstanceStatus,
   LaunchGrant,
   NamedSpawn,
-  SendPayload,
   SessionAddress,
   SessionCustody,
   SessionEndIntent,
   SessionOrigin,
   SpawnPayload,
   StoredFrame,
-  Verb,
 } from "@cawco/core/protocol";
 import {
   AGENT_BUSY,
@@ -181,6 +188,7 @@ import type {
   NeutralMessage,
   NeutralOrigin,
   NeutralResultMessage,
+  PermissionResult,
   SentMessage,
 } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -220,7 +228,11 @@ import type { ReportedToolStatus } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
-import { USAGE_HARNESSES, type UsageSpend } from "@cawco/core/usage/types";
+import {
+  USAGE_HARNESSES,
+  type UsageBucket,
+  type UsageSpend,
+} from "@cawco/core/usage/types";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import {
   accountMoveSentence,
@@ -511,7 +523,6 @@ import {
 import { createOpenItems } from "./open-items";
 import { watchPairingRequests } from "./pairing-requests";
 import { createPasskeyRelay } from "./passkey-relay";
-import { peek, peekResume } from "./payload-peeks";
 import {
   type AnswerFrom,
   onPermissionAnswer,
@@ -583,7 +594,7 @@ import { projectTrash } from "./project-trash";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
 import type { AnyProblem } from "./refusal";
-import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
+import { type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRelayControl } from "./relay-control";
 import {
@@ -671,6 +682,7 @@ import {
   namedSpawn,
   peekKind,
   peekParent,
+  resumedKey,
 } from "./spawns";
 import {
   CLIENT_ADDRESS_HEADER,
@@ -949,7 +961,7 @@ const keepPendingWhole = (db: DbShape): void => {
 const envelopeOf = (
   send: SentMessageRow,
   machineId: string
-): Envelope<SendPayload> | undefined => {
+): HubEnvelope<"send"> | undefined => {
   const body = send.body as unknown as SentMessage;
   const said = body.message.content;
   const blocks = typeof said === "string" ? [] : said;
@@ -1065,21 +1077,11 @@ export interface HubServices {
   readonly registry: RegistryShape;
 }
 
-const isEnvelope = (value: unknown): value is Envelope =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as Envelope).verb === "string" &&
-  typeof (value as Envelope).machineId === "string";
-
-const ack = (envelope: Envelope): Envelope<{ ok: true }> => ({
-  verb: envelope.verb,
-  machineId: envelope.machineId,
-  payload: { ok: true },
-});
-
 /** Sent back as a frame, the only verb a dashboard renders. */
-const failure = (envelope: Envelope, message: string): Envelope<ErrorFrame> =>
-  refusalFrame(envelope, message, envelope.verb);
+const failure = (
+  envelope: ClientEnvelope | HubEnvelope,
+  message: string
+): FrameEnvelope<"error"> => refusalFrame(envelope, message, envelope.verb);
 
 /** The states a daemon is allowed to claim; anything else is a daemon we do not know. */
 const AUTH_STATES: readonly AgentAuth[] = [
@@ -1159,20 +1161,14 @@ const peekAnswers = (result: unknown): Record<string, unknown> | undefined => {
  * to start it on, the ask the page puts right itself (core `ModeAsk`).
  */
 const refusedStart = (
-  message: Envelope,
+  message: ClientEnvelope,
   settled: { refusal: string; ask?: ModeAsk }
-): Envelope<ErrorFrame> => {
+): FrameEnvelope<"error"> => {
   const refused = failure(message, settled.refusal);
   return settled.ask
     ? { ...refused, payload: { ...refused.payload, modeAsk: settled.ask } }
     : refused;
 };
-
-/** `stop { discard: true }`: the spin-off is being thrown away, not paused. */
-const peekDiscard = (payload: unknown): boolean =>
-  typeof payload === "object" &&
-  payload !== null &&
-  (payload as { discard?: unknown }).discard === true;
 
 /** How a hub is built: one that serves, or one built only to be read. */
 export interface ServerOptions {
@@ -1195,14 +1191,15 @@ export interface ServerOptions {
 type AgentSocket = AuthSocket<MachineSocket> & { remoteAddress: string };
 
 /**
- * One verb of a machine's socket, handled once its envelope is decoded and
+ * Each verb of a machine's socket, handled once its envelope is parsed and
  * its connection speaks for its machine (server.ts `agentMessage`).
  */
-type AgentVerb = (
-  ws: AgentSocket,
-  message: Envelope,
-  agentFrame: AgentFrame
-) => void | Promise<void>;
+type AgentVerbs = {
+  [V in MachineVerb]: (
+    ws: AgentSocket,
+    message: MachineEnvelope<V>
+  ) => void | Promise<void>;
+};
 
 /** A dashboard's (or the app's) socket: its upgrade's headers, from an address. */
 type DashboardSocket = ClientSocket & {
@@ -1210,8 +1207,10 @@ type DashboardSocket = ClientSocket & {
   remoteAddress: string;
 };
 
-/** One verb of a dashboard's socket, handled once its message is an envelope (server.ts `dashboardMessage`). */
-type DashboardVerb = (ws: DashboardSocket, message: Envelope) => void;
+/** Each verb of a dashboard's socket, handled once its message is parsed (server.ts `dashboardMessage`). */
+type DashboardVerbs = {
+  [V in ClientVerb]: (ws: DashboardSocket, message: ClientEnvelope<V>) => void;
+};
 
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
@@ -2273,7 +2272,7 @@ export const createServer = (
         verb: "frames",
         machineId: "hub",
         payload: { kind: "laws.broken", broken },
-      } satisfies Envelope<FramePayload>),
+      } satisfies HubEnvelope<"frames">),
   });
 
   /**
@@ -2286,7 +2285,7 @@ export const createServer = (
         verb: "frames",
         machineId: "hub",
         payload,
-      } satisfies Envelope<FramePayload>),
+      } satisfies HubEnvelope<"frames">),
     HUB_VERSION
   );
 
@@ -2367,10 +2366,12 @@ export const createServer = (
     return waitingForProcess.delete(instanceId);
   };
   /** The one way a command leaves this hub for a machine: a start or attach sent is a process event. */
-  const sendToMachine = (socket: MachineSocket, frame: object): void => {
-    const envelope = frame as Partial<Envelope<Partial<SpawnPayload>>>;
-    const instanceId = envelope.instanceId ?? envelope.payload?.instanceId;
-    if (envelope.verb === "spawn" && instanceId) {
+  const sendToMachine = (socket: MachineSocket, frame: HubEnvelope): void => {
+    const instanceId =
+      frame.verb === "spawn"
+        ? (frame.instanceId ?? frame.payload.instanceId)
+        : undefined;
+    if (instanceId) {
       processEvent(instanceId);
     }
     writeToMachine(socket, frame);
@@ -2524,7 +2525,7 @@ export const createServer = (
    * dashboard, and to push the first time. A delegate's parent is told of
    * it the first time too.
    */
-  const parkForPerson = (envelope: Envelope, outlivesHub = false): void => {
+  const parkForPerson = (envelope: ArrivingAsk, outlivesHub = false): void => {
     if (!envelope.requestId) {
       throw new Error("An ask for the person has no request id.");
     }
@@ -2536,12 +2537,12 @@ export const createServer = (
       () => {
         registry.broadcast(parkedCard(requestId));
         // A browser ask is read by its session's artifact tabs too.
-        if ((envelope.payload as PermissionRequestFrame).browserAsk) {
+        if (envelope.payload.browserAsk) {
           artifactSessions.refresh(envelope.instanceId);
         }
         if (
           !existed &&
-          (envelope.payload as { routedTo?: string }).routedTo !== "parent"
+          envelope.payload.routedTo !== "parent"
         ) {
           push.onAsk(envelope);
         }
@@ -2703,16 +2704,14 @@ export const createServer = (
    * {@link noteWithdrawn}), an ask the hub raised, one an answer is already
    * in flight for.
    */
-  const keepPrompt = (parked: Envelope): boolean => {
-    const payload = parked.payload as
-      Partial<PermissionRequestFrame> | undefined;
+  const keepPrompt = (parked: ArrivingAsk): boolean => {
+    const { payload } = parked;
     if (
-      payload?.kind !== "permission_request" ||
       payload.processGeneration === undefined ||
       payload.browserAsk ||
       payload.connectAsk ||
       outlivesSession(parked) ||
-      questionsOf(payload.toolName ?? "", payload.input ?? {}) !== null ||
+      questionsOf(payload.toolName, payload.input) !== null ||
       answeringPermissions.has(parked.requestId ?? "")
     ) {
       return false;
@@ -3023,7 +3022,7 @@ export const createServer = (
       return;
     }
     // A browser ask leaves its session's artifact tabs too.
-    if ((parked.payload as PermissionRequestFrame).browserAsk) {
+    if (parked.payload.browserAsk) {
       artifactSessions.refresh(parked.instanceId);
     }
     const answering = answeringPermissions.get(parked.requestId);
@@ -3041,7 +3040,7 @@ export const createServer = (
     if (!(
       outcome === "answered" &&
       !answer &&
-      (parked.payload as PermissionRequestFrame).browserAsk
+      parked.payload.browserAsk
     )) {
       db.askPushes.drop(parked.requestId);
     }
@@ -3073,7 +3072,7 @@ export const createServer = (
         ...(answer ? { answer } : {}),
         // An ask no screen was shown: the transcript's only word of it.
         ...(why
-          ? { reason: why, toolName: peek(parked.payload, "toolName") }
+          ? { reason: why, toolName: parked.payload.toolName }
           : {}),
       },
     });
@@ -3084,7 +3083,7 @@ export const createServer = (
   // claiming `running` or `starting`.
   const swept = db.sweepBootStatuses();
   /** Asks this start drops with the process that parked them: asked again when each session next runs ({@link noteWithdrawn}), or kept as permits ({@link keepPrompt}) once asks can be presented. */
-  const droppedAtStart: Envelope[] = [];
+  const droppedAtStart: ArrivingAsk[] = [];
   for (const parked of pending.list()) {
     const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
     // A move's approval is kept on its `moving` row, which no process holds;
@@ -3868,7 +3867,7 @@ export const createServer = (
         verb: "frames",
         machineId: "hub",
         payload: frame,
-      } satisfies Envelope<FramePayload>),
+      } satisfies HubEnvelope<"frames">),
     outcome: (install) => push.install(install),
     settled: (id) => push.installSettled(id),
     synced: (machineId, signal) => welcomeConverge.settled(machineId, signal),
@@ -4090,7 +4089,7 @@ export const createServer = (
           method: FLEET_DELTA,
           args: [delta],
         } satisfies ControlPayload,
-      } satisfies Envelope<ControlPayload>);
+      } satisfies HubEnvelope<"control">);
       welcomeConverge.sent(machineId, delta);
       return true;
     },
@@ -4230,7 +4229,7 @@ export const createServer = (
         detail: answer.error ?? "Permission mode was refused",
       });
     }
-    if (peek(answer.result, "permissionMode") !== mode) {
+    if (answer.result?.permissionMode !== mode) {
       return problem(502, {
         code: "mode-refused",
         detail: "Harness did not acknowledge the permission mode",
@@ -5619,10 +5618,7 @@ export const createServer = (
     error: unknown
   ): void => {
     const reason = error instanceof Error ? error.message : String(error);
-    const raw =
-      typeof message === "object" && message !== null
-        ? (message as Record<string, unknown>)
-        : undefined;
+    const raw = isRecord(message) ? message : undefined;
     if (
       raw?.type === "command" &&
       typeof raw.commandId === "string" &&
@@ -5639,11 +5635,14 @@ export const createServer = (
       } satisfies CommandAck);
       return;
     }
-    if (isEnvelope(message)) {
+    const addressed = addressedOf(message);
+    const read = addressed && readClientEnvelope(addressed);
+    if (read && "envelope" in read) {
+      const { envelope } = read;
       console.error(
-        `[hub] dashboard ${message.verb}${message.instanceId ? ` for ${message.instanceId}` : ""} failed: ${reason}`
+        `[hub] dashboard ${envelope.verb}${envelope.instanceId ? ` for ${envelope.instanceId}` : ""} failed: ${reason}`
       );
-      sendToClient(ws, failure(message, reason));
+      sendToClient(ws, failure(envelope, reason));
       return;
     }
     const kind = typeof raw?.type === "string" ? raw.type : "message";
@@ -5655,21 +5654,17 @@ export const createServer = (
    * to hear acknowledged: a register, a session's address, a heartbeat
    * replaying addresses. Its machine is told to reconnect and retry.
    */
-  const carriesCustody = (message: Envelope): boolean => {
-    const { kind, sessionAddresses } = decodeAgentFrame(message.payload);
-    return (
-      message.verb === "register" ||
-      (message.verb === "frames" && kind === "session_address") ||
-      (message.verb === "heartbeat" && sessionAddresses.length > 0)
-    );
-  };
+  const carriesCustody = (message: MachineEnvelope): boolean =>
+    message.verb === "register" ||
+    (message.verb === "frames" && message.payload.kind === "session_address") ||
+    (message.verb === "heartbeat" && message.payload.sessionAddresses.length > 0);
   /**
    * A failed request's answer, `ok: false` with `reason`: to the hub's own
    * wait on `requestId`, its dashboard command, and the socket that asked;
    * logged as unrouted when none of them waits.
    */
   const requestFailed = (
-    message: Envelope,
+    message: EnvelopeAddress,
     requestId: string,
     reason: string
   ): void => {
@@ -5693,7 +5688,7 @@ export const createServer = (
         payload: frame,
       });
     } else if (!(waitingReply || commandAnswered)) {
-      logUnroutedReply({ ...message, payload: frame });
+      logUnroutedReply({ ...message, verb: "frames", payload: frame });
     }
   };
   /**
@@ -5709,23 +5704,30 @@ export const createServer = (
     error: unknown
   ): void => {
     const reason = error instanceof Error ? error.message : String(error);
-    if (!isEnvelope(message)) {
+    const addressed = addressedOf(message);
+    const read = addressed && readMachineEnvelope(addressed);
+    if (!(read && "envelope" in read)) {
       console.error(`[hub] malformed agent frame failed: ${reason}`);
       return;
     }
+    const { envelope } = read;
     console.error(
-      `[hub] ${message.verb} for ${message.instanceId ?? "the machine"} failed: ${reason}`
+      `[hub] ${envelope.verb} for ${envelope.instanceId ?? "the machine"} failed: ${reason}`
     );
-    if (carriesCustody(message)) {
+    if (carriesCustody(envelope)) {
       ws.close(
         1011,
         "Session acknowledgement failed. Reconnect to retry custody."
       );
       return;
     }
-    const requestId = message.requestId ?? peek(message.payload, "requestId");
+    const requestId =
+      envelope.requestId ??
+      (envelope.verb === "frames"
+        ? frameReads(envelope.payload).requestId
+        : undefined);
     if (requestId) {
-      requestFailed(message, requestId, reason);
+      requestFailed(envelope, requestId, reason);
     }
   };
   const guardedAgentMessage =
@@ -6143,7 +6145,7 @@ export const createServer = (
   /** A stored Stop survives reconnects; its caller still gets a bounded receipt. */
   const stopFromDashboard = (
     dashboard: ClientSocket,
-    message: Envelope
+    message: ClientEnvelope<"stop">
   ): void => {
     const { instanceId } = message;
     if (!instanceId) {
@@ -6154,10 +6156,8 @@ export const createServer = (
       return;
     }
     const requestId =
-      message.requestId ??
-      peek(message.payload, "requestId") ??
-      crypto.randomUUID();
-    const discard = peekDiscard(message.payload);
+      message.requestId ?? message.payload.requestId ?? crypto.randomUUID();
+    const discard = message.payload.discard === true;
     const at = Date.now();
     const reply = (frame: ControlResult, outcome = "failed"): void => {
       waiting.delete(requestId);
@@ -6289,7 +6289,7 @@ export const createServer = (
 
   /** Registers a socket's correlation before dispatch; Ledger commands own their ack route. */
   const forward = (
-    envelope: Envelope,
+    envelope: HubEnvelope<"control" | "fs" | "spawn" | "stop">,
     dashboard: ClientSocket,
     remember = true
   ): boolean => {
@@ -6308,13 +6308,13 @@ export const createServer = (
         outgoing = {
           ...envelope,
           payload: {
-            ...(envelope.payload as object),
+            ...envelope.payload,
             processGeneration: processGeneration(row),
           },
         };
       }
     }
-    const requestId = envelope.requestId ?? peek(outgoing.payload, "requestId");
+    const requestId = envelope.requestId ?? outgoing.payload.requestId;
     if (requestId) {
       outgoing = { ...outgoing, requestId };
       if (remember) {
@@ -6420,12 +6420,20 @@ export const createServer = (
     ) {
       publishInstances(row.machineId);
     }
+    // A reattach launches nothing, so no account refuses it (`bounded`).
+    const bound = bounded(asked, row);
+    if (bound instanceof ElysiaStatus) {
+      console.warn(
+        `[hub] reattach of ${row.id} refused: ${bound.response.detail}`
+      );
+      return;
+    }
     sendToMachine(agent, {
       verb: "spawn",
       machineId: row.machineId,
       instanceId: row.id,
       payload: {
-        ...bounded(asked, row),
+        ...bound,
         ingested: streams.ingestedFor([row.id])[row.id],
       },
     });
@@ -6698,17 +6706,13 @@ export const createServer = (
    * person by that add: what happened, why, and the fix. `keyed`: it
    * answered the nonce with some key, which no key the hub holds checks.
    */
-  const unprovenWords = (message: Envelope, keyed: boolean): string => {
-    const said = (message.payload ?? {}) as {
-      build?: { version?: unknown };
-      hostname?: unknown;
-    };
-    const host =
-      typeof said.hostname === "string" ? said.hostname : message.machineId;
-    const version =
-      typeof said.build?.version === "string"
-        ? said.build.version
-        : "of an unknown version";
+  const unprovenWords = (
+    message: MachineEnvelope<"register">,
+    keyed: boolean
+  ): string => {
+    const said = message.payload;
+    const host = said.hostname ?? message.machineId;
+    const version = said.build?.version ?? "of an unknown version";
     return keyed
       ? `${host}'s agent connected through this add's SSH connection with a key this hub does not hold: neither the one this add wrote to the machine nor one admitted before. Its agent reads its key from another file than the add wrote ($XDG_CONFIG_HOME/cawco/machine-key in the add's SSH session). Make its service read that file, then Retry.`
       : `${host}'s agent, CawCo ${version}, connected through this add's SSH connection and proved no key, which this hub requires of every machine added over SSH. Either that build predates machine keys (choose a channel in ${connectWords.updatesPlace} whose newest build is newer), or its agent found no key where the add wrote one ($XDG_CONFIG_HOME/cawco/machine-key in the add's SSH session: make its service read that file). Then Retry.`;
@@ -6717,7 +6721,7 @@ export const createServer = (
   /** A register through an SSH add's forward, kept for that add (join.ts `settle`): taken clears its record's words, else they say why not. */
   const noteSshAdd = (
     ws: AuthSocket,
-    message: Envelope,
+    message: MachineEnvelope<"register">,
     taken: boolean,
     keyed: boolean
   ): void => {
@@ -6742,7 +6746,7 @@ export const createServer = (
    */
   const registerProven = (
     ws: AuthSocket<MachineSocket>,
-    message: Envelope
+    message: MachineEnvelope<"register">
   ): boolean => {
     const bound = socketMachines.get(ws.id) ?? waitingSockets.get(ws.id);
     if (bound && bound !== message.machineId) {
@@ -6752,7 +6756,7 @@ export const createServer = (
       return false;
     }
     const nonce = machineNonces.get(ws.id);
-    const proof = (message.payload as { proof?: unknown } | undefined)?.proof;
+    const { proof } = message.payload;
     const verdict = nonce
       ? hubAuth.proveSocket(
           message.machineId,
@@ -6812,19 +6816,16 @@ export const createServer = (
       verb: "admission",
       machineId,
       payload: { kind: "refused", message: reason },
-    } satisfies Envelope<AdmissionPayload>);
+    } satisfies HubEnvelope<"admission">);
     ws.close(4403, reason);
   };
 
   /** A connection that proved no key, from a machine never admitted: held, told it waits, listed for the person. */
   const holdWaiting = (
     ws: AuthSocket<MachineSocket>,
-    message: Envelope
+    message: MachineEnvelope<"register">
   ): void => {
-    const identity = message.payload as {
-      hostname?: unknown;
-      os?: unknown;
-    };
+    const identity = message.payload;
     waitingSockets.set(ws.id, message.machineId);
     // Through an SSH add's forward while that add's key is still unproven,
     // the connection is the machine the add is joining: held for the add, not
@@ -6836,9 +6837,8 @@ export const createServer = (
     hubAuth.hold({
       quiet,
       machineId: message.machineId,
-      hostname:
-        typeof identity.hostname === "string" ? identity.hostname : null,
-      platform: typeof identity.os === "string" ? identity.os : null,
+      hostname: identity.hostname ?? null,
+      platform: identity.os ?? null,
       address: socketAddress(ws),
       since: Date.now(),
       socket: ws.id,
@@ -6852,7 +6852,7 @@ export const createServer = (
           verb: "admission",
           machineId: message.machineId,
           payload: { kind: "admitted", key },
-        } satisfies Envelope<AdmissionPayload>);
+        } satisfies HubEnvelope<"admission">);
         ws.close(4000, "admitted: connect again with this machine's key");
       },
       close: (reason) => ws.close(4403, reason),
@@ -6867,7 +6867,7 @@ export const createServer = (
           ? "This machine's SSH add is proving the key it gave it: it connects again once it has."
           : "This hub requires paired devices: this machine waits until the person admits it on the dashboard's Machines list.",
       },
-    } satisfies Envelope<AdmissionPayload>);
+    } satisfies HubEnvelope<"admission">);
   };
 
   /**
@@ -6884,9 +6884,9 @@ export const createServer = (
    */
   const takeFormerId = (
     ws: AuthSocket<MachineSocket>,
-    message: Envelope
+    message: MachineEnvelope<"register">
   ): void => {
-    const former = peek(message.payload, "formerMachineId");
+    const former = message.payload.formerMachineId;
     if (!former || former === message.machineId) {
       return;
     }
@@ -6896,7 +6896,7 @@ export const createServer = (
     }
     if (socketMode(ws) === "pairing") {
       const nonce = machineNonces.get(ws.id) ?? "";
-      const proof = peek(message.payload, "proof");
+      const { proof } = message.payload;
       const proven =
         hubAuth.provesFormer(former, message.machineId, nonce, proof) ||
         (hubAuth.proveSocket(message.machineId, nonce, proof, ws.id) ===
@@ -6946,7 +6946,7 @@ export const createServer = (
         verb: "frames",
         machineId: "hub",
         payload: frame,
-      } satisfies Envelope<FramePayload>),
+      } satisfies HubEnvelope<"frames">),
     deviceRemoved: (deviceId) => {
       for (const [socket, device] of dashboardDevices) {
         if (device === deviceId) {
@@ -6975,7 +6975,7 @@ export const createServer = (
               verb: "admission",
               machineId: id,
               payload: { kind: "admitted", key: hubAuth.mintMachineKey(id) },
-            } satisfies Envelope<AdmissionPayload>);
+            } satisfies HubEnvelope<"admission">);
           }
           console.log(
             `[hub-auth] admitted the ${registry.machineIds().length} machine(s) connected as pairing turned on`
@@ -7131,8 +7131,7 @@ export const createServer = (
       // The session's open browser ask for that browser: by its artifact or its key.
       const asked = key
         ? pending.list().find((envelope) => {
-            const named = (envelope.payload as PermissionRequestFrame)
-              .browserAsk;
+            const named = envelope.payload.browserAsk;
             return (
               envelope.instanceId === instanceId &&
               !!named &&
@@ -7140,8 +7139,7 @@ export const createServer = (
             );
           })
         : undefined;
-      const browserAsk = (asked?.payload as PermissionRequestFrame | undefined)
-        ?.browserAsk;
+      const browserAsk = asked?.payload.browserAsk;
       return {
         type: "artifact.session",
         ask:
@@ -7379,14 +7377,14 @@ export const createServer = (
     machineId: string,
     instanceId: string,
     requestId: string,
-    result: unknown
+    result: PermissionResult
   ): void => {
     const parentInstanceId = db.delegateAsk(requestId)?.parentInstanceId;
     if (!parentInstanceId) {
       return;
     }
 
-    const behavior = peek(result, "behavior") ?? "allow";
+    const { behavior } = result;
     const answers = peekAnswers(result);
     publishDelegateEvent(
       machineId,
@@ -7740,7 +7738,7 @@ export const createServer = (
       // What a screen is told says every secret as set (core fleet-secrets.ts);
       // the machines are sent the real values by the sync above.
       payload: { kind: "fleet_mcp", servers: servers.map(maskMcpServer) },
-    } satisfies Envelope<FramePayload>);
+    } satisfies HubEnvelope<"frames">);
     fleetChanged();
   };
   /** A fleet server as a read says it (core fleet-secrets.ts): every secret as set. */
@@ -7831,10 +7829,8 @@ export const createServer = (
   const noteRespawn = (
     instanceId: string,
     requestId: string | undefined,
-    payload: unknown
+    { resume }: Pick<SpawnPayload, "resume">
   ): void => {
-    const resume = (payload as { resume?: unknown }).resume as
-      { sessionKey?: string; fork?: boolean; atMessage?: string } | undefined;
     if (resume?.fork && resume.sessionKey) {
       forkSeeds.set(instanceId, {
         sessionKey: resume.sessionKey,
@@ -8709,7 +8705,7 @@ export const createServer = (
         method: CONTROL_INTERRUPT,
         args: [],
       },
-    } satisfies Envelope<ControlPayload>);
+    } satisfies HubEnvelope<"control">);
     noteInterrupt(instanceId, hold);
     cutTurn(instanceId, cause);
   };
@@ -10926,7 +10922,7 @@ export const createServer = (
                 method: CONTROL_REFRESH_CAWCO_TOOLS,
                 args: [],
               },
-            } satisfies Envelope<ControlPayload>)
+            } satisfies HubEnvelope<"control">)
         ).then((reply) => {
           switch (reply.kind) {
             case "unanswered":
@@ -11061,7 +11057,7 @@ export const createServer = (
               method: INSTALL_SESSION_CREDENTIAL,
               args: [credential],
             },
-          } satisfies Envelope<ControlPayload>)
+          } satisfies HubEnvelope<"control">)
       );
       switch (reply.kind) {
         case "unanswered":
@@ -11465,7 +11461,7 @@ export const createServer = (
    * dashboard told it is up under its id now. True when the start named a
    * former id.
    */
-  const resumeFormer = (ws: ClientSocket, message: Envelope): boolean => {
+  const resumeFormer = (ws: ClientSocket, message: ClientEnvelope<"spawn">): boolean => {
     const named = message.instanceId;
     const now = named ? db.instanceIdOf(named) : undefined;
     if (!(named && now) || now === named) {
@@ -11489,9 +11485,7 @@ export const createServer = (
       releaseOwed({ instanceId: now });
     }
     const requestId =
-      message.requestId ??
-      peek(message.payload, "requestId") ??
-      crypto.randomUUID();
+      message.requestId ?? message.payload.requestId ?? crypto.randomUUID();
     sendToClient(ws, {
       ...message,
       instanceId: now,
@@ -11499,7 +11493,7 @@ export const createServer = (
       verb: "frames",
       requestId,
       payload: { kind: "control_result", requestId, ok: true },
-    } satisfies Envelope<ControlResult>);
+    } satisfies HubEnvelope<"frames">);
     return true;
   };
 
@@ -11513,12 +11507,19 @@ export const createServer = (
    */
   const sendDashboardStart = (
     ws: ClientSocket,
-    message: Envelope,
+    message: ClientEnvelope<"spawn">,
     instanceId: string,
     payload: SpawnPayload
   ): void => {
     if (!holdingStarts(message.machineId)) {
-      forward({ ...message, payload: bounded(payload) }, ws);
+      // Bound as it goes: a launch that may run on no account goes nowhere.
+      const bound = bounded(payload);
+      if (bound instanceof ElysiaStatus) {
+        console.warn(spawnWords.refusedLine(bound.response.detail));
+        sendToClient(ws, failure(message, bound.response.detail));
+        return;
+      }
+      forward({ ...message, payload: bound }, ws);
       // What waited for this start goes right behind it ({@link sendSpawn}).
       releaseOwed({ instanceId });
       return;
@@ -11527,14 +11528,14 @@ export const createServer = (
     console.info(
       `[hub] start of ${instanceId} kept for ${machineName(message.machineId)}: ${startHold(message.machineId)?.words}`
     );
-    const requestId = message.requestId ?? peek(message.payload, "requestId");
+    const requestId = message.requestId ?? message.payload.requestId;
     if (requestId) {
       sendToClient(ws, {
         ...message,
         verb: "frames",
         requestId,
         payload: { kind: "control_result", requestId, ok: true },
-      } satisfies Envelope<ControlResult>);
+      } satisfies HubEnvelope<"frames">);
     }
   };
 
@@ -11582,7 +11583,7 @@ export const createServer = (
    */
   const dashboardStartOf = (
     ws: ClientSocket,
-    message: Envelope,
+    message: ClientEnvelope<"spawn">,
     known: boolean,
     cwd: string
   ): {
@@ -11600,7 +11601,7 @@ export const createServer = (
       parent,
       projectId: projectOfStart(
         parent.parentInstanceId,
-        peek(message.payload, "projectId"),
+        message.payload.projectId,
         message.machineId,
         cwd
       ),
@@ -11617,7 +11618,7 @@ export const createServer = (
    * (core `relaunchOf`), and its transcript says so.
    */
   const noteDashboardStart = (
-    message: Envelope,
+    message: ClientEnvelope<"spawn">,
     instanceId: string,
     asked: NamedSpawn,
     before: ReturnType<typeof rowNamed>
@@ -11626,7 +11627,7 @@ export const createServer = (
     noteChosenMode(message.machineId, asked, before !== undefined);
     if (
       before &&
-      !peekResume(message.payload) &&
+      !resumedKey(message.payload) &&
       relaunchOf(before).kind === "fresh"
     ) {
       noteFreshStart(before);
@@ -11643,7 +11644,7 @@ export const createServer = (
    */
   const dashboardBegins = (
     ws: ClientSocket,
-    message: Envelope,
+    message: ClientEnvelope<"spawn">,
     before: { projectId?: string | null } | undefined,
     payload: NamedSpawn
   ) => {
@@ -11669,7 +11670,7 @@ export const createServer = (
    */
   const startFromDashboard = (
     ws: ClientSocket,
-    message: Envelope,
+    message: ClientEnvelope<"spawn">,
     asked: Awaited<ReturnType<typeof piDefaultFor>>
   ): void => {
     if (asked instanceof ElysiaStatus) {
@@ -11728,11 +11729,11 @@ export const createServer = (
       id: message.instanceId,
       machineId: message.machineId,
       cwd: payload.cwd,
-      sessionId: peekResume(message.payload),
+      sessionId: resumedKey(message.payload),
       harness: payload.harness,
       origin,
       projectId,
-      title: peek(message.payload, "title"),
+      title: message.payload.title,
       kind: peekKind(message.payload),
       permissionMode: settled.permissionMode,
       model: payload.model,
@@ -12068,7 +12069,7 @@ export const createServer = (
    * superseded, unregistered or unproven connection, or one speaking for a
    * machine it did not register as) is not acted on, and is told so.
    */
-  const speaksForMachine = (ws: AgentSocket, message: Envelope): boolean => {
+  const speaksForMachine = (ws: AgentSocket, message: Addressed): boolean => {
     if (message.verb === "register") {
       return true;
     }
@@ -12092,13 +12093,6 @@ export const createServer = (
     return false;
   };
 
-  /** A verb no machine sends: a dashboard's, or an older or newer agent's. */
-  const refuseAgentVerb: AgentVerb = (ws, message) => {
-    const fault = `unknown verb "${message.verb}": a machine sends register, heartbeat, frames or usage`;
-    console.warn(`[hub] ${fault}, from ${message.machineId}`);
-    sendToMachine(ws, refusalFrame(message, fault));
-  };
-
   /**
    * A machine's register: a machine that re-joins under a new id takes its
    * rows, its key among them, before it proves itself (`takeFormerId`); its
@@ -12106,7 +12100,8 @@ export const createServer = (
    * connection, nor hears anything meant for it; then its return, step by
    * step ({@link machineReturnSteps}), awaited.
    */
-  const registerFromMachine: AgentVerb = async (ws, message, agentFrame) => {
+  const registerFromMachine: AgentVerbs["register"] = async (ws, message) => {
+    const agentFrame = message.payload;
     takeFormerId(ws, message);
     if (!registerProven(ws, message)) {
       return;
@@ -12140,14 +12135,14 @@ export const createServer = (
   const beatHeard = (
     ws: AgentSocket,
     machineId: string,
-    agentFrame: AgentFrame
+    agentFrame: HeartbeatReads
   ): void => {
     for (const claim of agentFrame.sessionAddresses) {
       recordSessionAddress(ws, machineId, claim);
     }
     db.touchAgent(machineId);
     fleetSyncs.heartbeat(machineId);
-    const { activity, activityReadable } = agentFrame.heartbeat;
+    const { activity, activityReadable } = agentFrame;
     if (activityReadable !== undefined) {
       notifications.readable(machineId, activityReadable);
     }
@@ -12182,11 +12177,11 @@ export const createServer = (
    * ({@link launches}). Filed asleep instead, it was owed its sends again
    * and woken by each one, every launch minting over the last (2026-10-10).
    */
-  const beatReconciled = (machineId: string, agentFrame: AgentFrame) => {
-    if (agentFrame.heartbeat.custody === undefined) {
+  const beatReconciled = (machineId: string, agentFrame: HeartbeatReads) => {
+    const { custody } = agentFrame;
+    if (custody === undefined) {
       lifecycle.reconcile(machineId);
     } else {
-      const { custody } = agentFrame;
       keepCustody(machineId, custody);
       lifecycle.reconcile(machineId, {
         custody,
@@ -12195,7 +12190,7 @@ export const createServer = (
       settleLaunchesOn(
         machineId,
         agentFrame.instances,
-        agentFrame.custody,
+        custody,
         HEARTBEAT_SETTLE_GRACE_MS
       );
     }
@@ -12216,7 +12211,7 @@ export const createServer = (
    */
   const beatTakenUp = (
     machineId: string,
-    agentFrame: AgentFrame,
+    agentFrame: HeartbeatReads,
     beat: ReturnType<typeof beatReconciled>
   ): void => {
     for (const row of beat.settled) {
@@ -12260,7 +12255,7 @@ export const createServer = (
    * in deciding to republish. A moved update state flushes the starts owed
    * to the machine.
    */
-  const beatStates = (machineId: string, agentFrame: AgentFrame) => {
+  const beatStates = (machineId: string, agentFrame: HeartbeatReads) => {
     const { binaryUpdate: beaten } = agentFrame;
     const updated =
       beaten !== undefined &&
@@ -12297,7 +12292,7 @@ export const createServer = (
    */
   const harnessesReported = (
     machineId: string,
-    reported: NonNullable<AgentFrame["harnesses"]>
+    reported: NonNullable<HeartbeatReads["harnesses"]>
   ): void => {
     const filed = reported.flatMap((report): NamedHarnessReport[] => {
       const auth =
@@ -12350,7 +12345,10 @@ export const createServer = (
    * register's `os`'s (core `machinePlatform`), so this beat moves no
    * platform-scoped server.
    */
-  const toolsReported = (machineId: string, agentFrame: AgentFrame): void => {
+  const toolsReported = (
+    machineId: string,
+    agentFrame: HeartbeatReads
+  ): void => {
     const tools = agentFrame.tools.map(keptToolStatus);
     if (tools.length > 0) {
       sayTakenOver(machineId, tools);
@@ -12376,14 +12374,14 @@ export const createServer = (
    * then every other provider's accounts on this machine, as their stores
    * there say, and the providers it knows.
    */
-  const accountsReported = (machineId: string, agentFrame: AgentFrame) => {
-    const { homeStores } = agentFrame.heartbeat;
+  const accountsReported = (machineId: string, agentFrame: HeartbeatReads) => {
+    const { homeStores } = agentFrame;
     if (homeStores !== undefined && homeStamps.get(machineId) !== homeStores) {
       homeStamps.set(machineId, homeStores);
       adoptHomeCredentials(machineId).catch(console.error);
     }
     lendToWaiting(machineId);
-    const { providerAccounts, providers } = agentFrame.heartbeat;
+    const { providerAccounts, providers } = agentFrame;
     if (providerAccounts) {
       syncAccounts(machineId, "providers", {
         reports: providerAccounts,
@@ -12404,7 +12402,10 @@ export const createServer = (
    * waits on that server's start, join the machine's catalog. How many it
    * dated.
    */
-  const beatDated = (machineId: string, agentFrame: AgentFrame): number => {
+  const beatDated = (
+    machineId: string,
+    agentFrame: HeartbeatReads
+  ): number => {
     const { resumableAt: served } = agentFrame;
     if (served) {
       const kept = keptOn.get(machineId) ?? new Set();
@@ -12431,8 +12432,8 @@ export const createServer = (
    * here, off the part it reads. Then its stored sessions dated, one
    * publish when anything moved, and its acknowledgement.
    */
-  const heartbeatFromMachine: AgentVerb = (ws, message, agentFrame) => {
-    const { machineId } = message;
+  const heartbeatFromMachine: AgentVerbs["heartbeat"] = (ws, message) => {
+    const { machineId, payload: agentFrame } = message;
     beatHeard(ws, machineId, agentFrame);
     const beat = beatReconciled(machineId, agentFrame);
     beatTakenUp(machineId, agentFrame, beat);
@@ -12456,7 +12457,8 @@ export const createServer = (
     const beatIds = agentFrame.instances;
     const tailnetServing = tailnetHttps.serving();
     sendToMachine(ws, {
-      ...ack(message),
+      verb: "heartbeat",
+      machineId,
       payload: {
         ok: true,
         // What this hub took of each session: the agent lets go
@@ -12470,7 +12472,7 @@ export const createServer = (
         ...(tailnetServing ? { tailnetHttps: tailnetServing } : {}),
         // Its desktop is read only once the person said yes to it.
         reportActivity: notifications.reports(machineId),
-      } satisfies HeartbeatAckPayload,
+      },
     });
   };
 
@@ -12482,15 +12484,16 @@ export const createServer = (
    * the heavy aggregates over REST. Claude's limits are its accounts',
    * which its sessions report.
    */
-  const usageFromMachine: AgentVerb = (_ws, message, agentFrame) => {
-    const { buckets, openCodeGo, accounts } = agentFrame.usage;
+  const usageFromMachine: AgentVerbs["usage"] = (_ws, message) => {
+    const { buckets, openCodeGo, accounts } = message.payload;
     for (const reading of accounts ?? []) {
       noteProviderReading(db, message.machineId, reading);
     }
     // A bucket of a harness this build does not scan (a newer agent's) is
     // left out, as `usage_buckets.harness` holds only the harnesses it reads.
-    const scanned = (buckets ?? []).filter((bucket) =>
-      USAGE_HARNESSES.some((harness) => harness === bucket.harness)
+    const scanned = (buckets ?? []).filter(
+      (bucket): bucket is UsageBucket =>
+        USAGE_HARNESSES.some((harness) => harness === bucket.harness)
     );
     if (scanned.length < (buckets?.length ?? 0)) {
       console.warn(
@@ -12522,13 +12525,13 @@ export const createServer = (
    * to the ask, whose machine would wait out its 90 s and fail the start
    * saying only that nothing came.
    */
-  const launchFromMachine: AgentVerb = (ws, message, agentFrame) => {
+  const launchFromMachine: AgentVerbs["launch"] = (ws, message) => {
     let grant: LaunchGrant;
     try {
       grant = grantLaunch(
         message.machineId,
         message.instanceId,
-        agentFrame.launchAsk
+        message.payload
       );
     } catch (error) {
       grant = {
@@ -12546,7 +12549,7 @@ export const createServer = (
       instanceId: message.instanceId,
       requestId: message.requestId,
       payload: grant,
-    } satisfies Envelope<LaunchGrant>);
+    });
   };
 
   /**
@@ -12554,77 +12557,109 @@ export const createServer = (
    * sends is refused here as one no machine sends. Every verb has its
    * entry: a new one does not compile until it is handled here.
    */
-  const agentVerbs: Record<Verb, AgentVerb> = {
+  const agentVerbs: AgentVerbs = {
     register: registerFromMachine,
     heartbeat: heartbeatFromMachine,
     usage: usageFromMachine,
     launch: launchFromMachine,
-    frames: (ws, message, agentFrame) =>
+    frames: (ws, message) =>
       runFrameStages(frameStages, {
         ws,
         message,
-        agentFrame,
+        agentFrame: frameReads(message.payload),
         hubReply: false,
         ownedSession: undefined,
         internal: false,
       }),
-    // A dashboard's verbs on a machine's socket.
-    admission: refuseAgentVerb,
-    control: refuseAgentVerb,
-    fs: refuseAgentVerb,
-    send: refuseAgentVerb,
-    spawn: refuseAgentVerb,
-    stop: refuseAgentVerb,
+  };
+
+  /** `message` to its verb's handler ({@link agentVerbs}). */
+  const handleAgentVerb = <V extends MachineVerb>(
+    ws: AgentSocket,
+    message: MachineEnvelope<V>
+  ): void | Promise<void> => agentVerbs[message.verb](ws, message);
+
+  /**
+   * The fields a machine sent that were not their type, left out of what the
+   * hub read (core agent-frame.ts `FieldReader`): each said in the log once
+   * per machine, as `received` says a key a type does not declare.
+   */
+  const fieldsLeftOut = new Set<string>();
+  const sayLeftOut = (machineId: string, dropped: readonly string[]): void => {
+    for (const field of dropped) {
+      const said = `${machineId}\n${field}`;
+      if (!fieldsLeftOut.has(said)) {
+        fieldsLeftOut.add(said);
+        console.warn(
+          `[hub] ${machineName(machineId)} (${machineId}) sent \`${field}\`, which is not its type: left out of what the hub read`
+        );
+      }
+    }
   };
 
   /**
    * EVERY MESSAGE ON A MACHINE'S SOCKET, in this order: one that is no
-   * envelope is refused; its payload is decoded once, for every step after;
-   * a connection that does not speak for its machine stops it
+   * envelope is refused; it is parsed once into the message its verb names
+   * (core agent-frame.ts `readMachineEnvelope`), for every step after; a
+   * connection that does not speak for its machine stops it
    * ({@link speaksForMachine}); word from the machine is noted
    * (machine-contact.ts; its beat also says whether sessions run there);
-   * then its verb's handler ({@link agentVerbs}), awaited, or a verb outside
-   * the union (an older or newer agent's: the wire's `verb` is checked only
-   * to be a string, `envelopeFault`) refused. What any of it throws meets
-   * the socket's one error policy ({@link agentFrameFailed}).
+   * then one that is no message a machine sends (a verb outside its union,
+   * a payload that is no JSON object, a frame of no kind this hub knows) is
+   * refused with why, and any other goes to its verb's handler
+   * ({@link agentVerbs}), awaited. What any of it throws meets the socket's
+   * one error policy ({@link agentFrameFailed}).
    */
   const agentMessage = async (
     ws: AgentSocket,
     message: unknown
   ): Promise<void> => {
-    if (!isEnvelope(message)) {
+    const addressed = addressedOf(message);
+    if (!addressed) {
       const fault = envelopeFault(message);
       console.warn(`[hub] agent ${fault}`, message);
       sendToMachine(ws, refusalFrame(message, fault));
       return;
     }
-    const agentFrame = decodeAgentFrame(message.payload);
-    if (!speaksForMachine(ws, message)) {
+    const read = readMachineEnvelope(addressed);
+    if (!speaksForMachine(ws, addressed)) {
       return;
     }
-    heardBinaryUpdate(message.machineId, {
-      state: agentFrame.binaryUpdate,
-      dropped: agentFrame.binaryUpdatePhaseDropped,
-    });
-    doing(`${message.verb} from machine ${message.machineId}`);
+    const envelope = "envelope" in read ? read.envelope : undefined;
+    if (envelope?.verb === "register" || envelope?.verb === "heartbeat") {
+      heardBinaryUpdate(envelope.machineId, {
+        state: envelope.payload.binaryUpdate,
+        dropped: envelope.payload.binaryUpdatePhaseDropped,
+      });
+    }
+    doing(`${addressed.verb} from machine ${addressed.machineId}`);
     contact.heard(
-      message.machineId,
-      message.verb === "heartbeat" ? agentFrame.instances.length > 0 : undefined
+      addressed.machineId,
+      envelope?.verb === "heartbeat"
+        ? envelope.payload.instances.length > 0
+        : undefined
     );
-    const handle = Object.hasOwn(agentVerbs, message.verb)
-      ? agentVerbs[message.verb]
-      : refuseAgentVerb;
-    await handle(ws, message, agentFrame);
+    if ("fault" in read) {
+      console.warn(`[hub] ${read.fault}, from ${addressed.machineId}`);
+      sendToMachine(ws, refusalFrame(addressed, read.fault));
+      return;
+    }
+    sayLeftOut(addressed.machineId, read.dropped);
+    await handleAgentVerb(ws, read.envelope);
   };
 
   // ── The dashboard socket ────────────────────────────────────────────────
 
   /**
-   * A verb no dashboard sends: a machine's, or one no build sends any more,
-   * from a page or app still running an older one. The client is named.
+   * A message no client sends: a verb no dashboard sends (a machine's, or
+   * one no build sends any more, from a page or app still running an older
+   * one), or a payload that is not its verb's. The client is named.
    */
-  const refuseDashboardVerb: DashboardVerb = (ws, message) => {
-    const fault = `unknown verb "${message.verb}": a dashboard sends spawn, stop, control or fs`;
+  const refuseDashboardMessage = (
+    ws: DashboardSocket,
+    message: Addressed,
+    fault: string
+  ): void => {
     console.warn(
       `[hub] ${fault}, from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
     );
@@ -12637,11 +12672,11 @@ export const createServer = (
    * ({@link launches}); then the row's key, not the client's (see
    * `enforceRowSessionKey`). Then it starts, from the dashboard.
    */
-  const spawnFromDashboard: DashboardVerb = (ws, message) => {
+  const spawnFromDashboard: DashboardVerbs["spawn"] = (ws, message) => {
     if (resumeFormer(ws, message)) {
       return;
     }
-    const start = namedSpawn(message.payload as SpawnPayload);
+    const start = namedSpawn(message.payload);
     if ("refusal" in start) {
       console.warn(spawnWords.refusedLine(start.refusal));
       sendToClient(ws, failure(message, start.refusal));
@@ -12702,7 +12737,7 @@ export const createServer = (
    * runner has ended. Then it cuts the turn it lands in, as an interrupt
    * does, and what it cut says it was the person's Stop.
    */
-  const stopAskedByDashboard: DashboardVerb = (ws, message) => {
+  const stopAskedByDashboard: DashboardVerbs["stop"] = (ws, message) => {
     stopFromDashboard(ws, message);
     if (message.instanceId) {
       noteInterrupt(message.instanceId);
@@ -12715,44 +12750,21 @@ export const createServer = (
    * is refused here as one no dashboard sends. Every verb has its entry: a
    * new one does not compile until it is handled here.
    */
-  const dashboardVerbs: Record<Verb, DashboardVerb> = {
+  const dashboardVerbs: DashboardVerbs = {
     spawn: spawnFromDashboard,
     stop: stopAskedByDashboard,
-    control: (ws, message) =>
-      relayControl(message as Envelope<ControlPayload>, ws),
+    control: (ws, message) => relayControl(message, ws),
     // Answered on `control_result` too, so the same requester map routes it.
     fs: (ws, message) => {
       forward(message, ws);
     },
-    // A machine's verbs on a dashboard's socket.
-    admission: refuseDashboardVerb,
     // Only the Chrome extension's BLE advert: it belongs to no machine.
-    frames: (ws, message) => {
-      const body = message.payload as
-        | {
-            kind?: unknown;
-            serviceData?: unknown;
-            rssi?: unknown;
-            capturedAt?: unknown;
-          }
-        | undefined;
-      if (
-        body?.kind !== "passkey_advert" ||
-        typeof body.serviceData !== "string" ||
-        typeof body.rssi !== "number" ||
-        typeof body.capturedAt !== "number"
-      ) {
-        refuseDashboardVerb(ws, message);
-        return;
-      }
+    frames: (_ws, message) => {
+      const { serviceData, rssi, capturedAt } = message.payload;
       detach(
         browsers.relayPasskeyAdvert(
           "extension",
-          {
-            serviceData: body.serviceData,
-            rssi: body.rssi,
-            capturedAt: body.capturedAt,
-          },
+          { serviceData, rssi, capturedAt },
           {
             captured: (key) => passkeyRelay.captured(key),
             injected: (key) => passkeyRelay.injected(key),
@@ -12761,36 +12773,40 @@ export const createServer = (
         "relay the passkey advert"
       );
     },
-    heartbeat: refuseDashboardVerb,
-    launch: refuseDashboardVerb,
-    register: refuseDashboardVerb,
-    send: refuseDashboardVerb,
-    usage: refuseDashboardVerb,
   };
+
+  /** `message` to its verb's handler ({@link dashboardVerbs}). */
+  const handleDashboardVerb = <V extends ClientVerb>(
+    ws: DashboardSocket,
+    message: ClientEnvelope<V>
+  ): void => dashboardVerbs[message.verb](ws, message);
 
   /**
    * EVERY MESSAGE ON A DASHBOARD'S SOCKET, in this order: the Ledger
    * Protocol's own shapes, which are not envelopes, read before the
    * envelope check, which would otherwise log them as junk; one that is no
-   * envelope refused; then its verb's handler ({@link dashboardVerbs}), or
-   * a verb outside the union (an older or newer client's: the wire's `verb`
-   * is checked only to be a string, `envelopeFault`) refused. What any of
-   * it throws is answered by {@link dashboardThrew}.
+   * envelope refused; one that is no message a client sends (a verb outside
+   * its union, a payload that is not its verb's: core client-envelope.ts)
+   * refused with why; then its verb's handler ({@link dashboardVerbs}).
+   * What any of it throws is answered by {@link dashboardThrew}.
    */
   const dashboardMessage = (ws: DashboardSocket, message: unknown): void => {
     if (streams.handleClientMessage(ws, message)) {
       return;
     }
-    if (!isEnvelope(message)) {
+    const addressed = addressedOf(message);
+    if (!addressed) {
       const fault = envelopeFault(message);
       console.warn(`[hub] dashboard ${fault}`, message);
       sendToClient(ws, refusalFrame(message, fault));
       return;
     }
-    const handle = Object.hasOwn(dashboardVerbs, message.verb)
-      ? dashboardVerbs[message.verb]
-      : refuseDashboardVerb;
-    handle(ws, message);
+    const read = readClientEnvelope(addressed);
+    if ("fault" in read) {
+      refuseDashboardMessage(ws, addressed, read.fault);
+      return;
+    }
+    handleDashboardVerb(ws, read.envelope);
   };
 
   /** The one setter of an away machine's headers (machine-reads.ts `nameAwayMachine`). */
@@ -13050,7 +13066,7 @@ export const createServer = (
             verb: "admission",
             machineId: "",
             payload: { kind: "challenge", nonce, hubId: hubId() },
-          } satisfies Envelope<AdmissionPayload>);
+          } satisfies HubEnvelope<"admission">);
         },
         drain(ws) {
           drainLine(ws);
@@ -13177,8 +13193,10 @@ export const createServer = (
           }
           // A page's place picker browsing a machine's folders; the reply
           // comes back to this socket as it does to a dashboard's.
-          if (isEnvelope(message) && message.verb === "fs") {
-            forward(message, ws);
+          const addressed = addressedOf(message);
+          const read = addressed && readClientEnvelope(addressed);
+          if (read && "envelope" in read && read.envelope.verb === "fs") {
+            forward(read.envelope, ws);
             return;
           }
           const fault =
@@ -13236,7 +13254,7 @@ export const createServer = (
               verb: "frames",
               machineId: "hub",
               payload: hubAuth.frame(),
-            } satisfies Envelope<FramePayload>);
+            } satisfies HubEnvelope<"frames">);
           }
           // A page names the wire it was built for (WIRE_PROTOCOL, 6). One
           // that names none was built before pages did: a browser sends
@@ -13281,7 +13299,7 @@ export const createServer = (
                   kind: "fleet_mcp",
                   servers: db.fleetConfig().mcp.map(maskMcpServer),
                 },
-              } satisfies Envelope<FramePayload>);
+              } satisfies HubEnvelope<"frames">);
             }),
             "fleet snapshot"
           );

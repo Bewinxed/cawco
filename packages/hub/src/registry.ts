@@ -1,5 +1,5 @@
-import type { ErrorFrame } from "@cawco/core/frames";
-import type { Envelope, Verb } from "@cawco/core/protocol";
+import { isRecord } from "@cawco/core/is-record";
+import type { HubEnvelope, FrameEnvelope, Verb } from "@cawco/core/protocol";
 import { Context, Effect, Layer } from "effect";
 import type { AskCard } from "./ask-presentation";
 import { HubLifetime, type HubLifetimeShape } from "./lifetime";
@@ -20,12 +20,9 @@ export const refusalFrame = (
   frame: unknown,
   message: string,
   verb?: Verb
-): Envelope<ErrorFrame> => {
+): FrameEnvelope<"error"> => {
   const field = (key: string): string | undefined => {
-    const value =
-      typeof frame === "object" && frame !== null
-        ? (frame as Record<string, unknown>)[key]
-        : undefined;
+    const value = isRecord(frame) ? frame[key] : undefined;
     return typeof value === "string" ? value : undefined;
   };
   return {
@@ -37,20 +34,6 @@ export const refusalFrame = (
   };
 };
 
-/**
- * What a frame that is not an envelope lacks, in the sender's terms: the
- * fields every envelope must carry as strings.
- */
-export const envelopeFault = (frame: unknown): string => {
-  if (typeof frame !== "object" || frame === null || Array.isArray(frame)) {
-    return "frame refused: it is not a JSON object with `verb` and `machineId`";
-  }
-  const missing = ["verb", "machineId"].filter(
-    (key) => typeof (frame as Record<string, unknown>)[key] !== "string"
-  );
-  return `frame refused: ${missing.map((key) => `\`${key}\``).join(" and ")} ${missing.length > 1 ? "are" : "is"} missing or not a string`;
-};
-
 export interface RegistryShape {
   /** `older`: the page behind the socket was built for a wire before this hub's. */
   readonly addDashboard: (socket: ClientSocket, older: boolean) => void;
@@ -60,7 +43,7 @@ export interface RegistryShape {
    * An envelope to every dashboard and app socket; a parked ask goes as its
    * card alone (ask-presentation.ts `AskCard`, wire-socket.ts `ClientFrame`).
    */
-  readonly broadcast: <F extends Envelope>(
+  readonly broadcast: <F extends HubEnvelope>(
     envelope: ClientFrame<F> | AskCard
   ) => void;
   /**
@@ -69,7 +52,10 @@ export interface RegistryShape {
    * reads, and the one whose `protocol` reloads it. Built once, and only when
    * an older page is connected.
    */
-  readonly broadcastBoard: (delta: Envelope, snapshot: () => Envelope) => void;
+  readonly broadcastBoard: (
+    delta: FrameEnvelope<"instances_delta">,
+    snapshot: () => FrameEnvelope<"instances">
+  ) => void;
   /** A hub frame that is not an envelope (`{ type, … }`), to every dashboard and app socket. */
   readonly broadcastTyped: (frame: { readonly type: string }) => void;
   /** Every usable dashboard origin seen since the hub started, newest first: empty if none has connected. */
@@ -254,7 +240,7 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
       }
     },
     broadcastBoard: (delta, snapshot) => {
-      let whole: Envelope | undefined;
+      let whole: FrameEnvelope<"instances"> | undefined;
       for (const socket of dashboards.values()) {
         if (older.has(socket.id)) {
           whole ??= snapshot();

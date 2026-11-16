@@ -64,9 +64,8 @@ import { isMachineSilence } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import type {
-  Envelope,
+  HubEnvelope,
   InstanceRow,
-  SendPayload,
   SpawnPayload,
 } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
@@ -279,7 +278,7 @@ export interface FleetWatchDeps {
   /** A notice to the person's phone. */
   push: (notice: FleetWatchNotice) => void;
   /** Delivers one message to a session through the hub's one send path. */
-  send: (envelope: Envelope<SendPayload>) => void;
+  send: (envelope: HubEnvelope<"send">) => void;
   /** Starts a session in `mode` where its harness has modes, resolved once its machine has it (spawns.ts `spawnSession`): the folder it runs in, or why it did not start. */
   spawn: (
     machineId: string,

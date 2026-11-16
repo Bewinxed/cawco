@@ -45,10 +45,22 @@ export interface UsageTokens {
  * the hub stores. The hub also keeps rows stored before quarters, an hour
  * long; `spanMs` says which a row is.
  */
-export interface UsageBucket {
+export interface UsageBucket extends UsageBucketFields {
+  harness: UsageHarness;
+}
+
+/**
+ * A bucket as a machine reports it: of any harness, one this build does
+ * not scan (a newer agent's) among them, which the hub leaves out.
+ */
+export interface ReportedUsageBucket extends UsageBucketFields {
+  harness: string;
+}
+
+/** A bucket's fields beside its harness ({@link UsageBucket}). */
+interface UsageBucketFields {
   costUsd: number;
   firstTs: number; // ms epoch of the earliest record in the bucket
-  harness: UsageHarness;
   lastTs: number; // ms epoch of the latest record in the bucket
   messages: number;
   model: string;

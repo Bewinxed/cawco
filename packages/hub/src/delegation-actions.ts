@@ -33,7 +33,7 @@ import {
 } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type {
-  Envelope,
+  HubEnvelope,
   InstanceRow,
   SendPayload,
   SpawnPayload,
@@ -723,10 +723,10 @@ export interface HandoffDeps {
    * it: a send that does not go answers the hub's problem, in its reason.
    */
   readonly deliver: (
-    envelope: Envelope<SendPayload>
+    envelope: HubEnvelope<"send">
   ) => ReturnType<DelegationSends["deliver"]>;
   /** Puts an envelope on the daemon's hub socket. */
-  readonly emit: (envelope: Envelope) => void;
+  readonly emit: (envelope: HubEnvelope) => void;
   /** The board and the machines, read in the hub's own process. */
   readonly fleet: Fleet;
   /**
@@ -751,7 +751,7 @@ export interface HandoffDeps {
   readonly handOff: (
     target: string,
     inputs: unknown[],
-    compose: (landed: HandoffInputs) => Envelope<SendPayload>
+    compose: (landed: HandoffInputs) => HubEnvelope<"send">
   ) => ReturnType<DelegationSends["handOff"]>;
   /** Exact-id lookup includes ended/archived rows outside the live roster. */
   readonly instanceById: (id: string) => InstanceRow | undefined;
@@ -1764,7 +1764,7 @@ export const handoffActions = ({
         peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
       const from = senderName(own, cwd);
       const said = `${handoffMarker(from, instanceId)}${message}`;
-      const envelopeOf = (body: string): Envelope<SendPayload> => ({
+      const envelopeOf = (body: string): HubEnvelope<"send"> => ({
         verb: "send",
         machineId: peer.row.machineId,
         instanceId: peer.row.id,

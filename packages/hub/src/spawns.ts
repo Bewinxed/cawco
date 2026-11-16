@@ -7,7 +7,8 @@ import { HARNESSES, harnessNamed } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import type {
-  Envelope,
+  ClientSpawn,
+  HubEnvelope,
   InstanceRow,
   NamedSpawn,
   SendPayload,
@@ -30,7 +31,6 @@ import { sessionLabel } from "./labels";
 import type { createLaunches } from "./launches";
 import { awayProblem, MachineProblem, silentProblem } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
-import { peek, peekResume } from "./payload-peeks";
 import type { PlacementInput, TaskAccounts } from "./placement";
 import {
   accountFacts,
@@ -65,8 +65,23 @@ export const MACHINE_DISCONNECTED =
  * prompt among them, is never read for one; a resumed one's next turn is
  * not its first.
  */
-export const awaitsItsName = (payload: unknown): boolean =>
-  !(peekResume(payload) || peek(payload, "title"));
+export const awaitsItsName = (
+  payload: Pick<SpawnPayload, "resume" | "title">
+): boolean => !(resumedKey(payload) || payload.title);
+
+/**
+ * The session a `spawn` resumes, so the instance row records what it re-opened.
+ * A fork is the exception: it *reads* the origin conversation but creates a new
+ * one, so claiming the origin's id here would trip openInstance's
+ * one-conversation-one-row guard. Left blank, the fork's own init frame stamps
+ * the real id via noteInstanceSession.
+ */
+export const resumedKey = (
+  payload: Pick<SpawnPayload, "resume">
+): string | undefined =>
+  payload.resume && !payload.resume.fork
+    ? payload.resume.sessionKey
+    : undefined;
 
 /**
  * The hub row is the single authority for an instance's session key. A spawn
@@ -89,7 +104,7 @@ export const enforceRowSessionKey = (
   if (payload.harness !== row.harness) {
     return `instance ${row.id} runs on ${row.harness}; refusing to start it on ${payload.harness}`;
   }
-  const asked = peekResume(payload);
+  const asked = resumedKey(payload);
   if (asked === undefined) {
     return undefined;
   }
@@ -113,45 +128,34 @@ const HARNESS_UNNAMED = `A start names the harness it runs on (${HARNESSES.join(
  * harness CawCo runs, and nothing stands in for one it left out.
  */
 export const namedSpawn = (
-  payload: SpawnPayload
+  payload: ClientSpawn
 ): NamedSpawn | { refusal: string } => {
   const harness = harnessNamed(payload.harness);
   return harness
     ? { ...payload, harness }
     : {
-        refusal: `${HARNESS_UNNAMED} This one named ${peek(payload, "harness") ?? "none"}.`,
+        refusal: `${HARNESS_UNNAMED} This one named ${payload.harness ?? "none"}.`,
       };
 };
 
 /** A spawn asking for scratch isolation, or for a session that is never stored. */
-export const peekKind = (payload: unknown): InstanceKind => {
-  if (typeof payload !== "object" || payload === null) {
-    return "mainline";
-  }
-  const scratch = "scratch" in payload && payload.scratch;
-  const persistSession =
-    "persistSession" in payload ? payload.persistSession : undefined;
-  return scratch || persistSession === false ? "scratch" : "mainline";
-};
+export const peekKind = (
+  payload: Pick<SpawnPayload, "persistSession" | "scratch">
+): InstanceKind =>
+  payload.scratch || payload.persistSession === false ? "scratch" : "mainline";
 
 /** The session that started a spawn (`SpawnPayload.parent`), so its row nests under it. */
-export const peekParent = (
-  payload: unknown
-): { parentInstanceId?: string; parentToolUseId?: string } => {
-  if (typeof payload !== "object" || payload === null) {
-    return {};
-  }
-  const parent = "parent" in payload ? payload.parent : undefined;
-  if (typeof parent !== "object" || parent === null) {
-    return {};
-  }
-  const instanceId = "instanceId" in parent ? parent.instanceId : undefined;
-  const toolUseId = "toolUseId" in parent ? parent.toolUseId : undefined;
-  return {
-    ...(typeof instanceId === "string" ? { parentInstanceId: instanceId } : {}),
-    ...(typeof toolUseId === "string" ? { parentToolUseId: toolUseId } : {}),
-  };
-};
+export const peekParent = ({
+  parent,
+}: Pick<SpawnPayload, "parent">): {
+  parentInstanceId?: string;
+  parentToolUseId?: string;
+} => ({
+  ...(parent ? { parentInstanceId: parent.instanceId } : {}),
+  ...(parent?.toolUseId === undefined
+    ? {}
+    : { parentToolUseId: parent.toolUseId }),
+});
 
 /**
  * A delegate's effective permission mode, resolved to the ROOT of its delegate
@@ -1175,7 +1179,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       id: payload.instanceId,
       machineId,
       cwd: payload.cwd,
-      sessionId: peekResume(payload),
+      sessionId: resumedKey(payload),
       harness: payload.harness,
       origin: by,
       projectId: payload.projectId,
@@ -1202,7 +1206,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       machineId,
       instanceId: payload.instanceId,
       payload,
-    } satisfies Envelope<SpawnPayload>);
+    } satisfies HubEnvelope<"spawn">);
     if (sent instanceof ElysiaStatus) {
       return sent;
     }
@@ -1510,7 +1514,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
           machineId,
           instanceId: payload.instanceId,
           payload: { ...bound, requestId },
-        } satisfies Envelope<SpawnPayload>)
+        } satisfies HubEnvelope<"spawn">)
     );
     return startedOrThrown(reply, machineId, payload.harness);
   };
@@ -1583,7 +1587,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
           },
         },
       },
-    } satisfies Envelope<SendPayload>);
+    } satisfies HubEnvelope<"send">);
     if (sent instanceof ElysiaStatus) {
       console.warn(`[hub] a hub word was not sent: ${sent.response.detail}`);
     }

@@ -1,5 +1,6 @@
 /** What the agent socket reads of its own: the hub's constants and pure reads the stages share. */
 
+import { everyOf } from "@cawco/core/every-of";
 import type { FleetSyncReport } from "@cawco/core/fleet";
 import type { FramePayload } from "@cawco/core/frames";
 import {
@@ -7,12 +8,14 @@ import {
   COMPACT_RELAUNCH,
   GATEWAY_RELAUNCH,
 } from "@cawco/core/harness";
+import { isRecord } from "@cawco/core/is-record";
 import type { HubPreviewOrigins } from "@cawco/core/preview/hub-previews";
 import type {
   BuildInfo,
   DeliveryMark,
-  Envelope,
+  HubEnvelope,
   IngestMark,
+  MachineEnvelope,
   SessionCustody,
   SessionLimits,
 } from "@cawco/core/protocol";
@@ -23,7 +26,6 @@ import {
   MESSAGES_STORED,
 } from "@cawco/core/session-messages";
 import { BuildInfoSchema } from "@cawco/core/stored-shapes";
-import type { RegisterAckPayload } from "@cawco/core/stream";
 import type { RelaunchFor } from "@cawco/core/words/relaunch";
 import { DASHBOARD_PORT, LOCAL_DASHBOARD_PORT, PREVIEW_PORTS } from "../config";
 import { MACHINE_LINE_SUBTYPE } from "../cut-turns";
@@ -33,7 +35,7 @@ import { keptAs } from "../stored-json";
 import type { TailnetHttpsService } from "../tailnet-https";
 
 export const registerAck = (
-  envelope: Envelope,
+  envelope: MachineEnvelope<"register">,
   ingested: Record<string, IngestMark>,
   delivered: Record<string, DeliveryMark>,
   unknownAccounts: string[] | undefined,
@@ -46,8 +48,8 @@ export const registerAck = (
   gitOrigins: string[],
   previewOrigins: HubPreviewOrigins,
   tailnetHttps: ReturnType<TailnetHttpsService["serving"]>
-): Envelope<RegisterAckPayload> => ({
-  verb: envelope.verb,
+): HubEnvelope<"register"> => ({
+  verb: "register",
   machineId: envelope.machineId,
   payload: {
     ok: true,
@@ -167,9 +169,14 @@ export const peekSendSignal = (
 
 /** Which line its machine said, by the frame's subtype; none for any other frame. */
 export const machineLineKind = (subtype: string): MachineLineKind | undefined =>
-  (Object.keys(MACHINE_LINE_SUBTYPE) as MachineLineKind[]).find(
-    (kind) => MACHINE_LINE_SUBTYPE[kind] === subtype
-  );
+  MACHINE_LINE_KINDS.find((kind) => MACHINE_LINE_SUBTYPE[kind] === subtype);
+
+/** Every line a machine says about a session, by its kind. */
+const MACHINE_LINE_KINDS = everyOf<MachineLineKind>()([
+  "limit",
+  "outdated",
+  "room",
+]);
 
 /** Why a held session was not taken back, said on its row and in its transcript. */
 export const custodyReason = (hours: string): string =>
@@ -194,9 +201,6 @@ export const RESTORE_HORIZON_MS = 30 * 60_000;
 /** A report's three tables of states, which is what tells a report from any other frame. */
 export const isFleetReport = (value: unknown): value is FleetSyncReport =>
   isRecord(value) &&
-  isRecord((value as FleetSyncReport).mcp) &&
-  isRecord((value as FleetSyncReport).marketplaces) &&
-  isRecord((value as FleetSyncReport).plugins);
-
-const isRecord = (value: unknown): boolean =>
-  typeof value === "object" && value !== null;
+  isRecord(value.mcp) &&
+  isRecord(value.marketplaces) &&
+  isRecord(value.plugins);

@@ -1,3 +1,4 @@
+import { isRecord } from "@cawco/core/is-record";
 import {
   atProviderLimit,
   CLAUDE_PROVIDER,
@@ -31,13 +32,15 @@ import {
 } from "@cawco/core/injected";
 import { invariant } from "@cawco/core/invariant";
 import { planWaitsOf } from "@cawco/core/plan";
-import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
+import type {
+  HubEnvelope,
+  InstanceRow,
+  SendPayload,
+} from "@cawco/core/protocol";
 import { relaunchOf } from "@cawco/core/relaunch";
 import { CONTROL_READ_TRANSCRIPT_WINDOW } from "@cawco/core/session/controls";
 import type {
-  NeutralAssistantMessage,
   NeutralOrigin,
-  NeutralResultMessage,
   NeutralUserMessage,
   SendMode,
   SendRecord,
@@ -210,29 +213,18 @@ const SETTLE_BACKOFF_MAX_MS = 120_000;
  * with the one a loaded transcript derives, which is the disagreement this
  * whole path exists to remove. Such a send names nothing; the transcript will.
  */
-const hasAttachments = (payload: unknown): boolean =>
-  typeof payload === "object" &&
-  payload !== null &&
-  Array.isArray((payload as { attachments?: unknown }).attachments) &&
-  (payload as { attachments: unknown[] }).attachments.length > 0;
+const hasAttachments = (payload: SendPayload): boolean =>
+  (payload.attachments?.length ?? 0) > 0;
 
 /**
  * A `send` that is one session addressing another, rather than a reader typing.
  * The hub stays payload-opaque otherwise; this is a sanctioned peek, and it is
  * the only way the fleet can be told a session is carrying handed work.
  */
-const peekPeer = (payload: unknown): string | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const { message } = payload as {
-    message?: { origin?: { kind?: string; name?: string } };
-  };
-  if (message?.origin?.kind !== "peer") {
-    return undefined;
-  }
-  return message.origin.name ?? "another session";
-};
+const peekPeer = ({ message }: SendPayload): string | undefined =>
+  message.origin.kind === "peer"
+    ? (message.origin.name ?? "another session")
+    : undefined;
 
 /**
  * A `send` that starts a turn. A queued hand-off (`shouldQuery: false`) is read
@@ -242,13 +234,8 @@ const peekPeer = (payload: unknown): string | undefined => {
  * cleared it unread, and the SDK acknowledges even a queued append with result
  * frames, which cleared it within seconds of arriving.
  */
-const isQuerySend = (payload: unknown): boolean => {
-  if (typeof payload !== "object" || payload === null) {
-    return false;
-  }
-  const { message } = payload as { message?: { shouldQuery?: unknown } };
-  return message?.shouldQuery !== false;
-};
+const isQuerySend = ({ message }: SendPayload): boolean =>
+  message.shouldQuery !== false;
 
 /**
  * Put a relay send's `message` into the one shape every adapter reads
@@ -270,16 +257,13 @@ const isQuerySend = (payload: unknown): boolean => {
  * rather than forwarded to hang. The one outcome no longer possible is the
  * one that was happening.
  */
-const normalizeRelayMessage = (body: unknown): string | undefined => {
+const normalizeRelayMessage = (body: SendPayload): string | undefined => {
   const needsEnvelope =
     "relay send needs a message: either plain text, or a {type:'user',message:{role:'user',content:…}} envelope";
-  if (typeof body !== "object" || body === null) {
-    return needsEnvelope;
-  }
-  const holder = body as { message?: unknown };
-  const { message } = holder;
+  // As it came: a caller that typed it loosely sends what it likes.
+  const message: unknown = body.message;
   if (typeof message === "string") {
-    holder.message = {
+    body.message = {
       type: "user",
       message: { role: "user", content: message },
       uuid: crypto.randomUUID(),
@@ -287,15 +271,11 @@ const normalizeRelayMessage = (body: unknown): string | undefined => {
     } satisfies SentMessage;
     return;
   }
-  if (typeof message !== "object" || message === null) {
+  if (!isRecord(message)) {
     return needsEnvelope;
   }
-  const envelope = message as { type?: unknown; message?: unknown };
-  const inner = envelope.message as {
-    role?: unknown;
-    content?: unknown;
-  } | null;
-  if (typeof inner !== "object" || inner === null) {
+  const inner = message.message;
+  if (!isRecord(inner)) {
     return needsEnvelope;
   }
   if (inner.role !== "user") {
@@ -306,18 +286,17 @@ const normalizeRelayMessage = (body: unknown): string | undefined => {
   }
   // The only field a well-formed caller tends to omit, and the one every
   // reader downstream keys off (`userTurnText`, `isQuerySend`).
-  if (envelope.type === undefined) {
-    envelope.type = "user";
+  if (message.type === undefined) {
+    message.type = "user";
   }
-  if (envelope.type !== "user") {
+  if (message.type !== "user") {
     return "relay send message.type must be 'user'";
   }
   // Every sent message has an identity and a speaker (`SentMessage`). The hub
   // completes the message here, so a caller that named neither gets its uuid
   // minted here, and speaks as a dashboard send does — as the operator.
-  const sent = envelope as { uuid?: unknown; origin?: unknown };
-  sent.uuid ??= crypto.randomUUID();
-  sent.origin ??= { kind: "human" };
+  message.uuid ??= crypto.randomUUID();
+  message.origin ??= { kind: "human" };
 };
 
 /**
@@ -521,11 +500,11 @@ export const createSends = (ctx: SendsContext) => {
    * One change to a record: stored, then said. The only way a record moves.
    * A record a session was handed stays its session's.
    */
-  const changeSend = <Row extends SentMessageRow>(
-    row: Row,
+  const changeSend = (
+    row: SentMessageRow,
     change: Parameters<DbShape["updateSend"]>[1]
-  ): Row => {
-    const moved = (ctx.db.updateSend(row.uuid, change) ?? row) as Row;
+  ): SentMessageRow => {
+    const moved = ctx.db.updateSend(row.uuid, change) ?? row;
     publishSend(moved);
     // A send leaving `pending`, read or never to be: what a routine's run
     // waits on (routines.ts `sendLeft`).
@@ -622,7 +601,7 @@ export const createSends = (ctx: SendsContext) => {
     if (isKeepAlive(row.body)) {
       return changeSend(row, { state: "read", readAt: new Date() });
     }
-    const origin = (row.body as SentMessage | null)?.origin;
+    const { origin } = row.body;
     // A live process took it up: finished work it was sent to runs again,
     // but for the hub's filing turn, which reopens nothing.
     if (!(origin?.kind === "system" && origin.name === COMPACTION_ORIGIN)) {
@@ -669,8 +648,8 @@ export const createSends = (ctx: SendsContext) => {
    * tell nobody.
    */
   const tellSender = (row: SentMessageRow, reason: string): void => {
-    const { origin } = row.body as SentMessage;
-    const sender = origin.kind === "peer" ? origin.fromSession : undefined;
+    const { origin } = row.body;
+    const sender = origin?.kind === "peer" ? origin.fromSession : undefined;
     if (!sender || sender === row.instanceId) {
       return;
     }
@@ -1359,7 +1338,7 @@ export const createSends = (ctx: SendsContext) => {
       return;
     }
     const unread = ctx.db.sendsIn(instanceId, ["pending"]).filter((send) => {
-      const origin = (send.body as SentMessage | null)?.origin;
+      const { origin } = send.body;
       return (
         !(send.owedHeld || isKeepAlive(send.body)) &&
         !!origin &&
@@ -1608,7 +1587,7 @@ export const createSends = (ctx: SendsContext) => {
     let refused = false;
     if (neutral.type === "assistant" && !neutral.parent_tool_use_id) {
       refused = atProviderLimit({
-        type: (neutral as { error?: string }).error,
+        type: neutral.error,
       });
     } else if (neutral.type === "result") {
       const [row] = ctx.db.getInstancesByIds([instanceId]);
@@ -1745,11 +1724,11 @@ export const createSends = (ctx: SendsContext) => {
       return false;
     }
     if (entry.type === "assistant" && entry.error) {
-      (entry as unknown as NeutralAssistantMessage).failedSends = failures;
+      entry.failedSends = failures;
       return true;
     }
-    const stored = entry.message as NeutralResultMessage | undefined;
-    if (entry.type === "system" && stored?.is_error) {
+    const stored = entry.message;
+    if (entry.type === "system" && isRecord(stored) && stored.is_error) {
       stored.failedSends = failures;
       return true;
     }
@@ -1780,14 +1759,16 @@ export const createSends = (ctx: SendsContext) => {
     );
     const byUuid = new Map(found.map((send) => [send.uuid, send]));
     const byHarnessId = Map.groupBy(
-      found.filter((send) => send.harnessId !== null),
-      (send) => send.harnessId as string
+      found.flatMap((send) =>
+        send.harnessId === null ? [] : [{ send, harnessId: send.harnessId }]
+      ),
+      (held) => held.harnessId
     );
     return (entry) => {
       const own = byUuid.get(entry.sourceUuid ?? entry.uuid);
-      const held = (byHarnessId.get(entry.uuid) ?? []).filter(
-        (send) => send.uuid !== own?.uuid
-      );
+      const held = (byHarnessId.get(entry.uuid) ?? [])
+        .map((one) => one.send)
+        .filter((send) => send.uuid !== own?.uuid);
       const sends = [...held, ...(own ? [own] : [])];
       if (own && instanceId && entry.joined && held.length === 0) {
         sends.push(...joinedWith(instanceId, entry, own));
@@ -1800,7 +1781,7 @@ export const createSends = (ctx: SendsContext) => {
 
   /** A send's words as the harness was handed them, when they are words alone. */
   const sentWords = (send: SentMessageRow): string | null => {
-    const content = (send.body as NeutralUserMessage | null)?.message.content;
+    const content = send.body.message.content;
     return typeof content === "string" ? content : null;
   };
 
@@ -1818,7 +1799,7 @@ export const createSends = (ctx: SendsContext) => {
     entry: SessionMessage,
     last: SentMessageRow
   ): SentMessageRow[] => {
-    const stored = (entry.message as { content?: unknown }).content;
+    const stored = isRecord(entry.message) ? entry.message.content : undefined;
     const own = sentWords(last);
     if (!(typeof stored === "string" && own && stored.endsWith(`\n${own}`))) {
       return [];
@@ -1937,9 +1918,9 @@ export const createSends = (ctx: SendsContext) => {
    * envelope and in the payload. Unchanged for any other id. Every send,
    * control and stop that names a session by id passes here.
    */
-  const byIdNow = <P extends { instanceId?: string }>(
-    envelope: Envelope<P>
-  ): Envelope<P> => {
+  const byIdNow = <E extends HubEnvelope<"control" | "send">>(
+    envelope: E
+  ): E => {
     const named = envelope.payload.instanceId ?? envelope.instanceId;
     const now = named ? ctx.db.instanceIdOf(named) : undefined;
     if (!(named && now) || now === named) {
@@ -1961,7 +1942,7 @@ export const createSends = (ctx: SendsContext) => {
    * carries, and a send that starts a turn reads it; the parent's or the
    * reader's word to a delegate starts its item's count of quiet turns over.
    */
-  const afterSend = ({ machineId, payload }: Envelope<SendPayload>): void => {
+  const afterSend = ({ machineId, payload }: HubEnvelope<"send">): void => {
     const { instanceId, message } = payload;
     if (isKeepAlive(message)) {
       return;
@@ -1992,8 +1973,8 @@ export const createSends = (ctx: SendsContext) => {
    * already naming them (the same send handed on again) is as it was.
    */
   const picturesNamed = (
-    envelope: Envelope<SendPayload>
-  ): Envelope<SendPayload> => {
+    envelope: HubEnvelope<"send">
+  ): HubEnvelope<"send"> => {
     const { images = [], message } = envelope.payload;
     const said = message.message.content;
     // Its pictures as the payload carries them, and those its content holds
@@ -2072,7 +2053,7 @@ export const createSends = (ctx: SendsContext) => {
    * own steps (`ahead`), which go first (`compactionSend`).
    *
    */
-  const deliverSend = (asked: Envelope<SendPayload>, ahead = false) => {
+  const deliverSend = (asked: HubEnvelope<"send">, ahead = false) => {
     const envelope = toContinuation(byIdNow(asked), "refused");
     if (!envelope) {
       return;
@@ -2127,9 +2108,9 @@ export const createSends = (ctx: SendsContext) => {
    * other session.
    */
   const toContinuation = (
-    envelope: Envelope<SendPayload>,
+    envelope: HubEnvelope<"send">,
     person: "refused" | "carried"
-  ): Envelope<SendPayload> | undefined => {
+  ): HubEnvelope<"send"> | undefined => {
     const named = envelope.payload.instanceId;
     const now = continuationNow(named);
     if (now === named) {
@@ -2165,7 +2146,7 @@ export const createSends = (ctx: SendsContext) => {
    */
   const moveOwedSend = (
     send: SentMessageRow,
-    owed: Envelope<SendPayload>
+    owed: HubEnvelope<"send">
   ): void => {
     if (!ctx.db.takeOwedSend(send.uuid)) {
       return;
@@ -2196,7 +2177,7 @@ export const createSends = (ctx: SendsContext) => {
    * a delegate started as a fork. Once: any send on record for the session
    * means it was told, or had nothing to be told.
    */
-  const tellForkFirst = ({ machineId, payload }: Envelope<SendPayload>) => {
+  const tellForkFirst = ({ machineId, payload }: HubEnvelope<"send">) => {
     const { instanceId, message } = payload;
     if (
       isKeepAlive(message) ||
@@ -2240,7 +2221,7 @@ export const createSends = (ctx: SendsContext) => {
    * project's Caw, his project's task plans): one note its turn reads first,
    * whoever sends that turn. The plan's own words go as they are.
    */
-  const tellPlanFirst = ({ machineId, payload }: Envelope<SendPayload>) => {
+  const tellPlanFirst = ({ machineId, payload }: HubEnvelope<"send">) => {
     const { instanceId, message } = payload;
     if (
       isKeepAlive(message) ||
@@ -2289,7 +2270,7 @@ export const createSends = (ctx: SendsContext) => {
    * brief and a continuation all carry it, on any harness. A keep-alive ping
    * never does. Answers whether it did.
    */
-  const toldMove = (envelope: Envelope<SendPayload>): boolean => {
+  const toldMove = (envelope: HubEnvelope<"send">): boolean => {
     const { instanceId, message } = envelope.payload;
     if (isKeepAlive(message)) {
       return false;
@@ -2549,8 +2530,8 @@ export const createSends = (ctx: SendsContext) => {
    * parent, never the person) carries no presence.
    */
   const presenced = (
-    envelope: Envelope<SendPayload>
-  ): Envelope<SendPayload> => {
+    envelope: HubEnvelope<"send">
+  ): HubEnvelope<"send"> => {
     const { instanceId, message } = envelope.payload;
     if (isKeepAlive(message)) {
       return envelope;
@@ -2583,7 +2564,7 @@ export const createSends = (ctx: SendsContext) => {
 
   /** {@link deliverSend}'s session path: the message into the session itself. */
   const deliverToSession = (
-    envelope: Envelope<SendPayload>,
+    envelope: HubEnvelope<"send">,
     ahead: boolean
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
   ) => {
@@ -2932,7 +2913,7 @@ export const createSends = (ctx: SendsContext) => {
     if (row && ctx.keptAsleep(row)) {
       return "resting";
     }
-    const origin = (record.body as SentMessage | null)?.origin;
+    const { origin } = record.body;
     if (origin && heldAtLimit(record.instanceId, origin, record.uuid)) {
       // Behind its compaction after a move, or its filing turn at its
       // context threshold, not its old account's limit.
@@ -2980,7 +2961,7 @@ export const createSends = (ctx: SendsContext) => {
    * failed is refused with why.
    */
   const sessionSend = (
-    asked: Envelope<SendPayload>,
+    asked: HubEnvelope<"send">,
     requester: InstanceRow
   ) => {
     const envelope = byIdNow(asked);
@@ -3174,7 +3155,7 @@ export const createSends = (ctx: SendsContext) => {
   const handToProcess = (
     agent: NonNullable<ReturnType<typeof ctx.registry.agent>>,
     send: SentMessageRow,
-    envelope: Envelope<SendPayload>
+    envelope: HubEnvelope<"send">
   ): boolean => {
     const [now] = ctx.db.getInstancesByIds([send.instanceId]);
     if (
@@ -3202,7 +3183,7 @@ export const createSends = (ctx: SendsContext) => {
   const handReleased = (
     agent: NonNullable<ReturnType<typeof ctx.registry.agent>>,
     send: SentMessageRow,
-    envelope: Envelope<SendPayload>
+    envelope: HubEnvelope<"send">
   ): void => {
     const delivery = crypto.randomUUID();
     envelope.payload.delivery = delivery;
@@ -3252,7 +3233,7 @@ export const createSends = (ctx: SendsContext) => {
    */
   const waitsOnMachine = (send: SentMessageRow): boolean => {
     const [row] = ctx.db.getInstancesByIds([send.instanceId]);
-    const origin = (send.body as SentMessage | null)?.origin;
+    const { origin } = send.body;
     return !(
       ctx.db.owesSpawn(send.instanceId) ||
       (row && ctx.keptAsleep(row)) ||

@@ -2,10 +2,9 @@ import { modelScope } from "@cawco/core/accounts";
 import { detach } from "@cawco/core/detach";
 import { traitsOf } from "@cawco/core/harness/traits";
 import {
-  type Envelope,
+  type HubEnvelope,
   type KeepAlive,
   OVER_STATUSES,
-  type SendPayload,
 } from "@cawco/core/protocol";
 import {
   cacheHit,
@@ -243,7 +242,7 @@ interface KeepAlivePorts {
    * seconds when twenty turns ended together (2026-10-09).
    */
   rows: () => KeepAliveRow[];
-  send: (envelope: Envelope<SendPayload>) => unknown;
+  send: (envelope: HubEnvelope<"send">) => unknown;
 }
 
 const tickKeepAlive = async (

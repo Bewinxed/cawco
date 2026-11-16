@@ -618,7 +618,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
         // What this hub took of each session the agent holds: it
         // sends again what it kept past each mark.
         ctx.streams.deliveredFor(agentFrame.instances),
-        ctx.unknownAccountsOf(message.machineId, message.payload),
+        ctx.unknownAccountsOf(message.machineId, agentFrame.accountStores),
         ctx.claudeSessionsOn(message.machineId),
         // Every session this hub has on the machine: what it kept
         // for any other goes.

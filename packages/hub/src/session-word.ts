@@ -3,8 +3,7 @@
  * the hub's own turn with the origin naming what said it.
  */
 import type {
-  ControlPayload,
-  Envelope,
+  HubEnvelope,
   SendPayload,
 } from "@cawco/core/protocol";
 
@@ -13,7 +12,7 @@ export const sessionWord = (
   content: string,
   origin: SendPayload["message"]["origin"],
   more: { shouldQuery?: boolean } = {}
-): Envelope<SendPayload> => ({
+): HubEnvelope<"send"> => ({
   verb: "send",
   machineId: row.machineId,
   instanceId: row.id,
@@ -36,7 +35,7 @@ export const sessionControl = (
   requestId: string,
   method: string,
   args: unknown[]
-): Envelope<ControlPayload> => ({
+): HubEnvelope<"control"> => ({
   verb: "control",
   machineId: row.machineId,
   instanceId: row.id,

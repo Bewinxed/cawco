@@ -2,7 +2,10 @@ import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import type { CutCommand } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
-import type { AsleepFrame } from "@cawco/core/frames";
+import type {
+  ArrivingAsk,
+  AsleepFrame,
+} from "@cawco/core/frames";
 import {
   CLI_OUTDATED,
   FRESH_START,
@@ -10,7 +13,10 @@ import {
   ROOM_HELD,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
+import type {
+  HubEnvelope,
+  InstanceRow,
+} from "@cawco/core/protocol";
 import type { LastErrorKind } from "@cawco/core/relaunch";
 import type { EndedTask } from "@cawco/core/session/controls";
 import { workWords } from "@cawco/core/words/work";
@@ -24,7 +30,6 @@ import { TURN_UNRECORDED } from "./db/sends";
 import type { MachineLine } from "./db/session-lines";
 import { isKeepAlive } from "./keep-alive";
 import { uuidOf } from "./named-uuid";
-import { peek } from "./payload-peeks";
 import type { createSends } from "./sends";
 import { unreachable } from "./unreachable";
 
@@ -289,7 +294,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
               origin: { kind: "system", name: "restore" },
             },
           },
-        } satisfies Envelope<SendPayload>);
+        } satisfies HubEnvelope<"send">);
         if (sent instanceof ElysiaStatus) {
           console.warn(
             `[hub] the cut tasks were not told to their session: ${sent.response.detail}`
@@ -346,7 +351,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
             origin: { kind: "system", name: "restore" },
           },
         },
-      } satisfies Envelope<SendPayload>,
+      } satisfies HubEnvelope<"send">,
       false
     );
     if (sent instanceof ElysiaStatus) {
@@ -434,11 +439,11 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
   const withdrawnQuestions = new Map<string, string[]>();
 
   /** Keeps the questions `asks` put to the person, which go with their process unanswered. */
-  const noteWithdrawn = (asks: readonly Envelope[]): void => {
+  const noteWithdrawn = (asks: readonly ArrivingAsk[]): void => {
     for (const ask of asks) {
       if (
         !ask.instanceId ||
-        peek(ask.payload, "toolName") !== ASK_USER_QUESTION
+        ask.payload.toolName !== ASK_USER_QUESTION
       ) {
         continue;
       }
@@ -457,7 +462,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
   };
 
   /** Asks that went with the process that parked them: off every screen, and a question asked again when its session next runs. */
-  const goneWithProcess = (asks: readonly Envelope[]): void => {
+  const goneWithProcess = (asks: readonly ArrivingAsk[]): void => {
     noteWithdrawn(asks);
     for (const parked of asks) {
       ctx.pending.resolve(parked.requestId ?? "", "cancelled");
@@ -510,7 +515,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
           origin: { kind: "system", name: "restore" },
         },
       },
-    } satisfies Envelope<SendPayload>);
+    } satisfies HubEnvelope<"send">);
     if (sent instanceof ElysiaStatus) {
       console.warn(
         `[hub] a question asked again was not sent: ${sent.response.detail}`

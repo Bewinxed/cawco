@@ -33,7 +33,7 @@
  */
 
 import type { FramePayload } from "@cawco/core/frames";
-import type { Envelope } from "@cawco/core/protocol";
+import type { HubEnvelope } from "@cawco/core/protocol";
 import {
   announcesParts,
   Inbox,
@@ -151,7 +151,7 @@ const lineFor = (socket: HubSocket, peer: Peer): Line | undefined => {
 
 /** What leaves for a client: an envelope, a `{ type }` message, or a session stream frame. */
 export type ClientMessage =
-  Envelope | { readonly type: string } | { readonly kind: string };
+  HubEnvelope | { readonly type: string } | { readonly kind: string };
 
 /** A parked ask's payload: its input is the call's own, which only a machine is sent. */
 interface AskPayload {

@@ -48,7 +48,7 @@ import type {
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
 import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
-import type { PreviewFrame } from "@cawco/core/frames";
+import type { ArrivingAsk, PreviewFrame } from "@cawco/core/frames";
 import type {
   HandoverCommand,
   HandoverEvent,
@@ -69,8 +69,8 @@ import type {
   BuildInfo,
   ContinuationJob,
   DelegateEvent,
-  Envelope,
   FsPayload,
+  HubEnvelope,
   InstanceRow,
   KeepAlive,
   NamedSpawn,
@@ -93,6 +93,7 @@ import type {
   NeutralMessage,
   NeutralOrigin,
   NeutralResultMessage,
+  PermissionResult,
   SendRecord,
   SendRefusal,
   SentMessage,
@@ -411,9 +412,7 @@ export interface ClosureContext {
   browserAsks: ReturnType<typeof createBrowserAsks>;
   browserStream: ReturnType<typeof createBrowserStream>;
   browsers: ReturnType<typeof createBrowsers>;
-  byIdNow: <P extends { instanceId?: string }>(
-    envelope: Envelope<P>
-  ) => Envelope<P>;
+  byIdNow: <E extends HubEnvelope<"control" | "send">>(envelope: E) => E;
   callAgent: AgentCall;
   callFs: <O extends FsOp>(
     machineId: string,
@@ -444,10 +443,10 @@ export interface ClosureContext {
   ) => Promise<{ kept: Kept } | { ended?: MoveEnded | undefined }>;
   catalogFaults: Map<string, string>;
   caw: ReturnType<typeof createCaw>;
-  changeSend: <Row extends SentMessageRow>(
-    row: Row,
+  changeSend: (
+    row: SentMessageRow,
     change: Parameters<DbShape["updateSend"]>[1]
-  ) => Row;
+  ) => SentMessageRow;
   checkRefused: (accountId: string) => Promise<RefusalVerdict>;
   checkSources: () => Promise<void>;
   claimAccount: (
@@ -560,7 +559,7 @@ export interface ClosureContext {
   forkedFromOf: (payload: SpawnPayload) => { forkedFrom?: string };
   forkNoticeFor: (instanceId: string) => string | undefined;
   forward: (
-    envelope: Envelope<unknown>,
+    envelope: HubEnvelope<"control" | "fs" | "spawn" | "stop">,
     dashboard: ClientSocket,
     remember?: boolean
   ) => boolean;
@@ -703,7 +702,7 @@ export interface ClosureContext {
     machineId: string,
     challenge: ProviderSigninChallenge
   ) => void;
-  keepPrompt: (parked: Envelope) => boolean;
+  keepPrompt: (parked: ArrivingAsk) => boolean;
   keepRemovedMemory: (row: {
     path?: string;
     content: string;
@@ -872,7 +871,7 @@ export interface ClosureContext {
     instanceId: string,
     neutral: { atLimit?: true | undefined; is_error?: boolean | undefined }
   ) => void;
-  noteWithdrawn: (asks: readonly Envelope[]) => void;
+  noteWithdrawn: (asks: readonly ArrivingAsk[]) => void;
   noticesSeen: ReturnType<typeof createNoticesSeen>;
   notifications: ReturnType<typeof createNotifications>;
   /** Whether a machine's agent is connected. */
@@ -903,8 +902,8 @@ export interface ClosureContext {
   ) => boolean;
   ownMachineId: Promise<string>;
   ownMachineIdRead: string | undefined;
-  ownsPermission: (parked: Envelope) => boolean;
-  parkForPerson: (envelope: Envelope<unknown>, outlivesHub?: boolean) => void;
+  ownsPermission: (parked: ArrivingAsk) => boolean;
+  parkForPerson: (envelope: ArrivingAsk, outlivesHub?: boolean) => void;
   passkeyRelay: ReturnType<typeof createPasskeyRelay>;
   pending: PendingShape;
   pendingInstalls: Map<
@@ -945,7 +944,7 @@ export interface ClosureContext {
   plans: ReturnType<typeof createPlans>;
   pluginRow: (row: FleetPlugin) => FleetPlugin;
   prepareContinuation: SessionCallsDeps["prepareContinuation"];
-  presenced: (envelope: Envelope<SendPayload>) => Envelope<SendPayload>;
+  presenced: (envelope: HubEnvelope<"send">) => HubEnvelope<"send">;
   presenceSaid: (request: Request) => string | null;
   previewListeners: ReturnType<typeof createPreviewListeners>;
   previewService: ReturnType<typeof createPreviewService>;
@@ -1018,7 +1017,7 @@ export interface ClosureContext {
     machineId: string,
     instanceId: string,
     requestId: string,
-    result: unknown
+    result: PermissionResult
   ) => void;
   recordSessionAddress: (
     agent: MachineSocket,
@@ -1137,7 +1136,7 @@ export interface ClosureContext {
     plan: { instanceId: string; lineId: string; move: MovedLine | null },
     stage: CompactStage
   ) => void;
-  sendAnswerable: <T extends Envelope>(socket: MachineSocket, frame: T) => T;
+  sendAnswerable: <T extends HubEnvelope>(socket: MachineSocket, frame: T) => T;
   sendFromHub: (
     machineId: string,
     instanceId: string,
@@ -1168,7 +1167,7 @@ export interface ClosureContext {
   /** A frame to a client's socket (wire-socket.ts). */
   sendToClient: SendToClient;
   /** The hub's command to a machine's socket, as it is (wire-socket.ts). */
-  sendToMachine: (socket: MachineSocket, frame: object) => void;
+  sendToMachine: (socket: MachineSocket, frame: HubEnvelope) => void;
   sentFrame: (arg0: SendPayload) => SentMessage;
   sessionAsleep: (machineId: string, instanceId: string) => void;
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;

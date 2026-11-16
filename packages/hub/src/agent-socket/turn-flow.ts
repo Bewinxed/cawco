@@ -3,13 +3,12 @@
 import { CLAUDE_PROVIDER, LIMITED_PROVIDERS } from "@cawco/core/accounts";
 import { FULL_SEND_ANSWER } from "@cawco/core/asks";
 import { detach } from "@cawco/core/detach";
-import type { Envelope } from "@cawco/core/protocol";
+import type { ArrivingAsk } from "@cawco/core/frames";
 import { asLastErrorKind } from "@cawco/core/relaunch";
 import { PROVIDER_RETRY } from "@cawco/core/session-messages";
 import { unreadAskWords } from "@cawco/core/words/ask-lines";
 import { briefingsObserve } from "../briefings";
 import type { HubContext } from "../hub-context";
-import { peek } from "../payload-peeks";
 import { outlivesSession, unreadFields } from "../pending";
 import { type FrameAnswer, type FrameRun, onSessionFrame } from "./frame-run";
 import { runTurnEnded } from "./turn-ended";
@@ -106,18 +105,19 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
   const permissionAsked = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
-    if (message.requestId && kind === "permission_request") {
+    const body = message.payload;
+    if (message.requestId && body.kind === "permission_request") {
+      const ask: ArrivingAsk = { ...message, payload: body };
       // An ask the hub cannot read is told back to its session before
       // anything is stamped, parked, pushed or broadcast: the process
       // that sent it would otherwise wait on a prompt no screen shows.
-      const unread = unreadFields(message);
+      const unread = unreadFields(ask);
       if (unread) {
         console.warn(
           `[hub] ask unreadable session=${message.instanceId ?? "none"} request=${message.requestId} fields=${unread.join(",")}`
         );
         detach(
-          ctx.withdrawUnshown(message, unreadAskWords(unread)),
+          ctx.withdrawUnshown(ask, unreadAskWords(unread)),
           "ask withdrawal"
         );
         return "stop";
@@ -130,7 +130,7 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
       // lands (`settleInstances`, `restore`), so its replayed asks
       // are admitted. A refusal is said, and the asking process is
       // told at once: nothing may wait on an ask nobody can see.
-      const refusal = ctx.askRefusal(owner, message);
+      const refusal = ctx.askRefusal(owner, ask);
       if (refusal) {
         console.warn(
           `[hub] ask refused session=${message.instanceId ?? "none"} request=${message.requestId} tool=${agentFrame.toolName ?? "unknown"}: ${refusal}`
@@ -139,13 +139,13 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         // late process is told.
         const kept = ctx.pending.get(message.requestId);
         if (!(kept && outlivesSession(kept))) {
-          ctx.pending.remember(message.requestId, message);
+          ctx.pending.remember(message.requestId, ask);
           ctx.pending.resolve(message.requestId, "cancelled", {
             why: refusal,
           });
         }
         // Admission does not wait on the machine.
-        detach(ctx.withdrawUnshown(message, refusal), "ask withdrawal");
+        detach(ctx.withdrawUnshown(ask, refusal), "ask withdrawal");
         return "stop";
       }
       // The call a permit of its session granted runs once without
@@ -154,9 +154,9 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
       if (
         owner &&
         !ctx.pending.get(message.requestId) &&
-        ctx.hubAsks.granted(owner, message)
+        ctx.hubAsks.granted(owner, ask)
       ) {
-        detach(ctx.allowGranted(message), "granted call");
+        detach(ctx.allowGranted(ask), "granted call");
         return "stop";
       }
       // A replayed ask (the daemon re-announces unresolved asks after
@@ -179,20 +179,20 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
           : undefined;
       const parent = sender ? ctx.delegateAskParent(sender) : undefined;
       const routed = alreadyParked
-        ? peek(parkedBefore.payload, "routedTo") === "parent"
+        ? parkedBefore.payload.routedTo === "parent"
         : parent !== undefined;
       // Routed before it is kept, so the copy kept across a hub
       // restart, and the permit kept when its process goes (asks.ts
       // `keep`), stay the parent's.
       if (routed) {
-        (body as { routedTo?: string }).routedTo = "parent";
+        body.routedTo = "parent";
       }
       // Its publish is the fan-out below, which every frame no
       // transcript folds goes out by, after its routing here.
       if (
         !ctx.askInOrder(
           requestId,
-          () => ctx.pending.remember(requestId, message, true),
+          () => ctx.pending.remember(requestId, ask, true),
           () => undefined
         )
       ) {
@@ -202,9 +202,9 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         return "stop";
       }
       if (sender && parent) {
-        ctx.delegateWaits.asked(message);
+        ctx.delegateWaits.asked(ask);
       } else if (!run.internal) {
-        ctx.push.onAsk(message);
+        ctx.push.onAsk(ask);
       }
     }
     return "continue";
@@ -212,7 +212,7 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
 
   const permissionSettled = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const body = message.payload;
     // The daemon's live reading of one session. Kept in memory only, so
     // a dashboard that connects mid-turn is handed the rail's now-state
     // in its first frame instead of a blank row. Relayed unchanged below
@@ -221,7 +221,7 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
     // withdrawn by an interrupt). Settling it here is what tells every
     // screen, through `pending.onSettled`; the daemon's frame itself
     // goes no further.
-    if (kind === "permission_settled") {
+    if (body.kind === "permission_settled") {
       // Most of these echo an answer the hub relayed and has already
       // settled; only one still parked is news here.
       const parked = message.requestId
@@ -231,11 +231,10 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         message.requestId &&
         parked?.instanceId === message.instanceId &&
         parked?.machineId === message.machineId &&
-        peek((parked as Envelope).payload, "processGeneration") ===
-          agentFrame.processGeneration &&
+        parked.payload.processGeneration === agentFrame.processGeneration &&
         // A prompt its ended process took with it stays for the
         // session's next process ({@link keepPrompt}).
-        !(body.processEnded === true && ctx.keepPrompt(parked as Envelope))
+        !(body.processEnded === true && ctx.keepPrompt(parked))
       ) {
         // Answered with no answer of the hub's in flight: by Full
         // Send as its session entered it, when the harness says
@@ -260,9 +259,9 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
   };
 
   const pulseHeard = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
-    if (kind === "pulse" && message.instanceId) {
+    const { message } = run;
+    const body = message.payload;
+    if (body.kind === "pulse" && message.instanceId) {
       const { pulse } = body;
       if (pulse) {
         ctx.pulses.set(message.instanceId, pulse);
@@ -283,23 +282,23 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
   };
 
   const namedFromTurn = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // A session named by what it was first asked, whether the ask came
     // through this hub or the harness echoed one it was spawned with.
-    if (kind === "frame" && message.instanceId) {
+    if (body.kind === "frame" && message.instanceId) {
       ctx.nameFromLiveTurn(message.machineId, message.instanceId, body.message);
     }
     return "continue";
   };
 
   const summariserAnswered = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // A continuation's summariser: its turn's end settles the
     // continuation's wait, and what it answered is read from its
     // transcript. Nothing else answers or hears an internal session.
-    if (kind === "frame" && message.instanceId && run.internal) {
+    if (body.kind === "frame" && message.instanceId && run.internal) {
       const neutral = body.message;
       const waiter = ctx.turnWaiters.get(message.instanceId);
       if (neutral.type === "result" && waiter) {
@@ -360,13 +359,13 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
   const turnEnded = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const body = message.payload;
     // A turn's end, in this order: the standing instructions answer
     // it first, then the delegate hand-back delivers the turn's final
     // message to the parent as a queued peer report — once, on the
     // turn that ends the work (aborted turns carry no answer and are
     // skipped).
-    if (kind === "frame" && message.instanceId && !run.internal) {
+    if (body.kind === "frame" && message.instanceId && !run.internal) {
       const neutral = body.message;
       // A pi or OpenCode turn its account's limit refused, as its
       // harness typed the refusal it ended on.
@@ -489,11 +488,11 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
   };
 
   const observers = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // Standing instructions read the frames inside a turn as the
     // dashboards do; a turn's end is answered above.
-    if (kind === "frame" && message.instanceId && !run.internal) {
+    if (body.kind === "frame" && message.instanceId && !run.internal) {
       ctx.ruleEngine.observe(message.instanceId, body.message);
       ctx.keepTasks(message.instanceId, body.message);
       ctx.observeCompaction(message.instanceId, body.message);
@@ -506,7 +505,7 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
 
   const spawnFailed = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
-    const { kind } = agentFrame;
+    const { kind } = message.payload;
     // An agent only frames an error about a session that failed to start
     // or died on its own, so the row records it for whoever looks later.
     if (

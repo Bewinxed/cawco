@@ -1,4 +1,7 @@
-import type { Envelope, SpawnPayload } from "@cawco/core/protocol";
+import type {
+  HubEnvelope,
+  SpawnPayload,
+} from "@cawco/core/protocol";
 import { updatesWords } from "@cawco/core/words/updates";
 import { ElysiaStatus } from "elysia";
 import type { ClosureContext } from "./closure-context";
@@ -146,7 +149,7 @@ export const createStartHolds = (
   const sendSpawn = (
     agent: ReturnType<typeof ctx.registry.agent>,
     machineId: string,
-    envelope: Envelope<SpawnPayload>,
+    envelope: HubEnvelope<"spawn">,
     /** The hub's own launch (a restore, a relaunch): it goes in its turn ({@link paceSpawn}). */
     paced = false
   ) => {

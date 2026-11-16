@@ -12,7 +12,10 @@ import { CONTEXT_LINE } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { COMPACTION_ORIGIN } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
+import type {
+  HubEnvelope,
+  InstanceRow,
+} from "@cawco/core/protocol";
 import type { NeutralSystemMessage } from "@cawco/core/session-messages";
 import { ContextLineSchema } from "@cawco/core/stored-shapes";
 import { contextWords } from "@cawco/core/words/context";
@@ -202,7 +205,7 @@ export const createCompaction = (ctx: CompactionContext) => {
             origin: { kind: "system", name: origin },
           },
         },
-      } satisfies Envelope<SendPayload>,
+      } satisfies HubEnvelope<"send">,
       true
     );
     // Refused as it was taken: the compaction ends now, stopped, and what

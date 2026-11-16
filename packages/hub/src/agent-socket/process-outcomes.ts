@@ -30,10 +30,10 @@ export type ProcessOutcomesContext = Pick<
 
 export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
   const rejectedSend = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // One send did not go: its record says so, and nothing else does.
-    if (kind === "rejected" && message.instanceId) {
+    if (body.kind === "rejected" && message.instanceId) {
       const { uuid, error } = body;
       ctx.takeSendSignal(message.instanceId, {
         kind: "rejected",
@@ -46,11 +46,11 @@ export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
   };
 
   const heldSend = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // A send no process took, handed back whole by its machine: owed
     // again for the session's next process ({@link takeBack}).
-    if (kind === "held_send" && message.instanceId) {
+    if (body.kind === "held_send" && message.instanceId) {
       const { send } = body;
       ctx.takeBack(message.machineId, message.instanceId, send);
       return "stop";
@@ -59,11 +59,11 @@ export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
   };
 
   const takenSend = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
+    const { message } = run;
+    const body = message.payload;
     // A send handed over again that the session took already: read,
     // and no turn follows (sends.ts `takeTaken`).
-    if (kind === "taken_send" && message.instanceId) {
+    if (body.kind === "taken_send" && message.instanceId) {
       const { uuid } = body;
       ctx.takeTaken(message.instanceId, uuid);
       return "stop";
@@ -72,9 +72,9 @@ export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
   };
 
   const stopped = (run: FrameRun): FrameAnswer => {
-    const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
-    if (kind === "stopped" && message.instanceId) {
+    const { message } = run;
+    const body = message.payload;
+    if (body.kind === "stopped" && message.instanceId) {
       if (!ctx.lifecycle.confirm(message.machineId, message.instanceId, body)) {
         return "stop";
       }
@@ -109,8 +109,8 @@ export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
 
   const asleep = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
-    if (kind === "asleep" && message.instanceId) {
+    const body = message.payload;
+    if (body.kind === "asleep" && message.instanceId) {
       const [process] = ctx.db.getInstancesByIds([message.instanceId]);
       if (
         process &&
@@ -142,7 +142,7 @@ export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
 
   const recoveryUnavailable = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
-    const { kind } = agentFrame;
+    const { kind } = message.payload;
     if (kind === "recovery_unavailable" && message.instanceId) {
       const [process] = ctx.db.getInstancesByIds([message.instanceId]);
       if (

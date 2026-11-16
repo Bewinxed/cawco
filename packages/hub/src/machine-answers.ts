@@ -14,7 +14,7 @@ import type {
   HarnessUnanswered,
 } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type { Envelope } from "@cawco/core/protocol";
+import type { HubEnvelope } from "@cawco/core/protocol";
 import { HTTPError, problem } from "elysia";
 import type { z } from "zod";
 import { received } from "./stored-json";
@@ -175,7 +175,7 @@ export type AwaitReply = <K extends ControlName>(
   method: K,
   requestId: string,
   timeoutMs: number,
-  send: () => Envelope | undefined,
+  send: () => HubEnvelope | undefined,
   letGo?: AbortSignal
 ) => Promise<Bounded<ControlAnswer<K>>>;
 
@@ -185,7 +185,7 @@ export type AwaitFs = <O extends FsOp>(
   op: O,
   requestId: string,
   timeoutMs: number,
-  send: () => Envelope | undefined
+  send: () => HubEnvelope | undefined
 ) => Promise<Bounded<FsAnswer<O>>>;
 
 /** A session's start, waited on (machine-calls.ts `awaitStart`): the hub reads nothing of its answer but whether it started. */
@@ -193,7 +193,7 @@ export type AwaitStart = (
   machineId: string,
   instanceId: string,
   requestId: string,
-  send: () => Envelope | undefined
+  send: () => HubEnvelope | undefined
 ) => Promise<Bounded<CallAnswer<unknown>>>;
 
 /** A control asked of a session's own process (machine-calls.ts `readSessionProcess`). */

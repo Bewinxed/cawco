@@ -6,7 +6,7 @@
  */
 
 import type { ArtifactNeed } from "@cawco/core/artifact-needs";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type { InstanceRow, MachineEnvelope } from "@cawco/core/protocol";
 import type { NeutralResultMessage } from "@cawco/core/session-messages";
 import type { DbShape } from "../db";
 
@@ -19,7 +19,7 @@ export interface TurnEnd {
   harness: string | undefined;
   instanceId: string;
   machineId: string;
-  message: Envelope;
+  message: MachineEnvelope<"frames">;
   neutral: NeutralResultMessage;
   onNoReply: boolean;
   parentId: string | null | undefined;

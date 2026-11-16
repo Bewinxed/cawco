@@ -77,7 +77,10 @@ import { readWithin } from "@cawco/core/bounded";
 import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
-import type { PermissionRequestFrame } from "@cawco/core/frames";
+import type {
+  ArrivingAsk,
+  PermissionRequestFrame,
+} from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { PairingRequest } from "@cawco/core/hub-auth";
 import { type Install, installName } from "@cawco/core/install";
@@ -89,7 +92,9 @@ import {
   MEMORY_PROPOSAL_TOOL,
   PROJECT_SETTINGS_TOOL,
 } from "@cawco/core/permission-presentation";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type {
+  InstanceRow,
+} from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { TurnWakes } from "@cawco/core/session-messages";
 import { PermissionRequestFrameSchema } from "@cawco/core/stored-shapes";
@@ -728,7 +733,7 @@ const PUSHED_ASK = PermissionRequestFrameSchema.partial().extend({
  * presentation stamped, under its request id, and not one routed to the
  * asker's parent; undefined for any other.
  */
-const pushedAskOf = (envelope: Envelope) => {
+const pushedAskOf = (envelope: ArrivingAsk) => {
   const read = PUSHED_ASK.safeParse(envelope.payload);
   if (!read.success) {
     return;
@@ -1761,7 +1766,7 @@ export const createPush = ({
      * Call wherever the ask reaches the operator; a request is pushed once
      * however often it is called.
      */
-    onAsk(envelope: Envelope): void {
+    onAsk(envelope: ArrivingAsk): void {
       const pushed = pushedAskOf(envelope);
       if (!pushed || asked.has(pushed.requestId)) {
         return;

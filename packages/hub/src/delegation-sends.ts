@@ -12,13 +12,12 @@ import { RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { PermissionMode } from "@cawco/core/harness/kinds";
 import type {
   ControlPayload,
-  Envelope,
+  HubEnvelope,
   InstanceRow,
-  SendPayload,
   SpawnPayload,
 } from "@cawco/core/protocol";
 import { CONTROL_INTERRUPT } from "@cawco/core/session/controls";
-import type { PermissionResult } from "@cawco/core/session-messages";
+
 import { turnCutWords } from "@cawco/core/words/cuts";
 import { delegateWaitWords } from "@cawco/core/words/delegates";
 import { ElysiaStatus, problem } from "elysia";
@@ -28,7 +27,11 @@ import type { createDelegateWaits } from "./delegate-waits";
 import { sessionLabel } from "./labels";
 import { awayProblem } from "./machine-answers";
 import { answerPermission } from "./pending";
-import { type createRelayControl, peekAnswer } from "./relay-control";
+import {
+  ANSWER_UNREAD,
+  answerOfControl,
+  type createRelayControl,
+} from "./relay-control";
 import type { createSends } from "./sends";
 import { type createSpawns, peekParent } from "./spawns";
 import { type HandoffInputs, mayStartRefusal } from "./work-items";
@@ -116,11 +119,11 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
     requester: InstanceRow,
     control: ControlPayload
   ) => {
-    const result = control.args?.[1] as PermissionResult;
-    const answer = peekAnswer(control);
+    const answer = answerOfControl(control);
     if (!answer) {
-      throw new Error("A permission answer names no request.");
+      throw new Error(ANSWER_UNREAD);
     }
+    const { result } = answer;
     const owned = deps.db.asks.get(answer.requestId);
     const parked = deps.pending.get(answer.requestId);
     if (parked && deps.delegateWaits.personOnly(parked)) {
@@ -165,7 +168,7 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
    * as that session's.
    */
   const controlDelegate = (
-    envelope: Envelope,
+    envelope: HubEnvelope<"control">,
     row: InstanceRow,
     requester: InstanceRow,
     control: ControlPayload
@@ -200,7 +203,7 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
      * Hands a session's send to the hub's one send path now, and answers
      * what became of it; a send that does not go answers the hub's problem.
      */
-    deliver: (envelope: Envelope<SendPayload>, actor: InstanceRow) => {
+    deliver: (envelope: HubEnvelope<"send">, actor: InstanceRow) => {
       const requester = caller(actor);
       return Promise.resolve(
         requester instanceof ElysiaStatus
@@ -216,7 +219,7 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
     handOff: async (
       target: string,
       inputs: unknown[],
-      compose: (landed: HandoffInputs) => Envelope<SendPayload>,
+      compose: (landed: HandoffInputs) => HubEnvelope<"send">,
       actor: InstanceRow
     ) => {
       const requester = caller(actor);
@@ -242,9 +245,9 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
      * in place. Answers the folder it runs in as the hub settled it.
      */
     spawn: async (
-      envelope: Envelope<
-        SpawnPayload & { fallbackPermissionMode?: PermissionMode }
-      >,
+      envelope: HubEnvelope<"spawn"> & {
+        payload: { fallbackPermissionMode?: PermissionMode };
+      },
       actor: InstanceRow
     ) => {
       const requester = caller(actor);
@@ -282,7 +285,7 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
      * interrupt, or an answer to its ask), each checked in that order before
      * the answer or the control goes; the hub's problem when it may not.
      */
-    forward: async (envelope: Envelope, actor: InstanceRow) => {
+    forward: async (envelope: HubEnvelope, actor: InstanceRow) => {
       // The MCP resolver supplies the caller separately, never from provenance
       // on an envelope. Recheck the row in case its permission changed mid-call.
       const requester = caller(actor);
@@ -290,20 +293,17 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
         return requester;
       }
       if (envelope.verb === "send") {
-        const sent = deps.sessionSend(
-          envelope as Envelope<SendPayload>,
-          requester
-        );
+        const sent = deps.sessionSend(envelope, requester);
         return sent instanceof ElysiaStatus ? sent : undefined;
       }
-      const control = envelope.payload as ControlPayload;
       if (!(
         envelope.verb === "control" &&
-        (control.method === CONTROL_INTERRUPT ||
-          control.method === RESOLVE_PERMISSION)
+        (envelope.payload.method === CONTROL_INTERRUPT ||
+          envelope.payload.method === RESOLVE_PERMISSION)
       )) {
         throw new Error(`Unsupported delegation operation ${envelope.verb}`);
       }
+      const control = envelope.payload;
       const row = delegateControlled(envelope.instanceId, requester);
       if (row instanceof ElysiaStatus) {
         return row;

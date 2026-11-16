@@ -50,13 +50,16 @@
  * design/ (memory.ts `personsTier`).
  */
 
+import type { ArrivingAsk } from "@cawco/core/frames";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
 import { DESIGN_PROPOSAL_TOOL } from "@cawco/core/permission-presentation";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type {
+  InstanceRow,
+} from "@cawco/core/protocol";
 import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -1439,7 +1442,7 @@ export const createDesignSystem = (deps: {
    */
   boundary: (workspaceId: string) => WorkspaceRef | undefined;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
-  park: (envelope: Envelope) => void;
+  park: (envelope: ArrivingAsk) => void;
   /**
    * Takes a settled ask off the pending ledger: answered, or (`closed`, a
    * sentence with no stop) closed by the hub because it no longer applies.
@@ -1623,7 +1626,7 @@ export const createDesignSystem = (deps: {
       : folderStore(projectId, author, deps.folderChanged, session, message);
 
   /** The proposal as the person's ask: drawn as its diff, answered by Approve or Deny, where it was made too. */
-  const envelopeOf = (row: DesignProposalRow, project: string): Envelope => ({
+  const envelopeOf = (row: DesignProposalRow, project: string): ArrivingAsk => ({
     verb: "frames",
     machineId: "hub",
     instanceId: row.id,
