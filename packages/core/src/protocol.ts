@@ -1233,9 +1233,12 @@ export interface InstanceRow {
    * The account a person moved it to that it moves to at its next launch,
    * as the hub keeps it (its `owed_moves`), until the move lands: what it
    * waits on, its turn's end, the background work its process holds ending,
-   * or its machine connected again. Absent when it owes none.
+   * or its machine connected again. Absent when it owes none. `model`: a
+   * model a person picked while it waits, checked against that account; the
+   * launch that lands there runs it, and the process it leaves is never
+   * asked to change.
    */
-  owedMove?: { accountId: string; waits: OwedMoveWait };
+  owedMove?: { accountId: string; model?: string; waits: OwedMoveWait };
   /**
    * The session that started this one (`delegate`, `start_session`), which every rail nests it under; absent on a
    * session a person started. A delegate is told from a session merely

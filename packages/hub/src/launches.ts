@@ -525,9 +525,14 @@ export const createLaunches = (ctx: LaunchesContext) => {
       throw new Error("A spawn has no recorded process generation.");
     }
     // A process launched now runs on the account a person moved its session
-    // to mid-turn; a reattach takes the process as it runs.
+    // to mid-turn, on the model picked with that move; a reattach takes the
+    // process as it runs.
     const stored = payload.reattachOnly ? read : ctx.takeOwedMove(read);
     const row = knownRow ?? stored;
+    const launching =
+      stored.model && stored.model !== read.model
+        ? { ...asked, model: stored.model }
+        : asked;
     // The row's harness, on every launch it sends: its conversation is that
     // harness's ({@link enforceRowSessionKey} refused any other).
     const { harness } = read;
@@ -553,8 +558,8 @@ export const createLaunches = (ctx: LaunchesContext) => {
       // A clean session is clean on every spawn of its row: no skills, and
       // CawCo's MCP server alone (`cleanSpawn`).
       ...(row.clean
-        ? cleanSpawn(fencedSpawn(asked, row, harness))
-        : fencedSpawn(asked, row, harness)),
+        ? cleanSpawn(fencedSpawn(launching, row, harness))
+        : fencedSpawn(launching, row, harness)),
       ...rowKeeps(row),
       harness,
       ...effort,

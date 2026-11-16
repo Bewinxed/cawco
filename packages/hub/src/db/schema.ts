@@ -3476,6 +3476,11 @@ export const owedMoves = sqliteTable("owed_moves", {
   /** The line written once it lands; null for none. */
   move: storedJson(AccountMoveSchema)("move"),
   waits: storedEnum(OwedMoveWaitSchema)("waits").notNull(),
+  /**
+   * A model a person picked while the move waits, checked against the
+   * account it lands on: the row takes it as the move lands. Null for none.
+   */
+  pickedModel: text("picked_model"),
   createdAt: stampedNow("created_at"),
 });
 

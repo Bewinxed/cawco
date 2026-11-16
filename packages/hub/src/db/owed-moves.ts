@@ -12,6 +12,13 @@ import { owedMoves } from "./schema";
 export interface OwedMove {
   /** A person asked for it ({@link OwedMovesDb}): the at-limit controller only carries it out. */
   byHand?: true;
+  /**
+   * A model a person picked while the move waited, checked against the
+   * account it lands on (limit-moves.ts `pickWithMove`): the launch that
+   * lands runs it, and the row takes it as the move lands (`landOwed`). The
+   * process the move leaves is never asked to change.
+   */
+  model?: string;
   move: AccountMove | null;
   to?: string;
   /**
@@ -45,6 +52,7 @@ const toOwed = (row: Row): OwedMove => ({
   waits: row.waits,
   ...(row.toAccountId === null ? {} : { to: row.toAccountId }),
   ...(row.byHand ? { byHand: true as const } : {}),
+  ...(row.pickedModel === null ? {} : { model: row.pickedModel }),
 });
 
 export const owedMovesDb = (db: BunSQLiteDatabase): OwedMovesDb => {
@@ -71,6 +79,7 @@ export const owedMovesDb = (db: BunSQLiteDatabase): OwedMovesDb => {
         byHand: owed.byHand === true,
         move: owed.move,
         waits: owed.waits,
+        pickedModel: owed.model ?? null,
         createdAt: new Date(),
       };
       db.insert(owedMoves)

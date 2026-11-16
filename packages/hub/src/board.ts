@@ -9,6 +9,7 @@ import { withAncestors } from "./board-ancestors";
 import type { DbShape } from "./db";
 import type { BoardInstanceRow } from "./db/instances";
 import { listedAt } from "./db/instances";
+import type { OwedMove } from "./db/owed-moves";
 import type { HubContext } from "./hub-context";
 import type { KeepAliveRow } from "./keep-alive";
 import { keepAliveState } from "./keep-alive";
@@ -274,6 +275,32 @@ export const createBoard = (ctx: BoardContext) => {
     return shown;
   };
   /**
+   * The move `row` owes as its menu says it (InstanceRow `owedMove`): a
+   * person's to another account, or any whose relaunch carries a model a
+   * person picked meanwhile, named by the account it lands on (the row's
+   * own, for a relaunch alone). None for a move of the hub's own with no
+   * pick, or one landing on no account.
+   */
+  const owedMoveOf = (
+    row: { accountId?: string | null },
+    owed: OwedMove | undefined
+  ): Pick<InstanceRow, "owedMove"> => {
+    const accountId = owed?.to ?? row.accountId;
+    const said =
+      owed !== undefined &&
+      ((owed.to !== undefined && owed.byHand) || owed.model !== undefined);
+    if (!(said && accountId)) {
+      return {};
+    }
+    return {
+      owedMove: {
+        accountId,
+        waits: owed.waits,
+        ...(owed.model === undefined ? {} : { model: owed.model }),
+      },
+    };
+  };
+  /**
    * Rows as every reader of the board is handed them: what the database
    * does not hold laid over each (presence, damage, running delegates,
    * keep-alive, its queued sends, its owed move, its stall). Whether its
@@ -284,7 +311,8 @@ export const createBoard = (ctx: BoardContext) => {
     // The move a person asked of each session that it still owes, off its
     // one record (`owedMoves`, read here from the database: the board is
     // first read before that is declared). A move of the hub's own
-    // (rebalance's, the at-limit controller's) says itself when it lands.
+    // (rebalance's, the at-limit controller's) says itself when it lands,
+    // unless a person picked a model to go with it.
     const owed = new Map(ctx.db.owedMoves.list());
     // Each session stopped at its limit, in the at-limit controller's words:
     // its row, head and transcript show the stop as an error.
@@ -298,9 +326,7 @@ export const createBoard = (ctx: BoardContext) => {
       return {
         ...row,
         ...(queued > 0 ? { queuedSends: queued } : {}),
-        ...(one?.to !== undefined && one.byHand
-          ? { owedMove: { accountId: one.to, waits: one.waits } }
-          : {}),
+        ...owedMoveOf(row, one),
         ...(stall ? { stalled: stall } : {}),
       };
     });

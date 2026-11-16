@@ -46152,10 +46152,13 @@
             "description": "Who started it ({@link SessionOrigin}), as the hub stamped it at its\nstart. A row the hub sends always has it."
           },
           "owedMove": {
-            "description": "The account a person moved it to that it moves to at its next launch,\nas the hub keeps it (its `owed_moves`), until the move lands: what it\nwaits on, its turn's end, the background work its process holds ending,\nor its machine connected again. Absent when it owes none.",
+            "description": "The account a person moved it to that it moves to at its next launch,\nas the hub keeps it (its `owed_moves`), until the move lands: what it\nwaits on, its turn's end, the background work its process holds ending,\nor its machine connected again. Absent when it owes none. `model`: a\nmodel a person picked while it waits, checked against that account; the\nlaunch that lands there runs it, and the process it leaves is never\nasked to change.",
             "type": "object",
             "properties": {
               "accountId": {
+                "type": "string"
+              },
+              "model": {
                 "type": "string"
               },
               "waits": {
@@ -85614,9 +85617,13 @@
               "$ref": "#/components/schemas/SessionOrigin"
             },
             "owedMove": {
+              "description": "The account a person moved it to that it moves to at its next launch,\nas the hub keeps it (its `owed_moves`), until the move lands: what it\nwaits on, its turn's end, the background work its process holds ending,\nor its machine connected again. Absent when it owes none. `model`: a\nmodel a person picked while it waits, checked against that account; the\nlaunch that lands there runs it, and the process it leaves is never\nasked to change.",
               "type": "object",
               "properties": {
                 "accountId": {
+                  "type": "string"
+                },
+                "model": {
                   "type": "string"
                 },
                 "waits": {

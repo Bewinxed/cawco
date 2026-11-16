@@ -167,6 +167,7 @@ export type RelayControlContext = Pick<
   | "notifications"
   | "owedMoves"
   | "ownsPermission"
+  | "pickWithMove"
   | "pending"
   | "pendingInstalls"
   | "projectMemory"
@@ -495,15 +496,6 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     return true;
   };
 
-  /**
-   * A model change on a pi or OpenCode session that crosses into or out of
-   * an account provider: not relayed to the running process, which would go
-   * on reading the store it started on. The row takes the new model and the
-   * account placement gives it (none for a model outside accounts), and the
-   * session moves at the turn boundary: now when it is at rest, else when its
-   * turn ends. Undefined when the change crosses nothing; a refusal when no
-   * account can take the new model.
-   */
   /** Whether moving a pi or OpenCode row to `model` changes the provider of the account it runs on (or none). */
   const crossesProvider = (
     row: InstanceRow | undefined,
@@ -520,14 +512,19 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     );
   };
 
+  /**
+   * A model change on a pi or OpenCode session that crosses into or out of
+   * an account provider: the running process would go on reading the store
+   * it started on, so its row takes the account placement gives the new
+   * model (none for a model outside accounts) and the model rides a
+   * relaunch owed to it ({@link owedMoves}, `model`): now when it is at
+   * rest, else when its turn ends. A refusal when no account can take the
+   * new model.
+   */
   const crossModel = async (
-    instanceId: string,
+    row: InstanceRow,
     model: string
-  ): Promise<"crossed" | { refusal: string } | undefined> => {
-    const [row] = ctx.db.getInstancesByIds([instanceId]);
-    if (!crossesProvider(row, model)) {
-      return undefined;
-    }
+  ): Promise<"carried" | { refusal: string }> => {
     const next = ctx.accountProviderFor(row.machineId, row.harness, model);
     const placed = next
       ? ctx.claimAccount(row.machineId, { ...row, model })
@@ -535,24 +532,47 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     if ("refusal" in placed) {
       return placed;
     }
-    ctx.db.patchInstance(row.id, {
-      model,
-      accountId: placed.accountId ?? null,
-    });
+    ctx.db.patchInstance(row.id, { accountId: placed.accountId ?? null });
+    ctx.owedMoves.set(row.id, { move: null, waits: "turn", model });
     if (await ctx.sessionIdle(row)) {
       ctx.relaunchOnAccount(row.id);
-    } else {
-      ctx.owedMoves.set(row.id, { move: null, waits: "turn" });
     }
-    return "crossed";
+    return "carried";
   };
 
   /**
-   * A dashboard's model change that crosses an account provider
-   * ({@link crossModel}): answered here, never relayed. False for every
-   * other control, which goes on to the machine.
+   * How a model picked for `instanceId` goes, when the hub answers it
+   * itself: one that crosses an account provider ({@link crossModel}), or
+   * one picked while the session owes a move to another account
+   * (limit-moves.ts `pickWithMove`), judged against the account it lands
+   * on and carried with the move. Undefined for every other pick, which the
+   * session's process takes. Either way the process a move leaves is never
+   * asked to change: its account may be the one refusing it.
    */
-  const relayModelCrossing = (
+  const modelPickOf = (
+    instanceId: string,
+    model: string
+  ): Promise<"carried" | { refusal: string }> | undefined => {
+    const [row] = ctx.db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return;
+    }
+    if (
+      ctx.owedMoves.get(row.id)?.to === undefined &&
+      crossesProvider(row, model)
+    ) {
+      return crossModel(row, model);
+    }
+    const taken = ctx.pickWithMove(row, model);
+    return taken === undefined ? undefined : Promise.resolve(taken);
+  };
+
+  /**
+   * A dashboard's model change the hub answers itself ({@link modelPickOf}):
+   * never relayed. False for every other control, which goes on to the
+   * machine.
+   */
+  const relayModelPick = (
     message: HubEnvelope<"control">,
     dashboard: ClientSocket,
     replyAsFrame: boolean
@@ -566,8 +586,8 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     ) {
       return false;
     }
-    const [row] = ctx.db.getInstancesByIds([instanceId]);
-    if (!crossesProvider(row, asked)) {
+    const pick = modelPickOf(instanceId, asked);
+    if (!pick) {
       return false;
     }
     const requestId = message.requestId ?? payload.requestId;
@@ -582,21 +602,21 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         ctx.streams.settleCommand(requestId, frame);
       }
     };
-    // The receipt is sent when the move is decided, or when deciding it
-    // threw: a move that failed says so on the command that asked for it.
-    const move = crossModel(instanceId, asked).then(
-      (crossed) => {
+    // The receipt is sent when the pick is decided, or when deciding it
+    // threw: a pick that failed says so on the command that asked for it.
+    const decided = pick.then(
+      (taken) => {
         receipt(
-          crossed && crossed !== "crossed"
-            ? {
+          taken === "carried"
+            ? { kind: "control_result", requestId, ok: true }
+            : {
                 kind: "control_result",
                 requestId,
                 ok: false,
-                error: crossed.refusal,
+                error: taken.refusal,
               }
-            : { kind: "control_result", requestId, ok: true }
         );
-        ctx.publishInstances(row.machineId);
+        ctx.publishInstances(message.machineId);
       },
       (error: unknown) => {
         const reason = error instanceof Error ? error.message : String(error);
@@ -611,7 +631,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         });
       }
     );
-    detach(move, "model move");
+    detach(decided, "model pick");
     return true;
   };
 
@@ -622,7 +642,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
   ): boolean => {
     const message = ctx.byIdNow(asked);
-    if (relayModelCrossing(message, dashboard, replyAsFrame)) {
+    if (relayModelPick(message, dashboard, replyAsFrame)) {
       return true;
     }
     // The hub owns skill reloads: an unchanged catalog must retain the CLI's

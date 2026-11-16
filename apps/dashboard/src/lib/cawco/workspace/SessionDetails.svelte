@@ -46,7 +46,12 @@
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
-  import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";
+  import {
+    movingTo,
+    movingWords,
+    pickWords,
+    stopWords,
+  } from "../accounts/switch.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import HarnessLogo from "../HarnessLogo.svelte";
   import { answeredOr } from "../hub/control";
@@ -162,6 +167,14 @@
     }
     return resume ? resume.model : (session?.model ?? null);
   });
+  /**
+   * A model picked while the session waits to move (its row's
+   * `owedMove.model`): the hub carries it with the move, and the process it
+   * leaves keeps the one it runs. The chip and the list show it from the
+   * pick, as the account chip shows the account it is moving to.
+   */
+  const picked = $derived(kept || resume ? undefined : row?.owedMove?.model);
+  const shownModel = $derived(picked ?? model);
 
   /**
    * This session's provider limit (owner pick h): the window that stops its
@@ -481,6 +494,11 @@
       : (session?.permissionMode ?? null);
   });
 
+  /** Whether this tab's change of `slot` is on its way, not yet answered. */
+  function inFlight(slot: Exclude<Slot, "account">) {
+    const record = latestCommandFor(sessionId, kinds[slot]);
+    return record?.stage === "submitted" || record?.stage === "accepted";
+  }
   function pending(slot: Slot) {
     if (slot === "account") {
       return row ? movingTo(row) !== undefined : false;
@@ -491,8 +509,29 @@
     if (slot === "model" && kept) {
       return kept.pending;
     }
-    const record = latestCommandFor(sessionId, kinds[slot]);
-    return record?.stage === "submitted" || record?.stage === "accepted";
+    // A model picked to go with a move waits for it to land.
+    return inFlight(slot) || (slot === "model" && picked !== undefined);
+  }
+  /**
+   * A model pick that rides a move to another account, with no newer pick
+   * on its way: the account's line says the two together
+   * ({@link movingWords}), so the model's says nothing.
+   */
+  const ridesMove = $derived(
+    picked !== undefined &&
+      !!row &&
+      movingTo(row) !== undefined &&
+      !inFlight("model")
+  );
+  /** What a change on its way says on its line. */
+  function pendingWords(slot: Slot): string | undefined {
+    if (slot === "account") {
+      return row ? movingWords(row) : undefined;
+    }
+    if (slot === "model" && !inFlight("model") && row) {
+      return pickWords(row);
+    }
+    return "Applying change…";
   }
   function failure(slot: Slot) {
     // A refused move is moveTo's toast, the one place the menu and the card
@@ -561,6 +600,11 @@
    * when its row names another, never when it was called off.
    */
   let accountBefore = untrack(() => row?.accountId ?? null);
+  /**
+   * The model last picked to go with a move: it landed only when the row
+   * runs it, never when the move, and the pick with it, was dropped.
+   */
+  let pickedBefore = untrack(() => picked);
   $effect(() => {
     const id = sessionId;
     const now = {
@@ -576,6 +620,8 @@
       account: failure("account") !== null,
     };
     const account = row?.accountId ?? null;
+    const runs = row?.model ?? null;
+    const pick = picked;
     untrack(() => {
       const moved = id !== doneFor;
       for (const slot of SLOTS) {
@@ -584,7 +630,10 @@
           wasPending[slot] &&
           !now[slot] &&
           !failed[slot] &&
-          (slot !== "account" || account !== accountBefore);
+          (slot !== "account" || account !== accountBefore) &&
+          (slot !== "model" ||
+            pickedBefore === undefined ||
+            runs === pickedBefore);
         if (landed || moved || now[slot]) {
           clearTimeout(holds.get(slot));
           done[slot] = landed;
@@ -603,6 +652,9 @@
       if (!now.account) {
         accountBefore = account;
       }
+      if (pick !== undefined || !now.model) {
+        pickedBefore = pick;
+      }
     });
   });
   onDestroy(() => {
@@ -616,7 +668,7 @@
       storedStore.pickResume(sessionId, { model: next });
       return;
     }
-    if (!(editable && machineId) || pending("model") || next === model) {
+    if (!(editable && machineId) || inFlight("model") || next === shownModel) {
       return;
     }
     submitCommand(sessionId, machineId, {
@@ -689,9 +741,9 @@
 </script>
 
 {#snippet modelChip()}
-  <ProviderLogo model={model ?? ""} size="control" />
+  <ProviderLogo model={shownModel ?? ""} size="control" />
   <span data-slot="chip-label"
-    >{model ? modelLabel(model, harness) : "Model not reported"}</span
+    >{shownModel ? modelLabel(shownModel, harness) : "Model not reported"}</span
   >
 {/snippet}
 
@@ -732,7 +784,7 @@
         />
       {/if}
     </div>
-  {:else if pending(slot)}
+  {:else if pending(slot) && !(slot === "model" && ridesMove)}
     <p
       data-slot="feedback"
       class="mark-line mt-space-2 flex items-start gap-space-2 type-body wrap-anywhere text-ink-muted"
@@ -742,9 +794,7 @@
     >
       <!-- A move says when it takes effect, in its rows' words (switch.svelte.ts). -->
       <span class="mark-cell"><LiveDot /></span><span class="min-w-0"
-        >{slot === "account" && row
-          ? movingWords(row)
-          : "Applying change…"}</span
+        >{pendingWords(slot)}</span
       >
     </p>
   {:else if done[slot]}
@@ -934,7 +984,7 @@
                   installed={kept ? keptHarnesses : [harness]}
                   machineIds={machineId ? [machineId] : []}
                   machineName={machine?.hostname ?? ""}
-                  model={shownHarness === harness ? (model ?? "") : ""}
+                  model={shownHarness === harness ? (shownModel ?? "") : ""}
                   onharness={(next) => {
                     // A running session keeps its harness; a kept one's
                     // rail is browsed, and a model picked there chooses both.

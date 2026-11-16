@@ -9,9 +9,11 @@
  * says so.
  */
 import type { Account, AccountProvider } from "@cawco/core/accounts";
+import { type MoveWait, owedMoveWords } from "@cawco/core/words/owed-moves";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
 import type { BoardRow } from "../links";
+import { modelLabel } from "../models.svelte";
 import { faultOn, pendingOn } from "../session-acts.svelte";
 import { accountsStore } from "../stores/accounts.svelte";
 import { boardStore, machineConnected } from "../stores/board.svelte";
@@ -27,7 +29,8 @@ import { accountsOf, nameOf, signinState } from "./model.svelte";
 export type AccountHolder = Pick<
   BoardRow,
   "accountId" | "id" | "machineId" | "owedMove"
->;
+> &
+  Partial<Pick<BoardRow, "harness">>;
 
 const moving = new SvelteMap<string, string>();
 
@@ -85,14 +88,45 @@ export const shownAccount = (instance: AccountHolder): string | null =>
   movingTo(instance) ?? instance.accountId ?? null;
 
 /**
+ * What the move a session is making waits on (its row's `owedMove.waits`,
+ * the hub's, never guessed: a session stopped at its limit has no turn to
+ * end), or its machine away, as its conversation is copied there: core
+ * words/owed-moves.ts `MoveWait`. A move with nothing to wait on goes now.
+ */
+function waitOf(instance: AccountHolder): MoveWait {
+  if (!machineConnected(instance.machineId)) {
+    const host =
+      boardStore.machines.find((one) => one.machineId === instance.machineId)
+        ?.hostname || instance.machineId;
+    return { kind: "machine", host };
+  }
+  switch (instance.owedMove?.waits) {
+    case "turn":
+      return { kind: "turn" };
+    case "work":
+      return { kind: "work" };
+    case "machine":
+    case undefined:
+      return { kind: "now" };
+  }
+}
+
+/** The model picked to go with a session's move, by name; undefined when none rides it. */
+function pickedWith(instance: AccountHolder): string | undefined {
+  const picked = instance.owedMove?.model;
+  return picked === undefined
+    ? undefined
+    : modelLabel(picked, instance.harness ?? undefined);
+}
+
+/**
  * When the move a session is making takes effect, in its rows' words, or
  * undefined when it makes none: the hub moves a session at rest (asleep,
  * stopped, stopped at its limit, or running between turns) at once; one
  * mid-turn at the turn's end; one whose background work keeps its process
  * when that work ends; one whose machine is away once that machine is
- * connected again, as its conversation is copied there. What it waits on is
- * the hub's (its row's `owedMove.waits`), never guessed: a session stopped
- * at its limit has no turn to end.
+ * connected again. A model picked meanwhile is named with it: it goes
+ * with the move ({@link pickedWith}).
  */
 export function movingWords(instance: AccountHolder): string | undefined {
   const target = movingTo(instance);
@@ -102,23 +136,24 @@ export function movingWords(instance: AccountHolder): string | undefined {
   const account = accountsStore.accounts?.accounts.find(
     (one) => one.id === target
   );
-  const name = account ? nameOf(account) : "another account";
-  if (!machineConnected(instance.machineId)) {
-    const host =
-      boardStore.machines.find((one) => one.machineId === instance.machineId)
-        ?.hostname || instance.machineId;
-    return `Moves to ${name} when ${host} is connected again`;
-  }
-  switch (instance.owedMove?.waits) {
-    case "turn":
-      return `Moves to ${name} when this turn ends`;
-    case "work":
-      return `Moves to ${name} when its background work ends`;
-    case "machine":
-    case undefined:
-      break;
-  }
-  return `Moving to ${name}…`;
+  return owedMoveWords.moving(
+    account ? nameOf(account) : "another account",
+    pickedWith(instance),
+    waitOf(instance)
+  );
+}
+
+/**
+ * A model picked to go with a relaunch the session owes on the account it
+ * already names (one a model crossing providers asked), in its menu's
+ * words; undefined when no such pick waits. A pick riding a move to
+ * another account is said by that move ({@link movingWords}).
+ */
+export function pickWords(instance: AccountHolder): string | undefined {
+  const picked = pickedWith(instance);
+  return picked === undefined || movingTo(instance) !== undefined
+    ? undefined
+    : owedMoveWords.runs(picked, waitOf(instance));
 }
 
 /**

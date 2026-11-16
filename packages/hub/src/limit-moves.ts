@@ -12,6 +12,7 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { COMPACTION_ORIGIN } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { doing } from "@cawco/core/loop-watch";
+import { modelAdmitted, modelListingOn } from "@cawco/core/model-names";
 import type { InstanceStatus } from "@cawco/core/protocol";
 import type { MoveEnded } from "@cawco/core/session/controls";
 import { HOUR_MS } from "@cawco/core/time";
@@ -23,6 +24,7 @@ import {
 } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
+import { owedMoveWords } from "@cawco/core/words/owed-moves";
 import { relaunchWords } from "@cawco/core/words/relaunch";
 import { ElysiaStatus } from "elysia";
 import { machineAccount } from "./accounts";
@@ -65,17 +67,22 @@ const AT_REST: ReadonlySet<InstanceStatus> = new Set([
   "error",
 ]);
 
+/** A sentence's closing stop, dropped so it sits inside another. */
+const SENTENCE_STOP = /\.$/u;
+
 /** A session's row as a mover reads it. */
 type MoverRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
 export type LimitMovesContext = Pick<
   ClosureContext,
   | "SETTLED"
+  | "accountProviderFor"
   | "accountWords"
   | "admission"
   | "atLimit"
   | "carryOn"
   | "carryTestFor"
+  | "catalogFaults"
   | "cloneForContinuation"
   | "continuationRefusal"
   | "credentialTurns"
@@ -89,6 +96,7 @@ export type LimitMovesContext = Pick<
   | "launchClaims"
   | "launchInFlight"
   | "machineName"
+  | "modelRefusal"
   | "moveRowsToAccount"
   | "noteAtLimit"
   | "owedMoves"
@@ -134,18 +142,163 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * is in the account's dir ({@link landSessionDir}).
    */
   const takeOwedMove = (row: StoredRow): StoredRow => {
+    const landing = owedOn(row);
     const owed = ctx.owedMoves.get(row.id);
     if (owed && owed.to === undefined) {
-      ctx.owedMoves.delete(row.id);
+      landOwed(row.id);
     }
-    return owedOn(row);
+    return landing;
   };
 
-  /** `row` on the account a move owed to it names, when one does ({@link owedMoves}). */
+  /**
+   * `row` as the launch a move owed to it lands runs it ({@link owedMoves}):
+   * on the account the move names, and on the model a person picked while it
+   * waited ({@link pickWithMove}). As it is when it owes none.
+   */
   const owedOn = (row: StoredRow): StoredRow => {
-    const to = ctx.owedMoves.get(row.id)?.to;
-    return to === undefined ? row : { ...row, accountId: to };
+    const owed = ctx.owedMoves.get(row.id);
+    return owed
+      ? {
+          ...row,
+          ...(owed.to === undefined ? {} : { accountId: owed.to }),
+          ...(owed.model === undefined ? {} : { model: owed.model }),
+        }
+      : row;
   };
+
+  /**
+   * The move `instanceId` owed has landed: its record goes, and a model
+   * picked while it waited is its row's from now on, so every later launch
+   * runs it there. Every landing of an owed move ends it here.
+   */
+  const landOwed = (instanceId: string): void => {
+    const picked = ctx.owedMoves.get(instanceId)?.model;
+    if (picked !== undefined) {
+      ctx.db.patchInstance(instanceId, { model: picked });
+    }
+    ctx.owedMoves.delete(instanceId);
+  };
+
+  /**
+   * A model a person picked for `row` while it owes a move
+   * ({@link owedMoves}), judged against the account it lands on: the one a
+   * person's or rebalance's move names, else the one its row already names
+   * (a model that crossed providers put it there). Taken, it rides the move
+   * on its record: the process the move leaves is never asked to change, and
+   * the launch that lands runs it ({@link owedOn}, {@link landOwed}). The
+   * model it runs now, picked again, takes the pick back. Refused, why, in
+   * that account's terms. Undefined when it owes no move.
+   */
+  const pickWithMove = (
+    row: StoredRow,
+    model: string
+  ): "carried" | { refusal: string } | undefined => {
+    const owed = ctx.owedMoves.get(row.id);
+    if (!owed) {
+      return;
+    }
+    const refusal = landingRefusal(row, owed.to ?? row.accountId, model);
+    if (refusal) {
+      return { refusal };
+    }
+    const { model: _picked, ...move } = owed;
+    ctx.owedMoves.set(row.id, model === row.model ? move : { ...move, model });
+    console.info(
+      `[accounts] ${ctx.sessionName(row)} runs ${model} once its move to ${ctx.accountWords(owed.to ?? row.accountId)} lands; its process now is not asked to change.`
+    );
+    return "carried";
+  };
+
+  /**
+   * Why a `row` that lands on `accountId` (null: on none) can't run `model`
+   * there: the account is another provider's than the model, its catalog
+   * doesn't list it (a machine's own list, for a harness whose catalog is
+   * the machine's), or it is at its limit for it. Undefined when it can.
+   */
+  const landingRefusal = (
+    row: StoredRow,
+    accountId: string | null,
+    model: string
+  ): string | undefined => {
+    const to = accountId ? ctx.db.accounts.get(accountId) : undefined;
+    const toName = ctx.accountWords(accountId);
+    const provider = ctx.accountProviderFor(row.machineId, row.harness, model);
+    if (to && to.provider !== provider) {
+      return provider
+        ? owedMoveWords.pickRefused.otherProvider(
+            toName,
+            providerName(to.provider),
+            model
+          )
+        : owedMoveWords.pickRefused.noAccount(toName, model);
+    }
+    const unlisted =
+      to && traitsOf(row.harness).modelCatalog === "account"
+        ? unlistedOn(row, to.id, toName, model)
+        : ctx.modelRefusal(row.machineId, row.harness, model);
+    if (unlisted) {
+      return unlisted.replace(SENTENCE_STOP, "");
+    }
+    return to ? atLimitFor(to.id, toName, model) : undefined;
+  };
+
+  /**
+   * Why `model` is not in the catalog of `accountId` (`toName`), the
+   * account a `row` lands on, for a harness whose catalog is each
+   * account's: it lists others, or it was never read.
+   */
+  const unlistedOn = (
+    row: StoredRow,
+    accountId: string,
+    toName: string,
+    model: string
+  ): string | undefined => {
+    const catalog = ctx.db.accounts
+      .catalogs()
+      .find((one) => one.accountId === accountId);
+    const fault = ctx.catalogFaults.get(accountId);
+    const listing = modelListingOn(row.harness, {
+      catalogs: catalog ? [catalog.models] : [],
+      faults: fault ? [fault] : [],
+    });
+    if (modelAdmitted(row.harness, model, listing)) {
+      return;
+    }
+    return listing.read
+      ? owedMoveWords.pickRefused.notOffered(
+          toName,
+          model,
+          listing.rows
+            .map((one) => one.value)
+            .filter((value) => value !== "default")
+        )
+      : owedMoveWords.pickRefused.unread(toName, model, listing.why);
+  };
+
+  /** Why `accountId` (`toName`) can't take `model` now: it is at its limit for it until then. */
+  const atLimitFor = (
+    accountId: string,
+    toName: string,
+    model: string
+  ): string | undefined => {
+    const now = Date.now();
+    const resets = refusedUntil(
+      ctx.db.accounts.bench(now),
+      ctx.db.accounts.readings().find((one) => one.accountId === accountId),
+      accountId,
+      model,
+      now
+    );
+    return resets === null
+      ? undefined
+      : owedMoveWords.pickRefused.atLimit(toName, model, clockWords(resets));
+  };
+
+  /** A provider's name, as a person reads it: "Claude", or its catalog's name. */
+  const providerName = (id: string): string =>
+    id === CLAUDE_PROVIDER
+      ? "Claude"
+      : (ctx.knownProviders().find((one) => one.id === id)?.name ?? id);
 
   /**
    * A Claude launch's word that its session's data is in `accountId`'s dir
@@ -159,7 +312,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     ctx.launchClaims.delete(row.id);
     const owed = ctx.owedMoves.get(row.id);
     if (owed?.to !== undefined && owed.to === accountId) {
-      ctx.owedMoves.delete(row.id);
+      landOwed(row.id);
       ctx.db.atLimit.dropHold(row.id);
       if (owed.move) {
         ctx.noteAtLimit(row, owed.move);
@@ -192,10 +345,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
           harness,
           ctx.resolvedModel(row.machineId, harness, row.model)
         )[0];
-    const named = (id: string) =>
-      id === CLAUDE_PROVIDER
-        ? "Claude"
-        : (ctx.knownProviders().find((one) => one.id === id)?.name ?? id);
+    const named = providerName;
     const called = accountNameAmong(account, ctx.db.accounts.list());
     if (provider !== account.provider) {
       return provider
@@ -430,12 +580,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     }
     if (why) {
       return {
-        refusal: `${title} stays on ${fromName}, not moved to ${toName}: ${why.why}. Nothing changed; move it again once that is fixed.`,
+        refusal: owedMoveWords.notMoved(title, fromName, toName, why.why),
       };
     }
-    ctx.db.atLimit.dropHold(row.id);
-    ctx.publishInstances(row.machineId);
-    ctx.publishStalls();
+    movedByHand(row);
     // One at rest is relaunched only when its limit or sign-in cut its last
     // turn: its carry-on starts it there ({@link relaunchOnAccount}).
     if (live || stopped) {
@@ -451,6 +599,13 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       accountId: account.id,
       why: handMovedWords(live, title, fromName, toName),
     };
+  };
+
+  /** A person's move of `row` went: a hold at its old account's limit ends, and every screen hears it. */
+  const movedByHand = (row: StoredRow): void => {
+    ctx.db.atLimit.dropHold(row.id);
+    ctx.publishInstances(row.machineId);
+    ctx.publishStalls();
   };
 
   /**
@@ -489,12 +644,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         };
       }
       return {
-        refusal: `${title} stays on ${fromName}, not moved to ${toName}: ${why.why}. Nothing changed; move it again once that is fixed.`,
+        refusal: owedMoveWords.notMoved(title, fromName, toName, why.why),
       };
     }
-    ctx.db.atLimit.dropHold(row.id);
-    ctx.publishInstances(row.machineId);
-    ctx.publishStalls();
+    movedByHand(row);
     if ("later" in done) {
       return {
         state: "pending",
@@ -633,13 +786,15 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     mine: boolean
   ): void => {
     const away = !(why.running || ctx.registry.agent(stored.machineId));
+    // As its record stands now: a model picked while the carry ran stays.
+    const now = ctx.owedMoves.get(stored.id) ?? owed;
     if (mine && why.running) {
       ctx.owedMoves.set(stored.id, {
-        ...owed,
+        ...now,
         waits: why.later ? "work" : "turn",
       });
     } else if (mine && away) {
-      ctx.owedMoves.set(stored.id, { ...owed, waits: "machine" });
+      ctx.owedMoves.set(stored.id, { ...now, waits: "machine" });
     } else if (mine) {
       ctx.owedMoves.delete(stored.id);
     }
@@ -725,7 +880,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
           return false;
         }
         if (still()) {
-          ctx.owedMoves.delete(stored.id);
+          landOwed(stored.id);
         }
         ctx.db.atLimit.dropHold(stored.id);
         ctx.publishInstances(stored.machineId);
@@ -762,13 +917,26 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     stopped: "limit" | "signin" | undefined
   ): Promise<void> => {
     const mine = () => ctx.owedMoves.get(stored.id)?.to === to;
-    if (mine()) {
-      ctx.owedMoves.delete(stored.id);
+    // Its record goes as it is taken up, so a model picked while it waited
+    // is its row's now: the move relaunches it, or goes on from a summary,
+    // on it. One kept back runs what it ran, the pick waiting with it again.
+    const owing = mine() ? ctx.owedMoves.get(stored.id) : undefined;
+    if (owing) {
+      landOwed(stored.id);
     }
-    const done = await moveAs(stored, to, stopped ?? false, how);
+    const picked = owing?.model;
+    const done = await moveAs(
+      picked === undefined ? stored : { ...stored, model: picked },
+      to,
+      stopped ?? false,
+      how
+    );
     if ("kept" in done) {
-      ctx.owedMoves.set(stored.id, owed);
-      keepUncarried(stored, owed, to, done.kept, true);
+      if (picked !== undefined && stored.model) {
+        ctx.db.patchInstance(stored.id, { model: stored.model });
+      }
+      ctx.owedMoves.set(stored.id, owing ?? owed);
+      keepUncarried(stored, owing ?? owed, to, done.kept, true);
       return;
     }
     ctx.db.atLimit.dropHold(stored.id);
@@ -1784,6 +1952,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     owedCarries,
     takeOwedMove,
     owedOn,
+    pickWithMove,
     landSessionDir,
     handMoveRefusal,
     moveByHand,
