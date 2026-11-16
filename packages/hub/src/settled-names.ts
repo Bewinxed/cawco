@@ -9,6 +9,7 @@
  */
 import type { ChoiceEntry, SettledBy } from "@cawco/core/choices";
 import { BUILT_IN, type BuiltInMember } from "@cawco/core/decides";
+import { z } from "zod";
 import type { ArtifactRow } from "./db/artifacts";
 import { SETTLED_NAMES } from "./db/migration-names";
 
@@ -19,13 +20,22 @@ const WAS: Record<string, BuiltInMember> = {
   agent: "asker",
 };
 
+/** A pick's `settled` as a route word wrote it, before members named it. */
+const SettledBefore = z.object({
+  by: z.string(),
+  name: z.unknown(),
+  session: z.string().optional(),
+  sources: z.array(z.string()).optional(),
+  why: z.string().optional(),
+});
+
 /** `settled` as a member's record, when it is one from before members; undefined when it needs nothing. */
 const namedSettled = (settled: unknown): SettledBy | undefined => {
-  const was = settled as Partial<SettledBy> | null | undefined;
-  if (!was || typeof was !== "object" || typeof was.name === "string") {
+  const was = SettledBefore.safeParse(settled).data;
+  if (!was || typeof was.name === "string") {
     return;
   }
-  const member = typeof was.by === "string" ? WAS[was.by] : undefined;
+  const member = WAS[was.by];
   if (!member) {
     return;
   }

@@ -68,25 +68,31 @@ const wordsOf = (value: unknown): string | null | undefined => {
 };
 
 const isArtifactKind = (value: unknown): value is ArtifactKind =>
-  (ARTIFACT_KINDS as readonly unknown[]).includes(value);
+  ARTIFACT_KINDS.some((kind) => kind === value);
+
+/** A JSON object, as the hub's words carry one. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 function markOf(value: unknown): ReferenceMark | null | undefined {
   if (value === null) {
     return null;
   }
-  const raw = value as Record<string, unknown> | undefined;
-  switch (raw?.of) {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  switch (value.of) {
     case "session":
-      return typeof raw.seed === "string" && typeof raw.place === "string"
-        ? { of: "session", seed: raw.seed, place: raw.place }
+      return typeof value.seed === "string" && typeof value.place === "string"
+        ? { of: "session", seed: value.seed, place: value.place }
         : undefined;
     case "artifact":
-      return isArtifactKind(raw.kind)
-        ? { of: "artifact", kind: raw.kind }
+      return isArtifactKind(value.kind)
+        ? { of: "artifact", kind: value.kind }
         : undefined;
     case "decision":
     case "change":
-      return { of: raw.of };
+      return { of: value.of };
     default:
       return undefined;
   }
@@ -94,14 +100,13 @@ function markOf(value: unknown): ReferenceMark | null | undefined {
 
 /** A host's face, whole; null when it is not one. */
 function faceOf(value: unknown): ReferenceFace | null {
-  if (typeof value !== "object" || value === null) {
+  if (!isRecord(value)) {
     return null;
   }
-  const raw = value as Record<string, unknown>;
-  const words = wordsOf(raw.words);
-  const state = wordsOf(raw.state);
-  const title = wordsOf(raw.title);
-  const mark = markOf(raw.mark);
+  const words = wordsOf(value.words);
+  const state = wordsOf(value.state);
+  const title = wordsOf(value.title);
+  const mark = markOf(value.mark);
   return words === undefined ||
     state === undefined ||
     title === undefined ||
@@ -202,10 +207,7 @@ const ARTIFACT_ID_MOST = 100;
 
 /** A page's links as the hub said them, each entry whole; anything else left out. */
 export function pageLinksOf(value: unknown): PageLinks {
-  const raw = (typeof value === "object" && value !== null ? value : {}) as {
-    artifacts?: unknown;
-    references?: unknown;
-  };
+  const raw: Record<string, unknown> = isRecord(value) ? value : {};
   return {
     references: Array.isArray(raw.references)
       ? [...new Set(raw.references.filter(isReferenceHref))]

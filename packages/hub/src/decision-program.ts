@@ -65,7 +65,6 @@ import {
   type ASTNode,
   createParser,
   type ElementNode,
-  type LibraryJSONSchema,
   mergeStatements,
   parseExpression,
   split,
@@ -86,12 +85,9 @@ export const PROGRAM_MAX = 128 * 1024;
 export const DECISION_ASSETS = "/__cawco/decision/";
 
 const MAX_PROBLEMS = 8;
-const parser = createParser(spec.schema as LibraryJSONSchema, spec.root);
+const parser = createParser(spec.schema, spec.root);
 /** A kept block's parser (core views-library.ts `blockLibrary`, tsk-330): a page whose root is a Column is a block's program. */
-const blockParser = createParser(
-  blocksSpec.schema as LibraryJSONSchema,
-  blocksSpec.root
-);
+const blockParser = createParser(blocksSpec.schema, blocksSpec.root);
 
 const URL_LIKE =
   /[a-z][a-z0-9+.-]*:\/\/|(?:^|[\s"'(])(?:data|javascript|vbscript|mailto|blob|file|tel):|(?:^|[\s"'(/])www\.[a-z0-9-]+\./iu;
@@ -124,10 +120,15 @@ const programRefusal = <const Code extends string>(
   });
 };
 
+/** A JSON object, as a piece's props hold one. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const isElement = (value: unknown): value is ElementNode =>
   typeof value === "object" &&
   value !== null &&
-  (value as { type?: unknown }).type === "element";
+  "type" in value &&
+  value.type === "element";
 
 /** The library a program is written over (core inline-blocks.ts `programLibraryOf`): its refusals speak of it. */
 type Library = ReturnType<typeof programLibraryOf>;
@@ -429,12 +430,9 @@ const elementsNamed = (value: unknown, name: string): ElementNode[] => {
  */
 const dialsProblems = (root: ElementNode | null): string[] =>
   elementsNamed(root, "Dials").flatMap(({ props }) => {
-    const config =
-      typeof props.config === "object" &&
-      props.config !== null &&
-      !Array.isArray(props.config)
-        ? (props.config as Record<string, unknown>)
-        : {};
+    const config: Record<string, unknown> = isRecord(props.config)
+      ? props.config
+      : {};
     return dialsOfConfig(config, () => false).unread.map(
       (one) =>
         `Dials "${String(props.name)}": ${one.path} is ${one.kind}, a control the panel doesn't draw. It draws ${DRAWN_CONTROLS}.`
@@ -867,13 +865,9 @@ const statementsOf = (program: string): Map<string, string> => {
 };
 
 /** Where a Decision's kind stands among its arguments, by the library's own order. */
-const KIND_ARG = Object.keys(
-  (
-    spec.schema as unknown as {
-      $defs: { Decision: { properties: Record<string, unknown> } };
-    }
-  ).$defs.Decision.properties
-).indexOf("kind");
+const KIND_ARG = Object.keys(spec.schema.$defs.Decision.properties).indexOf(
+  "kind"
+);
 
 /** An expression as openui-lang writes it: the parser's AST printed back, every compound child in parentheses. */
 const printed = (node: ASTNode): string => {
@@ -1077,10 +1071,11 @@ export const buildProgram = async (
   if (problems.length > 0) {
     return programRefusal("program-image-unread", problems);
   }
-  const files = names.map((name, index) => ({
-    path: imagePath(name, index),
-    bytes: (reads[index] as { bytes: Uint8Array }).bytes,
-  }));
+  const files = reads.flatMap((read, index) =>
+    "bytes" in read
+      ? [{ path: imagePath(names[index], index), bytes: read.bytes }]
+      : []
+  );
   const addresses = Object.fromEntries(
     names.map((name, index) => [name, files[index]?.path ?? ""])
   );

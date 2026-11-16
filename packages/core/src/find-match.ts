@@ -125,8 +125,10 @@ const bestFor = (
   entry: MatchEntry,
   token: string
 ): { by: FindField; score: number } | undefined => {
-  let best = entry.asked.has(token)
-    ? { by: "kind" as FindField, score: FIELD_WEIGHT.kind * 0.9 }
+  let best: { by: FindField; score: number } | undefined = entry.asked.has(
+    token
+  )
+    ? { by: "kind", score: FIELD_WEIGHT.kind * 0.9 }
     : undefined;
   for (const each of entry.fields) {
     const score = quality(token, each) * FIELD_WEIGHT[each.name];

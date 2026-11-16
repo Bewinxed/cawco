@@ -46,7 +46,6 @@
  */
 import {
   FIND_KINDS,
-  type FindKind,
   type FindMoment,
   type FindResult,
   type MomentAuthor,
@@ -522,11 +521,12 @@ const told = async (
         ),
       };
 
-/** A string field's words through the secret filter; absent stays absent. */
-const redacted = async <Value extends string | null | undefined>(
-  value: Value
-): Promise<Value> =>
-  (typeof value === "string" ? await redactSecrets(value) : value) as Value;
+/** A string field's words through the secret filter; none stays none. */
+async function redacted(value: string): Promise<string>;
+async function redacted(value: string | null): Promise<string | null>;
+async function redacted(value: string | null): Promise<string | null> {
+  return typeof value === "string" ? await redactSecrets(value) : value;
+}
 
 /**
  * A moment's words rendered from `from` to `to` of `marked`: each secret
@@ -1034,9 +1034,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     moments: FindMoment[],
     words: readonly string[]
   ): Promise<FindMoment[]> =>
-    Promise.all(
-      moments.map((moment) => shownMoment(moment as HeldMoment, words))
-    );
+    Promise.all(moments.map((moment) => shownMoment(moment, words)));
 
   /**
    * A hit's words as an agent reads them: its title, every moment's excerpt
@@ -1163,7 +1161,7 @@ export const createFindTool = (deps: FindToolDeps) => {
       context: true,
       where,
       ...(input.cursor ? { cursor: input.cursor } : {}),
-      ...(input.kinds?.length ? { kinds: input.kinds as FindKind[] } : {}),
+      ...(input.kinds?.length ? { kinds: input.kinds } : {}),
       ...(input.by ? { author: AUTHOR[input.by] } : {}),
     });
     if (page instanceof ElysiaStatus) {
@@ -1224,22 +1222,24 @@ export const createFindTool = (deps: FindToolDeps) => {
       transcripts: true,
       context: true,
       where: { ...where, ...(before === undefined ? {} : { before }) },
-      ...(input.kinds?.length ? { kinds: input.kinds as FindKind[] } : {}),
+      ...(input.kinds?.length ? { kinds: input.kinds } : {}),
     });
     const said = results
       .flatMap((result) =>
-        momentsOf(result).flatMap((moment) =>
-          moment.at === null
-            ? []
-            : [{ at: moment.at, doc: moment.docId, result, moment }]
-        )
+        result.kind === "conversation"
+          ? result.moments.flatMap((moment) =>
+              moment.at === null
+                ? []
+                : [{ at: moment.at, doc: moment.docId, result, moment }]
+            )
+          : []
       )
       .filter((one) => from === undefined || newerFirst(from, one) < 0)
       .toSorted(newerFirst);
     const page = said.slice(0, limit);
     const shown = await Promise.all(
       page.map(({ result, moment }) =>
-        redactedResult({ ...result, moments: [moment] } as FindResult, [])
+        redactedResult({ ...result, moments: [moment] }, [])
       )
     );
     const hits = bounded(

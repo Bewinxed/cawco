@@ -59,11 +59,11 @@ const wakeTo = (
 ): { to: string } | { problem: string } => {
   const open = movesFrom(stages, stage, "routine");
   if (open.length === 1) {
-    return { to: open[0] as string };
+    return { to: open[0] };
   }
   const alone = open.filter((to) => routineAlone(stages, stage, to));
   if (alone.length === 1) {
-    return { to: alone[0] as string };
+    return { to: alone[0] };
   }
   return {
     problem:

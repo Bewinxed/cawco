@@ -16,6 +16,7 @@
  */
 import {
   createLibrary,
+  type DefinedComponent,
   defineComponent,
   type Library,
   type PromptOptions,
@@ -26,6 +27,7 @@ import { z } from "zod";
 import { INLINE_BLOCK_LANG } from "./inline-blocks";
 import {
   STAGE_KINDS,
+  type StageKind,
   VIEW_TEXT_ROLES,
   VIEW_TONES,
   type ViewEventsInput,
@@ -90,12 +92,15 @@ const stage = z.object({
 });
 tagSchemaId(stage, "Stage");
 
-const byKind = z.object(
-  Object.fromEntries(STAGE_KINDS.map((each) => [each, z.number()])) as Record<
-    (typeof STAGE_KINDS)[number],
-    z.ZodNumber
-  >
-);
+/** A figure per stage kind, in {@link STAGE_KINDS}' order. */
+const byKind = z.object({
+  todo: z.number(),
+  active: z.number(),
+  waiting: z.number(),
+  you: z.number(),
+  done: z.number(),
+  dropped: z.number(),
+} satisfies Record<StageKind, z.ZodNumber>);
 
 const run = z.object({
   slot: z
@@ -288,10 +293,8 @@ export const viewToolSpecs = (): ToolSpec[] =>
   Object.entries(TOOLS).map(([name, spec]) => ({
     name,
     description: spec.description,
-    inputSchema: z.toJSONSchema(spec.input) as Record<string, unknown>,
-    outputSchema: z.toJSONSchema(spec.output, {
-      unrepresentable: "any",
-    }) as Record<string, unknown>,
+    inputSchema: z.toJSONSchema(spec.input),
+    outputSchema: z.toJSONSchema(spec.output, { unrepresentable: "any" }),
     annotations: { readOnlyHint: true },
   }));
 
@@ -399,6 +402,14 @@ const libraryOf = <C, N extends AnyComponentName>(
   const named = new Set<string>(names);
   const kept = <T extends { name: string }>(all: T[]): T[] =>
     all.filter((one) => named.has(one.name));
+  /** The kept components, each with its renderer. */
+  const drawn = (
+    all: DefinedComponent<z.ZodObject, null>[]
+  ): DefinedComponent<z.ZodObject, C>[] =>
+    all.flatMap((one) => {
+      const name = names.find((each) => each === one.name);
+      return name === undefined ? [] : [{ ...one, component: renderers[name] }];
+    });
   const define = <T extends z.ZodObject>(
     name: AnyComponentName,
     description: string,
@@ -408,7 +419,7 @@ const libraryOf = <C, N extends AnyComponentName>(
       name,
       description,
       props,
-      component: renderers[name as N] ?? (null as C),
+      component: null,
     });
 
   const Text = define(
@@ -619,7 +630,7 @@ const libraryOf = <C, N extends AnyComponentName>(
   );
 
   return createLibrary({
-    components: kept([
+    components: drawn([
       Column,
       Row,
       Text,

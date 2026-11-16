@@ -25,6 +25,9 @@ export const BUILT_IN_MEMBERS = [
 export type BuiltInMember = (typeof BUILT_IN_MEMBERS)[number];
 /** The members with a picture of Caw's flock: every built-in but You. */
 export type FlockMember = Exclude<BuiltInMember, "you">;
+/** Whether `id` names one of Caw's flock. */
+export const isFlockMember = (id: string): id is FlockMember =>
+  id !== "you" && BUILT_IN_MEMBERS.some((one) => one === id);
 /** How he hears about a member's answers: a push each time, or the catch-up. */
 export const HEARS = ["each", "later"] as const;
 export type Hear = (typeof HEARS)[number];
@@ -86,9 +89,10 @@ export const CAW_POSES = [
   },
 ] as const;
 export type CawPoseId = (typeof CAW_POSES)[number]["id"];
-export const CAW_POSE_IDS = CAW_POSES.map((pose) => pose.id) as [
-  CawPoseId,
-  ...CawPoseId[],
+const [FIRST_POSE, ...OTHER_POSES] = CAW_POSES;
+export const CAW_POSE_IDS: [CawPoseId, ...CawPoseId[]] = [
+  FIRST_POSE.id,
+  ...OTHER_POSES.map((pose) => pose.id),
 ];
 
 /** One member of Who decides: built in, or one he added. */

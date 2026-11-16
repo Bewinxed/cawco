@@ -44,6 +44,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Font, FontCollection } from "fontkit";
+import { z } from "zod";
 import coverage from "./house-faces.json" with { type: "json" };
 
 /** Which role a face plays: words, code, paths and IDs, or the wordmark. */
@@ -233,8 +235,10 @@ const CUTS: readonly { name: string; range: Ranges; marks: boolean }[] = [
 ];
 
 /** Whether `ranges` hold `point`. */
-const holds = (ranges: Ranges, point: number): boolean =>
-  ranges.some(([from, to]) => point >= from && point <= to);
+const holds = (
+  ranges: readonly (readonly number[])[],
+  point: number
+): boolean => ranges.some(([from, to]) => point >= from && point <= to);
 
 /** `points` as inclusive pairs, ascending and apart. */
 export const pairsOf = (points: Iterable<number>): [number, number][] => {
@@ -307,8 +311,7 @@ export async function cutHouseFaces(
   const pieces: FacePiece[] = [];
   for (const face of readHouseFaces()) {
     const file = Buffer.from(face.bytes);
-    const font = create(file) as Parameters<typeof heldBy>[0] &
-      Parameters<typeof featuresOf>[0];
+    const font = faceOf(create(file), face.file);
     const held = heldBy(font);
     const keep = featuresOf(font).filter((tag) => !face.leaves.includes(tag));
     const marks = held.filter(isMark);
@@ -415,9 +418,7 @@ export async function firstPaintPieces(
       pieces.push(piece);
       continue;
     }
-    const font = create(Buffer.from(face.bytes)) as Parameters<
-      typeof featuresOf
-    >[0];
+    const font = create(Buffer.from(face.bytes));
     const tools = {
       subsetFont,
       compress,
@@ -433,17 +434,33 @@ export async function firstPaintPieces(
   return pieces;
 }
 
+/** A layout table's feature list, as fontkit decodes a face's GSUB or GPOS (null when the face has none). */
+const FeatureTable = z
+  .object({ featureList: z.array(z.object({ tag: z.string() })) })
+  .nullish();
+
+/** The layout tables fontkit decodes on a face, which `@types/fontkit` leaves out of its `Font`. */
+const LayoutTables = z.object({ GPOS: FeatureTable, GSUB: FeatureTable });
+
 /** The layout features `font` has, GSUB's and GPOS's. */
-export const featuresOf = (font: {
-  GPOS?: { featureList: { tag: string }[] };
-  GSUB?: { featureList: { tag: string }[] };
-}): string[] => [
-  ...new Set(
-    [...(font.GSUB?.featureList ?? []), ...(font.GPOS?.featureList ?? [])].map(
-      (feature) => feature.tag
-    )
-  ),
-];
+export const featuresOf = (font: Font | FontCollection): string[] => {
+  const { GPOS, GSUB } = LayoutTables.parse(font);
+  return [
+    ...new Set(
+      [...(GSUB?.featureList ?? []), ...(GPOS?.featureList ?? [])].map(
+        (feature) => feature.tag
+      )
+    ),
+  ];
+};
+
+/** `font` as the one face its file holds: a house face is a single font, never a collection. */
+const faceOf = (font: Font | FontCollection, file: string): Font => {
+  if ("fonts" in font) {
+    throw new Error(`${file} is a font collection; a house face is one font`);
+  }
+  return font;
+};
 
 /**
  * HarfBuzz's subset options for `face`: its wght axis instanced to the
@@ -602,10 +619,7 @@ export const undrawn = (text: string): string[] => [
       (char) =>
         !(
           LAYOUT_ONLY.test(char) ||
-          holds(
-            COVERAGE.faces.sans.ranges as [number, number][],
-            char.codePointAt(0) ?? 0
-          )
+          holds(COVERAGE.faces.sans.ranges, char.codePointAt(0) ?? 0)
         )
     )
   ),

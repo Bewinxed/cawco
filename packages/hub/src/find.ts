@@ -1393,7 +1393,8 @@ export const createFind = (deps: FindDeps) => {
         transcriptsMs: fresh.transcriptsMs,
       });
       while (pages.size > PAGES_KEPT) {
-        pages.delete(pages.keys().next().value as string);
+        const [oldest] = pages.keys();
+        pages.delete(oldest);
       }
     }
     return fresh;
@@ -1698,6 +1699,10 @@ export const FIND_PLACES_QUERY = t.Object({
   q: t.String(),
 });
 
+/** Whether `kind` is one find answers with. */
+const isFindKind = (kind: string): kind is FindKind =>
+  FIND_KINDS.some((one) => one === kind);
+
 /** `kinds=conversation,task` read into kinds, or the refusal naming the unknown one. */
 const kindsOf = (raw: string | undefined) => {
   if (!raw?.trim()) {
@@ -1707,16 +1712,15 @@ const kindsOf = (raw: string | undefined) => {
     .split(",")
     .map((each) => each.trim())
     .filter(Boolean);
-  const unknown = kinds.filter(
-    (kind) => !(FIND_KINDS as readonly string[]).includes(kind)
-  );
+  const known = kinds.filter(isFindKind);
+  const unknown = kinds.filter((kind) => !isFindKind(kind));
   if (unknown.length > 0) {
     return problem(400, {
       code: "find-kind-unknown",
       detail: `${unknown.map((kind) => `"${kind}"`).join(", ")} is not a kind find answers with. Kinds: ${FIND_KINDS.join(", ")}.`,
     });
   }
-  return kinds as FindKind[];
+  return known;
 };
 
 /** `GET /api/find`'s answer, or its refusal. */

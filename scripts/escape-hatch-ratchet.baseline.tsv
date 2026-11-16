@@ -2,7 +2,6 @@
 as-unknown-as	[ string, string, string, ]	packages/core/src/external-items.ts	1
 as-unknown-as	[ string, string, string, string, string, ]	packages/core/src/external-items.ts	1
 as-unknown-as	{ __cawcoParents?: readonly string[] }	packages/preview/src/overlay/host-origin.ts	1
-as-unknown-as	{ $defs: { Decision: { properties: Record<string, unknown> } }; }	packages/hub/src/decision-program.ts	1
 as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<To	packages/preview/src/overlay/doc-worker.ts	1
 as-unknown-as	{ credentials?: { store?: { constructor?: unknown } }; }	packages/agent/src/harnesses/pi-accounts.ts	1
 as-unknown-as	{ details?: unknown; firstKeptEntryId?: string; id?: string; message?: {	packages/agent/src/harnesses/pi-services.ts	1

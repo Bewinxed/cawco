@@ -101,11 +101,11 @@ export interface DecidesDb {
   readonly open: () => CardSettlingRow[];
   /** A kind added or renamed. */
   readonly putKind: (kind: Kind) => void;
-  /** A member he added, with its delegate type, in one transaction. */
+  /** A member he added, with its delegate type, in one transaction; answers it as Who decides lists it. */
   readonly putMember: (
     row: Omit<MemberRow, "createdAt">,
     type: DelegateType | null
-  ) => void;
+  ) => Member;
   /** Each card's row, replacing that card's last. */
   readonly putSettlings: (rows: CardSettlingRow[]) => void;
   /** The member's record. */
@@ -130,7 +130,7 @@ export interface DecidesDb {
 }
 
 /** A row he added, as a member. */
-const memberOfRow = (row: MemberRow): Member => ({
+const memberOfRow = (row: Omit<MemberRow, "createdAt">): Member => ({
   id: row.id,
   type: row.type,
   name: row.name,
@@ -252,13 +252,13 @@ export const decidesDb = (
     // him, never to core's seed, until they are saved again.
     const unread = typeof row?.routesUnread === "string";
     const stored = storedRoutes();
+    // Core's seed by any kind's id: a kind he added has none.
+    const seeded: Partial<Record<string, string>> = DEFAULT_ROUTES;
     const routes = Object.fromEntries(
       listed.map((kind) => {
         const member = unread
           ? BUILT_IN.you.id
-          : (stored.get(kind.id) ??
-            (DEFAULT_ROUTES as Record<string, string>)[kind.id] ??
-            BUILT_IN.you.id);
+          : (stored.get(kind.id) ?? seeded[kind.id] ?? BUILT_IN.you.id);
         return [kind.id, known.has(member) ? member : BUILT_IN.you.id];
       })
     );
@@ -335,6 +335,7 @@ export const decidesDb = (
           .onConflictDoUpdate({ target: decidesMembers.id, set })
           .run();
       });
+      return memberOfRow(row);
     },
     removeMember: (id) => {
       const { routes } = fleet();

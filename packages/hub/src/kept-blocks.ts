@@ -94,11 +94,11 @@ export interface KeptBlocksDeps {
 
 /** One project's blocks filed under `decisions/`, as the move that takes each to `artifacts/`; the folder's refusal of a read. */
 const blocksIn = async (deps: KeptBlocksDeps, projectId: string) => {
-  const moved = {
-    names: [] as string[],
-    writes: [] as { content: string; path: string }[],
-    deletes: [] as string[],
-  };
+  const moved: {
+    deletes: string[];
+    names: string[];
+    writes: { content: string; path: string }[];
+  } = { names: [], writes: [], deletes: [] };
   const folders = await deps.folders(projectId, "decisions");
   if (!Array.isArray(folders)) {
     return folders;
