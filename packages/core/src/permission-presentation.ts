@@ -12,6 +12,7 @@
  * exist (so a put says whether it adds or replaces).
  */
 
+import { z } from "zod";
 import type { ProjectAtLimit } from "./accounts";
 import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./ask-tools";
 import type { SourceFacts } from "./asks";
@@ -21,7 +22,7 @@ import {
   WEB_FETCH_TOOLS,
   WEB_SEARCH_TOOLS,
 } from "./delegate-types";
-import type { MemoryScope } from "./fleet";
+import { MEMORY_ROLES, type MemoryScope } from "./fleet";
 import { cardOfMcpWrite } from "./fleet-secrets";
 import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
@@ -443,7 +444,7 @@ export function redact(key: string, value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => redact(key, item));
   }
-  const entries = Object.entries(value as Record<string, unknown>);
+  const entries: [string, unknown][] = Object.entries(value);
   if (KEYS_ONLY.has(key.toLowerCase())) {
     return Object.fromEntries(entries.map(([name]) => [name, HIDDEN]));
   }
@@ -493,6 +494,26 @@ const WORD_BREAK = /[_-]+/gu;
 const CAMEL = /([a-z\d])([A-Z])/gu;
 const SPACES = /\s+/gu;
 const COMMAND_CAP = 120;
+
+/** A JSON object, as a call's input holds one. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** A memory document's scope as a `set_doc` write names it (hub admin-tools.ts's input). */
+const WrittenScope = z.object({
+  areaIds: z.array(z.string()).optional(),
+  briefer: z.literal(true).optional(),
+  delegateTypes: z.array(z.string()).optional(),
+  model: z.string().optional(),
+  projectIds: z.array(z.string()).optional(),
+  role: z.enum(MEMORY_ROLES).optional(),
+});
+
+/** A starting set as a delegate type's or a project's write names it (core delegate-types.ts `StartingSet`). */
+export const WrittenStartingSet = z.object({
+  servers: z.array(z.string()),
+  skills: z.array(z.string()),
+});
 
 const text = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value : undefined;
@@ -558,7 +579,9 @@ function memoryWrite(
       const name = path ?? "(no path)";
       const now = path ? context.memory(path) : undefined;
       const { change: made, detail } = hunkOf(name, now ?? "", content);
-      const scope = input.scope as MemoryScope | undefined;
+      const scope: MemoryScope | undefined = WrittenScope.safeParse(
+        input.scope
+      ).data;
       return {
         summary: now === undefined ? `Create ${name}` : `Change ${name}`,
         detail,
@@ -808,9 +831,7 @@ const changeDetail = (fields: PermissionField[]): string =>
 
 /** The setting kept now, as a record, or undefined. */
 const record = (value: unknown): Record<string, unknown> | undefined =>
-  value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  isRecord(value) ? value : undefined;
 
 /** The input's own fields, minus what names the call. */
 const given = (input: Record<string, unknown>, skip: readonly string[]) =>
@@ -1126,7 +1147,8 @@ function delegateTypesWrite(
   }
   const before = context.current("delegate_types", name);
   // What joins its starting set and what leaves it, each a table of calls.
-  const proposed = (input.startingSet as StartingSet | undefined) ?? null;
+  const proposed: StartingSet | null =
+    WrittenStartingSet.safeParse(input.startingSet).data ?? null;
   const tables = setTablesOf(
     context.startingSet?.({ kind: "type", name }),
     proposed
@@ -1337,11 +1359,10 @@ function proposedFiles(
           typeof proposed,
           string
         > =>
-          typeof file === "object" &&
-          file !== null &&
-          typeof (file as { path?: unknown }).path === "string" &&
-          typeof (file as { before?: unknown }).before === "string" &&
-          typeof (file as Record<string, unknown>)[proposed] === "string"
+          isRecord(file) &&
+          typeof file.path === "string" &&
+          typeof file.before === "string" &&
+          typeof file[proposed] === "string"
       )
     : [];
   const made = files.map((file) =>
@@ -1596,11 +1617,7 @@ export const publishedWords = (
 const settingChanges = (input: Record<string, unknown>) =>
   (Array.isArray(input.changes) ? input.changes : []).filter(
     (one): one is ProjectSettingChange =>
-      typeof one === "object" &&
-      one !== null &&
-      (PROJECT_SETTING_KINDS as readonly string[]).includes(
-        (one as { kind?: unknown }).kind as string
-      )
+      isRecord(one) && PROJECT_SETTING_KINDS.some((kind) => kind === one.kind)
   );
 
 /** A project setting change Caw asked about: each change in plain words, what a publish takes, and why. */
@@ -1668,7 +1685,7 @@ function editChanges(
 ): PermissionChange[] {
   const edits: unknown[] = Array.isArray(input.edits) ? input.edits : [input];
   return edits.flatMap((edit) => {
-    const each = (edit ?? {}) as Record<string, unknown>;
+    const each: Record<string, unknown> = isRecord(edit) ? edit : {};
     const before = each.old_string ?? each.oldString ?? each.oldText;
     const after = each.new_string ?? each.newString ?? each.newText;
     // OpenCode asks with a `diff` instead; it stays a field.

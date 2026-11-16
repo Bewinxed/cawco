@@ -31,7 +31,6 @@ import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import {
   type ASTNode,
   createParser,
-  type LibraryJSONSchema,
   type ParseResult,
   tokenize,
 } from "@openuidev/lang-core";
@@ -49,8 +48,11 @@ const VIEW_SOURCE_MAX = 64 * 1024;
 const REFRESH_MIN_S = 30;
 const MAX_PROBLEMS = 8;
 
-const parser = createParser(spec.schema as LibraryJSONSchema, spec.root);
-const TOOLS = new Set<string>(VIEW_TOOLS);
+const parser = createParser(spec.schema, spec.root);
+
+/** Whether `name` is one of the view tools. */
+const isViewTool = (name: string): name is ViewToolName =>
+  VIEW_TOOLS.some((one) => one === name);
 
 /** A string that points outside the view: a scheme with `//`, a data/script/mail scheme, or a bare `www.` host. */
 const URL_LIKE =
@@ -187,14 +189,8 @@ const toolProblems = (result: ParseResult): string[] => {
       problems.push(
         `${query.statementId} = Query(…) names its tool by an expression: name it as a string, one of ${VIEW_TOOLS.join(", ")}.`
       );
-    } else if (TOOLS.has(tool.v)) {
-      problems.push(
-        ...argsProblems(
-          query.statementId,
-          tool.v as ViewToolName,
-          query.argsAST
-        )
-      );
+    } else if (isViewTool(tool.v)) {
+      problems.push(...argsProblems(query.statementId, tool.v, query.argsAST));
     } else {
       problems.push(
         `${query.statementId} = Query("${tool.v}") names a tool views do not have; the tools are ${VIEW_TOOLS.join(", ")}.`

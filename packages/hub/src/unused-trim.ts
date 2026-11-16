@@ -46,13 +46,15 @@ import {
   startingSetProblem,
 } from "@cawco/core/delegate-types";
 import { maskMcpConfig } from "@cawco/core/fleet-secrets";
-import type {
-  CalledItem,
-  SetOwner,
-  SetStanding,
+import {
+  type CalledItem,
+  type SetOwner,
+  type SetStanding,
+  WrittenStartingSet,
 } from "@cawco/core/permission-presentation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { routinesWords } from "@cawco/core/words/routines";
+import { z } from "zod";
 import {
   CALLS_DEFAULT_DAYS,
   CALLS_MAX_DAYS,
@@ -63,6 +65,12 @@ import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import type { KeptItem } from "./db/trim";
 import { mcpUsageName } from "./usage-count";
+
+/** A `project_settings` change to the project's starting set, as the ask carries it. */
+const StartingSetChange = z.object({
+  kind: z.literal("set_starting_set"),
+  startingSet: WrittenStartingSet.nullish(),
+});
 
 /** The window a run reads: "nobody has called in 30 days". */
 const TRIM_DAYS = CALLS_DEFAULT_DAYS;
@@ -639,10 +647,12 @@ export const createTrim = (deps: TrimDeps) => {
           ]
         : [];
     if (name === PROJECT_SETTINGS && asker.projectId) {
-      const changes = Array.isArray(input.changes) ? input.changes : [];
-      const change = changes.find(
-        (each: { kind?: unknown }) => each.kind === "set_starting_set"
-      ) as { startingSet?: StartingSet | null } | undefined;
+      const changes: unknown[] = Array.isArray(input.changes)
+        ? input.changes
+        : [];
+      const change = changes
+        .map((each) => StartingSetChange.safeParse(each).data)
+        .find((each) => each !== undefined);
       const owner: Owner = { kind: "project", projectId: asker.projectId };
       db.trim.keep(
         keyOf(owner),
@@ -654,7 +664,10 @@ export const createTrim = (deps: TrimDeps) => {
       const owner: Owner = { kind: "type", name: input.name };
       db.trim.keep(
         keyOf(owner),
-        leavingOf(setOf(owner), input.startingSet as StartingSet | undefined)
+        leavingOf(
+          setOf(owner),
+          WrittenStartingSet.safeParse(input.startingSet).data
+        )
       );
       return;
     }

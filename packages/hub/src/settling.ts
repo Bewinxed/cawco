@@ -140,6 +140,12 @@ interface Routed {
   where: "project" | "fleet";
 }
 
+/** A card with its route. */
+interface CardRouted {
+  card: DecisionCard;
+  route: Routed;
+}
+
 /** One option of a card, as the member reads it. */
 const optionLines = (card: DecisionCard): string[] =>
   card.options.map((option) =>
@@ -406,7 +412,10 @@ export const createSettling = (deps: SettlingDeps) => {
     asker: InstanceRow,
     page: PageCards
   ): Promise<RouteState> => {
-    const projectId = page.row.projectId as string;
+    const { projectId } = page.row;
+    if (!projectId) {
+      return { state: "failed", why: decidesWords.noProject };
+    }
     const told = await deps.tellCaw(projectId, {
       trigger: decidesWords.decisionTrigger(
         decisionLink(page.row.id, page.cards[0]?.id ?? "", page.row.title)
@@ -440,6 +449,7 @@ export const createSettling = (deps: SettlingDeps) => {
   const handTo = async (
     fleet: FleetDecides,
     member: Member,
+    typeName: string,
     session: InstanceRow,
     asker: InstanceRow,
     page: PageCards
@@ -448,7 +458,7 @@ export const createSettling = (deps: SettlingDeps) => {
       (session.parentInstanceId
         ? deps.instance(session.parentInstanceId)
         : undefined) ?? asker;
-    const type = deps.delegateType(member.delegateType as string);
+    const type = deps.delegateType(typeName);
     const handed = await deps.handoff(
       from,
       session.id,
@@ -489,15 +499,17 @@ export const createSettling = (deps: SettlingDeps) => {
     });
   };
 
-  /** One run of the member's delegate type under `asker`, with every card of `pages`. */
+  /** One run of the member's delegate type `typeName` under `asker`, with every card of `page` and of `others`. */
   const startRun = async (
     fleet: FleetDecides,
     member: Member,
+    typeName: string,
     asker: InstanceRow,
-    pages: PageCards[]
+    page: PageCards,
+    others: PageCards[]
   ) => {
-    const [page] = pages as [PageCards];
-    const type = deps.delegateType(member.delegateType as string);
+    const pages = [page, ...others];
+    const type = deps.delegateType(typeName);
     const title = `Settle: ${page.cards[0]?.question ?? page.row.title}`;
     const started = await deps.start({
       parentInstanceId: asker.id,
@@ -513,7 +525,7 @@ export const createSettling = (deps: SettlingDeps) => {
         title.length > SESSION_TITLE_MAX
           ? `${title.slice(0, SESSION_TITLE_MAX - 1)}…`
           : title,
-      type: member.delegateType as string,
+      type: typeName,
       lands: "none",
       settlesCards: true,
     });
@@ -566,10 +578,22 @@ export const createSettling = (deps: SettlingDeps) => {
       );
       return { state: "failed", why: said.endsWith(".") ? said : `${said}.` };
     };
+    // An agent member runs as its delegate type (its reach was read off it).
+    const typeName = member.delegateType;
+    if (typeName === null) {
+      return notStarted(decidesWords.cantRun(member.name, member.name));
+    }
     try {
       const routed = session
-        ? await handTo(fleet, member, session, asker, page)
-        : await startRun(fleet, member, asker, [page, ...stranded(page, kept)]);
+        ? await handTo(fleet, member, typeName, session, asker, page)
+        : await startRun(
+            fleet,
+            member,
+            typeName,
+            asker,
+            page,
+            stranded(page, kept)
+          );
       return answered(routed) ? routed : notStarted(routed.response.detail);
     } catch (error) {
       return notStarted(error instanceof Error ? error.message : String(error));
@@ -659,26 +683,28 @@ export const createSettling = (deps: SettlingDeps) => {
   };
 
   /**
-   * Each open card of `page` sorted ({@link sort}), the ledger rows that
-   * changed written: the cards settled where they stand, by id, and those
-   * to send, by member.
+   * Each open card of `page` sorted ({@link sort}), each with its route in
+   * `routes`, the ledger rows that changed written: the cards settled where
+   * they stand, by id, and those to send, by member.
    */
   const sortAll = (
     asker: InstanceRow,
     page: PageCards,
-    routes: Map<string, Routed>
+    routes: CardRouted[]
   ): {
-    sent: Map<string, DecisionCard[]>;
+    sent: Map<string, { cards: DecisionCard[]; member: Member }>;
     states: Map<string, RouteState>;
   } => {
     const states = new Map<string, RouteState>();
-    const sent = new Map<string, DecisionCard[]>();
+    const sent = new Map<string, { cards: DecisionCard[]; member: Member }>();
     const ledger: CardSettlingRow[] = [];
-    for (const card of page.cards) {
+    for (const {
+      card,
+      route: { member },
+    } of routes) {
       if (pickMade(card, page.state[card.id])) {
         continue;
       }
-      const { member } = routes.get(card.id) as Routed;
       const sorted = sort(asker, page.row, card, member);
       if (sorted.ledger) {
         ledger.push(sorted.ledger);
@@ -686,7 +712,12 @@ export const createSettling = (deps: SettlingDeps) => {
       if (sorted.state) {
         states.set(card.id, sorted.state);
       } else {
-        sent.set(member.id, [...(sent.get(member.id) ?? []), card]);
+        const going = sent.get(member.id);
+        if (going) {
+          going.cards.push(card);
+        } else {
+          sent.set(member.id, { member, cards: [card] });
+        }
       }
     }
     if (ledger.length > 0) {
@@ -715,20 +746,19 @@ export const createSettling = (deps: SettlingDeps) => {
         return lines;
       }
       const fleet = deps.db.fleet();
-      const routes = new Map<string, Routed>();
+      const routes: CardRouted[] = [];
       let problems: string[] = [];
       for (const card of cards) {
         const read = await routeOf(fleet, row, card);
         if (read instanceof ElysiaStatus) {
           return read;
         }
-        routes.set(card.id, read);
+        routes.push({ card, route: read });
         ({ problems } = read);
       }
       const page = { row, cards, all, state };
       const { states, sent } = sortAll(asker, page, routes);
-      for (const [id, handed] of sent) {
-        const member = memberOf(fleet, id) as Member;
+      for (const { member, cards: handed } of sent.values()) {
         const one = { ...page, cards: handed };
         const went =
           member.type === "caw"
@@ -743,8 +773,7 @@ export const createSettling = (deps: SettlingDeps) => {
           ? ` ${decidesWords.fileProblems(problems.join(" "))}`
           : "";
       return Object.fromEntries(
-        cards.map((card) => {
-          const { member, where } = routes.get(card.id) as Routed;
+        routes.map(({ card, route: { member, where } }) => {
           const link = decisionLink(row.id, card.id, card.question);
           const now = states.get(card.id);
           return [

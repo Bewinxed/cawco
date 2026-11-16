@@ -431,25 +431,28 @@ const responses = (state: Record<string, ChoiceEntry>): ChoiceEntry[] =>
 const recordText = (record: StoredRecord): string =>
   `${JSON.stringify(record, null, 2)}\n`;
 
+/** An object, as a page's state holds one under a key. */
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
 /** A dials panel named as a card, its values in order, each as written. */
 const dialsOf = (
   state: Record<string, ChoiceEntry>,
   card: string
 ): [string, string][] => {
-  const panels = (state.dials as ChoiceEntry | undefined)?.value;
-  if (!panels || typeof panels !== "object") {
+  const dials: ChoiceEntry | undefined = state.dials;
+  const panels = dials?.value;
+  if (!isObject(panels)) {
     return [];
   }
-  const panel = (panels as Record<string, unknown>)[card];
-  if (!panel || typeof panel !== "object") {
+  const panel = panels[card];
+  if (!isObject(panel)) {
     return [];
   }
-  return Object.entries(panel as Record<string, unknown>).map(
-    ([key, value]) => [
-      key,
-      typeof value === "string" ? value : JSON.stringify(value),
-    ]
-  );
+  return Object.entries(panel).map(([key, value]) => [
+    key,
+    typeof value === "string" ? value : JSON.stringify(value),
+  ]);
 };
 
 /**
@@ -559,12 +562,10 @@ const linksAmong = (
     )
   );
   const byName = new Map(pages.map((page) => [page.name, page]));
-  const links = new Map(
-    pages.map((page) => [
-      page.name,
-      { after: [] as DecisionLink[], unlocks: [] as DecisionLink[] },
-    ])
-  );
+  const links = new Map<
+    string,
+    { after: DecisionLink[]; unlocks: DecisionLink[] }
+  >(pages.map((page) => [page.name, { after: [], unlocks: [] }]));
   const add = (list: DecisionLink[], page: { name: string; title: string }) => {
     if (!list.some((each) => each.name === page.name)) {
       list.push({ name: page.name, title: page.title });
@@ -739,7 +740,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
     const read = { title, cards, setup: setup !== null };
     programReads.set(hash, read);
     if (programReads.size > PROGRAM_READS) {
-      programReads.delete(programReads.keys().next().value as string);
+      const [oldest] = programReads.keys();
+      programReads.delete(oldest);
     }
     return read;
   };

@@ -33,7 +33,6 @@ import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import {
   type ProjectView,
-  STAGE_KINDS,
   type StageKind,
   VIEW_TOOLS,
   type ViewEventsOutput,
@@ -46,6 +45,7 @@ import { viewToolInput } from "@cawco/core/views-library";
 import { askWords } from "@cawco/core/words/asks";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
+import type { z } from "zod";
 import type { Blocks } from "./blocks";
 import type { DbShape } from "./db";
 import { fileOr } from "./memory";
@@ -274,9 +274,14 @@ export const createViews = ({
     }
     const { tasks: rows } = list;
     const { stages } = view;
-    const byKind = Object.fromEntries(
-      STAGE_KINDS.map((kind) => [kind, 0])
-    ) as Record<StageKind, number>;
+    const byKind: Record<StageKind, number> = {
+      todo: 0,
+      active: 0,
+      waiting: 0,
+      you: 0,
+      done: 0,
+      dropped: 0,
+    };
     for (const row of rows) {
       if (row.kind) {
         byKind[row.kind] += 1;
@@ -380,45 +385,71 @@ export const createViews = ({
     return events;
   };
 
+  /** `args` as `tool`'s input `schema` reads them, or the refusal naming what it doesn't take or can't read. */
+  const argsOf = <S extends z.ZodType>(
+    tool: ViewToolName,
+    schema: S,
+    args: unknown
+  ) => {
+    const parsed = schema.safeParse(args ?? {});
+    if (parsed.success) {
+      return parsed.data;
+    }
+    // A key the tool doesn't take, named as the draft check and the
+    // route name it (core `viewToolInput`, one strict schema at every door).
+    const unknown = unrecognizedKeys(parsed.error.issues);
+    return unknown.length
+      ? problem(422, {
+          code: "view-tool-arguments-unknown",
+          detail: hubFailureWords.unknownArguments(
+            `Query("${tool}", …)`,
+            tool,
+            unknown
+          ),
+        })
+      : problem(400, {
+          code: "view-tool-arguments-unfit",
+          detail: `${tool}'s arguments: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(all)"} ${issue.message}`).join("; ")}.`,
+        });
+  };
+
   /** One view tool's call, its arguments checked against its input schema. */
   const query = (
     projectId: string,
     tool: ViewToolName,
     args: unknown
   ): Promise<unknown> | unknown => {
-    const parsed = viewToolInput(tool).safeParse(args ?? {});
-    if (!parsed.success) {
-      // A key the tool doesn't take, named as the draft check and the
-      // route name it (core `viewToolInput`, one strict schema at every door).
-      const unknown = unrecognizedKeys(parsed.error.issues);
-      return unknown.length
-        ? problem(422, {
-            code: "view-tool-arguments-unknown",
-            detail: hubFailureWords.unknownArguments(
-              `Query("${tool}", …)`,
-              tool,
-              unknown
-            ),
-          })
-        : problem(400, {
-            code: "view-tool-arguments-unfit",
-            detail: `${tool}'s arguments: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(all)"} ${issue.message}`).join("; ")}.`,
-          });
-    }
-    const input = parsed.data as Record<string, never>;
     switch (tool) {
-      case "tasks":
-        return taskRows(projectId, input).then((rows) =>
-          rows instanceof ElysiaStatus ? rows : { rows }
-        );
-      case "stages":
-        return stagesOf(projectId);
-      case "routines":
-        return routinesOf(projectId, (input as { runs?: number }).runs);
-      case "spend":
-        return spendOf(projectId, (input as { days?: number }).days);
-      case "events":
-        return eventsOf(projectId, (input as { limit?: number }).limit);
+      case "tasks": {
+        const input = argsOf(tool, viewToolInput(tool), args);
+        return input instanceof ElysiaStatus
+          ? input
+          : taskRows(projectId, input).then((rows) =>
+              rows instanceof ElysiaStatus ? rows : { rows }
+            );
+      }
+      case "stages": {
+        const input = argsOf(tool, viewToolInput(tool), args);
+        return input instanceof ElysiaStatus ? input : stagesOf(projectId);
+      }
+      case "routines": {
+        const input = argsOf(tool, viewToolInput(tool), args);
+        return input instanceof ElysiaStatus
+          ? input
+          : routinesOf(projectId, input.runs);
+      }
+      case "spend": {
+        const input = argsOf(tool, viewToolInput(tool), args);
+        return input instanceof ElysiaStatus
+          ? input
+          : spendOf(projectId, input.days);
+      }
+      case "events": {
+        const input = argsOf(tool, viewToolInput(tool), args);
+        return input instanceof ElysiaStatus
+          ? input
+          : eventsOf(projectId, input.limit);
+      }
       default:
         return problem(404, {
           code: "view-tool-unknown",

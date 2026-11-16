@@ -207,31 +207,46 @@ const manifestOf = (
     );
     return;
   }
-  const sources = (parsed as { sources?: unknown } | null)?.sources;
-  if (!sources || typeof sources !== "object" || Array.isArray(sources)) {
+  const manifest = isRecord(parsed) ? parsed : {};
+  const { sources, files } = manifest;
+  if (!isRecord(sources)) {
     problems.push(
       'manifest.json needs "sources": an object from each token\'s path to where its value came from.'
     );
     return;
   }
-  const blank = Object.entries(sources)
-    .filter(([, source]) => typeof source !== "string" || !source.trim())
-    .map(([path]) => path);
+  const sourced: Record<string, string> = {};
+  const blank: string[] = [];
+  for (const [path, source] of Object.entries(sources)) {
+    if (typeof source === "string" && source.trim()) {
+      sourced[path] = source;
+    } else {
+      blank.push(path);
+    }
+  }
   if (blank.length > 0) {
     problems.push(
       `manifest.json's sources for ${blank.join(", ")} are not a sentence: give each the file:line, URL, decision page card or "the person's edit" it came from.`
     );
     return;
   }
-  const { files } = parsed as { files?: unknown };
   return {
-    sources: sources as Record<string, string>,
-    files:
-      files && typeof files === "object" && !Array.isArray(files)
-        ? (files as Record<string, string>)
-        : {},
+    sources: sourced,
+    files: isRecord(files) ? stringsOf(files) : {},
   };
 };
+
+/** A JSON object, as a manifest holds one. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** `record`'s string values, by key; any other is left out. */
+const stringsOf = (record: Record<string, unknown>): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(record).flatMap(([key, value]): [string, string][] =>
+      typeof value === "string" ? [[key, value]] : []
+    )
+  );
 
 /** The statuses a project folder's read, and its write, answer problems with (project-folder.ts), read off its functions. */
 type FolderReadStatus = Extract<
@@ -444,7 +459,8 @@ type Unread = Exclude<
 /** The files the resolver's bytes name (dtcg-resolver.ts `resolverFiles`); none when they are no JSON, which the build then says. */
 const namedBy = (resolver: Uint8Array): string[] => {
   try {
-    return resolverFiles(RESOLVER, JSON.parse(decoder.decode(resolver)));
+    const doc: unknown = JSON.parse(decoder.decode(resolver));
+    return resolverFiles(RESOLVER, doc);
   } catch {
     return [];
   }
@@ -503,7 +519,8 @@ const systemOf = async (
           `${path} is named by ${RESOLVER} but is not in design/`
         );
       }
-      return Promise.resolve(JSON.parse(decoder.decode(bytes)));
+      const doc: unknown = JSON.parse(decoder.decode(bytes));
+      return Promise.resolve(doc);
     });
     const unsourced = [...built.system.files]
       .filter(([path]) => path !== RESOLVER)
@@ -1500,15 +1517,8 @@ export const createDesignSystem = (deps: {
   };
 
   /** Where a session's design/ is: its project's folder, or the root of the repository it works in. */
-  const placeOf = async (actor: InstanceRow) => {
-    if (!actor.projectId) {
-      return problem(409, {
-        code: "design-no-project",
-        detail:
-          "A design system belongs to a project; this session is in none.",
-      });
-    }
-    const folder = projectRoot(actor.projectId);
+  const placeOf = async (actor: InstanceRow, projectId: string) => {
+    const folder = projectRoot(projectId);
     if (folder instanceof ElysiaStatus) {
       return problem(folder.status, {
         code: "design-folder-unplaced",
@@ -1521,7 +1531,7 @@ export const createDesignSystem = (deps: {
     ) {
       return { repo: null } satisfies ProposalPlace;
     }
-    return await repositoryOf(actor, actor.projectId);
+    return await repositoryOf(actor, projectId);
   };
 
   /** The repository a session works in, with the commit its system must be on to be the project's when it is its workspace's clone. */
@@ -1999,12 +2009,19 @@ export const createDesignSystem = (deps: {
       why: string | undefined,
       toolUseId: string | undefined
     ) => {
-      const place = await placeOf(actor);
+      const { projectId } = actor;
+      if (!projectId) {
+        return problem(409, {
+          code: "design-no-project",
+          detail:
+            "A design system belongs to a project; this session is in none.",
+        });
+      }
+      const place = await placeOf(actor, projectId);
       // A problem has no `repo`: the task read's, across the dep, is Any.
       if (!("repo" in place)) {
         return place;
       }
-      const projectId = actor.projectId as string;
       const store = storeAt(projectId, place, actor.id, actor.title ?? "CawCo");
       if (store instanceof ElysiaStatus) {
         return store;

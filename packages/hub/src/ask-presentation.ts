@@ -38,14 +38,12 @@ const withOpenUrl = (
   if (
     typeof config !== "object" ||
     config === null ||
-    typeof (config as { url?: unknown }).url !== "string"
+    !("url" in config) ||
+    typeof config.url !== "string"
   ) {
     return input;
   }
-  return {
-    ...input,
-    config: { ...config, url: openUrl((config as { url: string }).url) },
-  };
+  return { ...input, config: { ...config, url: openUrl(config.url) } };
 };
 
 /**

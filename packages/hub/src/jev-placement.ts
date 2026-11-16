@@ -19,11 +19,7 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
-import {
-  type ProjectStarter,
-  STARTER_PLACES,
-  type StarterPlace,
-} from "@cawco/core/starters";
+import type { ProjectStarter, StarterPlace } from "@cawco/core/starters";
 import { unhandled } from "@cawco/core/unhandled";
 import { askJev, type JevAccess, jevUnanswered } from "./jev";
 import type {
@@ -315,7 +311,7 @@ export async function jevDispatch(
     state,
     questions
   );
-  const answers = result.answers as Record<string, { score: number }>;
+  const { answers } = result;
   return new Map(
     asked.map((task) => {
       const readyScore = answers[`${task.id}:ready`]?.score ?? 0;
@@ -450,7 +446,7 @@ export async function jevDuplicate(
       ])
     )
   );
-  const answers = result.answers as Record<string, { noul: number }>;
+  const { answers } = result;
   const [best] = asked
     .map((task) => ({ id: task.id, noul: answers[task.id]?.noul ?? 0 }))
     .sort((a, b) => b.noul - a.noul);
@@ -625,7 +621,7 @@ export async function jevJudged(
       ])
     )
   );
-  const answers = result.answers as Record<string, { noul: number }>;
+  const { answers } = result;
   return criteria.map((criterion, index) => {
     const noul = answers[`c${index}`]?.noul ?? 0;
     return { criterion, noul, met: noul >= JUDGED_THRESHOLD };
@@ -644,6 +640,10 @@ const PHONE_ACTIONS = {
   caw: "Anything else: a question, or a request for the project's conversation.",
 } as const;
 export type PhoneAction = keyof typeof PHONE_ACTIONS;
+
+/** Whether `choice` is one of {@link PHONE_ACTIONS}. */
+const isPhoneAction = (choice: string): choice is PhoneAction =>
+  Object.hasOwn(PHONE_ACTIONS, choice);
 
 /** The most open tasks a phone request picks from when it names none. */
 const PHONE_TASKS_MAX = 50;
@@ -710,9 +710,14 @@ export async function jevPhone(
     },
     questions
   );
-  const answers = result.answers as Record<string, JevChoiceAnswer>;
+  const { answers } = result;
+  if (!isPhoneAction(answers.action.choice)) {
+    throw new Error(
+      `Jev answered the phone request's action with "${answers.action.choice}", which is none of its options`
+    );
+  }
   return {
-    action: answers.action.choice as PhoneAction,
+    action: answers.action.choice,
     ...(answers.stage ? { stage: answers.stage.choice } : {}),
     ...(answers.task ? { task: answers.task.choice } : {}),
   };
@@ -821,9 +826,7 @@ export async function jevStarters(
   const refused: JevStarters["refused"] = [];
   const kept: { p: number; place: StarterPlace; starter: ProjectStarter }[] =
     [];
-  for (const [id, answer] of Object.entries(
-    result.answers as Record<string, JevChoiceAnswer>
-  )) {
+  for (const [id, answer] of Object.entries(result.answers)) {
     const asked = subjects.get(id);
     if (!asked) {
       dropped += 1;
@@ -875,9 +878,11 @@ export async function jevStarters(
   return {
     dropped,
     refused,
-    starters: Object.fromEntries(
-      STARTER_PLACES.map((place) => [place, setOf(place)])
-    ) as Record<StarterPlace, ProjectStarter[]>,
+    starters: {
+      board: setOf("board"),
+      routines: setOf("routines"),
+      decisions: setOf("decisions"),
+    } satisfies Record<StarterPlace, ProjectStarter[]>,
   };
 }
 

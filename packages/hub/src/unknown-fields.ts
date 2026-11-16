@@ -10,6 +10,7 @@
  */
 
 import { ValidationError } from "elysia";
+import { z } from "zod";
 import { unrecognizedKeys } from "./unrecognized-keys";
 
 /** A JSON Schema node as TypeBox builds one, read loosely. */
@@ -92,6 +93,11 @@ export const unknownFieldsOf = (
   return fields.length > 0 ? { fields, on: error.type ?? "body" } : null;
 };
 
+/** What a Standard Schema's `safeParse` answers, as far as its issues. */
+const SafeParsed = z.object({
+  error: z.object({ issues: z.array(z.unknown()) }).optional(),
+});
+
 /**
  * The fields of `value` route schema `schema` doesn't take, as a request
  * carrying it would be refused for: a TypeBox schema read as above, a
@@ -105,7 +111,6 @@ export const fieldsNotTaken = (schema: unknown, value: unknown): string[] =>
   "safeParse" in schema &&
   typeof schema.safeParse === "function"
     ? unrecognizedKeys(
-        (schema.safeParse(value) as { error?: { issues: unknown[] } }).error
-          ?.issues ?? []
+        SafeParsed.parse(schema.safeParse(value)).error?.issues ?? []
       )
     : unknownFields(schema, value);

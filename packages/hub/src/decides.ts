@@ -18,9 +18,9 @@ import {
   type DecidesOwn,
   decidesFileOf,
   type FleetDecides,
-  type FlockMember,
   HEARS,
   type Hear,
+  isFlockMember,
   type Kind,
   kindOf,
   type Member,
@@ -257,7 +257,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     if (member.type === "advisor" || member.type === "practice") {
       types.put(type);
       db.setBuiltIn({ hear: { [member.type]: body.hear } });
-      return memberOf(db.fleet(), member.id) as Member;
+      return known(member.id);
     }
     const row = db.members().find((one) => one.id === member.id);
     if (!row) {
@@ -266,7 +266,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
         detail: decidesWords.unknownMember(member.id),
       });
     }
-    db.putMember(
+    return db.putMember(
       {
         ...row,
         job: body.job?.trim() ?? row.job,
@@ -275,7 +275,6 @@ export const decidesRoutes = (deps: DecidesDeps) => {
       },
       type
     );
-    return memberOf(db.fleet(), member.id) as Member;
   };
 
   /** A kind's name and example as given, refused when either is empty or the name is another kind's. */
@@ -470,7 +469,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           const fleet = db.fleet();
           if (
             memberOf(fleet, id) ||
-            (BUILT_IN_MEMBERS as readonly string[]).includes(id) ||
+            BUILT_IN_MEMBERS.some((one) => one === id) ||
             types.get(id) ||
             !DECIDES_ID.test(id)
           ) {
@@ -483,7 +482,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           if (type instanceof ElysiaStatus) {
             return type;
           }
-          db.putMember(
+          return db.putMember(
             {
               id,
               type: "agent",
@@ -496,7 +495,6 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             },
             type
           );
-          return memberOf(db.fleet(), id) as Member;
         }
       )
       .put(
@@ -532,14 +530,14 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             return member;
           }
           if ("pose" in body) {
-            if (member.pose === null) {
+            if (member.pose === null || !isFlockMember(member.id)) {
               return problem(422, {
                 code: "decides-member-wears-mark",
                 detail: decidesWords.wearsMark(member.name),
               });
             }
             db.setBuiltIn({
-              pictures: { [member.id as FlockMember]: body.pose },
+              pictures: { [member.id]: body.pose },
             });
           } else {
             const row = db.members().find((one) => one.id === member.id);
@@ -551,7 +549,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             }
             db.putMember({ ...row, hue: body.hue }, null);
           }
-          return memberOf(db.fleet(), member.id) as Member;
+          return known(member.id);
         }
       )
       .delete("/api/decides/members/:id", async ({ params }) => {

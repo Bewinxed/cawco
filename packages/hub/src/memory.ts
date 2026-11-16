@@ -279,6 +279,10 @@ const NOT_LASTING = [
 ] as const satisfies readonly Verdict[];
 const VERDICTS: readonly Verdict[] = ["lasting", ...NOT_LASTING];
 
+/** Whether `word` is one of the {@link VERDICTS}. */
+const isVerdict = (word: string | null): word is Verdict =>
+  VERDICTS.some((one) => one === word);
+
 /** Your answer to a proposal for `paths`, as its note in the project's conversation: `sha` is your commit, null when you declined; it links the first file. */
 const answeredNote = (
   paths: string[],
@@ -602,7 +606,8 @@ export interface Note {
    */
   since: string | null;
   source: string;
-  taint: Taint[];
+  /** Its front matter's taints, word for word: the hub writes a session's {@link Taint}s there. */
+  taint: string[];
   task: string | null;
   text: string;
   time: string;
@@ -713,10 +718,8 @@ const parseNote = (path: string, content: string): Note | undefined => {
     task: field("task"),
     time: field("time") ?? "",
     since: since && DAY.test(since) ? since : null,
-    taint: ((taintLine ? listOf(taintLine) : undefined) ?? []) as Taint[],
-    verdict: VERDICTS.includes(verdict as Verdict)
-      ? (verdict as Verdict)
-      : null,
+    taint: (taintLine ? listOf(taintLine) : undefined) ?? [],
+    verdict: isVerdict(verdict) ? verdict : null,
     by: field("by"),
     outcome: field("outcome"),
     text: block.body.trim(),
@@ -1352,6 +1355,13 @@ const checkPersonsNotes = (files: ProposalFile[]) => {
 /** How a lasting note bears on a fact line (Fact sorting, §5.9). */
 type Sort = "corroborates" | "changes" | "conflicts" | "unrelated";
 
+/** Jev's answer of how a note bears on a fact line: its choice one of the sorts, its probabilities by each sort's name. */
+type SortAnswer = Omit<JevChoiceAnswer, "choice"> & { choice: Sort };
+
+/** Whether `choice` is one of the sorts. */
+const isSort = (choice: string): choice is Sort =>
+  Object.hasOwn(SORT_CRITERIA, choice);
+
 /** The four sorts as Jev's criteria: what each means, and what it is not. */
 const SORT_CRITERIA: Record<Sort, { means: string; not: string }> = {
   corroborates: {
@@ -1491,20 +1501,27 @@ const FACT_EDITS = {
   conflicts: conflictFact,
 } as const;
 
+/** A file the person edited in a card's diff, as their answer carries it. */
+const EditedFile = z.object({ content: z.string(), path: z.string() });
+
+/** The `edits` the person's answer carries, when its input is an object. */
+const editsAnswered = (input: unknown): unknown =>
+  typeof input === "object" && input !== null && "edits" in input
+    ? input.edits
+    : undefined;
+
 /** The files the person edited in a card's diff, by path: each `{ path, content }` of a file the proposal changes. */
 const editsOf = (proposal: Proposal, asked: unknown[]) => {
   const edits = new Map<string, string>();
   for (const each of asked) {
-    const { path, content } = (each ?? {}) as {
-      content?: unknown;
-      path?: unknown;
-    };
-    if (typeof path !== "string" || typeof content !== "string") {
+    const edited = EditedFile.safeParse(each);
+    if (!edited.success) {
       return problem(400, {
         code: "memory-edit-unshaped",
         detail: "Each edited file is `{ path, content }`.",
       });
     }
+    const { path, content } = edited.data;
     if (!proposal.files.some((file) => file.path === path)) {
       return problem(400, {
         code: "memory-edit-not-proposed",
@@ -1548,7 +1565,7 @@ const sortedEdit = (
  */
 const clearSort = (
   note: Note,
-  answers: { answer: JevChoiceAnswer<Sort> | undefined; fact: FactLine }[]
+  answers: { answer: SortAnswer | undefined; fact: FactLine }[]
 ): { fact: FactLine; sort: Exclude<Sort, "unrelated"> } | undefined => {
   if (
     answers.length === 0 ||
@@ -1792,7 +1809,7 @@ export const createMemory = ({
   };
 
   const row = (id: string): InstanceRow | undefined =>
-    db.getInstancesByIds([id])[0] as InstanceRow | undefined;
+    db.getInstancesByIds([id]).at(0);
 
   // --- taint ---------------------------------------------------------------------
 
@@ -2136,19 +2153,21 @@ export const createMemory = ({
       },
       questions
     );
-    const answers = result.answers as Record<string, JevChoiceAnswer>;
+    const { answers } = result;
     return {
       verdicts: new Map(
         unsorted.flatMap((each) => {
           const answer = answers[each.id];
-          return answer ? [[each.id, answer.choice as Verdict] as const] : [];
+          return answer?.type === "choice" && isVerdict(answer.choice)
+            ? [[each.id, answer.choice] as const]
+            : [];
         })
       ),
       sorts: new Map(
         pairs.flatMap((pair, index) => {
           const answer = answers[`pair${index}`];
-          return answer
-            ? [[pair, answer as JevChoiceAnswer<Sort>] as const]
+          return answer?.type === "choice" && isSort(answer.choice)
+            ? [[pair, { ...answer, choice: answer.choice }] as const]
             : [];
         })
       ),
@@ -2201,7 +2220,7 @@ export const createMemory = ({
     project: ProjectRow,
     notes: Note[],
     related: Map<string, FactLine[]>,
-    sortOf: (note: Note, fact: FactLine) => JevChoiceAnswer<Sort> | undefined,
+    sortOf: (note: Note, fact: FactLine) => SortAnswer | undefined,
     files: FactFile[]
   ) => {
     const edits = new Map<
@@ -2637,12 +2656,12 @@ export const createMemory = ({
     }: {
       jev:
         | {
-            sorts: Map<Pair, JevChoiceAnswer<Sort>>;
+            sorts: Map<Pair, SortAnswer>;
             verdicts: Map<string, Verdict>;
           }
         | undefined;
       related: Map<string, FactLine[]>;
-      sortOf: (note: Note, fact: FactLine) => JevChoiceAnswer<Sort> | undefined;
+      sortOf: (note: Note, fact: FactLine) => SortAnswer | undefined;
     }
   ) => {
     const kept = await settleInbox(project.id, sorted, jev?.verdicts);
@@ -2681,12 +2700,12 @@ export const createMemory = ({
     }
     // By the note's id: settleInbox hands back a copy of each note Jev
     // marks lasting, not the object the pair holds.
-    const sortOf = (asked: Note, line: FactLine) =>
-      jev?.sorts.get(
-        paired.pairs.find(
-          (pair) => pair.note.id === asked.id && pair.fact === line
-        ) as Pair
+    const sortOf = (asked: Note, line: FactLine) => {
+      const pair = paired.pairs.find(
+        (each) => each.note.id === asked.id && each.fact === line
       );
+      return pair && jev?.sorts.get(pair);
+    };
     const settled = await settleAndPrefill(project, sorted, factFiles, {
       jev,
       related: paired.related,
@@ -2748,11 +2767,11 @@ export const createMemory = ({
       notes: Note[];
       related: Map<string, FactLine[]>;
       reshape: boolean;
-      sortOf: (note: Note, fact: FactLine) => JevChoiceAnswer<Sort> | undefined;
+      sortOf: (note: Note, fact: FactLine) => SortAnswer | undefined;
     }
   ): string => {
     const { notes } = given;
-    const leaning = (answer: JevChoiceAnswer<Sort> | undefined): string => {
+    const leaning = (answer: SortAnswer | undefined): string => {
       if (!answer) {
         return "";
       }
@@ -3506,7 +3525,7 @@ export const createMemory = ({
   const asApproved = (proposal: Proposal, result: PermissionResult) => {
     const asked =
       result.behavior === "allow"
-        ? (result.updatedInput as { edits?: unknown } | undefined)?.edits
+        ? editsAnswered(result.updatedInput)
         : undefined;
     if (!Array.isArray(asked)) {
       return proposal;
@@ -4351,6 +4370,7 @@ export const createMemory = ({
         false: "It is about something the task does not touch.",
       },
     });
+    type ContextQuestion = ReturnType<typeof question>;
     const result = await askRow(
       "context",
       projectId,
@@ -4364,7 +4384,7 @@ export const createMemory = ({
         },
       },
       Object.fromEntries([
-        ...lines.map((fact, index) => [
+        ...lines.map((fact, index): [string, ContextQuestion] => [
           `l${index}`,
           question({
             fact: fact.text,
@@ -4374,7 +4394,7 @@ export const createMemory = ({
           }),
         ]),
         // A prose file from before fact lines, asked of as one fact: its start.
-        ...prose.map((file, index) => [
+        ...prose.map((file, index): [string, ContextQuestion] => [
           `p${index}`,
           question({
             fact: excerpt(file.content, PROSE_ASKED),
@@ -4383,7 +4403,7 @@ export const createMemory = ({
         ]),
       ])
     );
-    const answers = result.answers as Record<string, { noul: number }>;
+    const { answers } = result;
     return {
       lines: new Map(
         lines.map((fact, index) => [fact, answers[`l${index}`]?.noul ?? 0])

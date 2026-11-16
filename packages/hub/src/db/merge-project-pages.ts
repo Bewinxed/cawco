@@ -14,6 +14,7 @@
  */
 import type { Database } from "bun:sqlite";
 import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
+import { z } from "zod";
 
 interface PageRow {
   created_at: number;
@@ -23,18 +24,19 @@ interface PageRow {
   seq: number;
 }
 
-interface Entry {
-  at?: string;
-}
+/** A page's state entry as far as the fold reads it: when it was made; every other field kept as it is. */
+const EntryShape = z.looseObject({ at: z.string().optional() });
+/** A page's state, each entry by its key. */
+const Entries = z.record(z.string(), EntryShape);
 
 /** An artifact's doc, loaded from its update log in order (drop-graph-places.ts reads it too). */
 export const docOf = (client: Database, id: string): Doc => {
   const doc = new Doc();
   const updates = client
-    .query(
+    .query<{ update: Uint8Array }, [string]>(
       'SELECT "update" FROM artifact_updates WHERE artifact_id = ? ORDER BY seq'
     )
-    .all(id) as { update: Uint8Array }[];
+    .all(id);
   for (const { update } of updates) {
     applyUpdate(doc, update);
   }
@@ -43,19 +45,19 @@ export const docOf = (client: Database, id: string): Doc => {
 
 /** Whether the database has no artifacts at all: nothing to fold. Called only in a start that applies 0275 (db/migrate.ts). */
 const settled = (client: Database): boolean =>
-  (
-    client
-      .query(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts')"
-      )
-      .all() as { name: string }[]
-  ).length < 1;
+  client
+    .query<{ name: string }, []>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts')"
+    )
+    .all().length < 1;
 
 /** An artifact's rows by its id, and its held next version's: its log, its keys' changes, the panel that shows it. */
 const dropRow = (client: Database, id: string): void => {
   const held = client
-    .query("SELECT id FROM artifacts WHERE held_for = ?")
-    .all(id) as { id: string }[];
+    .query<{ id: string }, [string]>(
+      "SELECT id FROM artifacts WHERE held_for = ?"
+    )
+    .all(id);
   for (const one of held) {
     dropRow(client, one.id);
   }
@@ -81,12 +83,11 @@ const foldInto = (
   const taken = new Set<string>();
   doc.transact(() => {
     for (const row of older) {
-      const theirs = docOf(client, row.id).getMap("state").toJSON() as Record<
-        string,
-        Entry
-      >;
+      const theirs = Entries.parse(
+        docOf(client, row.id).getMap("state").toJSON()
+      );
       for (const [key, entry] of Object.entries(theirs)) {
-        const ours = state.get(key) as Entry | undefined;
+        const ours = EntryShape.safeParse(state.get(key)).data;
         if (!ours || (entry.at ?? "") > (ours.at ?? "")) {
           state.set(key, entry);
           taken.add(key);
@@ -124,12 +125,12 @@ export const mergeProjectPages = (client: Database): number => {
     return 0;
   }
   const rows = client
-    .query(
+    .query<PageRow, []>(
       `SELECT id, project_id, name, seq, created_at FROM artifacts
        WHERE kind = 'page' AND project_id IS NOT NULL AND held_for IS NULL
        ORDER BY project_id, name, created_at DESC`
     )
-    .all() as PageRow[];
+    .all();
   const groups = new Map<string, PageRow[]>();
   for (const row of rows) {
     const key = `${row.project_id}\n${row.name}`;

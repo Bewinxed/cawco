@@ -20,13 +20,11 @@ const PLACES = "graph.places";
 
 /** Whether the database has no artifacts at all: nothing to drop. Called only in a start that applies 0317 (db/migrate.ts). */
 const settled = (client: Database): boolean =>
-  (
-    client
-      .query(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts', 'artifact_updates')"
-      )
-      .all() as { name: string }[]
-  ).length < 2;
+  client
+    .query<{ name: string }, []>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts', 'artifact_updates')"
+    )
+    .all().length < 2;
 
 /**
  * Takes `graph.places` out of every page's state, in one transaction; how
@@ -37,8 +35,10 @@ export const dropGraphPlaces = (client: Database): number => {
     return 0;
   }
   const pages = client
-    .query("SELECT id, seq FROM artifacts WHERE kind = 'page'")
-    .all() as { id: string; seq: number }[];
+    .query<{ id: string; seq: number }, []>(
+      "SELECT id, seq FROM artifacts WHERE kind = 'page'"
+    )
+    .all();
   let dropped = 0;
   // Immediate, as every transaction on the hub's file (db/index.ts `make`).
   client

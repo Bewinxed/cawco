@@ -15,7 +15,6 @@ import {
 import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
-import type { SentMessage } from "@cawco/core/session-messages";
 import {
   STAGE_CLONE_MS,
   STAGE_INSTALL_MS,
@@ -151,7 +150,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       text: string;
     }[] = [];
     for (const row of ctx.db.sendsIn(instance.id, ["pending"])) {
-      const body = row.body as SentMessage | null;
+      const { body } = row;
       if (!(
         body?.origin?.kind === "system" && body.origin.name === ARTIFACT_ORIGIN
       )) {

@@ -34,11 +34,12 @@ const TYPES = ["select", "color", "text", "action", "pad"] as const;
 /** What the panel draws, in the words a refusal says it with. */
 export const DRAWN_CONTROLS = `a number ([default, min, max, step?] or bare), a colour, a boolean, words, {type: ${TYPES.map((one) => `"${one}"`).join(" | ")}}, and an object of these as a heading over them`;
 
-/** A select's option as a page's config writes it: its words, or a value with its own label. */
-type ConfigOption = string | { label?: string; value: string };
-
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** A number as written; anything else stands empty. */
+const numberOrNone = (one: unknown): number | undefined =>
+  typeof one === "number" ? one : undefined;
 
 /** A key in words, camelCase broken: `shadowBlur` → "Shadow blur". */
 const CASE_BREAK = /([a-z0-9])([A-Z])/gu;
@@ -81,7 +82,7 @@ function configDial(
     out.written[dial.name] = written;
   };
   if (Array.isArray(value) && typeof value[0] === "number") {
-    const [start, min, max, step] = value as number[];
+    const [start, min, max, step] = value.map(numberOrNone);
     add(
       { ...base, kind: "number", min, max, ...(step ? { step } : {}) },
       start ?? 0
@@ -116,7 +117,7 @@ function padDials(
   for (const axis of ["x", "y"] as const) {
     const said = value[axis];
     const [start = 0, min = 0, max = 1, step] = Array.isArray(said)
-      ? (said as number[])
+      ? said.map(numberOrNone)
       : [];
     configDial(
       `${base.name}.${axis}`,
@@ -130,11 +131,15 @@ function padDials(
 
 /** A select's options as a page's config writes them: each its words, or a value with its own label. */
 const optionsOf = (value: unknown): string[] =>
-  Array.isArray(value)
-    ? (value as ConfigOption[]).map((one) =>
-        typeof one === "string" ? one : one.value
-      )
-    : [];
+  Array.isArray(value) ? value.flatMap(optionWords) : [];
+
+/** One select option's words: the option itself, or the value it names; anything else names none. */
+const optionWords = (one: unknown): string[] => {
+  if (typeof one === "string") {
+    return [one];
+  }
+  return isObject(one) && typeof one.value === "string" ? [one.value] : [];
+};
 
 /** A control a page's config writes with its `type`: a select, a colour, words, an action, or a pad (two number dials, X and Y, under its one name); any other `type` is unread. */
 function typedDial(
