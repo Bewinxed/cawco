@@ -23,7 +23,10 @@ import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { ControlName, ControlReply } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
-import type { ArrivingAsk } from "@cawco/core/frames";
+import type {
+  ArrivingAsk,
+  ParkedAsk,
+} from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import {
@@ -77,7 +80,7 @@ import type { SpawnProblem } from "./spawn-problems";
 
 export interface MovesDeps {
   /** Every ask parked now, the ones kept across a hub restart included (server.ts `pending`). */
-  readonly asks: () => ArrivingAsk[];
+  readonly asks: () => ParkedAsk[];
   /**
    * A machine's control: its result, or {@link MachineAway} thrown when the
    * machine is not connected (or went while it answered), which a job waits

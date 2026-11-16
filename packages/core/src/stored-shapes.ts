@@ -3521,11 +3521,31 @@ export type PermissionRequestFrameOutput = z.output<
   typeof PermissionRequestFrameShape
 >;
 
+const HubAskFieldsShape = declared(
+  z.object({
+    designProposal: z.string().optional(),
+    memoryProposal: z.string().optional(),
+    move: z
+      .object({ details: z.array(z.string()), jobId: z.string() })
+      .optional(),
+    projectId: z.string().optional(),
+    proposer: z.string().optional(),
+  }),
+  "HubAskFields",
+  "packages/core/src/frames.ts"
+);
+
+const ParkedRequestShape = declared(
+  PermissionRequestFrameShape.extend(HubAskFieldsShape.shape).extend({}),
+  "ParkedRequest",
+  "packages/core/src/frames.ts"
+);
+
 export const ParkedAskShape = declared(
   z.object({
     instanceId: z.string().optional(),
     machineId: z.string(),
-    payload: PermissionRequestFrameShape,
+    payload: ParkedRequestShape,
     requestId: z.string().optional(),
     verb: VerbShape,
   }),

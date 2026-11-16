@@ -9932,6 +9932,36 @@
           },
           "toolUseId": {
             "type": "string"
+          },
+          "designProposal": {
+            "type": "string"
+          },
+          "memoryProposal": {
+            "type": "string"
+          },
+          "move": {
+            "type": "object",
+            "properties": {
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "jobId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "details",
+              "jobId"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "proposer": {
+            "type": "string"
           }
         },
         "required": [
