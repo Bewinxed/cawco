@@ -42,6 +42,13 @@ export const owedMoveWords = {
   moving: (to: string, model: string | undefined, wait: MoveWait): string =>
     `${wait.kind === "now" ? "Moving" : "Moves"} to ${to}${model ? ` on ${model}` : ""}${whenWords(wait)}`,
   /**
+   * The session card's line for a move that waits, beside chips that
+   * already show the account and the model it moves to: only when it goes.
+   * "Moves when this turn ends"; going now, "Moving…".
+   */
+  waiting: (wait: MoveWait): string =>
+    wait.kind === "now" ? "Moving…" : `Moves${whenWords(wait)}`,
+  /**
    * The menu's line for a model picked while the session waits to relaunch
    * on the account it already names (a model that crossed providers): "Runs
    * GPT-5 when this turn ends".
