@@ -19,6 +19,8 @@ export const Approved = {
 
 `play` runs on the start story's live instance. `update(next)` changes its props in place, never a re-mount, so the component's own enter and leave motion plays (Svelte's `transition:`, a CSS transition on a class, a WAAPI call). `userEvent` dispatches real pointer and key events (`click`, `hover`, `unhover`, `type`, `keyboard`, `tab`, `wait(ms)`); `canvas` finds elements by words and roles (`getByText`, `getByRole(role, { name })`, `getByTestId`). A play runs at most 6 s; its motion is waited on for 3 s more.
 
+From a live story (SKILL.md, step 3) the `play` makes the person's press in place of `update`, and the fixture's mock answers it: `await userEvent.click(canvas.getByRole("button", { name: "Approve" }))`.
+
 The design graph's Map face draws each flow move as a solid arrow from its `from` state to its destination, and each of your `edges` as a dashed one. The report's `moves` lists, per move, every animation it fired, read from `getAnimations()` as each started: `target`, `property`, `duration`, `delay`, `easing`. A move with no animations moved nothing the engine saw; a move with `error` threw.
 
 ## The Animation face

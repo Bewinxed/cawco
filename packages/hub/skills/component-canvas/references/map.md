@@ -5,6 +5,8 @@
 - `design_map({ query: "card" })`: find by name. Paged: 50 at a time, `cursor` for more; `dir` narrows a big repository.
 - `design_map({ component: "src/lib/Card.svelte" })`: its card: props, states files, stories with the interactions they reach, moves, used in and made of with each call site.
 
-**The screen rule: mount parts, never redraw them.** A screen is a real component that composes components. Its states file imports the screen; the screen imports its parts. Before writing markup, look the part up: if the map has it, import it and pass its props. A frame's `parts` (in `artifact_read` with `state`) is the proof: a screen whose frame shows a button's markup with no `Button` in its parts redrew it.
+**The screen rule: mount parts, never redraw them.** A screen is a real component that composes components. Its states file imports the screen; the screen imports its parts. Before writing markup, look the part up: if the map has it, import it and pass its props. A frame's `parts` (in `artifact_read` with `state`) is the proof: a screen whose frame shows a button's markup with no `Button` in its parts redrew it. `parts` reads the story's root: a part drawn only inside a layer portalled out of it (a popover's rows) is listed in that part's own states file.
+
+**Used in is where a piece ships.** A live story mounts the piece inside the components its card lists under used in, so the person meets it where the product has it.
 
 A part changed once changes everywhere it is used: an instance is an import. Check `usedIn` before changing a part's props, and read each screen that uses it again.
