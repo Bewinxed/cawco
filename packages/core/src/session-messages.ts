@@ -3,6 +3,7 @@
 import type { CutCommand } from "./commands/controls";
 import { everyOf } from "./every-of";
 import type { EffortLevel, HarnessKind, PermissionMode } from "./harness/kinds";
+import { isOneOf } from "./one-of";
 
 /** A session's own word on what it is doing right now. */
 export type NeutralStatus = "compacting" | "requesting" | null;
@@ -360,6 +361,47 @@ export interface SessionMessage {
 
 /* ------------------------------------------------------ neutral messages — */
 
+/**
+ * The blocks a Claude message carries that no reader draws, by their
+ * `type` as Anthropic's API names them (`@anthropic-ai/sdk` 0.129.0: the
+ * user role's `ContentBlockParam` and the assistant role's
+ * `BetaContentBlock`): a server tool's call and its result, an MCP
+ * connector's call, result and listing, a document or search result a
+ * message holds, a container upload, a compaction's block and a model
+ * fallback's. Core names each kind; its fields stay the harness's.
+ */
+export const HARNESS_BLOCK_TYPES = [
+  "advisor_tool_result",
+  "bash_code_execution_tool_result",
+  "code_execution_tool_result",
+  "compaction",
+  "container_upload",
+  "document",
+  "fallback",
+  "mcp_tool_listing",
+  "mcp_tool_result",
+  "mcp_tool_use",
+  "search_result",
+  "server_tool_use",
+  "text_editor_code_execution_tool_result",
+  "tool_search_tool_result",
+  "web_fetch_tool_result",
+  "web_search_tool_result",
+] as const;
+
+/** One of the {@link HARNESS_BLOCK_TYPES}. */
+export type HarnessBlockType = (typeof HARNESS_BLOCK_TYPES)[number];
+
+/** A block of a kind no reader draws ({@link HARNESS_BLOCK_TYPES}), passed on as the harness sent it. */
+export interface NeutralHarnessBlock {
+  type: HarnessBlockType;
+}
+
+/** Whether `block` is one no reader draws ({@link HARNESS_BLOCK_TYPES}). */
+export const isHarnessBlock = (block: {
+  type: string;
+}): block is NeutralHarnessBlock => isOneOf(HARNESS_BLOCK_TYPES, block.type);
+
 export type NeutralContentBlock =
   | { type: "text"; text: string }
   | { type: "thinking"; thinking: string; signature?: string }
@@ -368,12 +410,13 @@ export type NeutralContentBlock =
       type: "tool_use";
       id: string;
       name: string;
-      input: Record<string, unknown>;
+      /** The call's arguments as the model wrote them: an object, read with `isRecord`. */
+      input: unknown;
     }
   | {
       type: "tool_result";
       tool_use_id: string;
-      content: unknown;
+      content?: unknown;
       is_error?: boolean;
       structuredContent?: Record<string, unknown>;
       /** The answer payload of an `AskUserQuestion` tool result, normalised by the harness adapter. */
@@ -388,23 +431,55 @@ export type NeutralContentBlock =
        */
       source:
         | { type: "base64"; media_type: string; data: string }
-        | { type: "url"; media_type: string; url: string };
-    };
+        /** `media_type`: the hub's media store names it; a URL the model is handed (Anthropic's `URLImageSource`) carries none. */
+        | { type: "url"; media_type?: string; url: string }
+        /** A Files API upload the model is handed (Anthropic's `FileImageSource`). */
+        | { type: "file"; file_id: string };
+    }
+  | NeutralHarnessBlock;
 
 export type NeutralAssistantBlock = Extract<
   NeutralContentBlock,
-  { type: "text" | "thinking" | "redacted_thinking" | "tool_use" }
+  {
+    type:
+      "text" | "thinking" | "redacted_thinking" | "tool_use" | HarnessBlockType;
+  }
 >;
 
 export type NeutralOrigin =
   | { kind: "human" }
+  /** Another session's words: `from` is the session that sent them. */
   | {
       kind: "peer";
-      from?: string;
+      from: string;
       name?: string;
       fromSession?: string;
       body?: string;
     }
+  /**
+   * The kinds Claude Code itself stamps on a user frame (the Agent SDK's
+   * `SDKMessageOrigin`, 0.3.325) beside the human's and a peer's: a
+   * channel's message, a task's notification, a coordinator's, an observer's
+   * report or activity, a turn it continues on its own, and one whose
+   * provenance it could not tell (`unclassified`). Named here as Claude
+   * sends them, and drawn as no one's words of their own.
+   */
+  | { kind: "channel"; server: string }
+  | {
+      kind: "task-notification";
+      fireReason?: string;
+      runId?: string;
+      subkind?:
+        | "scheduled-trigger"
+        | "peer-send-message"
+        | "projects-relay"
+        | "session-inbox";
+    }
+  | { kind: "coordinator" }
+  | { kind: "unclassified" }
+  | { kind: "observer"; from: string; senderTaskId: string }
+  | { kind: "auto-continuation" }
+  | { kind: "observer-activity" }
   /**
    * CawCo's own word, not the user's and not another session's: a rule that
    * fired, a leak, a wake, a carry-on. `name` is its kind, e.g. `leak` or
@@ -450,10 +525,10 @@ export interface NeutralAssistantMessage {
   message: {
     model?: string;
     content: NeutralAssistantBlock[];
-    /** Claude: the request's own tokens, as its API answered them. */
+    /** Claude: the request's own tokens, as its API answered them (null where it counted none). */
     usage?: {
-      cache_creation_input_tokens?: number;
-      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number | null;
+      cache_read_input_tokens?: number | null;
       input_tokens?: number;
     };
   };
@@ -506,8 +581,12 @@ export interface NeutralUserMessage {
   compactSummary?: true;
   keepAlive?: true;
   /** `harnessNote`: the message is a notice of the harness's, typed where its normaliser read it ({@link HarnessNote}). */
+  /**
+   * `role`: Anthropic's `MessageParam` names three, and Claude Code's user
+   * frame carries whichever it was given; a send is always `user`.
+   */
   message: {
-    role: "user";
+    role: "user" | "assistant" | "system";
     content: string | NeutralContentBlock[];
     harnessNote?: HarnessNote;
   };
@@ -761,21 +840,30 @@ export const STREAM_SO_FAR = "stream_so_far";
 export const FRAMES_LOST = "frames_lost";
 
 export interface NeutralStreamMessage {
+  /**
+   * A partial as the model's stream says it (Anthropic's
+   * `BetaRawMessageStreamEvent`): its text and thinking read, every other
+   * event and delta named by its type, its fields the harness's.
+   */
   event:
-    | {
-        type: "content_block_start";
-        content_block: { type: "thinking"; thinking: string };
-      }
-    | {
-        type: "content_block_delta";
-        delta: { type: "text_delta"; text: string };
-      }
+    | { type: "message_start" }
+    | { type: "message_delta" }
+    | { type: "message_stop" }
+    | { type: "content_block_start"; content_block: NeutralAssistantBlock }
     | {
         type: "content_block_delta";
-        delta: { type: "thinking_delta"; thinking: string };
+        delta:
+          | { type: "text_delta"; text: string }
+          | { type: "thinking_delta"; thinking: string }
+          | {
+              type:
+                | "citations_delta"
+                | "compaction_delta"
+                | "input_json_delta"
+                | "signature_delta";
+            };
       }
-    | { type: "content_block_stop" }
-    | { type: "message_stop" };
+    | { type: "content_block_stop" };
   /**
    * The id the harness stores the message being written under, where it
    * stores it while it is written (opencode): what {@link STREAM_SO_FAR}

@@ -730,9 +730,14 @@ export interface HookHttpHandler extends HookHandlerBase {
   url: string;
 }
 
+/**
+ * An MCP tool the hook calls: `server` the server holding it, `tool` its
+ * name, as Claude Code's settings name them (the Agent SDK's `Settings`
+ * hook, 0.3.325, typed from the CLI's own schema).
+ */
 export interface HookMcpToolHandler extends HookHandlerBase {
-  mcp_server_name: string;
-  tool_name: string;
+  server: string;
+  tool: string;
   type: "mcp_tool";
 }
 
@@ -751,6 +756,18 @@ export interface HookAgentHandler extends HookHandlerBase {
 export type HookHandler =
   | HookCommandHandler
   | HookHttpHandler
+  | HookMcpToolHandler
+  | HookPromptHandler
+  | HookAgentHandler;
+
+/**
+ * A handler as Claude Code's settings take it (the Agent SDK's `Settings`
+ * hook): a command's `command` named, as the machine writes it in for a
+ * hook that carries a script; an HTTP post is run through CawCo's guard as
+ * a command (agent fleet-hook-guard.ts).
+ */
+export type ClaudeHookHandler =
+  | (HookCommandHandler & { command: string })
   | HookMcpToolHandler
   | HookPromptHandler
   | HookAgentHandler;
@@ -936,11 +953,11 @@ export function hookProblem(draft: HookDraftForm): Record<string, string> {
       break;
     }
     case "mcp_tool": {
-      if (!handler.mcp_server_name?.trim()) {
-        wrong.mcp_server_name = "Name the MCP server holding the tool.";
+      if (!handler.server?.trim()) {
+        wrong.server = "Name the MCP server holding the tool.";
       }
-      if (!handler.tool_name?.trim()) {
-        wrong.tool_name = "Name the tool to call.";
+      if (!handler.tool?.trim()) {
+        wrong.tool = "Name the tool to call.";
       }
       break;
     }

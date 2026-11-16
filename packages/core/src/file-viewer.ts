@@ -29,10 +29,11 @@
  * built (`build-binary.ts`, {@link fileViewerAssets}); a source checkout
  * builds them on first request.
  */
+
 import { readFile } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import pdfjsPackage from "pdfjs-dist/package.json" with { type: "json" };
-import { humanSize } from "./attachments";
+import { humanSize, IMAGE_MEDIA_TYPES } from "./attachments";
 import { bundled } from "./bundled";
 import {
   FILE_LOADING_ATTR,
@@ -64,15 +65,12 @@ export type FileView =
   | { kind: "other" };
 
 /** Images every engine the panel runs in draws (PDF.js's own list of them). */
-const DRAWN_IMAGES = new Set([
+const DRAWN_IMAGES: ReadonlySet<string> = new Set([
+  ...IMAGE_MEDIA_TYPES,
   "image/apng",
   "image/avif",
   "image/bmp",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
   "image/svg+xml",
-  "image/webp",
   "image/x-icon",
   "image/vnd.microsoft.icon",
 ]);

@@ -13,6 +13,7 @@ import type {
 import { ACCOUNT_HUES } from "./accounts/kinds";
 import type { CapPeriod as CapPeriodType, OnCap as OnCapType } from "./areas";
 import type { AskState as AskStateType } from "./asks";
+import { IMAGE_MEDIA_TYPES } from "./attachments";
 import { BINARY_UPDATE_PHASES } from "./binary-updates";
 import type {
   BrowserHostKind as BrowserHostKindType,
@@ -63,6 +64,7 @@ import type {
 import type { SendWithdrawal as SendWithdrawalType } from "./session/controls";
 import { FLEET_MCP_CHANGE_KINDS } from "./session/controls";
 import type { SendMode as SendModeType } from "./session-messages";
+import { HARNESS_BLOCK_TYPES } from "./session-messages";
 import { INTERACTIONS, STAGE_TOOLCHAINS } from "./stage";
 import type { StarterOutcome as StarterOutcomeType } from "./starters";
 import { declared } from "./stored-types";
@@ -1250,6 +1252,20 @@ export const SendAttachmentShape = declared(
 );
 export type SendAttachmentOutput = z.output<typeof SendAttachmentShape>;
 
+const ImageMediaTypeShape = declared(
+  z.enum(IMAGE_MEDIA_TYPES),
+  "ImageMediaType",
+  "packages/core/src/attachments.ts"
+);
+export type ImageMediaTypeOutput = z.output<typeof ImageMediaTypeShape>;
+
+const TurnImageShape = declared(
+  z.object({ data: z.string(), mediaType: ImageMediaTypeShape }),
+  "TurnImage",
+  "packages/core/src/attachments.ts"
+);
+export type TurnImageOutput = z.output<typeof TurnImageShape>;
+
 const UserAnswersShape = declared(
   z.record(z.string(), z.union([z.string(), z.array(z.string())])),
   "UserAnswers",
@@ -1312,25 +1328,40 @@ const UserQuestionResultShape = declared(
 );
 export type UserQuestionResultOutput = z.output<typeof UserQuestionResultShape>;
 
+const HarnessBlockTypeShape = declared(
+  z.enum(HARNESS_BLOCK_TYPES),
+  "HarnessBlockType",
+  "packages/core/src/session-messages.ts"
+);
+export type HarnessBlockTypeOutput = z.output<typeof HarnessBlockTypeShape>;
+
+const NeutralHarnessBlockShape = declared(
+  z.object({ type: HarnessBlockTypeShape }),
+  "NeutralHarnessBlock",
+  "packages/core/src/session-messages.ts"
+);
+export type NeutralHarnessBlockOutput = z.output<
+  typeof NeutralHarnessBlockShape
+>;
+
 const NeutralContentBlockShape = declared(
   z.union([
+    z.object({
+      type: z.literal("tool_use"),
+      id: z.string(),
+      name: z.string(),
+      input: z.unknown(),
+    }),
     z.object({ type: z.literal("text"), text: z.string() }),
     z.object({
       type: z.literal("thinking"),
       thinking: z.string(),
       signature: z.string().optional(),
     }),
-    z.object({ type: z.literal("redacted_thinking") }),
-    z.object({
-      type: z.literal("tool_use"),
-      id: z.string(),
-      name: z.string(),
-      input: z.record(z.string(), z.unknown()),
-    }),
     z.object({
       type: z.literal("tool_result"),
       tool_use_id: z.string(),
-      content: z.unknown(),
+      content: z.unknown().optional(),
       is_error: z.boolean().optional(),
       structuredContent: z.record(z.string(), z.unknown()).optional(),
       questionResult: UserQuestionResultShape.optional(),
@@ -1345,11 +1376,14 @@ const NeutralContentBlockShape = declared(
         }),
         z.object({
           type: z.literal("url"),
-          media_type: z.string(),
+          media_type: z.string().optional(),
           url: z.string(),
         }),
+        z.object({ type: z.literal("file"), file_id: z.string() }),
       ]),
     }),
+    z.object({ type: z.literal("redacted_thinking") }),
+    NeutralHarnessBlockShape,
   ]),
   "NeutralContentBlock",
   "packages/core/src/session-messages.ts"
@@ -1377,11 +1411,34 @@ const NeutralOriginShape = declared(
     z.object({ kind: z.literal("human") }),
     z.object({
       kind: z.literal("peer"),
-      from: z.string().optional(),
+      from: z.string(),
       name: z.string().optional(),
       fromSession: z.string().optional(),
       body: z.string().optional(),
     }),
+    z.object({ kind: z.literal("channel"), server: z.string() }),
+    z.object({
+      kind: z.literal("task-notification"),
+      fireReason: z.string().optional(),
+      runId: z.string().optional(),
+      subkind: z
+        .enum([
+          "scheduled-trigger",
+          "peer-send-message",
+          "projects-relay",
+          "session-inbox",
+        ])
+        .optional(),
+    }),
+    z.object({ kind: z.literal("coordinator") }),
+    z.object({ kind: z.literal("unclassified") }),
+    z.object({
+      kind: z.literal("observer"),
+      from: z.string(),
+      senderTaskId: z.string(),
+    }),
+    z.object({ kind: z.literal("auto-continuation") }),
+    z.object({ kind: z.literal("observer-activity") }),
     z.object({
       kind: z.literal("system"),
       line: z.string().optional(),
@@ -1399,7 +1456,7 @@ const NeutralUserMessageShape = declared(
     compactSummary: z.literal(true).optional(),
     keepAlive: z.literal(true).optional(),
     message: z.object({
-      role: z.literal("user"),
+      role: z.enum(["user", "assistant", "system"]),
       content: z.union([z.string(), z.array(NeutralContentBlockShape)]),
       harnessNote: HarnessNoteShape.optional(),
     }),
@@ -1436,9 +1493,7 @@ export const SendPayloadShape = declared(
     attachments: z.array(SendAttachmentShape).optional(),
     delivery: z.string().optional(),
     from: z.string().optional(),
-    images: z
-      .array(z.object({ mediaType: z.string(), data: z.string() }))
-      .optional(),
+    images: z.array(TurnImageShape).optional(),
     instanceId: z.string(),
     message: SentMessageShape,
     provenance: z
@@ -1864,8 +1919,8 @@ export type HookHttpHandlerOutput = z.output<typeof HookHttpHandlerShape>;
 
 const HookMcpToolHandlerShape = declared(
   HookHandlerBaseShape.extend({
-    mcp_server_name: z.string(),
-    tool_name: z.string(),
+    server: z.string(),
+    tool: z.string(),
     type: z.literal("mcp_tool"),
   }),
   "HookMcpToolHandler",
@@ -3416,9 +3471,7 @@ const MoveRequestShape = declared(
     approved: z.string().optional(),
     attachments: z.array(SendAttachmentShape).optional(),
     from: z.string().optional(),
-    images: z
-      .array(z.object({ data: z.string(), mediaType: z.string() }))
-      .optional(),
+    images: z.array(TurnImageShape).optional(),
     machineId: z.string(),
     path: z.string().optional(),
     prompt: z.string().optional(),

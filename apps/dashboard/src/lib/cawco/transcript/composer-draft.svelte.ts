@@ -10,9 +10,11 @@
  * across a reload through `draft-store.ts`.
  */
 
+import { type ImageMediaType, isImageMediaType } from "@cawco/core/attachments";
 import { eachFileOnce } from "@cawco/core/comments/model";
 import { detach } from "@cawco/core/detach";
 import type { StarterPlace } from "@cawco/core/starters";
+import { pictureWords } from "@cawco/core/words/pictures";
 import { SvelteSet } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
@@ -26,13 +28,16 @@ const LARGE_PASTE = 1200;
 const TEXT_LIMIT = 1024 * 1024;
 
 /** base64 without the `data:` prefix — the wire shape images travel in. */
-function readImage(file: File): Promise<PendingImage> {
+function readImage(
+  file: File,
+  mediaType: ImageMediaType
+): Promise<PendingImage> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const result = String(reader.result);
       resolve({
-        mediaType: file.type,
+        mediaType,
         data: result.slice(result.indexOf(",") + 1),
         name: file.name,
       });
@@ -60,7 +65,7 @@ async function textOf(file: File): Promise<string | undefined> {
 
 export interface PendingImage {
   data: string;
-  mediaType: string;
+  mediaType: ImageMediaType;
   name: string;
 }
 
@@ -374,17 +379,24 @@ export class ComposerDraft {
    */
   async add(files: Iterable<File>): Promise<void> {
     if (this.byReference) {
+      // A picture of a type no session takes rides as a file.
       for (const file of files) {
         await this.attach(
           file,
-          file.type.startsWith("image/") ? "image" : undefined
+          isImageMediaType(file.type) ? "image" : undefined
         );
       }
       return;
     }
     for (const file of files) {
-      if (file.type.startsWith("image/")) {
-        this.images = [...this.images, await readImage(file)];
+      const { type } = file;
+      if (isImageMediaType(type)) {
+        this.images = [...this.images, await readImage(file, type)];
+        continue;
+      }
+      // A picture no session takes is refused as it is attached.
+      if (type.startsWith("image/")) {
+        this.notice = pictureWords.typeRefused(type);
         continue;
       }
       const text = await textOf(file);
@@ -423,8 +435,8 @@ export class ComposerDraft {
     const id = newId();
     let preview: string | undefined;
     let pixels: { height: number; width: number } | null = null;
-    if (as === "image" && file instanceof File) {
-      const read = await readImage(file);
+    if (as === "image" && file instanceof File && isImageMediaType(file.type)) {
+      const read = await readImage(file, file.type);
       preview = `data:${read.mediaType};base64,${read.data}`;
       pixels = await pixelsOf(preview);
     }

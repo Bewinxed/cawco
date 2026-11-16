@@ -373,16 +373,18 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     if (!parentId || parentId === sender.id) {
       return undefined;
     }
-    return ctx.workItems
-      .reportees(sender)
-      .find(
-        (row) =>
-          (row.status === "running" ||
-            row.status === "starting" ||
-            (unknown && row.status === "unknown") ||
-            (row.status === "sleeping" && row.sessionId !== null)) &&
-          !ctx.workItems.refusal(row, { kind: "peer", fromSession: sender.id })
-      );
+    return ctx.workItems.reportees(sender).find(
+      (row) =>
+        (row.status === "running" ||
+          row.status === "starting" ||
+          (unknown && row.status === "unknown") ||
+          (row.status === "sleeping" && row.sessionId !== null)) &&
+        !ctx.workItems.refusal(row, {
+          kind: "peer",
+          from: sender.id,
+          fromSession: sender.id,
+        })
+    );
   };
 
   /**

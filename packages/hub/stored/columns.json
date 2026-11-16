@@ -4124,16 +4124,22 @@
         "items": {
           "type": "object",
           "properties": {
-            "mediaType": {
-              "type": "string"
-            },
             "data": {
               "type": "string"
+            },
+            "mediaType": {
+              "type": "string",
+              "enum": [
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+                "image/webp"
+              ]
             }
           },
           "required": [
-            "mediaType",
-            "data"
+            "data",
+            "mediaType"
           ]
         }
       },
@@ -4790,10 +4796,10 @@
           "timeout": {
             "type": "number"
           },
-          "mcp_server_name": {
+          "server": {
             "type": "string"
           },
-          "tool_name": {
+          "tool": {
             "type": "string"
           },
           "type": {
@@ -4802,8 +4808,8 @@
           }
         },
         "required": [
-          "mcp_server_name",
-          "tool_name",
+          "server",
+          "tool",
           "type"
         ]
       },
@@ -4952,10 +4958,10 @@
           "timeout": {
             "type": "number"
           },
-          "mcp_server_name": {
+          "server": {
             "type": "string"
           },
-          "tool_name": {
+          "tool": {
             "type": "string"
           },
           "type": {
@@ -4964,8 +4970,8 @@
           }
         },
         "required": [
-          "mcp_server_name",
-          "tool_name",
+          "server",
+          "tool",
           "type"
         ]
       },
@@ -8321,7 +8327,13 @@
               "type": "string"
             },
             "mediaType": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+                "image/webp"
+              ]
             }
           },
           "required": [
@@ -11094,7 +11106,11 @@
         "properties": {
           "role": {
             "type": "string",
-            "const": "user"
+            "enum": [
+              "user",
+              "assistant",
+              "system"
+            ]
           },
           "content": {
             "anyOf": [
@@ -11105,6 +11121,28 @@
                 "type": "array",
                 "items": {
                   "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "tool_use"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "input": {}
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "name",
+                        "input"
+                      ]
+                    },
                     {
                       "type": "object",
                       "properties": {
@@ -11138,46 +11176,6 @@
                       "required": [
                         "type",
                         "thinking"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "const": "redacted_thinking"
-                        }
-                      },
-                      "required": [
-                        "type"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "const": "tool_use"
-                        },
-                        "id": {
-                          "type": "string"
-                        },
-                        "name": {
-                          "type": "string"
-                        },
-                        "input": {
-                          "type": "object",
-                          "propertyNames": {
-                            "type": "string"
-                          },
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "type",
-                        "id",
-                        "name",
-                        "input"
                       ]
                     },
                     {
@@ -11356,8 +11354,7 @@
                       },
                       "required": [
                         "type",
-                        "tool_use_id",
-                        "content"
+                        "tool_use_id"
                       ]
                     },
                     {
@@ -11405,8 +11402,23 @@
                               },
                               "required": [
                                 "type",
-                                "media_type",
                                 "url"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "file"
+                                },
+                                "file_id": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "file_id"
                               ]
                             }
                           ]
@@ -11415,6 +11427,47 @@
                       "required": [
                         "type",
                         "source"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "redacted_thinking"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "advisor_tool_result",
+                            "bash_code_execution_tool_result",
+                            "code_execution_tool_result",
+                            "compaction",
+                            "container_upload",
+                            "document",
+                            "fallback",
+                            "mcp_tool_listing",
+                            "mcp_tool_result",
+                            "mcp_tool_use",
+                            "search_result",
+                            "server_tool_use",
+                            "text_editor_code_execution_tool_result",
+                            "tool_search_tool_result",
+                            "web_fetch_tool_result",
+                            "web_search_tool_result"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
                       ]
                     }
                   ]
@@ -11490,6 +11543,118 @@
               },
               "body": {
                 "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "from"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "channel"
+              },
+              "server": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "server"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "task-notification"
+              },
+              "fireReason": {
+                "type": "string"
+              },
+              "runId": {
+                "type": "string"
+              },
+              "subkind": {
+                "type": "string",
+                "enum": [
+                  "scheduled-trigger",
+                  "peer-send-message",
+                  "projects-relay",
+                  "session-inbox"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "coordinator"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "unclassified"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "observer"
+              },
+              "from": {
+                "type": "string"
+              },
+              "senderTaskId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "from",
+              "senderTaskId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "auto-continuation"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "observer-activity"
               }
             },
             "required": [
@@ -11636,16 +11801,22 @@
             "items": {
               "type": "object",
               "properties": {
-                "mediaType": {
-                  "type": "string"
-                },
                 "data": {
                   "type": "string"
+                },
+                "mediaType": {
+                  "type": "string",
+                  "enum": [
+                    "image/jpeg",
+                    "image/png",
+                    "image/gif",
+                    "image/webp"
+                  ]
                 }
               },
               "required": [
-                "mediaType",
-                "data"
+                "data",
+                "mediaType"
               ]
             }
           },
@@ -11668,7 +11839,11 @@
                 "properties": {
                   "role": {
                     "type": "string",
-                    "const": "user"
+                    "enum": [
+                      "user",
+                      "assistant",
+                      "system"
+                    ]
                   },
                   "content": {
                     "anyOf": [
@@ -11679,6 +11854,28 @@
                         "type": "array",
                         "items": {
                           "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "tool_use"
+                                },
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "input": {}
+                              },
+                              "required": [
+                                "type",
+                                "id",
+                                "name",
+                                "input"
+                              ]
+                            },
                             {
                               "type": "object",
                               "properties": {
@@ -11712,46 +11909,6 @@
                               "required": [
                                 "type",
                                 "thinking"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "type": {
-                                  "type": "string",
-                                  "const": "redacted_thinking"
-                                }
-                              },
-                              "required": [
-                                "type"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "type": {
-                                  "type": "string",
-                                  "const": "tool_use"
-                                },
-                                "id": {
-                                  "type": "string"
-                                },
-                                "name": {
-                                  "type": "string"
-                                },
-                                "input": {
-                                  "type": "object",
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "additionalProperties": {}
-                                }
-                              },
-                              "required": [
-                                "type",
-                                "id",
-                                "name",
-                                "input"
                               ]
                             },
                             {
@@ -11930,8 +12087,7 @@
                               },
                               "required": [
                                 "type",
-                                "tool_use_id",
-                                "content"
+                                "tool_use_id"
                               ]
                             },
                             {
@@ -11979,8 +12135,23 @@
                                       },
                                       "required": [
                                         "type",
-                                        "media_type",
                                         "url"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "const": "file"
+                                        },
+                                        "file_id": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "file_id"
                                       ]
                                     }
                                   ]
@@ -11989,6 +12160,47 @@
                               "required": [
                                 "type",
                                 "source"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "redacted_thinking"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "advisor_tool_result",
+                                    "bash_code_execution_tool_result",
+                                    "code_execution_tool_result",
+                                    "compaction",
+                                    "container_upload",
+                                    "document",
+                                    "fallback",
+                                    "mcp_tool_listing",
+                                    "mcp_tool_result",
+                                    "mcp_tool_use",
+                                    "search_result",
+                                    "server_tool_use",
+                                    "text_editor_code_execution_tool_result",
+                                    "tool_search_tool_result",
+                                    "web_fetch_tool_result",
+                                    "web_search_tool_result"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
                               ]
                             }
                           ]
@@ -12064,6 +12276,118 @@
                       },
                       "body": {
                         "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "from"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "channel"
+                      },
+                      "server": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "server"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "task-notification"
+                      },
+                      "fireReason": {
+                        "type": "string"
+                      },
+                      "runId": {
+                        "type": "string"
+                      },
+                      "subkind": {
+                        "type": "string",
+                        "enum": [
+                          "scheduled-trigger",
+                          "peer-send-message",
+                          "projects-relay",
+                          "session-inbox"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "coordinator"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "unclassified"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "observer"
+                      },
+                      "from": {
+                        "type": "string"
+                      },
+                      "senderTaskId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "from",
+                      "senderTaskId"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "auto-continuation"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "observer-activity"
                       }
                     },
                     "required": [

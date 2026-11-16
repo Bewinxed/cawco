@@ -23,8 +23,10 @@ import type {
 import type { ArtifactKind as ArtifactKindType } from "@cawco/core/artifact-kinds";
 import type {
   FileAttachment as FileAttachmentType,
+  ImageMediaType as ImageMediaTypeType,
   SendAttachment as SendAttachmentType,
   TextAttachment as TextAttachmentType,
+  TurnImage as TurnImageType,
 } from "@cawco/core/attachments";
 import type { BinaryUpdatePolicy as BinaryUpdatePolicyType } from "@cawco/core/binary-updates";
 import type {
@@ -115,8 +117,10 @@ import type {
   RuleWatch as RuleWatchType,
 } from "@cawco/core/rules";
 import type {
+  HarnessBlockType as HarnessBlockTypeType,
   HarnessNote as HarnessNoteType,
   NeutralContentBlock as NeutralContentBlockType,
+  NeutralHarnessBlock as NeutralHarnessBlockType,
   NeutralOrigin as NeutralOriginType,
   NeutralUserMessage as NeutralUserMessageType,
   SentMessage as SentMessageType,
@@ -261,6 +265,7 @@ import type {
   FleetScopeOutput,
   ForkSourceOutput,
   GraphKeptOutput,
+  HarnessBlockTypeOutput,
   HarnessKindOutput,
   HarnessNoteOutput,
   HookAgentHandlerOutput,
@@ -272,6 +277,7 @@ import type {
   HookHttpHandlerOutput,
   HookMcpToolHandlerOutput,
   HookPromptHandlerOutput,
+  ImageMediaTypeOutput,
   KeptFormOutput,
   KeptPairingOutput,
   KeptSendOutput,
@@ -287,6 +293,7 @@ import type {
   MemoryScopeOutput,
   ModelUseOutput,
   NeutralContentBlockOutput,
+  NeutralHarnessBlockOutput,
   NeutralOriginOutput,
   NeutralUserMessageOutput,
   OrphanedCommentsOutput,
@@ -360,6 +367,7 @@ import type {
   TaskWaitOutput,
   TextAttachmentOutput,
   ThreadEntryOutput,
+  TurnImageOutput,
   UserAnswersOutput,
   UserQuestionAnsweredOutput,
   UserQuestionDismissedOutput,
@@ -476,11 +484,15 @@ prove<
     Same<TextAttachmentOutput, TextAttachmentType>,
     Same<FileAttachmentOutput, FileAttachmentType>,
     Same<SendAttachmentOutput, SendAttachmentType>,
+    Same<ImageMediaTypeOutput, ImageMediaTypeType>,
+    Same<TurnImageOutput, TurnImageType>,
     Same<UserAnswersOutput, UserAnswersType>,
     Same<UserQuestionOutput, UserQuestionType>,
     Same<UserQuestionAnsweredOutput, UserQuestionAnsweredType>,
     Same<UserQuestionDismissedOutput, UserQuestionDismissedType>,
     Same<UserQuestionResultOutput, UserQuestionResultType>,
+    Same<HarnessBlockTypeOutput, HarnessBlockTypeType>,
+    Same<NeutralHarnessBlockOutput, NeutralHarnessBlockType>,
     Same<NeutralContentBlockOutput, NeutralContentBlockType>,
     Same<HarnessNoteOutput, HarnessNoteType>,
     Same<NeutralOriginOutput, NeutralOriginType>,

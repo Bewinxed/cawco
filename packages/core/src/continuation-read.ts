@@ -22,7 +22,11 @@
  * what a compaction forgot about files is still there.
  */
 import { isRecord } from "./is-record";
-import type { NeutralContentBlock, SessionMessage } from "./session-messages";
+import {
+  isHarnessBlock,
+  type NeutralContentBlock,
+  type SessionMessage,
+} from "./session-messages";
 import { NeutralContentBlockSchema } from "./stored-shapes";
 import { FILE_CHANGE_TOOLS, toolNamesOf } from "./tool-names";
 import { askedWords } from "./transcript-rules";
@@ -146,7 +150,11 @@ const messageOf = (entry: SessionMessage): StoredMessage => {
         ? content
         : (Array.isArray(content) ? content : []).flatMap((block: unknown) => {
             const read = NeutralContentBlockSchema.safeParse(block);
-            return read.success ? [read.data] : [];
+            // A tool call whose arguments are not an object reads as none.
+            return read.success &&
+              !(read.data.type === "tool_use" && !isRecord(read.data.input))
+              ? [read.data]
+              : [];
           }),
     ...(typeof model === "string" ? { model } : {}),
   };
@@ -210,9 +218,12 @@ const resultText = (content: unknown): string => {
 };
 
 const stringField = (
-  input: Record<string, unknown>,
+  input: unknown,
   keys: readonly string[]
 ): string | undefined => {
+  if (!isRecord(input)) {
+    return undefined;
+  }
   for (const key of keys) {
     const value = input[key];
     if (typeof value === "string" && value.trim()) {
@@ -425,6 +436,10 @@ function renderTurn(
  */
 const scopeChars = (entries: SessionMessage[]): number =>
   entries.flatMap(blocksOf).reduce((sum, block) => {
+    // A block of a kind no reader draws holds nothing the model reads here.
+    if (isHarnessBlock(block)) {
+      return sum;
+    }
     switch (block.type) {
       case "text":
         return sum + block.text.length;

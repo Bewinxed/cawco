@@ -4034,6 +4034,86 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/HarnessBlockType`.
+    public enum HarnessBlockType: OpenEnum {
+        case advisorToolResult
+        case bashCodeExecutionToolResult
+        case codeExecutionToolResult
+        case compaction
+        case containerUpload
+        case document
+        case fallback
+        case mcpToolListing
+        case mcpToolResult
+        case mcpToolUse
+        case searchResult
+        case serverToolUse
+        case textEditorCodeExecutionToolResult
+        case toolSearchToolResult
+        case webFetchToolResult
+        case webSearchToolResult
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "advisor_tool_result": self = .advisorToolResult
+            case "bash_code_execution_tool_result": self = .bashCodeExecutionToolResult
+            case "code_execution_tool_result": self = .codeExecutionToolResult
+            case "compaction": self = .compaction
+            case "container_upload": self = .containerUpload
+            case "document": self = .document
+            case "fallback": self = .fallback
+            case "mcp_tool_listing": self = .mcpToolListing
+            case "mcp_tool_result": self = .mcpToolResult
+            case "mcp_tool_use": self = .mcpToolUse
+            case "search_result": self = .searchResult
+            case "server_tool_use": self = .serverToolUse
+            case "text_editor_code_execution_tool_result": self = .textEditorCodeExecutionToolResult
+            case "tool_search_tool_result": self = .toolSearchToolResult
+            case "web_fetch_tool_result": self = .webFetchToolResult
+            case "web_search_tool_result": self = .webSearchToolResult
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .advisorToolResult: "advisor_tool_result"
+            case .bashCodeExecutionToolResult: "bash_code_execution_tool_result"
+            case .codeExecutionToolResult: "code_execution_tool_result"
+            case .compaction: "compaction"
+            case .containerUpload: "container_upload"
+            case .document: "document"
+            case .fallback: "fallback"
+            case .mcpToolListing: "mcp_tool_listing"
+            case .mcpToolResult: "mcp_tool_result"
+            case .mcpToolUse: "mcp_tool_use"
+            case .searchResult: "search_result"
+            case .serverToolUse: "server_tool_use"
+            case .textEditorCodeExecutionToolResult: "text_editor_code_execution_tool_result"
+            case .toolSearchToolResult: "tool_search_tool_result"
+            case .webFetchToolResult: "web_fetch_tool_result"
+            case .webSearchToolResult: "web_search_tool_result"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.advisorToolResult, .bashCodeExecutionToolResult, .codeExecutionToolResult, .compaction, .containerUpload, .document, .fallback, .mcpToolListing, .mcpToolResult, .mcpToolUse, .searchResult, .serverToolUse, .textEditorCodeExecutionToolResult, .toolSearchToolResult, .webFetchToolResult, .webSearchToolResult]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/HarnessConfigKind`.
     public enum HarnessConfigKind: OpenEnum {
         case claudeSettings
@@ -4538,6 +4618,50 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.jpeg, .png]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/ImageMediaType`.
+    public enum ImageMediaType: OpenEnum {
+        case imageGif
+        case imageJpeg
+        case imagePng
+        case imageWebp
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "image/gif": self = .imageGif
+            case "image/jpeg": self = .imageJpeg
+            case "image/png": self = .imagePng
+            case "image/webp": self = .imageWebp
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .imageGif: "image/gif"
+            case .imageJpeg: "image/jpeg"
+            case .imagePng: "image/png"
+            case .imageWebp: "image/webp"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.imageGif, .imageJpeg, .imagePng, .imageWebp]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -5804,6 +5928,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/NeutralOriginSubkind`.
+    public enum NeutralOriginSubkind: OpenEnum {
+        case peerSendMessage
+        case projectsRelay
+        case scheduledTrigger
+        case sessionInbox
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "peer-send-message": self = .peerSendMessage
+            case "projects-relay": self = .projectsRelay
+            case "scheduled-trigger": self = .scheduledTrigger
+            case "session-inbox": self = .sessionInbox
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .peerSendMessage: "peer-send-message"
+            case .projectsRelay: "projects-relay"
+            case .scheduledTrigger: "scheduled-trigger"
+            case .sessionInbox: "session-inbox"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.peerSendMessage, .projectsRelay, .scheduledTrigger, .sessionInbox]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/NeutralSessionInfoStartedBy`.
     public enum NeutralSessionInfoStartedBy: OpenEnum {
         case person
@@ -5870,6 +6038,47 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.compacting, .requesting]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/NeutralUserMessageRole`.
+    public enum NeutralUserMessageRole: OpenEnum {
+        case assistant
+        case system
+        case user
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "assistant": self = .assistant
+            case "system": self = .system
+            case "user": self = .user
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .assistant: "assistant"
+            case .system: "system"
+            case .user: "user"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.assistant, .system, .user]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

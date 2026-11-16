@@ -113,6 +113,7 @@ import {
 import { frontMatterBlock } from "@cawco/core/fleet";
 import type { ArrivingAsk } from "@cawco/core/frames";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
+import { isRecord } from "@cawco/core/is-record";
 import {
   DELEGATE_TYPE_PROPOSAL_TOOL,
   MEMORY_PROPOSAL_TOOL,
@@ -486,7 +487,13 @@ export const createTurnWatch = (store: TaintStore) => {
     if (
       calls.length > 0 &&
       !stateOf(instanceId).web &&
-      calls.some((block) => readsWeb(block.name, block.input, webContext()))
+      calls.some((block) =>
+        readsWeb(
+          block.name,
+          isRecord(block.input) ? block.input : {},
+          webContext()
+        )
+      )
     ) {
       change(instanceId, { web: true });
     }

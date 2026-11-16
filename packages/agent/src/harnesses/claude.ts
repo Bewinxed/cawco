@@ -10,6 +10,7 @@
  * with its `raw` self attached and nothing lost.
  */
 
+import type { UUID } from "node:crypto";
 import type { Dirent } from "node:fs";
 import {
   access,
@@ -37,6 +38,7 @@ import {
   query,
   renameSession,
   type SDKMessage,
+  type SDKMessageOrigin,
   type SDKSessionInfo,
   type SDKUserMessage,
   type Options as SdkOptions,
@@ -60,6 +62,7 @@ import {
 } from "@cawco/core/accounts/controls";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { FULL_SEND_ANSWER } from "@cawco/core/asks";
+import { isImageMediaType } from "@cawco/core/attachments";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
@@ -115,6 +118,7 @@ import {
   type PermissionMode,
 } from "@cawco/core/harness/kinds";
 import { CLAUDE_SETTINGS_REFUSED } from "@cawco/core/harness-config";
+import type { ClaudeHookHandler } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
 import {
   accountConfigDir,
@@ -161,7 +165,9 @@ import {
 import { sessionEnvironment } from "@cawco/core/session-env";
 import type {
   AuthState,
+  NeutralContentBlock,
   NeutralMessage,
+  NeutralOrigin,
   NeutralSessionInfo,
   SentMessage,
   SessionMessage,
@@ -183,6 +189,7 @@ import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
 import { harnessWords } from "@cawco/core/words/harness";
+import { pictureWords } from "@cawco/core/words/pictures";
 import {
   completeLines,
   lineRecords,
@@ -534,27 +541,22 @@ const toNeutral = (
   // is read once (claude-transcript.ts `harnessNoteOf`), as a stored read
   // types it.
   //
-  // Re-tagged whole, the user, assistant, stream and system frames keep a
-  // cast: core's neutral types name less than Claude Code sends (an SDK user
-  // message's `MessageParam` takes every `ContentBlockParam` and the
-  // assistant role; an assistant message's
-  // `BetaContentBlock`s include server-tool blocks and type a tool call's
-  // `input` unknown; a stream event is any `BetaRawMessageStreamEvent`), and
-  // every field goes out as the CLI sent it. Not an SDK gap: typing them is
-  // a change to core's neutral types or to what goes on the wire.
+  // The user, assistant, stream and system frames are re-tagged whole: core's
+  // neutral types name every block, delta and origin Claude Code sends
+  // (`HARNESS_BLOCK_TYPES` for the blocks no reader draws).
   if (sdk.type === "user") {
     return {
       ...sdk,
       message: withHarnessNote(sdk.message),
       raw: sdk,
-    } as unknown as NeutralMessage;
+    };
   }
   if (
     sdk.type === "assistant" ||
     sdk.type === "stream_event" ||
     sdk.type === "system"
   ) {
-    return { ...sdk, raw: sdk } as unknown as NeutralMessage;
+    return { ...sdk, raw: sdk };
   }
   // The CLI discarding the conversation for a new one (`/clear`): typed, so
   // a transcript knows it for what it is (core `CONVERSATION_RESET`).
@@ -1074,10 +1076,102 @@ type ContentBlock = Extract<
   SDKUserMessage["message"]["content"],
   unknown[]
 >[number];
-type Base64Source = Extract<
-  Extract<ContentBlock, { type: "image" }>["source"],
-  { type: "base64" }
->;
+
+/**
+ * A send as Claude Code is handed it: the SDK's user message, and the
+ * fields of CawCo's send that ride with it as they always have —
+ * `keepAlive` (a keep-alive's ping), `replaces` (the failed send it is sent
+ * in place of), `compactSummary`, `reminder` (CawCo's word beside the
+ * sender's, which the hub folds into the words before it reaches a machine)
+ * and `raw`. Claude Code reads none of them, and no read of its transcript
+ * takes any back (claude-transcript.ts reads the record's own fields).
+ */
+type ClaudeWireUserMessage = SDKUserMessage &
+  Pick<
+    SentMessage,
+    "compactSummary" | "keepAlive" | "raw" | "reminder" | "replaces"
+  >;
+
+/** The shape of the SDK's `UUID`: five runs of text between four hyphens. */
+const UUID_SHAPE = /^(?:[^-]*-){4}.*$/su;
+
+/** Whether `id` is in the SDK's `UUID` shape, as every send's uuid is (each minted by `crypto.randomUUID`). */
+const isUuid = (id: string): id is UUID => UUID_SHAPE.test(id);
+
+/**
+ * Who a send is from, as Claude Code's contract names it
+ * (`SDKMessageOrigin`): CawCo's own word (`system`) as `unclassified`, the
+ * kind Claude Code frames as no one's words of the person's, every other
+ * kind as it is.
+ */
+const sdkOrigin = (origin: NeutralOrigin): SDKMessageOrigin =>
+  origin.kind === "system" ? { kind: "unclassified" } : origin;
+
+/** One block of a send as Claude Code takes it in a user turn: its words and its pictures. */
+const wireBlock = (block: NeutralContentBlock): ContentBlock => {
+  if (block.type === "text") {
+    return { type: "text", text: block.text };
+  }
+  if (block.type === "image") {
+    const { source } = block;
+    switch (source.type) {
+      case "base64": {
+        const { data, media_type: mediaType } = source;
+        if (!isImageMediaType(mediaType)) {
+          throw new Error(pictureWords.typeRefused(mediaType));
+        }
+        return {
+          type: "image",
+          source: { type: "base64", media_type: mediaType, data },
+        };
+      }
+      case "url":
+        return { type: "image", source: { type: "url", url: source.url } };
+      case "file":
+        return {
+          type: "image",
+          source: { type: "file", file_id: source.file_id },
+        };
+      default:
+        return unhandled("source", source);
+    }
+  }
+  throw new Error(harnessWords.sendBlockUnsent(block.type));
+};
+
+/** `message` as Claude Code is handed it ({@link ClaudeWireUserMessage}), built field by field. */
+const wireMessage = (message: SentMessage): ClaudeWireUserMessage => {
+  const { uuid, message: said } = message;
+  if (!isUuid(uuid)) {
+    throw new Error(harnessWords.sendIdUnshaped(uuid));
+  }
+  return {
+    type: "user",
+    uuid,
+    message: {
+      role: "user",
+      content:
+        typeof said.content === "string"
+          ? said.content
+          : said.content.map(wireBlock),
+    },
+    parent_tool_use_id: message.parent_tool_use_id ?? null,
+    origin: sdkOrigin(message.origin),
+    ...(message.session_id === undefined
+      ? {}
+      : { session_id: message.session_id }),
+    ...(message.timestamp === undefined
+      ? {}
+      : { timestamp: message.timestamp }),
+    ...(message.keepAlive ? { keepAlive: message.keepAlive } : {}),
+    ...(message.replaces === undefined ? {} : { replaces: message.replaces }),
+    ...(message.compactSummary
+      ? { compactSummary: message.compactSummary }
+      : {}),
+    ...(message.reminder === undefined ? {} : { reminder: message.reminder }),
+    ...("raw" in message ? { raw: message.raw } : {}),
+  };
+};
 
 /**
  * A turn's images and pasted text folded into the message the SDK iterates.
@@ -1085,10 +1179,10 @@ type Base64Source = Extract<
  * about them, and each paste is tagged.
  */
 function withExtras(
-  message: SDKUserMessage,
+  message: ClaudeWireUserMessage,
   attachments: TurnExtras["attachments"],
   images: SendPayload["images"]
-): SDKUserMessage {
+): ClaudeWireUserMessage {
   if (!(attachments?.length || images?.length)) {
     return message;
   }
@@ -1100,10 +1194,7 @@ function withExtras(
       type: "image" as const,
       source: {
         type: "base64" as const,
-        // Cast: core's `SendPayload.images` carries any media type, and the
-        // SDK's image block takes four; a picture of another goes to the CLI
-        // as it was sent.
-        media_type: mediaType as Base64Source["media_type"],
+        media_type: mediaType,
         data,
       },
     })),
@@ -1930,18 +2021,39 @@ type FlagHookEntry = FlagHooks[string][number];
  * tool hook, whose reply only Claude Code reads, runs as the owner approved
  * it, its rewrite kept (core `hookWorkspaceNote`).
  */
+/** `handler` as flag settings hold it: each of its fields, then its `type`. */
+const typeLast = (
+  handler: ClaudeHookHandler
+): FlagHookEntry["hooks"][number] => {
+  switch (handler.type) {
+    case "command": {
+      const { type, ...fields } = handler;
+      return { ...fields, type };
+    }
+    case "mcp_tool": {
+      const { type, ...fields } = handler;
+      return { ...fields, type };
+    }
+    case "prompt": {
+      const { type, ...fields } = handler;
+      return { ...fields, type };
+    }
+    case "agent": {
+      const { type, ...fields } = handler;
+      return { ...fields, type };
+    }
+    default:
+      return unhandled("handler", handler);
+  }
+};
+
 const placedHookEntries = (
   hooks: readonly SetHook[],
   bounded: boolean
 ): FlagHooks => {
   const byEvent: FlagHooks = {};
   for (const hook of hooks) {
-    const { type, ...fields } = guardedHandler(hook.handler, bounded);
-    // Cast: core's `HookHandler` is not the SDK's `Settings` hook (a command
-    // handler's `command` is optional there, an MCP tool handler names
-    // `mcp_server_name`/`tool_name` where the SDK names `server`/`tool`), and
-    // the handler goes into flag settings as core holds it.
-    const handler = { ...fields, type } as FlagHookEntry["hooks"][number];
+    const handler = typeLast(guardedHandler(hook.handler, bounded));
     const matcher = hook.matcher?.trim();
     byEvent[hook.event] = [
       ...(byEvent[hook.event] ?? []),
@@ -3958,13 +4070,19 @@ class ClaudeSession implements HarnessSession {
         `[claude] ${this.instanceId}: send ${message.uuid} ${waits ? `waits for the running call's own end: ${waits}` : `reaches the turn now: ${[...this.#calls.values()].join(", ")} move aside for it`}`
       );
     }
-    // Cast: the send goes to the CLI as the neutral message it is, and core's
-    // `NeutralUserMessage` is not the SDK's `SDKUserMessage` (its `origin`
-    // kinds, its content blocks, an optional `parent_tool_use_id`, CawCo's
-    // own fields); typing it changes what the CLI is sent.
+    let wire: ClaudeWireUserMessage;
+    try {
+      wire = wireMessage(message);
+    } catch (error) {
+      this.#ctx.rejected(
+        message.uuid,
+        error instanceof Error ? error : new Error(String(error))
+      );
+      return;
+    }
     const outgoing = withExtras(
       {
-        ...(message as unknown as SDKUserMessage),
+        ...wire,
         shouldQuery: note ? false : undefined,
         ...(note || waits ? {} : SEND_NOW),
       },

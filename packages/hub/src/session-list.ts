@@ -251,9 +251,18 @@ const fromOf = (origin: NeutralOrigin | undefined): string => {
     case undefined:
       return "the person";
     case "peer":
-      return origin.name ?? origin.from ?? "another session";
+      return origin.name ?? origin.from;
     case "system":
       return origin.name ? `CawCo (${origin.name})` : "CawCo";
+    // Claude Code's own kinds, which only its frames carry: no send's.
+    case "channel":
+    case "task-notification":
+    case "coordinator":
+    case "unclassified":
+    case "observer":
+    case "auto-continuation":
+    case "observer-activity":
+      return "Claude Code";
   }
 };
 

@@ -399,12 +399,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    refused when its machine can't cut it (502 `artifact-pin-uncut`, or
  *    the stage's own refusal). A page built for 79 does not know these
  *    refusals, so it reloads first.
+ * 81: a session's frames are typed as their harness sends them: a user
+ *    frame's role may be `assistant` or `system`, its content any of
+ *    Claude's blocks (`HARNESS_BLOCK_TYPES`, an image by a file id), and its
+ *    origin any kind Claude Code stamps (`channel`, `task-notification`,
+ *    `unclassified`, …); a `peer` origin always names its `from`. A page
+ *    built for 80 reads those closed, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 80;
+export const WIRE_PROTOCOL = 81;
 
 /**
  * What a session's stream carries: the changes each frame made to its

@@ -20,7 +20,11 @@
  * (fleet.ts `syncHooks`), which every workspace reads.
  */
 import { join } from "node:path";
-import type { HookCommandHandler, HookHandler } from "@cawco/core/hooks";
+import type {
+  ClaudeHookHandler,
+  HookCommandHandler,
+  HookHandler,
+} from "@cawco/core/hooks";
 import { fleetHooksDir } from "@cawco/core/paths/fleet";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { systemProgram } from "@cawco/core/workspace-needs";
@@ -127,7 +131,7 @@ sub guarded {
 export const guardedHandler = (
   handler: HookHandler,
   drop: boolean
-): HookHandler => {
+): ClaudeHookHandler => {
   const flags = drop ? ["--drop"] : [];
   if (handler.type === "command") {
     const { args: _args, command: _command, ...rest } = handler;

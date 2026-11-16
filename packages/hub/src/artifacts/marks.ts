@@ -1,5 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
-import { fileHash, type SendAttachment } from "@cawco/core/attachments";
+import {
+  fileHash,
+  isImageMediaType,
+  type SendAttachment,
+  type TurnImage,
+} from "@cawco/core/attachments";
 import {
   type Carried,
   pinDelivery,
@@ -88,12 +93,18 @@ const FINAL_STOP = /\.$/u;
 function carryOne(
   one: CommentAttachment,
   bytes: Buffer,
-  images: { data: string; mediaType: string }[]
+  images: TurnImage[]
 ): { attachment?: SendAttachment; carried: Carried } {
-  if (one.kind === "image" && images.length < COMMENT_LIMITS.pictures) {
+  // A picture of a type no session takes rides as a file.
+  const { mediaType } = one;
+  if (
+    one.kind === "image" &&
+    isImageMediaType(mediaType) &&
+    images.length < COMMENT_LIMITS.pictures
+  ) {
     const data = bytes.toString("base64");
     if (data.length <= COMMENT_LIMITS.pictureChars) {
-      images.push({ data, mediaType: one.mediaType });
+      images.push({ data, mediaType });
       return { carried: { picture: images.length } };
     }
   }
@@ -474,7 +485,7 @@ export const createMarks = (ctx: MarksContext) => {
     owed: Pin[],
     crop: (of: Pin) => string | undefined
   ) => {
-    const images: { data: string; mediaType: string }[] = [];
+    const images: TurnImage[] = [];
     const attachments: SendAttachment[] = [];
     const carried = new Map<string, Carried>();
     // Marks whose crop the message had no room for: the delivery names them.
