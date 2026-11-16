@@ -50725,7 +50725,7 @@
             "type": "string"
           },
           "payload": {
-            "$ref": "#/components/schemas/PermissionRequestFrame"
+            "$ref": "#/components/schemas/ParkedRequest"
           },
           "requestId": {
             "type": "string"
@@ -50738,6 +50738,127 @@
           "machineId",
           "payload",
           "verb"
+        ]
+      },
+      "ParkedRequest": {
+        "description": "A parked ask's permission request, and what an ask the hub raised itself carries beside it ({@link HubAskFields}).",
+        "type": "object",
+        "properties": {
+          "askId": {
+            "description": "The hub's own ask this frame stands for (core asks.ts), absent on a session process's own prompt.",
+            "type": "string"
+          },
+          "browserAsk": {
+            "$ref": "#/components/schemas/BrowserAskFrame",
+            "description": "A browser ask's browser, reason and origin; absent on every other ask."
+          },
+          "connectAsk": {
+            "$ref": "#/components/schemas/ConnectAskFrame",
+            "description": "A connect ask's server, reason, address and access; absent on every other ask."
+          },
+          "designProposal": {
+            "description": "A design-system proposal's id (hub design-system.ts).",
+            "type": "string"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "input": {
+            "type": "object"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "permission_request"
+            ]
+          },
+          "memoryProposal": {
+            "description": "A memory or delegate-type proposal's id (hub memory.ts).",
+            "type": "string"
+          },
+          "move": {
+            "description": "A project move's approval: its job, and the git terms of what it runs (hub moves.ts).",
+            "type": "object",
+            "properties": {
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "jobId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "details",
+              "jobId"
+            ]
+          },
+          "originInstanceId": {
+            "description": "The session whose conversation made this ask, when the ask is not\nparked on that session's own row (a memory curator run's proposal,\nparked under its own id on machine \"hub\"). The ask is drawn and answered\nin that session's pane, at `toolUseId`, as its own asks are.",
+            "type": "string"
+          },
+          "presentation": {
+            "$ref": "#/components/schemas/PermissionPresentation",
+            "description": "What the ask says on every surface, read once by the hub as it parks it\n(permission-presentation.ts): the daemon's leg does not carry it, and the\nhub fills it before anything else reads the frame."
+          },
+          "processGeneration": {
+            "description": "The launch that raised this request; daemon replays retain it verbatim.",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "The project a proposal is for.",
+            "type": "string"
+          },
+          "proposer": {
+            "description": "Who made a proposal, in the card's words.",
+            "type": "string"
+          },
+          "raisedAt": {
+            "description": "When the hub first parked this ask, ms epoch. Absent only on the daemon-to-hub leg.",
+            "type": "number"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "requestKind": {
+            "$ref": "#/components/schemas/DelegateEventBaseRequestKind",
+            "description": "`tool` for a permission, `question` for an AskUserQuestion-shaped prompt."
+          },
+          "routedTo": {
+            "description": "`parent` when the ask is left to the session's parent, not the person.",
+            "const": "parent",
+            "type": "string"
+          },
+          "sourceFacts": {
+            "$ref": "#/components/schemas/SourceFacts",
+            "description": "Where an install the ask proposes fetches from (hub source-facts.ts)."
+          },
+          "suggestions": {
+            "description": "The harness's own suggested permission updates (Claude's\n`PermissionUpdate[]`), held as the provider's: passed through whole and\nnever enumerated here, so a destination, type or mode a later release adds\ncannot make the hub refuse the ask. A reader narrows where it reads.",
+            "type": "array",
+            "items": {}
+          },
+          "toolName": {
+            "type": "string"
+          },
+          "toolUseId": {
+            "description": "The tool call the ask gates, as its transcript message names it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness",
+          "input",
+          "instanceId",
+          "kind",
+          "presentation",
+          "requestId",
+          "toolName"
         ]
       },
       "PasskeyAdvertFrame": {
