@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type CONTROL_RUN_COMMAND,
   type CommandQueue,
   type CommandResult,
   type CommandRun,
@@ -10,6 +11,7 @@ import {
   QUEUE_WAIT_MAX_MS,
   type QueueSlot,
 } from "@cawco/core/commands/controls";
+import type { ControlArgs } from "@cawco/core/control-table";
 import {
   BACKGROUND_SHELL,
   HEAVY_SLOT_ENV,
@@ -42,6 +44,8 @@ const OUTPUT_LIMIT = 8 * 1024 * 1024;
 
 /** How long a command runs when its caller names no limit. */
 const DEFAULT_TIMEOUT_MS = 300_000;
+/** A command's limit as the hub names it (ms of its own work); none, {@link DEFAULT_TIMEOUT_MS}. */
+type Limit = number | null | undefined;
 
 /** How long a stopped command's process group has between SIGTERM and SIGKILL. */
 const KILL_GRACE_MS = 5000;
@@ -83,10 +87,7 @@ type Followed = CommandRun & {
  * answers `cancelled`. A run not running yet is kept cancelled: it answers
  * `cancelled` as it comes up, without starting. Answers whether it was running.
  */
-export function cancelCommand(runId: unknown): boolean {
-  if (typeof runId !== "string" || !runId) {
-    throw new Error("cancelCommand requires the run's id.");
-  }
+export function cancelCommand(runId: string): boolean {
   for (const running of live) {
     if (running.runId === runId) {
       running.stop("cancelled");
@@ -102,27 +103,6 @@ export function cancelCommand(runId: unknown): boolean {
   cancelledEarly.set(runId, now);
   return false;
 }
-
-/** Whether `value` names a delegation workspace: an id and an absolute clone path. */
-export const isWorkspaceRef = (value: unknown): value is WorkspaceRef =>
-  typeof value === "object" &&
-  value !== null &&
-  "id" in value &&
-  typeof value.id === "string" &&
-  "path" in value &&
-  typeof value.path === "string" &&
-  value.path.startsWith("/");
-
-/** Whether `value` names a run the hub follows: `{ id, queueMaxMs, gate?, moves? }` (core `CommandRun`). */
-const isCommandRun = (value: unknown): value is CommandRun =>
-  typeof value === "object" &&
-  value !== null &&
-  "id" in value &&
-  typeof value.id === "string" &&
-  "queueMaxMs" in value &&
-  typeof value.queueMaxMs === "number" &&
-  (!("gate" in value) || ["string", "undefined"].includes(typeof value.gate)) &&
-  (!("moves" in value) || ["string", "undefined"].includes(typeof value.moves));
 
 /** Whether `name` is one of the queue slots a marker can name. */
 const isQueueSlot = (name: string): name is QueueSlot =>
@@ -150,9 +130,9 @@ const tellWait = (
 
 /** The run the hub named in a command's arguments, with where its waits are told; none when it named none. */
 const followedOf = (
-  run: unknown,
+  run: CommandRun | null | undefined,
   ports: Pick<AgentPorts, "commandQueue">
-): Followed | undefined => (isCommandRun(run) ? { ...run, ports } : undefined);
+): Followed | undefined => (run ? { ...run, ports } : undefined);
 
 /**
  * The command each folder runs now: the machine runs a folder's commands one
@@ -184,13 +164,11 @@ const runningFor = (since: number): string => {
  * finishes frees the folder.
  */
 export function folderTurn(
-  args: readonly unknown[] | undefined,
+  [folder, cmd, , , asked]: ControlArgs<typeof CONTROL_RUN_COMMAND>,
   behind: boolean,
   ports: Pick<AgentPorts, "commandQueue">
 ): { end: () => void; start: () => void } {
-  const folder = String(args?.[0]);
-  const cmd = typeof args?.[1] === "string" ? args[1] : "";
-  const run = followedOf(args?.[4], ports);
+  const run = followedOf(asked, ports);
   if (behind) {
     const ahead = folderRunning.get(folder);
     tellWait(run, {
@@ -250,10 +228,10 @@ const boundaryExec = async (
  */
 const commandLine = async (
   cmd: string,
-  workspace: unknown,
+  workspace: WorkspaceRef | null | undefined,
   run: Followed | undefined
 ): Promise<[string, string[]]> =>
-  isWorkspaceRef(workspace)
+  workspace
     ? [await boundaryExec(workspace, run), [cmd]]
     : [systemProgram("sh"), ["-c", cmd]];
 
@@ -444,12 +422,10 @@ const underSlot = async (
  * reaches.
  */
 export async function runFollowedCommand(
-  cwd: unknown,
-  cmd: unknown,
-  timeoutMs: unknown,
-  workspace: unknown,
-  run: unknown,
-  ports: Pick<AgentPorts, "commandQueue">
+  ...[cwd, cmd, timeoutMs, workspace, run, ports]: [
+    ...ControlArgs<typeof CONTROL_RUN_COMMAND>,
+    ports: Pick<AgentPorts, "commandQueue">,
+  ]
 ): Promise<CommandResult> {
   return await runCommand(
     cwd,
@@ -466,39 +442,25 @@ export async function runFollowedCommand(
  * takes a heavy-work slot.
  */
 export async function runHubCommand(
-  cwd: unknown,
-  cmd: unknown,
-  timeoutMs: unknown,
-  workspace?: unknown,
+  cwd: string,
+  cmd: string,
+  timeoutMs: Limit,
+  workspace?: WorkspaceRef | null,
   heavy?: string
 ): Promise<CommandResult> {
   return await runCommand(cwd, cmd, timeoutMs, workspace, undefined, heavy);
 }
 
 async function runCommand(
-  cwd: unknown,
-  cmd: unknown,
-  timeoutMs: unknown,
-  workspace: unknown,
+  cwd: string,
+  cmd: string,
+  timeoutMs: Limit,
+  workspace: WorkspaceRef | null | undefined,
   named: Followed | undefined,
   heavy?: string
 ): Promise<CommandResult> {
-  if (
-    typeof cwd !== "string" ||
-    !cwd.startsWith("/") ||
-    typeof cmd !== "string" ||
-    !cmd.trim()
-  ) {
-    throw new Error(
-      "runCommand requires an absolute workspace directory and a command."
-    );
-  }
-  // An absent workspace crosses the wire as null.
-  if ((workspace ?? undefined) !== undefined && !isWorkspaceRef(workspace)) {
-    throw new Error("runCommand's workspace must be { id, path }.");
-  }
   if (named?.moves !== undefined) {
-    if (!isWorkspaceRef(workspace)) {
+    if (!workspace) {
       throw new Error("runCommand moves a worktree only in a workspace.");
     }
     return await movedCommand(cwd, cmd, timeoutMs, workspace, named);
@@ -537,8 +499,8 @@ interface Spawned {
   readonly env: Readonly<Record<string, string>>;
   readonly file: string;
   readonly named: Followed | undefined;
-  readonly timeoutMs: unknown;
-  readonly workspace: unknown;
+  readonly timeoutMs: Limit;
+  readonly workspace: WorkspaceRef | null | undefined;
 }
 
 /** {@link runHubCommand}'s run of one process, its clock, limits and cancel as it says. */
@@ -607,11 +569,11 @@ const spawned = ({
     // runs there running (boundary/work.ts `agentCommandStarted`).
     const executor = spawnedPid(child);
     const letGo =
-      isWorkspaceRef(workspace) && executor !== undefined
+      workspace && executor !== undefined
         ? agentCommandStarted(workspace.id, executor)
         : undefined;
     const clock = commandClock(
-      typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS,
+      timeoutMs ?? DEFAULT_TIMEOUT_MS,
       named?.queueMaxMs ?? QUEUE_WAIT_MAX_MS,
       (why) => {
         said = why;
@@ -803,7 +765,7 @@ const namesIn = (out: string): string[] =>
 const movedCommand = async (
   cwd: string,
   cmd: string,
-  timeoutMs: unknown,
+  timeoutMs: Limit,
   workspace: WorkspaceRef,
   run: Followed
 ): Promise<CommandResult> => {
@@ -882,7 +844,7 @@ const movedCommand = async (
 const onHost = async (
   cwd: string,
   cmd: string,
-  timeoutMs: unknown,
+  timeoutMs: Limit,
   workspace: WorkspaceRef,
   run: Followed,
   writes: readonly string[]

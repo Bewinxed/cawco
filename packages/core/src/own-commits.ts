@@ -26,7 +26,7 @@
 import { shellQuote } from "./shell-quote";
 
 /** A full commit id: what `landed` holds, never an option. */
-const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
+export const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
 
 /**
  * The shell steps, run in the clone after `SAFE_GIT_SHELL` (safe-git.ts:

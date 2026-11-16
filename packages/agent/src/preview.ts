@@ -16,7 +16,11 @@ import {
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { PREVIEW_HELD_HEADER } from "@cawco/core/preview/reach";
 import { PREVIEW_PING_PATH } from "@cawco/core/preview/routes";
-import type { ServingPreview, SourceKey } from "@cawco/core/preview/upstream";
+import type {
+  PreviewStartArgs,
+  ServingPreview,
+  SourceKey,
+} from "@cawco/core/preview/upstream";
 import {
   asksUpgrade,
   cachePreview,
@@ -304,10 +308,6 @@ export function previewNetworks(): string[] {
     network === undefined ? [] : [network]
   );
 }
-
-const BROWSER_LISTEN_ARGS = z.object({
-  token: z.string(),
-}) satisfies z.ZodType<BrowserListenArgs>;
 
 /** The TCP port `server` listens on; every listener here binds one. */
 const portOf = (server: Server<unknown>): number => {
@@ -605,14 +605,9 @@ async function serveBrowser(
  * answers `token` alone. Answers the port it listens on.
  */
 export function listenBrowsers(
-  args: unknown,
+  { token }: BrowserListenArgs,
   ports: BrowserPorts
 ): { port: number } {
-  const asked = BROWSER_LISTEN_ARGS.safeParse(args);
-  if (!asked.success || asked.data.token.length === 0) {
-    throw new Error("browser.listen names the hub's token for it.");
-  }
-  const { token } = asked.data;
   if (browserListener) {
     browserListener.token = Buffer.from(token);
     return { port: portOf(browserListener.listener) };
@@ -658,7 +653,7 @@ const unanswered = (
 const portSource = (
   port: number,
   parts: Pick<
-    Parameters<typeof startPreview>[0],
+    Extract<PreviewSource, { port: number }>,
     "pin" | "serve" | "stage" | "workspace"
   >
 ): Extract<PreviewSource, { port: number }> => ({
@@ -714,10 +709,9 @@ async function folderRoot(dir: string): Promise<string> {
  * process. For each, in order, core's `folderGone` words when it isn't
  * there, else null (a path that is no absolute one says nothing of it).
  */
-export async function foldersThere(dirs: unknown): Promise<(string | null)[]> {
-  if (!(Array.isArray(dirs) && dirs.every((dir) => typeof dir === "string"))) {
-    throw new Error("foldersThere takes a list of folders' absolute paths.");
-  }
+export async function foldersThere(
+  dirs: readonly string[]
+): Promise<(string | null)[]> {
   return await Promise.all(
     dirs.map((dir) =>
       folderRoot(dir).then(
@@ -733,39 +727,14 @@ export async function foldersThere(dirs: unknown): Promise<(string | null)[]> {
 
 /** What a folder preview of `dir` loads at most, and the desk captures on its start page at `path` (core `folderWeight`). */
 export async function previewWeight(
-  dir: unknown,
-  path?: unknown
+  dir: string,
+  path?: string | null
 ): Promise<FolderWeight> {
-  if (typeof dir !== "string") {
-    throw new Error("previewWeight takes a folder's absolute path.");
-  }
-  return folderWeight(
-    await folderRoot(dir),
-    typeof path === "string" ? path : undefined
-  );
+  return folderWeight(await folderRoot(dir), path ?? undefined);
 }
 
 export function startPreview(
-  options: {
-    instanceId: string;
-    port?: number;
-    dir?: string;
-    /** A sheet's: the workspace's stage serves the port (core `PreviewSource`); each request wakes it. */
-    stage?: { dir: string; file: string };
-    /** A workspace preview's: the server the workspace's stage runs on the port (core `ServeSpec`); each request wakes it. */
-    serve?: { command: string; cwd: string };
-    /** The workspace whose network the port is in; none, the host's. */
-    workspace?: string;
-    /** The version the person is served (core `PreviewSource.pin`): its pin's copy of the folder, or its pin's stage or server, answers in place of the source's own. */
-    pin?: string;
-    /**
-     * The hub's name for this start, which a stop of it alone names, and the
-     * one credential the listener answers (core `RELAY_HEADER`).
-     */
-    token: string;
-    /** The source key the hub started it for (core `SourceKey`), which the register reports back. */
-    for: SourceKey;
-  },
+  options: PreviewStartArgs,
   ports: Pick<AgentPorts, "stage" | "stageClone">
 ): Promise<{ port: number }> {
   return inTurn(options.instanceId, () => start(options, ports));
@@ -851,36 +820,16 @@ async function viewerOf(
 }
 
 async function start(
-  options: Parameters<typeof startPreview>[0],
+  options: PreviewStartArgs,
   ports: Pick<AgentPorts, "stage" | "stageClone">
 ): Promise<{ port: number }> {
-  const { instanceId, port, dir, workspace, token, stage, serve, pin } =
-    options;
-  if ((port === undefined) === (dir === undefined)) {
-    throw new Error("Pass exactly one of port or dir.");
-  }
-  if (typeof token !== "string" || token.length === 0) {
-    throw new Error("A preview start names the hub's token for it.");
-  }
-  if (typeof options.for !== "string" || options.for.length === 0) {
-    throw new Error("A preview start names the source key it is for.");
-  }
+  const { instanceId, token, pin } = options;
   const relayToken = Buffer.from(token);
-  if (workspace !== undefined && port === undefined) {
-    throw new Error("A workspace goes with a port, not a dir.");
-  }
-  if (
-    port !== undefined &&
-    (!Number.isInteger(port) || port < 1 || port > 65_535)
-  ) {
-    throw new Error("Port must be an integer from 1 to 65535.");
-  }
   let source: Exclude<PreviewSource, { page: string }>;
-  if (dir !== undefined) {
-    source = { dir: await pinnedRoot(dir, pin) };
-  } else if (port === undefined) {
-    throw new Error("Pass exactly one of port or dir.");
+  if ("dir" in options) {
+    source = { dir: await pinnedRoot(options.dir, pin) };
   } else {
+    const { port, workspace, stage, serve } = options;
     const named = portSource(port, { workspace, stage, serve, pin });
     // A pinned sheet answers on its pin's stage's own port.
     source = { ...named, port: servedPort(named) };

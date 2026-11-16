@@ -8,22 +8,19 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { HarnessCapabilities } from "@cawco/core/harness";
 import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
-import type { ControlPayload } from "@cawco/core/protocol";
-import { CONTROL_SUPPORTED_COMMANDS } from "@cawco/core/session/controls";
-import type {
-  McpServerStatus,
-  SupportedCommands,
-} from "@cawco/core/session-messages";
+import {
+  CONTROL_CONTEXT_USAGE,
+  CONTROL_MCP_STATUS,
+  CONTROL_SUPPORTED_COMMANDS,
+} from "@cawco/core/session/controls";
+import type { McpServerStatus } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import { machineFaultWords } from "@cawco/core/words/machine-names";
 import { untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
-import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { hub } from "#lib/platform/hub.js";
 import { hubDone, failureWords as messageOf } from "#lib/platform/hub-read.js";
-import { newId } from "#lib/platform/id.js";
 import { askMachine, didntAnswer } from "../hub/control";
-import { send } from "../hub/socket.svelte";
 import { answeredCommands } from "../slash-commands";
 import {
   boardState,
@@ -200,22 +197,10 @@ async function readContext(
 ): Promise<ContextRead> {
   const { instanceId } = target;
   target.contextPending = true;
-  const requestId = newId();
-  const payload: ControlPayload = {
-    instanceId,
-    requestId,
-    method: "getContextUsage",
-    args: [],
-  };
   try {
-    const read = await askMachine<{
-      totalTokens: number;
-      maxTokens: number;
-      percentage: number;
-      categories: { name: string; tokens: number; color: string }[];
-    }>(machineId, requestId, CONTROL_TIMEOUT_MS, () =>
-      send({ verb: "control", machineId, instanceId, requestId, payload })
-    );
+    const read = await askMachine(machineId, CONTROL_CONTEXT_USAGE, [], {
+      instanceId,
+    });
     switch (read.kind) {
       case "unanswered":
         // The last reading stands; the details say why it is not newer, and
@@ -281,20 +266,10 @@ export async function refreshCommands(
   }
   target.commandsPending = true;
 
-  const request = <T>(method: string): Promise<Bounded<T>> => {
-    const requestId = newId();
-    const payload: ControlPayload = {
-      instanceId,
-      requestId,
-      method,
-      args: [],
-    };
-    return askMachine<T>(machineId, requestId, CONTROL_TIMEOUT_MS, () =>
-      send({ verb: "control", machineId, instanceId, requestId, payload })
-    );
-  };
   try {
-    const read = await request<SupportedCommands>(CONTROL_SUPPORTED_COMMANDS);
+    const read = await askMachine(machineId, CONTROL_SUPPORTED_COMMANDS, [], {
+      instanceId,
+    });
     switch (read.kind) {
       case "unanswered":
         // The menu keeps what it last heard; the next open asks again.
@@ -326,19 +301,7 @@ function askMcp(
   instanceId: string,
   machineId: string
 ): Promise<Bounded<McpServerStatus[]>> {
-  const requestId = newId();
-  const payload: ControlPayload = {
-    instanceId,
-    requestId,
-    method: "mcpServerStatus",
-    args: [],
-  };
-  return askMachine<McpServerStatus[]>(
-    machineId,
-    requestId,
-    CONTROL_TIMEOUT_MS,
-    () => send({ verb: "control", machineId, instanceId, requestId, payload })
-  );
+  return askMachine(machineId, CONTROL_MCP_STATUS, [], { instanceId });
 }
 
 /**

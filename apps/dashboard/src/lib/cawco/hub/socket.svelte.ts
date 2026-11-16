@@ -903,25 +903,35 @@ export async function waitForHub(timeoutMs = 5000): Promise<void> {
   }
 }
 
+/** A start's or a stop's answer: nothing is read of it but that it came. */
+export const answered = (): void => undefined;
+
 /**
  * Sends something the agent answers by `requestId`, and waits `timeoutMs` for
- * that answer. A refusal rejects in the machine's words; no answer in time is
- * its own outcome, `unanswered`, which every caller says as such
- * ({@link didntAnswer}).
+ * that answer, read by `readAnswer` (a control's by its reply's schema,
+ * control.ts `askMachine`; a start's or a stop's taken as done). A refusal
+ * rejects in the machine's words, and so does an answer `readAnswer` throws
+ * on; no answer in time is its own outcome, `unanswered`, which every caller
+ * says as such ({@link didntAnswer}).
  */
 export function ask<T>(
   requestId: string,
   timeoutMs: number,
   dispatch: () => void,
-  readAnswer: (result: unknown, leftOut?: LeftOut) => T = (result) =>
-    result as T
+  readAnswer: (result: unknown, leftOut?: LeftOut) => T
 ): Promise<Bounded<T>> {
   return readWithin(
     timeoutMs,
     (signal) =>
       new Promise<T>((resolve, reject) => {
         inflight.set(requestId, {
-          resolve: (result, leftOut) => resolve(readAnswer(result, leftOut)),
+          resolve: (result, leftOut) => {
+            try {
+              resolve(readAnswer(result, leftOut));
+            } catch (error) {
+              reject(error instanceof Error ? error : new Error(String(error)));
+            }
+          },
           reject,
         });
         signal.addEventListener("abort", () => inflight.delete(requestId), {

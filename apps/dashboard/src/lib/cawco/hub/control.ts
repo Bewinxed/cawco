@@ -4,30 +4,106 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
+import {
+  CONTROL_REPLIES,
+  type ControlReply,
+} from "@cawco/core/control-replies";
+import type { ControlArgs, ControlName } from "@cawco/core/control-table";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { ControlPayload } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
+import { controlWords } from "@cawco/core/words/controls";
 import { machineFaultWords } from "@cawco/core/words/machine-names";
+import type { z } from "zod";
+import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
+import { newId } from "#lib/platform/id.js";
 import { machineConnected, machineName } from "../stores/board.svelte";
 import { type MissedRead, TRY_AGAIN, unansweredWords } from "../unanswered";
-import { ask, type LeftOut } from "./socket.svelte";
+import { ask, type LeftOut, send } from "./socket.svelte";
+
+/**
+ * `result`, a machine's answer to `call`, read by `schema` (core
+ * control-replies.ts, the hub's own reading of it): its value, or thrown in
+ * words when it is not one.
+ */
+export const readReply = <T>(
+  schema: z.ZodType<T>,
+  call: string,
+  result: unknown
+): T => {
+  const read = schema.safeParse(result);
+  if (!read.success) {
+    throw new Error(
+      controlWords.replyMalformed(
+        call,
+        read.error.issues
+          .map((issue) => issue.path.join(".") || issue.message)
+          .join(", ")
+      )
+    );
+  }
+  return read.data;
+};
 
 /**
  * {@link ask}, of a machine: refused here, with the hub's words for it, while
  * {@link machineConnected} says the machine is not back, never sent to be
- * refused there.
+ * refused there. `send` sends what is answered at `requestId`; `readAnswer`
+ * reads the answer.
  */
-export function askMachine<T>(
+export function askOf<T>(
   machineId: string,
   requestId: string,
   timeoutMs: number,
   dispatch: () => void,
-  readAnswer?: (result: unknown, leftOut?: LeftOut) => T
+  readAnswer: (result: unknown, leftOut?: LeftOut) => T
 ): Promise<Bounded<T>> {
   if (!machineConnected(machineId)) {
     return Promise.reject(
       new Error(machineFaultWords(machineName(machineId), "offline"))
     );
   }
-  return ask<T>(requestId, timeoutMs, dispatch, readAnswer);
+  return ask(requestId, timeoutMs, dispatch, readAnswer);
+}
+
+/**
+ * Control `method` of machine `machineId` (of its session `instanceId`'s
+ * process there, when it names one) called with its own arguments (core
+ * control-table.ts), its answer read by the control's reply's schema (core
+ * control-replies.ts): what it answered, as its type, or unanswered.
+ */
+export function askMachine<K extends ControlName>(
+  machineId: string,
+  method: K,
+  args: ControlArgs<K>,
+  {
+    harness,
+    instanceId,
+    timeoutMs = CONTROL_TIMEOUT_MS,
+  }: { harness?: HarnessKind; instanceId?: string; timeoutMs?: number } = {}
+): Promise<Bounded<ControlReply<K>>> {
+  const requestId = newId();
+  const payload: ControlPayload = {
+    requestId,
+    method,
+    args,
+    ...(harness ? { harness } : {}),
+    ...(instanceId ? { instanceId } : {}),
+  };
+  return askOf(
+    machineId,
+    requestId,
+    timeoutMs,
+    () =>
+      send({
+        verb: "control",
+        machineId,
+        ...(instanceId ? { instanceId } : {}),
+        requestId,
+        payload,
+      }),
+    (result) => readReply(CONTROL_REPLIES[method], method, result)
+  );
 }
 
 /** A read no answer came back to in time. */

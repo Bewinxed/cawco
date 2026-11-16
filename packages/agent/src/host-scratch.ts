@@ -21,20 +21,19 @@ import {
 import { workWords } from "@cawco/core/words/work";
 import {
   type HostOutputListed,
+  type HostScratchAsk,
   OUTPUTS_DIR,
   type WorkspaceOutputs,
 } from "@cawco/core/workspace/controls";
-import { fieldOf } from "./json-field";
 import { removeTree } from "./remove-tree";
 
 /** A workspace id as the hub makes one (`crypto.randomUUID()`): nothing else names a folder under the scratch root. */
 const WORKSPACE_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
-/** The host workspace id `asked` names, as a control's `{ id }` or a spawn's string; refused for anything else. */
-const hostId = (asked: unknown): string => {
-  const id = typeof asked === "string" ? asked : fieldOf(asked, "id");
-  if (typeof id !== "string" || !WORKSPACE_ID.test(id)) {
+/** The host workspace id a spawn names (`SpawnPayload.hostScratch`); refused for anything else. */
+const hostId = (id: string): string => {
+  if (!WORKSPACE_ID.test(id)) {
     throw new Error(workWords.hostScratchUnnamed);
   }
   return id;
@@ -46,7 +45,7 @@ const hostId = (asked: unknown): string => {
  * short name, core paths/workspace.ts `workspaceTmpDir`). Made again for a session
  * spawned after its removal.
  */
-export const hostScratchReady = async (asked: unknown): Promise<string> => {
+export const hostScratchReady = async (asked: string): Promise<string> => {
   const id = hostId(asked);
   await makeFolder(join(workspaceScratchDir(id), OUTPUTS_DIR), { mode: 0o700 });
   return linkWorkspaceTmp(id);
@@ -117,18 +116,18 @@ const outputsListed = async (id: string): Promise<HostOutputListed[]> => {
  * `$TMPDIR/outputs/` holds, as it stands: with `read`, each regular file
  * with its bytes; without, each file and link listed with its size alone.
  */
-export const hostOutputs = async (
-  asked: unknown
-): Promise<WorkspaceOutputs | { listed: HostOutputListed[] }> => {
-  const id = hostId(asked);
-  return fieldOf(asked, "read") === true
-    ? await outputsOf(id)
-    : { listed: await outputsListed(id) };
-};
+export const hostOutputs = async ({
+  id,
+  read,
+}: HostScratchAsk): Promise<
+  WorkspaceOutputs | { listed: HostOutputListed[] }
+> =>
+  read === true ? await outputsOf(id) : { listed: await outputsListed(id) };
 
 /** {@link CONTROL_HOST_SCRATCH_REMOVE}: host workspace `{ id }`'s scratch dir gone, its short name on macOS with it. */
-export const removeHostScratch = async (asked: unknown): Promise<void> => {
-  const id = hostId(asked);
+export const removeHostScratch = async ({
+  id,
+}: HostScratchAsk): Promise<void> => {
   await removeTree(workspaceScratchDir(id));
   forgetWorkspaceTmp(id);
 };

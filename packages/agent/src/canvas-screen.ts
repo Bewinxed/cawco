@@ -49,9 +49,6 @@ export async function openCanvasScreen(
     open.guard = guardOf(token);
     return { opened: true };
   }
-  if (!URL.canParse(url)) {
-    throw new Error("A canvas screen names the canvas page's URL.");
-  }
   const browser = await launchChromium(
     "The hub's machine has no Chromium browser to draw the canvas with: install Google Chrome or Chromium there (the machine's capability report names the command), then call again."
   );

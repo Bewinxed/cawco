@@ -1051,7 +1051,13 @@ export class SessionSupervisor {
       call: (_instanceId, cwd, input, bound, project) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : generateImage(this.#ports, cwd, input, bound, project),
+          : generateImage(
+              this.#ports,
+              cwd,
+              input,
+              bound ?? null,
+              project ?? null
+            ),
     },
     [PREVIEW_START]: {
       call: (options) => startPreview(options, this.#ports),

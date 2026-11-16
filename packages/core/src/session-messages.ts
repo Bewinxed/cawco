@@ -222,8 +222,13 @@ export interface NeutralSessionInfo {
  * the settings of the folder it ran in, the settings of the user it ran as,
  * or, recorded nowhere, its harness's own default.
  */
-export type RanFrom =
-  "transcript" | "project-settings" | "user-settings" | "default";
+export const RAN_FROM = [
+  "transcript",
+  "project-settings",
+  "user-settings",
+  "default",
+] as const;
+export type RanFrom = (typeof RAN_FROM)[number];
 
 /** One value of a {@link StoredRun}, with where it was read. */
 interface RanValue {

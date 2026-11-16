@@ -5,16 +5,24 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
+import {
+  CONTROL_REPLIES,
+  type ControlReply,
+  FS_REPLIES,
+  type FsOp,
+  type FsReply,
+} from "@cawco/core/control-replies";
+import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import type { FleetFetchFrame } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type { ControlPayload, FsPayload } from "@cawco/core/protocol";
+import type { FsPayload } from "@cawco/core/protocol";
 import { machineWords } from "@cawco/core/words/machine";
 import { sidebarWords } from "@cawco/core/words/sidebar";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { hub } from "#lib/platform/hub.js";
 import { hubData, hubDone, hubRefusal } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
-import { askMachine } from "../hub/control";
+import { askMachine, askOf, readReply } from "../hub/control";
 import type { FrameOf } from "../hub/frames";
 import {
   rereadHub,
@@ -34,46 +42,45 @@ export function takeFleetFetch(frame: FrameOf<"fleet.fetch">): void {
  * session functions. The reply is correlated by `requestId`, which the hub routes
  * back to this socket alone.
  */
-export async function machineControl<T>(
+export async function machineControl<K extends ControlName>(
   machineId: string,
-  method: string,
-  args: unknown[] = [],
+  method: K,
+  args: ControlArgs<K>,
   replyTimeoutMs = CONTROL_TIMEOUT_MS,
   harness?: HarnessKind
-): Promise<Bounded<T>> {
+): Promise<Bounded<ControlReply<K>>> {
   const benchControl = standingBench()?.control;
   if (import.meta.env.DEV && benchControl) {
-    // A bench's machine answers it in place of the wire (dev only).
+    // A bench's machine answers it in place of the wire (dev only), read
+    // as the wire's answer is.
     return {
       kind: "answered",
-      value: benchControl(machineId, method, args) as T,
+      value: readReply(
+        CONTROL_REPLIES[method],
+        method,
+        benchControl(machineId, method, args)
+      ),
     };
   }
   await waitForHub();
-  const requestId = newId();
-  const payload: ControlPayload = {
-    requestId,
-    method,
-    args,
-    ...(harness && { harness }),
-  };
-  return askMachine<T>(machineId, requestId, replyTimeoutMs, () =>
-    send({ verb: "control", machineId, requestId, payload })
-  );
+  return await askMachine(machineId, method, args, {
+    timeoutMs: replyTimeoutMs,
+    ...(harness ? { harness } : {}),
+  });
 }
 
 /**
  * The `fs` verb (NEW.md §6): a machine's files, for the docs rail and the light
  * markdown editing on top of it. Answered by `requestId` like a control call.
  */
-export async function machineFs<T>(
+export async function machineFs<O extends FsOp>(
   machineId: string,
-  op: FsPayload["op"],
+  op: O,
   path: string,
   content?: string,
   /** `path` is relative to this root, as the machine places it (`FsPayload.root`). */
   root?: FsPayload["root"]
-): Promise<Bounded<T>> {
+): Promise<Bounded<FsReply<O>>> {
   await waitForHub();
   const requestId = newId();
   const payload: FsPayload = {
@@ -83,8 +90,12 @@ export async function machineFs<T>(
     content,
     ...(root ? { root } : {}),
   };
-  return askMachine<T>(machineId, requestId, CONTROL_TIMEOUT_MS, () =>
-    send({ verb: "fs", machineId, requestId, payload })
+  return await askOf(
+    machineId,
+    requestId,
+    CONTROL_TIMEOUT_MS,
+    () => send({ verb: "fs", machineId, requestId, payload }),
+    (result) => readReply(FS_REPLIES[op], `fs ${op}`, result)
   );
 }
 
@@ -150,7 +161,7 @@ export async function deleteTranscript(
   dir: string | undefined,
   harness: HarnessKind | undefined
 ): Promise<Bounded<void>> {
-  return await machineControl<void>(
+  return await machineControl(
     machineId,
     "deleteSession",
     [sessionId, { dir }],

@@ -83,7 +83,13 @@ import type { GhAccount, GhToken } from "./connections";
 import { CONTROL_GH_ACCOUNTS, CONTROL_GH_TOKEN } from "./connections";
 import type { ContinuationRead } from "./continuation-read";
 import { CONTROL_READ_CONTINUATION } from "./continuation-read";
-import { isLentAccess } from "./control-args";
+import {
+  isFsEntries,
+  isLentAccess,
+  isMcpServerStatuses,
+  isSpinOffHeld,
+  isStoredRun,
+} from "./control-args";
 import type { ControlName, ControlResult } from "./control-table";
 import type {
   TranscriptAnswer,
@@ -140,7 +146,7 @@ import {
   PREVIEW_STOP,
   PREVIEW_WEIGHT,
 } from "./preview/protocol";
-import type { UpdateReport } from "./protocol";
+import type { FsEntry, UpdateReport } from "./protocol";
 import {
   AGENT_BUSY,
   CANCEL_BINARY_UPDATE,
@@ -203,10 +209,14 @@ import {
   GET_TASK_OUTPUT,
   REMOVED_SESSION_CUSTODY,
   SESSION_CUSTODY,
+  type SpinOffHeld,
 } from "./session/controls";
 import type {
+  AuthState,
+  McpServerStatus,
   NeutralSessionInfo,
   SessionMessage,
+  StoredRun,
   SupportedCommands,
 } from "./session-messages";
 import type {
@@ -234,6 +244,7 @@ import {
   AccountProbeSchema,
   AccountSigninResultSchema,
   AgentBusyReportSchema,
+  AuthStateShape,
   BrowserAskedPageSchema,
   BrowserFrameSchema,
   BrowserHandbackSchema,
@@ -629,19 +640,29 @@ const CONTROLS = {
   [CONTROL_SET_MODEL]: UNREAD,
   [CONTROL_SET_EFFORT]: UNREAD,
   [CONTROL_SUPPORTED_MODELS]: UNREAD,
-  [CONTROL_SUPPORTED_COMMANDS]: UNREAD,
-  [CONTROL_MCP_STATUS]: UNREAD,
+  [CONTROL_SUPPORTED_COMMANDS]: reply<SupportedCommands>(
+    SupportedCommandsSchema
+  ),
+  [CONTROL_MCP_STATUS]: z.custom<McpServerStatus[]>(
+    isMcpServerStatuses,
+    "a session's MCP servers"
+  ),
   [CONTROL_MCP_RECONNECT]: UNREAD,
   [CONTROL_MCP_TOGGLE]: UNREAD,
   [CONTROL_FLEET_SETTINGS]: UNREAD,
   [CONTROL_ACKNOWLEDGE_ADDRESS]: UNREAD,
   [VERIFY_SESSION_CREDENTIAL]: UNREAD,
-  [CONTROL_STORED_RUN]: UNREAD,
+  [CONTROL_STORED_RUN]: z.custom<StoredRun>(
+    isStoredRun,
+    "what a session ran with"
+  ),
   [CONTROL_RENAME_SESSION]: UNREAD,
   [CONTROL_TAG_SESSION]: UNREAD,
-  [CONTROL_SPIN_OFF_HELD]: UNREAD,
+  [CONTROL_SPIN_OFF_HELD]: z
+    .custom<SpinOffHeld>(isSpinOffHeld, "what a discard would take")
+    .nullable(),
   [FLEET_STATUS]: UNREAD,
-  [UNLOCK_KEYCHAIN]: UNREAD,
+  [UNLOCK_KEYCHAIN]: reply<AuthState | undefined>(AuthStateShape.optional()),
   [PROBE_CAPABILITIES]: UNREAD,
 } satisfies {
   readonly [K in ControlName]: z.ZodType<ControlResult<K>> | typeof UNREAD;
@@ -665,7 +686,7 @@ export const CONTROL_REPLIES: {
 
 /** Each `fs` op the hub asks a machine (protocol.ts `FsPayload`), with its reply's schema. */
 const FS_OPS = {
-  list: UNREAD,
+  list: z.custom<FsEntry[]>(isFsEntries, "a folder's listing"),
   read: z.string(),
   write: UNREAD,
   media: FsMediaSchema,

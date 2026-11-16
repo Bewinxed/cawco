@@ -29,6 +29,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
+import type { ControlArgs } from "@cawco/core/control-table";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
 import { makeFolder } from "@cawco/core/folders";
 import { processesWithin } from "@cawco/core/live-processes";
@@ -69,6 +70,7 @@ import type {
   WorkspaceCommit,
   WorkspaceConflict,
   WorkspaceCut,
+  WorkspaceFirstSession,
   WorkspaceHolding,
   WorkspaceKind,
   WorkspaceOutputs,
@@ -76,9 +78,10 @@ import type {
   WorkspaceUnlanded,
 } from "@cawco/core/workspace/controls";
 import {
+  type CONTROL_WORKSPACE_AT,
+  type CONTROL_WORKSPACE_CREATE,
   holdsNothing,
   WORKSPACE_GIT_TIMEOUT_MS,
-  WORKSPACE_UNLANDED,
 } from "@cawco/core/workspace/controls";
 import {
   refuseShortOfWorkspace,
@@ -215,7 +218,7 @@ const lfsCheckout = async ({
   hub: string | undefined;
   path: string;
   plain: Git;
-  projectId: unknown;
+  projectId: string | undefined;
   start: string;
 }): Promise<Git> => {
   const origin = hub ?? (await plain(path, "remote", "get-url", "origin"));
@@ -223,10 +226,8 @@ const lfsCheckout = async ({
   const refused = hub
     ? undefined
     : await undeclaredEndpoint(path, [start], [own, declared?.endpoint]);
-  const project =
-    typeof projectId === "string" && projectId ? projectId : undefined;
   if (refused) {
-    await noteRefused(project, path, refused);
+    await noteRefused(projectId, path, refused);
   }
   const skip: Record<string, string> = refused
     ? { GIT_LFS_SKIP_SMUDGE: "1" }
@@ -384,7 +385,7 @@ const holdingSource = async <T>(
  */
 const readySource = (
   repoRoot: string,
-  projectId: unknown,
+  projectId: string | undefined,
   fromClone: boolean,
   deadline: number,
   declared: () => Promise<DeclaredLfs | undefined>
@@ -396,7 +397,7 @@ const readySource = (
       () => undefined
     );
     if (!origin) {
-      if (typeof projectId !== "string" || !projectId) {
+      if (!projectId) {
         throw new Error(
           `${repoRoot} has no origin remote and belongs to no project, so it has no hub remote to cut a workspace from. Delegate from a session in a project, or add a remote with \`git remote add origin <url>\`, and delegate again.`
         );
@@ -487,17 +488,13 @@ const placeProjectRows = (
 const placeFirst = async (
   id: string,
   path: string,
-  {
-    account,
-    first,
-    projectId,
-  }: { account: unknown; first: unknown; projectId: unknown }
+  { account, first, projectId }: Omit<CreateAsked, "placeRows">
 ): Promise<void> => {
-  const named = typeof account === "string" && account ? account : null;
+  const named = account || null;
   if (named) {
     await addAccount(id, named);
   }
-  if (typeof projectId === "string" && projectId) {
+  if (projectId) {
     await setProject(id, projectId);
   }
   const spill = await firstSpill(id, path, named, firstSessionOf(first));
@@ -777,37 +774,12 @@ const clearStaleLayer = async (
   }
 };
 
-/**
- * The wire's arguments of the workspace controls, read where they enter
- * (their callers hand them over untyped, daemon.ts): each loose, so what a
- * control passes on is the object the hub sent, extra keys included.
- */
-const WorkspaceRefSchema = z.looseObject({ id: z.string(), path: z.string() });
-const WorkspaceCutSchema = z.looseObject({
-  branch: z.string(),
-  carry: z.string().optional(),
-  commit: z.string(),
-});
-const WorkspaceCommitSchema = z.looseObject({
-  bundle: z.string().nullable(),
-  head: z.string(),
-});
-const WorkspaceArchiveSchema = z.looseObject({
-  base: z.string().optional(),
-  id: z.string(),
-  landed: z.array(z.string()).optional(),
-  path: z.string().optional(),
-  skip: z.array(z.string()).optional(),
-  unlanded: z.enum(WORKSPACE_UNLANDED),
-});
-
 /** What a create is handed besides the folder: the hub's names for the workspace's first session and its project. */
 interface CreateAsked {
-  account: unknown;
-  at: unknown;
-  first: unknown;
+  account: string | null;
+  first: WorkspaceFirstSession | null;
   placeRows: (cwd: string, projectId: string) => Promise<void>;
-  projectId: unknown;
+  projectId: string | undefined;
 }
 
 /**
@@ -836,25 +808,20 @@ interface CreateAsked {
  */
 export const createWorkspace = async (
   placeRows: (cwd: string, projectId: string) => Promise<void>,
-  cwd: unknown,
-  workspaceId: unknown,
-  projectId?: unknown,
-  account?: unknown,
-  at?: unknown,
-  first?: unknown
+  ...[dir, id, projectId, account, at, first]: ControlArgs<
+    typeof CONTROL_WORKSPACE_CREATE
+  >
 ): Promise<WorkspaceCheckout> => {
   // What this machine lacks first, before the folder is read at all.
   refuseShortOfWorkspace();
-  // A MachinePath from the hub (work-items `openWorkspace`): absolute.
-  const dir = String(cwd);
   const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
-  const id = String(workspaceId);
-  const cut =
-    at === null || at === undefined ? undefined : WorkspaceCutSchema.parse(at);
-  if (cut && !COMMIT.test(cut.commit)) {
-    throw new Error(`"${cut.commit}" is not a commit id`);
-  }
-  const asked: CreateAsked = { account, at, first, placeRows, projectId };
+  const cut = at ?? undefined;
+  const asked: CreateAsked = {
+    account: account ?? null,
+    first: first ?? null,
+    placeRows,
+    projectId: projectId || undefined,
+  };
   await unfinishedCleared;
   const found = await kindAt(dir, deadline);
   return found.kind === "repo"
@@ -1014,7 +981,7 @@ const cutClone = async (
     // The project's rows this agent holds, in the clone before its boundary
     // and first session start: nothing is asked of the hub, and the
     // boundary's form has them from its start.
-    if (typeof projectId === "string" && projectId) {
+    if (projectId) {
       await placeProjectRows(id, path, projectId, placeRows);
     }
     const boundary = await ensureBoundary({ id, path });
@@ -1077,7 +1044,7 @@ const makeFolderLayer = async (
     // The project's rows this agent holds, in a copy of its own before its
     // boundary and first session start. A view writes nothing into the
     // person's folder.
-    if (typeof projectId === "string" && projectId && layer.form === "copy") {
+    if (projectId && layer.form === "copy") {
       await placeProjectRows(id, path, projectId, placeRows);
     }
     const boundary = await ensureBoundary(workspace);
@@ -1350,11 +1317,10 @@ const bundleName = (): string => `.cawco-bundle-${crypto.randomUUID()}`;
  * taken only as a regular file of one link: the workspace writes that dir.
  */
 export const workspaceBundle = async (
-  ref: unknown,
-  base: unknown
+  workspace: WorkspaceRef,
+  base: string
 ): Promise<WorkspaceCommit> => {
-  const workspace = WorkspaceRefSchema.parse(ref);
-  const upstream = shellQuote(`origin/${String(base)}`);
+  const upstream = shellQuote(`origin/${base}`);
   const git = insideGit(workspace);
   const head = await git("git rev-parse --verify 'HEAD^{commit}'");
   const ahead = Number(
@@ -1418,16 +1384,10 @@ export const workspaceBundle = async (
  * outside any boundary.
  */
 export const workspaceAt = async (
-  ref: unknown,
-  base: unknown,
-  commit: unknown,
-  source: unknown
+  ...[workspace, base, { head, bundle }, source]: ControlArgs<
+    typeof CONTROL_WORKSPACE_AT
+  >
 ): Promise<void> => {
-  const workspace = WorkspaceRefSchema.parse(ref);
-  const { head, bundle } = WorkspaceCommitSchema.parse(commit);
-  if (!COMMIT.test(head)) {
-    throw new Error(`"${head}" is not a commit id`);
-  }
   const git = insideGit(workspace);
   const { scratch } = await ensureBoundary(workspace);
   const name = bundleName();
@@ -1477,8 +1437,9 @@ export const workspaceAt = async (
 };
 
 /** {@link CONTROL_WORKSPACE_BOUNDARY}: the boundary, running; answers its pid. */
-export const workspaceBoundary = async (ref: unknown): Promise<number> =>
-  (await ensureBoundary(WorkspaceRefSchema.parse(ref))).pid;
+export const workspaceBoundary = async (
+  workspace: WorkspaceRef
+): Promise<number> => (await ensureBoundary(workspace)).pid;
 
 /**
  * The clone's path as `create.json` names it, for an archive the hub sends
@@ -2173,8 +2134,9 @@ const carryChanged = (
  * `.gitignore` covers with it;
  * `closeBoundary` takes its state and scratch dirs.
  */
-export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
-  closeClone(WorkspaceArchiveSchema.parse(ref), false);
+export const archiveWorkspace = (
+  asked: WorkspaceArchive
+): Promise<WorkspaceArchived> => closeClone(asked, false);
 
 /**
  * {@link CONTROL_WORKSPACE_DISCARD}: as {@link archiveWorkspace}, but what
@@ -2184,8 +2146,10 @@ export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
  * is no git clone any more has its own entries copied there as they are
  * (carry.ts `copyStrays`).
  */
-export const discardWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
-  closeClone({ ...WorkspaceArchiveSchema.parse(ref), unlanded: "keep" }, true);
+export const discardWorkspace = (
+  asked: WorkspaceArchive
+): Promise<WorkspaceArchived> =>
+  closeClone({ ...asked, unlanded: "keep" }, true);
 
 /**
  * {@link CONTROL_WORKSPACE_OUTPUTS}: the regular files of a closing
@@ -2197,9 +2161,8 @@ export const discardWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
  * boundary cannot start (a damaged record) is read all the same.
  */
 export const workspaceOutputs = async (
-  ref: unknown
+  workspace: WorkspaceRef
 ): Promise<WorkspaceOutputs> => {
-  const workspace = WorkspaceRefSchema.parse(ref);
   await stopWorkspaceBoundary(workspace);
   await endLeftInside(workspace);
   return await outputsOf(workspace.id);
@@ -2642,11 +2605,9 @@ const folderLayer = async (workspace: WorkspaceRef): Promise<Layer> => {
  * conflicts with the folder as it is now (layer.ts `readChanges`).
  */
 export const workspaceChanges = async (
-  ref: unknown
-): Promise<WorkspaceChanges> => {
-  const workspace = WorkspaceRefSchema.parse(ref);
-  return await readChanges(workspace.id, await folderLayer(workspace));
-};
+  workspace: WorkspaceRef
+): Promise<WorkspaceChanges> =>
+  await readChanges(workspace.id, await folderLayer(workspace));
 
 /**
  * {@link CONTROL_WORKSPACE_APPLY}: a folder workspace's change set landed in
@@ -2656,9 +2617,8 @@ export const workspaceChanges = async (
  * the item has finished, and its delegate waits on this landing's answer.
  */
 export const workspaceApply = async (
-  ref: unknown
+  workspace: WorkspaceRef
 ): Promise<{ applied: number; conflicts: WorkspaceConflict[] }> => {
-  const workspace = WorkspaceRefSchema.parse(ref);
   const layer = await folderLayer(workspace);
   const result = await applyChanges(workspace.id, layer);
   console.info(

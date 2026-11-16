@@ -342,7 +342,6 @@ import {
   ensureServed,
   ensureStage,
   keepPins,
-  pinArg,
   pinFolderOf,
   pinTreeOf,
   renderStage,
@@ -3821,14 +3820,14 @@ const startDaemon = (rediscover = false) =>
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
-      warmStage(ports, ref, warm, pinArg(pin));
+      warmStage(ports, ref, warm, pin ?? undefined);
       return Promise.resolve();
     });
     // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved; the person's in the pinned version he is served, copied to the workspace.
     supervisor.declareControl(STAGE_WRITE, (ref, write, pin) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : writeSheet(ports, ref, write, pinArg(pin))
+        : writeSheet(ports, ref, write, pin ?? undefined)
     );
     // The version an author hands up, cut: a tree's clone (`[ref, pin]`) or a folder's copy (`[null, pin, dir]`).
     supervisor.declareControl(STAGE_PIN, (...asked) => {
@@ -3871,7 +3870,7 @@ const startDaemon = (rediscover = false) =>
       if (!ref) {
         throw new StageRefusal(`No workspace ${workspace} is on this machine.`);
       }
-      return ensureServed(ports, ref, serve, undefined, pinArg(pin));
+      return ensureServed(ports, ref, serve, undefined, pin ?? undefined);
     });
     // A check that names another machine: the commit leaves here, and arrives there.
     supervisor.declareControl(

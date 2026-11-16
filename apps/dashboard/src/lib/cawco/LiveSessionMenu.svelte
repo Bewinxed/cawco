@@ -18,10 +18,7 @@
    * The row is the trigger itself: `children` is handed the trigger's props
    * and spreads them on its own root element, so a table row stays a `<tr>`.
    */
-  import {
-    CONTROL_SPIN_OFF_HELD,
-    type SpinOffHeld,
-  } from "@cawco/core/session/controls";
+  import { CONTROL_SPIN_OFF_HELD } from "@cawco/core/session/controls";
   import { unhandled } from "@cawco/core/unhandled";
   import { sidebarWords } from "@cawco/core/words/sidebar";
   import { holdsNothing } from "@cawco/core/workspace/controls";
@@ -308,7 +305,7 @@
    * the spawn made, whichever it was; the machine saves a carry either way.
    */
   async function askDiscard() {
-    const read = await machineControl<SpinOffHeld | null>(
+    const read = await machineControl(
       instance.machineId,
       CONTROL_SPIN_OFF_HELD,
       [instance.id]

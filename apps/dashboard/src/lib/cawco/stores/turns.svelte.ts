@@ -13,7 +13,7 @@ import { HOUR_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { newId } from "#lib/platform/id.js";
-import { ask, rereadHub, send } from "../hub/socket.svelte";
+import { answered, ask, rereadHub, send } from "../hub/socket.svelte";
 import type { Message } from "../types";
 import { instanceIndex, machineConnected } from "./board.svelte";
 import { canResend, canWithdraw, submitCommand } from "./commands.svelte";
@@ -132,10 +132,11 @@ export async function relaunchSession(
   target.permissionMode = permissionMode;
   target.relaunching = true;
   try {
-    const relaunched = await ask<void>(
+    const relaunched = await ask(
       requestId,
       inTurn ? RELAUNCH_AT_TURN_END_MS : CONTROL_TIMEOUT_MS,
-      () => send({ verb: "spawn", machineId, instanceId, requestId, payload })
+      () => send({ verb: "spawn", machineId, instanceId, requestId, payload }),
+      answered
     );
     switch (relaunched.kind) {
       case "unanswered":
@@ -356,8 +357,11 @@ export async function editAndResend(
   settleStopped(instanceId);
   target.relaunching = true;
   try {
-    const rewound = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
-      send({ verb: "spawn", machineId, instanceId, requestId, payload })
+    const rewound = await ask(
+      requestId,
+      CONTROL_TIMEOUT_MS,
+      () => send({ verb: "spawn", machineId, instanceId, requestId, payload }),
+      answered
     );
     switch (rewound.kind) {
       case "unanswered":

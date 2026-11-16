@@ -85,22 +85,6 @@ export const HOST_STAND_IN = `(() => {
   };
 })();`;
 
-/** Whether `value` names an artifact as a hello does. */
-export const isHelloArtifact = (value: unknown): value is HelloArtifact =>
-  typeof value === "object" &&
-  value !== null &&
-  "sync" in value &&
-  typeof value.sync === "string" &&
-  "artifact" in value &&
-  typeof value.artifact === "object" &&
-  value.artifact !== null &&
-  "id" in value.artifact &&
-  typeof value.artifact.id === "string" &&
-  "kind" in value.artifact &&
-  typeof value.artifact.kind === "string" &&
-  "name" in value.artifact &&
-  typeof value.artifact.name === "string";
-
 /**
  * The dashboard's hello to a page loaded under {@link HOST_STAND_IN}
  * (PreviewPane.svelte, stage.svelte.ts `hello`): the artifact it is, its

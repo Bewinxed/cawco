@@ -51,6 +51,10 @@ export interface PermissionModeSet {
 
 /** What {@link CONTROL_CONTEXT_USAGE} answers, as far as the hub reads it: the tokens the session's context holds. */
 export interface ContextUsage {
+  /** What fills the window, each part by its name, with its tokens and the colour a screen draws it in. */
+  categories: { color: string; name: string; tokens: number }[];
+  maxTokens: number;
+  percentage: number;
   totalTokens: number;
 }
 
