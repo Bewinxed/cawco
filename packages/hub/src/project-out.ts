@@ -10,11 +10,8 @@ export const placeOut = (place: PlaceRow) => ({
   createdAt: place.createdAt.toISOString(),
 });
 
-/** A project's place as {@link createProjectOut} answers it. */
-type ProjectPlaceOut = ReturnType<typeof placeOut> & {
-  held: BridgedHeldPlace | null;
-  within: ReturnType<typeof placeNesting>["within"];
-};
+/** Each place's `held`, sent as null (see {@link createProjectOut}). */
+const NONE_HELD: { held: BridgedHeldPlace | null } = { held: null };
 
 /** The fields kept for shipped apps that require them, read by nothing else. */
 interface KeptForShippedApps {
@@ -55,9 +52,9 @@ export const createProjectOut =
       budget: budgetOf({ budgetMinutes, budgetTurns, budgetUnread, budgetUsd }),
       createdAt: project.createdAt.toISOString(),
       moveDeclinedAt: project.moveDeclinedAt?.toISOString() ?? null,
-      places: project.places.map((place): ProjectPlaceOut => ({
+      places: project.places.map((place) => ({
         ...placeOut(place),
-        held: null,
+        ...NONE_HELD,
         within:
           place.kind === "checkout"
             ? placeNesting(project.id, place, live).within

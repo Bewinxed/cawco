@@ -53,13 +53,13 @@
  * stage: it is every task whose stage is of kind `you`, worked out on read.
  */
 
+import { isOneOf } from "@cawco/core/one-of";
 import type {
   SendBack,
   Stage,
   StageMove,
   StageView,
 } from "@cawco/core/task-views";
-import { isOneOf } from "@cawco/core/one-of";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import {
   STAGE_KINDS as KINDS,
