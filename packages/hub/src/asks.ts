@@ -73,13 +73,9 @@ import {
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
 import { ASK_ORIGIN, type PermissionMode } from "@cawco/core/harness/kinds";
-import type {
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { settledQuestionResult } from "@cawco/core/question";
-import type {
-  PermissionResult,
-} from "@cawco/core/session-messages";
+import type { PermissionResult } from "@cawco/core/session-messages";
 import { UserAnswersSchema } from "@cawco/core/stored-shapes";
 import {
   askClosedWords,

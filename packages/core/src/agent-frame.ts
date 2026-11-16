@@ -128,7 +128,8 @@ export interface RegisterReads extends BinaryUpdateReads {
 
 /** A beat, read once ({@link HeartbeatPayload}). */
 export interface HeartbeatReads
-  extends BinaryUpdateReads,
+  extends
+    BinaryUpdateReads,
     Pick<
       HeartbeatPayload,
       | "activity"
@@ -221,8 +222,7 @@ export interface FrameReads {
  * no message a machine sends, in the sender's terms.
  */
 export type MachineRead =
-  | { dropped: string[]; envelope: MachineEnvelope }
-  | { fault: string };
+  { dropped: string[]; envelope: MachineEnvelope } | { fault: string };
 
 /** A string field of a payload; anything else is no word at all. */
 const textOf = (
@@ -322,7 +322,10 @@ class FieldReader {
   }
 
   /** `key`'s list, each item parsed by `schema`: one that is not its type is left out, and said. */
-  items<S extends z.ZodType>(key: string, schema: S): z.output<S>[] | undefined {
+  items<S extends z.ZodType>(
+    key: string,
+    schema: S
+  ): z.output<S>[] | undefined {
     const value = this.#said[key];
     if (!Array.isArray(value)) {
       return undefined;

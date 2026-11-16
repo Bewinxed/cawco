@@ -24,13 +24,8 @@
 
 import { BROWSER_ASK_TOOL } from "@cawco/core/ask-tools";
 import type { BrowserKey } from "@cawco/core/browser";
-import type {
-  ArrivingAsk,
-  BrowserAskFrame,
-} from "@cawco/core/frames";
-import type {
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { ArrivingAsk, BrowserAskFrame } from "@cawco/core/frames";
+import type { InstanceRow } from "@cawco/core/protocol";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { browserAskWords } from "@cawco/core/words/browser";
 import { z } from "zod";

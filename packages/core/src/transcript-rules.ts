@@ -1460,9 +1460,7 @@ export function transcriptUserText(message: unknown): string | null {
   }
   const text = content
     .flatMap((block: unknown) =>
-      isRecord(block) && block.type === "text"
-        ? [String(block.text ?? "")]
-        : []
+      isRecord(block) && block.type === "text" ? [String(block.text ?? "")] : []
     )
     .join("\n");
   return text || null;
@@ -1986,8 +1984,9 @@ const spawnedOf = (
     const blocks: unknown[] = result;
     text = blocks
       .filter(isRecord)
-      .find((block) => block.type === "text" && typeof block.text === "string")
-      ?.text;
+      .find(
+        (block) => block.type === "text" && typeof block.text === "string"
+      )?.text;
   }
   if (typeof text !== "string") {
     return;

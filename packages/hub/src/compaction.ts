@@ -12,10 +12,7 @@ import { CONTEXT_LINE } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { COMPACTION_ORIGIN } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import type {
-  HubEnvelope,
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { HubEnvelope, InstanceRow } from "@cawco/core/protocol";
 import type { NeutralSystemMessage } from "@cawco/core/session-messages";
 import { ContextLineSchema } from "@cawco/core/stored-shapes";
 import { contextWords } from "@cawco/core/words/context";

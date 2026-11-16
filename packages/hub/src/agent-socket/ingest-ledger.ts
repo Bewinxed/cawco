@@ -81,7 +81,10 @@ export const ingestLedgerStagesOf = (ctx: IngestLedgerContext) => {
     const body = message.payload;
     // Pings share admission and send receipts, then leave before every
     // consumer that makes a turn into work, attention or activity.
-    if (message.instanceId && (body.kind === "frame" || body.kind === "pulse")) {
+    if (
+      message.instanceId &&
+      (body.kind === "frame" || body.kind === "pulse")
+    ) {
       const [row] = ctx.db.getInstancesByIds([message.instanceId]);
       const frame = body.kind === "frame" ? body : undefined;
       const signal = frame ? peekSendSignal(frame) : undefined;

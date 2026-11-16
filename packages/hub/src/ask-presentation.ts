@@ -7,7 +7,6 @@
  * memory write's diff is the change from what the fleet held at that moment.
  */
 
-
 import { maskMcpConfig, openUrl } from "@cawco/core/fleet-secrets";
 import type {
   ArrivingAsk,

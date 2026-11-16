@@ -342,10 +342,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     }
     return payload.kind === "send"
       ? entry.builder.applyRecord(payload.record)
-      : entry.builder.applyFrame(
-          payload.message,
-          payload.harness
-        );
+      : entry.builder.applyFrame(payload.message, payload.harness);
   };
 
   /**

@@ -57,9 +57,7 @@ import { join, posix } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
 import { DESIGN_PROPOSAL_TOOL } from "@cawco/core/permission-presentation";
-import type {
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -1626,7 +1624,10 @@ export const createDesignSystem = (deps: {
       : folderStore(projectId, author, deps.folderChanged, session, message);
 
   /** The proposal as the person's ask: drawn as its diff, answered by Approve or Deny, where it was made too. */
-  const envelopeOf = (row: DesignProposalRow, project: string): ArrivingAsk => ({
+  const envelopeOf = (
+    row: DesignProposalRow,
+    project: string
+  ): ArrivingAsk => ({
     verb: "frames",
     machineId: "hub",
     instanceId: row.id,

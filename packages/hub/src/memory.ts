@@ -118,9 +118,7 @@ import {
   MEMORY_PROPOSAL_TOOL,
 } from "@cawco/core/permission-presentation";
 import type { ProjectNote } from "@cawco/core/project-conversation";
-import type {
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { InstanceRow } from "@cawco/core/protocol";
 import type {
   NeutralMessage,
   NeutralOrigin,
@@ -2867,7 +2865,10 @@ export const createMemory = ({
   // --- proposals ------------------------------------------------------------------------
 
   /** The proposal as the person's ask: drawn as a diff per file, answered by Approve or Reject. */
-  const envelopeOf = (proposal: Proposal, projectName: string): ArrivingAsk => ({
+  const envelopeOf = (
+    proposal: Proposal,
+    projectName: string
+  ): ArrivingAsk => ({
     verb: "frames",
     machineId: "hub",
     instanceId: proposal.id,

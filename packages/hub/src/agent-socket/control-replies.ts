@@ -38,7 +38,11 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     const install = message.requestId
       ? ctx.pendingInstalls.get(message.requestId)
       : undefined;
-    if (install && message.payload.kind === "control_result" && message.requestId) {
+    if (
+      install &&
+      message.payload.kind === "control_result" &&
+      message.requestId
+    ) {
       ctx.pendingInstalls.delete(message.requestId);
       // Each press that joined it is answered with this answer, under its
       // own request id, where it waits (relay-control.ts).

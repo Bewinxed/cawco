@@ -38,9 +38,7 @@ import type {
   ConnectAnswer,
   ConnectAskFrame,
 } from "@cawco/core/frames";
-import type {
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { InstanceRow } from "@cawco/core/protocol";
 import type {
   FleetMcpChange,
   FleetMcpTaken,

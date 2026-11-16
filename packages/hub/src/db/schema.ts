@@ -37,10 +37,7 @@ import {
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
 } from "@cawco/core/plan";
-import {
-  DELEGATE_EVENT_KINDS,
-  type HubEnvelope,
-} from "@cawco/core/protocol";
+import { DELEGATE_EVENT_KINDS, type HubEnvelope } from "@cawco/core/protocol";
 import { RELAY_PROVIDERS, RELAY_STATES } from "@cawco/core/relays";
 import {
   ROUTINE_OUTCOMES,
@@ -305,8 +302,9 @@ const sealedJson = <S extends z.ZodType>(schema: S) =>
   });
 
 /** A send as its machine is handed it (`HubEnvelope<"send">`). */
-const SendEnvelopeSchema: z.ZodType<HubEnvelope<"send">> =
-  EnvelopeShape.extend({ payload: SendPayloadShape, verb: z.literal("send") });
+const SendEnvelopeSchema: z.ZodType<HubEnvelope<"send">> = EnvelopeShape.extend(
+  { payload: SendPayloadShape, verb: z.literal("send") }
+);
 /** A session's start as its machine is handed it (`HubEnvelope<"spawn">`). */
 const SpawnEnvelopeSchema: z.ZodType<HubEnvelope<"spawn">> =
   EnvelopeShape.extend({

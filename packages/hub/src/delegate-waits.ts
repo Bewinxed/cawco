@@ -54,12 +54,9 @@
 
 import type { ArrivingAsk } from "@cawco/core/frames";
 import type { AskAnswer, AskRecord } from "@cawco/core/asks";
-import type {
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { InstanceRow } from "@cawco/core/protocol";
 
 import { delegateWaitWords } from "@cawco/core/words/delegates";
-
 
 /** What a notice tells of its ask, by which its send is named: each is told once. */
 export type NoticeMark =
