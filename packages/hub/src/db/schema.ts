@@ -3249,8 +3249,10 @@ export const accountRouting = sqliteTable("account_routing", {
 });
 
 /**
- * Each account's freshest limit reading, from what its sessions' Claude Code
- * reported (`rate_limit_event`, `accountInfo()`), whichever machine they ran on.
+ * Each account's freshest limit reading: its provider's usage endpoint as a
+ * machine it is signed in on read it (Claude's `api/oauth/usage` among them),
+ * and what its sessions' Claude Code reported between reads
+ * (`rate_limit_event`, `accountInfo()`), whichever machine they ran on.
  */
 export const accountReadings = sqliteTable("account_readings", {
   accountId: text("account_id")

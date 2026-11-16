@@ -46,7 +46,7 @@ export interface HubContext
     >,
     Pick<
       ReturnType<typeof createAccountProbes>,
-      "freshAccountReports" | "probeAccount"
+      "freshAccountReports" | "probeAccount" | "readAccountUsageNow"
     >,
     Pick<
       ReturnType<typeof createAccountSignin>,

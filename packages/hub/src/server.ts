@@ -1309,6 +1309,7 @@ export const createServer = (
     observeTurn: () => observeTurn,
     probeAccount: () => probeAccount,
     projectOffers: () => projectOffers,
+    readAccountUsageNow: () => readAccountUsageNow,
     providerRetries: () => providerRetries,
     readLaunchDirs: () => readLaunchDirs,
     recordSessionAddress: () => recordSessionAddress,
@@ -2096,6 +2097,7 @@ export const createServer = (
     probeAccount,
     publishStalls,
     publishUsage,
+    readAccountUsageNow,
     rebalanceNotices,
     syncAccounts,
   } = createAccountProbes(ctx);
@@ -12508,8 +12510,9 @@ export const createServer = (
    * metered account's windows as the machine just read them, the buckets
    * and the OpenCode Go reading stored, then the small frame of limits and
    * the fleet's spend pushed, which moves exactly here: the dashboard pulls
-   * the heavy aggregates over REST. Claude's limits are its accounts',
-   * which its sessions report.
+   * the heavy aggregates over REST. Claude's accounts are among the
+   * metered ones: Anthropic's usage endpoint read on the machine, and
+   * between reads their sessions' `rate_limit_event`s.
    */
   const usageFromMachine: AgentVerbs["usage"] = (_ws, message) => {
     const { buckets, openCodeGo, accounts } = message.payload;

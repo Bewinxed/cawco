@@ -261,10 +261,31 @@ const credentialsFile: Store = {
   removeHome: () => rm(join(claudeHome(), CREDENTIALS), { force: true }),
 };
 
+/** Claude Code's stores on this platform, in the order it reads them. */
+const loginStores = (): Store[] =>
+  platform() === "darwin" ? [keychain, credentialsFile] : [credentialsFile];
+
+/**
+ * The login Claude Code keeps for an account's dir, as the first store that
+ * holds one has it (the JSON Claude Code wrote, `claudeAiOauth` in it);
+ * undefined when none does. Read, never written: Claude Code alone renews
+ * it. For one request (usage/anthropic.ts) and never logged.
+ */
+export const accountLogin = async (
+  account: string
+): Promise<string | undefined> => {
+  for (const store of loginStores()) {
+    const secret = await store.read(account);
+    if (secret) {
+      return secret;
+    }
+  }
+  return undefined;
+};
+
 /** The store the default dir's login is in, and the login itself. */
 const homeCredential = async (): Promise<{ secret: string; store: Store }> => {
-  const stores =
-    platform() === "darwin" ? [keychain, credentialsFile] : [credentialsFile];
+  const stores = loginStores();
   for (const store of stores) {
     const secret = await store.readHome();
     if (secret) {
@@ -425,8 +446,7 @@ const alreadyMoved = async (
   if (!(answered && sameIdentity(answered, expected))) {
     return undefined;
   }
-  const stores =
-    platform() === "darwin" ? [keychain, credentialsFile] : [credentialsFile];
+  const stores = loginStores();
   for (const store of stores) {
     if (await store.heldBy(account)) {
       log(`already moved: ${account}'s dir answers as ${answered.email}`);
@@ -526,8 +546,7 @@ export const joinAccountLogin = (
 
 /** An account dir's login, read from the store Claude Code keeps it in, with its `oauthAccount`. */
 const takeLogin = async (account: string): Promise<Taken> => {
-  const stores =
-    platform() === "darwin" ? [keychain, credentialsFile] : [credentialsFile];
+  const stores = loginStores();
   for (const store of stores) {
     const secret = await store.read(account);
     if (secret) {

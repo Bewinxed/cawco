@@ -882,9 +882,25 @@ export const confirmReading = (
 /**
  * An account's windows as one of its machines just read them from the
  * provider's own usage endpoint. Kept only while the account is signed in
- * there; a failed read keeps the last reading as it was, with its time. A
- * window at its limit benches the account until it resets, as a refused
- * Claude request does. True when the reading moved.
+ * there; a failed read keeps the last reading as it was, with its time, and
+ * says why in the log.
+ *
+ * The read is the provider's whole answer at `readAt`, so it is the
+ * account's from then on: its windows replace the ones held (percents that
+ * went down included, as a usage reset at claude.ai lowers them), its
+ * window set is the account's, and its bench is what it says: every bench
+ * the account had ends, and each window at its limit benches the account,
+ * for the model the window is scoped to (none: every model), until it
+ * resets. A plan the read did not name keeps the one held.
+ *
+ * Claude's windows also come between reads, from each `rate_limit_event`
+ * ({@link noteRateLimit}): the two are laid over each other in the order
+ * they reach the hub, each a word on the account at its arrival. An event
+ * after a read lays its windows over the read's, and never lowers a window's
+ * percent within the same reset (an older header): after a reset at
+ * claude.ai, only the next read lowers it, and every turn's end on the
+ * account brings one (agent provider-usage.ts). True when the reading
+ * moved.
  */
 export const noteProviderReading = (
   db: DbShape,
@@ -904,7 +920,7 @@ export const noteProviderReading = (
   }
   if (reading.error) {
     console.warn(
-      `[accounts] ${reading.accountId}'s windows were not read on ${machineId}: ${reading.error}; the last reading stays`
+      `[accounts] ${reading.accountId}'s windows could not be read on ${machineId}: ${reading.error}; the last reading stays, from ${reading.readAt > 0 ? new Date(reading.readAt).toISOString() : "no read yet"}`
     );
     return false;
   }
@@ -914,15 +930,28 @@ export const noteProviderReading = (
     {
       windows: reading.windows,
       windowKinds: reading.windows.map(windowKey),
-      subscription: reading.plan,
+      ...(reading.plan === null ? {} : { subscription: reading.plan }),
     },
     reading.readAt
   );
-  for (const window of reading.windows) {
+  const lifted = db.accounts.liftBench(reading.accountId);
+  const now = Date.now();
+  const benched = reading.windows.flatMap((window) => {
     const until = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN;
-    if (window.percent >= 100 && Number.isFinite(until) && until > Date.now()) {
-      db.accounts.setBench(reading.accountId, null, until);
-    }
+    return window.percent >= 100 && Number.isFinite(until) && until > now
+      ? [{ scope: window.scopeLabel, until }]
+      : [];
+  });
+  for (const { scope, until } of benched) {
+    db.accounts.setBench(reading.accountId, scope, until);
+  }
+  const back = lifted.filter(
+    (scope) => !benched.some((one) => (one.scope ?? "") === scope)
+  );
+  if (back.length > 0) {
+    console.info(
+      `[accounts] ${reading.accountId} is off its bench (${back.map((scope) => scope || "every model").join(", ")}): its windows read on ${machineId} have none at its limit there`
+    );
   }
   return true;
 };
@@ -941,7 +970,9 @@ export const noteProviderReading = (
  * until the reset, so a lower percent there is an older header, and the
  * window keeps the higher reading. The window set the event names (core
  * `ObservedReading.windowKinds`) is the account's whatever its percents:
- * the filter drops older percents, never a window from the set.
+ * the filter drops older percents, never a window from the set. A live read
+ * of the account ({@link noteProviderReading}) knows no such filter: it is
+ * the server's answer, and sets every window as it reads.
  */
 export const noteRateLimit = (
   db: DbShape,

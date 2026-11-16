@@ -36905,7 +36905,7 @@
         ]
       },
       "ClaudeLimits": {
-        "description": "A Claude account's limits, as its sessions' Claude Code reported them\n(`rate_limit_event`, `accountInfo()`). A window whose `resetsAt` has passed\nwith no newer report reads 0%.",
+        "description": "A Claude account's limits, as Anthropic's usage endpoint answered them and\nits sessions' Claude Code reported them between reads (`rate_limit_event`,\n`accountInfo()`). A window whose `resetsAt` has passed\nwith no newer report reads 0%.",
         "type": "object",
         "properties": {
           "error": {

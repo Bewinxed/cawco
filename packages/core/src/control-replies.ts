@@ -17,6 +17,7 @@ import type {
   HomeCredential,
   HomeLogin,
   HomeLoginMoved,
+  ProviderAccountReading,
   ProviderSigninChallenge,
   ProviderSigninResult,
 } from "./accounts";
@@ -37,6 +38,7 @@ import {
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PI_DEFAULT_MODEL,
   CONTROL_PROBE_ACCOUNT,
+  CONTROL_READ_ACCOUNT_USAGE,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
   CONTROL_SET_PROVIDER_KEY,
@@ -250,6 +252,7 @@ import {
   PlacePushSchema,
   PlaceRepoSchema,
   PreviewStartedSchema,
+  ProviderAccountReadingSchema,
   ProviderSigninChallengeSchema,
   ProviderSigninResultSchema,
   RelayCertifiedSchema,
@@ -410,6 +413,9 @@ const CONTROLS = {
     ProviderSigninResultSchema
   ),
   [CONTROL_FORGET_PROVIDER_ACCOUNT]: UNREAD,
+  [CONTROL_READ_ACCOUNT_USAGE]: reply<ProviderAccountReading | null>(
+    ProviderAccountReadingSchema.nullable()
+  ),
   [CONTROL_READ_HOME_CREDENTIALS]: reply<HomeCredential[]>(
     z.array(HomeCredentialSchema)
   ),

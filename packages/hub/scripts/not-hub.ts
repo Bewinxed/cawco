@@ -68,6 +68,11 @@ export const NOT_HUB: { file: string; pattern: string; why: string }[] = [
     why: "neko's sign-in, on the browser container's loopback port",
   },
   {
+    file: "packages/agent/src/usage/anthropic.ts",
+    pattern: "/api/oauth/usage",
+    why: "Anthropic's usage endpoint on api.anthropic.com, the read Claude Code makes for a login's windows",
+  },
+  {
     file: "packages/agent/src/forges/github.ts",
     pattern: "/api/v3",
     why: "a GitHub Enterprise host's API base",

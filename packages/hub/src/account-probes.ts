@@ -1,6 +1,7 @@
 import type {
   AccountReport,
   PendingAccountSignin,
+  ProviderAccountReading,
   ProviderSigninChallenge,
   RebalanceNotice,
   RefusalVerdict,
@@ -8,6 +9,7 @@ import type {
 import {
   CONTROL_CHECK_ACCOUNT,
   CONTROL_PROBE_ACCOUNT,
+  CONTROL_READ_ACCOUNT_USAGE,
 } from "@cawco/core/accounts/controls";
 import { detach } from "@cawco/core/detach";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
@@ -16,6 +18,7 @@ import { configurePage } from "@cawco/core/words/configure";
 import type { AccountProber } from "./accounts";
 import {
   checkRefusal,
+  noteProviderReading,
   probeRetryDelay,
   REFUSAL_CHECK_EVERY_MS,
   reconcileAccounts,
@@ -412,7 +415,88 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
     });
   };
 
+  /**
+   * How long the hub waits on a machine's read of one account now: the
+   * provider's answer (5 s on Claude's, its CLI's own bound) and, for a
+   * login past its expiry, Claude Code's `auth status` renewing it first.
+   */
+  const READ_NOW_TIMEOUT_MS = 10_000;
+
+  /**
+   * One account's windows read now, from its provider's usage endpoint on a
+   * connected machine it is signed in on, each tried in turn until one
+   * reads them (agent provider-usage.ts `readAccountUsage`): the check a pick
+   * of the account makes, for any provider with a reader. The reading is the
+   * account's at once ({@link noteProviderReading}) and every screen hears
+   * it. `unread` says why none was read, in words: no machine to read on,
+   * none that answered, or the provider's refusal (a login the endpoint
+   * refuses, a setup-token's). Nothing is guessed in its place.
+   */
+  const readAccountUsageNow = async (
+    accountId: string
+  ): Promise<
+    | { kind: "read"; machineId: string; reading: ProviderAccountReading }
+    | { kind: "unread"; why: string }
+  > => {
+    const machines = [
+      ...new Set(
+        ctx.db.accounts
+          .signins()
+          .filter(
+            (one) =>
+              one.accountId === accountId &&
+              one.state === "signed-in" &&
+              ctx.registry.agent(one.machineId) !== undefined
+          )
+          .map((one) => one.machineId)
+      ),
+    ];
+    const named = ctx.accountWords(accountId);
+    const whys: string[] = [];
+    for (const machineId of machines) {
+      const answer = await ctx.readAgent(
+        machineId,
+        CONTROL_READ_ACCOUNT_USAGE,
+        [accountId],
+        READ_NOW_TIMEOUT_MS
+      );
+      const machine = ctx.machineName(machineId);
+      if (answer.kind === "unanswered") {
+        whys.push(
+          `${machine} didn't answer: ${ctx.unansweredFault(machineId, answer)}`
+        );
+        continue;
+      }
+      if (!answer.value.ok) {
+        whys.push(
+          `${machine} refused the read: ${answer.value.error ?? "it gave no reason"}`
+        );
+        continue;
+      }
+      const reading = answer.value.result;
+      if (!reading) {
+        whys.push(`${machine} has no usage reader for it`);
+        continue;
+      }
+      if (reading.error) {
+        whys.push(`${machine} couldn't read it: ${reading.error}`);
+        continue;
+      }
+      if (noteProviderReading(ctx.db, machineId, reading)) {
+        publishUsage(machineId);
+      }
+      return { kind: "read", machineId, reading };
+    }
+    const why =
+      machines.length === 0
+        ? `${named} is signed in on no connected machine, so its usage was not read`
+        : `${named}'s usage was not read: ${whys.join("; ")}`;
+    console.warn(`[accounts] ${why}`);
+    return { kind: "unread", why };
+  };
+
   return {
+    readAccountUsageNow,
     catalogFaults,
     pendingSignins,
     pendingKey,

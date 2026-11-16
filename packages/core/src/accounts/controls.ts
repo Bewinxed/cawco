@@ -110,6 +110,16 @@ export const CONTROL_ACCOUNT_LENT = "accountLent";
 export const CONTROL_BEGIN_PROVIDER_LOGIN = "beginProviderLogin";
 export const CONTROL_COMPLETE_PROVIDER_LOGIN = "completeProviderLogin";
 export const CONTROL_SET_PROVIDER_KEY = "setProviderKey";
+/**
+ * Machine control (arg: account id): the account's windows read now from
+ * its provider's own usage endpoint with the credential this machine holds
+ * (agent provider-usage.ts), for an account of any provider with a reader:
+ * Claude's, ChatGPT's, OpenCode Go's. Answers the
+ * {@link ProviderAccountReading}, whose `error` says why it could not be
+ * read; null for an account whose provider has no reader, or that has no
+ * store on the machine.
+ */
+export const CONTROL_READ_ACCOUNT_USAGE = "readAccountUsage";
 export const CONTROL_FORGET_PROVIDER_ACCOUNT = "forgetProviderAccount";
 
 /**

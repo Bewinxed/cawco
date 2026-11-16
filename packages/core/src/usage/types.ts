@@ -106,16 +106,18 @@ export interface OpenCodeGoLimits {
 
 /**
  * How long an account's reading stands as current after the last word on it:
- * a `rate_limit_event`, or a turn on the account that ended without one
- * (Claude Code emits the event whenever a window's rounded percent or reset
- * moves, so a turn with none confirms the reading). Past this it is stale:
- * use from anywhere else (claude.ai, another client) goes unseen.
+ * a live read of Anthropic's usage endpoint (every 5 minutes on a machine
+ * the account is signed in on), a `rate_limit_event`, or a turn on the
+ * account that ended without one (Claude Code emits the event whenever a
+ * window's rounded percent or reset moves, so a turn with none confirms the
+ * reading). Past this it is stale: no read has answered for an hour.
  */
 export const CLAUDE_READING_CURRENT_MS = HOUR_MS;
 
 /**
- * A Claude account's limits, as its sessions' Claude Code reported them
- * (`rate_limit_event`, `accountInfo()`). A window whose `resetsAt` has passed
+ * A Claude account's limits, as Anthropic's usage endpoint answered them and
+ * its sessions' Claude Code reported them between reads (`rate_limit_event`,
+ * `accountInfo()`). A window whose `resetsAt` has passed
  * with no newer report reads 0%.
  */
 export interface ClaudeLimits {

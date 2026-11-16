@@ -3,8 +3,11 @@ import type { LimitWindow } from "./types";
 import { bearing, windowKey, windowResetAt } from "./windows";
 
 /**
- * Rate-limit windows as Claude Code reports them, and the only source CawCo
- * has for them: CawCo never asks Anthropic for an account's usage itself.
+ * Rate-limit windows as Claude Code reports them between the account's live
+ * reads (agent usage/anthropic.ts, Anthropic's own `api/oauth/usage`): the
+ * read is the server's whole answer, these the signal that comes the moment
+ * a session's response moves a window (hub accounts.ts `noteRateLimit` has
+ * how the two meet).
  *
  * Claude Code emits a `rate_limit_event` whenever a window's rounded
  * percentage or reset time moves, carrying `rate_limit_info`: the

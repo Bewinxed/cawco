@@ -259,6 +259,7 @@ import {
 } from "../move-login";
 import { probeStarted } from "../probe-count";
 import { parseProcId, procIdFor } from "../proc-id";
+import { withAccountReads } from "../provider-usage";
 import { redactText } from "../redaction";
 import {
   acknowledgeSessionCredential,
@@ -5114,8 +5115,10 @@ class ClaudeHarness implements Harness<"claude"> {
 
   async spawn(
     spec: SpawnPayload,
-    ctx: HarnessContext
+    given: HarnessContext
   ): Promise<HarnessSession> {
+    // Each turn's end reads the account's windows shortly after.
+    const ctx = withAccountReads(spec, given);
     // THE VERSION FLOOR: no Claude Code below it starts a session here, on
     // a start, a wake or a relaunch alike (all of them come through here).
     const executable = await claudeToStart();
@@ -5311,7 +5314,7 @@ class ClaudeHarness implements Harness<"claude"> {
    */
   async adopt(
     spec: SpawnPayload,
-    ctx: HarnessContext,
+    given: HarnessContext,
     options: {
       afterSeq?: number;
       /** The ring's last seq as sessiond listed it. */
@@ -5320,6 +5323,8 @@ class ClaudeHarness implements Harness<"claude"> {
       turnRunning: boolean;
     }
   ): Promise<HarnessSession> {
+    // Each turn's end reads the account's windows shortly after, as a launch's does.
+    const ctx = withAccountReads(spec, given);
     const { instanceId } = spec;
     const { head, turnRunning } = options;
     const procId = procIdFor("claude", instanceId);

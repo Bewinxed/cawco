@@ -107,8 +107,9 @@ export type HomeStore = Extract<import("./harness/kinds").HarnessKind, string>;
 type SigninKind = "paste-code" | "device-code" | "api-key";
 
 /**
- * The providers whose limits CawCo reads: Claude's from its sessions'
- * `rate_limit_event`s, ChatGPT's from `wham/usage` (usage/chatgpt.ts),
+ * The providers whose limits CawCo reads: Claude's from Anthropic's
+ * `api/oauth/usage` (usage/anthropic.ts) and, between those reads, its
+ * sessions' `rate_limit_event`s; ChatGPT's from `wham/usage` (usage/chatgpt.ts),
  * OpenCode Go's from `zen/go/v1/usage` (usage/opencode-go.ts). Every other
  * provider exposes none CawCo can read (Copilot included: neither pi-ai's
  * github-copilot.js nor OpenCode's copilot.ts reads a quota), so it has no
@@ -938,10 +939,11 @@ export const atProviderLimit = ({ status, type }: ProviderRefusal): boolean =>
 
 /**
  * One reading of an account's windows on a machine, made by its agent from
- * the provider's own usage endpoint with the account's credential: ChatGPT's
- * `wham/usage`, OpenCode Go's `zen/go/v1/usage`. Every 5 minutes while signed
- * in, and after each turn on it. `error` says why the last read failed (a
- * 401: the reading held is the last good one, from `readAt`).
+ * the provider's own usage endpoint with the account's credential: Claude's
+ * `api/oauth/usage`, ChatGPT's `wham/usage`, OpenCode Go's
+ * `zen/go/v1/usage`. Every 5 minutes while signed in, after each turn on it,
+ * and when the hub asks for one account now. `error` says why the last read
+ * failed (a 401: the reading held is the last good one, from `readAt`).
  */
 export interface ProviderAccountReading {
   accountId: string;

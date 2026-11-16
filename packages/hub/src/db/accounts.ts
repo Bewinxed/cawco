@@ -142,6 +142,13 @@ export interface AccountsDb {
   readonly leaveMachine: (accountId: string, machineId: string) => boolean;
   /** The removed accounts' stores machines still hold under a running process. */
   readonly leaves: () => AccountLeave[];
+  /**
+   * Every bench of the account ends now, whatever its scope: a live read of
+   * its windows says which are at their limit (hub accounts.ts
+   * `noteProviderReading`). The scopes that were still running, "" for
+   * every model.
+   */
+  readonly liftBench: (accountId: string) => string[];
   readonly list: () => Account[];
   /** The sessions still running from a moved credential, by instance id → machine id. */
   readonly movedFrom: () => Map<string, string>;
@@ -1155,6 +1162,16 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           scope: row.scope === "" ? null : row.scope,
           until: row.until.getTime(),
         })),
+    liftBench: (accountId) => {
+      const now = Date.now();
+      return db
+        .delete(accountBench)
+        .where(eq(accountBench.accountId, accountId))
+        .returning()
+        .all()
+        .filter((row) => row.until.getTime() > now)
+        .map((row) => row.scope);
+    },
     setBench: (accountId, scope, until) => {
       if (!get(accountId)) {
         return;

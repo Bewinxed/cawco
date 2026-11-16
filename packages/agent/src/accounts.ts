@@ -51,8 +51,10 @@ import { probeStarted } from "./probe-count";
  * own credential (made by Claude Code's own `claude auth login`), transcripts
  * and `.claude.json`, with the fleet's user layer linked in from
  * {@link claudeHome}.
- * CawCo reads none of the credential: who a dir is signed in as comes from
- * Claude Code's own `auth status` and initialize response.
+ * Who a dir is signed in as comes from Claude Code's own `auth status` and
+ * initialize response. The one read of the credential itself is its access
+ * token, for one request to Anthropic's usage endpoint (usage/anthropic.ts);
+ * CawCo never writes or renews it: Claude Code does, under its own lock.
  */
 
 /** The env that points Claude Code at an account's dir. */
@@ -610,7 +612,10 @@ const PROBE_TIMEOUT_MS = 60_000;
  * (`done`: "probed", "checked"): its login is in the locked login keychain
  * ({@link lockedAway}), or the keychain's look gave no answer in time.
  */
-const notLockedAway = async (account: string, done: string): Promise<void> => {
+export const notLockedAway = async (
+  account: string,
+  done: string
+): Promise<void> => {
   const away = await readWithin(AUTH_STATUS_TIMEOUT_MS, (signal) =>
     lockedAway(keychainService(account), signal)
   );

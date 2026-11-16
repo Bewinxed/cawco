@@ -17,6 +17,7 @@ import {
   CONTROL_JOIN_PROVIDER_ACCOUNT,
   CONTROL_LEND_ACCOUNT,
   CONTROL_MOVE_HOME_CREDENTIAL,
+  CONTROL_READ_ACCOUNT_USAGE,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_SET_PROVIDER_KEY,
 } from "@cawco/core/accounts/controls";
@@ -331,7 +332,11 @@ import {
   readHomeCredentials,
   setProviderKey,
 } from "./provider-accounts";
-import { machineGoKey, readDueProviderAccounts } from "./provider-usage";
+import {
+  machineGoKey,
+  readAccountUsage,
+  readDueProviderAccounts,
+} from "./provider-usage";
 import {
   forgetRevoked,
   outbound,
@@ -894,6 +899,10 @@ const registerProviderAccounts = (
       await forgetProviderAccount(id as string, ports);
       return { forgotten: true };
     })()
+  );
+  supervisor.declareControl(
+    CONTROL_READ_ACCOUNT_USAGE,
+    async (id) => (await readAccountUsage(id as string, ports)) ?? null
   );
   supervisor.declareControl(CONTROL_READ_HOME_CREDENTIALS, () =>
     readHomeCredentials(ports)
@@ -3262,11 +3271,9 @@ const attach = (
       Effect.repeat(
         Effect.gen(function* () {
           const buckets = yield* Effect.promise(() => scanner.scan(Date.now()));
-          // The OpenCode Go plan's windows, when this machine holds a Go key.
-          // Claude's limits are its accounts', which each session's Claude
-          // Code reports as it runs.
           // The machine's OpenCode Go windows, from its Go account's key, and
-          // every metered account's windows, each every 5 minutes.
+          // every metered account's windows (Claude's, ChatGPT's, OpenCode
+          // Go's), each every 5 minutes.
           const openCodeGo = yield* Effect.promise(() =>
             fetchOpenCodeGoLimits(machineGoKey())
           );

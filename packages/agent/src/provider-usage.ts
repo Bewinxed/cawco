@@ -1,23 +1,25 @@
 /**
- * Each provider account's windows on this machine, read wherever the
- * provider exposes them, with the account's one credential: ChatGPT's
- * `wham/usage` (agent usage/chatgpt.ts), OpenCode Go's `zen/go/v1/usage`
- * (agent usage/opencode-go.ts). Every 5 minutes while the account is signed in
- * here, and shortly after each turn a session runs on it. Every other
- * provider exposes none: no windows, and so no dials and no at-limit moves,
- * though placement still works. A credential is read at call time for one
- * request and never logged.
+ * Each account's windows on this machine, read wherever the provider exposes
+ * them, with the account's one credential: Claude's `api/oauth/usage`
+ * (agent usage/anthropic.ts), ChatGPT's `wham/usage` (usage/chatgpt.ts),
+ * OpenCode Go's `zen/go/v1/usage` (usage/opencode-go.ts). Every 5 minutes
+ * while the account is signed in here, shortly after each turn a session
+ * runs on it (at most once a minute), and when the hub asks for one account
+ * now ({@link readAccountUsage}). Every other provider exposes none: no
+ * windows, and so no dials and no at-limit moves, though placement still
+ * works. A credential is read at call time for one request and never logged.
  *
  * A read that fails keeps the last good windows, with their time, and says
  * why ({@link ProviderAccountReading.error}); the hub keeps that reading.
  */
 import type { ProviderAccountReading } from "@cawco/core/accounts";
-import { credentialAccountIds } from "@cawco/core/paths/claude";
+import { accountIds, credentialAccountIds } from "@cawco/core/paths/claude";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import type { AgentPorts } from "./agent-ports";
 import type { HarnessContext } from "./harness";
 import { freshen, readHeld } from "./provider-accounts";
+import { readAnthropicUsage } from "./usage/anthropic";
 import { chatgptClaims, readChatgptUsage } from "./usage/chatgpt";
 import { fetchOpenCodeGoLimits } from "./usage/opencode-go";
 
@@ -27,12 +29,21 @@ const PROVIDER_READ_INTERVAL_MS = 5 * 60_000;
 /** How long after a turn ends its account's windows are read: one read for a burst of turns. */
 const AFTER_TURN_MS = 3000;
 
-/** The providers whose windows CawCo can read. */
+/**
+ * The least time between an account's reads that turns set going: Claude
+ * Code's own (it answers a usage read from a snapshot younger than a
+ * minute, 2.1.325), so a busy account is not read at every turn's end.
+ */
+const TURN_READ_SPACING_MS = 60_000;
+
+/** The providers of a pi-ai credential store whose windows CawCo can read. */
 const METERED = new Set(["openai-codex", "opencode-go"]);
 
 const last = new Map<string, ProviderAccountReading>();
 const attempted = new Map<string, number>();
 const soon = new Map<string, ReturnType<typeof setTimeout>>();
+/** Each account's read under way: a second ask joins it. */
+const inFlight = new Map<string, Promise<ProviderAccountReading | undefined>>();
 
 /**
  * OpenCode Go's windows as the windows placement and at-limit read: its
@@ -56,6 +67,9 @@ const readWindows = async (
   accountId: string,
   ports: Pick<AgentPorts, "borrowAsk">
 ): Promise<Read | undefined> => {
+  if (accountIds().includes(accountId)) {
+    return await readAnthropicUsage(accountId);
+  }
   const held = readHeld(accountId);
   if (!(held && METERED.has(held.provider))) {
     return undefined;
@@ -84,7 +98,28 @@ const readWindows = async (
     : { ok: true, plan: "OpenCode Go", windows: goWindows(go.windows) };
 };
 
-/** Reads one account's windows now; undefined for a provider with none. */
+/**
+ * Reads one account's windows now, joining a read of it already under way;
+ * undefined for an account whose provider has none, or that has no store
+ * here. The hub's on-demand read (core accounts/controls.ts
+ * `CONTROL_READ_ACCOUNT_USAGE`) and the beats alike.
+ */
+export const readAccountUsage = (
+  accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">
+): Promise<ProviderAccountReading | undefined> => {
+  const running = inFlight.get(accountId);
+  if (running) {
+    return running;
+  }
+  const read = readOne(accountId, ports).finally(() => {
+    inFlight.delete(accountId);
+  });
+  inFlight.set(accountId, read);
+  return read;
+};
+
+/** One read of the account, kept as its last good one when it answered. */
 const readOne = async (
   accountId: string,
   ports: Pick<AgentPorts, "borrowAsk">
@@ -124,43 +159,52 @@ const readOne = async (
 export const readDueProviderAccounts = async (
   ports: Pick<AgentPorts, "borrowAsk">
 ): Promise<ProviderAccountReading[]> => {
-  const due = credentialAccountIds().filter(
+  const due = [...accountIds(), ...credentialAccountIds()].filter(
     (accountId) =>
       Date.now() - (attempted.get(accountId) ?? 0) >= PROVIDER_READ_INTERVAL_MS
   );
   const readings = await Promise.all(
-    due.map((accountId) => readOne(accountId, ports))
+    due.map((accountId) => readAccountUsage(accountId, ports))
   );
   return readings.filter(
     (one): one is ProviderAccountReading => one !== undefined
   );
 };
 
-/** A turn on the account just ended: its windows are read shortly, once for a burst, and sent on `emit`, the session's line to the hub. */
+/**
+ * A turn on the account just ended: its windows are read shortly, once for a
+ * burst and no sooner than {@link TURN_READ_SPACING_MS} after its last read,
+ * and sent on `emit`, the session's line to the hub.
+ */
 const readAccountSoon = (
   accountId: string,
   emit: HarnessContext["emit"]
 ): void => {
   clearTimeout(soon.get(accountId));
-  const timer = setTimeout(() => {
-    soon.delete(accountId);
-    readOne(accountId, {
-      borrowAsk: (frame) =>
-        emit({ verb: "frames", machineId: "", payload: frame }),
-    })
-      .then((reading) => {
-        if (reading) {
-          emit({
-            verb: "usage",
-            machineId: "",
-            payload: { accounts: [reading] },
-          });
-        }
+  const spaced =
+    (attempted.get(accountId) ?? 0) + TURN_READ_SPACING_MS - Date.now();
+  const timer = setTimeout(
+    () => {
+      soon.delete(accountId);
+      readAccountUsage(accountId, {
+        borrowAsk: (frame) =>
+          emit({ verb: "frames", machineId: "", payload: frame }),
       })
-      .catch((error: unknown) =>
-        console.warn(`[provider-usage] ${accountId}: ${String(error)}`)
-      );
-  }, AFTER_TURN_MS);
+        .then((reading) => {
+          if (reading) {
+            emit({
+              verb: "usage",
+              machineId: "",
+              payload: { accounts: [reading] },
+            });
+          }
+        })
+        .catch((error: unknown) =>
+          console.warn(`[provider-usage] ${accountId}: ${String(error)}`)
+        );
+    },
+    Math.max(AFTER_TURN_MS, spaced)
+  );
   timer.unref?.();
   soon.set(accountId, timer);
 };
