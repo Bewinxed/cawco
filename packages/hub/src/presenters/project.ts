@@ -53,12 +53,14 @@ export const folderReadWords = (read: FolderFile | FolderListing): string => {
 };
 
 /** `folder_write`: committed, or proposed for the person. */
-export const folderWrittenWords = (written: unknown): string => {
-  const done = written as { path?: string; sha?: string };
-  return done.sha
-    ? `Committed ${done.path} (commit ${done.sha.slice(0, 8)}).`
+export const folderWrittenWords = (
+  written:
+    | { ok: boolean; path: string; sha: string }
+    | { id: string; path: string; waiting: string }
+): string =>
+  "sha" in written
+    ? `Committed ${written.path} (commit ${written.sha.slice(0, 8)}).`
     : `Proposed: ${valueWords(written, 600)}`;
-};
 
 /** `view_draft`. */
 export const viewDraftedWords = (drafted: {
@@ -104,20 +106,24 @@ export const memoryClassifiedWords = (classified: {
 }): string => `Archived ${listed(classified.archived)}.`;
 
 /** `memory_read`: the inbox and knowledge/, or one file. */
-export const memoryReadWords = (read: unknown): string => {
-  if (typeof read === "object" && read !== null && "inbox" in read) {
-    const shelf = read as {
-      inbox: {
-        from: string;
-        id: string;
-        since?: string;
-        text: string;
-        verdict?: unknown;
-      }[];
-      knowledge: string[];
-      prose: string[];
-      unreadable: string[];
-    };
+export const memoryReadWords = (
+  read:
+    | {
+        inbox: {
+          from: string;
+          id: string;
+          since?: string;
+          text: string;
+          verdict?: unknown;
+        }[];
+        knowledge: string[];
+        prose: string[];
+        unreadable: string[];
+      }
+    | FolderFile
+): string => {
+  if ("inbox" in read) {
+    const shelf = read;
     return lines(
       shelf.inbox.length === 0
         ? "The inbox is empty."
@@ -134,7 +140,7 @@ export const memoryReadWords = (read: unknown): string => {
         `Lines that read as no fact: ${shelf.unreadable.join("; ")}`
     );
   }
-  return folderReadWords(read as FolderFile);
+  return folderReadWords(read);
 };
 
 /** What a run came to: its outcome once it has one, else its state. */

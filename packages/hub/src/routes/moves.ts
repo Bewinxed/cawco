@@ -3,7 +3,6 @@
  */
 
 import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
-import type { MoveRequest } from "@cawco/core/move";
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
 
@@ -59,7 +58,7 @@ export const moveRoutes = ({ moves }: Pick<HubContext, "moves">) =>
     // Move & start: the hub owns the job from here; its stages reach every
     // screen on the `moves` frame. The no-move case is the ordinary spawn.
     .post("/api/projects/:id/moves", { body: moveBody }, ({ params, body }) =>
-      moves.start(params.id, body as MoveRequest)
+      moves.start(params.id, body)
     )
     // The moves the hub is carrying, for a screen that connects late.
     .get("/api/moves", () => moves.table())

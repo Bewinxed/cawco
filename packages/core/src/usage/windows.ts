@@ -140,20 +140,13 @@ export function bearing<W extends Freshable>(
   now: number,
   kinds: readonly string[] | null
 ): W[];
-export function bearing<W extends Pick<LimitWindow, "resetsAt" | "scopeLabel">>(
+export function bearing<W extends Freshable>(
   windows: readonly W[],
   scope: string | null | undefined,
   now: number,
   kinds: readonly string[] | null
 ): W[] {
-  // Only the second signature names a set, and its windows are freshable.
-  const read = kinds
-    ? (freshWindows(
-        windows as unknown as Freshable[],
-        kinds,
-        now
-      ) as unknown as W[])
-    : windows;
+  const read = kinds ? freshWindows(windows, kinds, now) : windows;
   return read.filter((window) => {
     const reset = windowResetAt(window);
     return (

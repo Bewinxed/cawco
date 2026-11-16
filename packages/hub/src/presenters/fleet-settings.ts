@@ -10,7 +10,6 @@ import type { DelegateType } from "@cawco/core/delegate-types";
 import {
   type FleetAgent,
   type FleetMarketplace,
-  type FleetMcpServer,
   type FleetMemory,
   type FleetMemoryDoc,
   type FleetPlugin,
@@ -23,8 +22,9 @@ import {
   type HarnessConfigKind,
   harnessConfigLabel,
 } from "@cawco/core/harness-config";
+import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
 import type { FleetHook } from "@cawco/core/hooks";
-import type { RuleRow } from "@cawco/core/rules";
+import type { Rule, RuleRow } from "@cawco/core/rules";
 import {
   memoryKeptWords,
   memoryListWords,
@@ -85,25 +85,29 @@ const versionWords = (row: {
 
 type Asked = { action: string } & Record<string, unknown>;
 
+/** The fleet's account names by id, which a delegate types answer carries beside it. */
+interface AccountNamed {
+  accountNames?: Readonly<Record<string, string>>;
+}
+
 /** How much of a memory hash `expectedHash` takes (admin-tools.ts `wholeHash`). */
 export const HASH_HANDLE = 12;
 
 /** admin_delegate_types: the catalog, or the type saved. */
 export const delegateTypeSettingsWords = (
-  answer: unknown,
+  answer:
+    | Deleted
+    | (AccountNamed & { types: (DelegateType & { source?: string })[] })
+    | (AccountNamed & DelegateType),
   asked: Asked
 ): Presented => {
   if (isDeleted(answer)) {
     return removedWords(`delegate type ${asked.name}`, answer);
   }
-  if (asked.action === "list") {
-    return delegateTypesWords(
-      answer as { accountNames?: Record<string, string>; types: DelegateType[] }
-    );
+  if ("types" in answer) {
+    return delegateTypesWords(answer);
   }
-  const { accountNames, ...saved } = answer as DelegateType & {
-    accountNames?: Record<string, string>;
-  };
+  const { accountNames, ...saved } = answer;
   return delegateTypesWords({
     types: [saved],
     ...(accountNames ? { accountNames } : {}),
@@ -115,14 +119,21 @@ const connectionLine = (connection: ConnectionView): string =>
 
 /** admin_connections: each connection, or the one written. */
 export const connectionSettingsWords = (
-  answer: unknown,
+  answer:
+    | Deleted
+    | { connections: ConnectionView[] }
+    | ConnectionView
+    | { authorizationUrl: string },
   asked: Asked
 ): Presented => {
   if (isDeleted(answer)) {
     return removedWords(`connection ${asked.name}`, answer);
   }
-  if (asked.action === "list") {
-    const { connections } = answer as { connections: ConnectionView[] };
+  if ("authorizationUrl" in answer) {
+    return `Open this to sign in: ${valueWords(answer, 2000)}`;
+  }
+  if ("connections" in answer) {
+    const { connections } = answer;
     return connections.length === 0
       ? "No connections: admin_connections_write's create adds one."
       : lines(
@@ -130,10 +141,7 @@ export const connectionSettingsWords = (
           connections.map(connectionLine)
         );
   }
-  if (asked.action === "sign_in") {
-    return `Open this to sign in: ${valueWords(answer, 2000)}`;
-  }
-  return lines("Saved:", connectionLine(answer as ConnectionView));
+  return lines("Saved:", connectionLine(answer));
 };
 
 const skillLine = (skill: FleetSkillMeta): string =>
@@ -147,19 +155,19 @@ const skillLine = (skill: FleetSkillMeta): string =>
 
 /** admin_skills: each skill, or the one installed. */
 export const skillSettingsWords = (
-  answer: unknown,
+  answer: Deleted | { skills: FleetSkillMeta[] } | FleetSkillMeta,
   asked: Asked
 ): Presented => {
   if (isDeleted(answer)) {
     return removedWords(`skill ${asked.name}`, answer);
   }
-  if (asked.action === "list") {
-    const { skills } = answer as { skills: FleetSkillMeta[] };
+  if ("skills" in answer) {
+    const { skills } = answer;
     return skills.length === 0
       ? "No fleet skills."
       : lines(`${count(skills.length, "skill")}:`, skills.map(skillLine));
   }
-  return lines("Saved:", skillLine(answer as FleetSkillMeta));
+  return lines("Saved:", skillLine(answer));
 };
 
 const pluginLine = (plugin: FleetPlugin): string =>
@@ -171,7 +179,11 @@ const pluginLine = (plugin: FleetPlugin): string =>
 
 /** admin_plugins: the marketplaces and plugins, or the one written. */
 export const pluginSettingsWords = (
-  answer: unknown,
+  answer:
+    | Deleted
+    | { marketplaces: FleetMarketplace[]; plugins: FleetPlugin[] }
+    | FleetMarketplace
+    | FleetPlugin,
   asked: Asked
 ): Presented => {
   if (isDeleted(answer)) {
@@ -182,11 +194,8 @@ export const pluginSettingsWords = (
       answer
     );
   }
-  if (asked.action === "list") {
-    const { marketplaces, plugins } = answer as {
-      marketplaces: FleetMarketplace[];
-      plugins: FleetPlugin[];
-    };
+  if ("marketplaces" in answer) {
+    const { marketplaces, plugins } = answer;
     return lines(
       marketplaces.length === 0
         ? "No marketplaces linked."
@@ -197,15 +206,14 @@ export const pluginSettingsWords = (
       plugins.map(pluginLine)
     );
   }
-  if (asked.action === "link") {
-    const marketplace = answer as FleetMarketplace;
-    return `Linked marketplace ${marketplace.name} from ${marketplace.source}: install takes <plugin>@${marketplace.name}.`;
+  if ("id" in answer) {
+    return lines("Saved:", pluginLine(answer));
   }
-  return lines("Saved:", pluginLine(answer as FleetPlugin));
+  return `Linked marketplace ${answer.name} from ${answer.source}: install takes <plugin>@${answer.name}.`;
 };
 
 /** Where a server runs, after its other facts: nothing when it is every machine. */
-const platformWords = (server: FleetMcpServer): string => {
+const platformWords = (server: FleetMcpServerView): string => {
   if (server.platformsUnread) {
     return ` · saved platforms unreadable${server.platforms?.length ? ` (${listed(server.platforms)} read)` : ""}: on no machine until saved`;
   }
@@ -217,23 +225,25 @@ const platformWords = (server: FleetMcpServer): string => {
     : " · on no machine";
 };
 
-const mcpLine = (server: FleetMcpServer): string => {
-  const config = server.config as {
-    command?: string;
-    type?: string;
-    url?: string;
-  };
-  const where = config.url ?? config.command ?? "";
+const mcpLine = (server: FleetMcpServerView): string => {
+  const { config } = server;
+  const where =
+    config.type === "http" || config.type === "sse"
+      ? config.url
+      : config.command;
   return `- ${server.name}: ${config.type ?? "stdio"} ${where} · ${server.enabled ? "on" : "off"} · ${placeWords(server)}${platformWords(server)}${server.shared ? " · shared per machine" : ""}${server.auth ? ` · sign-in ${server.auth.state}${server.auth.detail ? ` (${server.auth.detail})` : ""}` : ""}`;
 };
 
 /** admin_mcp_servers: each server, or the one written. */
-export const mcpSettingsWords = (answer: unknown, asked: Asked): Presented => {
+export const mcpSettingsWords = (
+  answer: Deleted | { mcp: FleetMcpServerView[] } | FleetMcpServerView,
+  asked: Asked
+): Presented => {
   if (isDeleted(answer)) {
     return removedWords(`MCP server ${asked.name}`, answer);
   }
-  if (asked.action === "list") {
-    const { mcp } = answer as { mcp: FleetMcpServer[] };
+  if ("mcp" in answer) {
+    const { mcp } = answer;
     return mcp.length === 0
       ? "No fleet MCP servers."
       : lines(`${count(mcp.length, "MCP server")}:`, mcp.map(mcpLine));
@@ -260,15 +270,15 @@ const templateLine = (template: RuleTemplate): string =>
   `- ${template.title}: ${template.blurb}`;
 
 /** admin_rules: each rule and the starter templates, or the one written. */
-export const ruleSettingsWords = (answer: unknown, asked: Asked): Presented => {
+export const ruleSettingsWords = (
+  answer: Deleted | { rules?: RuleRow[]; templates: RuleTemplate[] } | Rule,
+  asked: Asked
+): Presented => {
   if (isDeleted(answer)) {
     return removedWords(`rule ${asked.id}`, answer);
   }
-  if (asked.action === "list" || asked.action === "templates") {
-    const { rules, templates } = answer as {
-      rules?: RuleRow[];
-      templates?: RuleTemplate[];
-    };
+  if ("templates" in answer) {
+    const { rules, templates } = answer;
     return lines(
       rules !== undefined &&
         (rules.length === 0
@@ -280,8 +290,7 @@ export const ruleSettingsWords = (answer: unknown, asked: Asked): Presented => {
       (templates ?? []).map(templateLine)
     );
   }
-  const rule = answer as RuleRow;
-  return `Saved rule ${rule.name} (${rule.id.slice(0, 8)}): ${rule.enabled ? "on" : "off"}, ${rule.matchKind} ${quote(rule.pattern, 120)}.`;
+  return `Saved rule ${answer.name} (${answer.id.slice(0, 8)}): ${answer.enabled ? "on" : "off"}, ${answer.matchKind} ${quote(answer.pattern, 120)}.`;
 };
 
 interface HookTemplate {
@@ -293,15 +302,16 @@ const hookLine = (hook: FleetHook): string =>
   `- ${hook.name} (${hook.id.slice(0, 8)}) · ${hook.enabled ? "on" : "off"} · on ${hook.event}${hook.matcher ? ` matching ${hook.matcher}` : ""} · ${hook.handler.type}${hook.script ? ", with a script" : ""} · ${placeWords(hook)}`;
 
 /** admin_hooks: each hook and the templates, or the one written. */
-export const hookSettingsWords = (answer: unknown, asked: Asked): Presented => {
+export const hookSettingsWords = (
+  answer:
+    Deleted | { hooks: FleetHook[]; templates?: HookTemplate[] } | FleetHook,
+  asked: Asked
+): Presented => {
   if (isDeleted(answer)) {
     return removedWords(`hook ${asked.id}`, answer);
   }
-  if (asked.action === "list") {
-    const { hooks, templates } = answer as {
-      hooks: FleetHook[];
-      templates?: HookTemplate[];
-    };
+  if ("hooks" in answer) {
+    const { hooks, templates } = answer;
     return lines(
       hooks.length === 0
         ? "No hooks."
@@ -314,7 +324,7 @@ export const hookSettingsWords = (answer: unknown, asked: Asked): Presented => {
       )
     );
   }
-  return lines("Saved:", hookLine(answer as FleetHook));
+  return lines("Saved:", hookLine(answer));
 };
 
 /** A refusal the subagent routes answer (admin-tools.ts `AGENT_REFUSALS`). */
@@ -322,9 +332,6 @@ interface AgentRefused {
   answer: FleetAgent | string;
   refused: number;
 }
-
-const isAgentRefused = (answer: unknown): answer is AgentRefused =>
-  typeof answer === "object" && answer !== null && "refused" in answer;
 
 /** One subagent's file, under the hash put and remove take back. */
 const agentFileWords = (agent: FleetAgent, lead = ""): string =>
@@ -335,10 +342,10 @@ const agentFileWords = (agent: FleetAgent, lead = ""): string =>
 
 /** admin_subagents: each name and description, one file, or what a write did. */
 export const subagentSettingsWords = (
-  answer: unknown,
+  answer: AgentRefused | Deleted | { agents: FleetAgent[] } | FleetAgent,
   asked: Asked
 ): Presented => {
-  if (isAgentRefused(answer)) {
+  if ("refused" in answer) {
     return typeof answer.answer === "string"
       ? `Refused: ${answer.answer}; list names them.`
       : agentFileWords(
@@ -349,26 +356,21 @@ export const subagentSettingsWords = (
   if (isDeleted(answer)) {
     return `${removedWords(`subagent ${asked.name}`, answer)} Each machine keeps its copy of the file until its next sync.`;
   }
-  switch (asked.action) {
-    case "list": {
-      const { agents } = answer as { agents: FleetAgent[] };
-      return agents.length === 0
-        ? 'No subagents: put with expectedHash "" adds one.'
-        : lines(
-            `${count(agents.length, "subagent")}; get takes the name:`,
-            agents.map(
-              (agent) =>
-                `- ${agent.name}: ${parseAgentFrontMatter(agent.content).description ?? "no description"}`
-            )
-          );
-    }
-    case "get":
-      return agentFileWords(answer as FleetAgent);
-    default: {
-      const agent = answer as FleetAgent;
-      return `Saved subagent ${agent.name}, ${count(agent.content.split("\n").length, "line")}, hash ${agent.hash.slice(0, HASH_HANDLE)}.`;
-    }
+  if ("agents" in answer) {
+    const { agents } = answer;
+    return agents.length === 0
+      ? 'No subagents: put with expectedHash "" adds one.'
+      : lines(
+          `${count(agents.length, "subagent")}; get takes the name:`,
+          agents.map(
+            (agent) =>
+              `- ${agent.name}: ${parseAgentFrontMatter(agent.content).description ?? "no description"}`
+          )
+        );
   }
+  return asked.action === "get"
+    ? agentFileWords(answer)
+    : `Saved subagent ${answer.name}, ${count(answer.content.split("\n").length, "line")}, hash ${answer.hash.slice(0, HASH_HANDLE)}.`;
 };
 
 const scopeWords = (scope: MemoryScope | undefined): string => {
@@ -394,68 +396,53 @@ const scopeWords = (scope: MemoryScope | undefined): string => {
 
 /** admin_memory: CLAUDE.md or the documents, or what a write kept. */
 export const memorySettingsWords = (
-  answer: unknown,
+  answer:
+    | Deleted
+    | { memory: FleetMemory | null }
+    | { docs: (FleetMemoryDoc & { scope?: MemoryScope })[] }
+    | { bytes: number; hash: string; lines: number; path?: string },
   asked: Asked
 ): Presented => {
-  switch (asked.action) {
-    case "get": {
-      const { memory } = answer as { memory: FleetMemory | null };
-      return memory
-        ? lines(
-            memoryReadHead(
-              memory.docs.length,
-              memory.hash.slice(0, HASH_HANDLE)
-            ),
-            memory.content
-          )
-        : "The fleet keeps no CLAUDE.md: set writes one.";
-    }
-    case "list_docs": {
-      const { docs } = answer as {
-        docs: (FleetMemoryDoc & { scope?: MemoryScope })[];
-      };
-      return memoryListWords(
-        docs.map((doc) => ({
-          path: doc.path,
-          about: [
-            scopeWords(doc.scope),
-            count(doc.content.split("\n").length, "line"),
-          ],
-        }))
-      );
-    }
-    case "remove_doc":
-      return isDeleted(answer)
-        ? removedWords(`document ${asked.path}`, answer)
-        : `Removed document ${asked.path}.`;
-    default: {
-      const kept = answer as {
-        bytes: number;
-        hash: string;
-        lines: number;
-        path?: string;
-      };
-      return memoryKeptWords({
-        path: kept.path ?? "CLAUDE.md",
-        lines: kept.lines,
-        bytes: kept.bytes,
-        handle: kept.hash.slice(0, HASH_HANDLE),
-      });
-    }
+  if ("memory" in answer) {
+    const { memory } = answer;
+    return memory
+      ? lines(
+          memoryReadHead(memory.docs.length, memory.hash.slice(0, HASH_HANDLE)),
+          memory.content
+        )
+      : "The fleet keeps no CLAUDE.md: set writes one.";
   }
+  if ("docs" in answer) {
+    return memoryListWords(
+      answer.docs.map((doc) => ({
+        path: doc.path,
+        about: [
+          scopeWords(doc.scope),
+          count(doc.content.split("\n").length, "line"),
+        ],
+      }))
+    );
+  }
+  if (isDeleted(answer)) {
+    return removedWords(`document ${asked.path}`, answer);
+  }
+  return memoryKeptWords({
+    path: answer.path ?? "CLAUDE.md",
+    lines: answer.lines,
+    bytes: answer.bytes,
+    handle: answer.hash.slice(0, HASH_HANDLE),
+  });
 };
 
 /** admin_previews: how previews are reached. */
-export const previewSettingsWords = (answer: unknown): Presented => {
-  const settings = answer as {
-    mode: "port" | "host";
-    pattern?: string;
-    ports?: string;
-  };
-  return settings.mode === "host"
+export const previewSettingsWords = (settings: {
+  mode: "port" | "host";
+  pattern?: string;
+  ports?: string;
+}): Presented =>
+  settings.mode === "host"
     ? `Previews are reached by host: ${settings.pattern ?? "no pattern"}, routed to the range ${settings.ports ?? "the hub keeps"}.`
     : `Previews are reached by port, on the hub's range ${settings.ports ?? "it keeps"}.`;
-};
 
 /** What one row of each kind is called in a count. */
 const HARNESS_CONFIG_NOUN: Record<HarnessConfigKind, [string, string]> = {
@@ -477,12 +464,15 @@ const harnessConfigLine = (row: FleetHarnessConfig): string => {
 /** admin_claude_settings, admin_opencode_plugins, admin_pi_extensions: each row of the kind, or the one written. */
 export const harnessConfigSettingsWords =
   (kind: HarnessConfigKind) =>
-  (answer: unknown, asked: Asked): Presented => {
+  (
+    answer: Deleted | { rows: FleetHarnessConfig[] } | FleetHarnessConfig,
+    asked: Asked
+  ): Presented => {
     if (isDeleted(answer)) {
       return removedWords(`${harnessConfigLabel(kind)} ${asked.name}`, answer);
     }
-    if (asked.action === "list") {
-      const { rows } = answer as { rows: FleetHarnessConfig[] };
+    if ("rows" in answer) {
+      const { rows } = answer;
       const [one, many] = HARNESS_CONFIG_NOUN[kind];
       return rows.length === 0
         ? `No ${many}.`
@@ -491,5 +481,5 @@ export const harnessConfigSettingsWords =
             rows.map(harnessConfigLine)
           );
     }
-    return lines("Saved:", harnessConfigLine(answer as FleetHarnessConfig));
+    return lines("Saved:", harnessConfigLine(answer));
   };

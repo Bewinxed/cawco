@@ -33,6 +33,7 @@ import type {
   FleetPluginPayload,
   MarketplacePluginInfo,
 } from "@cawco/core/fleet";
+import * as v from "valibot";
 import { pluginVersion } from "./fleet-versions";
 import { downloadRepo, get, readTree, unpack } from "./skills";
 
@@ -58,17 +59,39 @@ const inside = (root: string, rel: string): string => {
   return joined;
 };
 
-/** What a marketplace's manifest says, of the parts that matter here. */
-interface Manifest {
-  name?: unknown;
-  plugins?: (MarketplacePluginInfo & { source?: unknown })[];
-}
+/** What a marketplace's manifest says, of the parts that matter here: each plugin's facts, and its source as written, read where it resolves. */
+const Manifest = v.looseObject({
+  name: v.optional(v.unknown()),
+  plugins: v.optional(
+    v.array(
+      v.looseObject({
+        category: v.optional(v.string()),
+        description: v.optional(v.string()),
+        name: v.string(),
+        source: v.optional(v.unknown()),
+        version: v.optional(v.string()),
+      })
+    )
+  ),
+});
+type Manifest = v.InferOutput<typeof Manifest>;
+
+/** A plugin source that is not a path: an object naming its kind (github, url, git-subdir) and where. */
+const SourceSpec = v.record(v.string(), v.unknown());
+
+/** `read` as a manifest, or undefined when it is none. */
+const manifestOf = (read: unknown): Manifest | undefined => {
+  const parsed = v.safeParse(Manifest, read);
+  return parsed.success ? parsed.output : undefined;
+};
 
 /** The manifest at a marketplace's root, as Claude Code reads it, or undefined. */
 const readManifest = async (root: string): Promise<Manifest | undefined> =>
-  (await Bun.file(join(root, ".claude-plugin", "marketplace.json"))
-    .json()
-    .catch(() => undefined)) as Manifest | undefined;
+  manifestOf(
+    await Bun.file(join(root, ".claude-plugin", "marketplace.json"))
+      .json()
+      .catch(() => undefined)
+  );
 
 /**
  * Why a plugin of a marketplace added by its marketplace.json URL cannot have
@@ -107,9 +130,8 @@ const fetchMarketplace = async (
     if (!response.ok) {
       throw new Error(`${trimmed} answered ${response.status}`);
     }
-    const manifest = (await response.json().catch(() => undefined)) as
-      Manifest | undefined;
-    if (!manifest || typeof manifest !== "object") {
+    const manifest = manifestOf(await response.json().catch(() => undefined));
+    if (!manifest) {
       throw new Error(`${trimmed} is not a marketplace.json cawco could read`);
     }
     return { manifest };
@@ -239,18 +261,19 @@ const pluginRoot = async (
     }
     return inside(marketplace, source);
   }
-  if (!source || typeof source !== "object") {
+  if (!v.is(SourceSpec, source)) {
     throw new Error(`${entry.name} has no source cawco can read`);
   }
-  const spec = source as Record<string, unknown>;
-  const kind = typeof spec.source === "string" ? spec.source : undefined;
+  const kind = typeof source.source === "string" ? source.source : undefined;
 
-  if (kind === "github" && typeof spec.repo === "string") {
-    const [owner, repo] = spec.repo.split("/");
+  if (kind === "github" && typeof source.repo === "string") {
+    const [owner, repo] = source.repo.split("/");
     if (!(owner && repo)) {
-      throw new Error(`${entry.name}'s repo "${spec.repo}" is not owner/name`);
+      throw new Error(
+        `${entry.name}'s repo "${source.repo}" is not owner/name`
+      );
     }
-    const ref = typeof spec.ref === "string" ? spec.ref : undefined;
+    const ref = typeof source.ref === "string" ? source.ref : undefined;
     return await downloadRepo(
       owner,
       repo,
@@ -260,7 +283,7 @@ const pluginRoot = async (
   }
 
   // `git-subdir` and `url` both name an archive; the first also names a path in it.
-  const href = typeof spec.url === "string" ? spec.url : undefined;
+  const href = typeof source.url === "string" ? source.url : undefined;
   if ((kind === "git-subdir" || kind === "url") && href) {
     const scratch = await mkdtemp(join(work, "p-"));
     const url = new URL(href);
@@ -273,7 +296,7 @@ const pluginRoot = async (
       if (!(owner && repo)) {
         throw new Error(`${href} is not a github repository`);
       }
-      const ref = typeof spec.sha === "string" ? spec.sha : undefined;
+      const ref = typeof source.sha === "string" ? source.sha : undefined;
       root = await downloadRepo(owner, repo, ref, scratch);
     } else {
       const response = await get(href);
@@ -282,7 +305,7 @@ const pluginRoot = async (
       }
       root = await unpack(response, scratch, url.pathname);
     }
-    const path = typeof spec.path === "string" ? spec.path : undefined;
+    const path = typeof source.path === "string" ? source.path : undefined;
     return path ? inside(root, path) : root;
   }
 

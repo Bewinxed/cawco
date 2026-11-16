@@ -1,7 +1,6 @@
 import { detach } from "@cawco/core/detach";
 import { harnessesWith, traitsOf } from "@cawco/core/harness/traits";
 import type { SessionAttachments } from "@cawco/core/protocol";
-import type { TranscriptPage } from "@cawco/core/transcript-types";
 import { harnessWords } from "@cawco/core/words/harness";
 import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
@@ -193,7 +192,7 @@ export const instanceEditRoutes = (
         }
         const [first] = read.pages;
         return {
-          harness: (first as TranscriptPage).where.harness,
+          harness: first.where.harness,
           attachments: attachmentsOfPages(read.pages),
         } satisfies SessionAttachments;
       })

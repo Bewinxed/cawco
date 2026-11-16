@@ -29,7 +29,7 @@ import { z } from "zod";
 import type { AdminCalls } from "./admin-calls";
 import { landedFetch } from "./fleet-fetches";
 import { byHandle } from "./handles";
-import { answered, type Presenter, toolOn } from "./mcp-tool";
+import { type Answered, answered, type Presenter, toolOn } from "./mcp-tool";
 import {
   connectionSettingsWords,
   delegateTypeSettingsWords,
@@ -318,7 +318,7 @@ export const answeredWithoutAsking = (
  * person's ask, run by the hub once they approve it, or at once in Full Send
  * (asks.ts).
  */
-function admin<G extends string, T extends z.ZodRawShape>(
+function admin<G extends string, T extends z.ZodRawShape, R>(
   group: G,
   about: string,
   reads: readonly [string, ...string[]],
@@ -327,9 +327,9 @@ function admin<G extends string, T extends z.ZodRawShape>(
   handler: (
     args: { action: string } & Partial<z.infer<z.ZodObject<T>>>,
     on: AdminCalls
-  ) => Promise<unknown>,
+  ) => Promise<R>,
   /** How an agent reads the group's answers, knowing the action asked. */
-  present: Presenter<unknown, { action: string } & Record<string, unknown>>,
+  present: Presenter<Answered<R>, { action: string } & Record<string, unknown>>,
   writeNote = "",
   /** The fields of `input` a read takes too, by name; none by default. */
   readFields: readonly (keyof T & string)[] = []
@@ -344,11 +344,11 @@ function admin<G extends string, T extends z.ZodRawShape>(
     // A read names its action and the fields it was given; every other field is the write's.
     (args, _format, on) =>
       handler(
+        // Legitimate: zod's object inference over the generic shape T is not relatable inside this function (https://github.com/colinhacks/zod/issues/4619).
         args as { action: string } & Partial<z.infer<z.ZodObject<T>>>,
         on
       ),
-    (answer, asked) =>
-      present(answer, asked as { action: string } & Record<string, unknown>)
+    (answer, asked) => present(answer, asked)
   );
   const write = adminTool(
     `admin_${group}_write` as const,
@@ -356,13 +356,16 @@ function admin<G extends string, T extends z.ZodRawShape>(
     { action: z.enum(writes), reason, ...input },
     // The reason is the person's to read on the approval, not a setting.
     (args, _format, on) => {
+      // Legitimate: zod's object inference over the generic shape T is not relatable inside this function (https://github.com/colinhacks/zod/issues/4619).
       const { reason: _reason, ...setting } = args as Record<string, unknown>;
       return handler(
+        // Legitimate, as above (https://github.com/colinhacks/zod/issues/4619).
         setting as { action: string } & Partial<z.infer<z.ZodObject<T>>>,
         on
       );
     },
     (answer, asked) =>
+      // Legitimate, as above (https://github.com/colinhacks/zod/issues/4619).
       present(answer, asked as { action: string } & Record<string, unknown>)
   );
   return [read, write];
@@ -421,7 +424,7 @@ const harnessConfigHandler =
       settings?: Record<string, unknown>;
     },
     on: AdminCalls
-  ): Promise<unknown> => {
+  ) => {
     if (action === "list") {
       return await Promise.resolve(on.harnessConfigs.list(kind));
     }
@@ -454,7 +457,10 @@ const STARTING_SET_DESCRIPTION =
  * account names beside it, so a type's preferred account reads by the name
  * CawCo gives it (core `accountNames`).
  */
-const withAccountNames = (on: AdminCalls, answer: object): object => {
+const withAccountNames = <A extends object>(
+  on: AdminCalls,
+  answer: A
+): A & { accountNames: Record<string, string> } => {
   const { accounts } = on.accounts();
   return {
     ...answer,

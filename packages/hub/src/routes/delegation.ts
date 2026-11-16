@@ -3,9 +3,26 @@
  */
 
 import { Elysia, problem, t } from "elysia";
+import * as v from "valibot";
 import type { createDelegationMcp } from "../delegation-mcp";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+
+/** An object that is no array, as a call's arguments are. */
+const Arguments = v.pipe(
+  v.record(v.string(), v.unknown()),
+  v.check((value) => !Array.isArray(value))
+);
+
+/** A CawCo tool call as a harness posts it: the tool's name, its arguments, and the harness's own key for the call (pi's toolCallId, call-keys.ts). */
+const DelegationCall = v.looseObject({
+  name: v.pipe(
+    v.string(),
+    v.check((name) => name.trim() !== "")
+  ),
+  arguments: v.optional(Arguments),
+  callKey: v.optional(v.unknown()),
+});
 
 export const delegationRoutes = (
   { identities, toolCallKeys }: Pick<HubContext, "identities" | "toolCallKeys">,
@@ -54,29 +71,15 @@ export const delegationRoutes = (
               "Session credential does not belong to the named instanceId",
           });
         }
-        if (
-          typeof body !== "object" ||
-          body === null ||
-          Array.isArray(body) ||
-          typeof (body as { name?: unknown }).name !== "string" ||
-          !(body as { name: string }).name.trim() ||
-          ("arguments" in body &&
-            (typeof body.arguments !== "object" ||
-              body.arguments === null ||
-              Array.isArray(body.arguments)))
-        ) {
+        const call = v.safeParse(DelegationCall, body);
+        if (!call.success) {
           return problem(400, {
             code: "delegation-call-needs-non",
             detail:
               "delegation call needs a non-empty tool name and object arguments",
           });
         }
-        const input = body as {
-          name: string;
-          arguments?: Record<string, unknown>;
-          /** The harness's own key for the call (pi's toolCallId, call-keys.ts). */
-          callKey?: unknown;
-        };
+        const input = call.output;
         if (
           input.name === "generate_image" ||
           input.name === "continue_session" ||

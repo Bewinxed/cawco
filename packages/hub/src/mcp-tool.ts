@@ -36,7 +36,7 @@ export interface Picture {
  * A run's answer without its problems (Elysia's `problem()`), by Elysia's own mark on
  * its status: what a presenter reads. A refusal is the call's error.
  */
-type Answered<R> = Exclude<R, { readonly "~status": true }>;
+export type Answered<R> = Exclude<R, { readonly "~status": true }>;
 
 /** Whether a run's answer is one, not a refusal. */
 export const answered = <R>(answer: R): answer is Answered<R> =>
@@ -237,7 +237,7 @@ export const toolOn =
     present: Presenter<Answered<R>, z.infer<z.ZodObject<T>>>,
     options: ToolOptions<Answered<R>, z.infer<z.ZodObject<T>>> = {}
   ): McpToolOn<C> & { name: N } & Takes<z.input<z.ZodObject<T>>> => {
-    const formats = (present as unknown) !== sentence;
+    const formats = present !== sentence;
     const shape = formats
       ? { ...input, response_format: responseFormat() }
       : input;
@@ -273,7 +273,7 @@ export const toolOn =
       inputSchema: z.toJSONSchema(z.object(shape), {
         target: "draft-07",
         io: "input",
-      }) as Record<string, unknown>,
+      }),
       ...(options.annotations ? { annotations: options.annotations } : {}),
       refusal: (args) => {
         const parsed = schema.safeParse(args);
@@ -284,6 +284,7 @@ export const toolOn =
         if (!parsed.success) {
           throw new Error(refusalOf(parsed.error));
         }
+        // Legitimate: zod's object inference over the generic shape T is not relatable inside this function (https://github.com/colinhacks/zod/issues/4619).
         const {
           response_format: format,
           [STAMPED_KEY]: _stamp,
@@ -292,6 +293,7 @@ export const toolOn =
           [STAMPED_KEY]?: unknown;
           response_format?: ResponseFormat;
         } & z.infer<z.ZodObject<T>>;
+        // Legitimate, as above (https://github.com/colinhacks/zod/issues/4619).
         const asked = rest as z.infer<z.ZodObject<T>>;
         const answer = await run(asked, format ?? "concise", on);
         // A refusal the run returned is the call's error, in its own words.

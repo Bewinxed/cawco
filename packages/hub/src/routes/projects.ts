@@ -13,6 +13,9 @@ import { placesChanged } from "../project-placements";
 import { schemaRefusal } from "../refusal";
 import { LANDS } from "../tasks";
 
+/** A create's `conversation`, which no create starts any more: typed as the shipped apps' schema reads it (wire-compat.ts). */
+const noConversation = (): string | undefined => undefined;
+
 /** The projects, each as the app's client types it: the routes answer it, and the admin tools list them directly. */
 export const projectsListed = ({
   caps,
@@ -141,7 +144,7 @@ export const projectRoutes = ({
           // `prompt` started, before his start carried on past the answer.
           // Kept in the shipped apps' schema (wire-compat.ts); it goes
           // with the next WIRE_PROTOCOL.
-          conversation: undefined as string | undefined,
+          conversation: noConversation(),
         };
       }
     )

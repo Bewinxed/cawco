@@ -357,13 +357,13 @@ export const refusal = (row: InstanceRow, name: string): string => {
     case "worker":
       break;
   }
-  if (TRIAGE_TOOLS.includes(name as (typeof TRIAGE_TOOLS)[number])) {
+  if (TRIAGE_TOOLS.some((tool) => tool === name)) {
     return `${name} belongs to a fleet-watch triage run.`;
   }
-  if (TRIMMER_OWN.includes(name as (typeof TRIMMER_OWN)[number])) {
+  if (TRIMMER_OWN.some((tool) => tool === name)) {
     return `${name} belongs to a run of the unused skills and servers routine.`;
   }
-  return CURATOR_OWN.includes(name as (typeof CURATOR_OWN)[number])
+  return CURATOR_OWN.some((tool) => tool === name)
     ? `${name} belongs to a project's memory curator.`
     : `${name} belongs to a design check's verifier.`;
 };

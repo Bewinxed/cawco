@@ -300,6 +300,7 @@ const findingLines = (render: ReturnType<typeof renderSaid>): string[] => [
 
 /** A component canvas's read: its frames, stories, moves and the person's dials, each a line. */
 const componentLines = (read: ArtifactRead): string[] => {
+  // Type-the-source, left: a component canvas's read (artifacts/kinds/component.ts `readSheet`) answers these fields, but artifacts/shapes.ts `ArtifactRead` has no variant that names them; no upstream issue, the fix is that type.
   const extra = read as ArtifactRead & {
     dials?: unknown;
     errors?: { file: string; line: number | null; message?: string }[];
@@ -503,8 +504,10 @@ export const artifactReadWords = (read: ArtifactRead): Presented => {
  * answers the address its browser loads). The HTTP wire keeps it: installed
  * apps decode it.
  */
-const withoutRoute = <T extends object>(answer: T): Omit<T, "route"> => {
-  const { route: _route, ...rest } = answer as T & { route?: string };
+const withoutRoute = <T extends object>(
+  answer: T & { route?: string }
+): Omit<T, "route"> => {
+  const { route: _route, ...rest } = answer;
   return rest;
 };
 
@@ -514,7 +517,7 @@ export const artifactCreatedDetailed = (created: Created): Presented =>
 
 /** `artifact_read`, detailed: the hub's whole read as JSON, its picture as an image beside it. */
 export const artifactReadDetailed = (whole: ArtifactRead): Presented => {
-  const read = withoutRoute(whole) as ArtifactRead;
+  const read = withoutRoute(whole);
   const { png, ...rest } = read;
   const pictures = picturesOf(read);
   const text = JSON.stringify(

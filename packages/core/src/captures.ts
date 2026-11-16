@@ -63,7 +63,7 @@ const webpWidth = (bytes: Uint8Array): number | null => {
   }
   if (holds(bytes, 12, "VP8X")) {
     // A 24-bit little-endian field, less one.
-    return view.getUint16(24, true) + (bytes[26] as number) * 0x1_00_00 + 1;
+    return view.getUint16(24, true) + view.getUint8(26) * 0x1_00_00 + 1;
   }
   return null;
 };

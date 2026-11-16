@@ -112,7 +112,7 @@ export const mcpRunsOn = (
   server.platformsUnread !== true &&
   (!server.platforms ||
     (platform !== undefined &&
-      (server.platforms as readonly string[]).includes(platform)));
+      server.platforms.some((one) => one === platform)));
 
 /**
  * A machine's platform: the first part of its register's `os`,
@@ -625,7 +625,7 @@ export const MEMORY_ROLES = ["orchestrator", "leaf"] as const;
 export type MemoryRole = (typeof MEMORY_ROLES)[number];
 
 export const isMemoryRole = (value: string): value is MemoryRole =>
-  (MEMORY_ROLES as readonly string[]).includes(value);
+  MEMORY_ROLES.some((role) => role === value);
 
 /**
  * Which sessions a fleet memory document reaches. No scope at all is a

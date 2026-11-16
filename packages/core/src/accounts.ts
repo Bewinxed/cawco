@@ -465,19 +465,32 @@ export const defaultRouting = (provider: AccountProvider): ProviderRouting => {
  * strategy), what the others offer, the routing each starts from, and the
  * at-limit policy a routing starts with.
  */
+/** The strategy a routing starts from, for your own sessions and for delegates. */
+interface StrategyDefaults {
+  delegates: PlacementStrategy;
+  yours: PlacementStrategy;
+}
+
+const UNLIMITED_STRATEGIES: readonly PlacementStrategy[] = [
+  "pinned",
+  "fill-first",
+];
+const LIMITED_DEFAULTS: StrategyDefaults = {
+  yours: "pinned",
+  delegates: "soonest-reset",
+};
+const UNLIMITED_DEFAULTS: StrategyDefaults = {
+  yours: "fill-first",
+  delegates: "fill-first",
+};
+
 export const ACCOUNT_RULES = {
   /** A provider's routing is a choice among its accounts: it is offered from this many. */
   routingFrom: 2,
   limitedProviders: LIMITED_PROVIDERS,
-  unlimitedStrategies: ["pinned", "fill-first"] as readonly PlacementStrategy[],
-  limitedDefaults: {
-    yours: "pinned" as PlacementStrategy,
-    delegates: "soonest-reset" as PlacementStrategy,
-  },
-  unlimitedDefaults: {
-    yours: "fill-first" as PlacementStrategy,
-    delegates: "fill-first" as PlacementStrategy,
-  },
+  unlimitedStrategies: UNLIMITED_STRATEGIES,
+  limitedDefaults: LIMITED_DEFAULTS,
+  unlimitedDefaults: UNLIMITED_DEFAULTS,
   atLimit: DEFAULT_AT_LIMIT,
   /**
    * How long the hub waits on a machine's sign-in step: Claude Code printing

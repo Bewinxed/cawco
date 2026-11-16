@@ -1,4 +1,3 @@
-import type { SessionCustody } from "@cawco/core/protocol";
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import { Elysia, problem } from "elysia";
 import type { HubContext } from "../hub-context";
@@ -55,15 +54,11 @@ export const instanceDeleteRoutes = ({
             "This session's project is still moving. Cancel the move in its pane instead.",
         });
       }
+      const custody = machineCustody.get(row.machineId);
       if (
         ["running", "starting"].includes(row.status) ||
-        (machineCustody.get(row.machineId)?.state === "available" &&
-          (
-            machineCustody.get(row.machineId) as Extract<
-              SessionCustody,
-              { state: "available" }
-            >
-          ).instances.includes(row.id)) ||
+        (custody?.state === "available" &&
+          custody.instances.includes(row.id)) ||
         heldSessions.has(row.id) ||
         inCustody.has(row.id)
       ) {

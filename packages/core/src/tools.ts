@@ -852,5 +852,7 @@ export const TOOL_STATES = everyOf<ToolState>()([
 export const isToolStatus = (value: unknown): value is ToolStatus =>
   typeof value === "object" &&
   value !== null &&
-  typeof (value as ToolStatus).id === "string" &&
-  TOOL_STATES.includes((value as ToolStatus).state);
+  "id" in value &&
+  typeof value.id === "string" &&
+  "state" in value &&
+  TOOL_STATES.some((state) => state === value.state);

@@ -2,7 +2,7 @@
  * Bringing a thing the person deleted back from the trash.
  */
 
-import type { HarnessConfigKind } from "@cawco/core/harness-config";
+import { isHarnessConfigKind } from "@cawco/core/harness-config";
 import { areaWords } from "@cawco/core/words/areas";
 import { Elysia, problem, t } from "elysia";
 import type { TrashKind } from "../db/stored-types";
@@ -100,8 +100,13 @@ export const trashRoutes = ({
         return { kind, row: connections.returned(key) };
       case "harnessConfig": {
         fleetChanged();
-        const [harness, name] = key.split(":") as [HarnessConfigKind, string];
-        return { kind, row: db.getHarnessConfig(harness, name) ?? null };
+        const [harness = "", name = ""] = key.split(":");
+        return {
+          kind,
+          row: isHarnessConfigKind(harness)
+            ? (db.getHarnessConfig(harness, name) ?? null)
+            : null,
+        };
       }
       default:
         throw unreachable(kind);

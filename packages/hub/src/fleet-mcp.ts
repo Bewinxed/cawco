@@ -786,11 +786,8 @@ export class FleetMcp {
     // RFC 9207: a server that says it names itself on the redirect must be heard
     // doing so, and as the one this sign-in started with.
     if (
-      (
-        row.metadata as {
-          authorization_response_iss_parameter_supported?: boolean;
-        }
-      ).authorization_response_iss_parameter_supported === true &&
+      "authorization_response_iss_parameter_supported" in row.metadata &&
+      row.metadata.authorization_response_iss_parameter_supported === true &&
       iss !== row.metadata.issuer
     ) {
       throw new Error(
@@ -1225,11 +1222,7 @@ export class FleetMcp {
 
 /** The scopes a server names: its resource's, else its authorization server's. */
 function scopesOf(row: OAuthRow): string[] {
-  return (
-    row.resource.scopes_supported ??
-    (row.metadata as { scopes_supported?: string[] }).scopes_supported ??
-    []
-  );
+  return row.resource.scopes_supported ?? row.metadata.scopes_supported ?? [];
 }
 
 /** A refresh, waited on for at most {@link REFRESH_WAIT_MS}; it goes on past that. */
