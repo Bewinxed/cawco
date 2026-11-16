@@ -15,6 +15,8 @@ typeOverrides:
     AccountSigninRefusalReach: OpenEnums.AccountSigninRefusalReach
     ActionState: OpenEnums.ActionState
     AgentBusyReportRecovery: OpenEnums.AgentBusyReportRecovery
+    AgentMemberHear: OpenEnums.AgentMemberHear
+    AgentMemberPose: OpenEnums.AgentMemberPose
     AgentRowAuth: OpenEnums.AgentRowAuth
     AgentRowClaude: OpenEnums.AgentRowClaude
     ArtifactDoes: OpenEnums.ArtifactDoes
@@ -89,7 +91,6 @@ typeOverrides:
     FindLiveState: OpenEnums.FindLiveState
     FindPlaceWhose: OpenEnums.FindPlaceWhose
     FleetConvergeState: OpenEnums.FleetConvergeState
-    FleetDecidesAdvisor: OpenEnums.FleetDecidesAdvisor
     FleetFaultCause: OpenEnums.FleetFaultCause
     FleetMcpServerViewMode: OpenEnums.FleetMcpServerViewMode
     FleetMcpServerViewState: OpenEnums.FleetMcpServerViewState
@@ -135,8 +136,6 @@ typeOverrides:
     LocalNameState: OpenEnums.LocalNameState
     MachineCapabilityId: OpenEnums.MachineCapabilityId
     MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
-    MemberHear: OpenEnums.MemberHear
-    MemberType: OpenEnums.MemberType
     MemoryScopeRole: OpenEnums.MemoryScopeRole
     MomentAuthor: OpenEnums.MomentAuthor
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage
