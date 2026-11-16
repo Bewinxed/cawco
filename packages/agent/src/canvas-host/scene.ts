@@ -6,6 +6,7 @@ import {
   type CanvasRequestResult,
   keptOnRemake,
 } from "@cawco/core/canvas";
+import { filledSkeletonOf } from "@cawco/core/canvas-skeleton";
 import { docMeta } from "@cawco/core/doc-meta";
 import type { CanvasPress } from "@cawco/core/page-wire";
 import { toSegment } from "@cawco/core/shapes";
@@ -1404,6 +1405,27 @@ const endIdOf = (end: unknown): string | undefined =>
     : undefined;
 
 /**
+ * An element of the canvas an arrow of the write binds to, as Excalidraw's
+ * conversion takes it beside the skeletons, to find it by its id
+ * (`bindLinearElementToElement`): itself, but a frame, whose skeleton
+ * carries the list of its children the conversion reads (none: only what
+ * binds to it is read back, {@link gainArrows}) and a name or none, never
+ * the element's null; and an image only once its file is there, as
+ * Excalidraw's image skeleton names one (an arrow sent to an image still
+ * without its file is drawn unbound, as one sent to no element is).
+ */
+const boundTo = (el: ExcalidrawElement): ExcalidrawElementSkeleton[] => {
+  if (el.type === "frame" || el.type === "magicframe") {
+    return [{ ...el, children: [], name: el.name ?? undefined }];
+  }
+  if (el.type === "image") {
+    return el.fileId === null ? [] : [{ ...el, fileId: el.fileId }];
+  }
+  // A selection box is the screen's, never an element of the scene.
+  return el.type === "selection" ? [] : [el];
+};
+
+/**
  * Skeleton elements: added, or replacing the element of the id they carry;
  * on a remake (`replace`), the drawing, which nothing it held fills or binds.
  */
@@ -1414,10 +1436,16 @@ const fromSkeletons = async (
   replace: boolean
 ): Promise<string[]> => {
   const entries = entriesOf(live, replace);
-  const sent = skeletons.map((skeleton) => {
+  // Each read as Excalidraw draws it once filled from the element it
+  // replaces (core canvas-skeleton.ts): one with no x or y that replaces
+  // nothing is refused, as the hub refuses one with no id.
+  const sent = skeletons.map((skeleton, index) => {
     const map = skeleton.id ? entries.get(skeleton.id) : undefined;
-    return shippedFonts(
-      withEnds(map ? filled(skeleton, theElement(map), entries) : skeleton)
+    return filledSkeletonOf(
+      shippedFonts(
+        withEnds(map ? filled(skeleton, theElement(map), entries) : skeleton)
+      ),
+      index
     );
   });
   // An arrow may bind to an element already drawn: it converts beside them.
@@ -1435,10 +1463,11 @@ const fromSkeletons = async (
   const skeletonsOf = [
     ...[...context].flatMap((id) => {
       const map = entries.get(id);
-      return map ? [theElement(map)] : [];
+      return map ? boundTo(theElement(map)) : [];
     }),
+    // A frame without children ({@link childless}) converts with none.
     ...sent.map((one) =>
-      one.id && frames.has(one.id) ? { ...one, children: [] } : one
+      one.type === "frame" ? { ...one, children: one.children ?? [] } : one
     ),
   ];
   await fontsLoaded(skeletonsOf);
@@ -1446,16 +1475,7 @@ const fromSkeletons = async (
     framedBy(
       wrappedText(
         freeEnds(
-          convertToExcalidrawElements(
-            // The agent's skeletons, checked for a type and an id alone
-            // (hub artifacts/tools.ts `skeleton`, {@link isSkeleton}): the
-            // rest of each is Excalidraw's to read, whose
-            // `ExcalidrawElementSkeleton` asks fields (`x`, `y`) an agent's
-            // skeleton may leave out. A parse of the whole would refuse
-            // skeletons the canvas takes today.
-            skeletonsOf as ExcalidrawElementSkeleton[],
-            { regenerateIds: false }
-          ),
+          convertToExcalidrawElements(skeletonsOf, { regenerateIds: false }),
           sent
         ),
         sent

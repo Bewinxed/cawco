@@ -41,6 +41,7 @@ import {
   SUBAGENTS_DENIED,
 } from "@cawco/core/delegate-types";
 import { userLayerPath } from "@cawco/core/paths/claude";
+import { claudeFleetSidecarFile } from "@cawco/core/paths/fleet";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { clockWords } from "@cawco/core/words/account-lines";
@@ -56,7 +57,7 @@ import {
 const SETTINGS = userLayerPath("settings.json");
 
 /** The sidecar: the policy as each welcome or delta arrives, what the converge wrote after it. */
-const SIDECAR = userLayerPath("cawco-fleet.json");
+const SIDECAR = claudeFleetSidecarFile();
 
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

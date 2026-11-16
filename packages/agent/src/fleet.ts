@@ -20,6 +20,13 @@ import {
 } from "node:fs/promises";
 import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import {
+  installedPluginsOf,
+  type KnownMarketplace,
+  type KnownMarketplaces,
+  knownMarketplacesOf,
+  projectMcpOf,
+} from "@cawco/core/claude-plugin-files";
 import { hashFiles } from "@cawco/core/file-hash";
 import type {
   CliInstall,
@@ -73,6 +80,7 @@ import {
   VENDOR_MARKETPLACES_DIR,
 } from "@cawco/core/paths/claude";
 import {
+  claudeFleetSidecarFile,
   fleetHarnessSetFile,
   fleetHooksDir,
   fleetPlacedDir,
@@ -122,6 +130,7 @@ import { readJson, readOwnJson, UnreadJson, writeJson } from "./json-file";
 import { readMcpRuntime, readSettledOnce } from "./mcp-status";
 import { markdownUnder } from "./placed-memory";
 import { noRepositoryAt } from "./stand-ins";
+import { ClaudeFleetSidecarSchema } from "./stored-shapes";
 import { claudeHomeEnv, toolEnv, toolPath } from "./tools";
 import {
   CARRIED,
@@ -141,7 +150,7 @@ import { cloneHolding } from "./workspace-records";
 const CLAUDE_JSON = claudeHomeJson();
 
 /** What cawco manages here. Anything this does not name is never touched. */
-const SIDECAR = userLayerPath("cawco-fleet.json");
+const SIDECAR = claudeFleetSidecarFile();
 
 /** Where a plain skill's files land — one directory per skill, all of it cawco's. */
 const SKILLS_DIR = claudeSkillsDir();
@@ -217,7 +226,7 @@ const tail = (output: string): string =>
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-interface Sidecar {
+export interface ClaudeFleetSidecar {
   /**
    * The fleet's denied-tools list, synced from `fleet_denied_tools`. None
    * before the machine's first sync: the machine has not heard the list,
@@ -345,8 +354,11 @@ const scriptPathOf = (record: ManagedHook): string | undefined =>
  * What cawco put here last time; unreadable is the same as never written,
  * and a machine that never synced manages nothing.
  */
-const readSidecar = async (): Promise<Sidecar> => {
-  const stored = await readOwnJson<Partial<Sidecar>>(SIDECAR);
+const readSidecar = async (): Promise<ClaudeFleetSidecar> => {
+  const stored = await readOwnJson(
+    SIDECAR,
+    (value) => ClaudeFleetSidecarSchema.partial().safeParse(value).data
+  );
   return {
     ...(stored?.mcp ? { mcp: stored.mcp } : {}),
     mcpServers: stored?.mcpServers ?? [],
@@ -417,46 +429,34 @@ const mcpServersOf = (root: ClaudeJson): Record<string, unknown> => ({
 const placedKey = (row: { name: string; placeId?: string }): string =>
   `${row.name}@${row.placeId ?? ""}`;
 
-/** The sidecar the agent kept before CawCo was named CawCo, which named the servers it wrote then. */
-const LEGACY_SIDECAR = userLayerPath("cockpit-fleet.json");
-
 /**
  * The fleet's servers taken back out of every `.claude.json` CawCo wrote
  * them into (`~/.claude.json` and each account's), once: sessions take them
  * through the SDK now (fleet-mcp-set.ts), and the person's own `claude`
  * loads only what he configured. Out go the names the sidecar says CawCo
- * wrote (`mcp`), the ones the agent's sidecar named before CawCo was
- * renamed ({@link LEGACY_SIDECAR}), which no later sidecar carried, and the
- * fleet's own names now, whose entries a merge overwrote with the fleet's
+ * wrote (`mcp`, the ones the agent's sidecar named before CawCo was renamed
+ * among them: fleet-sidecar-move.ts folds them in as the agent starts), and
+ * the fleet's own names now, whose entries a merge overwrote with the fleet's
  * whatever was there; and each placed copy from its folder's map
  * (`placedMcp`). Every other key of each file comes back out as it went in.
  * Answers whether every file was cleaned: one that could not be read or
  * written is tried again at the next sync.
  */
 const dropWrittenMcp = async (
-  managed: Sidecar,
+  managed: ClaudeFleetSidecar,
   fleetNames: readonly string[]
 ): Promise<boolean> => {
-  const legacy = await readOwnJson<{ mcp?: string[] }>(LEGACY_SIDECAR);
-  if (!(managed.mcp || managed.placedMcp || legacy)) {
+  if (!(managed.mcp || managed.placedMcp)) {
     return true;
   }
-  const names = new Set([
-    ...(managed.mcp ?? []),
-    ...(legacy?.mcp ?? []),
-    ...fleetNames,
-  ]);
+  const names = new Set([...(managed.mcp ?? []), ...fleetNames]);
   const placed = Object.values(managed.placedMcp ?? {});
   const results = await Promise.all(
     [CLAUDE_JSON, ...accountClaudeJsons()].map((path) =>
       dropWrittenMcpFrom(path, names, placed)
     )
   );
-  if (!results.every(Boolean)) {
-    return false;
-  }
-  await rm(LEGACY_SIDECAR, { force: true });
-  return true;
+  return results.every(Boolean);
 };
 
 /** {@link dropWrittenMcp} for one file: `names` out of its user scope, each of `placed` out of its folder's map. */
@@ -543,7 +543,7 @@ const readFleetMcpRuntime = async (
  */
 const reportMcp = async (
   config: PlacedFleetConfig,
-  managed: Sidecar,
+  managed: ClaudeFleetSidecar,
   report: FleetSyncReport["mcp"]
 ): Promise<string[]> => {
   const servers = Object.fromEntries(
@@ -767,22 +767,15 @@ const isLinked = async (name: string): Promise<boolean> =>
   (await linkedEntry(name))?.installLocation !== undefined;
 
 /**
- * One entry of the CLI's own account of what is linked: where it came from,
- * and the directory its catalog is in. Keyed by the marketplace's name, the
- * `name` of its `marketplace.json`, which is the only name Claude Code
- * addresses it by (https://code.claude.com/docs/en/plugin-marketplaces:
- * "This is the `name` from `marketplace.json`, not the source you passed to
- * `add`").
+ * The CLI's own account of what is linked (core claude-plugin-files.ts):
+ * where each came from, and the directory its catalog is in. Keyed by the
+ * marketplace's name, the `name` of its `marketplace.json`, which is the
+ * only name Claude Code addresses it by
+ * (https://code.claude.com/docs/en/plugin-marketplaces: "This is the `name`
+ * from `marketplace.json`, not the source you passed to `add`").
  */
-interface KnownMarketplace {
-  installLocation?: string;
-  source?: { source?: string; repo?: string; url?: string; path?: string };
-}
-
-const linkedMarketplaces = async (): Promise<
-  Record<string, KnownMarketplace>
-> =>
-  (await readJson<Record<string, KnownMarketplace>>(KNOWN_MARKETPLACES)) ?? {};
+const linkedMarketplaces = async (): Promise<KnownMarketplaces> =>
+  (await readJson(KNOWN_MARKETPLACES, knownMarketplacesOf)) ?? {};
 
 /** The registry's entry under `name`, if the CLI has one. */
 const linkedEntry = async (
@@ -821,26 +814,18 @@ const sourceKeysOf = (entry: KnownMarketplace): string[] =>
  * Only for saying so after an add; nothing is linked or reported under it.
  */
 const registeredAs = (
-  linked: Record<string, KnownMarketplace>,
+  linked: KnownMarketplaces,
   source: string
 ): string | undefined =>
   Object.keys(linked).find((key) =>
     sourceKeysOf(linked[key]).includes(sourceKey(source))
   );
 
-interface InstalledPlugins {
-  /** Plugin id → one entry per scope it is installed at, with its unpacked copy. */
-  plugins?: Record<
-    string,
-    { scope?: string; installPath?: string; version?: string }[]
-  >;
-}
-
 /** The CLI's record of the plugin at the scope this daemon installs at. */
 const installedEntry = async (
   id: string
 ): Promise<{ version?: string } | undefined> => {
-  const stored = await readJson<InstalledPlugins>(INSTALLED_PLUGINS);
+  const stored = await readJson(INSTALLED_PLUGINS, installedPluginsOf);
   return (stored?.plugins?.[id] ?? []).find((entry) => entry.scope === "user");
 };
 
@@ -987,14 +972,14 @@ const toUnlink = (
 
 /** What a plugin sync leaves in the sidecar. */
 type PluginRecords = Pick<
-  Sidecar,
+  ClaudeFleetSidecar,
   "marketplaces" | "hubOnlyMarketplaces" | "plugins" | "vendoredPlugins"
 >;
 
 /** Every marketplace and plugin the fleet wants said as `state`, and the sidecar's records kept as they are: a sync that acted on none. */
 const keptPlugins = (
   config: PlacedFleetConfig,
-  managed: Sidecar,
+  managed: ClaudeFleetSidecar,
   report: FleetSyncReport,
   state: FleetItemState
 ): PluginRecords => {
@@ -1018,8 +1003,8 @@ const keptPlugins = (
 const pluginRegistriesUnread = async (): Promise<string | undefined> => {
   try {
     await Promise.all([
-      readJson(INSTALLED_PLUGINS),
-      readJson(KNOWN_MARKETPLACES),
+      readJson(INSTALLED_PLUGINS, installedPluginsOf),
+      readJson(KNOWN_MARKETPLACES, knownMarketplacesOf),
     ]);
   } catch (error) {
     if (error instanceof UnreadJson) {
@@ -1036,7 +1021,7 @@ const pluginRegistriesUnread = async (): Promise<string | undefined> => {
  */
 const syncPlugins = async (
   config: PlacedFleetConfig,
-  managed: Sidecar,
+  managed: ClaudeFleetSidecar,
   report: FleetSyncReport
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: links every marketplace and installs every plugin the config wants, reporting each one's outcome
 ): Promise<PluginRecords> => {
@@ -1993,11 +1978,11 @@ const syncVendoredPlugins = async (
 export const syncSkillFiles = async (
   dir: string,
   desired: FleetSkillPayload[],
-  sidecar: Sidecar["skills"],
+  sidecar: ClaudeFleetSidecar["skills"],
   report: Record<string, FleetItemState>
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: converge each skill while preserving ownership and reporting write and removal errors individually.
-): Promise<Sidecar["skills"]> => {
-  const written: Sidecar["skills"] = {};
+): Promise<ClaudeFleetSidecar["skills"]> => {
+  const written: ClaudeFleetSidecar["skills"] = {};
   // What is on this disk now, not what the sidecar says was written: the
   // sidecar is who owns a directory, the disk is what is in it.
   const held = await heldSkills(dir, Object.keys(sidecar), desired);
@@ -2244,10 +2229,10 @@ const placeSkill = async (
  */
 const syncPlacedSkills = async (
   desired: FleetSkillPayload[],
-  managed: Sidecar["placedSkills"],
+  managed: ClaudeFleetSidecar["placedSkills"],
   report: Record<string, FleetItemState>
-): Promise<Sidecar["placedSkills"]> => {
-  const placed: Sidecar["placedSkills"] = {};
+): Promise<ClaudeFleetSidecar["placedSkills"]> => {
+  const placed: ClaudeFleetSidecar["placedSkills"] = {};
   for (const skill of desired) {
     const { cwd } = skill;
     if (!(cwd && skill.placeId)) {
@@ -2714,10 +2699,10 @@ const placeMemoryDoc = async (
  */
 const syncPlacedMemory = async (
   desired: FleetPlacedMemoryDoc[],
-  managed: Sidecar["placedMemory"],
+  managed: ClaudeFleetSidecar["placedMemory"],
   report: Record<string, FleetItemState>
-): Promise<Sidecar["placedMemory"]> => {
-  const placed: Sidecar["placedMemory"] = {};
+): Promise<ClaudeFleetSidecar["placedMemory"]> => {
+  const placed: ClaudeFleetSidecar["placedMemory"] = {};
   for (const doc of desired) {
     const { cwd } = doc;
     if (!(cwd && doc.placeId)) {
@@ -3390,7 +3375,7 @@ const syncHooks = async (
 
 /** The placed skills cawco manages, as each place's file names them (fleet-place-set.ts): each skill's dir by its name, by the place's folder. */
 const placeSkillsOf = (
-  placed: Sidecar["placedSkills"]
+  placed: ClaudeFleetSidecar["placedSkills"]
 ): Record<string, Record<string, string>> => {
   const byPlace: Record<string, Record<string, string>> = {};
   for (const { cwd, name } of Object.values(placed)) {
@@ -3461,7 +3446,7 @@ export const placeFolder = (
       harnessConfig: harnessStates,
       at: Date.now(),
     };
-    const placedSkills: Sidecar["placedSkills"] = {};
+    const placedSkills: ClaudeFleetSidecar["placedSkills"] = {};
     for (const skill of copies.skills) {
       const key = placedKey(skill);
       const hash = await placeSkill(
@@ -3474,7 +3459,7 @@ export const placeFolder = (
         placedSkills[key] = { cwd, name: skill.name, hash };
       }
     }
-    const placedMemory: Sidecar["placedMemory"] = {};
+    const placedMemory: ClaudeFleetSidecar["placedMemory"] = {};
     for (const doc of copies.memory) {
       const key = placedKey({ name: doc.path, placeId: doc.placeId });
       const hash = await placeMemoryDoc(
@@ -3519,13 +3504,15 @@ export const placeFolder = (
         },
         placedMemory: { ...now.placedMemory, ...placedMemory },
         placedSkills: { ...now.placedSkills, ...placedSkills },
-      } satisfies Sidecar);
+      } satisfies ClaudeFleetSidecar);
     });
     return { ...report, at: Date.now() };
   });
 
 /** What one part's converge leaves in the sidecar: its fields, a field it no longer keeps as `undefined`. */
-type SidecarFields = { [K in keyof Sidecar]?: Sidecar[K] | undefined };
+type SidecarFields = {
+  [K in keyof ClaudeFleetSidecar]?: ClaudeFleetSidecar[K] | undefined;
+};
 
 /** What one part's converge wrote, for the sidecar and the harness set. */
 interface PartWrote {
@@ -3547,7 +3534,7 @@ interface PartWrote {
 interface ConvergePart {
   run: (
     config: PlacedFleetConfig,
-    managed: Sidecar,
+    managed: ClaudeFleetSidecar,
     report: Required<
       Pick<
         FleetSyncReport,
@@ -4240,7 +4227,7 @@ const installedPlugins = async (): Promise<ListedPlugin[]> => {
 /** Every skill on this machine, in the order Claude Code would resolve them. */
 const discoverSkills = async (
   cwd: string | undefined,
-  managed: Sidecar
+  managed: ClaudeFleetSidecar
 ): Promise<DiscoveredSkill[]> => {
   const plugins = await Promise.all(
     pluginSkillRoots(await installedPlugins()).map(({ plugin, root }) =>
@@ -4276,16 +4263,13 @@ export const inspectConfig = async (
   const projects = root.projects ?? {};
   const local = cwd ? (projects[cwd]?.mcpServers ?? {}) : {};
   const project = cwd
-    ? ((
-        await readJson<{ mcpServers?: Record<string, unknown> }>(
-          join(cwd, ".mcp.json")
-        )
-      )?.mcpServers ?? {})
+    ? ((await readJson(join(cwd, ".mcp.json"), projectMcpOf))?.mcpServers ?? {})
     : {};
 
-  const installed = (await readJson<InstalledPlugins>(INSTALLED_PLUGINS)) ?? {};
+  const installed =
+    (await readJson(INSTALLED_PLUGINS, installedPluginsOf)) ?? {};
   const linked =
-    (await readJson<Record<string, unknown>>(KNOWN_MARKETPLACES)) ?? {};
+    (await readJson(KNOWN_MARKETPLACES, knownMarketplacesOf)) ?? {};
 
   const memoryHash = await fileHashAt(MEMORY_PATH);
   const memoryFile = Bun.file(MEMORY_PATH);

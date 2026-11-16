@@ -31,6 +31,23 @@ export const fleetMcpSetFile = (): string =>
   join(cawcoDataDir(), "fleet-mcp-set.json");
 
 /**
+ * What the fleet sync manages in Claude Code's user layer, by what it last
+ * wrote (agent fleet.ts `ClaudeFleetSidecar`): anything it does not name is
+ * never touched.
+ */
+export const claudeFleetSidecarFile = (): string =>
+  userLayerPath("cawco-fleet.json");
+
+/**
+ * The sidecar the agent kept before CawCo was named CawCo, which named the
+ * servers it wrote into `.claude.json` then: folded into
+ * {@link claudeFleetSidecarFile} once, as the agent starts (agent
+ * fleet-sidecar-move.ts), and read by nothing else.
+ */
+export const legacyClaudeFleetSidecarFile = (): string =>
+  userLayerPath("cockpit-fleet.json");
+
+/**
  * Where each fleet hook's script is written, one file per hook id (a placed
  * copy's id is `<hook id>@<place id>`): agent fleet.ts writes them, and every
  * harness runs a command hook from here. A workspace reads it

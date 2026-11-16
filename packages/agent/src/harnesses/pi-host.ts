@@ -2,20 +2,18 @@
 import { createInterface } from "node:readline";
 import { readCall } from "@cawco/core/control-args";
 import type { Control } from "@cawco/core/control-table";
-import type { PiHostState } from "@cawco/core/harness/pi-host-state";
+import {
+  type PiHostCommand,
+  type PiHostEvent,
+  type PiHostState,
+  piHostCommand,
+} from "@cawco/core/harness/pi-host-state";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { MESSAGES_READ } from "@cawco/core/session-messages";
 import type { HarnessContext, HarnessSession } from "../harness";
 import { installOf } from "./credential-controls";
 import { startPiHost } from "./pi-runtime";
-import {
-  backgroundShell,
-  hostFailure,
-  PI_ASKS_NOTHING,
-  PI_HOST_COMMAND,
-  type PiHostCommand,
-  type PiHostEvent,
-} from "./pi-sessiond";
+import { backgroundShell, hostFailure, PI_ASKS_NOTHING } from "./pi-sessiond";
 
 // SDK/extension diagnostics must never enter the sequenced protocol stream.
 console.log = console.error;
@@ -110,7 +108,7 @@ function start(
  * arguments its own.
  */
 type HostCommand =
-  | Exclude<PiHostCommand, { type: "control" }>
+  | (PiHostCommand & { type: "start" | "send" | "snapshot" | "stop" })
   | { type: "control"; id: string; control: Control };
 
 async function handle(command: HostCommand): Promise<void> {
@@ -152,7 +150,7 @@ createInterface({ input: process.stdin })
   .on("line", (line) => {
     let command: HostCommand;
     try {
-      const read = PI_HOST_COMMAND.parse(JSON.parse(line));
+      const read = piHostCommand(JSON.parse(line));
       if (read.type === "control") {
         const called = readCall(read.method, read.args);
         if (!called.ok) {

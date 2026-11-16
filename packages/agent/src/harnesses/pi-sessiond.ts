@@ -7,7 +7,10 @@ import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import type { Control } from "@cawco/core/control-table";
 import { BOUNDARY_RELAUNCH, GATEWAY_RELAUNCH } from "@cawco/core/harness";
 import {
+  type PiHostCommand,
+  type PiHostEvent,
   type PiHostState,
+  piHostEvent,
   piHostState,
 } from "@cawco/core/harness/pi-host-state";
 import { workspaceSpillDir } from "@cawco/core/paths/workspace";
@@ -27,7 +30,6 @@ import {
 import type { NeutralMessage, SentMessage } from "@cawco/core/session-messages";
 import { MESSAGES_HELD, MESSAGES_READ } from "@cawco/core/session-messages";
 import { FleetMcpTakeAnswerSchema } from "@cawco/core/stored-shapes";
-import { z } from "zod";
 import { CHROME_DEVTOOLS } from "../browser/door";
 import { fleetMcpAt } from "../fleet-mcp-set";
 import { gateForm } from "../gate-form";
@@ -40,7 +42,6 @@ import {
 } from "../harness";
 import { KeeperPool } from "../keepers";
 import { enterSpawn } from "../layer";
-import type { McpGate } from "../mcp-gate";
 import { procIdFor } from "../proc-id";
 import {
   KeeperRefused,
@@ -48,27 +49,6 @@ import {
   refusalReason,
   type SessiondClient,
 } from "../sessiond-client";
-
-export type PiHostCommand =
-  | {
-      type: "start";
-      spec: SpawnPayload;
-      boundary?: HarnessContext["boundary"];
-      /** The gate form of the build that starts the host, which is the build the host runs ({@link gateForm}). */
-      gateForm?: string;
-      /** The session's browser door, which the fleet's chrome-devtools goes through ({@link piBrowserDoor}). */
-      door?: BrowserDoor;
-      /** A workspace session's MCP gate (mcp-gate.ts), which its fleet servers with a command go through. */
-      mcpGate?: McpGate;
-    }
-  | {
-      type: "send";
-      message: SentMessage;
-      extras: TurnExtras;
-    }
-  | { type: "control"; id: string; method: string; args: unknown[] }
-  | { type: "snapshot"; id: string }
-  | { type: "stop"; id: string };
 
 /**
  * The MCP gateway port a host reaches CawCo's tools on. One started before
@@ -79,51 +59,6 @@ export type PiHostCommand =
 const hostGateway = (state: PiHostState): number | undefined =>
   state.gatewayPort ??
   (readEnv(CAWCO_ENV.mcpPort) === undefined ? undefined : mcpGatewayPort());
-/**
- * The host's commands and events read back off its line: checked to be a
- * kind the other side sends. Both sides are the one build's (the agent
- * starts its own host), and each kind's fields are read as typed here.
- */
-const PI_HOST_COMMANDS: ReadonlySet<unknown> = new Set<PiHostCommand["type"]>([
-  "start",
-  "send",
-  "control",
-  "snapshot",
-  "stop",
-]);
-export const PI_HOST_COMMAND = z.custom<PiHostCommand>(
-  (value) =>
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    PI_HOST_COMMANDS.has(value.type),
-  "a pi host command"
-);
-const PI_HOST_EVENTS: ReadonlySet<unknown> = new Set<PiHostEvent["type"]>([
-  "frame",
-  "busy",
-  "session",
-  "failed",
-  "rejected",
-  "reply",
-]);
-const PI_HOST_EVENT = z.custom<PiHostEvent>(
-  (value) =>
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    PI_HOST_EVENTS.has(value.type),
-  "a pi host event"
-);
-
-export type PiHostEvent =
-  | { type: "frame"; message: NeutralMessage }
-  | { type: "busy"; active: boolean }
-  | { type: "session"; sessionId: string }
-  | ({ type: "failed" } & HostFailure)
-  | { type: "rejected"; uuid: string; error: string }
-  | ({ type: "reply"; id: string; value?: unknown } & Partial<HostFailure>);
-
 /**
  * A failure as the host says it on its line: its words, and its kind when
  * its maker typed it (core relaunch.ts), which a thrown error loses on the
@@ -279,7 +214,7 @@ class PiRemoteSession implements HarnessSession {
             return;
           }
           this.#seq = line.seq;
-          const event = PI_HOST_EVENT.parse(JSON.parse(line.data));
+          const event = piHostEvent(JSON.parse(line.data));
           switch (event.type) {
             case "frame":
               if (this.#ready) {
@@ -660,7 +595,7 @@ export async function piSnapshot(instanceId: string): Promise<PiHostState> {
     let stop = (): void => undefined;
     stop = client.subscribe(procIdFor("pi", instanceId), {
       line: (line) => {
-        const event = PI_HOST_EVENT.parse(JSON.parse(line.data));
+        const event = piHostEvent(JSON.parse(line.data));
         if (event.type !== "reply" || event.id !== id) {
           return;
         }

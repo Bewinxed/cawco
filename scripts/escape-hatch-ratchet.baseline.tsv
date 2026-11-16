@@ -49,7 +49,6 @@ as-cast	{ color: unknown }[]	packages/design-tokens/src/dtcg-values.ts	1
 as-cast	{ components: { schemas: Record<string, unknown> } }	packages/hub/scripts/openapi.ts	1
 as-cast	{ contexts?: Record<string, ContextCondition> } | undefined	packages/design-tokens/src/dtcg-resolver.ts	1
 as-cast	{ cooked?: string }	apps/dashboard/scripts/specificity-trap.ts	1
-as-cast	{ cwd?: unknown; id?: unknown; type?: unknown } | undefined	packages/jsonl-parser/src/pi.ts	1
 as-cast	{ default: { packages: Record<string, [string, ...unknown[]]> }; }	scripts/patched-dependencies-check.ts	1
 as-cast	{ default: { patchedDependencies?: Record<string, string> }; }	scripts/patched-dependencies-check.ts	1
 as-cast	{ definitions?: Record<string, Schema> }	packages/hub/scripts/openapi.ts	1
@@ -156,7 +155,6 @@ as-cast	Element	site/src/tabs.ts	1
 as-cast	EndSignal	scripts/lib/tied-child.ts	1
 as-cast	Error	apps/dashboard/scripts/svelte-unused-css.ts	1
 as-cast	ErrorEvent	packages/preview/src/proxy.ts	1
-as-cast	ExcalidrawElementSkeleton[]	packages/agent/src/canvas-host/scene.ts	1
 as-cast	Figure	apps/dashboard/src/lib/cawco/graph/figures.ts	1
 as-cast	FileId	packages/agent/src/canvas-host/images.ts	1
 as-cast	Font	scripts/house-faces.ts	1
@@ -393,7 +391,6 @@ as-cast	T	packages/hub/scripts/fixture-db.ts	1
 as-cast	T	scripts/lib/tool-call.ts	1
 as-cast	T	scripts/lib/workspace-imports.ts	1
 as-cast	T	scripts/tailwind-draws-check.ts	1
-as-cast	T | undefined	packages/agent/src/json-file.ts	1
 as-cast	T | undefined	scripts/release.ts	1
 as-cast	TokenType[]	packages/design-tokens/src/design-tokens.ts	1
 as-cast	ToolEnvelope	scripts/lib/tool-call.ts	1

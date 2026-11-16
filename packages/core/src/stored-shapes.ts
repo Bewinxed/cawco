@@ -931,6 +931,97 @@ const CheckoutMoveShape = declared(
 export const CheckoutMoveSchema = CheckoutMoveShape;
 export type CheckoutMoveOutput = z.output<typeof CheckoutMoveShape>;
 
+const FaultCauseShape = declared(
+  z.enum(FAULT_CAUSES),
+  "FaultCause",
+  "packages/core/src/fleet.ts"
+);
+export type FaultCauseOutput = z.output<typeof FaultCauseShape>;
+
+const FleetFaultCauseShape = declared(
+  FaultCauseShape.exclude([
+    "auth-discovery",
+    "needs-auth",
+    "ssh-refused",
+    "unfetchable",
+  ]),
+  "FleetFaultCause",
+  "packages/core/src/fleet.ts"
+);
+export type FleetFaultCauseOutput = z.output<typeof FleetFaultCauseShape>;
+
+export const FleetItemStateShape = declared(
+  z.union([
+    z.object({
+      cause: FleetFaultCauseShape,
+      detail: z.string().optional(),
+      state: z.literal("failed"),
+    }),
+    z.object({
+      cause: z.never().optional(),
+      detail: z.string().optional(),
+      state: z.enum([
+        "applied",
+        "removed",
+        "needs-auth",
+        "disabled",
+        "unsupported",
+        "pending",
+      ]),
+    }),
+  ]),
+  "FleetItemState",
+  "packages/core/src/fleet.ts"
+);
+export type FleetItemStateOutput = z.output<typeof FleetItemStateShape>;
+
+export const HookEventShape = declared(
+  z.enum([
+    "SessionStart",
+    "Setup",
+    "InstructionsLoaded",
+    "UserPromptSubmit",
+    "UserPromptExpansion",
+    "MessageDisplay",
+    "PreToolUse",
+    "PermissionRequest",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "PostToolBatch",
+    "PermissionDenied",
+    "Notification",
+    "SubagentStart",
+    "SubagentStop",
+    "TaskCreated",
+    "TaskCompleted",
+    "Stop",
+    "StopFailure",
+    "TeammateIdle",
+    "ConfigChange",
+    "CwdChanged",
+    "DirectoryAdded",
+    "FileChanged",
+    "WorktreeCreate",
+    "WorktreeRemove",
+    "PreCompact",
+    "PostCompact",
+    "SessionEnd",
+    "Elicitation",
+    "ElicitationResult",
+  ]),
+  "HookEvent",
+  "packages/core/src/hooks.ts"
+);
+export type HookEventOutput = z.output<typeof HookEventShape>;
+
+const FleetScopeShape = declared(
+  z.enum(["user", "project", "local"]),
+  "FleetScope",
+  "packages/core/src/fleet-placement.ts"
+);
+export const FleetScopeSchema: z.ZodType<FleetScopeType> = FleetScopeShape;
+export type FleetScopeOutput = z.output<typeof FleetScopeShape>;
+
 const ClaudeModelUsageShape = declared(
   z.object({
     cacheCreationInputTokens: z.number(),
@@ -1013,14 +1104,6 @@ const FleetMcpConfigShape = declared(
 );
 export const FleetMcpConfigSchema = FleetMcpConfigShape;
 export type FleetMcpConfigOutput = z.output<typeof FleetMcpConfigShape>;
-
-const FleetScopeShape = declared(
-  z.enum(["user", "project", "local"]),
-  "FleetScope",
-  "packages/core/src/fleet-placement.ts"
-);
-export const FleetScopeSchema: z.ZodType<FleetScopeType> = FleetScopeShape;
-export type FleetScopeOutput = z.output<typeof FleetScopeShape>;
 
 const DiscoveredMcpShape = declared(
   z.object({
@@ -1230,6 +1313,7 @@ const TextAttachmentShape = declared(
   "TextAttachment",
   "packages/core/src/attachments.ts"
 );
+export const TextAttachmentSchema = TextAttachmentShape;
 export type TextAttachmentOutput = z.output<typeof TextAttachmentShape>;
 
 const FileAttachmentShape = declared(
@@ -1264,6 +1348,7 @@ const TurnImageShape = declared(
   "TurnImage",
   "packages/core/src/attachments.ts"
 );
+export const TurnImageSchema = TurnImageShape;
 export type TurnImageOutput = z.output<typeof TurnImageShape>;
 
 const UserAnswersShape = declared(
@@ -1847,45 +1932,6 @@ const FleetHarnessConfigShape = declared(
 export const FleetHarnessConfigSchema = FleetHarnessConfigShape;
 export type FleetHarnessConfigOutput = z.output<typeof FleetHarnessConfigShape>;
 
-export const HookEventShape = declared(
-  z.enum([
-    "SessionStart",
-    "Setup",
-    "InstructionsLoaded",
-    "UserPromptSubmit",
-    "UserPromptExpansion",
-    "MessageDisplay",
-    "PreToolUse",
-    "PermissionRequest",
-    "PostToolUse",
-    "PostToolUseFailure",
-    "PostToolBatch",
-    "PermissionDenied",
-    "Notification",
-    "SubagentStart",
-    "SubagentStop",
-    "TaskCreated",
-    "TaskCompleted",
-    "Stop",
-    "StopFailure",
-    "TeammateIdle",
-    "ConfigChange",
-    "CwdChanged",
-    "DirectoryAdded",
-    "FileChanged",
-    "WorktreeCreate",
-    "WorktreeRemove",
-    "PreCompact",
-    "PostCompact",
-    "SessionEnd",
-    "Elicitation",
-    "ElicitationResult",
-  ]),
-  "HookEvent",
-  "packages/core/src/hooks.ts"
-);
-export type HookEventOutput = z.output<typeof HookEventShape>;
-
 const HookHandlerBaseShape = declared(
   z.object({
     if: z.string().optional(),
@@ -2259,50 +2305,6 @@ const FleetSyncOutcomeShape = declared(
 );
 export const FleetSyncOutcomeSchema = FleetSyncOutcomeShape;
 export type FleetSyncOutcomeOutput = z.output<typeof FleetSyncOutcomeShape>;
-
-const FaultCauseShape = declared(
-  z.enum(FAULT_CAUSES),
-  "FaultCause",
-  "packages/core/src/fleet.ts"
-);
-export type FaultCauseOutput = z.output<typeof FaultCauseShape>;
-
-const FleetFaultCauseShape = declared(
-  FaultCauseShape.exclude([
-    "auth-discovery",
-    "needs-auth",
-    "ssh-refused",
-    "unfetchable",
-  ]),
-  "FleetFaultCause",
-  "packages/core/src/fleet.ts"
-);
-export type FleetFaultCauseOutput = z.output<typeof FleetFaultCauseShape>;
-
-const FleetItemStateShape = declared(
-  z.union([
-    z.object({
-      cause: FleetFaultCauseShape,
-      detail: z.string().optional(),
-      state: z.literal("failed"),
-    }),
-    z.object({
-      cause: z.never().optional(),
-      detail: z.string().optional(),
-      state: z.enum([
-        "applied",
-        "removed",
-        "needs-auth",
-        "disabled",
-        "unsupported",
-        "pending",
-      ]),
-    }),
-  ]),
-  "FleetItemState",
-  "packages/core/src/fleet.ts"
-);
-export type FleetItemStateOutput = z.output<typeof FleetItemStateShape>;
 
 const PlacedSectionShape = declared(
   z.enum(PLACED_SECTIONS),

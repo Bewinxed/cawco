@@ -32,6 +32,7 @@ import { launchGateForm } from "../gate-form";
 import { readJson } from "../json-file";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
+import { OpencodeServerRecordSchema } from "../stored-shapes";
 
 const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
 
@@ -282,10 +283,15 @@ const startedServer = (
   }
 };
 
-interface ServerRecord {
+/** What a keeper's record file says of the servers it keeps: the one current, and the ones retired that may still run. */
+export interface OpencodeServerRecord {
   active: ServerIdentity | null;
   retired: ServerIdentity[];
 }
+
+/** A server record as it was written, or undefined when it is not one. */
+const serverRecordOf = (value: unknown): OpencodeServerRecord | undefined =>
+  OpencodeServerRecordSchema.safeParse(value).data;
 
 type Attach = (
   client: SessiondClient,
@@ -371,7 +377,7 @@ const recordedServers = async (): Promise<Set<string>> => {
   );
   const named = new Set<string>();
   for (const file of files) {
-    const record = await readJson<ServerRecord>(join(dir, file));
+    const record = await readJson(join(dir, file), serverRecordOf);
     if (!record) {
       throw new Error(
         `OpenCode server record ${file} is unreadable: no server is taken for a stray.`
@@ -497,7 +503,7 @@ export class OpencodeServerOwner {
   readonly #whyNotIdle: (
     identity: ServerIdentity
   ) => Promise<string | undefined>;
-  #record: ServerRecord | null = null;
+  #record: OpencodeServerRecord | null = null;
   #transition: Promise<ServerIdentity> | null = null;
   #candidateProcId: string | null = null;
   #writes = Promise.resolve();
@@ -624,9 +630,9 @@ export class OpencodeServerOwner {
     return birth;
   }
 
-  async #load(): Promise<ServerRecord> {
+  async #load(): Promise<OpencodeServerRecord> {
     if (!this.#record) {
-      const stored = await readJson<ServerRecord>(this.#path);
+      const stored = await readJson(this.#path, serverRecordOf);
       if ((await Bun.file(this.#path).exists()) && !stored) {
         throw new Error("OpenCode active-generation record is unreadable.");
       }
