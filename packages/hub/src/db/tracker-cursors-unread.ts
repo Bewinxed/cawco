@@ -18,15 +18,18 @@
  * (db/json-reads.ts): SQLite may run the right side of an AND first.
  */
 import type { Database } from "bun:sqlite";
-import { NUMBER, object, readsWhole, TEXT_OR_NULL } from "./json-reads";
 import {
   type Lifted,
   type LiftedRow,
   liftedColumns,
   liftedRows,
   logRestrictive,
+  NUMBER,
+  object,
+  readsWhole,
   shown,
-} from "./lifted-reading";
+  TEXT_OR_NULL,
+} from "./json-reads";
 
 /** The issues' list: the newest change taken in, ms, and its ETag. */
 const ISSUES = object({ since: NUMBER, etag: TEXT_OR_NULL });

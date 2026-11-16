@@ -14,6 +14,7 @@
  */
 
 import type { PreviewDown } from "./preview/protocol";
+import { withoutUndefined } from "./without-undefined";
 
 /**
  * The frameworks a stage mounts a component with: what the daemon hands its
@@ -778,12 +779,6 @@ const textsOf = (value: unknown): string[] | undefined =>
   Array.isArray(value) && value.every((one) => typeof one === "string")
     ? value
     : undefined;
-/** The keys of `value` that are present, each as it reads. */
-const present = <T extends object>(value: T): Partial<T> =>
-  // Cast kept: `Object.fromEntries` answers `{ [k: string]: V }`, never `T`'s keys (by design: https://github.com/microsoft/TypeScript/issues/35745).
-  Object.fromEntries(
-    Object.entries(value).filter(([, one]) => one !== undefined)
-  ) as Partial<T>;
 const DIAL_KINDS: readonly CanvasDial["kind"][] = [
   "number",
   "color",
@@ -809,7 +804,7 @@ const dialOf = (value: unknown): CanvasDial | undefined => {
     kind,
     name,
     target: cssVar ? { cssVar } : { arg: arg ?? "" },
-    ...present({
+    ...withoutUndefined({
       group: textOf(value.group),
       label: textOf(value.label),
       max: numberOf(value.max),
@@ -828,7 +823,7 @@ const edgeOf = (value: unknown): CanvasEdge | undefined => {
   const from = textOf(value.from);
   const to = textOf(value.to);
   return from && to
-    ? { from, to, ...present({ label: textOf(value.label) }) }
+    ? { from, to, ...withoutUndefined({ label: textOf(value.label) }) }
     : undefined;
 };
 
@@ -844,7 +839,7 @@ export const canvasSpecOf = (value: unknown): CanvasSpec => {
         )
       )
     : undefined;
-  return present({
+  return withoutUndefined({
     dials: Array.isArray(value.dials)
       ? value.dials.flatMap((one) => dialOf(one) ?? [])
       : undefined,

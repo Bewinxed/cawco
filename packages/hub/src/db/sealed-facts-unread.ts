@@ -48,10 +48,10 @@ import {
   nullable,
   object,
   oneOf,
+  type Reading,
   readsWhole,
   TEXT,
 } from "./json-reads";
-import type { Reading } from "./lifted-reading";
 import {
   OAuthClientInformationFullSchema,
   OAuthClientInformationMixedSchema,

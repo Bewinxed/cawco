@@ -35,8 +35,16 @@
  */
 import type { Database } from "bun:sqlite";
 import { REFRESH_WHY, refreshReads } from "./fleet-refresh-unread";
-import { FLAG, inJson, listOf, object, readsWhole, TEXT } from "./json-reads";
-import { type Reading, shown } from "./lifted-reading";
+import {
+  FLAG,
+  inJson,
+  listOf,
+  object,
+  type Reading,
+  readsWhole,
+  shown,
+  TEXT,
+} from "./json-reads";
 import { trashedEntries } from "./trash";
 
 /** A row's files, as the three `files` columns held them (core `SkillFile[]`). */

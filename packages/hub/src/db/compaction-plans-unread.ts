@@ -22,15 +22,17 @@
  */
 import type { Database } from "bun:sqlite";
 import { MOVED_FIELDS } from "./continuation-askers-unread";
-import { NUMBER, object, readsWhole } from "./json-reads";
 import {
   type Lifted,
   type LiftedRow,
   liftedColumns,
   liftedRows,
   logRestrictive,
+  NUMBER,
+  object,
+  readsWhole,
   shown,
-} from "./lifted-reading";
+} from "./json-reads";
 
 /** A `moved` line without its kind, as `limit_compactions.move` held it after 0410 (core `AccountMove`). */
 const MOVED = object(MOVED_FIELDS.required, MOVED_FIELDS.optional);

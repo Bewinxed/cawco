@@ -15,8 +15,7 @@
  * (db/json-reads.ts): SQLite may run the right side of an AND first.
  */
 import type { Database } from "bun:sqlite";
-import { inJson, NUMBER, object, readsWhole, TEXT } from "./json-reads";
-import { shown } from "./lifted-reading";
+import { inJson, NUMBER, object, readsWhole, shown, TEXT } from "./json-reads";
 
 /** An item's waits since its last delivered message, as `work_items.wait_history` held them. */
 const HISTORY = object({ count: NUMBER, reason: TEXT, until: NUMBER });

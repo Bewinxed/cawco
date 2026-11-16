@@ -18,15 +18,18 @@
  */
 import type { Database } from "bun:sqlite";
 import { CAW_POSE_IDS, HEARS } from "@cawco/core/decides";
-import { type JsonShape, object, oneOf, readsWhole } from "./json-reads";
 import {
+  type JsonShape,
   type Lifted,
   type LiftedRow,
   liftedColumns,
   liftedRows,
   logRestrictive,
+  object,
+  oneOf,
+  readsWhole,
   shown,
-} from "./lifted-reading";
+} from "./json-reads";
 
 /** How he hears of a member's answers (core `HEARS`). */
 const HEAR_VALUE = oneOf(...HEARS);

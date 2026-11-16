@@ -14,8 +14,7 @@
  * (db/json-reads.ts): SQLite may run the right side of an AND first.
  */
 import type { Database } from "bun:sqlite";
-import { NUMBER, object, readsWhole, TEXT } from "./json-reads";
-import { shown } from "./lifted-reading";
+import { NUMBER, object, readsWhole, shown, TEXT } from "./json-reads";
 
 /** A cold reading, as `instances.cache_cold` held it: what the ping read, and when. */
 const COLD = object({ at: NUMBER, reason: TEXT });

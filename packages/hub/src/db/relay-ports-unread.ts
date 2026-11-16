@@ -18,8 +18,15 @@
  * (db/json-reads.ts): SQLite may run the right side of an AND first.
  */
 import type { Database } from "bun:sqlite";
-import { FLAG, inJson, listOf, object, oneOf, readsWhole } from "./json-reads";
-import { shown } from "./lifted-reading";
+import {
+  FLAG,
+  inJson,
+  listOf,
+  object,
+  oneOf,
+  readsWhole,
+  shown,
+} from "./json-reads";
 
 /** A proof's chips, as `stream_relay_proofs.ports` held them: a list of the relay URLs' chips (core `RelayPortName`). */
 const CHIPS = listOf(oneOf("udp 3478", "tcp 3478", "tls 5349"));

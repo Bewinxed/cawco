@@ -18,8 +18,7 @@
  * is read no further.
  */
 import type { Database } from "bun:sqlite";
-import { listOf, object, readsWhole, TEXT } from "./json-reads";
-import { shown } from "./lifted-reading";
+import { listOf, object, readsWhole, shown, TEXT } from "./json-reads";
 
 /** An attempt's witnesses, as `work_items.waited_on` held them (core `WaitWitness`). */
 const WITNESSES = listOf(object({ target: TEXT, value: TEXT }));

@@ -38,7 +38,6 @@ as-cast	[string, string, string]	scripts/lib/ratchet.ts	1
 as-cast	[string, string]	packages/hub/scripts/agent-calls.ts	1
 as-cast	[string, string]	packages/hub/scripts/shipped.ts	1
 as-cast	{ __cawcoSheetsOnPage?: Record<string, object> }	packages/preview/src/overlay/page.ts	1
-as-cast	{ [K in keyof T]?: Exclude<T[K], undefined> }	packages/hub/src/ingress.ts	1
 as-cast	{ [STAMPED_KEY]?: unknown; response_format?: ResponseFormat; } & z.infer	packages/hub/src/mcp-tool.ts	1
 as-cast	{ action: string } & Partial<z.infer<z.ZodObject<T>>>	packages/hub/src/admin-tools.ts	2
 as-cast	{ action: string } & Record<string, unknown>	packages/hub/src/admin-tools.ts	1
@@ -489,7 +488,7 @@ as-cast	Partial<Record<keyof Box, unknown>> | null	packages/preview/src/overlay/
 as-cast	Partial<Record<keyof PlacePick, unknown>> | null	packages/preview/src/overlay/page.ts	1
 as-cast	Partial<RelayCertifyArgs> | null	packages/agent/src/daemon.ts	1
 as-cast	Partial<RelayStartArgs> | null	packages/agent/src/daemon.ts	1
-as-cast	Partial<T>	packages/core/src/stage.ts	1
+as-cast	Partial<T>	packages/core/src/without-undefined.ts	1
 as-cast	Partial<WorkspaceWorkEnd>	packages/agent/src/daemon.ts	1
 as-cast	PerformanceResourceTiming	packages/preview/src/overlay/embeds.ts	1
 as-cast	PermissionMode	apps/dashboard/src/lib/cawco/stores/session-start.svelte.ts	1
@@ -718,7 +717,6 @@ as-cast	T	apps/dashboard/src/lib/cawco/stores/machines.ts	1
 as-cast	T	packages/agent/src/stage-host/docgen.ts	1
 as-cast	T	packages/cli/src/service.ts	1
 as-cast	T	packages/hub/scripts/fixture-db.ts	1
-as-cast	T	packages/hub/src/delegation-actions.ts	1
 as-cast	T	scripts/lib/tool-call.ts	1
 as-cast	T	scripts/lib/workspace-imports.ts	1
 as-cast	T	scripts/tailwind-draws-check.ts	1
