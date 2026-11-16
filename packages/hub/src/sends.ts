@@ -47,6 +47,7 @@ import { SEND_STATES } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { noticeWords } from "@cawco/core/words/notices";
+import { type UnsentWhy, unsentWords } from "@cawco/core/words/unsent";
 import { ElysiaStatus, problem } from "elysia";
 import type { PersonsSend } from "./caw";
 import type { ClosureContext } from "./closure-context";
@@ -61,6 +62,7 @@ import { sessionLabel } from "./labels";
 import type { CallAnswer, ControlAnswer, Unanswered } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages, mediaNameOf } from "./media";
+import { OWED_NOTICE_DAYS, owedNoticeEnd, unsentLine } from "./owed-ends";
 import { talksWithPerson } from "./roles";
 import { sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
@@ -3228,6 +3230,74 @@ export const createSends = (ctx: SendsContext) => {
   };
 
   /**
+   * THE END OF A NOTICE OWED TO A SESSION NOTHING WILL WAKE (owed-ends.ts
+   * `owedNoticeEnd`): each owed notice whose session never runs again, or
+   * that waited past the bound, is taken off what is owed, so nothing hands
+   * it meanwhile, and fails with why, as a send to a machine past its grace
+   * does ({@link failOwedAway}). Each session whose notices one look ended
+   * keeps one line in its transcript ({@link noteUnsent}). `of`: a session
+   * as it ends (ask-routing.ts `forgetPending`), or every owed send, at the
+   * hub's start and each hour after (server.ts).
+   */
+  const endOwedNotices = (of: { instanceId: string } | "every"): void => {
+    const now = Date.now();
+    const sends = ctx.db.owedSends(of);
+    if (sends.length === 0) {
+      return;
+    }
+    const rows = new Map(
+      ctx.db
+        .getInstancesByIds([...new Set(sends.map((send) => send.instanceId))])
+        .map((row) => [row.id, row])
+    );
+    const ended = new Map<string, { count: number; why: UnsentWhy }>();
+    for (const send of sends) {
+      const why = owedNoticeEnd(
+        { acceptedAt: send.acceptedAt.getTime(), origin: send.body.origin },
+        rows.get(send.instanceId),
+        now
+      );
+      if (!(why && ctx.db.takeOwedSend(send.uuid))) {
+        continue;
+      }
+      failSend(send, unsentWords.reason(why, OWED_NOTICE_DAYS));
+      ended.set(send.instanceId, {
+        count: (ended.get(send.instanceId)?.count ?? 0) + 1,
+        why,
+      });
+    }
+    for (const [instanceId, { count, why }] of ended) {
+      noteUnsent(instanceId, rows.get(instanceId), count, why);
+    }
+  };
+
+  /**
+   * The session's one line for the notices one look ended
+   * ({@link endOwedNotices}): how many and why, kept on its row and folded
+   * into what its screens show now, and said in the hub's log. A session the
+   * hub holds no row of has its log line alone.
+   */
+  const noteUnsent = (
+    instanceId: string,
+    row: PublicInstanceRow | undefined,
+    count: number,
+    why: UnsentWhy
+  ): void => {
+    const content = unsentWords.line(count, why, OWED_NOTICE_DAYS);
+    console.info(
+      `[sends] ${row ? ctx.sessionName(row) : instanceId} (${instanceId}): ${content}`
+    );
+    const line = {
+      at: Date.now(),
+      id: `unsent-${crypto.randomUUID()}`,
+      content,
+    };
+    if (row && ctx.db.noteUnsentLine(row.id, line)) {
+      ctx.transcripts.line(row.id, unsentLine(row, line), row.harness);
+    }
+  };
+
+  /**
    * Whether an owed send waits on its machine: not one kept for a session at
    * rest, nor at its account's limit (it goes once the limit is over or the
    * session has moved, its machine back by then), nor one whose start an
@@ -3312,5 +3382,6 @@ export const createSends = (ctx: SendsContext) => {
     releaseOwed,
     releaseOne,
     failOwedAway,
+    endOwedNotices,
   };
 };

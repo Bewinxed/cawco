@@ -26,6 +26,7 @@
     "migrations:check": "bun scripts/migrations-check.ts && bun scripts/migrations-check.ts --fixture lists",
     "openapi": "bun scripts/openapi.ts",
     "openapi:check": "bun scripts/openapi.ts --check",
+    "owed-notices": "bun scripts/owed-notices.ts",
     "owed-sends": "bun scripts/owed-sends.ts",
     "platforms-routes": "bun scripts/platforms-routes.ts",
     "queued-requests": "bun scripts/queued-requests.ts",

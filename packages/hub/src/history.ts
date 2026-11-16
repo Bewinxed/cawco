@@ -30,6 +30,7 @@ import { freshStartLine, machineLine } from "./cut-turns";
 import type { PriorConversation } from "./db/schema";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages } from "./media";
+import { unsentLine } from "./owed-ends";
 import { HISTORY_WINDOW } from "./sends";
 import type { HubLine } from "./transcript";
 import type {
@@ -710,7 +711,8 @@ export const createHistory = (ctx: HistoryContext) => {
    * `HubLine`, `line_anchors`): the account lines but the one between two of
    * its conversations, which stands between them already ({@link readOlder}),
    * the lines its machine said ({@link noteMachineLine}), fleet watch's
-   * (`noteWatch`), its context's (`noteContext`), and where it
+   * (`noteWatch`), its context's (`noteContext`), the notices owed to it
+   * that ended undelivered (owed-ends.ts), and where it
    * started again fresh ({@link noteFreshStart}).
    */
   const readRowHistory = (
@@ -737,11 +739,19 @@ export const createHistory = (ctx: HistoryContext) => {
     for (const note of ctx.db.machineLinesOf(row.id)) {
       lines.push(placed(lineEntry(row, machineLine(row, note)), note.at));
     }
-    for (const said of ctx.db.watchLinesOf(row.id)) {
-      lines.push(placed(lineEntry(row, watchLine(row, said)), said.at));
-    }
-    for (const said of ctx.db.contextLinesOf(row.id)) {
-      lines.push(placed(lineEntry(row, contextLine(row, said)), said.at));
+    // The lines the hub kept on its row, each as its kind draws it.
+    for (const [said, message] of [
+      ...ctx.db
+        .watchLinesOf(row.id)
+        .map((one) => [one, watchLine(row, one)] as const),
+      ...ctx.db
+        .unsentLinesOf(row.id)
+        .map((one) => [one, unsentLine(row, one)] as const),
+      ...ctx.db
+        .contextLinesOf(row.id)
+        .map((one) => [one, contextLine(row, one)] as const),
+    ]) {
+      lines.push(placed(lineEntry(row, message), said.at));
     }
     for (const kept of ctx.db.projectNotes.of(row.id)) {
       lines.push(placed(lineEntry(row, projectNoteLine(row, kept)), kept.at));

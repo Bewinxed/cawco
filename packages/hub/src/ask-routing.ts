@@ -83,6 +83,7 @@ export type AskRoutingContext = Pick<
   | "connectAsks"
   | "db"
   | "delegateWaits"
+  | "endOwedNotices"
   | "homeLoginMoveOf"
   | "hubAsks"
   | "inCustody"
@@ -202,6 +203,9 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
           undefined,
           refusal
         );
+        // Unless it never runs again: then the notices kept for it end,
+        // as nothing will wake it for them (owed-ends.ts).
+        ctx.endOwedNotices({ instanceId });
       }
     }
     // A session that never runs again: what fleet watch read of it is over,

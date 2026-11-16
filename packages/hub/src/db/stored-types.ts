@@ -669,9 +669,11 @@ export type WorkspaceState = "active" | "held" | "archived";
  * - `context`: what the hub did as its context filled (core `CONTEXT_LINE`,
  *   context-filing.ts `ContextLine` as JSON): a filing at the threshold,
  *   said again in its place as it ends, or its harness's compaction.
+ * - `unsent`: the notices owed to it that one look ended undelivered (core
+ *   `NOTICES_ENDED`, hub owed-ends.ts), the line: how many, and why.
  */
 export type SessionLineKind =
-  "limit" | "outdated" | "watch" | "moved" | "room" | "context";
+  "limit" | "outdated" | "watch" | "moved" | "room" | "context" | "unsent";
 
 /** The resources a project's repository is polled for: issue events are where its labels come from. */
 export type GitHubResource =
