@@ -27,6 +27,8 @@
   import NsPopover from "../spawn/NsPopover.svelte";
   import { accountsStore } from "../stores/accounts.svelte";
   import { usageStore } from "../stores/usage.svelte";
+  import type { MeterState } from "../usage";
+  import UsageRing from "../usage/UsageRing.svelte";
   import { forcePast, pickPastLimit } from "./limit-checks.svelte";
   import { hueVar, nameOf } from "./model.svelte";
   import { limitRowOf, roomOf } from "./room";
@@ -45,6 +47,7 @@
     size = "regular",
     onpick,
     none,
+    quota,
   }: {
     instance: AccountHolder;
     /**
@@ -66,7 +69,23 @@
      * accounts signed in on its machine it offers, any one a pick.
      */
     none?: { label: string; provider: AccountProvider };
+    /**
+     * The account's room for the model the session runs, drawn on the
+     * chip: the share of its binding window used, its state, its name
+     * ("5-hour") and when it resets. Absent where the card puts it
+     * elsewhere.
+     */
+    quota?: {
+      detail: string;
+      label: string;
+      state: MeterState;
+      used: number;
+    } | null;
   } = $props();
+  /** The chip's figure: what the account has left, as its rows say it ("38% left"). */
+  const quotaWords = $derived(
+    quota ? limitPickWords.left(Math.max(0, Math.round(100 - quota.used))) : ""
+  );
   const chip = $derived(
     chipVariants({ variant: "setting", size, class: "min-w-0 max-w-full" })
   );
@@ -116,6 +135,12 @@
     ></span>
   {/if}
   <span data-slot="chip-label" data-account-chip>{name}</span>
+  <!-- The account's room for the model the session runs, with the account
+       it belongs to. -->
+  {#if quota}
+    <UsageRing share={100 - quota.used} state={quota.state} />
+    <span class="flex-none text-ink-muted tabular-nums">{quotaWords}</span>
+  {/if}
 {/snippet}
 
 {#if shown || none}
@@ -123,7 +148,9 @@
     <NsPopover
       haspopup="listbox"
       id={`details-account-${instance.id}`}
-      label={`Account: ${name}`}
+      label={quota
+        ? `Account: ${name}, ${quotaWords} of its ${quota.label} limit. ${quota.detail}`
+        : `Account: ${name}`}
       onchange={(value) => {
         open = value;
       }}

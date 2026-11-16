@@ -5,6 +5,8 @@
  */
 
 export const sessionStatWords = {
+  /** The context in a line of facts: "38% of context". */
+  context: (used: number): string => `${Math.round(used)}% of context`,
   /** A meter's figure: the share used, "38%". */
   share: (used: number): string => `${Math.round(used)}%`,
   /** The context meter's tooltip: "76k of 200k tokens", and when it was read while the session isn't running. */
