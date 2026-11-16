@@ -3,7 +3,6 @@
  * from the types CawCo stores as JSON: never edited by hand. Each schema's
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
-import { DOC_AUTHORS } from "@cawco/jsonl-parser";
 import { z } from "zod";
 import type {
   AccountKind as AccountKindType,
@@ -5127,7 +5126,7 @@ export const TrackerSyncStateSchema: z.ZodType<TrackerSyncStateType> =
 export type TrackerSyncStateOutput = z.output<typeof TrackerSyncStateShape>;
 
 const DocAuthorShape = declared(
-  z.enum(DOC_AUTHORS),
+  z.enum(["owner", "agent", "report", "injected"]),
   "DocAuthor",
   "packages/jsonl-parser/src/text.ts"
 );

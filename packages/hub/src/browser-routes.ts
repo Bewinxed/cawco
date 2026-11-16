@@ -37,8 +37,8 @@ import {
   isBrowserKey,
 } from "@cawco/core/browser";
 import { detach } from "@cawco/core/detach";
+import { stunServer } from "@cawco/core/env-ports";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
-import { stunServer } from "@cawco/core/stream-relay";
 import { HOUR_MS } from "@cawco/core/time";
 import {
   causeOf,
