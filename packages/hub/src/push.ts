@@ -10,11 +10,16 @@
  * details by, over the tailnet, once opened.
  *
  * - **Cawrier** (apps/cawrier) holds the app's APNs key; no hub does. A phone
- *   that bought Pro enrolls a pairing there and registers the pairing's id
- *   and secret here, on a hidden route. Each push is one `POST /v1/push` to
- *   Cawrier with that secret. A pairing Cawrier no longer knows (401) or
- *   whose device is gone (410) is deleted; the app registers again on its
- *   next launch. A quiet device stays registered and is sent nothing.
+ *   with a Caw&Co Pro subscription (its free trial included) enrolls a
+ *   pairing there and registers the pairing's id and secret here, on a hidden
+ *   route. Each push is one `POST /v1/push` to Cawrier with that secret. A
+ *   pairing Cawrier no longer knows (401) or whose device is gone (410) is
+ *   deleted; the app registers again on its next launch. A pairing whose
+ *   subscription is not entitled (402: lapsed, in billing retry) stays
+ *   registered and is sent nothing this time; the next push tries it again,
+ *   so delivery resumes by itself once Apple renews the subscription and
+ *   Cawrier delivers again. A quiet device stays registered and is sent
+ *   nothing.
  * - **Moments**: a session asks for permission or asks a question
  *   ({@link Push.onAsk}), a task enters a stage of kind `you`
  *   ({@link Push.taskChanged}), an attempt you started yourself fails
@@ -133,6 +138,9 @@ import type { Decided } from "./settling-answers";
 import type { TaskEvent } from "./tasks";
 
 const CAWRIER = Bun.env.CAWCO_CAWRIER_ORIGIN ?? "https://cawrier.cawco.dev";
+
+/** Cawrier's answer for a pairing it keeps while its subscription is not entitled. */
+const PAYMENT_REQUIRED = 402;
 
 /** One push per collapse id inside this window: a task's move and its failed attempt are one moment. */
 const SAME_MOMENT_MS = 10_000;
@@ -937,7 +945,11 @@ export const createPush = ({
   /** Answers by a member of Who decides he picked again or opened, by collapse id: over, if still held. */
   const seenDecisions = new Set<string>();
 
-  /** Records what Cawrier said for a device: taken, pairing gone (the device goes) or refused. */
+  /**
+   * Records what Cawrier said for a device: taken, pairing gone (401 or 410:
+   * the device goes) or refused. A refusal keeps the device, and the next
+   * push tries it again: 402, its subscription not entitled now, among them.
+   */
   const settle = (
     device: PushDeviceRow,
     status: number,
@@ -957,8 +969,12 @@ export const createPush = ({
           (status ? `Cawrier answered ${status}` : "Cawrier not reached")
       );
     }
+    const kept =
+      status === PAYMENT_REQUIRED
+        ? " — its subscription is not active; kept, tried again on the next push"
+        : "";
     console.warn(
-      `[push] ${device.name}: ${status} ${reason ?? ""}${pruned ? " — pairing gone, removed" : ""}`
+      `[push] ${device.name}: ${status} ${reason ?? ""}${pruned ? " — pairing gone, removed" : kept}`
     );
     return pruned;
   };

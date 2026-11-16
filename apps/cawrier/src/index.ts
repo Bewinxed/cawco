@@ -4,11 +4,13 @@
  * App Store has products, enrolls a pairing (its device token, under a secret
  * it gives its hub); the hub pushes through the pairing with that secret. No
  * hub holds the key. One subscription holds at most
- * {@link SEATS_PER_PURCHASE} live pairings, each living while the
- * subscription does (entitlement.ts).
+ * {@link SEATS_PER_PURCHASE} live pairings, each delivering while the
+ * subscription is entitled and kept, silent, while it is not
+ * (entitlement.ts).
  *
  * POST /v1/enroll  { pairingId, secret, deviceToken, apnsEnvironment, proof }
  * POST /v1/push    Authorization: Bearer <secret>; { pairingId, collapseId?, expiration?, pushType?: "alert" | "background", payload }
+ *                  402 { error } while the pairing's subscription is not entitled: the pairing is kept
  * POST /v1/unenroll Authorization: Bearer <secret>; { pairingId }: the pairing and its seat go
  * GET  /v1/health  one APNs probe: proves outbound HTTP/2 to Apple and the key
  * POST /v1/apple/notifications  { signedPayload }: App Store Server Notifications V2
@@ -259,12 +261,22 @@ const relay = async (request: Request, env: Env): Promise<Response> => {
   const stub = pairing(env, push.pairingId);
   const claim = await stub.claim(await sha256(secret));
   if (!claim.ok) {
-    return claim.status === 401
-      ? refuse(401, "No pairing holds this id and secret.")
-      : json(429, {
+    switch (claim.status) {
+      case 401:
+        return refuse(401, "No pairing holds this id and secret.");
+      case 402:
+        return refuse(
+          402,
+          "The Caw&Co Pro subscription behind this pairing is not active. The pairing is kept, and push resumes once Apple renews it."
+        );
+      case 429:
+        return json(429, {
           error: "This pairing has had its 500 pushes for today.",
           resetsAt: claim.resetsAt,
         });
+      default:
+        return unhandled("claim", claim);
+    }
   }
   const answer = await sendApns(env, {
     apnsEnvironment: claim.apnsEnvironment,
@@ -316,10 +328,11 @@ type Verified = Extract<Notification, { ok: true }>;
 
 /**
  * What the notification says of the subscription's entitlement
- * (entitlement.ts), kept under its seat when Apple signed it later than what
- * the seat holds; then every pairing on the seat moves to the end that
- * stands: a renewal extends each, an ended subscription wipes each (each
- * gives its seat back as it goes, so a retry finds the rest).
+ * (entitlement.ts), kept under its seat when Apple signed it no earlier than
+ * what the seat holds; then every pairing on the seat moves to the end that
+ * stands: an entitled end makes each deliver, a lapsed one keeps each silent,
+ * and a refund or revocation that stands wipes each (each gives its seat back
+ * as it goes, so a retry finds the rest).
  */
 const settled = async (env: Env, notice: Verified): Promise<string> => {
   const decision = notificationEntitlement(notice, proProducts(env));
@@ -331,18 +344,23 @@ const settled = async (env: Env, notice: Verified): Promise<string> => {
     return "left: no original transaction id";
   }
   const seat = `${notice.environment}:${original}`;
-  const { until, pairings } = await seats(env, seat).settle(
+  const { until, pairings, stands } = await seats(env, seat).settle(
     decision.entitlement
   );
+  const wipe = decision.revoked && stands;
   await Promise.all(
-    pairings.map((id) =>
-      env.PAIRING.get(env.PAIRING.idFromString(id)).entitled(seat, until)
-    )
+    pairings.map((id) => {
+      const stub = env.PAIRING.get(env.PAIRING.idFromString(id));
+      return wipe ? stub.revoked(seat) : stub.entitled(seat, until);
+    })
   );
+  if (wipe) {
+    return `revoked, ${pairings.length} pairing(s) wiped`;
+  }
   const state =
     until > Date.now()
       ? `entitled until ${new Date(until).toISOString()}`
-      : "ended";
+      : "not entitled";
   return `${state}, ${pairings.length} pairing(s) moved`;
 };
 

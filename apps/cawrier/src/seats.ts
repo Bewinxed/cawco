@@ -1,20 +1,22 @@
 /**
  * The devices one subscription is on: a SQLite-backed Durable Object named by
  * the subscription's environment and original transaction id, holding one
- * row per live pairing and what Apple last said of the subscription. A
+ * row per kept pairing and what Apple last said of the subscription. A
  * pairing takes a seat when it enrolls under the subscription and gives it
- * back when it is wiped (its alarm, APNs saying the device is gone, or the
- * subscription ending). Its own storage, not KV: the free plan allows KV
- * 1,000 writes a day.
+ * back when it is wiped (its alarm, APNs saying the device is gone, removal
+ * in CawCo, or a refund or revocation). A pairing whose subscription has
+ * lapsed keeps its seat and delivers nothing until Apple says it is entitled
+ * again. Its own storage, not KV: the free plan allows KV 1,000 writes a day.
  *
  * What Apple last said ({@link Entitlement}) comes from a phone's transaction
  * at enrolment and from App Store Server Notifications; the one Apple signed
  * later stands (entitlement.ts). A notification moves every pairing on the
- * seat to the subscription's new end ({@link Seats.settle}). Once the
- * subscription has ended, the word stays even with no seat left: a phone's
- * own copy of a refunded transaction carries no revocation, so this is what
- * refuses it, until Apple signs a later word (a resubscription, a reversed
- * refund).
+ * seat to the subscription's new end ({@link Seats.settle}): a renewal or a
+ * recovery makes each deliver again, a lapse makes each deliver nothing. Once
+ * the subscription has ended, the word stays even with no seat left: a
+ * phone's own copy of a refunded transaction carries no revocation, so this
+ * is what refuses it, until Apple signs a later word (a resubscription, a
+ * reversed refund).
  */
 import { DurableObject } from "cloudflare:workers";
 import { type Entitlement, fresher } from "./entitlement";
@@ -37,9 +39,14 @@ export type Taken =
   | { readonly kind: "full" }
   | { readonly kind: "ended" };
 
-/** The subscription's end as it now stands, and the pairings that hold its seats. */
+/**
+ * The subscription's end as it now stands, the pairings that hold its seats,
+ * and whether the word just given is the one that stands (false when Apple
+ * signed what the seat holds later).
+ */
 export interface Settled {
   readonly pairings: string[];
+  readonly stands: boolean;
   readonly until: number;
 }
 
@@ -115,16 +122,18 @@ export class Seats extends DurableObject<Env> {
 
   /**
    * Apple's notification about the subscription: kept when Apple signed it
-   * later than what is held. Answers the end that stands and the pairings
-   * that hold seats, for the caller to move to that end. Every call answers
-   * every pairing, so a retry after a failed move still reaches it.
+   * no earlier than what is held. Answers the end that stands and the
+   * pairings that hold seats, for the caller to move to that end (or wipe,
+   * on a refund that stands). Every call answers every pairing, so a retry
+   * after a failed move still reaches it.
    */
   settle(word: Entitlement): Settled {
-    const { until } = this.record(word);
+    const standing = this.record(word);
+    const { until } = standing;
     const pairings = this.sql
       .exec<{ pairing: string }>("SELECT pairing FROM seat")
       .toArray()
       .map(({ pairing }) => pairing);
-    return { until, pairings };
+    return { until, pairings, stands: standing === word };
   }
 }

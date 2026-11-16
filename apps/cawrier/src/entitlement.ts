@@ -1,8 +1,8 @@
 /**
- * Whether, and until when, a Caw&Co Pro subscription keeps a pairing alive:
- * pure decisions over what Apple signed and the clock, with no storage and no
- * network. The Durable Objects (pairing.ts, seats.ts) store what these
- * functions decide.
+ * Whether, and until when, a Caw&Co Pro subscription lets a pairing deliver
+ * push, and how long a pairing is kept: pure decisions over what Apple signed
+ * and the clock, with no storage and no network. The Durable Objects
+ * (pairing.ts, seats.ts) store what these functions decide.
  *
  * Pro is one subscription group of two auto-renewable subscriptions
  * (`PRO_PRODUCT_IDS`), each with a 14-day free introductory offer, which
@@ -18,6 +18,12 @@
  * Apple does not promise to deliver notifications in order, and a phone may
  * enrol on a transaction it fetched before a refund: whichever of the two
  * Apple signed later stands ({@link fresher}).
+ *
+ * A pairing whose subscription is not entitled is kept and delivers nothing
+ * ({@link delivers}), so a later word that it is entitled again (a late
+ * renewal, a billing recovery, a resubscription) resumes push with nothing
+ * for the person to do. A refund or a revocation ends the purchase itself:
+ * its pairings are wiped ({@link Decision}'s `revoked`).
  */
 import type {
   JWSRenewalInfoDecodedPayload,
@@ -26,8 +32,9 @@ import type {
 import { DAY_MS } from "@cawco/core/time";
 
 /**
- * A pairing lives at most this long past its last enrol. The app enrols on
- * every launch, so a device left unused gives its seat back after it.
+ * A pairing is kept this long past its last enrol, entitled or not. The app
+ * enrols on every launch, so a device left unused gives its seat back after
+ * it.
  */
 const LIFE_MS = 30 * DAY_MS;
 
@@ -123,8 +130,13 @@ export interface Notice {
   readonly transaction: JWSTransactionDecodedPayload | undefined;
 }
 
+/** `revoked`: Apple refunded or revoked the subscription, so its pairings are wiped rather than kept. */
 export type Decision =
-  | { readonly kind: "entitlement"; readonly entitlement: Entitlement }
+  | {
+      readonly kind: "entitlement";
+      readonly entitlement: Entitlement;
+      readonly revoked: boolean;
+    }
   | { readonly kind: "leave"; readonly reason: string };
 
 /**
@@ -150,9 +162,10 @@ export const notificationEntitlement = (
   if (!(status !== undefined && renewalInfo)) {
     return { kind: "leave", reason: "no subscription status" };
   }
-  const endsAt = (until: number): Decision => ({
+  const endsAt = (until: number, revoked = false): Decision => ({
     kind: "entitlement",
     entitlement: { signedAt, until },
+    revoked,
   });
   // Active: entitled until the current period renews or expires. The
   // notification's transaction may be an earlier period's (a refund or a
@@ -180,20 +193,23 @@ export const notificationEntitlement = (
   // period and you can stop providing the subscription service"
   // (notificationtype, DID_FAIL_TO_RENEW); and after a grace period, "you can
   // turn off access to the service or content" (GRACE_PERIOD_EXPIRED). Ended
-  // as of the notification.
+  // as of the notification; its pairings are kept, since a recovery
+  // (DID_RENEW, BILLING_RECOVERY) can follow for 60 days.
   if (status === STATUS.billingRetry) {
     return endsAt(signedAt);
   }
   // Expired: "a subscription expired" for any reason (notificationtype,
-  // EXPIRED). Ended as of the notification.
+  // EXPIRED). Ended as of the notification; a resubscription in the same
+  // group keeps its original transaction id, so its seat's pairings are kept.
   if (status === STATUS.expired) {
     return endsAt(signedAt);
   }
   // Revoked: "The App Store refunded the transaction or revoked it from
   // Family Sharing" (developer.apple.com/documentation/appstoreserverapi/status;
-  // notificationtype, REFUND and REVOKE). Ended as of the notification.
+  // notificationtype, REFUND and REVOKE). Ended as of the notification, and
+  // the purchase with it: its pairings are wiped.
   if (status === STATUS.revoked) {
-    return endsAt(signedAt);
+    return endsAt(signedAt, true);
   }
   return { kind: "leave", reason: `unknown status ${status}` };
 };
@@ -204,14 +220,14 @@ export const fresher = (
   next: Entitlement
 ): Entitlement => (held && held.signedAt > next.signedAt ? held : next);
 
+/** When a pairing is wiped: 30 days after its last enrol ({@link LIFE_MS}), whatever its subscription says. */
+export const pairingEnd = (lastEnrolledAt: number): number =>
+  lastEnrolledAt + LIFE_MS;
+
 /**
- * When a pairing ends: 30 days after its last enrol ({@link LIFE_MS}), or
- * the end of its subscription's entitlement when that is sooner. `until` is
- * null for a seat no subscription stands behind (a TestFlight install's
- * app transaction).
+ * Whether a kept pairing delivers push now: while its subscription is
+ * entitled. `until` is null for a seat no subscription stands behind (a
+ * TestFlight install's app transaction), which always delivers.
  */
-export const pairingEnd = (
-  lastEnrolledAt: number,
-  until: number | null
-): number =>
-  Math.min(lastEnrolledAt + LIFE_MS, until ?? Number.POSITIVE_INFINITY);
+export const delivers = (until: number | null, now: number): boolean =>
+  until === null || until > now;
