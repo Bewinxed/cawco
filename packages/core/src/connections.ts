@@ -121,10 +121,15 @@ export const CONTROL_GH_ACCOUNTS = "ghAccounts";
 /**
  * The machine control that reads its gh's token for one account (`gh auth
  * token --hostname <host> --user <login>`): args `[host, login]`; answers
- * `{ token }`, refused when gh has none for it. Only the hub asks it, and
+ * {@link GhToken}, refused when gh has none for it. Only the hub asks it, and
  * only for a `gh` connection.
  */
 export const CONTROL_GH_TOKEN = "ghToken";
+
+/** What {@link CONTROL_GH_TOKEN} answers. */
+export interface GhToken {
+  token: string;
+}
 
 /** `signed-in`: its tools answer. `needs-sign-in`: a key or a sign-in is owed. `error`: `reason` says what failed. */
 export type ConnectionState = "signed-in" | "needs-sign-in" | "error";

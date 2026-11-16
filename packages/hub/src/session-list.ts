@@ -354,7 +354,7 @@ export const sessionReads = (
     new Map(db.atLimit.standingStops().map((stop) => [stop.instanceId, stop]));
   return {
     limitStopped: (): InstanceRow[] =>
-      overlay(db.getInstancesByIds([...stops().keys()]) as InstanceRow[]),
+      overlay(db.getInstancesByIds([...stops().keys()])),
     facts: (rows: readonly InstanceRow[]) =>
       sessionFacts(db, rows, stops(), Date.now()),
   };

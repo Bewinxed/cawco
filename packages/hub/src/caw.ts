@@ -182,22 +182,24 @@ const modelAfter = (
 
 /** A fleet-watch triage run's denied tools on `harness` (core `BOARD_ONLY_DENIED_TOOLS`): the board alone. */
 const boardOnlyDenied = (harness: string): readonly string[] => {
-  if (!(harness in BOARD_ONLY_DENIED_TOOLS)) {
+  const named = harnessNamed(harness);
+  if (!named) {
     throw new Error(
       `Fleet-watch triage does not run on ${harness}: it cannot be fenced to CawCo's tools alone.`
     );
   }
-  return BOARD_ONLY_DENIED_TOOLS[harness as HarnessKind];
+  return BOARD_ONLY_DENIED_TOOLS[named];
 };
 
 /** A memory curator's denied tools on `harness` (core `CURATOR_DENIED_TOOLS`); refused on one that cannot fence it. */
 const curatorDenied = (harness: string): readonly string[] => {
-  if (!(harness in CURATOR_DENIED_TOOLS)) {
+  const named = harnessNamed(harness);
+  if (!named) {
     throw new Error(
       `The memory curator does not run on ${harness}: it cannot be fenced to CawCo's tools alone.`
     );
   }
-  return CURATOR_DENIED_TOOLS[harness as HarnessKind];
+  return CURATOR_DENIED_TOOLS[named];
 };
 
 /**
@@ -686,7 +688,7 @@ export const createCaw = ({
     });
 
   const row = (id: string): InstanceRow | undefined =>
-    db.getInstancesByIds([id])[0] as InstanceRow | undefined;
+    db.getInstancesByIds([id])[0];
 
   /**
    * The project's conversation is now `instanceId` (null: none): its notes

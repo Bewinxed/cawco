@@ -1885,7 +1885,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiAgentsByMachineIdBusy200"
+                  "$ref": "#/components/schemas/AgentBusyReport"
                 }
               }
             }
@@ -3836,6 +3836,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/putApiBinaryUpdatesMachinesByMachineIdState200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiBinaryUpdatesMachinesByMachineIdState 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiBinaryUpdatesMachinesByMachineIdState400"
                 }
               }
             }
@@ -32715,6 +32725,44 @@
           "kind"
         ]
       },
+      "AgentBusyReport": {
+        "description": "Recovery is a decided-outcome barrier, never evidence that every session succeeded.",
+        "type": "object",
+        "properties": {
+          "busy": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          },
+          "instances": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/AgentBusyReportRecovery"
+          }
+        },
+        "required": [
+          "busy",
+          "instances",
+          "ready",
+          "recovery"
+        ]
+      },
+      "AgentBusyReportRecovery": {
+        "type": "string",
+        "enum": [
+          "failed",
+          "ready",
+          "recovering"
+        ]
+      },
       "AgentRow": {
         "description": "A machine from the hub's `agents` table — what `GET /api/agents` answers with,\nand what rides alongside the sessions in an `instances` frame.",
         "type": "object",
@@ -42931,7 +42979,7 @@
         ]
       },
       "FolderWeight": {
-        "description": "What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`).",
+        "description": "What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`). {@link PREVIEW_WEIGHT}'s answer.",
         "type": "object",
         "properties": {
           "bytes": {
@@ -77141,24 +77189,6 @@
           "status",
           "title",
           "type"
-        ]
-      },
-      "getApiAgentsByMachineIdBusy200": {
-        "type": "object",
-        "properties": {
-          "busy": {
-            "type": "number"
-          },
-          "instances": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "busy",
-          "instances"
         ]
       },
       "getApiAgentsByMachineIdBusy422": {
@@ -207406,6 +207436,42 @@
         },
         "required": [
           "ok"
+        ]
+      },
+      "putApiBinaryUpdatesMachinesByMachineIdState400": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "binary-update-state-unread"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              400
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "putApiBinaryUpdatesMachinesByMachineIdState422": {

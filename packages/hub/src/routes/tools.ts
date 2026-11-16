@@ -9,12 +9,11 @@ import {
   CONTROL_COMPLETE_TOOL_SIGNIN,
   TOOL_CATALOG,
   TOOL_UPDATES,
-  type ToolSigninChallenge,
   toolSpec,
 } from "@cawco/core/tools";
 import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
-import { peekToolStatus, unansweredIn } from "../machine-answers";
+import { unansweredIn } from "../machine-answers";
 
 import { unreachable } from "../unreachable";
 
@@ -151,7 +150,7 @@ export const toolRoutes = ({
                   detail: answer.value.error ?? "The sign-in did not start.",
                 });
               }
-              const challenge = answer.value.result as ToolSigninChallenge;
+              const challenge = answer.value.result;
               pendingToolSignins.set(key, challenge);
               return challenge;
             }
@@ -190,13 +189,13 @@ export const toolRoutes = ({
             case "answered": {
               // Used or refused, the machine's sign-in is spent.
               pendingToolSignins.delete(`${params.machineId}:${params.toolId}`);
-              const tool = peekToolStatus({ result: answer.value.result });
-              if (!(answer.value.ok && tool)) {
+              if (!answer.value.ok) {
                 return problem(502, {
                   code: "tool-signin-not-finished",
                   detail: answer.value.error ?? "The sign-in did not finish.",
                 });
               }
+              const tool = answer.value.result;
               db.setAgentToolCell(params.machineId, tool);
               publishInstances(params.machineId);
               keepCopiesOn(params.machineId);

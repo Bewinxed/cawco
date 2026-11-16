@@ -256,14 +256,16 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
             `Command got no answer: ${ctx.unansweredFault(machineId, response)}`
           );
         case "answered":
-          if (response.value.error) {
-            throw new Error(String(response.value.error));
+          if (!response.value.ok) {
+            throw new Error(
+              response.value.error ?? "the command's machine gave no reason"
+            );
           }
           break;
         default:
           throw unreachable(response);
       }
-      const result = response.value.result as CommandResult;
+      const { result } = response.value;
       if (waited !== undefined && result.cancelled) {
         throw new WouldWait(waited);
       }

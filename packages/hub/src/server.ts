@@ -24,11 +24,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { workspaceReach } from "@cawco/core/boundary-reach";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import {
-  BROWSER_PAGE,
-  type BrowserAskedPage,
-  type BrowserPageArgs,
-} from "@cawco/core/browser";
+import { BROWSER_PAGE, type BrowserPageArgs } from "@cawco/core/browser";
 import {
   crossSiteRefusal,
   dashboardOriginOf,
@@ -48,7 +44,6 @@ import { compressAnswer } from "@cawco/core/compress-answer";
 import {
   CONTROL_GH_ACCOUNTS,
   CONTROL_GH_TOKEN,
-  type GhAccount,
   pushOnlyProvider,
 } from "@cawco/core/connections";
 import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
@@ -58,11 +53,10 @@ import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { docMeta } from "@cawco/core/doc-meta";
 import type { ExternalRef } from "@cawco/core/external-items";
-import type { TranscriptAnswer, TranscriptTurns } from "@cawco/core/find";
 import type { FleetSyncReport } from "@cawco/core/fleet";
 import { FLEET_DELTA, machinePlatform, mcpRunsOn } from "@cawco/core/fleet";
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
-import { CONTROL_FORGE_POST, type ForgeVerdict } from "@cawco/core/forge-post";
+import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
 import type {
   ArtifactSessionFrame,
   ErrorFrame,
@@ -76,12 +70,7 @@ import {
   initialHandover,
   presenceOf,
 } from "@cawco/core/handover";
-import type {
-  AgentBusyReport,
-  HarnessReport,
-  NamedHarnessReport,
-  SessionCredentialInstall,
-} from "@cawco/core/harness";
+import type { HarnessReport, NamedHarnessReport } from "@cawco/core/harness";
 import {
   BOUNDARY_RELAUNCH,
   byPerson,
@@ -192,15 +181,12 @@ import type {
   NeutralMessage,
   NeutralOrigin,
   NeutralResultMessage,
-  NeutralSessionInfo,
   SentMessage,
 } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
 import {
   type DecisionMedia,
-  type DesignMap,
   isEmbedShape,
-  type SheetWritten,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
   STAGE_IDLE_MS,
@@ -212,9 +198,6 @@ import {
   STAGE_WARM,
   STAGE_WRITE,
   type StageFrame,
-  type StageOpened,
-  type StageRendered,
-  type StageState,
   type StageStatus,
   storiesKey,
 } from "@cawco/core/stage";
@@ -287,7 +270,6 @@ import {
   CONTROL_WORKSPACE_OUTPUTS,
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
-import type { FolderWeight } from "@cawco/preview/proxy";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { websocket } from "elysia/websocket";
@@ -487,7 +469,10 @@ import { createLimitMoves } from "./limit-moves";
 import { createLoginMoves } from "./login-moves";
 import {
   awayProblem,
+  type CallAnswer,
   type ControlResult,
+  failedProblem,
+  type MachineCall,
   MachineProblem,
   silentProblem,
   type Unanswered,
@@ -698,7 +683,7 @@ import { createSshTunnels } from "./ssh-tunnels";
 import { templateOf } from "./stages";
 import { createStartHolds } from "./start-holds";
 import { sessionStartingSet } from "./starting-set";
-import { received } from "./stored-json";
+import { keptAs } from "./stored-json";
 import { createStoredRecent } from "./stored-recent";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
@@ -781,7 +766,7 @@ const PAGE_SOURCE =
 const IPV6_BRACKETS = /^\[|\]$/gu;
 
 /** Why a machine's transcripts gave no answer to a find, as the clause after "couldn't search:". */
-function searchMiss(answer: Bounded<ControlResult>): string {
+function searchMiss<T>(answer: Bounded<CallAnswer<T>>): string {
   switch (answer.kind) {
     case "answered":
       return answer.value.error ?? "it gave no reason";
@@ -1108,7 +1093,7 @@ const keptToolStatus = (tool: ReportedToolStatus): ReportedToolStatus => ({
   ...tool,
   ...(tool.signin
     ? {
-        signin: received(
+        signin: keptAs(
           NamedToolSigninSchema,
           tool.signin,
           "a machine's report beat (a tool's sign-in)"
@@ -1117,7 +1102,7 @@ const keptToolStatus = (tool: ReportedToolStatus): ReportedToolStatus => ({
     : {}),
   ...(tool.copy
     ? {
-        copy: received(
+        copy: keptAs(
           ToolCopySchema,
           tool.copy,
           "a machine's report beat (whose a tool's copy is)"
@@ -1126,7 +1111,7 @@ const keptToolStatus = (tool: ReportedToolStatus): ReportedToolStatus => ({
     : {}),
   ...(tool.wants
     ? {
-        wants: received(
+        wants: keptAs(
           ToolWantsSchema,
           tool.wants,
           "a machine's report beat (the version a tool runs at)"
@@ -1140,7 +1125,7 @@ const keptCapabilities = (
   capabilities: NamedMachineCapabilities | undefined
 ): NamedMachineCapabilities | undefined =>
   capabilities &&
-  received(
+  keptAs(
     NamedMachineCapabilitiesSchema,
     capabilities,
     "a machine's report beat (its capabilities)"
@@ -1544,6 +1529,7 @@ export const createServer = (
     releaseOne: () => releaseOne,
     unnoteAtLimit: () => unnoteAtLimit,
     asRead: () => asRead,
+    awaitFs: () => awaitFs,
     awaitReply: () => awaitReply,
     cutTasksWords: () => cutTasksWords,
     deliverToSession: () => deliverToSession,
@@ -2140,6 +2126,7 @@ export const createServer = (
   const {
     FORGET_CREDENTIALS_TIMEOUT_MS,
     asRead,
+    awaitFs,
     awaitReply,
     awaitStart,
     bindFolderInstall,
@@ -2796,8 +2783,7 @@ export const createServer = (
   // below, which withdraws the asks of sessions that ended.
   const browsers = createBrowsers({
     asks: () => browserAsks,
-    call: (machineId, method, args, timeoutMs) =>
-      callAgent(machineId, method, args, timeoutMs),
+    call: callAgent,
     db: { artifacts: db.artifacts, browsers: db.browsers },
     instance: (id) => db.getInstancesByIds([id])[0],
     itemEnded: (row) => itemEnded(row),
@@ -2841,8 +2827,7 @@ export const createServer = (
   // Passkey relay: the cascade that picks which machines scan for BLE
   // passkey adverts when a browser needs one (passkey-relay.ts).
   const passkeyRelay = createPasskeyRelay({
-    call: (machineId, method, args, timeoutMs) =>
-      callAgent(machineId, method, args, timeoutMs),
+    call: callAgent,
     listAgents: () => db.listAgents(),
     hasBle: (machineId) => browsers.relayCapability(machineId)?.hasBle ?? false,
     machineName: (machineId) => machineName(machineId),
@@ -2854,8 +2839,7 @@ export const createServer = (
   // (browser-routes.ts): relayed to its machine's browser listener.
   const browserStream = createBrowserStream({
     artifact: (id) => db.artifacts.get(id),
-    call: (machineId, method, args, timeoutMs) =>
-      callAgent(machineId, method, args, timeoutMs),
+    call: callAgent,
     callerOf: (request) => hubAuth.callerOf(request, null),
     classify: (header, method, path, address) =>
       hubAuth.classify(header, method, path, address),
@@ -2896,7 +2880,7 @@ export const createServer = (
         origin,
         workspaceId: sessionWorkspace(actor)?.id ?? actor.id,
       };
-      const asked = browserAnswered<BrowserAskedPage>(
+      const asked = browserAnswered(
         await callAgent(machineId, BROWSER_PAGE, [page], BROWSER_CALL_MS),
         machineId,
         machineName(machineId),
@@ -2987,7 +2971,7 @@ export const createServer = (
         };
       }
       return answer.value.ok
-        ? { kind: "answered", verdict: answer.value.result as ForgeVerdict }
+        ? { kind: "answered", verdict: answer.value.result }
         : {
             kind: "failed",
             why: answer.value.error ?? "The machine refused the post.",
@@ -3642,7 +3626,7 @@ export const createServer = (
             detail: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: ${answer.value.error ?? "it gave no reason"}. Nothing was started.`,
           });
         }
-        const model = answer.value.result as string | null;
+        const model = answer.value.result;
         return model ? { ...payload, model } : payload;
       }
       default:
@@ -4989,22 +4973,18 @@ export const createServer = (
         return staged;
       }
       const { machineId, workspace, result } = staged;
-      return { machineId, workspace, opened: result as StageOpened };
+      return { machineId, workspace, opened: result };
     },
     // A design system round asked of a component canvas in a chat; its verdict reaches the asker.
     verify: (requester, artifact) => designVerify.ask(requester, artifact),
     // A component canvas drawn by its workspace's daemon in the machine's own Chromium.
     stageRender: async (at, ask) => {
       const staged = await onStage(at, STAGE_RENDER, ask);
-      return staged instanceof ElysiaStatus
-        ? staged
-        : (staged.result as StageRendered);
+      return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     stageWrite: async (at, write) => {
       const staged = await onStage(at, STAGE_WRITE, write);
-      return staged instanceof ElysiaStatus
-        ? staged
-        : (staged.result as SheetWritten);
+      return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     // A decision page's Previews' stage warmed as it goes out; the machine answers before the warm-up runs.
     warmStage: async (at, warm) => {
@@ -5013,9 +4993,7 @@ export const createServer = (
     },
     stageComponents: async (at, ask) => {
       const staged = await onStage(at, STAGE_COMPONENTS, ask);
-      return staged instanceof ElysiaStatus
-        ? staged
-        : (staged.result as DesignMap);
+      return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     // A preview handed up, loaded once on its own origin as its parent will
     // open it: its listener is the one that origin keeps.
@@ -5136,7 +5114,7 @@ export const createServer = (
           detail: answer.error ?? "The server didn't start.",
         });
       }
-      return answer.result as StageState;
+      return answer.result;
     },
     // A folder preview's weight and its start page's desk captures, from its folder on the machine that serves it.
     folderWeight: async (machineId, dir, path) => {
@@ -5168,7 +5146,7 @@ export const createServer = (
           detail: answer.error ?? "The folder couldn't be read.",
         });
       }
-      return answer.result as FolderWeight;
+      return answer.result;
     },
     unserve: (machineId, workspace, port) => {
       // Ended, the server says nothing more: it holds its clone no more.
@@ -5538,8 +5516,7 @@ export const createServer = (
   const previewService = createPreviewService({
     address: (machineId) => registry.address(machineId),
     busyMs: BUSY_TIMEOUT_MS,
-    call: (machineId, method, args, timeoutMs) =>
-      callAgent(machineId, method, args, timeoutMs),
+    call: callAgent,
     carry: (machineId, port) => sshTunnels.carry(machineId, port),
     carried: (machineId) => sshTunnels.holds(machineId),
     connected: (machineId) => !!registry.agent(machineId),
@@ -5918,10 +5895,7 @@ export const createServer = (
             default:
               throw unreachable(answer);
           }
-          settleRemovedCustody(
-            machineId,
-            answer.value.result as { id: string; present: boolean | null }[]
-          );
+          settleRemovedCustody(machineId, answer.value.result);
           publishInstances(machineId);
         })
         .catch((error: unknown) =>
@@ -6058,10 +6032,7 @@ export const createServer = (
                 return;
               case "answered":
                 if (answer.value.ok && answer.value.result) {
-                  const snapshot = answer.value.result as {
-                    custody: SessionCustody;
-                    attached: string[];
-                  };
+                  const snapshot = answer.value.result;
                   lifecycle.reconcile(machineId, snapshot);
                 }
                 return;
@@ -7065,11 +7036,11 @@ export const createServer = (
           answer.error === AGENT_RESTARTING
           ? awayError(machineId)
           : new MachineProblem(
-              problem(502, {
-                code: "machine-call-failed",
-                detail:
-                  answer.error ?? `${machineName(machineId)} gave no answer.`,
-              })
+              failedProblem(
+                answer,
+                "machine-call-failed",
+                `${machineName(machineId)} gave no answer.`
+              )
             );
       }
       return answer.result;
@@ -7499,7 +7470,7 @@ export const createServer = (
     // A project's rows are placed at each of its places on the machine,
     // which says each place's state; the hub keeps one state per row, the
     // worst of its places.
-    const report = received(
+    const report = keptAs(
       FleetSyncReportSchema,
       foldPlaced(peeked),
       "a machine's fleet report"
@@ -8028,11 +7999,7 @@ export const createServer = (
    * (`MachineProblem`): its machine away, silent, or its failure in the
    * machine's own words (502 machine-call-failed).
    */
-  const callMachine = async (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ): Promise<unknown> => {
+  const callMachine: MachineCall = async (machineId, method, args) => {
     const timeout =
       method === CONTROL_WORKSPACE_CREATE ||
       method === CONTROL_WORKSPACE_ARCHIVE ||
@@ -8072,12 +8039,11 @@ export const createServer = (
       case "answered":
         if (!answer.value.ok) {
           throw new MachineProblem(
-            problem(502, {
-              code: "machine-call-failed",
-              detail:
-                answer.value.error ??
-                `${method} failed on ${machineName(machineId)}`,
-            })
+            failedProblem(
+              answer.value,
+              "machine-call-failed",
+              `${method} failed on ${machineName(machineId)}`
+            )
           );
         }
         return answer.value.result;
@@ -9042,7 +9008,7 @@ export const createServer = (
         case "answered":
           return answer.value.ok
             ? {
-                sessions: answer.value.result as NeutralSessionInfo[],
+                sessions: answer.value.result,
                 unanswered: answer.value.unanswered ?? [],
                 failed: answer.value.failed ?? [],
               }
@@ -9073,13 +9039,14 @@ export const createServer = (
         default:
           throw unreachable(answer);
       }
-      // An answer with no conversations list is named as one that did not
-      // answer, never read as one that found nothing.
-      const result = answer.value.result as Partial<TranscriptAnswer> | null;
-      if (!(result && Array.isArray(result.conversations))) {
+      // An answer with no conversations list (one that is not its type
+      // fails above) is named as one that did not answer, never read as
+      // one that found nothing.
+      const { result } = answer.value;
+      if (!result) {
         return { error: "its answer to this search had no conversations" };
       }
-      return result as TranscriptAnswer;
+      return result;
     },
   });
   findHearsPort.fill((ids) => find.instancesChanged(ids));
@@ -10162,7 +10129,7 @@ export const createServer = (
             answer.kind === "answered" &&
             answer.value.ok &&
             Array.isArray(answer.value.result)
-              ? (answer.value.result as GhAccount[]).map((account) => ({
+              ? answer.value.result.map((account) => ({
                   ...account,
                   machineId,
                   machine: machineName(machineId),
@@ -10190,8 +10157,7 @@ export const createServer = (
                 : `${machineName(machineId)} didn't answer in time.`,
           };
         }
-        const token = (answer.value.result as { token?: unknown } | undefined)
-          ?.token;
+        const token = answer.value.result?.token;
         return answer.value.ok && typeof token === "string" && token
           ? { kind: "token", token }
           : {
@@ -10545,17 +10511,14 @@ export const createServer = (
       if (answer.kind === "unanswered" || !answer.value.ok) {
         return { error: searchMiss(answer) };
       }
-      // An answer with neither turns nor why is named as one that did not
-      // answer, never read as a conversation with no turns.
-      const result = answer.value.result as Partial<TranscriptTurns> | null;
-      if (!(
-        result &&
-        ("missing" in result ||
-          ("turns" in result && Array.isArray(result.turns)))
-      )) {
+      // An answer with neither turns nor why (one that is not its type
+      // fails above) is named as one that did not answer, never read as a
+      // conversation with no turns.
+      const { result } = answer.value;
+      if (!result) {
         return { error: "its answer to this read had no turns" };
       }
-      return result as TranscriptTurns;
+      return result;
     },
     sessionIds: (id) => {
       const [row] = db.find.instances([id]);
@@ -10946,19 +10909,24 @@ export const createServer = (
       const requestId = crypto.randomUUID();
       // The host's refresh is the session's; the hub only logs how it went.
       detach(
-        awaitReply(row.machineId, requestId, 60_000, () =>
-          sendAnswerable(agent, {
-            verb: "control",
-            machineId: row.machineId,
-            instanceId: row.id,
-            requestId,
-            payload: {
+        awaitReply(
+          row.machineId,
+          CONTROL_REFRESH_CAWCO_TOOLS,
+          requestId,
+          60_000,
+          () =>
+            sendAnswerable(agent, {
+              verb: "control",
+              machineId: row.machineId,
               instanceId: row.id,
               requestId,
-              method: CONTROL_REFRESH_CAWCO_TOOLS,
-              args: [],
-            },
-          } satisfies Envelope<ControlPayload>)
+              payload: {
+                instanceId: row.id,
+                requestId,
+                method: CONTROL_REFRESH_CAWCO_TOOLS,
+                args: [],
+              },
+            } satisfies Envelope<ControlPayload>)
         ).then((reply) => {
           switch (reply.kind) {
             case "unanswered":
@@ -11076,19 +11044,24 @@ export const createServer = (
       await ensureIdentityWorkspace(row);
       const credential = identities.mint(instanceId);
       const requestId = crypto.randomUUID();
-      const reply = await awaitReply(row.machineId, requestId, 120_000, () =>
-        sendAnswerable(agent, {
-          verb: "control",
-          machineId: row.machineId,
-          instanceId,
-          requestId,
-          payload: {
+      const reply = await awaitReply(
+        row.machineId,
+        INSTALL_SESSION_CREDENTIAL,
+        requestId,
+        120_000,
+        () =>
+          sendAnswerable(agent, {
+            verb: "control",
+            machineId: row.machineId,
             instanceId,
             requestId,
-            method: INSTALL_SESSION_CREDENTIAL,
-            args: [credential],
-          },
-        } satisfies Envelope<ControlPayload>)
+            payload: {
+              instanceId,
+              requestId,
+              method: INSTALL_SESSION_CREDENTIAL,
+              args: [credential],
+            },
+          } satisfies Envelope<ControlPayload>)
       );
       switch (reply.kind) {
         case "unanswered":
@@ -11108,8 +11081,7 @@ export const createServer = (
       if (db.sessionIdentity(instanceId)?.pendingHash) {
         throw new Error("Harness returned without an installation ACK");
       }
-      const installed = reply.value.result as
-        SessionCredentialInstall | undefined;
+      const installed = reply.value.result;
       return {
         instanceId,
         installed: true,
@@ -11154,7 +11126,7 @@ export const createServer = (
       default:
         throw unreachable(answer);
     }
-    const reading = answer.value.result as AgentBusyReport | undefined;
+    const reading = answer.value.result;
     return (
       reading?.ready === true &&
       Array.isArray(reading.instances) &&
@@ -12334,7 +12306,7 @@ export const createServer = (
         (report.refused ? "unauthenticated" : undefined);
       return auth
         ? [
-            received(
+            keptAs(
               NamedHarnessReportSchema,
               { ...report, auth },
               "a machine's report beat (a harness's report)"
@@ -12534,7 +12506,7 @@ export const createServer = (
       db.putOpenCodeGoLimits(
         message.machineId,
         openCodeGo &&
-          received(
+          keptAs(
             OpenCodeGoLimitsSchema,
             openCodeGo,
             "a machine's usage report (OpenCode Go)"

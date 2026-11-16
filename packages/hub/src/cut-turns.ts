@@ -15,6 +15,7 @@ import type { LastErrorKind } from "@cawco/core/relaunch";
 import type { EndedTask } from "@cawco/core/session/controls";
 import { workWords } from "@cawco/core/words/work";
 import { ElysiaStatus } from "elysia";
+import { z } from "zod";
 import type { ClosureContext } from "./closure-context";
 import type { HubLineMessage } from "./compaction";
 import type { PublicInstanceRow } from "./db/instances";
@@ -124,6 +125,34 @@ export type CutTurnsContext = Pick<
 > &
   Pick<ReturnType<typeof createSends>, "deliverSend" | "deliverToSession">;
 
+/** A Claude session's list of its background tasks (its `background_tasks_changed`), each as it named it. */
+const TASKS_LINE = z.object({
+  subtype: z.string().optional(),
+  tasks: z
+    .array(
+      z.object({
+        ambient: z.boolean().optional(),
+        description: z.string().optional(),
+        task_id: z.string().optional(),
+        task_type: z.string().optional(),
+      })
+    )
+    .optional(),
+  type: z.string().optional(),
+});
+
+/** The questions an `AskUserQuestion` ask asked, each as it came. */
+const ASKED_QUESTIONS = z.object({
+  input: z
+    .object({
+      questions: z.array(z.object({ question: z.unknown() })).optional(),
+    })
+    .optional(),
+});
+
+/** A machine's own line about a session (core `MachineLineKind`): its id and its words. */
+const MACHINE_LINE = z.object({ uuid: z.string(), content: z.string() });
+
 export const createCutTurns = (ctx: CutTurnsContext) => {
   /**
    * A Claude session's CLI listed its background tasks (its
@@ -132,20 +161,15 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
    * its process cuts is known after it ({@link tellCutTasks}).
    */
   const keepTasks = (instanceId: string, message: unknown): void => {
-    const frame = message as {
-      subtype?: string;
-      tasks?: {
-        ambient?: boolean;
-        description?: string;
-        task_id?: string;
-        task_type?: string;
-      }[];
-      type?: string;
-    };
+    const read = TASKS_LINE.safeParse(message);
+    if (!read.success) {
+      return;
+    }
+    const frame = read.data;
     if (
       frame.type !== "system" ||
       frame.subtype !== "background_tasks_changed" ||
-      !Array.isArray(frame.tasks)
+      !frame.tasks
     ) {
       return;
     }
@@ -184,9 +208,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
       case "unanswered":
         return { outputUnread: { after: answer.after } };
       case "answered": {
-        const read = answer.value.ok
-          ? (answer.value.result as { output?: unknown } | undefined)
-          : undefined;
+        const read = answer.value.ok ? answer.value.result : undefined;
         return typeof read?.output === "string" && read.output
           ? { output: read.output }
           : {};
@@ -420,10 +442,8 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
       ) {
         continue;
       }
-      const { input } = ask.payload as { input?: { questions?: unknown } };
-      const asked: { question?: unknown }[] = Array.isArray(input?.questions)
-        ? input.questions
-        : [];
+      const read = ASKED_QUESTIONS.safeParse(ask.payload);
+      const asked = read.success ? (read.data.input?.questions ?? []) : [];
       const questions = asked.flatMap((one) =>
         typeof one.question === "string" ? [one.question] : []
       );
@@ -738,16 +758,12 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
     kind: MachineLineKind,
     said: unknown
   ): void => {
-    const { uuid, content } = said as { uuid?: unknown; content?: unknown };
+    const line = MACHINE_LINE.safeParse(said);
     const [row] = ctx.db.getInstancesByIds([instanceId]);
-    if (
-      !row ||
-      row.machineId !== machineId ||
-      typeof uuid !== "string" ||
-      typeof content !== "string"
-    ) {
+    if (!(row && row.machineId === machineId && line.success)) {
       return;
     }
+    const { uuid, content } = line.data;
     const note = { kind, at: Date.now(), id: uuid, content };
     if (!ctx.db.noteMachineLine(row.id, kind, note)) {
       return;

@@ -323,9 +323,15 @@ export const CONTROL_WORKSPACE_CHANGES = "workspaceChanges";
  * agent outside every wall, once the folder's checks passed: the conflict
  * scan again first (any conflict refuses the whole set, nothing written),
  * then each written path by temp-and-rename, then the deletions. Args
- * `[WorkspaceRef]`; answers `{ applied, conflicts }`.
+ * `[WorkspaceRef]`; answers {@link WorkspaceApplied}.
  */
 export const CONTROL_WORKSPACE_APPLY = "workspaceApply";
+
+/** What {@link CONTROL_WORKSPACE_APPLY} answers: how many paths it wrote, or the conflicts that refused the whole set. */
+export interface WorkspaceApplied {
+  applied: number;
+  conflicts: WorkspaceConflict[];
+}
 
 /** A workspace as the machine that holds it is told about it. */
 export interface WorkspaceRef {
@@ -411,6 +417,14 @@ export interface HostOutputListed {
   path: string;
   size: number;
 }
+
+/** What {@link CONTROL_HOST_OUTPUTS} answers without `read`: each file and link, with its size alone. */
+export interface HostOutputsListed {
+  listed: HostOutputListed[];
+}
+
+/** What {@link CONTROL_HOST_OUTPUTS} answers: with `read`, each file's bytes; without, its listing. */
+export type HostOutputs = WorkspaceOutputs | HostOutputsListed;
 
 /**
  * A host-scope delegate's scratch dir removed, `outputs/` with it, once its

@@ -13,10 +13,11 @@
 import { readWithin } from "@cawco/core/bounded";
 import type { DelegateType, MayStart } from "@cawco/core/delegate-types";
 import type { ForgeWrite } from "@cawco/core/forge-post";
-import type {
-  HarnessKind,
-  PermissionMode,
-  SessionChosenMode,
+import {
+  type HarnessKind,
+  type PermissionMode,
+  type SessionChosenMode,
+  WIRE_PERMISSION_MODES,
 } from "@cawco/core/harness/kinds";
 import type {
   GeneratedImage,
@@ -229,9 +230,10 @@ function fleetInstances(fleet: Fleet): {
 const callerMode = (
   rows: InstanceRow[],
   instanceId: string
-): PermissionMode | undefined =>
-  (rows.find((row) => row.id === instanceId)?.permissionMode ?? undefined) as
-    PermissionMode | undefined;
+): PermissionMode | undefined => {
+  const stored = rows.find((row) => row.id === instanceId)?.permissionMode;
+  return WIRE_PERMISSION_MODES.find((mode) => mode === stored);
+};
 
 /** The calling session as its handoff marker names it: its row's label, or its folder before it has one. */
 const senderName = (own: InstanceRow | undefined, cwd: string): string =>
@@ -1145,6 +1147,8 @@ function resolveDelegate(
  * was once the request went as JSON.
  */
 const asRouteReadsIt = <T extends object>(request: T): T =>
+  // Library gap (casts inventory): `Object.fromEntries` drops the keys it is
+  // given, https://github.com/microsoft/TypeScript/issues/35745
   Object.fromEntries(
     Object.entries(request).filter(([, value]) => value !== undefined)
   ) as T;
@@ -1219,7 +1223,10 @@ function repeatOfRefused(
   }
   // Bound warnings in memory; a newer turn also invalidates an unused repeat.
   if (coldRefusals.size >= 256) {
-    coldRefusals.delete(coldRefusals.keys().next().value as string);
+    const oldest = coldRefusals.keys().next().value;
+    if (oldest !== undefined) {
+      coldRefusals.delete(oldest);
+    }
   }
   coldRefusals.set(key, turn);
   return false;
@@ -1323,7 +1330,7 @@ async function checkCold(
     code: "session-cold",
     detail: coldRefusalText(
       { ...row, contextTokens },
-      lastTurnAt as string,
+      lastTurnAt,
       activityBound,
       hasTurns
     ),
@@ -1417,20 +1424,19 @@ async function readFollowupState(
 
 function coldRefusalText(
   row: KeepAliveRow,
-  lastTurnAt: string,
+  lastTurnAt: string | null,
   activityBound: boolean,
   hasTurns: boolean,
   now = Date.now()
 ): string {
   const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
   const measured = !!(row.cacheTtl && row.lastRequestAt);
-  const idle = Math.floor(
-    (now -
-      (
-        (measured ? row.lastRequestAt : new Date(lastTurnAt as string)) as Date
-      ).getTime()) /
-      60_000
-  );
+  // A turn's end not on record reads as the epoch's start, as it always did.
+  const since =
+    row.cacheTtl && row.lastRequestAt
+      ? row.lastRequestAt
+      : new Date(lastTurnAt ?? 0);
+  const idle = Math.floor((now - since.getTime()) / 60_000);
   const lifetime = row.cacheTtl === "1h" ? "1 hour" : "5 minutes";
   let age = `Its last recorded turn ended ${idle} minutes ago`;
   if (activityBound) {

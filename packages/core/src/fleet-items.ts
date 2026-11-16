@@ -68,6 +68,10 @@ const PROJECT_KINDS = {
 /** A project item's part: what follows `project:<id>/`, before its key. */
 export type ProjectPart = keyof typeof PROJECT_KINDS;
 
+/** Whether `part` names one of a project's parts ({@link PROJECT_KINDS}). */
+const isProjectPart = (part: string): part is ProjectPart =>
+  Object.hasOwn(PROJECT_KINDS, part);
+
 const PROJECT = "project:";
 
 /** A project item's id: `project:<project id>/<part>:<key>`. */
@@ -91,10 +95,10 @@ export const projectItemOf = (
     return;
   }
   const part = id.slice(slash + 1, colon);
-  return part in PROJECT_KINDS
+  return isProjectPart(part)
     ? {
         projectId: id.slice(PROJECT.length, slash),
-        part: part as ProjectPart,
+        part,
         key: id.slice(colon + 1),
       }
     : undefined;

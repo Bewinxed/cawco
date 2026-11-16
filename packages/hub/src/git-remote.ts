@@ -35,6 +35,7 @@ import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import { startedPath } from "@cawco/core/workspace-needs";
 import { Elysia } from "elysia";
 import { problemResponse } from "elysia/error";
+import { z } from "zod";
 import { HUB_DEBUG } from "./config";
 import { hidden } from "./hidden";
 
@@ -226,10 +227,17 @@ const unauthorized = (): Response =>
     }
   );
 
-interface BatchObject {
-  oid: string;
-  size: number;
-}
+/** One object a Git LFS batch names. */
+const BATCH_OBJECT = z.object({ oid: z.string(), size: z.number() });
+
+type BatchObject = z.output<typeof BATCH_OBJECT>;
+
+/** A Git LFS batch request, as far as this hub reads it. */
+const LFS_BATCH = z.object({
+  objects: z.array(BATCH_OBJECT).optional(),
+  operation: z.string().optional(),
+  transfers: z.array(z.string()).optional(),
+});
 
 export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
   /** Repositories being made now, so two first requests make one. */
@@ -579,17 +587,17 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
           if (!(projectId && deps.projectExists(projectId))) {
             return lfsError(404, "There is no such project on this hub.");
           }
-          let body: {
-            objects?: BatchObject[];
-            operation?: string;
-            transfers?: string[];
-          };
+          let sent: unknown;
           try {
-            body = (await request.json()) as typeof body;
+            sent = await request.json();
           } catch {
             return lfsError(422, "A batch request is JSON.");
           }
-          const { operation, objects, transfers } = body;
+          // One not of a batch's shape names no operation and no objects.
+          const batch = LFS_BATCH.safeParse(sent);
+          const { operation, objects, transfers } = batch.success
+            ? batch.data
+            : {};
           if (!(
             (operation === "download" || operation === "upload") &&
             Array.isArray(objects)

@@ -1,10 +1,10 @@
+import type { Bounded } from "@cawco/core/bounded";
 import { problem } from "elysia";
-import { awayProblem, silentProblem } from "./machine-answers";
-import type { RelayCall } from "./stream-relay";
+import { awayProblem, type CallAnswer, silentProblem } from "./machine-answers";
 
 /** Machine `machineId`'s answer to a browser call, or its refusal in the person's words (`machine`, its name). */
 export const answered = <T>(
-  read: Awaited<ReturnType<RelayCall>>,
+  read: Bounded<CallAnswer<T>>,
   machineId: string,
   machine: string,
   what: string
@@ -25,5 +25,5 @@ export const answered = <T>(
       detail: read.value.error ?? `${machine}'s browser did not ${what}.`,
     });
   }
-  return read.value.result as T;
+  return read.value.result;
 };

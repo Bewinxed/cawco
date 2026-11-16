@@ -24,7 +24,6 @@ import { doing } from "@cawco/core/loop-watch";
 import type { ContinuationJob, NamedSpawn } from "@cawco/core/protocol";
 import type { WorkInFlight } from "@cawco/core/session/controls";
 import { CONTROL_WORK_IN_FLIGHT } from "@cawco/core/session/controls";
-import { ContinuationReadSchema } from "@cawco/core/stored-shapes";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { CONTINUATION_ASKER_UNREAD } from "@cawco/core/words/relaunch";
 import { ElysiaStatus, problem } from "elysia";
@@ -54,7 +53,6 @@ import type { createSends } from "./sends";
 import { UNREAD } from "./sends";
 import type { createSpawns } from "./spawns";
 import { StartsHeld } from "./start-holds";
-import { received } from "./stored-json";
 import { unreachable } from "./unreachable";
 import { unwatchedMode } from "./unwatched-mode";
 
@@ -168,18 +166,13 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         if (!answer.value.ok) {
           throw new MachineProblem(
             problem(502, {
-              code: "machine-call-failed",
+              code: answer.value.code ?? "machine-call-failed",
               detail: `${ctx.machineName(where.machineId)} could not read session ${where.sessionId}'s transcript: ${answer.value.error ?? "it gave no reason"}`,
             })
           );
         }
-        // Its read is kept in the continuation's record: taken into
-        // CawCo's type as it is.
-        return received(
-          ContinuationReadSchema,
-          answer.value.result,
-          "a machine's continuation read"
-        );
+        // Its read, as its type, is kept in the continuation's record.
+        return answer.value.result;
       default:
         throw unreachable(answer);
     }
@@ -407,7 +400,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
           // No process of it here: nothing in flight to end.
           return null;
         }
-        return (answer.value.result as WorkInFlight | null) ?? null;
+        return answer.value.result ?? null;
       default:
         throw unreachable(answer);
     }

@@ -1,8 +1,10 @@
 /** A control's answer finding who waits on it, and the fan-out to dashboards. */
 
+import { FLEET_DELTA } from "@cawco/core/fleet";
+import { INSTALL_TOOL } from "@cawco/core/tools";
 import { AskCard } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
-import { type ControlResult, peekToolStatus } from "../machine-answers";
+import { answerOf, type ControlResult } from "../machine-answers";
 import { externalizeImages } from "../media";
 import type { TranscriptPayload } from "../transcripts";
 import type { FrameAnswer, FrameRun } from "./frame-run";
@@ -15,6 +17,7 @@ export type ControlRepliesContext = Pick<
   | "lateAnswer"
   | "lifecycle"
   | "logUnroutedReply"
+  | "machineName"
   | "pending"
   | "pendingInstalls"
   | "publishInstances"
@@ -30,13 +33,12 @@ export type ControlRepliesContext = Pick<
 export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
   const installAnswered = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
-    const { kind } = agentFrame;
     // An install answering, whoever asked for it: the cell is the hub's
     // to keep, and the reply still goes wherever it was going.
     const install = message.requestId
       ? ctx.pendingInstalls.get(message.requestId)
       : undefined;
-    if (install && kind === "control_result" && message.requestId) {
+    if (install && agentFrame.kind === "control_result" && message.requestId) {
       ctx.pendingInstalls.delete(message.requestId);
       // Each press that joined it is answered with this answer, under its
       // own request id, where it waits (relay-control.ts).
@@ -58,9 +60,15 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       // A copy left older than the release it was sent to reach says
       // why on its row (agent tools.ts `install`), and is due no other
       // until a newer release (core `toolUpdateOf`).
-      const status = peekToolStatus(message.payload);
-      if (status) {
-        ctx.db.setAgentToolCell(message.machineId, status);
+      // Its answer read as the install's type where it arrives: one that is
+      // not a tool's status changes no cell, and the frame goes on.
+      const status = answerOf(
+        INSTALL_TOOL,
+        agentFrame.body,
+        ctx.machineName(message.machineId)
+      );
+      if (status.ok) {
+        ctx.db.setAgentToolCell(message.machineId, status.result);
         ctx.publishInstances(message.machineId);
       }
       // The answer moves whether a copy there is due, and an install
@@ -73,7 +81,6 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
 
   const syncAnswered = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
-    const { kind, body } = agentFrame;
     // A transcript delete answering: once the machine says it is gone,
     // every row that named it goes with it, through the one
     // per-session delete, and every dashboard sees it leave.
@@ -83,11 +90,18 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     // A refusal is kept too, in the machine's words, on its row.
     if (
       message.requestId &&
-      kind === "control_result" &&
+      agentFrame.kind === "control_result" &&
       ctx.fleetSyncs.has(message.requestId)
     ) {
-      ctx.fleetSyncs.answered(message.requestId, body);
-      ctx.welcomeConverge.answered(message.machineId, body);
+      // Read as a delta's ACK where it arrives: one that is not its type
+      // is the machine's refusal of the delta, and the frame goes on.
+      const ack = answerOf(
+        FLEET_DELTA,
+        agentFrame.body,
+        ctx.machineName(message.machineId)
+      );
+      ctx.fleetSyncs.answered(message.requestId, ack);
+      ctx.welcomeConverge.answered(message.machineId, ack);
     }
     return "continue";
   };

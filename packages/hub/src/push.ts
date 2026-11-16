@@ -92,6 +92,7 @@ import {
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { TurnWakes } from "@cawco/core/session-messages";
+import { PermissionRequestFrameSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";
@@ -105,6 +106,7 @@ import { mcpWords } from "@cawco/core/words/mcp";
 import { pairingWords } from "@cawco/core/words/pairing";
 import { presenceLogWords } from "@cawco/core/words/presence-log";
 import { Elysia, problem, t } from "elysia";
+import { z } from "zod";
 import { isProjectConversation } from "./caw";
 import type { DbShape } from "./db";
 import type { PushDeviceRow } from "./db/presence";
@@ -706,6 +708,42 @@ const HARNESS_NAMES: Record<HarnessKind, string> = {
 };
 
 /** Which category an ask goes as: a question, a permission to open, or one Approve may answer. */
+/** What Cawrier says of a push it refused, as far as the hub reads it. */
+const CAWRIER_REFUSAL = z.object({
+  error: z.string().optional(),
+  reason: z.string().optional(),
+});
+
+/**
+ * What a push reads of an ask's payload: its permission request's fields,
+ * and the project an ask no session row stands behind names itself (a
+ * memory proposal, memory.ts).
+ */
+const PUSHED_ASK = PermissionRequestFrameSchema.partial().extend({
+  projectId: z.string().optional(),
+});
+
+/**
+ * `envelope`'s ask as a push says it: a permission request with its
+ * presentation stamped, under its request id, and not one routed to the
+ * asker's parent; undefined for any other.
+ */
+const pushedAskOf = (envelope: Envelope) => {
+  const read = PUSHED_ASK.safeParse(envelope.payload);
+  if (!read.success) {
+    return;
+  }
+  const payload = read.data;
+  const { presentation } = payload;
+  const requestId = envelope.requestId ?? payload.requestId;
+  return payload.kind === "permission_request" &&
+    presentation &&
+    requestId &&
+    payload.routedTo !== "parent"
+    ? { payload, presentation, requestId }
+    : undefined;
+};
+
 const askCategory = (
   payload: Partial<PermissionRequestFrame>
 ): (typeof PUSH_CATEGORIES)[keyof typeof PUSH_CATEGORIES] => {
@@ -792,10 +830,10 @@ const post = async (
       if (response.ok) {
         return { status: response.status, reason: null };
       }
-      const answer = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        reason?: string;
-      };
+      const read = CAWRIER_REFUSAL.safeParse(
+        await response.json().catch(() => ({}))
+      );
+      const answer = read.success ? read.data : {};
       return {
         status: response.status,
         reason: answer.reason ?? answer.error ?? null,
@@ -843,9 +881,10 @@ const removeDevice = async (
       if (response.status === 204) {
         return;
       }
-      const answer = (await response.json().catch(() => ({}))) as {
-        error?: string;
-      };
+      const read = CAWRIER_REFUSAL.safeParse(
+        await response.json().catch(() => ({}))
+      );
+      const answer = read.success ? read.data : {};
       return `Cawrier answered ${response.status} ${answer.error ?? ""}`;
     });
     switch (asked.kind) {
@@ -1723,20 +1762,11 @@ export const createPush = ({
      * however often it is called.
      */
     onAsk(envelope: Envelope): void {
-      const payload = envelope.payload as Partial<PermissionRequestFrame> & {
-        /** An ask no session row stands behind names its project itself (a memory proposal, memory.ts). */
-        projectId?: string;
-        routedTo?: string;
-      };
-      const requestId = envelope.requestId ?? payload.requestId;
-      if (
-        payload.kind !== "permission_request" ||
-        !requestId ||
-        payload.routedTo === "parent" ||
-        asked.has(requestId)
-      ) {
+      const pushed = pushedAskOf(envelope);
+      if (!pushed || asked.has(pushed.requestId)) {
         return;
       }
+      const { payload, presentation, requestId } = pushed;
       asked.add(requestId);
       // Taken once, whichever hub took it: one parked again as the hub
       // starts (a design proposal, design-system.ts `start`) was pushed by
@@ -1753,8 +1783,7 @@ export const createPush = ({
       const project = projectName(projectId);
       // The ask's presentation, stamped as it parked (ask-presentation.ts):
       // the session as the board names it, and the needs-you card's line.
-      const { asker, summary, detail } = (payload as PermissionRequestFrame)
-        .presentation;
+      const { asker, summary, detail } = presentation;
       const category = askCategory(payload);
       // A CawCo ask's question carries whether work waits on it (core
       // asks.ts `askStanceLine`), the line under it on its card.

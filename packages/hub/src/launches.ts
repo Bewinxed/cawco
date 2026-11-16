@@ -1,8 +1,9 @@
 import { cleanStartRefusal } from "@cawco/core/harness";
-import type {
-  EffortLevel,
-  HarnessKind,
-  PermissionMode,
+import {
+  type EffortLevel,
+  type HarnessKind,
+  type PermissionMode,
+  WIRE_PERMISSION_MODES,
 } from "@cawco/core/harness/kinds";
 import { forkNotice } from "@cawco/core/injected";
 import type { MachinePath } from "@cawco/core/machine-path";
@@ -21,6 +22,7 @@ import type { ModeAsk } from "@cawco/core/session-messages";
 import { spawnWords } from "@cawco/core/words/spawn";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { ElysiaStatus, problem } from "elysia";
+import { z } from "zod";
 import { cleanSpawn, fencedSpawn } from "./caw";
 import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
@@ -31,16 +33,33 @@ import { documentFacts, sessionInstructions } from "./memory-scopes";
 import { peekResume } from "./payload-peeks";
 import { makesRoutines } from "./roles";
 
+/** A frame of a session's that may name its settings: a control's answer, or a line of its own. */
+const SETTINGS_FRAME = z.object({
+  kind: z.string().optional(),
+  ok: z.boolean().optional(),
+  result: z.object({ permissionMode: z.unknown() }).partial().optional(),
+  message: z
+    .object({
+      type: z.unknown(),
+      subtype: z.unknown(),
+      model: z.unknown(),
+      permissionMode: z.unknown(),
+      parent_tool_use_id: z.unknown(),
+      fallback_model: z.unknown(),
+    })
+    .partial()
+    .optional(),
+});
+
 /** Settings reported by the harness, including a live mode change's receipt. */
 const peekSessionSettings = (
   payload: unknown
 ): { model?: unknown; permissionMode?: unknown } | undefined => {
-  const body = payload as {
-    kind?: string;
-    ok?: boolean;
-    result?: { permissionMode?: unknown };
-    message?: Record<string, unknown>;
-  };
+  const read = SETTINGS_FRAME.safeParse(payload);
+  if (!read.success) {
+    return undefined;
+  }
+  const body = read.data;
   if (body.kind === "control_result") {
     const mode = body.ok ? body.result?.permissionMode : undefined;
     return typeof mode === "string" ? { permissionMode: mode } : undefined;
@@ -651,7 +670,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
     return mode === null
       ? { payload: rest, permissionMode: null }
       : {
-          payload: { ...rest, permissionMode: mode as PermissionMode },
+          payload: { ...rest, permissionMode: mode },
           permissionMode: mode,
         };
   };
@@ -663,10 +682,10 @@ export const createLaunches = (ctx: LaunchesContext) => {
    */
   const modeOf = (
     machineId: string,
-    harness: string,
+    harness: HarnessKind,
     asked: string | undefined,
     fallback?: string | null
-  ): { mode: string | null } | { refusal: string; ask?: ModeAsk } => {
+  ): { mode: PermissionMode | null } | { refusal: string; ask?: ModeAsk } => {
     if (harnessModes(machineId, harness)?.length === 0) {
       return asked
         ? {
@@ -679,21 +698,19 @@ export const createLaunches = (ctx: LaunchesContext) => {
       // The page asks for one where the person acted (core `ModeAsk`).
       return {
         refusal: unchosenMode(machineId, harness),
-        ask: { machineId, harness: harness as HarnessKind },
+        ask: { machineId, harness },
       };
     }
     const unfit = modeRefusal(machineId, harness, mode);
-    // A mode its machine doesn't take: the page asks for one it does.
-    return unfit
+    const named = WIRE_PERMISSION_MODES.find((one) => one === mode);
+    // A mode its machine doesn't take, or none the wire carries: the page
+    // asks for one it does.
+    return unfit || !named
       ? {
-          refusal: `${unfit} Nothing was started.`,
-          ask: {
-            machineId,
-            harness: harness as HarnessKind,
-            refused: mode as PermissionMode,
-          },
+          refusal: `${unfit ?? spawnWords.modeUnknown(mode)} Nothing was started.`,
+          ask: { machineId, harness, ...(named ? { refused: named } : {}) },
         }
-      : { mode };
+      : { mode: named };
   };
 
   /** Why a spawn that names no permission mode does not start ({@link settleMode}). */

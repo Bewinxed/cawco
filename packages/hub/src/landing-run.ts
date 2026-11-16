@@ -16,9 +16,7 @@ import {
   CONTROL_HOST_OUTPUTS,
   CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_CHANGES,
-  type HostOutputListed,
   OUTPUTS_DIR,
-  type WorkspaceChanges,
   type WorkspaceConflict,
 } from "@cawco/core/workspace/controls";
 import { ElysiaStatus } from "elysia";
@@ -1200,9 +1198,9 @@ export const createLandingRun = ({
     };
     let verdict: ForgeVerdict;
     try {
-      verdict = (await call(workspace.machineId, CONTROL_FORGE_POST, [
+      verdict = await call(workspace.machineId, CONTROL_FORGE_POST, [
         { repo: origin, write },
-      ])) as ForgeVerdict;
+      ]);
     } catch (error) {
       verdict = {
         kind: "refused",
@@ -1281,9 +1279,9 @@ export const createLandingRun = ({
     gate: Gate
   ): Promise<Landed> => {
     const ref = refOf(workspace);
-    const read = (await call(workspace.machineId, CONTROL_WORKSPACE_CHANGES, [
+    const read = await call(workspace.machineId, CONTROL_WORKSPACE_CHANGES, [
       ref,
-    ])) as WorkspaceChanges;
+    ]);
     const ran: GateRun = { declared: gate.declared, outcomes: [] };
     if (read.conflicts.length > 0) {
       return { kind: "retry", text: conflictText(read.conflicts, read.folder) };
@@ -1324,9 +1322,9 @@ export const createLandingRun = ({
         ),
       };
     }
-    const applied = (await call(workspace.machineId, CONTROL_WORKSPACE_APPLY, [
+    const applied = await call(workspace.machineId, CONTROL_WORKSPACE_APPLY, [
       ref,
-    ])) as { applied: number; conflicts: WorkspaceConflict[] };
+    ]);
     if (applied.conflicts.length > 0) {
       return {
         kind: "retry",
@@ -1388,11 +1386,17 @@ export const createLandingRun = ({
     item: WorkItemRow
   ): Promise<ScratchOutput[]> => {
     if (isHostFolder(workspace)) {
-      const read = await workspaces.onHostScratch<{
-        listed: HostOutputListed[];
-      }>(workspace, CONTROL_HOST_OUTPUTS, [{ id: workspace.id, read: false }], {
-        listed: [],
-      });
+      const read = await workspaces.onHostScratch(
+        workspace,
+        CONTROL_HOST_OUTPUTS,
+        [{ id: workspace.id, read: false }],
+        { listed: [] }
+      );
+      if (!("listed" in read)) {
+        throw new Error(
+          `${SCRATCH_OUTPUTS} of ${workspace.id} could not be listed: its machine answered their bytes`
+        );
+      }
       return read.listed;
     }
     const listed = await runIn(workspace, item)(

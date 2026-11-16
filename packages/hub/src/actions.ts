@@ -105,9 +105,9 @@ const capped = (text: string, max: number): string => {
 const resultText = (content: unknown): string =>
   Array.isArray(content)
     ? content
-        .map((part) =>
+        .map((part: unknown) =>
           part && typeof part === "object" && "text" in part
-            ? String((part as { text: unknown }).text)
+            ? String(part.text)
             : ""
         )
         .filter(Boolean)
@@ -121,10 +121,7 @@ const argsProblem = (
   found: Tool,
   args: Record<string, unknown>
 ): string | undefined => {
-  const { $schema: _dialect, ...schema } = found.inputSchema as Record<
-    string,
-    unknown
-  >;
+  const { $schema: _dialect, ...schema } = found.inputSchema;
   let validate: ReturnType<typeof ajv.compile>;
   try {
     validate = ajv.compile(schema);

@@ -67,8 +67,10 @@ export const skillName = (
 const manifestVersion = (text: string): string | undefined => {
   try {
     const manifest: unknown = JSON.parse(text);
-    return typeof manifest === "object" && manifest !== null
-      ? declared((manifest as { version?: unknown }).version)
+    return typeof manifest === "object" &&
+      manifest !== null &&
+      "version" in manifest
+      ? declared(manifest.version)
       : undefined;
   } catch {
     // A plugin.json that does not parse declares nothing; the entry may.

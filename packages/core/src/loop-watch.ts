@@ -199,8 +199,8 @@ export const watchFromItsOwnThread = (
   const worker = new Worker(WATCHDOG_URL, { ref: false, smol: true });
   worker.postMessage({
     kind: "start",
-    beat: shared.buffer as SharedArrayBuffer,
-    doing: doingMemory.buffer as SharedArrayBuffer,
+    beat: shared.buffer,
+    doing: doingMemory.buffer,
     port: echo.port,
     who,
     ...(options.end ? { end: options.end } : {}),

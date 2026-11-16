@@ -270,6 +270,12 @@ export interface ToolSigninChallenge {
 export const CONTROL_BEGIN_TOOL_SIGNIN = "beginToolSignin";
 export const CONTROL_COMPLETE_TOOL_SIGNIN = "completeToolSignin";
 
+/** The machine's tools as its tool probe finds them: no args; answers {@link ToolStatus}[]. Machine-scoped. */
+export const LIST_TOOLS = "listTools";
+
+/** One tool put on the machine, or brought to a version: answers the tool's {@link ToolStatus} once it ends. Machine-scoped. */
+export const INSTALL_TOOL = "installTool";
+
 /** What a probe or an install attempt found. The unit every surface renders. */
 export type ToolState =
   "installed" | "missing" | "installing" | "failed" | "unsupported";

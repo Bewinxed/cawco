@@ -133,12 +133,20 @@ function github<T>(
       try {
         return (await ask(uncachedOctokit(), { signal })).data;
       } catch (error) {
-        const refused = error as { response?: unknown; status?: unknown };
-        if (typeof refused.status === "number" && refused.response) {
-          if (refused.status === 404) {
+        // Octokit's refusal carries the host's status and its response.
+        const status =
+          error instanceof Object && "status" in error
+            ? error.status
+            : undefined;
+        const response =
+          error instanceof Object && "response" in error
+            ? error.response
+            : undefined;
+        if (typeof status === "number" && response) {
+          if (status === 404) {
             return;
           }
-          throw new Error(`The release host answered ${refused.status}`, {
+          throw new Error(`The release host answered ${status}`, {
             cause: error,
           });
         }

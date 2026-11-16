@@ -58,6 +58,7 @@ const OUTS = DASHBOARD ? [DASH_OUT] : [CORE_OUT, HUB_OUT, AGENT_OUT];
 const HUB_SRC = join(HUB, "src/");
 const HUB_DB = join(HUB_SRC, "db/");
 const CORE_SRC = join(ROOT, "packages/core/src/");
+const JSONL_PARSER_SRC = join(ROOT, "packages/jsonl-parser/src/");
 const SDK =
   /node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/(.+)\.d\.ts$/u;
 const NODE_MODULES = "/node_modules/";
@@ -450,6 +451,11 @@ const specifierOf = (file: string, out: string): string => {
   if (file.startsWith(CORE_SRC) && out !== CORE_OUT) {
     return `@cawco/core/${file.slice(CORE_SRC.length).replace(TS_FILE, "")}`;
   }
+  // The transcript index's own words (core find.ts reads `DocAuthor` so):
+  // by its package's one entry, which exports its types.
+  if (file.startsWith(JSONL_PARSER_SRC)) {
+    return "@cawco/jsonl-parser";
+  }
   const path = relative(dirname(out), file).replace(TS_FILE, "");
   return path.startsWith(".") ? path : `./${path}`;
 };
@@ -708,9 +714,17 @@ const referenceOf = (
       }
       return `${schemaOf(inner, scope)}.partial()`;
     }
-    // An enum with some of its members left out, or kept alone.
-    case "Exclude":
+    // A union's string members (`Extract<HarnessKind, string>`, kept so the
+    // wire schema names it): a union of strings whole, as the proof holds.
     case "Extract":
+      if (arg(1).kind === ts.SyntaxKind.StringKeyword) {
+        return schemaOf(arg(0), scope);
+      }
+      return `${schemaOf(arg(0), scope)}.extract([${literalKeys(arg(1))
+        .map((k) => JSON.stringify(k))
+        .join(", ")}])`;
+    // An enum with some of its members left out.
+    case "Exclude":
       return `${schemaOf(arg(0), scope)}.${name.toLowerCase()}([${literalKeys(
         arg(1)
       )

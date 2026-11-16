@@ -246,6 +246,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/AgentBusyReportRecovery`.
+    public enum AgentBusyReportRecovery: OpenEnum {
+        case failed
+        case ready
+        case recovering
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "failed": self = .failed
+            case "ready": self = .ready
+            case "recovering": self = .recovering
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .failed: "failed"
+            case .ready: "ready"
+            case .recovering: "recovering"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.failed, .ready, .recovering]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/AgentRowAuth`.
     public enum AgentRowAuth: OpenEnum {
         case authenticated

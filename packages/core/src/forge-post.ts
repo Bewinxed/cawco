@@ -5,6 +5,8 @@
  * forges/forge.ts, docs/forge-adapters.md).
  */
 
+import { ForgeAskSchema } from "./stored-shapes";
+
 /** The forges CawCo posts to through an adapter. */
 const FORGES = ["github", "gitlab", "gitea"] as const;
 export type Forge = (typeof FORGES)[number];
@@ -51,13 +53,15 @@ export interface ForgeAsk {
 
 /** A forge ask read off the wire; undefined when it is none. */
 export const readForgeAsk = (value: unknown): ForgeAsk | undefined => {
-  const ask = value as { repo?: unknown; write?: unknown } | null;
-  return ask &&
-    typeof ask === "object" &&
-    typeof ask.repo === "string" &&
-    isForgeWrite(ask.write)
-    ? { repo: ask.repo, write: ask.write }
-    : undefined;
+  const read = ForgeAskSchema.safeParse(value);
+  if (!read.success) {
+    return undefined;
+  }
+  const { write } = read.data;
+  // A comment names its issue or pull request by its whole number.
+  return write.op === "comment" && !Number.isInteger(write.number)
+    ? undefined
+    : read.data;
 };
 
 /**
@@ -77,30 +81,3 @@ interface PostMade {
   readonly said: string;
   readonly url?: string;
 }
-
-/** Whether a value read off the wire is a forge write the adapters make. */
-const isForgeWrite = (value: unknown): value is ForgeWrite => {
-  const write = value as Record<string, unknown> | null;
-  if (!write || typeof write !== "object") {
-    return false;
-  }
-  switch (write.op) {
-    case "issue":
-      return typeof write.title === "string" && typeof write.body === "string";
-    case "pull_request":
-      return (
-        typeof write.title === "string" &&
-        typeof write.body === "string" &&
-        typeof write.base === "string" &&
-        typeof write.head === "string"
-      );
-    case "comment":
-      return (
-        typeof write.body === "string" &&
-        Number.isInteger(write.number) &&
-        (write.on === "issue" || write.on === "pull_request")
-      );
-    default:
-      return false;
-  }
-};

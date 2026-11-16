@@ -34,7 +34,7 @@ import { freshWindows, windowKey } from "@cawco/core/usage/windows";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { z } from "zod";
 import type { DbShape } from "./db";
-import { received } from "./stored-json";
+import { keptAs } from "./stored-json";
 
 /**
  * The hub's half of accounts: where each is signed in, as machines report it,
@@ -70,7 +70,7 @@ const MODELS = z.array(ModelInfoSchema);
  * Keeps what a probe read of an account: its models, as its catalog
  * (replacing the one before, rows and all), and its plan. The models are
  * Claude Code's own list, taken into CawCo's type here (hub stored-json.ts
- * `received`): a field its release adds is left out and said, and an effort
+ * `keptAs`): a field its release adds is left out and said, and an effort
  * level it adds is kept as the string it is (`ModelInfo` holds the list's
  * effort words as Claude Code's, unenumerated), so neither makes the
  * catalog's write refuse.
@@ -84,7 +84,7 @@ export const keepProbe = (
   if (probe.models.length > 0) {
     db.accounts.putCatalog(
       accountId,
-      received(MODELS, probe.models, "Claude Code's model list"),
+      keptAs(MODELS, probe.models, "Claude Code's model list"),
       at
     );
   }

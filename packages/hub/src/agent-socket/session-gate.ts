@@ -3,7 +3,7 @@
 import { CONTAINERS_ENDED, CONTAINERS_UNTRACKED } from "@cawco/core/harness";
 import { ScratchWorktreeSchema } from "@cawco/core/stored-shapes";
 import type { HubContext } from "../hub-context";
-import { received } from "../stored-json";
+import { keptAs } from "../stored-json";
 import type { FrameAnswer, FrameRun } from "./frame-run";
 
 export type SessionGateContext = Pick<
@@ -32,7 +32,7 @@ export const sessionGateStagesOf = (ctx: SessionGateContext) => {
       if (row && dir) {
         ctx.db.recordScratchWorktree(
           row.id,
-          received(
+          keptAs(
             ScratchWorktreeSchema,
             frame.worktree,
             "a machine's scratch worktree frame"

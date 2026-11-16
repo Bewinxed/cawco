@@ -198,7 +198,7 @@ export const createBoard = (ctx: BoardContext) => {
       } = row;
       return {
         ...visible,
-        keepAlive: keepAliveState(row as KeepAliveRow, limits(row), now),
+        keepAlive: keepAliveState(row, limits(row), now),
       };
     });
   };

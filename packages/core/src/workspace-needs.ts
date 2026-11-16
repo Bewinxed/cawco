@@ -230,6 +230,10 @@ const PROGRAMS = {
 /** A system program CawCo runs ({@link PROGRAMS}). */
 export type SystemProgram = keyof typeof PROGRAMS;
 
+/** Whether `name` is a {@link SystemProgram}. */
+const isSystemProgram = (name: string): name is SystemProgram =>
+  Object.hasOwn(PROGRAMS, name);
+
 /** The PATH every lookup reads ({@link STARTED_PATH}): what CawCo's own tools run with, its hook, executor and host among them. */
 export const startedPath = (): string => STARTED_PATH;
 
@@ -479,21 +483,23 @@ const toolsFor = (
   where: ToolPlaces,
   need: WorkspaceTool["need"] | undefined
 ): Needed[] =>
-  Object.entries(PROGRAMS as Record<string, Program>).flatMap(
-    ([command, program]) =>
-      program.before &&
-      program.package &&
-      (need === undefined || program.before === need) &&
-      (program.before === "checkout" || where.platform === "linux")
+  Object.keys(PROGRAMS)
+    .filter(isSystemProgram)
+    .flatMap((command) => {
+      const program: Program = PROGRAMS[command];
+      return program.before &&
+        program.package &&
+        (need === undefined || program.before === need) &&
+        (program.before === "checkout" || where.platform === "linux")
         ? [
             {
-              command: command as SystemProgram,
+              command,
               need: program.before,
               package: program.package,
             },
           ]
-        : []
-  );
+        : [];
+    });
 
 /** The folders of `searched` that are there, each once, in its order: where a missing tool was looked for. */
 const foldersOf = (searched: string): string[] => [

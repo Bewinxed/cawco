@@ -10,7 +10,6 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
-import { machineSkillFiles } from "../machine-answers";
 import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
 import { pushTarget, skillFilesOff, unansweredProblem } from "../machine-reads";
@@ -369,7 +368,7 @@ export const fleetSkillRoutes = (
             });
           }
           if (answer.ok) {
-            const theirs = machineSkillFiles(answer.result);
+            const theirs = answer.result;
             const hash = hashFiles(theirs);
             if (hash !== fleetCopy.hash) {
               db.recordFleetSkill({

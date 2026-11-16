@@ -6,7 +6,7 @@
  * without the closure's context naming it.
  */
 
-import type { MachineHookScript } from "@cawco/core/fleet";
+import type { ControlName } from "@cawco/core/control-replies";
 import {
   NO_SKILL,
   READ_HOOK_SCRIPT,
@@ -15,12 +15,8 @@ import {
 } from "@cawco/core/fleet";
 import { ElysiaStatus, problem } from "elysia";
 import type { HubContext } from "./hub-context";
-import type { MachineMemory, Unanswered } from "./machine-answers";
-import {
-  awayProblem,
-  machineSkillFiles,
-  unansweredIn,
-} from "./machine-answers";
+import type { Unanswered } from "./machine-answers";
+import { awayProblem, unansweredIn } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { unreachable } from "./unreachable";
 
@@ -29,37 +25,6 @@ export type MachineReadsContext = Pick<
   HubContext,
   "db" | "machineFault" | "machinePresence" | "readAgent" | "registry"
 >;
-
-/** The answer, read off the wire: a malformed set is no set. */
-const peekMemoryFile = (result: unknown): MachineMemory => {
-  if (typeof result !== "object" || result === null) {
-    return null;
-  }
-  const { content, hash, docs } = result as {
-    content?: unknown;
-    hash?: unknown;
-    docs?: unknown;
-  };
-  if (
-    typeof content !== "string" ||
-    typeof hash !== "string" ||
-    !Array.isArray(docs)
-  ) {
-    return null;
-  }
-  const read = docs.flatMap((doc: unknown) => {
-    if (typeof doc !== "object" || doc === null) {
-      return [];
-    }
-    const { path, content: text, hash: of } = doc as Record<string, unknown>;
-    return typeof path === "string" &&
-      typeof text === "string" &&
-      typeof of === "string"
-      ? [{ path, content: text, hash: of }]
-      : [];
-  });
-  return { content, hash, docs: read };
-};
 
 /**
  * Whether a machine that is not connected is on its way back: the ms left
@@ -178,7 +143,7 @@ export const skillFilesOff = async (
       ? problem(404, { code: "skill-unread", detail })
       : problem(502, { code: "skill-unread", detail });
   }
-  return { files: machineSkillFiles(answer.result) };
+  return { files: answer.result };
 };
 
 /** A fleet hook and the copy of its script `machineId` holds, or what the route answers when either is missing. */
@@ -215,12 +180,11 @@ export const pushTarget = (
  * about to destroy is kept before it goes.
  */
 /** A file a machine's agent reads for `method`, or why it could not be read. */
-const readOffMachine = async <Copy>(
+const readOffMachine = async <K extends ControlName>(
   ctx: MachineReadsContext,
   machineId: string,
-  method: string,
+  method: K,
   args: unknown[],
-  copyOf: (result: unknown) => Copy,
   failed: string
 ) => {
   const answer = await ctx.readAgent(machineId, method, args, READ_TIMEOUT_MS);
@@ -229,7 +193,7 @@ const readOffMachine = async <Copy>(
       return unansweredProblem(ctx, machineId, answer);
     case "answered":
       return answer.value.ok
-        ? { copy: copyOf(answer.value.result) }
+        ? { copy: answer.value.result }
         : problem(502, {
             code: "machine-read-failed",
             detail: answer.value.error ?? failed,
@@ -248,7 +212,6 @@ export const readMachineMemory = (
     machineId,
     READ_MEMORY_FILE,
     [],
-    peekMemoryFile,
     "the machine could not read its memory"
   );
 
@@ -266,6 +229,5 @@ export const readMachineHookScript = (
     machineId,
     READ_HOOK_SCRIPT,
     [id],
-    (result) => result as MachineHookScript | null,
     "the machine could not read the hook's script"
   );

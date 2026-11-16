@@ -435,7 +435,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       writeStateFileSync(path, `${JSON.stringify(record)}\n`, { mode: 0o600 });
     } catch (error) {
       console.warn(
-        `[installs] ${path} could not be written, so a restart would lose what is in it: ${(error as Error).message}`
+        `[installs] ${path} could not be written, so a restart would lose what is in it: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   };

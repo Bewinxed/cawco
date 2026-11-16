@@ -37,6 +37,8 @@ export const machinePauseWords = {
  * running command"; undefined when the pause stopped nothing.
  */
 export function stoppedWords(stopped: StoppedCommands): string | undefined {
+  // Library gap (casts inventory): `Object.keys` answers `string[]`,
+  // https://github.com/microsoft/TypeScript/issues/12253
   const parts = (Object.keys(COMMAND_NOUNS) as RunKind[]).flatMap((kind) => {
     const count = stopped[kind] ?? 0;
     const [one, many] = COMMAND_NOUNS[kind];

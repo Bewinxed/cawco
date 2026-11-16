@@ -373,7 +373,7 @@ export const accountsWords = {
       label: "Soonest reset",
       line: "Whose window resets first",
     },
-  ] satisfies StrategyWords[] as readonly StrategyWords[],
+  ] satisfies StrategyWords[],
 
   // ── At the limit (AtLimitBlock) ───────────────────────────────────────
   atLimit: {
@@ -563,5 +563,5 @@ export const accountsWords = {
     { hue: "blue", name: "Blue" },
     { hue: "rose", name: "Rose" },
     { hue: "violet", name: "Violet" },
-  ] satisfies SwatchWords[] as readonly SwatchWords[],
+  ] satisfies SwatchWords[],
 };

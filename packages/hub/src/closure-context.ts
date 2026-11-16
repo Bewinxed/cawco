@@ -37,6 +37,7 @@ import type {
   CommandQueue,
   CommandResult,
 } from "@cawco/core/commands/controls";
+import type { FsOp } from "@cawco/core/control-replies";
 import type { StartingSet } from "@cawco/core/delegate-types";
 import type {
   FleetPlugin,
@@ -170,8 +171,16 @@ import type { createLaws } from "./laws";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Kept, Stall, TakenUpBy } from "./limit-decision";
 import type {
+  AgentCall,
+  AsRead,
+  AwaitFs,
+  AwaitReply,
+  AwaitStart,
   AwayProblem,
-  ControlResult,
+  CallAnswer,
+  FsAnswer,
+  ReadSessionProcess,
+  ReadStoppable,
   SilentProblem,
   Unanswered,
 } from "./machine-answers";
@@ -216,7 +225,7 @@ import type { SkillFolderReader } from "./skills";
 import type { SshTunnels } from "./ssh-tunnels";
 import type { createStoredRecent } from "./stored-recent";
 import type { createStreamRelay } from "./stream-relay";
-import type { ControlResultFrame, StreamHubShape } from "./stream-shape";
+import type { StreamHubShape } from "./stream-shape";
 import type { createTailnetHttps } from "./tailnet-https";
 import type { createTasks } from "./tasks";
 import type { createToolCallKeys } from "./tool-call-keys";
@@ -254,6 +263,11 @@ export interface HomeCredentialFound {
 type HomeLoginRefused<Status extends 409 | 502> = ReturnType<
   typeof problem<Status, { code: "home-login-refused"; detail: string }>
 >;
+
+/** A sign-in a machine finished, as its kind's machine answered it: Claude Code's, or a provider's (account-signin.ts `completeOn`). */
+export type SigninFinished =
+  | { kind: "account"; result: AccountSigninResult }
+  | { kind: "provider"; result: ProviderSigninResult };
 
 /** A session's permission mode not applied, at `Status`, in the words of what refused it (server.ts `applyPermissionMode`). */
 type ModeRefused<Status extends 400 | 502> = ReturnType<
@@ -376,22 +390,12 @@ export interface ClosureContext {
     park: () => boolean,
     publish: () => void
   ) => boolean;
-  asRead: (answer: Bounded<ControlResult>) => Bounded<ControlResult>;
+  asRead: AsRead;
   atLimit: ReturnType<typeof createAtLimit>;
+  awaitFs: AwaitFs;
   awaitingFirstTurn: Set<string>;
-  awaitReply: (
-    machineId: string,
-    requestId: string,
-    timeoutMs: number,
-    send: () => Envelope | undefined,
-    letGo?: AbortSignal
-  ) => Promise<Bounded<ControlResult>>;
-  awaitStart: (
-    machineId: string,
-    instanceId: string,
-    requestId: string,
-    send: () => Envelope | undefined
-  ) => Promise<Bounded<ControlResult>>;
+  awaitReply: AwaitReply;
+  awaitStart: AwaitStart;
   /** Sends a hub frame to every dashboard. */
   awayError: (machineId: string) => MachineAway;
   awayWords: (machineId: string, answer: Unanswered) => string;
@@ -410,12 +414,12 @@ export interface ClosureContext {
   byIdNow: <P extends { instanceId?: string }>(
     envelope: Envelope<P>
   ) => Envelope<P>;
-  callAgent: SessionCallsDeps["callAgent"];
-  callFs: (
+  callAgent: AgentCall;
+  callFs: <O extends FsOp>(
     machineId: string,
     agent: MachineSocket,
-    op: Omit<FsPayload, "requestId">
-  ) => Promise<Bounded<ControlResult>>;
+    op: Omit<FsPayload, "requestId" | "op"> & { op: O }
+  ) => Promise<Bounded<FsAnswer<O>>>;
   cancelContinuation: (
     id: string
   ) => { row: ContinuationRow } | { refused: 404 | 409; why: string };
@@ -460,7 +464,7 @@ export interface ClosureContext {
     signinId: string,
     machineId: string,
     code: string | undefined
-  ) => Promise<Bounded<ControlResultFrame>>;
+  ) => Promise<Bounded<CallAnswer<SigninFinished>>>;
   connectAsks: ReturnType<typeof createConnectAsks>;
   connections: ReturnType<typeof createConnections>;
   contact: ReturnType<typeof createMachineContact>;
@@ -524,7 +528,7 @@ export interface ClosureContext {
     signinId: string,
     into: Account,
     machineId: string,
-    result: AccountSigninResult | ProviderSigninResult
+    finished: SigninFinished
   ) => Promise<{ error: string } | ProviderSigninResult | AccountSigninResult>;
   finishStopDispatch: (key: string, outcome: string) => void;
   firstTellingOfLeak: (
@@ -543,7 +547,7 @@ export interface ClosureContext {
     account: Pick<Account, "id" | "provider">,
     machineId: string,
     into?: string | null
-  ) => Promise<Bounded<ControlResultFrame>>;
+  ) => Promise<Bounded<CallAnswer<unknown>>>;
   forgetPending: (
     instanceId: string,
     why: string,
@@ -994,14 +998,7 @@ export interface ClosureContext {
   pulses: Map<string, SessionPulse>;
   push: ReturnType<typeof createPush>;
   pushAgents: (machineId: string) => Promise<void>;
-  readAgent: (
-    machineId: string,
-    method: string,
-    args: unknown[],
-    timeoutMs: number,
-    harness?: HarnessKind | undefined,
-    instanceId?: string | undefined
-  ) => Promise<Bounded<ControlResult>>;
+  readAgent: AgentCall;
   readMachineMedia: (
     machineId: string,
     path: string
@@ -1012,19 +1009,9 @@ export interface ClosureContext {
     | { refused: string }
   >;
   readMarketplaceSource: (source: string) => Promise<MarketplaceRead>;
-  readSessionProcess: (
-    row: { id: string; machineId: string },
-    method: string,
-    args: unknown[]
-  ) => Promise<Bounded<ControlResult>>;
+  readSessionProcess: ReadSessionProcess;
   readSkillFolder: SkillFolderReader;
-  readStoppable: (
-    machineId: string,
-    method: string,
-    args: unknown[],
-    timeoutMs: number,
-    ask: { caller: string; signal?: AbortSignal | undefined }
-  ) => Promise<Bounded<ControlResult> | null>;
+  readStoppable: ReadStoppable;
   rebalanceNotices: RebalanceNotice[];
   reconnectingFor: (machineId: string) => number;
   recordDelegateAnswer: (
@@ -1212,7 +1199,7 @@ export interface ClosureContext {
   settleSignin: (
     account: Account,
     machineId: string,
-    result: AccountSigninResult | ProviderSigninResult
+    finished: SigninFinished
   ) =>
     | Promise<ProviderSigninResult | { error: string }>
     | Promise<AccountSigninResult | { error: string }>;

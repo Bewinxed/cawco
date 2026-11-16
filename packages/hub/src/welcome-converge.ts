@@ -10,8 +10,13 @@
  * window says the machine is in the fleet only once what the fleet holds is
  * on it, a machine whose last converge was cut short included.
  */
-import type { FleetAck, FleetDelta, FleetItemStatus } from "@cawco/core/fleet";
-import type { ControlResultFrame } from "@cawco/core/frames";
+
+import type {
+  FLEET_DELTA,
+  FleetDelta,
+  FleetItemStatus,
+} from "@cawco/core/fleet";
+import type { ControlAnswer } from "./machine-answers";
 
 interface Owed {
   generation: number;
@@ -39,10 +44,8 @@ export class WelcomeConverge {
   }
 
   /** The machine answered a delta (ACK): the generation it has converged. */
-  answered(machineId: string, result: ControlResultFrame): void {
-    const converged = result.ok
-      ? (result.result as Partial<FleetAck> | undefined)?.convergedGeneration
-      : undefined;
+  answered(machineId: string, result: ControlAnswer<typeof FLEET_DELTA>): void {
+    const converged = result.ok ? result.result.convergedGeneration : undefined;
     this.#reached(machineId, converged);
   }
 

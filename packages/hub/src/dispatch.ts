@@ -981,7 +981,7 @@ export const createDispatcher = ({
   };
 
   const instance = (id: string): InstanceRow | undefined =>
-    db.getInstancesByIds([id])[0] as InstanceRow | undefined;
+    db.getInstancesByIds([id])[0];
 
   /** The project's conversation, started now when it has none; undefined while its switch is off. */
   const conversationOf = async (project: ProjectRow, by: Origin = "event") => {

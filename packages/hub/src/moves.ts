@@ -20,7 +20,9 @@
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
+import type { ControlName, ControlReply } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import {
   type MachinePath,
@@ -41,7 +43,6 @@ import {
   type MoveEstimate,
   type MoveInspection,
   type MoveJob,
-  type MoveLfsResult,
   type MoveProgressFrame,
   type MoveRemoteAuth,
   type MoveRequest,
@@ -57,11 +58,6 @@ import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";
-import {
-  MoveInspectionSchema,
-  MoveLfsResultShape,
-  MoveSnapshotResultShape,
-} from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { spawnWords } from "@cawco/core/words/spawn";
@@ -76,7 +72,6 @@ import type { HubLifetimeShape } from "./lifetime";
 import { hubRemoteIdentity, normaliseRemote } from "./projects";
 
 import type { SpawnProblem } from "./spawn-problems";
-import { received } from "./stored-json";
 
 export interface MovesDeps {
   /** Every ask parked now, the ones kept across a hub restart included (server.ts `pending`). */
@@ -86,12 +81,12 @@ export interface MovesDeps {
    * machine is not connected (or went while it answered), which a job waits
    * out; else the machine's own cause, thrown as its `MachineProblem`.
    */
-  readonly call: (
+  readonly call: <K extends ControlName>(
     machineId: string,
-    method: string,
+    method: K,
     args: unknown[],
     timeoutMs: number
-  ) => Promise<unknown>;
+  ) => Promise<ControlReply<K>>;
   readonly db: DbShape;
   /** The hub's git remote's repositories (git-remote.ts). */
   readonly gitRoot: string;
@@ -103,7 +98,7 @@ export interface MovesDeps {
    */
   readonly modeRefusal: (
     machineId: string,
-    harness: string,
+    harness: HarnessKind,
     mode: string | undefined
   ) => string | undefined;
   /**
@@ -479,29 +474,17 @@ export const createMoves = (deps: MovesDeps) => {
     stage: MoveStep
   ): Promise<MoveRemoteAuth> =>
     readsCredential(row, stage)
-      ? ((await deps.call(
+      ? await deps.call(
           row.state.sourceMachineId,
           CONTROL_MOVE_REMOTE_CREDENTIAL,
           [row.state.sourcePath],
           INSPECT_TIMEOUT_MS
-        )) as MoveRemoteAuth)
+        )
       : {};
 
-  /** A machine's inspection of `path`, taken into CawCo's type: its large files, LFS and ignores are kept in the move's record. */
-  const inspect = async (
-    machineId: string,
-    path: string
-  ): Promise<MoveInspection> =>
-    received(
-      MoveInspectionSchema,
-      await deps.call(
-        machineId,
-        CONTROL_MOVE_INSPECT,
-        [path],
-        INSPECT_TIMEOUT_MS
-      ),
-      "a machine's move inspection"
-    );
+  /** A machine's inspection of `path`, as its type (core control-replies.ts): its large files, LFS and ignores are kept in the move's record. */
+  const inspect = (machineId: string, path: string): Promise<MoveInspection> =>
+    deps.call(machineId, CONTROL_MOVE_INSPECT, [path], INSPECT_TIMEOUT_MS);
 
   /** Whether the hub's repository `key` already holds `commit` on a branch. */
   const onHub = async (key: HubRepoKey, commit: string): Promise<boolean> => {
@@ -1180,7 +1163,7 @@ export const createMoves = (deps: MovesDeps) => {
         return {};
       }
       case "snapshot": {
-        const snapshot = (await deps.call(
+        const kept = await deps.call(
           state.sourceMachineId,
           CONTROL_MOVE_SNAPSHOT,
           [
@@ -1193,12 +1176,6 @@ export const createMoves = (deps: MovesDeps) => {
             },
           ],
           STEP_TIMEOUT_MS
-        )) as MoveSnapshotResult;
-        // The machine's answer, taken into CawCo's type as it is kept.
-        const kept = received(
-          MoveSnapshotResultShape,
-          snapshot,
-          "a machine's move snapshot"
         );
         // A repository with no origin has the hub's as its remote from here.
         if (kept.hub) {
@@ -1212,7 +1189,7 @@ export const createMoves = (deps: MovesDeps) => {
             "There is no snapshot to clone: the source had no commit."
           );
         }
-        const lfs = (await deps.call(
+        const lfs = await deps.call(
           state.targetMachineId,
           CONTROL_MOVE_CLONE,
           [
@@ -1229,16 +1206,13 @@ export const createMoves = (deps: MovesDeps) => {
             },
           ],
           STEP_TIMEOUT_MS
-        )) as MoveLfsResult;
+        );
         return state.steps.includes("lfs")
-          ? {
-              lfs: received(MoveLfsResultShape, lfs, "a machine's move clone"),
-              progress: undefined,
-            }
+          ? { lfs, progress: undefined }
           : { progress: undefined };
       }
       case "lfs": {
-        const lfs = (await deps.call(
+        const lfs = await deps.call(
           state.targetMachineId,
           CONTROL_MOVE_LFS,
           [
@@ -1252,9 +1226,9 @@ export const createMoves = (deps: MovesDeps) => {
             },
           ],
           STEP_TIMEOUT_MS
-        )) as MoveLfsResult;
+        );
         return {
-          lfs: received(MoveLfsResultShape, lfs, "a machine's move LFS step"),
+          lfs,
           progress: undefined,
           lfsFile: undefined,
         };

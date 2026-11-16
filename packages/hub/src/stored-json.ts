@@ -228,6 +228,15 @@ const undeclaredIssue = (undeclared: readonly UndeclaredKey[]): string => {
 const leftOut = new Set<string>();
 
 /**
+ * What {@link received} made of a value another program sent: its type's
+ * value, or, when it is not that type at all, the value as it came (`raw`,
+ * typed as the caller held it) and what is wrong with it (`issue`, as zod
+ * says it).
+ */
+export type Received<T, R> =
+  { ok: true; value: T } | { ok: false; raw: R; issue: string };
+
+/**
  * `value`, which another program sent (an agent's frame or answer, a
  * harness's own report carried in one), as `schema`'s type, to be stored:
  * the keys its type declares, each other one left out here and said once
@@ -237,17 +246,19 @@ const leftOut = new Set<string>();
  * that is no fault of CawCo's, a field Claude Code added (its model list's
  * `supportsThinkingOff`, 2026-11-04), or one an older agent still sends
  * after it left the type, so it is taken into the type where it arrives.
- * A value that is not its type at all comes back as it was, for its write
- * to refuse with the column's name.
+ * A value that is not its type at all is said as not parsed, with the value
+ * as it came: a caller that holds it typed (a frame's field) hands it to its
+ * write, which refuses it with the column's name; one that holds it unknown
+ * (a machine's answer) fails there.
  */
-export const received = <S extends z.ZodType>(
+export const received = <S extends z.ZodType, R>(
   schema: S,
-  value: unknown,
+  value: R,
   from: string
-): z.output<S> => {
+): Received<z.output<S>, R> => {
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
-    return value as z.output<S>;
+    return { ok: false, raw: value, issue: issueOf(parsed.error) };
   }
   for (const { key, type } of undeclaredKeys(schema, value, parsed.data)) {
     const path = key.replace(INDEX, "[]");
@@ -259,7 +270,22 @@ export const received = <S extends z.ZodType>(
       );
     }
   }
-  return parsed.data;
+  return { ok: true, value: parsed.data };
+};
+
+/**
+ * `value`, which CawCo holds as its own type `R` (a frame's field) though
+ * another program sent it, kept as `schema`'s type ({@link received}): its
+ * keys the type declares; or, when it is not that type at all, as it came,
+ * for its write to refuse with the column's name.
+ */
+export const keptAs = <S extends z.ZodType, R>(
+  schema: S,
+  value: R,
+  from: string
+): z.output<S> | R => {
+  const read = received(schema, value, from);
+  return read.ok ? read.value : read.raw;
 };
 
 /**

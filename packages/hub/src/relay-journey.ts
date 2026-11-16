@@ -72,10 +72,10 @@ import type {
   StreamRelayDb,
 } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
+import type { AgentCall } from "./machine-answers";
 
 import {
   candidateOf,
-  type RelayCall,
   type RelayFleetMachine,
   type RelayMachineRefusal,
   type StreamRelay,
@@ -104,7 +104,7 @@ export interface RelayAsker {
 }
 
 export interface RelayJourneyDeps {
-  call: RelayCall;
+  call: AgentCall;
   db: StreamRelayDb;
   /** The hub's own machine, listed first when two or more machines could run the relay. */
   hubMachineId: () => string | null;
@@ -743,7 +743,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         runtimeRead = { machineId, read: "failed" };
         return;
       }
-      const runtime = read.value.result as RelayRuntimeRead;
+      const runtime = read.value.result;
       runtimeRead = { machineId, read: runtime };
       // Kept as whether the runtime holds what the relay needs, so the step
       // stands ticked across a hub restart until the next read.
@@ -844,7 +844,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     try {
       const read = await call(away.machineId, RELAY_PROVE, [{ urls }], READ_MS);
       if (read.kind === "answered" && read.value.ok) {
-        const answered = read.value.result as string[];
+        const answered = read.value.result;
         if (answered.length > 0) {
           db.proved({
             deviceId: `machine:${away.machineId}`,
@@ -1202,6 +1202,8 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         detail: "The stream relay is not set up yet: press Set up first.",
       });
     }
+    // Legitimate (casts inventory): `ACTS[one.act]` and `one` are a correlated
+    // union TypeScript does not tie, https://github.com/microsoft/TypeScript/issues/30581
     const run = ACTS[one.act] as (
       journey: StoredJourney,
       act: RelayAct,
@@ -1389,7 +1391,7 @@ export const relayJourneyRoutes = (
       { body: ACT_BODY },
       async ({ body, request, server }) => {
         const asker = askerOf(request, socketOf(request, server));
-        const acted = await journey.act(body as RelayAct, asker);
+        const acted = await journey.act(body, asker);
         return acted instanceof ElysiaStatus ? acted : answer(asker);
       }
     )
