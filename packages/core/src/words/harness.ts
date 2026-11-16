@@ -23,6 +23,9 @@ export const harnessWords = {
   /** The context a compacted session gets in place of its open items when they could not be listed in time (agent claude.ts `#openItemsAfterCompaction`). */
   openItemsUnlisted:
     "Your open items could not be listed after the compaction. Call open_items to list them.",
+  /** Claude Code options a spawn carried that are not options of the shape the SDK takes (core claude-options.ts), with what does not read. */
+  claudeOptionsUnread: (issues: string) =>
+    `The Claude Code options this session was started with don't read: ${issues}. Nothing was started.`,
   /** A Claude Code process that ended on its own and said nothing on stderr. */
   claudeCrashed:
     "Claude Code stopped on its own and said nothing about why. A message to it starts it again.",
