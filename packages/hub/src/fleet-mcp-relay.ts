@@ -7,7 +7,7 @@ import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
-import * as v from "valibot";
+import { object, record, safeParse, string, unknown } from "valibot";
 import { z } from "zod";
 
 /**
@@ -68,7 +68,7 @@ const isListMethod = (method: string): method is ListMethod =>
   Object.hasOwn(LIST_METHODS, method);
 
 /** What an upstream's `initialize` result offers, by area (tools, prompts, resources). */
-const Offers = v.object({ capabilities: v.record(v.string(), v.unknown()) });
+const Offers = object({ capabilities: record(string(), unknown()) });
 /** Each list-changed notification, and the lists it makes stale. */
 const CHANGED: Record<string, string[]> = {
   "notifications/tools/list_changed": ["tools/list"],
@@ -714,7 +714,7 @@ export class FleetMcpRelay {
     let listed: Listed;
     try {
       const lister = await this.#lister(name, state, upstream);
-      const offers = v.safeParse(Offers, lister.result);
+      const offers = safeParse(Offers, lister.result);
       const offered =
         offers.success && offers.output.capabilities[method.split("/")[0]];
       if (!offered) {

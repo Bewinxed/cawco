@@ -33,7 +33,17 @@ import type {
   FleetPluginPayload,
   MarketplacePluginInfo,
 } from "@cawco/core/fleet";
-import * as v from "valibot";
+import {
+  array,
+  type InferOutput,
+  is,
+  looseObject,
+  optional,
+  record,
+  safeParse,
+  string,
+  unknown,
+} from "valibot";
 import { pluginVersion } from "./fleet-versions";
 import { downloadRepo, get, readTree, unpack } from "./skills";
 
@@ -60,28 +70,28 @@ const inside = (root: string, rel: string): string => {
 };
 
 /** What a marketplace's manifest says, of the parts that matter here: each plugin's facts, and its source as written, read where it resolves. */
-const Manifest = v.looseObject({
-  name: v.optional(v.unknown()),
-  plugins: v.optional(
-    v.array(
-      v.looseObject({
-        category: v.optional(v.string()),
-        description: v.optional(v.string()),
-        name: v.string(),
-        source: v.optional(v.unknown()),
-        version: v.optional(v.string()),
+const Manifest = looseObject({
+  name: optional(unknown()),
+  plugins: optional(
+    array(
+      looseObject({
+        category: optional(string()),
+        description: optional(string()),
+        name: string(),
+        source: optional(unknown()),
+        version: optional(string()),
       })
     )
   ),
 });
-type Manifest = v.InferOutput<typeof Manifest>;
+type Manifest = InferOutput<typeof Manifest>;
 
 /** A plugin source that is not a path: an object naming its kind (github, url, git-subdir) and where. */
-const SourceSpec = v.record(v.string(), v.unknown());
+const SourceSpec = record(string(), unknown());
 
 /** `read` as a manifest, or undefined when it is none. */
 const manifestOf = (read: unknown): Manifest | undefined => {
-  const parsed = v.safeParse(Manifest, read);
+  const parsed = safeParse(Manifest, read);
   return parsed.success ? parsed.output : undefined;
 };
 
@@ -261,7 +271,7 @@ const pluginRoot = async (
     }
     return inside(marketplace, source);
   }
-  if (!v.is(SourceSpec, source)) {
+  if (!is(SourceSpec, source)) {
     throw new Error(`${entry.name} has no source cawco can read`);
   }
   const kind = typeof source.source === "string" ? source.source : undefined;

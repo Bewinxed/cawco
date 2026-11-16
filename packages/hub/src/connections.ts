@@ -117,7 +117,16 @@ import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/rest";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
-import * as v from "valibot";
+import {
+  type GenericSchema,
+  type InferOutput,
+  number,
+  object,
+  optional,
+  parse,
+  string,
+  union,
+} from "valibot";
 import { readsOnly } from "./connection-writes";
 import {
   type AppFacts,
@@ -499,43 +508,43 @@ const originOf = (origin: string): URL => {
 };
 
 /** GitHub's words when a token or code endpoint refuses: its code, and the interval a `slow_down` names. */
-const GitHubRefusal = v.object({
-  error: v.string(),
-  error_description: v.optional(v.string()),
-  interval: v.optional(v.number()),
+const GitHubRefusal = object({
+  error: string(),
+  error_description: optional(string()),
+  interval: optional(number()),
 });
 
 /** A GitHub token endpoint's JSON answer: a token, or the error its device and refresh flows name. */
-const GitHubTokenAnswer = v.union([
-  v.object({
-    access_token: v.string(),
-    expires_in: v.optional(v.number()),
-    refresh_token: v.optional(v.string()),
-    scope: v.optional(v.string()),
-    token_type: v.string(),
+const GitHubTokenAnswer = union([
+  object({
+    access_token: string(),
+    expires_in: optional(number()),
+    refresh_token: optional(string()),
+    scope: optional(string()),
+    token_type: string(),
   }),
   GitHubRefusal,
 ]);
-type GitHubTokenAnswer = v.InferOutput<typeof GitHubTokenAnswer>;
+type GitHubTokenAnswer = InferOutput<typeof GitHubTokenAnswer>;
 
 /** GitHub's device code answer ("POST https://github.com/login/device/code"), or its refusal. */
-const GitHubDeviceCodes = v.union([
-  v.object({
-    device_code: v.string(),
-    expires_in: v.optional(v.number()),
-    interval: v.optional(v.number()),
-    user_code: v.string(),
-    verification_uri: v.string(),
+const GitHubDeviceCodes = union([
+  object({
+    device_code: string(),
+    expires_in: optional(number()),
+    interval: optional(number()),
+    user_code: string(),
+    verification_uri: string(),
   }),
   GitHubRefusal,
 ]);
 
 /** A form posted to GitHub's site (device codes, tokens), answered as JSON ("Accept: application/json") that `schema` takes; any other answer throws. */
-const postToGitHub = async <S extends v.GenericSchema>(
+const postToGitHub = async <S extends GenericSchema>(
   path: string,
   form: Record<string, string>,
   schema: S
-): Promise<v.InferOutput<S>> => {
+): Promise<InferOutput<S>> => {
   const read = await readWithin(CONNECT_MS, async (signal) => {
     const answer = await fetch(`${GITHUB_WEB}${path}`, {
       method: "POST",
@@ -549,7 +558,7 @@ const postToGitHub = async <S extends v.GenericSchema>(
     if (!answer.ok) {
       throw new Error(`GitHub answered ${answer.status}`);
     }
-    return v.parse(schema, await answer.json());
+    return parse(schema, await answer.json());
   });
   if (read.kind === "unanswered") {
     throw new Error(`GitHub did not answer within ${secondsOf(read.after)} s`);
@@ -762,8 +771,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
     });
     // Octokit's own `auth()` is typed `unknown`; the same app's auth, made
     // through its request, answers an installation token typed.
-    const auth = createAppAuth({ ...strategy, request: octokit.request });
-    const kept = { auth, made, octokit };
+    const appAuth = createAppAuth({ ...strategy, request: octokit.request });
+    const kept = { auth: appAuth, made, octokit };
     githubApps.set(r.id, kept);
     return kept;
   };
@@ -2290,7 +2299,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
         "Sign-in with a code needs CawCo's GitHub app, which isn't registered yet. Connect with gh on a machine, or as a GitHub App."
       );
     }
-    let codes: v.InferOutput<typeof GitHubDeviceCodes>;
+    let codes: InferOutput<typeof GitHubDeviceCodes>;
     try {
       codes = await postToGitHub(
         "/login/device/code",

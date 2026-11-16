@@ -4,7 +4,19 @@ import { dirname, join, resolve } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { Elysia, problem, t } from "elysia";
-import * as v from "valibot";
+import {
+  array,
+  boolean,
+  type GenericSchema,
+  lazy,
+  looseObject,
+  number,
+  optional,
+  record,
+  safeParse,
+  string,
+  unknown,
+} from "valibot";
 import { z } from "zod";
 import { DB_PATH } from "./config";
 import { hidden } from "./hidden";
@@ -59,24 +71,24 @@ interface Frame {
 }
 
 /** One frame of MetricKit's call-stack tree, with its callees under it. */
-const FrameSchema: v.GenericSchema<Frame> = v.looseObject({
-  address: v.optional(v.number()),
-  binaryName: v.optional(v.string()),
-  binaryUUID: v.optional(v.string()),
-  offsetIntoBinaryTextSegment: v.optional(v.number()),
-  sampleCount: v.optional(v.number()),
-  subFrames: v.optional(v.array(v.lazy(() => FrameSchema))),
+const FrameSchema: GenericSchema<Frame> = looseObject({
+  address: optional(number()),
+  binaryName: optional(string()),
+  binaryUUID: optional(string()),
+  offsetIntoBinaryTextSegment: optional(number()),
+  sampleCount: optional(number()),
+  subFrames: optional(array(lazy(() => FrameSchema))),
 });
 
 /** The part of a diagnostic its stack text reads: each thread's frames. */
-const StackTreeSchema = v.looseObject({
-  callStackTree: v.optional(
-    v.looseObject({
-      callStacks: v.optional(
-        v.array(
-          v.looseObject({
-            threadAttributed: v.optional(v.boolean()),
-            callStackRootFrames: v.optional(v.array(FrameSchema)),
+const StackTreeSchema = looseObject({
+  callStackTree: optional(
+    looseObject({
+      callStacks: optional(
+        array(
+          looseObject({
+            threadAttributed: optional(boolean()),
+            callStackRootFrames: optional(array(FrameSchema)),
           })
         )
       ),
@@ -85,8 +97,8 @@ const StackTreeSchema = v.looseObject({
 });
 
 /** The part of a diagnostic its summary reads: MetricKit's metadata. */
-const MetaDataSchema = v.looseObject({
-  diagnosticMetaData: v.optional(v.record(v.string(), v.unknown())),
+const MetaDataSchema = looseObject({
+  diagnosticMetaData: optional(record(string(), unknown())),
 });
 
 /**
@@ -96,7 +108,7 @@ const MetaDataSchema = v.looseObject({
  */
 function stackText(diagnostic: Record<string, unknown>): string {
   // A tree MetricKit did not write as its documented shape has no stacks to show.
-  const read = v.safeParse(StackTreeSchema, diagnostic);
+  const read = safeParse(StackTreeSchema, diagnostic);
   const tree = read.success ? read.output.callStackTree : undefined;
   const lines: string[] = [];
   const walk = (frame: Frame, depth: number) => {
@@ -120,7 +132,7 @@ function stackText(diagnostic: Record<string, unknown>): string {
 }
 
 const summary = ({ diagnostic, ...rest }: Stored) => {
-  const read = v.safeParse(MetaDataSchema, diagnostic);
+  const read = safeParse(MetaDataSchema, diagnostic);
   const meta = (read.success && read.output.diagnosticMetaData) || {};
   return {
     ...rest,
@@ -217,14 +229,14 @@ export const appleDiagnosticsRoutes = () =>
         const records = recordsOf(body);
         // The same diagnostic sent again (a retry, a past payload) is kept once.
         const written = await Promise.all(
-          records.map(async (record) => {
-            const file = Bun.file(join(DIR, `${record.id}.json`));
+          records.map(async (one) => {
+            const file = Bun.file(join(DIR, `${one.id}.json`));
             if (await file.exists()) {
               return false;
             }
             await writeStateFile(
-              join(DIR, `${record.id}.json`),
-              JSON.stringify(record)
+              join(DIR, `${one.id}.json`),
+              JSON.stringify(one)
             );
             return true;
           })
@@ -257,22 +269,22 @@ export const appleDiagnosticsRoutes = () =>
             detail: "No such diagnostic.",
           });
         }
-        const record = await readRecord(
+        const kept = await readRecord(
           join(DIR, `${params.id}.json`),
           StoredSchema
         );
-        if (!record) {
+        if (!kept) {
           return problem(404, {
             code: "no-such-diagnostic",
             detail: "No such diagnostic.",
           });
         }
-        const stack = stackText(record.diagnostic);
+        const stack = stackText(kept.diagnostic);
         if (query.format === "text") {
-          const head = `${record.kind} · CawCo ${record.appVersion} (${record.build}) · ${record.os}${record.device ? ` · ${record.device}` : ""}`;
+          const head = `${kept.kind} · CawCo ${kept.appVersion} (${kept.build}) · ${kept.os}${kept.device ? ` · ${kept.device}` : ""}`;
           set.headers["content-type"] = "text/plain; charset=utf-8";
           return `${head}\n\n${stack}\n`;
         }
-        return { ...summary(record), diagnostic: record.diagnostic, stack };
+        return { ...summary(kept), diagnostic: kept.diagnostic, stack };
       }
     );

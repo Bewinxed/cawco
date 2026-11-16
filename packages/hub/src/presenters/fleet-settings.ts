@@ -17,12 +17,12 @@ import {
   type MemoryScope,
   parseAgentFrontMatter,
 } from "@cawco/core/fleet";
+import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
 import {
   type FleetHarnessConfig,
   type HarnessConfigKind,
   harnessConfigLabel,
 } from "@cawco/core/harness-config";
-import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
 import type { FleetHook } from "@cawco/core/hooks";
 import type { Rule, RuleRow } from "@cawco/core/rules";
 import {
@@ -285,9 +285,9 @@ export const ruleSettingsWords = (
           ? "No rules."
           : `${count(rules.length, "rule")}; update and remove take the id:`),
       (rules ?? []).map(ruleLine),
-      (templates ?? []).length > 0 &&
+      templates.length > 0 &&
         `Starter templates (create takes a template's fields; response_format "detailed" has each one's draft):`,
-      (templates ?? []).map(templateLine)
+      templates.map(templateLine)
     );
   }
   return `Saved rule ${answer.name} (${answer.id.slice(0, 8)}): ${answer.enabled ? "on" : "off"}, ${answer.matchKind} ${quote(answer.pattern, 120)}.`;

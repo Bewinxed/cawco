@@ -3,7 +3,7 @@
  */
 
 import { MEMORY_ROLES } from "@cawco/core/fleet";
-import { HARNESSES } from "@cawco/core/harness/kinds";
+import { harnessNamed } from "@cawco/core/harness/kinds";
 import {
   RULE_TEMPLATES,
   type Rule,
@@ -11,7 +11,7 @@ import {
   ruleProblem,
 } from "@cawco/core/rules";
 import { areaWords } from "@cawco/core/words/areas";
-import { Elysia, problem, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import type { DbShape } from "../db";
 import { undoable } from "../db/trash";
@@ -41,12 +41,32 @@ export const ruleBody = t.Object({
     machineId: t.Optional(t.String()),
     projectId: t.Optional(t.String()),
     areaId: t.Optional(t.String()),
-    harness: t.Optional(t.UnionEnum(HARNESSES)),
+    harness: t.Optional(t.String()),
     model: t.Optional(t.String()),
     role: t.Optional(t.UnionEnum(MEMORY_ROLES)),
     delegateType: t.Optional(t.String()),
   }),
 });
+
+/**
+ * A rule's body as the rule it drafts: a scope's harness one of the
+ * harnesses, or the 400 that names it.
+ */
+const draftOf = (body: Static<typeof ruleBody>) => {
+  const { harness, ...scope } = body.scope;
+  const named = harnessNamed(harness);
+  if (harness !== undefined && named === undefined) {
+    return problem(400, {
+      code: "rule-invalid",
+      detail: `${harness} is no harness: claude, opencode or pi.`,
+    });
+  }
+  const draft: RuleDraft = {
+    ...body,
+    scope: { ...scope, ...(named === undefined ? {} : { harness: named }) },
+  };
+  return draft;
+};
 
 /** The first thing wrong with a rule as drafted, in the words the form shows. */
 const firstRuleProblem = (draft: RuleDraft): string | undefined => {
@@ -101,7 +121,10 @@ export const ruleCalls = ({
     templates: RULE_TEMPLATES,
   }),
   create: (body: Static<typeof ruleBody>) => {
-    const draft: RuleDraft = body;
+    const draft = draftOf(body);
+    if (draft instanceof ElysiaStatus) {
+      return draft;
+    }
     const invalid = invalidRule(draft) ?? misplacedRule(db, draft);
     if (invalid) {
       return invalid;
@@ -117,7 +140,10 @@ export const ruleCalls = ({
     return rule;
   },
   update: (id: string, body: Static<typeof ruleBody>) => {
-    const draft: RuleDraft = body;
+    const draft = draftOf(body);
+    if (draft instanceof ElysiaStatus) {
+      return draft;
+    }
     const invalid = invalidRule(draft);
     if (invalid) {
       return invalid;
