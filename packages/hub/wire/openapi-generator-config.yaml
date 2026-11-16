@@ -130,7 +130,6 @@ typeOverrides:
     KeepAliveState: OpenEnums.KeepAliveState
     KeepAliveTtl: OpenEnums.KeepAliveTtl
     LandsMode: OpenEnums.LandsMode
-    Law: OpenEnums.Law
     LfsOfferStateAnswer: OpenEnums.LfsOfferStateAnswer
     LinkMode: OpenEnums.LinkMode
     LocalNameState: OpenEnums.LocalNameState

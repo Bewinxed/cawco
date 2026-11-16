@@ -3217,7 +3217,8 @@ export const createSends = (ctx: SendsContext) => {
       left.length === 0,
       "owed-send-machine-has-deadline",
       () =>
-        `Machine ${machineId} reads offline with no deadline, and ${left.length} send(s) kept for it still wait on it: ${left.map((send) => send.uuid).join(", ")}.`
+        `Machine ${machineId} reads offline with no deadline, and ${left.length} send(s) kept for it still wait on it: ${left.map((send) => send.uuid).join(", ")}.`,
+      () => ({ machine: machineId })
     );
   };
 
@@ -3260,7 +3261,8 @@ export const createSends = (ctx: SendsContext) => {
           ctx.reconnectingFor(machineId) > 0,
         "owed-send-machine-has-deadline",
         () =>
-          `Send ${uuid} was about to be kept for machine ${machineId}, which reads offline with no deadline: no socket, no reconnecting window ahead, no pause.`
+          `Send ${uuid} was about to be kept for machine ${machineId}, which reads offline with no deadline: no socket, no reconnecting window ahead, no pause.`,
+        () => ({ send: uuid, machine: machineId })
       )
     );
 

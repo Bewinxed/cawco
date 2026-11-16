@@ -255,10 +255,6 @@ public final class FleetStore {
     public func actions(projectId: String, taskId: String) -> [ApprovedAction] {
         actions.filter { $0.projectId == projectId && $0.taskId == taskId }
     }
-    /// Every system law the hub caught broken since it started (core
-    /// invariant.ts), whole on each `laws.broken` frame; none until one
-    /// breaks (client.svelte.ts `lawsBroken`).
-    public internal(set) var lawsBroken: [Components.Schemas.LawBroken] = []
     /// HTTPS on the hub machine's tailnet name (`GET /api/tailnet-https`,
     /// client.svelte.ts `tailnetHttps`): read on connect, then on each
     /// `tailnet.https` frame; Needs you shows its step while one stands.

@@ -1563,8 +1563,6 @@ public final class HubConnection {
             fleet.watchNotices = notices
         case let .actions(actions):
             fleet.actions = actions
-        case let .lawsBroken(broken):
-            fleet.lawsBroken = broken
         case let .fleetFetched(frame):
             fleetFetches = Array((fleetFetches + [frame]).suffix(32))
             fleetFetchCount += 1

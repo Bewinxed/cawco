@@ -488,6 +488,7 @@ import { landedDiff } from "./landed";
 import { landingBranch } from "./landing-run";
 import { createLaunchAccounts } from "./launch-accounts";
 import { createLaunches } from "./launches";
+import { createLawTasks } from "./law-tasks";
 import { createLaws } from "./laws";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
@@ -2306,16 +2307,10 @@ export const createServer = (
 
   /**
    * The system's laws, at the hub (laws.ts): a broken one fails its frame or
-   * request, is logged by name, and goes to every dashboard as a red notice.
+   * request, is logged by name, and opens a defect task for agents once the
+   * tasks exist (law-tasks.ts, filled below).
    */
-  const laws = createLaws({
-    broadcast: (broken) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "laws.broken", broken },
-      } satisfies HubEnvelope<"frames">),
-  });
+  const laws = createLaws();
 
   /**
    * An update about to restart this hub, told to every dashboard before it
@@ -2332,20 +2327,13 @@ export const createServer = (
   );
 
   /**
-   * What a dashboard is owed after its board: every law caught broken
-   * before it, and an update about to restart this hub (one that connects
-   * in its last moments hears it as the rest did).
+   * What a dashboard is owed after its board: an update about to restart
+   * this hub (one that connects in its last moments hears it as the rest
+   * did).
    */
-  const owedAfterBoard = (
-    broken: ReturnType<typeof laws.broken>
-  ): ClientPayload[] => {
+  const owedAfterBoard = (): ClientPayload[] => {
     const restart = restarts.frame();
-    return [
-      ...(broken.length > 0
-        ? [{ kind: "laws.broken", broken } satisfies FramePayload]
-        : []),
-      ...(restart ? [restart] : []),
-    ];
+    return restart ? [restart] : [];
   };
 
   /**
@@ -8586,6 +8574,17 @@ export const createServer = (
       }
     },
   });
+  // A broken law opens a defect task in the project whose repository is
+  // CawCo's (law-tasks.ts), the breaks caught at boot before this first.
+  laws.fileWith(
+    createLawTasks({
+      after: lifetime.after,
+      gitRoot: GIT_ROOT,
+      projectIds: () => db.listProjects().map((project) => project.id),
+      tasks,
+      version: HUB_VERSION,
+    }).broke
+  );
   // External items on tasks (external-items.ts): links and comments from
   // GitHub and Linear as data, filed through one door.
   const externalItems = createExternalItems({

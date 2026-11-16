@@ -12,7 +12,6 @@
   import { GROUPS } from "#lib/cawco/config/sections.js";
   import { PREFETCHES as CAW_PREFETCHES } from "#lib/cawco/home/Caw.svelte";
   import { hubAuth, mustPair, readAuth } from "#lib/cawco/hub-auth.svelte.js";
-  import LawsBroken from "#lib/cawco/LawsBroken.svelte";
   import { provideMarkdownFleet } from "#lib/cawco/markdown-fleet.js";
   import { liveMarkdown } from "#lib/cawco/markdown-live.js";
   import PairingScreen from "#lib/cawco/PairingScreen.svelte";
@@ -169,5 +168,4 @@
     >{@render children()}</Shell
   >
   <CanvasStages />
-  <LawsBroken />
 {/if}

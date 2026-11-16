@@ -350,7 +350,8 @@ export const createBoard = (ctx: BoardContext) => {
         row.status !== "running" || ctx.registry.agent(row.machineId),
         "running-session-machine-connected",
         () =>
-          `Session ${row.id} was about to be served running on machine ${row.machineId}, which holds no socket at the hub.`
+          `Session ${row.id} was about to be served running on machine ${row.machineId}, which holds no socket at the hub.`,
+        () => ({ session: row.id, machine: row.machineId })
       );
     }
     return board;
@@ -467,19 +468,18 @@ export const createBoard = (ctx: BoardContext) => {
   /**
    * A dashboard's first frames, as its socket opens: the board, before it is
    * asked for, so the rail fills before the REST snapshot lands. A law broken
-   * on the board fails this snapshot (laws.ts), and the break goes to every
-   * dashboard, this one among them; a snapshot that went is followed by
-   * every law caught broken before it. Then the fleet's browsers, whole, to
+   * on the board fails this snapshot (laws.ts), and this dashboard is sent
+   * no board; a snapshot that went is followed by an update about to
+   * restart the hub, when one is. Then the fleet's browsers, whole, to
    * a page on this wire: a browser view paints from them and follows each
    * `browser_list` frame after, never polling. Then each passkey QR still in
    * time, which the take-over view draws over its stream.
    */
   const greetDashboard = (ws: ClientSocket, older: boolean): void => {
     const board = ctx.laws.hold(() => instancesFrame(""));
-    const broken = ctx.laws.broken();
     if (board) {
       ctx.sendToClient(ws, board);
-      for (const payload of ctx.owedAfterBoard(broken)) {
+      for (const payload of ctx.owedAfterBoard()) {
         ctx.sendToClient(ws, {
           verb: "frames",
           machineId: "hub",

@@ -1,8 +1,8 @@
 /**
  * What waits on the person beside the sessions' asks: approved actions,
- * fleet watch's notices, the artifacts in Needs you and their notices, and
- * every system law the hub caught broken. Read on connect where the hub
- * has a read, then kept whole by each one's frame.
+ * fleet watch's notices, and the artifacts in Needs you and their notices.
+ * Read on connect where the hub has a read, then kept whole by each one's
+ * frame.
  */
 import type { ApprovedActionView } from "@cawco/core/actions";
 import type {
@@ -10,7 +10,6 @@ import type {
   ArtifactNeedNotice,
 } from "@cawco/core/artifact-needs";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
-import type { LawBroken } from "@cawco/core/invariant";
 import { hub } from "#lib/platform/hub.js";
 import { hubData, hubDone } from "#lib/platform/hub-read.js";
 import { heardFrame, heardSince, readLeaves } from "../heard";
@@ -48,19 +47,12 @@ const needsState = $state<{
    */
   artifactNeeds: ArtifactNeed[];
   artifactNotices: ArtifactNeedNotice[];
-
-  /**
-   * Every system law the hub caught broken since it started (core
-   * invariant.ts), whole on each `laws.broken` frame; none until one breaks.
-   */
-  lawsBroken: LawBroken[];
 }>({
   questionsMoved: 0,
   actions: [],
   watchNotices: [],
   artifactNeeds: [],
   artifactNotices: [],
-  lawsBroken: [],
 });
 
 export function takeActions(frame: FrameOf<"actions">): void {
@@ -76,10 +68,6 @@ export function takeWatchNotices(frame: FrameOf<"fleet_watch.notices">): void {
 export function takeArtifactNeeds(frame: FrameOf<"artifact.needs">): void {
   needsState.artifactNeeds = frame.needs;
   needsState.artifactNotices = frame.notices;
-}
-
-export function takeLawsBroken(frame: FrameOf<"laws.broken">): void {
-  needsState.lawsBroken = frame.broken;
 }
 
 export function takeQuestionsMoved(): void {
@@ -134,7 +122,7 @@ const artifactNeedsOpen = $derived(
   )
 );
 
-/** What waits on the person beside the asks: actions, fleet watch's notices, artifacts, broken laws. */
+/** What waits on the person beside the asks: actions, fleet watch's notices, artifacts. */
 export const needsStore = {
   /** Approved actions waiting on you: proposed, or failed or unknown until put away. */
   get actions(): ApprovedActionView[] {
@@ -155,10 +143,6 @@ export const needsStore = {
   /** The artifacts' notices, newest first. */
   get artifactNotices(): ArtifactNeedNotice[] {
     return needsState.artifactNotices;
-  },
-  /** Every system law the hub caught broken since it started. */
-  get lawsBroken(): LawBroken[] {
-    return needsState.lawsBroken;
   },
   /**
    * What says a session's questions to the person may have moved: Needs

@@ -15,13 +15,15 @@
  *   alone is repaired in that workspace instead, and never reaches here
  *   (`live-workspace-judge-answers`).
  * - The hub throws: the frame or the request fails, the law is logged by
- *   name and raised as a red notice on every dashboard (hub laws.ts). One hub
- *   is the operator's only view, so a broken law never takes the board down.
+ *   name, and it opens a defect task for agents in the project whose
+ *   repository is CawCo's own (hub laws.ts, law-tasks.ts). One hub is the
+ *   operator's only view, so a broken law never takes the board down, and
+ *   it never reaches the person's screen: he does not fix the code.
  */
 
 /**
  * Every law, by name, with the sentence that states it. A law's name is what
- * the log line, the dashboard's notice and a grep for it all read.
+ * the log line, its defect task and a grep for it all read.
  */
 export const LAWS = {
   /**
@@ -38,8 +40,8 @@ export const LAWS = {
    * running is on a machine the hub holds a socket for now. Session
    * red-law-a was about to be served running on machine d04ca118428001f1,
    * which holds no socket at the hub." The dashboard socket was sent no
-   * board frame and one `laws.broken`. With the overlay back, the same row
-   * read `unknown`, 200, and no law.
+   * board frame. With the overlay back, the same row read `unknown`, 200,
+   * and no law.
    */
   "running-session-machine-connected":
     "Every session served as running is on a machine the hub holds a socket for now.",
@@ -97,41 +99,27 @@ export const LAWS = {
 
 export type Law = keyof typeof LAWS;
 
-/** One law the hub caught broken, as every dashboard is told it. */
-export interface LawBroken {
-  /** When it was first caught broken since the hub started, ms since the epoch. */
-  at: number;
-  /** How many times it has been caught broken since. */
-  count: number;
-  /** When it was last caught broken, ms since the epoch. */
-  lastAt: number;
-  law: Law;
-  /** The law's sentence ({@link LAWS}). */
-  statement: string;
-  /** The facts that broke it, the last time. */
-  words: string;
-}
-
 /**
- * Hub-originated: every law the hub has caught broken since it started,
- * whole, on each break, and to each dashboard as it connects. Sent apart from
- * the board, because the board's own frame may be the one a law failed.
+ * What a broken law was found about, by id, for the defect task it opens
+ * (hub law-tasks.ts): each one the break's facts name.
  */
-export interface LawsBrokenFrame {
-  broken: LawBroken[];
-  instanceId?: undefined;
-  kind: "laws.broken";
+export interface LawAbout {
+  machine?: string;
+  send?: string;
+  session?: string;
 }
 
-/** A law found broken: its name and the facts. */
+/** A law found broken: its name, the facts, and what they were about. */
 export class InvariantBroken extends Error {
+  readonly about: LawAbout;
   readonly law: Law;
   readonly words: string;
-  constructor(law: Law, words: string) {
+  constructor(law: Law, words: string, about: LawAbout = {}) {
     super(`Law broken: ${law}. ${LAWS[law]} ${words}`);
     this.name = "InvariantBroken";
     this.law = law;
     this.words = words;
+    this.about = about;
   }
 }
 
@@ -150,23 +138,25 @@ export const lawPolicy = (next: "crash" | "throw"): void => {
 };
 
 /**
- * Asserts `cond`, a law of the system. Broken, it names the law and the facts
- * (`words`, read only then) and throws {@link InvariantBroken}; in a process
- * whose policy is `crash` it says the same on stderr and the process exits
- * with 70 (EX_SOFTWARE), so nothing above it can catch the break and carry
- * on.
+ * Asserts `cond`, a law of the system. Broken, it names the law, the facts
+ * (`words`) and the ids they are about (`about`), each read only then, and
+ * throws {@link InvariantBroken}; in a process whose policy is `crash` it
+ * says the same on stderr and the process exits with 70 (EX_SOFTWARE), so
+ * nothing above it can catch the break and carry on.
  */
 export function invariant(
   cond: unknown,
   law: Law,
-  words: string | (() => string)
+  words: string | (() => string),
+  about?: () => LawAbout
 ): asserts cond {
   if (cond) {
     return;
   }
   const broken = new InvariantBroken(
     law,
-    typeof words === "function" ? words() : words
+    typeof words === "function" ? words() : words,
+    about?.()
   );
   if (policy === "crash") {
     console.error(`[law] ${broken.message}`);

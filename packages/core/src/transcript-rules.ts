@@ -2136,7 +2136,8 @@ function sendRow(
       row.metadata?.subtype === ARTIFACT_RESPONSES,
     "artifact-notice-drawn",
     () =>
-      `Send ${record.uuid} to session ${record.instanceId} came on the artifact origin, and no artifact notice reads it, so it was about to be drawn as the person's words: "${text.split("\n")[0].slice(0, 160)}".`
+      `Send ${record.uuid} to session ${record.instanceId} came on the artifact origin, and no artifact notice reads it, so it was about to be drawn as the person's words: "${text.split("\n")[0].slice(0, 160)}".`,
+    () => ({ send: record.uuid, session: record.instanceId })
   );
   const metadata = {
     ...row.metadata,

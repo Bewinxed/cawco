@@ -82,7 +82,6 @@ import {
   readWatchNotices,
   takeActions,
   takeArtifactNeeds,
-  takeLawsBroken,
   takeQuestionsMoved,
   takeWatchNotices,
 } from "./stores/needs.svelte";
@@ -500,7 +499,6 @@ export function startClient(): () => void {
     onFrame("installs", takeInstallsFrame),
     onFrame("fleet_watch.notices", takeWatchNotices),
     onFrame("artifact.needs", takeArtifactNeeds),
-    onFrame("laws.broken", takeLawsBroken),
     onFrame("hub.restart", takeHubRestart),
     onFrame("project.stop", takeProjectStop),
     onFrame("projects.changed", rereadProjects),

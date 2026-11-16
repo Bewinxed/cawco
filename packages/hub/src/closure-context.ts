@@ -890,9 +890,7 @@ export interface ClosureContext {
   openItems: ReturnType<typeof createOpenItems>;
   originKeyOf: (id: string) => string | undefined;
   outcomeOf: SessionCallsDeps["outcomeOf"];
-  owedAfterBoard: (
-    broken: ReturnType<ClosureContext["laws"]["broken"]>
-  ) => ClientPayload[];
+  owedAfterBoard: () => ClientPayload[];
   owedCarries: Map<string, Promise<void>>;
   owedMoves: {
     get: (instanceId: string) => OwedMove | undefined;

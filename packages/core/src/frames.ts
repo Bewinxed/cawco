@@ -29,7 +29,6 @@ import type { FleetWatchNoticesFrame } from "./fleet-watch";
 import type { HarnessKind } from "./harness/kinds";
 import type { HubAuthFrame } from "./hub-auth";
 import type { InstallsFrame } from "./install";
-import type { LawsBrokenFrame } from "./invariant";
 import type { MoveJob, MoveProgressFrame, MovesFrame } from "./move";
 import type { DeskAlertFrame, PersonFrame } from "./notifications";
 import type { PermissionPresentation } from "./permission-presentation";
@@ -892,7 +891,6 @@ export type FramePayload =
   /** Hub-originated: every artifact waiting on the person, and their notices, whole, on each change. */
   | ArtifactNeedsFrame
   /** Hub-originated: every law the hub caught broken, whole, on each break. */
-  | LawsBrokenFrame
   /** Hub-originated: the person's presence and the machines that count toward it. */
   | PersonFrame
   /** Hub-originated: something that needs the person, shown on the desk tab they use. */

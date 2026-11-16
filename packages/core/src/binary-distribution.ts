@@ -39,6 +39,13 @@ const NIGHTLY_TAG = /^nightly-(\d+)-[0-9a-f]+$/u;
 const TRAILING_SLASH = /\/$/u;
 
 export const RELEASE_REPOSITORY = "Bewinxed/cawco";
+/**
+ * CawCo's own repository by its root commit (the one HEAD reaches by first
+ * parents), which every clone of it has on any machine (hub-repo.ts): a
+ * project whose repository has it develops CawCo, and takes the defect
+ * tasks a broken law opens (hub law-tasks.ts).
+ */
+export const CAWCO_ROOT_COMMIT = "01d2d93bd4535f060ce8972b3d85bd120bbcca7f";
 export const NIGHTLY_TAG_PREFIX = "nightly-";
 
 /** The release repository as Octokit names it. */

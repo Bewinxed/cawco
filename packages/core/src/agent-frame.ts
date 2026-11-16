@@ -97,7 +97,6 @@ const FRAME_KINDS: ReadonlySet<string> = new Set(
     "delegate_event",
     "fleet_watch.notices",
     "artifact.needs",
-    "laws.broken",
     "person",
     "desk_alert",
     "moves",
