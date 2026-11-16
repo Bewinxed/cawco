@@ -752,6 +752,11 @@ const RestoreHeldWhyShape = z.union([
   }),
   z.object({ kind: z.literal("taken") }),
   z.object({ kind: z.literal("orphan"), parent: z.string().nullable() }),
+  z.object({
+    kind: z.literal("machine"),
+    machineId: z.string(),
+    hostname: z.string().nullable(),
+  }),
   z.object({ kind: z.literal("table") }),
 ]);
 export type RestoreHeldWhyOutput = z.output<typeof RestoreHeldWhyShape>;

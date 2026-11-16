@@ -97,7 +97,7 @@ export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
 const TRAILING_SLASHES = /\/+$/u;
 
 /** A hub place's machine: the hub itself, which is no machine of the fleet. */
-const HUB_PLACE_MACHINE = "hub";
+export const HUB_PLACE_MACHINE = "hub";
 
 /** Where a place stands in its project's list: the primary checkout, other checkouts, then the hub's folder. */
 const placeRank = (place: PlaceRow): number => {

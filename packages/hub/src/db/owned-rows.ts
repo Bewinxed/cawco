@@ -203,7 +203,11 @@ export const OWNED_ROWS = [
   { column: moves.sourceMachineId, rekey: "move" },
   { column: moves.targetMachineId, rekey: "move" },
   { column: rules.scopeMachineId, rekey: "move" },
-  { column: projectPlaces.machineId, rekey: "keyed" },
+  {
+    column: projectPlaces.machineId,
+    rekey: "keyed",
+    goesWithMachine: true,
+  },
   {
     column: projectRepositories.machineId,
     rekey: "keyed",

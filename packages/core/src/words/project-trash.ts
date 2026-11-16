@@ -29,6 +29,10 @@ const heldWhy = (why: RestoreHeldWhy): string => {
       return why.parent
         ? `the ${why.parent} row it names is gone`
         : "a row it hangs off is gone";
+    case "machine":
+      return why.hostname
+        ? `its machine, ${why.hostname}, was removed from the fleet`
+        : "its machine was removed from the fleet";
     case "table":
       return "its table is no longer kept";
     default:

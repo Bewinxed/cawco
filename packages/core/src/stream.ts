@@ -398,7 +398,7 @@ import type { TailnetServing } from "./tailnet-https";
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 78;
+export const WIRE_PROTOCOL = 79;
 
 /**
  * What a session's stream carries: the changes each frame made to its

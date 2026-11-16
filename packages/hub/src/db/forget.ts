@@ -32,7 +32,11 @@
  * - a key another row made since holds (that one stays);
  * - something it names that went since (a session, an account), treated as
  *   that thing's delete would have treated it: its link set to null where
- *   the key says so, else the row stays out.
+ *   the key says so, else the row stays out;
+ * - a machine no longer in the fleet, for a row that goes with its machine
+ *   (owned-rows.ts `GO_WITH_MACHINE`, a project's places among them): no
+ *   foreign key holds it to its machine, so it is checked here, and a try
+ *   again once the machine has joined again puts it back.
  *
  * Each cut link is set again where it still reads null and the row it
  * names stands; one naming a row held back waits with it. A project whose
@@ -66,7 +70,9 @@ import { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
 import { isStoredShapeError, primaryKeyOf } from "../stored-json";
 import { type Deleter, projectPage } from "./artifacts";
-import { artifacts } from "./schema";
+import { GO_WITH_MACHINE } from "./owned-rows";
+import { HUB_PLACE_MACHINE } from "./projects";
+import { agents, artifacts, removedMachines } from "./schema";
 import type { Tx } from "./tx";
 
 /** A value as the record keeps it: SQLite's text, numbers and nulls as they are, a blob as base64. */
@@ -565,6 +571,7 @@ export const forgetDb = (
       }
       const edges = edgesOf(tx);
       const staged = stage(rows, tables);
+      holdOffFleet(tx, staged);
       holdDependents(staged, edges);
       const own = staged.find((one) => one.table === "projects" && one.held);
       if (own) {
@@ -584,6 +591,7 @@ export const forgetDb = (
       }
       const edges = edgesOf(tx);
       const staged = stage(rows, tables);
+      holdOffFleet(tx, staged);
       holdDependents(staged, edges);
       return {
         ok: true,
@@ -849,6 +857,56 @@ const stage = (rows: ProjectRows, tables: SchemaTables): Staged[] =>
       };
     });
   });
+
+/** By table, the columns naming a machine whose rows go with it (owned-rows.ts `GO_WITH_MACHINE`). */
+const machineColumns = new Map<string, string[]>();
+for (const { column } of GO_WITH_MACHINE) {
+  const table = getTableName(column.table);
+  machineColumns.set(table, [
+    ...(machineColumns.get(table) ?? []),
+    column.name,
+  ]);
+}
+
+/**
+ * Each row not held back that goes with a machine (`machineColumns`) and
+ * names one the fleet no longer has (the hub's own folder, on
+ * `HUB_PLACE_MACHINE`, names none), held back, named by the hostname the
+ * machine had when it was removed: no foreign key ties it to its machine,
+ * so nothing else would keep it from coming back on one that is gone.
+ */
+const holdOffFleet = (tx: Tx, staged: Staged[]): void => {
+  for (const one of staged) {
+    for (const column of machineColumns.get(one.table) ?? []) {
+      const machineId = one.cells[column];
+      if (
+        one.held ||
+        typeof machineId !== "string" ||
+        machineId === HUB_PLACE_MACHINE
+      ) {
+        continue;
+      }
+      const kept = tx
+        .select({ machineId: agents.machineId })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get();
+      if (kept) {
+        continue;
+      }
+      const removed = tx
+        .select({ hostname: removedMachines.hostname })
+        .from(removedMachines)
+        .where(eq(removedMachines.machineId, machineId))
+        .get();
+      one.held = {
+        kind: "machine",
+        machineId,
+        hostname: removed?.hostname ?? null,
+      };
+    }
+  }
+};
 
 /** A held row as the restore names it. */
 const heldRow = (one: Staged): RestoreHeldRow => ({

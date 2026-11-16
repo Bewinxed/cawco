@@ -613,6 +613,18 @@ const SEEDED_SERVERS = [
   { name: "restore-unread-platforms", platforms: "linux and darwin" },
 ] as const;
 
+/**
+ * The checkout the restore case seeds for {@link RESTORED} on a machine the
+ * fleet removes before the restore: held back, named by the hostname the
+ * machine went with, until it joins again.
+ */
+const GONE_PLACE = {
+  id: "restore-removed-place",
+  machineId: "restore-removed-machine",
+  hostname: "gone.local",
+  path: "/home/dev/src/project-2-gone",
+} as const;
+
 /** A project's rows as a forget records them (db forget.ts `ProjectRows`'s tables). */
 interface TablesKept {
   columns: string[];
@@ -684,7 +696,8 @@ const rowsBeyond = (
 
 /**
  * The lists fixture unpacked twice at its base schema, {@link SEEDED_SERVERS}
- * seeded in both for {@link RESTORED}: `forgotten`, where it is forgotten,
+ * and {@link GONE_PLACE} seeded in both for {@link RESTORED} (no machine of
+ * the fleet holds the place's machine id): `forgotten`, where it is forgotten,
  * and `stayed`, where it stays. Undefined: the fixture's schema is past the
  * moved columns, or holds no such project.
  */
@@ -717,6 +730,16 @@ const seededCopies = async (dir: string) => {
         [server.name, config, RESTORED, server.platforms, Date.now()]
       );
     }
+    base.run(
+      "INSERT INTO project_places (id, project_id, machine_id, path, kind, created_at) VALUES (?, ?, ?, ?, 'checkout', ?)",
+      [
+        GONE_PLACE.id,
+        RESTORED,
+        GONE_PLACE.machineId,
+        GONE_PLACE.path,
+        Date.now(),
+      ]
+    );
     const entries = journalEntries(join(HUB, "drizzle"));
     const { pending } = migrationState(appliedRows(base), entries);
     base.run(`VACUUM INTO '${stayed.replaceAll("'", "''")}'`);
@@ -899,6 +922,34 @@ const retriedOn = async (path: string, held: HeldKept) => {
   }
 };
 
+/**
+ * {@link GONE_PLACE}'s machine on the database at `path` (today's schema):
+ * `removed`, as db machines.ts `deleteMachine` leaves the hub, its hostname
+ * kept in `removed_machines`; or joined again, as a register leaves it,
+ * its `agents` row there and the removal gone.
+ */
+const goneMachine = (path: string, state: "removed" | "joined"): void => {
+  const db = new Database(path, { readwrite: true });
+  try {
+    if (state === "removed") {
+      db.run(
+        "INSERT INTO removed_machines (machine_id, hostname, removed_at) VALUES (?, ?, ?)",
+        [GONE_PLACE.machineId, GONE_PLACE.hostname, Date.now()]
+      );
+      return;
+    }
+    db.run(
+      "INSERT INTO agents (machine_id, hostname, os, created_at) VALUES (?, ?, 'linux', ?)",
+      [GONE_PLACE.machineId, GONE_PLACE.hostname, Date.now()]
+    );
+    db.run("DELETE FROM removed_machines WHERE machine_id = ?", [
+      GONE_PLACE.machineId,
+    ]);
+  } finally {
+    db.close();
+  }
+};
+
 /** How many rows `kept` holds, of every table. */
 const keptCount = (held: HeldKept): number =>
   held.kept.tables.reduce((sum, one) => sum + one.rows.length, 0);
@@ -964,15 +1015,17 @@ const valueIn = (
  * copy, where the project stayed, opened the same way, is how the
  * migrations place its rows on a live hub: the restored project holds
  * exactly those rows, but the ones held back, each of them a value a
- * migration kept as not read or a row hanging off one, named with why. The
+ * migration kept as not read or a row hanging off one, or {@link GONE_PLACE}
+ * on the machine the fleet removed before the restore, named with why. The
  * record's schema found from its columns alone (a record made before
  * records named their migrations) brings the same rows. The rows held back,
  * as the entry project-trash.ts writes keeps them, are tried again on the
  * same build (project-trash.ts `retry`'s steps): every one is held back and
  * named again, the entry keeping them all. Then one tracker link's baseline
  * is fixed in the entry and they are tried again: it and the label hanging
- * off it go back, the rest stay, named, and the entry keeps them alone. One
- * line.
+ * off it go back, the rest stay, named, and the entry keeps them alone.
+ * Then the removed machine joins again and they are tried again: the place
+ * goes back, the rest stay. One line.
  */
 const restoreCase = async (): Promise<string> => {
   const dir = join(scratch, "case-restore");
@@ -984,6 +1037,7 @@ const restoreCase = async (): Promise<string> => {
   const record = await forgottenAt(copies.forgotten);
   await openWhole(copies.forgotten);
   await openWhole(copies.stayed);
+  goneMachine(copies.forgotten, "removed");
   const { tables, foundTag } = await migratedRecord(record);
   const restored = await restoredOn(copies.forgotten, tables, record);
   const after = await rowsOn(copies.forgotten);
@@ -1001,7 +1055,10 @@ const restoreCase = async (): Promise<string> => {
   const { held } = restored;
   const missed = rowsBeyond(placed, after);
   const unexplained = held.filter(
-    (one) => one.why.kind !== "unread" && one.why.kind !== "depends"
+    (one) =>
+      one.why.kind !== "unread" &&
+      one.why.kind !== "depends" &&
+      !(one.table === "project_places" && one.id === GONE_PLACE.id)
   );
   if (unexplained.length > 0 || missed.length !== held.length) {
     throw new Error(
@@ -1015,6 +1072,18 @@ const restoreCase = async (): Promise<string> => {
   if (!unread) {
     throw new Error(
       "case restore: the server whose platforms do not read was not held back"
+    );
+  }
+  const offFleet = held.find(
+    (one) => one.table === "project_places" && one.id === GONE_PLACE.id
+  );
+  if (!(
+    offFleet?.why.kind === "machine" &&
+    offFleet.why.machineId === GONE_PLACE.machineId &&
+    offFleet.why.hostname === GONE_PLACE.hostname
+  )) {
+    throw new Error(
+      `case restore: the place on the removed machine was not held back as off the fleet: ${JSON.stringify(offFleet)}`
     );
   }
   if (
@@ -1091,7 +1160,27 @@ const restoreCase = async (): Promise<string> => {
       `case restore: with ${FIXED_TASK}'s link fixed, ${fixedBack} went back (the link and ${dependents.length} hanging off it meant) and ${stillKeys.join(", ")} stay, where ${meant.join(", ")} were meant to`
     );
   }
-  return `case restore across migrations: ${RESTORED} forgotten at ${copies.baseTag}, its schema the record names and, found from its columns alone, ${foundTag}, bringing the same rows; restored on today's schema: ${back} rows back in ${Object.keys(restored.back).length} tables, each as the migrations place it on a hub where it stayed (${count("mcp_server_platforms")} server platform rows, ${count("project_task_outputs")} task outputs, ${count("tracker_link_synced_labels")} tracker labels, ${count("moves")} moves), ${held.length} held back and named (${of("unread")} kept as not read, ${of("depends")} hanging off one), as "${projectTrashWords.heldRow(unread)}"; tried again on the same build: ${againBack} back, ${again.held.length} held back and named again, the entry keeping ${keptCount(again)}; tried again with ${FIXED_TASK}'s tracker link's baseline fixed: ${fixedBack} back (it and ${dependents.length} hanging off it), ${fixed.held.length} still held back and named, the entry keeping ${keptCount(fixed)}`;
+  // The removed machine joins again: its place goes back, the rest stay.
+  goneMachine(copies.forgotten, "joined");
+  const rejoined = await retriedOn(copies.forgotten, fixed);
+  const rejoinedBack = Object.values(rejoined.back).reduce(
+    (sum, n) => sum + n,
+    0
+  );
+  const rest = heldKeys(fixed.held.filter((one) => one.id !== GONE_PLACE.id));
+  const placeBack = (await rowsOn(copies.forgotten))
+    .get("project_places")
+    ?.some((text) => text.includes(GONE_PLACE.path));
+  if (
+    rejoinedBack !== 1 ||
+    heldKeys(rejoined.held).join() !== rest.join() ||
+    !placeBack
+  ) {
+    throw new Error(
+      `case restore: with the removed machine joined again, ${rejoinedBack} went back (its place meant) and ${heldKeys(rejoined.held).join(", ")} stay, where ${rest.join(", ")} were meant to`
+    );
+  }
+  return `case restore across migrations: ${RESTORED} forgotten at ${copies.baseTag}, its schema the record names and, found from its columns alone, ${foundTag}, bringing the same rows; restored on today's schema: ${back} rows back in ${Object.keys(restored.back).length} tables, each as the migrations place it on a hub where it stayed (${count("mcp_server_platforms")} server platform rows, ${count("project_task_outputs")} task outputs, ${count("tracker_link_synced_labels")} tracker labels, ${count("moves")} moves), ${held.length} held back and named (${of("unread")} kept as not read, ${of("depends")} hanging off one, ${of("machine")} on a removed machine), as "${projectTrashWords.heldRow(unread)}" and "${projectTrashWords.heldRow(offFleet)}"; tried again on the same build: ${againBack} back, ${again.held.length} held back and named again, the entry keeping ${keptCount(again)}; tried again with ${FIXED_TASK}'s tracker link's baseline fixed: ${fixedBack} back (it and ${dependents.length} hanging off it), ${fixed.held.length} still held back and named, the entry keeping ${keptCount(fixed)}; tried again with the removed machine joined again: ${rejoinedBack} back (its place), ${rejoined.held.length} still held back`;
 };
 
 /**
