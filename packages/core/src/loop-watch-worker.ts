@@ -73,8 +73,10 @@ const LOOK_MS = 1000;
 const ECHO_EVERY_MS = 5000;
 /** A beat or an echo this late is a stall worth saying. Ours: ten of the loop's own late ticks. */
 const SAY_MS = 10_000;
+/** The last of {@link SAY_AT_S}, after which a stall is said every minute. */
+const SAY_LAST_S = 60;
 /** When, in seconds of a stall, it is said; then every minute. */
-const SAY_AT_S = [10, 30, 60];
+const SAY_AT_S = [10, 30, SAY_LAST_S];
 /** Linux's clock ticks per second, in which `/proc` counts CPU time (`getconf CLK_TCK`). */
 const CLOCK_TICKS = 100;
 /** A beat this old at a look is a hold this thread reads the main thread through; one that ends before {@link SAY_MS} is said with what it read. The loop's own watch's `LATE_MS`. */
@@ -318,7 +320,7 @@ const lastSection = (): string => {
   if (!shared || shared[SECTION] === -1) {
     return "no marked section entered yet";
   }
-  const name = sections.get(shared[SECTION] as number) ?? "an unnamed section";
+  const name = sections.get(shared[SECTION]) ?? "an unnamed section";
   return loopWords.lastSection(name, shared[LEFT] === 1);
 };
 
@@ -374,7 +376,7 @@ const look = async (): Promise<void> => {
   }
   thread = await mainThread();
   const now = Date.now();
-  const held = now - (shared[BEAT] as number);
+  const held = now - shared[BEAT];
   const deaf = owed === undefined ? 0 : now - owed;
   let kind: "held" | "deaf" | undefined;
   if (held >= SAY_MS) {
@@ -413,7 +415,7 @@ const look = async (): Promise<void> => {
   }
   const due =
     SAY_AT_S[stall.said] ??
-    (SAY_AT_S.at(-1) as number) + 60 * (stall.said - SAY_AT_S.length + 1);
+    SAY_LAST_S + 60 * (stall.said - SAY_AT_S.length + 1);
   if (ms >= due * 1000) {
     stall.said += 1;
     await say(kind, ms);

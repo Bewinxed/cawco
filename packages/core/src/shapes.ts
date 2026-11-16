@@ -112,8 +112,9 @@ const resample = (points: Point[], n: number): Point[] => {
     }
     carried += seg;
   }
-  while (out.length < n) {
-    out.push(points.at(-1) as Point);
+  const last = points.at(-1);
+  while (last && out.length < n) {
+    out.push(last);
   }
   return out;
 };
@@ -133,7 +134,10 @@ const simplify = (path: Point[], tolerance: number): Point[] => {
     return path;
   }
   const [first] = path;
-  const last = path.at(-1) as Point;
+  const last = path.at(-1);
+  if (!last) {
+    return path;
+  }
   let far = 0;
   let at = 0;
   for (let i = 1; i < path.length - 1; i += 1) {
@@ -169,7 +173,10 @@ const between = (u: Point, v: Point) =>
 /** A line: the chord from start to end, when no point strays far from it; its error the furthest stray over the chord. */
 const lineFit = (path: Point[]): { error: number } | null => {
   const [a] = path;
-  const b = path.at(-1) as Point;
+  const b = path.at(-1);
+  if (!b) {
+    return null;
+  }
   const chord = dist(a, b);
   if (chord === 0) {
     return null;
@@ -185,11 +192,12 @@ const openShape = (path: Point[]): Recognised | null => {
     return arrow;
   }
   const line = lineFit(path);
-  return line
+  const end = path.at(-1);
+  return line && end
     ? {
         type: "line",
-        box: boxOf([path[0], path.at(-1) as Point]),
-        points: [path[0], path.at(-1) as Point],
+        box: boxOf([path[0], end]),
+        points: [path[0], end],
         confidence: 1 - line.error,
       }
     : null;
@@ -215,7 +223,10 @@ const arrowShape = (path: Point[]): Recognised | null => {
   if (!fit) {
     return null;
   }
-  const tipAt = shaft.at(-1) as Point;
+  const tipAt = shaft.at(-1);
+  if (!tipAt) {
+    return null;
+  }
   const length = dist(shaft[0], tipAt);
   const back: Point = [shaft[0][0] - tipAt[0], shaft[0][1] - tipAt[1]];
   // The head's legs: a barb leaves the tip; a leg back to it, between two
@@ -340,7 +351,11 @@ export function recognise(points: Point[]): Recognised | null {
   if (diagonal === 0) {
     return null;
   }
-  const closed = dist(path[0], path.at(-1) as Point) <= T.closedGap * diagonal;
+  const end = path.at(-1);
+  if (!end) {
+    return null;
+  }
+  const closed = dist(path[0], end) <= T.closedGap * diagonal;
   const found = closed ? closedShape(path) : openShape(path);
   return found && found.confidence >= T.minConfidence ? found : null;
 }

@@ -12,7 +12,7 @@
  * binds by these hashes ({@link syncedHeld}), never by a stat of the disk.
  */
 import type { FleetSyncReport } from "@cawco/core/fleet";
-import { itemKind } from "@cawco/core/fleet-items";
+import { itemKindOf } from "@cawco/core/fleet-items";
 import { fleetConvergedFile } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { FleetSyncReportSchema } from "@cawco/core/stored-shapes";
@@ -140,7 +140,7 @@ export const syncedHeld = async (): Promise<string> => {
   for (const [id, hash] of Object.entries(items).sort(([a], [b]) =>
     a < b ? -1 : Number(a > b)
   )) {
-    const kind = itemKind(id);
+    const kind = itemKindOf(id);
     if (
       kind === "memory" ||
       kind === "policy" ||

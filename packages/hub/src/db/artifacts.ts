@@ -49,6 +49,16 @@ export type ArtifactRow = Omit<StoredArtifact, SourceColumn> & {
   source: PreviewSource;
 };
 
+/**
+ * An artifact a session owns: every kind but a project's page, which outlives
+ * its session (schema.ts `artifacts.instanceId`).
+ */
+export type SessionArtifact = ArtifactRow & { instanceId: string };
+
+/** Whether `row` is a session's own ({@link SessionArtifact}). */
+export const isSessionArtifact = (row: ArtifactRow): row is SessionArtifact =>
+  row.instanceId !== null;
+
 /** A port source's `workspace`: a workspace's id, kept as its key, or a place's, kept as itself ({@link isPlace}). */
 const workspaceColumnsOf = (
   source: PreviewSource

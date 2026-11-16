@@ -220,6 +220,7 @@ import {
   NamedMachineCapabilitiesSchema,
   NamedToolSigninSchema,
   OpenCodeGoLimitsSchema,
+  SentMessageSchema,
   ToolCopySchema,
   ToolWantsSchema,
 } from "@cawco/core/stored-shapes";
@@ -935,17 +936,30 @@ const keepSendsAtStart = (db: DbShape): void => {
   }
 };
 
+/** Why a pending send could not be kept whole: its session gone, its body naming no sender, or an image it carried gone from the media store. */
+const unkeptReason = (sessionThere: boolean, bodyRead: boolean): string => {
+  if (!sessionThere) {
+    return "its session is gone";
+  }
+  return bodyRead
+    ? "an image it carried is no longer in the media store"
+    : "its record names no sender";
+};
+
 const keepPendingWhole = (db: DbShape): void => {
   let keptWhole = 0;
   for (const send of db.unkeptSends()) {
     const [row] = db.getInstancesByIds([send.instanceId]);
-    const envelope = row && envelopeOf(send, row.machineId);
+    // A body stored before sends kept their sender (migration 0413) names none, and is no send to hand on.
+    const sent = SentMessageSchema.safeParse(send.body);
+    const envelope =
+      row && sent.success && envelopeOf(send, sent.data, row.machineId);
     if (envelope) {
       db.keepEnvelope(send.uuid, envelope);
       keptWhole += 1;
     } else {
       console.warn(
-        `[hub] send ${send.uuid} to ${send.instanceId} could not be kept whole: ${row ? "an image it carried is no longer in the media store" : "its session is gone"}`
+        `[hub] send ${send.uuid} to ${send.instanceId} could not be kept whole: ${unkeptReason(!!row, sent.success)}`
       );
     }
   }
@@ -958,14 +972,15 @@ const keepPendingWhole = (db: DbShape): void => {
  * A pending send whole again from its record, as its machine was handed it
  * (`sentFrame`, read backwards): the images it led with, out of the media
  * store, and the rest its message — one text block back to the words it
- * was, the files and pasted text folded in as they went. Undefined when an
- * image it carried is no longer stored.
+ * was, the files and pasted text folded in as they went. `body` is the
+ * record's body read as a send. Undefined when an image it carried is no
+ * longer stored.
  */
 const envelopeOf = (
   send: SentMessageRow,
+  body: SentMessage,
   machineId: string
 ): HubEnvelope<"send"> | undefined => {
-  const body = send.body as unknown as SentMessage;
   const said = body.message.content;
   const blocks = typeof said === "string" ? [] : said;
   const images: { mediaType: string; data: string }[] = [];
@@ -2809,11 +2824,7 @@ export const createServer = (
     machineName: (machineId) => machineName(machineId),
     mint: (userId, ttlMs) => streamRelay.mint(userId, ttlMs),
     open: async (artifact) => {
-      const opened = await openPreview(
-        // A browser is always its session's: only a project's page outlives one.
-        artifact.instanceId as string,
-        artifact
-      );
+      const opened = await openPreview(artifact.instanceId, artifact);
       return opened.ok ? { ok: true } : { ok: false, error: opened.error };
     },
     // Every dashboard (the app's included) follows the fleet's browsers, and
@@ -5011,8 +5022,7 @@ export const createServer = (
           `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
         );
       }
-      // A canvas is always its session's: only a project's page outlives one.
-      const owner = artifact.instanceId as string;
+      const owner = artifact.instanceId;
       const local = previewListeners.local(owner);
       if (local instanceof ElysiaStatus) {
         return local;
@@ -12928,7 +12938,7 @@ export const createServer = (
         browserRoutes(browsers),
         browserStreamRoutes(browserStream),
         relayJourneyRoutes(relayJourney, relayAsker, (request, server) =>
-          addressOf(server as Parameters<typeof addressOf>[0], request)
+          addressOf(server, request)
         ),
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),

@@ -196,7 +196,7 @@ export async function keeperEndpoints(
 ): Promise<FoundKeeper[]> {
   const current = await currentKeeper(machine);
   const dir = dirname(machine);
-  const names = await readdir(dir).catch(() => [] as string[]);
+  const names = await readdir(dir).catch((): string[] => []);
   const found: FoundKeeper[] = names.flatMap((name) => {
     const keeper = keeperOf(name);
     const endpoint = join(dir, name);

@@ -1346,6 +1346,7 @@ const NeutralContentBlockShape = declared(
   "NeutralContentBlock",
   "packages/core/src/session-messages.ts"
 );
+export const NeutralContentBlockSchema = NeutralContentBlockShape;
 export type NeutralContentBlockOutput = z.output<
   typeof NeutralContentBlockShape
 >;
@@ -1419,6 +1420,7 @@ const SentMessageShape = declared(
   "SentMessage",
   "packages/core/src/session-messages.ts"
 );
+export const SentMessageSchema = SentMessageShape;
 export type SentMessageOutput = z.output<typeof SentMessageShape>;
 
 export const SendPayloadShape = declared(

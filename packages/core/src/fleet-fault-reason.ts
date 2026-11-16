@@ -102,7 +102,10 @@ export function readFault(raw: string): ReadFault {
     if (state && state !== "failed") {
       continue;
     }
-    harnesses.push(harness as HarnessKind);
+    const named = HARNESSES.find((one) => one === harness);
+    if (named) {
+      harnesses.push(named);
+    }
     const end = heads[index + 1]?.index ?? raw.length;
     const said = raw.slice((head.index ?? 0) + whole.length, end);
     reason ??= faultReason(said);

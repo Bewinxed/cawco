@@ -278,8 +278,7 @@ const same = (a: string | null, b: string | null) =>
 const defined = <T extends object>(
   fields: T
 ): { [K in keyof T]?: Exclude<T[K], undefined> } =>
-  // Library gap (casts inventory): `Object.fromEntries` drops the keys it is
-  // given, https://github.com/microsoft/TypeScript/issues/35745
+  // Library gap: `Object.fromEntries` answers `{ [k: string]: V }`, never the keys it is given (https://github.com/microsoft/TypeScript/issues/35745).
   Object.fromEntries(
     Object.entries(fields).filter(([, value]) => value !== undefined)
   ) as { [K in keyof T]?: Exclude<T[K], undefined> };

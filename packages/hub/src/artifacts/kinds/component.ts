@@ -42,6 +42,7 @@ import { sheetOf } from "../served";
 import type {
   ArtifactInput,
   ArtifactRead,
+  ComponentRead,
   ComponentReadAsk,
   ComponentWritten,
   Created,
@@ -645,7 +646,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         detail: `${row.name} has no story ${ask.story}; its stories are ${sheetNow?.stories.map((one) => one.name).join(", ") || "none"}.`,
       });
     }
-    return {
+    const read: ComponentRead = {
       ...base,
       state: picks,
       ...(stage ? { stage: { ...stage, errors: [] } } : {}),
@@ -675,6 +676,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ...(ask.png ? { png: png ?? null } : {}),
       hint: READ_HINT,
     };
+    return read;
   };
   /** A design system round on component canvas `row`, asked by `requester`: what the ask did. */
   const askVerify = (requester: InstanceRow, row: ArtifactRow) => {

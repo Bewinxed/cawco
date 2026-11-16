@@ -31,7 +31,7 @@ const loadLibc = (): Libc => {
     {
       flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 },
     }
-  ).symbols as unknown as Libc;
+  ).symbols;
   return libc;
 };
 

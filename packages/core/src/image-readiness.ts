@@ -1,5 +1,5 @@
 import type { Account, AccountReading, AccountSignin } from "./accounts";
-import { IMAGE_PROVIDERS, type ImageProviderId } from "./image-generation";
+import type { ImageProviderId } from "./image-generation";
 import { machineLabel } from "./machine-names";
 import type { ToolStatus } from "./tools";
 
@@ -154,20 +154,24 @@ const lackOf = (
   }
 };
 
-/** Every provider's standing on every machine, in the machines' order. */
+/** Every provider's standing on every machine, in the machines' order: each provider named, so one added fails the type here until it is. */
 export const imageReadiness = (
   machines: readonly ImageMachine[],
   fleet: ImageAccounts | null
-): Record<ImageProviderId, MachineImageReadiness[]> =>
-  Object.fromEntries(
-    IMAGE_PROVIDERS.map((provider) => [
-      provider,
-      machines.map((machine): MachineImageReadiness => ({
+): Record<ImageProviderId, MachineImageReadiness[]> => {
+  const on = (provider: ImageProviderId) =>
+    machines.map(
+      (machine): MachineImageReadiness => ({
         machineId: machine.machineId,
         name: machineLabel(machine.hostname),
         os: machine.os,
         online: machine.status === "online",
         lack: lackOf(provider, machine, fleet),
-      })),
-    ])
-  ) as Record<ImageProviderId, MachineImageReadiness[]>;
+      })
+    );
+  return {
+    chatgpt: on("chatgpt"),
+    antigravity: on("antigravity"),
+    "gemini-api": on("gemini-api"),
+  };
+};

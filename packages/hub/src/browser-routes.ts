@@ -44,11 +44,11 @@ import {
   causeOf,
   decodedHeaders,
   type PreviewSocket,
+  type PreviewSocketEnd,
   previewWebSocket,
   proxyHeaders,
   RELAY_HEADER,
 } from "@cawco/preview/proxy";
-import type { ServerWebSocket } from "bun";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { ElysiaWS } from "elysia/ws";
@@ -128,7 +128,7 @@ export interface ViewSocket {
 
 /** A view's socket while it is open: relayed once its upstream is known, its first frames held until then. */
 interface Relayed {
-  adapter?: ServerWebSocket<PreviewSocket>;
+  adapter?: PreviewSocketEnd;
   closed: boolean;
   /** The browser it counts as a view of, once counted. */
   counted?: Place;
@@ -419,7 +419,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
     socket: ViewSocket,
     to: { at: Upstream; kind: "api" | "cdp"; place: Place },
     viewer: { id: string; session: BrowserViewerSession } | undefined
-  ): ServerWebSocket<PreviewSocket> => {
+  ): PreviewSocketEnd => {
     const { at, kind, place } = to;
     const servers = viewer ? iceServersFor(viewer.session.session) : undefined;
     /** Whether neko has said its `system/init`: a disconnect before it is its refusal of the session. */
@@ -438,10 +438,10 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
       instanceId: socket.instance,
       nothingListens: () => forgetListener(place.machineId, at),
     };
-    // Cast kept: packages/preview `previewWebSocket` takes Bun's whole `ServerWebSocket` but reads `data`, `send` and `close` alone; no issue, the type is ours to narrow there.
     return {
       data,
-      send: (frame: string | ArrayBuffer) => {
+      // The view's socket keeps its own order: never owed.
+      send: (frame) => {
         if (typeof frame !== "string" || !(servers && viewer)) {
           socket.send(frame);
           return;
@@ -455,8 +455,8 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
         }
         socket.send(withIceServers(frame, servers));
       },
-      close: (code: number, reason: string) => shut(socket, code, reason),
-    } as unknown as ServerWebSocket<PreviewSocket>;
+      close: (code, reason) => shut(socket, code, reason),
+    };
   };
 
   /** A view's socket opened: relayed to the machine once its browser and viewer are known. */

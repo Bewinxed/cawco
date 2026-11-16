@@ -52,9 +52,12 @@ export const RECORD_SETS = {
   longest: { count: MANY_RECORDS, longest: true },
 } as const satisfies Record<string, RecordCut>;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 /** A list record's name, for the longest names: its `name`, `title` or `label`. */
 const recordName = (record: unknown): string => {
-  const one = record as Record<string, unknown> | null;
+  const one = isRecord(record) ? record : null;
   const named = one?.name ?? one?.title ?? one?.label;
   return typeof named === "string" ? named : "";
 };
@@ -463,8 +466,6 @@ export interface StageFault {
  * overlay, the stage page and the panel all load this module, and a page
  * carries no validator of its own. Each keeps what is that shape.
  */
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 const finite = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
 /** The longest name a state is read with: a path, an export. Ours. */
@@ -487,8 +488,9 @@ function stateRefOf(value: unknown): StateRef | null {
   const variant = isRecord(value.variant) ? value.variant : null;
   const records = isRecord(variant?.records) ? variant.records : null;
   const count = finite(records?.count);
-  if (variant && nameOf(variant.story)) {
-    return { file, story, variant: { story: nameOf(variant.story) as string } };
+  const variantStory = nameOf(variant?.story);
+  if (variantStory) {
+    return { file, story, variant: { story: variantStory } };
   }
   if (records && count !== null && count > 0) {
     return {
@@ -527,6 +529,12 @@ const VALUE_MAX = 400;
 const wordsOf = (value: unknown, most = NAME_MAX): string | null =>
   typeof value === "string" && value.length <= most ? value : null;
 
+/** `value` as one of `set`'s members, when it is one. */
+const memberOf = <T extends string>(
+  set: ReadonlySet<T>,
+  value: unknown
+): T | undefined => [...set].find((one) => one === value);
+
 const KINDS_SAID = new Set<ClipKind>([
   "size",
   "move",
@@ -541,10 +549,10 @@ const offsetsOf = (value: unknown): number[] | null =>
   Array.isArray(value)
     ? value
         .slice(0, POINTS_MAX)
-        .filter(
-          (one): one is number =>
-            finite(one) !== null && (one as number) > 0 && (one as number) < 1
-        )
+        .flatMap((one) => {
+          const offset = finite(one);
+          return offset !== null && offset > 0 && offset < 1 ? [offset] : [];
+        })
     : null;
 
 /** A {@link ClipValue} as it crossed the frame; null when it is none. */
@@ -604,9 +612,7 @@ function clipReadOf(value: unknown): ClipRead | null {
     id,
     start,
     delay,
-    direction: DIRECTIONS.has(said.direction as ClipDirection)
-      ? (said.direction as ClipDirection)
-      : "normal",
+    direction: memberOf(DIRECTIONS, said.direction) ?? "normal",
     duration,
     easing,
     element,
@@ -615,9 +621,7 @@ function clipReadOf(value: unknown): ClipRead | null {
     frameCurve: curve.length > 1 ? curve : null,
     group: wordsOf(said.group) || null,
     iterations: iterations !== null && iterations >= 0 ? iterations : 1,
-    kind: KINDS_SAID.has(said.kind as ClipKind)
-      ? (said.kind as ClipKind)
-      : "other",
+    kind: memberOf(KINDS_SAID, said.kind) ?? "other",
     legs: offsetsOf(said.legs) ?? [],
     target: nameOf(said.target) ?? id,
     thing: nameOf(said.thing),
@@ -946,9 +950,7 @@ function tuningOneOf(value: unknown): Tuning | null {
     easing,
     shaped: said.shaped === true,
     legs: offsetsOf(said.legs),
-    repeat: REPEATS.has(said.repeat as ClipRepeat)
-      ? (said.repeat as ClipRepeat)
-      : "once",
+    repeat: memberOf(REPEATS, said.repeat) ?? "once",
     values: valuesOf(said.values),
   };
 }
@@ -996,8 +998,9 @@ export function stageLetGoOf(value: unknown): StageLetGo | null {
 /** A {@link StageSeek} as it crossed the frame; null when it is none. */
 export function stageSeekOf(value: unknown): StageSeek | null {
   const at = stageLetGoOf(value);
-  const said = value as Record<string, unknown>;
-  return at ? { ...at, tuning: tuningOf(said.tuning) } : null;
+  return at && isRecord(value)
+    ? { ...at, tuning: tuningOf(value.tuning) }
+    : null;
 }
 
 /** A {@link StageRetime} as it crossed the frame; null when it is none. */
@@ -1043,13 +1046,11 @@ function dialValuesOf(value: unknown): Record<string, DialSet> | null {
   }
   const kept: Record<string, DialSet> = {};
   for (const [name, one] of Object.entries(value).slice(0, DIALS_MAX)) {
-    if (
-      nameOf(name) &&
-      (finite(one) !== null ||
-        typeof one === "boolean" ||
-        wordsOf(one, VALUE_MAX) !== null)
-    ) {
-      kept[name] = one as DialSet;
+    const set =
+      finite(one) ??
+      (typeof one === "boolean" ? one : wordsOf(one, VALUE_MAX));
+    if (nameOf(name) && set !== null) {
+      kept[name] = set;
     }
   }
   return kept;

@@ -23,6 +23,7 @@ import { copyFile, readdir, rm, stat, truncate } from "node:fs/promises";
 import { constants, homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { unlessGone } from "./absent";
 import { bootId } from "./process-identity";
 import { runInC } from "./run-captured";
 import { isDamagedRecord, readRecord } from "./state-file";
@@ -62,7 +63,7 @@ const LAUNCHD_LOG_CAP_BYTES = 10 * 1024 * 1024;
 export async function capLaunchdLogs(
   dir = launchdLogsDir()
 ): Promise<string[]> {
-  const names = await readdir(dir).catch(unlessMissing([] as string[]));
+  const names = await readdir(dir).catch(unlessGone<string[]>([]));
   const rotated: string[] = [];
   for (const name of names) {
     if (!(name.startsWith("cawco-") && name.endsWith(".log"))) {
@@ -71,7 +72,7 @@ export async function capLaunchdLogs(
     const path = join(dir, name);
     const size = await stat(path).then(
       (found) => (found.isFile() ? found.size : 0),
-      unlessMissing(0)
+      unlessGone(0)
     );
     if (size > LAUNCHD_LOG_CAP_BYTES) {
       await copyFile(path, `${path}.1`);
@@ -104,7 +105,7 @@ async function cawcoLaunchdServices(
 ): Promise<Set<string>> {
   const services = new Set<string>();
   for (const name of await readdir(agents).catch(
-    unlessMissing([] as string[])
+    unlessGone<string[]>([])
   )) {
     const service = CAWCO_PLIST.exec(name)?.[1];
     if (service) {
@@ -133,7 +134,7 @@ export async function sweepLaunchdLogs(
   services: () => Promise<ReadonlySet<string>> = cawcoLaunchdServices,
   dir = launchdLogsDir()
 ): Promise<string[]> {
-  const names = await readdir(dir).catch(unlessMissing([] as string[]));
+  const names = await readdir(dir).catch(unlessGone<string[]>([]));
   const kept = await services();
   const stray = names.filter((name) => {
     const service = CAWCO_LOG.exec(name)?.[1];
@@ -142,16 +143,6 @@ export async function sweepLaunchdLogs(
   await Promise.all(stray.map((name) => rm(join(dir, name), { force: true })));
   return stray;
 }
-
-/** A read that found nothing there answers `none`; any other failure stands. */
-const unlessMissing =
-  <T>(none: T) =>
-  (error: NodeJS.ErrnoException): T => {
-    if (error.code === "ENOENT") {
-      return none;
-    }
-    throw error;
-  };
 
 /** One loaded job, as its row in `launchctl list` states it. */
 export interface LaunchdRow {

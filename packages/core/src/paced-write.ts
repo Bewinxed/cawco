@@ -61,7 +61,7 @@ export class PacedWriter {
         this.#offset = 0;
         return;
       }
-      const message = this.#queue[this.#head] as string;
+      const message = this.#queue[this.#head];
       let end = Math.min(this.#offset + PACED_PIECE, message.length);
       // A high surrogate at the cut keeps its partner: never half a character.
       const last = message.charCodeAt(end - 1);

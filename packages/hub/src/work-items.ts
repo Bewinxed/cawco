@@ -157,6 +157,7 @@ import {
   handedSize,
 } from "./handed-inputs";
 import { byId } from "./handles";
+import type { ReportingSession } from "./hub-shapes";
 import { holdsBut, type ItemHold, itemHold } from "./item-holds";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { statusCommand } from "./landing";
@@ -798,7 +799,7 @@ interface WorkItemDeps extends Pick<
    * `outputs` the folder paths its finish copied its outputs to.
    */
   readonly report: (
-    row: InstanceRow,
+    row: ReportingSession,
     body: string,
     failed: boolean,
     notice?: boolean,
@@ -1840,7 +1841,9 @@ export const createWorkItems = ({
    * so a run that answers NO_REPLY wakes no model, the conversation's
    * included.
    */
-  const reportsBack = (row: InstanceRow): boolean =>
+  const reportsBack = (
+    row: Pick<InstanceRow, "parentInstanceId" | "workItemId">
+  ): boolean =>
     !isHubParent(row.parentInstanceId) && !!row.workItemId;
 
   /**
@@ -1852,7 +1855,9 @@ export const createWorkItems = ({
    * reaches him not at all: off, only your words wake him (caw.ts). Your
    * work reaches him on or off.
    */
-  const reportees = (row: InstanceRow): InstanceRow[] => {
+  const reportees = (
+    row: Pick<InstanceRow, "parentInstanceId" | "workItemId">
+  ): InstanceRow[] => {
     if (!reportsBack(row)) {
       return [];
     }
@@ -2007,9 +2012,8 @@ export const createWorkItems = ({
    * fields the report path reads (its id and machine, its parent and item,
    * its title as its label), from the item and its workspace.
    */
-  const standIn = (item: WorkItemRow): InstanceRow => {
+  const standIn = (item: WorkItemRow): ReportingSession => {
     const [workspace] = db.workspacesNamed(item.workspaceId);
-    // Cast stays: the report path (ask-routing.ts reportToParent, server.ts) takes a whole InstanceRow; typing it by the fields it reads is outside G5.
     return {
       id: item.instanceId,
       machineId: workspace?.machineId ?? "",
@@ -2018,7 +2022,7 @@ export const createWorkItems = ({
       title: item.title,
       launchDir: "unknown",
       harness: item.harness,
-    } as InstanceRow;
+    };
   };
 
   /**
@@ -4579,7 +4583,9 @@ export const createWorkItems = ({
       );
 
   /** The item a session runs, when it runs one. */
-  const itemOf = (row: InstanceRow): WorkItemRow | undefined =>
+  const itemOf = (
+    row: Pick<InstanceRow, "workItemId">
+  ): WorkItemRow | undefined =>
     row.workItemId ? db.workItem(row.workItemId) : undefined;
 
   /**

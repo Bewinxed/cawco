@@ -52,7 +52,6 @@ import {
 import { inkProblem } from "@cawco/core/ink";
 import { writeStateFile } from "@cawco/core/state-file";
 import { TUNED_MAP, tunedProblem } from "@cawco/core/tuned";
-import type { ServerWebSocket } from "bun";
 import { problemResponse } from "elysia/error";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
 import {
@@ -617,9 +616,20 @@ export const takeSentWrites = (
     },
   });
 
+/**
+ * What of Bun's `ServerWebSocket` the artifact socket's handlers read: its
+ * data, a send and a close. A panel's doc socket, which Elysia holds, is
+ * handed in as these alone (preview-routes.ts).
+ */
+export interface ArtifactSocketEnd {
+  close: (code?: number, reason?: string) => void;
+  readonly data: ArtifactSocket;
+  send: (message: Uint8Array) => void;
+}
+
 /** The listener's handlers for artifact sockets. */
 export const artifactSocket = (docs: ArtifactDocs) => ({
-  open(socket: ServerWebSocket<ArtifactSocket>) {
+  open(socket: ArtifactSocketEnd) {
     const client: ArtifactClient = {
       beat: () => socket.send(BEAT),
       // The artifact was removed: core ARTIFACT_GONE, on which a device lets its copy go.
@@ -632,7 +642,7 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
     const doc = docs.join(socket.data.artifactId, client);
     socket.send(syncMessage((encoder) => writeSyncStep1(encoder, doc)));
   },
-  message(socket: ServerWebSocket<ArtifactSocket>, message: string | Buffer) {
+  message(socket: ArtifactSocketEnd, message: string | Buffer) {
     if (typeof message === "string") {
       return;
     }
@@ -667,7 +677,7 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       socket.send(refusal(why));
     }
   },
-  close(socket: ServerWebSocket<ArtifactSocket>, code?: number) {
+  close(socket: ArtifactSocketEnd, code?: number) {
     if (socket.data.origin) {
       docs.leave(socket.data.artifactId, socket.data.origin.client);
       // A removed artifact's doc is let go with its sockets: nothing to elect.

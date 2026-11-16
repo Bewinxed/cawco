@@ -196,6 +196,7 @@ import {
   type CanvasChange,
   type CanvasExport,
   type CommentRead,
+  type ComponentRead,
   type Created,
   type Making,
   type Opened,
@@ -4533,14 +4534,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return told;
       }
       if (ask.save === undefined) {
-        const answer: ArtifactRead = told;
+        const answer: ArtifactRead | ComponentRead = told;
         return answer;
       }
       const saved = await keptIn(instance, row, ask.save, told);
       if (saved instanceof ElysiaStatus) {
         return saved;
       }
-      const answer: ArtifactRead = { ...told, saved };
+      const answer: ArtifactRead | ComponentRead = { ...told, saved };
       return answer;
     },
 

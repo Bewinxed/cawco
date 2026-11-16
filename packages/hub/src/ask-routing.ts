@@ -22,7 +22,7 @@ import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
 import type { SentMessageRow } from "./db/sends";
 import type { StoredSendRefusal } from "./db/stored-types";
-import type { ReportTold } from "./hub-shapes";
+import type { ReportingSession, ReportTold } from "./hub-shapes";
 import { boardTitle, sessionLabel } from "./labels";
 import { outlivesSession } from "./pending";
 import type { createSends } from "./sends";
@@ -520,7 +520,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
    * `finish_item`, carried on the marker.
    */
   const reportToParent = (
-    delegate: InstanceRow,
+    delegate: ReportingSession,
     body: string,
     failed: boolean,
     told: ReportTold = {}
@@ -533,7 +533,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
   /** One report, to one of the sessions that hears a delegate's reports. */
   const reportTo = (
     parent: InstanceRow,
-    delegate: InstanceRow,
+    delegate: ReportingSession,
     body: string,
     failed: boolean,
     { completion, notice = false, headline, outputs }: ReportTold

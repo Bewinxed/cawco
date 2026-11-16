@@ -132,22 +132,30 @@ export function userEventIn(frame: HTMLElement): UserEvent {
       el.dispatchEvent(new Event("change", { bubbles: true }));
       await settle();
     },
-    keyboard: (name) =>
-      key(
-        frame.contains(document.activeElement)
-          ? (document.activeElement as Element)
-          : frame,
-        name
-      ),
+    keyboard: (name) => {
+      const active = document.activeElement;
+      return key(active && frame.contains(active) ? active : frame, name);
+    },
     async tab() {
       const all = [...frame.querySelectorAll<HTMLElement>(FOCUSABLE)];
-      const at = all.indexOf(document.activeElement as HTMLElement);
+      const active = document.activeElement;
+      const at = active instanceof HTMLElement ? all.indexOf(active) : -1;
       all[(at + 1) % Math.max(1, all.length)]?.focus();
       await settle();
     },
     wait: (ms) => new Promise((done) => setTimeout(done, ms)),
   };
 }
+
+/** An input's `type` as the page reads it (lower-cased, `text` when unset); "" for an element with none. */
+const typeOf = (el: Element): string =>
+  "type" in el && typeof el.type === "string" ? el.type : "";
+
+/** An element's rendered text (`innerText`), when it is an HTML element; else undefined. */
+const renderedText = (el: Element): string | undefined =>
+  "innerText" in el && typeof el.innerText === "string"
+    ? el.innerText
+    : undefined;
 
 /** The implicit ARIA role of the elements a story most often asks by. */
 function roleOf(el: Element): string | null {
@@ -159,7 +167,7 @@ function roleOf(el: Element): string | null {
   if (
     tag === "button" ||
     (tag === "input" &&
-      ["button", "submit", "reset"].includes((el as HTMLInputElement).type))
+      ["button", "submit", "reset"].includes(typeOf(el)))
   ) {
     return "button";
   }
@@ -167,7 +175,7 @@ function roleOf(el: Element): string | null {
     return "link";
   }
   if (tag === "input") {
-    const { type } = el as HTMLInputElement;
+    const type = typeOf(el);
     return type === "checkbox" || type === "radio" ? type : "textbox";
   }
   if (tag === "textarea") {
@@ -186,7 +194,7 @@ const nameOf = (el: Element): string =>
   (
     el.getAttribute("aria-label") ??
     el.getAttribute("alt") ??
-    (el as HTMLElement).innerText ??
+    renderedText(el) ??
     el.textContent ??
     ""
   ).trim();
@@ -218,7 +226,7 @@ export function queriesIn(frame: HTMLElement): CanvasQueries {
             node.nodeType === Node.TEXT_NODE &&
             matches(node.textContent ?? "", want)
         ) ||
-        (matches((el as HTMLElement).innerText ?? "", want) &&
+        (matches(renderedText(el) ?? "", want) &&
           el.children.length === 0)
     ) ?? null;
   const byRole = (role: string, options?: { name?: string | RegExp }) =>

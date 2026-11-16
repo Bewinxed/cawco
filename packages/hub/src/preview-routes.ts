@@ -10,11 +10,10 @@
 
 import type { PreviewNames } from "@cawco/core/browser";
 import { SEND_CONTROL_NAMES } from "@cawco/core/comments/model";
-import type { ServerWebSocket } from "bun";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import type { createArtifactPages } from "./artifact-pages";
-import type { ArtifactSocket } from "./artifacts/sync";
+import type { ArtifactSocketEnd } from "./artifacts/sync";
 import type { PreviewPassesDb } from "./db/preview-passes";
 import { projectOrigin } from "./db/previews";
 import { hidden } from "./hidden";
@@ -83,7 +82,7 @@ export const previewRoutes = (deps: {
   republish: () => void;
 }) => {
   /** Each pane's doc socket, as the artifact sync code keeps one. */
-  const panes = new Map<string, ServerWebSocket<ArtifactSocket>>();
+  const panes = new Map<string, ArtifactSocketEnd>();
   const settings = previewSettings(deps);
   return (
     new Elysia()
@@ -203,12 +202,11 @@ export const previewRoutes = (deps: {
             ws.close(4404, NO_SUCH_ARTIFACT);
             return;
           }
-          // Cast kept: artifacts/sync.ts's handler takes Bun's whole `ServerWebSocket` but reads `data`, `send` and `close` alone; no issue, the type is ours to narrow there.
-          const pane = {
+          const pane: ArtifactSocketEnd = {
             data: { artifactId: artifact, screen: false },
-            send: (message: Uint8Array) => ws.send(message),
-            close: (code?: number, reason?: string) => ws.close(code, reason),
-          } as unknown as ServerWebSocket<ArtifactSocket>;
+            send: (message) => ws.send(message),
+            close: (code, reason) => ws.close(code, reason),
+          };
           panes.set(ws.id, pane);
           deps.listener.socket.open(pane);
         },

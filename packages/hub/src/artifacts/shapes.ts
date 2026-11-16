@@ -30,6 +30,8 @@ import type {
   movesSaid,
   renderSaid,
   StateAsk,
+  stateSaid,
+  storiesSaid,
   weightSaid,
 } from "./component";
 import type { Question } from "./questions";
@@ -306,6 +308,30 @@ export interface ArtifactRead {
   workspace?: string;
   /** The element ids an update wrote. */
   wrote?: string[];
+}
+
+/**
+ * A component canvas's read (kinds/component.ts `readSheet`): every
+ * artifact's read, with its stage's compile errors, and, once a browser drew
+ * it, its frames, moves and stories; the person's dials and what they tuned,
+ * the frame and story asked, and where to read next. `errors` is on every
+ * one, and on no other kind's read: what tells it apart.
+ */
+export interface ComponentRead extends ArtifactRead {
+  dials?: unknown;
+  errors: ReturnType<typeof errorsSaid>;
+  frame?: ReturnType<typeof stateSaid>;
+  hint: string;
+  moves?: ReturnType<typeof movesSaid>;
+  render?: ReturnType<typeof renderSaid>;
+  stories?: ReturnType<typeof storiesSaid>;
+  story?: {
+    args: unknown;
+    code: unknown;
+    meta: { args: unknown; code: unknown };
+    name: string;
+  };
+  tuned?: unknown;
 }
 
 /**

@@ -32,6 +32,8 @@
  * `bun run signal:check` (scripts/signal-check.ts) fails on any
  * `process.kill(` or group kill outside this file, and on a cast to `Pid`.
  */
+import { errnoCode } from "./absent";
+
 declare const PID: unique symbol;
 
 /** A process this code identified (module doc): an integer above 1, from a real source. */
@@ -67,6 +69,7 @@ export const wall = (value: unknown, what: string): Pid => {
       `${what} is not above 1 (-1 is every process, 0 the caller's own group, 1 init)`
     );
   }
+  // Cast kept, the brand's one mint: TypeScript makes a branded number only by assertion (https://github.com/microsoft/TypeScript/issues/202).
   return value as Pid;
 };
 
@@ -111,7 +114,7 @@ const send = (target: number, sig: NodeJS.Signals | 0): Delivery => {
     process.kill(target, sig);
     return "sent";
   } catch (error) {
-    const { code } = error as NodeJS.ErrnoException;
+    const code = errnoCode(error);
     if (code === "ESRCH") {
       return "gone";
     }

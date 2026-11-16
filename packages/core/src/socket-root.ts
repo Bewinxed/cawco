@@ -6,6 +6,7 @@
 
 import { lstatSync, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { errnoCode } from "./absent";
 import { makeFolderSync } from "./folders";
 import { darwinSocketRoot } from "./paths/roots";
 
@@ -22,7 +23,7 @@ export const ownSocketRoot = (): string => {
   try {
     makeFolderSync(root, { mode: 0o700, exclusive: true });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+    if (errnoCode(error) !== "EEXIST") {
       throw error;
     }
   }
@@ -56,7 +57,7 @@ export const shortLink = (name: string, target: string): string => {
     try {
       return readlinkSync(link);
     } catch (error) {
-      const { code } = error as NodeJS.ErrnoException;
+      const code = errnoCode(error);
       if (code === "ENOENT") {
         return;
       }
@@ -81,7 +82,7 @@ export const shortLink = (name: string, target: string): string => {
   } catch (error) {
     // Another process made it first: it is right if it names the same dir.
     if (
-      (error as NodeJS.ErrnoException).code !== "EEXIST" ||
+      errnoCode(error) !== "EEXIST" ||
       pointsAt() !== target
     ) {
       throw error;

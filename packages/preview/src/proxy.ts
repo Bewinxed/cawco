@@ -16,7 +16,7 @@ import {
 import { OVERLAY_PATH } from "@cawco/core/preview/routes";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
-import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import type { Server, WebSocketHandler } from "bun";
 import { z } from "zod";
 
 const HEAD_OPEN = /<head(\s[^>]*)?\s*>/iu;
@@ -1075,6 +1075,20 @@ export interface PreviewSocket {
   viewer?: () => () => void;
 }
 
+/**
+ * What of Bun's `ServerWebSocket` the relay ({@link previewWebSocket}) reads:
+ * its data, a send and a close. The hub relays a browser's view through it
+ * from a socket Elysia holds, handed in as these alone (hub
+ * browser-routes.ts). `send` answers as Bun's does (bytes written, -1 taken
+ * into a buffer that backs up, 0 not taken); undefined from a socket that
+ * keeps its own order, which never owes.
+ */
+export interface PreviewSocketEnd {
+  close: (code: number, reason: string) => void;
+  readonly data: PreviewSocket;
+  send: (frame: string | ArrayBuffer) => number | undefined;
+}
+
 /** Bun's words for a client socket that failed, before its reason. */
 const FAILED_PREFIX = /^WebSocket connection to '[^']*' failed: /u;
 /** Bun's reason when no connection opened at all (`ECONNREFUSED`): no listener there. */
@@ -1152,7 +1166,7 @@ const sendable = (code: number): number =>
  * ({@link previewWebSocket} `drain`).
  */
 const sendInOrder = (
-  socket: ServerWebSocket<PreviewSocket>,
+  socket: PreviewSocketEnd,
   frame: string | ArrayBuffer
 ): void => {
   const { owed } = socket.data;
@@ -1166,7 +1180,7 @@ const sendInOrder = (
 };
 
 /** The socket drained: what it owes goes on, until it takes no more. */
-const sendOwed = (socket: ServerWebSocket<PreviewSocket>): void => {
+const sendOwed = (socket: PreviewSocketEnd): void => {
   const { owed } = socket.data;
   while (owed && owed.length > 0 && !socket.data.closed) {
     const sent = socket.send(owed[0] as string | ArrayBuffer);
@@ -1181,8 +1195,8 @@ const sendOwed = (socket: ServerWebSocket<PreviewSocket>): void => {
   }
 };
 
-export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
-  open(socket) {
+export const previewWebSocket = {
+  open(socket: PreviewSocketEnd) {
     const { data } = socket;
     data.release = data.viewer?.();
     const upstream = new ProxyWebSocket(data.url, {
@@ -1227,7 +1241,7 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
       socket.close(1011, "Preview connection failed");
     };
   },
-  message(socket, message) {
+  message(socket: PreviewSocketEnd, message: string | Buffer<ArrayBuffer>) {
     const { upstream, pending } = socket.data;
     if (upstream?.readyState === WebSocket.OPEN) {
       upstream.send(message);
@@ -1235,10 +1249,10 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
       pending.push(message);
     }
   },
-  drain(socket) {
+  drain(socket: PreviewSocketEnd) {
     sendOwed(socket);
   },
-  close(socket, code, reason) {
+  close(socket: PreviewSocketEnd, code: number, reason: string) {
     socket.data.closed = true;
     socket.data.release?.();
     socket.data.release = undefined;
@@ -1246,4 +1260,4 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
     socket.data.owed = undefined;
     socket.data.upstream?.close(sendable(code), reason);
   },
-};
+} satisfies WebSocketHandler<PreviewSocket>;

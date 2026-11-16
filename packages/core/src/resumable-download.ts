@@ -35,6 +35,7 @@
  * a partial that fails.
  */
 import { open, rm, stat } from "node:fs/promises";
+import { errnoCode } from "./absent";
 import { downloadWords } from "./words/downloads";
 
 /**
@@ -81,7 +82,7 @@ export type CutCode = (typeof CUT_CODES)[number];
 
 /** The connection code of a fetch error, when it is one. */
 export const cutCode = (error: unknown): CutCode | undefined => {
-  const { code } = (error ?? {}) as { code?: unknown };
+  const code = errnoCode(error);
   return CUT_CODES.find((cut) => cut === code);
 };
 
@@ -174,7 +175,7 @@ async function readAnswer(
   download: ResumableDownload,
   from: number,
   response: Response
-): Promise<Outcome | { resumes: boolean }> {
+): Promise<Outcome | { body: ReadableStream<Uint8Array>; resumes: boolean }> {
   const said = await download.answered?.(response);
   if (said && "refuse" in said) {
     throw new Refused(said.refuse);
@@ -208,7 +209,7 @@ async function readAnswer(
         : downloadWords.startedOver(download.what, from, status)
     );
   }
-  return { resumes };
+  return { body: response.body, resumes };
 }
 
 /** Streams a body onto the partial file, the rest after `from` or the whole from 0. */
@@ -260,11 +261,7 @@ async function attempt(
   if ("kind" in read) {
     return read;
   }
-  return streamBody(
-    download,
-    response.body as ReadableStream<Uint8Array>,
-    read.resumes ? from : 0
-  );
+  return streamBody(download, read.body, read.resumes ? from : 0);
 }
 
 /**
