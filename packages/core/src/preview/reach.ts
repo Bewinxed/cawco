@@ -20,6 +20,7 @@
  * the hub itself reaches the same origin now ({@link PREVIEW_REACH_PATH}).
  */
 import { readWithin } from "../bounded";
+import { isRecord } from "../is-record";
 import { PREVIEW_DOWNS, type PreviewDown } from "./protocol";
 import { PREVIEW_PING_PATH } from "./routes";
 
@@ -314,19 +315,17 @@ export const askHubReach = async (
   if (!(read?.kind === "answered" && read.value.ok)) {
     return null;
   }
-  const body = (await read.value.json().catch(() => null)) as {
-    hostMode?: unknown;
-    ports?: unknown;
-    reached?: unknown;
-    why?: unknown;
-  } | null;
-  if (typeof body?.ports === "string" && typeof body.hostMode === "boolean") {
+  const body: unknown = await read.value.json().catch(() => null);
+  if (!isRecord(body)) {
+    return null;
+  }
+  if (typeof body.ports === "string" && typeof body.hostMode === "boolean") {
     heard?.({ ports: body.ports, hostMode: body.hostMode });
   }
-  if (body?.reached === true) {
+  if (body.reached === true) {
     return { reached: true };
   }
-  return body?.reached === false && typeof body.why === "string"
+  return body.reached === false && typeof body.why === "string"
     ? { reached: false, why: body.why }
     : null;
 };

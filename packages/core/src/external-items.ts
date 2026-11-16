@@ -139,13 +139,7 @@ export const refOfUrl = (url: string): ItemOfUrl | undefined => {
   const written = url.trim();
   const github = GITHUB_ITEM.exec(written);
   if (github) {
-    const [, owner, repo, segment, digits] = github as unknown as [
-      string,
-      string,
-      string,
-      string,
-      string,
-    ];
+    const [, owner, repo, segment, digits] = github;
     const number = Number(digits);
     return {
       source: "github",
@@ -158,11 +152,7 @@ export const refOfUrl = (url: string): ItemOfUrl | undefined => {
   }
   const linear = LINEAR_ITEM.exec(written);
   if (linear) {
-    const [, workspace, identifier] = linear as unknown as [
-      string,
-      string,
-      string,
-    ];
+    const [, workspace, identifier] = linear;
     const ref = identifier.toUpperCase();
     return {
       source: "linear",

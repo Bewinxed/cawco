@@ -203,6 +203,7 @@ export const previewRoutes = (deps: {
             ws.close(4404, NO_SUCH_ARTIFACT);
             return;
           }
+          // Cast kept: artifacts/sync.ts's handler takes Bun's whole `ServerWebSocket` but reads `data`, `send` and `close` alone; no issue, the type is ours to narrow there.
           const pane = {
             data: { artifactId: artifact, screen: false },
             send: (message: Uint8Array) => ws.send(message),
@@ -213,13 +214,10 @@ export const previewRoutes = (deps: {
         },
         message(ws, message) {
           const pane = panes.get(ws.id);
-          if (pane) {
-            deps.listener.socket.message(
-              pane,
-              message instanceof Uint8Array
-                ? Buffer.from(message)
-                : (message as string | Buffer)
-            );
+          if (pane && typeof message === "string") {
+            deps.listener.socket.message(pane, message);
+          } else if (pane && message instanceof Uint8Array) {
+            deps.listener.socket.message(pane, Buffer.from(message));
           }
         },
         close(ws) {

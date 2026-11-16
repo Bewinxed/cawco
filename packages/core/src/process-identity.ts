@@ -1224,7 +1224,7 @@ export async function listeningPorts(pid: number): Promise<number[]> {
       ),
     ];
   }
-  const fds = await readdir(`/proc/${pid}/fd`).catch(() => [] as string[]);
+  const fds = await readdir(`/proc/${pid}/fd`).catch((): string[] => []);
   const inodes = new Set(
     (
       await Promise.all(

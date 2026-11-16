@@ -51,14 +51,36 @@
  */
 
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { isRecord } from "@cawco/core/is-record";
 import { unhandled } from "@cawco/core/unhandled";
 import type { WaitTarget } from "@cawco/core/wait-targets";
 import { cutShort } from "@cawco/core/words/helpers";
 import type { Octokit } from "@octokit/rest";
+import {
+  array,
+  boolean,
+  type GenericSchema,
+  type InferOutput,
+  looseObject,
+  nullable,
+  nullish,
+  object,
+  optional,
+  safeParse,
+  string,
+  summarize,
+  unknown,
+} from "valibot";
 import { z } from "zod";
 import type { GitHubCursor } from "./db/schema";
 import type { GitHubResource } from "./db/stored-types";
 import type { InboundEvent } from "./inbound-event";
+import {
+  graphqlErrorsOf,
+  messageOf,
+  type OctokitRefusal,
+  refusalOf,
+} from "./octokit-answer";
 import type { GitHubWaitState } from "./task-waits";
 
 /** What {@link normalizeGitHub} reads: a polled object's kind, or a webhook's event name. */
@@ -437,8 +459,6 @@ const discussionEvents = (
   ),
 ];
 
-const ISSUE_ACTIONS = new Set(["opened", "closed"]);
-
 /**
  * THE map from GitHub to inbound events: a polled object or a webhook
  * payload of the same change gives the same events under the same keys. A
@@ -496,8 +516,8 @@ const READERS: Record<GitHubKind, (payload: unknown) => InboundEvent[]> = {
         at: ms(one.updated_at),
       });
     }
-    return ISSUE_ACTIONS.has(action)
-      ? issueEvents(one, { action: action as "opened" | "closed" })
+    return action === "opened" || action === "closed"
+      ? issueEvents(one, { action })
       : [];
   },
   issue_comment: (payload) => {
@@ -622,16 +642,12 @@ const KIND_OF: Record<GitHubResource, GitHubKind> = {
 
 /** When a listed item last moved: its `updated_at` (a discussion's `updatedAt`), or an issue event's `created_at`. */
 const movedAt = (item: unknown): number => {
-  const {
-    updated_at: updated,
-    created_at: created,
-    updatedAt,
-  } = item as {
-    created_at?: string;
-    updated_at?: string;
-    updatedAt?: string;
-  };
-  return Date.parse(updated ?? updatedAt ?? created ?? "");
+  if (!isRecord(item)) {
+    return Number.NaN;
+  }
+  return Date.parse(
+    String(item.updated_at ?? item.updatedAt ?? item.created_at ?? "")
+  );
 };
 
 /**
@@ -667,47 +683,64 @@ const DISCUSSION_MORE_QUERY = `query CawcoDiscussionMore($owner: String!, $name:
   }
 }`;
 
-/** What {@link DISCUSSION_MORE_QUERY} answers. */
-interface DiscussionMore {
-  repository: {
-    discussion: Partial<Record<"comments" | "labels", Connection>> | null;
-  } | null;
-}
+/** Where a GraphQL connection's next page begins. */
+const PageInfoSchema = object({
+  endCursor: nullable(string()),
+  hasNextPage: boolean(),
+});
 
 /** One connection of a discussion: a page of its nodes and where the next begins. */
-interface Connection {
-  nodes?: unknown[];
-  pageInfo?: { endCursor: string | null; hasNextPage: boolean };
-}
+const ConnectionSchema = object({
+  nodes: optional(array(unknown())),
+  pageInfo: optional(PageInfoSchema),
+});
+type Connection = InferOutput<typeof ConnectionSchema>;
 
-/** What {@link DISCUSSIONS_QUERY} answers. */
-interface DiscussionsPage {
-  repository: {
-    discussions: {
-      nodes: (Record<string, unknown> | null)[];
-      pageInfo: { endCursor: string | null; hasNextPage: boolean };
-    };
-  } | null;
-}
+/** What {@link DISCUSSION_MORE_QUERY} answers. */
+const DiscussionMoreSchema = object({
+  repository: nullable(
+    object({
+      discussion: nullable(
+        object({
+          comments: optional(ConnectionSchema),
+          labels: optional(ConnectionSchema),
+        })
+      ),
+    })
+  ),
+});
+
+/** What {@link DISCUSSIONS_QUERY} answers: each discussion kept whole, its labels and comments read as connections. */
+const DiscussionsPageSchema = object({
+  repository: nullable(
+    object({
+      discussions: object({
+        nodes: array(
+          nullable(
+            looseObject({
+              comments: nullish(ConnectionSchema),
+              labels: nullish(ConnectionSchema),
+            })
+          )
+        ),
+        pageInfo: PageInfoSchema,
+      }),
+    })
+  ),
+});
+
+type DiscussionsPage = InferOutput<typeof DiscussionsPageSchema>;
 
 /** One page of discussions, as {@link DISCUSSIONS_QUERY} answers it. */
 type Discussions = NonNullable<DiscussionsPage["repository"]>["discussions"];
 
+/** One discussion of a page, as {@link DISCUSSIONS_QUERY} answers it. */
+type DiscussionNode = NonNullable<
+  NonNullable<DiscussionsPage["repository"]>["discussions"]["nodes"][number]
+>;
+
 /** An answer's headers as Octokit hands them over: lower-case names. */
-type Headers = Readonly<Record<string, string | number | undefined>>;
-
-/** GitHub's answer as Octokit throws it for a status of 300 or more (@octokit/request-error `RequestError`). */
-interface Refused {
-  readonly response: { data?: unknown; headers: Headers };
-  readonly status: number;
-}
-
-const refusedOf = (error: unknown): Refused | undefined => {
-  const read = error as Partial<Refused> | null;
-  return typeof read?.status === "number" && read.response
-    ? (read as Refused)
-    : undefined;
-};
+type Headers = OctokitRefusal["headers"];
 
 /** When GitHub's answer says to wait, ms; null when it does not. */
 const waitOf = (headers: Headers, now: number): number | null => {
@@ -732,12 +765,12 @@ class Stop extends Error {
 
 /** Why GitHub refused a request, in words for the project's ingress view. */
 const refusal = (
-  refused: Refused,
+  refused: OctokitRefusal,
   path: string,
   connection: string,
   now: number
 ): Stop => {
-  const wait = waitOf(refused.response.headers, now);
+  const wait = waitOf(refused.headers, now);
   if (wait !== null && [403, 429].includes(refused.status)) {
     return new Stop(
       `GitHub's rate limit: polls wait until ${new Date(wait).toISOString()}.`,
@@ -749,9 +782,8 @@ const refusal = (
       `GitHub refused the sign-in of connection ${connection} (401): set its key again.`
     );
   }
-  const words = (refused.response.data as { message?: unknown } | null)
-    ?.message;
-  const said = typeof words === "string" ? cutShort(words, 200) : "";
+  const words = messageOf(refused.data);
+  const said = words === undefined ? "" : cutShort(words, 200);
   return new Stop(
     `GitHub answered ${refused.status} for ${path}${said ? `: ${said}` : ""}.`
   );
@@ -770,7 +802,11 @@ const readPage = (
   if (!Array.isArray(items)) {
     throw new Stop(`GitHub's ${resource} list was not a list.`);
   }
-  const page = { events: [] as InboundEvent[], newest: edge, past: false };
+  const page: { events: InboundEvent[]; newest: number; past: boolean } = {
+    events: [],
+    newest: edge,
+    past: false,
+  };
   for (const item of items) {
     const updated = movedAt(item);
     if (!Number.isFinite(updated) || updated < edge) {
@@ -823,32 +859,30 @@ export const pollRepo = async (input: {
     etag: string | null
   ) => {
     let signal: AbortSignal | undefined;
-    const request = Object.assign(
-      (options: Readonly<Record<string, unknown>>) => {
-        const url = new URL(String(options.url), origin);
-        if (url.origin !== origin) {
-          throw new Stop(
-            `GitHub named a next page off its API (${url.origin}), so the poll stopped there.`
-          );
-        }
-        return octokit.request({
-          ...options,
-          request: { redirect: "error", signal },
-        } as Parameters<Octokit["request"]>[1] & {
-          method: "GET";
-          url: string;
-        });
+    // Octokit's own request with the auth it carries, each page sent with
+    // the signal of the read it is in and on the API's own origin alone: a
+    // next page named off it is refused before anything is sent there.
+    const request = octokit.request.defaults({
+      request: {
+        redirect: "error",
+        fetch: (url: string, init: RequestInit) => {
+          const at = new URL(url, origin);
+          if (at.origin !== origin) {
+            throw new Stop(
+              `GitHub named a next page off its API (${at.origin}), so the poll stopped there.`
+            );
+          }
+          return fetch(url, { ...init, signal });
+        },
       },
-      { endpoint: octokit.request.endpoint }
-    ) as unknown as Octokit["request"];
+    });
     const pages = octokit.paginate
       .iterator(request, {
         method: "GET",
         url: path,
         ...query,
         ...(etag ? { headers: { "if-none-match": etag } } : {}),
-        // `Parameters<R>[0]` reads the route-string overload of a request
-        // function; the iterator takes its endpoint options alike.
+        // Cast kept, @octokit/plugin-paginate-rest 14.0.0 gap (held by @octokit/rest 22.0.1, latest): `iterator(request, parameters)` types them as `Parameters<R>[0]`, the route-string overload, though it reads endpoint options; no upstream issue exists.
       } as never)
       [Symbol.asyncIterator]();
     return () =>
@@ -880,7 +914,12 @@ export const pollRepo = async (input: {
         value: done || !value ? undefined : value,
       };
     } catch (error) {
-      const refused = refusedOf(error);
+      // A next page off the API's origin, refused in `fetch`: Octokit
+      // throws it on as the cause of its own failure to reach GitHub.
+      if (error instanceof Error && error.cause instanceof Stop) {
+        throw error.cause;
+      }
+      const refused = refusalOf(error);
       if (refused?.status === 304) {
         return { kind: "answered", value: "not modified" };
       }
@@ -922,29 +961,40 @@ export const pollRepo = async (input: {
     return { kind: "answered", value: newest };
   };
 
-  /** A GraphQL request within {@link REQUEST_MS}, no redirect followed; a refusal thrown in the words the project's ingress view reads. */
-  const ask = <T>(
+  /**
+   * A GraphQL request within {@link REQUEST_MS}, no redirect followed, its
+   * answer read with `answer`; a refusal, or an answer `answer` does not
+   * read, thrown in the words the project's ingress view reads.
+   */
+  const ask = <Answer extends GenericSchema>(
     query: string,
-    variables: Record<string, unknown>
-  ): Promise<Bounded<T>> =>
+    variables: Record<string, unknown>,
+    answer: Answer
+  ): Promise<Bounded<InferOutput<Answer>>> =>
     readWithin(REQUEST_MS, async (signal) => {
+      let answered: unknown;
       try {
-        return (await octokit.graphql(query, {
+        answered = await octokit.graphql(query, {
           ...variables,
           request: { redirect: "error", signal },
-        })) as T;
+        });
       } catch (error) {
-        const refused = refusedOf(error);
+        const refused = refusalOf(error);
         if (refused) {
           throw refusal(refused, "discussions", input.connection, input.now);
         }
-        const { errors } = error as { errors?: { message?: string }[] };
-        throw errors?.[0]?.message
-          ? new Stop(
-              `GitHub refused the discussions: ${cutShort(errors[0].message, 200)}`
-            )
+        const said = graphqlErrorsOf(error)[0]?.message;
+        throw said
+          ? new Stop(`GitHub refused the discussions: ${cutShort(said, 200)}`)
           : error;
       }
+      const read = safeParse(answer, answered);
+      if (!read.success) {
+        throw new Stop(
+          `GitHub's answer for the discussions was not the one asked for: ${summarize(read.issues)}`
+        );
+      }
+      return read.output;
     });
 
   /** The nodes of a discussion's connection past its first page, and the first's with them. */
@@ -958,14 +1008,18 @@ export const pollRepo = async (input: {
     const nodes = [...(first?.nodes ?? [])];
     let after = first?.pageInfo?.hasNextPage ? first.pageInfo.endCursor : null;
     while (after !== null) {
-      const more = await ask<DiscussionMore>(DISCUSSION_MORE_QUERY, {
-        owner,
-        name,
-        number,
-        isLabels: field === "labels",
-        isComments: field === "comments",
-        after,
-      });
+      const more = await ask(
+        DISCUSSION_MORE_QUERY,
+        {
+          owner,
+          name,
+          number,
+          isLabels: field === "labels",
+          isComments: field === "comments",
+          after,
+        },
+        DiscussionMoreSchema
+      );
       if (more.kind === "unanswered") {
         return more;
       }
@@ -978,12 +1032,12 @@ export const pollRepo = async (input: {
 
   /** A discussion with all its labels and comments: those past the first page read on. */
   const fill = async (
-    node: Record<string, unknown>,
+    node: DiscussionNode,
     owner: string,
     name: string
   ): Promise<Bounded<Record<string, unknown>>> => {
     const labels = await follow(
-      node.labels as Connection | null | undefined,
+      node.labels,
       owner,
       name,
       node.number,
@@ -993,7 +1047,7 @@ export const pollRepo = async (input: {
       return labels;
     }
     const comments = await follow(
-      node.comments as Connection | null | undefined,
+      node.comments,
       owner,
       name,
       node.number,
@@ -1014,7 +1068,7 @@ export const pollRepo = async (input: {
 
   /** A page's discussions, each with all its labels and comments, and its repository's name. */
   const fillAll = async (
-    page: (Record<string, unknown> | null)[],
+    page: (DiscussionNode | null)[],
     owner: string,
     name: string
   ): Promise<
@@ -1051,13 +1105,10 @@ export const pollRepo = async (input: {
     let newest = edge;
     let after: string | null = null;
     for (;;) {
-      const asked: Bounded<DiscussionsPage> = await ask<DiscussionsPage>(
+      const asked: Bounded<DiscussionsPage> = await ask(
         DISCUSSIONS_QUERY,
-        {
-          owner,
-          name,
-          after,
-        }
+        { owner, name, after },
+        DiscussionsPageSchema
       );
       if (asked.kind === "unanswered") {
         return asked;

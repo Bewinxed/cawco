@@ -158,7 +158,7 @@ export const secretRangesOf = async (
   }
   const found = await secretRanges(joined);
   return texts.map((text, index) => {
-    const from = starts[index] as number;
+    const from = starts[index];
     const to = from + text.length;
     return found.flatMap(([start, end]): [number, number][] =>
       end > from && start < to

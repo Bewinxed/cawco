@@ -17,7 +17,7 @@
  * could carry script), under a sandboxing CSP.
  */
 import { createHash } from "node:crypto";
-import { lookup as dnsLookup, type LookupAddress } from "node:dns";
+import { lookup as dnsLookup } from "node:dns";
 import { readFile } from "node:fs/promises";
 import { get as httpsGet } from "node:https";
 import type { LookupFunction } from "node:net";
@@ -59,12 +59,11 @@ const publicName = (host: string): boolean =>
  * checked — a name can't pass the check and then resolve inside the network.
  */
 const publicLookup: LookupFunction = (hostname, options, callback) => {
-  dnsLookup(hostname, { all: true, verbatim: true }, (error, addresses) => {
+  dnsLookup(hostname, { all: true, verbatim: true }, (error, list) => {
     if (error) {
       callback(error, "", 0);
       return;
     }
-    const list = addresses as LookupAddress[];
     if (
       list.length === 0 ||
       !list.every(({ address }) => isPublicDestination(address))

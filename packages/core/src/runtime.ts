@@ -2,6 +2,7 @@
 import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { errnoCode } from "./absent";
 import { atMost } from "./at-most";
 import { binaryAssets, publishedHashes } from "./binary-assets";
 import { makeFolderSync } from "./folders";
@@ -129,7 +130,7 @@ const markerManifest = (text: string): Map<string, string> | undefined => {
 
 /** A runtime folder that refuses writes: a workspace's, which only the machine's processes publish. */
 const readOnly = (error: unknown): boolean => {
-  const { code } = error as NodeJS.ErrnoException;
+  const code = errnoCode(error);
   return code === "EROFS" || code === "EACCES";
 };
 

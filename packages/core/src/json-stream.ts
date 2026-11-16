@@ -16,6 +16,8 @@
  * Browser-safe: no Node or Bun imports.
  */
 
+import { isRecord } from "./is-record";
+
 /**
  * About how much text one {@link encodeJson} piece holds, and the longest
  * string encoded or decoded in one native call. Our choice: a few
@@ -64,9 +66,10 @@ const resolved = (value: unknown, key: string): unknown => {
   if (
     typeof value === "object" &&
     value !== null &&
-    typeof (value as { toJSON?: unknown }).toJSON === "function"
+    "toJSON" in value &&
+    typeof value.toJSON === "function"
   ) {
-    return (value as { toJSON: (key: string) => unknown }).toJSON(key);
+    return value.toJSON(key);
   }
   return value;
 };
@@ -178,11 +181,11 @@ function* walk(root: unknown): Generator<string, void, undefined> {
         }
       }
       emit("]");
-    } else {
+    } else if (isRecord(value)) {
       emit("{");
       let first = true;
       for (const key of Object.keys(value)) {
-        const item = resolved((value as Record<string, unknown>)[key], key);
+        const item = resolved(value[key], key);
         if (skipped(item)) {
           continue;
         }
@@ -241,10 +244,10 @@ export const jsonSizeEstimate = (
     size += 2;
     if (Array.isArray(item)) {
       stack.push({ members: item, keys: undefined, at: 0 });
-    } else {
+    } else if (isRecord(item)) {
       const keys = Object.keys(item);
       stack.push({
-        members: keys.map((key) => (item as Record<string, unknown>)[key]),
+        members: keys.map((key) => item[key]),
         keys,
         at: 0,
       });
@@ -252,7 +255,10 @@ export const jsonSizeEstimate = (
   };
   count(value);
   while (stack.length > 0 && size < cap) {
-    const top = stack.at(-1) as (typeof stack)[number];
+    const top = stack.at(-1);
+    if (top === undefined) {
+      break;
+    }
     if (top.at >= top.members.length) {
       stack.pop();
       continue;
@@ -269,11 +275,9 @@ export const jsonSizeEstimate = (
 type Expect =
   "value" | "value-or-end" | "key" | "key-or-end" | "colon" | "after" | "done";
 
-interface Container {
-  array: boolean;
-  key: string;
-  value: Record<string, unknown> | unknown[];
-}
+type Container =
+  | { array: true; key: string; value: unknown[] }
+  | { array: false; key: string; value: Record<string, unknown> };
 
 const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/u;
 const TOKEN_CHAR = /[-+.0-9a-zA-Z]/u;
@@ -333,7 +337,7 @@ export class JsonDecoder {
     }
     while (at < text.length) {
       if (this.#string) {
-        at = this.#continueString(text, at);
+        at = this.#continueString(this.#string, text, at);
         continue;
       }
       const code = text.charCodeAt(at);
@@ -357,7 +361,7 @@ export class JsonDecoder {
   }
 
   #structural(text: string, at: number, code: number): number {
-    const char = text[at] as string;
+    const char = text[at];
     switch (this.#expect) {
       case "done":
         throw new SyntaxError(`Unexpected '${char}' after the JSON value`);
@@ -444,7 +448,7 @@ export class JsonDecoder {
       return;
     }
     if (top.array) {
-      (top.value as unknown[]).push(value);
+      top.value.push(value);
     } else if (top.key === "__proto__") {
       // As JSON.parse: a member named __proto__ is data, not the prototype.
       Object.defineProperty(top.value, top.key, {
@@ -454,14 +458,14 @@ export class JsonDecoder {
         configurable: true,
       });
     } else {
-      (top.value as Record<string, unknown>)[top.key] = value;
+      top.value[top.key] = value;
     }
     this.#expect = "after";
   }
 
   #continueToken(text: string, from: number): number {
     let at = from;
-    while (at < text.length && TOKEN_CHAR.test(text[at] as string)) {
+    while (at < text.length && TOKEN_CHAR.test(text[at])) {
       at += 1;
     }
     this.#cut.token += text.slice(from, at);
@@ -495,8 +499,7 @@ export class JsonDecoder {
    * the piece's end cuts is kept and decoded with the next piece.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a string scan whose escape state crosses piece boundaries; its states are only meaningful together
-  #continueString(text: string, from: number): number {
-    const open = this.#string as OpenString;
+  #continueString(open: OpenString, text: string, from: number): number {
     let at = from;
     // Where, in this piece, the escape still open at its end began.
     let escapeAt = -1;
@@ -534,7 +537,12 @@ export class JsonDecoder {
       open.raw = "";
       this.#string = undefined;
       if (open.isKey) {
-        (this.#stack.at(-1) as Container).key = open.decoded;
+        // A key is read only inside an object (`#structural`'s `key`).
+        const top = this.#stack.at(-1);
+        if (!top) {
+          throw new SyntaxError("Unexpected key outside an object in JSON");
+        }
+        top.key = open.decoded;
         this.#expect = "colon";
       } else {
         this.#value(open.decoded);

@@ -48,10 +48,15 @@ export const STREAM_RELAY_TLS_PORT = 5349;
 /** The relay's UDP relay range, as `relay.start` carries it. */
 type RelayRange = readonly [first: number, last: number];
 
+/** The relay's ports on either transport, read as numbers for `includes`. */
+const RELAY_HELD: readonly (readonly number[])[] = [
+  STREAM_RELAY_PORTS.tcp,
+  STREAM_RELAY_PORTS.udp,
+];
+
 /** Whether `port` is one of the ports the stream relay may hold on its machine, on either transport. */
 export const isStreamRelayPort = (port: number): boolean =>
-  (STREAM_RELAY_PORTS.tcp as readonly number[]).includes(port) ||
-  (STREAM_RELAY_PORTS.udp as readonly number[]).includes(port);
+  RELAY_HELD.some((ports) => ports.includes(port));
 
 /**
  * The STUN server a machine asks for the public address its router maps it

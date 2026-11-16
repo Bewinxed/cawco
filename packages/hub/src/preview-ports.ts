@@ -9,6 +9,7 @@
  * stand in the table that owns them (preview-listeners.ts); the rows of the
  * ports each origin keeps are the database's (db/previews.ts).
  */
+import { errnoCode } from "@cawco/core/absent";
 import { detach } from "@cawco/core/detach";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import {
@@ -96,7 +97,7 @@ export function createPreviewPorts({
       bind();
       return true;
     } catch (thrown) {
-      if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
+      if (errnoCode(thrown) === "EADDRINUSE") {
         return false;
       }
       return problem(503, {

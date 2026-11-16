@@ -14,6 +14,7 @@
  * apps/apple/Packages/CawCoKit/Sources/CawCoTranscript/Generated/ToolPresentation.swift;
  * `bun run tools:check` fails while that file is stale).
  */
+import { keysOf } from "./keys-of";
 import { lineCounts, linesOf } from "./line-diff";
 
 /** Which body an opened call shows; each exists once per client. */
@@ -214,10 +215,10 @@ const STATUS_SET: Record<ToolStatus, true> = {
   success: true,
   error: true,
 };
-export const RENDERERS = Object.keys(RENDERER_SET) as Renderer[];
-export const TRANSFORMS = Object.keys(TRANSFORM_SET) as Transform[];
-export const FACTS = Object.keys(FACT_SET) as Fact[];
-export const STATUSES = Object.keys(STATUS_SET) as ToolStatus[];
+export const RENDERERS = keysOf(RENDERER_SET);
+export const TRANSFORMS = keysOf(TRANSFORM_SET);
+export const FACTS = keysOf(FACT_SET);
+export const STATUSES = keysOf(STATUS_SET);
 
 /** Past this a line is a payload, not a sentence: it only has to truncate. */
 export const LINE_CAP = 200;
@@ -249,6 +250,50 @@ const primary: Piece = {
 };
 const leaf = (piece: Piece): Piece => ({ ...piece, as: "path-leaf" });
 const dir = (piece: Piece): Piece => ({ ...piece, as: "path-dir" });
+
+/** The kind of an MCP tool no other kind names. */
+const MCP_KIND: ToolKind = {
+  id: "mcp",
+  names: [],
+  glyph: "plug-circle-bold-duotone",
+  ink: "tool-mcp",
+  one: "call",
+  many: "calls",
+  renderer: "fields",
+  sentence: { label: "tool-name", objectMono: false, secondLine: true },
+  variants: [
+    // CawCo's own setup calls say what they did, in words: the name it
+    // gave, never its input as fields (no body, so no chevron to open).
+    {
+      when: { names: ["project_name"] },
+      renderer: "prose",
+      sentence: {
+        label: "Named the project",
+        object: { from: ["name"], as: "one-line" },
+        objectMono: false,
+      },
+    },
+    {
+      when: { names: ["project_setup"] },
+      renderer: "prose",
+      sentence: { label: "Read how a project is set up", objectMono: false },
+    },
+  ],
+};
+
+/** The kind of a tool no other kind names. */
+const OTHER_KIND: ToolKind = {
+  // Not "step": the header already counts steps. An unknown tool has no
+  // family to be, so it takes the muted ink rather than borrowing one.
+  id: "other",
+  names: [],
+  glyph: "sledgehammer-bold-duotone",
+  ink: "muted-foreground",
+  one: "action",
+  many: "actions",
+  renderer: "fields",
+  sentence: { label: "tool-name", object: primary, secondLine: true },
+};
 
 /** Every kind, in the order a name is matched against them; `other` takes the rest. */
 export const TOOL_KINDS: ToolKind[] = [
@@ -631,46 +676,8 @@ export const TOOL_KINDS: ToolKind[] = [
       },
     ],
   },
-  {
-    id: "mcp",
-    names: [],
-    glyph: "plug-circle-bold-duotone",
-    ink: "tool-mcp",
-    one: "call",
-    many: "calls",
-    renderer: "fields",
-    sentence: { label: "tool-name", objectMono: false, secondLine: true },
-    variants: [
-      // CawCo's own setup calls say what they did, in words: the name it
-      // gave, never its input as fields (no body, so no chevron to open).
-      {
-        when: { names: ["project_name"] },
-        renderer: "prose",
-        sentence: {
-          label: "Named the project",
-          object: { from: ["name"], as: "one-line" },
-          objectMono: false,
-        },
-      },
-      {
-        when: { names: ["project_setup"] },
-        renderer: "prose",
-        sentence: { label: "Read how a project is set up", objectMono: false },
-      },
-    ],
-  },
-  {
-    // Not "step": the header already counts steps. An unknown tool has no
-    // family to be, so it takes the muted ink rather than borrowing one.
-    id: "other",
-    names: [],
-    glyph: "sledgehammer-bold-duotone",
-    ink: "muted-foreground",
-    one: "action",
-    many: "actions",
-    renderer: "fields",
-    sentence: { label: "tool-name", object: primary, secondLine: true },
-  },
+  MCP_KIND,
+  OTHER_KIND,
 ];
 
 // ── The dashboard's reading of the rules. The native app's is generated
@@ -796,9 +803,7 @@ function toolKind(toolName: string | undefined): ToolKind {
             new RegExp(kind.namePattern, "u").test(own))
       )
     : undefined;
-  const fallback = mcp ? "mcp" : "other";
-  const resolved =
-    found ?? (TOOL_KINDS.find((each) => each.id === fallback) as ToolKind);
+  const resolved = found ?? (mcp ? MCP_KIND : OTHER_KIND);
   remember(readKinds, raw, resolved);
   return resolved;
 }
@@ -848,7 +853,7 @@ export interface ToolSentence {
 const blank = (value: unknown): value is undefined =>
   typeof value !== "string" || value.trim().length === 0;
 const textOf = (value: unknown): string | undefined =>
-  blank(value) ? undefined : (value as string);
+  typeof value === "string" && value.trim().length > 0 ? value : undefined;
 const int = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value)
     ? Math.trunc(value)
@@ -1064,11 +1069,12 @@ export function fileChanges(
   }
   const edits: unknown[] = Array.isArray(input.edits) ? input.edits : [input];
   return edits.map((edit) => {
-    const each = (edit ?? {}) as Record<string, unknown>;
+    const each: Record<string, unknown> = isRecord(edit) ? edit : {};
     const pick = (keys: string[]) => {
       for (const key of keys) {
-        if (typeof each[key] === "string") {
-          return each[key] as string;
+        const found = each[key];
+        if (typeof found === "string") {
+          return found;
         }
       }
       return "";

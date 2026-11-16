@@ -51,6 +51,7 @@ import {
 import type { ServerWebSocket } from "bun";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
+import { ElysiaWS } from "elysia/ws";
 import { z } from "zod";
 import { answered } from "./browser-answered";
 import type { ArtifactRow } from "./db/artifacts";
@@ -220,8 +221,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
   /** The browser artifact `artifact` of session `instance`; refused when it is no such thing. */
   const placeOf = (instance: string, artifact: string) => {
     const row = deps.artifact(artifact);
-    const page =
-      row && "page" in row.source ? (row.source.page as unknown) : undefined;
+    const page = row && "page" in row.source ? row.source.page : undefined;
     if (!(
       row?.kind === "browser" &&
       row.instanceId === instance &&
@@ -438,6 +438,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
       instanceId: socket.instance,
       nothingListens: () => forgetListener(place.machineId, at),
     };
+    // Cast kept: packages/preview `previewWebSocket` takes Bun's whole `ServerWebSocket` but reads `data`, `send` and `close` alone; no issue, the type is ours to narrow there.
     return {
       data,
       send: (frame: string | ArrayBuffer) => {
@@ -662,8 +663,8 @@ interface RawSocket {
 
 /**
  * An Elysia socket as a {@link ViewSocket}. Every callback's socket is an
- * `ElysiaWS`, whose `raw` is Bun's socket; the route's context type leaves
- * it out.
+ * `ElysiaWS` (elysia/dist/ws/route.mjs `getElysia`), whose `raw` is Bun's
+ * socket; the route's context type leaves it out, so it is narrowed here.
  */
 const viewOf = (ws: {
   id: string;
@@ -672,7 +673,10 @@ const viewOf = (ws: {
   query: Record<string, string | undefined>;
   remoteAddress?: string;
 }): ViewSocket => {
-  const { raw } = ws as unknown as { raw: RawSocket };
+  if (!(ws instanceof ElysiaWS)) {
+    throw new TypeError("a browser view's socket is not Elysia's");
+  }
+  const raw: RawSocket = ws.raw;
   const bearer = ws.headers.authorization;
   return {
     token:

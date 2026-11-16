@@ -869,7 +869,10 @@ export const createSshTunnels = ({
     }
     const child = master(row, path);
     tunnel.child = child;
-    const heard = { lines: [] as string[], since: [] as string[] };
+    const heard: { lines: string[]; since: string[] } = {
+      lines: [],
+      since: [],
+    };
     const reading = eachLine(child.stderr, (line) => hear(tunnel, heard, line));
     const refusal = await bringUp(tunnel, row, path, child);
     await reading;

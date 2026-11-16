@@ -93,14 +93,14 @@ export const spawnTethered = <
     env: Record<string, string | undefined>;
     stdin?: In;
   }
-): Bun.Subprocess<In, Out, Err> => {
+): Bun.Subprocess<In | "pipe", Out, Err> => {
   if (process.platform === "win32") {
     throw new Error(tetherWords.noShell);
   }
   return Bun.spawn([systemProgram("sh"), "-c", TETHER, "sh", ...argv], {
     ...options,
     env: options.env,
-    stdin: options.stdin ?? ("pipe" as In),
+    stdin: options.stdin ?? "pipe",
     detached: true,
   });
 };

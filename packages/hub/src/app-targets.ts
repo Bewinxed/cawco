@@ -18,7 +18,9 @@
  * A file under no target's folder and in no `wholeApp` (README, scripts,
  * StoreKit) builds nothing.
  */
+import { isRecord } from "@cawco/core/is-record";
 import type { DeclaredStep } from "@cawco/core/project-gate";
+import { array, object, safeParse, string, unknown } from "valibot";
 import { covers, TARGETS_PLACE } from "./gate-file";
 import type { GateStep } from "./landing";
 
@@ -60,13 +62,20 @@ const NAME = /^[A-Za-z0-9_-]+$/u;
 const strings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((each) => typeof each === "string");
 
+/** The map file's two lists; each target is checked on its own ({@link mapTarget}), for words on what is wrong with it. */
+const TargetMapFile = object({
+  targets: array(unknown()),
+  wholeApp: array(string()),
+});
+
 /** One map entry, checked: a problem in words when it is not a target the map before it allows. */
 const mapTarget = (
   raw: unknown,
   before: ReadonlySet<string>
 ): MapTarget | string => {
-  const target = (raw ?? {}) as Partial<Record<keyof MapTarget, unknown>>;
-  const { name, kind, sources, resources, dependencies } = target;
+  const { name, kind, sources, resources, dependencies } = isRecord(raw)
+    ? raw
+    : {};
   if (!(typeof name === "string" && NAME.test(name))) {
     return `a target's name, ${JSON.stringify(name)}, is not a scheme name`;
   }
@@ -87,17 +96,19 @@ const mapTarget = (
 export const readTargetMap = (
   text: string
 ): TargetMap | { problem: string } => {
-  let raw: { targets?: unknown; wholeApp?: unknown };
+  let json: unknown;
   try {
-    raw = JSON.parse(text);
+    json = JSON.parse(text);
   } catch (error) {
     return {
       problem: `it is not JSON (${error instanceof Error ? error.message : String(error)})`,
     };
   }
-  if (!(strings(raw.wholeApp) && Array.isArray(raw.targets))) {
+  const read = safeParse(TargetMapFile, json);
+  if (!read.success) {
     return { problem: "it holds no wholeApp list and targets list" };
   }
+  const raw = read.output;
   const targets: MapTarget[] = [];
   const named = new Set<string>();
   for (const each of raw.targets) {

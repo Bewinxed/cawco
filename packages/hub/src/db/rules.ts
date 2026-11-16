@@ -211,14 +211,14 @@ export const rulesDb = (core: DbCore): RulesDb => {
         .from(ruleState)
         .where(eq(ruleState.id, id))
         .get();
-      const next = {
+      const next: typeof ruleState.$inferSelect = {
         id,
         ruleId,
         instanceId,
         // A rule that does not repeat still records the fire; it just stays
         // armed-looking, and the engine's own once-per-session check is what
         // keeps it quiet afterwards.
-        status: (repeat ? "pending" : "armed") as "armed" | "pending",
+        status: repeat ? "pending" : "armed",
         fireCount: (before?.fireCount ?? 0) + 1,
         totalFires: (before?.totalFires ?? 0) + 1,
         lastFiredAt: now,
@@ -236,7 +236,7 @@ export const rulesDb = (core: DbCore): RulesDb => {
           },
         })
         .run();
-      return ruleStateOf(next as typeof ruleState.$inferSelect);
+      return ruleStateOf(next);
     },
     ruleStateFor: (ruleId, instanceId) => {
       const row = db

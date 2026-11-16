@@ -1,4 +1,5 @@
 import { ARTIFACT_PICTURE, PICTURE_LIMITS } from "@cawco/core/artifact-picture";
+import { isRecord } from "@cawco/core/is-record";
 import {
   placeAtLink,
   previewEnterUrl,
@@ -78,11 +79,12 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
         detail: "Only a decision page's Diagram opens as a canvas.",
       });
     }
-    const body = (await request.json().catch(() => null)) as {
-      from?: unknown;
-      mermaid?: unknown;
-    } | null;
-    if (typeof body?.mermaid !== "string" || !body.mermaid.trim()) {
+    const body: unknown = await request.json().catch(() => null);
+    if (
+      !isRecord(body) ||
+      typeof body.mermaid !== "string" ||
+      !body.mermaid.trim()
+    ) {
       return problemResponse({
         status: 400,
         code: "name-diagrams-mermaid-draw",

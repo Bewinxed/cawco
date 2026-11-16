@@ -11,6 +11,8 @@
  * checkout of the project; with none, the start is refused with a sentence
  * saying what it needs, and nothing is placed elsewhere.
  */
+
+import { keysOf } from "@cawco/core/keys-of";
 import { machinesCalled } from "@cawco/core/machine-names";
 import type { RunsOnCapability } from "@cawco/core/project-gate";
 
@@ -19,9 +21,7 @@ const CAPABILITY_OS: Record<RunsOnCapability, string> = {
   apple: "darwin",
   linux: "linux",
 };
-export const RUNS_ON_CAPABILITIES = Object.keys(
-  CAPABILITY_OS
-) as RunsOnCapability[];
+export const RUNS_ON_CAPABILITIES = keysOf(CAPABILITY_OS);
 
 /** What a capability needs, in a sentence's words. */
 const CAPABILITY_WORDS: Record<RunsOnCapability, string> = {

@@ -257,7 +257,7 @@ export function fileViewerPage(file: {
       break;
     }
     case "other":
-      body = `<main class="file-body file-other"><section id="cawco-file" class="file-card" ${SPOT_ATTR}="file"><p class="file-kind">${esc(kind)}</p><h1 class="file-name">${esc(file.name)}</h1>${size.length > 0 ? `<p class="file-meta"><span>${esc(size[0] as string)}</span></p>` : ""}<p class="file-line">${esc(words.noViewer(kind))}</p><a class="file-download" href="${esc(file.src)}" download="${esc(file.name)}">${esc(words.download)}</a></section></main>`;
+      body = `<main class="file-body file-other"><section id="cawco-file" class="file-card" ${SPOT_ATTR}="file"><p class="file-kind">${esc(kind)}</p><h1 class="file-name">${esc(file.name)}</h1>${size.length > 0 ? `<p class="file-meta"><span>${esc(size[0])}</span></p>` : ""}<p class="file-line">${esc(words.noViewer(kind))}</p><a class="file-download" href="${esc(file.src)}" download="${esc(file.name)}">${esc(words.download)}</a></section></main>`;
       break;
     default:
       body = view satisfies never;

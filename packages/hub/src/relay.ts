@@ -55,6 +55,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
+import { isRecord } from "@cawco/core/is-record";
 import { machineId } from "@cawco/core/machine-id";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
@@ -77,7 +78,7 @@ import { byHandle } from "./handles";
 import { type Ingress, valueAt } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { defineTool } from "./mcp-tool";
-import { octokitAnswer } from "./octokit-answer";
+import { messageOf, octokitAnswer } from "./octokit-answer";
 import {
   relayCreatedWords,
   relayListWords,
@@ -358,15 +359,13 @@ export const createRelay = ({
       console.log(`[relay] ${row.id}: GitHub's test delivery (ping) arrived`);
       return 202;
     }
-    if (!(GITHUB_EVENTS as readonly string[]).includes(event)) {
+    const kind = GITHUB_EVENTS.find((one) => one === event);
+    if (kind === undefined) {
       return 202;
     }
     const repo = repoOf(row);
     const source = repo ? `github:${repo.toLowerCase()}` : "";
-    const landed = normalizeGitHub(
-      event as GitHubKind,
-      JSON.parse(text) as unknown
-    )
+    const landed = normalizeGitHub(kind, JSON.parse(text))
       .filter((one) => one.source === source)
       .filter((one) => ingest(one, "webhook", row.projectId)).length;
     console.log(`[relay] ${row.id}: GitHub ${event}, ${landed} new`);
@@ -376,8 +375,7 @@ export const createRelay = ({
   /** A verified Stripe or generic delivery, as source `hook:<id>` under the provider's event id. */
   const deliverHook = (row: RelayRow, raw: Uint8Array, now: Date): number => {
     const text = Buffer.from(raw).toString("utf8");
-    const body =
-      row.provider === "stripe" ? (JSON.parse(text) as unknown) : jsonOr(text);
+    const body = row.provider === "stripe" ? JSON.parse(text) : jsonOr(text);
     const key = keyOf(row, body, raw);
     if (key === undefined) {
       console.warn(
@@ -437,7 +435,7 @@ export const createRelay = ({
   /** A generic body: its JSON, or its text when it isn't JSON. */
   const jsonOr = (text: string): unknown => {
     try {
-      return JSON.parse(text) as unknown;
+      return JSON.parse(text);
     } catch {
       return { text };
     }
@@ -553,8 +551,8 @@ export const createRelay = ({
 
   /** What GitHub said with a refusal, ": <message>", or nothing. */
   const saidBy = (data: unknown): string => {
-    const said = (data as { message?: unknown } | null)?.message;
-    return typeof said === "string" ? `: ${cutShort(said, 200)}` : "";
+    const said = messageOf(data);
+    return said === undefined ? "" : `: ${cutShort(said, 200)}`;
   };
 
   /** `owner/repo` as Octokit's two parameters. */
@@ -627,7 +625,7 @@ export const createRelay = ({
       }
       const answer = asked.value;
       if (answer.status >= 200 && answer.status < 300) {
-        const { id } = (answer.data ?? {}) as { id?: unknown };
+        const id = isRecord(answer.data) ? answer.data.id : undefined;
         console.log(
           `[relay] ${row.id}: GitHub webhook ${String(id)} registered on ${repo} through ${row.connection}`
         );
@@ -790,7 +788,12 @@ export const createRelay = ({
     }
     const changes = (key: keyof RelayPatch) =>
       key in patch && patch[key] !== current[key];
-    if (!(Object.keys(patch) as (keyof RelayPatch)[]).some(changes)) {
+    const was = new Map(Object.entries<unknown>(current));
+    if (
+      !Object.entries<unknown>(patch).some(
+        ([key, value]) => value !== was.get(key)
+      )
+    ) {
       return;
     }
     store.update(id, patch);

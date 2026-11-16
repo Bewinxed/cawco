@@ -15,6 +15,7 @@
  * closure has run, as a closure's names are.
  */
 
+import { keysOf } from "@cawco/core/keys-of";
 import type { createAccountCarry } from "./account-carry";
 import type { createAccountProbes } from "./account-probes";
 import type { createAccountSignin } from "./account-signin";
@@ -133,8 +134,9 @@ type Readers = { [Member in keyof HubContext]: () => HubContext[Member] };
 
 /** A context whose members are read through {@link Readers}, each when it is asked for. */
 export const hubContextOf = (readers: Readers): HubContext => {
+  // Cast kept: its members are accessors defined below, and `Object.defineProperty` answers the type it was given (https://github.com/microsoft/TypeScript/issues/43786).
   const context = {} as HubContext;
-  for (const member of Object.keys(readers) as (keyof HubContext)[]) {
+  for (const member of keysOf<keyof HubContext>(readers)) {
     Object.defineProperty(context, member, {
       enumerable: true,
       get: readers[member],

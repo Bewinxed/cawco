@@ -40,6 +40,7 @@ import type {
 } from "@cawco/core/trackers";
 import type { Octokit } from "@octokit/rest";
 import { ElysiaStatus, problem } from "elysia";
+import { graphqlErrorsOf } from "./octokit-answer";
 import type { TrackerProblem } from "./tracker-adapter";
 import { githubProblem, partsOf } from "./tracker-github";
 
@@ -59,10 +60,6 @@ const REFUSED_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** GitHub's GraphQL error as Octokit's GraphqlResponseError carries it. */
-interface GraphqlFailure {
-  errors?: { message?: string; type?: string }[];
-}
-
 /** A Project item as a sync reads it: its id, and the Status option it stands in (null: none). */
 export interface StatusItem {
   itemId: string;
@@ -188,8 +185,8 @@ const graphqlProblem = (
   what: string,
   on: string
 ): TrackerProblem => {
-  const { errors } = error as GraphqlFailure;
-  if (Array.isArray(errors) && errors.length > 0) {
+  const errors = graphqlErrorsOf(error);
+  if (errors.length > 0) {
     const refused = errors.find((one) => REFUSED_TYPES.has(one.type ?? ""));
     const said = (refused ?? errors[0])?.message ?? "";
     return refused
@@ -333,10 +330,8 @@ export const githubProjectStatus = (
     /** The Project's Status field, and each of the repository's issues on it with its Status. */
     read: async (): Promise<ProjectRead | TrackerProblem> => {
       const items = new Map<string, StatusItem>();
-      let after: string | null = null;
-      let head: Omit<ProjectRead, "complete" | "items"> | null = null;
-      let complete = false;
-      for (let page = 1; page <= MAX_PAGES; page += 1) {
+      /** The page after `after`: its issues kept in `items`, the Project it read and where the next begins. */
+      const pageAt = async (after: string | null) => {
         const data = await itemsPage(after);
         if (data instanceof ElysiaStatus) {
           return data;
@@ -347,23 +342,27 @@ export const githubProjectStatus = (
             detail: `GitHub answered no Project for “${project.title}”: deleted, or one the connection cannot see.`,
           });
         }
-        head ??= {
-          title: data.node.title ?? project.title,
-          url: data.node.url ?? "",
-          fieldId: data.node.field?.id ?? null,
-          options: data.node.field?.options ?? [],
-        };
         keepItems(data.node.items.nodes, repo, items);
-        const { hasNextPage, endCursor } = data.node.items.pageInfo;
-        if (!hasNextPage) {
-          complete = true;
-          break;
+        return { node: data.node, next: data.node.items.pageInfo };
+      };
+      const first = await pageAt(null);
+      if (first instanceof ElysiaStatus) {
+        return first;
+      }
+      let { next } = first;
+      for (let page = 2; page <= MAX_PAGES && next.hasNextPage; page += 1) {
+        const read = await pageAt(next.endCursor);
+        if (read instanceof ElysiaStatus) {
+          return read;
         }
-        after = endCursor;
+        ({ next } = read);
       }
       return {
-        ...(head as Omit<ProjectRead, "complete" | "items">),
-        complete,
+        title: first.node.title ?? project.title,
+        url: first.node.url ?? "",
+        fieldId: first.node.field?.id ?? null,
+        options: first.node.field?.options ?? [],
+        complete: !next.hasNextPage,
         items,
       };
     },

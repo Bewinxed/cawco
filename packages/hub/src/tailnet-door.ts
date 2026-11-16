@@ -68,7 +68,7 @@ const send = (
 /** What waits for `to` written while it takes it: true once nothing waits. */
 const flush = (to: Socket<unknown>, queue: Uint8Array[]): boolean => {
   while (queue.length > 0) {
-    const chunk = queue[0] as Uint8Array;
+    const [chunk] = queue;
     const written = Math.max(to.write(chunk), 0);
     if (written < chunk.length) {
       queue[0] = chunk.subarray(written);

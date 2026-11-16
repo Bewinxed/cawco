@@ -9,6 +9,7 @@
  * load the generated schemas, never the database's modules.
  */
 import { z } from "zod";
+import { isRecord } from "./is-record";
 
 /** A declared type: its name, and where it is declared (a path from the repository's root, or a package's module). */
 export interface StoredType {
@@ -34,84 +35,81 @@ export const declared = <S extends z.ZodType>(
   return schema;
 };
 
-/** What the walk reads of a schema's definition (zod's `_zod.def`), each on the kinds that have it. */
-interface DefView {
-  catchall?: z.ZodType;
-  element?: z.ZodType;
-  getter?: () => z.ZodType;
-  in?: z.ZodType;
-  innerType?: z.ZodType;
-  left?: z.ZodType;
-  options?: readonly z.ZodType[];
-  right?: z.ZodType;
-  shape?: Readonly<Record<string, z.ZodType>>;
-  type: string;
-  valueType?: z.ZodType;
-}
+/** A schema of any kind, as zod's core declares it: what each kind's class narrows. */
+type Schema = z.core.$ZodType;
 
-const defOf = (schema: z.ZodType): DefView => schema._zod.def as DefView;
+/** `held`'s member at `key`: an array's at its index, an object's at its name. */
+const memberOf = (held: unknown, key: string | number): unknown => {
+  if (Array.isArray(held)) {
+    return typeof key === "number" ? held[key] : undefined;
+  }
+  return isRecord(held) ? held[key] : undefined;
+};
 
-/** The kinds that read their value with the one schema they wrap. */
-const WRAPPERS = new Set([
-  "catch",
-  "default",
-  "nonoptional",
-  "nullable",
-  "optional",
-  "prefault",
-  "readonly",
-]);
+/**
+ * The schema `schema` reads `value` with in its place: a wrapper's inner
+ * one, a pipe's input, a lazy schema's own, a union's first option that
+ * parses it (z.union keeps that one's output); undefined for any other kind.
+ */
+const innerOf = (schema: Schema, value: unknown): Schema | undefined => {
+  if (
+    schema instanceof z.core.$ZodCatch ||
+    schema instanceof z.core.$ZodDefault ||
+    schema instanceof z.core.$ZodNonOptional ||
+    schema instanceof z.core.$ZodNullable ||
+    schema instanceof z.core.$ZodOptional ||
+    schema instanceof z.core.$ZodPrefault ||
+    schema instanceof z.core.$ZodReadonly
+  ) {
+    return schema._zod.def.innerType;
+  }
+  if (schema instanceof z.core.$ZodPipe || schema instanceof z.core.$ZodCodec) {
+    return schema._zod.def.in;
+  }
+  if (schema instanceof z.core.$ZodLazy) {
+    return schema._zod.def.getter();
+  }
+  if (schema instanceof z.core.$ZodUnion) {
+    return schema._zod.def.options.find(
+      (option) => z.safeParse(option, value).success
+    );
+  }
+};
 
 /**
  * `schema` as it reads `value`: its wrappers off, a pipe's input, a lazy
- * schema's own, a union's first option that parses it (z.union keeps that
- * one's output). `seen` hears each schema on the way.
+ * schema's own, a union's first option that parses it. `seen` hears each
+ * schema on the way.
  */
 const settled = (
-  schema: z.ZodType,
+  schema: Schema,
   value: unknown,
-  seen: (one: z.ZodType) => void
-): z.ZodType => {
-  let at: z.ZodType | undefined = schema;
+  seen: (one: Schema) => void
+): Schema => {
+  let at: Schema | undefined = schema;
   let last = schema;
   while (at) {
     seen(at);
     last = at;
-    const def = defOf(at);
-    if (WRAPPERS.has(def.type)) {
-      at = def.innerType;
-    } else if (def.type === "pipe") {
-      at = def.in;
-    } else if (def.type === "lazy") {
-      at = def.getter?.();
-    } else if (def.type === "union") {
-      at = def.options?.find((option) => option.safeParse(value).success);
-    } else {
-      at = undefined;
-    }
+    at = innerOf(at, value);
   }
   return last;
 };
 
 /** The schema a settled `schema` reads its `key`'s value with; undefined when it names none. */
-const childOf = (
-  schema: z.ZodType,
-  key: string | number
-): z.ZodType | undefined => {
-  const def = defOf(schema);
-  if (def.type === "object") {
-    return def.shape?.[key] ?? def.catchall;
+const childOf = (schema: Schema, key: string | number): Schema | undefined => {
+  if (schema instanceof z.core.$ZodObject) {
+    return schema._zod.def.shape[key] ?? schema._zod.def.catchall;
   }
-  if (def.type === "array") {
-    return def.element;
+  if (schema instanceof z.core.$ZodArray) {
+    return schema._zod.def.element;
   }
-  if (def.type === "record") {
-    return def.valueType;
+  if (schema instanceof z.core.$ZodRecord) {
+    return schema._zod.def.valueType;
   }
-  if (def.type === "intersection") {
+  if (schema instanceof z.core.$ZodIntersection) {
     return (
-      (def.left && childOf(def.left, key)) ??
-      (def.right && childOf(def.right, key))
+      childOf(schema._zod.def.left, key) ?? childOf(schema._zod.def.right, key)
     );
   }
 };
@@ -128,20 +126,17 @@ export const typeAt = (
   path: readonly (string | number)[]
 ): StoredType | undefined => {
   let named = storedTypes.get(schema);
-  const seen = (one: z.ZodType) => {
+  const seen = (one: Schema) => {
     named = storedTypes.get(one) ?? named;
   };
-  let at: z.ZodType | undefined = schema;
+  let at: Schema | undefined = schema;
   let held = value;
   for (const key of path) {
     at = childOf(settled(at, held, seen), key);
     if (!at) {
       return named;
     }
-    held =
-      typeof held === "object" && held !== null
-        ? (held as Record<string | number, unknown>)[key]
-        : undefined;
+    held = memberOf(held, key);
   }
   settled(at, held, seen);
   return named;

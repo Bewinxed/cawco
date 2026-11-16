@@ -95,10 +95,10 @@ export const sealAtRest = (sqlite: Database): Record<string, number> => {
       for (const { table, key, columns } of SECRET_COLUMNS) {
         for (const column of columns) {
           const rows = sqlite
-            .query(
+            .query<{ id: string; value: string }, []>(
               `SELECT ${key} AS id, ${column} AS value FROM ${table} WHERE ${column} IS NOT NULL`
             )
-            .all() as { id: string; value: string }[];
+            .all();
           const update = sqlite.query(
             `UPDATE ${table} SET ${column} = ? WHERE ${key} = ?`
           );

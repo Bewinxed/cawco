@@ -28,7 +28,7 @@
 import { link, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { isGone } from "./absent";
+import { errnoCode, isGone } from "./absent";
 import { makeFolder } from "./folders";
 import { markerIsLive, ownIdentity } from "./process-identity";
 import { parseRecord } from "./state-file";
@@ -87,7 +87,7 @@ export const lockDatabase = async (path: string): Promise<void> => {
         await link(written, lock);
         return;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        if (errnoCode(error) !== "EEXIST") {
           throw error;
         }
       }
