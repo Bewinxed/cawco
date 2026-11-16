@@ -61,6 +61,7 @@ import {
 } from "@cawco/core/fleet-watch";
 import type { PermissionMode } from "@cawco/core/harness/kinds";
 import { fleetWatchNudge } from "@cawco/core/injected";
+import { isRecord } from "@cawco/core/is-record";
 import { isMachineSilence } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
@@ -895,7 +896,12 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
         watch.quietTurns = 0;
         closeSignals(id, watch, ["error", "repeat", "quiet"]);
       }
-      countCall(id, watch, block.name, block.input);
+      countCall(
+        id,
+        watch,
+        block.name,
+        isRecord(block.input) ? block.input : {}
+      );
     }
   };
 

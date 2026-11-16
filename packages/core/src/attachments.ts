@@ -23,6 +23,33 @@ export interface FileAttachment {
 
 export type SendAttachment = TextAttachment | FileAttachment;
 
+/**
+ * The pictures a turn can carry, by media type: what Anthropic's API takes
+ * in an image block (`Base64ImageSource.media_type`, `@anthropic-ai/sdk`
+ * 0.129.0), which Claude Code hands the model as it is. OpenCode and pi hand
+ * any media type on to their provider, and OpenAI's take these four too. A
+ * picture of another type is refused where it enters ({@link isImageMediaType}).
+ */
+export const IMAGE_MEDIA_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+] as const;
+
+/** One of the {@link IMAGE_MEDIA_TYPES}. */
+export type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number];
+
+/** A picture a turn carries: its bytes base64, with no `data:` URI prefix, and its type. */
+export interface TurnImage {
+  data: string;
+  mediaType: ImageMediaType;
+}
+
+/** Whether `value` is a picture's media type a turn can carry ({@link IMAGE_MEDIA_TYPES}). */
+export const isImageMediaType = (value: unknown): value is ImageMediaType =>
+  IMAGE_MEDIA_TYPES.some((type) => type === value);
+
 const KB = 1024;
 
 /** "14 B", "2.3 KB", "1.2 MB", "1.0 GB": how a file's size is said everywhere. */

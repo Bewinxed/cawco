@@ -102,6 +102,7 @@ typeOverrides:
     FsEntryKind: OpenEnums.FsEntryKind
     GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
+    HarnessBlockType: OpenEnums.HarnessBlockType
     HarnessConfigKind: OpenEnums.HarnessConfigKind
     HarnessKind: OpenEnums.HarnessKind
     HarnessNoteKind: OpenEnums.HarnessNoteKind
@@ -113,6 +114,7 @@ typeOverrides:
     HookEvent: OpenEnums.HookEvent
     HubAuthMode: OpenEnums.HubAuthMode
     ImageFormat: OpenEnums.ImageFormat
+    ImageMediaType: OpenEnums.ImageMediaType
     ImageProviderId: OpenEnums.ImageProviderId
     InboundVia: OpenEnums.InboundVia
     InstallCheck: OpenEnums.InstallCheck
@@ -141,8 +143,10 @@ typeOverrides:
     MoveStage: OpenEnums.MoveStage
     MoveStep: OpenEnums.MoveStep
     NeutralOriginLive: OpenEnums.NeutralOriginLive
+    NeutralOriginSubkind: OpenEnums.NeutralOriginSubkind
     NeutralSessionInfoStartedBy: OpenEnums.NeutralSessionInfoStartedBy
     NeutralStatus: OpenEnums.NeutralStatus
+    NeutralUserMessageRole: OpenEnums.NeutralUserMessageRole
     OnCap: OpenEnums.OnCap
     OwedMoveWait: OpenEnums.OwedMoveWait
     PageAnchorFramework: OpenEnums.PageAnchorFramework

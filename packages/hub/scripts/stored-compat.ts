@@ -94,6 +94,36 @@ const REWRITES: readonly Rewrite[] = [
     migration: "0429_compaction_plan_columns",
     why: "a plan's move is a moved line whose to's id, compactFirst, asked and a refused because move to their own columns, the rest of the line kept; one that is not a moved line reading whole moves, as stored with its kind, to move_unread with move null, and the plan reads as none",
   },
+  {
+    column: "sent_messages.body",
+    migration: "0436_peer_origin_from",
+    why: "a peer origin with no from is given its fromSession as from; one that names no session becomes unclassified; nothing else of the send changes and no row is deleted",
+  },
+  {
+    column: "sent_messages.envelope",
+    migration: "0436_peer_origin_from",
+    why: "the kept envelope's message origin is rewritten as the body's is: from its fromSession, else unclassified",
+  },
+  {
+    column: "continuations.request",
+    migration: "0437_picture_types",
+    why: "a picture whose media type no session takes is dropped from the request's images, every other picture and field kept; no row is deleted",
+  },
+  {
+    column: "moves.request",
+    migration: "0437_picture_types",
+    why: "a picture whose media type no session takes is dropped from the request's images, every other picture and field kept; no row is deleted",
+  },
+  {
+    column: "fleet_hooks.handler",
+    migration: "0438_hook_mcp_tool_fields",
+    why: "an MCP tool handler's mcp_server_name and tool_name are renamed server and tool, as Claude Code's settings read them; every other field and handler kept, no row deleted",
+  },
+  {
+    column: "fleet_hook_history.handler",
+    migration: "0438_hook_mcp_tool_fields",
+    why: "the same rename in each kept version of an MCP tool handler",
+  },
 ];
 
 type Schema = Record<string, unknown>;

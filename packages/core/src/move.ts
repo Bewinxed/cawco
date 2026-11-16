@@ -198,7 +198,7 @@ export interface MoveRequest {
    * takes the project's primary checkout, as their estimate read it.
    */
   from?: string;
-  images?: { data: string; mediaType: string }[];
+  images?: import("./attachments").TurnImage[];
   /** The target machine. */
   machineId: string;
   /** The folder on the target; absent: the estimate's. */

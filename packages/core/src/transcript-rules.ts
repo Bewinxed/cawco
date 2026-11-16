@@ -66,6 +66,7 @@ import type {
 } from "./session-messages";
 import {
   CONVERSATION_RESET,
+  isHarnessBlock,
   MCP_NOT_CONNECTED,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
@@ -469,6 +470,11 @@ function blockOf(
   block: AssistantBlock,
   base: BlockBase
 ): TranscriptBlock | null {
+  // A block of a kind no reader draws (a server tool's, a compaction's) is
+  // no row.
+  if (isHarnessBlock(block)) {
+    return null;
+  }
   switch (block.type) {
     case "text":
       return { ...base, type: "assistant", content: block.text };
@@ -508,7 +514,7 @@ function blockOf(
           metadata: {
             toolId: block.id,
             toolName: block.name,
-            toolInput: block.input,
+            toolInput: isRecord(block.input) ? block.input : undefined,
             toolStatus: "pending",
             handoffKind: handoff,
             handoffBrief: String(input.prompt ?? input.message ?? ""),
@@ -524,7 +530,7 @@ function blockOf(
         metadata: {
           toolId: block.id,
           toolName: block.name,
-          toolInput: block.input,
+          toolInput: isRecord(block.input) ? block.input : undefined,
           toolStatus: "pending",
           subagentType: spawn?.subagentType,
           subagentDescription: spawn?.description,
@@ -2232,12 +2238,16 @@ function cawcoRow(
       },
     };
   }
+  // CawCo's own word, which carries its kind and line; any other origin a
+  // send can carry carries neither, and is drawn as a notice all the same.
+  const notice: { line?: string; live?: "running" | "ended"; name?: string } =
+    origin.kind === "system" ? origin : {};
   // Your answer to one of its asks says how it went: as its marker said
   // when it was sent, unless the hub has written its line since (a permit's
   // grant that lapsed, hub asks.ts `turnEnded`).
   const { content } = said;
   const answered =
-    origin.name === ASK_ORIGIN && !origin.line && typeof content === "string"
+    notice.name === ASK_ORIGIN && !notice.line && typeof content === "string"
       ? { said: content, as: parseAskAnswered(content) }
       : null;
   return {
@@ -2249,8 +2259,8 @@ function cawcoRow(
       noteKind: "CawCo",
       noteTitle: answered?.as
         ? askAnsweredTitle(answered.as, answered.said)
-        : noticeLine(origin),
-      notice: origin.name ?? "",
+        : noticeLine(notice),
+      notice: notice.name ?? "",
     },
   };
 }

@@ -1,5 +1,6 @@
 import { waitsOnYou } from "@cawco/core/activity";
 import type { SendAttachment } from "@cawco/core/attachments";
+import { isImageMediaType, type TurnImage } from "@cawco/core/attachments";
 import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
@@ -114,15 +115,19 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   /** The base64 pictures a held send's envelope carries, in order. */
   const picturesOf = (
     whole: Pick<HubEnvelope<"send">, "payload"> | null
-  ): { data: string; mediaType: string }[] => {
+  ): TurnImage[] => {
     const content = whole ? whole.payload.message.message.content : "";
     return typeof content === "string"
       ? []
-      : content.flatMap((block) =>
-          block.type === "image" && block.source.type === "base64"
-            ? [{ data: block.source.data, mediaType: block.source.media_type }]
-            : []
-        );
+      : content.flatMap((block) => {
+          if (block.type !== "image" || block.source.type !== "base64") {
+            return [];
+          }
+          // The hub made these blocks of the pictures a send carried, each
+          // of a type a turn can carry.
+          const { data, media_type: mediaType } = block.source;
+          return isImageMediaType(mediaType) ? [{ data, mediaType }] : [];
+        });
   };
   /** The texts and files a stored send carried (`SendPayload.attachments`). */
   const attachmentsOf = (
@@ -141,14 +146,14 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     replaces?: string;
     withdrawn: {
       attachments: SendAttachment[];
-      images: { data: string; mediaType: string }[];
+      images: TurnImage[];
       text: string;
     }[];
   }> => {
     let replaces: string | undefined;
     const withdrawn: {
       attachments: SendAttachment[];
-      images: { data: string; mediaType: string }[];
+      images: TurnImage[];
       text: string;
     }[] = [];
     for (const row of ctx.db.sendsIn(instance.id, ["pending"])) {
@@ -184,7 +189,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   const artifactEventPayload = (
     instance: InstanceRow,
     text: string,
-    images: { data: string; mediaType: string }[],
+    images: TurnImage[],
     replaces: string | undefined,
     attachments: SendAttachment[] = []
   ): SendPayload => ({
@@ -219,7 +224,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   const sendArtifactEvent = (
     instance: InstanceRow,
     text: string,
-    images: { data: string; mediaType: string }[],
+    images: TurnImage[],
     replaces: string | undefined,
     attachments: SendAttachment[] = []
   ) =>
@@ -243,7 +248,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   const recordUndelivered = (
     instance: InstanceRow,
     text: string,
-    images: { data: string; mediaType: string }[],
+    images: TurnImage[],
     reason: string,
     attachments: SendAttachment[] = []
   ) => {

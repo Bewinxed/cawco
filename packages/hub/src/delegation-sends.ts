@@ -94,6 +94,7 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
     }
     const retired = deps.workItems.refusal(row, {
       kind: "peer",
+      from: requester.id,
       fromSession: requester.id,
     });
     if (retired) {

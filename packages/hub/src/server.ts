@@ -21,6 +21,7 @@ import {
   ARTIFACT_SESSION_REFUSED,
 } from "@cawco/core/artifact-session";
 import { type AskAnswer, PROJECT_SETTINGS } from "@cawco/core/asks";
+import { isImageMediaType, type TurnImage } from "@cawco/core/attachments";
 import {
   AGENT_RESTARTING,
   type BinaryUpdatePolicy,
@@ -1011,21 +1012,23 @@ const envelopeOf = (
 ): HubEnvelope<"send"> | undefined => {
   const said = body.message.content;
   const blocks = typeof said === "string" ? [] : said;
-  const images: { mediaType: string; data: string }[] = [];
+  const images: TurnImage[] = [];
   let at = 0;
   for (; at < blocks.length; at += 1) {
     const block = blocks[at];
     if (block.type !== "image") {
       break;
     }
+    const { source } = block;
     const data =
-      block.source.type === "url" && block.source.url
-        ? mediaBase64(block.source.url)
-        : undefined;
-    if (!(data && block.source.media_type)) {
+      source.type === "url" && source.url ? mediaBase64(source.url) : undefined;
+    // A stored picture that is gone, or of a type no session takes, is
+    // none it can hand on.
+    const mediaType = source.type === "url" ? source.media_type : undefined;
+    if (!(data && isImageMediaType(mediaType))) {
       return;
     }
-    images.push({ mediaType: block.source.media_type, data });
+    images.push({ mediaType, data });
   }
   const rest = blocks.slice(at);
   const only = rest.length === 1 ? rest[0] : undefined;

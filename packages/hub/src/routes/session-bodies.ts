@@ -1,7 +1,9 @@
+import { IMAGE_MEDIA_TYPES } from "@cawco/core/attachments";
 import {
   EFFORT_LEVELS,
   WIRE_PERMISSION_MODES,
 } from "@cawco/core/harness/kinds";
+import { pictureWords } from "@cawco/core/words/pictures";
 import { t } from "elysia";
 import { harnessSchema } from "./harness-schema";
 
@@ -54,8 +56,16 @@ export const continueBody = t.Object({
   askedBy: t.Optional(t.String({ minLength: 1 })),
   // What rides the new session's opening message beside its words, as a
   // send carries it. The summariser is never handed them.
+  // Each of a type a turn can carry (core `IMAGE_MEDIA_TYPES`).
   images: t.Optional(
-    t.Array(t.Object({ mediaType: t.String(), data: t.String() }))
+    t.Array(
+      t.Object({
+        mediaType: t.UnionEnum(IMAGE_MEDIA_TYPES, {
+          error: pictureWords.typeRefused(""),
+        }),
+        data: t.String(),
+      })
+    )
   ),
   attachments: t.Optional(
     t.Array(

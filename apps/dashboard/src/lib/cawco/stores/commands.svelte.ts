@@ -7,6 +7,11 @@
 
 import { ASK_USER_QUESTION, RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { SendAttachment } from "@cawco/core/attachments";
+import {
+  type ImageMediaType,
+  isImageMediaType,
+  type TurnImage,
+} from "@cawco/core/attachments";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { detach } from "@cawco/core/detach";
 import {
@@ -1001,7 +1006,7 @@ export async function failedSendPayload(
 ): Promise<{ text: string; extras: SendExtras }> {
   const images = await Promise.all(
     (message.metadata?.images ?? []).flatMap(({ src, mediaType }) =>
-      src ? [imageBytes(src, mediaType)] : []
+      src && isImageMediaType(mediaType) ? [imageBytes(src, mediaType)] : []
     )
   );
   return {
@@ -1028,8 +1033,8 @@ export async function retryFailed(message: Message): Promise<void> {
 /** A picture's bytes as a send carries them: base64, with no `data:` prefix. */
 async function imageBytes(
   src: string,
-  mediaType: string
-): Promise<{ mediaType: string; data: string }> {
+  mediaType: ImageMediaType
+): Promise<TurnImage> {
   if (src.startsWith("data:")) {
     return { mediaType, data: src.slice(src.indexOf(",") + 1) };
   }
@@ -1164,7 +1169,7 @@ export async function replaceQueued(
   }
   const images = await Promise.all(
     (message.metadata?.images ?? []).flatMap(({ src, mediaType }) =>
-      src ? [imageBytes(src, mediaType)] : []
+      src && isImageMediaType(mediaType) ? [imageBytes(src, mediaType)] : []
     )
   );
   const replacementId = newId();

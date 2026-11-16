@@ -21,6 +21,7 @@
  */
 
 import { RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
+import { isImageMediaType } from "@cawco/core/attachments";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { everyOf } from "@cawco/core/every-of";
 import type { PlanSnapshot } from "@cawco/core/plan";
@@ -51,6 +52,7 @@ import {
   type StreamReset,
   type StreamSubscribe,
 } from "@cawco/core/stream";
+import { pictureWords } from "@cawco/core/words/pictures";
 import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
 import { refusalFrame } from "./registry";
@@ -452,6 +454,23 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
           `[hub] dashboard send ${commandId} for ${sessionId} refused: it named the origin ${JSON.stringify(origin)}`
         );
         fail(socket, commandId, refusedOriginWords);
+        return;
+      }
+      // A picture of a type no session takes is refused here, where it
+      // enters, in the words its composer says it in.
+      const picture = (
+        Array.isArray(payload.images) ? payload.images : []
+      ).find(
+        (image: unknown) =>
+          !(isRecord(image) && isImageMediaType(image.mediaType))
+      );
+      if (picture !== undefined) {
+        const said = isRecord(picture) ? picture.mediaType : undefined;
+        fail(
+          socket,
+          commandId,
+          pictureWords.typeRefused(typeof said === "string" ? said : "")
+        );
         return;
       }
       // A send the hub refuses outright (a Claude conversation gone, which

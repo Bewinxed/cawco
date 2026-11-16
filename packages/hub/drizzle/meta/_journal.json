@@ -2997,6 +2997,27 @@
       "when": 1794827595335,
       "tag": "0435_artifact_source_pin",
       "breakpoints": true
+    },
+    {
+      "idx": 436,
+      "version": "6",
+      "when": 1794851210598,
+      "tag": "0436_peer_origin_from",
+      "breakpoints": true
+    },
+    {
+      "idx": 437,
+      "version": "6",
+      "when": 1794851584513,
+      "tag": "0437_picture_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 438,
+      "version": "6",
+      "when": 1794851731674,
+      "tag": "0438_hook_mcp_tool_fields",
+      "breakpoints": true
     }
   ]
 }

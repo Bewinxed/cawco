@@ -13,6 +13,7 @@
  * written.
  */
 
+import { isImageMediaType } from "@cawco/core/attachments";
 import { cutShort } from "@cawco/core/words/helpers";
 import { transcriptWords } from "@cawco/core/words/transcript";
 import { DraftRecordSchema } from "#lib/cawco/stored-shapes.js";
@@ -92,12 +93,14 @@ export async function loadDraft(
   }
   return {
     text: record.text,
+    // A kept picture of a type no session takes is one its composer would
+    // refuse now: it is not put back.
     images: await Promise.all(
-      record.images.map(async (image) => ({
-        name: image.name,
-        mediaType: image.mediaType,
-        data: await base64Of(image.blob),
-      }))
+      record.images.flatMap(({ name, mediaType, blob }) =>
+        isImageMediaType(mediaType)
+          ? [base64Of(blob).then((data) => ({ name, mediaType, data }))]
+          : []
+      )
     ),
     texts: record.texts,
     // A file whose upload a reload cut short is one to try again.

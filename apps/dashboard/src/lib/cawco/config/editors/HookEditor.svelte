@@ -138,8 +138,8 @@
     } else if (next === "mcp_tool") {
       draft.handler = {
         type: "mcp_tool",
-        mcp_server_name: "",
-        tool_name: "",
+        server: "",
+        tool: "",
         ...shared,
       };
     } else if (next === "prompt") {
@@ -614,36 +614,32 @@
           in:crossIn
           out:crossOut
         >
-          <Field
-            id="hook-server"
-            label="MCP server"
-            problem={shown("mcp_server_name")}
-          >
+          <Field id="hook-server" label="MCP server" problem={shown("server")}>
             <Input
-              aria-invalid={shown("mcp_server_name") ? "true" : undefined}
+              aria-invalid={shown("server") ? "true" : undefined}
               autocomplete="off"
               face="mono"
               id="hook-server"
               onblur={() => {
-                form.touched.mcp_server_name = true;
+                form.touched.server = true;
               }}
               placeholder="filesystem"
               spellcheck="false"
-              bind:value={draft.handler.mcp_server_name}
+              bind:value={draft.handler.server}
             />
           </Field>
-          <Field id="hook-tool" label="Tool" problem={shown("tool_name")}>
+          <Field id="hook-tool" label="Tool" problem={shown("tool")}>
             <Input
-              aria-invalid={shown("tool_name") ? "true" : undefined}
+              aria-invalid={shown("tool") ? "true" : undefined}
               autocomplete="off"
               face="mono"
               id="hook-tool"
               onblur={() => {
-                form.touched.tool_name = true;
+                form.touched.tool = true;
               }}
               placeholder="read_file"
               spellcheck="false"
-              bind:value={draft.handler.tool_name}
+              bind:value={draft.handler.tool}
             />
           </Field>
         </div>

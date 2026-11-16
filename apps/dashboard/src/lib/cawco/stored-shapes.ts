@@ -6,6 +6,7 @@
 import { ACCOUNT_SETUP_STEPS } from "@cawco/core/accounts";
 import { ACCOUNT_HUES } from "@cawco/core/accounts/kinds";
 import { ARTIFACT_KINDS } from "@cawco/core/artifact-kinds";
+import { IMAGE_MEDIA_TYPES } from "@cawco/core/attachments";
 import { SESSION_ROLES } from "@cawco/core/delegate-types";
 import { EXTERNAL_KINDS, EXTERNAL_SOURCES } from "@cawco/core/external-items";
 import { MEMORY_ROLES } from "@cawco/core/fleet";
@@ -15,6 +16,7 @@ import {
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
 } from "@cawco/core/plan";
+import { HARNESS_BLOCK_TYPES } from "@cawco/core/session-messages";
 import { STAGE_TOOLCHAINS } from "@cawco/core/stage";
 import { STAGE_KINDS, TASK_MOVERS } from "@cawco/core/views";
 import { WORK_ITEM_STATES } from "@cawco/core/work-items";
@@ -547,8 +549,8 @@ const HookHttpHandlerShape = HookHandlerBaseShape.extend({
 export type HookHttpHandlerOutput = z.output<typeof HookHttpHandlerShape>;
 
 const HookMcpToolHandlerShape = HookHandlerBaseShape.extend({
-  mcp_server_name: z.string(),
-  tool_name: z.string(),
+  server: z.string(),
+  tool: z.string(),
   type: z.literal("mcp_tool"),
 });
 export type HookMcpToolHandlerOutput = z.output<typeof HookMcpToolHandlerShape>;
@@ -627,6 +629,15 @@ export type FileAttachmentOutput = z.output<typeof FileAttachmentShape>;
 const SendAttachmentShape = z.union([TextAttachmentShape, FileAttachmentShape]);
 export type SendAttachmentOutput = z.output<typeof SendAttachmentShape>;
 
+const ImageMediaTypeShape = z.enum(IMAGE_MEDIA_TYPES);
+export type ImageMediaTypeOutput = z.output<typeof ImageMediaTypeShape>;
+
+const TurnImageShape = z.object({
+  data: z.string(),
+  mediaType: ImageMediaTypeShape,
+});
+export type TurnImageOutput = z.output<typeof TurnImageShape>;
+
 const UserAnswersShape = z.record(
   z.string(),
   z.union([z.string(), z.array(z.string())])
@@ -671,24 +682,31 @@ const UserQuestionResultShape = z.union([
 ]);
 export type UserQuestionResultOutput = z.output<typeof UserQuestionResultShape>;
 
+const HarnessBlockTypeShape = z.enum(HARNESS_BLOCK_TYPES);
+export type HarnessBlockTypeOutput = z.output<typeof HarnessBlockTypeShape>;
+
+const NeutralHarnessBlockShape = z.object({ type: HarnessBlockTypeShape });
+export type NeutralHarnessBlockOutput = z.output<
+  typeof NeutralHarnessBlockShape
+>;
+
 const NeutralContentBlockShape = z.union([
+  z.object({
+    type: z.literal("tool_use"),
+    id: z.string(),
+    name: z.string(),
+    input: z.unknown(),
+  }),
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({
     type: z.literal("thinking"),
     thinking: z.string(),
     signature: z.string().optional(),
   }),
-  z.object({ type: z.literal("redacted_thinking") }),
-  z.object({
-    type: z.literal("tool_use"),
-    id: z.string(),
-    name: z.string(),
-    input: z.record(z.string(), z.unknown()),
-  }),
   z.object({
     type: z.literal("tool_result"),
     tool_use_id: z.string(),
-    content: z.unknown(),
+    content: z.unknown().optional(),
     is_error: z.boolean().optional(),
     structuredContent: z.record(z.string(), z.unknown()).optional(),
     questionResult: UserQuestionResultShape.optional(),
@@ -703,11 +721,14 @@ const NeutralContentBlockShape = z.union([
       }),
       z.object({
         type: z.literal("url"),
-        media_type: z.string(),
+        media_type: z.string().optional(),
         url: z.string(),
       }),
+      z.object({ type: z.literal("file"), file_id: z.string() }),
     ]),
   }),
+  z.object({ type: z.literal("redacted_thinking") }),
+  NeutralHarnessBlockShape,
 ]);
 export type NeutralContentBlockOutput = z.output<
   typeof NeutralContentBlockShape
@@ -726,11 +747,34 @@ const NeutralOriginShape = z.union([
   z.object({ kind: z.literal("human") }),
   z.object({
     kind: z.literal("peer"),
-    from: z.string().optional(),
+    from: z.string(),
     name: z.string().optional(),
     fromSession: z.string().optional(),
     body: z.string().optional(),
   }),
+  z.object({ kind: z.literal("channel"), server: z.string() }),
+  z.object({
+    kind: z.literal("task-notification"),
+    fireReason: z.string().optional(),
+    runId: z.string().optional(),
+    subkind: z
+      .enum([
+        "scheduled-trigger",
+        "peer-send-message",
+        "projects-relay",
+        "session-inbox",
+      ])
+      .optional(),
+  }),
+  z.object({ kind: z.literal("coordinator") }),
+  z.object({ kind: z.literal("unclassified") }),
+  z.object({
+    kind: z.literal("observer"),
+    from: z.string(),
+    senderTaskId: z.string(),
+  }),
+  z.object({ kind: z.literal("auto-continuation") }),
+  z.object({ kind: z.literal("observer-activity") }),
   z.object({
     kind: z.literal("system"),
     line: z.string().optional(),
@@ -744,7 +788,7 @@ const NeutralUserMessageShape = z.object({
   compactSummary: z.literal(true).optional(),
   keepAlive: z.literal(true).optional(),
   message: z.object({
-    role: z.literal("user"),
+    role: z.enum(["user", "assistant", "system"]),
     content: z.union([z.string(), z.array(NeutralContentBlockShape)]),
     harnessNote: HarnessNoteShape.optional(),
   }),
@@ -771,9 +815,7 @@ const SendPayloadShape = z.object({
   attachments: z.array(SendAttachmentShape).optional(),
   delivery: z.string().optional(),
   from: z.string().optional(),
-  images: z
-    .array(z.object({ mediaType: z.string(), data: z.string() }))
-    .optional(),
+  images: z.array(TurnImageShape).optional(),
   instanceId: z.string(),
   message: SentMessageShape,
   provenance: z

@@ -406,8 +406,8 @@ export interface SendPayload {
   delivery?: string;
   /** The instance a fleet-originated send claims as its caller. */
   from?: string;
-  /** Images the turn carries: base64, with no `data:` URI prefix. */
-  images?: { mediaType: string; data: string }[];
+  /** Images the turn carries: base64, with no `data:` URI prefix, each of a type a turn can carry. */
+  images?: import("./attachments").TurnImage[];
   /** The session it goes to. */
   instanceId: string;
   /** The user turn, under the uuid it keeps everywhere it is shown. */

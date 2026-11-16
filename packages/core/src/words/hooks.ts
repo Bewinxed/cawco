@@ -42,7 +42,7 @@ export function hookSentence(draft: Partial<HookDraft>): string {
         break;
       }
       case "mcp_tool": {
-        runs = `call ${handler.mcp_server_name || "…"}’s ${handler.tool_name || "…"} tool`;
+        runs = `call ${handler.server || "…"}’s ${handler.tool || "…"} tool`;
         break;
       }
       case "prompt": {

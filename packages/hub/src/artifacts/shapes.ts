@@ -1,6 +1,6 @@
 import type { ArtifactDoes, ArtifactKind } from "@cawco/core/artifact-kinds";
 import type { PictureCut } from "@cawco/core/artifact-picture";
-import type { SendAttachment } from "@cawco/core/attachments";
+import type { SendAttachment, TurnImage } from "@cawco/core/attachments";
 import type { excalidrawFile } from "@cawco/core/canvas";
 import type { ChoiceEntry, SettledBy } from "@cawco/core/choices";
 import type { Pin } from "@cawco/core/comments/model";
@@ -682,7 +682,7 @@ export interface Removed {
 export interface MarksDelivery {
   /** The texts folded in and the files the session's machine keeps (core attachments.ts), as a send carries them. */
   attachments: SendAttachment[];
-  images: { data: string; mediaType: string }[];
+  images: TurnImage[];
   /** The comments notice (core `artifactCommentsNotice`), its sections the marks themselves. */
   text: string;
 }

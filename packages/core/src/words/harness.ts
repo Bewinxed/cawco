@@ -26,6 +26,12 @@ export const harnessWords = {
   /** Claude Code options a spawn carried that are not options of the shape the SDK takes (core claude-options.ts), with what does not read. */
   claudeOptionsUnread: (issues: string) =>
     `The Claude Code options this session was started with don't read: ${issues}. Nothing was started.`,
+  /** A send carrying a block of a kind Claude Code takes none of in a user turn (anything but words and pictures). */
+  sendBlockUnsent: (type: string) =>
+    `This message carries a ${type} block, which Claude Code doesn't take in a message; only words and pictures can be sent.`,
+  /** A send whose id is not a UUID, which Claude Code keys each message it is sent by. */
+  sendIdUnshaped: (id: string) =>
+    `This message's id (${id}) is not a UUID, which Claude Code needs to say when it read it. Nothing was sent.`,
   /** A Claude Code process that ended on its own and said nothing on stderr. */
   claudeCrashed:
     "Claude Code stopped on its own and said nothing about why. A message to it starts it again.",

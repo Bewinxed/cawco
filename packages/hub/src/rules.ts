@@ -254,10 +254,13 @@ export class RuleEngine {
         }
         const buffer = this.#buffer(instanceId);
         const { delta } = event;
-        buffer.streaming +=
-          delta.type === "text_delta"
-            ? delta.text
-            : `${THINKING_MARK}${delta.thinking}`;
+        // Text and thinking stream on; Claude's other deltas (a tool call's
+        // arguments, a signature, citations) put nothing on the buffer.
+        if (delta.type === "text_delta") {
+          buffer.streaming += delta.text;
+        } else if (delta.type === "thinking_delta") {
+          buffer.streaming += `${THINKING_MARK}${delta.thinking}`;
+        }
         this.#fireImmediate(instanceId, buffer);
       } else if (event.type === "message_stop") {
         const buffer = this.#buffer(instanceId);

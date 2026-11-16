@@ -15897,6 +15897,13 @@
                           "type": "string"
                         },
                         "mediaType": {
+                          "error": "This picture can't be sent: a session takes JPEG, PNG, GIF or WebP pictures.",
+                          "enum": [
+                            "image/gif",
+                            "image/jpeg",
+                            "image/png",
+                            "image/webp"
+                          ],
                           "type": "string"
                         }
                       },
@@ -23350,6 +23357,13 @@
                           "type": "string"
                         },
                         "mediaType": {
+                          "error": "This picture can't be sent: a session takes JPEG, PNG, GIF or WebP pictures.",
+                          "enum": [
+                            "image/gif",
+                            "image/jpeg",
+                            "image/png",
+                            "image/webp"
+                          ],
                           "type": "string"
                         }
                       },
@@ -44003,6 +44017,28 @@
           "projects"
         ]
       },
+      "HarnessBlockType": {
+        "description": "One of the {@link HARNESS_BLOCK_TYPES}.",
+        "type": "string",
+        "enum": [
+          "advisor_tool_result",
+          "bash_code_execution_tool_result",
+          "code_execution_tool_result",
+          "compaction",
+          "container_upload",
+          "document",
+          "fallback",
+          "mcp_tool_listing",
+          "mcp_tool_result",
+          "mcp_tool_use",
+          "search_result",
+          "server_tool_use",
+          "text_editor_code_execution_tool_result",
+          "tool_search_tool_result",
+          "web_fetch_tool_result",
+          "web_search_tool_result"
+        ]
+      },
       "HarnessCapabilities": {
         "description": "What a harness can do, so the dashboard gates features instead of guessing.",
         "type": "object",
@@ -45021,13 +45057,14 @@
         ]
       },
       "HookMcpToolHandler": {
+        "description": "An MCP tool the hook calls: `server` the server holding it, `tool` its\nname, as Claude Code's settings name them (the Agent SDK's `Settings`\nhook, 0.3.325, typed from the CLI's own schema).",
         "type": "object",
         "properties": {
           "if": {
             "description": "A single permission rule narrowing when this runs, like `Bash(git *)`.\nOnly consulted on tool events; on any other event a handler carrying one\nnever runs at all, which is why {@link hookProblem} refuses the pairing\nrather than letting it be saved as a hook that silently does nothing.",
             "type": "string"
           },
-          "mcp_server_name": {
+          "server": {
             "type": "string"
           },
           "statusMessage": {
@@ -45038,7 +45075,7 @@
             "description": "Seconds before it is cancelled. Claude Code's defaults apply when unset.",
             "type": "number"
           },
-          "tool_name": {
+          "tool": {
             "type": "string"
           },
           "type": {
@@ -45049,8 +45086,8 @@
           }
         },
         "required": [
-          "mcp_server_name",
-          "tool_name",
+          "server",
+          "tool",
           "type"
         ]
       },
@@ -45271,6 +45308,16 @@
         "enum": [
           "jpeg",
           "png"
+        ]
+      },
+      "ImageMediaType": {
+        "description": "One of the {@link IMAGE_MEDIA_TYPES}.",
+        "type": "string",
+        "enum": [
+          "image/gif",
+          "image/jpeg",
+          "image/png",
+          "image/webp"
         ]
       },
       "ImageProviderId": {
@@ -48161,6 +48208,9 @@
       "NeutralAssistantBlock": {
         "anyOf": [
           {
+            "$ref": "#/components/schemas/NeutralHarnessBlock"
+          },
+          {
             "type": "object",
             "properties": {
               "type": {
@@ -48220,7 +48270,7 @@
                 "type": "string"
               },
               "input": {
-                "type": "object"
+                "description": "The call's arguments as the model wrote them: an object, read with `isRecord`."
               },
               "name": {
                 "type": "string"
@@ -48277,7 +48327,7 @@
                 "type": "string"
               },
               "usage": {
-                "description": "Claude: the request's own tokens, as its API answered them.",
+                "description": "Claude: the request's own tokens, as its API answered them (null where it counted none).",
                 "type": "object",
                 "properties": {
                   "cache_creation_input_tokens": {
@@ -48327,6 +48377,9 @@
       "NeutralContentBlock": {
         "anyOf": [
           {
+            "$ref": "#/components/schemas/NeutralHarnessBlock"
+          },
+          {
             "type": "object",
             "properties": {
               "source": {
@@ -48357,6 +48410,24 @@
                   {
                     "type": "object",
                     "properties": {
+                      "file_id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "file"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "file_id",
+                      "type"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
                       "media_type": {
                         "type": "string"
                       },
@@ -48371,7 +48442,6 @@
                       }
                     },
                     "required": [
-                      "media_type",
                       "type",
                       "url"
                     ]
@@ -48475,7 +48545,6 @@
               }
             },
             "required": [
-              "content",
               "tool_use_id",
               "type"
             ]
@@ -48487,7 +48556,7 @@
                 "type": "string"
               },
               "input": {
-                "type": "object"
+                "description": "The call's arguments as the model wrote them: an object, read with `isRecord`."
               },
               "name": {
                 "type": "string"
@@ -48506,6 +48575,36 @@
               "type"
             ]
           }
+        ]
+      },
+      "NeutralHarnessBlock": {
+        "description": "A block of a kind no reader draws ({@link HARNESS_BLOCK_TYPES}), passed on as the harness sent it.",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "advisor_tool_result",
+              "bash_code_execution_tool_result",
+              "code_execution_tool_result",
+              "compaction",
+              "container_upload",
+              "document",
+              "fallback",
+              "mcp_tool_listing",
+              "mcp_tool_result",
+              "mcp_tool_use",
+              "search_result",
+              "server_tool_use",
+              "text_editor_code_execution_tool_result",
+              "tool_search_tool_result",
+              "web_fetch_tool_result",
+              "web_search_tool_result"
+            ]
+          }
+        },
+        "required": [
+          "type"
         ]
       },
       "NeutralMessage": {
@@ -48616,7 +48715,89 @@
               "kind": {
                 "type": "string",
                 "enum": [
+                  "auto-continuation"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "channel"
+                ]
+              },
+              "server": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "server"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "coordinator"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
                   "human"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "observer"
+                ]
+              },
+              "senderTaskId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "kind",
+              "senderTaskId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "observer-activity"
                 ]
               }
             },
@@ -48647,6 +48828,7 @@
               }
             },
             "required": [
+              "from",
               "kind"
             ]
           },
@@ -48672,6 +48854,43 @@
             "required": [
               "kind"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "fireReason": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "task-notification"
+                ]
+              },
+              "runId": {
+                "type": "string"
+              },
+              "subkind": {
+                "$ref": "#/components/schemas/NeutralOriginSubkind"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "unclassified"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
           }
         ]
       },
@@ -48680,6 +48899,15 @@
         "enum": [
           "ended",
           "running"
+        ]
+      },
+      "NeutralOriginSubkind": {
+        "type": "string",
+        "enum": [
+          "peer-send-message",
+          "projects-relay",
+          "scheduled-trigger",
+          "session-inbox"
         ]
       },
       "NeutralRawMessage": {
@@ -48925,59 +49153,66 @@
         "type": "object",
         "properties": {
           "event": {
+            "description": "A partial as the model's stream says it (Anthropic's\n`BetaRawMessageStreamEvent`): its text and thinking read, every other\nevent and delta named by its type, its fields the harness's.",
             "anyOf": [
               {
                 "type": "object",
                 "properties": {
                   "delta": {
-                    "type": "object",
-                    "properties": {
-                      "text": {
-                        "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "enum": [
+                              "citations_delta",
+                              "compaction_delta",
+                              "input_json_delta",
+                              "signature_delta"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       },
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "text_delta"
+                      {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "text_delta"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "type"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "thinking": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "thinking_delta"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "thinking",
+                          "type"
                         ]
                       }
-                    },
-                    "required": [
-                      "text",
-                      "type"
-                    ]
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "content_block_delta"
-                    ]
-                  }
-                },
-                "required": [
-                  "delta",
-                  "type"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "delta": {
-                    "type": "object",
-                    "properties": {
-                      "thinking": {
-                        "type": "string"
-                      },
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "thinking_delta"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "thinking",
-                      "type"
                     ]
                   },
                   "type": {
@@ -48996,22 +49231,7 @@
                 "type": "object",
                 "properties": {
                   "content_block": {
-                    "type": "object",
-                    "properties": {
-                      "thinking": {
-                        "type": "string"
-                      },
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "thinking"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "thinking",
-                      "type"
-                    ]
+                    "$ref": "#/components/schemas/NeutralAssistantBlock"
                   },
                   "type": {
                     "type": "string",
@@ -49032,6 +49252,34 @@
                     "type": "string",
                     "enum": [
                       "content_block_stop"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "message_delta"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "message_start"
                     ]
                   }
                 },
@@ -49907,7 +50155,7 @@
             "type": "boolean"
           },
           "message": {
-            "description": "`harnessNote`: the message is a notice of the harness's, typed where its normaliser read it ({@link HarnessNote}).",
+            "description": "`role`: Anthropic's `MessageParam` names three, and Claude Code's user\nframe carries whichever it was given; a send is always `user`.",
             "type": "object",
             "properties": {
               "content": {
@@ -49928,10 +50176,7 @@
                 "description": "A notice the harness put in the user's role, as its agent's normaliser\nread it (agent claude-transcript.ts `harnessNoteOf`): Claude Code's\n`<task-notification>` block (`task-notification`) and its `[SYSTEM\nNOTIFICATION …]` line, and a whole `<system-reminder>` block\n(`system-reminder`). `title` is what a fold says closed, `status` the\ntask's (`completed`, `failed`, `stopped`; empty when it said none), `body`\nthe rest, as markdown. Never the reader's words."
               },
               "role": {
-                "type": "string",
-                "enum": [
-                  "user"
-                ]
+                "$ref": "#/components/schemas/NeutralUserMessageRole"
               }
             },
             "required": [
@@ -49947,7 +50192,89 @@
                   "kind": {
                     "type": "string",
                     "enum": [
+                      "auto-continuation"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "channel"
+                    ]
+                  },
+                  "server": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "server"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "coordinator"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
                       "human"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "observer"
+                    ]
+                  },
+                  "senderTaskId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "from",
+                  "kind",
+                  "senderTaskId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "observer-activity"
                     ]
                   }
                 },
@@ -49978,6 +50305,7 @@
                   }
                 },
                 "required": [
+                  "from",
                   "kind"
                 ]
               },
@@ -49998,6 +50326,43 @@
                   },
                   "name": {
                     "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "fireReason": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "task-notification"
+                    ]
+                  },
+                  "runId": {
+                    "type": "string"
+                  },
+                  "subkind": {
+                    "$ref": "#/components/schemas/NeutralOriginSubkind"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "unclassified"
+                    ]
                   }
                 },
                 "required": [
@@ -50044,6 +50409,14 @@
         "required": [
           "message",
           "type"
+        ]
+      },
+      "NeutralUserMessageRole": {
+        "type": "string",
+        "enum": [
+          "assistant",
+          "system",
+          "user"
         ]
       },
       "ObservedRateLimitInfo": {
@@ -56054,22 +56427,10 @@
             "type": "string"
           },
           "images": {
-            "description": "Images the turn carries: base64, with no `data:` URI prefix.",
+            "description": "Images the turn carries: base64, with no `data:` URI prefix, each of a type a turn can carry.",
             "type": "array",
             "items": {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "string"
-                },
-                "mediaType": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "data",
-                "mediaType"
-              ]
+              "$ref": "#/components/schemas/TurnImage"
             }
           },
           "instanceId": {
@@ -61962,6 +62323,22 @@
           "harness",
           "machineId",
           "sessionKey"
+        ]
+      },
+      "TurnImage": {
+        "description": "A picture a turn carries: its bytes base64, with no `data:` URI prefix, and its type.",
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "mediaType": {
+            "$ref": "#/components/schemas/ImageMediaType"
+          }
+        },
+        "required": [
+          "data",
+          "mediaType"
         ]
       },
       "TurnWakes": {
