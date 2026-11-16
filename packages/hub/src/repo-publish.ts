@@ -17,7 +17,8 @@
  *   remote of its repository with its machine's credential (agent
  *   place-push.ts names which); the hub creates
  *   the repository through the connection with Octokit
- *   (`repos.createForAuthenticatedUser`, private as asked) and pushes that
+ *   (`repos.createForAuthenticatedUser`, `POST /user/repos` on API version
+ *   2026-03-10, private as asked) and pushes that
  *   branch from that repository's bare one with the token in
  *   an `http.extraHeader` given through git's environment, never argv; the
  *   project then links it as that repository's published copy.
@@ -38,6 +39,7 @@ import type { DbShape } from "./db";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import type { MachineCall } from "./machine-answers";
 import type { PlaceRepos } from "./place-repo";
+import { GITHUB_API_VERSION } from "./upstreams";
 
 /** GitHub's rule for a repository's name. */
 const REPO_NAME = /^[A-Za-z0-9._-]{1,100}$/u;
@@ -334,6 +336,7 @@ export const createRepoPublish = ({
           name: change.name,
           private: change.private,
           auto_init: false,
+          headers: { "x-github-api-version": GITHUB_API_VERSION },
           request: { signal, redirect: "error" },
         });
         return { made: data };
