@@ -3,25 +3,34 @@
  */
 
 import { Elysia, problem, t } from "elysia";
-import * as v from "valibot";
+import {
+  check,
+  looseObject,
+  optional,
+  pipe,
+  record,
+  safeParse,
+  string,
+  unknown,
+} from "valibot";
 import type { createDelegationMcp } from "../delegation-mcp";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 
 /** An object that is no array, as a call's arguments are. */
-const Arguments = v.pipe(
-  v.record(v.string(), v.unknown()),
-  v.check((value) => !Array.isArray(value))
+const Arguments = pipe(
+  record(string(), unknown()),
+  check((value) => !Array.isArray(value))
 );
 
 /** A CawCo tool call as a harness posts it: the tool's name, its arguments, and the harness's own key for the call (pi's toolCallId, call-keys.ts). */
-const DelegationCall = v.looseObject({
-  name: v.pipe(
-    v.string(),
-    v.check((name) => name.trim() !== "")
+const DelegationCall = looseObject({
+  name: pipe(
+    string(),
+    check((name) => name.trim() !== "")
   ),
-  arguments: v.optional(Arguments),
-  callKey: v.optional(v.unknown()),
+  arguments: optional(Arguments),
+  callKey: optional(unknown()),
 });
 
 export const delegationRoutes = (
@@ -71,7 +80,7 @@ export const delegationRoutes = (
               "Session credential does not belong to the named instanceId",
           });
         }
-        const call = v.safeParse(DelegationCall, body);
+        const call = safeParse(DelegationCall, body);
         if (!call.success) {
           return problem(400, {
             code: "delegation-call-needs-non",

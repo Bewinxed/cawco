@@ -25,7 +25,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { $ } from "bun";
-import * as v from "valibot";
+import { looseObject, optional, record, safeParse, string } from "valibot";
 import { skillMdName } from "./fleet-versions";
 
 /** What a `source` string names, once its scheme has been read off it. */
@@ -479,13 +479,13 @@ export const readTree = async (
 
 /** What the registry says about a package: enough of it to find one tarball. */
 /** An npm packument, of the parts a skill's install reads: its tags and each version's tarball. */
-const Packument = v.looseObject({
-  "dist-tags": v.optional(v.record(v.string(), v.string())),
-  versions: v.optional(
-    v.record(
-      v.string(),
-      v.looseObject({
-        dist: v.optional(v.looseObject({ tarball: v.optional(v.string()) })),
+const Packument = looseObject({
+  "dist-tags": optional(record(string(), string())),
+  versions: optional(
+    record(
+      string(),
+      looseObject({
+        dist: optional(looseObject({ tarball: optional(string()) })),
       })
     )
   ),
@@ -502,7 +502,7 @@ const npmRoot = async (
     );
   }
 
-  const read = v.safeParse(Packument, await metadata.json());
+  const read = safeParse(Packument, await metadata.json());
   if (!read.success) {
     throw new Error(
       `the npm registry's answer for ${source.pkg} is no packument`
