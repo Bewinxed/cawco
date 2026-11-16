@@ -87,6 +87,9 @@
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
   import { fmt } from "../usage/rings";
   import StatMeter, { STAT_COLS } from "../usage/StatMeter.svelte";
+  import { statsPlace } from "../usage/stats-place";
+  import UsageFigure from "../usage/UsageFigure.svelte";
+  import UsageRing from "../usage/UsageRing.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { contextOf } from "./workspace.svelte";
 
@@ -415,6 +418,44 @@
       ? Math.min(100, Math.round((stats.totalTokens / stats.maxTokens) * 100))
       : null
   );
+  /** Where the card puts the context and the account's limit while the owner picks (usage/stats-place). */
+  const placeNow = statsPlace();
+  const place = $derived(placeNow());
+  /** This conversation's room in its model's window (its context), with its exact numbers; null until read. */
+  const room = $derived(
+    percent !== null && stats.totalTokens !== null && stats.maxTokens !== null
+      ? {
+          used: percent,
+          detail: sessionStatWords.contextTokens(
+            tokens(stats.totalTokens),
+            tokens(stats.maxTokens),
+            readAt
+          ),
+        }
+      : null
+  );
+  const contextShown = $derived(room !== null || reading || !!refusal);
+  /**
+   * The account's room for the model the session runs: the window that
+   * binds first, its share left, and when it resets; null with no reading.
+   */
+  const quota = $derived.by(() => {
+    if (!providerLimit) {
+      return null;
+    }
+    const { meter } = providerLimit;
+    return {
+      used: meter.used,
+      state: meter.state,
+      detail: sessionStatWords.limitResets(
+        meter.window.resetsAt
+          ? clockWords(Date.parse(meter.window.resetsAt))
+          : null,
+        meter.state === "stale" ? fmt(limitNow - providerLimit.seenAt) : null
+      ),
+      label: providerLimit.label,
+    };
+  });
   function tokens(value: number) {
     if (value >= 1_000_000) {
       return `${Number((value / 1_000_000).toFixed(1))}M`;
@@ -692,9 +733,9 @@
     if (!modelAccount) {
       return;
     }
-    const room = roomOf(usageStore.claudeLimits[modelAccount], id, limitNow);
-    return room?.kind === "limit"
-      ? limitRowOf(modelKey(id), room, limitNow)
+    const there = roomOf(usageStore.claudeLimits[modelAccount], id, limitNow);
+    return there?.kind === "limit"
+      ? limitRowOf(modelKey(id), there, limitNow)
       : undefined;
   }
   /** Why a model can't run on {@link modelAccount}: its catalog doesn't list it. */
@@ -801,6 +842,14 @@
   <span data-slot="chip-label"
     >{shownModel ? modelLabel(shownModel, harness) : "Model not reported"}</span
   >
+  <!-- The conversation's room in this model's window, on the model's chip
+       (`place` "chips"). -->
+  {#if place === "chips" && room}
+    <UsageRing share={room.used} state={fillState(room.used)} />
+    <span class="flex-none text-ink-muted tabular-nums"
+      >{sessionStatWords.share(room.used)}</span
+    >
+  {/if}
 {/snippet}
 
 <!-- A changing figure in the stats strip. -->
@@ -962,6 +1011,17 @@
           <span aria-hidden="true">·</span>
           <span data-slot="clean">{spawnWords.context.mark}</span>
         {/if}
+        <!-- The conversation's room in its model's window, with what the
+             conversation is (`place` "owners"). -->
+        {#if place === "owners" && room}
+          <span aria-hidden="true">·</span>
+          <UsageFigure
+            detail={room.detail}
+            state={fillState(room.used)}
+            used={room.used}
+            words={sessionStatWords.context(room.used)}
+          />
+        {/if}
       </p>
       <!-- A copy pressed in the head that the browser refused, under it. -->
       <RowFault
@@ -1111,6 +1171,7 @@
           {#if row?.accountId}
             <AccountSwitch
               instance={row}
+              quota={place === "strip" ? null : quota}
               readonly={!accountOpen}
               size="compact"
             />
@@ -1179,68 +1240,50 @@
       </div>
     {/if}
   </div>
-  <!-- The stats on one grid: name, meter, figure, every row a subgrid of
-       it (StatMeter), so each meter starts and ends on the card's edges and
-       each figure stands in one column. A row that has no meter (a reading
-       on its way, why there is none, the MCP count) spans the three. -->
-  <div
-    data-slot="stats"
-    class="grid flex-none grid-cols-(--stat-cols) items-center gap-x-space-3 gap-y-space-2 border-t border-t-border-hairline px-space-5 pt-space-3 pb-0 text-size-meta font-normal leading-body num text-ink-strong"
-    bind:this={statsEl}
-    style:--stat-cols={STAT_COLS}
-    {@attach morph()}
-  >
-    {#if percent !== null && stats.totalTokens !== null && stats.maxTokens !== null}
-      <StatMeter
-        detail={sessionStatWords.contextTokens(
-          tokens(stats.totalTokens),
-          tokens(stats.maxTokens),
-          readAt
-        )}
-        elapsed={null}
-        figure={sessionStatWords.share(percent)}
-        label="Context"
-        state={fillState(percent)}
-        used={percent}
-      />
-    {:else if reading}
-      <span class="col-span-full mark-line inline-flex items-center gap-space-2"
-        ><LiveDot /><span>Reading…</span></span
-      >
-    {:else if refusal}
-      <span
-        data-slot="refusal"
-        class="col-span-full min-w-0 wrap-anywhere"
-        title={refusal}>{refusal}</span
-      >
-    {:else}
-      <span class="col-span-full">Context not reported</span>
-    {/if}
-    {#if providerLimit}
-      <StatMeter
-        detail={sessionStatWords.limitResets(
-          providerLimit.meter.window.resetsAt
-            ? clockWords(Date.parse(providerLimit.meter.window.resetsAt))
-            : null,
-          providerLimit.meter.state === "stale"
-            ? fmt(limitNow - providerLimit.seenAt)
-            : null
-        )}
-        elapsed={providerLimit.meter.elapsed}
-        figure={sessionStatWords.share(providerLimit.meter.used)}
-        label={providerLimit.label}
-        state={providerLimit.meter.state}
-        used={providerLimit.meter.used}
-      />
-    {/if}
-    {#if session?.mcp}
-      <a
-        data-slot="tools"
-        class="col-span-full inline-flex items-center text-ink-strong hover:text-ink-strong"
-        href="/config/mcp">{@render figure(`${session.mcp.length} MCP`)}</a
-      >
-    {/if}
-  </div>
+  <!-- The conversation's own stats: its context (where the figures stand
+       in the strip, `place`), and its MCP servers. The account's limit is
+       no stat of the conversation: it stands with the account (its chip, or
+       its list's rows), never beside the context. -->
+  {#if (place === "strip" && contextShown) || session?.mcp}
+    <div
+      data-slot="stats"
+      class="grid flex-none grid-cols-(--stat-cols) items-center gap-x-space-3 gap-y-space-2 border-t border-t-border-hairline px-space-5 pt-space-3 pb-0 text-size-meta font-normal leading-body num text-ink-strong"
+      bind:this={statsEl}
+      style:--stat-cols={STAT_COLS}
+      {@attach morph()}
+    >
+      {#if place === "strip"}
+        {#if room}
+          <StatMeter
+            detail={room.detail}
+            elapsed={null}
+            figure={sessionStatWords.share(room.used)}
+            label="Context"
+            state={fillState(room.used)}
+            used={room.used}
+          />
+        {:else if reading}
+          <span
+            class="col-span-full mark-line inline-flex items-center gap-space-2"
+            ><LiveDot /><span>Reading…</span></span
+          >
+        {:else if refusal}
+          <span
+            data-slot="refusal"
+            class="col-span-full min-w-0 wrap-anywhere"
+            title={refusal}>{refusal}</span
+          >
+        {/if}
+      {/if}
+      {#if session?.mcp}
+        <a
+          data-slot="tools"
+          class="col-span-full inline-flex items-center text-ink-strong hover:text-ink-strong"
+          href="/config/mcp">{@render figure(`${session.mcp.length} MCP`)}</a
+        >
+      {/if}
+    </div>
+  {/if}
   <!-- The action row (SessionFooter's): right-aligned, 8px apart, on the
        body's surface under the meters, parted from them by space alone. -->
   <div

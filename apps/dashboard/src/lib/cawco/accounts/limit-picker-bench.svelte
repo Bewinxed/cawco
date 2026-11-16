@@ -50,7 +50,7 @@
   import { session } from "../stores/sessions.svelte";
   import { adoptUsageLimits } from "../stores/usage.svelte";
   import { handleStreamMessage } from "../stream";
-  import { type MeterLook, provideMeterLook } from "../usage/meter-look";
+  import { provideStatsPlace, type StatsPlace } from "../usage/stats-place";
   import SessionDetails from "../workspace/SessionDetails.svelte";
   import {
     answerLimitChecksWith,
@@ -63,7 +63,7 @@
     reading,
     check,
     pending,
-    meter = "track",
+    place = "owners",
     room = "lists",
     again = 0,
   }: {
@@ -73,8 +73,8 @@
     check: "cleared" | "still" | "offline";
     /** A move to Research ops already waits for the turn to end. */
     pending: boolean;
-    /** How the stats strip's meters draw, while the owner picks one (usage/meter-look). */
-    meter?: MeterLook;
+    /** Where the card puts the context and the account's limit, while the owner picks one (usage/stats-place). */
+    place?: StatsPlace;
     /** The frame's height: room for the open lists, or the card alone. */
     room?: "lists" | "card";
     /** Start over: each press seeds the stores again. */
@@ -398,7 +398,7 @@
   );
 
   /** Seeds again when any of `_dials` changes: each is read here, so the effect follows it. */
-  provideMeterLook(() => meter);
+  provideStatsPlace(() => place);
   seed();
   // The app's own follower of moves (start.ts starts it): an ask settles as
   // its row owes the move, and the row says it.
