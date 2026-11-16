@@ -105,6 +105,7 @@ import {
   type ModelInfo,
   PLAN_ORIGIN,
   permissionModeNamed,
+  WIRE_PERMISSION_MODES,
   WORK_ITEM_ORIGIN,
 } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
@@ -843,7 +844,7 @@ const ACTIVITY_TOUCH_MS = 60_000;
  */
 const FORMER_LIMIT_WORDS = /usage limit|hit your limit|rate[ _-]?limit/iu;
 const failedOnlyForAProcess = (reason: string): boolean =>
-  (Object.values(UNREAD) as string[]).includes(reason) ||
+  Object.values(UNREAD).some((said) => said === reason) ||
   FORMER_LIMIT_WORDS.test(reason);
 
 /**
@@ -970,28 +971,25 @@ const envelopeOf = (
   const images: { mediaType: string; data: string }[] = [];
   let at = 0;
   for (; at < blocks.length; at += 1) {
-    const block = blocks[at] as {
-      type: string;
-      source?: { type?: string; url?: string; media_type?: string };
-    };
+    const block = blocks[at];
     if (block.type !== "image") {
       break;
     }
     const data =
-      block.source?.type === "url" && block.source.url
+      block.source.type === "url" && block.source.url
         ? mediaBase64(block.source.url)
         : undefined;
-    if (!(data && block.source?.media_type)) {
+    if (!(data && block.source.media_type)) {
       return;
     }
     images.push({ mediaType: block.source.media_type, data });
   }
   const rest = blocks.slice(at);
-  const only = rest.length === 1 ? (rest[0] as { text?: unknown }) : undefined;
+  const only = rest.length === 1 ? rest[0] : undefined;
   let content: SentMessage["message"]["content"] = rest;
   if (typeof said === "string") {
     content = said;
-  } else if (typeof only?.text === "string") {
+  } else if (only?.type === "text") {
     content = only.text;
   }
   return {
@@ -1002,7 +1000,7 @@ const envelopeOf = (
       instanceId: send.instanceId,
       message: {
         ...body,
-        message: { ...body.message, content } as SentMessage["message"],
+        message: { ...body.message, content },
       },
       ...(images.length > 0 ? { images } : {}),
     },
@@ -1143,19 +1141,21 @@ const sameBinaryUpdate = (
   JSON.stringify({ ...a, updatedAt: 0 }) ===
   JSON.stringify({ ...b, updatedAt: 0 });
 
+/** A partial write's field over the stored one: `null` clears it, an absent one keeps what was stored. */
+const givenOver = <T>(
+  given: T | null | undefined,
+  stored: T | undefined
+): T | undefined => (given === null ? undefined : (given ?? stored));
+
 /** The chosen option labels an answer to a question carries, when it is one. */
-const peekAnswers = (result: unknown): Record<string, unknown> | undefined => {
-  if (typeof result !== "object" || result === null) {
+const peekAnswers = (
+  result: PermissionResult
+): Record<string, unknown> | undefined => {
+  if (result.behavior !== "allow" || !isRecord(result.updatedInput)) {
     return undefined;
   }
-  const { updatedInput } = result as { updatedInput?: unknown };
-  if (typeof updatedInput !== "object" || updatedInput === null) {
-    return undefined;
-  }
-  const { answers } = updatedInput as { answers?: unknown };
-  return typeof answers === "object" && answers !== null
-    ? (answers as Record<string, unknown>)
-    : undefined;
+  const { answers } = result.updatedInput;
+  return isRecord(answers) ? answers : undefined;
 };
 
 /**
@@ -4582,8 +4582,10 @@ export const createServer = (
       return state === "starting" || state === "running";
     },
     delegateType: (name) => db.delegateTypes.get(name),
-    harnessName: (harness) =>
-      accountsWords.harnesses[harness as HarnessKind] ?? harness,
+    harnessName: (harness) => {
+      const named = harnessNamed(harness);
+      return named ? accountsWords.harnesses[named] : harness;
+    },
     harnessOnline: (harness) =>
       machinesOnline().some((machine) =>
         (machine.harnesses ?? []).some(
@@ -5185,10 +5187,9 @@ export const createServer = (
     markDataMigrated: (name) => db.markDataMigrated(name),
     pages: () => db.artifacts.picked(),
     state: (id) =>
-      artifactDocs.doc(id).getMap("state").toJSON() as Record<
-        string,
-        ChoiceEntry
-      >,
+      Object.fromEntries(
+        artifactDocs.doc(id).getMap<ChoiceEntry>("state").entries()
+      ),
     write: (id, entries) =>
       artifactDocs.transact(id, "hub", (doc) => {
         const state = doc.getMap("state");
@@ -5421,21 +5422,17 @@ export const createServer = (
           { allow: "POST" }
         );
       }
-      const told = (await request.json().catch(() => null)) as {
-        artifact?: unknown;
-        h?: unknown;
-        stories?: unknown;
-        w?: unknown;
-        width?: unknown;
-      } | null;
-      const shape = { h: told?.h, w: told?.w ?? null };
-      const canvas = typeof told?.artifact === "string" ? told.artifact : "";
-      const width = told?.width ?? null;
+      const sent: unknown = await request.json().catch(() => null);
+      const told = isRecord(sent) ? sent : {};
+      const shape = { h: told.h, w: told.w ?? null };
+      const canvas = typeof told.artifact === "string" ? told.artifact : "";
+      const width = told.width ?? null;
+      const { stories } = told;
       if (!(
         canvas &&
         (width === null || (typeof width === "number" && width > 0)) &&
-        Array.isArray(told?.stories) &&
-        told.stories.every((one) => typeof one === "string") &&
+        Array.isArray(stories) &&
+        stories.every((one): one is string => typeof one === "string") &&
         isEmbedShape(shape)
       )) {
         return problemResponse({
@@ -5452,11 +5449,7 @@ export const createServer = (
           detail: "This page shows no such canvas.",
         });
       }
-      return artifacts.keepSaidShape(
-        canvas,
-        storiesKey(told.stories as string[], width as number | null),
-        shape
-      )
+      return artifacts.keepSaidShape(canvas, storiesKey(stories, width), shape)
         ? new Response(null, { status: 204 })
         : problemResponse({
             status: 404,
@@ -6369,25 +6362,26 @@ export const createServer = (
   const restoredSpawn = (
     row: InstanceRow,
     reattachOnly: SpawnPayload["reattachOnly"]
-  ): NamedSpawn => ({
-    instanceId: row.id,
-    cwd: row.cwd,
-    ...(reattachOnly ? { reattachOnly } : {}),
-    ...(row.sessionId ? { resume: { sessionKey: row.sessionId } } : {}),
-    harness: row.harness,
-    ...(row.model ? { model: row.model } : {}),
-    ...(row.permissionMode
-      ? {
-          permissionMode: row.permissionMode as SpawnPayload["permissionMode"],
-        }
-      : {}),
-    ...(row.projectId ? { projectId: row.projectId } : {}),
-    // A leaf stays a leaf across a restart: the daemon builds the toolset
-    // from the payload, and a restore that dropped this would hand a leaf
-    // delegate the spawning tools back.
-    mayStart: row.mayStart,
-    ...typeSettingsOf(row),
-  });
+  ): NamedSpawn => {
+    const storedMode = WIRE_PERMISSION_MODES.find(
+      (mode) => mode === row.permissionMode
+    );
+    return {
+      instanceId: row.id,
+      cwd: row.cwd,
+      ...(reattachOnly ? { reattachOnly } : {}),
+      ...(row.sessionId ? { resume: { sessionKey: row.sessionId } } : {}),
+      harness: row.harness,
+      ...(row.model ? { model: row.model } : {}),
+      ...(storedMode ? { permissionMode: storedMode } : {}),
+      ...(row.projectId ? { projectId: row.projectId } : {}),
+      // A leaf stays a leaf across a restart: the daemon builds the toolset
+      // from the payload, and a restore that dropped this would hand a leaf
+      // delegate the spawning tools back.
+      mayStart: row.mayStart,
+      ...typeSettingsOf(row),
+    };
+  };
 
   /**
    * A restore that reattaches the process its machine still holds: the
@@ -7502,10 +7496,11 @@ export const createServer = (
    * asked: a project asked lets go of a stored area, an area asked of a
    * stored project, and neither asked keeps what was stored.
    */
-  const boundAsAsked = (
-    merged: Record<string, unknown>,
+  const boundAsAsked = <Row extends { areaId?: unknown; projectId?: unknown }>(
+    merged: Row,
     asked: { areaId?: string | null; projectId?: string | null }
-  ): Record<string, unknown> => {
+  ): Omit<Row, "areaId" | "projectId"> &
+    Partial<Pick<Row, "areaId" | "projectId">> => {
     const { projectId, areaId, ...rest } = merged;
     if (asked.areaId) {
       return { ...rest, areaId };
@@ -8145,11 +8140,11 @@ export const createServer = (
         return (
           !!row &&
           db.sendsIn(instanceId, ["pending"]).some((send) => {
-            const body = send.body as SentMessage | null;
+            const { origin, shouldQuery } = send.body;
             return (
               !isKeepAlive(send.body) &&
-              !!body?.origin &&
-              startsTurnIn(row, body)
+              !!origin &&
+              startsTurnIn(row, { origin, shouldQuery })
             );
           })
         );
@@ -8788,11 +8783,11 @@ export const createServer = (
     if (neutral.type !== "user" || neutral.parent_tool_use_id) {
       return;
     }
-    const { content } = neutral.message as { content: unknown };
+    const { content } = neutral.message;
     const answered =
       Array.isArray(content) &&
       content.some(
-        (block: { tool_use_id?: unknown; type?: unknown }) =>
+        (block) =>
           block.type === "tool_result" && block.tool_use_id === pausing.call
       );
     if (!answered) {
@@ -9215,7 +9210,7 @@ export const createServer = (
       const doc = artifactDocs.doc(artifactId);
       const meta = docMeta(doc);
       return {
-        state: doc.getMap("state").toJSON() as Record<string, ChoiceEntry>,
+        state: Object.fromEntries(doc.getMap<ChoiceEntry>("state").entries()),
         meta: {
           revisedAt: meta.get("revisedAt") ?? null,
           sentAt: meta.get("sentAt") ?? null,
@@ -9914,7 +9909,7 @@ export const createServer = (
       }
       const window = await contextWindowOf(
         row.machineId,
-        row.harness as HarnessKind,
+        row.harness,
         row.model ?? undefined
       ).then(
         (found) => ({ window: found ?? null }),
@@ -10471,9 +10466,9 @@ export const createServer = (
   // `find`: the dashboard's Finder as every session's tool (find-tool.ts).
   const findTool = createFindTool({
     find,
-    instance: (id) => db.getInstancesByIds([id])[0] as InstanceRow | undefined,
+    instance: (id) => db.getInstancesByIds([id])[0],
     instancesByPrefix: (prefix) =>
-      db.getInstancesByIds(db.find.idsByPrefix(prefix)) as InstanceRow[],
+      db.getInstancesByIds(db.find.idsByPrefix(prefix)),
     machines: () =>
       db.listAgents().map((agent) => ({
         id: agent.machineId,
@@ -10585,14 +10580,13 @@ export const createServer = (
         const { content } = row.body.message;
         return typeof content === "string"
           ? []
-          : content.flatMap((block) => {
-              const { source } = block as { source?: { url?: unknown } };
-              return block.type === "image" &&
-                typeof source?.url === "string" &&
-                MEDIA_ADDRESS.test(source.url)
-                ? [source.url.replace(MEDIA_ADDRESS, "")]
-                : [];
-            });
+          : content.flatMap((block) =>
+              block.type === "image" &&
+              block.source.type === "url" &&
+              MEDIA_ADDRESS.test(block.source.url)
+                ? [block.source.url.replace(MEDIA_ADDRESS, "")]
+                : []
+            );
       }),
     tree: (caller) => treeSessions(db, caller),
     // Read inside the workspace's boundary, as its own sessions read it; a
@@ -10675,31 +10669,27 @@ export const createServer = (
     name: string,
     body: HarnessConfigBody
   ) => {
-    const merged: Record<string, unknown> = {
-      enabled: true,
-      ...db.getHarnessConfig(kind, name),
+    const stored = db.getHarnessConfig(kind, name);
+    const merged: FleetHarnessConfig = {
+      ...stored,
       kind,
       name,
+      enabled: body.enabled ?? stored?.enabled ?? true,
+      settings: givenOver(body.settings, stored?.settings),
+      module: givenOver(body.module, stored?.module),
+      package: givenOver(body.package, stored?.package),
+      projectId: givenOver(body.projectId, stored?.projectId),
+      areaId: givenOver(body.areaId, stored?.areaId),
     };
-    for (const [key, value] of Object.entries(body)) {
-      if (value === null) {
-        delete merged[key];
-      } else if (value !== undefined) {
-        merged[key] = value;
-      }
-    }
-    const placed = boundAsAsked(merged, body);
-    placed.scope = placed.projectId || placed.areaId ? "project" : undefined;
-    const unplaced = boundProblem(
-      placed as { areaId?: string; projectId?: string }
-    );
+    const row = boundAsAsked(merged, body);
+    row.scope = row.projectId || row.areaId ? "project" : undefined;
+    const unplaced = boundProblem(row);
     if (unplaced) {
       return problem(400, {
         code: "harness-config-unplaced",
         detail: unplaced,
       });
     }
-    const row = placed as unknown as FleetHarnessConfig;
     const misfit = harnessConfigProblem(row);
     if (misfit) {
       return problem(400, { code: "harness-config-invalid", detail: misfit });

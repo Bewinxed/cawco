@@ -172,6 +172,7 @@ export const compressAnswer = async (
   }
   return new Response(
     whole.pipeThrough(
+      // Library gap: @types/node's node:stream/web streams and Bun's global ones never interassign (https://github.com/DefinitelyTyped/DefinitelyTyped/discussions/74885).
       Duplex.toWeb(COMPRESSORS[encoding]()) as unknown as ReadableWritablePair<
         Uint8Array<ArrayBuffer>,
         Uint8Array<ArrayBuffer>
