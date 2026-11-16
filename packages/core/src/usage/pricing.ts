@@ -175,8 +175,24 @@ function hashRates(): number {
   return hash;
 }
 
+/**
+ * Rates models.dev does not list, each as its provider publishes it, laid
+ * under every catalog load so a listing models.dev adds later wins.
+ *
+ * TypeSafe's Jev, keyed by the ids the hub asks with (`typesafe/<model id>`,
+ * hub jev.ts): input only, output free. "$0.042 per million input tokens, $0
+ * per million output tokens" (https://openrouter.ai/typesafe/jev-1.13 and
+ * https://openrouter.ai/typesafe/jev-1.14, TypeSafe the one provider;
+ * `jev-latest` is 1.14 now, priced the same as 1.13).
+ */
+const PUBLISHED: Record<string, SnapshotModel> = {
+  "typesafe/jev-1.13.0": { input: 0.042, output: 0 },
+  "typesafe/jev-1.14.0": { input: 0.042, output: 0 },
+  "typesafe/jev-latest": { input: 0.042, output: 0 },
+};
+
 function loadFromSnapshot(json: PricingSnapshot): void {
-  loadRates(json);
+  loadRates({ ...json, models: { ...PUBLISHED, ...json.models } });
   fingerprint = hashRates();
 }
 

@@ -1,72 +1,33 @@
 /**
- * TypeSafe's Jev (https://docs.typesafe.ai/api.md): the questions the hub
- * asks it and the answers it gives back (hub jev.ts).
+ * What one ask of TypeSafe's Jev comes back as (hub jev.ts `askJev`). The
+ * questions, the state and each answer are the AI SDK's own
+ * (`Experimental_DecisionQuestion`, `Experimental_DecisionState`,
+ * `Experimental_DecisionResult`, from `ai`); this adds what the hub reads
+ * beside them.
  */
-
-/** `instructions` and every criterion may be text or structured data. */
-export type JevText =
-  string | Readonly<Record<string, unknown>> | readonly unknown[];
-
-/** One question to Jev. */
-export type JevQuestion =
-  | {
-      readonly type: "noul";
-      readonly instructions: JevText;
-      /**
-       * What a yes and a no mean, when the instructions leave it open. Both or
-       * neither: the API refuses one without the other.
-       */
-      readonly criteria?: { readonly true: string; readonly false: string };
-    }
-  | {
-      readonly type: "choice";
-      readonly instructions: JevText;
-      /** Option name → what it means; up to 255 options. */
-      readonly criteria: Readonly<Record<string, JevText | null>>;
-    }
-  | {
-      readonly type: "score";
-      readonly instructions: JevText;
-      /** 2–10 ordered levels, lowest first. */
-      readonly criteria: readonly JevText[];
-    };
-
-interface JevNoulAnswer {
-  /** The calibrated probability that the answer is yes. */
-  noul: number;
-  type: "noul";
-}
-export interface JevChoiceAnswer<Option extends string = string> {
-  choice: Option;
-  confidence: number;
-  probabilities: Record<Option, number>;
-  type: "choice";
-}
-interface JevScoreAnswer {
-  confidence: number;
-  /** Level index → the level as it was given. */
-  legend: Record<string, JevText>;
-  probabilities: Record<string, number>;
-  score: number;
-  type: "score";
-}
-export type JevAnswer = JevNoulAnswer | JevChoiceAnswer | JevScoreAnswer;
-/** The answer a question of this shape comes back as. */
-type JevAnswerOf<Question> = Question extends { type: "noul" }
-  ? JevNoulAnswer
-  : Question extends { type: "choice"; criteria: infer Criteria }
-    ? JevChoiceAnswer<Extract<keyof Criteria, string>>
-    : Question extends { type: "score" }
-      ? JevScoreAnswer
-      : never;
+import type {
+  Experimental_DecisionQuestion,
+  Experimental_DecisionResult,
+} from "ai";
 
 export interface JevResult<
-  Questions extends Readonly<Record<string, JevQuestion>> = Readonly<
-    Record<string, JevQuestion>
-  >,
+  Questions extends Readonly<Record<string, Experimental_DecisionQuestion>> =
+    Readonly<Record<string, Experimental_DecisionQuestion>>,
 > {
-  answers: { [Id in keyof Questions]: JevAnswerOf<Questions[Id]> };
+  answers: Experimental_DecisionResult<Questions>["answers"];
+  /**
+   * TypeSafe's confidence in each choice and score answer, by question id:
+   * the provider's metadata (`providerMetadata.typesafe.confidence`), which
+   * the AI SDK's answer types do not carry. A question it gave none for is
+   * absent.
+   */
+  confidence: Readonly<Record<string, number>>;
   /** The model version that answered, e.g. `typesafe/jev-1.13-20260917`. */
   model: string;
-  usage: { costUsd: number; inputTokens: number; outputTokens: number };
+  usage: {
+    /** What the ask cost, from the house pricing table; absent when the table has no price for the model. */
+    costUsd?: number;
+    inputTokens: number | undefined;
+    outputTokens: number | undefined;
+  };
 }
