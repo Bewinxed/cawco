@@ -127,6 +127,8 @@ export type RestoreHeldWhy =
   | { kind: "taken" }
   /** What it names went since: a row of `parent`, or (null) a row it hangs off that went with one. */
   | { kind: "orphan"; parent: string | null }
+  /** The machine it is on is not in the fleet: removed, named by the hostname it had when it went (null: none kept). */
+  | { kind: "machine"; machineId: string; hostname: string | null }
   /** Its table is no longer kept. */
   | { kind: "table" };
 

@@ -924,9 +924,11 @@ export const machinesDb = (core: DbCore): MachinesDb => {
             )
           )
           .all();
-        tx.delete(projectPlaces)
-          .where(eq(projectPlaces.machineId, machineId))
-          .run();
+        for (const { column } of GO_WITH_MACHINE) {
+          tx.run(
+            sql`DELETE FROM ${column.table} WHERE ${sql.identifier(column.name)} = ${machineId}`
+          );
+        }
         for (const { projectId } of orphaned) {
           const [next] = tx
             .select()
@@ -946,11 +948,6 @@ export const machinesDb = (core: DbCore): MachinesDb => {
               .where(eq(projectPlaces.id, next.id))
               .run();
           }
-        }
-        for (const { column } of GO_WITH_MACHINE) {
-          tx.run(
-            sql`DELETE FROM ${column.table} WHERE ${sql.identifier(column.name)} = ${machineId}`
-          );
         }
         // Its own row goes last: the rows above named it.
         tx.delete(agents).where(eq(agents.machineId, machineId)).run();

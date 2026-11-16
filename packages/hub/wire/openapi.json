@@ -54978,6 +54978,27 @@
           {
             "type": "object",
             "properties": {
+              "hostname": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "machine"
+                ]
+              },
+              "machineId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "machineId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
               "kind": {
                 "type": "string",
                 "enum": [
