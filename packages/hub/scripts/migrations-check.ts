@@ -56,6 +56,8 @@ import { parseAskAnswered } from "@cawco/core/asks";
 import { choiceEntryProblem } from "@cawco/core/choices";
 import { ARTIFACT_ORIGIN } from "@cawco/core/harness/kinds";
 import {
+  MARKER_KINDS,
+  type MarkerKind,
   parseArtifactNotice,
   parseDelegateAsk,
   parseDelegateWaitNotice,
@@ -64,6 +66,8 @@ import {
   parseHandoffMarker,
   parseReportMarker,
   parseUndelivered,
+  parseWorkflowNotice,
+  parseWorkflowStep,
 } from "@cawco/core/injected";
 import {
   type AppliedRow,
@@ -72,6 +76,7 @@ import {
   journalEntries,
   migrationState,
 } from "@cawco/core/migration-state";
+import { isOneOf } from "@cawco/core/one-of";
 import { parseRuleMarker } from "@cawco/core/rules";
 import {
   contextLineOf,
@@ -140,29 +145,31 @@ const artifactNoticeOf =
   };
 
 /**
- * Every kind of marker CawCo stamps a stored send with (`[cawco:<kind> …]`,
- * core injected.ts `markerTag`), and the reader the transcript reads it back
- * by: core transcript-rules.ts `artifactNoticeBlock` and `injectedBlock`
- * through `sentRow`, `cawcoRow` for an answered ask. A send stamped with a
- * kind none of these is, or one its kind's reader refuses, is drawn as the
- * person's words or a bare CawCo notice, never as the marker it is.
+ * Each kind of marker a stored send's tag says (core injected.ts
+ * `MARKER_KINDS`, the only kinds `markerTag` writes), and the reader the
+ * transcript reads it back by: core transcript-rules.ts
+ * `artifactNoticeBlock`, `injectedBlock` and `hubNoteBlock` through
+ * `sentRow`, and `cawcoRow` for an answered ask. A kind added to
+ * `MARKER_KINDS` without its reader here fails the type check.
  */
-const MARKER_READERS: ReadonlyMap<string, MarkerReader> = new Map([
-  ["artifact-responses", artifactNoticeOf("responses")],
-  ["artifact-comments", artifactNoticeOf("comments")],
-  ["artifact-errors", artifactNoticeOf("errors")],
-  ["artifact-saves", artifactNoticeOf("saves")],
-  ["artifact-handed", artifactNoticeOf("handed")],
-  ["handoff", parseHandoffMarker],
-  ["undelivered", parseUndelivered],
-  ["fleet-watch", parseFleetWatchNudge],
-  ["fork", parseForkNotice],
-  ["delegate-wait", parseDelegateWaitNotice],
-  ["report", parseReportMarker],
-  ["delegate-ask", parseDelegateAsk],
-  ["rule", parseRuleMarker],
-  ["ask-answered", parseAskAnswered],
-]);
+const MARKER_READERS: Readonly<Record<MarkerKind, MarkerReader>> = {
+  "artifact-responses": artifactNoticeOf("responses"),
+  "artifact-comments": artifactNoticeOf("comments"),
+  "artifact-errors": artifactNoticeOf("errors"),
+  "artifact-saves": artifactNoticeOf("saves"),
+  "artifact-handed": artifactNoticeOf("handed"),
+  handoff: parseHandoffMarker,
+  undelivered: parseUndelivered,
+  "fleet-watch": parseFleetWatchNudge,
+  fork: parseForkNotice,
+  "delegate-wait": parseDelegateWaitNotice,
+  report: parseReportMarker,
+  "delegate-ask": parseDelegateAsk,
+  rule: parseRuleMarker,
+  "ask-answered": parseAskAnswered,
+  "workflow-notice": parseWorkflowNotice,
+  "workflow-step": parseWorkflowStep,
+};
 
 /** The kind a send's words are stamped with: its first line's `[cawco:<kind>`, read before any field is (jsonl-parser text.ts `CAWCO_TAG`). */
 const STAMP = /^\[cawco:([a-z-]+)[ \]]/u;
@@ -170,6 +177,15 @@ const STAMP = /^\[cawco:([a-z-]+)[ \]]/u;
 /** The first line of a stored row, as a failure quotes it. */
 const quoted = (text: string): string =>
   `"${text.split("\n")[0].slice(0, 200)}"`;
+
+/** How many rows of one kind {@link storedMarkers} found no reader reads, and the first few, quoted. */
+interface UnreadRows {
+  count: number;
+  rows: string[];
+}
+
+/** The rows of each kind a failure quotes. */
+const QUOTED_PER_KIND = 3;
 
 /**
  * Every stored marker read back as the transcript reads it: each send
@@ -179,18 +195,18 @@ const quoted = (text: string): string =>
  * `artifact-notice-drawn` law, transcript-rules.ts `sendRow`), and each
  * context line a session keeps (`session_lines`, kind `context`) through
  * `contextLineOf`, which draws none it does not read. How many of each,
- * and each one no reader takes: a reader tightened, or a kind or field
- * renamed, without a once-step over the stored rows (db/sheet-notices.ts
- * did it for `sheet`) fails here, on the fixtures and on the live
- * database's copy before a release.
+ * and, by kind, the rows no reader takes: a reader tightened, or a kind or
+ * field renamed, without a once-step over the stored rows
+ * (db/sheet-notices.ts did it for `sheet`) fails here, on the fixtures and
+ * on the live database's copy before a release.
  */
 const storedMarkers = (
   dbPath: string
 ): {
   artifactOrigin: number;
   contextLines: number;
-  failures: string[];
   stamped: Map<string, number>;
+  unread: Map<string, UnreadRows>;
 } => {
   const sqlite = new Database(dbPath, { readonly: true });
   const sends = sqlite
@@ -212,47 +228,61 @@ const storedMarkers = (
     )
     .all();
   sqlite.close();
-  const stamped = new Map([...MARKER_READERS.keys()].map((kind) => [kind, 0]));
+  const stamped = new Map<string, number>(
+    MARKER_KINDS.map((kind) => [kind, 0])
+  );
+  const unread = new Map<string, UnreadRows>();
+  const fail = (kind: string, row: string): void => {
+    const held = unread.get(kind) ?? { count: 0, rows: [] };
+    held.count += 1;
+    if (held.rows.length < QUOTED_PER_KIND) {
+      held.rows.push(row);
+    }
+    unread.set(kind, held);
+  };
   let artifactOrigin = 0;
-  const failures: string[] = [];
   for (const { uuid, instance, message, artifact } of sends) {
     const text = transcriptUserText(JSON.parse(message)) ?? "";
     const kind = STAMP.exec(text)?.[1];
-    const row = `send ${uuid} to session ${instance}`;
+    const row = `send ${uuid} to session ${instance}: ${quoted(text)}`;
     if (kind !== undefined) {
       stamped.set(kind, (stamped.get(kind) ?? 0) + 1);
-      const reader = MARKER_READERS.get(kind);
-      if (!reader) {
-        failures.push(
-          `${row}, stamped ${kind}, a kind no reader takes: ${quoted(text)}`
-        );
+      if (!isOneOf(MARKER_KINDS, kind)) {
+        fail(`${kind} (a kind no reader takes)`, row);
         continue;
       }
-      if (reader(text) === null) {
-        failures.push(
-          `${row}, stamped ${kind}, which its reader does not read: ${quoted(text)}`
-        );
+      if (MARKER_READERS[kind](text) === null) {
+        fail(kind, row);
         continue;
       }
     }
     if (artifact) {
       artifactOrigin += 1;
       if (!parseArtifactNotice(text)) {
-        failures.push(
-          `${row}, on the artifact origin, which no artifact notice reads: ${quoted(text)}`
-        );
+        fail("the artifact origin, read as no artifact notice", row);
       }
     }
   }
   for (const { instance, id, content } of lines) {
     if (contextLineOf(content) === null) {
-      failures.push(
-        `context line ${id} of session ${instance}, which contextLineOf does not read: ${quoted(content)}`
+      fail(
+        "context line",
+        `line ${id} of session ${instance}: ${quoted(content)}`
       );
     }
   }
-  return { artifactOrigin, contextLines: lines.length, failures, stamped };
+  return { artifactOrigin, contextLines: lines.length, stamped, unread };
 };
+
+/** The rows {@link storedMarkers} found no reader reads, as the check's failure lists them: each kind's count and its first rows. */
+const unreadSaid = (unread: Map<string, UnreadRows>): string =>
+  [...unread]
+    .toSorted(([, a], [, b]) => b.count - a.count)
+    .map(
+      ([kind, { count, rows }]) =>
+        `${kind}: ${count} row${count === 1 ? "" : "s"}, as\n${rows.map((row) => `  ${row}`).join("\n")}`
+    )
+    .join("\n");
 
 /** The counts {@link storedMarkers} read, as the check's line says them. */
 const markersSaid = ({
@@ -1983,9 +2013,13 @@ try {
   // once-steps over the stored sends ran): a marker no reader takes would be
   // drawn as the person's words or a bare notice, or not at all.
   const markers = storedMarkers(dbPath);
-  if (markers.failures.length > 0) {
+  const unreadCount = [...markers.unread.values()].reduce(
+    (sum, { count }) => sum + count,
+    0
+  );
+  if (unreadCount > 0) {
     throw new Error(
-      `${markers.failures.length} stored marker${markers.failures.length === 1 ? "" : "s"} that the transcript's reader for their kind does not read (MARKER_READERS, core injected.ts \`parseArtifactNotice\` on the artifact origin, transcript-rules.ts \`contextLineOf\`), so a transcript would draw each as the person's words or a bare CawCo notice, or drop it: a reader tightened, or a marker's kind or fields renamed (a kind dropped from ARTIFACT_KINDS, core artifact-kinds.ts), needs a once-step that rewrites the stored rows (db \`migrateSendsOnce\`), as db/sheet-notices.ts did for \`sheet\`; a new kind of marker adds its reader to MARKER_READERS.\n${markers.failures.slice(0, 10).join("\n")}`
+      `${unreadCount} stored marker${unreadCount === 1 ? "" : "s"} that the transcript's reader for their kind does not read (MARKER_READERS, core injected.ts \`parseArtifactNotice\` on the artifact origin, transcript-rules.ts \`contextLineOf\`), so a transcript would draw each as the person's words or a bare CawCo notice, or drop it: a reader tightened, or a marker's kind or fields renamed (a kind dropped from ARTIFACT_KINDS, core artifact-kinds.ts), needs a once-step that rewrites the stored rows (db \`migrateSendsOnce\`), as db/sheet-notices.ts did for \`sheet\`; a kind of marker no reader takes needs its reader in the transcript and in MARKER_READERS. By kind:\n${unreadSaid(markers.unread)}`
     );
   }
   // Every artifact made before titles took its title from the start's one

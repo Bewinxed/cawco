@@ -32,6 +32,41 @@ import { unhandled } from "./unhandled";
 import { workWords } from "./words/work";
 import { type CarryRestored, INPUTS_DIR } from "./workspace/controls";
 
+/** The kinds of the artifact notices' tags ({@link ARTIFACT_NOTICES}), each a {@link MarkerKind}. */
+export const ARTIFACT_MARKER_KINDS = [
+  "artifact-responses",
+  "artifact-comments",
+  "artifact-errors",
+  "artifact-saves",
+  "artifact-handed",
+] as const;
+
+/**
+ * EVERY KIND OF MARKER: the one list of the kinds a stored send's tag says
+ * ({@link markerTag} takes no other), each read back by the transcript
+ * (transcript-rules.ts `sentRow`) and checked on every stored row by hub
+ * migrations:check (`MARKER_READERS`, a record over this list). The
+ * workflow ones have no writer since CawCo's workflow engine went
+ * (71a7fe2155, 2026-10-23); the sends it stored keep their tags, and are
+ * read as the notes they were ({@link parseWorkflowNotice},
+ * {@link parseWorkflowStep}).
+ */
+export const MARKER_KINDS = [
+  ...ARTIFACT_MARKER_KINDS,
+  "handoff",
+  "undelivered",
+  "fleet-watch",
+  "fork",
+  "delegate-wait",
+  "report",
+  "delegate-ask",
+  "rule",
+  "ask-answered",
+  "workflow-notice",
+  "workflow-step",
+] as const;
+export type MarkerKind = (typeof MARKER_KINDS)[number];
+
 /** One marker's tag, read: its kind, its fields, and the text after the tag's line. */
 export interface MarkerTag {
   fields: Readonly<Partial<Record<string, string>>>;
@@ -45,7 +80,7 @@ export interface MarkerTag {
  * that is undefined is left out.
  */
 export const markerTag = (
-  kind: string,
+  kind: MarkerKind,
   fields: Readonly<Record<string, string | number | undefined>>
 ): string =>
   `[cawco:${kind}${Object.entries(fields)
@@ -92,7 +127,7 @@ const afterLine = (rest: string, line: string): string => {
 };
 
 /** The tag `text` opens with when it is of `kind`, else null. */
-const tagOf = (text: string, kind: string): MarkerTag | null => {
+const tagOf = (text: string, kind: MarkerKind): MarkerTag | null => {
   const tag = readMarkerTag(text);
   return tag?.kind === kind ? tag : null;
 };
@@ -824,7 +859,7 @@ const namedOf = ({ fields }: MarkerTag): ArtifactComments | null => {
 
 /** What a notice of `kind` names, read off its tag. */
 const namedBy =
-  (kind: string) =>
+  (kind: MarkerKind) =>
   (text: string): ArtifactComments | null => {
     const tag = tagOf(text, kind);
     return tag ? namedOf(tag) : null;
@@ -926,6 +961,55 @@ export function parseFleetWatchNudge(
   }
   const { line = "" } = tag.fields;
   return { line, body: afterLine(tag.rest, fleetWatchLine(line)) };
+}
+
+/** The words a workflow's notice opened with, before its body. */
+const workflowNoticeLine = (workflow: string, event: string): string =>
+  `[Workflow ${workflow} — ${event}]\n\n`;
+
+/**
+ * A notice CawCo's workflow engine sent a run's supervising session (a
+ * step's receipt, a question, the run's end), read back into its workflow,
+ * its event and its body. None is sent any more: the engine went with
+ * 71a7fe2155; the sends it stored are drawn as the hub's notes.
+ */
+export function parseWorkflowNotice(
+  text: string
+): { body: string; event: string; workflow: string } | null {
+  const tag = tagOf(text, "workflow-notice");
+  if (!tag) {
+    return null;
+  }
+  const { workflow = "", event = "" } = tag.fields;
+  return {
+    workflow,
+    event,
+    body: afterLine(tag.rest, workflowNoticeLine(workflow, event)),
+  };
+}
+
+/** The words a workflow step's brief opened with, before the brief. */
+const workflowStepLine = (workflow: string, step: string): string =>
+  `[Hand-off from the ${workflow} workflow — step ${step}, not the user]\n\n`;
+
+/**
+ * The brief CawCo's workflow engine handed the session that ran one of a
+ * run's steps, read back into its workflow, its step and the brief. None is
+ * sent any more ({@link parseWorkflowNotice}).
+ */
+export function parseWorkflowStep(
+  text: string
+): { body: string; step: string; workflow: string } | null {
+  const tag = tagOf(text, "workflow-step");
+  if (!tag) {
+    return null;
+  }
+  const { workflow = "", step = "" } = tag.fields;
+  return {
+    workflow,
+    step,
+    body: afterLine(tag.rest, workflowStepLine(workflow, step)),
+  };
 }
 
 /** The words a fork's notice opens with. */

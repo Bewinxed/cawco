@@ -43,6 +43,8 @@ import {
   parseHandoffMarker,
   parseReportMarker,
   parseUndelivered,
+  parseWorkflowNotice,
+  parseWorkflowStep,
 } from "./injected";
 import { invariant } from "./invariant";
 import { isRecord } from "./is-record";
@@ -82,6 +84,7 @@ import { delegateWaitWords } from "./words/delegates";
 import { FRESH_START_LINE } from "./words/harness-lines";
 import { noticeLine, noticeWords } from "./words/notices";
 import { unsentWords } from "./words/unsent";
+import { workflowWords } from "./words/workflows";
 
 type AssistantBlock = NeutralAssistantMessage["message"]["content"][number];
 
@@ -1747,8 +1750,9 @@ export function turnStart(
  * A note the hub wrote into the session, drawn as one: fleet watch's nudge
  * to this session, its steward (the same note the watched session's transcript
  * draws), the hub's word to a parent while its delegate waits on the person,
- * or the hub's word to a fork about the delegates in the history it
- * copied. Null for any other text.
+ * the hub's word to a fork about the delegates in the history it copied,
+ * or a notice or step brief CawCo's workflow engine stored before it went
+ * (core injected.ts `parseWorkflowNotice`). Null for any other text.
  */
 function hubNoteBlock(text: string, base: BlockBase): TranscriptBlock | null {
   const nudge = parseFleetWatchNudge(text);
@@ -1777,12 +1781,36 @@ function hubNoteBlock(text: string, base: BlockBase): TranscriptBlock | null {
     };
   }
   const fork = parseForkNotice(text);
-  return fork
+  if (fork) {
+    return {
+      ...base,
+      type: "ui.system_note",
+      content: fork.body,
+      metadata: { noteKind: "Fork", noteTitle: fork.line },
+    };
+  }
+  const workflow = parseWorkflowNotice(text);
+  if (workflow) {
+    return {
+      ...base,
+      type: "ui.system_note",
+      content: workflow.body,
+      metadata: {
+        noteKind: workflowWords.noteKind,
+        noteTitle: workflowWords.noticeTitle(workflow.workflow, workflow.event),
+      },
+    };
+  }
+  const step = parseWorkflowStep(text);
+  return step
     ? {
         ...base,
         type: "ui.system_note",
-        content: fork.body,
-        metadata: { noteKind: "Fork", noteTitle: fork.line },
+        content: step.body,
+        metadata: {
+          noteKind: workflowWords.noteKind,
+          noteTitle: workflowWords.stepTitle(step.workflow, step.step),
+        },
       }
     : null;
 }
