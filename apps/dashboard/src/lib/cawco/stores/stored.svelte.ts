@@ -136,7 +136,7 @@ function readStoredInfo(where: StoredWhere, sessionId: string): void {
   }
   storedInfoAsked.add(sessionId);
   detach(
-    machineControl<NeutralSessionInfo | undefined>(
+    machineControl(
       machineId,
       "getSessionInfo",
       [sessionId, { dir: where.cwd || undefined }],
@@ -187,7 +187,7 @@ function readStoredRun(source: ForkSource): Promise<StoredRun> {
   const key = source.sessionId;
   let asked = storedRunAsked.get(key);
   if (!asked) {
-    asked = machineControl<StoredRun>(
+    asked = machineControl(
       source.machineId,
       CONTROL_STORED_RUN,
       [source.sessionId, { dir: source.cwd || undefined }],

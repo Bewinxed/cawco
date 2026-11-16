@@ -181,8 +181,7 @@ export const repoTop = async (
  * top, or null when it is in no repository. Reads only. Refused for a path
  * that is no folder here, and as {@link repoTop} refuses.
  */
-export const repoRoot = async (path: unknown): Promise<string | null> => {
-  const folder = String(path);
+export const repoRoot = async (folder: string): Promise<string | null> => {
   const info = await stat(folder).catch(() => undefined);
   if (!info?.isDirectory()) {
     throw new Error(`${folder} is not a folder on this machine.`);

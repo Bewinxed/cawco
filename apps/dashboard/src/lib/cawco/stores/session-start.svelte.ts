@@ -19,6 +19,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { newId } from "#lib/platform/id.js";
 import {
+  answered,
   ask,
   rereadHub,
   send,
@@ -157,10 +158,15 @@ async function start({
     taken = { kind: "answered", value: undefined };
   } else {
     try {
-      taken = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () => {
-        opening.set(instanceId, requestId);
-        send({ verb: "spawn", machineId, instanceId, requestId, payload });
-      });
+      taken = await ask(
+        requestId,
+        CONTROL_TIMEOUT_MS,
+        () => {
+          opening.set(instanceId, requestId);
+          send({ verb: "spawn", machineId, instanceId, requestId, payload });
+        },
+        answered
+      );
     } finally {
       opening.delete(instanceId);
     }

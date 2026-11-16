@@ -18,7 +18,7 @@
 
 import { readFile, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { projectSlug, sessionConfigDir } from "@cawco/core/paths/claude";
 import {
@@ -68,27 +68,23 @@ const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 const SESSION_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
-/** What a `first` may carry; the fields are checked after, as the cut reads them. */
-const WireFirstSession = z.object({
-  harness: z.enum(HARNESSES).refine((kind) => SPILLING[kind]),
-  instanceId: z.string(),
-  resume: z.string().nullish().catch(null),
-});
-
 /**
- * The hub's `first` of a workspace's cut, as it came over the wire: a
- * {@link WorkspaceFirstSession}, or none for anything else (none named, a
- * gate workspace's cut), so a cut never fails for it.
+ * The hub's `first` of a workspace's cut: the session it names when it is
+ * one whose spill folder the cut reads, or none for anything else (none
+ * named, a gate workspace's cut, a harness that spills nothing), so a cut
+ * never fails for it. A resume that is no session id is none.
  */
-export const firstSessionOf = (raw: unknown): WorkspaceFirstSession | null => {
-  const given = WireFirstSession.safeParse(raw);
-  if (!given.success) {
+export const firstSessionOf = (
+  given: WorkspaceFirstSession | null | undefined
+): WorkspaceFirstSession | null => {
+  if (!(
+    given &&
+    SPILLING[given.harness] &&
+    INSTANCE_ID.test(given.instanceId)
+  )) {
     return null;
   }
-  const { harness, instanceId, resume } = given.data;
-  if (!INSTANCE_ID.test(instanceId)) {
-    return null;
-  }
+  const { harness, instanceId, resume } = given;
   return {
     harness,
     instanceId,

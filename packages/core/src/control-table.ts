@@ -116,6 +116,7 @@ import type {
 } from "./session/controls";
 import type {
   AuthState,
+  McpServerStatus,
   NeutralSessionInfo,
   PermissionResult,
   SessionMessage,
@@ -354,7 +355,7 @@ interface ControlTable {
   lendAccount: Entry<[account: string], LentAccess>;
   listSessions: Entry<[ask?: SessionListAsk | null], NeutralSessionInfo[]>;
   listTools: Entry<[], ToolStatus[]>;
-  mcpServerStatus: Entry<[], unknown>;
+  mcpServerStatus: Entry<[], McpServerStatus[]>;
   modelCatalog: Entry<[], ModelInfo[]>;
   moveCancel: Entry<[jobId: string], MoveCancelled>;
   moveClone: Entry<[request: MoveCloneRequest], MoveLfsResult>;
@@ -492,7 +493,7 @@ interface ControlTable {
     SheetWritten
   >;
   storedRun: Entry<[sessionKey: string, dir?: CatalogDir], StoredRun>;
-  supportedCommands: Entry<[], unknown>;
+  supportedCommands: Entry<[], SupportedCommands>;
   supportedModels: Entry<[], unknown>;
   tagSession: Entry<
     [sessionKey: string, tag: string | null, dir?: CatalogDir],

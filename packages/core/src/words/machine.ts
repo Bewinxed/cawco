@@ -16,4 +16,7 @@ export const machineWords = {
   loginPasswordFor: (host: string) => `Login password for ${host}`,
   unlocked: (host: string) => `${host} is unlocked`,
   cantReadLogins: (host: string) => `${host} cannot read its logins`,
+  /** The keychain unlocked, and Claude there gave no word on its sign-in yet (core `MachineHarnessReport.auth`). */
+  loginsUnsaid: (host: string) =>
+    `${host}'s keychain is unlocked, and Claude there has not said yet whether it is signed in. Its row says once it does.`,
 };

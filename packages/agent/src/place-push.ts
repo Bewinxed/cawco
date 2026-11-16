@@ -11,8 +11,10 @@
  * pushes nothing.
  */
 
+import type { ControlArgs } from "@cawco/core/control-table";
 import { hubRepoOfUrl } from "@cawco/core/hub-repo";
 import {
+  type CONTROL_PLACE_PUSH,
   type PlacePush,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
@@ -26,17 +28,10 @@ const LINE = /\r?\n/u;
 const TREE_SIZE = /^\S+ blob \S+\s+(\d+)\t/u;
 
 export const placePush = async (
-  path: unknown,
-  projectId: unknown,
-  dryRun?: unknown
+  ...[asked, projectId, dryRun]: ControlArgs<typeof CONTROL_PLACE_PUSH>
 ): Promise<PlacePush> => {
-  if (typeof projectId !== "string" || !projectId) {
-    throw new Error("A place is pushed for its project: name the project.");
-  }
   const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
   const git = gitUntil(deadline);
-  // A place's path is absolute: the hub stores no other (db placePathOn).
-  const asked = String(path);
   const root = await git(asked, "rev-parse", "--show-toplevel").catch(
     (error: Error) => {
       throw new Error(

@@ -8,6 +8,7 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
+import type { FsReply } from "@cawco/core/control-replies";
 import { PACKAGE_MANAGERS } from "@cawco/core/deps";
 import {
   CAWCO_OAUTH_URL,
@@ -832,12 +833,12 @@ const markdown = (entry: FsEntry): boolean =>
   entry.kind === "file" && entry.name.endsWith(".md");
 
 /** A listing or read under a machine's user layer, which the machine itself places. */
-const userLayerFs = <T>(
+const userLayerFs = <O extends "list" | "read">(
   machineId: string,
-  op: "list" | "read",
+  op: O,
   path: string
-): Promise<Bounded<T>> =>
-  machineFs<T>(machineId, op, path, undefined, "claude-home");
+): Promise<Bounded<FsReply<O>>> =>
+  machineFs(machineId, op, path, undefined, "claude-home");
 
 /**
  * The subagent files a machine really has under its user layer's `agents`.
@@ -855,7 +856,7 @@ export async function discoverAgents(
   const root = "agents";
   let listed: Bounded<FsEntry[]>;
   try {
-    listed = await userLayerFs<FsEntry[]>(machineId, "list", root);
+    listed = await userLayerFs(machineId, "list", root);
   } catch {
     return { kind: "answered", value: [] };
   }
@@ -875,11 +876,7 @@ export async function discoverAgents(
   for (const dir of entries.filter((entry) => entry.kind === "dir")) {
     let nested: Bounded<FsEntry[]>;
     try {
-      nested = await userLayerFs<FsEntry[]>(
-        machineId,
-        "list",
-        `${root}/${dir.name}`
-      );
+      nested = await userLayerFs(machineId, "list", `${root}/${dir.name}`);
     } catch {
       // One unreadable subdirectory is not a reason to lose the rest of them.
       continue;
@@ -903,7 +900,7 @@ export async function discoverAgents(
   const read = await Promise.all(
     paths.map(async (path) => {
       try {
-        const got = await userLayerFs<string>(machineId, "read", path);
+        const got = await userLayerFs(machineId, "read", path);
         let content: string;
         switch (got.kind) {
           case "unanswered":

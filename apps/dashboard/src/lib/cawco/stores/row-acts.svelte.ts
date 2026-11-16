@@ -14,7 +14,7 @@ import { CONTROL_TIMEOUT_MS, DISCARD_TIMEOUT_MS } from "#lib/config.js";
 import { hub } from "#lib/platform/hub.js";
 import { hubDone, hubRefusal } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
-import { ask, rereadHub, send } from "../hub/socket.svelte";
+import { answered, ask, rereadHub, send } from "../hub/socket.svelte";
 import { instanceIndex } from "./board.svelte";
 import { machineControl } from "./machines";
 import {
@@ -68,8 +68,11 @@ export async function stopSession(
   const requestId = newId();
   const payload: StopRequest = { instanceId, requestId };
   try {
-    const stopped = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
-      send({ verb: "stop", machineId, instanceId, requestId, payload })
+    const stopped = await ask(
+      requestId,
+      CONTROL_TIMEOUT_MS,
+      () => send({ verb: "stop", machineId, instanceId, requestId, payload }),
+      answered
     );
     switch (stopped.kind) {
       case "answered":
@@ -97,8 +100,11 @@ export async function discardSession(
   const requestId = newId();
   const payload: StopRequest = { instanceId, discard: true, requestId };
   try {
-    const discarded = await ask<void>(requestId, DISCARD_TIMEOUT_MS, () =>
-      send({ verb: "stop", machineId, instanceId, requestId, payload })
+    const discarded = await ask(
+      requestId,
+      DISCARD_TIMEOUT_MS,
+      () => send({ verb: "stop", machineId, instanceId, requestId, payload }),
+      answered
     );
     switch (discarded.kind) {
       case "answered":
@@ -168,7 +174,7 @@ export async function keepSession(instanceId: string): Promise<Bounded<void>> {
   if (target.sessionId && target.machineId) {
     // `null` is how the harness clears a tag; the machine tells the hub its
     // transcript moved, and the stored list follows (hub stored-recent.ts).
-    return await machineControl<void>(
+    return await machineControl(
       target.machineId,
       "tagSession",
       [target.sessionId, null, { dir: target.cwd || undefined }],

@@ -34,6 +34,7 @@ import {
   relative,
   resolve,
 } from "node:path";
+import type { ControlArgs } from "@cawco/core/control-table";
 import { readRange } from "@cawco/core/file-range";
 import { makeFolder } from "@cawco/core/folders";
 import { freeBytes } from "@cawco/core/free-bytes";
@@ -46,11 +47,16 @@ import {
 import { writeStateFile } from "@cawco/core/state-file";
 import { workWords } from "@cawco/core/words/work";
 import {
+  type CONTROL_INPUTS_ADMIT,
+  type CONTROL_INPUTS_COPY,
+  type CONTROL_INPUTS_READ,
   INPUTS_DIR,
   INPUTS_PIECE_BYTES,
   type InputNamed,
+  type InputPiece,
   type InputsAdmitted,
   type InputsLanded,
+  type InputsPlace,
   type InputsRead,
   type InputsRoom,
   inputBatches,
@@ -62,8 +68,6 @@ import {
   projectFolderOf,
   resolveAsFar,
 } from "@cawco/core/workspace-policy";
-import { z } from "zod";
-import { isWorkspaceRef } from "./hub-command";
 import { cloneHolding } from "./workspace-records";
 
 const within = (path: string, root: string): boolean =>
@@ -344,12 +348,12 @@ const admitFile = async (
  * workspace it runs in, when it runs in one; `project`, its project, when
  * it belongs to one.
  */
-const reachOf = async (bound: unknown, project: unknown): Promise<Reach> => {
-  if (!(project === null || typeof project === "string")) {
-    throw new Error("an inputs' project is a project id or null");
-  }
+const reachOf = async (
+  bound: WorkspaceRef | null,
+  project: string | null
+): Promise<Reach> => {
   const opened = project ? await projectFolderOf(project) : [];
-  const roots = isWorkspaceRef(bound)
+  const roots = bound
     ? [
         ...(await Promise.all(
           [bound.path, workspaceScratchDir(bound.id)].map((root) =>
@@ -362,9 +366,7 @@ const reachOf = async (bound: unknown, project: unknown): Promise<Reach> => {
   return {
     opened,
     roots,
-    ...(isWorkspaceRef(bound)
-      ? { cliTmp: resolveAsFar(workspaceClaudeTmpDir(bound.id)) }
-      : {}),
+    ...(bound ? { cliTmp: resolveAsFar(workspaceClaudeTmpDir(bound.id)) } : {}),
   };
 };
 
@@ -400,33 +402,6 @@ export const admitFiles = async (
   return reals;
 };
 
-/** The list of paths a control hands over. */
-const PATHS = z.array(z.string());
-
-const OFFSET = z.number().int().nonnegative();
-
-/** The ranges {@link CONTROL_INPUTS_READ} is asked for. */
-const WANTS = z.array(
-  z.object({ at: OFFSET, from: z.string(), length: OFFSET, size: OFFSET })
-);
-
-/** The pieces {@link CONTROL_INPUTS_WRITE} hands over: the fields a write reads. */
-const PIECES = z.array(
-  z.object({
-    at: OFFSET,
-    content: z.string(),
-    last: z.boolean(),
-    mode: z.number(),
-    name: z.string(),
-  })
-);
-
-/** The names {@link CONTROL_INPUTS_CLEAR} takes out. */
-const NAMES = z.array(z.string());
-
-/** A session's place: the session and the folder it works in. */
-const SESSION_PLACE = z.object({ cwd: z.string(), session: z.string() });
-
 /**
  * Each of `paths` admitted, or the first reason one may not go ({@link
  * admit}), or two that would land under one name, of any size and count
@@ -436,17 +411,13 @@ const SESSION_PLACE = z.object({ cwd: z.string(), session: z.string() });
  * again where it is read or copied.
  */
 const admitAll = async (
-  paths: unknown,
-  bound: unknown,
-  project: unknown
+  paths: readonly string[],
+  bound: WorkspaceRef | null,
+  project: string | null
 ): Promise<Admitted[] | string> => {
-  const listed = PATHS.safeParse(paths);
-  if (!listed.success) {
-    throw new Error("inputs must be a list of absolute paths");
-  }
   const reach = await reachOf(bound, project);
   const tally: Tally = { admitted: [], named: new Map() };
-  for (const path of listed.data) {
+  for (const path of paths) {
     const why = await admit(path, reach, tally);
     if (why) {
       return why;
@@ -505,9 +476,7 @@ const inputRange = async (
  * ({@link admitAll}), by name and where each is: none of their bytes.
  */
 export const admitInputs = async (
-  paths: unknown,
-  bound: unknown,
-  project: unknown
+  ...[paths, bound, project]: ControlArgs<typeof CONTROL_INPUTS_ADMIT>
 ): Promise<InputsAdmitted> => {
   const admitted = await admitAll(paths, bound, project);
   return typeof admitted === "string"
@@ -522,15 +491,9 @@ export const admitInputs = async (
  * {@link INPUTS_PIECE_BYTES} together, as core `inputBatches` plans them.
  */
 export const readInputs = async (
-  bound: unknown,
-  project: unknown,
-  wants: unknown
+  ...[bound, project, wants]: ControlArgs<typeof CONTROL_INPUTS_READ>
 ): Promise<InputsRead> => {
-  const listed = WANTS.safeParse(wants);
-  if (!listed.success) {
-    throw new Error("inputs are read as a list of { from, at, length, size }");
-  }
-  const asked = listed.data.reduce((sum, want) => sum + want.length, 0);
+  const asked = wants.reduce((sum, want) => sum + want.length, 0);
   if (asked > INPUTS_PIECE_BYTES) {
     throw new Error(
       `one read of inputs asks ${INPUTS_PIECE_BYTES} bytes at most, and this asks ${asked}`
@@ -538,7 +501,7 @@ export const readInputs = async (
   }
   const reach = await reachOf(bound, project);
   const contents: string[] = [];
-  for (const want of listed.data) {
+  for (const want of wants) {
     const file = await admitFile(want.from, reach);
     if (typeof file === "string") {
       return { refused: file };
@@ -563,10 +526,7 @@ export const readInputs = async (
  * (core `CONTROL_INPUTS_CLEAR`).
  */
 export const copyInputs = async (
-  paths: unknown,
-  bound: unknown,
-  place: unknown,
-  project: unknown
+  ...[paths, bound, place, project]: ControlArgs<typeof CONTROL_INPUTS_COPY>
 ): Promise<InputsAdmitted> => {
   const admitted = await admitAll(paths, bound, project);
   if (typeof admitted === "string") {
@@ -595,7 +555,7 @@ export const copyInputs = async (
  * ({@link inputsUnder}), and the bytes free on its disk (move.ts
  * `freeBytes`).
  */
-export const roomInputs = async (place: unknown): Promise<InputsRoom> => {
+export const roomInputs = async (place: InputsPlace): Promise<InputsRoom> => {
   const { named, under } = await inputsUnder(place);
   return { folder: named, free: await freeBytes(under.own) };
 };
@@ -606,15 +566,11 @@ export const roomInputs = async (place: unknown): Promise<InputsRoom> => {
  * ({@link writePiece}).
  */
 export const writeInputs = async (
-  place: unknown,
-  pieces: unknown
+  place: InputsPlace,
+  pieces: readonly InputPiece[]
 ): Promise<InputsLanded> => {
-  const listed = PIECES.safeParse(pieces);
-  if (!listed.success) {
-    throw new Error("inputs are written as a list of pieces");
-  }
   const { named, under } = await inputsUnder(place);
-  for (const piece of listed.data) {
+  for (const piece of pieces) {
     await writePiece(under, {
       name: piece.name,
       mode: piece.mode,
@@ -632,15 +588,11 @@ export const writeInputs = async (
  * on the way that is no longer the inputs' own is left as it is.
  */
 export const clearInputs = async (
-  place: unknown,
-  names: unknown
+  place: InputsPlace,
+  names: readonly string[]
 ): Promise<void> => {
-  const listed = NAMES.safeParse(names);
-  if (!listed.success) {
-    throw new Error("inputs are cleared by a list of names");
-  }
   const { under } = await inputsUnder(place);
-  for (const name of listed.data) {
+  for (const name of names) {
     if (nameProblem(name)) {
       continue;
     }
@@ -662,7 +614,7 @@ export const clearInputs = async (
     }
   }
   console.info(
-    `[inputs] ${under.what}: ${listed.data.length} input(s) cleared from ${under.dir}`
+    `[inputs] ${under.what}: ${names.length} input(s) cleared from ${under.dir}`
   );
 };
 
@@ -836,10 +788,6 @@ const writePiece = async (
   }
 };
 
-/** A session id as the hub makes one: nothing else names a folder under the scratch root. */
-const SESSION_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
-
 /**
  * Where `place`'s inputs land (core `InputsPlace`): the scratch dir they go
  * under, the folder as the receiving session names it, and what it is in
@@ -850,23 +798,16 @@ const SESSION_ID =
  * its absolute path, as its `TMPDIR` is none of CawCo's.
  */
 const inputsHome = async (
-  place: unknown
+  asked: InputsPlace
 ): Promise<{ named: string; scratch: string; what: string }> => {
   const inTmp = `$TMPDIR/${INPUTS_DIR}/`;
-  if (isWorkspaceRef(place)) {
+  if ("id" in asked) {
     return {
-      scratch: workspaceScratchDir(place.id),
+      scratch: workspaceScratchDir(asked.id),
       named: inTmp,
-      what: `workspace ${place.id}'s own inputs folder`,
+      what: `workspace ${asked.id}'s own inputs folder`,
     };
   }
-  const sessionPlace = SESSION_PLACE.safeParse(place);
-  if (!(sessionPlace.success && SESSION_ID.test(sessionPlace.data.session))) {
-    throw new Error(
-      "inputs are written for a workspace, { id, path }, or a session, { session, cwd }"
-    );
-  }
-  const asked = sessionPlace.data;
   const held = await cloneHolding(asked.cwd);
   if (held) {
     return {
@@ -890,7 +831,7 @@ const inputsHome = async (
  * as its session names it.
  */
 const inputsUnder = async (
-  place: unknown
+  place: InputsPlace
 ): Promise<{ named: string; under: Under }> => {
   const { named, scratch, what } = await inputsHome(place);
   const dir = join(scratch, INPUTS_DIR);
@@ -1018,19 +959,10 @@ export const writeKept = async (
  * session's own terms (`$TMPDIR/outputs/x.png`).
  */
 export const savePicture = async (
-  ref: unknown,
-  named: unknown,
-  png: unknown
+  ref: WorkspaceRef,
+  named: string,
+  png: string
 ): Promise<WorkspaceSaved> => {
-  if (!(
-    isWorkspaceRef(ref) &&
-    typeof named === "string" &&
-    typeof png === "string"
-  )) {
-    throw new Error(
-      "a picture is saved as [{ id, path }, its path, its base64 PNG]"
-    );
-  }
   const kept = placeInWorkspace(ref, named);
   if (typeof kept === "string") {
     return { refused: kept };

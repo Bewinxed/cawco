@@ -8,18 +8,15 @@ import {
   IMAGE_EXTENSIONS,
   IMAGE_GENERATION_TIMEOUT_MS,
   IMAGE_PROVIDER_MODELS,
-  IMAGE_PROVIDERS,
-  IMAGE_QUALITIES,
   type ImageFormat,
-  MAX_REFERENCE_IMAGES,
+  type ImageGenerationRequest,
   offersModelChoice,
 } from "@cawco/core/image-generation";
 import { unhandled } from "@cawco/core/unhandled";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { imageSize } from "image-size";
-import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
-import { isWorkspaceRef } from "./hub-command";
 import type {
   ImageProvider,
   MadeImage,
@@ -34,20 +31,6 @@ import {
   writeKept,
 } from "./inputs";
 
-const requestSchema = z
-  .object({
-    prompt: z.string().trim().min(1),
-    output_path: z.string().min(1),
-    reference_images: z
-      .array(z.string().min(1))
-      .max(MAX_REFERENCE_IMAGES)
-      .optional(),
-    size: z.string().default("auto"),
-    quality: z.enum(IMAGE_QUALITIES).default("auto"),
-    provider: z.enum(IMAGE_PROVIDERS).optional(),
-    model: z.string().trim().min(1).optional(),
-  })
-  .strict();
 const SIZE = /^(\d+)x(\d+)$/u;
 const activeOutputs = new Set<string>();
 
@@ -86,8 +69,12 @@ function refuseUnexpanded(
  * in no workspace, which no boundary holds, wherever it names, but a path
  * naming a shell variable ({@link refuseUnexpanded}).
  */
-function outputOf(cwd: string, named: string, bound: unknown): Kept {
-  if (isWorkspaceRef(bound)) {
+function outputOf(
+  cwd: string,
+  named: string,
+  bound: WorkspaceRef | null
+): Kept {
+  if (bound) {
     const kept = placeInWorkspace(bound, named, cwd);
     if (typeof kept === "string") {
       throw new Error(imageGenerationWords.outputRefused(kept));
@@ -177,18 +164,12 @@ function imageMime(bytes: Buffer): string {
 async function referenceImages(
   cwd: string,
   references: string[],
-  bound: unknown,
-  project: unknown,
+  bound: WorkspaceRef | null,
+  project: string | null,
   provider: ImageProvider
 ): Promise<ReferenceImage[]> {
   const named = references.map((reference) => resolve(cwd, reference));
-  const paths = isWorkspaceRef(bound)
-    ? await admitFiles(
-        named,
-        bound,
-        typeof project === "string" ? project : null
-      )
-    : named;
+  const paths = bound ? await admitFiles(named, bound, project) : named;
   if (typeof paths === "string") {
     throw new Error(imageGenerationWords.referenceRefused(paths));
   }
@@ -299,21 +280,25 @@ async function made(
 export async function generateImage(
   ports: Pick<AgentPorts, "borrowAsk">,
   cwd: string,
-  input: unknown,
-  bound: unknown = null,
-  project: unknown = null
+  asked: ImageGenerationRequest,
+  bound: WorkspaceRef | null,
+  project: string | null
 ): Promise<GeneratedImage> {
-  const args = requestSchema.parse(input);
+  const args = {
+    ...asked,
+    size: asked.size ?? "auto",
+    quality: asked.quality ?? "auto",
+  };
   validateSize(args.size);
   const kept = outputOf(cwd, args.output_path, bound);
   const output = kept.shown;
   const provider = imageProvider(args.provider);
   const model = modelOf(provider, args.model);
-  const asked = args.reference_images ?? [];
-  for (const reference of asked) {
+  const references = args.reference_images ?? [];
+  for (const reference of references) {
     refuseUnexpanded("reference_images", reference);
   }
-  if (asked.length > provider.references) {
+  if (references.length > provider.references) {
     throw refusal(
       provider,
       imageGenerationWords.tooManyReferences(provider.id, provider.references)
@@ -324,14 +309,8 @@ export async function generateImage(
   if (!readiness.ready) {
     throw refusal(provider, readiness.reason);
   }
-  const references = await referenceImages(
-    cwd,
-    asked,
-    bound,
-    project,
-    provider
-  );
-  if (!isWorkspaceRef(bound)) {
+  const read = await referenceImages(cwd, references, bound, project, provider);
+  if (!bound) {
     // A workspace's clone and scratch dir are there; its folders under them are made one at a time as it is written.
     await makeFolder(kept.root);
   }
@@ -348,7 +327,7 @@ export async function generateImage(
           model,
           quality: args.quality,
           size: args.size,
-          references,
+          references: read,
         },
         signal
       )

@@ -11,11 +11,13 @@ import { DOC_AUTHORS } from "@cawco/jsonl-parser";
 import {
   array,
   boolean,
+  check,
   custom,
   type GenericSchema,
   integer,
   is,
   literal,
+  maxLength,
   maxValue,
   minValue,
   nonEmpty,
@@ -28,11 +30,14 @@ import {
   pipe,
   rawTransform,
   record,
+  regex,
   safeParse,
   startsWith,
+  strictObject,
   string,
   summarize,
   transform,
+  trim,
   tuple,
   union,
   unknown,
@@ -52,13 +57,25 @@ import {
   isEffortLevel,
   WIRE_PERMISSION_MODES,
 } from "./harness/kinds";
-import { IMAGE_PROVIDERS, IMAGE_QUALITIES } from "./image-generation";
+import {
+  IMAGE_PROVIDERS,
+  IMAGE_QUALITIES,
+  MAX_REFERENCE_IMAGES,
+} from "./image-generation";
 import { isOneOf } from "./one-of";
+import { COMMIT } from "./own-commits";
 import { isSourceKey, type SourceKey } from "./preview/upstream";
+import type { FsEntry } from "./protocol";
 import {
   FLEET_MCP_CHANGE_KINDS,
+  type SpinOffHeld,
   unknownControlWords,
 } from "./session/controls";
+import {
+  type McpServerStatus,
+  RAN_FROM,
+  type StoredRun,
+} from "./session-messages";
 import { canvasSpecOf, INTERACTIONS } from "./stage";
 import {
   BinaryUpdatePolicySchema,
@@ -66,6 +83,7 @@ import {
   MoveSnapshotResultShape,
   PermissionResultSchema,
 } from "./stored-shapes";
+import { controlWords } from "./words/controls";
 import { WORKSPACE_UNLANDED } from "./workspace/controls";
 
 /** A value read by `schema`, a stored type's own (stored-shapes.ts, its output that type exactly): its output, or its issues said. */
@@ -78,7 +96,12 @@ const storedAs = <T>(schema: z.ZodType<T>, what: string) =>
         return read.data;
       }
       addIssue({
-        message: `is not ${what} (${read.error.issues.map((issue) => issue.path.join(".") || issue.message).join(", ")})`,
+        message: controlWords.notStored(
+          what,
+          read.error.issues
+            .map((issue) => issue.path.join(".") || issue.message)
+            .join(", ")
+        ),
       });
       return NEVER;
     })
@@ -86,13 +109,20 @@ const storedAs = <T>(schema: z.ZodType<T>, what: string) =>
 
 // The shapes the arguments are made of, each its type's.
 const text = string();
-const named = pipe(string(), nonEmpty());
+const named = pipe(string(), nonEmpty(controlWords.empty));
 const count = number();
 const texts = array(string());
 const maybe = <S extends GenericSchema>(schema: S) =>
   optional(nullable(schema));
 
-const WorkspaceRef = object({ id: text, path: text });
+/** A page's URL. */
+const pageUrl = pipe(
+  string(),
+  check((said) => URL.canParse(said), controlWords.notUrl)
+);
+/** An absolute path on the machine. */
+const absolute = pipe(text, startsWith("/", controlWords.notAbsolute));
+const WorkspaceRef = object({ id: text, path: absolute });
 const AccountIdentity = object({
   email: text,
   organization: text,
@@ -109,9 +139,12 @@ const CredentialStore = picklist(["opencode", "pi"]);
 const AccountKind = picklist(ACCOUNT_KINDS);
 const PermissionMode = picklist(
   WIRE_PERMISSION_MODES,
-  "names no setting: a permission mode"
+  controlWords.noSetting("permission mode")
 );
-const BrowserKey = custom<BrowserKeyType>(isBrowserKey, "names no browser key");
+const BrowserKey = custom<BrowserKeyType>(
+  isBrowserKey,
+  controlWords.noBrowserKey
+);
 const CatalogDir = nullable(union([text, object({ dir: optional(text) })]));
 const FleetMcpChange = object({
   kind: picklist(FLEET_MCP_CHANGE_KINDS),
@@ -123,16 +156,34 @@ const WindowAsk = union([
   object({ limit: count, start: nullable(text) }),
   object({ limit: count, through: text }),
 ]);
-const InputsPlace = union([WorkspaceRef, object({ cwd: text, session: text })]);
+/** A session's or a workspace's id as the hub makes one (`crypto.randomUUID()`): nothing else names a folder under the scratch root. */
+const HUB_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+const InputsPlace = union([
+  WorkspaceRef,
+  object({
+    cwd: text,
+    session: pipe(text, regex(HUB_ID, controlWords.notSession)),
+  }),
+]);
+/** A host-scope workspace's scratch dir, by the workspace's id. */
+const HostScratchAsk = object({
+  id: pipe(text, regex(HUB_ID, controlWords.notWorkspace)),
+  read: optional(boolean()),
+});
+/** A place in a file, or a length of it, in bytes. */
+const offset = pipe(count, integer(), minValue(0));
 const WorkspaceArchive = object({
   base: optional(text),
-  id: text,
+  id: named,
   landed: optional(texts),
   path: optional(text),
   skip: optional(texts),
   unlanded: picklist(WORKSPACE_UNLANDED),
 });
-const WorkspaceCommit = object({ bundle: nullable(text), head: text });
+/** A full commit id (own-commits.ts `COMMIT`). */
+const commit = pipe(text, regex(COMMIT, controlWords.notCommit));
+const WorkspaceCommit = object({ bundle: nullable(text), head: commit });
 const MoveSnapshotResult = storedAs(
   MoveSnapshotResultShape,
   "a move's snapshot"
@@ -174,7 +225,7 @@ const RenderAsk = object({
   ),
 });
 const PortSource = {
-  port: count,
+  port: pipe(count, integer(), minValue(1), maxValue(65_535)),
   path: optional(text),
   stage: optional(object({ dir: text, file: text })),
   serve: optional(object({ command: text, cwd: text })),
@@ -183,7 +234,7 @@ const PortSource = {
 };
 const DirSource = { dir: text, path: optional(text), pin: optional(text) };
 const PreviewStarted = {
-  for: custom<SourceKey>(isSourceKey, "names no source key"),
+  for: custom<SourceKey>(isSourceKey, controlWords.noSourceKey),
   instanceId: text,
   token: named,
 };
@@ -237,18 +288,18 @@ const ARGS: {
 
   // A live session's process, or its machine for it.
   interrupt: tuple([]),
-  withdrawSend: tuple([pipe(text, nonEmpty("names no send"))]),
+  withdrawSend: tuple([pipe(text, nonEmpty(controlWords.noSend))]),
   // A setting's control names the setting. One with none is refused before
   // the harness hears it: Claude's would set nothing and clear its session's
   // own record of its mode (agent claude.ts `SessionMode.choose`), Full Send
   // with it, while the hub's row kept the old mode (restart-rules on the
   // host, 2026-10-23).
   setPermissionMode: tuple([PermissionMode]),
-  setModel: tuple([pipe(text, nonEmpty("names no setting: a model"))]),
+  setModel: tuple([pipe(text, nonEmpty(controlWords.noSetting("model")))]),
   setEffort: tuple([
     custom<ControlArgs<"setEffort">[0]>(
       isEffortLevel,
-      "names no setting: an effort level"
+      controlWords.noSetting("effort level")
     ),
   ]),
   getContextUsage: tuple([]),
@@ -366,15 +417,18 @@ const ARGS: {
   forgetCredentials: tuple([texts]),
   refreshCawcoTools: tuple([]),
   installSessionCredential: tuple([
-    pipe(text, nonEmpty("Session credential is missing.")),
+    pipe(text, nonEmpty(controlWords.noCredential)),
     maybe(literal("initial")),
   ]),
   verifySessionCredential: tuple([]),
 
   // A machine's commands.
   runCommand: tuple([
-    text,
-    text,
+    absolute,
+    pipe(
+      text,
+      check((cmd) => cmd.trim().length > 0, controlWords.noCommand)
+    ),
     maybe(count),
     maybe(WorkspaceRef),
     maybe(
@@ -394,7 +448,7 @@ const ARGS: {
     text,
     maybe(text),
     maybe(text),
-    maybe(object({ branch: text, carry: optional(text), commit: text })),
+    maybe(object({ branch: text, carry: optional(text), commit })),
     maybe(
       object({
         harness: picklist(HARNESSES),
@@ -403,17 +457,17 @@ const ARGS: {
       })
     ),
   ]),
-  placeRepo: tuple([text]),
-  repoRoot: tuple([text]),
+  placeRepo: tuple([absolute]),
+  repoRoot: tuple([absolute]),
   removeFolder: tuple([
     object({ kind: picklist(["place", "carry"]), path: text }),
   ]),
   cloneHolding: tuple([named]),
   placeLfs: tuple([
-    text,
+    absolute,
     array(object({ bytes: count, count, paths: texts, pattern: text })),
   ]),
-  placePush: tuple([text, text, maybe(boolean())]),
+  placePush: tuple([absolute, named, maybe(boolean())]),
   workspaceChanges: tuple([WorkspaceRef]),
   workspaceApply: tuple([WorkspaceRef]),
   workspaceBoundary: tuple([WorkspaceRef]),
@@ -421,8 +475,8 @@ const ARGS: {
   workspaceDiscard: tuple([WorkspaceArchive]),
   workspaceOutputs: tuple([WorkspaceRef]),
   workspaceClones: tuple([]),
-  hostOutputs: tuple([object({ id: text, read: optional(boolean()) })]),
-  hostScratchRemove: tuple([object({ id: text, read: optional(boolean()) })]),
+  hostOutputs: tuple([HostScratchAsk]),
+  hostScratchRemove: tuple([HostScratchAsk]),
   workspaceWorkEnd: tuple([
     object({
       id: named,
@@ -435,14 +489,14 @@ const ARGS: {
   inputsRead: tuple([
     nullable(WorkspaceRef),
     nullable(text),
-    array(object({ at: count, from: text, length: count, size: count })),
+    array(object({ at: offset, from: text, length: offset, size: offset })),
   ]),
   inputsRoom: tuple([InputsPlace]),
   inputsWrite: tuple([
     InputsPlace,
     array(
       object({
-        at: count,
+        at: offset,
         content: text,
         last: boolean(),
         mode: count,
@@ -542,13 +596,15 @@ const ARGS: {
   generateImage: tuple([
     text,
     text,
-    object({
-      model: optional(text),
-      output_path: text,
-      prompt: text,
+    strictObject({
+      model: optional(pipe(string(), trim(), nonEmpty(controlWords.empty))),
+      output_path: named,
+      prompt: pipe(string(), trim(), nonEmpty(controlWords.empty)),
       provider: optional(picklist(IMAGE_PROVIDERS)),
       quality: optional(picklist(IMAGE_QUALITIES)),
-      reference_images: optional(texts),
+      reference_images: optional(
+        pipe(array(named), maxLength(MAX_REFERENCE_IMAGES))
+      ),
       size: optional(text),
     }),
     maybe(WorkspaceRef),
@@ -558,7 +614,7 @@ const ARGS: {
     object({
       artifact: object({ id: text, kind: text, name: text }),
       sync: text,
-      url: text,
+      url: pageUrl,
       width: count,
     }),
   ]),
@@ -575,7 +631,7 @@ const ARGS: {
     object({
       canvas: object({ id: text, name: text, sync: text }),
       token: named,
-      url: text,
+      url: pageUrl,
     }),
   ]),
   canvasScreenClose: tuple([object({ token: text })]),
@@ -591,11 +647,11 @@ const ARGS: {
     ]),
   ]),
   stageRender: tuple([WorkspaceRef, RenderAsk]),
-  stageWrite: tuple([WorkspaceRef, SheetWrite, maybe(text)]),
+  stageWrite: tuple([WorkspaceRef, SheetWrite, maybe(named)]),
   stageWarm: tuple([
     WorkspaceRef,
     object({ by: text, canvases: array(texts) }),
-    maybe(text),
+    maybe(named),
   ]),
   stageComponents: tuple([
     WorkspaceRef,
@@ -610,10 +666,10 @@ const ARGS: {
       })
     ),
   ]),
-  stageServe: tuple([text, ServeSpec, maybe(text)]),
+  stageServe: tuple([text, ServeSpec, maybe(named)]),
   stagePin: union([
     tuple([WorkspaceRef, named]),
-    tuple([null_(), named, named]),
+    tuple([null_(), named, absolute]),
   ]),
   stagePins: tuple([texts]),
   stagePicture: tuple([
@@ -625,7 +681,7 @@ const ARGS: {
       width: pipe(count, integer()),
     }),
   ]),
-  stageUnpin: tuple([pipe(text, nonEmpty("names the pin it lets go"))]),
+  stageUnpin: tuple([pipe(text, nonEmpty(controlWords.noPin))]),
 
   // A machine's browsers and the passkey scans for them.
   "browser.start": tuple([
@@ -679,6 +735,58 @@ const ARGS: {
   "relay.prove": tuple([object({ urls: texts })]),
 };
 
+/**
+ * What a machine answers that the hub passes on unread and a dashboard reads
+ * (control-replies.ts holds each reply to them): what a stored session ran
+ * with, what discarding a spin-off would take, a session's MCP servers.
+ */
+const RanValue = object({ from: picklist(RAN_FROM), value: text });
+const StoredRunShape = object({
+  account: optional(nullable(text)),
+  effort: optional(RanValue),
+  model: optional(RanValue),
+  permissionMode: optional(RanValue),
+  signIn: optional(text),
+});
+const SpinOffHeldShape = object({
+  ahead: count,
+  dirty: count,
+  holds: text,
+  path: text,
+});
+const McpServerStatusShape = object({
+  config: optional(record(string(), unknown())),
+  error: optional(text),
+  name: text,
+  scope: optional(text),
+  serverInfo: optional(object({ name: text, version: optional(text) })),
+  status: text,
+  tools: optional(array(object({ name: text, description: optional(text) }))),
+});
+
+const FsEntryShape = object({
+  kind: picklist(["dir", "file"]),
+  name: text,
+  size: count,
+});
+
+/** Whether `value` is a folder's listing as a machine's `fs list` answers it. */
+export const isFsEntries = (value: unknown): value is FsEntry[] =>
+  is(array(FsEntryShape), value);
+
+/** Whether `value` is what a stored session ran with ({@link CONTROL_STORED_RUN}'s answer). */
+export const isStoredRun = (value: unknown): value is StoredRun =>
+  is(StoredRunShape, value);
+
+/** Whether `value` is what a spin-off's discard would take ({@link CONTROL_SPIN_OFF_HELD}'s answer). */
+export const isSpinOffHeld = (value: unknown): value is SpinOffHeld =>
+  is(SpinOffHeldShape, value);
+
+/** Whether `value` is a session's MCP servers as it holds them ({@link CONTROL_MCP_STATUS}'s answer). */
+export const isMcpServerStatuses = (
+  value: unknown
+): value is McpServerStatus[] => is(array(McpServerStatusShape), value);
+
 /** Whether `value` is a lent sign-in as a lender answers one ({@link CONTROL_ACCOUNT_LENT}'s, the borrow's). */
 export const isLentAccess = (value: unknown): value is LentAccess =>
   is(LentAccessShape, value);
@@ -707,7 +815,7 @@ const readArgs = <K extends ControlName>(
     ? { ok: true, control: { method, args: read.output } }
     : {
         ok: false,
-        error: `${method} refused: its arguments are not its own (${summarize(read.issues)})`,
+        error: controlWords.argumentsRefused(method, summarize(read.issues)),
       };
 };
 
@@ -760,7 +868,7 @@ export const readControl = (payload: unknown): ControlRead => {
   if (!read.success) {
     return {
       ok: false,
-      error: `control refused: its payload is not a control (${summarize(read.issues)})`,
+      error: controlWords.payloadRefused(summarize(read.issues)),
     };
   }
   const { args = [], method, ...address } = read.output;

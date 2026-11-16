@@ -105,7 +105,7 @@
     listing = true;
     listError = "";
     try {
-      const read = await machineFs<FsEntry[]>(machineId, "list", next);
+      const read = await machineFs(machineId, "list", next);
       if (id !== request) {
         return;
       }

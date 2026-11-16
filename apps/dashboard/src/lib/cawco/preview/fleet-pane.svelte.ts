@@ -4,7 +4,6 @@
  * The app's layout sets it for every pane under it.
  */
 
-import type { FsEntry } from "@cawco/core/protocol";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { didntAnswer } from "../hub/control";
@@ -22,7 +21,7 @@ import type { PaneFleet, PaneMachine } from "./pane-fleet";
 
 /** A machine's folders over the app's socket, opening on where it was working last. */
 const fleetFolders: FolderReader = {
-  list: (machineId, path) => machineFs<FsEntry[]>(machineId, "list", path),
+  list: (machineId, path) => machineFs(machineId, "list", path),
   unanswered: (machineId, missed) =>
     didntAnswer(machineId, missed, {
       missed: "the folder's listing didn't come back",

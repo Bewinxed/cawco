@@ -54,12 +54,7 @@ export const installTool = (
   machineId: string,
   id: string
 ): Promise<Bounded<ToolStatus>> =>
-  machineControl<ToolStatus>(
-    machineId,
-    "installTool",
-    [id],
-    INSTALL_TIMEOUT_MS
-  );
+  machineControl(machineId, "installTool", [id], INSTALL_TIMEOUT_MS);
 
 /**
  * A tool sign-in's refusal, in the hub's words (hub routes/tools.ts, the

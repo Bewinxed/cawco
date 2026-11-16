@@ -106,15 +106,18 @@
     // Cleared the moment it has been sent, whatever the answer will be.
     password = "";
     try {
-      const read = await machineControl<AuthState>(
-        machine.machineId,
-        "unlockKeychain",
-        [sent]
-      );
+      const read = await machineControl(machine.machineId, "unlockKeychain", [
+        sent,
+      ]);
       if (mine === attempt) {
         switch (read.kind) {
           case "answered":
-            phase = { kind: "done", state: read.value };
+            phase = read.value
+              ? { kind: "done", state: read.value }
+              : {
+                  kind: "error",
+                  message: machineWords.loginsUnsaid(machine.hostname),
+                };
             break;
           case "unanswered":
             phase = {

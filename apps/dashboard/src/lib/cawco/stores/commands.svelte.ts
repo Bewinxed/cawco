@@ -7,6 +7,7 @@
 
 import { ASK_USER_QUESTION, RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { SendAttachment } from "@cawco/core/attachments";
+import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { detach } from "@cawco/core/detach";
 import {
   EFFORT_LEVELS,
@@ -15,6 +16,12 @@ import {
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ControlPayload, SendPayload } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
+import {
+  CONTROL_INTERRUPT,
+  CONTROL_SET_EFFORT,
+  CONTROL_SET_MODEL,
+  CONTROL_SET_PERMISSION_MODE,
+} from "@cawco/core/session/controls";
 import type { CommandKind } from "@cawco/core/stream";
 import { unhandled } from "@cawco/core/unhandled";
 import { SvelteMap } from "svelte/reactivity";
@@ -556,7 +563,10 @@ function wirePayload(
   instanceId: string,
   commandId: string
 ): SendPayload | ControlPayload | { sendId: string } {
-  const controlPayload = (method: string, args: unknown[]): ControlPayload => ({
+  const controlPayload = <K extends ControlName>(
+    method: K,
+    args: ControlArgs<K>
+  ): ControlPayload => ({
     instanceId,
     requestId: commandId,
     method,
@@ -581,20 +591,18 @@ function wirePayload(
     case "permission.answer": {
       const { requestId, result } = request.intent;
       return {
-        instanceId,
+        ...controlPayload(RESOLVE_PERMISSION, [requestId, result]),
         requestId,
-        method: RESOLVE_PERMISSION,
-        args: [requestId, result],
       };
     }
     case "interrupt":
-      return controlPayload("interrupt", []);
+      return controlPayload(CONTROL_INTERRUPT, []);
     case "set-model":
-      return controlPayload("setModel", [request.intent.model]);
+      return controlPayload(CONTROL_SET_MODEL, [request.intent.model]);
     case "set-permission-mode":
-      return controlPayload("setPermissionMode", [request.intent.mode]);
+      return controlPayload(CONTROL_SET_PERMISSION_MODE, [request.intent.mode]);
     case "set-effort":
-      return controlPayload("setEffort", [request.intent.effort]);
+      return controlPayload(CONTROL_SET_EFFORT, [request.intent.effort]);
     default:
       // A kind the contract grew and this map did not: the type check names
       // it here, and a kind off the wire throws rather than being sent as

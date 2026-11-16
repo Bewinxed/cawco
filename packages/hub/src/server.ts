@@ -4236,7 +4236,7 @@ export const createServer = (
     if (!isOneOf(WIRE_PERMISSION_MODES, mode)) {
       return problem(400, {
         code: "mode-refused",
-        detail: `"${mode}" is no permission mode.`,
+        detail: spawnWords.modeUnknown(mode),
       });
     }
     const asked = await callAgent(

@@ -155,7 +155,7 @@ export async function renameSession(
     await renameInstance(row.id, title);
     return;
   }
-  const renamed = await machineControl<void>(
+  const renamed = await machineControl(
     machineId,
     "renameSession",
     [info.sessionId, title, { dir: info.cwd || undefined }],

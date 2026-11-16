@@ -39,7 +39,6 @@ import {
   greet,
   HOST_STAND_IN,
   holdTimeAnimations,
-  isHelloArtifact,
   launchChromium,
 } from "./chromium";
 import {
@@ -206,11 +205,6 @@ const openToLength = async (page: Page, width: number): Promise<number> => {
 export function drawArtifact(
   ask: PictureAsk
 ): Promise<{ png: string; cut?: PictureCut }> {
-  if (!(isHelloArtifact(ask) && URL.canParse(ask.url))) {
-    throw new Error(
-      "A picture names the page's URL and the artifact: its id, kind, name and sync path."
-    );
-  }
   return drawPage(ask.url, ask.width, ask.artifact.name, ask);
 }
 

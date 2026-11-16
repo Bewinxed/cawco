@@ -1148,7 +1148,14 @@ export const ContextLineSchema = ContextLineShape;
 export type ContextLineOutput = z.output<typeof ContextLineShape>;
 
 const ContextUsageShape = declared(
-  z.object({ totalTokens: z.number() }),
+  z.object({
+    categories: z.array(
+      z.object({ color: z.string(), name: z.string(), tokens: z.number() })
+    ),
+    maxTokens: z.number(),
+    percentage: z.number(),
+    totalTokens: z.number(),
+  }),
   "ContextUsage",
   "packages/core/src/session/controls.ts"
 );

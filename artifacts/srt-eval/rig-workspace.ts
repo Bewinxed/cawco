@@ -35,7 +35,7 @@ if (verb === "create" && first && second) {
   }
   console.log(JSON.stringify(checkout));
 } else if (verb === "archive" && first && second) {
-  await archiveWorkspace({ id: first, path: second });
+  await archiveWorkspace({ id: first, path: second, unlanded: "keep" });
   console.log(`archived ${first}`);
   process.exit(0);
 } else {

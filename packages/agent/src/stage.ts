@@ -117,7 +117,10 @@ import {
   writeTail,
 } from "@cawco/core/words/helpers";
 import { sheetWords } from "@cawco/core/words/sheet";
-import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import type {
+  WorkspaceArchive,
+  WorkspaceRef,
+} from "@cawco/core/workspace/controls";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
@@ -469,17 +472,10 @@ const stageIn = (id: string): Stage | undefined =>
  * sends core `WorkspaceArchive`, whose `id` is required.
  */
 export const closingStages = <T>(
-  request: { id?: unknown; path?: string; skip?: string[] } | null,
-  close: (request: unknown) => Promise<T>
+  request: WorkspaceArchive,
+  close: (request: WorkspaceArchive) => Promise<T>
 ): Promise<T> => {
-  const id = request?.id;
-  if (!(typeof id === "string" && id)) {
-    return Promise.reject(
-      new Error(
-        "A workspace's archive names the workspace by its id; this request names none, so nothing was ended or deleted."
-      )
-    );
-  }
+  const { id } = request;
   if (!isStageClone(id)) {
     stopStages(id);
     return unpinFrom(id).then(() => close(request));
@@ -491,8 +487,8 @@ export const closingStages = <T>(
         `Workspace ${id} was not archived: ${stageWords(running)} runs in it (${running.status}), so nothing was deleted.`
       );
     }
-    const same = request?.path ? await sameAsCheckout(id, request.path) : [];
-    return close({ ...request, skip: [...(request?.skip ?? []), ...same] });
+    const same = request.path ? await sameAsCheckout(id, request.path) : [];
+    return close({ ...request, skip: [...(request.skip ?? []), ...same] });
   });
 };
 
@@ -2199,15 +2195,8 @@ export async function pinTreeOf(
   await cutPin(workspace, pin);
 }
 
-/** A control's pin argument (core `PreviewSource.pin`): its id, or nothing when it names none. */
-export const pinArg = (pin: unknown): string | undefined =>
-  typeof pin === "string" && pin.length > 0 ? pin : undefined;
-
 /** The version of folder `dir` an author hands up cut: pin `pin`'s copy of it (stage-clone.ts `pinFolder`). */
 export async function pinFolderOf(dir: string, pin: string): Promise<void> {
-  if (!isAbsolute(dir)) {
-    throw new StageRefusal(`${dir} is no absolute path to a folder.`);
-  }
   await pinFolder(dir, pin);
 }
 
