@@ -9,6 +9,7 @@ import { CONTROL_REFRESH_CAWCO_TOOLS } from "@cawco/core/harness";
 import type { HookEvent } from "@cawco/core/hooks";
 import { hookToolCall, hookToolInputBack } from "@cawco/core/hooks";
 import type { SpawnPayload } from "@cawco/core/protocol";
+import { conversationGone } from "@cawco/core/relaunch";
 import type {
   FleetMcpChange,
   FleetMcpTakeAnswer,
@@ -1688,10 +1689,10 @@ const sessionManagerFor = async (
     return SessionManager.create(cwd);
   }
   const source = await piSessionPath(spec.resume.sessionKey, cwd);
+  // Its session file is gone: the conversation is, as a Claude Code
+  // transcript or an OpenCode session can be (core relaunch.ts).
   if (!source) {
-    throw new Error(
-      `pi cannot ${spec.resume.fork ? "fork" : "resume"} missing session ${spec.resume.sessionKey}.`
-    );
+    throw conversationGone();
   }
   return spec.resume.fork
     ? SessionManager.forkFrom(source, cwd)

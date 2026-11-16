@@ -8,6 +8,7 @@ import { installOf } from "./credential-controls";
 import { startPiHost } from "./pi-runtime";
 import {
   backgroundShell,
+  hostFailure,
   PI_ASKS_NOTHING,
   PI_HOST_COMMAND,
   type PiHostCommand,
@@ -152,11 +153,12 @@ createInterface({ input: process.stdin })
         command.type === "control"
           ? installOf(command.method, command.args)
           : undefined;
-      const message = installing
-        ? String(error).replaceAll(installing.credential, "[credential]")
-        : String(error);
+      const failure = hostFailure(error);
       if ("id" in command) {
-        output({ type: "reply", id: command.id, error: message });
+        const said = installing
+          ? failure.error.replaceAll(installing.credential, "[credential]")
+          : failure.error;
+        output({ type: "reply", id: command.id, ...failure, error: said });
       } else if (command.type === "send") {
         state.held = state.held.filter((held) => held !== command.message.uuid);
         output({
@@ -165,7 +167,7 @@ createInterface({ input: process.stdin })
           error: String(error),
         });
       } else {
-        output({ type: "failed", error: String(error) });
+        output({ type: "failed", ...failure });
       }
     });
   })
