@@ -26,11 +26,7 @@ import {
   CONTROL_READ_CONTINUATION,
   readContinuation,
 } from "@cawco/core/continuation-read";
-import {
-  type ControlRead,
-  isControlOf,
-  readControl,
-} from "@cawco/core/control-args";
+import { isControlOf } from "@cawco/core/control-args";
 import type {
   AddressedControl,
   Control,
@@ -40,6 +36,7 @@ import type {
 } from "@cawco/core/control-table";
 import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
+import type { MachineInbound, MachineSend } from "@cawco/core/envelopes";
 import { FLEET_DELTA, FLEET_STATUS } from "@cawco/core/fleet";
 import { makeFolder } from "@cawco/core/folders";
 import type {
@@ -77,6 +74,7 @@ import {
 import { GENERATE_IMAGE } from "@cawco/core/image-generation";
 import { withWorktreeLine } from "@cawco/core/injected";
 import { inFlight } from "@cawco/core/loop-watch";
+import type { InboundRefusal } from "@cawco/core/machine-inbound";
 import { machineLabel } from "@cawco/core/machine-names";
 import { sessionScratchDir } from "@cawco/core/paths/workspace";
 import {
@@ -87,8 +85,8 @@ import {
   PreviewStartDown,
 } from "@cawco/core/preview/protocol";
 import type {
-  Envelope,
   FsPayload,
+  HeartbeatAckPayload,
   IngestMark,
   LaunchGrant,
   SendPayload,
@@ -146,13 +144,8 @@ import {
 } from "@cawco/core/sessiond";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { isDamagedRecord } from "@cawco/core/state-file";
-import type { FrameProvenance } from "@cawco/core/stream";
-import {
-  alreadyIngested,
-  readDelivered,
-  readIngested,
-  resumeCursor,
-} from "@cawco/core/stream";
+import type { FrameProvenance, RegisterAckPayload } from "@cawco/core/stream";
+import { alreadyIngested, resumeCursor } from "@cawco/core/stream";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import {
   CONTROL_BEGIN_TOOL_SIGNIN,
@@ -1250,7 +1243,7 @@ export class SessionSupervisor {
     return this.#sinkTo(frame);
   };
   /** Puts an arbitrary envelope on the daemon's hub socket (hand-offs). */
-  emit = (envelope: Envelope): void => this.#ports.emit(envelope);
+  emit = (envelope: MachineSend): void => this.#ports.emit(envelope);
   /**
    * Asks the hub what a launch starting now runs on ({@link LaunchGrant}),
    * through whichever connection is up; the daemon's to fill in. Settles,
@@ -1300,12 +1293,9 @@ export class SessionSupervisor {
    * while no hub listened was dropped, and a hub that started since would
    * draw a running reply from its middle.
    */
-  linkUp(ack: unknown): void {
+  linkUp(ack: RegisterAckPayload): void {
     this.#outbox.linkUp(
-      {
-        delivered: readDelivered(ack),
-        hubEpoch: (ack as { hubEpoch?: string } | undefined)?.hubEpoch,
-      },
+      { delivered: ack.delivered ?? {}, hubEpoch: ack.hubEpoch },
       () => {
         for (const frame of this.#streams.frames()) {
           this.sink({ kind: "frame", ...frame });
@@ -1320,8 +1310,8 @@ export class SessionSupervisor {
   }
 
   /** A heartbeat's ack: what the hub took of each session, which the outbox lets go. */
-  acknowledged(ack: unknown): void {
-    this.#outbox.acknowledged(readDelivered(ack));
+  acknowledged(ack: HeartbeatAckPayload): void {
+    this.#outbox.acknowledged(ack.delivered);
   }
 
   /** Re-sinks every unresolved ask, and every ask's end the hub missed — called by the daemon after register. */
@@ -1338,19 +1328,10 @@ export class SessionSupervisor {
 
   /** Settles once the envelope has been handled, success or failure alike. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: address ACK bypasses the queue waiting on that same ACK
-  dispatch(envelope: Envelope): Promise<void> {
-    // A control is read once, here, where it reaches the machine: its name
-    // the table's, its arguments its own (core control-args.ts). One that is
-    // neither is refused before anything runs or waits.
-    let control: AddressedControl | undefined;
-    if (envelope.verb === "control") {
-      const read = readControl(envelope.payload);
-      if (!read.ok) {
-        this.#refused(read);
-        return Promise.resolve();
-      }
-      ({ control } = read);
-    }
+  dispatch(envelope: MachineInbound): Promise<void> {
+    // A control was read once, where it reached the machine (core
+    // machine-inbound.ts): its name the table's, its arguments its own.
+    const control = envelope.verb === "control" ? envelope.payload : undefined;
     if (control?.method === CONTROL_ACKNOWLEDGE_ADDRESS) {
       const id = envelope.instanceId ?? control.instanceId ?? "";
       const pending = this.#addressWaiting.get(id);
@@ -1379,14 +1360,13 @@ export class SessionSupervisor {
     }
     // A request the hub sent again, under the id it went under before
     // (request-record.ts): never run twice.
-    const requestId = (envelope.payload as { requestId?: unknown } | undefined)
-      ?.requestId;
-    if (
-      typeof requestId === "string" &&
-      (envelope.verb === "control" ||
-        envelope.verb === "spawn" ||
-        envelope.verb === "fs")
-    ) {
+    const requestId =
+      envelope.verb === "control" ||
+      envelope.verb === "spawn" ||
+      envelope.verb === "fs"
+        ? envelope.payload.requestId
+        : undefined;
+    if (requestId !== undefined) {
       const seen = arrive(requestId);
       if (seen !== "run") {
         if (seen !== "running") {
@@ -1432,8 +1412,7 @@ export class SessionSupervisor {
     // A stop for a session being attached does not wait on its child's
     // answer: the attach lets go, and the stop behind it ends the child.
     if (envelope.verb === "stop") {
-      const stopping =
-        envelope.instanceId ?? (envelope.payload as StopPayload).instanceId;
+      const stopping = envelope.instanceId ?? envelope.payload.instanceId;
       this.#attaching
         .get(stopping)
         ?.abort(new Error("The session was stopped before it was attached."));
@@ -1460,7 +1439,7 @@ export class SessionSupervisor {
       key === envelope.instanceId &&
       this.#relaunchWaits.has(key)
     ) {
-      return this.#route(envelope, control).catch((error: unknown) => {
+      return this.#route(envelope).catch((error: unknown) => {
         warn(`${envelope.verb} failed: ${error}`);
       });
     }
@@ -1480,10 +1459,8 @@ export class SessionSupervisor {
       return inFlight(
         transcript ? "transcript reads" : `${control.method} reads`,
         transcript
-          ? behind.then(() =>
-              this.#transcriptRead(() => this.#route(envelope, control))
-            )
-          : behind.then(() => this.#route(envelope, control))
+          ? behind.then(() => this.#transcriptRead(() => this.#route(envelope)))
+          : behind.then(() => this.#route(envelope))
       );
     }
     // A command behind another in its folder says so as it queues (folderTurn).
@@ -1493,14 +1470,12 @@ export class SessionSupervisor {
         : undefined;
     const routed = (this.#queues.get(key) ?? Promise.resolve()).then(() => {
       folder?.start();
-      return this.#route(envelope, control);
+      return this.#route(envelope);
     });
     const queue = (
       envelope.verb === "spawn"
         ? inFlight(
-            (envelope.payload as SpawnPayload).reattachOnly
-              ? "reattaches"
-              : "starts",
+            envelope.payload.reattachOnly ? "reattaches" : "starts",
             routed
           )
         : routed
@@ -1516,7 +1491,7 @@ export class SessionSupervisor {
         if (envelope.instanceId && envelope.verb === "send") {
           this.#reject(
             envelope.instanceId,
-            (envelope.payload as SendPayload).message.uuid,
+            envelope.payload.message.uuid,
             error
           );
         } else if (envelope.instanceId && envelope.verb === "stop") {
@@ -1810,12 +1785,8 @@ export class SessionSupervisor {
   #keptAwake: ReadonlySet<string> | undefined;
 
   /** The hub's heartbeat ack: the whole list, replacing the last. */
-  keepAwake(ids: unknown): void {
-    if (Array.isArray(ids)) {
-      this.#keptAwake = new Set(
-        ids.filter((id): id is string => typeof id === "string")
-      );
-    }
+  keepAwake(ids: readonly string[]): void {
+    this.#keptAwake = new Set(ids);
   }
 
   /**
@@ -2278,42 +2249,55 @@ export class SessionSupervisor {
     return this.#controls[method]?.lane?.({ args, requestId });
   }
 
-  /** A control refused as it arrived ({@link readControl}): its caller answered why, when it named its request. */
-  #refused(read: Extract<ControlRead, { ok: false }>): void {
-    const { error, instanceId, requestId } = read;
-    if (requestId === undefined) {
-      warn(error);
+  /**
+   * A message the hub sent this machine, refused as it arrived (core
+   * machine-inbound.ts `readMachineInbound`): a control that named its
+   * request is answered with its refusal under it; a start, a send, a stop
+   * or a file request with an error frame naming its verb, as one that
+   * failed is; anything else is said in the log alone. Nothing of it ran.
+   */
+  refuse(read: InboundRefusal): void {
+    const { error, instanceId, requestId, verb } = read;
+    if (verb === "control" && requestId !== undefined) {
+      this.sink({
+        kind: "control_result",
+        instanceId,
+        requestId,
+        ok: false,
+        error,
+        refusal: { kind: "unknown", message: error },
+      });
       return;
     }
-    this.sink({
-      kind: "control_result",
-      instanceId,
-      requestId,
-      ok: false,
-      error,
-      refusal: { kind: "unknown", message: error },
-    });
+    warn(error);
+    if (
+      verb === "spawn" ||
+      verb === "send" ||
+      verb === "stop" ||
+      verb === "fs"
+    ) {
+      this.sink({ kind: "error", instanceId, requestId, verb, message: error });
+    }
   }
 
-  /** `envelope` run as its verb says; a control's, `control`, as it was read where it arrived ({@link dispatch}). */
-  #route(envelope: Envelope, control?: AddressedControl): Promise<void> {
+  /** `envelope` run as its verb says ({@link dispatch}). */
+  #route(envelope: MachineInbound): Promise<void> {
     switch (envelope.verb) {
       case "spawn":
-        return this.#spawn(envelope.payload as SpawnPayload);
+        return this.#spawn(envelope.payload);
       case "send":
-        return this.#send(envelope.payload as SendPayload);
+        return this.#send(envelope.payload);
       case "stop":
-        return this.#stop(envelope.payload as StopPayload);
+        return this.#stop(envelope.payload);
       case "control":
-        return control ? this.#control(control) : Promise.resolve();
+        return this.#control(envelope.payload);
       case "fs":
-        return this.#fs(envelope.payload as FsPayload);
+        return this.#fs(envelope.payload);
       case "admission":
       case "frames":
       case "heartbeat":
       case "launch":
       case "register":
-      case "usage":
         break;
     }
     return Promise.resolve();
@@ -3765,7 +3749,7 @@ export class SessionSupervisor {
    */
   takeHeld(
     kind: KeeperHarnessKind,
-    ackPayload: unknown,
+    ack: RegisterAckPayload,
     spec: SpawnPayload,
     proc: Claimed["proc"]
   ): "attached" | "held" {
@@ -3783,7 +3767,7 @@ export class SessionSupervisor {
       this.#adopting.has(spec.instanceId) ||
       this.#attaching.has(spec.instanceId)
     )) {
-      this.#holdChild(adoption, spec, proc, readIngested(ackPayload));
+      this.#holdChild(adoption, spec, proc, ack.ingested);
     }
     return "held";
   }
@@ -3938,17 +3922,10 @@ export class SessionSupervisor {
    * ({@link sessionsOwedEnding}) ended. Of a session whose ending an earlier
    * agent wrote down and did not finish, as its stop would have; of one the
    * hub no longer has on this machine (`instances`), only said in the log,
-   * as nobody is there to tell. A welcome naming no list is a wire error:
-   * nothing is ended.
+   * as nobody is there to tell.
    */
-  sweepContainers(welcome: unknown): void {
-    const named = (welcome as { instances?: unknown } | undefined)?.instances;
-    if (!(
-      Array.isArray(named) && named.every((id) => typeof id === "string")
-    )) {
-      return;
-    }
-    sessionsOwedEnding(named)
+  sweepContainers(welcome: RegisterAckPayload): void {
+    sessionsOwedEnding(welcome.instances)
       .then(async ({ gone, unfinished }) => {
         for (const instanceId of unfinished) {
           this.#endContainers(

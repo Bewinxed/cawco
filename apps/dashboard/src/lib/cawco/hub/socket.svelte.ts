@@ -10,9 +10,10 @@
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { GATED_PAGE_MARK, GATED_PAGE_PARAM } from "@cawco/core/browser-gate";
 import { detach } from "@cawco/core/detach";
+import type { ClientEnvelope } from "@cawco/core/envelopes";
 import type { HarnessFailed, HarnessUnanswered } from "@cawco/core/frames";
 import { isRecord } from "@cawco/core/is-record";
-import type { Envelope, NamedSpawn } from "@cawco/core/protocol";
+import type { NamedSpawn } from "@cawco/core/protocol";
 import type { ModeAsk } from "@cawco/core/session-messages";
 import {
   HEARTBEAT_DEADLINE_MS,
@@ -334,7 +335,7 @@ export function takeHubRestart(frame: FrameOf<"hub.restart">): void {
     : null;
 }
 
-export function send(envelope: Envelope): void {
+export function send(envelope: ClientEnvelope): void {
   const { socket } = hubHeld;
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     throw new Error(

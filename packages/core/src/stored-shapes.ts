@@ -2577,6 +2577,48 @@ const HarnessReportShape = declared(
 export const HarnessReportSchema = HarnessReportShape;
 export type HarnessReportOutput = z.output<typeof HarnessReportShape>;
 
+const DeliveryMarkShape = declared(
+  z.object({ epoch: z.string(), seq: z.number() }),
+  "DeliveryMark",
+  "packages/core/src/protocol.ts"
+);
+export type DeliveryMarkOutput = z.output<typeof DeliveryMarkShape>;
+
+const SessionLimitsShape = declared(
+  z.object({
+    cpuPercent: z.number().optional(),
+    memoryPercent: z.number().optional(),
+  }),
+  "SessionLimits",
+  "packages/core/src/protocol.ts"
+);
+export type SessionLimitsOutput = z.output<typeof SessionLimitsShape>;
+
+const TailnetServingShape = declared(
+  z.object({ ips: z.array(z.string()), name: z.string() }),
+  "TailnetServing",
+  "packages/core/src/tailnet-https.ts"
+);
+export type TailnetServingOutput = z.output<typeof TailnetServingShape>;
+
+const HeartbeatAckPayloadShape = declared(
+  z.object({
+    delivered: z.record(z.string(), DeliveryMarkShape),
+    keepAwake: z.array(z.string()),
+    liveWorkspaces: z.array(z.string()),
+    ok: z.literal(true),
+    reportActivity: z.boolean().optional(),
+    sessionLimits: SessionLimitsShape.optional(),
+    tailnetHttps: TailnetServingShape.optional(),
+  }),
+  "HeartbeatAckPayload",
+  "packages/core/src/protocol.ts"
+);
+export const HeartbeatAckPayloadSchema = HeartbeatAckPayloadShape;
+export type HeartbeatAckPayloadOutput = z.output<
+  typeof HeartbeatAckPayloadShape
+>;
+
 const HomeStoreShape = declared(
   HarnessKindShape,
   "HomeStore",
@@ -2956,6 +2998,128 @@ const LastErrorKindShape = declared(
 export const LastErrorKindSchema: z.ZodType<LastErrorKindType> =
   LastErrorKindShape;
 export type LastErrorKindOutput = z.output<typeof LastErrorKindShape>;
+
+const IngestMarkShape = declared(
+  z.object({ epoch: z.string(), srcSeq: z.number() }),
+  "IngestMark",
+  "packages/core/src/protocol.ts"
+);
+export type IngestMarkOutput = z.output<typeof IngestMarkShape>;
+
+const SessionInstructionShape = declared(
+  z.object({ content: z.string(), path: z.string() }),
+  "SessionInstruction",
+  "packages/core/src/fleet.ts"
+);
+export type SessionInstructionOutput = z.output<typeof SessionInstructionShape>;
+
+const SessionRoleShape = declared(
+  z.enum(SESSION_ROLES),
+  "SessionRole",
+  "packages/core/src/delegate-types.ts"
+);
+export type SessionRoleOutput = z.output<typeof SessionRoleShape>;
+
+const ScratchWorktreeShape = declared(
+  z.object({ dir: z.string(), path: z.string(), root: z.string() }),
+  "ScratchWorktree",
+  "packages/core/src/protocol.ts"
+);
+export const ScratchWorktreeSchema = ScratchWorktreeShape;
+export type ScratchWorktreeOutput = z.output<typeof ScratchWorktreeShape>;
+
+const StartingSetShape = declared(
+  z.object({ servers: z.array(z.string()), skills: z.array(z.string()) }),
+  "StartingSet",
+  "packages/core/src/delegate-types.ts"
+);
+export type StartingSetOutput = z.output<typeof StartingSetShape>;
+
+const WorkspaceRefShape = declared(
+  z.object({ id: z.string(), path: z.string() }),
+  "WorkspaceRef",
+  "packages/core/src/workspace/controls.ts"
+);
+export const WorkspaceRefSchema = WorkspaceRefShape;
+export type WorkspaceRefOutput = z.output<typeof WorkspaceRefShape>;
+
+const SpawnPayloadShape = declared(
+  z.object({
+    account: z.string().optional(),
+    accountDir: z.object({ accountId: z.string() }).optional(),
+    bootstrap: z.object({ repo: z.string(), baseDir: z.string() }).optional(),
+    clean: z.literal(true).optional(),
+    cwd: z.string(),
+    delegateType: z
+      .object({ name: z.string(), projectId: z.string().optional() })
+      .optional(),
+    denyTools: z.array(z.string()).optional(),
+    effort: EffortLevelShape.optional(),
+    fence: z.literal(true).optional(),
+    harness: HarnessKindShape.optional(),
+    homeLoginMove: z.object({ accountId: z.string() }).optional(),
+    hostScratch: z.string().optional(),
+    ingested: IngestMarkShape.optional(),
+    instanceId: z.string(),
+    instructions: z.array(SessionInstructionShape).optional(),
+    keepAliveTurn: z.string().optional(),
+    mayStart: MayStartShape.optional(),
+    model: z.string().optional(),
+    options: z.unknown().optional(),
+    parent: z
+      .object({ instanceId: z.string(), toolUseId: z.string().optional() })
+      .optional(),
+    permissionMode: PermissionModeShape.optional(),
+    persistSession: z.boolean().optional(),
+    processGeneration: z.string().optional(),
+    projectId: z.string().optional(),
+    reattachOnly: z
+      .union([z.boolean(), z.literal("busy"), z.literal("inspect")])
+      .optional(),
+    relaunch: z.literal(true).optional(),
+    requestId: z.string().optional(),
+    resume: z
+      .object({
+        sessionKey: z.string(),
+        fork: z.boolean().optional(),
+        atMessage: z.string().optional(),
+      })
+      .optional(),
+    role: SessionRoleShape.optional(),
+    schedulesToParent: z.literal(true).optional(),
+    scratch: z
+      .object({
+        worktree: z.boolean().optional(),
+        baseCwd: z.string().optional(),
+      })
+      .optional(),
+    scratchWorktree: ScratchWorktreeShape.optional(),
+    skills: z.array(z.string()).optional(),
+    spawnedBy: z.object({ instanceId: z.string() }).optional(),
+    startingSet: StartingSetShape.optional(),
+    title: z.string().optional(),
+    workspace: WorkspaceRefShape.optional(),
+  }),
+  "SpawnPayload",
+  "packages/core/src/protocol.ts"
+);
+export const SpawnPayloadSchema = SpawnPayloadShape;
+export type SpawnPayloadOutput = z.output<typeof SpawnPayloadShape>;
+
+const LaunchGrantShape = declared(
+  z.union([
+    z.object({ refusal: z.string() }),
+    SpawnPayloadShape.pick({
+      accountDir: true,
+      homeLoginMove: true,
+      instructions: true,
+    }).extend({ sessionCredential: z.string() }),
+  ]),
+  "LaunchGrant",
+  "packages/core/src/protocol.ts"
+);
+export const LaunchGrantSchema = LaunchGrantShape;
+export type LaunchGrantOutput = z.output<typeof LaunchGrantShape>;
 
 const LinkModeShape = declared(
   z.enum(["record", "closes", "refs", "related"]),
@@ -3966,6 +4130,57 @@ export const RefusalReachSchema: z.ZodType<RefusalReachType> =
   RefusalReachShape;
 export type RefusalReachOutput = z.output<typeof RefusalReachShape>;
 
+const HubPreviewOriginsShape = declared(
+  z.object({
+    domain: z.object({ name: z.string(), port: z.number() }).nullable(),
+    names: z.array(z.string()),
+    ports: z.object({ first: z.number(), last: z.number() }),
+  }),
+  "HubPreviewOrigins",
+  "packages/core/src/preview/hub-previews.ts"
+);
+export type HubPreviewOriginsOutput = z.output<typeof HubPreviewOriginsShape>;
+
+const CarrySessionRequestShape = declared(
+  z.object({
+    accountId: z.string().nullable(),
+    endLater: z.literal(true).optional(),
+    instanceId: z.string(),
+    sessionId: z.string(),
+    stop: z.boolean().optional(),
+  }),
+  "CarrySessionRequest",
+  "packages/core/src/session/controls.ts"
+);
+export type CarrySessionRequestOutput = z.output<
+  typeof CarrySessionRequestShape
+>;
+
+const RegisterAckPayloadShape = declared(
+  z.object({
+    dashboardPorts: z.object({ hub: z.number(), local: z.number() }),
+    delivered: z.record(z.string(), DeliveryMarkShape).optional(),
+    gitOrigins: z.array(z.string()),
+    hostsHub: z.boolean(),
+    hubEpoch: z.string(),
+    ingested: z.record(z.string(), IngestMarkShape),
+    instances: z.array(z.string()),
+    machineCredential: z.string(),
+    ok: z.literal(true),
+    previewOrigins: HubPreviewOriginsShape.optional(),
+    previewPorts: z.object({ first: z.number(), last: z.number() }),
+    revokedCredentials: z.array(z.string()).optional(),
+    sessionLimits: SessionLimitsShape.optional(),
+    sessions: z.array(CarrySessionRequestShape).optional(),
+    tailnetHttps: TailnetServingShape.optional(),
+    unknownAccounts: z.array(z.string()).optional(),
+  }),
+  "RegisterAckPayload",
+  "packages/core/src/stream.ts"
+);
+export const RegisterAckPayloadSchema = RegisterAckPayloadShape;
+export type RegisterAckPayloadOutput = z.output<typeof RegisterAckPayloadShape>;
+
 const RelayCertifiedShape = declared(
   z.object({ expiresAt: z.number() }),
   "RelayCertified",
@@ -4354,14 +4569,6 @@ const RuleWatchShape = declared(
 );
 export const RuleWatchSchema: z.ZodType<RuleWatchType> = RuleWatchShape;
 export type RuleWatchOutput = z.output<typeof RuleWatchShape>;
-
-const ScratchWorktreeShape = declared(
-  z.object({ dir: z.string(), path: z.string(), root: z.string() }),
-  "ScratchWorktree",
-  "packages/core/src/protocol.ts"
-);
-export const ScratchWorktreeSchema = ScratchWorktreeShape;
-export type ScratchWorktreeOutput = z.output<typeof ScratchWorktreeShape>;
 
 const SendModeShape = declared(
   z.enum(["turn", "note"]),
@@ -4763,105 +4970,6 @@ const SheetWrittenShape = declared(
 export const SheetWrittenSchema = SheetWrittenShape;
 export type SheetWrittenOutput = z.output<typeof SheetWrittenShape>;
 
-const IngestMarkShape = declared(
-  z.object({ epoch: z.string(), srcSeq: z.number() }),
-  "IngestMark",
-  "packages/core/src/protocol.ts"
-);
-export type IngestMarkOutput = z.output<typeof IngestMarkShape>;
-
-const SessionInstructionShape = declared(
-  z.object({ content: z.string(), path: z.string() }),
-  "SessionInstruction",
-  "packages/core/src/fleet.ts"
-);
-export type SessionInstructionOutput = z.output<typeof SessionInstructionShape>;
-
-const SessionRoleShape = declared(
-  z.enum(SESSION_ROLES),
-  "SessionRole",
-  "packages/core/src/delegate-types.ts"
-);
-export type SessionRoleOutput = z.output<typeof SessionRoleShape>;
-
-const StartingSetShape = declared(
-  z.object({ servers: z.array(z.string()), skills: z.array(z.string()) }),
-  "StartingSet",
-  "packages/core/src/delegate-types.ts"
-);
-export type StartingSetOutput = z.output<typeof StartingSetShape>;
-
-const WorkspaceRefShape = declared(
-  z.object({ id: z.string(), path: z.string() }),
-  "WorkspaceRef",
-  "packages/core/src/workspace/controls.ts"
-);
-export const WorkspaceRefSchema = WorkspaceRefShape;
-export type WorkspaceRefOutput = z.output<typeof WorkspaceRefShape>;
-
-const SpawnPayloadShape = declared(
-  z.object({
-    account: z.string().optional(),
-    accountDir: z.object({ accountId: z.string() }).optional(),
-    bootstrap: z.object({ repo: z.string(), baseDir: z.string() }).optional(),
-    clean: z.literal(true).optional(),
-    cwd: z.string(),
-    delegateType: z
-      .object({ name: z.string(), projectId: z.string().optional() })
-      .optional(),
-    denyTools: z.array(z.string()).optional(),
-    effort: EffortLevelShape.optional(),
-    fence: z.literal(true).optional(),
-    harness: HarnessKindShape.optional(),
-    homeLoginMove: z.object({ accountId: z.string() }).optional(),
-    hostScratch: z.string().optional(),
-    ingested: IngestMarkShape.optional(),
-    instanceId: z.string(),
-    instructions: z.array(SessionInstructionShape).optional(),
-    keepAliveTurn: z.string().optional(),
-    mayStart: MayStartShape.optional(),
-    model: z.string().optional(),
-    options: z.unknown().optional(),
-    parent: z
-      .object({ instanceId: z.string(), toolUseId: z.string().optional() })
-      .optional(),
-    permissionMode: PermissionModeShape.optional(),
-    persistSession: z.boolean().optional(),
-    processGeneration: z.string().optional(),
-    projectId: z.string().optional(),
-    reattachOnly: z
-      .union([z.boolean(), z.literal("busy"), z.literal("inspect")])
-      .optional(),
-    relaunch: z.literal(true).optional(),
-    requestId: z.string().optional(),
-    resume: z
-      .object({
-        sessionKey: z.string(),
-        fork: z.boolean().optional(),
-        atMessage: z.string().optional(),
-      })
-      .optional(),
-    role: SessionRoleShape.optional(),
-    schedulesToParent: z.literal(true).optional(),
-    scratch: z
-      .object({
-        worktree: z.boolean().optional(),
-        baseCwd: z.string().optional(),
-      })
-      .optional(),
-    scratchWorktree: ScratchWorktreeShape.optional(),
-    skills: z.array(z.string()).optional(),
-    spawnedBy: z.object({ instanceId: z.string() }).optional(),
-    startingSet: StartingSetShape.optional(),
-    title: z.string().optional(),
-    workspace: WorkspaceRefShape.optional(),
-  }),
-  "SpawnPayload",
-  "packages/core/src/protocol.ts"
-);
-export const SpawnPayloadSchema = SpawnPayloadShape;
-export type SpawnPayloadOutput = z.output<typeof SpawnPayloadShape>;
-
 const StageStatusShape = declared(
   z.enum(["starting", "waking", "live", "error", "asleep"]),
   "StageStatus",
@@ -4997,6 +5105,7 @@ const StopPayloadShape = declared(
   "StopPayload",
   "packages/core/src/protocol.ts"
 );
+export const StopPayloadSchema = StopPayloadShape;
 export type StopPayloadOutput = z.output<typeof StopPayloadShape>;
 
 const StopRequestShape = declared(

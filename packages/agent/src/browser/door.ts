@@ -34,6 +34,7 @@ import {
   workspacesDir,
 } from "@cawco/core/paths/workspace";
 import { writeStateFile } from "@cawco/core/state-file";
+import type { RegisterAckPayload } from "@cawco/core/stream";
 import { setProject } from "../boundary/looks";
 import { type BrowserPorts, reserveBrowser } from "./browsers";
 import {
@@ -156,20 +157,10 @@ export const forgetBrowserDoor = async (
  * sent (a fold, a session its machine reported gone). Each by
  * {@link forgetBrowserDoor}, which leaves a workspace's folder alone. A door
  * made since the welcome came is a session the welcome could not name yet,
- * and stays. A welcome naming no list is a wire error: nothing is swept.
+ * and stays.
  */
-export const sweepBrowserDoors = (welcome: unknown): void => {
-  const named =
-    typeof welcome === "object" && welcome !== null && "instances" in welcome
-      ? welcome.instances
-      : undefined;
-  if (!(Array.isArray(named) && named.every((id) => typeof id === "string"))) {
-    console.warn(
-      "[browser] the hub's welcome names no instances, a wire error: it is refused, and no browser door is swept"
-    );
-    return;
-  }
-  sweepDoors(new Set<string>(named), Date.now()).catch((error: unknown) =>
+export const sweepBrowserDoors = (welcome: RegisterAckPayload): void => {
+  sweepDoors(new Set(welcome.instances), Date.now()).catch((error: unknown) =>
     console.warn(
       `[browser] the welcome's door sweep failed: ${error instanceof Error ? error.message : String(error)}`
     )

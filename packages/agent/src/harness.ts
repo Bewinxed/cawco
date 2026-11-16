@@ -20,6 +20,7 @@ import type { TextAttachment } from "@cawco/core/attachments";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import type { CutCommand } from "@cawco/core/commands/controls";
 import type { Control } from "@cawco/core/control-table";
+import type { MachineSend } from "@cawco/core/envelopes";
 import type { FleetSyncReport, PlacedFleetConfig } from "@cawco/core/fleet";
 import type { FramePayload } from "@cawco/core/frames";
 import type {
@@ -30,7 +31,7 @@ import type {
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { KeeperHarnessKind } from "@cawco/core/harness/traits";
-import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
+import type { SendPayload, SpawnPayload } from "@cawco/core/protocol";
 import type {
   CarrySessionOutcome,
   CarrySessionRequest,
@@ -120,7 +121,7 @@ export interface HarnessContext {
    */
   died?: (signal: string, error: unknown, cut?: CutCommand[]) => void;
   /** Put an envelope the harness built itself on the daemon's hub socket. */
-  emit: (envelope: Envelope) => void;
+  emit: (envelope: MachineSend) => void;
   /** The session itself died of something the reader should see. */
   failed: (error: unknown) => void;
   /** Ship one neutral frame toward the hub. */
