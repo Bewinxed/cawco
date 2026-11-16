@@ -14,7 +14,7 @@ import { stateOf, stillThere } from "./facts";
 import { unheardKeys } from "./needs";
 import { answersKept } from "./overwrite";
 import type { createPageStore } from "./page-store";
-import { pinnedAt, servedOf, servedPin, sheetOf } from "./served";
+import { pinnedAt, servedOf, sheetOf } from "./served";
 import type { Making, WarmPreviews } from "./shapes";
 
 /** What createVersions reads of the artifact service: its deps, and the service's parts it calls, each read when called. */
@@ -31,6 +31,11 @@ export interface VersionsContext {
     name: string
   ) => ArtifactRow | undefined;
   programOf: (row: ArtifactRow) => string | undefined;
+  /** A workspace preview's server started or woken on the machine that serves `source`, in its pin when it names one (kinds/preview.ts `serveFirst`); nothing for any other source. */
+  serveFirst: (
+    source: PreviewSource,
+    machineId: string | null
+  ) => ReturnType<ArtifactServiceDeps["serve"]> | Promise<undefined>;
   show: (
     row: ArtifactRow,
     panel?: string | null,
@@ -105,9 +110,9 @@ export const createVersions = (ctx: VersionsContext) => {
    * {@link holdsChange}: its next version, a hidden row of its own (`heldFor`)
    * made from it whole (its doc forked, its files copied), which no list
    * holds and nothing shows, so what the panel shows stays. What a machine
-   * serves of it is its own pin, named by its own id (core
-   * `PreviewSource.pin`), cut by the change it holds, or from its source at
-   * the first request that meets none: never the pin the panel is served. One already held
+   * serves of it is the pin the panel is served (core `PreviewSource.pin`,
+   * which never changes after its cut) until the change it holds cuts its
+   * own. One already held
    * takes every change after. `fresh` when this call made it; null when the
    * change is not held.
    */
@@ -123,14 +128,9 @@ export const createVersions = (ctx: VersionsContext) => {
       return { fresh: false, next: holding };
     }
     const now = new Date();
-    const id = crypto.randomUUID();
     const next = db.create({
       ...row,
-      id,
-      source:
-        servedPin(row.source) === undefined
-          ? row.source
-          : pinnedAt(row.source, id),
+      id: crypto.randomUUID(),
       heldFor: row.id,
       madeBy: maker.id,
       seq: 0,
@@ -153,7 +153,7 @@ export const createVersions = (ctx: VersionsContext) => {
     });
     return { fresh: true, next };
   };
-  /** Pin `pin` of `source` cut on machine `machineId` ({@link cutVersion}): the refusal, or `unpinned` for a source nothing pins. */
+  /** Pin `pin` of `source` cut on machine `machineId` ({@link pinnedSource}): the refusal, or `unpinned` for a source nothing pins. */
   const cutOn = (machineId: string, source: PreviewSource, pin: string) => {
     if ("dir" in source) {
       return deps.pinFolder(machineId, source.dir, pin);
@@ -165,31 +165,63 @@ export const createVersions = (ctx: VersionsContext) => {
       : Promise.resolve("unpinned" as const);
   };
   /**
-   * The version of `row` its author hands up, cut (core
-   * `PreviewSource.pin`): for a sheet or a workspace preview, its pin's
-   * clone of the workspace or place it was made in, cut or brought in step
-   * with it once; for a folder, its pin's copy made again. Its pin is the
-   * one its source names, else one of its own id, which its source then
-   * names. A page or a host's port pins nothing. The refusal when its
-   * machine could not cut it.
+   * The version of `source` its author hands up (core `PreviewSource.pin`),
+   * cut on its machine as a pin of its own beside the one the person is
+   * served: a sheet's or a workspace preview's tree as it is now, a
+   * folder's copy; a served preview's server started there. The source on
+   * that pin, and the server's state; a page or a host's port as it is.
+   * Refused, nothing of the pin left, when its machine could not cut it or
+   * its server did not start: the person's pin is never touched, and he is
+   * moved onto the new one only by its row's write (db `resource`), which
+   * lets the old one go once nothing names it (`letGoMoved`).
    */
-  const cutVersion = async (row: ArtifactRow) => {
-    const { machineId, source } = row;
-    const pin = servedPin(source) ?? row.id;
+  const pinnedSource = async (
+    machineId: string | null,
+    source: PreviewSource
+  ) => {
+    const unpinned: { source: PreviewSource; stage: undefined } = {
+      source,
+      stage: undefined,
+    };
     if (!machineId) {
-      return row;
+      return unpinned;
     }
+    const pin = crypto.randomUUID();
     const refused = await cutOn(machineId, source, pin);
     if (refused === "unpinned") {
-      return row;
+      return unpinned;
     }
     if (refused) {
+      deps.unpin(machineId, pin);
       return refused;
     }
-    if (servedPin(source) === pin) {
+    const pinned = pinnedAt(source, pin);
+    const stage = await ctx.serveFirst(pinned, machineId);
+    if (stage instanceof ElysiaStatus) {
+      deps.unpin(machineId, pin);
+      return stage;
+    }
+    const cut: { source: PreviewSource; stage: StageState | undefined } = {
+      source: pinned,
+      stage,
+    };
+    return cut;
+  };
+  /**
+   * The version of `row` its author hands up again (its artifact_update, its
+   * own artifact_show), cut ({@link pinnedSource}) and served to the person
+   * from now on; the row as it stood, and the person's pin with it, when it
+   * is refused.
+   */
+  const cutVersion = async (row: ArtifactRow) => {
+    const cut = await pinnedSource(row.machineId, row.source);
+    if (cut instanceof ElysiaStatus) {
+      return cut;
+    }
+    if (cut.source === row.source) {
       return row;
     }
-    db.resource(row.id, { machineId, source: pinnedAt(source, pin) });
+    db.resource(row.id, { machineId: row.machineId, source: cut.source });
     return stillThere(db.get(row.id), row.id);
   };
   /**
@@ -464,6 +496,7 @@ export const createVersions = (ctx: VersionsContext) => {
   return {
     changedBy,
     cutVersion,
+    pinnedSource,
     handOver,
     handing,
     heldAnswer,

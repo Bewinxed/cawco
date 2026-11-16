@@ -254,7 +254,7 @@ const stageWords = (
     : []),
   ...(read.unreached
     ? [
-        `Its stage could not be reached (${read.unreached.down}) since ${ago(read.unreached.since)}: ${read.unreached.why}`,
+        `Its stage could not be reached (${read.unreached.down}): ${read.unreached.why}`,
       ]
     : []),
 ];

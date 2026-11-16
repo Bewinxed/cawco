@@ -61,7 +61,6 @@ export interface KindContext {
     cards: readonly DecisionCard[]
   ) => Record<string, string>;
   choicesAsked: (row: ArtifactRow) => { card?: DecisionCard; id: string }[];
-  cutVersion: ReturnType<typeof createVersions>["cutVersion"];
   db: ArtifactServiceDeps["db"];
   deps: ArtifactServiceDeps;
   discard: (row: ArtifactRow) => void;
@@ -104,6 +103,7 @@ export interface KindContext {
     present: Set<string>
   ) => string[];
   pictureOf: (id: string) => string | null;
+  pinnedSource: ReturnType<typeof createVersions>["pinnedSource"];
   read: (
     row: ArtifactRow,
     since?: number,

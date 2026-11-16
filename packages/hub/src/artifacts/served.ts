@@ -40,15 +40,6 @@ export const servedOf = (
 export const servedPin = (source: PreviewSource): string | undefined =>
   "page" in source ? undefined : source.pin;
 
-/** `source` served from the pin `standing` is served from, when it is: a source made again where it stands keeps its pin, cut again from it (versions.ts `cutVersion`). */
-export const onPinOf = (
-  source: PreviewSource,
-  standing: { source: PreviewSource }
-): PreviewSource => {
-  const pin = servedPin(standing.source);
-  return pin === undefined ? source : pinnedAt(source, pin);
-};
-
 /**
  * `source` served from pin `pin`, a source a machine pins (a sheet, a
  * workspace preview, a folder); as it is for any other (a page, a host's

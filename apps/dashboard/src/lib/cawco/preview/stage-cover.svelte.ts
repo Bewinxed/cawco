@@ -46,7 +46,7 @@ export class StageCover {
   readonly #deps: StageCoverDeps;
 
   readonly downTitle = $derived.by(() => {
-    switch (this.shownDown) {
+    switch (this.#deps.previewFrame.down) {
       case "server":
         return "The page's server stopped answering";
       case "workspace":
@@ -83,38 +83,10 @@ export class StageCover {
    * the stage. The doc's word is the agent's last frame, which can trail the
    * stage (a frame missed, a version opened over another's); a page that
    * answered is the stage serving. One that answered and then went silent is
-   * the proxy's `down` and the doc's `docDown`, never a wait again.
+   * the proxy's `down`, never a wait again.
    */
   readonly awaited = $derived.by(() =>
     this.#deps.previewFrame.connected ? null : this.staged
-  );
-
-  /**
-   * The hub's last read couldn't reach the stage (the doc's `meta.unreached`,
-   * which the agent's read says too): said as the proxy's own down is, with
-   * its why and since when, once this pane's own load has had its say and
-   * the page did not answer (`silentKey`, PAGE_SILENT_MS after it loaded).
-   * While a load is on its way, an earlier read is no word on it: the cover
-   * stands, and a page its stage answers through the hub's relay clears the
-   * doc's word (hub artifacts `stageAnswered`).
-   */
-  readonly docDown = $derived.by(() =>
-    this.staged &&
-    !this.#deps.previewFrame.connected &&
-    this.#deps.previewFrame.silentKey === this.#deps.previewFrame.frameKey &&
-    this.#deps.paneDoc.view?.unreached
-      ? this.#deps.paneDoc.view.unreached
-      : null
-  );
-
-  readonly shownDown = $derived.by(
-    () => this.#deps.previewFrame.down ?? this.docDown?.down ?? null
-  );
-
-  readonly shownWhy = $derived.by(() =>
-    this.#deps.previewFrame.down
-      ? this.#deps.previewFrame.downWhy
-      : (this.docDown?.why ?? null)
   );
 
   /** A down stage's own words stand unfolded (Show details). */

@@ -46,7 +46,6 @@ import {
   notUpYet,
   OVERLAY_KEY,
   overlayResponse,
-  PREVIEW_SERVED_HEADER,
   type PreviewSocket,
   previewFailed,
   previewWebSocket,
@@ -470,8 +469,6 @@ export interface PreviewListenerDeps {
   /** Whether session `instanceId` still runs: a session's ticket enters host mode's names only while it does (preview-access.ts). */
   sessionLive: (instanceId: string) => boolean;
   socket: ReturnType<typeof artifactSocket>;
-  /** Artifact `artifactId`'s stage answered its page through the relay (core `PREVIEW_SERVED_HEADER`): it is reachable. */
-  stageAnswered: (artifactId: string) => void;
   /** The machine's listener at `upstream` refused a connection: the next request reaches the preview again. */
   unreachable: (key: string, upstream: Upstream) => void;
   /** Where machine artifact `row`'s preview is served now, when a listener started for what the row names serves it; undefined while none does (preview-service.ts `upstreamOf`). */
@@ -792,9 +789,7 @@ async function relay(
   instanceId: string,
   at: Upstream,
   deps: PreviewListenerDeps,
-  direct: boolean,
-  /** The preview's own port answered, as the machine's listener marks it. */
-  answered?: () => void
+  direct: boolean
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
   const address = at.address.includes(":") ? `[${at.address}]` : at.address;
@@ -828,14 +823,9 @@ async function relay(
     deps.unreachable(instanceId, at);
     return downResponse("machine", 502, why);
   }
-  const down = downstreamHeaders(response, direct);
-  if (down.get(PREVIEW_SERVED_HEADER) === "1") {
-    answered?.();
-  }
-  down.delete(PREVIEW_SERVED_HEADER);
   return new Response(response.body, {
     status: response.status,
-    headers: down,
+    headers: downstreamHeaders(response, direct),
   });
 }
 
@@ -1034,16 +1024,7 @@ async function serveMachine(
       reached.down === "reach" ? reached.error : undefined
     );
   }
-  // A canvas's stage answering its page is the stage reached again.
-  return relay(
-    request,
-    server,
-    instanceId,
-    reached.upstream,
-    deps,
-    direct,
-    row.kind === "component" ? () => deps.stageAnswered(row.id) : undefined
-  );
+  return relay(request, server, instanceId, reached.upstream, deps, direct);
 }
 
 /**

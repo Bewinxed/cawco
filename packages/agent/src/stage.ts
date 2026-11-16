@@ -56,6 +56,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import type { PictureCut } from "@cawco/core/artifact-picture";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
 import { makeFolder } from "@cawco/core/folders";
@@ -75,6 +76,7 @@ import {
   HEALTH_PATH,
   REPORT_PATH,
   SERVE_COMMAND_LIMIT,
+  type ServedPicture,
   type ServeSpec,
   type SheetWeight,
   type SheetWrite,
@@ -119,6 +121,7 @@ import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
+import { drawPage } from "./artifact-picture";
 import { ensureBoundary } from "./boundary/ensure";
 import { listeners, workspaceNetworks } from "./boundary/sandboxes";
 import { agentServerStarted } from "./boundary/work";
@@ -126,16 +129,17 @@ import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
 import {
   copyBack,
+  cutPin,
   dropPin,
   inCloneTurn,
   installStage,
   isPin,
   isStageClone,
   MIRROR_MS,
-  pinClone,
   pinFolder,
   pinnedTree,
   pinsFrom,
+  pinsHeld,
   type StageClone,
   sameAsCheckout,
   stageCloneOf,
@@ -143,7 +147,12 @@ import {
 } from "./stage-clone";
 import { HOST_RUNTIME_ENV, stageHost } from "./stage-host/build";
 import { installMoved, installProject, type ProjectAt } from "./stage-install";
-import { type RenderAsk, type Rendered, renderCanvas } from "./stage-render";
+import {
+  listenerFor,
+  type RenderAsk,
+  type Rendered,
+  renderCanvas,
+} from "./stage-render";
 import { userBun } from "./user-bun";
 import { keepPlace, workspaceRefs } from "./workspace-records";
 
@@ -365,7 +374,8 @@ const pinTree = (pin: string, clone: StageClone, ports: StagePorts): Tree => ({
 /**
  * The tree workspace or place `workspace` serves from: its own, or with
  * `pin` the version of it its author handed up (core `PreviewSource.pin`),
- * that pin's clone, cut from it now when it has none whole.
+ * that pin's tree, cut from it now when it has none whole (a pin the hub
+ * named before this machine cut pins).
  */
 const treeOf = async (
   workspace: WorkspaceRef,
@@ -373,8 +383,7 @@ const treeOf = async (
   pin?: string
 ): Promise<Tree> => {
   if (pin !== undefined) {
-    const clone =
-      (await pinnedTree(pin)) ?? (await pinClone(workspace, pin, false));
+    const clone = (await pinnedTree(pin)) ?? (await cutPin(workspace, pin));
     return pinTree(pin, clone, ports);
   }
   return isPlace(workspace.id)
@@ -1690,6 +1699,46 @@ export async function renderStage(
   }
 }
 
+/**
+ * A served preview's page drawn as its author has it now (core
+ * `STAGE_PICTURE`), for the author's `artifact_read` with `png`: the
+ * workspace's own server (never the pin the person is served) started or
+ * woken as `artifact_create` starts it ({@link ensureServed}), and its page
+ * drawn in the machine's own Chromium through a loopback listener into the
+ * workspace's network, as a canvas's render reaches its stage. A use of
+ * the server.
+ */
+export async function drawServed(
+  ports: StagePorts,
+  workspace: WorkspaceRef,
+  ask: ServedPicture
+): Promise<{ png: string; cut?: PictureCut }> {
+  await ensureServed(ports, workspace, ask.serve, "its author's read");
+  const stage = stages.get(serveKey(workspace.id, ask.serve.port));
+  if (!stage) {
+    throw new StageRefusal(
+      `${ask.name}'s server on port ${ask.serve.port} isn't running in ${workspace.path}.`
+    );
+  }
+  const reached = await reachWorkspace(
+    bridgeName(stage),
+    stage.boundary.id,
+    stage.port
+  );
+  const listener = reached === "host" ? null : await listenerFor(reached);
+  const release = viewing(stage);
+  try {
+    return await drawPage(
+      `http://127.0.0.1:${listener ? listener.port : stage.port}${ask.path}`,
+      ask.width,
+      ask.name
+    );
+  } finally {
+    release();
+    listener?.stop(true);
+  }
+}
+
 /** How long a warm-up's ask for one canvas's Preview page may take, its graph's cold walk inside it. Ours: caw-panel's 839-module graph answered 1.5 s in, cold. */
 const WARM_WAIT_MS = 60_000;
 
@@ -2144,17 +2193,31 @@ function stopStages(id: string): void {
 
 /**
  * The version an author hands up cut (core `STAGE_PIN`, `PreviewSource.pin`):
- * pin `pin` of tree `workspace`'s sheet or served preview, its clone cut, or
- * brought in step with the tree once when it stands. A stage running in it
- * sees its files change, and the person's open page with it, as a new
- * version reaches him. Answers once it stands.
+ * pin `pin` of tree `workspace`'s sheet or served preview, cut as the tree
+ * is now beside the pin the person is served (stage-clone.ts `cutPin`),
+ * which the hub moves him onto once it stands. Answers once it stands.
  */
 export async function pinTreeOf(
   workspace: WorkspaceRef,
   pin: string
 ): Promise<void> {
-  await pinClone(workspace, pin, true);
+  await cutPin(workspace, pin);
 }
+
+/** What a core `STAGE_PICTURE` asks ({@link drawServed}). */
+export const ServedPictureSchema = z.object({
+  name: z.string(),
+  path: z.string().startsWith("/"),
+  serve: z.object({
+    command: z.string(),
+    cwd: z.string(),
+    port: z.number().int().min(1).max(65_535),
+  }),
+  width: z.number().int(),
+}) satisfies z.ZodType<ServedPicture>;
+
+/** What a core `STAGE_PINS` names: the pins the hub serves from. */
+export const StagePinsSchema = z.array(z.string());
 
 /** What a core `STAGE_PIN` names: a tree and its pin, or a folder's pin and the folder. */
 export const StagePinArgsSchema = z.union([
@@ -2166,12 +2229,40 @@ export const StagePinArgsSchema = z.union([
 export const pinArg = (pin: unknown): string | undefined =>
   typeof pin === "string" && pin.length > 0 ? pin : undefined;
 
-/** The version of folder `dir` an author hands up cut: pin `pin`'s copy of it made again (stage-clone.ts `pinFolder`). */
+/** The version of folder `dir` an author hands up cut: pin `pin`'s copy of it (stage-clone.ts `pinFolder`). */
 export async function pinFolderOf(dir: string, pin: string): Promise<void> {
   if (!isAbsolute(dir)) {
     throw new StageRefusal(`${dir} is no absolute path to a folder.`);
   }
-  await pinFolder(dir, pin, true);
+  await pinFolder(dir, pin);
+}
+
+/**
+ * How long a pin's cut stands before a register's list may let it go
+ * ({@link keepPins}): the hub names a pin on its artifact only once its cut
+ * answered, and a list it sent before then does not name it. Ours: a create's
+ * cut, install and serve, with room.
+ */
+const PIN_NAMED_MS = 10 * 60_000;
+
+/**
+ * The pins the hub serves from, sent as this machine registers (core
+ * `STAGE_PINS`): every other pin it holds let go ({@link unpin}), one whose
+ * unpin was sent while it was away among them. One cut within
+ * {@link PIN_NAMED_MS} stays: its create may not have named it yet.
+ * Answers how many went.
+ */
+export async function keepPins(served: readonly string[]): Promise<number> {
+  const kept = new Set(served);
+  const now = Date.now();
+  let gone = 0;
+  for (const { pin, at } of await pinsHeld()) {
+    if (!kept.has(pin) && now - at > PIN_NAMED_MS) {
+      await unpin(pin);
+      gone += 1;
+    }
+  }
+  return gone;
 }
 
 /** Pin `pin` let go (core `STAGE_UNPIN`): every stage running in it stopped, then its copy removed. */

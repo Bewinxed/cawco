@@ -100,6 +100,7 @@ import {
 } from "@cawco/core/page-faults";
 import { pinName } from "@cawco/core/pin-name";
 import type { PreviewSource, ShownFailure } from "@cawco/core/preview/protocol";
+import { placeAtLink } from "@cawco/core/preview/routes";
 import type {
   ArtifactHit,
   ArtifactPromotion,
@@ -136,7 +137,7 @@ import { decidesWords } from "@cawco/core/words/decides";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import type { Doc } from "yjs";
-import type { ArtifactRow, GoneArtifact } from "../db/artifacts";
+import type { ArtifactRow } from "../db/artifacts";
 import {
   type BuiltProgram,
   keptLinks,
@@ -185,7 +186,7 @@ import {
 import { answersReplaced } from "./overwrite";
 import { createPageStore } from "./page-store";
 import { type Question, stillAsked } from "./questions";
-import { onPinOf, type ServedOwed, servedOf, sheetOf } from "./served";
+import { type ServedOwed, servedOf, servedPin, sheetOf } from "./served";
 import {
   type ArtifactInput,
   type ArtifactList,
@@ -1006,6 +1007,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const {
     changedBy,
     cutVersion,
+    pinnedSource,
     handOver,
     handing,
     heldAnswer,
@@ -1031,6 +1033,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     get programOf() {
       return programOf;
     },
+    serveFirst,
     get show() {
       return show;
     },
@@ -1435,7 +1438,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     get askedOf() {
       return askedOf;
     },
-    cutVersion,
     db,
     deps,
     discard,
@@ -1451,6 +1453,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return openedOf;
     },
     openNextFirst,
+    pinnedSource,
     get read() {
       return read;
     },
@@ -2291,11 +2294,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (before) {
       const holding = holdNext(maker, before);
       const target = holding?.next ?? before;
-      // Made again where it stands: on the pin it is served from, cut again (cutVersion); a held one's own.
-      db.resource(target.id, {
-        machineId: at.machineId,
-        source: onPinOf(at.source, target),
-      });
+      db.resource(target.id, at);
       const row = stillThere(
         db.update(target.id, {
           ...asked,
@@ -2342,13 +2341,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * A create's row placed ({@link placed}), a held next version opened
-   * first ({@link openNextFirst}), the version it hands up cut (its pin,
-   * {@link cutVersion}) and its server started there ({@link serveFirst});
-   * its workspace held from the create's start until the row names it
-   * ({@link makingFrom}), as a retirement in between would end its source
-   * under the create. A cut or a server that refuses lets the placement go
-   * ({@link unplace}), and nothing is kept.
+   * A create's server started in its author's workspace, as its author has
+   * it ({@link serveFirst}), a held next version opened first ({@link
+   * openNextFirst}), the version it hands up cut as a pin of its own and its
+   * server started there ({@link pinnedSource}), then its row placed on that
+   * pin ({@link placed}); its workspace held from the create's start until
+   * the row names it ({@link makingFrom}), as a retirement in between would
+   * end its source under the create. A refusal before the row is placed
+   * touches nothing the person is served; one of the placement lets the new
+   * pin go.
    */
   const servedAndPlaced = async (
     making: Making,
@@ -2357,31 +2358,45 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ) => {
     const madeFrom = makingFrom(at.source);
     try {
+      const authors = await serveFirst(at.source, at.machineId);
+      if (authors instanceof ElysiaStatus) {
+        return authors;
+      }
       const unopened = await openNextFirst(making, input.kind, input.name);
       if (unopened) {
         return unopened;
       }
-      const placement = placed(making, input, at);
-      if (placement instanceof ElysiaStatus) {
-        return placement;
-      }
-      const cut = await cutVersion(placement.row);
+      const cut = await pinnedSource(at.machineId, at.source);
       if (cut instanceof ElysiaStatus) {
-        unplace(placement);
         return cut;
       }
-      const stage = await serveFirst(cut.source, cut.machineId);
-      if (stage instanceof ElysiaStatus) {
-        unplace({ ...placement, row: cut });
-        return stage;
+      const placement = placed(making, input, {
+        machineId: at.machineId,
+        source: cut.source,
+      });
+      if (placement instanceof ElysiaStatus) {
+        letGoPins([{ machineId: at.machineId, pin: servedPin(cut.source) }]);
+        return placement;
       }
       const served: { placement: Placement; stage: StageState | undefined } = {
-        stage,
-        placement: { ...placement, row: cut },
+        stage: cut.stage ?? authors,
+        placement,
       };
       return served;
     } finally {
       madeFrom();
+    }
+  };
+
+  /** Each pin of `gone` let go once no row is served from it ({@link releasePin}). */
+  const letGoPins = (
+    gone: readonly {
+      machineId: string | null;
+      pin: string | null | undefined;
+    }[]
+  ): void => {
+    for (const { machineId, pin } of gone) {
+      releasePin(machineId, pin ?? null);
     }
   };
 
@@ -2507,6 +2522,45 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
   };
 
+  /**
+   * A page's or a preview's picture for `instance`'s read: the person's view
+   * of it, on its own preview origin with his pins (`deps.picture`); its
+   * author's of a served preview, its workspace's own server as it has it
+   * now (`deps.servedPicture`), since the origin serves the version the
+   * person was handed (core `PreviewSource.pin`).
+   */
+  const pictureFor = (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    width: number,
+    link: string | undefined
+  ) => {
+    const served = servedOf(row);
+    if (
+      served &&
+      row.madeBy === instance.id &&
+      "port" in row.source &&
+      row.source.serve
+    ) {
+      return deps.servedPicture(
+        { workspace: served.workspace },
+        {
+          name: row.name,
+          path:
+            link === undefined
+              ? (row.source.path ?? "/")
+              : placeAtLink(row.source.path ?? "/", link),
+          serve: { ...row.source.serve, port: row.source.port },
+          width,
+        }
+      );
+    }
+    return deps.picture(instance, row, {
+      width,
+      ...(link === undefined ? {} : { link }),
+    });
+  };
+
   /** A page's or a preview's read ({@link pageNow}), its picture drawn first when `drawn`, which the read then says it shows. */
   const pageReadOf = async (
     instance: InstanceRow,
@@ -2521,10 +2575,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }: { drawn: boolean; link: string | undefined; width: number | undefined }
   ) => {
     const picture = drawn
-      ? await deps.picture(instance, now, {
-          width: width ?? PICTURE_VIEW.width,
-          ...(link === undefined ? {} : { link }),
-        })
+      ? await pictureFor(instance, now, width ?? PICTURE_VIEW.width, link)
       : undefined;
     return picture instanceof ElysiaStatus
       ? picture
@@ -3499,12 +3550,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /** The server artifact `id`'s source moved off, let go once nothing else shows it ({@link letGoMoved}). */
     letGoMoved,
-    /** Artifact rows gone (db `onArtifactsGone`, every way a row goes): each pin one was served from let go once no row is served from it ({@link releasePin}). */
-    letGoPins: (gone: readonly GoneArtifact[]): void => {
-      for (const { machineId, pin } of gone) {
-        releasePin(machineId, pin);
-      }
-    },
+    /** Artifact rows gone (db `onArtifactsGone`, every way a row goes): each pin one was served from let go once no row is served from it. */
+    letGoPins,
 
     /** Whether a create is making a preview from workspace `id` now, its row not yet written ({@link makingIn}). */
     makingFrom: (id: string): boolean => makingIn.has(id),
@@ -4648,20 +4695,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       // cutVersion); a maker's change to one its parent opened is its next
       // version (changedBy).
       const answer = await changedBy(instance, row, async (target) => {
-        db.resource(target.id, {
-          machineId: target.machineId,
-          source: { ...target.source, path: canvasPath(files, spec) },
+        // Its new address, cut as a version of its own first: a refusal leaves the person's pin and address as they were.
+        const cut = await pinnedSource(target.machineId, {
+          ...target.source,
+          path: canvasPath(files, spec),
         });
-        const cut = await cutVersion(stillThere(db.get(target.id), target.id));
         if (cut instanceof ElysiaStatus) {
           return cut;
         }
+        db.resource(target.id, {
+          machineId: target.machineId,
+          source: cut.source,
+        });
         const next = stillThere(
-          db.update(cut.id, {
-            revision: cut.revision + 1,
+          db.update(target.id, {
+            revision: target.revision + 1,
             updatedAt: new Date(),
           }),
-          cut.id
+          target.id
         );
         stampMeta(next, null);
         // An update of what the panel shows, not a show of it: a tab that
@@ -4809,39 +4860,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * A workspace's stage changed (the daemon's {@link StageFrame}): each
-     * sheet and each served preview of the workspace on that stage's port
-     * keeps its state, and a sheet with a compile error its session has not
-     * heard has its delivery scheduled.
+     * Machine `machineId`'s agent registered again: it is sent every pin an
+     * artifact on it is served from (core `STAGE_PINS`), and lets go of every
+     * other one it holds, one whose unpin it missed while it was away among
+     * them (agent stage.ts `keepPins`). The pins are the hub's: its rows
+     * keep them.
      */
-    /**
-     * Machine `machineId`'s agent registered again: the hop a read found down
-     * on it (`machine`, `reach`) is back, so each of its canvases' docs lets
-     * `meta.unreached` go, as a reached read's `stageWritten` does; a
-     * `workspace` one waits for that workspace's stage to say it is up
-     * ({@link staged}).
-     */
-    machineBack: (machineId: string): void => {
-      for (const row of db.componentsOn(machineId)) {
-        const unreached = getMeta(docs.doc(row.id), "unreached");
-        if (!(unreached && unreached.down !== "workspace")) {
-          continue;
-        }
-        // One doc that can't be written is that canvas's: the register goes on.
-        try {
-          docs.transact(row.id, "hub", (doc) => {
-            docMeta(doc).delete("unreached");
-          });
-        } catch (error) {
-          console.warn(
-            `[artifacts] ${row.id} still says its stage is unreached: ${error instanceof Error ? error.message : String(error)}`
-          );
-          continue;
-        }
-        if (inPanel(row)) {
-          relistOf(row);
-        }
-      }
+    pinsBack: (machineId: string): void => {
+      deps.keepPins(machineId, db.pinsOn(machineId));
     },
 
     /**
@@ -4869,29 +4895,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         docs.transact(row.id, "hub", (doc) => {
           setMeta(doc, "faults", kept);
         });
-      }
-    },
-
-    /**
-     * Canvas `id`'s stage answered its page through the hub's relay (preview.ts
-     * `relay`, core `PREVIEW_SERVED_HEADER`): whatever hop a read found down
-     * is back, so its doc lets `meta.unreached` go, as a reached read's
-     * `stageWritten` does. Asked on every answer the page gets: a doc that
-     * says nothing of it is left as it is.
-     */
-    stageAnswered: (id: string): void => {
-      const row = db.get(id);
-      if (!(row && row.kind === "component")) {
-        return;
-      }
-      if (!docMeta(docs.doc(id)).has("unreached")) {
-        return;
-      }
-      docs.transact(id, "hub", (doc) => {
-        docMeta(doc).delete("unreached");
-      });
-      if (inPanel(row)) {
-        relistOf(row);
       }
     },
 

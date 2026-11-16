@@ -202,8 +202,10 @@ import {
   STAGE_ENSURE,
   STAGE_IDLE_MS,
   STAGE_INSTALL_MS,
+  STAGE_PICTURE,
   STAGE_PIN,
   STAGE_PIN_MS,
+  STAGE_PINS,
   STAGE_READY_MS,
   STAGE_RENDER,
   STAGE_SERVE,
@@ -5016,6 +5018,11 @@ export const createServer = (
       const staged = await onStage(at, STAGE_WRITE, write);
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
+    // A served preview's page as its author has it, drawn on its workspace's own server.
+    servedPicture: async (at, ask) => {
+      const staged = await onStage(at, STAGE_PICTURE, ask);
+      return staged instanceof ElysiaStatus ? staged : staged.result;
+    },
     // The version of a sheet or a served preview an author hands up, cut on its workspace's machine.
     pin: async (at, pin) => {
       const staged = await onStage(at, STAGE_PIN, pin);
@@ -5213,6 +5220,24 @@ export const createServer = (
               asked.value.error ??
               "This version of the folder couldn't be kept.",
           });
+    },
+    keepPins: (machineId, pins) => {
+      detach(
+        callAgent(machineId, STAGE_PINS, [pins], BUSY_TIMEOUT_MS).then(
+          (asked) => {
+            if (
+              asked.kind === "answered" &&
+              asked.value.ok &&
+              asked.value.result > 0
+            ) {
+              console.info(
+                `[artifacts] ${machineId}: ${asked.value.result} pin(s) no artifact is served from let go`
+              );
+            }
+          }
+        ),
+        "pins kept"
+      );
     },
     unpin: (machineId, pin) => {
       // Its stages end with it and say nothing more: forgotten here now.
@@ -5453,7 +5478,6 @@ export const createServer = (
     },
     reach: (row) => previewService.reach(row),
     upstream: (row) => previewService.upstreamOf(row),
-    stageAnswered: (artifactId) => artifacts.stageAnswered(artifactId),
     pageFault: (report) => artifacts.pageFault(report),
     artifactAt: (key) => {
       const origin = originOfKey(key);

@@ -34,7 +34,6 @@ import {
   isFolderGone,
   loadsDocument,
   notUpYet,
-  PREVIEW_SERVED_HEADER,
   type PreviewSocket,
   previewFailed,
   previewWebSocket,
@@ -680,8 +679,7 @@ async function pinnedRoot(dir: string, pin: string | undefined) {
     return await folderRoot(dir);
   }
   return await folderRoot(
-    (await pinnedFolder(pin)) ??
-      (await pinFolder(await folderRoot(dir), pin, false))
+    (await pinnedFolder(pin)) ?? (await pinFolder(await folderRoot(dir), pin))
   );
 }
 
@@ -1186,8 +1184,6 @@ async function start(
     // `no-store`.
     cachePreview(headers, response.status, true);
     if ("port" in source) {
-      // The preview's own port answered (every refusal of this listener returned above).
-      headers.set(PREVIEW_SERVED_HEADER, "1");
       const location = headers.get("location");
       if (location) {
         // A redirect back to the app itself, under any loopback name, has
@@ -1226,14 +1222,10 @@ async function start(
     // overlay) is the page being built, served as any page with its
     // overlay; a page's own fetches and modules keep their answers.
     if (response.status >= 400 && loadsDocument(request) && !page?.trim()) {
-      const failed = errorPageResponse(
+      return errorPageResponse(
         response.status,
         page ?? (await response.text())
       );
-      if ("port" in source) {
-        failed.headers.set(PREVIEW_SERVED_HEADER, "1");
-      }
-      return failed;
     }
     let body: ReadableStream<Uint8Array> | string | null = response.body;
     if (page !== null) {

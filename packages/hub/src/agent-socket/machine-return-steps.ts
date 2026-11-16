@@ -124,8 +124,8 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
 
   const artifactsBack = (ret: MachineReturn): void => {
     const { message } = ret;
-    // Its canvases' stages are reachable again: no doc says otherwise.
-    ctx.artifacts.machineBack(message.machineId);
+    // The pins its artifacts are served from: it lets go of every other.
+    ctx.artifacts.pinsBack(message.machineId);
   };
 
   const foldersRead = (ret: MachineReturn): void => {

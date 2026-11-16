@@ -85,6 +85,9 @@ const stageOf = (
         at: { workspace: sheet.workspace, pin: sheet.pin },
       };
 
+/** How long a pin no row names stands before it is let go ({@link createPreviewKind} `releasePin`). Ours: past a create's own checks, which may put its row back on it. */
+const PIN_KEPT_MS = 2 * 60_000;
+
 /** What PreviewKind reads of the artifact service ({@link KindContext}). */
 export type PreviewKindContext = Pick<
   KindContext,
@@ -224,12 +227,20 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
   /**
    * Pin `pin` on machine `machineId` let go once no artifact is served from
    * it (core `PreviewSource.pin`): its stages and server stop with it, and
-   * its copy goes. Its life is its artifacts'.
+   * its copy goes. Looked at {@link PIN_KEPT_MS} after the last row moved
+   * off it, so a create that puts its row back as it was (service.ts
+   * `unplace`) finds the person's pin still standing. Its life is its
+   * artifacts'.
    */
   const releasePin = (machineId: string | null, pin: string | null): void => {
-    if (machineId && pin && db.pinnedBy(pin).length === 0) {
-      deps.unpin(machineId, pin);
+    if (!(machineId && pin)) {
+      return;
     }
+    deps.lifetime.after(PIN_KEPT_MS, () => {
+      if (db.pinnedBy(pin).length === 0) {
+        deps.unpin(machineId, pin);
+      }
+    });
   };
   /**
    * Artifact `id`'s source moved off `before` (db artifacts.ts `resource`):

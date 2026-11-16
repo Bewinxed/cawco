@@ -109,8 +109,8 @@ const drain = (socket: Socket<Pipe>): void => {
   }
 };
 
-/** A loopback listener that pipes each connection to the bridge's unix socket, for one render. */
-function listenerFor(unix: string): Promise<TCPSocketListener<Pipe>> {
+/** A loopback listener that pipes each connection to the bridge's unix socket, for one render or picture (stage.ts `drawServed`). */
+export function listenerFor(unix: string): Promise<TCPSocketListener<Pipe>> {
   return Promise.resolve(
     Bun.listen<Pipe>({
       hostname: "127.0.0.1",

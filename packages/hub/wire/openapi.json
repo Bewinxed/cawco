@@ -33971,7 +33971,7 @@
           },
           "unreached": {
             "$ref": "#/components/schemas/StageUnreached",
-            "description": "The hub's word that a canvas's stage couldn't be reached by its last read\n(the doc's `meta.unreached`, which the panel and the agent's read both\nsay): the hop that failed, in the preview proxy's kinds; why, in the hub's\nwords; and since when, the first read that failed since one that reached\nit. A read that reaches the stage, or the daemon's next word of it, takes\nit away."
+            "description": "An author's read of its component canvas that couldn't reach its\nworkspace's stage (hub component.ts `stageRead`): the hop that failed, in\nthe preview proxy's kinds, and why, in the hub's words. Said in that read\nalone: the person's panel is served the version handed up (core\n`PreviewSource.pin`), whose own load says what it meets."
           },
           "verify": {
             "description": "A component canvas's design system round, as `verify: true` asked it: what the ask did.",
@@ -58175,14 +58175,11 @@
         ]
       },
       "StageUnreached": {
-        "description": "The hub's word that a canvas's stage couldn't be reached by its last read\n(the doc's `meta.unreached`, which the panel and the agent's read both\nsay): the hop that failed, in the preview proxy's kinds; why, in the hub's\nwords; and since when, the first read that failed since one that reached\nit. A read that reaches the stage, or the daemon's next word of it, takes\nit away.",
+        "description": "An author's read of its component canvas that couldn't reach its\nworkspace's stage (hub component.ts `stageRead`): the hop that failed, in\nthe preview proxy's kinds, and why, in the hub's words. Said in that read\nalone: the person's panel is served the version handed up (core\n`PreviewSource.pin`), whose own load says what it meets.",
         "type": "object",
         "properties": {
           "down": {
             "$ref": "#/components/schemas/PreviewDown"
-          },
-          "since": {
-            "type": "string"
           },
           "why": {
             "type": "string"
@@ -58190,7 +58187,6 @@
         },
         "required": [
           "down",
-          "since",
           "why"
         ]
       },
@@ -143641,6 +143637,42 @@
                 "type": "string",
                 "enum": [
                   "artifact-pin-uncut"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-serve-unstarted"
                 ]
               },
               "detail": {

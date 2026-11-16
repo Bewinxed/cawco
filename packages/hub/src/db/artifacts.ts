@@ -217,8 +217,6 @@ export interface ArtifactsDb {
   ) => ArtifactChange[];
   /** Replaces the log with one snapshot, at the seq the log had reached. */
   readonly compact: (id: string, snapshot: Uint8Array) => void;
-  /** The component canvases made on machine `machineId`, held next versions too: each one's stage runs there. */
-  readonly componentsOn: (machineId: string) => ArtifactRow[];
   /**
    * A new row, its preview origin minted with it (schema.ts
    * `artifacts.origin`), whatever `row` was copied from; `composer` only on
@@ -264,6 +262,8 @@ export interface ArtifactsDb {
    */
   /** The artifacts served from pin `pin` (core `PreviewSource.pin`), held next versions too: the one that cut it, or one a held version was opened onto. */
   readonly pinnedBy: (pin: string) => ArtifactRow[];
+  /** Every pin an artifact on machine `machineId` is served from (core `PreviewSource.pin`), held next versions' too. */
+  readonly pinsOn: (machineId: string) => string[];
   readonly previewing: (workspace: {
     id: string;
     machineId: string;
@@ -375,15 +375,15 @@ export const artifactsDb = (
     artifactsWritten: written,
   }: ArtifactEvents
 ): ArtifactsDb => ({
-  componentsOn: (machineId) =>
+  pinsOn: (machineId) =>
     db
-      .select()
+      .selectDistinct({ pin: artifacts.sourcePin })
       .from(artifacts)
       .where(
-        and(eq(artifacts.machineId, machineId), eq(artifacts.kind, "component"))
+        and(eq(artifacts.machineId, machineId), isNotNull(artifacts.sourcePin))
       )
       .all()
-      .map(artifactOf),
+      .flatMap((row) => (row.pin === null ? [] : [row.pin])),
   append: (id, update, changed) =>
     db.transaction((tx) => {
       const row = tx.select().from(artifacts).where(eq(artifacts.id, id)).get();
