@@ -13,8 +13,7 @@
 import type { SettingSource } from "./areas";
 import { decidesWords } from "./words/decides";
 
-/** Who decides a kind. The five built in are constants; the rest are rows. */
-type MemberType = BuiltInMember | "agent" | "person" | "channel";
+/** Who decides a kind: the five built in are constants, the rest are rows ({@link Member}). */
 export const BUILT_IN_MEMBERS = [
   "you",
   "caw",
@@ -95,12 +94,10 @@ export const CAW_POSE_IDS: [CawPoseId, ...CawPoseId[]] = [
   ...OTHER_POSES.map((pose) => pose.id),
 ];
 
-/** One member of Who decides: built in, or one he added. */
-export interface Member {
+/** What every member of Who decides has, whatever it runs as. */
+interface MemberFields {
   /** `you`, `caw`, `advisor`, `practice`, `asker`, or the slug of a member he added (a delegate type's name). */
   builtIn: boolean;
-  /** An agent (built-in Advisor and Common practice included): the fleet delegate type it runs as. */
-  delegateType: string | null;
   /** How he hears about its answers; null for You, Caw and The agent, which have none. */
   hear: Hear | null;
   /** One of the eight identity marks (1–8); null for Caw's flock and You. */
@@ -113,8 +110,34 @@ export interface Member {
   pose: CawPoseId | null;
   /** In a sentence: "Roost iOS sends scope to the advisor". */
   subject: string;
-  type: MemberType;
 }
+
+/** An agent: Advisor, Common practice, or one he added; it runs as `delegateType`, the fleet delegate type. */
+export interface AgentMember extends MemberFields {
+  delegateType: string;
+  type: "advisor" | "practice" | "agent";
+}
+
+/** You, Caw, The agent, or a person or channel he added: none runs as a delegate type. */
+export interface PlainMember extends MemberFields {
+  delegateType: null;
+  type: "you" | "caw" | "asker" | "person" | "channel";
+}
+
+/**
+ * A member he added whose stored row doesn't read: its type and its
+ * delegate type disagree (an agent with none, a person or channel with
+ * one). Kept, runs as nothing, and is never reached; `unread` says why, in
+ * the words its card shows.
+ */
+export interface UnreadMember extends MemberFields {
+  delegateType: null;
+  type: "agent" | "person" | "channel";
+  unread: string;
+}
+
+/** One member of Who decides: built in, or one he added. */
+export type Member = AgentMember | PlainMember | UnreadMember;
 
 /** A kind of choice: built in, or one he added. */
 export interface Kind {
@@ -198,26 +221,38 @@ const DEFAULT_POSES: Record<FlockMember, CawPoseId> = {
   asker: "working",
 };
 
-const builtIn = (
-  id: BuiltInMember,
-  rest: Pick<Member, "delegateType" | "hear">
-): Member => ({
+/** A built-in member's fields but what it runs as. */
+const builtIn = (id: BuiltInMember) => ({
   id,
-  type: id,
   ...decidesWords[id],
   builtIn: true,
   hue: null,
   pose: id === "you" ? null : DEFAULT_POSES[id],
-  ...rest,
 });
 
 /** The built-in members as they stand until he changes them (the hub overlays `decides_settings`). */
-export const BUILT_IN: Record<BuiltInMember, Member> = {
-  you: builtIn("you", { delegateType: null, hear: null }),
-  caw: builtIn("caw", { delegateType: null, hear: null }),
-  advisor: builtIn("advisor", { delegateType: "advisor", hear: "each" }),
-  practice: builtIn("practice", { delegateType: "research", hear: "later" }),
-  asker: builtIn("asker", { delegateType: null, hear: null }),
+export const BUILT_IN: {
+  advisor: AgentMember;
+  asker: PlainMember;
+  caw: PlainMember;
+  practice: AgentMember;
+  you: PlainMember;
+} = {
+  you: { ...builtIn("you"), type: "you", delegateType: null, hear: null },
+  caw: { ...builtIn("caw"), type: "caw", delegateType: null, hear: null },
+  advisor: {
+    ...builtIn("advisor"),
+    type: "advisor",
+    delegateType: "advisor",
+    hear: "each",
+  },
+  practice: {
+    ...builtIn("practice"),
+    type: "practice",
+    delegateType: "research",
+    hear: "later",
+  },
+  asker: { ...builtIn("asker"), type: "asker", delegateType: null, hear: null },
 };
 
 /** A member's or kind's id: lowercase, digits and dashes, a letter first (a delegate type's name). */

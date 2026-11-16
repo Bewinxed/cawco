@@ -9,8 +9,10 @@ import {
   KIND_SEED,
   type Kind,
   type Member,
+  type UnreadMember,
 } from "@cawco/core/decides";
 import type { DelegateType } from "@cawco/core/delegate-types";
+import { decidesWords } from "@cawco/core/words/decides";
 import {
   and,
   asc,
@@ -129,19 +131,39 @@ export interface DecidesDb {
   readonly spend: (instances: string[], since: Date) => number;
 }
 
-/** A row he added, as a member. */
-const memberOfRow = (row: Omit<MemberRow, "createdAt">): Member => ({
-  id: row.id,
-  type: row.type,
-  name: row.name,
-  job: row.job,
-  subject: row.subject,
-  builtIn: false,
-  hue: row.hue,
-  pose: null,
-  hear: row.hear,
-  delegateType: row.delegateType,
-});
+/**
+ * A row he added, as a member: an agent runs as its delegate type, a person
+ * or channel as none. A row whose type and delegate type disagree is kept
+ * as it was stored and read as unread (core `UnreadMember`), its card
+ * saying why.
+ */
+const memberOfRow = (row: Omit<MemberRow, "createdAt">): Member => {
+  const fields = {
+    id: row.id,
+    name: row.name,
+    job: row.job,
+    subject: row.subject,
+    builtIn: false,
+    hue: row.hue,
+    pose: null,
+    hear: row.hear,
+  };
+  const { type, delegateType } = row;
+  const unread = (why: string): UnreadMember => ({
+    ...fields,
+    type,
+    delegateType: null,
+    unread: why,
+  });
+  if (type === "agent") {
+    return delegateType === null
+      ? unread(decidesWords.agentUntyped)
+      : { ...fields, type, delegateType };
+  }
+  return delegateType === null
+    ? { ...fields, type, delegateType }
+    : unread(decidesWords.personTyped);
+};
 
 /** Each flock member's chosen pose, as the settings row holds it; a member he left alone has none. */
 const posesOf = (
@@ -183,10 +205,11 @@ const builtIns = (settings: SettingsRow | undefined): Member[] => {
     const member = BUILT_IN[id];
     const pose = id === "you" ? null : (poses[id] ?? member.pose);
     if (id === "advisor" || id === "practice") {
+      const agent = BUILT_IN[id];
       return {
-        ...member,
+        ...agent,
         pose,
-        delegateType: settings?.[id] ?? member.delegateType,
+        delegateType: settings?.[id] ?? agent.delegateType,
         hear: hearOf(settings, id),
       };
     }
