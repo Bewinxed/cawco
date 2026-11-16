@@ -547,12 +547,10 @@ const KINDS_SAID = new Set<ClipKind>([
 /** Offsets between a clip's first frame and its last, each inside them; null when none were said. */
 const offsetsOf = (value: unknown): number[] | null =>
   Array.isArray(value)
-    ? value
-        .slice(0, POINTS_MAX)
-        .flatMap((one) => {
-          const offset = finite(one);
-          return offset !== null && offset > 0 && offset < 1 ? [offset] : [];
-        })
+    ? value.slice(0, POINTS_MAX).flatMap((one) => {
+        const offset = finite(one);
+        return offset !== null && offset > 0 && offset < 1 ? [offset] : [];
+      })
     : null;
 
 /** A {@link ClipValue} as it crossed the frame; null when it is none. */
@@ -1047,8 +1045,7 @@ function dialValuesOf(value: unknown): Record<string, DialSet> | null {
   const kept: Record<string, DialSet> = {};
   for (const [name, one] of Object.entries(value).slice(0, DIALS_MAX)) {
     const set =
-      finite(one) ??
-      (typeof one === "boolean" ? one : wordsOf(one, VALUE_MAX));
+      finite(one) ?? (typeof one === "boolean" ? one : wordsOf(one, VALUE_MAX));
     if (nameOf(name) && set !== null) {
       kept[name] = set;
     }

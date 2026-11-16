@@ -58,13 +58,7 @@ import {
   zoneOf,
 } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
-import {
-  Elysia,
-  ElysiaStatus,
-  problem,
-  type Server,
-  t,
-} from "elysia";
+import { Elysia, ElysiaStatus, problem, type Server, t } from "elysia";
 import {
   addRecord,
   isCloudflareAddress,

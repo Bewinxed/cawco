@@ -223,9 +223,7 @@ const isConst = (type: ts.TypeNode): boolean =>
  * Whether `node` is an assertion the as-cast kind counts: not `as const`,
  * and neither half of an `as unknown as` (the as-unknown-as kind's).
  */
-const isCast = (
-  node: ts.Node
-): node is ts.AsExpression | ts.TypeAssertion => {
+const isCast = (node: ts.Node): node is ts.AsExpression | ts.TypeAssertion => {
   if (ts.isTypeAssertionExpression(node)) {
     return true;
   }

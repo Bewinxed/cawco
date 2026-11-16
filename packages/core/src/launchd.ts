@@ -104,9 +104,7 @@ async function cawcoLaunchdServices(
   loaded: () => Promise<ReadonlyMap<string, unknown>> = launchdJobs
 ): Promise<Set<string>> {
   const services = new Set<string>();
-  for (const name of await readdir(agents).catch(
-    unlessGone<string[]>([])
-  )) {
+  for (const name of await readdir(agents).catch(unlessGone<string[]>([]))) {
     const service = CAWCO_PLIST.exec(name)?.[1];
     if (service) {
       services.add(service);

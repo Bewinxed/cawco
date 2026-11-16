@@ -166,8 +166,7 @@ function roleOf(el: Element): string | null {
   const tag = el.localName;
   if (
     tag === "button" ||
-    (tag === "input" &&
-      ["button", "submit", "reset"].includes(typeOf(el)))
+    (tag === "input" && ["button", "submit", "reset"].includes(typeOf(el)))
   ) {
     return "button";
   }
@@ -226,8 +225,7 @@ export function queriesIn(frame: HTMLElement): CanvasQueries {
             node.nodeType === Node.TEXT_NODE &&
             matches(node.textContent ?? "", want)
         ) ||
-        (matches(renderedText(el) ?? "", want) &&
-          el.children.length === 0)
+        (matches(renderedText(el) ?? "", want) && el.children.length === 0)
     ) ?? null;
   const byRole = (role: string, options?: { name?: string | RegExp }) =>
     all().find(
