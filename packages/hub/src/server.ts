@@ -12645,7 +12645,7 @@ export const createServer = (
    * one no build sends any more, from a page or app still running an older
    * one), or a payload that is not its verb's. The client is named.
    */
-  const refuseDashboardMessage = (
+  const dashboardMessageFault = (
     ws: DashboardSocket,
     message: Addressed,
     fault: string
@@ -12793,7 +12793,7 @@ export const createServer = (
     }
     const read = readClientEnvelope(addressed);
     if ("fault" in read) {
-      refuseDashboardMessage(ws, addressed, read.fault);
+      dashboardMessageFault(ws, addressed, read.fault);
       return;
     }
     handleDashboardVerb(ws, read.envelope);
