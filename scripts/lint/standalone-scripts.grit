@@ -1,0 +1,53 @@
+language js
+
+// A standalone script takes Node's built-ins alone, and the one file written
+// beside it. Each of these files is copied alone into a workspace's state dir
+// and run there as a plain Bun script (scripts/build-binary.ts embeds each as
+// a file; packages/agent/src/boundary/hook-judge.ts and shims.ts write them
+// out), so an import of any other module fails as `Cannot find module` in a
+// real binary, and every workspace's judge with it:
+//
+// - packages/core/src/workspace-judge.ts, the judge itself, which OpenCode's
+//   server also imports from that copy;
+// - packages/agent/src/boundary-judge.ts, the judge's server, and the
+//   protocol written beside it (packages/agent/src/boundary/protocol.ts);
+// - packages/agent/src/boundary-log.ts, a macOS workspace's `log` shim, and
+//   the protocol written beside it (packages/agent/src/boundary-log-protocol.ts).
+//
+// `import type` and `export type … from` are erased; `import { type X }` is
+// kept under verbatimModuleSyntax and refused with the rest. A dynamic
+// `import()` of a path the script computes (boundary-judge.ts loads the judge
+// beside it by `join(import.meta.dir, …)`) is the script's own reach and left
+// alone; one of a named module is held to the same rule.
+or {
+  `import $clause from $source` as $hit where {
+    not $hit <: `import type $_ from $_`
+  },
+  `import $source` as $hit,
+  `export { $names } from $source` as $hit where {
+    not $hit <: `export type { $_ } from $_`
+  },
+  `export * from $source` as $hit,
+  `export * as $_ from $source` as $hit,
+  `import($source)` as $hit,
+  `require($source)` as $hit
+} where {
+  $source <: r"[\"'].*[\"']",
+  not $source <: r"[\"'](?:node:[a-z_/]+|(?:assert|async_hooks|buffer|child_process|cluster|console|constants|crypto|dgram|diagnostics_channel|dns|domain|events|fs|http|http2|https|inspector|module|net|os|path|perf_hooks|process|punycode|querystring|readline|repl|stream|string_decoder|sys|timers|tls|trace_events|tty|url|util|v8|vm|wasi|worker_threads|zlib)(?:/[a-z_]+)?)[\"']",
+  or {
+    $filename <: or {
+      r".*packages/core/src/workspace-judge\.ts",
+      r".*packages/agent/src/boundary/protocol\.ts",
+      r".*packages/agent/src/boundary-log-protocol\.ts"
+    },
+    and {
+      $filename <: r".*packages/agent/src/boundary-judge\.ts",
+      not $source <: r"[\"']\./boundary/protocol[\"']"
+    },
+    and {
+      $filename <: r".*packages/agent/src/boundary-log\.ts",
+      not $source <: r"[\"']\./boundary-log-protocol[\"']"
+    }
+  },
+  register_diagnostic(span=$hit, message="This file runs alone as a plain Bun script from a workspace's state dir (scripts/build-binary.ts embeds it by itself), so it imports only Node's built-ins and the one script written beside it: anything else fails as `Cannot find module` in a real binary. Keep a small helper's own copy here instead.")
+}

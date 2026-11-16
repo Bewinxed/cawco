@@ -7,8 +7,9 @@
  * it the call as the harness sees it, and it answers with the first path the
  * call may not touch.
  *
- * It imports only node's built-ins: the judge runs it as a plain Bun script
- * from the workspace's state dir, and OpenCode's server imports that same copy.
+ * It imports only node's built-ins (and types, which Bun erases): the judge
+ * runs it as a plain Bun script from the workspace's state dir, and
+ * OpenCode's server imports that same copy (scripts/lint/standalone-scripts.grit).
  *
  * The policy has @anthropic-ai/sandbox-runtime's filesystem shape and
  * semantics (its README, "Filesystem Isolation"): reads are allowed unless
@@ -29,11 +30,26 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { errnoCode } from "./absent";
 import type { HarnessKind } from "./harness/kinds";
-import { isRecord } from "./is-record";
 
 type Access = "read" | "write";
+
+/**
+ * Whether `value` is a JSON object (not null, not an array). Core's
+ * `is-record.ts` says the same; this script keeps its own copy, since it
+ * runs alone from a workspace's state dir.
+ */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The errno code a failed file call carries (`ENOENT`, `EACCES`, ...), if it carries one: core's `absent.ts` `errnoCode`, kept here for the same reason. */
+const errnoCode = (error: unknown): string | undefined =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  typeof error.code === "string"
+    ? error.code
+    : undefined;
 
 /** A workspace's policy, every path a real path but an account's user-layer links. */
 export interface Policy {

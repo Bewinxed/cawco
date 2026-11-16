@@ -83,3 +83,14 @@ model-calls/packages/agent/src/planted.ts:17:25 model-calls
 model-calls/packages/agent/src/planted.ts:19:3 model-calls
 model-calls/packages/agent/src/planted.ts:20:40 model-calls
 model-calls/packages/hub/src/other.ts:2:27 model-calls
+standalone-scripts/packages/agent/src/boundary-judge.ts:2:1 standalone-scripts
+standalone-scripts/packages/agent/src/boundary-judge.ts:3:1 standalone-scripts
+standalone-scripts/packages/agent/src/boundary-log-protocol.ts:2:1 standalone-scripts
+standalone-scripts/packages/agent/src/boundary-log.ts:2:1 standalone-scripts
+standalone-scripts/packages/agent/src/boundary/protocol.ts:2:1 standalone-scripts
+standalone-scripts/packages/core/src/workspace-judge.ts:2:1 standalone-scripts
+standalone-scripts/packages/core/src/workspace-judge.ts:3:1 standalone-scripts
+standalone-scripts/packages/core/src/workspace-judge.ts:4:1 standalone-scripts
+standalone-scripts/packages/core/src/workspace-judge.ts:5:1 standalone-scripts
+standalone-scripts/packages/core/src/workspace-judge.ts:6:28 standalone-scripts
+standalone-scripts/packages/core/src/workspace-judge.ts:7:20 standalone-scripts
