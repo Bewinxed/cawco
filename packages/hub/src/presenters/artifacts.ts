@@ -360,9 +360,7 @@ const componentLines = (read: ComponentRead): string[] => {
     ...(read.tuned === undefined
       ? []
       : [`What they tuned: ${valueWords(read.tuned, 600)}`]),
-    ...(read.frame
-      ? [`The frame asked: ${valueWords(read.frame, 2000)}`]
-      : []),
+    ...(read.frame ? [`The frame asked: ${valueWords(read.frame, 2000)}`] : []),
     ...(read.story
       ? [
           `Story ${read.story.name}: args ${valueWords(read.story.args, 1500)}; code ${valueWords(read.story.code, 1500)}`,

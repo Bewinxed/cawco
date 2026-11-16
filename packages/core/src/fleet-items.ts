@@ -40,7 +40,7 @@ import { unhandled } from "./unhandled";
  * {@link projectItemOf}): the machine places each at every place of the
  * project it has.
  */
-export const FLEET_ITEM_KINDS = [
+const FLEET_ITEM_KINDS = [
   "policy",
   "mcp",
   "skill",

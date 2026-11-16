@@ -228,12 +228,7 @@ export const artifactSend =
         return problem(422, { code: "refused", detail: refused });
       }
     }
-    const sent = await send(
-      instanceId,
-      artifactId,
-      sentBody(read),
-      route
-    );
+    const sent = await send(instanceId, artifactId, sentBody(read), route);
     if (!("response" in sent)) {
       return sent;
     }

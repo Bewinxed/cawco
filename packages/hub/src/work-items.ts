@@ -1843,8 +1843,7 @@ export const createWorkItems = ({
    */
   const reportsBack = (
     row: Pick<InstanceRow, "parentInstanceId" | "workItemId">
-  ): boolean =>
-    !isHubParent(row.parentInstanceId) && !!row.workItemId;
+  ): boolean => !isHubParent(row.parentInstanceId) && !!row.workItemId;
 
   /**
    * Who hears a delegated session's reports and asks: the session that

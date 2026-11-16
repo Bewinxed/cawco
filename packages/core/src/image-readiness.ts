@@ -160,15 +160,13 @@ export const imageReadiness = (
   fleet: ImageAccounts | null
 ): Record<ImageProviderId, MachineImageReadiness[]> => {
   const on = (provider: ImageProviderId) =>
-    machines.map(
-      (machine): MachineImageReadiness => ({
-        machineId: machine.machineId,
-        name: machineLabel(machine.hostname),
-        os: machine.os,
-        online: machine.status === "online",
-        lack: lackOf(provider, machine, fleet),
-      })
-    );
+    machines.map((machine): MachineImageReadiness => ({
+      machineId: machine.machineId,
+      name: machineLabel(machine.hostname),
+      os: machine.os,
+      online: machine.status === "online",
+      lack: lackOf(provider, machine, fleet),
+    }));
   return {
     chatgpt: on("chatgpt"),
     antigravity: on("antigravity"),

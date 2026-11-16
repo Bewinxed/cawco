@@ -81,10 +81,7 @@ export const shortLink = (name: string, target: string): string => {
     symlinkSync(target, link);
   } catch (error) {
     // Another process made it first: it is right if it names the same dir.
-    if (
-      errnoCode(error) !== "EEXIST" ||
-      pointsAt() !== target
-    ) {
+    if (errnoCode(error) !== "EEXIST" || pointsAt() !== target) {
       throw error;
     }
   }
