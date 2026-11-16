@@ -2,15 +2,13 @@
   import { HOUR_MS } from "@cawco/core/time";
   /**
    * The session details' stats strip on a bench, with no hub: the Context
-   * bar (what is used) beside the provider's limit (what is left,
-   * usage/ProviderLimit), read from staged windows through the same
+   * meter beside the provider's limit (usage/StatMeter), read from staged windows through the same
    * `limitRows` and `firstToStop` the details use. Four limits: calm, early
    * in its window; burning faster than it lasts; at its limit; and out of
    * date. In the reader's theme.
    */
   import type { LimitWindow } from "@cawco/core/usage/types";
-  import LimitBar from "#lib/cawco/usage/LimitBar.svelte";
-  import ProviderLimit from "#lib/cawco/usage/ProviderLimit.svelte";
+  import StatMeter, { STAT_COLS } from "#lib/cawco/usage/StatMeter.svelte";
   import { fillState, firstToStop, limitRows } from "#lib/cawco/usage.js";
 
   const now = Date.now();
@@ -68,30 +66,27 @@
   {#each rows as row (row.id)}
     <section data-case={row.id}>
       <p class="type-meta text-ink-subtle">{row.say}</p>
-      <!-- The details' strip as it stands: raised, meta, its units wrapping. -->
+      <!-- The details' strip as it stands: raised, meta, its meters on one grid (StatMeter). -->
       <div
-        class="type-meta flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-md bg-surface-raised p-space-3 text-ink-strong"
+        class="type-meta grid grid-cols-(--stat-cols) items-center gap-x-space-3 gap-y-space-2 rounded-md bg-surface-raised p-space-3 text-ink-strong"
+        style:--stat-cols={STAT_COLS}
       >
-        <div class="flex flex-auto items-center gap-x-space-2 gap-y-space-1">
-          <span class="text-ink-muted">Context</span>
-          <span class="max-w-c-context-bar-max min-w-c-context-bar-min flex-1">
-            <LimitBar
-              elapsed={null}
-              label="Context"
-              reads="used"
-              size="compact"
-              state={fillState(contextUsed)}
-              used={contextUsed}
-            />
-          </span>
-          <span>{contextUsed}% · 124k/200k</span>
-        </div>
+        <StatMeter
+          detail="124k of 200k tokens"
+          elapsed={null}
+          figure={`${contextUsed}%`}
+          label="Context"
+          state={fillState(contextUsed)}
+          used={contextUsed}
+        />
         {#if row.limit}
-          <ProviderLimit
+          <StatMeter
+            detail={row.say}
+            elapsed={row.limit.meter.elapsed}
+            figure={`${Math.round(row.limit.meter.used)}%`}
             label={row.limit.label}
-            meter={row.limit.meter}
-            {now}
-            seenAt={now - 90 * 60_000}
+            state={row.limit.meter.state}
+            used={row.limit.meter.used}
           />
         {/if}
       </div>

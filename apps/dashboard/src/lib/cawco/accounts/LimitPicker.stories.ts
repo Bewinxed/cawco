@@ -1,15 +1,15 @@
 /**
- * A session card's account and model pickers, to use (Component Story
- * Format 3, live components): pick an account or a model at its limit,
- * watch it checked, move anyway. The dials set what a click can't reach:
- * how old the readings are, what the provider answers, and a move already
- * waiting. My own checks of each state are LimitPickerChecks.stories.ts.
+ * The session card's account and model pickers, to use (Component Story
+ * Format 3, live components): the real SessionDetails on a bench's hub
+ * (limit-picker-bench). Pick an account or a model at its limit, watch it
+ * checked, move anyway. The dials set what a click can't reach: how old the
+ * readings are, what the provider answers, and a move already waiting.
  */
-import LimitPickerLive from "./limit-picker-live.svelte";
+import LimitPickerBench from "./limit-picker-bench.svelte";
 
 export default {
   title: "Accounts/Limit picker",
-  component: LimitPickerLive,
+  component: LimitPickerBench,
   args: { reading: "fresh", check: "still", pending: false, again: 0 },
 };
 

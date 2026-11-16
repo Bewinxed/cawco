@@ -1,7 +1,5 @@
 <script lang="ts">
   import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
-  import { CAPABILITIES_NONE } from "@cawco/core/harness";
-  import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
   import {
     type MemberProject,
     projectAt,
@@ -24,6 +22,7 @@
   } from "@cawco/core/transcript-types";
   import { onMount } from "svelte";
   import { z } from "zod";
+  import { benchClaudeReport } from "#lib/cawco/bench-reports.js";
   import Home from "#lib/cawco/home/Home.svelte";
   import type { ProjectRow } from "#lib/cawco/projects.js";
   import type { Machine } from "#lib/cawco/stores/board.svelte.js";
@@ -682,21 +681,7 @@
       status: stays ? "online" : "offline",
       ...(stays
         ? {
-            harnesses: [
-              {
-                harness: "claude",
-                auth: "authenticated",
-                installed: true,
-                capabilities: {
-                  ...CAPABILITIES_NONE,
-                  permissionModes: PERMISSION_MODES.filter(
-                    (mode) => mode !== "fullSend"
-                  ),
-                  effort: true,
-                  setModel: true,
-                },
-              },
-            ],
+            harnesses: [benchClaudeReport],
           }
         : {}),
     }));

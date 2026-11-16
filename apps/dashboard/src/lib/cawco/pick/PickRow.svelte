@@ -106,7 +106,7 @@
           <span
             data-slot="name"
             class="min-w-0 truncate type-label text-ink-strong group-aria-disabled:opacity-50 group-data-limited:text-ink-muted"
-            >{name}</span
+            ><bdi>{name}</bdi></span
           >
           <span
             data-slot="detail"

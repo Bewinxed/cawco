@@ -7,21 +7,22 @@
    * ("Coming soon"); the list is the app's catalogue, canonical names only.
    */
   import { accountsWords } from "@cawco/core/words/accounts";
+  import { limitPickWords } from "@cawco/core/words/limit-picks";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { untrack } from "svelte";
   import { crossfade } from "svelte/transition";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { pressVariants } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import { provideGlide } from "#lib/components/ui/tooltip/glide.js";
+  import GlideTip from "#lib/components/ui/tooltip/glide-tip.svelte";
   import {
     IconCloseTab as Clear,
     IconTerminal as Code,
     IconCpuBolt as Cpu,
     IconSearch as Search,
   } from "#lib/icons.js";
-  import { frameSize } from "#lib/platform/frame-observer.js";
   import { autowidth } from "#lib/platform/motion/autosize.svelte.js";
   import {
     crossIn,
@@ -35,8 +36,10 @@
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import Rail from "#lib/platform/motion/Rail.svelte";
+  import type { LimitRow } from "../accounts/room";
   import HarnessLogo from "../HarnessLogo.svelte";
   import { models, rememberModel } from "../models.svelte";
+  import PickRow from "../pick/PickRow.svelte";
   import { providerOf } from "../provider";
   import AccountChip, { type AccountTool } from "./AccountChip.svelte";
   import {
@@ -62,6 +65,8 @@
     account,
     label = spawnWords.form.model,
     unavailable,
+    limitOf,
+    onforce,
   }: {
     harness: HarnessKind;
     onharness: (harness: HarnessKind) => void;
@@ -83,8 +88,18 @@
     label?: string;
     /** Why a model cannot be picked here, shown on its row; nothing when it can. */
     unavailable?: (entry: ModelEntry) => string | undefined;
+    /**
+     * A model's limit on the account it would run on (accounts/room.ts
+     * `limitRowOf`): its row's second line, and whether it is at its limit,
+     * checked again, or holding its pick. Absent where no account binds it.
+     */
+    limitOf?: (id: string) => LimitRow | undefined;
+    /** Pick anyway on a row holding its pick past a limit. */
+    onforce?: (id: string) => void;
   } = $props();
   const uid = $props.id();
+  /** The list's one tooltip, gliding row to row (glide.ts), as a bar's glass has one. */
+  const tips = provideGlide();
   type TabId = HarnessKind | "codex";
   const TABS: { id: TabId; name: string; soon?: boolean }[] = [
     { id: "claude", name: accountsWords.harnesses.claude },
@@ -126,21 +141,6 @@
     }))
   );
   let accountOpen = $state(false);
-
-  /**
-   * The chosen option's height: its row, and the line its chips dropped to
-   * when the row could not hold them beside its name. The fill stands on the
-   * whole of it.
-   */
-  let chosenHeight = $state(44);
-  // Read now, and a change in the next frame (frameSize): the fill stands
-  // on it.
-  const chosen = frameSize(
-    (node: HTMLElement) => node.offsetHeight,
-    (value) => {
-      chosenHeight = value;
-    }
-  );
 
   /**
    * The chosen model's run settings glide from the row it leaves to the one
@@ -263,18 +263,7 @@
   /** Why the harness lists nothing to pick here, when its list is unread. */
   const unread = $derived(models.unread(listHarness, machineIds));
   const noResults = $derived(rows.length === 0 && !showCustomRow);
-  const modelIdx = $derived(
-    Math.max(
-      0,
-      rows.findIndex((row) => row.id === selectedId)
-    ) + (showCustomRow ? 1 : 0)
-  );
-  const hiOpacity = $derived(rows.some((row) => row.id === selectedId) ? 1 : 0);
   const vendor = (id: string) => VENDOR[providerOf(id) ?? ""] ?? "";
-  /** One maker for the whole list says nothing per row; mixed lists do. */
-  const mixedMakers = $derived(
-    new Set(entries.map((entry) => providerOf(entry.id) ?? "")).size > 1
-  );
   function pick(entry: ModelEntry) {
     if (entry.isCustom) {
       rememberModel(entry.id, listHarness);
@@ -421,18 +410,8 @@
         role="listbox"
         tabindex="-1"
         bind:this={list}
-        {@attach highlight({ rows: "[data-fh]" })}
+        {@attach highlight({ rows: "[data-pick-row]" })}
       >
-        <!-- Every option above the chosen one is a row (a row and its gap a step), so the
-             fill travels by its index; it is as tall as the chosen option. -->
-        <span
-          data-slot="fill"
-          aria-hidden="true"
-          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 rounded-xs bg-selected-bg transition-[opacity] duration-(--duration-control) ease-out motion-safe:transition-panel-resize"
-          style:transform={`translateY(calc(${modelIdx} * (var(--spacing-c-row-h) + var(--spacing-space-row))))`}
-          style:height={`${chosenHeight}px`}
-          style:opacity={hiOpacity}
-        ></span>
         {#if swap.leaving.length}
           <div
             aria-hidden="true"
@@ -441,12 +420,8 @@
             inert
           >
             {#each swap.leaving as entry (entry.id)}
-              <div
-                data-slot="row"
-                class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-xs px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed border border-transparent bg-transparent"
-                style:animation={swap.leaveAnim()}
-              >
-                {@render rowBody(entry)}
+              <div style:animation={swap.leaveAnim()}>
+                {@render row(entry, false)}
               </div>
             {/each}
           </div>
@@ -454,35 +429,20 @@
         <!-- One slot for the custom row and the empty line, ahead of the rows:
              the one leaving keeps its place while the other fades in. -->
         {#if showCustomRow}
-          <button
-            data-slot="row"
-            class="select-none group relative flex h-c-row-h w-full items-center gap-space-3 rounded-xs px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint transition-control border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
-            data-fh="1"
-            onclick={pickCustom}
-            type="button"
-            in:crossIn
-            out:crossOut
-          >
-            <span data-slot="tile" class={iconTileVariants()} data-ink
-              ><Code class="size-icon-md" /></span
+          <div in:crossIn out:crossOut>
+            <PickRow
+              detail={query}
+              full={query}
+              mono
+              name={spawnWords.model.custom}
+              onpick={pickCustom}
+              picked={false}
             >
-            <span data-slot="text" class="min-w-0 flex-1">
-              <span
-                data-slot="name"
-                class="type-label block truncate group-disabled:opacity-50"
-                >{spawnWords.model.custom}</span
-              >
-              <span
-                data-slot="meta"
-                class="block truncate type-meta font-(family-name:--font-mono) text-ink-muted"
-                >{query}</span
-              >
-            </span>
-            <span
-              class="font-sans text-size-meta leading-none font-normal whitespace-nowrap text-ink-subtle"
-              >{spawnWords.model.enter}</span
-            >
-          </button>
+              {#snippet lead()}
+                <Code class="size-icon-md text-ink-muted" />
+              {/snippet}
+            </PickRow>
+          </div>
         {:else if noResults}
           <div
             data-slot="none"
@@ -500,7 +460,6 @@
           </div>
         {/if}
         {#each rows as entry, i (`${swap.gen}:${entry.id}`)}
-          {@const reason = unavailable?.(entry)}
           {@const picked = entry.id === selectedId}
           <!-- A row, and on the chosen one its run settings, in its flow: at
                the row's end while the row holds its name beside them, on a
@@ -509,22 +468,10 @@
             data-slot="option"
             class="relative flex flex-wrap items-center justify-end"
             style:animation={swap.rowAnim(i)}
-            {@attach picked && tools ? chosen : undefined}
           >
-            <button
-              data-slot="row"
-              aria-disabled={reason ? true : undefined}
-              aria-selected={picked}
-              class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-xs px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint transition-control select-none min-w-0 shrink grow basis-48 border border-transparent bg-transparent"
-              data-fh="1"
-              data-model={entry.id}
-              disabled={Boolean(reason)}
-              onclick={() => pick(entry)}
-              role="option"
-              type="button"
-            >
-              {@render rowBody(entry, reason)}
-            </button>
+            <div class="min-w-0 shrink grow basis-48">
+              {@render row(entry, true)}
+            </div>
             {#if picked && tools}
               <!-- The chips' line folds open and shut under the name, so the
                    rows after it glide; the chips glide between rows in it. -->
@@ -550,42 +497,43 @@
     </div>
   </div>
 </section>
+<GlideTip tether={tips} />
 
-{#snippet rowBody(entry: ModelEntry, reason?: string)}
-  {@const provider = providerOf(entry.id)}
-  {#if mixedMakers}
-    <span
-      data-slot="tile"
-      class={iconTileVariants({
-        class: "overflow-hidden group-disabled:opacity-50",
-      })}
-    >
-      {#if provider}
+<!-- Every model is a PickRow (one row for every account and model list):
+     its maker's mark, its name, and its second line: why it can't be picked,
+     the limit it is at on the account it would run on (`limitOf`), or its
+     id. -->
+{#snippet row(entry: ModelEntry, live: boolean)}
+  {@const reason = unavailable?.(entry)}
+  {@const limit = reason ? undefined : limitOf?.(entry.id)}
+  {@const detail = reason ?? limit?.detail ?? entry.id}
+  <PickRow
+    checking={live && Boolean(limit?.checking)}
+    {detail}
+    disabled={Boolean(reason)}
+    force={live && limit?.held && onforce
+      ? {
+          action: limitPickWords.pickAnyway,
+          onforce: () => onforce(entry.id),
+        }
+      : undefined}
+    full={`${entry.id}${vendor(entry.id) ? ` · ${vendor(entry.id)}` : ""}${reason || limit ? `\n${detail}` : ""}`}
+    limited={Boolean(limit?.limited)}
+    mono={!(reason || limit)}
+    name={entry.name}
+    onpick={() => {
+      if (live) {
+        pick(entry);
+      }
+    }}
+    picked={live && entry.id === selectedId}
+  >
+    {#snippet lead()}
+      {#if providerOf(entry.id)}
         <ProviderLogo model={entry.id} size="control" />
       {:else}
         <HarnessLogo harness={listHarness} />
       {/if}
-    </span>
-  {/if}
-  <span data-slot="text" class="min-w-0 flex-1">
-    <span
-      data-slot="name"
-      class="type-label block truncate group-disabled:opacity-50 data-mono:font-(family-name:--font-mono)"
-      data-mono={entry.mono || undefined}>{entry.name}</span
-    >
-    {#if reason}
-      <span
-        data-slot="reason"
-        data-meta
-        class="type-meta block truncate text-ink-muted">{reason}</span
-      >
-    {:else}
-      <span
-        data-slot="meta"
-        class="type-meta block truncate text-ink-subtle in-aria-selected:text-selected-ink"
-        ><span class="font-(family-name:--font-mono)">{entry.id}</span>
-        {vendor(entry.id) ? ` · ${vendor(entry.id)}` : ""}</span
-      >
-    {/if}
-  </span>
+    {/snippet}
+  </PickRow>
 {/snippet}

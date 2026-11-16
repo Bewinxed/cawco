@@ -1,43 +1,90 @@
 /**
- * The limit picker's states, each forced, for checking the drawing
+ * The limit picker clicked through, for checking the drawing
  * (artifact_read), not for the person: what they open is
- * LimitPicker.stories.ts `Live`. The meta's args are every story's; a
- * story's own args are what it changes.
+ * LimitPicker.stories.ts `Live`. Each story starts from the card at rest
+ * and plays the presses a person makes.
  */
-import LimitPickerLive from "./limit-picker-live.svelte";
+import LimitPickerBench from "./limit-picker-bench.svelte";
 
 export default {
-  title: "Accounts/Limit picker checks",
-  component: LimitPickerLive,
-  args: { reading: "fresh", check: "still", pending: false, open: "account" },
+  title: "Accounts/Limit picker clicked",
+  component: LimitPickerBench,
+  args: { reading: "fresh", check: "still", pending: false, again: 0 },
 };
 
-/** The account list: bewinxed at its limit, read a few minutes ago. */
-export const Accounts = {};
+/** The card at rest. */
+export const Rest = {};
 
-/** The same list, its readings three hours old. */
-export const Stale = { args: { reading: "stale" } };
+interface Play {
+  canvas: {
+    getByRole: (role: string, options: { name: RegExp }) => HTMLElement;
+  };
+  userEvent: {
+    click: (element: Element) => Promise<void>;
+    wait: (ms: number) => Promise<void>;
+  };
+}
 
-/** bewinxed picked and being checked again. */
-export const Checking = { args: { checking: "bewinxed" } };
+const ACCOUNT = /Account:/u;
+const BEWINXED = /bewinxed/u;
+const MODEL = /Opus 5.5/u;
+const FABLE = /Fable/u;
+const MOVE_ANYWAY = /Move anyway/u;
+const EFFORT = /Effort/u;
+const PERMISSION = /Accept edits/u;
+/** Longer than the provider takes to answer a check. */
+const ANSWERED_MS = 1400;
 
-/** Still at its limit: Move anyway on its row. */
-export const StillAtLimit = {
-  args: { held: { id: "bewinxed", why: "still" } },
+/** Presses `chip`, then each option named in `picks`, waiting `after` once done. */
+const presses =
+  (chip: RegExp, picks: RegExp[], after = 400) =>
+  async ({ canvas, userEvent }: Play): Promise<void> => {
+    await userEvent.click(canvas.getByRole("button", { name: chip }));
+    for (const pick of picks) {
+      await userEvent.wait(300);
+      await userEvent.click(canvas.getByRole("option", { name: pick }));
+    }
+    await userEvent.wait(after);
+  };
+
+/** The account list open. */
+export const AccountsOpen = { from: "Rest", play: presses(ACCOUNT, []) };
+
+/** bewinxed picked, still being checked. */
+export const Checking = {
+  from: "Rest",
+  play: presses(ACCOUNT, [BEWINXED], 300),
 };
 
-/** Its machine offline: the old reading, and Move anyway at once. */
-export const Offline = {
-  args: { held: { id: "bewinxed", why: "offline" } },
+/** The check answered: still at its limit, Move anyway on its row. */
+export const Held = {
+  from: "Rest",
+  play: presses(ACCOUNT, [BEWINXED], ANSWERED_MS),
 };
 
-/** The model list on jude: Fable at its limit. */
-export const Models = { args: { open: "model" } };
-
-/** Fable still at its limit: Pick anyway on its row. */
-export const ModelStill = {
-  args: { open: "model", held: { id: "claude-fable-5-2", why: "still" } },
+/** Move anyway pressed: the card says the move waits for the turn. */
+export const MovedAnyway = {
+  from: "Rest",
+  play: async (play: Play) => {
+    await presses(ACCOUNT, [BEWINXED], ANSWERED_MS)(play);
+    await play.userEvent.click(
+      play.canvas.getByRole("button", { name: MOVE_ANYWAY })
+    );
+    await play.userEvent.wait(500);
+  },
 };
 
-/** A move to Research ops waiting for the turn to end, the list closed. */
-export const MovePending = { args: { open: null, pending: true } };
+/** The model list open, Fable at its limit on jude. */
+export const ModelsOpen = { from: "Rest", play: presses(MODEL, []) };
+
+/** Fable picked and held: Pick anyway on its row. */
+export const FableHeld = {
+  from: "Rest",
+  play: presses(MODEL, [FABLE], ANSWERED_MS),
+};
+
+/** The effort picker open. */
+export const EffortOpen = { from: "Rest", play: presses(EFFORT, []) };
+
+/** The permission picker open. */
+export const PermissionOpen = { from: "Rest", play: presses(PERMISSION, []) };

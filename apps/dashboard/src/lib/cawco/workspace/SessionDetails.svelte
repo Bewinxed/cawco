@@ -6,7 +6,7 @@
 </script>
 
 <script lang="ts">
-  import { accountProvidersOf } from "@cawco/core/accounts";
+  import { accountProvidersOf, modelScope } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
   import {
     EFFORT_NONE,
@@ -15,8 +15,11 @@
     isEffortLevel,
     type PermissionMode,
   } from "@cawco/core/harness/kinds";
+  import { clockWords } from "@cawco/core/words/account-lines";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { commonWords } from "@cawco/core/words/common";
+  import { limitPickWords } from "@cawco/core/words/limit-picks";
+  import { sessionStatWords } from "@cawco/core/words/session-stats";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { onDestroy, untrack } from "svelte";
@@ -45,7 +48,9 @@
   import { standsOpen } from "#lib/platform/motion/hang.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
+  import { forcePast, pickPastLimit } from "../accounts/limit-checks.svelte";
   import { nameOf } from "../accounts/model.svelte";
+  import { type LimitRow, limitRowOf, roomOf } from "../accounts/room";
   import {
     accountFault,
     movingTo,
@@ -80,8 +85,8 @@
   import { relaunchSession } from "../stores/turns.svelte";
   import { usageStore } from "../stores/usage.svelte";
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
-  import LimitBar from "../usage/LimitBar.svelte";
-  import ProviderLimit from "../usage/ProviderLimit.svelte";
+  import { fmt } from "../usage/rings";
+  import StatMeter, { STAT_COLS } from "../usage/StatMeter.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { contextOf } from "./workspace.svelte";
 
@@ -193,7 +198,16 @@
     if (traitsOf(harness).providerLimit === "account") {
       const accountId = row?.accountId;
       const claude = accountId ? usageStore.claudeLimits[accountId] : undefined;
-      const limit = firstToStop(limitRows("Claude", claude, limitNow));
+      // The windows that bind the model it runs: every model's, and its
+      // family's own (core `modelScope`), never another family's week.
+      const scope = modelScope(model);
+      const binding = claude && {
+        ...claude,
+        windows: claude.windows.filter(
+          (one) => one.scopeLabel === null || one.scopeLabel === scope
+        ),
+      };
+      const limit = firstToStop(limitRows("Claude", binding, limitNow));
       return limit && claude ? { ...limit, seenAt: claude.fetchedAt } : null;
     }
     if (
@@ -664,6 +678,47 @@
     }
   });
 
+  /**
+   * The account a model picked here runs on: the one the session is moving
+   * to, else its own. Its readings say each model's limit there, and its
+   * catalog what it offers.
+   */
+  const modelAccount = $derived(
+    kept || resume || !row ? null : (movingTo(row) ?? row.accountId ?? null)
+  );
+  const modelKey = (id: string): string => `model:${modelAccount}:${id}`;
+  /** A model's limit on {@link modelAccount}, for its row; none while it has room. */
+  function modelLimitOf(id: string): LimitRow | undefined {
+    if (!modelAccount) {
+      return;
+    }
+    const room = roomOf(usageStore.claudeLimits[modelAccount], id, limitNow);
+    return room?.kind === "limit"
+      ? limitRowOf(modelKey(id), room, limitNow)
+      : undefined;
+  }
+  /** Why a model can't run on {@link modelAccount}: its catalog doesn't list it. */
+  function notOffered(entry: { id: string }): string | undefined {
+    const catalog = accountsStore.accounts?.catalogs.find(
+      (one) => one.accountId === modelAccount
+    );
+    if (
+      !catalog ||
+      catalog.models.some(
+        (one) => one.value === entry.id || one.resolvedModel === entry.id
+      )
+    ) {
+      return;
+    }
+    return limitPickWords.notOffered;
+  }
+  /** A model picked: changed, and the list shut. */
+  function modelPicked(id: string): void {
+    changeModel(id);
+    modelOpen = false;
+    browsing = undefined;
+  }
+
   function changeModel(next: string) {
     if (resume) {
       storedStore.pickResume(sessionId, { model: next });
@@ -991,15 +1046,30 @@
                     // rail is browsed, and a model picked there chooses both.
                     browsing = next;
                   }}
+                  limitOf={modelLimitOf}
+                  onforce={(id) =>
+                    forcePast(modelKey(id), () => modelPicked(id))}
                   onmodel={(id) => {
                     if (kept) {
                       kept.onchoose({ harness: shownHarness, model: id });
-                    } else {
-                      changeModel(id);
+                      modelOpen = false;
+                      browsing = undefined;
+                      return;
                     }
-                    modelOpen = false;
-                    browsing = undefined;
+                    // A model at its limit on the account it would run on is
+                    // checked again before the pick goes (limit-checks).
+                    if (modelAccount && modelLimitOf(id)?.limited) {
+                      detach(
+                        pickPastLimit(modelKey(id), modelAccount, id, () =>
+                          modelPicked(id)
+                        ),
+                        "pickPastLimit"
+                      );
+                      return;
+                    }
+                    modelPicked(id);
                   }}
+                  unavailable={kept ? undefined : notOffered}
                   runtime={!kept}
                 />
               </div>
@@ -1109,66 +1179,64 @@
       </div>
     {/if}
   </div>
-  <!-- A meter wrapping to a second line tweens the strip's height (morph). -->
+  <!-- The stats on one grid: name, meter, figure, every row a subgrid of
+       it (StatMeter), so each meter starts and ends on the card's edges and
+       each figure stands in one column. A row that has no meter (a reading
+       on its way, why there is none, the MCP count) spans the three. -->
   <div
     data-slot="stats"
-    class="flex flex-none flex-wrap items-center gap-space-4 gap-y-space-2 border-t border-t-border-hairline px-space-5 pt-space-3 pb-0 text-size-meta font-normal leading-body num text-ink-strong"
+    class="grid flex-none grid-cols-(--stat-cols) items-center gap-x-space-3 gap-y-space-2 border-t border-t-border-hairline px-space-5 pt-space-3 pb-0 text-size-meta font-normal leading-body num text-ink-strong"
     bind:this={statsEl}
+    style:--stat-cols={STAT_COLS}
     {@attach morph()}
   >
-    <!-- Each meter (context, the provider's limit, MCP) is one unit, sized
-         by its content: a unit that does not fit beside the others moves to
-         the next line. Only a unit wider than the whole strip wraps inside
-         itself, a part to a line, and no part ever gets narrower than its
-         own text. Context takes whatever the line has spare, its bar first:
-         a word, a 4px bar of what is used (usage/LimitBar) and a figure;
-         the provider's limit is its own unit (usage/ProviderLimit). -->
-    <div
-      data-slot="context"
-      class="flex flex-auto flex-wrap items-center gap-x-space-2 gap-y-space-1"
-    >
-      {#if percent !== null && stats.totalTokens !== null && stats.maxTokens !== null}
-        <span class="flex-none whitespace-nowrap text-ink-muted">Context</span>
-        <span
-          class="max-w-c-context-bar-max min-w-c-context-bar-min flex-1"
-          title={readAt ? `Read at ${readAt}` : undefined}
-        >
-          <LimitBar
-            elapsed={null}
-            label="Context"
-            reads="used"
-            size="compact"
-            state={fillState(percent)}
-            used={percent}
-          />
-        </span>
-        {@render figure(
-          `${percent}% · ${tokens(stats.totalTokens)}/${tokens(stats.maxTokens)}`
+    {#if percent !== null && stats.totalTokens !== null && stats.maxTokens !== null}
+      <StatMeter
+        detail={sessionStatWords.contextTokens(
+          tokens(stats.totalTokens),
+          tokens(stats.maxTokens),
+          readAt
         )}
-      {:else if reading}
-        <span class="mark-line inline-flex items-center gap-space-2"
-          ><LiveDot /><span>Reading…</span></span
-        >
-      {:else if refusal}
-        <span data-slot="refusal" class="min-w-0 wrap-anywhere" title={refusal}
-          >{refusal}</span
-        >
-      {:else}
-        <span>Context not reported</span>
-      {/if}
-    </div>
+        elapsed={null}
+        figure={sessionStatWords.share(percent)}
+        label="Context"
+        state={fillState(percent)}
+        used={percent}
+      />
+    {:else if reading}
+      <span class="col-span-full mark-line inline-flex items-center gap-space-2"
+        ><LiveDot /><span>Reading…</span></span
+      >
+    {:else if refusal}
+      <span
+        data-slot="refusal"
+        class="col-span-full min-w-0 wrap-anywhere"
+        title={refusal}>{refusal}</span
+      >
+    {:else}
+      <span class="col-span-full">Context not reported</span>
+    {/if}
     {#if providerLimit}
-      <ProviderLimit
+      <StatMeter
+        detail={sessionStatWords.limitResets(
+          providerLimit.meter.window.resetsAt
+            ? clockWords(Date.parse(providerLimit.meter.window.resetsAt))
+            : null,
+          providerLimit.meter.state === "stale"
+            ? fmt(limitNow - providerLimit.seenAt)
+            : null
+        )}
+        elapsed={providerLimit.meter.elapsed}
+        figure={sessionStatWords.share(providerLimit.meter.used)}
         label={providerLimit.label}
-        meter={providerLimit.meter}
-        now={limitNow}
-        seenAt={providerLimit.seenAt}
+        state={providerLimit.meter.state}
+        used={providerLimit.meter.used}
       />
     {/if}
     {#if session?.mcp}
       <a
         data-slot="tools"
-        class="inline-flex flex-none items-center text-ink-strong hover:text-ink-strong"
+        class="col-span-full inline-flex items-center text-ink-strong hover:text-ink-strong"
         href="/config/mcp">{@render figure(`${session.mcp.length} MCP`)}</a
       >
     {/if}
