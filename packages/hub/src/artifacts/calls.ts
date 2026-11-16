@@ -93,7 +93,7 @@ const changeOf = (body: {
   elements?: SkeletonElement[];
   html?: string;
   mermaid?: string;
-  patch?: unknown[];
+  patch?: Operation[];
 }) => {
   const named = (
     ["html", "patch", "elements", "delete", "mermaid"] as const
@@ -113,14 +113,13 @@ const oneChange = (body: {
   elements?: SkeletonElement[];
   html?: string;
   mermaid?: string;
-  patch?: unknown[];
+  patch?: Operation[];
 }): Exclude<PageChange, { statements: string }> | CanvasChange => {
   if (body.html !== undefined) {
     return { html: body.html };
   }
   if (body.patch !== undefined) {
-    // Cast kept: the route's schema (bodies.ts `operation`) is one object with `from` and `value` optional for every op, which rfc6902's per-op `Operation` union does not take; typing it means a union per op in the schema, a change to the API's shape.
-    return { patch: body.patch as Operation[] };
+    return { patch: body.patch };
   }
   if (body.elements !== undefined) {
     return { elements: body.elements };

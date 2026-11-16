@@ -141,10 +141,14 @@ import {
  * instructions live in the tool, decisions/memory-tool-lines); its fields say
  * the loose ends that are the person's and the thing itself (delegate 11,383
  * measured).
+ * 2026-11-16: artifact_update's `patch` takes each JSON Patch operation as
+ * its op's shape (`from` on a move or copy, `value` on an add, replace or
+ * test), as the route and rfc6902 take it, so an op missing either is
+ * refused at the call (worker 30,917, delegate 11,402 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_840,
-  delegate: 11_390,
+  worker: 30_930,
+  delegate: 11_410,
   overseer: 770,
   "web-facing": 3400,
   curator: 1320,

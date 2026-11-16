@@ -380,12 +380,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    work, is refused 409 `artifact-name-taken`; `to` and its refusal
  *    `artifact-no-parent` are gone. A page built for 75 does not know the
  *    new code, so it reloads first.
+ * 77: a page's `patch` takes each RFC 6902 operation as its op's shape:
+ *    `from` on a move or copy, `value` on an add, replace or test, neither
+ *    on a remove. An op without what it needs is refused 422, where it was
+ *    taken and failed as the patch applied. A page built for 76 may send
+ *    one, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 76;
+export const WIRE_PROTOCOL = 77;
 
 /**
  * What a session's stream carries: the changes each frame made to its
