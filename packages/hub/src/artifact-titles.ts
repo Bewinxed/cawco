@@ -8,7 +8,12 @@
  * no surface ever reads an empty title, and nothing falls back at runtime.
  */
 import { ARTIFACT_TITLE_LIMIT } from "@cawco/core/artifact-kinds";
-import { markerTag, readMarkerTag } from "@cawco/core/injected";
+import {
+  ARTIFACT_MARKER_KINDS,
+  markerTag,
+  readMarkerTag,
+} from "@cawco/core/injected";
+import { isOneOf } from "@cawco/core/one-of";
 import type { NeutralUserMessage } from "@cawco/core/session-messages";
 import type { ArtifactRow } from "./db/artifacts";
 import { ARTIFACT_TITLES } from "./db/migration-names";
@@ -116,7 +121,10 @@ export const titledStoredNotice =
   (body: NeutralUserMessage): NeutralUserMessage | null =>
     rewriteSendText(body, (text) => {
       const tag = readMarkerTag(text);
-      if (!tag?.kind.startsWith("artifact-") || tag.fields.title) {
+      if (
+        !(tag && isOneOf(ARTIFACT_MARKER_KINDS, tag.kind)) ||
+        tag.fields.title
+      ) {
         return null;
       }
       const { id = "", name = "" } = tag.fields;

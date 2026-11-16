@@ -12,7 +12,12 @@
  */
 
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
-import { markerTag, readMarkerTag } from "@cawco/core/injected";
+import {
+  ARTIFACT_MARKER_KINDS,
+  markerTag,
+  readMarkerTag,
+} from "@cawco/core/injected";
+import { isOneOf } from "@cawco/core/one-of";
 import type { NeutralUserMessage } from "@cawco/core/session-messages";
 import { rewriteSendText } from "./tag-markers";
 
@@ -22,7 +27,9 @@ const SHEET_IS: ArtifactKind = "component";
 /** `text` with its artifact notice's tag naming a component; null for any other text. */
 const renamed = (text: string): string | null => {
   const tag = readMarkerTag(text);
-  return tag?.kind.startsWith("artifact-") && tag.fields.kind === "sheet"
+  return tag &&
+    isOneOf(ARTIFACT_MARKER_KINDS, tag.kind) &&
+    tag.fields.kind === "sheet"
     ? `${markerTag(tag.kind, { ...tag.fields, kind: SHEET_IS })}${tag.rest}`
     : null;
 };

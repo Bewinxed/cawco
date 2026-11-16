@@ -3572,8 +3572,9 @@ const SHORT = "5a167bde";
 
 /**
  * Each marker that is not an artifact notice, as its builder writes it now
- * (core injected.ts, rules.ts `ruleMarker`, asks.ts `askAnsweredText`), with
- * the origin its send carries.
+ * (core injected.ts, rules.ts `ruleMarker`, asks.ts `askAnsweredText`), or
+ * as CawCo's workflow engine wrote it before it went (71a7fe2155), with the
+ * origin its send carries.
  */
 const MARKER_TEXTS: readonly [string, Record<string, string>][] = [
   [
@@ -3619,6 +3620,14 @@ const MARKER_TEXTS: readonly [string, Record<string, string>][] = [
   [
     `${markerTag("ask-answered", { id: "ask_fixture-marked", kind: "question", outcome: "answered" })}The person answered [Where does the tray go?](cawco:ask/ask_fixture-marked):\n- Where does the tray go? → Under the rail`,
     { kind: "system", name: "ask" },
+  ],
+  [
+    `${markerTag("workflow-notice", { workflow: "Deep research", event: "done", run: "run_fixture-1" })}[Workflow Deep research — done]\n\nrun run_fixture-1 · 4m 12s · The report is in ref 3.`,
+    { kind: "peer", name: "Deep research", fromSession: "run_fixture-1" },
+  ],
+  [
+    `${markerTag("workflow-step", { workflow: "Deep research", step: "Search" })}[Hand-off from the Deep research workflow — step Search, not the user]\n\nSearch for how other boards keep a rail's place across a reconnect.`,
+    { kind: "peer", name: "Deep research", fromSession: "run_fixture-1" },
   ],
 ];
 
@@ -3671,6 +3680,14 @@ const UNTAGGED_TEXTS = (
   [
     "[Rule: no-force-push]\n\nNever force-push main.",
     { kind: "system", name: "rule:no-force-push" },
+  ],
+  [
+    "[Workflow Deep research — question]\n\nrun run_fixture-2 · step 2\nWhich sources count?",
+    { kind: "peer", name: "Deep research", fromSession: "run_fixture-2" },
+  ],
+  [
+    "[Hand-off from the Deep research workflow — step Search, not the user]\n\nSearch for how other boards keep a rail's place across a reconnect.",
+    { kind: "peer", name: "Deep research", fromSession: "run_fixture-2" },
   ],
 ];
 

@@ -21,6 +21,10 @@ const BEFORE: readonly {
     tag: ([, from, short]) => markerTag("handoff", { from, short }),
   },
   {
+    line: /^\[Hand-off from the (.+?) workflow — step (.+?), not the user\]/u,
+    tag: ([, workflow, step]) => markerTag("workflow-step", { workflow, step }),
+  },
+  {
     line: /^\[CawCo\] Your message to (.+?) was not delivered: /u,
     tag: ([, to]) => markerTag("undelivered", { to }),
   },
@@ -52,6 +56,11 @@ const BEFORE: readonly {
   {
     line: /^\[Fleet watch\] (.+)\n\n/u,
     tag: ([, line]) => markerTag("fleet-watch", { line }),
+  },
+  {
+    line: /^\[Workflow (.+?) — (.+?)\]\n\n/u,
+    tag: ([, workflow, event]) =>
+      markerTag("workflow-notice", { workflow, event }),
   },
   {
     line: /^\[Fork\] (.+)\n\n/u,
