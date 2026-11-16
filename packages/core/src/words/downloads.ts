@@ -23,6 +23,14 @@ export const downloadWords = {
   /** The hub is still fetching the build from its release host: how far it is. */
   hubFetching: (received: number, total: number) =>
     `the hub is fetching it, ${megabytes(received)} of ${megabytes(total)} MB`,
+  /** The hub's answer (503) to a machine's ask of an archive it is still fetching from its release host. */
+  hubStillFetching: (
+    archive: string,
+    received: number,
+    total: number,
+    askAgainS: number
+  ) =>
+    `The hub is still fetching ${archive} from its release host (${megabytes(received)} of ${megabytes(total)} MB); ask again in ${askAgainS} s`,
   /** No byte came for the stall window: the one way a slow link is abandoned. */
   stalled: (seconds: number) => `no byte came for ${seconds} s`,
   /** The connection went before the body was whole. */

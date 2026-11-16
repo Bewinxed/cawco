@@ -1737,7 +1737,8 @@ export class BinaryUpdater {
    * attempt; one of any other build is deleted first.
    *
    * While the hub still fetches the build from its release host it answers
-   * 503 with how far it is: the machine says the hub's progress, waits the
+   * 503 with `Retry-After` and how far it is (core binary-distribution.ts
+   * `archiveAnswered`): the machine says the hub's progress, waits the
    * hub's `Retry-After` and asks again, its own attempt standing, until the
    * hub holds the archive or says its fetch failed (502, said with the
    * hub's words as this attempt's failure). A hub that refuses the

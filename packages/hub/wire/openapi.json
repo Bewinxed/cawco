@@ -81618,6 +81618,21 @@
           "detail": {
             "type": "string"
           },
+          "fetching": {
+            "type": "object",
+            "properties": {
+              "received": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "received",
+              "total"
+            ]
+          },
           "instance": {
             "type": "string"
           },
@@ -81637,6 +81652,7 @@
         "required": [
           "code",
           "detail",
+          "fetching",
           "status",
           "title",
           "type"
