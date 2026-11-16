@@ -167,6 +167,13 @@ export const decidesWords = {
     "Give it standing instructions: what it reads before every decision.",
   kindFields:
     "Give the kind a name and the line agents read to file a choice under it.",
+  memberUnread: (name: string) =>
+    `${name}'s stored settings don't read, so it runs nothing: remove it and add it again.`,
+  runsNothing: (name: string) =>
+    `${name} runs as no delegate type, so it has no harness or model to set.`,
+  /** Why a member's stored row doesn't read, on its card. */
+  agentUntyped: "An agent with no delegate type to run as",
+  personTyped: "A person or channel with a delegate type",
   wearsMark: (name: string) =>
     `${name} wears an identity mark, not one of Caw's poses.`,
   wearsPose: (name: string) =>

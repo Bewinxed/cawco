@@ -255,6 +255,10 @@ export class WhoDecides {
     if (this.read.state !== "read") {
       return null;
     }
+    // A member whose stored row doesn't read runs nothing: its card says why.
+    if ("unread" in member) {
+      return { attention: true, text: member.unread };
+    }
     switch (member.type) {
       case "you":
       case "asker":
@@ -305,7 +309,7 @@ export class WhoDecides {
         };
       }
       default:
-        return unhandled("member type", member.type);
+        return unhandled("member type", member);
     }
   };
 

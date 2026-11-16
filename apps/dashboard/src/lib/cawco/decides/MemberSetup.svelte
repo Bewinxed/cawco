@@ -19,7 +19,7 @@
    * Delegate types from under it; one he added can be removed, which asks in
    * the settings' flow first.
    */
-  import { BUILT_IN_MEMBERS, type Member } from "@cawco/core/decides";
+  import { BUILT_IN_MEMBERS, type Member, slugOf } from "@cawco/core/decides";
   import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
   import { unhandled } from "@cawco/core/unhandled";
   import { decidesWords } from "@cawco/core/words/decides";
@@ -102,7 +102,8 @@
         hue: draft.hue,
         pose: null,
         hear: draft.hear,
-        delegateType: null,
+        // The type it is added as: its id, its name's slug (hub decides.ts).
+        delegateType: slugOf(draft.name),
       };
     }
     return member.type === "agent" ? { ...member, hue: draft.hue } : member;
@@ -111,6 +112,9 @@
     member?.name ?? (setup.adding === null ? decidesWords.addMember : face.name)
   );
   const line = $derived.by(() => {
+    if (member && "unread" in member) {
+      return member.unread;
+    }
     const type = member?.type ?? "agent";
     switch (type) {
       case "agent":

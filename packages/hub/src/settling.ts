@@ -37,6 +37,7 @@ import type { AnyProblem } from "./refusal";
 
 import type { ChoiceEntry } from "@cawco/core/choices";
 import {
+  type AgentMember,
   BUILT_IN,
   type FleetDecides,
   kindName,
@@ -132,7 +133,12 @@ export interface SettlingDeps {
 }
 
 /** Where a card's member stands, or why it can't be reached. */
-type Reach = { ok: true } | { ok: false; reason: string };
+/** Where a reached member's cards go: Caw's conversation on the page's project, or an agent's run. */
+type Send =
+  { projectId: string; to: "caw" } | { member: AgentMember; to: "agent" };
+
+/** Whether a member can be reached, and if not why; `send` is where its cards go, null when they wait on the person or the asker. */
+type Reach = { ok: true; send: Send | null } | { ok: false; reason: string };
 
 /** A card routed: its member, and where its table came from. */
 interface Routed {
@@ -310,7 +316,7 @@ export const createSettling = (deps: SettlingDeps) => {
     }
     const project = deps.project(projectId);
     return project?.eventsOn
-      ? { ok: true }
+      ? { ok: true, send: { to: "caw", projectId } }
       : {
           ok: false,
           reason: decidesWords.notLeading(project?.name ?? projectId),
@@ -318,21 +324,16 @@ export const createSettling = (deps: SettlingDeps) => {
   };
 
   /** Whether an agent member can run: its delegate type's harness is on a machine that is online. */
-  const agentReach = (member: Member): Reach => {
-    const type = member.delegateType
-      ? deps.delegateType(member.delegateType)
-      : undefined;
+  const agentReach = (member: AgentMember): Reach => {
+    const type = deps.delegateType(member.delegateType);
     if (!type) {
       return {
         ok: false,
-        reason: decidesWords.cantRun(
-          member.name,
-          member.delegateType ?? member.name
-        ),
+        reason: decidesWords.cantRun(member.name, member.delegateType),
       };
     }
     return deps.harnessOnline(type.harness)
-      ? { ok: true }
+      ? { ok: true, send: { to: "agent", member } }
       : {
           ok: false,
           reason: decidesWords.cantRun(
@@ -347,7 +348,7 @@ export const createSettling = (deps: SettlingDeps) => {
     switch (member.type) {
       case "you":
       case "asker":
-        return { ok: true };
+        return { ok: true, send: null };
       case "caw":
         return cawReach(projectId);
       case "person":
@@ -356,9 +357,11 @@ export const createSettling = (deps: SettlingDeps) => {
       case "advisor":
       case "practice":
       case "agent":
-        return agentReach(member);
+        return member.delegateType === null
+          ? { ok: false, reason: decidesWords.memberUnread(member.name) }
+          : agentReach(member);
       default:
-        return unhandled("member type", member.type);
+        return unhandled("member type", member);
     }
   };
 
@@ -410,12 +413,9 @@ export const createSettling = (deps: SettlingDeps) => {
   const toCaw = async (
     fleet: FleetDecides,
     asker: InstanceRow,
-    page: PageCards
+    page: PageCards,
+    projectId: string
   ): Promise<RouteState> => {
-    const { projectId } = page.row;
-    if (!projectId) {
-      return { state: "failed", why: decidesWords.noProject };
-    }
     const told = await deps.tellCaw(projectId, {
       trigger: decidesWords.decisionTrigger(
         decisionLink(page.row.id, page.cards[0]?.id ?? "", page.row.title)
@@ -448,8 +448,7 @@ export const createSettling = (deps: SettlingDeps) => {
   /** `page`'s cards handed to `session`, the member's warm session, by its parent: the handoff path. */
   const handTo = async (
     fleet: FleetDecides,
-    member: Member,
-    typeName: string,
+    member: AgentMember,
     session: InstanceRow,
     asker: InstanceRow,
     page: PageCards
@@ -458,7 +457,7 @@ export const createSettling = (deps: SettlingDeps) => {
       (session.parentInstanceId
         ? deps.instance(session.parentInstanceId)
         : undefined) ?? asker;
-    const type = deps.delegateType(typeName);
+    const type = deps.delegateType(member.delegateType);
     const handed = await deps.handoff(
       from,
       session.id,
@@ -499,17 +498,16 @@ export const createSettling = (deps: SettlingDeps) => {
     });
   };
 
-  /** One run of the member's delegate type `typeName` under `asker`, with every card of `page` and of `others`. */
+  /** One run of the member's delegate type under `asker`, with every card of `page` and of `others`. */
   const startRun = async (
     fleet: FleetDecides,
-    member: Member,
-    typeName: string,
+    member: AgentMember,
     asker: InstanceRow,
     page: PageCards,
     others: PageCards[]
   ) => {
     const pages = [page, ...others];
-    const type = deps.delegateType(typeName);
+    const type = deps.delegateType(member.delegateType);
     const title = `Settle: ${page.cards[0]?.question ?? page.row.title}`;
     const started = await deps.start({
       parentInstanceId: asker.id,
@@ -525,7 +523,7 @@ export const createSettling = (deps: SettlingDeps) => {
         title.length > SESSION_TITLE_MAX
           ? `${title.slice(0, SESSION_TITLE_MAX - 1)}…`
           : title,
-      type: typeName,
+      type: member.delegateType,
       lands: "none",
       settlesCards: true,
     });
@@ -565,7 +563,7 @@ export const createSettling = (deps: SettlingDeps) => {
    */
   const toAgent = async (
     fleet: FleetDecides,
-    member: Member,
+    member: AgentMember,
     asker: InstanceRow,
     page: PageCards
   ): Promise<RouteState> => {
@@ -578,22 +576,10 @@ export const createSettling = (deps: SettlingDeps) => {
       );
       return { state: "failed", why: said.endsWith(".") ? said : `${said}.` };
     };
-    // An agent member runs as its delegate type (its reach was read off it).
-    const typeName = member.delegateType;
-    if (typeName === null) {
-      return notStarted(decidesWords.cantRun(member.name, member.name));
-    }
     try {
       const routed = session
-        ? await handTo(fleet, member, typeName, session, asker, page)
-        : await startRun(
-            fleet,
-            member,
-            typeName,
-            asker,
-            page,
-            stranded(page, kept)
-          );
+        ? await handTo(fleet, member, session, asker, page)
+        : await startRun(fleet, member, asker, page, stranded(page, kept));
       return answered(routed) ? routed : notStarted(routed.response.detail);
     } catch (error) {
       return notStarted(error instanceof Error ? error.message : String(error));
@@ -603,14 +589,14 @@ export const createSettling = (deps: SettlingDeps) => {
   /**
    * Where card `card` goes now: settled here (`state`: the person's, the
    * writer's, a member already on it, or unreachable), with the ledger row
-   * that records it when it changed; or, with no `state`, sent to `member`.
+   * that records it when it changed; or `send`: where it goes to be settled.
    */
   const sort = (
     asker: InstanceRow,
     row: ArtifactRow,
     card: DecisionCard,
     member: Member
-  ): { ledger?: CardSettlingRow; state?: RouteState } => {
+  ): { ledger?: CardSettlingRow; state: RouteState } | { send: Send } => {
     const reached = reach(member, row.projectId);
     const kept = deps.db.settling(row.id, card.id);
     if (!reached.ok) {
@@ -627,10 +613,11 @@ export const createSettling = (deps: SettlingDeps) => {
             }),
       };
     }
-    if (member.type === "you") {
-      return { state: { state: "you" } };
-    }
-    if (member.type === "asker") {
+    if (reached.send === null) {
+      // The person's card, or the asker's.
+      if (member.type === "you") {
+        return { state: { state: "you" } };
+      }
       return {
         state: { state: "asker" },
         ...(kept?.route === "asker"
@@ -646,7 +633,7 @@ export const createSettling = (deps: SettlingDeps) => {
     }
     return kept?.route === member.id && onIt(deps, kept)
       ? { state: { state: "running" } }
-      : {};
+      : { send: reached.send };
   };
 
   /** The refusal of `settler` unless it wrote the card: the asker's cards are its writer's. */
@@ -692,11 +679,11 @@ export const createSettling = (deps: SettlingDeps) => {
     page: PageCards,
     routes: CardRouted[]
   ): {
-    sent: Map<string, { cards: DecisionCard[]; member: Member }>;
+    sent: Map<string, { cards: DecisionCard[]; send: Send }>;
     states: Map<string, RouteState>;
   } => {
     const states = new Map<string, RouteState>();
-    const sent = new Map<string, { cards: DecisionCard[]; member: Member }>();
+    const sent = new Map<string, { cards: DecisionCard[]; send: Send }>();
     const ledger: CardSettlingRow[] = [];
     for (const {
       card,
@@ -706,19 +693,19 @@ export const createSettling = (deps: SettlingDeps) => {
         continue;
       }
       const sorted = sort(asker, page.row, card, member);
-      if (sorted.ledger) {
-        ledger.push(sorted.ledger);
-      }
-      if (sorted.state) {
-        states.set(card.id, sorted.state);
-      } else {
+      if ("send" in sorted) {
         const going = sent.get(member.id);
         if (going) {
           going.cards.push(card);
         } else {
-          sent.set(member.id, { member, cards: [card] });
+          sent.set(member.id, { send: sorted.send, cards: [card] });
         }
+        continue;
       }
+      if (sorted.ledger) {
+        ledger.push(sorted.ledger);
+      }
+      states.set(card.id, sorted.state);
     }
     if (ledger.length > 0) {
       deps.db.putSettlings(ledger);
@@ -758,12 +745,12 @@ export const createSettling = (deps: SettlingDeps) => {
       }
       const page = { row, cards, all, state };
       const { states, sent } = sortAll(asker, page, routes);
-      for (const { member, cards: handed } of sent.values()) {
+      for (const { send, cards: handed } of sent.values()) {
         const one = { ...page, cards: handed };
         const went =
-          member.type === "caw"
-            ? await toCaw(fleet, asker, one)
-            : await toAgent(fleet, member, asker, one);
+          send.to === "caw"
+            ? await toCaw(fleet, asker, one, send.projectId)
+            : await toAgent(fleet, send.member, asker, one);
         for (const card of handed) {
           states.set(card.id, went);
         }

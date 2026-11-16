@@ -12,6 +12,7 @@
  */
 
 import {
+  type AgentMember,
   BUILT_IN_MEMBERS,
   CAW_POSE_IDS,
   DECIDES_ID,
@@ -23,7 +24,6 @@ import {
   isFlockMember,
   type Kind,
   kindOf,
-  type Member,
   memberOf,
   readDecides,
   slugOf,
@@ -223,7 +223,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     return type;
   };
 
-  /** A member whose settings he changes here, or refused: unknown, Caw (his are the project's), You or The agent (none). */
+  /** A member whose settings he changes here, an agent, or refused: unknown, Caw (his are the project's), You or The agent (none), a person or channel (it runs as nothing), or one whose stored row does not read. */
   const editable = (id: string) => {
     const member = known(id);
     if (member instanceof ElysiaStatus) {
@@ -241,15 +241,27 @@ export const decidesRoutes = (deps: DecidesDeps) => {
         detail: decidesWords.builtInMember,
       });
     }
+    if ("unread" in member) {
+      return problem(409, {
+        code: "decides-member-unread",
+        detail: decidesWords.memberUnread(member.name),
+      });
+    }
+    if (member.delegateType === null) {
+      return problem(403, {
+        code: "decides-member-runs-nothing",
+        detail: decidesWords.runsNothing(member.name),
+      });
+    }
     return member;
   };
 
   /** An agent member's settings saved: its delegate type, and how he hears (the built-ins') or its row (one he added). */
   const saveMember = (
-    member: Member,
+    member: AgentMember,
     body: { agent: AgentBody; hear: Hear; hue?: number; job?: string }
   ) => {
-    const typeName = member.delegateType as string;
+    const typeName = member.delegateType;
     const type = typeOf(typeName, body.agent, types.get(typeName));
     if (type instanceof ElysiaStatus) {
       return type;
