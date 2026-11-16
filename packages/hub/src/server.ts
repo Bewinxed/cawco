@@ -171,7 +171,6 @@ import {
 import { questionsOf } from "@cawco/core/question";
 import { artifactLink, sessionLink, taskLink } from "@cawco/core/references";
 import {
-  CLAUDE_CONVERSATION_GONE,
   type LastErrorKind,
   relaunchOf,
   startRefused,
@@ -263,6 +262,7 @@ import {
   type RelaunchFor,
   relaunchWords,
 } from "@cawco/core/words/relaunch";
+import { CONVERSATION_GONE } from "@cawco/core/words/session-ends";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { updatesWords } from "@cawco/core/words/updates";
 import { workWords } from "@cawco/core/words/work";
@@ -3784,7 +3784,7 @@ export const createServer = (
       };
     }
     if (row?.lastErrorKind === "conversation-gone") {
-      return { reason: CLAUDE_CONVERSATION_GONE, gone: true };
+      return { reason: CONVERSATION_GONE, gone: true };
     }
     // A send to a session whose process is gone wakes it ({@link wakeForSend}),
     // fresh when its harness never began a conversation (core `relaunchOf`);

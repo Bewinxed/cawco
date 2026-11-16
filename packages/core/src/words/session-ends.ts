@@ -5,6 +5,15 @@ export const RESTART_LOST =
   "The agent restarted, and this session left nothing to resume from.";
 
 /**
+ * What the hub records on a session whose conversation its harness no longer
+ * stores (core relaunch.ts `conversationGone`): a Claude Code transcript
+ * missing from its machine, an OpenCode session no database on its machine
+ * holds. It never runs on that conversation again.
+ */
+export const CONVERSATION_GONE =
+  "This conversation is gone and cannot be resumed. Start a new session to continue working.";
+
+/**
  * The error an OpenCode session's turn ends with when the server it ran in
  * stopped before finishing it, read back on reattach from the reply the
  * server kept unfinished. The turn did not end: it was cut, and the hub hands

@@ -4,21 +4,16 @@
  * revive decides by.
  */
 
-/**
- * A missing Claude conversation is terminal; restarting cannot recreate its
- * history. The words a person reads; what CawCo decides by is the kind
- * `conversation-gone` ({@link LastErrorKind}).
- */
 import { continuedWords } from "./words/relaunch";
-export const CLAUDE_CONVERSATION_GONE =
-  "This Claude Code conversation is gone and cannot be resumed. Start a new session to continue working.";
+import { CONVERSATION_GONE } from "./words/session-ends";
 
 /**
  * What a session's failure was, typed where it is found, beside the words
  * (`lastError`) a person reads. Every decision about a failed row reads this,
  * never the words:
- * - `conversation-gone` — the conversation it would resume is gone
- *   ({@link CLAUDE_CONVERSATION_GONE}): it never runs on it again;
+ * - `conversation-gone` — the conversation it would resume is gone from
+ *   its harness's store ({@link CONVERSATION_GONE}): it never runs on it
+ *   again, and a new session is how its work goes on;
  * - `restart-lost` — its daemon restarted and it left nothing to resume from
  *   ({@link RESTART_LOST});
  * - `start-refused` — the hub would not restore it: its account or its
@@ -39,9 +34,13 @@ export class KindedError extends Error {
   }
 }
 
-/** A Claude conversation that is gone: its words, and its kind. */
+/**
+ * A conversation its harness no longer stores, which restarting cannot
+ * bring back: its words, and its kind. Claude Code's missing transcript and
+ * OpenCode's session no database on its machine holds are both this.
+ */
 export const conversationGone = (): KindedError =>
-  new KindedError("conversation-gone", CLAUDE_CONVERSATION_GONE);
+  new KindedError("conversation-gone", CONVERSATION_GONE);
 
 /**
  * Whether a row the hub refused to restore still stands refused: filed
@@ -92,7 +91,7 @@ export const relaunchOf = (row: {
     return { kind: "refused", reason: continuedWords(row.continuedInto) };
   }
   if (row.lastErrorKind === "conversation-gone") {
-    return { kind: "refused", reason: CLAUDE_CONVERSATION_GONE };
+    return { kind: "refused", reason: CONVERSATION_GONE };
   }
   return row.sessionId
     ? { kind: "resume", sessionKey: row.sessionId }
