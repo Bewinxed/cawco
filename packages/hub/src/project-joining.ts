@@ -13,9 +13,9 @@ import type {
   ProjectMade,
   ProjectMakeProblem,
 } from "./project-making";
+import { scratchPlaceRefusal } from "./project-place-scratch";
 import { placesChanged } from "./project-placements";
 import { NOTHING_READ, readCheckout } from "./projects";
-
 import type { WorkAsk, WorkPlace } from "./work-place";
 import { workPlace } from "./work-place";
 
@@ -109,7 +109,8 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * prompt again under the id it went as while the first is being made (a
    * device sending again after its answer was lost) answers both: nothing
    * is made twice. Refused in the hub's words: a folder that is no
-   * absolute path on its machine, or a paused machine's.
+   * absolute path on its machine, one in its scratch root
+   * (project-place-scratch.ts), or a paused machine's.
    */
   const createOrJoinProject: CreateOrJoinProject = (asked) => {
     const promptId = asked.setup?.promptId;
@@ -166,6 +167,15 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     }
     const checkout = asked.checkout &&
       path && { machineId: asked.checkout.machineId, path };
+    const scratch =
+      checkout &&
+      scratchPlaceRefusal(
+        ctx.db.machineHome(checkout.machineId),
+        checkout.path
+      );
+    if (scratch) {
+      return scratch;
+    }
     const unread = folderUnread(checkout?.machineId);
     if (unread) {
       return unread;
