@@ -12694,14 +12694,14 @@
                     "type": "string"
                   },
                   "kind": {
-                    "type": "string",
                     "enum": [
                       "canvas",
                       "component",
                       "page",
                       "preview",
                       "sheet"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "machine": {
                     "minLength": 1,

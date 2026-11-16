@@ -8,6 +8,8 @@ import { FILE_HASH_SCHEME } from "@cawco/core/file-hash";
  */
 /** server.ts `keepSendsAtStart`, through db `migrateSendsOnce`. */
 export const TAG_MARKERS = "tag-markers";
+/** server.ts `keepSendsAtStart`, through db `migrateSendsOnce`: sheet-notices.ts. */
+export const SHEET_NOTICES = "sheet_notices_component";
 /** server.ts `repairSplitContinuations`. */
 export const SPLIT_CONTINUATIONS = "split_continuations:2026-11-05";
 /** settled-names.ts `nameSettledOnce`. */

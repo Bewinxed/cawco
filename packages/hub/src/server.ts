@@ -387,13 +387,18 @@ import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import type { ContinuationRow } from "./db/continuations";
 import { accountReportOf } from "./db/machines";
-import { SPLIT_CONTINUATIONS, TAG_MARKERS } from "./db/migration-names";
+import {
+  SHEET_NOTICES,
+  SPLIT_CONTINUATIONS,
+  TAG_MARKERS,
+} from "./db/migration-names";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
+import { componentStoredSend } from "./db/sheet-notices";
 import type {
   AgentAuth,
   AttemptAsk,
@@ -922,6 +927,13 @@ const keepSendsAtStart = (db: DbShape): void => {
   const tagged = db.migrateSendsOnce(TAG_MARKERS, tagStoredSend);
   if (tagged !== null) {
     console.info(`[hub] ${tagged} stored send(s) given their marker's tag`);
+  }
+  // Once, after the tags: a notice sent while `sheet` was a kind names a component, as its artifact does (migration 0255).
+  const renamed = db.migrateSendsOnce(SHEET_NOTICES, componentStoredSend);
+  if (renamed !== null) {
+    console.info(
+      `[hub] ${renamed} stored artifact notice(s) of a sheet now name a component`
+    );
   }
   const owedAgain = foldFormerSessions(db);
   keepPendingWhole(db);

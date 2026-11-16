@@ -92,13 +92,18 @@ const tagged = (text: string): string | null => {
   return null;
 };
 
-/** A stored send with its marker tagged ({@link tagged}); null when it needs none. */
-export const tagStoredSend = (
-  body: NeutralUserMessage
+/**
+ * A stored send with its first text rewritten by `rewrite`; null when it has
+ * no text, or `rewrite` leaves it as it is (null). The one walk every
+ * once-step over the stored sends' words takes (db `migrateSendsOnce`).
+ */
+export const rewriteSendText = (
+  body: NeutralUserMessage,
+  rewrite: (text: string) => string | null
 ): NeutralUserMessage | null => {
   const { content } = body.message;
   if (typeof content === "string") {
-    const text = tagged(content);
+    const text = rewrite(content);
     return text === null
       ? null
       : { ...body, message: { ...body.message, content: text } };
@@ -108,7 +113,7 @@ export const tagStoredSend = (
   if (first?.type !== "text") {
     return null;
   }
-  const text = tagged(first.text);
+  const text = rewrite(first.text);
   return text === null
     ? null
     : {
@@ -121,3 +126,8 @@ export const tagStoredSend = (
         },
       };
 };
+
+/** A stored send with its marker tagged ({@link tagged}); null when it needs none. */
+export const tagStoredSend = (
+  body: NeutralUserMessage
+): NeutralUserMessage | null => rewriteSendText(body, tagged);

@@ -10,6 +10,7 @@ import {
   ARTIFACT_NAME,
   ARTIFACT_TITLE_LIMIT,
   ASK_LIMIT,
+  MADE_ARTIFACT_KINDS,
 } from "@cawco/core/artifact-kinds";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { CHOICE_LIMITS } from "@cawco/core/choices";
@@ -173,14 +174,8 @@ const sheetChange = {
 
 /** A create's body: a kind, its words and what it is made of. */
 export const createBody = t.Object({
-  kind: t.Union([
-    t.Literal("page"),
-    t.Literal("component"),
-    t.Literal("preview"),
-    t.Literal("canvas"),
-    // Shipped apps' generated client still lists it (the wire guard): refused with the new shape.
-    t.Literal("sheet"),
-  ]),
+  // "sheet" is no kind since migration 0255: shipped apps' generated client still lists it (the wire guard), refused with the new shape.
+  kind: t.UnionEnum([...MADE_ARTIFACT_KINDS, "sheet"]),
   // Every create names all three but the person's own composer canvas (draft), which shipped apps make without them: refused with the tool's shape when missing (service.ts `askedOf`).
   does: t.Optional(doesField),
   ask: t.Optional(askField),

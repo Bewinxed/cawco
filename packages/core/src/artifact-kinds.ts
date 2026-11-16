@@ -1,4 +1,10 @@
-/** Every kind of artifact ({@link ArtifactKind}). */
+/**
+ * Every kind of artifact ({@link ArtifactKind}): the hub's artifacts table
+ * and the artifact notices' reader (injected.ts `namedOf`) take only these. A
+ * kind renamed or dropped is renamed in the stored sends' notice tags too, as
+ * `sheet` was (hub db/sheet-notices.ts), or the notices naming it are read as
+ * the person's words.
+ */
 export const ARTIFACT_KINDS = [
   "page",
   "canvas",
