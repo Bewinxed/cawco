@@ -6654,6 +6654,278 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/PostApiInstancesByIdArtifactsByArtifactSend403Code`.
+    public enum PostApiInstancesByIdArtifactsByArtifactSend403Code: OpenEnum {
+        case ambiguous
+        case artifactAskAgainGone
+        case artifactAskAgainNoSession
+        case artifactCommentHeard
+        case artifactCommentUndelivered
+        case artifactCommentsOnTheirWay
+        case artifactOthers
+        case artifactSessionUnknown
+        case artifactUnknown
+        case artifactUnnamed
+        case atLimitNeedsAccount
+        case cawHomeUnsaid
+        case cawNoMachine
+        case cawOff
+        case cawProjectUnknown
+        case cawSendNotTaken
+        case cawSpendCapped
+        case cawStartUndone
+        case dispatchProjectUnknown
+        case dispatchRunsOnUnknown
+        case dispatchSettingsUnfit
+        case folderAreaIdUnfit
+        case folderChangeNone
+        case folderChangeTwice
+        case folderDeleteFolder
+        case folderFileBinary
+        case folderFileMissing
+        case folderFileTooLarge
+        case folderFileUnnamed
+        case folderForgotten
+        case folderGitFailed
+        case folderGitMissing
+        case folderGitUnanswered
+        case folderLinkInGit
+        case folderLinkOutside
+        case folderListedFile
+        case folderMessageMissing
+        case folderMessageTooLong
+        case folderPathAbsolute
+        case folderPathBackslash
+        case folderPathControl
+        case folderPathInGit
+        case folderPathOutside
+        case folderPathThroughLink
+        case folderPathTooLong
+        case folderPlaceTaken
+        case folderProjectIdUnfit
+        case folderReadFolder
+        case folderWriteNone
+        case folderWriteOntoFolder
+        case folderWriteTooLarge
+        case folderWriteUnderFile
+        case folderWriteUnfit
+        case giveUrlAloneConnection
+        case largeFilesLiveHttps
+        case largeFilesLiveUrl
+        case launchAccountUnavailable
+        case lfsRefused
+        case machineAway
+        case machineSilent
+        case nameNeeded
+        case nameOneLine
+        case nameTooLong
+        case noAccount
+        case noArea
+        case noProject
+        case notAllowed
+        case spawnDefaultUnnamed
+        case spawnNotPlaced
+        case spawnNotSettled
+        case spawnPayloadUnnamed
+        case spawnProjectDeleted
+        case spawnSessionKeyHeld
+        case spawnStartFailed
+        case spawnTaskAccountsUnread
+        case startingSetUnread
+        case taskIdUnfit
+        case taskLinkUnread
+        case taskProjectUnknown
+        case workLandsNoneThem
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "ambiguous": self = .ambiguous
+            case "artifact-ask-again-gone": self = .artifactAskAgainGone
+            case "artifact-ask-again-no-session": self = .artifactAskAgainNoSession
+            case "artifact-comment-heard": self = .artifactCommentHeard
+            case "artifact-comment-undelivered": self = .artifactCommentUndelivered
+            case "artifact-comments-on-their-way": self = .artifactCommentsOnTheirWay
+            case "artifact-others": self = .artifactOthers
+            case "artifact-session-unknown": self = .artifactSessionUnknown
+            case "artifact-unknown": self = .artifactUnknown
+            case "artifact-unnamed": self = .artifactUnnamed
+            case "at-limit-needs-account": self = .atLimitNeedsAccount
+            case "caw-home-unsaid": self = .cawHomeUnsaid
+            case "caw-no-machine": self = .cawNoMachine
+            case "caw-off": self = .cawOff
+            case "caw-project-unknown": self = .cawProjectUnknown
+            case "caw-send-not-taken": self = .cawSendNotTaken
+            case "caw-spend-capped": self = .cawSpendCapped
+            case "caw-start-undone": self = .cawStartUndone
+            case "dispatch-project-unknown": self = .dispatchProjectUnknown
+            case "dispatch-runs-on-unknown": self = .dispatchRunsOnUnknown
+            case "dispatch-settings-unfit": self = .dispatchSettingsUnfit
+            case "folder-area-id-unfit": self = .folderAreaIdUnfit
+            case "folder-change-none": self = .folderChangeNone
+            case "folder-change-twice": self = .folderChangeTwice
+            case "folder-delete-folder": self = .folderDeleteFolder
+            case "folder-file-binary": self = .folderFileBinary
+            case "folder-file-missing": self = .folderFileMissing
+            case "folder-file-too-large": self = .folderFileTooLarge
+            case "folder-file-unnamed": self = .folderFileUnnamed
+            case "folder-forgotten": self = .folderForgotten
+            case "folder-git-failed": self = .folderGitFailed
+            case "folder-git-missing": self = .folderGitMissing
+            case "folder-git-unanswered": self = .folderGitUnanswered
+            case "folder-link-in-git": self = .folderLinkInGit
+            case "folder-link-outside": self = .folderLinkOutside
+            case "folder-listed-file": self = .folderListedFile
+            case "folder-message-missing": self = .folderMessageMissing
+            case "folder-message-too-long": self = .folderMessageTooLong
+            case "folder-path-absolute": self = .folderPathAbsolute
+            case "folder-path-backslash": self = .folderPathBackslash
+            case "folder-path-control": self = .folderPathControl
+            case "folder-path-in-git": self = .folderPathInGit
+            case "folder-path-outside": self = .folderPathOutside
+            case "folder-path-through-link": self = .folderPathThroughLink
+            case "folder-path-too-long": self = .folderPathTooLong
+            case "folder-place-taken": self = .folderPlaceTaken
+            case "folder-project-id-unfit": self = .folderProjectIdUnfit
+            case "folder-read-folder": self = .folderReadFolder
+            case "folder-write-none": self = .folderWriteNone
+            case "folder-write-onto-folder": self = .folderWriteOntoFolder
+            case "folder-write-too-large": self = .folderWriteTooLarge
+            case "folder-write-under-file": self = .folderWriteUnderFile
+            case "folder-write-unfit": self = .folderWriteUnfit
+            case "give-url-alone-connection": self = .giveUrlAloneConnection
+            case "large-files-live-https": self = .largeFilesLiveHttps
+            case "large-files-live-url": self = .largeFilesLiveUrl
+            case "launch-account-unavailable": self = .launchAccountUnavailable
+            case "lfs-refused": self = .lfsRefused
+            case "machine-away": self = .machineAway
+            case "machine-silent": self = .machineSilent
+            case "name-needed": self = .nameNeeded
+            case "name-one-line": self = .nameOneLine
+            case "name-too-long": self = .nameTooLong
+            case "no-account": self = .noAccount
+            case "no-area": self = .noArea
+            case "no-project": self = .noProject
+            case "not-allowed": self = .notAllowed
+            case "spawn-default-unnamed": self = .spawnDefaultUnnamed
+            case "spawn-not-placed": self = .spawnNotPlaced
+            case "spawn-not-settled": self = .spawnNotSettled
+            case "spawn-payload-unnamed": self = .spawnPayloadUnnamed
+            case "spawn-project-deleted": self = .spawnProjectDeleted
+            case "spawn-session-key-held": self = .spawnSessionKeyHeld
+            case "spawn-start-failed": self = .spawnStartFailed
+            case "spawn-task-accounts-unread": self = .spawnTaskAccountsUnread
+            case "starting-set-unread": self = .startingSetUnread
+            case "task-id-unfit": self = .taskIdUnfit
+            case "task-link-unread": self = .taskLinkUnread
+            case "task-project-unknown": self = .taskProjectUnknown
+            case "work-lands-none-them": self = .workLandsNoneThem
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .ambiguous: "ambiguous"
+            case .artifactAskAgainGone: "artifact-ask-again-gone"
+            case .artifactAskAgainNoSession: "artifact-ask-again-no-session"
+            case .artifactCommentHeard: "artifact-comment-heard"
+            case .artifactCommentUndelivered: "artifact-comment-undelivered"
+            case .artifactCommentsOnTheirWay: "artifact-comments-on-their-way"
+            case .artifactOthers: "artifact-others"
+            case .artifactSessionUnknown: "artifact-session-unknown"
+            case .artifactUnknown: "artifact-unknown"
+            case .artifactUnnamed: "artifact-unnamed"
+            case .atLimitNeedsAccount: "at-limit-needs-account"
+            case .cawHomeUnsaid: "caw-home-unsaid"
+            case .cawNoMachine: "caw-no-machine"
+            case .cawOff: "caw-off"
+            case .cawProjectUnknown: "caw-project-unknown"
+            case .cawSendNotTaken: "caw-send-not-taken"
+            case .cawSpendCapped: "caw-spend-capped"
+            case .cawStartUndone: "caw-start-undone"
+            case .dispatchProjectUnknown: "dispatch-project-unknown"
+            case .dispatchRunsOnUnknown: "dispatch-runs-on-unknown"
+            case .dispatchSettingsUnfit: "dispatch-settings-unfit"
+            case .folderAreaIdUnfit: "folder-area-id-unfit"
+            case .folderChangeNone: "folder-change-none"
+            case .folderChangeTwice: "folder-change-twice"
+            case .folderDeleteFolder: "folder-delete-folder"
+            case .folderFileBinary: "folder-file-binary"
+            case .folderFileMissing: "folder-file-missing"
+            case .folderFileTooLarge: "folder-file-too-large"
+            case .folderFileUnnamed: "folder-file-unnamed"
+            case .folderForgotten: "folder-forgotten"
+            case .folderGitFailed: "folder-git-failed"
+            case .folderGitMissing: "folder-git-missing"
+            case .folderGitUnanswered: "folder-git-unanswered"
+            case .folderLinkInGit: "folder-link-in-git"
+            case .folderLinkOutside: "folder-link-outside"
+            case .folderListedFile: "folder-listed-file"
+            case .folderMessageMissing: "folder-message-missing"
+            case .folderMessageTooLong: "folder-message-too-long"
+            case .folderPathAbsolute: "folder-path-absolute"
+            case .folderPathBackslash: "folder-path-backslash"
+            case .folderPathControl: "folder-path-control"
+            case .folderPathInGit: "folder-path-in-git"
+            case .folderPathOutside: "folder-path-outside"
+            case .folderPathThroughLink: "folder-path-through-link"
+            case .folderPathTooLong: "folder-path-too-long"
+            case .folderPlaceTaken: "folder-place-taken"
+            case .folderProjectIdUnfit: "folder-project-id-unfit"
+            case .folderReadFolder: "folder-read-folder"
+            case .folderWriteNone: "folder-write-none"
+            case .folderWriteOntoFolder: "folder-write-onto-folder"
+            case .folderWriteTooLarge: "folder-write-too-large"
+            case .folderWriteUnderFile: "folder-write-under-file"
+            case .folderWriteUnfit: "folder-write-unfit"
+            case .giveUrlAloneConnection: "give-url-alone-connection"
+            case .largeFilesLiveHttps: "large-files-live-https"
+            case .largeFilesLiveUrl: "large-files-live-url"
+            case .launchAccountUnavailable: "launch-account-unavailable"
+            case .lfsRefused: "lfs-refused"
+            case .machineAway: "machine-away"
+            case .machineSilent: "machine-silent"
+            case .nameNeeded: "name-needed"
+            case .nameOneLine: "name-one-line"
+            case .nameTooLong: "name-too-long"
+            case .noAccount: "no-account"
+            case .noArea: "no-area"
+            case .noProject: "no-project"
+            case .notAllowed: "not-allowed"
+            case .spawnDefaultUnnamed: "spawn-default-unnamed"
+            case .spawnNotPlaced: "spawn-not-placed"
+            case .spawnNotSettled: "spawn-not-settled"
+            case .spawnPayloadUnnamed: "spawn-payload-unnamed"
+            case .spawnProjectDeleted: "spawn-project-deleted"
+            case .spawnSessionKeyHeld: "spawn-session-key-held"
+            case .spawnStartFailed: "spawn-start-failed"
+            case .spawnTaskAccountsUnread: "spawn-task-accounts-unread"
+            case .startingSetUnread: "starting-set-unread"
+            case .taskIdUnfit: "task-id-unfit"
+            case .taskLinkUnread: "task-link-unread"
+            case .taskProjectUnknown: "task-project-unknown"
+            case .workLandsNoneThem: "work-lands-none-them"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.ambiguous, .artifactAskAgainGone, .artifactAskAgainNoSession, .artifactCommentHeard, .artifactCommentUndelivered, .artifactCommentsOnTheirWay, .artifactOthers, .artifactSessionUnknown, .artifactUnknown, .artifactUnnamed, .atLimitNeedsAccount, .cawHomeUnsaid, .cawNoMachine, .cawOff, .cawProjectUnknown, .cawSendNotTaken, .cawSpendCapped, .cawStartUndone, .dispatchProjectUnknown, .dispatchRunsOnUnknown, .dispatchSettingsUnfit, .folderAreaIdUnfit, .folderChangeNone, .folderChangeTwice, .folderDeleteFolder, .folderFileBinary, .folderFileMissing, .folderFileTooLarge, .folderFileUnnamed, .folderForgotten, .folderGitFailed, .folderGitMissing, .folderGitUnanswered, .folderLinkInGit, .folderLinkOutside, .folderListedFile, .folderMessageMissing, .folderMessageTooLong, .folderPathAbsolute, .folderPathBackslash, .folderPathControl, .folderPathInGit, .folderPathOutside, .folderPathThroughLink, .folderPathTooLong, .folderPlaceTaken, .folderProjectIdUnfit, .folderReadFolder, .folderWriteNone, .folderWriteOntoFolder, .folderWriteTooLarge, .folderWriteUnderFile, .folderWriteUnfit, .giveUrlAloneConnection, .largeFilesLiveHttps, .largeFilesLiveUrl, .launchAccountUnavailable, .lfsRefused, .machineAway, .machineSilent, .nameNeeded, .nameOneLine, .nameTooLong, .noAccount, .noArea, .noProject, .notAllowed, .spawnDefaultUnnamed, .spawnNotPlaced, .spawnNotSettled, .spawnPayloadUnnamed, .spawnProjectDeleted, .spawnSessionKeyHeld, .spawnStartFailed, .spawnTaskAccountsUnread, .startingSetUnread, .taskIdUnfit, .taskLinkUnread, .taskProjectUnknown, .workLandsNoneThem]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/PostApiToolsByIdUpdateAll200Why`.
     public enum PostApiToolsByIdUpdateAll200Why: OpenEnum {
         case away

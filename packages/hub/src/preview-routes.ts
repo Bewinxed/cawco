@@ -168,7 +168,7 @@ export const previewRoutes = (deps: {
       // page's own send would: to the session that holds the page. Its body
       // is core `SendBody`'s fields, so one it doesn't take is refused (422)
       // as on every route; the page's own send's checks then read it as
-      // they read a page's (artifacts/sync.ts `artifactSend`).
+      // they read a page's (artifacts/page-posts.ts `artifactSend`).
       .post(
         "/api/instances/:id/artifacts/:artifact/send",
         {

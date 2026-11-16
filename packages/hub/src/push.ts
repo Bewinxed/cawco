@@ -127,7 +127,7 @@ import {
   turnCollapseId,
 } from "./notifications";
 
-import type { Decided } from "./settling";
+import type { Decided } from "./settling-answers";
 import type { TaskEvent } from "./tasks";
 
 const CAWRIER = Bun.env.CAWCO_CAWRIER_ORIGIN ?? "https://cawrier.cawco.dev";

@@ -1954,7 +1954,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const note = body.text?.trim() || null;
     if (!(picked || note)) {
       // Agents and the API hear it as the 409 it is; the page's own Send
-      // reads it as sent (sync.ts `artifactSend`), since what he asked for
+      // reads it as sent (page-posts.ts `artifactSend`), since what he asked for
       // already holds.
       return problem(409, {
         code: "artifact-nothing-new",

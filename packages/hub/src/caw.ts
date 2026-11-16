@@ -111,6 +111,7 @@ import {
 } from "./presenters/project";
 import type { Caps } from "./project-caps";
 import { typeFileProblem } from "./project-delegate-types";
+import type { createProjectEdits } from "./project-edit";
 import {
   FOLDER_CONTENT_LIMIT,
   FOLDER_ENCODINGS,
@@ -121,7 +122,7 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import type { ProjectStops } from "./project-stops";
-import type { AnyProblem, ProblemsOf } from "./refusal";
+import type { ProblemsOf } from "./refusal";
 import type { CawToolName } from "./roles";
 import {
   SETUP_CARDS,
@@ -586,14 +587,17 @@ export interface CawDeps {
    */
   readonly proposeType: Memory["proposeType"];
   /**
-   * Renames the project as the dashboard's rename does (project-edit.ts),
-   * every client reading it again; answers the name as kept, or its
-   * refusal.
+   * Renames the project as the dashboard's rename does (project-edit.ts
+   * `edit`), every client reading it again; answers the name as kept, or
+   * the edit's problem.
    */
   readonly rename: (
     projectId: string,
     name: string
-  ) => Promise<string | AnyProblem>;
+  ) => Promise<
+    | string
+    | ProblemsOf<ReturnType<ReturnType<typeof createProjectEdits>["edit"]>>
+  >;
   /** Delivers one message to a session through the hub's one send path: its record, `pending` when the hub took it, else why not. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;

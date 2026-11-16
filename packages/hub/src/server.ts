@@ -16,7 +16,6 @@ import {
   ARTIFACT_SESSION_PATH,
   ARTIFACT_SESSION_REFUSED,
 } from "@cawco/core/artifact-session";
-import { RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import { type AskAnswer, PROJECT_SETTINGS } from "@cawco/core/asks";
 import {
   AGENT_RESTARTING,
@@ -194,7 +193,6 @@ import type {
   NeutralOrigin,
   NeutralResultMessage,
   NeutralSessionInfo,
-  PermissionResult,
   SentMessage,
 } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -251,7 +249,6 @@ import { ARTIFACT_GONE } from "@cawco/core/words/artifact-session";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { connectWords } from "@cawco/core/words/connect";
 import { turnCutWords } from "@cawco/core/words/cuts";
-import { delegateWaitWords } from "@cawco/core/words/delegates";
 import { harnessRefusedWords, harnessWords } from "@cawco/core/words/harness";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { judgedWords } from "@cawco/core/words/judged";
@@ -325,6 +322,7 @@ import { titlesSaid, titleUntitledOnce } from "./artifact-titles";
 import { boardOf } from "./artifacts/access";
 import { createArtifactDocs } from "./artifacts/docs";
 import { createArtifactLane } from "./artifacts/lane";
+import { artifactPictures, artifactSend } from "./artifacts/page-posts";
 import { artifactRoutes } from "./artifacts/routes";
 import {
   type Artifacts,
@@ -333,8 +331,6 @@ import {
 } from "./artifacts/service";
 import {
   artifactPicture,
-  artifactPictures,
-  artifactSend,
   artifactSocket,
   takeSentWrites,
 } from "./artifacts/sync";
@@ -533,7 +529,6 @@ import { createPasskeyRelay } from "./passkey-relay";
 import { peek, peekResume } from "./payload-peeks";
 import {
   type AnswerFrom,
-  answerPermission,
   onPermissionAnswer,
   outlivesSession,
   type PendingShape,
@@ -605,7 +600,7 @@ import { createPush, pushRoutes } from "./push";
 import type { AnyProblem } from "./refusal";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
-import { createRelayControl, peekAnswer } from "./relay-control";
+import { createRelayControl } from "./relay-control";
 import {
   askedFrom,
   browserKey,
@@ -679,7 +674,7 @@ import { createSessionRuntime } from "./session-runtime";
 import { sessionWord } from "./session-word";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
-import { isSetupPage, type SetupPicks, setupPicksOf } from "./setup";
+import { createSetupPicksApply, isSetupPage, setupPicksOf } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { FOLDER_CHANGED, folderOf, readCheckedFolder } from "./skills";
 import { sourceFacts } from "./source-facts";
@@ -9526,87 +9521,20 @@ export const createServer = (
       };
     }
   };
-  /** `opening` and `row`'s records (open-items.ts), the session going on from it reads first; the problem of a read that fails. */
-  const goOnOpening = async (row: InstanceRow, opening: string) => {
-    const open = await openItems.read(row.id);
-    if (open instanceof ElysiaStatus) {
-      return open;
-    }
-    return `${opening}\n\n${open}`;
-  };
-  /** The folder a session goes on in from `row`: its own, or its project's checkout on its machine once its workspace is archived. */
-  const goOnCwd = (row: InstanceRow) => {
-    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
-    const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-    return workspace?.state === "archived"
-      ? db
-          .project(row.projectId ?? "")
-          ?.places.find(
-            (place) =>
-              place.kind === "checkout" && place.machineId === row.machineId
-          )?.path
-      : row.cwd;
-  };
-  /**
-   * The session that goes on from one that cannot (plan-changes.ts): in its
-   * project, on its machine, in its folder (its project's checkout there
-   * when its workspace is gone), on its harness and model, under its parent;
-   * its plan copied, opening on `opening` and the old session's records.
-   */
-  const goOnFrom = async (row: InstanceRow, opening: string) => {
-    const cwd = goOnCwd(row);
-    if (!cwd) {
-      throw new Error(
-        `its workspace is gone, and its project has no checkout on ${machineName(row.machineId)}`
-      );
-    }
-    const instanceId = crypto.randomUUID();
-    const spawned = await spawnFromHub(
-      row.machineId,
-      {
-        instanceId,
-        cwd,
-        harness: row.harness,
-        ...(row.model ? { model: row.model } : {}),
-        ...(row.projectId ? { projectId: row.projectId } : {}),
-        ...(row.parentInstanceId
-          ? { parent: { instanceId: row.parentInstanceId } }
-          : {}),
-        title: `${sessionName(row)} (continued)`,
-        spawnedBy: { instanceId: row.id },
-      },
-      "mainline",
-      // It goes on with the row's work, as whoever started that.
-      row.origin ?? "person",
-      row.permissionMode ?? undefined,
-      undefined,
-      row
-    );
-    if (spawned instanceof ElysiaStatus) {
-      return spawned;
-    }
-    plans.copySteps(row.id, instanceId);
-    const opened = await goOnOpening(row, opening);
-    if (typeof opened !== "string") {
-      return opened;
-    }
-    const told = tellPlan(instanceId, opened);
-    if (told.kind !== "taken") {
-      throw new Error(told.reason);
-    }
-    return instanceId;
-  };
   // The person's changes to a plan, and who hears them when (plan-changes.ts).
   const changesOfPlans = createPlanChanges({
     db,
     busy: (instanceId) => pulses.get(instanceId)?.busy === true,
-    goOnFrom,
     lifetime,
+    machineName,
+    openItems,
     plans,
     sendUnread: (uuid) => {
       const state = db.sendRecord(uuid)?.state;
       return state === "pending" || state === "failed";
     },
+    sessionName,
+    spawnFromHub,
     tell: tellPlan,
     wakeCaw: async (projectId, text) => {
       const woke = await caw.tell(projectId, {
@@ -10402,44 +10330,12 @@ export const createServer = (
     projectsChanged,
     stagesChanged: (projectId) => tasks.touched(projectId),
   });
-  /**
-   * A setup page's picks applied as the person's own edits: its name, shape,
-   * area (before the account, which an account of its own is then set over)
-   * and account. A pick that cannot be applied is the problem the send
-   * answers: the picks after it are not applied.
-   */
-  const applySetupPicks = async (projectId: string, picks: SetupPicks) => {
-    if (picks.name !== undefined) {
-      const named = await projectEdits.edit(projectId, { name: picks.name });
-      if (named instanceof ElysiaStatus) {
-        return named;
-      }
-    }
-    if (picks.shape !== undefined) {
-      const shaped = await tasks.applyTemplate(
-        projectId,
-        picks.shape,
-        YOU_ACTOR
-      );
-      if (shaped instanceof ElysiaStatus) {
-        return shaped;
-      }
-    }
-    if (picks.area !== undefined) {
-      const placed = await projectAreas.place(projectId, picks.area);
-      if (placed instanceof ElysiaStatus) {
-        return placed;
-      }
-    }
-    if (picks.account !== undefined) {
-      const moved = await projectEdits.edit(projectId, {
-        account: picks.account,
-      });
-      if (moved instanceof ElysiaStatus) {
-        return moved;
-      }
-    }
-  };
+  // A setup page's picks applied as the person's own edits (setup.ts).
+  const applySetupPicks = createSetupPicksApply({
+    applyTemplate: tasks.applyTemplate,
+    edit: projectEdits.edit,
+    place: projectAreas.place,
+  });
 
   // Caw's own project settings, applied through the settings' own paths, or
   // asked about as an admin write is (project-settings.ts).
@@ -10797,10 +10693,19 @@ export const createServer = (
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
   // A session's sends and starts through its tools (delegation-sends.ts).
   const delegationSends = createDelegationSends({
+    cutTurn,
     db,
-    handOff: workItems.handOff,
+    delegateWaits,
+    machineFault,
+    noteInterrupt,
+    pending,
+    registry,
+    saidInterrupt,
+    sendToMachine,
+    sessionName,
     sessionSend,
     spawnSession,
+    workItems,
   });
   const ruleRowsOf = createRuleRows(db);
 
@@ -10896,129 +10801,6 @@ export const createServer = (
     areas: projectAreas,
     republishPreviews,
   });
-  /**
-   * The delegate `instanceId` names, which `requester` may control: its
-   * parent, or its project's conversation (a co-parent of every work item of
-   * the project, which may answer, steer and stop it); refused when it is
-   * neither's, or retired.
-   */
-  const delegateControlled = (
-    instanceId: string | undefined,
-    requester: InstanceRow
-  ) => {
-    // A delegate named by a former id is acted on by its id now.
-    const row = instanceId
-      ? db.getInstancesByIds([db.instanceIdOf(instanceId)])[0]
-      : undefined;
-    if (!(
-      row &&
-      (row.parentInstanceId === requester.id ||
-        workItems.ledBy(row.id, requester.id))
-    )) {
-      return problem(403, {
-        code: "delegation-control-not-yours",
-        detail:
-          "you can only control your own delegates, or the work items of the project whose conversation you are",
-      });
-    }
-    const retired = workItems.refusal(row, {
-      kind: "peer",
-      fromSession: requester.id,
-    });
-    if (retired) {
-      return problem(409, {
-        code: "delegation-control-retired",
-        detail: retired.reason,
-      });
-    }
-    return row;
-  };
-  /**
-   * A delegate's ask answered by `requester`, its parent or its project's
-   * conversation: a question the hub owns (asks.ts) is its asker's parent's
-   * to answer too, and a permit is, as the prompt it was kept from was; an
-   * ask the hub raised and settles itself (an approval, a browser or connect
-   * ask, a move, a proposal) only the person answers (delegate-waits.ts
-   * `personOnly`). The answer's problem goes on in its status and code,
-   * said for the delegate the target named.
-   */
-  const answerForDelegate = async (
-    row: InstanceRow,
-    requester: InstanceRow,
-    control: ControlPayload
-  ) => {
-    const result = control.args?.[1] as PermissionResult;
-    const answer = peekAnswer(control);
-    if (!answer) {
-      throw new Error("A permission answer names no request.");
-    }
-    const owned = db.asks.get(answer.requestId);
-    const parked = pending.get(answer.requestId);
-    if (parked && delegateWaits.personOnly(parked)) {
-      return problem(403, {
-        code: "delegation-ask-person-only",
-        detail: delegateWaitWords.refused,
-      });
-    }
-    if (owned && owned.instanceId !== row.id) {
-      return problem(403, {
-        code: "delegation-ask-not-theirs",
-        detail: "That ask isn't this delegate's.",
-      });
-    }
-    // Its refusal says which delegate the target named: an ask that is
-    // no longer pending reads the same for every session otherwise.
-    const said = (why: string) =>
-      `Your delegate ${sessionLabel(row).tag}, ask ${answer.requestId}: ${why}`;
-    const answered = await answerPermission(
-      pending,
-      row.id,
-      answer.requestId,
-      result,
-      { via: "session", name: sessionName(requester) }
-    ).catch((error: unknown) => {
-      throw new Error(
-        said(error instanceof Error ? error.message : String(error)),
-        { cause: error }
-      );
-    });
-    if (answered) {
-      return problem(answered.status, {
-        code: answered.response.code,
-        detail: said(answered.response.detail),
-      });
-    }
-  };
-  /**
-   * A control `requester` sends its delegate `row` on its machine, from
-   * `requester`; an interrupt is noted and cuts the turn it lands in, said
-   * as that session's.
-   */
-  const controlDelegate = (
-    envelope: Envelope,
-    row: InstanceRow,
-    requester: InstanceRow,
-    control: ControlPayload
-  ) => {
-    const agent = registry.agent(row.machineId);
-    if (!agent) {
-      return awayProblem(row.machineId, machineFault(row.machineId, "offline"));
-    }
-    sendToMachine(agent, {
-      ...envelope,
-      instanceId: row.id,
-      machineId: row.machineId,
-      payload: { ...control, instanceId: row.id, from: requester.id },
-    });
-    if (control.method === CONTROL_INTERRUPT) {
-      saidInterrupt(row.id, `by session ${requester.id}`);
-      noteInterrupt(row.id);
-      cutTurn(
-        row.id,
-        turnCutWords.interruptFrom(`“${sessionName(requester)}”`)
-      );
-    }
-  };
   const delegationMcp = createDelegationMcp({
     workItemCalls: workItemCalls(ctx),
     adminCalls: adminCallsMade,
@@ -11202,36 +10984,9 @@ export const createServer = (
     handOff: delegationSends.handOff,
     projectAt: projectAtFolder,
     spawn: delegationSends.spawn,
-    // One in-process dispatcher in place of six relay routes: the caller,
-    // then the verb, then the target's ownership and retirement, each
-    // checked in that order before the answer or the control goes.
-    forward: async (envelope, actor) => {
-      // The MCP resolver supplies the caller separately, never from provenance
-      // on an envelope. Recheck the row in case its permission changed mid-call.
-      const requester = delegationSends.caller(actor);
-      if (requester instanceof ElysiaStatus) {
-        return requester;
-      }
-      if (envelope.verb === "send") {
-        const sent = sessionSend(envelope as Envelope<SendPayload>, requester);
-        return sent instanceof ElysiaStatus ? sent : undefined;
-      }
-      const control = envelope.payload as ControlPayload;
-      if (!(
-        envelope.verb === "control" &&
-        (control.method === CONTROL_INTERRUPT ||
-          control.method === RESOLVE_PERMISSION)
-      )) {
-        throw new Error(`Unsupported delegation operation ${envelope.verb}`);
-      }
-      const row = delegateControlled(envelope.instanceId, requester);
-      if (row instanceof ElysiaStatus) {
-        return row;
-      }
-      return control.method === RESOLVE_PERMISSION
-        ? await answerForDelegate(row, requester, control)
-        : controlDelegate(envelope, row, requester, control);
-    },
+    // One in-process dispatcher in place of six relay routes
+    // (delegation-sends.ts `forward`).
+    forward: delegationSends.forward,
   });
   toolsMayHaveChangedPort.fill(delegationMcp.toolsMayHaveChanged);
 

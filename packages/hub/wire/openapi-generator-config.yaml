@@ -161,6 +161,7 @@ typeOverrides:
     PlanStepPriority: OpenEnums.PlanStepPriority
     PlanStepStatus: OpenEnums.PlanStepStatus
     PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State
+    PostApiInstancesByIdArtifactsByArtifactSend403Code: OpenEnums.PostApiInstancesByIdArtifactsByArtifactSend403Code
     PostApiToolsByIdUpdateAll200Why: OpenEnums.PostApiToolsByIdUpdateAll200Why
     PresenceDeviceState: OpenEnums.PresenceDeviceState
     PreviewDown: OpenEnums.PreviewDown

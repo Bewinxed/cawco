@@ -143,9 +143,14 @@ import type { Caw } from "./caw";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
-import type { AttemptAsk, Origin, WorkBudget } from "./db/stored-types";
+import type { AttemptAsk, Origin } from "./db/stored-types";
 import { needsDesignSystem } from "./design-offers";
 import type { designSection as designSectionOf } from "./design-system";
+import type {
+  DispatchChange,
+  DispatchConfigure,
+  DispatchView,
+} from "./dispatch-shapes";
 import type { JevAccess } from "./jev";
 import {
   DISPATCH_ASKED_MAX,
@@ -317,52 +322,6 @@ export interface AttemptHow {
   retry?: boolean;
   /** The active stage a hook started it from. */
   stage?: Stage;
-}
-
-/** A project's dispatch: its settings, and what the dispatcher would do now. */
-export interface DispatchView {
-  /** What an attempt may spend where its task and its delegate call say nothing; null: no limit. */
-  budget: WorkBudget | null;
-  /** The project's Caw session, once the hub has started one. */
-  conversationInstanceId: string | null;
-  /** Whether the hub starts attempts at ready tasks on its own. */
-  dispatch: boolean;
-  /** The tasks it would start next, in order. */
-  frontier: string[];
-  /**
-   * Tasks it does not start, each with why: a ready task's `startProblem`
-   * (a budget line that does not read, or the hub's last try failing on the
-   * file as it stands), and a queued start held because what the
-   * `delegate` call that named its task asked does not read.
-   */
-  held: { task: string; why: string }[];
-  /** Where an attempt lands when its task and type say nothing. */
-  lands: LandsMode;
-  /** Attempts starting or running now. */
-  live: number;
-  maxAttempts: number;
-  /** Why it would start nothing now even with a ready task; null when it would. */
-  paused: string | null;
-  /** Tasks whose `runs:` hook start waits for a slot, oldest first. */
-  queued: string[];
-  /** Tasks waiting in `you` stages now. */
-  review: number;
-  reviewLimit: number;
-  /** Where an attempt runs when its task says nothing (runs-on.ts); null: any machine with a checkout. */
-  runsOn: string | null;
-}
-
-/** A change to a project's dispatch settings; what is left out stays. */
-export interface DispatchChange {
-  /** The project's default budget; null clears it. */
-  budget?: WorkBudget | null;
-  dispatch?: boolean;
-  /** Where an attempt lands when its task and type say nothing. */
-  lands?: LandsMode;
-  maxAttempts?: number;
-  reviewLimit?: number;
-  /** Where an attempt runs when its task says nothing: a machine, or a capability like `apple`; null clears it. */
-  runsOn?: string | null;
 }
 
 /** What a start nobody can take the report of says to do. */
@@ -2858,6 +2817,29 @@ export const createDispatcher = ({
         });
   };
 
+  /** Changes a project's dispatch settings, then looks at it again. */
+  const configure: DispatchConfigure = async (projectId, change) => {
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
+    const misfit = dispatchProblem(change);
+    if (misfit) {
+      return problem(400, {
+        code: "dispatch-settings-unfit",
+        detail: misfit,
+      });
+    }
+    const runsOn = runsOnOf(change.runsOn);
+    if (runsOn instanceof ElysiaStatus) {
+      return runsOn;
+    }
+    db.setProjectDispatch(projectId, columnsOf({ ...change, runsOn }));
+    evaluate(projectId);
+    const now = projectOf(projectId);
+    return now instanceof ElysiaStatus ? now : await viewOf(now);
+  };
+
   return {
     startAttempt,
     evaluate,
@@ -2978,28 +2960,7 @@ export const createDispatcher = ({
       return project instanceof ElysiaStatus ? project : await viewOf(project);
     },
 
-    /** Changes a project's dispatch settings, then looks at it again. */
-    async configure(projectId: string, change: DispatchChange) {
-      const project = projectOf(projectId);
-      if (project instanceof ElysiaStatus) {
-        return project;
-      }
-      const misfit = dispatchProblem(change);
-      if (misfit) {
-        return problem(400, {
-          code: "dispatch-settings-unfit",
-          detail: misfit,
-        });
-      }
-      const runsOn = runsOnOf(change.runsOn);
-      if (runsOn instanceof ElysiaStatus) {
-        return runsOn;
-      }
-      db.setProjectDispatch(projectId, columnsOf({ ...change, runsOn }));
-      evaluate(projectId);
-      const now = projectOf(projectId);
-      return now instanceof ElysiaStatus ? now : await viewOf(now);
-    },
+    configure,
 
     /**
      * An attempt you start from the dashboard: it reports to the session

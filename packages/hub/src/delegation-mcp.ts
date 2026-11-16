@@ -78,7 +78,6 @@ import {
   type ProjectSettings,
   projectSettingsListed,
 } from "./project-settings";
-import type { AnyProblem } from "./refusal";
 import { RELAY_DEFINITIONS, RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import {
@@ -384,11 +383,8 @@ export function createDelegationMcp(options: {
   ledBy?: (instanceId: string, leadId: string) => boolean;
   /** The sessions `instanceId` was forked from, nearest first (launches.ts `forkLineage`). */
   forkOrigins?: (instanceId: string) => ForkOrigin[];
-  /** Carries out what a call emitted; the hub's problem when it may not, which is the call's error. */
-  forward: (
-    envelope: Envelope,
-    actor: InstanceRow
-  ) => Promise<AnyProblem | undefined>;
+  /** Carries out what a call emitted; the hub's problem when it may not, which is the call's error (delegation-sends.ts `forward`). */
+  forward: DelegationSends["forward"];
   /** The project holding folder `cwd` on `machineId` (server.ts `projectAtFolder`): what a session's start_session names. */
   projectAt: (machineId: string, cwd: string) => string | undefined;
   /** A session's start_session, held until the session is in place; answers its settled folder (delegation-sends.ts `spawn`). */

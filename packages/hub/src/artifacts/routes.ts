@@ -4,7 +4,7 @@
  * lookup an artifact's own tab opens with. A session reaches only its own
  * artifacts, and those it handed to its parent (update, read);
  * any other id is 404. The person's Send is on the preview
- * listener, beside the doc's socket (sync.ts `artifactSend`).
+ * listener, beside the doc's socket (page-posts.ts `artifactSend`).
  */
 
 import { PICTURE_LIMITS } from "@cawco/core/artifact-picture";
