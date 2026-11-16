@@ -8,9 +8,9 @@
 /** Why a notice owed to a session ended undelivered: the session never runs again, or it waited past the bound. */
 export type UnsentWhy = "ended" | "waited";
 
-/** "1 notice", "3 notices". */
+/** "1 system notice", "3 system notices". */
 const noticesCount = (count: number): string =>
-  count === 1 ? "1 notice" : `${count} notices`;
+  count === 1 ? "1 system notice" : `${count} system notices`;
 
 export const unsentWords = {
   /** The kind the transcript's line is drawn under. */
@@ -23,6 +23,6 @@ export const unsentWords = {
   /** The session's one line for the notices one look ended: how many, and why. */
   line: (count: number, why: UnsentWhy, days: number): string =>
     why === "ended"
-      ? `${noticesCount(count)} from CawCo ended undelivered: this session can't run again.`
-      : `${noticesCount(count)} from CawCo ended undelivered: ${count === 1 ? "it" : "they"} waited more than ${days} days for this session to run.`,
+      ? `${noticesCount(count)} ended undelivered: this session can't run again.`
+      : `${noticesCount(count)} ended undelivered: ${count === 1 ? "it" : "they"} waited more than ${days} days for this session to run.`,
 };
