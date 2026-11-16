@@ -1217,6 +1217,7 @@ export const createProjectSettings = ({
 
   /** The card's changes, as the ask's input holds them, checked then. */
   const cardOf = (input: Record<string, unknown>): ProjectSettingChange[] =>
+    // Cast stays until valibot is a dependency (G7 adds it): then a schema of ProjectSettingChange parses it.
     (Array.isArray(input.changes)
       ? input.changes
       : []) as ProjectSettingChange[];
