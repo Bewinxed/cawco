@@ -2,7 +2,10 @@
 
 import { readFile } from "node:fs/promises";
 import { atProviderLimit } from "@cawco/core/accounts";
+import type { BrowserDoor } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { isControlOf } from "@cawco/core/control-args";
+import type { Control } from "@cawco/core/control-table";
 import type { StartingSet } from "@cawco/core/delegate-types";
 import { inStartingSet, piToolsFor } from "@cawco/core/delegate-types";
 import { CONTROL_REFRESH_CAWCO_TOOLS } from "@cawco/core/harness";
@@ -31,6 +34,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { MESSAGES_READ, usageByModel } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
+import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import {
@@ -68,7 +72,6 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { type Boundary, boundaryCommand } from "../boundary/state";
-import type { BrowserDoor } from "../browser/door";
 import {
   callDelegationTool,
   delegationTools,
@@ -965,6 +968,18 @@ class ProviderAnswers {
 /** A send that is pi's `/compact`, with its optional focus text. */
 const COMPACT_COMMAND = /^\/compact(?:\s+([\s\S]*))?$/u;
 
+/** The controls a pi session answers (`PiSession.control`); its credential's are answered first. */
+const PI_SESSION_CONTROLS = [
+  CONTROL_REFRESH_CAWCO_TOOLS,
+  CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_MCP_FLEET_HEAL,
+  CONTROL_INTERRUPT,
+  CONTROL_SET_MODEL,
+  CONTROL_SUPPORTED_MODELS,
+  CONTROL_SUPPORTED_COMMANDS,
+  CONTROL_CONTEXT_USAGE,
+] as const;
+
 class PiSession implements HarnessSession {
   readonly harness = "pi" as const;
   sessionId: string | null = null;
@@ -1492,12 +1507,16 @@ class PiSession implements HarnessSession {
     return undefined;
   }
 
-  async control(method: string, args: unknown[]): Promise<unknown> {
-    const credential = this.#credentialControls(method, args);
+  async control(control: Control): Promise<unknown> {
+    const credential = this.#credentialControls(control);
     if (credential) {
       return await credential;
     }
-    switch (method) {
+    if (!isControlOf(PI_SESSION_CONTROLS, control)) {
+      console.warn(`[pi] no control verb ${control.method} — ignored`);
+      return undefined;
+    }
+    switch (control.method) {
       case CONTROL_REFRESH_CAWCO_TOOLS: {
         const count = await this.#tools.refresh();
         console.error(`[pi] cawco tools refreshed: ${count} listed`);
@@ -1505,13 +1524,10 @@ class PiSession implements HarnessSession {
       }
       // The agent sends the session's door with the changes (pi-sessiond.ts).
       case CONTROL_MCP_FLEET_CHANGED: {
-        const changes = args[0] as FleetMcpChange[];
+        const [changes, door] = control.args;
         // A fenced session takes no MCP server ({@link cawcosExtensionsAlone}).
         return this.#fleetMcp
-          ? await this.#fleetMcp.take(
-              changes,
-              args[1] as BrowserDoor | undefined
-            )
+          ? await this.#fleetMcp.take(changes, door ?? undefined)
           : {
               servers: changes.map(({ name, kind }) => ({
                 name,
@@ -1523,9 +1539,9 @@ class PiSession implements HarnessSession {
       }
       // Named by the hub for a connect ask; the agent sends the door (pi-sessiond.ts).
       case CONTROL_MCP_FLEET_HEAL: {
-        const names = (args[0] as string[] | undefined) ?? [];
+        const names = control.args[0] ?? [];
         return this.#fleetMcp
-          ? await this.#fleetMcp.heal(names, args[1] as BrowserDoor | undefined)
+          ? await this.#fleetMcp.heal(names, control.args[1] ?? undefined)
           : ({
               servers: names.map((name) => ({
                 name,
@@ -1540,7 +1556,7 @@ class PiSession implements HarnessSession {
         return undefined;
       case CONTROL_SET_MODEL: {
         await this.#session.setModel(
-          await resolvePiModel(this.#runtime, String(args[0]))
+          await resolvePiModel(this.#runtime, control.args[0])
         );
         return undefined;
       }
@@ -1572,8 +1588,7 @@ class PiSession implements HarnessSession {
         };
       }
       default:
-        console.warn(`[pi] no control verb ${method} — ignored`);
-        return undefined;
+        return unhandled("control", control);
     }
   }
   /** pi has no permission modes and no question tool, and puts no call to the hub: there is no ask to answer. */

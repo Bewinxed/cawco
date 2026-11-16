@@ -36,6 +36,7 @@ export {
   type ScanOptions,
 } from "./scan.ts";
 export {
+  DOC_AUTHORS,
   type DocAuthor,
   extractDoc,
   type ExtractOptions,

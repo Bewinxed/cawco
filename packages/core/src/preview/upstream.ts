@@ -1,4 +1,4 @@
-import type { PreviewSource } from "./protocol";
+import type { PREVIEW_START, PreviewSource } from "./protocol";
 
 /**
  * What a machine serves a preview from: a port (in a workspace's network or
@@ -43,6 +43,34 @@ export const sourceKeyOf = (at: {
         ];
   // Cast kept, the brand's one mint: TypeScript makes a branded string only by assertion (https://github.com/microsoft/TypeScript/issues/202).
   return JSON.stringify(tuple) as SourceKey;
+};
+
+/**
+ * Whether `value`, off the wire, is a {@link SourceKey} as
+ * {@link sourceKeyOf} writes one: a JSON tuple of its machine, its kind
+ * (`dir` or `port`), and the source's parts.
+ */
+export const isSourceKey = (value: unknown): value is SourceKey => {
+  if (typeof value !== "string") {
+    return false;
+  }
+  try {
+    const tuple: unknown = JSON.parse(value);
+    return (
+      Array.isArray(tuple) &&
+      typeof tuple[0] === "string" &&
+      (tuple[1] === "dir" || tuple[1] === "port")
+    );
+  } catch {
+    return false;
+  }
+};
+
+/** What {@link PREVIEW_START} is asked: the source a machine serves (a port or a folder), the hub's name for the start (`instanceId`, which a stop of it names), the one credential its listener answers (`token`), and the source key it was started for, which the machine's register reports back. */
+export type PreviewStartArgs = MachineSource & {
+  for: SourceKey;
+  instanceId: string;
+  token: string;
 };
 
 /** The machine a {@link SourceKey} names: its tuple's first part. */

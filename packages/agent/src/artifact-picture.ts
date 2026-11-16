@@ -24,9 +24,11 @@
  */
 
 import {
+  type HelloArtifact,
   PICTURE_LIMITS,
   PICTURE_PAGE_SCROLLER,
   PICTURE_VIEW,
+  type PictureAsk,
   type PictureCut,
 } from "@cawco/core/artifact-picture";
 import { PREVIEW_DOWNS } from "@cawco/core/preview/protocol";
@@ -35,7 +37,6 @@ import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import type { Frame, Page } from "playwright-core";
 import {
   greet,
-  type HelloArtifact,
   HOST_STAND_IN,
   holdTimeAnimations,
   isHelloArtifact,
@@ -49,12 +50,6 @@ import {
   hiddenLength,
   markChanged,
 } from "./in-page/page";
-
-/** What the hub asks a picture of: where the page loads, at what width, and the artifact its hello names. */
-export interface PictureAsk extends HelloArtifact {
-  url: string;
-  width: number;
-}
 
 /**
  * The page's readiness, watched from before its own scripts run: its

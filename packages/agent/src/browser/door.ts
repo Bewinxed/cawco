@@ -25,7 +25,7 @@
 import { readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode } from "@cawco/core/absent";
-import { browserGatePort } from "@cawco/core/browser";
+import { type BrowserDoor, browserGatePort } from "@cawco/core/browser";
 import { machineId } from "@cawco/core/machine-id";
 import {
   workspaceProjectFile,
@@ -54,11 +54,6 @@ export const CHROME_DEVTOOLS = "chrome-devtools";
 
 /** The name of a gate id's chrome-devtools-mcp config in its state dir. */
 const GATE_CONFIG_NAME = "browser-mcp.json";
-
-/** What a session's browser tool is launched with: its config file. */
-export interface BrowserDoor {
-  config: string;
-}
 
 /**
  * Gate id `id`'s door, made when it has none. `projectId` is kept for an id

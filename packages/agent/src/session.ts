@@ -18,17 +18,28 @@ import {
   waitingWords,
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { BrowserDoor } from "@cawco/core/browser";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
 import type { CutCommand } from "@cawco/core/commands/controls";
 import { CONTROL_RUN_COMMAND } from "@cawco/core/commands/controls";
 import {
   CONTROL_READ_CONTINUATION,
-  type ContinuationReadOptions,
   readContinuation,
 } from "@cawco/core/continuation-read";
+import {
+  type ControlRead,
+  isControlOf,
+  readControl,
+} from "@cawco/core/control-args";
+import type {
+  AddressedControl,
+  Control,
+  ControlArgs,
+  ControlName,
+  ControlResult,
+} from "@cawco/core/control-table";
 import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
-import type { FleetDelta } from "@cawco/core/fleet";
 import { FLEET_DELTA, FLEET_STATUS } from "@cawco/core/fleet";
 import { makeFolder } from "@cawco/core/folders";
 import type {
@@ -76,7 +87,6 @@ import {
   PreviewStartDown,
 } from "@cawco/core/preview/protocol";
 import type {
-  ControlPayload,
   Envelope,
   FsPayload,
   IngestMark,
@@ -89,35 +99,37 @@ import type {
 import { AGENT_BUSY, isGitUrl, repoPath } from "@cawco/core/protocol";
 import { lastErrorKindOf } from "@cawco/core/relaunch";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
-import type {
-  CarrySessionRequest,
-  GitChanges,
-  WorkInFlight,
-} from "@cawco/core/session/controls";
+import type { GitChanges, WorkInFlight } from "@cawco/core/session/controls";
 import {
+  type CatalogDir,
   CONTROL_ABANDON,
+  CONTROL_ACKNOWLEDGE_ADDRESS,
   CONTROL_CARRY_SESSIONS,
+  CONTROL_GET_SESSION_INFO,
+  CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
   CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_QUERIES,
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_READ_TRANSCRIPT_WINDOW,
+  CONTROL_RENAME_SESSION,
   CONTROL_RESTLESS,
-  CONTROL_SET_EFFORT,
-  CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
   CONTROL_SPIN_OFF_HELD,
   CONTROL_STORED_RUN,
+  CONTROL_TAG_SESSION,
+  CONTROL_WITHDRAW_SEND,
   CONTROL_WORK_IN_FLIGHT,
+  DELETE_SESSION,
+  type SessionListAsk,
   unknownControlWords,
 } from "@cawco/core/session/controls";
 import type {
   NeutralMessage,
   NeutralResultMessage,
   NeutralSessionInfo,
-  PermissionResult,
 } from "@cawco/core/session-messages";
 import {
   cacheHit,
@@ -145,8 +157,10 @@ import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import {
   CONTROL_BEGIN_TOOL_SIGNIN,
   CONTROL_COMPLETE_TOOL_SIGNIN,
+  INSTALL_TOOL,
+  LIST_TOOLS,
+  type ToolStatus,
 } from "@cawco/core/tools";
-import type { WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { harnessWords } from "@cawco/core/words/harness";
 import {
@@ -171,7 +185,6 @@ import { sandboxOf } from "./boundary/sandboxes";
 import type { Boundary } from "./boundary/state";
 import { endSessionWork } from "./boundary/work";
 import {
-  type BrowserDoor,
   browserDoor,
   closeBrowserDoor,
   forgetBrowserDoor,
@@ -183,10 +196,11 @@ import {
 } from "./canvas-screen";
 import { onCatalogMoved } from "./catalog-index";
 import {
+  type ControlAnswer,
   type ControlLane,
-  type ControlMethod,
   imageLane,
   type MachineControl,
+  type MachineControls,
 } from "./control-lanes";
 import { reportDamaged } from "./damaged-records";
 import { forgetFirstSession } from "./first-session";
@@ -279,13 +293,6 @@ const serverBusyInstances = async (): Promise<string[]> =>
       serverAdapters().map((adapter) => adapter.custody.busyInstances())
     )
   ).flat();
-
-/** The controls that change a session's setting: each names it as its one argument. */
-const SETTING_CONTROLS: ReadonlySet<string> = new Set([
-  CONTROL_SET_MODEL,
-  CONTROL_SET_PERMISSION_MODE,
-  CONTROL_SET_EFFORT,
-]);
 
 /**
  * A surviving child one reattach has claimed, and what it decided about it.
@@ -547,17 +554,17 @@ const repoLeaf = (repo: string): string =>
 const FINAL_STOP = /\.$/u;
 
 /** The machine-scoped session-catalog controls, routed to a harness. */
-const CATALOG_METHODS = new Set([
-  "listSessions",
-  "getSessionInfo",
+const CATALOG_METHODS = [
+  CONTROL_LIST_SESSIONS,
+  CONTROL_GET_SESSION_INFO,
   CONTROL_STORED_RUN,
-  "getSessionMessages",
+  CONTROL_GET_SESSION_MESSAGES,
   CONTROL_READ_TRANSCRIPT_WINDOW,
   CONTROL_READ_CONTINUATION,
-  "renameSession",
-  "tagSession",
-  "deleteSession",
-]);
+  CONTROL_RENAME_SESSION,
+  CONTROL_TAG_SESSION,
+  DELETE_SESSION,
+] as const;
 
 /**
  * The catalog controls that only read a stored conversation. Each waits for
@@ -566,15 +573,15 @@ const CATALOG_METHODS = new Set([
  * other session, so a read of a transcript of hundreds of megabytes holds up
  * no other reader ({@link SessionSupervisor.dispatch}).
  */
-const CATALOG_READS = new Set([
-  "listSessions",
-  "getSessionInfo",
+const CATALOG_READS = [
+  CONTROL_LIST_SESSIONS,
+  CONTROL_GET_SESSION_INFO,
   CONTROL_STORED_RUN,
-  "getSessionMessages",
+  CONTROL_GET_SESSION_MESSAGES,
   CONTROL_READ_TRANSCRIPT_WINDOW,
   CONTROL_READ_CONTINUATION,
   CONTROL_READ_SESSION_CONTEXT,
-]);
+] as const;
 
 /** Stored transcripts read at once ({@link SessionSupervisor.#transcriptRead}). Ours: the hub's settle reads ask four of a machine at once (server.ts `SETTLE_READS_PER_MACHINE`); a page's and Find's reads take the rest. */
 const TRANSCRIPT_READS_AT_ONCE = 8;
@@ -595,24 +602,13 @@ const catalogRead = (at: number, what: string): void => {
   }
 };
 
-/**
- * The short ids a continuation read counts the hand-offs of as the
- * session's asks (core `ContinuationReadOptions.askers`): a delegate's
- * parent; none when its options name none.
- */
-const askersOf = (arg: unknown): string[] => {
-  const askers =
-    typeof arg === "object" && arg !== null
-      ? (arg as ContinuationReadOptions).askers
-      : undefined;
-  return Array.isArray(askers)
-    ? askers.filter((one): one is string => typeof one === "string")
-    : [];
-};
-
 /** The lane a catalog control takes: its conversation's, by its session key; the whole catalog's for a listing. */
-const catalogLane = (method: string, args: unknown[] | undefined): string =>
-  method === "listSessions" ? "catalog:list" : `catalog:${String(args?.[0])}`;
+const catalogLane = (
+  control: Control<(typeof CATALOG_METHODS | typeof CATALOG_READS)[number]>
+): string =>
+  control.method === CONTROL_LIST_SESSIONS
+    ? "catalog:list"
+    : `catalog:${control.args[0]}`;
 
 /**
  * The catalog's directory argument, whichever convention carried it: new
@@ -620,18 +616,8 @@ const catalogLane = (method: string, args: unknown[] | undefined): string =>
  * the SDK's `{ dir }` options object. A mixed-age fleet speaks both, so both
  * are heard; anything else means no directory was named.
  */
-const dirOf = (arg: unknown): string | undefined => {
-  if (typeof arg === "string") {
-    return arg;
-  }
-  if (typeof arg === "object" && arg !== null) {
-    const { dir } = arg as { dir?: unknown };
-    if (typeof dir === "string") {
-      return dir;
-    }
-  }
-  return undefined;
-};
+const dirOf = (arg: CatalogDir | undefined): string | undefined =>
+  typeof arg === "string" ? arg : (arg?.dir ?? undefined);
 
 /**
  * Every stored conversation this machine could pick back up, with the moment
@@ -1056,7 +1042,7 @@ export class SessionSupervisor {
    * {@link declareRead}). A session's own controls go to its process
    * ({@link #call}), and the session catalog's to the harness it names.
    */
-  readonly #controls: Record<string, MachineControl> = {
+  readonly #controls: MachineControls = {
     // A generation runs in this process, so a restart cuts it: none starts behind a raised fence.
     // A slow image request must not block machine busy probes or other
     // controls.
@@ -1065,18 +1051,13 @@ export class SessionSupervisor {
       call: (_instanceId, cwd, input, bound, project) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : generateImage(this.#ports, cwd as string, input, bound, project),
+          : generateImage(this.#ports, cwd, input, bound, project),
     },
     [PREVIEW_START]: {
-      call: (options) =>
-        startPreview(
-          options as Parameters<typeof startPreview>[0],
-          this.#ports
-        ),
+      call: (options) => startPreview(options, this.#ports),
     },
     [PREVIEW_STOP]: {
-      call: (options) =>
-        stopPreview(options as Parameters<typeof stopPreview>[0]),
+      call: (options) => stopPreview(options),
     },
     [PREVIEW_WEIGHT]: { call: (dir, path) => previewWeight(dir, path) },
     // A read of folders, as a machine registers: nothing starts (preview.ts `foldersThere`).
@@ -1086,56 +1067,53 @@ export class SessionSupervisor {
       call: (options) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : openCanvasScreen(options as Parameters<typeof openCanvasScreen>[0]),
+          : openCanvasScreen(options),
     },
     [CANVAS_SCREEN_CLOSE]: {
-      call: (options) =>
-        closeCanvasScreen(options as Parameters<typeof closeCanvasScreen>[0]),
+      call: (options) => closeCanvasScreen(options),
     },
     // A preview or a page drawn as the panel draws it, for artifact_read's png (artifact-picture.ts).
     [ARTIFACT_PICTURE]: {
       call: (options) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : drawArtifact(options as Parameters<typeof drawArtifact>[0]),
+          : drawArtifact(options),
     },
     [AGENT_BUSY]: { call: () => this.busyNow() },
     [CONTROL_ABANDON]: {
-      call: (requestId) => this.#abandon(String(requestId)),
+      call: (requestId) => this.#abandon(requestId),
     },
-    [CONTROL_RESTLESS]: { call: (ids) => this.#restless(ids as string[]) },
+    [CONTROL_RESTLESS]: { call: (ids) => this.#restless(ids) },
     // The hub revoked these credentials: they grant nothing now.
     [CONTROL_FORGET_CREDENTIALS]: {
-      call: (ids) => ({ forgotten: forgetRevoked(ids as string[]) }),
+      call: (ids) => ({ forgotten: forgetRevoked(ids) }),
     },
     // Each carry in a lane of its own: one session's carry never waits on
     // another's. A second carry of a conversation one is still carrying is
     // refused with that reason (claude-carry.ts `carrySessions`).
     [CONTROL_CARRY_SESSIONS]: {
       lane: (control) => `carry:${control.requestId}`,
-      call: (requests) =>
-        this.carrier.carrySessions(requests as CarrySessionRequest[]),
+      call: (requests) => this.carrier.carrySessions(requests),
     },
     [CONTROL_SPIN_OFF_HELD]: {
-      call: (instanceId) => this.#spinOffs.spinOffHeld(String(instanceId)),
+      call: (instanceId) => this.#spinOffs.spinOffHeld(instanceId),
     },
     [CONTROL_GIT_CHANGES]: {
-      call: (dir, since) => gitChanges(dir as string, since as string),
+      call: (dir, since) => gitChanges(dir, since),
     },
-    listTools: { call: () => probeTools() },
+    [LIST_TOOLS]: { call: () => probeTools() },
     [CONTROL_BEGIN_TOOL_SIGNIN]: {
-      call: (tool) => beginToolSignin(String(tool)),
+      call: (tool) => beginToolSignin(tool),
     },
     [CONTROL_COMPLETE_TOOL_SIGNIN]: {
-      call: (tool, code) =>
-        completeToolSignin(String(tool), String(code ?? "")),
+      call: (tool, code) => completeToolSignin(tool, code ?? ""),
     },
     // Each ask in a lane of its own, never queued behind another: a second
     // ask of the same tool while its install runs joins it (tools.ts
     // `installTool`), where queued it ran a second install once the first
     // ended (host run 49045442, two dashboards pressing at once).
-    installTool: {
-      call: (...args) => this.#installTool(args),
+    [INSTALL_TOOL]: {
+      call: (...args) => this.#installTool(...args),
       lane: (control) => `install:${control.requestId}`,
     },
     // A delta, held as it arrived and kept on disk (#holdDelta): answered
@@ -1149,7 +1127,7 @@ export class SessionSupervisor {
     // behind its start-up work (2026-10-25 17:39-17:43).
     [FLEET_DELTA]: {
       lane: () => "fleet",
-      call: (delta) => this.#fleet.answerDelta(delta as FleetDelta),
+      call: (delta) => this.#fleet.answerDelta(delta),
     },
     [FLEET_STATUS]: { call: () => this.#fleet.status() },
   };
@@ -1158,8 +1136,20 @@ export class SessionSupervisor {
    * Declares machine-scoped control `name` ({@link #controls}), callable
    * without an instanceId, waiting in `lane` when it names one.
    */
-  declareControl(name: string, call: ControlMethod, lane?: ControlLane): void {
-    this.#controls[name] = { call, ...(lane ? { lane } : {}) };
+  declareControl<K extends ControlName>(
+    name: K,
+    call: (...args: ControlArgs<K>) => ControlAnswer<K>,
+    lane?: ControlLane<K>
+  ): void {
+    this.#declare(name, { call, ...(lane ? { lane } : {}) });
+  }
+
+  /** Control `name` declared as `control`, in its own place of {@link #controls}. */
+  #declare<K extends ControlName>(name: K, control: MachineControl<K>): void {
+    // This signature holds `control` to `name`. A write through a generic
+    // key to the mapped type expands it over every control (TS2590: a union
+    // too complex to represent), so it is said as the one entry it adds.
+    Object.assign(this.#controls, { [name]: control });
   }
 
   /**
@@ -1169,14 +1159,14 @@ export class SessionSupervisor {
    * the hub may let go runs beside every other: one search never waits on
    * another, nor the hub's word that it let one go on it.
    */
-  declareRead(
-    name: string,
-    read: (signal: AbortSignal, ...args: unknown[]) => unknown
+  declareRead<K extends ControlName>(
+    name: K,
+    read: (signal: AbortSignal, ...args: ControlArgs<K>) => ControlAnswer<K>
   ): void {
-    this.#controls[name] = {
+    this.#declare(name, {
       lane: (control) => `read:${control.requestId}`,
       read,
-    };
+    });
   }
 
   /** Each abandonable read running, by the hub's request id. */
@@ -1185,11 +1175,11 @@ export class SessionSupervisor {
   readonly #letGo = new Set<string>();
 
   /** `read`, stopped when the hub lets `requestId` go. */
-  async #abandonableRead(
-    read: (signal: AbortSignal, ...args: unknown[]) => unknown,
+  async #abandonableRead<K extends ControlName>(
+    read: (signal: AbortSignal, ...args: ControlArgs<K>) => ControlAnswer<K>,
     requestId: string | undefined,
-    args: unknown[]
-  ): Promise<unknown> {
+    args: ControlArgs<K>
+  ): Promise<ControlResult<K>> {
     if (requestId && this.#letGo.delete(requestId)) {
       throw new Error("the hub let this read go before it began");
     }
@@ -1343,19 +1333,28 @@ export class SessionSupervisor {
   /** Settles once the envelope has been handled, success or failure alike. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: address ACK bypasses the queue waiting on that same ACK
   dispatch(envelope: Envelope): Promise<void> {
-    const control =
-      envelope.verb === "control"
-        ? (envelope.payload as ControlPayload)
-        : undefined;
-    if (control?.method === "acknowledgeSessionAddress") {
+    // A control is read once, here, where it reaches the machine: its name
+    // the table's, its arguments its own (core control-args.ts). One that is
+    // neither is refused before anything runs or waits.
+    let control: AddressedControl | undefined;
+    if (envelope.verb === "control") {
+      const read = readControl(envelope.payload);
+      if (!read.ok) {
+        this.#refused(read);
+        return Promise.resolve();
+      }
+      ({ control } = read);
+    }
+    if (control?.method === CONTROL_ACKNOWLEDGE_ADDRESS) {
       const id = envelope.instanceId ?? control.instanceId ?? "";
       const pending = this.#addressWaiting.get(id);
+      const [sessionId, generation, acknowledged] = control.args;
       if (
         pending &&
-        pending.sessionId === control.args?.[0] &&
-        pending.generation === control.args?.[1]
+        pending.sessionId === sessionId &&
+        pending.generation === generation
       ) {
-        if (control.args?.[2] === true) {
+        if (acknowledged) {
           this.#addressAcknowledged.set(id, {
             sessionId: pending.sessionId,
             generation: pending.generation,
@@ -1390,35 +1389,39 @@ export class SessionSupervisor {
         return Promise.resolve();
       }
     }
-    if (control?.method === FLEET_DELTA && control.requestId) {
-      this.#fleet.takeDelta(control.requestId, control.args?.[0] as FleetDelta);
+    if (control?.method === FLEET_DELTA) {
+      this.#fleet.takeDelta(control.requestId, control.args[0]);
     }
-    const imageRequest =
-      control?.method === GENERATE_IMAGE ? control.requestId : undefined;
+    const image =
+      control?.method === GENERATE_IMAGE
+        ? { requestId: control.requestId, instanceId: control.args[0] }
+        : undefined;
+    const imageRequest = image?.requestId;
     let key = envelope.instanceId ?? "";
     // A slow image request must not block machine busy probes or other
     // controls. Nor may a command the hub runs (a check, a landing gate step, up
     // to an hour): commands in one directory run one after another, and
     // nothing else waits for them. Each control's lane is declared with it
     // ({@link #controls}).
-    const lane = control && this.#controls[control.method]?.lane?.(control);
+    const lane =
+      control && this.#laneOf(control.method, control.args, control.requestId);
     if (lane !== undefined) {
       key = lane;
     } else if (
       control &&
       !envelope.instanceId &&
-      (CATALOG_METHODS.has(control.method) || CATALOG_READS.has(control.method))
+      isControlOf(CATALOG_METHODS, control)
     ) {
       // A stored conversation's own lane: its changes keep their order, and
       // one session's catalog never waits on another's.
-      key = catalogLane(control.method, control.args);
+      key = catalogLane(control);
     } else if (control && !envelope.instanceId) {
       // Fleet convergence cannot serialize unrelated machine controls behind
       // its HTTP probes. Mutations of the same kind still retain their order.
       key = `machine:${control.method}`;
     }
-    if (imageRequest) {
-      this.#imageRequests.set(imageRequest, String(control?.args?.[0]));
+    if (image) {
+      this.#imageRequests.set(image.requestId, image.instanceId);
     }
     // A stop for a session being attached does not wait on its child's
     // answer: the attach lets go, and the stop behind it ends the child.
@@ -1451,7 +1454,7 @@ export class SessionSupervisor {
       key === envelope.instanceId &&
       this.#relaunchWaits.has(key)
     ) {
-      return this.#route(envelope).catch((error: unknown) => {
+      return this.#route(envelope, control).catch((error: unknown) => {
         warn(`${envelope.verb} failed: ${error}`);
       });
     }
@@ -1461,7 +1464,7 @@ export class SessionSupervisor {
     if (
       control &&
       (CONTROL_QUERIES.has(control.method) ||
-        (!envelope.instanceId && CATALOG_READS.has(control.method)))
+        (!envelope.instanceId && isControlOf(CATALOG_READS, control)))
     ) {
       // #control sinks its own answer, success or failure.
       const behind = this.#queues.get(key) ?? Promise.resolve();
@@ -1471,8 +1474,10 @@ export class SessionSupervisor {
       return inFlight(
         transcript ? "transcript reads" : `${control.method} reads`,
         transcript
-          ? behind.then(() => this.#transcriptRead(() => this.#route(envelope)))
-          : behind.then(() => this.#route(envelope))
+          ? behind.then(() =>
+              this.#transcriptRead(() => this.#route(envelope, control))
+            )
+          : behind.then(() => this.#route(envelope, control))
       );
     }
     // A command behind another in its folder says so as it queues (folderTurn).
@@ -1482,7 +1487,7 @@ export class SessionSupervisor {
         : undefined;
     const routed = (this.#queues.get(key) ?? Promise.resolve()).then(() => {
       folder?.start();
-      return this.#route(envelope);
+      return this.#route(envelope, control);
     });
     const queue = (
       envelope.verb === "spawn"
@@ -2258,7 +2263,34 @@ export class SessionSupervisor {
     }
   }
 
-  #route(envelope: Envelope): Promise<void> {
+  /** The lane control `method` is declared with reads its own arguments for its key ({@link ControlLane}); none, the default's. */
+  #laneOf<K extends ControlName>(
+    method: K,
+    args: ControlArgs<K>,
+    requestId: string
+  ): string | undefined {
+    return this.#controls[method]?.lane?.({ args, requestId });
+  }
+
+  /** A control refused as it arrived ({@link readControl}): its caller answered why, when it named its request. */
+  #refused(read: Extract<ControlRead, { ok: false }>): void {
+    const { error, instanceId, requestId } = read;
+    if (requestId === undefined) {
+      warn(error);
+      return;
+    }
+    this.sink({
+      kind: "control_result",
+      instanceId,
+      requestId,
+      ok: false,
+      error,
+      refusal: { kind: "unknown", message: error },
+    });
+  }
+
+  /** `envelope` run as its verb says; a control's, `control`, as it was read where it arrived ({@link dispatch}). */
+  #route(envelope: Envelope, control?: AddressedControl): Promise<void> {
     switch (envelope.verb) {
       case "spawn":
         return this.#spawn(envelope.payload as SpawnPayload);
@@ -2267,7 +2299,7 @@ export class SessionSupervisor {
       case "stop":
         return this.#stop(envelope.payload as StopPayload);
       case "control":
-        return this.#control(envelope.payload as ControlPayload);
+        return control ? this.#control(control) : Promise.resolve();
       case "fs":
         return this.#fs(envelope.payload as FsPayload);
       case "admission":
@@ -4716,20 +4748,17 @@ export class SessionSupervisor {
     }
   }
 
-  async #control({
-    instanceId,
-    harness: kind,
-    requestId,
-    method,
-    args = [],
-  }: ControlPayload): Promise<void> {
+  async #control(control: AddressedControl): Promise<void> {
+    const { instanceId, requestId } = control;
     // A delta's policy, written as it arrived: its answer waits on it, and
     // one that could not write it is refused in those words (NACK).
     const held = this.#fleet.denialsFor(requestId);
-    const denials = method === FLEET_DELTA ? held : undefined;
+    const denials = control.method === FLEET_DELTA ? held : undefined;
     try {
-      if (method === CONTROL_LIST_SESSIONS) {
-        const { sessions, unanswered, failed } = await listSessions(args);
+      if (control.method === CONTROL_LIST_SESSIONS) {
+        const { sessions, unanswered, failed } = await listSessions(
+          control.args[0]
+        );
         this.sink({
           kind: "control_result",
           instanceId,
@@ -4741,29 +4770,12 @@ export class SessionSupervisor {
         });
         return;
       }
-      // A setting's control names the setting. One with none is refused
-      // before the harness hears it: Claude's would set nothing and clear
-      // its session's own record of its mode (claude.ts
-      // `SessionMode.choose`), Full Send with it, while the hub's row kept
-      // the old mode (restart-rules on the host, 2026-10-23).
-      if (
-        SETTING_CONTROLS.has(method) &&
-        !(typeof args[0] === "string" && args[0])
-      ) {
-        throw new Error(`${method} names no setting`);
-      }
       await denials;
       // An interrupted session is idle: nothing it started in its workspace
       // runs on, to end later and wake it, whether or not its process was
       // there to hear the interrupt.
-      const result = await this.#call(
-        instanceId,
-        kind,
-        method,
-        args,
-        requestId
-      ).finally(() =>
-        method === CONTROL_INTERRUPT && instanceId
+      const result = await this.#call(control).finally(() =>
+        control.method === CONTROL_INTERRUPT && instanceId
           ? this.#endWork(instanceId, "interrupted")
           : undefined
       );
@@ -4775,9 +4787,9 @@ export class SessionSupervisor {
         // The mode is acknowledged only after the harness applied it. The hub
         // persists this receipt for both socket controls and REST changes.
         result:
-          method === CONTROL_SET_PERMISSION_MODE
-            ? { permissionMode: args[0] }
-            : this.fleet.answerWithoutSecrets(method, result),
+          control.method === CONTROL_SET_PERMISSION_MODE
+            ? { permissionMode: control.args[0] }
+            : this.fleet.answerWithoutSecrets(control.method, result),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -4801,196 +4813,192 @@ export class SessionSupervisor {
     }
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches to whichever catalog/harness/daemon method the control names, each a distinct branch
-  async #call(
-    instanceId: string | undefined,
-    kind: HarnessKind | undefined,
-    method: string,
-    args: unknown[],
-    requestId?: string
-  ): Promise<unknown> {
-    if (instanceId === undefined) {
-      const declared = this.#controls[method];
-      if (declared) {
-        return "read" in declared
-          ? await this.#abandonableRead(declared.read, requestId, args)
-          : await declared.call(...args);
-      }
+  /** Declared control `method` run with its own arguments ({@link #controls}); undefined when none is declared under it. */
+  #runDeclared<K extends ControlName>(
+    method: K,
+    args: ControlArgs<K>,
+    requestId: string
+  ): Promise<unknown> | undefined {
+    const declared = this.#controls[method];
+    if (!declared) {
+      return undefined;
+    }
+    return "read" in declared
+      ? this.#abandonableRead(declared.read, requestId, args)
+      : Promise.resolve(declared.call(...args));
+  }
 
-      if (CATALOG_METHODS.has(method)) {
+  /** A catalog control, run by the harness that keeps its conversation ({@link CATALOG_METHODS}). */
+  async #catalog(
+    control: Control<(typeof CATALOG_METHODS)[number]>,
+    adapter: Harness
+  ): Promise<unknown> {
+    switch (control.method) {
+      case CONTROL_GET_SESSION_INFO: {
+        const [key, dir] = control.args;
+        const info = await adapter.getSessionInfo(key, dirOf(dir));
+        return info ? titled(info) : info;
+      }
+      case CONTROL_STORED_RUN: {
+        const [key, dir] = control.args;
+        return await adapter.storedRun(key, dirOf(dir));
+      }
+      case CONTROL_READ_TRANSCRIPT_WINDOW: {
+        const at = Date.now();
+        const [key, { dir, window: asked }] = control.args;
+        const window = await adapter.readTranscriptWindow(key, dir, asked);
+        catalogRead(
+          at,
+          `readTranscriptWindow ${adapter.kind} ${key.slice(0, 8)} ${JSON.stringify(asked)}: ${window.entries.length} message(s)`
+        );
+        return window;
+      }
+      case CONTROL_GET_SESSION_MESSAGES: {
+        const at = Date.now();
+        const [key, options] = control.args;
+        // `whole`: every message stored; else the active chain.
+        const span: TranscriptSpan = options?.whole ? "whole" : "chain";
+        const messages = await adapter.getSessionMessages(
+          key,
+          options?.dir,
+          options?.tail,
+          span
+        );
+        catalogRead(
+          at,
+          `getSessionMessages ${adapter.kind} ${key.slice(0, 8)}${span === "chain" ? "" : ` ${span}`}${options?.tail ? ` tail ${options.tail}` : ""}: ${messages.length} message(s)`
+        );
+        return messages;
+      }
+      case CONTROL_READ_CONTINUATION: {
+        const at = Date.now();
+        const [key, options] = control.args;
+        const [live, whole] = await Promise.all([
+          adapter.getSessionMessages(key, options?.dir),
+          adapter.getSessionMessages(key, options?.dir, undefined, "whole"),
+        ]);
+        const read = readContinuation(live, whole, options?.askers ?? []);
+        console.info(
+          `[catalog] readContinuation ${adapter.kind} ${key.slice(0, 8)}: ${whole.length} stored message(s), ${read.entries.scope} in its live scope, answered ${JSON.stringify(read).length} characters in ${Date.now() - at} ms`
+        );
+        return read;
+      }
+      case CONTROL_RENAME_SESSION: {
+        const [key, title, dir] = control.args;
+        return await adapter.renameSession(key, title, dirOf(dir));
+      }
+      case CONTROL_TAG_SESSION: {
+        const [key, tag, dir] = control.args;
+        await adapter.tagSession(key, tag, dirOf(dir));
+        this.#spinOffs.closeTagging(key);
+        return undefined;
+      }
+      case DELETE_SESSION: {
+        const [key, dir] = control.args;
+        await adapter.deleteSession(key, dirOf(dir));
+        await this.#transcriptDeleted(key);
+        return undefined;
+      }
+      case CONTROL_LIST_SESSIONS:
+        // Answered whole, with the harnesses it left out ({@link #control}).
+        throw new Error(`${control.method} is answered by the machine`);
+      default:
+        return unhandled("catalog control", control);
+    }
+  }
+
+  async #call(control: AddressedControl): Promise<unknown> {
+    const { instanceId, harness: kind } = control;
+    if (instanceId === undefined) {
+      const declared = this.#runDeclared(
+        control.method,
+        control.args,
+        control.requestId
+      );
+      if (declared) {
+        return await declared;
+      }
+      if (isControlOf(CATALOG_METHODS, control)) {
         if (!kind) {
           throw new Error(
-            `${method} names no harness: a session key is one harness's`
+            `${control.method} names no harness: a session key is one harness's`
           );
         }
-        const adapter = adapterFor(kind);
-        switch (method) {
-          case "getSessionInfo": {
-            const info = await adapter.getSessionInfo(
-              args[0] as string,
-              dirOf(args[1])
-            );
-            return info ? titled(info) : info;
-          }
-          case CONTROL_STORED_RUN:
-            return await adapter.storedRun(args[0] as string, dirOf(args[1]));
-          case CONTROL_READ_TRANSCRIPT_WINDOW: {
-            const at = Date.now();
-            const options = args[1] as
-              { dir?: string; window: WindowAsk } | undefined;
-            if (!options?.window) {
-              throw new Error(`${method} names no window`);
-            }
-            const window = await adapter.readTranscriptWindow(
-              args[0] as string,
-              dirOf(args[1]),
-              options.window
-            );
-            catalogRead(
-              at,
-              `readTranscriptWindow ${adapter.kind} ${String(args[0]).slice(0, 8)} ${JSON.stringify(options.window)}: ${window.entries.length} message(s)`
-            );
-            return window;
-          }
-          case "getSessionMessages": {
-            const at = Date.now();
-            // `whole`: every message stored; else the active chain.
-            const options = args[1] as
-              { tail?: number; whole?: boolean } | undefined;
-            const span: TranscriptSpan = options?.whole ? "whole" : "chain";
-            const messages = await adapter.getSessionMessages(
-              args[0] as string,
-              dirOf(args[1]),
-              options?.tail,
-              span
-            );
-            catalogRead(
-              at,
-              `getSessionMessages ${adapter.kind} ${String(args[0]).slice(0, 8)}${span === "chain" ? "" : ` ${span}`}${options?.tail ? ` tail ${options.tail}` : ""}: ${messages.length} message(s)`
-            );
-            return messages;
-          }
-          case CONTROL_READ_CONTINUATION: {
-            const at = Date.now();
-            const key = args[0] as string;
-            const [live, whole] = await Promise.all([
-              adapter.getSessionMessages(key, dirOf(args[1])),
-              adapter.getSessionMessages(
-                key,
-                dirOf(args[1]),
-                undefined,
-                "whole"
-              ),
-            ]);
-            const read = readContinuation(live, whole, askersOf(args[1]));
-            console.info(
-              `[catalog] readContinuation ${adapter.kind} ${key.slice(0, 8)}: ${whole.length} stored message(s), ${read.entries.scope} in its live scope, answered ${JSON.stringify(read).length} characters in ${Date.now() - at} ms`
-            );
-            return read;
-          }
-          case "renameSession":
-            return await adapter.renameSession(
-              args[0] as string,
-              args[1] as string,
-              dirOf(args[2])
-            );
-          case "tagSession":
-            await adapter.tagSession(
-              args[0] as string,
-              typeof args[1] === "string" ? args[1] : null,
-              dirOf(args[2])
-            );
-            this.#spinOffs.closeTagging(args[0]);
-            return undefined;
-          case "deleteSession":
-            await adapter.deleteSession(args[0] as string, dirOf(args[1]));
-            await this.#transcriptDeleted(args[0] as string);
-            return undefined;
-          default:
-            break;
-        }
+        return await this.#catalog(control, adapterFor(kind));
       }
-
       // A machine-scoped control only one harness knows: try the named harness,
       // then every harness, until one claims it.
-      if (kind) {
-        const adapter = adapterFor(kind);
-        if (adapter.machine) {
-          const answer = await adapter.machine(method, args);
-          if (answer !== undefined) {
-            return answer;
-          }
+      const named = kind ? [adapterFor(kind)] : [];
+      for (const adapter of [...named, ...harnesses()]) {
+        const answer = await adapter.machine?.(control);
+        if (answer !== undefined) {
+          return answer;
         }
       }
-      for (const adapter of harnesses()) {
-        if (adapter.machine) {
-          const answer = await adapter.machine(method, args);
-          if (answer !== undefined) {
-            return answer;
-          }
-        }
-      }
-      throw new Error(unknownControlWords(method));
+      throw new Error(unknownControlWords(control.method));
     }
+    return await this.#sessionCall(control, instanceId);
+  }
 
-    if (method === RESOLVE_PERMISSION) {
-      this.#session(instanceId).resolvePermission(
-        args[0] as string,
-        args[1] as PermissionResult
-      );
-      this.#settleAsk(instanceId, args[0] as string);
+  /** A control of live session `instanceId`: the supervisor's own of it, else its process's ({@link HarnessSession.control}). */
+  async #sessionCall(
+    control: AddressedControl,
+    instanceId: string
+  ): Promise<unknown> {
+    if (control.method === RESOLVE_PERMISSION) {
+      const [askId, answer] = control.args;
+      this.#session(instanceId).resolvePermission(askId, answer);
+      this.#settleAsk(instanceId, askId);
       return undefined;
     }
-    if (method === WITHDRAW_PERMISSION) {
-      this.#session(instanceId).withdrawPermission(
-        args[0] as string,
-        args[1] as string
-      );
-      this.#settleAsk(instanceId, args[0] as string, "cancelled");
+    if (control.method === WITHDRAW_PERMISSION) {
+      const [askId, reason] = control.args;
+      this.#session(instanceId).withdrawPermission(askId, reason);
+      this.#settleAsk(instanceId, askId, "cancelled");
       return undefined;
     }
-    if (method === CONTROL_SLEEP) {
+    if (control.method === CONTROL_SLEEP) {
       return await this.sleep(instanceId);
     }
-    if (method === CONTROL_WORK_IN_FLIGHT) {
+    if (control.method === CONTROL_WORK_IN_FLIGHT) {
       return this.#workInFlight(instanceId);
     }
     const session = this.#session(instanceId);
-    if (method === "withdrawSend" && !traitsOf(session.harness).queuesSends) {
+    if (
+      control.method === CONTROL_WITHDRAW_SEND &&
+      !traitsOf(session.harness).queuesSends
+    ) {
       return "started";
     }
     // A credential the hub installs in a live session is known before the
     // process can print it, as a launch's is ({@link #granted}).
-    const installing = installOf(method, args);
+    const installing = installOf(control);
     if (installing) {
-      rememberCredential(instanceId, installing.credential);
+      rememberCredential(instanceId, installing);
     }
-    return await session.control(method, args);
+    return await session.control(control);
   }
 
-  /** {@link installTool} of the tool `args` names, as the hub asked. */
-  async #installTool(args: unknown[]): Promise<unknown> {
+  /** {@link installTool} of the tool the hub names, as it asked. */
+  async #installTool(
+    ...[id, version, newest, automatic, startedBy]: ControlArgs<
+      typeof INSTALL_TOOL
+    >
+  ): Promise<ToolStatus> {
     // The policy's pin, the newest release the hub sends a tool it keeps
     // current to reach, whether the hub sent it to keep it current rather
     // than a press (hub tool-releases.ts), and who started it (a hub too
     // old to say: a press unless automatic); JSON says an absent one as null.
-    const said = (at: number): string | undefined =>
-      typeof args[at] === "string" ? (args[at] as string) : undefined;
-    const newest = said(2);
-    const automatic = args[3] === true;
-    const said4 = said(4);
-    let startedBy: "cawco" | "person" = automatic ? "cawco" : "person";
-    if (said4 === "cawco" || said4 === "person") {
-      startedBy = said4;
-    }
-    const installed = await installTool(args[0] as string, said(1), {
+    const said =
+      startedBy === "cawco" || startedBy === "person" ? startedBy : undefined;
+    const installed = await installTool(id, version ?? undefined, {
       ...(newest ? { newest } : {}),
-      automatic,
-      startedBy,
+      automatic: automatic === true,
+      startedBy: said ?? (automatic === true ? "cawco" : "person"),
     });
     // A harness CLI installed here converges what the machine holds of
     // the fleet, as every harness already here did.
-    if (harnesses().some((adapter) => adapter.kind === args[0])) {
+    if (harnesses().some((adapter) => adapter.kind === id)) {
       this.#fleet.reconverge();
     }
     return installed;
@@ -5092,12 +5100,11 @@ function adoptionOf(kind: HarnessKind): KeeperHarness | undefined {
  * Each one left out is said beside the answer (`unanswered`, `failed`),
  * never read as having none.
  */
-async function listSessions(args: unknown[]): Promise<{
+async function listSessions(options: SessionListAsk | null = null): Promise<{
   sessions: NeutralSessionInfo[];
   unanswered: HarnessUnanswered[];
   failed: HarnessFailed[];
 }> {
-  const options = (args[0] ?? {}) as { limit?: number; dir?: string };
   const unanswered: HarnessUnanswered[] = [];
   const failed: HarnessFailed[] = [];
   const listed = await Promise.all(
@@ -5105,7 +5112,7 @@ async function listSessions(args: unknown[]): Promise<{
       let read: Bounded<NeutralSessionInfo[]>;
       try {
         read = await readWithin(HARNESS_LISTING_MS, () =>
-          adapter.listSessions(options.dir)
+          adapter.listSessions(options?.dir)
         );
       } catch (error) {
         warn(`listSessions on ${adapter.kind} failed: ${error}`);
@@ -5133,7 +5140,7 @@ async function listSessions(args: unknown[]): Promise<{
   const all = listed.flat();
   all.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0));
   return {
-    sessions: (options.limit ? all.slice(0, options.limit) : all).map(titled),
+    sessions: (options?.limit ? all.slice(0, options.limit) : all).map(titled),
     unanswered,
     failed,
   };
@@ -5241,7 +5248,10 @@ async function applyStoredPermissionMode(
   mode: SpawnPayload["permissionMode"]
 ): Promise<void> {
   if (mode !== undefined) {
-    await session.control(CONTROL_SET_PERMISSION_MODE, [mode]);
+    await session.control({
+      method: CONTROL_SET_PERMISSION_MODE,
+      args: [mode],
+    });
   }
 }
 

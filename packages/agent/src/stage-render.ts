@@ -25,10 +25,9 @@ import { readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_PATH,
   CANVAS_PLAN_ID,
-  type CanvasSpec,
-  type Interaction,
   RENDER_STATE_PARAM,
   REPORT_PATH,
+  type RenderAsk,
   type ReportAnswer,
   type SectionPlan,
   type SectionUndrawn,
@@ -56,23 +55,6 @@ const POLL_MS = 250;
 const SETTLE_MS = 600;
 /** The window a render opens in: the desk's. A state the stage can't hold whole at its own size grows it (frame-picture.ts `poseState`). */
 const VIEWPORT = { width: 1440, height: 900 };
-
-/** One state a render is asked for: its story and interaction, for its picture. */
-interface RenderState {
-  interaction?: Interaction;
-  scheme?: "light" | "dark";
-  /** Its story's name, or `file:Story` where two of the canvas's states files name one story alike. */
-  story: string;
-  width?: number;
-}
-
-export interface RenderAsk {
-  files: string[];
-  /** A picture: of `state` when it names one, else the stage in view. */
-  png?: boolean;
-  spec?: CanvasSpec;
-  state?: RenderState;
-}
 
 /** A render's answer (core `StageRendered`): `png` a PNG, base64, when asked. */
 export type Rendered = StageRendered;

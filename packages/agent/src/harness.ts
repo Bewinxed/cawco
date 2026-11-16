@@ -19,6 +19,7 @@ import type { AskAnswer } from "@cawco/core/asks";
 import type { TextAttachment } from "@cawco/core/attachments";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import type { CutCommand } from "@cawco/core/commands/controls";
+import type { Control } from "@cawco/core/control-table";
 import type { FleetSyncReport, PlacedFleetConfig } from "@cawco/core/fleet";
 import type { FramePayload } from "@cawco/core/frames";
 import type {
@@ -95,7 +96,9 @@ export interface HarnessContext {
    * asked, starting no browser. Absent on a fenced session and on an attach,
    * which launch none.
    */
-  readonly browserDoor?: () => Promise<import("./browser/door").BrowserDoor>;
+  readonly browserDoor?: () => Promise<
+    import("@cawco/core/browser").BrowserDoor
+  >;
   /** Whether a turn is in flight — the supervisor's busy set and drain read this. */
   busy: (active: boolean) => void;
   /** The session's event loop ended; the supervisor drops its routing entry. */
@@ -208,8 +211,13 @@ export interface HarnessContext {
 export interface HarnessSession {
   /** Called only after the supervisor has installed this handle. */
   attached?: () => void;
-  /** A neutral control ({@link CONTROL_INTERRUPT}, …), mapped to the runtime. */
-  control: (method: string, args: unknown[]) => Promise<unknown>;
+  /**
+   * A neutral control ({@link CONTROL_INTERRUPT}, …), mapped to the runtime:
+   * called by its name with its own arguments (core control-table.ts). One
+   * the harness has no function for is refused in those words (core
+   * `unknownControlWords`).
+   */
+  control: (control: Control) => Promise<unknown>;
   /** Hard teardown, used on drain/shutdown. */
   dispose: () => Promise<void>;
   /**
@@ -572,7 +580,7 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
   /** The stored sessions this harness can resume. */
   listSessions: (dir?: string) => Promise<NeutralSessionInfo[]>;
   /** A machine-scoped control this harness owns; `undefined` when it is not its word. */
-  machine?: (method: string, args: unknown[]) => Promise<unknown> | undefined;
+  machine?: (control: Control) => Promise<unknown> | undefined;
   /**
    * Every provider the harness's own catalog names, by id and name: the
    * providers an account can be for through it. Absent from a harness with

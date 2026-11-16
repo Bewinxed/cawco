@@ -3,6 +3,7 @@
  * from the types CawCo stores as JSON: never edited by hand. Each schema's
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
+import { DOC_AUTHORS } from "@cawco/jsonl-parser";
 import { z } from "zod";
 import type {
   AccountKind as AccountKindType,
@@ -61,6 +62,7 @@ import type {
   RuleWatch as RuleWatchType,
 } from "./rules";
 import type { SendWithdrawal as SendWithdrawalType } from "./session/controls";
+import { FLEET_MCP_CHANGE_KINDS } from "./session/controls";
 import type { SendMode as SendModeType } from "./session-messages";
 import { INTERACTIONS, STAGE_TOOLCHAINS } from "./stage";
 import type { StarterOutcome as StarterOutcomeType } from "./starters";
@@ -2003,15 +2005,7 @@ export const FleetMcpServerSchema = FleetMcpServerShape;
 export type FleetMcpServerOutput = z.output<typeof FleetMcpServerShape>;
 
 const FleetMcpChangeKindShape = declared(
-  z.enum([
-    "signed-in",
-    "signed-out",
-    "config",
-    "added",
-    "removed",
-    "enabled",
-    "disabled",
-  ]),
+  z.enum(FLEET_MCP_CHANGE_KINDS),
   "FleetMcpChangeKind",
   "packages/core/src/session/controls.ts"
 );
@@ -5126,7 +5120,7 @@ export const TrackerSyncStateSchema: z.ZodType<TrackerSyncStateType> =
 export type TrackerSyncStateOutput = z.output<typeof TrackerSyncStateShape>;
 
 const DocAuthorShape = declared(
-  z.enum(["owner", "agent", "report", "injected"]),
+  z.enum(DOC_AUTHORS),
   "DocAuthor",
   "packages/jsonl-parser/src/text.ts"
 );

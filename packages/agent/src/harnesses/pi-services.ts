@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
 import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
+import type { Control } from "@cawco/core/control-table";
 import type {
   FleetHoldings,
   FleetItemState,
@@ -1275,15 +1276,17 @@ export class PiProfile {
     servicesPromise = null;
     return Promise.resolve();
   }
-  async machine(method: string, args: unknown[]): Promise<unknown> {
-    if (method === CONTROL_PI_DEFAULT_MODEL) {
-      return await piDefaultModel(String(args[0]));
+  async machine(control: Control): Promise<unknown> {
+    if (control.method === CONTROL_PI_DEFAULT_MODEL) {
+      return await piDefaultModel(control.args[0]);
     }
     // pi has no slash commands: its sessions answer the same empty list.
-    if (method === CONTROL_FOLDER_COMMANDS) {
+    if (control.method === CONTROL_FOLDER_COMMANDS) {
       return [] satisfies SupportedCommands;
     }
-    return method === CONTROL_MODEL_CATALOG ? await modelCatalog() : undefined;
+    return control.method === CONTROL_MODEL_CATALOG
+      ? await modelCatalog()
+      : undefined;
   }
 
   /** pi's agent dir, where its skills, memory file and the fleet's sidecar are. */

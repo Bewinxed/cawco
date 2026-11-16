@@ -52,6 +52,7 @@ import {
   pushOnlyProvider,
 } from "@cawco/core/connections";
 import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
+import type { AddressedControl } from "@cawco/core/control-table";
 import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
@@ -135,6 +136,7 @@ import {
   namedModels,
   unlistedModelRefusal,
 } from "@cawco/core/model-names";
+import { isOneOf } from "@cawco/core/one-of";
 import {
   type HubPreviewOrigins,
   isHubPreview,
@@ -145,7 +147,6 @@ import { previewEnterUrl } from "@cawco/core/preview/routes";
 import type {
   AgentRow,
   BuildInfo,
-  ControlPayload,
   DelegateEvent,
   EnvelopeAddress,
   InstanceRow,
@@ -177,14 +178,18 @@ import {
 } from "@cawco/core/relaunch";
 import { protocolRange } from "@cawco/core/runtime";
 import {
+  CONTROL_ACKNOWLEDGE_ADDRESS,
   CONTROL_GET_SESSION_INFO,
   CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MCP_FLEET_HEAL,
+  CONTROL_REINITIALIZE,
+  CONTROL_RELOAD_PLUGINS,
   CONTROL_RELOAD_SKILLS,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_TRANSCRIPT_TURNS,
+  DELETE_SESSION,
 } from "@cawco/core/session/controls";
 import type {
   ModeAsk,
@@ -3204,13 +3209,13 @@ export const createServer = (
       payload: {
         instanceId: claim.instanceId,
         requestId: crypto.randomUUID(),
-        method: "acknowledgeSessionAddress",
+        method: CONTROL_ACKNOWLEDGE_ADDRESS,
         args: [
           claim.sessionId,
           claim.processGeneration ?? (row ? processGeneration(row) : ""),
           !!acknowledged && !row?.endIntent,
         ],
-      },
+      } satisfies AddressedControl,
     });
     if (acknowledged && row.endIntent && row.sessionId !== claim.sessionId) {
       lifecycle.reconcile(machineId);
@@ -4114,7 +4119,7 @@ export const createServer = (
           requestId,
           method: FLEET_DELTA,
           args: [delta],
-        } satisfies ControlPayload,
+        } satisfies AddressedControl,
       } satisfies HubEnvelope<"control">);
       welcomeConverge.sent(machineId, delta);
       return true;
@@ -4227,6 +4232,12 @@ export const createServer = (
     const unfit = sessionModeRefusal(row.id, mode);
     if (unfit) {
       return problem(400, { code: "mode-refused", detail: unfit });
+    }
+    if (!isOneOf(WIRE_PERMISSION_MODES, mode)) {
+      return problem(400, {
+        code: "mode-refused",
+        detail: `"${mode}" is no permission mode.`,
+      });
     }
     const asked = await callAgent(
       row.machineId,
@@ -4996,11 +5007,10 @@ export const createServer = (
     workspaces: (needle) => db.workspacesNamed(needle),
     // A sheet runs on its workspace's stage, on that workspace's machine.
     stage: async (at, file, files, opening) => {
-      const staged = await onStage(
-        at,
-        STAGE_ENSURE,
-        files ? { file, files, opening } : file
-      );
+      const staged = await onStage(at, STAGE_ENSURE, (ref) => [
+        ref,
+        files ? { file, files, opening } : file,
+      ]);
       if (staged instanceof ElysiaStatus) {
         return staged;
       }
@@ -5011,30 +5021,38 @@ export const createServer = (
     verify: (requester, artifact) => designVerify.ask(requester, artifact),
     // A component canvas drawn by its workspace's daemon in the machine's own Chromium.
     stageRender: async (at, ask) => {
-      const staged = await onStage(at, STAGE_RENDER, ask);
+      const staged = await onStage(at, STAGE_RENDER, (ref) => [ref, ask]);
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     stageWrite: async (at, write) => {
-      const staged = await onStage(at, STAGE_WRITE, write);
+      const staged = await onStage(at, STAGE_WRITE, (ref, version) => [
+        ref,
+        write,
+        version,
+      ]);
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     // A served preview's page as its author has it, drawn on its workspace's own server.
     servedPicture: async (at, ask) => {
-      const staged = await onStage(at, STAGE_PICTURE, ask);
+      const staged = await onStage(at, STAGE_PICTURE, (ref) => [ref, ask]);
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     // The version of a sheet or a served preview an author hands up, cut on its workspace's machine.
     pin: async (at, pin) => {
-      const staged = await onStage(at, STAGE_PIN, pin);
+      const staged = await onStage(at, STAGE_PIN, (ref) => [ref, pin]);
       return staged instanceof ElysiaStatus ? staged : undefined;
     },
     // A decision page's Previews' stage warmed as it goes out; the machine answers before the warm-up runs.
     warmStage: async (at, warm) => {
-      const staged = await onStage(at, STAGE_WARM, warm);
+      const staged = await onStage(at, STAGE_WARM, (ref, version) => [
+        ref,
+        warm,
+        version,
+      ]);
       return staged instanceof ElysiaStatus ? staged : undefined;
     },
     stageComponents: async (at, ask) => {
-      const staged = await onStage(at, STAGE_COMPONENTS, ask);
+      const staged = await onStage(at, STAGE_COMPONENTS, (ref) => [ref, ask]);
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     // A preview handed up, loaded once on its own origin as its parent will
@@ -5907,7 +5925,7 @@ export const createServer = (
     cwd: string;
     harness: HarnessKind;
     machineId: string;
-    sessionId?: string | null;
+    sessionId: string;
   }) =>
     readAgent(
       row.machineId,
@@ -6071,10 +6089,12 @@ export const createServer = (
     },
     deleteDone: (id) => watchPort.now()?.untell(id),
     deleteTranscript: async (row) => {
-      if (!row.sessionId) {
+      const { sessionId } = row;
+      if (!sessionId) {
         return true;
       }
-      const info = await lookupTranscript(row);
+      const stored = { ...row, sessionId };
+      const info = await lookupTranscript(stored);
       switch (info.kind) {
         case "unanswered":
           throw new Error(
@@ -6093,8 +6113,8 @@ export const createServer = (
       }
       const result = await callAgent(
         row.machineId,
-        "deleteSession",
-        [row.sessionId, row.cwd],
+        DELETE_SESSION,
+        [sessionId, row.cwd],
         READ_TIMEOUT_MS,
         row.harness
       );
@@ -6112,7 +6132,7 @@ export const createServer = (
         default:
           throw unreachable(result);
       }
-      if (await transcriptGone(row)) {
+      if (await transcriptGone(stored)) {
         return true;
       }
       throw new Error(failed);
@@ -7597,9 +7617,11 @@ export const createServer = (
     db.setAgentFleet(machineId, report);
     publishInstances(machineId);
     refreshSessions(machineId, agent, [
-      ...(pluginsChanged ? ["reloadPlugins"] : []),
-      ...(skillsChanged && !pluginsChanged ? [CONTROL_RELOAD_SKILLS] : []),
-      ...(hooksChanged ? ["reinitialize"] : []),
+      ...(pluginsChanged ? ([CONTROL_RELOAD_PLUGINS] as const) : []),
+      ...(skillsChanged && !pluginsChanged
+        ? ([CONTROL_RELOAD_SKILLS] as const)
+        : []),
+      ...(hooksChanged ? ([CONTROL_REINITIALIZE] as const) : []),
     ]);
     sendMcpChanges(machineId, riding);
   };
@@ -8818,7 +8840,7 @@ export const createServer = (
         requestId,
         method: CONTROL_INTERRUPT,
         args: [],
-      },
+      } satisfies AddressedControl,
     } satisfies HubEnvelope<"control">);
     noteInterrupt(instanceId, hold);
     cutTurn(instanceId, cause);
@@ -11030,7 +11052,7 @@ export const createServer = (
                 requestId,
                 method: CONTROL_REFRESH_CAWCO_TOOLS,
                 args: [],
-              },
+              } satisfies AddressedControl,
             } satisfies HubEnvelope<"control">)
         ).then((reply) => {
           switch (reply.kind) {
@@ -11165,7 +11187,7 @@ export const createServer = (
               requestId,
               method: INSTALL_SESSION_CREDENTIAL,
               args: [credential],
-            },
+            } satisfies AddressedControl,
           } satisfies HubEnvelope<"control">)
       );
       switch (reply.kind) {

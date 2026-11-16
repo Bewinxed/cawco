@@ -53,6 +53,8 @@ import {
 } from "../../packages/agent/src/sessiond-client";
 import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts/controls";
 import { CAWCO_ENV } from "../../packages/core/src/cawco-env";
+import type { Control } from "../../packages/core/src/control-table";
+import { INSPECT_CONFIG } from "../../packages/core/src/fleet";
 import {
   CAPABILITIES_NONE,
   type MachineHarnessReport,
@@ -345,8 +347,8 @@ for (const kind of HARNESSES) {
     }),
     getSessionInfo: async () => undefined,
     storedRun: async () => ({}),
-    machine: (method: string) => {
-      if (method === "inspectConfig") {
+    machine: ({ method }: Control) => {
+      if (method === INSPECT_CONFIG) {
         return Promise.resolve({
           at: Date.now(),
           marketplaces: [],

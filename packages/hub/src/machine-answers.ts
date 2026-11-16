@@ -1,12 +1,12 @@
 import type { Bounded } from "@cawco/core/bounded";
 import {
   CONTROL_REPLIES,
-  type ControlName,
   type ControlReply,
   FS_REPLIES,
   type FsOp,
   type FsReply,
 } from "@cawco/core/control-replies";
+import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type {
   ControlRefusal,
@@ -156,7 +156,7 @@ export type ControlAnswer<K extends ControlName> = CallAnswer<ControlReply<K>>;
 export type AgentCall = <K extends ControlName>(
   machineId: string,
   method: K,
-  args: unknown[],
+  args: ControlArgs<K>,
   timeoutMs: number,
   harness?: HarnessKind,
   instanceId?: string
@@ -201,14 +201,14 @@ export type AwaitStart = (
 export type ReadSessionProcess = <K extends ControlName>(
   row: { id: string; machineId: string },
   method: K,
-  args: unknown[]
+  args: ControlArgs<K>
 ) => Promise<Bounded<ControlAnswer<K>>>;
 
 /** A read the machine stops once the hub lets it go (machine-calls.ts `readStoppable`); null when its asker let it go. */
 export type ReadStoppable = <K extends ControlName>(
   machineId: string,
   method: K,
-  args: unknown[],
+  args: ControlArgs<K>,
   timeoutMs: number,
   ask: { caller: string; signal?: AbortSignal | undefined }
 ) => Promise<Bounded<ControlAnswer<K>> | null>;
@@ -220,7 +220,7 @@ export type ReadStoppable = <K extends ControlName>(
 export type MachineCall = <K extends ControlName>(
   machineId: string,
   method: K,
-  args: unknown[]
+  args: ControlArgs<K>
 ) => Promise<ControlReply<K>>;
 
 /** A machine's answer to `fs` op `O` ({@link CallAnswer}). */

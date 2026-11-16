@@ -75,6 +75,7 @@ import {
   type DesignQuery,
   HEALTH_PATH,
   REPORT_PATH,
+  type RenderAsk,
   SERVE_COMMAND_LIMIT,
   type ServedPicture,
   type ServeSpec,
@@ -106,7 +107,6 @@ import {
   SheetWeightSchema,
   SheetWrittenSchema,
   StageErrorSchema,
-  WorkspaceRefSchema,
 } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import {
@@ -147,12 +147,7 @@ import {
 } from "./stage-clone";
 import { HOST_RUNTIME_ENV, stageHost } from "./stage-host/build";
 import { installMoved, installProject, type ProjectAt } from "./stage-install";
-import {
-  listenerFor,
-  type RenderAsk,
-  type Rendered,
-  renderCanvas,
-} from "./stage-render";
+import { listenerFor, type Rendered, renderCanvas } from "./stage-render";
 import { userBun } from "./user-bun";
 import { keepPlace, workspaceRefs } from "./workspace-records";
 
@@ -2203,27 +2198,6 @@ export async function pinTreeOf(
 ): Promise<void> {
   await cutPin(workspace, pin);
 }
-
-/** What a core `STAGE_PICTURE` asks ({@link drawServed}). */
-export const ServedPictureSchema = z.object({
-  name: z.string(),
-  path: z.string().startsWith("/"),
-  serve: z.object({
-    command: z.string(),
-    cwd: z.string(),
-    port: z.number().int().min(1).max(65_535),
-  }),
-  width: z.number().int(),
-}) satisfies z.ZodType<ServedPicture>;
-
-/** What a core `STAGE_PINS` names: the pins the hub serves from. */
-export const StagePinsSchema = z.array(z.string());
-
-/** What a core `STAGE_PIN` names: a tree and its pin, or a folder's pin and the folder. */
-export const StagePinArgsSchema = z.union([
-  z.tuple([WorkspaceRefSchema, z.string().min(1)]),
-  z.tuple([z.null(), z.string().min(1), z.string().min(1)]),
-]);
 
 /** A control's pin argument (core `PreviewSource.pin`): its id, or nothing when it names none. */
 export const pinArg = (pin: unknown): string | undefined =>

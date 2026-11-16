@@ -1,7 +1,8 @@
 import { waitsOnYou } from "@cawco/core/activity";
 import type { SendAttachment } from "@cawco/core/attachments";
 import { COMMENT_LIMITS } from "@cawco/core/comments/model";
-import type { ControlName, ControlReply } from "@cawco/core/control-replies";
+import type { ControlReply } from "@cawco/core/control-replies";
+import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { byPerson } from "@cawco/core/harness";
@@ -732,18 +733,19 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         }
       : undefined;
   };
-  /** A call on a pinned version names its pin after its argument (core `PreviewSource.pin`). */
-  const pinArgs = (at: StageAt): string[] =>
-    "pin" in at && at.pin !== undefined ? [at.pin] : [];
+  /** The version a call on a pinned one names (core `PreviewSource.pin`); none for the source's own. */
+  const pinOf = (at: StageAt): string | undefined =>
+    "pin" in at ? at.pin : undefined;
   /**
    * A stage method (core stage.ts) on a workspace's machine (a session's
-   * own, or the one a sheet was made in), with the workspace and `arg`: its
-   * answer, or a refusal saying why the stage can't be reached or said no.
+   * own, or the one a sheet was made in), with the arguments `args` makes of
+   * the workspace and the version's pin: its answer, or a refusal saying
+   * why the stage can't be reached or said no.
    */
   const onStage = async <K extends ControlName>(
     at: StageAt,
     method: K,
-    arg: unknown
+    args: (workspace: WorkspaceRef, pin: string | undefined) => ControlArgs<K>
   ) => {
     const where = stageWhere(at);
     if (!where) {
@@ -767,7 +769,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     const asked = await ctx.callAgent(
       machineId,
       method,
-      [workspace, arg, ...pinArgs(at)],
+      args(workspace, pinOf(at)),
       STAGE_READY_MS +
         (isPlace(workspace.id) ? STAGE_CLONE_MS : STAGE_INSTALL_MS) +
         (method === STAGE_RENDER || method === STAGE_PICTURE

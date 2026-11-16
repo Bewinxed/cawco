@@ -435,6 +435,12 @@ export type HostOutputs = WorkspaceOutputs | HostOutputsListed;
  */
 export const CONTROL_HOST_SCRATCH_REMOVE = "hostScratchRemove";
 
+/** What {@link CONTROL_HOST_OUTPUTS} and {@link CONTROL_HOST_SCRATCH_REMOVE} are asked: the host workspace's id; an outputs read with `read`, each file's bytes. */
+export interface HostScratchAsk {
+  id: string;
+  read?: boolean;
+}
+
 /** What {@link CONTROL_WORKSPACE_OUTPUTS} answers: each regular file, by its path under `outputs/`, with base64 of its bytes. */
 export interface WorkspaceOutputs {
   files: { content: string; path: string }[];

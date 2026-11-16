@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readWithin } from "@cawco/core/bounded";
+import type { BrowserDoor } from "@cawco/core/browser";
 import {
   type FleetItemState,
   type FleetMcpConfig,
@@ -19,11 +20,7 @@ import { standalone } from "@cawco/core/runtime";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { McpServerConfig } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
-import {
-  type BrowserDoor,
-  CHROME_DEVTOOLS,
-  throughGate,
-} from "../browser/door";
+import { CHROME_DEVTOOLS, throughGate } from "../browser/door";
 import { type McpGate, throughMcpGate } from "../mcp-gate";
 import { MCP_CONNECT_MS } from "../mcp-status";
 import { toolEnv } from "../tools";

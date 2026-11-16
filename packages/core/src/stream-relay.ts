@@ -201,6 +201,10 @@ export interface RelayRuntimeRead {
  * reached from outside without the person. Answers the URLs that answered.
  */
 export const RELAY_PROVE = "relay.prove";
+/** What {@link RELAY_PROVE} is asked: the relay's URLs to reach. */
+export interface RelayProveArgs {
+  urls: string[];
+}
 /**
  * The relay's ICE server URLs: TURN over UDP and TCP on 3478, and with a DNS
  * name TURN over TLS on 5349. A browser whose runtime forwards only TCP, or

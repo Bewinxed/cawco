@@ -1,8 +1,9 @@
 /** NDJSON host, spawned exclusively by sessiond. Agent disconnects do not end it. */
 import { createInterface } from "node:readline";
+import { readCall } from "@cawco/core/control-args";
+import type { Control } from "@cawco/core/control-table";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { MESSAGES_READ } from "@cawco/core/session-messages";
-import type { BrowserDoor } from "../browser/door";
 import type { HarnessContext, HarnessSession } from "../harness";
 import { installOf } from "./credential-controls";
 import { startPiHost } from "./pi-runtime";
@@ -43,6 +44,7 @@ function start(
   if (command.gateForm) {
     state.gateForm = command.gateForm;
   }
+  const { door } = command;
   const ctx: HarnessContext = {
     instanceId: command.spec.instanceId,
     cwd: command.spec.cwd,
@@ -51,9 +53,7 @@ function start(
     // with a command go through it.
     ...(command.mcpGate ? { mcpGate: command.mcpGate } : {}),
     // The door its agent made: the host makes none of its own.
-    ...(command.door
-      ? { browserDoor: () => Promise.resolve(command.door as BrowserDoor) }
-      : {}),
+    ...(door ? { browserDoor: () => Promise.resolve(door) } : {}),
     frame: (message) => {
       if (message.type === "system" && message.subtype === MESSAGES_READ) {
         const read = new Set(message.read);
@@ -104,7 +104,16 @@ function start(
   return started;
 }
 
-async function handle(command: PiHostCommand): Promise<void> {
+/**
+ * A command off the agent's line, a control's call read as the wire's
+ * controls are (core control-args.ts `readCall`): its name the table's, its
+ * arguments its own.
+ */
+type HostCommand =
+  | Exclude<PiHostCommand, { type: "control" }>
+  | { type: "control"; id: string; control: Control };
+
+async function handle(command: HostCommand): Promise<void> {
   if (command.type === "start") {
     await start(command);
     return;
@@ -127,7 +136,7 @@ async function handle(command: PiHostCommand): Promise<void> {
       output({
         type: "reply",
         id: command.id,
-        value: await session.control(command.method, command.args),
+        value: await session.control(command.control),
       });
       return;
     case "stop":
@@ -141,22 +150,30 @@ async function handle(command: PiHostCommand): Promise<void> {
 
 createInterface({ input: process.stdin })
   .on("line", (line) => {
-    let command: PiHostCommand;
+    let command: HostCommand;
     try {
-      command = PI_HOST_COMMAND.parse(JSON.parse(line));
+      const read = PI_HOST_COMMAND.parse(JSON.parse(line));
+      if (read.type === "control") {
+        const called = readCall(read.method, read.args);
+        if (!called.ok) {
+          output({ type: "reply", id: read.id, error: called.error });
+          return;
+        }
+        command = { type: "control", id: read.id, control: called.control };
+      } else {
+        command = read;
+      }
     } catch (error) {
       output({ type: "failed", error: String(error) });
       return;
     }
     handle(command).catch((error: unknown) => {
       const installing =
-        command.type === "control"
-          ? installOf(command.method, command.args)
-          : undefined;
+        command.type === "control" ? installOf(command.control) : undefined;
       const failure = hostFailure(error);
       if ("id" in command) {
         const said = installing
-          ? failure.error.replaceAll(installing.credential, "[credential]")
+          ? failure.error.replaceAll(installing, "[credential]")
           : failure.error;
         output({ type: "reply", id: command.id, ...failure, error: said });
       } else if (command.type === "send") {

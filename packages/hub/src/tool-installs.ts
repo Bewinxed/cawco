@@ -1,4 +1,5 @@
 import type { Bounded } from "@cawco/core/bounded";
+import type { AddressedControl, ControlArgs } from "@cawco/core/control-table";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { HARNESS_TOOL } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
@@ -135,7 +136,13 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
     ask: { newest?: string; pin?: string },
     automatic: boolean,
     startedBy: "cawco" | "person"
-  ): unknown[] => [toolId, ask.pin, ask.newest, automatic, startedBy];
+  ): ControlArgs<typeof INSTALL_TOOL> => [
+    toolId,
+    ask.pin,
+    ask.newest,
+    automatic,
+    startedBy,
+  ];
 
   /**
    * Sends the machine one install: the hub's own (a required tool it is
@@ -170,9 +177,9 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       machineId,
       payload: {
         requestId,
-        method: "installTool",
+        method: INSTALL_TOOL,
         args: installArgs(install.toolId, install, automatic, startedBy),
-      },
+      } satisfies AddressedControl,
     } satisfies HubEnvelope<"control">);
     ctx.db.setAgentToolCell(machineId, {
       id: install.toolId,
@@ -421,7 +428,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
             requestId,
             method: INSTALL_TOOL,
             args: installArgs(toolId, ask, false, "cawco"),
-          },
+          } satisfies AddressedControl,
         } satisfies HubEnvelope<"control">;
         ctx.sendToMachine(agent, frame);
         return frame;

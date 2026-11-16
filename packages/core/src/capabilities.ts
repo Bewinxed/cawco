@@ -91,3 +91,6 @@ export interface MachineCapabilities {
   items: MachineCapability[];
   platform: string;
 }
+
+/** What the machine can run, probed now (agent capabilities.ts `probeCapabilities`): no args, answers its {@link MachineCapabilities}. Machine-scoped. */
+export const PROBE_CAPABILITIES = "probeCapabilities";

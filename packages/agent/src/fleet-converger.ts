@@ -189,14 +189,14 @@ export class FleetConverger {
         }
         if (mcp) {
           try {
-            await session.control(CONTROL_MCP_FLEET_HEAL, []);
+            await session.control({ method: CONTROL_MCP_FLEET_HEAL, args: [] });
           } catch (error) {
             warn(`fleet MCP heal of ${instanceId} failed: ${errorText(error)}`);
           }
         }
         if (settings) {
           try {
-            await session.control(CONTROL_FLEET_SETTINGS, []);
+            await session.control({ method: CONTROL_FLEET_SETTINGS, args: [] });
           } catch (error) {
             warn(
               `the fleet's hooks and settings did not reach ${instanceId}: ${errorText(error)}`

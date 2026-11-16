@@ -296,6 +296,16 @@ export interface BrowserListenArgs {
   token: string;
 }
 
+/** What a session's browser tool is launched with: its config file (agent browser/door.ts). */
+export interface BrowserDoor {
+  config: string;
+}
+
+/** A browser control that names its browser alone (stop, remove, hand back, a viewer's session). */
+export interface BrowserKeyArgs {
+  key: BrowserKey;
+}
+
 /** Where the machine's browser listener serves the browser of `key`. */
 export const browserMount = (key: BrowserKey): string =>
   `/__cawco/browser/${encodeURIComponent(key)}`;

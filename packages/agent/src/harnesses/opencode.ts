@@ -30,6 +30,7 @@ import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import type { Control } from "@cawco/core/control-table";
 import { HARNESS_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type {
@@ -72,14 +73,12 @@ import { conversationGone } from "@cawco/core/relaunch";
 import {
   CONTROL_FOLDER_COMMANDS,
   CONTROL_MODEL_CATALOG,
-  CONTROL_SUPPORTED_COMMANDS,
 } from "@cawco/core/session/controls";
 import { serverEnvironment } from "@cawco/core/session-env";
 import type {
   NeutralMessage,
   NeutralSessionInfo,
   SessionMessage,
-  SlashCommand,
   StoredRun,
 } from "@cawco/core/session-messages";
 import type { ProcSpec } from "@cawco/core/sessiond";
@@ -6154,9 +6153,8 @@ class OpencodeHarness implements Harness<"opencode"> {
       session.sayEffort();
       detach(
         session
-          .control(CONTROL_SUPPORTED_COMMANDS, [])
-          .then((answer) => {
-            const commands = answer as SlashCommand[];
+          .supportedCommands()
+          .then((commands) => {
             if (commands.length) {
               ctx.frame({
                 type: "system",
@@ -6432,21 +6430,16 @@ class OpencodeHarness implements Harness<"opencode"> {
     forgetBackground(sessionKey);
   }
 
-  async machine(method: string, args: unknown[]): Promise<unknown> {
-    switch (method) {
-      case CONTROL_MODEL_CATALOG:
-        return await this.#catalog();
-      // The machine's own server's reading of the folder's lists: commands
-      // and skills are read from the folder and the machine's config, which
-      // every server here shares.
-      case CONTROL_FOLDER_COMMANDS:
-        return await opencodeSlashCommands(
-          await this.#ensure(),
-          String(args[0])
-        );
-      default:
-        return;
+  async machine(control: Control): Promise<unknown> {
+    if (control.method === CONTROL_MODEL_CATALOG) {
+      return await this.#catalog();
     }
+    // The machine's own server's reading of the folder's lists: commands
+    // and skills are read from the folder and the machine's config, which
+    // every server here shares.
+    return control.method === CONTROL_FOLDER_COMMANDS
+      ? await opencodeSlashCommands(await this.#ensure(), control.args[0])
+      : undefined;
   }
 
   /**
