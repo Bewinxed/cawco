@@ -46,6 +46,7 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
   failedForGood,
+  failureAfterInstall,
   hubWaitWords,
   type KeptProcess,
   mergeHolds,
@@ -137,16 +138,47 @@ const POLL_MS = 60_000;
  * niftybot and uwucloud said 6829 failed, on 8198). Without its sequence its
  * order is not known, so the last landing decides: an install of another
  * build landed after it (a rollback or an undecided trial of the failed build
- * leaves the landing on that build). Dropped as the agent starts, which, for
- * the states those builds left, is once; a failure written since carries its
- * sequence (unless its manifest could not be read) and ends at the confirm of
- * a build at or above it (core binary-updates.ts `failureAfterInstall`).
+ * leaves the landing on that build). Dropped at the agent's load
+ * ({@link outlivedFailure}); a failure written since carries its sequence
+ * (unless its manifest could not be read).
  */
-const outlivedFailure = (state: BinaryUpdateState): boolean =>
+const unsequencedOutlived = (state: BinaryUpdateState): boolean =>
   state.failedVersion !== undefined &&
   state.failedSequence === undefined &&
   state.landed?.outcome === "installed" &&
   state.landed.version !== state.failedVersion;
+
+/**
+ * Whether the recorded failure no longer stands on this build, the one
+ * `confirm()` ends (core binary-updates.ts `failureAfterInstall`) held at
+ * every load against the running build's sequence (its signed manifest,
+ * core binary-installation.ts `readRunningManifest`): a write of this
+ * agent's that put back what the helper's confirm cleared is dropped again
+ * at the next load. One case keeps it here that `confirm()` never sees: a
+ * failure of this very build while its trial is open (a retry the hub's
+ * silence may roll back again, counting on it, core `rolledBack`) or while
+ * it runs unconfirmed (`unconfirmedVersion`, cli binary-apply.ts
+ * `endUndecided`). A failure with no sequence goes by
+ * {@link unsequencedOutlived}.
+ */
+const outlivedFailure = async (state: BinaryUpdateState): Promise<boolean> => {
+  if (state.failedVersion === undefined) {
+    return false;
+  }
+  if (state.failedSequence === undefined) {
+    return unsequencedOutlived(state);
+  }
+  const deciding =
+    state.failedVersion === runtimeVersion &&
+    (state.unconfirmedVersion === runtimeVersion ||
+      (await readTrial()) !== undefined);
+  if (deciding) {
+    return false;
+  }
+  // Read only with a sequenced failure to weigh: a load with none needs no manifest.
+  const { sequence } = await readRunningManifest();
+  return failureAfterInstall(state, sequence).failedVersion === undefined;
+};
 
 /**
  * The update state's fields earlier builds wrote that nothing reads now
@@ -849,11 +881,15 @@ export class BinaryUpdater {
       readUpdateState(),
       readRecord(updateStatePath(), RETIRED_FIELDS),
     ]);
-    const outlived = saved !== undefined && outlivedFailure(saved);
+    const outlived = saved !== undefined && (await outlivedFailure(saved));
     this.#state = {
       ...(saved ?? this.#state),
       ...(outlived
-        ? { failedVersion: undefined, hubSilentTrials: undefined }
+        ? {
+            failedVersion: undefined,
+            failedSequence: undefined,
+            hubSilentTrials: undefined,
+          }
         : {}),
       installedVersion: runtimeVersion,
       hostsHub: this.#hostsHub,
