@@ -1,5 +1,6 @@
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import { CAWCO_ENV } from "./cawco-env";
+import { GITHUB_API_VERSION } from "./github-api";
 import { INSTALL_CODE_ENV } from "./install";
 import { INSTALL_STEP_PREFIX } from "./join";
 import { CAWCO_HUB_PORT, CAWCO_LOCAL_DASHBOARD_PORT } from "./ports";
@@ -295,6 +296,7 @@ ${
 
   WORK="$(mktemp -d)"
   download() { curl -fsSL --retry 3 --connect-timeout 15 --max-filesize "$3" "$1" -o "$2" || fail "could not download $1"; }
+  GITHUB_API_HEADER="X-GitHub-Api-Version: ${GITHUB_API_VERSION}"
 
   say "finding the newest $CHANNEL release"
   if [ -n "$RELEASE_HOST" ]; then
@@ -308,11 +310,12 @@ ${
       # release is published and a pre-release. Release-by-tag serves published releases only, so a draft
       # answers 404 and the next tag is tried. In a release, draft and prerelease follow its author object
       # with no brace between them.
-      download "https://api.github.com/repos/$SLUG/git/matching-refs/tags/nightly-" "$WORK/tags.json" 1048576
+      curl -fsSL --retry 3 --connect-timeout 15 --max-filesize 1048576 -H "$GITHUB_API_HEADER" "https://api.github.com/repos/$SLUG/git/matching-refs/tags/nightly-" -o "$WORK/tags.json" \\
+        || fail "could not download the nightly tags"
       TAG=""
       for CANDIDATE in $(grep -o '"ref": *"refs/tags/nightly-[0-9][0-9]*-[0-9a-f][0-9a-f]*"' "$WORK/tags.json" \\
         | sed 's|.*"refs/tags/\\(nightly-\\([0-9]*\\)-[0-9a-f]*\\)"|\\2 \\1|' | sort -rn | cut -d ' ' -f 2); do
-        STATUS="$(curl -sSL --retry 3 --connect-timeout 15 --max-filesize 4194304 -o "$WORK/release-tag.json" -w '%{http_code}' "https://api.github.com/repos/$SLUG/releases/tags/$CANDIDATE")" \\
+        STATUS="$(curl -sSL --retry 3 --connect-timeout 15 --max-filesize 4194304 -H "$GITHUB_API_HEADER" -o "$WORK/release-tag.json" -w '%{http_code}' "https://api.github.com/repos/$SLUG/releases/tags/$CANDIDATE")" \\
           || fail "could not download the $CANDIDATE release"
         case "$STATUS" in
           200) ;;

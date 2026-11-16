@@ -10,7 +10,7 @@
  * socket.
  */
 import { join } from "node:path";
-import { Octokit } from "@octokit/rest";
+import { GitHubOctokit } from "@cawco/core/github-api";
 import { z } from "zod";
 import { ghSays, hostGh } from "../host-gh";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
@@ -73,7 +73,7 @@ export const githubForge: ForgeAdapter = {
 
   client(signIn, path) {
     const { socket } = signIn;
-    const octokit = new Octokit({
+    const octokit = new GitHubOctokit({
       auth: signIn.token,
       baseUrl: signIn.api,
       userAgent: "CawCo",

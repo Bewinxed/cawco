@@ -12,9 +12,9 @@ import type { SourceFacts } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
 import type { FleetMarketplace } from "@cawco/core/fleet";
+import { GitHubOctokit } from "@cawco/core/github-api";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import {
   FOLDER_CHANGED,
@@ -132,7 +132,7 @@ const githubFacts = async (
     // A public repository's facts, read with no sign-in through Octokit
     // (`GET /repos/{owner}/{repo}`).
     const asked = await readWithin(READ_MS, async (signal) => {
-      const { data } = await new Octokit({
+      const { data } = await new GitHubOctokit({
         baseUrl: GITHUB_API,
         userAgent: "cawco-hub",
       }).rest.repos.get({ owner, repo, request: { signal } });
