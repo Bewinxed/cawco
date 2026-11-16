@@ -2,12 +2,7 @@ import { unwatchFile, watchFile } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { arch, homedir, hostname, networkInterfaces, platform } from "node:os";
 import { dirname, join } from "node:path";
-import type {
-  AccountIdentity,
-  HomeCredential,
-  LentAccess,
-  MachineProviderLists,
-} from "@cawco/core/accounts";
+import type { MachineProviderLists } from "@cawco/core/accounts";
 import {
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_PROVIDER_LOGIN,
@@ -20,6 +15,7 @@ import {
   CONTROL_READ_ACCOUNT_USAGE,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_SET_PROVIDER_KEY,
+  UNLOCK_KEYCHAIN,
 } from "@cawco/core/accounts/controls";
 import { readInstallation } from "@cawco/core/binary-installation";
 import {
@@ -39,18 +35,12 @@ import {
   BROWSER_STOP,
   BROWSER_VIEWER_TOKEN,
   BROWSER_VIEWERS,
-  type BrowserInjectAdvertArgs,
-  type BrowserKey,
-  type BrowserPageArgs,
-  type BrowserShieldArgs,
-  type BrowserStartArgs,
-  type BrowserViewersArgs,
-  isBrowserKey,
   PASSKEY_ADVERT_MAX_AGE_MS,
   PASSKEY_SCAN_START,
   PASSKEY_SCAN_STOP,
   type PasskeyAdvertFrame,
 } from "@cawco/core/browser";
+import { PROBE_CAPABILITIES } from "@cawco/core/capabilities";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { timerMs } from "@cawco/core/clock";
 import {
@@ -60,14 +50,9 @@ import {
 import { CONTROL_GH_ACCOUNTS, CONTROL_GH_TOKEN } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
 import { sayFetchCap } from "@cawco/core/fetch-cap";
-import type {
-  TranscriptPlacesQuery,
-  TranscriptQuery,
-  TranscriptTurnsQuery,
-} from "@cawco/core/find";
 import type { FleetHeld } from "@cawco/core/fleet";
 import { keepFoldersPrivate } from "@cawco/core/folders";
-import { CONTROL_FORGE_POST, readForgeAsk } from "@cawco/core/forge-post";
+import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
 import {
   CUSTODY_BOUND_MS,
   type HandoverCommand,
@@ -135,16 +120,16 @@ import {
   UPDATE_CAWCO,
 } from "@cawco/core/protocol";
 import {
+  CONTROL_ACKNOWLEDGE_ADDRESS,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_TRANSCRIPT_PLACES,
   CONTROL_TRANSCRIPT_TURNS,
+  REMOVED_SESSION_CUSTODY,
+  SESSION_CUSTODY,
 } from "@cawco/core/session/controls";
 import type { AuthState } from "@cawco/core/session-messages";
 import { sweepDeadShortLinks } from "@cawco/core/sessiond";
-import type { DesignQuery } from "@cawco/core/stage";
 import {
-  type ServeSpec,
-  type SheetWrite,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
   STAGE_PICTURE,
@@ -155,10 +140,8 @@ import {
   STAGE_UNPIN,
   STAGE_WARM,
   STAGE_WRITE,
-  type StageWarm,
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
-import { WorkspaceRefSchema } from "@cawco/core/stored-shapes";
 import type { RegisterAckPayload } from "@cawco/core/stream";
 import {
   RELAY_CERTIFY,
@@ -168,12 +151,9 @@ import {
   RELAY_RUNTIME,
   RELAY_START,
   RELAY_STOP,
-  type RelayCertifyArgs,
-  type RelayStartArgs,
 } from "@cawco/core/stream-relay";
 import { unhandled } from "@cawco/core/unhandled";
 import { announcingParts, clientLine } from "@cawco/core/wire";
-import type { WorkspaceWorkEnd } from "@cawco/core/workspace/controls";
 import {
   CONTROL_CLONE_HOLDING,
   CONTROL_HOST_OUTPUTS,
@@ -201,8 +181,6 @@ import {
   CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_SAVE,
   CONTROL_WORKSPACE_WORK_END,
-  type RemoveFolder,
-  type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import { hostJavaHome, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { setSectionMarker } from "@cawco/jsonl-parser";
@@ -297,6 +275,7 @@ import {
   savePicture,
   writeInputs,
 } from "./inputs";
+import { fieldOf } from "./json-field";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
@@ -368,9 +347,6 @@ import {
   pinTreeOf,
   renderStage,
   resumeStages,
-  ServedPictureSchema,
-  StagePinArgsSchema,
-  StagePinsSchema,
   StageRefusal,
   stageComponents,
   tellStages,
@@ -378,7 +354,6 @@ import {
   warmStage,
   writeSheet,
 } from "./stage";
-import type { RenderAsk } from "./stage-render";
 import { endToolSignins } from "./tool-signin";
 import {
   COPY_LOOK_MS,
@@ -407,50 +382,6 @@ import { cloneHolding, workspaceRefs } from "./workspace-records";
 
 /** How often the machine's interfaces are compared, for a network change (our call: a minute's stale address is a minute's wrong relay candidate). */
 const NETWORK_CHECK_MS = 30_000;
-
-/** The settings a `relay.start` carries, or a refusal saying what came. */
-const relayStartOf = (args: unknown): RelayStartArgs => {
-  const given = args as Partial<RelayStartArgs> | null;
-  const range = given?.relayRange;
-  if (!(
-    given &&
-    typeof given.secret === "string" &&
-    given.secret.length > 0 &&
-    typeof given.address === "string" &&
-    given.address.length > 0 &&
-    (given.hostname === undefined || typeof given.hostname === "string") &&
-    Array.isArray(range) &&
-    range.length === 2 &&
-    range.every((port) => Number.isInteger(port))
-  )) {
-    throw new Error(
-      "relay.start takes a secret, an address and a relay range."
-    );
-  }
-  return given as RelayStartArgs;
-};
-
-/** A `relay.certify`'s name and token, or a refusal saying what came. */
-const relayCertifyOf = (args: unknown): RelayCertifyArgs => {
-  const given = args as Partial<RelayCertifyArgs> | null;
-  if (!(
-    given &&
-    typeof given.hostname === "string" &&
-    typeof given.cloudflareToken === "string"
-  )) {
-    throw new Error("relay.certify takes a hostname and a Cloudflare token.");
-  }
-  return given as RelayCertifyArgs;
-};
-
-/** The key a `browser.stop` or `browser.remove` names (`{ key }`), or a refusal saying what came. */
-const browserKeyOf = (args: unknown): BrowserKey => {
-  const key = (args as { key?: unknown } | null)?.key;
-  if (!isBrowserKey(key)) {
-    throw new Error(`${JSON.stringify(args)} names no browser key.`);
-  }
-  return key;
-};
 
 /** The hub's session limits, said to every keeper, which starts each child under them from here; said in the log once each time they change. */
 const takeSessionLimits = (
@@ -881,17 +812,11 @@ const registerProviderAccounts = (
       providerAccountsChanged();
       return result;
     };
-  supervisor.declareControl(CONTROL_BEGIN_PROVIDER_LOGIN, (id, provider) =>
-    beginProviderLogin(id as string, provider as string)
-  );
+  supervisor.declareControl(CONTROL_BEGIN_PROVIDER_LOGIN, beginProviderLogin);
   supervisor.declareControl(
     CONTROL_COMPLETE_PROVIDER_LOGIN,
     async (code, id, expected) => {
-      const result = await completeProviderLogin(
-        (code as string | null) ?? null,
-        id as string,
-        (expected as AccountIdentity | null) ?? null
-      );
+      const result = await completeProviderLogin(code, id, expected ?? null);
       if (result.state === "signed-in" || result.state === "mismatch") {
         providerAccountsChanged();
       }
@@ -901,81 +826,47 @@ const registerProviderAccounts = (
   supervisor.declareControl(
     CONTROL_SET_PROVIDER_KEY,
     (id, provider, key, expected) =>
-      changing(() =>
-        setProviderKey(
-          id as string,
-          provider as string,
-          key as string,
-          (expected as AccountIdentity | null) ?? null
-        )
-      )()
+      changing(() => setProviderKey(id, provider, key, expected ?? null))()
   );
   supervisor.declareControl(CONTROL_FORGET_PROVIDER_ACCOUNT, (id) =>
     changing(async () => {
-      await forgetProviderAccount(id as string, ports);
+      await forgetProviderAccount(id, ports);
       return { forgotten: true };
     })()
   );
-  supervisor.declareControl(CONTROL_READ_ACCOUNT_USAGE, async (id) => {
-    if (typeof id !== "string") {
-      throw new Error("readAccountUsage names one account by its id");
-    }
-    return (await readAccountUsage(id, ports)) ?? null;
-  });
+  supervisor.declareControl(
+    CONTROL_READ_ACCOUNT_USAGE,
+    async (id) => (await readAccountUsage(id, ports)) ?? null
+  );
   supervisor.declareControl(CONTROL_READ_HOME_CREDENTIALS, () =>
     readHomeCredentials(ports)
   );
   supervisor.declareControl(
     CONTROL_JOIN_PROVIDER_ACCOUNT,
     (from, into, expected) =>
-      changing(() =>
-        joinProviderAccount(
-          from as string,
-          into as string,
-          expected as AccountIdentity,
-          ports
-        )
-      )()
+      changing(() => joinProviderAccount(from, into, expected, ports))()
   );
   supervisor.declareControl(
     CONTROL_MOVE_HOME_CREDENTIAL,
     (id, store, storeProvider, expected) =>
       changing(() =>
-        moveHomeCredential(
-          id as string,
-          ports,
-          store as HomeCredential["store"],
-          storeProvider as string,
-          expected as AccountIdentity
-        )
+        moveHomeCredential(id, ports, store, storeProvider, expected)
       )()
   );
   supervisor.declareControl(CONTROL_LEND_ACCOUNT, (id) =>
-    lendAccount(id as string, ports)
+    lendAccount(id, ports)
   );
   supervisor.declareControl(
     CONTROL_BORROW_ACCOUNT,
     (id, lender, lent, store, storeProvider, expected) =>
       changing(() =>
-        borrowAccount(
-          id as string,
-          ports,
-          lender as string,
-          lent as LentAccess,
-          store as HomeCredential["store"],
-          storeProvider as string,
-          expected as AccountIdentity
-        )
+        borrowAccount(id, ports, lender, lent, store, storeProvider, expected)
       )()
   );
   supervisor.declareControl(
     CONTROL_ACCOUNT_LENT,
     (requestId, answer, accountId) =>
-      accountLent(
-        (requestId as string | null) ?? null,
-        answer as LentAccess | { error: string },
-        (accountId as string | undefined) ?? undefined
-      )
+      accountLent(requestId, answer, accountId ?? undefined)
   );
 };
 
@@ -2366,8 +2257,8 @@ const attach = (
      * machine's menu stops offering Unlock), not at the agent's next connect.
      * Answers the machine's word on Claude, which the dashboard's step says.
      */
-    supervisor.declareControl("unlockKeychain", async (password) => {
-      await unlockKeychain(password as string);
+    supervisor.declareControl(UNLOCK_KEYCHAIN, async (password) => {
+      await unlockKeychain(password);
       const claude = harness("claude");
       if (!claude) {
         throw new Error(
@@ -2613,18 +2504,15 @@ const attach = (
      * unavailable there, its sends owed (`recovery_unavailable`).
      */
     const reattaching: Envelope[] = [];
-    supervisor.declareControl("sessionCustody", async () => ({
+    supervisor.declareControl(SESSION_CUSTODY, async () => ({
       custody: await readCustody(supervisor.stopSequence, [
         ...supervisor.custodyInstanceIds,
         ...undecided.keys(),
       ]),
       attached: supervisor.instanceIds,
     }));
-    supervisor.declareControl("removedSessionCustody", (rows, claimed) =>
-      supervisor.removedSessionCustody(
-        rows as { id: string; sessionId: string | null; cwd: string }[],
-        claimed as string[]
-      )
+    supervisor.declareControl(REMOVED_SESSION_CUSTODY, (rows, claimed) =>
+      supervisor.removedSessionCustody(rows, claimed)
     );
 
     /**
@@ -3144,8 +3032,7 @@ const attach = (
       receiveStop(envelope);
       if (
         envelope.verb === "control" &&
-        (envelope.payload as import("@cawco/core/protocol").ControlPayload)
-          .method === "acknowledgeSessionAddress"
+        fieldOf(envelope.payload, "method") === CONTROL_ACKNOWLEDGE_ADDRESS
       ) {
         supervisor.dispatch(envelope);
         return;
@@ -3547,7 +3434,7 @@ const startDaemon = (rediscover = false) =>
     // The usage scanner outlives connections too: its store (usage.db) is the
     // machine's, so a reconnect picks up where the last scan stopped.
     const scanner = yield* Effect.sync(() => new UsageScans());
-    supervisor.declareControl("probeCapabilities", probeCapabilities);
+    supervisor.declareControl(PROBE_CAPABILITIES, probeCapabilities);
 
     // Updates arrive only as signed builds from the hub: this one object owns
     // the update tick, the "Install now" command and the policy the hub pushes.
@@ -3555,9 +3442,7 @@ const startDaemon = (rediscover = false) =>
       supervising?.restartHolds()
     );
     supervisor.declareControl(UPDATE_CAWCO, (command) =>
-      updater.installNow(
-        (command ?? {}) as { commandId?: string; version?: string }
-      )
+      updater.installNow(command ?? {})
     );
     supervisor.declareControl(CONFIGURE_BINARY_UPDATES, () =>
       updater.configure()
@@ -3673,17 +3558,15 @@ const startDaemon = (rediscover = false) =>
     supervisor.declareControl(CONTROL_REMOVE_FOLDER, (asked) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : removeFolder(asked as RemoveFolder)
+        : removeFolder(asked)
     );
     // The checkout a folder is in, as a workspace cut there reads it: read only.
     supervisor.declareControl(CONTROL_REPO_ROOT, (path) => repoRoot(path));
     // The clone a folder is inside, as a spawn there would be bounded to it: read only.
-    supervisor.declareControl(CONTROL_CLONE_HOLDING, async (path) => {
-      if (typeof path !== "string" || !path) {
-        throw new Error("cloneHolding names no folder");
-      }
-      return (await cloneHolding(path)) ?? null;
-    });
+    supervisor.declareControl(
+      CONTROL_CLONE_HOLDING,
+      async (path) => (await cloneHolding(path)) ?? null
+    );
     // A place's left-out large files through Git LFS, once the person accepted: a second commit.
     supervisor.declareControl(CONTROL_PLACE_LFS, (path, rows) =>
       fenced()
@@ -3702,11 +3585,7 @@ const startDaemon = (rediscover = false) =>
     // `closingStages`).
     supervisor.declareControl(
       CONTROL_WORKSPACE_ARCHIVE,
-      (ref) =>
-        closingStages(
-          ref as { id?: string; path?: string; skip?: string[] } | null,
-          archiveWorkspace
-        ),
+      (asked) => closingStages(asked, archiveWorkspace),
       workspaceLane
     );
     // A closing workspace's `$TMPDIR/outputs/`, read on this host with its
@@ -3730,11 +3609,7 @@ const startDaemon = (rediscover = false) =>
     // An archive whose unlanded work a person let go: a carry first.
     supervisor.declareControl(
       CONTROL_WORKSPACE_DISCARD,
-      (ref) =>
-        closingStages(
-          ref as { id?: string; path?: string; skip?: string[] } | null,
-          discardWorkspace
-        ),
+      (asked) => closingStages(asked, discardWorkspace),
       workspaceLane
     );
     // A workspace whose items have all ended: what their sessions left
@@ -3742,51 +3617,28 @@ const startDaemon = (rediscover = false) =>
     // (hub workspaces.ts `settle`).
     supervisor.declareControl(
       CONTROL_WORKSPACE_WORK_END,
-      (asked) => {
-        const { id, instanceIds } = (asked ?? {}) as Partial<WorkspaceWorkEnd>;
-        if (!(
-          typeof id === "string" &&
-          id &&
-          Array.isArray(instanceIds) &&
-          instanceIds.every((one) => typeof one === "string" && one)
-        )) {
-          return Promise.reject(
-            new Error("workspaceWorkEnd takes a workspace id and its sessions")
-          );
-        }
-        return supervisor.endFinishedWork(id, instanceIds);
-      },
+      ({ id, instanceIds }) => supervisor.endFinishedWork(id, instanceIds),
       workspaceLane
     );
     // The hub's gh connections (hub connections.ts): the accounts this
     // machine's gh is signed in to, and one account's token, read each time.
     supervisor.declareControl(CONTROL_GH_ACCOUNTS, () => ghAccounts());
-    supervisor.declareControl(CONTROL_GH_TOKEN, (host, login) =>
-      typeof host === "string" && typeof login === "string"
-        ? ghAccountToken(host, login)
-        : Promise.reject(new Error("ghToken takes a host and a login"))
-    );
+    supervisor.declareControl(CONTROL_GH_TOKEN, ghAccountToken);
     // A session's forge write, or a landing's pull or merge request
     // (forges/forge.ts): made here with this machine's own sign-in.
-    supervisor.declareControl(CONTROL_FORGE_POST, (ask) => {
-      const read = readForgeAsk(ask);
-      if (!read) {
-        return Promise.reject(new Error("forgePost takes a forge write"));
-      }
-      return forgePost(read);
-    });
+    supervisor.declareControl(CONTROL_FORGE_POST, forgePost);
     // A project's browser (browser/browsers.ts): started or woken on its
     // machine's host, stopped, removed; the whole list told on each change.
     supervisor.declareControl(BROWSER_START, (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : startBrowser(ports, args as BrowserStartArgs)
+        : startBrowser(ports, args)
     );
-    supervisor.declareControl(BROWSER_STOP, async (args) =>
-      stopBrowser(ports, browserKeyOf(args))
+    supervisor.declareControl(BROWSER_STOP, async ({ key }) =>
+      stopBrowser(ports, key)
     );
-    supervisor.declareControl(BROWSER_REMOVE, async (args) =>
-      removeBrowser(ports, browserKeyOf(args))
+    supervisor.declareControl(BROWSER_REMOVE, async ({ key }) =>
+      removeBrowser(ports, key)
     );
     // The person takes a browser over privately and hands it back
     // (browser/shield.ts); a take-over with no view for two minutes is
@@ -3794,44 +3646,30 @@ const startDaemon = (rediscover = false) =>
     supervisor.declareControl(BROWSER_SHIELD, (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : shieldBrowser(ports, {
-            ...(args as BrowserShieldArgs),
-            key: browserKeyOf(args),
-          })
+        : shieldBrowser(ports, args)
     );
-    supervisor.declareControl(BROWSER_HANDBACK, async (args) =>
-      handBackBrowser(ports, browserKeyOf(args))
+    supervisor.declareControl(BROWSER_HANDBACK, async ({ key }) =>
+      handBackBrowser(ports, key)
     );
     // A browser ask as it parks: the asking door's page on the asked origin,
     // which a take-over brings to the front (browser/shield.ts).
-    supervisor.declareControl(BROWSER_PAGE, (args) => {
-      const { origin, workspaceId } = (args ?? {}) as Partial<BrowserPageArgs>;
-      if (!(typeof origin === "string" && typeof workspaceId === "string")) {
-        return Promise.reject(
-          new Error("browser.page takes a door's id and an origin")
-        );
-      }
-      return askedPage({ key: browserKeyOf(args), origin, workspaceId });
-    });
+    supervisor.declareControl(BROWSER_PAGE, askedPage);
     // The person's view of a browser, through the hub (hub
     // browser-routes.ts): the machine's one browser listener, and a neko
     // session of its own for each viewer.
     supervisor.declareControl(BROWSER_LISTEN, async (args) =>
       listenBrowsers(args, ports)
     );
-    supervisor.declareControl(BROWSER_VIEWER_TOKEN, async (args) =>
-      viewerSession(ports, browserKeyOf(args))
+    supervisor.declareControl(BROWSER_VIEWER_TOKEN, async ({ key }) =>
+      viewerSession(ports, key)
     );
     // The machine's browsers whole, as its records hold them: what the hub
     // reads as the machine registers (its take-overs are the machine's own).
     supervisor.declareControl(BROWSER_ROWS, () => browserFrame(ports));
-    supervisor.declareControl(BROWSER_VIEWERS, (args) => {
-      const { count } = args as BrowserViewersArgs;
-      const key = browserKeyOf(args);
-      const views = typeof count === "number" ? count : 0;
-      browserViewers(key, views);
+    supervisor.declareControl(BROWSER_VIEWERS, ({ count, key }) => {
+      browserViewers(key, count);
       console.info(
-        `[browser] ${key}: the hub counts ${views} view${views === 1 ? "" : "s"}`
+        `[browser] ${key}: the hub counts ${count} view${count === 1 ? "" : "s"}`
       );
       return Promise.resolve(true);
     });
@@ -3844,7 +3682,7 @@ const startDaemon = (rediscover = false) =>
     // adapter up (container-host.ts); an advert brings it up again if it was
     // lost.
     supervisor.declareControl(BROWSER_INJECT_ADVERT, async (args) => {
-      const { key, serviceData, capturedAt } = args as BrowserInjectAdvertArgs;
+      const { key, serviceData, capturedAt } = args;
 
       // Drop stale adverts.
       if (Date.now() - capturedAt > PASSKEY_ADVERT_MAX_AGE_MS) {
@@ -3875,8 +3713,7 @@ const startDaemon = (rediscover = false) =>
         capturedAt: Date.now(),
       } satisfies PasskeyAdvertFrame)
     );
-    supervisor.declareControl(PASSKEY_SCAN_START, async (args) => {
-      const key = browserKeyOf(args);
+    supervisor.declareControl(PASSKEY_SCAN_START, async ({ key }) => {
       if (!(await PasskeyCapture.available())) {
         throw new Error("No BLE scanner available on this machine");
       }
@@ -3884,8 +3721,7 @@ const startDaemon = (rediscover = false) =>
       console.info(`[passkey] BLE scan started for ${key}`);
       return true;
     });
-    supervisor.declareControl(PASSKEY_SCAN_STOP, (args) => {
-      const key = browserKeyOf(args);
+    supervisor.declareControl(PASSKEY_SCAN_STOP, ({ key }) => {
       passkeyCapture.stop(key);
       console.info(`[passkey] BLE scan stopped for ${key}`);
       return Promise.resolve(true);
@@ -3940,30 +3776,16 @@ const startDaemon = (rediscover = false) =>
     supervisor.declareControl(RELAY_START, async (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : startRelay(ports, relayStartOf(args))
+        : startRelay(ports, args)
     );
     supervisor.declareControl(RELAY_STOP, () => stopRelay(ports));
     supervisor.declareControl(RELAY_REMOVE, () => removeRelay(ports));
-    supervisor.declareControl(RELAY_RENEW, (args) => {
-      const token = (args as { cloudflareToken?: unknown } | null)
-        ?.cloudflareToken;
-      if (typeof token !== "string") {
-        throw new Error("relay.renew takes the Cloudflare token.");
-      }
-      return renewRelay(ports, { cloudflareToken: token });
-    });
+    supervisor.declareControl(RELAY_RENEW, (args) => renewRelay(ports, args));
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
     // runtime read, and a binding from here through it.
-    supervisor.declareControl(RELAY_CERTIFY, (args) =>
-      certifyRelay(relayCertifyOf(args))
-    );
+    supervisor.declareControl(RELAY_CERTIFY, certifyRelay);
     supervisor.declareControl(RELAY_RUNTIME, () => relayRuntimeRead());
-    supervisor.declareControl(RELAY_PROVE, (args) => {
-      const urls = (args as { urls?: unknown } | null)?.urls;
-      return proveRelay(
-        Array.isArray(urls) ? urls.filter((one) => typeof one === "string") : []
-      );
-    });
+    supervisor.declareControl(RELAY_PROVE, ({ urls }) => proveRelay(urls));
     yield* Effect.forkScoped(
       Effect.promise(() =>
         watchRelay(ports).catch((error: unknown) =>
@@ -3979,17 +3801,15 @@ const startDaemon = (rediscover = false) =>
       )
     );
     // A canvas's first states file, and (`{ file, files }`) every states file whose report it reads; `opening` as the canvas is made.
-    supervisor.declareControl(STAGE_ENSURE, (ref, file) => {
+    supervisor.declareControl(STAGE_ENSURE, (ref, named) => {
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
-      const named = file as
-        { file?: string; files?: string[]; opening?: boolean } | string;
       return typeof named === "string"
-        ? ensureStage(ports, ref as WorkspaceRef, named)
+        ? ensureStage(ports, ref, named)
         : ensureStage(
             ports,
-            ref as WorkspaceRef,
+            ref,
             String(named.file),
             named.files,
             named.opening === true
@@ -4001,66 +3821,45 @@ const startDaemon = (rediscover = false) =>
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
-      warmStage(ports, ref as WorkspaceRef, warm as StageWarm, pinArg(pin));
+      warmStage(ports, ref, warm, pinArg(pin));
       return Promise.resolve();
     });
     // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved; the person's in the pinned version he is served, copied to the workspace.
     supervisor.declareControl(STAGE_WRITE, (ref, write, pin) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : writeSheet(
-            ports,
-            ref as WorkspaceRef,
-            write as SheetWrite,
-            pinArg(pin)
-          )
+        : writeSheet(ports, ref, write, pinArg(pin))
     );
     // The version an author hands up, cut: a tree's clone (`[ref, pin]`) or a folder's copy (`[null, pin, dir]`).
-    supervisor.declareControl(STAGE_PIN, (...args) => {
+    supervisor.declareControl(STAGE_PIN, (...asked) => {
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
-      const asked = StagePinArgsSchema.parse(args);
       return asked[0] === null
         ? pinFolderOf(asked[2], asked[1])
         : pinTreeOf(asked[0], asked[1]);
     });
     // The pins the hub serves from, as this machine registers: every other one let go.
-    supervisor.declareControl(STAGE_PINS, (served) =>
-      keepPins(StagePinsSchema.parse(served))
-    );
+    supervisor.declareControl(STAGE_PINS, keepPins);
     // A served preview's page as its author has it, drawn on its workspace's own server.
     supervisor.declareControl(STAGE_PICTURE, (ref, ask) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : drawServed(
-            ports,
-            WorkspaceRefSchema.parse(ref),
-            ServedPictureSchema.parse(ask)
-          )
+        : drawServed(ports, ref, ask)
     );
     // A pin no artifact is served from any more, let go.
-    supervisor.declareControl(STAGE_UNPIN, (pin) => {
-      const named = pinArg(pin);
-      return named === undefined
-        ? Promise.reject(new Error("An unpin names the pin it lets go."))
-        : unpin(named);
-    });
+    supervisor.declareControl(STAGE_UNPIN, unpin);
     // A canvas drawn by the daemon's own Chromium when no panel has drawn it (stage-render.ts).
     supervisor.declareControl(STAGE_RENDER, (ref, ask) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : renderStage(ports, ref as WorkspaceRef, ask as RenderAsk)
+        : renderStage(ports, ref, ask)
     );
     // A toolchain root's components, as its stage finds them (spec §6's discovery).
-    supervisor.declareControl(STAGE_COMPONENTS, (ref, dir) =>
+    supervisor.declareControl(STAGE_COMPONENTS, (ref, query) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : stageComponents(
-            ports,
-            ref as WorkspaceRef,
-            dir && typeof dir === "object" ? (dir as DesignQuery) : {}
-          )
+        : stageComponents(ports, ref, query ?? {})
     );
     // A workspace preview's server, started or woken and kept up there (stage.ts).
     // With a pin, the server of the version the person is served (core `PreviewSource.pin`).
@@ -4072,13 +3871,7 @@ const startDaemon = (rediscover = false) =>
       if (!ref) {
         throw new StageRefusal(`No workspace ${workspace} is on this machine.`);
       }
-      return ensureServed(
-        ports,
-        ref,
-        serve as ServeSpec,
-        undefined,
-        pinArg(pin)
-      );
+      return ensureServed(ports, ref, serve, undefined, pinArg(pin));
     });
     // A check that names another machine: the commit leaves here, and arrives there.
     supervisor.declareControl(
@@ -4133,58 +3926,43 @@ const startDaemon = (rediscover = false) =>
       <A extends unknown[], R>(step: (...args: A) => Promise<R>) =>
       (...args: A): Promise<R> =>
         fenced() ? Promise.reject(new Error(AGENT_RESTARTING)) : step(...args);
-    supervisor.declareControl(CONTROL_MOVE_INSPECT, (path) =>
-      moveInspect(path as string)
-    );
-    supervisor.declareControl(CONTROL_MOVE_REMOTE_CREDENTIAL, (path) =>
-      moveRemoteCredential(path as string)
+    supervisor.declareControl(CONTROL_MOVE_INSPECT, moveInspect);
+    supervisor.declareControl(
+      CONTROL_MOVE_REMOTE_CREDENTIAL,
+      moveRemoteCredential
     );
     supervisor.declareControl(
       CONTROL_MOVE_PREPARE,
-      unfenced((request) =>
-        movePrepare(request as Parameters<typeof movePrepare>[0])
-      ),
+      unfenced(movePrepare),
       moveLane
     );
     supervisor.declareControl(
       CONTROL_MOVE_SNAPSHOT,
-      unfenced((request) =>
-        moveSnapshot(request as Parameters<typeof moveSnapshot>[0])
-      ),
+      unfenced(moveSnapshot),
       moveLane
     );
     supervisor.declareControl(
       CONTROL_MOVE_CLONE,
-      unfenced((request) =>
-        moveClone(request as Parameters<typeof moveClone>[0], ports)
-      ),
+      unfenced((request) => moveClone(request, ports)),
       moveLane
     );
     supervisor.declareControl(
       CONTROL_MOVE_LFS,
-      unfenced((request) =>
-        moveLfs(request as Parameters<typeof moveLfs>[0], ports)
-      ),
+      unfenced((request) => moveLfs(request, ports)),
       moveLane
     );
-    supervisor.declareControl(CONTROL_MOVE_CANCEL, (jobId) =>
-      moveCancel(jobId as string)
-    );
+    supervisor.declareControl(CONTROL_MOVE_CANCEL, moveCancel);
     // Stopped where they run once the hub lets them go (CONTROL_ABANDON).
     supervisor.declareRead(
       CONTROL_SEARCH_TRANSCRIPTS,
       (signal, query, options) =>
-        search.search(
-          query as string,
-          options as TranscriptQuery | undefined,
-          signal
-        )
+        search.search(query, options ?? undefined, signal)
     );
     supervisor.declareRead(CONTROL_TRANSCRIPT_TURNS, (signal, query) =>
-      search.turns(query as TranscriptTurnsQuery, signal)
+      search.turns(query, signal)
     );
     supervisor.declareRead(CONTROL_TRANSCRIPT_PLACES, (signal, query) =>
-      search.places(query as TranscriptPlacesQuery, signal)
+      search.places(query, signal)
     );
 
     phase("connecting");

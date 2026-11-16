@@ -2,6 +2,7 @@
  * A word from the hub to a session it runs: the send's envelope, its message
  * the hub's own turn with the origin naming what said it.
  */
+import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { SendPayload } from "@cawco/core/protocol";
 
@@ -28,11 +29,11 @@ export const sessionWord = (
 });
 
 /** The hub's `control` to a session's process: `method` with `args`, answered at `requestId`. */
-export const sessionControl = (
+export const sessionControl = <K extends ControlName>(
   row: { id: string; machineId: string },
   requestId: string,
-  method: string,
-  args: unknown[]
+  method: K,
+  args: ControlArgs<K>
 ): HubEnvelope<"control"> => ({
   verb: "control",
   machineId: row.machineId,

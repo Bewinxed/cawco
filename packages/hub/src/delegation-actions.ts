@@ -11,6 +11,7 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
+import type { AddressedControl } from "@cawco/core/control-table";
 import type { DelegateType, MayStart } from "@cawco/core/delegate-types";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { ForgeWrite } from "@cawco/core/forge-post";
@@ -2003,7 +2004,7 @@ export const handoffActions = ({
           method: "interrupt",
           args: [],
           from: instanceId,
-        },
+        } satisfies AddressedControl,
       });
       return (
         `Interrupted your delegate ${peer.label}${continuesWords(followed)}. Its current turn stopped; it keeps all state, ` +
@@ -2075,7 +2076,7 @@ export const handoffActions = ({
           method: "resolvePermission",
           args: [requestId, result],
           from: instanceId,
-        },
+        } satisfies AddressedControl,
       });
       return deny
         ? `Denied your delegate ${peer.label}${continuesWords(followed)}'s ask (${requestId}).`

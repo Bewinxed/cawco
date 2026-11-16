@@ -6,7 +6,7 @@
  * without the closure's context naming it.
  */
 
-import type { ControlName } from "@cawco/core/control-replies";
+import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import {
   NO_SKILL,
   READ_HOOK_SCRIPT,
@@ -118,7 +118,7 @@ export const unansweredProblem = (
 export const skillFilesOff = async (
   ctx: MachineReadsContext,
   machineId: string,
-  args: unknown[]
+  args: ControlArgs<typeof READ_SKILL_FILES>
 ) => {
   const asked = await ctx.readAgent(
     machineId,
@@ -184,7 +184,7 @@ const readOffMachine = async <K extends ControlName>(
   ctx: MachineReadsContext,
   machineId: string,
   method: K,
-  args: unknown[],
+  args: ControlArgs<K>,
   failed: string
 ) => {
   const answer = await ctx.readAgent(machineId, method, args, READ_TIMEOUT_MS);

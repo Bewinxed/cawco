@@ -22,7 +22,8 @@ import type {
  * command echoes, hook output, notices, interruptions, a compaction's
  * summary). Only `owner` is "said by me".
  */
-export type DocAuthor = "owner" | "agent" | "report" | "injected";
+export const DOC_AUTHORS = ["owner", "agent", "report", "injected"] as const;
+export type DocAuthor = (typeof DOC_AUTHORS)[number];
 
 /** A normalized, harness-agnostic searchable document. */
 export interface TranscriptDoc {

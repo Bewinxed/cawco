@@ -1,5 +1,6 @@
 import type { CommandResult } from "@cawco/core/commands/controls";
-import type { ControlName, ControlReply } from "@cawco/core/control-replies";
+import type { ControlReply } from "@cawco/core/control-replies";
+import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { detach } from "@cawco/core/detach";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { ownCommitsShell } from "@cawco/core/own-commits";
@@ -725,7 +726,7 @@ export const createWorkspaces = ({
   const onHostScratch = async <K extends ControlName>(
     workspace: WorkspaceRow,
     method: K,
-    args: unknown[],
+    args: ControlArgs<K>,
     none: ControlReply<K>
   ): Promise<ControlReply<K>> => {
     try {

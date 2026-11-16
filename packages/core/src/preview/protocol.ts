@@ -165,6 +165,12 @@ export interface PreviewStarted {
 
 export const PREVIEW_START = "previewStart";
 export const PREVIEW_STOP = "previewStop";
+
+/** What {@link PREVIEW_STOP} is asked: the start it ends, by the hub's name for it and, for that one start alone, its token. */
+export interface PreviewStopArgs {
+  instanceId: string;
+  token?: string;
+}
 /** The daemon's control method that weighs a folder preview's folder on its machine (core preview-proxy `folderWeight`). */
 export const PREVIEW_WEIGHT = "previewWeight";
 /**

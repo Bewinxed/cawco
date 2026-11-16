@@ -2,7 +2,9 @@
 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { BrowserDoor } from "@cawco/core/browser";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
+import type { Control } from "@cawco/core/control-table";
 import { BOUNDARY_RELAUNCH, GATEWAY_RELAUNCH } from "@cawco/core/harness";
 import { workspaceSpillDir } from "@cawco/core/paths/workspace";
 import { mcpGatewayPort } from "@cawco/core/ports";
@@ -20,8 +22,9 @@ import {
 } from "@cawco/core/session/controls";
 import type { NeutralMessage, SentMessage } from "@cawco/core/session-messages";
 import { MESSAGES_HELD, MESSAGES_READ } from "@cawco/core/session-messages";
+import { FleetMcpTakeAnswerSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
-import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
+import { CHROME_DEVTOOLS } from "../browser/door";
 import { fleetMcpAt } from "../fleet-mcp-set";
 import { gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
@@ -483,9 +486,7 @@ class PiRemoteSession implements HarnessSession {
 
   async request(
     command:
-      | { type: "snapshot" }
-      | { type: "control"; method: string; args: unknown[] }
-      | { type: "stop" }
+      { type: "snapshot" } | ({ type: "control" } & Control) | { type: "stop" }
   ): Promise<unknown> {
     const id = crypto.randomUUID();
     const response = new Promise<unknown>((resolve, reject) =>
@@ -527,13 +528,13 @@ class PiRemoteSession implements HarnessSession {
       ? `${this.#background.size} shell command(s) it moved to the background are still running`
       : undefined;
   }
-  control(method: string, args: unknown[]): Promise<unknown> {
-    if (method === CONTROL_MCP_FLEET_CHANGED) {
-      return this.#takeFleetMcp(args[0] as FleetMcpChange[]);
+  control(control: Control): Promise<unknown> {
+    if (control.method === CONTROL_MCP_FLEET_CHANGED) {
+      return this.#takeFleetMcp(control.args[0]);
     }
-    return method === CONTROL_MCP_FLEET_HEAL
-      ? this.#healFleetMcp((args[0] as string[] | undefined) ?? [])
-      : this.request({ type: "control", method, args });
+    return control.method === CONTROL_MCP_FLEET_HEAL
+      ? this.#healFleetMcp(control.args[0] ?? [])
+      : this.request({ type: "control", ...control });
   }
   /**
    * A fleet MCP change, to the host, which registers the fleet's servers
@@ -541,33 +542,37 @@ class PiRemoteSession implements HarnessSession {
    * what it did with each is said on the machine's log, as Claude Code's and
    * OpenCode's sessions say theirs (the host's own output is not kept).
    */
-  async #takeFleetMcp(changes: FleetMcpChange[]): Promise<unknown> {
+  async #takeFleetMcp(changes: FleetMcpChange[]): Promise<FleetMcpTakeAnswer> {
     const door = await piBrowserDoor(this.#ctx);
-    const taken = (await this.request({
-      type: "control",
-      method: CONTROL_MCP_FLEET_CHANGED,
-      args: [changes, door],
-    })) as FleetMcpTakeAnswer;
+    const taken = FleetMcpTakeAnswerSchema.parse(
+      await this.request({
+        type: "control",
+        method: CONTROL_MCP_FLEET_CHANGED,
+        args: [changes, door],
+      })
+    );
     console.info(
       `[pi] ${this.#ctx.instanceId}: fleet MCP ${taken.servers.map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
     );
     return taken;
   }
   /** The hub's ask of named fleet servers (pi-runtime.ts `FleetMcp.heal`), with the door, said as a take is. */
-  async #healFleetMcp(names: string[]): Promise<unknown> {
+  async #healFleetMcp(names: string[]): Promise<FleetMcpTakeAnswer> {
     const door = await piBrowserDoor(this.#ctx);
-    const healed = (await this.request({
-      type: "control",
-      method: CONTROL_MCP_FLEET_HEAL,
-      args: [names, door],
-    })) as FleetMcpTakeAnswer;
+    const healed = FleetMcpTakeAnswerSchema.parse(
+      await this.request({
+        type: "control",
+        method: CONTROL_MCP_FLEET_HEAL,
+        args: [names, door],
+      })
+    );
     console.info(
       `[pi] ${this.#ctx.instanceId}: fleet MCP read ${healed.servers.map(({ name, status }) => `${name}: ${status}`).join("; ")}`
     );
     return healed;
   }
   async interrupt(): Promise<void> {
-    await this.control(CONTROL_INTERRUPT, []);
+    await this.control({ method: CONTROL_INTERRUPT, args: [] });
   }
   /** pi raises no permission prompt and has no question tool: nothing waits on an answer. */
   resolvePermission(): void {

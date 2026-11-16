@@ -134,3 +134,11 @@ export const CONTROL_FORGET_PROVIDER_ACCOUNT = "forgetProviderAccount";
  */
 export const CONTROL_READ_HOME_CREDENTIALS = "readHomeCredentials";
 export const CONTROL_MOVE_HOME_CREDENTIAL = "moveHomeCredential";
+
+/**
+ * The machine's login keychain unlocked with the password the person typed
+ * in the dashboard (agent auth.ts `unlockKeychain`), macOS's alone (arg: the
+ * password). Answers the machine's word on Claude, read again once it is
+ * unlocked. Machine-scoped.
+ */
+export const UNLOCK_KEYCHAIN = "unlockKeychain";

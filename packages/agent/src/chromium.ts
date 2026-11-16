@@ -12,6 +12,7 @@
  * `host`), and {@link greet} says the hello the dashboard's pane would.
  */
 
+import type { HelloArtifact } from "@cawco/core/artifact-picture";
 import type { FrameInset, FrameSays } from "@cawco/core/page-wire";
 import type { Browser, Frame, Page } from "playwright-core";
 import { browserExecutable, chromiumSandboxed } from "./capabilities";
@@ -83,12 +84,6 @@ export const HOST_STAND_IN = `(() => {
     }
   };
 })();`;
-
-/** The artifact a hello names, and where its doc is synced on the page's origin. */
-export interface HelloArtifact {
-  artifact: { id: string; kind: string; name: string };
-  sync: string;
-}
 
 /** Whether `value` names an artifact as a hello does. */
 export const isHelloArtifact = (value: unknown): value is HelloArtifact =>

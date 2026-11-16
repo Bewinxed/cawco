@@ -1,5 +1,6 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { FsOp } from "@cawco/core/control-replies";
+import type { AddressedControl } from "@cawco/core/control-table";
 import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type {
@@ -18,9 +19,14 @@ import type { FleetItems } from "@cawco/core/fleet-items";
 import { fleetItemsOf } from "@cawco/core/fleet-items";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { FleetHook } from "@cawco/core/hooks";
-import type { ControlPayload, FsPayload } from "@cawco/core/protocol";
+import type { FsPayload } from "@cawco/core/protocol";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
-import { CONTROL_MCP_FLEET_CHANGED } from "@cawco/core/session/controls";
+import {
+  CONTROL_MCP_FLEET_CHANGED,
+  type CONTROL_REINITIALIZE,
+  type CONTROL_RELOAD_PLUGINS,
+  type CONTROL_RELOAD_SKILLS,
+} from "@cawco/core/session/controls";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import type { FleetMcpTook } from "./connect-asks";
 import type { SourceNote } from "./db/fleet-catalog";
@@ -210,7 +216,11 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   const refreshSessions = (
     machineId: string,
     agent: MachineSocket,
-    methods: readonly string[]
+    methods: readonly (
+      | typeof CONTROL_REINITIALIZE
+      | typeof CONTROL_RELOAD_PLUGINS
+      | typeof CONTROL_RELOAD_SKILLS
+    )[]
   ): void => {
     if (methods.length === 0) {
       return;
@@ -221,7 +231,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       }
       for (const method of methods) {
         const requestId = crypto.randomUUID();
-        const payload: ControlPayload = {
+        const payload: AddressedControl = {
           instanceId: row.id,
           requestId,
           method,

@@ -1,3 +1,4 @@
+import type { Control } from "@cawco/core/control-table";
 import {
   INSTALL_SESSION_CREDENTIAL,
   VERIFY_SESSION_CREDENTIAL,
@@ -11,41 +12,23 @@ import type { HarnessSession } from "../harness";
  * {@link verifyHeldCredential}) and reads what an install from the hub names
  * ({@link installOf}); the pi host reads one the same way; each adapter
  * answers them ({@link credentialControls}). Nothing else in the agent names
- * the two methods or the shape of their arguments.
+ * the two methods; their arguments are the control table's (core
+ * control-table.ts).
  */
 
-/** The `args[1]` of an install that is the launch's first. */
-const INITIAL = "initial";
-
-/** What an install control names: the credential, and whether it is the launch's first. */
-interface Install {
-  credential: string;
-  initial: boolean;
-}
-
-/**
- * What an install control names, or `undefined` for any other method and for
- * an install that names no credential.
- */
-export const installOf = (
-  method: string,
-  args: readonly unknown[]
-): Install | undefined => {
-  if (method !== INSTALL_SESSION_CREDENTIAL) {
-    return undefined;
-  }
-  const [credential, mode] = args;
-  return typeof credential === "string" && credential
-    ? { credential, initial: mode === INITIAL }
-    : undefined;
-};
+/** What an install control names: the credential, or `undefined` for any other control. */
+export const installOf = (control: Control): string | undefined =>
+  control.method === INSTALL_SESSION_CREDENTIAL ? control.args[0] : undefined;
 
 /** The launch's own credential, installed in the process it just started. */
 export const installCredential = async (
   session: Pick<HarnessSession, "control">,
   credential: string
 ): Promise<void> => {
-  await session.control(INSTALL_SESSION_CREDENTIAL, [credential, INITIAL]);
+  await session.control({
+    method: INSTALL_SESSION_CREDENTIAL,
+    args: [credential, "initial"],
+  });
 };
 
 /**
@@ -63,7 +46,10 @@ export interface HeldCredential {
 export const verifyHeldCredential = async (
   session: Pick<HarnessSession, "control">
 ): Promise<HeldCredential> => {
-  const held = await session.control(VERIFY_SESSION_CREDENTIAL, []);
+  const held = await session.control({
+    method: VERIFY_SESSION_CREDENTIAL,
+    args: [],
+  });
   if (typeof held !== "object" || held === null) {
     return { refused: false };
   }
@@ -78,27 +64,20 @@ export const verifyHeldCredential = async (
 };
 
 /**
- * The session credential's controls, routed and guarded the same for every
- * adapter: an install names a credential (refused when it names none) and
- * says whether it is the launch's first (`initial`); a verify proves the
- * one the process already holds. `undefined` for any other method, which is
- * the adapter's own.
+ * The session credential's controls, routed the same for every adapter: an
+ * install names a credential (its schema refuses one that names none, core
+ * control-args.ts) and says whether it is the launch's first (`initial`); a
+ * verify proves the one the process already holds. `undefined` for any
+ * other control, which is the adapter's own.
  */
 export const credentialControls =
   (
     install: (credential: string, initial: boolean) => Promise<unknown>,
     verify: () => Promise<unknown>
   ) =>
-  (method: string, args: unknown[]): Promise<unknown> | undefined => {
-    if (method === INSTALL_SESSION_CREDENTIAL) {
-      const named = installOf(method, args);
-      if (!named) {
-        throw new Error("Session credential is missing.");
-      }
-      return install(named.credential, named.initial);
+  (control: Control): Promise<unknown> | undefined => {
+    if (control.method === INSTALL_SESSION_CREDENTIAL) {
+      return install(control.args[0], control.args[1] === "initial");
     }
-    if (method === VERIFY_SESSION_CREDENTIAL) {
-      return verify();
-    }
-    return undefined;
+    return control.method === VERIFY_SESSION_CREDENTIAL ? verify() : undefined;
   };

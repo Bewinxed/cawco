@@ -15,16 +15,13 @@
  * `CANVAS_LIMITS.screenHoldMs`.
  */
 
-import { CANVAS_LIMITS } from "@cawco/core/canvas";
+import {
+  CANVAS_LIMITS,
+  type CanvasScreenClose,
+  type CanvasScreenOpen,
+} from "@cawco/core/canvas";
 import type { Browser } from "playwright-core";
 import { greet, HOST_STAND_IN, launchChromium } from "./chromium";
-
-/** What the hub names the canvas by: its id and name, and where its doc is synced on the page's origin. */
-interface CanvasNamed {
-  id: string;
-  name: string;
-  sync: string;
-}
 
 /** Each held page's browser, and the guard that closes it once the hub goes quiet on it, by the hub's token. */
 const held = new Map<
@@ -42,15 +39,10 @@ const guardOf = (token: string) =>
  * The canvas page at `url` open, loaded and told which canvas it is, held
  * under `token` until it is closed; a token already open is held on.
  */
-export async function openCanvasScreen(options: {
-  canvas: CanvasNamed;
-  token: string;
-  url: string;
-}): Promise<{ opened: true }> {
+export async function openCanvasScreen(
+  options: CanvasScreenOpen
+): Promise<{ opened: true }> {
   const { canvas, token, url } = options;
-  if (typeof token !== "string" || token.length === 0) {
-    throw new Error("A canvas screen names the hub's token for it.");
-  }
   const open = held.get(token);
   if (open) {
     clearTimeout(open.guard);
@@ -59,16 +51,6 @@ export async function openCanvasScreen(options: {
   }
   if (!URL.canParse(url)) {
     throw new Error("A canvas screen names the canvas page's URL.");
-  }
-  if (!(
-    canvas &&
-    typeof canvas.id === "string" &&
-    typeof canvas.name === "string" &&
-    typeof canvas.sync === "string"
-  )) {
-    throw new Error(
-      "A canvas screen names the canvas: its id, name and sync path."
-    );
   }
   const browser = await launchChromium(
     "The hub's machine has no Chromium browser to draw the canvas with: install Google Chrome or Chromium there (the machine's capability report names the command), then call again."
@@ -104,9 +86,9 @@ export function closeCanvasScreens(): void {
 }
 
 /** The page held under `token` closed; whether one was. */
-export async function closeCanvasScreen(options: {
-  token: string;
-}): Promise<{ closed: boolean }> {
+export async function closeCanvasScreen(
+  options: CanvasScreenClose
+): Promise<{ closed: boolean }> {
   const one = held.get(options.token);
   if (!one) {
     return { closed: false };

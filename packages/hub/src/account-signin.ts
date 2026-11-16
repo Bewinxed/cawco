@@ -654,7 +654,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
           await ctx.callAgent(
             machineId,
             CONTROL_COMPLETE_ACCOUNT_LOGIN,
-            [code, signinId, expectedOf(account)],
+            [code ?? null, signinId, expectedOf(account)],
             SIGNIN_TIMEOUT_MS,
             "claude"
           ),

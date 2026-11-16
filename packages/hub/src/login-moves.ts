@@ -1,4 +1,10 @@
-import type { AccountBorrowFrame, HomeLoginMoved } from "@cawco/core/accounts";
+import type {
+  AccountBorrowFrame,
+  HomeCredential,
+  HomeLoginMoved,
+  HomeStore,
+  LentAccess,
+} from "@cawco/core/accounts";
 import { ACCOUNT_RULES, accountNameAmong } from "@cawco/core/accounts";
 import {
   CONTROL_ACCOUNT_LENT,
@@ -18,6 +24,12 @@ import type { LoginMoveResults } from "./hub-shapes";
 import type { HubTimer } from "./lifetime";
 import type { CallAnswer, Unanswered } from "./machine-answers";
 import { unreachable } from "./unreachable";
+
+/** Whether `store` keeps its sign-ins as credentials (pi's, OpenCode's), never a Claude dir (core traits `homeLogin`). */
+const isCredentialStore = (
+  store: HomeStore
+): store is HomeCredential["store"] =>
+  traitsOf(store).homeLogin === "credentials";
 
 /** An account sign-in step on a machine (core `ACCOUNT_RULES.signinWaitMs`). */
 export const SIGNIN_TIMEOUT_MS = ACCOUNT_RULES.signinWaitMs;
@@ -225,6 +237,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
    */
   const borrowInto = async (
     move: LoginMove,
+    store: HomeCredential["store"],
     expired: string
   ): Promise<{
     answer: Bounded<CallAnswer<HomeLoginMoved>>;
@@ -269,7 +282,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
           move.accountId,
           lender,
           lent.value.result,
-          move.store,
+          store,
           move.storeProvider,
           move.identity,
         ],
@@ -302,7 +315,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     borrower: string,
     requestId: string | null,
     accountId: string,
-    answer: unknown
+    answer: LentAccess | { error: string }
   ): void => {
     detach(
       ctx.callAgent(
@@ -319,7 +332,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
   const lendOnce = async (
     accountId: string,
     lender: string
-  ): Promise<unknown> => {
+  ): Promise<LentAccess | { error: string }> => {
     if (!ctx.registry.agent(lender)) {
       return { error: lenderAway(accountId, lender) };
     }
@@ -369,9 +382,9 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       waiting.set(`${borrower}\u0000${accountId}`, { accountId, borrower });
       awaitingLender.set(lender, waiting);
     }
-    if (answer && typeof answer === "object" && "error" in answer) {
+    if ("error" in answer) {
       console.warn(
-        `[hub] ${ctx.machineName(borrower)}'s borrowed sign-in of account ${accountId} was not refreshed: ${String(answer.error)}`
+        `[hub] ${ctx.machineName(borrower)}'s borrowed sign-in of account ${accountId} was not refreshed: ${answer.error}`
       );
     } else {
       console.log(
@@ -391,7 +404,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     for (const { accountId, borrower } of waiting.values()) {
       lendOnce(accountId, lender)
         .then((answer) => {
-          if (answer && typeof answer === "object" && !("error" in answer)) {
+          if (!("error" in answer)) {
             console.log(
               `[hub] ${ctx.machineName(lender)} is back: ${ctx.machineName(borrower)}'s borrowed sign-in of account ${accountId} refreshed`
             );
@@ -580,6 +593,34 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       ctx.stepping.delete(key);
     }
   };
+  /**
+   * A credential store's login moved into its account, or, once the store's
+   * own copy has expired, borrowed from a machine that holds it working
+   * ({@link borrowInto}).
+   */
+  const moveCredential = async (
+    move: LoginMove,
+    store: HomeCredential["store"],
+    ranFrom: string[]
+  ): Promise<void> => {
+    const answer = await ctx.callAgent(
+      move.machineId,
+      CONTROL_MOVE_HOME_CREDENTIAL,
+      [move.accountId, store, move.storeProvider, move.identity],
+      MOVE_TIMEOUT_MS
+    );
+    const expired =
+      answer.kind === "answered" && answer.value.ok
+        ? answer.value.result.expired
+        : undefined;
+    if (expired === undefined) {
+      await settleMove(move, answer, ranFrom);
+      return;
+    }
+    const borrowed = await borrowInto(move, store, expired);
+    await settleMove(move, borrowed.answer, ranFrom, borrowed.lender);
+  };
+
   const stepMove = async (move: LoginMove): Promise<void> => {
     const { machineId } = move;
     // A machine not connected (a hub just started, a machine away) is asked
@@ -613,30 +654,18 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
           throw unreachable(restless);
       }
     }
-    const answer =
-      traitsOf(move.store).homeLogin === "dir"
-        ? await ctx.callAgent(
-            machineId,
-            CONTROL_MOVE_HOME_LOGIN,
-            [move.accountId, move.identity],
-            MOVE_TIMEOUT_MS,
-            move.store
-          )
-        : await ctx.callAgent(
-            machineId,
-            CONTROL_MOVE_HOME_CREDENTIAL,
-            [move.accountId, move.store, move.storeProvider, move.identity],
-            MOVE_TIMEOUT_MS
-          );
-    const expired =
-      answer.kind === "answered" && answer.value.ok
-        ? answer.value.result.expired
-        : undefined;
-    if (expired === undefined) {
-      await settleMove(move, answer, ranFrom);
+    const { store } = move;
+    if (isCredentialStore(store)) {
+      await moveCredential(move, store, ranFrom);
     } else {
-      const borrowed = await borrowInto(move, expired);
-      await settleMove(move, borrowed.answer, ranFrom, borrowed.lender);
+      const answer = await ctx.callAgent(
+        machineId,
+        CONTROL_MOVE_HOME_LOGIN,
+        [move.accountId, move.identity],
+        MOVE_TIMEOUT_MS,
+        store
+      );
+      await settleMove(move, answer, ranFrom);
     }
     sleepMovedFrom();
     ctx.publishInstances(machineId);

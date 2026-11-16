@@ -47,7 +47,6 @@ import {
   tagSession,
 } from "@anthropic-ai/claude-agent-sdk";
 import { errnoCode, isGone } from "@cawco/core/absent";
-import type { AccountIdentity, AccountKind } from "@cawco/core/accounts";
 import { identityOf } from "@cawco/core/accounts";
 import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
@@ -67,6 +66,8 @@ import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import type { CutCommand } from "@cawco/core/commands/controls";
 import { isObject } from "@cawco/core/comments/model";
+import { isControlOf } from "@cawco/core/control-args";
+import type { Control } from "@cawco/core/control-table";
 import type { StartingSet } from "@cawco/core/delegate-types";
 import {
   HARNESS_TOOLS,
@@ -127,12 +128,22 @@ import {
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
+  CONTROL_MCP_RECONNECT,
   CONTROL_MCP_STATUS,
+  CONTROL_MCP_TOGGLE,
   CONTROL_READ_SESSION_CONTEXT,
+  CONTROL_REINITIALIZE,
+  CONTROL_RELOAD_PLUGINS,
+  CONTROL_RELOAD_SKILLS,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
+  CONTROL_SUPPORTED_COMMANDS,
+  CONTROL_SUPPORTED_MODELS,
   CONTROL_WITHDRAW_SEND,
+  GET_TASK_OUTPUT,
+  type TaskOutput,
+  unknownControlWords,
 } from "@cawco/core/session/controls";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import type {
@@ -153,6 +164,7 @@ import {
   MESSAGES_READ,
 } from "@cawco/core/session-messages";
 import { isDamagedRecord } from "@cawco/core/state-file";
+import { TaskOutputSchema } from "@cawco/core/stored-shapes";
 import { resumeCursor } from "@cawco/core/stream";
 import { HOUR_MS } from "@cawco/core/time";
 import { withPastedText } from "@cawco/core/transcript-rules";
@@ -242,6 +254,7 @@ import {
   unreadSendsHeld,
 } from "../harness";
 import { HUB_AWAY_BOUND_MS } from "../hub-away";
+import { fieldOf } from "../json-field";
 import { KeeperPool } from "../keepers";
 import { enterSpawn } from "../layer";
 import {
@@ -572,6 +585,47 @@ const toNeutral = (
  * payload is not a question result, which the caller treats as absent, never as
  * an empty answer.
  */
+/** The controls a live Claude Code session answers itself (`ClaudeSession.control`); its credential's are answered first. */
+const CLAUDE_SESSION_CONTROLS = [
+  CONTROL_WITHDRAW_SEND,
+  CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_FLEET_SETTINGS,
+  CONTROL_MCP_FLEET_HEAL,
+  CONTROL_SET_EFFORT,
+  CONTROL_CONTEXT_USAGE,
+  CONTROL_SET_PERMISSION_MODE,
+  CONTROL_INTERRUPT,
+  CONTROL_SET_MODEL,
+  CONTROL_SUPPORTED_MODELS,
+  CONTROL_SUPPORTED_COMMANDS,
+  CONTROL_RELOAD_SKILLS,
+  CONTROL_RELOAD_PLUGINS,
+  CONTROL_REINITIALIZE,
+  CONTROL_MCP_STATUS,
+  CONTROL_MCP_RECONNECT,
+  CONTROL_MCP_TOGGLE,
+  GET_TASK_OUTPUT,
+] as const;
+
+/** The machine-scoped controls Claude's harness answers (`ClaudeHarness.machine`): its account dirs', its fleet files' and its stored sessions'. */
+const CLAUDE_MACHINE_CONTROLS = [
+  CONTROL_READ_SESSION_CONTEXT,
+  READ_MEMORY_FILE,
+  READ_HOOK_SCRIPT,
+  READ_SKILL_FILES,
+  READ_SKILL_FOLDER,
+  INSPECT_CONFIG,
+  CONTROL_BEGIN_ACCOUNT_LOGIN,
+  CONTROL_COMPLETE_ACCOUNT_LOGIN,
+  CONTROL_FORGET_ACCOUNT,
+  CONTROL_PROBE_ACCOUNT,
+  CONTROL_FOLDER_COMMANDS,
+  CONTROL_CHECK_ACCOUNT,
+  CONTROL_READ_HOME_LOGIN,
+  CONTROL_MOVE_HOME_LOGIN,
+  CONTROL_JOIN_ACCOUNT_LOGIN,
+] as const;
+
 /**
  * A server's status as a screen is told it: its config's secrets said as
  * set (core fleet-secrets.ts). Claude Code's own kinds besides the fleet's
@@ -3847,22 +3901,16 @@ class ClaudeSession implements HarnessSession {
    * printed nothing.
    */
   async endedForMove(): Promise<MoveEnded> {
-    const handle = this.#handle as unknown as {
-      getTaskOutput?: (taskId: string) => Promise<{ output: string }>;
-    };
     const tasks = await Promise.all(
       [...this.#background].map(async ([taskId, task]): Promise<EndedTask> => {
-        const { getTaskOutput } = handle;
-        if (!getTaskOutput) {
-          return { taskId, ...task };
-        }
-        let read: Bounded<{ output: string }>;
+        let read: Bounded<TaskOutput>;
         try {
           read = await readWithin(TASK_OUTPUT_READ_MS, () =>
-            getTaskOutput.call(handle, taskId)
+            this.#taskOutput(taskId)
           );
         } catch {
-          // The CLI refused the read (it keeps no output for this task).
+          // The CLI refused the read (it keeps no output for this task), or
+          // has no such read.
           return { taskId, ...task };
         }
         switch (read.kind) {
@@ -3971,89 +4019,109 @@ class ClaudeSession implements HarnessSession {
     }
   }
 
-  async control(method: string, args: unknown[]): Promise<unknown> {
-    if (method === CONTROL_WITHDRAW_SEND) {
-      if (typeof args[0] !== "string" || !args[0]) {
-        throw new Error("A withdrawal names no send.");
-      }
-      return await this.#withdraw(args[0]);
+  /**
+   * Task `taskId`'s output as the CLI keeps it, read through its
+   * `get_task_output`: a function of the `Query` at runtime that its type
+   * does not declare, so it is looked up by name and its answer parsed
+   * (core `TaskOutput`). A CLI without it refuses, as an unknown control.
+   */
+  async #taskOutput(taskId: string): Promise<TaskOutput> {
+    const read = fieldOf(this.#handle, "getTaskOutput");
+    if (typeof read !== "function") {
+      throw new Error(unknownControlWords(GET_TASK_OUTPUT));
     }
-    const credential = this.#credentialControls(method, args);
+    const answer: unknown = await read.call(this.#handle, taskId);
+    return TaskOutputSchema.parse(answer);
+  }
+
+  async control(control: Control): Promise<unknown> {
+    const credential = this.#credentialControls(control);
     if (credential) {
       return await credential;
     }
-    if (method === CONTROL_MCP_FLEET_CHANGED) {
-      const changes = args[0] as FleetMcpChange[];
-      const taking = this.#fleetMcp.then(() => this.#takeFleetMcp(changes));
-      this.#fleetMcp = taking.catch(() => undefined);
-      return await taking;
+    if (!isControlOf(CLAUDE_SESSION_CONTROLS, control)) {
+      throw new Error(unknownControlWords(control.method));
     }
-    if (method === CONTROL_FLEET_SETTINGS) {
-      return await this.#takeFleetSettings();
+    switch (control.method) {
+      case CONTROL_WITHDRAW_SEND:
+        return await this.#withdraw(control.args[0]);
+      case CONTROL_MCP_FLEET_CHANGED: {
+        const [changes] = control.args;
+        const taking = this.#fleetMcp.then(() => this.#takeFleetMcp(changes));
+        this.#fleetMcp = taking.catch(() => undefined);
+        return await taking;
+      }
+      case CONTROL_FLEET_SETTINGS:
+        return await this.#takeFleetSettings();
+      case CONTROL_MCP_FLEET_HEAL: {
+        const named = control.args[0] ?? undefined;
+        const healing = this.#fleetMcp.then(() => this.#healFleetMcp(named));
+        this.#fleetMcp = healing.catch(() => undefined);
+        return await healing;
+      }
+      // Effort is the one neutral verb with no `Query` method behind it: it is a
+      // flag setting, applied over user/project/local settings and never written
+      // to any of them, which is exactly a session-scoped switch. `max` is only
+      // reachable this way — the persisted setting excludes it.
+      case CONTROL_SET_EFFORT:
+        await this.#handle.applyFlagSettings({ effortLevel: control.args[0] });
+        // What the session now sends, which a model's own ceiling can make
+        // lower than what was asked.
+        await this.#readEffort();
+        return undefined;
+      // How full the window is, from the last answer's usage and the CLI's own
+      // estimates: "'summary' answers from the last response's usage and local
+      // estimates without per-category token-count API calls (default 'full')"
+      // (agent SDK 0.3.257 CHANGELOG). The full count waited on Anthropic's
+      // token-count API once per category, and on a busy machine (many
+      // sessions reading after every turn) ran past every reader's deadline.
+      case CONTROL_CONTEXT_USAGE:
+        return await this.#handle.getContextUsage({ detail: "summary" });
+      // The CLI is told its own mode (`fullSend` is its bypass); the session
+      // takes the mode CawCo was asked for once the CLI is in it.
+      case CONTROL_SET_PERMISSION_MODE:
+        await this.#setMode(control.args[0]);
+        return undefined;
+      // The session's own interrupt, never the `Query`'s alone: it stops the
+      // CLI's background tasks too ({@link interrupt}). Passed through to
+      // `Query.interrupt`, a background shell the agent then ended in its
+      // workspace (session.ts `#endWork`) was one the CLI read as failed, and
+      // its notice woke the interrupted session (delegate-kill i2, obelisk,
+      // 2026-10-20).
+      case CONTROL_INTERRUPT:
+        await this.interrupt();
+        return undefined;
+      // A model switch moves the effort with it: onto a model without effort,
+      // or down to the new model's ceiling.
+      case CONTROL_SET_MODEL:
+        await this.#handle.setModel(control.args[0]);
+        await this.#readEffort();
+        return undefined;
+      case CONTROL_SUPPORTED_MODELS:
+        return await this.#handle.supportedModels();
+      case CONTROL_SUPPORTED_COMMANDS:
+        return await this.#handle.supportedCommands();
+      case CONTROL_RELOAD_SKILLS:
+        return await this.#handle.reloadSkills();
+      case CONTROL_RELOAD_PLUGINS:
+        return await this.#handle.reloadPlugins();
+      case CONTROL_REINITIALIZE:
+        return await this.#handle.reinitialize();
+      // What a screen is told of a server's config says its secrets as set
+      // (core fleet-secrets.ts), as every other read of a connector does.
+      case CONTROL_MCP_STATUS:
+        return (await this.#handle.mcpServerStatus()).map((server) =>
+          withConfigMasked(server)
+        );
+      case CONTROL_MCP_RECONNECT:
+        return await this.#handle.reconnectMcpServer(control.args[0]);
+      case CONTROL_MCP_TOGGLE:
+        return await this.#handle.toggleMcpServer(...control.args);
+      case GET_TASK_OUTPUT:
+        return await this.#taskOutput(control.args[0]);
+      default:
+        return unhandled("control", control);
     }
-    if (method === CONTROL_MCP_FLEET_HEAL) {
-      const named = args[0] as string[] | undefined;
-      const healing = this.#fleetMcp.then(() => this.#healFleetMcp(named));
-      this.#fleetMcp = healing.catch(() => undefined);
-      return await healing;
-    }
-    // Effort is the one neutral verb with no `Query` method behind it: it is a
-    // flag setting, applied over user/project/local settings and never written
-    // to any of them, which is exactly a session-scoped switch. `max` is only
-    // reachable this way — the persisted setting excludes it.
-    if (method === CONTROL_SET_EFFORT) {
-      await this.#handle.applyFlagSettings({
-        effortLevel: args[0] as EffortLevel,
-      });
-      // What the session now sends, which a model's own ceiling can make
-      // lower than what was asked.
-      await this.#readEffort();
-      return undefined;
-    }
-    // How full the window is, from the last answer's usage and the CLI's own
-    // estimates: "'summary' answers from the last response's usage and local
-    // estimates without per-category token-count API calls (default 'full')"
-    // (agent SDK 0.3.257 CHANGELOG). The full count waited on Anthropic's
-    // token-count API once per category, and on a busy machine (many
-    // sessions reading after every turn) ran past every reader's deadline.
-    if (method === CONTROL_CONTEXT_USAGE) {
-      return await this.#handle.getContextUsage({ detail: "summary" });
-    }
-    // The CLI is told its own mode (`fullSend` is its bypass); the session
-    // takes the mode CawCo was asked for once the CLI is in it.
-    if (method === CONTROL_SET_PERMISSION_MODE) {
-      await this.#setMode(args[0] as PermissionMode | undefined);
-      return undefined;
-    }
-    // The session's own interrupt, never the `Query`'s alone: it stops the
-    // CLI's background tasks too ({@link interrupt}). Passed through to
-    // `Query.interrupt`, a background shell the agent then ended in its
-    // workspace (session.ts `#endWork`) was one the CLI read as failed, and
-    // its notice woke the interrupted session (delegate-kill i2, obelisk,
-    // 2026-10-20).
-    if (method === CONTROL_INTERRUPT) {
-      await this.interrupt();
-      return undefined;
-    }
-    const handle = this.#handle as unknown as Record<
-      string,
-      (...a: unknown[]) => unknown
-    >;
-    if (typeof handle[method] !== "function") {
-      throw new Error(`unknown control method: ${method}`);
-    }
-    const answer = await handle[method](...args);
-    // A model switch moves the effort with it: onto a model without effort,
-    // or down to the new model's ceiling.
-    if (method === CONTROL_SET_MODEL) {
-      await this.#readEffort();
-    }
-    // What a screen is told of a server's config says its secrets as set
-    // (core fleet-secrets.ts), as every other read of a connector does.
-    if (method === CONTROL_MCP_STATUS && Array.isArray(answer)) {
-      return answer.map((server: McpServerStatus) => withConfigMasked(server));
-    }
-    return answer;
   }
 
   /**
@@ -5614,13 +5682,14 @@ class ClaudeHarness implements Harness<"claude"> {
     await deleteSession(sessionKey, { sessionStore: transcriptStore(file) });
   }
 
-  async machine(method: string, args: unknown[]): Promise<unknown> {
-    switch (method) {
+  async machine(control: Control): Promise<unknown> {
+    if (!isControlOf(CLAUDE_MACHINE_CONTROLS, control)) {
+      return undefined;
+    }
+    switch (control.method) {
       case CONTROL_READ_SESSION_CONTEXT: {
-        const file = await claudeSessionFile(
-          args[0] as string,
-          args[1] as string | undefined
-        );
+        const [key, dir] = control.args;
+        const file = await claudeSessionFile(key, dir ?? undefined);
         return file
           ? await readSessionContext(file)
           : { reason: "transcript missing" };
@@ -5628,66 +5697,52 @@ class ClaudeHarness implements Harness<"claude"> {
       case READ_MEMORY_FILE:
         return readMemoryFile();
       case READ_HOOK_SCRIPT:
-        return readHookScript(args[0] as string);
-      case READ_SKILL_FILES:
-        return readSkillFiles(args[0] as string, args[1] as string | undefined);
+        return readHookScript(control.args[0]);
+      case READ_SKILL_FILES: {
+        const [name, cwd] = control.args;
+        return readSkillFiles(name, cwd ?? undefined);
+      }
       case READ_SKILL_FOLDER:
-        return readSkillFolder(args[0] as string);
+        return readSkillFolder(control.args[0]);
       case INSPECT_CONFIG:
-        return inspectConfig(args[0] as string | undefined);
+        return inspectConfig(control.args[0] ?? undefined);
       // Each change to an account dir's sign-in is one a report waits out
       // (`changingSignins`), so none says what a dir was before it.
       case CONTROL_BEGIN_ACCOUNT_LOGIN:
+        return changingSignins(beginAccountLogin(...control.args));
+      case CONTROL_COMPLETE_ACCOUNT_LOGIN: {
+        const [code, account, expected] = control.args;
         return changingSignins(
-          beginAccountLogin(args[0] as string, args[1] as AccountKind)
+          completeAccountLogin(code ?? "", account, expected ?? null)
         );
-      case CONTROL_COMPLETE_ACCOUNT_LOGIN:
-        return changingSignins(
-          completeAccountLogin(
-            args[0] as string,
-            args[1] as string,
-            (args[2] as AccountIdentity | null) ?? null
-          )
-        );
-      case CONTROL_FORGET_ACCOUNT:
+      }
+      case CONTROL_FORGET_ACCOUNT: {
         // An answer, not undefined: undefined tells the daemon this harness
         // does not handle the control, and the hub reads that as a refusal.
-        await changingSignins(
-          forgetAccount(
-            args[0] as string,
-            (args[1] as string | null | undefined) ?? null
-          )
-        );
+        const [account, into] = control.args;
+        await changingSignins(forgetAccount(account, into ?? null));
         return { forgotten: true };
+      }
       case CONTROL_PROBE_ACCOUNT:
-        return probeAccount(args[0] as string);
-      case CONTROL_FOLDER_COMMANDS:
+        return probeAccount(control.args[0]);
+      case CONTROL_FOLDER_COMMANDS: {
+        const [cwd, account, model] = control.args;
         return folderCommands(
-          args[0] as string,
-          args[1] as string | undefined,
-          await folderLaunch(
-            args[0] as string,
-            (args[2] as string | undefined) || undefined
-          )
+          cwd,
+          account ?? undefined,
+          await folderLaunch(cwd, model || undefined)
         );
+      }
       case CONTROL_CHECK_ACCOUNT:
-        return checkAccount(args[0] as string);
+        return checkAccount(control.args[0]);
       case CONTROL_READ_HOME_LOGIN:
         return readHomeLogin();
       case CONTROL_MOVE_HOME_LOGIN:
-        return changingSignins(
-          moveHomeLogin(args[0] as string, args[1] as AccountIdentity)
-        );
+        return changingSignins(moveHomeLogin(...control.args));
       case CONTROL_JOIN_ACCOUNT_LOGIN:
-        return changingSignins(
-          joinAccountLogin(
-            args[0] as string,
-            args[1] as string,
-            args[2] as AccountIdentity
-          )
-        );
+        return changingSignins(joinAccountLogin(...control.args));
       default:
-        return undefined;
+        return unhandled("machine control", control);
     }
   }
 

@@ -239,6 +239,17 @@ export const CONTROL_MOVE_CLONE = "moveClone";
 export const CONTROL_MOVE_LFS = "moveLfs";
 /** Stops whatever step of a job runs on the machine. */
 export const CONTROL_MOVE_CANCEL = "moveCancel";
+
+/** What {@link CONTROL_MOVE_PREPARE} answers: the folder's commit once prepared, null when it holds none. */
+export interface MovePrepared {
+  commit: string | null;
+}
+
+/** What {@link CONTROL_MOVE_CANCEL} answers: whether a step ran, and which. */
+export interface MoveCancelled {
+  stage?: string;
+  stopped: boolean;
+}
 /**
  * On the source, for a target step that reaches an outside remote whose URL
  * carries a credential ({@link MoveInspection.originCredential}): that

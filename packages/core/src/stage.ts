@@ -312,6 +312,24 @@ export const REPORT_PATH = "/__cawco/report";
 /** The daemon's control method that draws a canvas in the machine's browser when no panel has (agent `stage-render.ts`). */
 export const STAGE_RENDER = "stageRender";
 
+/** One state a render is asked for: its story and interaction, for its picture. */
+interface RenderState {
+  interaction?: Interaction;
+  scheme?: "light" | "dark";
+  /** Its story's name, or `file:Story` where two of the canvas's states files name one story alike. */
+  story: string;
+  width?: number;
+}
+
+/** What {@link STAGE_RENDER} is asked: the canvas's states files and spec, and a picture of one state, or of the stage in view. */
+export interface RenderAsk {
+  files: string[];
+  /** A picture: of `state` when it names one, else the stage in view. */
+  png?: boolean;
+  spec?: CanvasSpec;
+  state?: RenderState;
+}
+
 /**
  * How long a daemon's render of a canvas may take, Chromium's launch to its
  * answer, past the stage's own start. A sweep that runs past it answers
@@ -954,6 +972,10 @@ export const HEALTH_PATH = "/__cawco/health";
 
 /** The daemon's control method that starts a workspace's stage or wakes it, and answers a sheet's stories. */
 export const STAGE_ENSURE = "stageEnsure";
+
+/** What {@link STAGE_ENSURE} is asked of a stage: its first states file, or (`{ file, files }`) every states file whose report it reads, `opening` as the canvas is made. */
+export type StageEnsure =
+  string | { file?: string; files?: string[]; opening?: boolean };
 
 /**
  * The daemon's control method that warms one stage for a decision page as

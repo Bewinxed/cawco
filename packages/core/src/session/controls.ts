@@ -1,6 +1,7 @@
 /** The control verbs the hub calls on a live session or on its machine for that session, with their answers. */
 
 import type { SessionCustody } from "../protocol";
+import type { WindowAsk } from "../transcript-types";
 
 /**
  * The neutral names the `control` verb understands for a *live session*.
@@ -24,9 +25,21 @@ export const CONTROL_CONTEXT_USAGE = "getContextUsage";
 export const CONTROL_SUPPORTED_MODELS = "supportedModels";
 export const CONTROL_SUPPORTED_COMMANDS = "supportedCommands";
 export const CONTROL_RELOAD_SKILLS = "reloadSkills";
+/** Claude Code's plugins read again by a live session, as a fleet sync that moved them asks (hub fleet-sources.ts `refreshSessions`). */
+export const CONTROL_RELOAD_PLUGINS = "reloadPlugins";
+/** A live Claude Code session initialized again, as a fleet sync that moved its hooks asks (hub fleet-sources.ts `refreshSessions`). */
+export const CONTROL_REINITIALIZE = "reinitialize";
 export const CONTROL_MCP_STATUS = "mcpServerStatus";
 export const CONTROL_MCP_RECONNECT = "reconnectMcpServer";
 export const CONTROL_MCP_TOGGLE = "toggleMcpServer";
+
+/**
+ * The hub's word on the address a session's process said it took (its
+ * session id under its launch's generation): args `[sessionId, generation,
+ * acknowledged]`. Taken ahead of every queue (agent session.ts `dispatch`):
+ * the launch that said the address waits on it. Instance-scoped.
+ */
+export const CONTROL_ACKNOWLEDGE_ADDRESS = "acknowledgeSessionAddress";
 
 /** What {@link CONTROL_WITHDRAW_SEND} answers: the send taken back before its turn began, or its turn already begun. */
 export type SendWithdrawal = "withdrawn" | "started";
@@ -61,14 +74,16 @@ export interface TaskOutput {
 export const DELETE_SESSION = "deleteSession";
 
 /** What became of one fleet MCP server at the hub. */
-export type FleetMcpChangeKind =
-  | "signed-in"
-  | "signed-out"
-  | "config"
-  | "added"
-  | "removed"
-  | "enabled"
-  | "disabled";
+export const FLEET_MCP_CHANGE_KINDS = [
+  "signed-in",
+  "signed-out",
+  "config",
+  "added",
+  "removed",
+  "enabled",
+  "disabled",
+] as const;
+export type FleetMcpChangeKind = (typeof FLEET_MCP_CHANGE_KINDS)[number];
 
 export interface FleetMcpChange {
   kind: FleetMcpChangeKind;
@@ -134,6 +149,12 @@ export const CONTROL_FLEET_SETTINGS = "fleetSettings";
  * `{ asleep: boolean; awake?: string }`, `awake` being what kept it up.
  */
 export const CONTROL_SLEEP = "sleep";
+
+/** What {@link CONTROL_SLEEP} answers: whether the session sleeps, and what kept it up when it does not. */
+export interface SleepAnswer {
+  asleep: boolean;
+  awake?: string;
+}
 /**
  * Machine control: which of the sessions named (arg: instance ids) are not
  * at rest by {@link CONTROL_SLEEP}'s own test, leaving out the hub's
@@ -198,6 +219,13 @@ export interface SessionCustodyRead {
  */
 export const REMOVED_SESSION_CUSTODY = "removedSessionCustody";
 
+/** One row {@link REMOVED_SESSION_CUSTODY} asks of: its id, its session's, and its folder. */
+export interface CustodyRow {
+  cwd: string;
+  id: string;
+  sessionId: string | null;
+}
+
 /** One row of {@link REMOVED_SESSION_CUSTODY}'s answer: its session there, gone, or not known (null). */
 export interface CustodyPresence {
   id: string;
@@ -213,6 +241,37 @@ export const CONTROL_GET_SESSION_MESSAGES = "getSessionMessages";
  * {@link StoredRun}, empty for a session its harness has no record of.
  */
 export const CONTROL_STORED_RUN = "storedRun";
+/** A stored conversation's title set by the harness that keeps it: args `[sessionKey, title, dir?]`. Machine-scoped. */
+export const CONTROL_RENAME_SESSION = "renameSession";
+/** A stored conversation's tag set, or cleared with null, by the harness that keeps it: args `[sessionKey, tag, dir?]`. Machine-scoped. */
+export const CONTROL_TAG_SESSION = "tagSession";
+
+/**
+ * The folder a catalog control names its conversation's harness store by,
+ * whichever convention carried it: new callers send a plain string, while
+ * dashboards and pre-rework callers send the SDK's `{ dir }` options
+ * object; null or absent names none.
+ */
+export type CatalogDir = string | { dir?: string } | null;
+
+/** What {@link CONTROL_LIST_SESSIONS} is asked: at most `limit` conversations, those of folder `dir` alone when it names one. */
+export interface SessionListAsk {
+  dir?: string;
+  limit?: number;
+}
+
+/** What {@link CONTROL_GET_SESSION_MESSAGES} is asked besides the key: its folder, its last `tail` messages, and every message stored (`whole`) rather than the active chain. */
+export interface MessagesAsk {
+  dir?: string;
+  tail?: number;
+  whole?: boolean;
+}
+
+/** What {@link CONTROL_READ_TRANSCRIPT_WINDOW} is asked besides the key: its folder, and the window. */
+export interface WindowRead {
+  dir?: string;
+  window: WindowAsk;
+}
 /**
  * A window of a stored conversation, as it was said: args
  * `[sessionKey, { dir?, window: WindowAsk }]`; answers a `TranscriptWindow`

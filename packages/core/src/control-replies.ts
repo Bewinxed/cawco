@@ -1,12 +1,13 @@
 /**
  * What a machine answers each call the hub makes to it, by the call's name:
- * one table, its reply's schema per control (`CONTROL_REPLIES`) and per
+ * its reply's schema per control of the control table (control-table.ts,
+ * `CONTROL_REPLIES`), each held to the table's own `result`, and per
  * `fs` op (`FS_REPLIES`). The hub parses every answer against its schema
  * where it arrives (hub machine-answers.ts `answerOf`), so a caller reads
  * the reply as its type and never casts it; an answer that does not parse
  * is the machine's failure. A schema is the reply's own type's
  * (stored-shapes.ts, made from the type); `UNREAD` is a reply the hub reads
- * nothing of but whether the call failed, `PASSED` one it carries on unread.
+ * nothing of but whether the call failed.
  */
 import { z } from "zod";
 import type {
@@ -17,6 +18,7 @@ import type {
   HomeCredential,
   HomeLogin,
   HomeLoginMoved,
+  LentAccess,
   ProviderAccountReading,
   ProviderSigninChallenge,
   ProviderSigninResult,
@@ -42,6 +44,7 @@ import {
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
   CONTROL_SET_PROVIDER_KEY,
+  UNLOCK_KEYCHAIN,
 } from "./accounts/controls";
 import type { PictureTaken } from "./artifact-picture";
 import { ARTIFACT_PICTURE } from "./artifact-picture";
@@ -70,6 +73,7 @@ import {
   PASSKEY_SCAN_STOP,
 } from "./browser";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "./canvas";
+import { PROBE_CAPABILITIES } from "./capabilities";
 import type { CommandResult } from "./commands/controls";
 import {
   CONTROL_CANCEL_COMMAND,
@@ -79,6 +83,8 @@ import type { GhAccount, GhToken } from "./connections";
 import { CONTROL_GH_ACCOUNTS, CONTROL_GH_TOKEN } from "./connections";
 import type { ContinuationRead } from "./continuation-read";
 import { CONTROL_READ_CONTINUATION } from "./continuation-read";
+import { isLentAccess } from "./control-args";
+import type { ControlName, ControlResult } from "./control-table";
 import type {
   TranscriptAnswer,
   TranscriptPlace,
@@ -93,6 +99,7 @@ import type {
 } from "./fleet";
 import {
   FLEET_DELTA,
+  FLEET_STATUS,
   INSPECT_CONFIG,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
@@ -106,6 +113,7 @@ import {
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_REFRESH_CAWCO_TOOLS,
   INSTALL_SESSION_CREDENTIAL,
+  VERIFY_SESSION_CREDENTIAL,
 } from "./harness";
 import type { ModelInfo } from "./harness/kinds";
 import type { GeneratedImage } from "./image-generation";
@@ -154,23 +162,39 @@ import type {
 } from "./session/controls";
 import {
   CONTROL_ABANDON,
+  CONTROL_ACKNOWLEDGE_ADDRESS,
   CONTROL_CARRY_SESSIONS,
   CONTROL_CONTEXT_USAGE,
+  CONTROL_FLEET_SETTINGS,
   CONTROL_FOLDER_COMMANDS,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
+  CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
+  CONTROL_MCP_RECONNECT,
+  CONTROL_MCP_STATUS,
+  CONTROL_MCP_TOGGLE,
   CONTROL_MODEL_CATALOG,
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_READ_TRANSCRIPT_WINDOW,
+  CONTROL_REINITIALIZE,
+  CONTROL_RELOAD_PLUGINS,
   CONTROL_RELOAD_SKILLS,
+  CONTROL_RENAME_SESSION,
   CONTROL_RESTLESS,
   CONTROL_SEARCH_TRANSCRIPTS,
+  CONTROL_SET_EFFORT,
+  CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
+  CONTROL_SPIN_OFF_HELD,
+  CONTROL_STORED_RUN,
+  CONTROL_SUPPORTED_COMMANDS,
+  CONTROL_SUPPORTED_MODELS,
+  CONTROL_TAG_SESSION,
   CONTROL_TRANSCRIPT_PLACES,
   CONTROL_TRANSCRIPT_TURNS,
   CONTROL_WITHDRAW_SEND,
@@ -373,9 +397,6 @@ const reply = <T>(schema: z.ZodType<T>): z.ZodType<T> => schema;
 /** A reply the hub reads nothing of but whether the call failed: nothing, as the hub has it. */
 const UNREAD = z.unknown().transform((): undefined => undefined);
 
-/** A reply the hub reads nothing of but carries on, as it came, to another machine. */
-const PASSED = z.unknown();
-
 /**
  * A tool's status, by core's own guard (tools.ts `isToolStatus`): its
  * schema is not made from its type, as tool-presentation.ts declares a
@@ -402,8 +423,9 @@ const CONTROLS = {
     AccountJoinedOnSchema
   ),
   [CONTROL_PI_DEFAULT_MODEL]: z.string().nullable(),
-  // A lent access goes on to its borrower as the lender wrote it: the hub reads none of it.
-  [CONTROL_LEND_ACCOUNT]: PASSED,
+  // A lent access goes on to its borrower as the lender wrote it, once it is
+  // one (control-args.ts `isLentAccess`).
+  [CONTROL_LEND_ACCOUNT]: z.custom<LentAccess>(isLentAccess, "a lent sign-in"),
   [CONTROL_BORROW_ACCOUNT]: reply<HomeLoginMoved>(HomeLoginMovedSchema),
   [CONTROL_ACCOUNT_LENT]: UNREAD,
   [CONTROL_BEGIN_PROVIDER_LOGIN]: reply<ProviderSigninChallenge>(
@@ -599,13 +621,34 @@ const CONTROLS = {
   [RELAY_CERTIFY]: reply<RelayCertified>(RelayCertifiedSchema),
   [RELAY_RUNTIME]: reply<RelayRuntimeRead>(RelayRuntimeReadSchema),
   [RELAY_PROVE]: z.array(z.string()),
-} satisfies Record<string, z.ZodType>;
+  // What the hub sends a live session and reads nothing of but whether it
+  // failed, or relays to the client that asked it (session/controls.ts).
+  [CONTROL_INTERRUPT]: UNREAD,
+  [CONTROL_RELOAD_PLUGINS]: UNREAD,
+  [CONTROL_REINITIALIZE]: UNREAD,
+  [CONTROL_SET_MODEL]: UNREAD,
+  [CONTROL_SET_EFFORT]: UNREAD,
+  [CONTROL_SUPPORTED_MODELS]: UNREAD,
+  [CONTROL_SUPPORTED_COMMANDS]: UNREAD,
+  [CONTROL_MCP_STATUS]: UNREAD,
+  [CONTROL_MCP_RECONNECT]: UNREAD,
+  [CONTROL_MCP_TOGGLE]: UNREAD,
+  [CONTROL_FLEET_SETTINGS]: UNREAD,
+  [CONTROL_ACKNOWLEDGE_ADDRESS]: UNREAD,
+  [VERIFY_SESSION_CREDENTIAL]: UNREAD,
+  [CONTROL_STORED_RUN]: UNREAD,
+  [CONTROL_RENAME_SESSION]: UNREAD,
+  [CONTROL_TAG_SESSION]: UNREAD,
+  [CONTROL_SPIN_OFF_HELD]: UNREAD,
+  [FLEET_STATUS]: UNREAD,
+  [UNLOCK_KEYCHAIN]: UNREAD,
+  [PROBE_CAPABILITIES]: UNREAD,
+} satisfies {
+  readonly [K in ControlName]: z.ZodType<ControlResult<K>> | typeof UNREAD;
+};
 
 /** What a session's start (a `spawn`) answers: the hub reads nothing of it but whether it started. */
 export const SPAWN_REPLY = UNREAD;
-
-/** A control the hub calls on a machine. */
-export type ControlName = keyof typeof CONTROLS;
 
 /** What a machine answers control `K` with, once parsed. */
 export type ControlReply<K extends ControlName> = z.output<

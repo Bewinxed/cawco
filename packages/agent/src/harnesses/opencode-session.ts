@@ -31,6 +31,8 @@ import { atProviderLimit } from "@cawco/core/accounts";
 import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import { type AskAnswer, FULL_SEND_ANSWER } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { isControlOf } from "@cawco/core/control-args";
+import type { Control } from "@cawco/core/control-table";
 import {
   ANY_TYPE,
   type MayStart,
@@ -73,6 +75,7 @@ import type {
   NeutralContentBlock,
   PermissionResult,
   SentMessage,
+  SlashCommand,
   UserAnswers,
   UserQuestion,
 } from "@cawco/core/session-messages";
@@ -866,6 +869,23 @@ const endedToolResult = (
       : { error: event.data.error },
     event.type === "session.tool.failed"
   );
+
+/** The controls an OpenCode session answers (`OpencodeSession.control`); its credential's are answered first. */
+const OPENCODE_SESSION_CONTROLS = [
+  CONTROL_INTERRUPT,
+  CONTROL_SET_MODEL,
+  CONTROL_SET_EFFORT,
+  CONTROL_SET_PERMISSION_MODE,
+  CONTROL_CONTEXT_USAGE,
+  CONTROL_SUPPORTED_MODELS,
+  CONTROL_SUPPORTED_COMMANDS,
+  CONTROL_RELOAD_SKILLS,
+  CONTROL_MCP_STATUS,
+  CONTROL_MCP_RECONNECT,
+  CONTROL_MCP_TOGGLE,
+  CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_MCP_FLEET_HEAL,
+] as const;
 
 export class OpencodeSession implements HarnessSession {
   attached?: () => void;
@@ -3393,34 +3413,43 @@ export class OpencodeSession implements HarnessSession {
     return model ? requestWindow(model.limit) : 200_000;
   }
 
-  async control(method: string, args: unknown[]): Promise<unknown> {
+  /** The slash commands and skills OpenCode offers at this session's directory. */
+  supportedCommands(): Promise<SlashCommand[]> {
+    return opencodeSlashCommands(this.#client, this.#directory);
+  }
+
+  async control(control: Control): Promise<unknown> {
     // Config convergence gate: MCP mutations must not race a server replacement.
     if (
       this.#isConfigGateHeld() &&
-      (method === CONTROL_MCP_RECONNECT || method === CONTROL_MCP_TOGGLE)
+      (control.method === CONTROL_MCP_RECONNECT ||
+        control.method === CONTROL_MCP_TOGGLE)
     ) {
-      throw new Error(`${method} blocked: config reload in progress`);
+      throw new Error(`${control.method} blocked: config reload in progress`);
     }
-    const credential = this.#credentialControls(method, args);
+    const credential = this.#credentialControls(control);
     if (credential) {
       return await credential;
     }
-    switch (method) {
+    if (!isControlOf(OPENCODE_SESSION_CONTROLS, control)) {
+      // An unsupported control verb is a silent no-op, never a user-facing
+      // failure: the hub may send a verb this harness has none for.
+      console.warn(`[opencode] no control verb ${control.method} — ignored`);
+      return;
+    }
+    switch (control.method) {
       case CONTROL_INTERRUPT:
         await this.interrupt();
         return;
       case CONTROL_SET_MODEL:
-        this.#model = args[0] as string;
+        this.#model = control.args[0];
         return;
       case CONTROL_SET_EFFORT:
-        if (!EFFORT_LEVELS.includes(args[0] as EffortLevel)) {
-          throw new Error(`Unsupported OpenCode effort: ${String(args[0])}`);
-        }
-        this.#effort = args[0] as EffortLevel;
+        this.#effort = control.args[0];
         this.sayEffort();
         return;
       case CONTROL_SET_PERMISSION_MODE:
-        this.#permissionMode = offeredMode(args[0] as PermissionMode);
+        this.#permissionMode = offeredMode(control.args[0]);
         this.#answerOpen();
         return;
       case CONTROL_CONTEXT_USAGE: {
@@ -3458,7 +3487,7 @@ export class OpencodeSession implements HarnessSession {
       case CONTROL_SUPPORTED_MODELS:
         return await opencodeCatalog(this.#client, this.#directory);
       case CONTROL_SUPPORTED_COMMANDS:
-        return await opencodeSlashCommands(this.#client, this.#directory);
+        return await this.supportedCommands();
       case CONTROL_RELOAD_SKILLS:
         this.#commands = null;
         return {
@@ -3478,7 +3507,7 @@ export class OpencodeSession implements HarnessSession {
         }));
       }
       case CONTROL_MCP_RECONNECT: {
-        const name = args[0] as string;
+        const [name] = control.args;
         await this.#client.experimental.mcp.connect({
           server: name,
           ...at(this.#directory),
@@ -3494,9 +3523,9 @@ export class OpencodeSession implements HarnessSession {
         return;
       }
       case CONTROL_MCP_TOGGLE: {
-        const name = args[0] as string;
+        const [name, enabled] = control.args;
         const target = { server: name, ...at(this.#directory) };
-        await (args[1]
+        await (enabled
           ? this.#client.experimental.mcp.connect(target)
           : this.#client.experimental.mcp.disconnect(target));
         return;
@@ -3509,21 +3538,16 @@ export class OpencodeSession implements HarnessSession {
         // (opencode.ts `#startFailed`). What each reads at this session's
         // directory is the answer: OpenCode lists a connected server's
         // tools at the session's next step.
-        const taken = await this.#fleetMcpHeld(args[0] as FleetMcpChange[]);
+        const taken = await this.#fleetMcpHeld(control.args[0]);
         console.info(
           `[opencode] ${this.instanceId}: fleet MCP ${taken.servers.map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
         );
         return taken;
       }
       case CONTROL_MCP_FLEET_HEAL:
-        return await this.#healFleetMcp(
-          (args[0] as string[] | undefined) ?? []
-        );
+        return await this.#healFleetMcp(control.args[0] ?? []);
       default:
-        // An unsupported control verb is a silent no-op, never a user-facing
-        // failure: the hub may send a verb this harness has none for.
-        console.warn(`[opencode] no control verb ${method} — ignored`);
-        return;
+        return unhandled("control", control);
     }
   }
 

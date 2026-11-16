@@ -1,11 +1,8 @@
 import type { Bounded } from "@cawco/core/bounded";
 import { readWithin } from "@cawco/core/bounded";
 import type { CommandQueue } from "@cawco/core/commands/controls";
-import {
-  type ControlName,
-  type FsOp,
-  SPAWN_REPLY,
-} from "@cawco/core/control-replies";
+import { type FsOp, SPAWN_REPLY } from "@cawco/core/control-replies";
+import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { detach } from "@cawco/core/detach";
 import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
 import type { FleetSkillMeta } from "@cawco/core/fleet";
@@ -278,7 +275,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
   const callAgent = <K extends ControlName>(
     machineId: string,
     method: K,
-    args: unknown[],
+    args: ControlArgs<K>,
     timeoutMs: number,
     harness?: HarnessKind,
     instanceId?: string
@@ -333,7 +330,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
   const readSessionProcess = async <K extends ControlName>(
     row: { id: string; machineId: string },
     method: K,
-    args: unknown[]
+    args: ControlArgs<K>
   ): Promise<Bounded<ControlAnswer<K>>> => {
     const requestId = crypto.randomUUID();
     return asRead(
@@ -359,7 +356,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
   const readAgent = async <K extends ControlName>(
     machineId: string,
     method: K,
-    args: unknown[],
+    args: ControlArgs<K>,
     timeoutMs: number,
     harness?: HarnessKind,
     instanceId?: string
@@ -553,7 +550,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
   const readStoppable = async <K extends ControlName>(
     machineId: string,
     method: K,
-    args: unknown[],
+    args: ControlArgs<K>,
     timeoutMs: number,
     ask: { caller: string; signal?: AbortSignal | undefined }
   ): Promise<Bounded<ControlAnswer<K>> | null> => {

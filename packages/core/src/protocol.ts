@@ -927,6 +927,12 @@ export interface UpdateReport {
  */
 export const UPDATE_CAWCO = "updateCawco";
 
+/** What {@link UPDATE_CAWCO} is asked: the person's command it answers, and the version it names. */
+export interface UpdateAsk {
+  commandId?: string;
+  version?: string;
+}
+
 /**
  * Which of this machine's sessions are mid-turn: what the hub's keep-alive
  * reads before it pings a session, and what a restart of the session keeper

@@ -111,6 +111,25 @@ export const CANVAS_LIMITS = {
 export const CANVAS_SCREEN_OPEN = "canvasScreenOpen";
 export const CANVAS_SCREEN_CLOSE = "canvasScreenClose";
 
+/** What the hub names a canvas by to a screen: its id and name, and where its doc is synced on the page's origin. */
+interface CanvasNamed {
+  id: string;
+  name: string;
+  sync: string;
+}
+
+/** What {@link CANVAS_SCREEN_OPEN} is asked: the canvas, its host page's URL and the hub's token for it. */
+export interface CanvasScreenOpen {
+  canvas: CanvasNamed;
+  token: string;
+  url: string;
+}
+
+/** What {@link CANVAS_SCREEN_CLOSE} is asked: the token its open named. */
+export interface CanvasScreenClose {
+  token: string;
+}
+
 /** The images a screen adds to a canvas (pasted, dropped or picked), by MIME type, with the name a refusal lists. */
 export const CANVAS_IMAGE_TYPES: Readonly<Record<string, string>> = {
   "image/png": "PNG",

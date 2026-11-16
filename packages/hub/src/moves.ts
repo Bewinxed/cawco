@@ -20,7 +20,8 @@
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
-import type { ControlName, ControlReply } from "@cawco/core/control-replies";
+import type { ControlReply } from "@cawco/core/control-replies";
+import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { ArrivingAsk, ParkedAsk } from "@cawco/core/frames";
@@ -88,7 +89,7 @@ export interface MovesDeps {
   readonly call: <K extends ControlName>(
     machineId: string,
     method: K,
-    args: unknown[],
+    args: ControlArgs<K>,
     timeoutMs: number
   ) => Promise<ControlReply<K>>;
   readonly db: DbShape;
@@ -1224,6 +1225,11 @@ export const createMoves = (deps: MovesDeps) => {
           : { progress: undefined };
       }
       case "lfs": {
+        if (!state.snapshot) {
+          throw new Error(
+            "There is no snapshot to fetch large files for: the source had no commit."
+          );
+        }
         const lfs = await deps.call(
           state.targetMachineId,
           CONTROL_MOVE_LFS,

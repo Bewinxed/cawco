@@ -19,6 +19,18 @@ export const PICTURE_VIEW = { width: 640, height: 800 } as const;
  */
 export const ARTIFACT_PICTURE = "artifactPicture";
 
+/** An artifact as a page greets the overlay with it: its id, kind and name, and where its doc syncs on the page's origin. */
+export interface HelloArtifact {
+  artifact: { id: string; kind: string; name: string };
+  sync: string;
+}
+
+/** What {@link ARTIFACT_PICTURE} is asked: the page's URL and the width it is drawn at, and the artifact it shows. */
+export interface PictureAsk extends HelloArtifact {
+  url: string;
+  width: number;
+}
+
 /** How much of a page longer than `PICTURE_LIMITS.maxHeight` its picture drew: `drawn` of `of` CSS px, from the top. */
 export interface PictureCut {
   drawn: number;
