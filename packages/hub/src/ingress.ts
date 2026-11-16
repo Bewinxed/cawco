@@ -67,6 +67,7 @@ import {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { githubTarget, type WaitTarget } from "@cawco/core/wait-targets";
+import { withoutUndefined } from "@cawco/core/without-undefined";
 import { configurePage } from "@cawco/core/words/configure";
 import { cutShort } from "@cawco/core/words/helpers";
 import { routineToolWords } from "@cawco/core/words/routines";
@@ -273,15 +274,6 @@ const globMatches = (pattern: string, source: string): boolean =>
 
 const same = (a: string | null, b: string | null) =>
   a !== null && b !== null && a.toLowerCase() === b.toLowerCase();
-
-/** A tool's optional fields without the ones left out: what a patch leaves alone. */
-const defined = <T extends object>(
-  fields: T
-): { [K in keyof T]?: Exclude<T[K], undefined> } =>
-  // Library gap: `Object.fromEntries` answers `{ [k: string]: V }`, never the keys it is given (https://github.com/microsoft/TypeScript/issues/35745).
-  Object.fromEntries(
-    Object.entries(fields).filter(([, value]) => value !== undefined)
-  ) as { [K in keyof T]?: Exclude<T[K], undefined> };
 
 /**
  * Why a route's regex cannot be one, or nothing. RE2 has no backreferences
@@ -1628,7 +1620,11 @@ export const createIngress = ({
         return Promise.resolve(
           named instanceof ElysiaStatus
             ? named
-            : updateRoute(named, defined({ ...rest, routineId: routine }), me())
+            : updateRoute(
+                named,
+                withoutUndefined({ ...rest, routineId: routine }),
+                me()
+              )
         );
       }),
       EVENT_ROUTE_DELETE_DEFINITION.run(({ id }) => {
@@ -1668,7 +1664,7 @@ export const createIngress = ({
           ? named
           : await updatePoll(
               named,
-              defined({
+              withoutUndefined({
                 args: input.args,
                 intervalS: input.interval_s,
                 itemsPath: input.items_path,

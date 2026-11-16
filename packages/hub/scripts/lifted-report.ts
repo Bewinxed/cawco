@@ -6,7 +6,7 @@
  * column's count, and a migration that has already run.
  */
 import { Database } from "bun:sqlite";
-import type { Lifted, Reading } from "../src/db/lifted-reading";
+import type { Lifted, Reading } from "../src/db/json-reads";
 
 /** The database `script` was named, opened read-only; exits naming the command when none was. */
 export const liftedReport = (script: string) => {

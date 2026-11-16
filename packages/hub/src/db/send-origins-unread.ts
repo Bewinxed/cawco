@@ -10,7 +10,7 @@
  * Each JSON function sits inside a CASE that has proved the body JSON.
  */
 import type { Database } from "bun:sqlite";
-import { type Lifted, logRestrictive, shown } from "./lifted-reading";
+import { type Lifted, logRestrictive, shown } from "./json-reads";
 
 /** A send as 0413 reads it: its origin as stored, and the JSON types of it and of its kind. */
 interface Row {

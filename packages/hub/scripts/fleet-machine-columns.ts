@@ -22,7 +22,7 @@ import { Database } from "bun:sqlite";
 import { isUtf8 } from "node:buffer";
 import { fleetFilesKept, trashRefreshKept } from "../src/db/fleet-files-unread";
 import { fleetRefreshKept } from "../src/db/fleet-refresh-unread";
-import type { Lifted } from "../src/db/lifted-reading";
+import type { Lifted } from "../src/db/json-reads";
 import {
   namedPlatforms,
   osPlatform,

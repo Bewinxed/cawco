@@ -20,7 +20,7 @@
  * so and not counted.
  */
 import { cacheColdKept } from "../src/db/cache-cold-unread";
-import { shown } from "../src/db/lifted-reading";
+import { shown } from "../src/db/json-reads";
 import { waitHistoryKept } from "../src/db/wait-history-unread";
 import { waitsKept } from "../src/db/waits-unread";
 import { workspaceHeadsKept } from "../src/db/workspace-heads-unread";

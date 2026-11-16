@@ -19,8 +19,15 @@
  * (db/json-reads.ts): SQLite may run the right side of an AND first.
  */
 import type { Database } from "bun:sqlite";
-import { listOf, NUMBER, object, oneOf, readsWhole, TEXT } from "./json-reads";
-import { shown } from "./lifted-reading";
+import {
+  listOf,
+  NUMBER,
+  object,
+  oneOf,
+  readsWhole,
+  shown,
+  TEXT,
+} from "./json-reads";
 
 /** The person's comment on a step (core `PlanComment`). */
 const COMMENT = object({ at: TEXT, text: TEXT });

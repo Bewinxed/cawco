@@ -29,11 +29,11 @@ import {
   object,
   oneOf,
   readsWhole,
+  shown,
   TEXT,
   TEXT_OR_NULL,
   TRUE,
 } from "./json-reads";
-import { shown } from "./lifted-reading";
 
 /** An account a line names (core `NamedAccount`). */
 const ACCOUNT = object({

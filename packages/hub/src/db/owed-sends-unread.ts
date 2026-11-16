@@ -42,11 +42,11 @@ import {
   oneOf,
   readsWhole,
   recordOf,
+  shown,
   TEXT,
   TEXT_OR_NULL,
   TRUE,
 } from "./json-reads";
-import { shown } from "./lifted-reading";
 
 /** An object with any keys (`z.record(z.string(), z.unknown())`). */
 const OBJECT = recordOf();

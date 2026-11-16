@@ -20,7 +20,7 @@ import {
   logRestrictive,
   shown,
   typeIn,
-} from "./lifted-reading";
+} from "./json-reads";
 
 /**
  * `blocked` reads whole: an object with `kind` one of what an item is

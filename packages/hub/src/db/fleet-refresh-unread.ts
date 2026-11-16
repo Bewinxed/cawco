@@ -24,8 +24,16 @@
  * (db/json-reads.ts): SQLite may run the right side of an AND first.
  */
 import type { Database } from "bun:sqlite";
-import { NUMBER, object, oneOf, readsWhole, TEXT } from "./json-reads";
-import { type Lifted, type Reading, shown } from "./lifted-reading";
+import {
+  type Lifted,
+  NUMBER,
+  object,
+  oneOf,
+  type Reading,
+  readsWhole,
+  shown,
+  TEXT,
+} from "./json-reads";
 
 /** A last fetch, as `skills.last_refresh` and `plugins.last_refresh` held it (core `FleetRefresh`). */
 const REFRESH = object(

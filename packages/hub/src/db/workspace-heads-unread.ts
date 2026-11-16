@@ -15,8 +15,7 @@
  * (db/json-reads.ts): SQLite may run the right side of an AND first.
  */
 import type { Database } from "bun:sqlite";
-import { object, readsWhole, TEXT } from "./json-reads";
-import { shown } from "./lifted-reading";
+import { object, readsWhole, shown, TEXT } from "./json-reads";
 
 /** A retired workspace's head, as `workspaces.head` held it (core `WorkspaceCut`). */
 const HEAD = object({ branch: TEXT, commit: TEXT }, { carry: TEXT });

@@ -19,7 +19,7 @@ import {
   liftedRows,
   logRestrictive,
   shown,
-} from "./lifted-reading";
+} from "./json-reads";
 
 /** A line's kinds, as an SQL list. */
 const KINDS = ACCOUNT_MOVE_KINDS.map((kind) => `'${kind}'`).join(", ");

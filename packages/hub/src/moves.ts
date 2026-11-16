@@ -67,7 +67,7 @@ import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
-import type { MoveHold, MoveRow } from "./db/moves";
+import type { MoveHold, MoveRow, SettledMove } from "./db/moves";
 import { checkoutOf, type PlaceRow, type ProjectRow } from "./db/projects";
 import type { MoveState } from "./db/stored-types";
 import { bareRepoPath } from "./git-remote";
@@ -395,15 +395,17 @@ export const createMoves = (deps: MovesDeps) => {
   const holds = (instanceId: string): MoveHold | undefined =>
     db.moveHolding(instanceId);
 
-  /** Deletes a started or cancelled job once it has been kept a while. */
-  const forgetLater = (row: MoveRow): void => {
+  /**
+   * Deletes a started or cancelled job once it has been kept a while: settled
+   * by its stage, so a move whose state does not read (migration 0415) goes
+   * too.
+   */
+  const forgetLater = (move: SettledMove): void => {
     deps.lifetime.after(
-      Math.max(0, row.updatedAt.getTime() + SETTLED_KEPT_MS - Date.now()),
+      Math.max(0, move.updatedAt.getTime() + SETTLED_KEPT_MS - Date.now()),
       () => {
-        const now = db.moveRow(row.id);
-        if (now && (now.stage === "started" || now.stage === "cancelled")) {
-          db.deleteMove(row.id);
-          live.delete(row.id);
+        if (db.deleteSettledMove(move.id)) {
+          live.delete(move.id);
           publish();
         }
       }
@@ -1639,6 +1641,13 @@ export const createMoves = (deps: MovesDeps) => {
     }
   };
 
+  /** Lets every settled move go later, by its stage: one whose state does not read too. */
+  const forgetSettled = (): void => {
+    for (const move of db.movesSettled()) {
+      forgetLater(move);
+    }
+  };
+
   /**
    * At the hub's start: every job goes on from its record, its session's
    * row held as its stage says (a move begun before rows were held gets its
@@ -1663,9 +1672,9 @@ export const createMoves = (deps: MovesDeps) => {
       }
     }
     unreadRowsSay();
+    forgetSettled();
     for (const row of db.moveRows()) {
       if (row.stage === "started" || row.stage === "cancelled") {
-        forgetLater(row);
         continue;
       }
       holdRow(row);

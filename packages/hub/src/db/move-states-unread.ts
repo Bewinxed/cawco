@@ -28,11 +28,11 @@ import {
   object,
   oneOf,
   readsWhole,
+  shown,
   TEXT,
   TEXT_OR_NULL,
   TRUE,
 } from "./json-reads";
-import { shown } from "./lifted-reading";
 
 /** A move's step (core `MoveStep`). */
 const STEP = oneOf("approval", "snapshot", "clone", "lfs", "start");

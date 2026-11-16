@@ -44,6 +44,7 @@ import { relaunchOf } from "@cawco/core/relaunch";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { withoutUndefined } from "@cawco/core/without-undefined";
 import { contextWords } from "@cawco/core/words/context";
 import { pauseClock } from "@cawco/core/words/machine-pause";
 import { workWords } from "@cawco/core/words/work";
@@ -1141,17 +1142,6 @@ function resolveDelegate(
   }
 }
 
-/**
- * A request as `POST /api/work-items` reads it, which the start reads as
- * that route has always handed it: a key left undefined is absent, as it
- * was once the request went as JSON.
- */
-const asRouteReadsIt = <T extends object>(request: T): T =>
-  // Library gap: `Object.fromEntries` answers `{ [k: string]: V }`, never the keys it is given (https://github.com/microsoft/TypeScript/issues/35745).
-  Object.fromEntries(
-    Object.entries(request).filter(([, value]) => value !== undefined)
-  ) as T;
-
 const coldRefusals = new Map<string, string>();
 
 /** The cold check waits for Jev's answer when the hub asks it: its 20 s, and the hub's own read. */
@@ -1914,14 +1904,14 @@ export const handoffActions = ({
       }
       // A fresh remote fetch and, on failure, its acknowledged discard take
       // minutes: nothing here times it out.
-      const started = await work.delegate(
-        asRouteReadsIt({
-          ...request,
-          machineId: target?.machineId,
-          parentInstanceId: instanceId,
-          prompt,
-        })
-      );
+      const started = await work.delegate({
+        // As `POST /api/work-items` has always read it: a key left
+        // undefined is absent, as once the request went as JSON.
+        ...withoutUndefined({ ...request, machineId: target?.machineId }),
+        title: request.title,
+        parentInstanceId: instanceId,
+        prompt,
+      });
       if (started instanceof ElysiaStatus) {
         return started;
       }

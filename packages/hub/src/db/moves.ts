@@ -1,6 +1,15 @@
 /** Move rows: a session or workspace on its way to another machine. */
 
-import { and, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
+import type { MoveStage } from "@cawco/core/move";
+import {
+  and,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  notInArray,
+  or,
+} from "drizzle-orm";
 import type { DbCore } from "./core";
 import { moves, projects } from "./schema";
 import type { MoveState } from "./stored-types";
@@ -75,8 +84,20 @@ const moveOf = ({
 /** A move the hub reads as one: its state read whole. */
 const READ = and(isNotNull(moves.learned), isNull(moves.stateUnread));
 
+/** The stages a move has settled in: it started its session, or was cancelled. */
+const SETTLED_STAGES: MoveStage[] = ["started", "cancelled"];
+
 /** A move that has not settled: it still holds its session's row. */
-const UNSETTLED = notInArray(moves.stage, ["started", "cancelled"]);
+const UNSETTLED = notInArray(moves.stage, SETTLED_STAGES);
+
+/** A move that has settled, by its stage column: read whole or not. */
+const SETTLED = inArray(moves.stage, SETTLED_STAGES);
+
+/** A settled move as its removal reads it: by its columns alone, its state read or not. */
+export interface SettledMove {
+  id: string;
+  updatedAt: Date;
+}
 
 /** A move whose state, as a hub before migration 0415 stored it, does not read, while it names the row it holds. */
 interface UnreadMove {
@@ -86,7 +107,8 @@ interface UnreadMove {
 }
 
 export interface MovesDb {
-  readonly deleteMove: (id: string) => void;
+  /** Removes `id` when it has settled (by its stage, its state read or not); whether it did. */
+  readonly deleteSettledMove: (id: string) => boolean;
   readonly insertMove: (
     row: Omit<MoveRow, "createdAt" | "updatedAt">
   ) => MoveRow;
@@ -100,6 +122,8 @@ export interface MovesDb {
   readonly moveRows: () => MoveRow[];
   /** The project moves that name a machine: a Cancel it has not heard, or a step on it or reading from it. */
   readonly moveRowsOn: (machineId: string) => MoveRow[];
+  /** Every move that has settled, by its stage, whether its state reads or not. */
+  readonly movesSettled: () => SettledMove[];
   /** The moves that have not settled whose state does not read, and the session row each names. */
   readonly movesUnread: () => UnreadMove[];
   readonly setProjectMoveDeclined: (id: string, at: Date | null) => void;
@@ -213,9 +237,18 @@ export const movesDb = (core: DbCore): MovesDb => {
         .get();
       return row && moveOf(row)[0];
     },
-    deleteMove: (id) => {
-      db.delete(moves).where(eq(moves.id, id)).run();
-    },
+    deleteSettledMove: (id) =>
+      db
+        .delete(moves)
+        .where(and(eq(moves.id, id), SETTLED))
+        .returning({ id: moves.id })
+        .all().length > 0,
+    movesSettled: () =>
+      db
+        .select({ id: moves.id, updatedAt: moves.updatedAt })
+        .from(moves)
+        .where(SETTLED)
+        .all(),
     setProjectMoveDeclined: (id, at) => {
       db.update(projects)
         .set({ moveDeclinedAt: at })
