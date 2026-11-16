@@ -385,19 +385,19 @@ import type { TailnetServing } from "./tailnet-https";
  *    on a remove. An op without what it needs is refused 422, where it was
  *    taken and failed as the patch applied. A page built for 76 may send
  *    one, so it reloads first.
- *    And a Who decides member is one of three shapes by what it runs as:
+ * 78: a Who decides member is one of three shapes by what it runs as:
  *    an agent (advisor, practice, agent) with its `delegateType`, a member
  *    that runs as none (`delegateType: null`), or one he added whose stored
  *    row doesn't read, with `unread` saying why; editing a member that runs
  *    as nothing is refused 403 `decides-member-runs-nothing`, and one whose
- *    row doesn't read 409 `decides-member-unread`. A page built for 76 reads
+ *    row doesn't read 409 `decides-member-unread`. A page built for 77 reads
  *    a member as one shape and does not know the codes, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 77;
+export const WIRE_PROTOCOL = 78;
 
 /**
  * What a session's stream carries: the changes each frame made to its

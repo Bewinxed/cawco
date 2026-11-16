@@ -6506,7 +6506,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Member"
+                  "$ref": "#/components/schemas/postApiDecidesMembers200"
                 }
               }
             }
@@ -6630,7 +6630,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Member"
+                  "$ref": "#/components/schemas/putApiDecidesMembersById200"
                 }
               }
             }
@@ -6651,6 +6651,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/putApiDecidesMembersById404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiDecidesMembersById 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiDecidesMembersById409"
                 }
               }
             }
@@ -6863,7 +6873,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Member"
+                  "$ref": "#/components/schemas/putApiDecidesMembersByIdPicture200"
                 }
               }
             }
@@ -32803,6 +32813,88 @@
           "recovering"
         ]
       },
+      "AgentMember": {
+        "description": "An agent: Advisor, Common practice, or one he added; it runs as `delegateType`, the fleet delegate type.",
+        "type": "object",
+        "properties": {
+          "builtIn": {
+            "description": "`you`, `caw`, `advisor`, `practice`, `asker`, or the slug of a member he added (a delegate type's name).",
+            "type": "boolean"
+          },
+          "delegateType": {
+            "type": "string"
+          },
+          "hear": {
+            "$ref": "#/components/schemas/AgentMemberHear",
+            "description": "How he hears about its answers; null for You, Caw and The agent, which have none."
+          },
+          "hue": {
+            "description": "One of the eight identity marks (1–8); null for Caw's flock and You.",
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "job": {
+            "description": "One line under the name: what it does with a decision.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pose": {
+            "$ref": "#/components/schemas/AgentMemberPose",
+            "description": "Caw's flock: the pose it wears; null for the rest."
+          },
+          "subject": {
+            "description": "In a sentence: \"Roost iOS sends scope to the advisor\".",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "advisor",
+              "agent",
+              "practice"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "builtIn",
+          "delegateType",
+          "id",
+          "job",
+          "name",
+          "subject",
+          "type"
+        ]
+      },
+      "AgentMemberHear": {
+        "type": "string",
+        "enum": [
+          "each",
+          "later"
+        ]
+      },
+      "AgentMemberPose": {
+        "type": "string",
+        "enum": [
+          "asleep",
+          "chart",
+          "done",
+          "easel",
+          "head",
+          "heart",
+          "idle",
+          "laptop",
+          "ready",
+          "rocket",
+          "sheets",
+          "smiling",
+          "trying",
+          "working"
+        ]
+      },
       "AgentRow": {
         "description": "A machine from the hub's `agents` table — what `GET /api/agents` answers with,\nand what rides alongside the sessions in an `instances` frame.",
         "type": "object",
@@ -41715,16 +41807,16 @@
             "type": "object",
             "properties": {
               "advisor": {
-                "$ref": "#/components/schemas/FleetDecidesAdvisor"
+                "$ref": "#/components/schemas/AgentMemberPose"
               },
               "asker": {
-                "$ref": "#/components/schemas/FleetDecidesAdvisor"
+                "$ref": "#/components/schemas/AgentMemberPose"
               },
               "caw": {
-                "$ref": "#/components/schemas/FleetDecidesAdvisor"
+                "$ref": "#/components/schemas/AgentMemberPose"
               },
               "practice": {
-                "$ref": "#/components/schemas/FleetDecidesAdvisor"
+                "$ref": "#/components/schemas/AgentMemberPose"
               }
             },
             "description": "Caw's chosen pose, and each flock member's; absent: the default pose."
@@ -41744,25 +41836,6 @@
           "members",
           "pictures",
           "routes"
-        ]
-      },
-      "FleetDecidesAdvisor": {
-        "type": "string",
-        "enum": [
-          "asleep",
-          "chart",
-          "done",
-          "easel",
-          "head",
-          "heart",
-          "idle",
-          "laptop",
-          "ready",
-          "rocket",
-          "sheets",
-          "smiling",
-          "trying",
-          "working"
         ]
       },
       "FleetFaultCause": {
@@ -47344,74 +47417,16 @@
       },
       "Member": {
         "description": "One member of Who decides: built in, or one he added.",
-        "type": "object",
-        "properties": {
-          "builtIn": {
-            "description": "`you`, `caw`, `advisor`, `practice`, `asker`, or the slug of a member he added (a delegate type's name).",
-            "type": "boolean"
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AgentMember"
           },
-          "delegateType": {
-            "description": "An agent (built-in Advisor and Common practice included): the fleet delegate type it runs as.",
-            "type": "string"
+          {
+            "$ref": "#/components/schemas/PlainMember"
           },
-          "hear": {
-            "$ref": "#/components/schemas/MemberHear",
-            "description": "How he hears about its answers; null for You, Caw and The agent, which have none."
-          },
-          "hue": {
-            "description": "One of the eight identity marks (1–8); null for Caw's flock and You.",
-            "type": "number"
-          },
-          "id": {
-            "type": "string"
-          },
-          "job": {
-            "description": "One line under the name: what it does with a decision.",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "pose": {
-            "$ref": "#/components/schemas/FleetDecidesAdvisor",
-            "description": "Caw's flock: the pose it wears; null for the rest."
-          },
-          "subject": {
-            "description": "In a sentence: \"Roost iOS sends scope to the advisor\".",
-            "type": "string"
-          },
-          "type": {
-            "$ref": "#/components/schemas/MemberType"
+          {
+            "$ref": "#/components/schemas/UnreadMember"
           }
-        },
-        "required": [
-          "builtIn",
-          "id",
-          "job",
-          "name",
-          "subject",
-          "type"
-        ]
-      },
-      "MemberHear": {
-        "type": "string",
-        "enum": [
-          "each",
-          "later"
-        ]
-      },
-      "MemberType": {
-        "description": "Who decides a kind. The five built in are constants; the rest are rows.",
-        "type": "string",
-        "enum": [
-          "advisor",
-          "agent",
-          "asker",
-          "caw",
-          "channel",
-          "person",
-          "practice",
-          "you"
         ]
       },
       "MemoryDocRow": {
@@ -51555,6 +51570,64 @@
           "answered",
           "outdated",
           "silent"
+        ]
+      },
+      "PlainMember": {
+        "description": "You, Caw, The agent, or a person or channel he added: none runs as a delegate type.",
+        "type": "object",
+        "properties": {
+          "builtIn": {
+            "description": "`you`, `caw`, `advisor`, `practice`, `asker`, or the slug of a member he added (a delegate type's name).",
+            "type": "boolean"
+          },
+          "delegateType": {
+            "type": "null"
+          },
+          "hear": {
+            "$ref": "#/components/schemas/AgentMemberHear",
+            "description": "How he hears about its answers; null for You, Caw and The agent, which have none."
+          },
+          "hue": {
+            "description": "One of the eight identity marks (1–8); null for Caw's flock and You.",
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "job": {
+            "description": "One line under the name: what it does with a decision.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pose": {
+            "$ref": "#/components/schemas/AgentMemberPose",
+            "description": "Caw's flock: the pose it wears; null for the rest."
+          },
+          "subject": {
+            "description": "In a sentence: \"Roost iOS sends scope to the advisor\".",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "asker",
+              "caw",
+              "channel",
+              "person",
+              "you"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "builtIn",
+          "delegateType",
+          "id",
+          "job",
+          "name",
+          "subject",
+          "type"
         ]
       },
       "PlanChange": {
@@ -61693,6 +61766,66 @@
           "ok",
           "restorableForMs",
           "restore"
+        ]
+      },
+      "UnreadMember": {
+        "description": "A member he added whose stored row doesn't read: its type and its\ndelegate type disagree (an agent with none, a person or channel with\none). Kept, runs as nothing, and is never reached; `unread` says why, in\nthe words its card shows.",
+        "type": "object",
+        "properties": {
+          "builtIn": {
+            "description": "`you`, `caw`, `advisor`, `practice`, `asker`, or the slug of a member he added (a delegate type's name).",
+            "type": "boolean"
+          },
+          "delegateType": {
+            "type": "null"
+          },
+          "hear": {
+            "$ref": "#/components/schemas/AgentMemberHear",
+            "description": "How he hears about its answers; null for You, Caw and The agent, which have none."
+          },
+          "hue": {
+            "description": "One of the eight identity marks (1–8); null for Caw's flock and You.",
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "job": {
+            "description": "One line under the name: what it does with a decision.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pose": {
+            "$ref": "#/components/schemas/AgentMemberPose",
+            "description": "Caw's flock: the pose it wears; null for the rest."
+          },
+          "subject": {
+            "description": "In a sentence: \"Roost iOS sends scope to the advisor\".",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "agent",
+              "channel",
+              "person"
+            ],
+            "type": "string"
+          },
+          "unread": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "builtIn",
+          "delegateType",
+          "id",
+          "job",
+          "name",
+          "subject",
+          "type",
+          "unread"
         ]
       },
       "UpdateReport": {
@@ -82733,16 +82866,16 @@
             "type": "object",
             "properties": {
               "advisor": {
-                "$ref": "#/components/schemas/FleetDecidesAdvisor"
+                "$ref": "#/components/schemas/AgentMemberPose"
               },
               "asker": {
-                "$ref": "#/components/schemas/FleetDecidesAdvisor"
+                "$ref": "#/components/schemas/AgentMemberPose"
               },
               "caw": {
-                "$ref": "#/components/schemas/FleetDecidesAdvisor"
+                "$ref": "#/components/schemas/AgentMemberPose"
               },
               "practice": {
-                "$ref": "#/components/schemas/FleetDecidesAdvisor"
+                "$ref": "#/components/schemas/AgentMemberPose"
               }
             },
             "description": "Caw's chosen pose, and each flock member's; absent: the default pose."
@@ -127769,6 +127902,19 @@
               "title",
               "type"
             ]
+          }
+        ]
+      },
+      "postApiDecidesMembers200": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AgentMember"
+          },
+          {
+            "$ref": "#/components/schemas/PlainMember"
+          },
+          {
+            "$ref": "#/components/schemas/UnreadMember"
           }
         ]
       },
@@ -208234,6 +208380,19 @@
           }
         ]
       },
+      "putApiDecidesMembersById200": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AgentMember"
+          },
+          {
+            "$ref": "#/components/schemas/PlainMember"
+          },
+          {
+            "$ref": "#/components/schemas/UnreadMember"
+          }
+        ]
+      },
       "putApiDecidesMembersById403": {
         "anyOf": [
           {
@@ -208307,6 +208466,42 @@
               "title",
               "type"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "decides-member-runs-nothing"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  403
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
           }
         ]
       },
@@ -208329,6 +208524,42 @@
             "type": "number",
             "enum": [
               404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "putApiDecidesMembersById409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "decides-member-unread"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
             ]
           },
           "title": {
@@ -208515,6 +208746,19 @@
               "title",
               "type"
             ]
+          }
+        ]
+      },
+      "putApiDecidesMembersByIdPicture200": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AgentMember"
+          },
+          {
+            "$ref": "#/components/schemas/PlainMember"
+          },
+          {
+            "$ref": "#/components/schemas/UnreadMember"
           }
         ]
       },

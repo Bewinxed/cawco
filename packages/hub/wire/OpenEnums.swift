@@ -287,6 +287,118 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/AgentMemberHear`.
+    public enum AgentMemberHear: OpenEnum {
+        case each
+        case later
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "each": self = .each
+            case "later": self = .later
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .each: "each"
+            case .later: "later"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.each, .later]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/AgentMemberPose`.
+    public enum AgentMemberPose: OpenEnum {
+        case asleep
+        case chart
+        case done
+        case easel
+        case head
+        case heart
+        case idle
+        case laptop
+        case ready
+        case rocket
+        case sheets
+        case smiling
+        case trying
+        case working
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "asleep": self = .asleep
+            case "chart": self = .chart
+            case "done": self = .done
+            case "easel": self = .easel
+            case "head": self = .head
+            case "heart": self = .heart
+            case "idle": self = .idle
+            case "laptop": self = .laptop
+            case "ready": self = .ready
+            case "rocket": self = .rocket
+            case "sheets": self = .sheets
+            case "smiling": self = .smiling
+            case "trying": self = .trying
+            case "working": self = .working
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .asleep: "asleep"
+            case .chart: "chart"
+            case .done: "done"
+            case .easel: "easel"
+            case .head: "head"
+            case .heart: "heart"
+            case .idle: "idle"
+            case .laptop: "laptop"
+            case .ready: "ready"
+            case .rocket: "rocket"
+            case .sheets: "sheets"
+            case .smiling: "smiling"
+            case .trying: "trying"
+            case .working: "working"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.asleep, .chart, .done, .easel, .head, .heart, .idle, .laptop, .ready, .rocket, .sheets, .smiling, .trying, .working]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/AgentRowAuth`.
     public enum AgentRowAuth: OpenEnum {
         case authenticated
@@ -3420,80 +3532,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/FleetDecidesAdvisor`.
-    public enum FleetDecidesAdvisor: OpenEnum {
-        case asleep
-        case chart
-        case done
-        case easel
-        case head
-        case heart
-        case idle
-        case laptop
-        case ready
-        case rocket
-        case sheets
-        case smiling
-        case trying
-        case working
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "asleep": self = .asleep
-            case "chart": self = .chart
-            case "done": self = .done
-            case "easel": self = .easel
-            case "head": self = .head
-            case "heart": self = .heart
-            case "idle": self = .idle
-            case "laptop": self = .laptop
-            case "ready": self = .ready
-            case "rocket": self = .rocket
-            case "sheets": self = .sheets
-            case "smiling": self = .smiling
-            case "trying": self = .trying
-            case "working": self = .working
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .asleep: "asleep"
-            case .chart: "chart"
-            case .done: "done"
-            case .easel: "easel"
-            case .head: "head"
-            case .heart: "heart"
-            case .idle: "idle"
-            case .laptop: "laptop"
-            case .ready: "ready"
-            case .rocket: "rocket"
-            case .sheets: "sheets"
-            case .smiling: "smiling"
-            case .trying: "trying"
-            case .working: "working"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.asleep, .chart, .done, .easel, .head, .heart, .idle, .laptop, .ready, .rocket, .sheets, .smiling, .trying, .working]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/FleetFaultCause`.
     public enum FleetFaultCause: OpenEnum {
         case absent
@@ -5542,100 +5580,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.none, .tcp, .udpTcp]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/MemberHear`.
-    public enum MemberHear: OpenEnum {
-        case each
-        case later
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "each": self = .each
-            case "later": self = .later
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .each: "each"
-            case .later: "later"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.each, .later]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/MemberType`.
-    public enum MemberType: OpenEnum {
-        case advisor
-        case agent
-        case asker
-        case caw
-        case channel
-        case person
-        case practice
-        case you
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "advisor": self = .advisor
-            case "agent": self = .agent
-            case "asker": self = .asker
-            case "caw": self = .caw
-            case "channel": self = .channel
-            case "person": self = .person
-            case "practice": self = .practice
-            case "you": self = .you
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .advisor: "advisor"
-            case .agent: "agent"
-            case .asker: "asker"
-            case .caw: "caw"
-            case .channel: "channel"
-            case .person: "person"
-            case .practice: "practice"
-            case .you: "you"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.advisor, .agent, .asker, .caw, .channel, .person, .practice, .you]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
