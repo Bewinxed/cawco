@@ -124,7 +124,7 @@ export type SessionEffort = EffortLevel | typeof EFFORT_NONE;
 
 /** Whether a stored or wire value is one of the {@link EFFORT_LEVELS}. */
 export const isEffortLevel = (value: unknown): value is EffortLevel =>
-  EFFORT_LEVELS.includes(value as EffortLevel);
+  EFFORT_LEVELS.some((level) => level === value);
 
 /**
  * The `system` origin name of the message a session went on from in a fresh

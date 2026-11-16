@@ -23,7 +23,7 @@ export type HarnessConfigKind = (typeof HARNESS_CONFIG_KINDS)[number];
 export const isHarnessConfigKind = (
   value: string
 ): value is HarnessConfigKind =>
-  (HARNESS_CONFIG_KINDS as readonly string[]).includes(value);
+  HARNESS_CONFIG_KINDS.some((kind) => kind === value);
 
 /**
  * One row. A `claudeSettings` row carries `settings`, merged into its
@@ -80,9 +80,7 @@ export const npmPackageOf = (
   spec: string
 ): { name: string; version: string } | undefined => {
   const match = NPM_PACKAGE.exec(spec.trim());
-  return match
-    ? { name: match[1] as string, version: match[2] as string }
-    : undefined;
+  return match ? { name: match[1], version: match[2] } : undefined;
 };
 
 /** What a `claudeSettings` row's settings may not be, in a sentence, or nothing. */

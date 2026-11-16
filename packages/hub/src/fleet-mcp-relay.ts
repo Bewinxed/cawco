@@ -7,6 +7,7 @@ import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
+import * as v from "valibot";
 import { z } from "zod";
 
 /**
@@ -54,12 +55,20 @@ const BACKOFF_FIRST_MS = 1000;
 const BACKOFF_MAX_MS = 60_000;
 
 /** Each list method, and the key its result carries the items under. */
-const LIST_METHODS: Record<string, string> = {
+const LIST_METHODS = {
   "tools/list": "tools",
   "prompts/list": "prompts",
   "resources/list": "resources",
   "resources/templates/list": "resourceTemplates",
-};
+} satisfies Record<string, string>;
+type ListMethod = keyof typeof LIST_METHODS;
+
+/** Whether `method` is one of the lists the relay keeps. */
+const isListMethod = (method: string): method is ListMethod =>
+  Object.hasOwn(LIST_METHODS, method);
+
+/** What an upstream's `initialize` result offers, by area (tools, prompts, resources). */
+const Offers = v.object({ capabilities: v.record(v.string(), v.unknown()) });
 /** Each list-changed notification, and the lists it makes stale. */
 const CHANGED: Record<string, string[]> = {
   "notifications/tools/list_changed": ["tools/list"],
@@ -414,13 +423,13 @@ export class FleetMcpRelay {
     name: string,
     state: ServerState,
     upstream: Upstream,
-    method: string
+    method: ListMethod
   ): Promise<Listed> {
     const kept = state.lists.get(method);
     if (kept && Date.now() - kept.at < LISTING_TTL_MS) {
       return kept.listed;
     }
-    const key = LIST_METHODS[method] as string;
+    const key = LIST_METHODS[method];
     const listed = this.#fetchList(name, state, upstream, method).then(
       (answer) => {
         if ("items" in answer) {
@@ -454,10 +463,10 @@ export class FleetMcpRelay {
     name: string,
     state: ServerState,
     upstream: Upstream,
-    method: string,
+    method: ListMethod,
     again = false
   ): Promise<Listed> {
-    const key = LIST_METHODS[method] as string;
+    const key = LIST_METHODS[method];
     const lister = await this.#lister(name, state, upstream);
     const items: unknown[] = [];
     let cursor: unknown;
@@ -688,7 +697,7 @@ export class FleetMcpRelay {
         error: { code: -32_601, message: "Method not found: server/discover" },
       });
     }
-    if (method && LIST_METHODS[method] && single.params?.cursor === undefined) {
+    if (method && isListMethod(method) && single.params?.cursor === undefined) {
       return await this.#answerList(name, state, upstream, method, id);
     }
     return undefined;
@@ -699,15 +708,15 @@ export class FleetMcpRelay {
     name: string,
     state: ServerState,
     upstream: Upstream,
-    method: string,
+    method: ListMethod,
     id: JsonRpcMessage["id"]
   ): Promise<Response> {
     let listed: Listed;
     try {
       const lister = await this.#lister(name, state, upstream);
-      const offered = (
-        lister.result.capabilities as Record<string, unknown> | undefined
-      )?.[method.split("/")[0] as string];
+      const offers = v.safeParse(Offers, lister.result);
+      const offered =
+        offers.success && offers.output.capabilities[method.split("/")[0]];
       if (!offered) {
         return rpcAnswer(id, {
           error: { code: -32_601, message: `Method not found: ${method}` },
@@ -720,7 +729,7 @@ export class FleetMcpRelay {
     return "error" in listed
       ? rpcAnswer(id, { error: listed.error })
       : rpcAnswer(id, {
-          result: { [LIST_METHODS[method] as string]: listed.items },
+          result: { [LIST_METHODS[method]]: listed.items },
         });
   }
 

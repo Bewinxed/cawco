@@ -174,8 +174,9 @@ export const accountPlacementRoutes = ({
           const running = new Set(
             db
               .listInstances()
-              .filter((row) => row.status === "running" && row.accountId)
-              .map((row) => row.accountId as string)
+              .flatMap((row) =>
+                row.status === "running" && row.accountId ? [row.accountId] : []
+              )
           );
           const forecasts = accountForecasts(
             accounts,

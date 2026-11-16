@@ -12,7 +12,8 @@ import { ago, count, lines, listed } from "./words";
 export const machinesUpdatedWords = (updated: {
   found: { channel?: string; notes?: string; version: string };
   updates?: (
-    { machine: string; report: unknown } | { error: string; machine: string }
+    | { machine: string; report: UpdateReport }
+    | { error: string; machine: string }
   )[];
 }): string =>
   lines(
@@ -23,7 +24,7 @@ export const machinesUpdatedWords = (updated: {
           if ("error" in one) {
             return `- ${one.machine}: not installed, ${one.error}`;
           }
-          const report = one.report as UpdateReport;
+          const { report } = one;
           return `- ${one.machine}: ${report.installed ? "installed" : "not installed"}${report.restarted.length > 0 ? `, restarted ${listed(report.restarted)}` : ""}${report.skipped ? `; ${report.skipped}` : ""}`;
         })
   );

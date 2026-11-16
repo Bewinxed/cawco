@@ -3,6 +3,7 @@
  */
 
 import { MEMORY_ROLES } from "@cawco/core/fleet";
+import { HARNESSES } from "@cawco/core/harness/kinds";
 import {
   RULE_TEMPLATES,
   type Rule,
@@ -40,7 +41,7 @@ export const ruleBody = t.Object({
     machineId: t.Optional(t.String()),
     projectId: t.Optional(t.String()),
     areaId: t.Optional(t.String()),
-    harness: t.Optional(t.String()),
+    harness: t.Optional(t.UnionEnum(HARNESSES)),
     model: t.Optional(t.String()),
     role: t.Optional(t.UnionEnum(MEMORY_ROLES)),
     delegateType: t.Optional(t.String()),
@@ -100,7 +101,7 @@ export const ruleCalls = ({
     templates: RULE_TEMPLATES,
   }),
   create: (body: Static<typeof ruleBody>) => {
-    const draft = body as unknown as RuleDraft;
+    const draft: RuleDraft = body;
     const invalid = invalidRule(draft) ?? misplacedRule(db, draft);
     if (invalid) {
       return invalid;
@@ -116,7 +117,7 @@ export const ruleCalls = ({
     return rule;
   },
   update: (id: string, body: Static<typeof ruleBody>) => {
-    const draft = body as unknown as RuleDraft;
+    const draft: RuleDraft = body;
     const invalid = invalidRule(draft);
     if (invalid) {
       return invalid;

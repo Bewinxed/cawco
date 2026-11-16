@@ -37,6 +37,7 @@ import type {
   FleetMcpConfig,
   FleetMcpServer,
 } from "./fleet";
+import { isRecord } from "./is-record";
 import { isSecretConfigName, looksSecret } from "./secret-shapes";
 import type {
   McpHttpServerConfig,
@@ -55,7 +56,8 @@ const isSecretSet = (value: unknown): value is SecretSet =>
   typeof value === "object" &&
   value !== null &&
   !Array.isArray(value) &&
-  (value as { secret?: unknown }).secret === "set" &&
+  "secret" in value &&
+  value.secret === "set" &&
   Object.keys(value).length === 1;
 
 /** A server's config as every read but a machine's sync says it. */
@@ -208,7 +210,7 @@ const allSet = (record: Record<string, unknown>): Record<string, SecretSet> =>
 
 /** A config as a read says it: every secret as set, none of its value. */
 export const maskMcpConfig = (config: FleetMcpConfig): FleetMcpConfigView => {
-  if ("url" in config && typeof config.url === "string") {
+  if (config.type === "http" || config.type === "sse") {
     const { headers, url, ...rest } = config;
     const parts = splitUrl(url);
     return {
@@ -218,7 +220,7 @@ export const maskMcpConfig = (config: FleetMcpConfig): FleetMcpConfigView => {
       ...(hasSecretParts(parts) ? { urlSecret: SECRET_SET } : {}),
     };
   }
-  const { env, ...rest } = config as McpStdioServerConfig;
+  const { env, ...rest } = config;
   return { ...rest, ...(env ? { env: allSet(env) } : {}) };
 };
 
@@ -291,9 +293,7 @@ export type KeptMcpSecrets =
   | { ok: false; problem: string };
 
 const mapOf = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  isRecord(value) ? value : undefined;
 
 /** The map a write's secrets are in: a remote server's headers, else a command's env. */
 const secretFieldOf = (sent: Record<string, unknown>): "env" | "headers" =>
@@ -363,7 +363,7 @@ const withField = (
 /** Whether what a server holds goes along with a write: only to where it was held for. */
 const carriesHeld = (
   sentUrl: string | undefined,
-  held: Record<string, unknown> | undefined
+  held: FleetMcpConfig | undefined
 ): boolean => {
   if (held === undefined) {
     return false;
@@ -371,9 +371,26 @@ const carriesHeld = (
   if (sentUrl === undefined) {
     return true;
   }
-  return (
-    typeof held.url === "string" && originOf(sentUrl) === originOf(held.url)
-  );
+  const heldUrl = urlOf(held);
+  return heldUrl !== undefined && originOf(sentUrl) === originOf(heldUrl);
+};
+
+/** A remote server's url; none for a command. */
+const urlOf = (held: FleetMcpConfig | undefined): string | undefined =>
+  held?.type === "http" || held?.type === "sse" ? held.url : undefined;
+
+/** The secrets map `field` names in what a server holds: a remote server's headers, a command's env. */
+const heldSecrets = (
+  held: FleetMcpConfig | undefined,
+  field: "env" | "headers"
+): Record<string, string> | undefined => {
+  if (held === undefined) {
+    return undefined;
+  }
+  if (held.type === "http" || held.type === "sse") {
+    return field === "headers" ? held.headers : undefined;
+  }
+  return field === "env" ? held.env : undefined;
 };
 
 /**
@@ -391,15 +408,14 @@ export const mergeMcpSecrets = (
     notText: (field: string, key: string) => string;
   }
 ): KeptMcpSecrets => {
-  const heldRecord = held as Record<string, unknown> | undefined;
   const sentUrl = typeof sent.url === "string" ? sent.url : undefined;
-  const carries = carriesHeld(sentUrl, heldRecord);
+  const carries = carriesHeld(sentUrl, held);
   const out: Record<string, unknown> = { ...sent };
   const { field, named, writes } = namesOf(sent);
   const { urlSecret } = out;
   // The other kind's secrets map is no field of this config: never stored.
   delete out[field === "headers" ? "env" : "headers"];
-  const heldKeys = Object.keys(mapOf(heldRecord?.[field]) ?? {});
+  const heldKeys = Object.keys(heldSecrets(held, field) ?? {});
   if (!carries && sentUrl !== undefined) {
     // Another host receives none of the old secrets: a key not named anew
     // would be lost without a word, so the write is refused.
@@ -407,7 +423,7 @@ export const mergeMcpSecrets = (
       const value = named?.[key];
       return value === undefined || isSecretSet(value) || value === "";
     });
-    const heldUrl = heldRecord?.url;
+    const heldUrl = urlOf(held);
     if (
       typeof heldUrl === "string" &&
       urlSecret !== null &&
@@ -422,7 +438,7 @@ export const mergeMcpSecrets = (
   }
   if (writes) {
     const applied = applyNamed(
-      (carries ? mapOf(heldRecord?.[field]) : undefined) ?? {},
+      (carries ? heldSecrets(held, field) : undefined) ?? {},
       named ?? {},
       (value) => value
     );
@@ -435,7 +451,7 @@ export const mergeMcpSecrets = (
     withField(out, field, applied.values);
   }
   const { urlSecret: _cut, ...rest } = out;
-  const heldUrl = heldRecord?.url;
+  const heldUrl = urlOf(held);
   if (
     sentUrl !== undefined &&
     urlSecret !== null &&

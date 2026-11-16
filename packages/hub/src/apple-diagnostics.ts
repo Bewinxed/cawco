@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { Elysia, problem, t } from "elysia";
+import * as v from "valibot";
 import { z } from "zod";
 import { DB_PATH } from "./config";
 import { hidden } from "./hidden";
@@ -26,8 +27,6 @@ const KINDS = {
   crashDiagnostics: "crash",
   cpuExceptionDiagnostics: "cpu",
 } as const;
-
-type Kind = (typeof KINDS)[keyof typeof KINDS];
 
 const StoredSchema = z.object({
   appVersion: z.string(),
@@ -59,20 +58,46 @@ interface Frame {
   subFrames?: Frame[];
 }
 
+/** One frame of MetricKit's call-stack tree, with its callees under it. */
+const FrameSchema: v.GenericSchema<Frame> = v.looseObject({
+  address: v.optional(v.number()),
+  binaryName: v.optional(v.string()),
+  binaryUUID: v.optional(v.string()),
+  offsetIntoBinaryTextSegment: v.optional(v.number()),
+  sampleCount: v.optional(v.number()),
+  subFrames: v.optional(v.array(v.lazy(() => FrameSchema))),
+});
+
+/** The part of a diagnostic its stack text reads: each thread's frames. */
+const StackTreeSchema = v.looseObject({
+  callStackTree: v.optional(
+    v.looseObject({
+      callStacks: v.optional(
+        v.array(
+          v.looseObject({
+            threadAttributed: v.optional(v.boolean()),
+            callStackRootFrames: v.optional(v.array(FrameSchema)),
+          })
+        )
+      ),
+    })
+  ),
+});
+
+/** The part of a diagnostic its summary reads: MetricKit's metadata. */
+const MetaDataSchema = v.looseObject({
+  diagnosticMetaData: v.optional(v.record(v.string(), v.unknown())),
+});
+
 /**
  * MetricKit's call-stack tree as text: each thread, then its frames down
  * their callers, binary name and offset (what `atos` and xcsym resolve),
  * with the address, the image's UUID and how many samples saw it.
  */
 function stackText(diagnostic: Record<string, unknown>): string {
-  const tree = diagnostic.callStackTree as
-    | {
-        callStacks?: {
-          threadAttributed?: boolean;
-          callStackRootFrames?: Frame[];
-        }[];
-      }
-    | undefined;
+  // A tree MetricKit did not write as its documented shape has no stacks to show.
+  const read = v.safeParse(StackTreeSchema, diagnostic);
+  const tree = read.success ? read.output.callStackTree : undefined;
   const lines: string[] = [];
   const walk = (frame: Frame, depth: number) => {
     const offset = frame.offsetIntoBinaryTextSegment ?? 0;
@@ -95,7 +120,8 @@ function stackText(diagnostic: Record<string, unknown>): string {
 }
 
 const summary = ({ diagnostic, ...rest }: Stored) => {
-  const meta = (diagnostic.diagnosticMetaData ?? {}) as Record<string, unknown>;
+  const read = v.safeParse(MetaDataSchema, diagnostic);
+  const meta = (read.success && read.output.diagnosticMetaData) || {};
   return {
     ...rest,
     hangDuration: meta.hangDuration ?? null,
@@ -147,31 +173,29 @@ const dated = (value: unknown): string | null =>
 /** One record per diagnostic in a payload, named by its own content's hash. */
 function recordsOf(upload: Upload): Stored[] {
   const receivedAt = Date.now();
-  return (Object.entries(KINDS) as [keyof typeof KINDS, Kind][]).flatMap(
-    ([key, kind]) => {
-      const list = upload.payload[key];
-      return (Array.isArray(list) ? list : [])
-        .filter(
-          (each): each is Record<string, unknown> =>
-            each !== null && typeof each === "object"
-        )
-        .map((diagnostic) => ({
-          id: createHash("sha256")
-            .update(JSON.stringify(diagnostic))
-            .digest("hex")
-            .slice(0, 16),
-          kind,
-          appVersion: upload.appVersion,
-          build: upload.build,
-          os: upload.os,
-          device: upload.device ?? null,
-          receivedAt,
-          from: dated(upload.payload.timeStampBegin),
-          to: dated(upload.payload.timeStampEnd),
-          diagnostic,
-        }));
-    }
-  );
+  return Object.entries(KINDS).flatMap(([key, kind]) => {
+    const list = upload.payload[key];
+    return (Array.isArray(list) ? list : [])
+      .filter(
+        (each): each is Record<string, unknown> =>
+          each !== null && typeof each === "object"
+      )
+      .map((diagnostic) => ({
+        id: createHash("sha256")
+          .update(JSON.stringify(diagnostic))
+          .digest("hex")
+          .slice(0, 16),
+        kind,
+        appVersion: upload.appVersion,
+        build: upload.build,
+        os: upload.os,
+        device: upload.device ?? null,
+        receivedAt,
+        from: dated(upload.payload.timeStampBegin),
+        to: dated(upload.payload.timeStampEnd),
+        diagnostic,
+      }));
+  });
 }
 
 export const appleDiagnosticsRoutes = () =>
@@ -233,14 +257,16 @@ export const appleDiagnosticsRoutes = () =>
             detail: "No such diagnostic.",
           });
         }
-        const file = Bun.file(join(DIR, `${params.id}.json`));
-        if (!(await file.exists())) {
+        const record = await readRecord(
+          join(DIR, `${params.id}.json`),
+          StoredSchema
+        );
+        if (!record) {
           return problem(404, {
             code: "no-such-diagnostic",
             detail: "No such diagnostic.",
           });
         }
-        const record = (await file.json()) as Stored;
         const stack = stackText(record.diagnostic);
         if (query.format === "text") {
           const head = `${record.kind} · CawCo ${record.appVersion} (${record.build}) · ${record.os}${record.device ? ` · ${record.device}` : ""}`;

@@ -1,7 +1,6 @@
 /**
  * The delegate-types store's routes (its table is db/delegate-types.ts).
  */
-import type { DelegateType } from "@cawco/core/delegate-types";
 import { delegateTypeProblem } from "@cawco/core/delegate-types";
 import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import { delegateTypesWords } from "@cawco/core/words/delegate-types";
@@ -22,7 +21,7 @@ export const delegateTypeCalls = ({
 }: Pick<HubContext, "db" | "delegateTypes">) => ({
   list: () => ({ types: delegateTypes.list() }),
   put: (name: string, body: DelegateTypeBody) => {
-    const draft = { ...(body as Partial<DelegateType>), name };
+    const draft = { ...body, name };
     const misfit = delegateTypeProblem(draft);
     if (misfit) {
       return problem(400, {
@@ -39,7 +38,7 @@ export const delegateTypeCalls = ({
         detail: delegateTypesWords.noAccount(draft.account),
       });
     }
-    return delegateTypes.put(draft as DelegateType);
+    return delegateTypes.put(draft);
   },
   remove: (name: string) => {
     const restore = db.trash.put(

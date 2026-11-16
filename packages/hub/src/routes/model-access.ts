@@ -5,10 +5,14 @@
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth/pkce";
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { Elysia, problem, t } from "elysia";
+import * as v from "valibot";
 import type { HubContext } from "../hub-context";
 import { jevAccess } from "../jev";
 
 import { suggest } from "../suggest";
+
+/** OpenRouter's answer to a PKCE code exchange: the account's key. */
+const OpenRouterKey = v.object({ key: v.string() });
 
 export const modelAccessRoutes = ({
   db,
@@ -150,8 +154,14 @@ export const modelAccessRoutes = ({
               detail: `OpenRouter answered ${response.status}: ${(await response.text()) || response.statusText}`,
             });
           }
-          const { key } = (await response.json()) as { key: string };
-          db.setOpenRouterConnection(key);
+          const exchanged = v.safeParse(OpenRouterKey, await response.json());
+          if (!exchanged.success) {
+            return problem(502, {
+              code: "openrouter-exchange-failed",
+              detail: "OpenRouter answered without a key.",
+            });
+          }
+          db.setOpenRouterConnection(exchanged.output.key);
           openrouterVerifier = undefined;
           return { ok: true };
         }

@@ -14,6 +14,7 @@ import {
   type CallToolResult,
   CancelledNotificationSchema,
   ListToolsRequestSchema,
+  type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ElysiaStatus } from "elysia";
 import { problemResponse } from "elysia/error";
@@ -167,17 +168,24 @@ export const listedFor =
     ...entry
   }: {
     description: string;
-    inputSchema: unknown;
+    inputSchema: Record<string, unknown>;
     name: string;
-  }) => ({
-    name,
-    description,
-    inputSchema: inputSchema as { type: "object" },
-    ...("annotations" in entry ? { annotations: entry.annotations } : {}),
-    ...(loadsUpfront(name, searcher(row), filesTasks(row))
-      ? { _meta: { "anthropic/alwaysLoad": true } }
-      : {}),
-  });
+  }) => {
+    // MCP lists a tool's input as an object schema; every schema listed here is one (zod's z.object, or a connection's own listing).
+    const objectSchema: Tool["inputSchema"] = {
+      ...inputSchema,
+      type: "object",
+    };
+    return {
+      name,
+      description,
+      inputSchema: objectSchema,
+      ...("annotations" in entry ? { annotations: entry.annotations } : {}),
+      ...(loadsUpfront(name, searcher(row), filesTasks(row))
+        ? { _meta: { "anthropic/alwaysLoad": true } }
+        : {}),
+    };
+  };
 
 /**
  * `response` with its `body` relayed as it is read, `ended` run once it
@@ -638,8 +646,11 @@ export function createDelegationMcp(options: {
       return undefined;
     }
     const credential =
-      typeof context === "object" && context !== null && !Array.isArray(context)
-        ? (context as { credential?: unknown }).credential
+      typeof context === "object" &&
+      context !== null &&
+      !Array.isArray(context) &&
+      "credential" in context
+        ? context.credential
         : undefined;
     if (typeof credential !== "string" || !credential) {
       throw new Error("__cawco carries no session credential");
@@ -667,8 +678,11 @@ export function createDelegationMcp(options: {
     }
     const context = args.__cawco;
     const stamped =
-      typeof context === "object" && context !== null && !Array.isArray(context)
-        ? (context as { call?: unknown }).call
+      typeof context === "object" &&
+      context !== null &&
+      !Array.isArray(context) &&
+      "call" in context
+        ? context.call
         : undefined;
     return typeof stamped === "string" && stamped ? stamped : undefined;
   };
@@ -677,7 +691,9 @@ export function createDelegationMcp(options: {
    * `value` with every token shaped like a session credential that hashes to
    * one the hub holds replaced by {@link REDACTED_CREDENTIAL}, at any depth.
    */
-  const scrubCredentials = <T>(value: T): { value: T; redacted: number } => {
+  const scrubCredentials = (
+    value: Record<string, unknown>
+  ): { value: Record<string, unknown>; redacted: number } => {
     let redacted = 0;
     const scrub = (node: unknown): unknown => {
       if (typeof node === "string") {
@@ -699,7 +715,9 @@ export function createDelegationMcp(options: {
       }
       return node;
     };
-    const scrubbed = scrub(value) as T;
+    const scrubbed = Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, scrub(child)])
+    );
     return { value: scrubbed, redacted };
   };
 
@@ -1284,7 +1302,8 @@ export function createDelegationMcp(options: {
       (message) =>
         typeof message === "object" &&
         message !== null &&
-        (message as { method?: unknown }).method === "initialize"
+        "method" in message &&
+        message.method === "initialize"
     );
 
   /**

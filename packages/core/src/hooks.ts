@@ -17,6 +17,7 @@
 import { USER_LAYER_SHELL, userLayerLabel } from "./claude-dirs";
 import { type FleetPlacement, placementProblem } from "./fleet-placement";
 import type { HarnessKind } from "./harness/kinds";
+import { isRecord } from "./is-record";
 import { accountsWords } from "./words/accounts";
 
 /** Every lifecycle point a hook can attach to. */
@@ -461,7 +462,7 @@ interface HookToolName {
  * `edits` kept as they are), `ls`, `find` and `grep`. A tool not named here
  * (an MCP tool, a plugin's or an extension's) is matched by its own name.
  */
-const HOOK_TOOL_NAMES = {
+const HOOK_TOOL_NAMES: Record<HookHarness, Record<string, HookToolName>> = {
   opencode: {
     shell: { name: "Bash" },
     read: { name: "Read", input: { path: "file_path" } },
@@ -493,7 +494,7 @@ const HOOK_TOOL_NAMES = {
     find: { name: "Glob" },
     grep: { name: "Grep" },
   },
-} as const satisfies Record<HookHarness, Record<string, HookToolName>>;
+};
 
 /** A harness's tool call as a fleet hook reads it: Claude Code's name for the tool, and its input with Claude Code's keys. */
 export const hookToolCall = (
@@ -501,9 +502,7 @@ export const hookToolCall = (
   tool: string,
   input: unknown
 ): { input: unknown; name: string } => {
-  const known: HookToolName | undefined = (
-    HOOK_TOOL_NAMES[harness] as Record<string, HookToolName>
-  )[tool];
+  const known: HookToolName | undefined = HOOK_TOOL_NAMES[harness][tool];
   if (!known) {
     return { name: tool, input };
   }
@@ -529,8 +528,7 @@ export const hookToolInputBack = (
   tool: string,
   input: Record<string, unknown>
 ): Record<string, unknown> => {
-  const keys = (HOOK_TOOL_NAMES[harness] as Record<string, HookToolName>)[tool]
-    ?.input;
+  const keys: HookToolName["input"] = HOOK_TOOL_NAMES[harness][tool]?.input;
   if (!keys) {
     return input;
   }
@@ -649,18 +647,17 @@ export const hookVerdict = (
       ? { context: out }
       : {};
   }
-  const specific = (parsed.hookSpecificOutput ?? {}) as Record<string, unknown>;
+  const specific = isRecord(parsed.hookSpecificOutput)
+    ? parsed.hookSpecificOutput
+    : {};
   const block = jsonBlock(parsed, specific);
   const context = saidText(specific.additionalContext);
   const updated = specific.updatedInput;
   return {
     ...(block ? { block } : {}),
     ...(context ? { context } : {}),
-    ...(event === "PreToolUse" &&
-    updated &&
-    typeof updated === "object" &&
-    !Array.isArray(updated)
-      ? { updatedInput: updated as Record<string, unknown> }
+    ...(event === "PreToolUse" && isRecord(updated)
+      ? { updatedInput: updated }
       : {}),
   };
 };
@@ -674,9 +671,7 @@ const jsonObject = (text: string): Record<string, unknown> | undefined => {
     // Words, not JSON.
     value = undefined;
   }
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? value : undefined;
 };
 
 /** A value that is words, trimmed; nothing for anything else or for blank. */

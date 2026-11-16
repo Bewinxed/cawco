@@ -117,6 +117,7 @@ import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/rest";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
+import * as v from "valibot";
 import { readsOnly } from "./connection-writes";
 import {
   type AppFacts,
@@ -497,23 +498,44 @@ const originOf = (origin: string): URL => {
   return base;
 };
 
-/** A GitHub token endpoint's JSON answer: a token, or the error its device and refresh flows name. */
-interface GitHubTokenAnswer {
-  access_token?: string;
-  error?: string;
-  error_description?: string;
-  expires_in?: number;
-  interval?: number;
-  refresh_token?: string;
-  scope?: string;
-  token_type?: string;
-}
+/** GitHub's words when a token or code endpoint refuses: its code, and the interval a `slow_down` names. */
+const GitHubRefusal = v.object({
+  error: v.string(),
+  error_description: v.optional(v.string()),
+  interval: v.optional(v.number()),
+});
 
-/** A form posted to GitHub's site (device codes, tokens), answered as JSON ("Accept: application/json"). */
-const postToGitHub = async <T>(
+/** A GitHub token endpoint's JSON answer: a token, or the error its device and refresh flows name. */
+const GitHubTokenAnswer = v.union([
+  v.object({
+    access_token: v.string(),
+    expires_in: v.optional(v.number()),
+    refresh_token: v.optional(v.string()),
+    scope: v.optional(v.string()),
+    token_type: v.string(),
+  }),
+  GitHubRefusal,
+]);
+type GitHubTokenAnswer = v.InferOutput<typeof GitHubTokenAnswer>;
+
+/** GitHub's device code answer ("POST https://github.com/login/device/code"), or its refusal. */
+const GitHubDeviceCodes = v.union([
+  v.object({
+    device_code: v.string(),
+    expires_in: v.optional(v.number()),
+    interval: v.optional(v.number()),
+    user_code: v.string(),
+    verification_uri: v.string(),
+  }),
+  GitHubRefusal,
+]);
+
+/** A form posted to GitHub's site (device codes, tokens), answered as JSON ("Accept: application/json") that `schema` takes; any other answer throws. */
+const postToGitHub = async <S extends v.GenericSchema>(
   path: string,
-  form: Record<string, string>
-): Promise<T> => {
+  form: Record<string, string>,
+  schema: S
+): Promise<v.InferOutput<S>> => {
   const read = await readWithin(CONNECT_MS, async (signal) => {
     const answer = await fetch(`${GITHUB_WEB}${path}`, {
       method: "POST",
@@ -527,7 +549,7 @@ const postToGitHub = async <T>(
     if (!answer.ok) {
       throw new Error(`GitHub answered ${answer.status}`);
     }
-    return (await answer.json()) as T;
+    return v.parse(schema, await answer.json());
   });
   if (read.kind === "unanswered") {
     throw new Error(`GitHub did not answer within ${secondsOf(read.after)} s`);
@@ -705,12 +727,16 @@ export const createConnections = (deps: ConnectionsDeps) => {
    * it was made from: the installation token it mints lives in it, cached
    * and renewed by its app auth, so it is made again only when that moves.
    */
-  const githubApps = new Map<string, { made: string; octokit: Octokit }>();
+  const githubApps = new Map<
+    string,
+    { auth: ReturnType<typeof createAppAuth>; made: string; octokit: Octokit }
+  >();
 
-  const githubAppOctokit = (
+  /** A GitHub App connection's Octokit and the app auth that signs its requests, as {@link githubApps} holds them. */
+  const githubApp = (
     r: ConnectionRow,
     app: Extract<HeldApp, { service: "github" }>
-  ): Octokit => {
+  ) => {
     if (!app.installationId) {
       return misfit(
         `${r.name}'s GitHub App isn't installed yet: install it on the repositories it reads.`
@@ -721,21 +747,31 @@ export const createConnections = (deps: ConnectionsDeps) => {
       .digest("hex");
     const held = githubApps.get(r.id);
     if (held?.made === made) {
-      return held.octokit;
+      return held;
     }
+    const strategy = {
+      appId: app.appId,
+      installationId: Number(app.installationId),
+      privateKey: app.privateKey,
+    };
     const octokit = new Octokit({
       authStrategy: createAppAuth,
-      auth: {
-        appId: app.appId,
-        installationId: Number(app.installationId),
-        privateKey: app.privateKey,
-      },
+      auth: strategy,
       baseUrl: GITHUB_API,
       userAgent: "CawCo-hub",
     });
-    githubApps.set(r.id, { made, octokit });
-    return octokit;
+    // Octokit's own `auth()` is typed `unknown`; the same app's auth, made
+    // through its request, answers an installation token typed.
+    const auth = createAppAuth({ ...strategy, request: octokit.request });
+    const kept = { auth, made, octokit };
+    githubApps.set(r.id, kept);
+    return kept;
   };
+
+  const githubAppOctokit = (
+    r: ConnectionRow,
+    app: Extract<HeldApp, { service: "github" }>
+  ): Octokit => githubApp(r, app).octokit;
 
   /** A token's refresh under way (a Linear app's, a code sign-in's), by row id: two callers share one. */
   const refreshing = new Map<string, Promise<string>>();
@@ -824,20 +860,24 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const deviceAccess = (r: ConnectionRow): Promise<string> =>
     accessRefreshed(r, opened(r).tokens, async (refreshToken) => {
       const answer = refreshToken
-        ? await postToGitHub<GitHubTokenAnswer>("/login/oauth/access_token", {
-            client_id: GITHUB_DEVICE_CLIENT_ID,
-            grant_type: "refresh_token",
-            refresh_token: refreshToken,
-          }).catch((error: unknown): GitHubTokenAnswer => ({
+        ? await postToGitHub(
+            "/login/oauth/access_token",
+            {
+              client_id: GITHUB_DEVICE_CLIENT_ID,
+              grant_type: "refresh_token",
+              refresh_token: refreshToken,
+            },
+            GitHubTokenAnswer
+          ).catch((error: unknown): GitHubTokenAnswer => ({
             error: error instanceof Error ? error.message : String(error),
           }))
         : { error: "no refresh token" };
-      if (!answer.access_token) {
-        const said = `GitHub refused to refresh its sign-in (${answer.error_description ?? answer.error ?? "no token"}). Sign in again.`;
+      if ("error" in answer) {
+        const said = `GitHub refused to refresh its sign-in (${answer.error_description ?? answer.error}). Sign in again.`;
         setState(r, "needs-sign-in", said);
         return misfit(`${r.name}: ${said}`);
       }
-      keepTokens(r.id, answer as OAuthTokens);
+      keepTokens(r.id, answer);
       drop(r.id);
       return answer.access_token;
     });
@@ -947,9 +987,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       };
     }
     try {
-      const minted = (await githubAppOctokit(r, app).auth({
-        type: "installation",
-      })) as { expiresAt: string; token: string };
+      const minted = await githubApp(r, app).auth({ type: "installation" });
       return { token: minted.token, expiresAt: Date.parse(minted.expiresAt) };
     } catch (error) {
       const said = cutShort(
@@ -1473,7 +1511,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
     let result: CallToolResult;
     switch (called.kind) {
       case "answered":
-        result = called.value as CallToolResult;
+        // The SDK's callTool is typed with the compatibility shape beside it; the answer is read as the current one.
+        result = CallToolResultSchema.parse(called.value);
         break;
       case "unanswered":
         throw unanswered(r, called.after);
@@ -1529,7 +1568,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
       let result: CallToolResult;
       switch (called.kind) {
         case "answered":
-          result = called.value as CallToolResult;
+          // The SDK's callTool is typed with the compatibility shape beside it; the answer is read as the current one.
+          result = CallToolResultSchema.parse(called.value);
           break;
         case "unanswered":
           // It went, or its connection was being made: it may have run.
@@ -2107,7 +2147,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
           baseUrl: GITHUB_API,
           userAgent: "CawCo-hub",
         }).rest.apps.createFromManifest({ code })
-      ).data as typeof made;
+      ).data;
     } catch (error) {
       setState(r, "needs-sign-in", connectionsWords.saidSignIn);
       return misfit(
@@ -2250,37 +2290,30 @@ export const createConnections = (deps: ConnectionsDeps) => {
         "Sign-in with a code needs CawCo's GitHub app, which isn't registered yet. Connect with gh on a machine, or as a GitHub App."
       );
     }
-    let codes: {
-      device_code?: string;
-      error?: string;
-      error_description?: string;
-      expires_in?: number;
-      interval?: number;
-      user_code?: string;
-      verification_uri?: string;
-    };
+    let codes: v.InferOutput<typeof GitHubDeviceCodes>;
     try {
-      codes = await postToGitHub("/login/device/code", {
-        client_id: GITHUB_DEVICE_CLIENT_ID,
-        scope: DEVICE_SCOPE,
-      });
+      codes = await postToGitHub(
+        "/login/device/code",
+        { client_id: GITHUB_DEVICE_CLIENT_ID, scope: DEVICE_SCOPE },
+        GitHubDeviceCodes
+      );
     } catch (error) {
       return misfit(
         `GitHub did not hand out a code: ${error instanceof Error ? error.message : String(error)}.`
       );
     }
-    if (!(codes.device_code && codes.user_code && codes.verification_uri)) {
+    if ("error" in codes) {
       return misfit(
-        `GitHub did not hand out a code (${codes.error_description ?? codes.error ?? "no code"}).`
+        `GitHub did not hand out a code (${codes.error_description ?? codes.error}).`
       );
     }
     const expiresAt = Date.now() + (codes.expires_in ?? 900) * 1000;
     const interval = codes.interval ?? 5;
     reseal(r.id, () => ({
       device: {
-        deviceCode: codes.device_code ?? "",
-        userCode: codes.user_code ?? "",
-        verificationUri: codes.verification_uri ?? "",
+        deviceCode: codes.device_code,
+        userCode: codes.user_code,
+        verificationUri: codes.verification_uri,
         expiresAt,
         interval,
       },
@@ -2320,13 +2353,14 @@ export const createConnections = (deps: ConnectionsDeps) => {
     }
     let answer: GitHubTokenAnswer;
     try {
-      answer = await postToGitHub<GitHubTokenAnswer>(
+      answer = await postToGitHub(
         "/login/oauth/access_token",
         {
           client_id: GITHUB_DEVICE_CLIENT_ID,
           device_code: pending.deviceCode,
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-        }
+        },
+        GitHubTokenAnswer
       );
     } catch (error) {
       console.warn(
@@ -2335,9 +2369,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
       pollDeviceIn(id, pending.interval);
       return;
     }
-    if (answer.access_token) {
+    if (!("error" in answer)) {
       endDevice(id);
-      keepTokens(id, answer as OAuthTokens);
+      keepTokens(id, answer);
       db.update(id, { state: "error", reason: connectionReasons.notLookedAt });
       drop(id);
       console.info(`[connections] ${r.name}: signed in with a code`);
@@ -2363,7 +2397,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     setState(
       r,
       "needs-sign-in",
-      `GitHub ended the code sign-in (${answer.error_description ?? answer.error ?? "no token"}). Sign in again.`
+      `GitHub ended the code sign-in (${answer.error_description ?? answer.error}). Sign in again.`
     );
   };
 
@@ -2596,15 +2630,12 @@ export const createConnections = (deps: ConnectionsDeps) => {
     state: string,
     iss: string | undefined
   ): Promise<void> => {
-    const metadata = r.discovery?.authorizationServerMetadata as
-      | {
-          authorization_response_iss_parameter_supported?: boolean;
-          issuer?: string;
-        }
-      | undefined;
+    const metadata = r.discovery?.authorizationServerMetadata;
     // RFC 9207: a server that names itself on the redirect must name itself.
     if (
-      metadata?.authorization_response_iss_parameter_supported === true &&
+      metadata &&
+      "authorization_response_iss_parameter_supported" in metadata &&
+      metadata.authorization_response_iss_parameter_supported === true &&
       iss !== metadata.issuer
     ) {
       return misfit(
@@ -2662,7 +2693,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       });
       octokit.hook.error("request", (error) => {
         // GitHub refused the token: a gh connection reads its machine again.
-        if ((error as { status?: number }).status === 401) {
+        if ("status" in error && error.status === 401) {
           ghRead.delete(r.id);
         }
         throw error;
@@ -2709,7 +2740,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       installation_id: Number(app.installationId),
     });
     return {
-      permissions: (data.permissions ?? {}) as Record<string, string>,
+      permissions: data.permissions ?? {},
       slug: app.slug ?? name,
     };
   };

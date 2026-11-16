@@ -138,7 +138,11 @@ export const capabilityCalls = (
   const rows = new Map<string, RoleCalls & { ids: Set<string> }>();
   const counted = new Map<string, HarnessKind | null>();
   for (const call of calls) {
-    const kind = call.kind as CalledKind;
+    // The query reads skills and MCP servers alone (db `bySession`).
+    if (call.kind === "tool") {
+      continue;
+    }
+    const { kind } = call;
     const role = roleOf(call);
     const key = `${role}\u0000${kind}\u0000${call.name}`;
     const row = rows.get(key) ?? {

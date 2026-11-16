@@ -1,6 +1,5 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { HubEnvelope } from "@cawco/core/envelopes";
-import type { InstanceRow } from "@cawco/core/protocol";
 import type { Rule, RuleFacts, RuleTiming } from "@cawco/core/rules";
 import {
   RULE_FIRE_CEILING,
@@ -480,7 +479,7 @@ export class RuleEngine {
         : null,
       harness: row.harness ?? null,
       model: row.model ?? null,
-      role: memoryRoleOf(row as InstanceRow),
+      role: memoryRoleOf(row),
       delegateType: row.delegateType ?? null,
       clean: row.clean === true,
     };
