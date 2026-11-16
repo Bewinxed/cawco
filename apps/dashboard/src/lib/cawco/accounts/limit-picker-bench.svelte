@@ -32,9 +32,9 @@
   import type { AccountHue } from "@cawco/core/accounts/kinds";
   import {
     EFFORT_LEVELS,
-    type EffortLevel,
+    isEffortLevel,
     type ModelInfo,
-    type PermissionMode,
+    PERMISSION_MODES,
   } from "@cawco/core/harness/kinds";
   import type { InstanceRow } from "@cawco/core/protocol";
   import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
@@ -320,16 +320,19 @@
     });
   };
 
+  /** What a setting command's intent names. */
+  const BenchIntent = z.object({
+    effort: z.string().optional(),
+    mode: z.string().optional(),
+    model: z.string().optional(),
+  });
+
   standSocket({
     control: null,
     spawn: null,
     hub: (_instanceId, kind, intent, commandId) => {
       const live = session(ID);
-      const said = intent as {
-        effort?: EffortLevel;
-        mode?: PermissionMode;
-        model?: string;
-      };
+      const said = BenchIntent.parse(intent);
       if (kind === "set-model" && said.model) {
         // A pick while a move waits rides the move (hub `pickWithMove`).
         if (owed) {
@@ -338,10 +341,12 @@
         } else {
           live.model = said.model;
         }
-      } else if (kind === "set-effort" && said.effort) {
+      } else if (kind === "set-effort" && isEffortLevel(said.effort)) {
         live.effort = said.effort;
-      } else if (kind === "set-permission-mode" && said.mode) {
-        live.permissionMode = said.mode;
+      } else if (kind === "set-permission-mode") {
+        live.permissionMode =
+          PERMISSION_MODES.find((mode) => mode === said.mode) ??
+          live.permissionMode;
       }
       applied(commandId);
     },
