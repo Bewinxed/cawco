@@ -21,12 +21,13 @@
  * and a `sessions` link, a thread begun in one home resumed and continued in
  * another (2026-11-17, Codex 0.169.0 against a scripted model).
  */
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { lstat, readFile, readlink, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { ProviderSigninResult } from "@cawco/core/accounts";
 import { readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
+import { accountsRoot } from "@cawco/core/paths/claude";
 import {
   codexAccountHome,
   codexFleetRoot,
@@ -478,6 +479,51 @@ export const keyCodexHome = async (
       `[codex] account ${accountId}: its Codex home did not take the key: ${error instanceof Error ? error.message : String(error)}`
     )
   );
+};
+
+/**
+ * Codex signs itself out of account `accountId`'s home (`account/logout`),
+ * a device-code sign-in still waiting there ended first. Where Codex can't
+ * start (gone from the machine, or a release CawCo doesn't run), its
+ * sign-in file is deleted unread. A home with no sign-in is left as it is.
+ */
+export const forgetCodexLogin = async (accountId: string): Promise<void> => {
+  signIns.get(accountId)?.end();
+  signIns.delete(accountId);
+  const auth = join(codexAccountHome(accountId), "auth.json");
+  if (!existsSync(auth)) {
+    return;
+  }
+  const gate = await toolGate(CODEX_SPEC);
+  if (gate.refused || !codexOnPath()) {
+    await rm(auth, { force: true });
+    return;
+  }
+  await inHome(accountId, async (peer) => {
+    await peer.request("account/logout", undefined);
+  });
+};
+
+/**
+ * The accounts whose Codex home on this machine holds a Codex sign-in: its
+ * `auth.json` there, which Codex writes at a sign-in (a ChatGPT account's
+ * or an OpenAI key's) and removes at a sign-out. Found, never read: CawCo
+ * never reads the token (the owner's pick "Codex's own sign-in",
+ * 2026-11-17). The hub reads it as where each account runs Codex.
+ */
+export const codexSignedInAccounts = (): string[] => {
+  try {
+    return readdirSync(accountsRoot(), { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          existsSync(join(codexAccountHome(entry.name), "auth.json"))
+      )
+      .map((entry) => entry.name)
+      .toSorted();
+  } catch {
+    return [];
+  }
 };
 
 /** Ends every device-code sign-in still waiting, for the daemon's exit. */

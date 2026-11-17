@@ -169,6 +169,12 @@ export const accountsWords = {
     signInOn: (verb: string, account: string, machine: string) =>
       `${verb} ${account} on ${machine}`,
     signOut: "Sign out on this machine",
+    /** A ChatGPT account signed in for pi and OpenCode on a machine, and not yet for Codex. */
+    codexOut: "Codex not signed in",
+    /** Codex's own sign-in on a machine, signed out alone. */
+    signOutCodex: "Sign Codex out on this machine",
+    /** What a row's sign-in is for, beside the machine: "pi and OpenCode", "Codex". */
+    signsInFor: (harnesses: readonly string[]) => andList(harnesses),
     /** A row's ⋯ menu's subject: "you@x.com on obelisk". */
     accountOn: (account: string, machine: string) => `${account} on ${machine}`,
     /**

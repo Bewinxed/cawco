@@ -20,6 +20,7 @@ import { namedIn, noAccountRefusal, place as placeAccount } from "./placement";
 
 export type LaunchAccountsContext = Pick<
   HubContext,
+  | "codexSignedIn"
   | "db"
   | "homeMovedAccountOn"
   | "machineName"
@@ -301,6 +302,36 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
       ? { homeLoginMove: { accountId: move.accountId } }
       : accountLaunch(machineId, row, session, use);
   };
+  /**
+   * Whether `accountId` can run `harness` on `machineId`: Codex on the
+   * account's Codex home, signed in by Codex itself; any other on the
+   * account's own sign-in there.
+   */
+  const signedInFor = (
+    harness: HarnessKind,
+    accountId: string,
+    machineId: string
+  ): boolean =>
+    harness === "codex"
+      ? ctx.codexSignedIn(accountId, machineId)
+      : ctx.db.accounts
+          .signins()
+          .some(
+            (one) =>
+              one.accountId === accountId &&
+              one.machineId === machineId &&
+              one.state === "signed-in"
+          );
+  /** Why a session can't run on an account not signed in for its harness there. */
+  const signedOutWords = (
+    harness: HarnessKind,
+    named: string,
+    machine: string,
+    session: string
+  ): string => {
+    const forWhat = harness === "codex" ? " for Codex" : "";
+    return `${named} isn't signed in${forWhat} on ${machine}, so ${session} can't run there. Sign ${named} in${forWhat} on ${machine} in ${configurePage("accounts")}, or continue the session on another account.`;
+  };
   /** {@link launchAccount} for a session on a CawCo account, or to be placed on one. */
   const accountLaunch = (
     machineId: string,
@@ -347,16 +378,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
           }
         : {};
     }
-    if (
-      ctx.db.accounts
-        .signins()
-        .some(
-          (one) =>
-            one.accountId === accountId &&
-            one.machineId === machineId &&
-            one.state === "signed-in"
-        )
-    ) {
+    if (signedInFor(harness, accountId, machineId)) {
       return { accountId };
     }
     const account = ctx.db.accounts.get(accountId);
@@ -364,7 +386,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
       ? accountNameAmong(account, ctx.db.accounts.list())
       : accountId;
     return {
-      refusal: `${named} isn't signed in on ${machine}, so ${session} can't run there. Sign ${named} in on ${machine} in ${configurePage("accounts")}, or continue the session on another account.`,
+      refusal: signedOutWords(harness, named, machine, session),
       cause: { kind: "account-signed-out", accountId, machineId },
     };
   };

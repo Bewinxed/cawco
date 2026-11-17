@@ -301,6 +301,7 @@ interface ControlTable {
   >;
   forgePost: Entry<[ask: ForgeAsk], ForgeVerdict>;
   forgetAccount: Unread<[account: string, into?: string | null]>;
+  forgetCodexLogin: Unread<[account: string]>;
   forgetCredentials: Entry<[ids: string[]], { forgotten: number }>;
   forgetProviderAccount: Unread<[account: string]>;
   generateImage: Entry<

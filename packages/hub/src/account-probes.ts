@@ -72,18 +72,23 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
    * connection's sign-in waits.
    */
   const PENDING_LINK_MS = 10 * 60_000;
-  const pendingKey = (accountId: string, machineId: string): string =>
-    `${accountId}:${machineId}`;
-  /** What a machine showed for a sign-in it started, kept until it ends or lapses. */
+  const pendingKey = (
+    accountId: string,
+    machineId: string,
+    codex = false
+  ): string => `${accountId}:${machineId}${codex ? ":codex" : ""}`;
+  /** What a machine showed for a sign-in it started (`codex`: Codex's own), kept until it ends or lapses. */
   const keepPending = (
     accountId: string,
     machineId: string,
-    challenge: ProviderSigninChallenge
+    challenge: ProviderSigninChallenge,
+    codex = false
   ): void => {
-    pendingSignins.set(pendingKey(accountId, machineId), {
+    pendingSignins.set(pendingKey(accountId, machineId, codex), {
       accountId,
       machineId,
       challenge,
+      ...(codex ? { codex: true as const } : {}),
       expiresAt:
         "expiresAt" in challenge
           ? challenge.expiresAt
@@ -94,7 +99,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
   const forgetPendingOf = (accountId: string): void => {
     for (const one of [...pendingSignins.values()]) {
       if (one.accountId === accountId) {
-        pendingSignins.delete(pendingKey(accountId, one.machineId));
+        pendingSignins.delete(pendingKey(accountId, one.machineId, one.codex));
       }
     }
   };

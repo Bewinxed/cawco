@@ -14,14 +14,35 @@ import type {
   AccountJoined,
   PendingAccountSignin,
   ProviderSigninChallenge,
+  ProviderSigninResult,
 } from "@cawco/core/accounts";
 import { detach } from "@cawco/core/detach";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { failureWords } from "#lib/platform/hub-read.js";
 import {
+  awaitCodexSignin,
   awaitDeviceSignin,
+  beginCodexSignin,
   beginDeviceSignin,
 } from "../stores/accounts.svelte";
+
+/** The hub's two asks a device-code sign-in makes: mint a code, wait on it. */
+export interface DeviceAsks {
+  begin: (id: string, machineId: string) => Promise<ProviderSigninChallenge>;
+  wait: (id: string, machineId: string) => Promise<ProviderSigninResult>;
+}
+
+/** The provider's own sign-in into the account's store (pi-ai's, for pi and OpenCode). */
+const providerAsks: DeviceAsks = {
+  begin: beginDeviceSignin,
+  wait: awaitDeviceSignin,
+};
+
+/** Codex's own sign-in into the account's Codex home on the machine. */
+export const codexAsks: DeviceAsks = {
+  begin: beginCodexSignin,
+  wait: awaitCodexSignin,
+};
 
 export type DevicePhase =
   "idle" | "starting" | "waiting" | "expired" | "signed-in" | "mismatch";
@@ -48,13 +69,19 @@ export class DeviceFlow {
 
   readonly #account: () => Promise<string>;
   readonly #machineId: string;
+  readonly #asks: DeviceAsks;
   /** Bumped by every start and by dispose: an older wait stops asking. */
   #round = 0;
   #tick: ReturnType<typeof setInterval> | undefined;
 
-  constructor(account: () => Promise<string>, machineId: string) {
+  constructor(
+    account: () => Promise<string>,
+    machineId: string,
+    asks: DeviceAsks = providerAsks
+  ) {
     this.#account = account;
     this.#machineId = machineId;
+    this.#asks = asks;
   }
 
   /** A code is shown and waited on, or being asked for. */
@@ -110,7 +137,7 @@ export class DeviceFlow {
     this.problem = null;
     try {
       const id = await this.#account();
-      const challenge = await beginDeviceSignin(id, this.#machineId);
+      const challenge = await this.#asks.begin(id, this.#machineId);
       if (round !== this.#round) {
         return;
       }
@@ -137,7 +164,7 @@ export class DeviceFlow {
 
   async #wait(id: string, round: number): Promise<void> {
     while (round === this.#round) {
-      const result = await awaitDeviceSignin(id, this.#machineId);
+      const result = await this.#asks.wait(id, this.#machineId);
       if (round !== this.#round) {
         return;
       }

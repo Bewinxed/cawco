@@ -124,6 +124,12 @@ export const CONTROL_SET_PROVIDER_KEY = "setProviderKey";
 export const CONTROL_BEGIN_CODEX_LOGIN = "beginCodexLogin";
 export const CONTROL_COMPLETE_CODEX_LOGIN = "completeCodexLogin";
 /**
+ * Machine control (arg: account id): Codex signs itself out of the
+ * account's Codex home there (`account/logout`), and the account's other
+ * sign-ins on the machine stay.
+ */
+export const CONTROL_FORGET_CODEX_LOGIN = "forgetCodexLogin";
+/**
  * Machine control (arg: account id): the account's windows read now from
  * its provider's own usage endpoint with the credential this machine holds
  * (agent provider-usage.ts), for an account of any provider with a reader:

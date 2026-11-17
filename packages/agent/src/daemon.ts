@@ -10,6 +10,7 @@ import {
   CONTROL_BORROW_ACCOUNT,
   CONTROL_COMPLETE_CODEX_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
+  CONTROL_FORGET_CODEX_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
   CONTROL_LEND_ACCOUNT,
@@ -262,7 +263,9 @@ import { harness, harnesses } from "./harnesses";
 import { transcriptIndexes } from "./harnesses/claude-transcript";
 import {
   beginCodexLogin,
+  codexSignedInAccounts,
   completeCodexLogin,
+  forgetCodexLogin,
   keyCodexHome,
 } from "./harnesses/codex-home";
 import {
@@ -868,6 +871,12 @@ const registerProviderAccounts = (
   supervisor.declareControl(CONTROL_BEGIN_CODEX_LOGIN, beginCodexLogin);
   supervisor.declareControl(CONTROL_COMPLETE_CODEX_LOGIN, (id) =>
     changing(() => completeCodexLogin(id))()
+  );
+  supervisor.declareControl(CONTROL_FORGET_CODEX_LOGIN, (id) =>
+    changing(async () => {
+      await forgetCodexLogin(id);
+      return { forgotten: true };
+    })()
   );
   supervisor.declareControl(CONTROL_FORGET_PROVIDER_ACCOUNT, (id) =>
     changing(async () => {
@@ -1837,6 +1846,7 @@ const attach = (
     let lastPiCheck = Date.now();
     const pi = harness("pi");
     let reportedProviderAccounts = providerAccountReports();
+    let reportedCodexAccounts = codexSignedInAccounts();
     /** The fingerprint of pi's and OpenCode's own stores this connection last sent; undefined until one is read. */
     let reportedHomeStores: string | undefined;
     /** `part` sent on a beat of its own when the link is open; the hub keeps what it leaves out. */
@@ -1978,12 +1988,14 @@ const attach = (
       detach(
         (async () => {
           reportedProviderAccounts = providerAccountReports();
+          reportedCodexAccounts = codexSignedInAccounts();
           reportedHomeStores = (await homeStoresStamp()) ?? reportedHomeStores;
           beat({
             ...(latestBinaryUpdate()
               ? { binaryUpdate: latestBinaryUpdate() }
               : {}),
             providerAccounts: reportedProviderAccounts,
+            codexAccounts: reportedCodexAccounts,
             ...(reportedHomeStores ? { homeStores: reportedHomeStores } : {}),
           });
           await Promise.all([
@@ -2031,9 +2043,11 @@ const attach = (
     // its credential.
     providerAccountsChanged = (homeStores?: string) => {
       reportedProviderAccounts = providerAccountReports();
+      reportedCodexAccounts = codexSignedInAccounts();
       reportedHomeStores = homeStores ?? reportedHomeStores;
       beat({
         providerAccounts: reportedProviderAccounts,
+        codexAccounts: reportedCodexAccounts,
         ...(reportedHomeStores ? { homeStores: reportedHomeStores } : {}),
       });
       tellAccountsChanged();
@@ -2217,9 +2231,12 @@ const attach = (
           // reaches the hub too, which moves it into an account.
           const homeStores = await homeStoresStamp();
           if (
-            !Bun.deepEquals(
-              providerAccountReports(),
-              reportedProviderAccounts
+            !(
+              Bun.deepEquals(
+                providerAccountReports(),
+                reportedProviderAccounts
+              ) &&
+              Bun.deepEquals(codexSignedInAccounts(), reportedCodexAccounts)
             ) ||
             (homeStores !== undefined && homeStores !== reportedHomeStores)
           ) {

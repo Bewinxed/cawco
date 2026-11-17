@@ -1,7 +1,14 @@
-import { accountNameAmong, CLAUDE_PROVIDER } from "@cawco/core/accounts";
+import {
+  accountNameAmong,
+  CLAUDE_PROVIDER,
+  isChatgptPlan,
+} from "@cawco/core/accounts";
 import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
+  CONTROL_BEGIN_CODEX_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
+  CONTROL_COMPLETE_CODEX_LOGIN,
+  CONTROL_FORGET_CODEX_LOGIN,
   CONTROL_SET_PROVIDER_KEY,
 } from "@cawco/core/accounts/controls";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -21,6 +28,7 @@ export const accountSigninRoutes = ({
   finishJoined,
   joinOn,
   keepPending,
+  noteCodexSignin,
   pendingKey,
   pendingSignins,
   publishUsage,
@@ -38,6 +46,7 @@ export const accountSigninRoutes = ({
   | "finishJoined"
   | "joinOn"
   | "keepPending"
+  | "noteCodexSignin"
   | "pendingKey"
   | "pendingSignins"
   | "publishUsage"
@@ -49,6 +58,41 @@ export const accountSigninRoutes = ({
   const known = (id: string) =>
     accountOf(id) ??
     problem(404, { code: "no-account", detail: `There is no account ${id}.` });
+  /**
+   * One of Codex's sign-in controls asked of a machine for an account: its
+   * answer, or the problem a machine away, silent or refusing makes.
+   */
+  const codexAsk = async <
+    C extends
+      | typeof CONTROL_BEGIN_CODEX_LOGIN
+      | typeof CONTROL_COMPLETE_CODEX_LOGIN
+      | typeof CONTROL_FORGET_CODEX_LOGIN,
+  >(
+    machineId: string,
+    control: C,
+    accountId: string,
+    failed: string
+  ) => {
+    const answer = await callAgent(
+      machineId,
+      control,
+      [accountId],
+      SIGNIN_TIMEOUT_MS
+    );
+    switch (answer.kind) {
+      case "unanswered":
+        return unansweredIn(machineId, answer, awayWords(machineId, answer));
+      case "answered":
+        return answer.value.ok
+          ? answer.value.result
+          : problem(502, {
+              code: "codex-signin",
+              detail: answer.value.error ?? failed,
+            });
+      default:
+        throw unreachable(answer);
+    }
+  };
   return (
     new Elysia()
       // Checks now whether Claude Code still refuses an account it refused
@@ -248,6 +292,111 @@ export const accountSigninRoutes = ({
                 detail: settled.error,
               })
             : settled;
+        }
+      )
+      // Signs a ChatGPT account in for Codex on a machine: Codex's own
+      // device-code sign-in, into the account's Codex home there, which
+      // CawCo never reads (the owner's pick "Codex's own sign-in",
+      // 2026-11-17). Answers the code to enter on any device, and where;
+      // kept until it ends or lapses, so a screen that reloads shows it
+      // again.
+      .post(
+        "/api/accounts/:id/machines/:machineId/codex-signin",
+        async ({ params }) => {
+          const account = known(params.id);
+          if (account instanceof ElysiaStatus) {
+            return account;
+          }
+          if (!isChatgptPlan(account)) {
+            return problem(400, {
+              code: "not-chatgpt",
+              detail: `${accountNameAmong(account, db.accounts.list())} isn't a ChatGPT account: Codex runs on an OpenAI key once the key is sent to the machine.`,
+            });
+          }
+          const answer = await codexAsk(
+            params.machineId,
+            CONTROL_BEGIN_CODEX_LOGIN,
+            account.id,
+            "Codex's sign-in did not start."
+          );
+          if (answer instanceof ElysiaStatus) {
+            pendingSignins.delete(
+              pendingKey(account.id, params.machineId, true)
+            );
+            return answer;
+          }
+          keepPending(account.id, params.machineId, answer, true);
+          return answer;
+        }
+      )
+      // Waits up to a minute for the person to enter Codex's code, and
+      // says how it stands: `pending` while they have not, `expired` once
+      // it lapsed, or who Codex signed in as. Signed in as someone other
+      // than the account already is, Codex signs that home out again and
+      // the answer is `mismatch`.
+      .post(
+        "/api/accounts/:id/machines/:machineId/codex-signin/complete",
+        async ({ params }) => {
+          const account = known(params.id);
+          if (account instanceof ElysiaStatus) {
+            return account;
+          }
+          const key = pendingKey(account.id, params.machineId, true);
+          const answer = await codexAsk(
+            params.machineId,
+            CONTROL_COMPLETE_CODEX_LOGIN,
+            account.id,
+            "Codex's sign-in did not finish."
+          );
+          if (answer instanceof ElysiaStatus) {
+            pendingSignins.delete(key);
+            return answer;
+          }
+          if (answer.state === "pending") {
+            return answer;
+          }
+          pendingSignins.delete(key);
+          if (answer.state !== "signed-in") {
+            return answer;
+          }
+          const who = answer.email?.toLowerCase();
+          if (account.email && who && account.email.toLowerCase() !== who) {
+            await callAgent(
+              params.machineId,
+              CONTROL_FORGET_CODEX_LOGIN,
+              [account.id],
+              SIGNIN_TIMEOUT_MS
+            );
+            noteCodexSignin(account.id, params.machineId, false);
+            publishUsage(params.machineId);
+            return { state: "mismatch" as const, email: answer.email };
+          }
+          noteCodexSignin(account.id, params.machineId, true);
+          publishUsage(params.machineId);
+          return answer;
+        }
+      )
+      // Signs Codex out of the account's Codex home on a machine; the
+      // account's own sign-in there, pi's and OpenCode's, stays.
+      .delete(
+        "/api/accounts/:id/machines/:machineId/codex-signin",
+        async ({ params }) => {
+          const account = known(params.id);
+          if (account instanceof ElysiaStatus) {
+            return account;
+          }
+          const answer = await codexAsk(
+            params.machineId,
+            CONTROL_FORGET_CODEX_LOGIN,
+            account.id,
+            "Codex did not sign out."
+          );
+          if (answer instanceof ElysiaStatus) {
+            return answer;
+          }
+          noteCodexSignin(account.id, params.machineId, false);
+          publishUsage(params.machineId);
+          return { ok: true as const };
         }
       )
       // A key account's key, typed once in the dashboard: relayed to each

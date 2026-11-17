@@ -360,6 +360,7 @@
       catalogFaults: [],
       credit: [],
       access: [],
+      codexSignins: [],
       catalogs: ACCOUNTS.map((one) => ({
         accountId: one.id,
         defaultEfforts: {},

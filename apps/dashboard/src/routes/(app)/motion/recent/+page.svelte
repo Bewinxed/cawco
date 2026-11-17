@@ -707,6 +707,7 @@
         catalogFaults: [],
         credit: [],
         access: [],
+        codexSignins: [],
         catalogs: [],
         pending: [],
         readings: [],

@@ -102,6 +102,7 @@ export interface HeartbeatReads
       HeartbeatPayload,
       | "activity"
       | "activityReadable"
+      | "codexAccounts"
       | "homeStores"
       | "providerAccounts"
       | "providers"

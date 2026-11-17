@@ -17,6 +17,7 @@ import {
 } from "@cawco/core/paths/claude";
 import { changingSignins, removeAccountDir } from "./accounts";
 import type { AgentPorts } from "./agent-ports";
+import { forgetCodexLogin } from "./harnesses/codex-home";
 import { forgetAccount } from "./login";
 import { forgetProviderAccount } from "./provider-accounts";
 
@@ -49,6 +50,7 @@ export const forgetUnknownAccounts = async (
       if (existsSync(accountCredentialPath(id))) {
         await forgetProviderAccount(id, ports);
       }
+      await forgetCodexLogin(id);
       await removeAccountDir(id);
       console.log(
         `[accounts] ${id}: the hub removed this account; signed out and removed here`

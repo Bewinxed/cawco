@@ -169,6 +169,13 @@ export interface ProviderChoice {
 }
 
 /**
+ * The providers Codex runs on: a ChatGPT plan (`openai-codex`), signed in
+ * by Codex's own device code into the account's Codex home, and an OpenAI
+ * key (`openai`), handed to that home as it is sent (core harness/codex.ts).
+ */
+const CODEX_PROVIDERS: readonly AccountProvider[] = ["openai-codex", "openai"];
+
+/**
  * The account picker's rows from the providers the fleet's machines know:
  * Claude's two, then for every other provider a device-code row where pi-ai
  * signs it in with a device code, and a key row where it takes a key.
@@ -200,6 +207,7 @@ export const providerChoices = (
     const harnesses: import("./harness/kinds").HarnessKind[] = [
       ...(one.pi ? (["pi"] as const) : []),
       ...(one.opencode ? (["opencode"] as const) : []),
+      ...(CODEX_PROVIDERS.includes(one.id) ? (["codex"] as const) : []),
     ];
     const limits = LIMITED_PROVIDERS.includes(one.id);
     const base = { provider: one.id, name: one.name, harnesses, limits };
@@ -983,6 +991,8 @@ export type ProviderSigninChallenge =
 export interface PendingAccountSignin {
   accountId: string;
   challenge: ProviderSigninChallenge;
+  /** Codex's own sign-in, into the account's Codex home there; absent for the account's own. */
+  codex?: true;
   expiresAt: number;
   machineId: string;
 }

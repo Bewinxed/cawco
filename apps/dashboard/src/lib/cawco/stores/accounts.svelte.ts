@@ -68,6 +68,8 @@ export interface AccountsView {
   /** Why accounts with no catalog have none: their last probe's fault. */
   catalogFaults: AccountCatalogFault[];
   catalogs: AccountCatalog[];
+  /** Where each account runs Codex: the machines whose Codex home of it holds a sign-in. */
+  codexSignins: { accountId: string; machineId: string }[];
   /** Accounts a provider refused for want of credit, by the model provider (hub account-marks.ts). */
   credit: AccountCredit[];
   /** Sign-ins started on a machine and not finished: the link or code each showed. */
@@ -282,6 +284,38 @@ export const awaitDeviceSignin = (
   });
 
 /**
+ * Starts Codex's own device-code sign-in for a ChatGPT account on a
+ * machine, into the account's Codex home there: the code to enter, where,
+ * and until when.
+ */
+export const beginCodexSignin = (
+  id: string,
+  machineId: string
+): Promise<ProviderSigninChallenge> =>
+  accountsWrite(
+    hubData(
+      hub.api.accounts({ id }).machines({ machineId })["codex-signin"].post()
+    )
+  );
+
+/**
+ * Waits up to a minute for Codex's code to be entered: signed in (who, as
+ * Codex says), expired, or still pending (ask again).
+ */
+export const awaitCodexSignin = (
+  id: string,
+  machineId: string
+): Promise<ProviderSigninResult> =>
+  accountsWrite(
+    hubData(
+      hub.api
+        .accounts({ id })
+        .machines({ machineId })
+        ["codex-signin"].complete.post()
+    )
+  );
+
+/**
  * Reads an account's windows now from its provider's usage endpoint, on a
  * machine it is signed in on: the reading, or why none was read in the
  * hub's words. A refusal of the ask itself (no such account) is thrown in
@@ -311,6 +345,20 @@ export const checkRefusalOf = (id: string): Promise<RefusalVerdict> =>
 export const signOutOn = (id: string, machineId: string): Promise<unknown> =>
   accountsWrite(
     hubData(hub.api.accounts({ id }).machines({ machineId }).delete())
+  );
+
+/**
+ * Signs Codex out of the account's Codex home on one machine; the
+ * account's own sign-in there stays.
+ */
+export const signOutCodexOn = (
+  id: string,
+  machineId: string
+): Promise<unknown> =>
+  accountsWrite(
+    hubData(
+      hub.api.accounts({ id }).machines({ machineId })["codex-signin"].delete()
+    )
   );
 
 /** What sending a key came to on one machine: its result, or why it didn't arrive. */

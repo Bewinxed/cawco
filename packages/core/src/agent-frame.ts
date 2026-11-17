@@ -358,6 +358,9 @@ const heartbeatOf = (
       : undefined,
   homeStores: textOf(said, "homeStores"),
   providerAccounts: fields.items("providerAccounts", AccountReportSchema),
+  codexAccounts: Array.isArray(said.codexAccounts)
+    ? stringsOf(said.codexAccounts)
+    : undefined,
   providers: fields.field("providers", MachineProviderListsSchema),
 });
 

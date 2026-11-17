@@ -18,7 +18,7 @@ import type { PendingAccountSignin } from "@cawco/core/accounts";
 import { SvelteMap } from "svelte/reactivity";
 import { accountsStore, takeAccounts } from "../stores/accounts.svelte";
 
-import { DeviceFlow } from "./device.svelte";
+import { codexAsks, DeviceFlow } from "./device.svelte";
 import { SigninFlow } from "./signin.svelte";
 
 const flows = new SvelteMap<string, SigninFlow | DeviceFlow>();
@@ -37,19 +37,32 @@ export const flowKey = (accountId: string, machineId: string): string =>
 export const startFlows = (): (() => void) =>
   takeAccounts((view) => {
     for (const pending of view.pending) {
-      flows.get(flowKey(pending.accountId, pending.machineId))?.resume(pending);
+      flows
+        .get(
+          pending.codex
+            ? codexKey(pending.accountId, pending.machineId)
+            : flowKey(pending.accountId, pending.machineId)
+        )
+        ?.resume(pending);
     }
   });
 
-/** What the hub kept of a sign-in under way for the account on the machine. */
+/**
+ * What the hub kept of a sign-in under way for the account on the machine:
+ * its own, or (`codex`) Codex's own.
+ */
 export const pendingOf = (
   accountId: string | null,
-  machineId: string
+  machineId: string,
+  codex = false
 ): PendingAccountSignin | undefined =>
   accountId === null
     ? undefined
     : accountsStore.accounts?.pending?.find(
-        (one) => one.accountId === accountId && one.machineId === machineId
+        (one) =>
+          one.accountId === accountId &&
+          one.machineId === machineId &&
+          (one.codex ?? false) === codex
       );
 
 /** The flow under `key`, made (and caught up from the hub) when there is none. */
@@ -85,6 +98,27 @@ export const deviceFlow = (
   machineId: string,
   accountId: string | null
 ): DeviceFlow => flow(key, DeviceFlow, account, accountId, machineId);
+
+/** The key of Codex's own sign-in for the account on the machine, beside the provider's. */
+export const codexKey = (accountId: string, machineId: string): string =>
+  `${flowKey(accountId, machineId)}:codex`;
+
+/** Codex's own device-code flow for the account on the machine, made when there is none. */
+export function codexFlow(
+  account: () => Promise<string>,
+  accountId: string,
+  machineId: string
+): DeviceFlow {
+  const key = codexKey(accountId, machineId);
+  const held = flows.get(key);
+  if (held instanceof DeviceFlow) {
+    return held;
+  }
+  const made = new DeviceFlow(account, machineId, codexAsks);
+  made.resume(pendingOf(accountId, machineId, true));
+  flows.set(key, made);
+  return made;
+}
 
 /** The flow under `key`, if one is under way or has an outcome to show. */
 export const heldFlow = (key: string): SigninFlow | DeviceFlow | undefined =>

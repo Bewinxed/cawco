@@ -96,6 +96,8 @@
   import { DeviceFlow } from "./device.svelte";
   import {
     adoptFlows,
+    codexFlow,
+    codexKey,
     deviceFlow,
     dropFlow,
     flowKey,
@@ -104,9 +106,12 @@
   } from "./flows.svelte";
   import KeyPanel from "./KeyPanel.svelte";
   import {
+    type AccountMachine,
     accountsOf,
     choiceLabel,
     choicesOf,
+    codexState,
+    harnessesOn,
     harnessWords,
     machineName,
     machineOnline,
@@ -117,6 +122,7 @@
     signinState,
   } from "./model.svelte";
   import ProviderMark from "./ProviderMark.svelte";
+  import SigninFor from "./SigninFor.svelte";
   import StrategyPicker from "./StrategyPicker.svelte";
   import Swatches from "./Swatches.svelte";
   import { SigninFlow } from "./signin.svelte";
@@ -262,10 +268,11 @@
   };
   /** Each machine's sign-in flow, as far as one is made. */
   const flows = $derived(
-    machines.flatMap((machine) => {
-      const flow = flowOn(machine.machineId);
-      return flow ? [flow] : [];
-    })
+    machines.flatMap((machine) =>
+      [flowOn(machine.machineId), codexOn(machine.machineId)].filter(
+        (flow) => flow !== undefined
+      )
+    )
   );
   /** The account the hub already had that a key sent here came out as (KeyPanel). */
   let keyJoined = $state<AccountJoined | null>(null);
@@ -289,6 +296,35 @@
   const deviceFor = (machineId: string): DeviceFlow =>
     deviceFlow(flowKey(root, machineId), ensureAccount, machineId, createdId);
 
+  /**
+   * A ChatGPT account signs in twice where Codex runs: its own sign-in for
+   * pi and OpenCode, and Codex's own into its Codex home, each a row of its
+   * own (the owner's pick "A row per sign-in", 2026-11-17).
+   */
+  const chatgpt = $derived(
+    choice !== null &&
+      choice !== undefined &&
+      isChatgptPlan({ provider: choice.provider, kind: choice.kind })
+  );
+  /** What each of a machine's rows signs in for: its own sign-in's harnesses, and Codex's. */
+  const rowsOn = (machine: AccountMachine) => {
+    const all = choice ? harnessesOn(machine, choice.provider) : [];
+    const codex = chatgpt && all.includes("codex");
+    return {
+      codex,
+      others: codex ? all.filter((one) => one !== "codex") : all,
+    };
+  };
+  const codexOn = (machineId: string): DeviceFlow | undefined => {
+    const flow = heldFlow(codexKey(root, machineId));
+    return flow instanceof DeviceFlow ? flow : undefined;
+  };
+  const codexFor = (machineId: string): DeviceFlow =>
+    codexFlow(ensureAccount, root, machineId);
+  const codexDoneOn = (machineId: string) =>
+    (accountId !== null && codexState(accountId, machineId) === "signed-in") ||
+    codexOn(machineId)?.phase === "signed-in";
+
   /** A setup taken up again shows each link or code the hub kept for its account. */
   function takeUpPending() {
     const id = createdId;
@@ -297,7 +333,9 @@
       if (id === null || one.accountId !== id) {
         continue;
       }
-      if (kind === "paste-code") {
+      if (one.codex) {
+        codexFor(one.machineId);
+      } else if (kind === "paste-code") {
         pasteFor(one.machineId);
       } else if (kind === "device-code") {
         deviceFor(one.machineId);
@@ -309,6 +347,7 @@
   function dropFlows() {
     for (const machine of machines) {
       dropFlow(flowKey(root, machine.machineId));
+      dropFlow(codexKey(root, machine.machineId));
     }
   }
 
@@ -319,7 +358,10 @@
     stateOn(machineId) === "signed-in" ||
     flowOn(machineId)?.phase === "signed-in";
   const signedIn = $derived(
-    machines.filter((machine) => doneOn(machine.machineId)).length
+    machines.filter((machine) => doneOn(machine.machineId)).length +
+      machines.filter(
+        (machine) => rowsOn(machine).codex && codexDoneOn(machine.machineId)
+      ).length
   );
   const email = $derived(
     account?.email ??
@@ -970,14 +1012,21 @@
             choice?.signin === "paste-code"
               ? harnessBlockOf(machine, "claude")
               : null}
-          {#if choice?.signin === "device-code"}
+          {@const rows = rowsOn(machine)}
+          {#if choice?.signin === "device-code" && rows.others.length > 0}
             <li
               class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
               data-device
             >
-              <b
-                class="col-(--area) row-(--area) type-label min-w-0 truncate text-ink-strong group-data-device:leading-c-btn-h-sm"
-                style:--area="name">{name}</b
+              <span
+                class="col-(--area) row-(--area) flex min-w-0 flex-col"
+                style:--area="name"
+                ><b
+                  class="type-label min-w-0 truncate text-ink-strong group-data-device:leading-c-btn-h-sm"
+                  >{name}</b
+                >{#if rows.codex}<SigninFor
+                    harnesses={rows.others}
+                  />{/if}</span
               >
               <div
                 data-slot="controls"
@@ -1003,7 +1052,49 @@
                 {/if}
               </span>
             </li>
-          {:else}
+          {/if}
+          {#if choice?.signin === "device-code" && rows.codex}
+            {@const codex = codexOn(machine.machineId)}
+            <!-- Codex's own sign-in, under the machine's first, named once. -->
+            <li
+              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 py-space-3 not-data-again:border-t not-data-again:border-t-border-hairline @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
+              data-again={rows.others.length > 0 || undefined}
+              data-device
+            >
+              <span
+                class="col-(--area) row-(--area) flex min-w-0 flex-col"
+                style:--area="name"
+                ><b
+                  class={[
+                    "type-label min-w-0 truncate text-ink-strong",
+                    rows.others.length > 0 && "sr-only",
+                  ]}>{name}</b
+                ><SigninFor harnesses={["codex"]} /></span
+              >
+              <div
+                data-slot="controls"
+                class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 @max-setup/setup:pt-space-2"
+                style:--area="controls"
+              >
+                <DevicePanel
+                  flow={codex}
+                  machine={name}
+                  {online}
+                  start={() => codexFor(machine.machineId).start()}
+                />
+              </div>
+              <span
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn-ink"
+                data-warn={codex?.phase === "mismatch" || undefined}
+                style:--area="st"
+              >
+                {#if !online}
+                  <span>{words.offline}</span>
+                {/if}
+              </span>
+            </li>
+          {/if}
+          {#if choice?.signin !== "device-code"}
             <!-- One control per machine: Sign in opens Claude Code's link in
                  a new tab and opens the row onto the link, the paste field
                  and Done. Continue is how a machine is skipped. A row with

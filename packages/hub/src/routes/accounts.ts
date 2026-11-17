@@ -33,12 +33,17 @@ export const accountProvider = t.String({
 export const accountsListed = (
   {
     catalogFaults,
+    codexSignins,
     db,
     livePendingSignins,
     rebalanceNotices,
   }: Pick<
     HubContext,
-    "catalogFaults" | "db" | "livePendingSignins" | "rebalanceNotices"
+    | "catalogFaults"
+    | "codexSignins"
+    | "db"
+    | "livePendingSignins"
+    | "rebalanceNotices"
   >,
   provider: Static<typeof accountProvider> | undefined
 ) => {
@@ -51,6 +56,8 @@ export const accountsListed = (
   return {
     accounts,
     signins: mine(db.accounts.signins()),
+    // Where each account runs Codex: its Codex home signed in on a machine.
+    codexSignins: mine(codexSignins()),
     // Sign-ins started and not finished: the link or code each
     // showed, for a screen that reloads or reopens to show again.
     pending: livePendingSignins().filter((one) => ids.has(one.accountId)),
@@ -87,7 +94,9 @@ export const accountRoutes = ({
   accountKindRefusal,
   accountOf,
   catalogFaults,
+  codexSignins,
   db,
+  forgetCodexEverywhere,
   forgetOn,
   knownProviders,
   livePendingSignins,
@@ -104,7 +113,9 @@ export const accountRoutes = ({
   | "accountKindRefusal"
   | "accountOf"
   | "catalogFaults"
+  | "codexSignins"
   | "db"
+  | "forgetCodexEverywhere"
   | "forgetOn"
   | "knownProviders"
   | "livePendingSignins"
@@ -128,7 +139,13 @@ export const accountRoutes = ({
       { query: t.Object({ provider: t.Optional(accountProvider) }) },
       ({ query }) =>
         accountsListed(
-          { catalogFaults, db, livePendingSignins, rebalanceNotices },
+          {
+            catalogFaults,
+            codexSignins,
+            db,
+            livePendingSignins,
+            rebalanceNotices,
+          },
           query.provider
         )
     )
@@ -265,6 +282,9 @@ export const accountRoutes = ({
       // connects: it names its stores, and this hub answers the ones it
       // removed, by the record `remove` keeps (`unknownAccountsOf`). One
       // that is online and fails says why.
+      // Codex signs out of the account's Codex homes first: a home that
+      // holds Codex's own sign-in outlives the account's other stores.
+      await forgetCodexEverywhere(account.id);
       const { failed, silent, later } = await signOutEverywhere(
         account,
         signins

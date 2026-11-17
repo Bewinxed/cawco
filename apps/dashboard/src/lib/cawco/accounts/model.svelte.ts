@@ -15,6 +15,7 @@ import {
   type AccountSignin,
   accountNameAmong,
   CLAUDE_PROVIDER,
+  isChatgptPlan,
   LIMITED_PROVIDERS,
   type NameableAccount,
   type ProviderChoice,
@@ -125,6 +126,28 @@ export function machinesFor(provider: AccountProvider) {
 }
 
 export type AccountMachine = ReturnType<typeof machinesFor>[number];
+
+/** The provider's harnesses `machine` runs, in the fleet's order. */
+export const harnessesOn = (
+  machine: AccountMachine,
+  provider: AccountProvider
+): HarnessKind[] =>
+  HARNESSES.filter(
+    (harness) =>
+      providerHarnesses(provider).includes(harness) &&
+      (machine.harnesses?.some((entry) => entry.harness === harness) ?? false)
+  );
+
+/** Where a ChatGPT account is signed in for Codex: its Codex home on the machine. */
+export const codexState = (
+  accountId: string,
+  machineId: string
+): SigninState =>
+  accountsStore.accounts?.codexSignins.some(
+    (one) => one.accountId === accountId && one.machineId === machineId
+  )
+    ? "signed-in"
+    : "signed-out";
 
 export const machineName = (machine: AccountMachine): string =>
   machineLabel(machine.hostname);
@@ -250,6 +273,31 @@ export function signinState(
  * machine that runs its harnesses doesn't have it. An offline machine is
  * not a problem.
  */
+/**
+ * Whether each of an account's sign-ins on a machine is made: its own,
+ * where the machine runs a harness that reads it, and, for a ChatGPT
+ * account where it runs Codex, Codex's own.
+ */
+function signinsOn(account: Account, machine: AccountMachine): boolean[] {
+  const harnesses = harnessesOn(machine, account.provider);
+  const codex = isChatgptPlan(account) && harnesses.includes("codex");
+  const own = harnesses.some((one) => !(codex && one === "codex"));
+  return [
+    ...(own
+      ? [
+          signinState(
+            accountsStore.accounts?.signins ?? [],
+            account.id,
+            machine.machineId
+          ) === "signed-in",
+        ]
+      : []),
+    ...(codex
+      ? [codexState(account.id, machine.machineId) === "signed-in"]
+      : []),
+  ];
+}
+
 export function problemOf(account: Account): string | null {
   const signins = (accountsStore.accounts?.signins ?? []).filter(
     (one) => one.accountId === account.id
@@ -262,7 +310,10 @@ export function problemOf(account: Account): string | null {
   if (someoneElse) {
     return words.problem.someoneElse(machineName(someoneElse));
   }
-  if (!signins.some((one) => one.state === "signed-in")) {
+  const codex = (accountsStore.accounts?.codexSignins ?? []).some(
+    (one) => one.accountId === account.id
+  );
+  if (!(codex || signins.some((one) => one.state === "signed-in"))) {
     // Signed out by the hub on a refusal: its words say why.
     const refused = signins.find((one) => one.reason)?.reason;
     return refused ?? words.problem.nowhere;
@@ -284,9 +335,8 @@ export function problemOf(account: Account): string | null {
       marked.mark.model
     );
   }
-  const missing = online.filter(
-    (machine) =>
-      signinState(signins, account.id, machine.machineId) !== "signed-in"
+  const missing = online.filter((machine) =>
+    signinsOn(account, machine).some((signedIn) => !signedIn)
   );
   if (missing.length === 0) {
     return null;

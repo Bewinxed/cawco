@@ -717,7 +717,8 @@ export interface ClosureContext {
   keepPending: (
     accountId: string,
     machineId: string,
-    challenge: ProviderSigninChallenge
+    challenge: ProviderSigninChallenge,
+    codex?: boolean
   ) => void;
   keepPrompt: (parked: ArrivingAsk) => boolean;
   keepRemovedMemory: (row: {
@@ -968,7 +969,7 @@ export interface ClosureContext {
       toolId: string;
     }
   >;
-  pendingKey: (accountId: string, machineId: string) => string;
+  pendingKey: (accountId: string, machineId: string, codex?: boolean) => string;
   pendingSignins: Map<string, PendingAccountSignin>;
   pendingToolSignins: Map<string, ToolSigninChallenge>;
   /** A model picked while a session owes a move, judged against the account it lands on and carried with it (limit-moves.ts). */

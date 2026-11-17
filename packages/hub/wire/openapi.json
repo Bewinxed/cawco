@@ -1079,6 +1079,269 @@
         }
       }
     },
+    "/api/accounts/{id}/machines/{machineId}/codex-signin": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiAccountsByIdMachinesByMachineIdCodexSignin",
+        "responses": {
+          "200": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSignin 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderSigninChallenge"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSignin 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSignin400"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSignin 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSignin404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSignin 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSignin422"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSignin 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSignin502"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSignin 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSignin503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSignin 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSignin504"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiAccountsByIdMachinesByMachineIdCodexSignin",
+        "responses": {
+          "200": {
+            "description": "deleteApiAccountsByIdMachinesByMachineIdCodexSignin 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiAccountsByIdMachinesByMachineIdCodexSignin200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiAccountsByIdMachinesByMachineIdCodexSignin 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiAccountsByIdMachinesByMachineIdCodexSignin404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiAccountsByIdMachinesByMachineIdCodexSignin 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiAccountsByIdMachinesByMachineIdCodexSignin422"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "deleteApiAccountsByIdMachinesByMachineIdCodexSignin 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiAccountsByIdMachinesByMachineIdCodexSignin502"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "deleteApiAccountsByIdMachinesByMachineIdCodexSignin 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiAccountsByIdMachinesByMachineIdCodexSignin503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "deleteApiAccountsByIdMachinesByMachineIdCodexSignin 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiAccountsByIdMachinesByMachineIdCodexSignin504"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/{id}/machines/{machineId}/codex-signin/complete": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete",
+        "responses": {
+          "200": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSigninComplete200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSigninComplete404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSigninComplete422"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSigninComplete502"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSigninComplete503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSigninComplete504"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/accounts/{id}/machines/{machineId}/signin": {
       "post": {
         "parameters": [
@@ -51396,6 +51659,11 @@
           "challenge": {
             "$ref": "#/components/schemas/ProviderSigninChallenge"
           },
+          "codex": {
+            "description": "Codex's own sign-in, into the account's Codex home there; absent for the account's own.",
+            "const": true,
+            "type": "boolean"
+          },
           "expiresAt": {
             "type": "number"
           },
@@ -64176,6 +64444,204 @@
           "type"
         ]
       },
+      "deleteApiAccountsByIdMachinesByMachineIdCodexSignin200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "deleteApiAccountsByIdMachinesByMachineIdCodexSignin404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "no-account"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "deleteApiAccountsByIdMachinesByMachineIdCodexSignin422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "deleteApiAccountsByIdMachinesByMachineIdCodexSignin502": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "codex-signin"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              502
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "deleteApiAccountsByIdMachinesByMachineIdCodexSignin503": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-away"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "deleteApiAccountsByIdMachinesByMachineIdCodexSignin504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "deleteApiAgentsByMachineId200": {
         "type": "object",
         "properties": {
@@ -76382,6 +76848,24 @@
               "$ref": "#/components/schemas/AccountCatalog"
             }
           },
+          "codexSignins": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "accountId",
+                "machineId"
+              ]
+            }
+          },
           "credit": {
             "type": "array",
             "items": {
@@ -76425,6 +76909,7 @@
           "bench",
           "catalogFaults",
           "catalogs",
+          "codexSignins",
           "credit",
           "pending",
           "readings",
@@ -122122,6 +122607,487 @@
               "type"
             ]
           }
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSignin400": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "not-chatgpt"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              400
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSignin404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "no-account"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSignin422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSignin502": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "codex-signin"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              502
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSignin503": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-away"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSignin504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete200": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "expired"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "mismatch"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "pending"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "identity": {
+                "description": "Null when the provider's credential names nobody.",
+                "$ref": "#/components/schemas/AccountIdentity"
+              },
+              "joined": {
+                "$ref": "#/components/schemas/AccountJoined",
+                "description": "Signed in as an account that already exists: it is that account's now."
+              },
+              "plan": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "signed-in"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          }
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "no-account"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete502": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "codex-signin"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              502
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete503": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-away"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSigninComplete504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiAccountsByIdMachinesByMachineIdSignin400": {

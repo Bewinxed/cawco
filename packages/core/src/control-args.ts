@@ -258,6 +258,7 @@ const ARGS: {
   completeCodexLogin: tuple([text]),
   completeProviderLogin: tuple([nullable(text), text, maybe(AccountIdentity)]),
   setProviderKey: tuple([text, text, text, maybe(AccountIdentity)]),
+  forgetCodexLogin: tuple([text]),
   forgetProviderAccount: tuple([text]),
   readAccountUsage: tuple([text]),
   readHomeCredentials: tuple([]),

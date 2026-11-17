@@ -1297,6 +1297,10 @@ export const createServer = (
     goneWithProcess: () => goneWithProcess,
     handAgain: () => handAgain,
     homeStamps: () => homeStamps,
+    codexSignedIn: () => codexSignedIn,
+    codexSignins: () => codexSignins,
+    noteCodexSignin: () => noteCodexSignin,
+    forgetCodexEverywhere: () => forgetCodexEverywhere,
     hubGitOrigins: () => hubGitOrigins,
     hubPreviewOrigins: () => hubPreviewOrigins,
     interruptedTurns: () => interruptedTurns,
@@ -1934,6 +1938,11 @@ export const createServer = (
     accountOf,
     adoptHomeCredentials,
     awayWords,
+    codexAccountsOn,
+    codexSignedIn,
+    codexSignins,
+    noteCodexSignin,
+    forgetCodexEverywhere,
     completeOn,
     finishJoined,
     homeCredentialOf,
@@ -7053,6 +7062,7 @@ export const createServer = (
     machineCredentials.forget(former);
     forgetMachineRuntime(former);
     homeStamps.delete(former);
+    codexAccountsOn.delete(former);
     ruleEngine.reload();
     ruleEngine.forgetFacts();
     console.info(
@@ -12637,7 +12647,19 @@ export const createServer = (
       adoptHomeCredentials(machineId).catch(console.error);
     }
     lendToWaiting(machineId);
-    const { providerAccounts, providers } = agentFrame;
+    const { codexAccounts, providerAccounts, providers } = agentFrame;
+    if (codexAccounts) {
+      const was = codexAccountsOn.get(machineId);
+      const now = new Set(codexAccounts);
+      codexAccountsOn.set(machineId, now);
+      if (!(
+        was &&
+        was.size === now.size &&
+        [...now].every((id) => was.has(id))
+      )) {
+        publishUsage(machineId);
+      }
+    }
     if (providerAccounts) {
       syncAccounts(machineId, "providers", {
         reports: providerAccounts,

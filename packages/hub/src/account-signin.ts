@@ -22,6 +22,7 @@ import {
 import {
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
+  CONTROL_FORGET_CODEX_LOGIN,
   CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
   CONTROL_READ_HOME_CREDENTIALS,
@@ -109,6 +110,67 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
    * leaves out (its list could not be read) keeps its last list.
    */
   const machineProviders = new Map<string, MachineProviderLists>();
+
+  /**
+   * Each machine's accounts whose Codex home there holds a Codex sign-in,
+   * as its last beat said (agent harnesses/codex-home.ts
+   * `codexSignedInAccounts`). Live: a machine says it again at every
+   * register.
+   */
+  const codexAccountsOn = new Map<string, ReadonlySet<string>>();
+
+  /** Whether `accountId` runs Codex on `machineId`: its Codex home there is signed in. */
+  const codexSignedIn = (accountId: string, machineId: string): boolean =>
+    codexAccountsOn.get(machineId)?.has(accountId) ?? false;
+
+  /**
+   * What a machine's answer to a Codex sign-in or sign-out just settled,
+   * kept at once: its next beat says it again.
+   */
+  const noteCodexSignin = (
+    accountId: string,
+    machineId: string,
+    signedIn: boolean
+  ): void => {
+    const now = new Set(codexAccountsOn.get(machineId));
+    if (signedIn) {
+      now.add(accountId);
+    } else {
+      now.delete(accountId);
+    }
+    codexAccountsOn.set(machineId, now);
+  };
+
+  /**
+   * An account removed: Codex signs out of its Codex home on every machine
+   * that holds one, as far as each answers. One that doesn't drops the
+   * home when it next names its stores (`unknownAccountsOf`).
+   */
+  const forgetCodexEverywhere = async (accountId: string): Promise<void> => {
+    for (const [machineId, ids] of codexAccountsOn) {
+      if (!ids.has(accountId)) {
+        continue;
+      }
+      const answer = await ctx.callAgent(
+        machineId,
+        CONTROL_FORGET_CODEX_LOGIN,
+        [accountId],
+        SIGNIN_TIMEOUT_MS
+      );
+      if (answer.kind === "answered" && answer.value.ok) {
+        noteCodexSignin(accountId, machineId, false);
+      }
+    }
+  };
+
+  /**
+   * Where each account is signed in for Codex, as the dashboard reads it:
+   * one row per account and machine whose Codex home holds a sign-in.
+   */
+  const codexSignins = (): { accountId: string; machineId: string }[] =>
+    [...codexAccountsOn].flatMap(([machineId, ids]) =>
+      [...ids].map((accountId) => ({ accountId, machineId }))
+    );
 
   /** Every provider any machine knows, one entry each, the first machine's word on it. */
   const knownProviders = (): ProviderInfo[] => {
@@ -715,6 +777,11 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
 
   return {
     undoRemovedSignin,
+    codexAccountsOn,
+    codexSignedIn,
+    codexSignins,
+    noteCodexSignin,
+    forgetCodexEverywhere,
     machineProviders,
     knownProviders,
     accountKindRefusal,

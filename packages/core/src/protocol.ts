@@ -492,6 +492,13 @@ export interface HeartbeatPayload {
   at: number;
   /** The machine's binary update state, live on every beat. */
   binaryUpdate?: import("./binary-updates").BinaryUpdateState;
+  /**
+   * The accounts whose Codex home on the machine holds a Codex sign-in
+   * (agent harnesses/codex-home.ts `codexSignedInAccounts`): where each runs
+   * Codex. Rides the beat `providerAccounts` rides, and again whenever it
+   * changed.
+   */
+  codexAccounts?: string[];
   /** Fresh sessiond custody after an owner-named stop or register recovery. */
   custody?: SessionCustody;
   custodyComplete?: true;

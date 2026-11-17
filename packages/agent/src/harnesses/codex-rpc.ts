@@ -28,6 +28,7 @@ const CODEX_CLIENT = {
 interface Results {
   "account/login/cancel": V2.CancelLoginAccountResponse;
   "account/login/start": V2.LoginAccountResponse;
+  "account/logout": V2.LogoutAccountResponse;
   "account/rateLimits/read": V2.GetAccountRateLimitsResponse;
   "account/read": V2.GetAccountResponse;
   initialize: InitializeResponse;

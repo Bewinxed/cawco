@@ -15,6 +15,7 @@
   import { harnessSpec } from "@cawco/core/harness-refusal";
   import { TOOL_CATALOG, type ToolUpdates } from "@cawco/core/tools";
   import { onMount } from "svelte";
+  import { standBench } from "#lib/cawco/bench-stand.js";
   import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
@@ -28,7 +29,6 @@
   import { toolNeedsOf } from "#lib/cawco/home/tool-needs.js";
   import OutOfDate from "#lib/cawco/OutOfDate.svelte";
   import ToolMatrix from "#lib/cawco/ToolMatrix.svelte";
-  import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
   import { stageUsage } from "../usage-relay/stage";
   import { fleet, RELEASES } from "./fixtures";
@@ -44,12 +44,7 @@
 
   // The shell as a reached hub draws it, with nothing running.
   onMount(() => {
-    const scheme = page.url.searchParams.get("theme");
-    if (scheme === "dark" || scheme === "light") {
-      theme.set(scheme);
-    }
-    window.__cawcoDebug.standHub(() => undefined);
-    window.__cawcoDebug.boardState.machines = machines;
+    standBench(page.url.searchParams.get("theme"), machines);
     stageUsage(2);
   });
 

@@ -39,9 +39,11 @@ import { descriptorOf } from "@cawco/core/harness/kinds";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
   accountCredentialPath,
+  accountsRoot,
   credentialAccountIds,
 } from "@cawco/core/paths/claude";
 import {
+  codexAccountHome,
   opencodeAccountHome,
   opencodeDataDir,
 } from "@cawco/core/paths/harnesses";
@@ -170,10 +172,23 @@ const carryOutOpencode = async (
 /**
  * The account's store here gone (any Claude session in it carried out
  * first, {@link removeAccountDir}), and its OpenCode server's data with it,
- * once {@link carryOutOpencode} has moved its sessions out.
+ * once {@link carryOutOpencode} has moved its sessions out. A Codex home
+ * that holds Codex's own sign-in stays: it is signed out on its own
+ * (harnesses/codex-home.ts `forgetCodexLogin`), and with the account by the
+ * hub, or by the sweep of the stores it no longer knows.
  */
 const removeAccount = async (accountId: string): Promise<void> => {
-  await removeAccountDir(accountId);
+  const codex = codexAccountHome(accountId);
+  if (existsSync(join(codex, "auth.json"))) {
+    const root = join(accountsRoot(), accountId);
+    for (const entry of await readdir(root)) {
+      if (join(root, entry) !== codex) {
+        await rm(join(root, entry), { recursive: true, force: true });
+      }
+    }
+  } else {
+    await removeAccountDir(accountId);
+  }
   credentialChanged(accountId);
   await rm(opencodeAccountHome(accountId), { recursive: true, force: true });
 };

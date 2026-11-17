@@ -20,6 +20,13 @@
   /** A CLI with a mark: a harness, or a tool of the catalog that has one. */
   export type MarkedCli = keyof typeof MARKS;
 
+  /**
+   * The marks drawn in one ink: Codex's (OpenAI's) ships black, which
+   * vanishes on the dark theme, so it is filled with `--color-ink-strong`
+   * and follows the theme, as ProviderLogo's single-ink marks do.
+   */
+  const INK: ReadonlySet<MarkedCli> = new Set(["codex"]);
+
   /** Whether the CLI with this id has a mark to draw. */
   export const hasMark = (id: string): id is MarkedCli => id in MARKS;
 </script>
@@ -39,7 +46,8 @@
 
 <span
   data-slot="harness-logo"
-  class="inline-flex size-icon-md flex-none text-inherit"
+  class="inline-flex size-icon-md flex-none text-inherit data-ink:text-ink-strong data-ink:[&_path]:fill-current"
   data-harness-logo={harness}
+  data-ink={INK.has(harness) || undefined}
   {...rest}><Mark class="size-full" /></span
 >
