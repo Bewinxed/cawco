@@ -576,6 +576,8 @@ const gated: Gated[] = [
   bun("scripts/tailwind-draws-check.ts"),
   inDashboard("scripts/role-order.ts"),
   inDashboard("scripts/build-variants.ts", "--check"),
+  // The web app manifest's colours are the theme's, as the tokens make them.
+  inDashboard("scripts/web-manifest.ts", "--check"),
   bun("packages/hub/scripts/skills-check.ts"),
   bun("scripts/house-faces.ts", "--check"),
   bun("scripts/style-residual-check.ts"),

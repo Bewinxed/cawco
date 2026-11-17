@@ -12,7 +12,8 @@
     "fmt": "bun ../../scripts/fmt.ts .",
     "preview": "vite preview",
     "tab-icon": "bun scripts/tab-icon-art.ts",
-    "variants": "bun scripts/build-variants.ts"
+    "variants": "bun scripts/build-variants.ts",
+    "web-manifest": "bun scripts/web-manifest.ts"
   },
   "overrides": {
     "vite": "^8.3.5"

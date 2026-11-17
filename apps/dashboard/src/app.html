@@ -52,6 +52,28 @@
       (an artifact's own tab) keeps it.
     -->
     <link href="%cawco.tab-icon%" rel="icon" type="image/png" />
+    <!--
+      The board as an app on a phone's home screen: Caw&Co under Caw's icon,
+      opening in its own window. The manifest (written from the tokens by
+      scripts/web-manifest.ts) says the name, the window and the icons for
+      every browser; the rest is what iOS reads from the page. Both
+      web-app-capable tags: the unprefixed one is the current form (Chrome
+      warns on the prefixed one alone); iOS reads the status bar's style only
+      beside the prefixed one (Apple's "Supported Meta Tags"), and a page with
+      the unprefixed one alone opened in Safari's bars on iOS 18.3
+      (grafana/grafana#100071). The status bar is `default`: iOS draws it opaque and lays the
+      page below it in either scheme, coloured from `theme-color`, which
+      ScreenEdges keeps on the bar as drawn; `black-translucent` would put
+      white status text over the light scheme's bar. The touch icon is the
+      180 px opaque square iOS masks itself; the title is the name under it.
+      No service worker and no push: installed, the board is this same page.
+    -->
+    <link href="/manifest.webmanifest" rel="manifest" />
+    <link href="/icons/apple-touch-icon.png" rel="apple-touch-icon" />
+    <meta content="yes" name="mobile-web-app-capable" />
+    <meta content="yes" name="apple-mobile-web-app-capable" />
+    <meta content="default" name="apple-mobile-web-app-status-bar-style" />
+    <meta content="Caw&amp;Co" name="apple-mobile-web-app-title" />
     %sveltekit.head%
     <!--
       The faces the first paint sets its text in, decoded before it. The build
