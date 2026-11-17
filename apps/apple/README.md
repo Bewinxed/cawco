@@ -30,13 +30,10 @@ milliseconds.
 Build and launch both platforms on the Mac, from the repo root. From a
 person's shell on obelisk the script reaches the Mac over `ssh mac`; on the
 Mac it runs there. A CawCo workspace holds no SSH key and reaches no other
-machine, so from one the script refuses: an item's check names the Mac
-instead (`delegate`'s `checks[].machine`, e.g. `{ machine: "Omars-MacBook-Pro",
-command: "bash apps/apple/scripts/build-both.sh ios", expect: "LAUNCHED iOS 18.5" }`),
-and the hub runs it in a workspace on the Mac at the item's commit; or the
-work is delegated to the Mac. A landing check launches (`build-both.sh ios`
-proves the floor, iOS 18.5, and the newest runtime): a binary that dies at
-launch compiles clean. `--compile-only` never launches; it is for a workspace
+machine, so from one the script refuses: the work is delegated to the Mac
+instead (`delegate`'s `machine`), where its workspace runs the script itself.
+The proof of a build launches (`build-both.sh ios` proves the floor, iOS 18.5,
+and the newest runtime): a binary that dies at launch compiles clean. `--compile-only` never launches; it is for a workspace
 that cannot, and compiles the simulator's arm64 slice alone. With
 `--targets A,B,…` it compiles only those targets, deps first: the targets
 whose folders a change touched plus every target depending on them, as
