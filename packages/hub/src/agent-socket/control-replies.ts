@@ -151,16 +151,22 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       body.kind === "control_result" &&
       message.requestId !== undefined &&
       ctx.streams.settleCommand(message.requestId, body);
-    // A set-effort answered: the level the session applied is its chosen
-    // effort from now on (relay-control.ts `noteControl`); a refused one is
-    // not.
+    // A set-effort answered (relay-control.ts `noteControl`). The level is
+    // the session's chosen effort, which its next launch asks for, when its
+    // session applied it, and when its machine ran no process to ask (`not-
+    // running`: asleep, between a stop and its relaunch, mid-move), so a
+    // choice made then takes hold at the next start. One the session
+    // refused (pi: its model has no such level) is not.
     const effortAsk =
       body.kind === "control_result" && message.requestId
         ? ctx.effortAsks.get(message.requestId)
         : undefined;
     if (effortAsk && message.requestId) {
       ctx.effortAsks.delete(message.requestId);
-      if (body.kind === "control_result" && body.ok) {
+      if (
+        body.kind === "control_result" &&
+        (body.ok || body.refusal?.kind === "not-running")
+      ) {
         ctx.db.chooseEffort(effortAsk.instanceId, effortAsk.effort);
       }
     }

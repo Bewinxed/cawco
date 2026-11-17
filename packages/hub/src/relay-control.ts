@@ -833,10 +833,11 @@ export const createRelayControl = (ctx: RelayControlContext) => {
   /** A control that interrupts a session's turn cuts into it ({@link noteInterrupt}). */
   const noteControl = (message: HubEnvelope<"control">): void => {
     // The operator's effort for the session, which every later launch of it
-    // asks for ({@link bounded}), once the session says it applied it: a
-    // level its model has none of is refused there (pi), and a refused
-    // level would otherwise be the one every relaunch asks for. The CLI's
-    // reading of it only moves the chip.
+    // asks for ({@link bounded}), once the machine answers: kept when the
+    // session applied it or no process was there to ask, never when the
+    // session refused it (pi, a level its model has none of), which every
+    // relaunch would otherwise ask for (agent-socket control-replies.ts).
+    // The CLI's reading of it only moves the chip.
     const effort = message.payload.args?.[0];
     const requestId = message.requestId ?? message.payload.requestId;
     if (
