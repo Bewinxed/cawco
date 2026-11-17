@@ -48,6 +48,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { MESSAGES_READ, usageByModel } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
+import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
@@ -1067,6 +1068,79 @@ class ProviderAnswers {
   }
 }
 
+/** One request's pi-ai `Usage` on `model` (`provider/id`), priced by CawCo at `at` (epoch ms, core `pricedRequest`). */
+const priced = (model: string, usage: Usage, at: number): ModelTurnUsage =>
+  pricedRequest(
+    model,
+    {
+      input: usage.input,
+      output: usage.output,
+      cacheRead: usage.cacheRead,
+      cacheWrite: usage.cacheWrite,
+      ...(usage.cacheWrite1h === undefined
+        ? {}
+        : { cacheWrite1h: usage.cacheWrite1h }),
+    },
+    at
+  );
+
+/**
+ * What the conversation a session resumes had cost before its host
+ * started, in dollars, priced as a live turn prices each request
+ * ({@link priced}): every answer, compaction, branch summary and request
+ * pi made of its own (`usage`) its session file stored, abandoned branches
+ * too, since each was spent. An entry older than the file itself (its
+ * header's `timestamp`) was copied in by a fork (`forkFrom`,
+ * `createBranchedSession` keep each entry's own time) and is the
+ * conversation it came from's spend. A summary names no model: it ran on
+ * the one the conversation was on (`AgentSession.compact`: `const model =
+ * this.model`), the last answer's before it, else the session's.
+ */
+const storedCost = (session: AgentSession): number => {
+  const manager = session.sessionManager;
+  const made = Date.parse(manager.getHeader()?.timestamp ?? "");
+  let model = session.model ? piModelValue(session.model) : undefined;
+  let cost = 0;
+  const add = (
+    on: string | undefined,
+    usage: Usage | undefined,
+    at: string
+  ) => {
+    if (on && usage && !(Date.parse(at) < made)) {
+      cost += priced(on, usage, Date.parse(at)).costUsd ?? 0;
+    }
+  };
+  for (const entry of manager.getEntries()) {
+    switch (entry.type) {
+      case "message":
+        if (entry.message.role === "assistant") {
+          model = `${entry.message.provider}/${entry.message.model}`;
+          add(model, entry.message.usage, entry.timestamp);
+        }
+        break;
+      case "compaction":
+      case "branch_summary":
+        add(model, entry.usage, entry.timestamp);
+        break;
+      case "usage":
+        add(`${entry.provider}/${entry.model}`, entry.usage, entry.timestamp);
+        break;
+      // What spent nothing: no request was made for it.
+      case "context_edit":
+      case "custom":
+      case "custom_message":
+      case "label":
+      case "model_change":
+      case "session_info":
+      case "thinking_level_change":
+        break;
+      default:
+        unhandled("pi session entry", entry);
+    }
+  }
+  return cost;
+};
+
 /** A send that is pi's `/compact`, with its optional focus text. */
 const COMPACT_COMMAND = /^\/compact(?:\s+([\s\S]*))?$/u;
 
@@ -1089,12 +1163,17 @@ class PiSession implements HarnessSession {
   #reading: string | undefined;
   /** What the turn's requests spent so far: its answers' and any compaction's. */
   #turnUsage: ModelTurnUsage[] = [];
-  /** What this process's turns before the one now ending cost, in dollars ({@link #costSoFar}). */
-  #costBase = 0;
+  /**
+   * What the conversation's requests before the turn now ending cost, in
+   * dollars ({@link #costSoFar}): from its start, what its session file
+   * stored before this host ({@link storedCost}), then each turn this host
+   * ran.
+   */
+  #costBase: number;
 
   /**
-   * What the session has cost since its host started, the turn now ending
-   * included: each request priced by CawCo as it ran ({@link #spent}, core
+   * What the conversation has cost, the turn now ending included: each
+   * request priced by CawCo as it ran ({@link #spent}, core
    * `pricedRequest`), the price the turn's `turnUsage` carries to the hub's
    * records, summed as OpenCode's session sums it (`total_cost_usd`). pi's
    * own `usage.cost` is not read: the hub's one price is the truth, and the
@@ -1168,21 +1247,7 @@ class PiSession implements HarnessSession {
   /** One request's pi-ai `Usage` on `model` (`provider/id`), priced at `at` (epoch ms). */
   #spent(model: string, usage: Usage | undefined, at: number): void {
     if (usage) {
-      this.#turnUsage.push(
-        pricedRequest(
-          model,
-          {
-            input: usage.input,
-            output: usage.output,
-            cacheRead: usage.cacheRead,
-            cacheWrite: usage.cacheWrite,
-            ...(usage.cacheWrite1h === undefined
-              ? {}
-              : { cacheWrite1h: usage.cacheWrite1h }),
-          },
-          at
-        )
-      );
+      this.#turnUsage.push(priced(model, usage, at));
     }
   }
 
@@ -1247,6 +1312,7 @@ class PiSession implements HarnessSession {
     fleetMcp: FleetMcp | undefined,
     effort: EffortLevel | undefined
   ) {
+    this.#costBase = storedCost(session);
     this.#ctx = ctx;
     this.#effort = effort;
     this.#session = session;
@@ -1448,6 +1514,22 @@ class PiSession implements HarnessSession {
         this.#sayEffort();
         break;
       }
+      // A request pi made of its own between turns, which no answer of the
+      // session's carries: its prompt cache kept warm (cache-warmer.js
+      // `appendUsage("cache_warm", …)`, on by default: `cacheWarming:
+      // "idle"`, "Global only because each refresh costs money"). Its spend
+      // goes with the session's next result, as a compaction's does.
+      case "entry_appended": {
+        const { entry } = event;
+        if (entry.type === "usage") {
+          this.#spent(
+            `${entry.provider}/${entry.model}`,
+            entry.usage,
+            Date.parse(entry.timestamp)
+          );
+        }
+        break;
+      }
       // Its effort moved (a set-effort, a model switch, pi's own clamp): said
       // as pi now holds it.
       case "thinking_level_changed":
@@ -1459,7 +1541,6 @@ class PiSession implements HarnessSession {
       case "auto_retry_start":
       case "bash_execution_update":
       case "compaction_start":
-      case "entry_appended":
       case "queue_update":
       case "session_info_changed":
       case "summarization_retry_attempt_start":
