@@ -98,6 +98,10 @@
     (node: HTMLDivElement) => node.offsetHeight,
     (value) => {
       room = value;
+      // Its room changed (a keyboard's lift, the pane resized): its foot
+      // moves with the host's at once, and vaul moves it to the new stop.
+      // A stop changed alone moves it by vaul's transition (`moving`).
+      followHead?.();
     }
   );
   /** The stops as vaul takes them: px of the room as measured. */
@@ -133,44 +137,85 @@
 
   /** Frames it stands still for before it has come to rest. Our call. */
   const REST_FRAMES = 5;
-  let watchingRest = false;
+  /**
+   * Calls `read` each frame until what it returns has held still for
+   * `REST_FRAMES` frames, then calls `done` and asks for no frame more.
+   * `kick` says it moves or is about to: it starts the reading (its first
+   * read at once, so the frame it comes in is read) or, already reading,
+   * waits `REST_FRAMES` still frames again from there. At rest it costs
+   * nothing.
+   */
+  function untilStill(read: () => number | undefined, done: () => void) {
+    let frame = 0;
+    let last: number | undefined;
+    let still = 0;
+    const look = () => {
+      const now = read();
+      still = now === last ? still + 1 : 0;
+      last = now;
+      if (still < REST_FRAMES) {
+        frame = requestAnimationFrame(look);
+        return;
+      }
+      frame = 0;
+      done();
+    };
+    return {
+      kick() {
+        still = 0;
+        if (frame) {
+          return;
+        }
+        last = read();
+        frame = requestAnimationFrame(look);
+      },
+      stop() {
+        cancelAnimationFrame(frame);
+        frame = 0;
+      },
+    };
+  }
+
   /**
    * It has moved or is about to, by vaul's animation or its transition, on
    * itself or on what it holds: its place read each frame until it has stood
    * still, then told once. Read at the event, it may not stand there yet: at
    * an animation's end its own transform has only just come back.
    */
-  function watchRest() {
-    if (watchingRest) {
-      return;
-    }
-    watchingRest = true;
-    let last = surface?.getBoundingClientRect().top;
-    let still = 0;
-    const look = () => {
-      const now = surface?.getBoundingClientRect().top;
-      still = now === last ? still + 1 : 0;
-      last = now;
-      if (still < REST_FRAMES) {
-        requestAnimationFrame(look);
-        return;
-      }
-      watchingRest = false;
-      onmoved?.();
-    };
-    requestAnimationFrame(look);
+  const rest = untilStill(
+    () => surface?.getBoundingClientRect().top,
+    () => onmoved?.()
+  );
+
+  /** The floating head's follower while one is drawn over the sheet (below): kicked wherever the sheet can move. */
+  let followHead: (() => void) | undefined;
+  /** The sheet moves or is about to, by an animation or a transition: vaul's open, close and snap, on itself or on what it holds. */
+  function moving() {
+    rest.kick();
+    followHead?.();
   }
 
   /*
    * A panel's floating head (SideSurface's) yields to the sheet as the
    * sheet's top comes within a head's height of its foot, and is gone by the
    * time the top reaches it (`--head-shown` on the card, 1 down to 0), so the
-   * sheet never covers a head still drawn; read
-   * every frame the sheet stands open, since vaul moves it by a transform no
-   * observer hears. At half its room the head stands whole over the page; at
-   * the whole room the sheet is the screen and its own bar stands where the
-   * head was, the head gone under it; between, the two bars never overlap.
-   * The sheet stands over the head (its host's `z-3`).
+   * sheet never covers a head still drawn. At half its room the head stands
+   * whole over the page; at the whole room the sheet is the screen and its
+   * own bar stands where the head was, the head gone under it; between, the
+   * two bars never overlap. The sheet stands over the head (its host's
+   * `z-3`).
+   *
+   * vaul moves the sheet by a transform no observer hears, so its place is
+   * read each frame, but only while it can be moving (`untilStill`): from
+   * its opening, a drag on the grabber (vaul's own pointer moves on the
+   * handle, `handleOnly`), vaul's transitions and animations as they start
+   * (open, close, a snap after release, a step to the other stop: each
+   * bubbles to the host it is drawn in), the room or the stop changing
+   * (a keyboard's lift, the pane resized), and the visible viewport
+   * resizing (a keyboard, the window). At rest it asks for no frame: read
+   * every frame it stood open, it read two boxes and wrote a property every
+   * element in the card inherits, each frame of a sheet standing still. The
+   * property is written only when its value changes.
    *
    * In the phone's preview sheet (SideSheet's `data-preview-sheet`) the
    * panel is itself a sheet, its grabber over its head: the room starts
@@ -188,24 +233,34 @@
     const headRoom =
       card.querySelector<HTMLElement>('[data-slot="side-head"]')
         ?.offsetHeight || 1;
-    let frame = 0;
-    const look = () => {
-      const top = surface
-        ? surface.getBoundingClientRect().top - at.getBoundingClientRect().top
-        : headRoom;
-      card.style.setProperty(
-        "--head-shown",
-        String(Math.min(1, Math.max(0, (top - headRoom) / headRoom)))
-      );
-      frame = requestAnimationFrame(look);
-    };
-    look();
+    let shown = "";
+    const follow = untilStill(
+      () => {
+        const top = surface
+          ? surface.getBoundingClientRect().top - at.getBoundingClientRect().top
+          : headRoom;
+        const next = String(
+          Math.min(1, Math.max(0, (top - headRoom) / headRoom))
+        );
+        if (next !== shown) {
+          shown = next;
+          card.style.setProperty("--head-shown", next);
+        }
+        return top;
+      },
+      () => undefined
+    );
+    followHead = follow.kick;
+    follow.kick();
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", follow.kick);
     return () => {
-      cancelAnimationFrame(frame);
+      viewport?.removeEventListener("resize", follow.kick);
+      follow.stop();
+      followHead = undefined;
       card.style.removeProperty("--head-shown");
     };
   });
-
   let grabbedAt = 0;
   let dragged = false;
   /** A tap on the grabber steps the sheet to its other stop; a drag is vaul's. */
@@ -223,10 +278,10 @@
   bind:this={host}
   class="pointer-events-none absolute inset-x-0 top-0 z-3 bottom-(--keyboard-lift,0px) overflow-clip in-data-preview-sheet:top-(--side-room)"
   data-slot="thread-sheet-host"
-  onanimationend={watchRest}
-  onanimationstart={watchRest}
-  ontransitionend={watchRest}
-  ontransitionrun={watchRest}
+  onanimationend={moving}
+  onanimationstart={moving}
+  ontransitionend={moving}
+  ontransitionrun={moving}
   {@attach measured}
 ></div>
 <!-- Drawn once its room is measured: its stops are px of it. -->
@@ -292,6 +347,8 @@
             dragged = false;
           }}
           onpointermove={(event) => {
+            // vaul drags it 1:1 under this move (`handleOnly`).
+            followHead?.();
             if (Math.abs(event.clientY - grabbedAt) > 8) {
               dragged = true;
             }
