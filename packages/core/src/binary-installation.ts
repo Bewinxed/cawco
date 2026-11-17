@@ -424,15 +424,25 @@ export async function prune(): Promise<PruneReport> {
 const NAMED_BUILDS = 8;
 
 /**
- * A prune's journal line: on each side the folders by place, their bytes, and
- * the builds they belong to. "removed 80 folders (runtime/ 40, versions/ 40)
+ * A prune's journal line: on each side the folders by place (runtime/,
+ * versions/, binary-releases/, always in that order), their bytes, and the
+ * builds they belong to. "removed 80 folders (runtime/ 40, versions/ 40)
  * of 40 builds, 6.1 GB: 0.0.0-stale.1, … and 32 more; kept 3 folders
  * (runtime/ 2, versions/ 1) of 2 builds, 312 MB: 0.0.0-held-open,
  * 0.1.13-nightly.8241".
  */
 export const pruneLine = (report: PruneReport): string => {
+  // The places in one fixed order, whatever order the prune visited them in.
+  const order = [
+    runtimeRoot(),
+    join(binaryRoot(), "versions"),
+    hubReleasesDir(),
+  ];
+  const places = [...report.places].sort(
+    (a, b) => order.indexOf(a.dir) - order.indexOf(b.dir)
+  );
   const said = (pick: "kept" | "removed", bytes: number): string => {
-    const counted = report.places.filter((place) => place[pick].length > 0);
+    const counted = places.filter((place) => place[pick].length > 0);
     const folders = counted.reduce((sum, place) => sum + place[pick].length, 0);
     if (folders === 0) {
       return `${pick} nothing`;
