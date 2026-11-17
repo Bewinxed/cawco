@@ -17,6 +17,7 @@ import {
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
 import { fleetItemsOf } from "@cawco/core/fleet-items";
+import type { HarnessCapabilities } from "@cawco/core/harness";
 import { answersControl } from "@cawco/core/harness/traits";
 import type { FleetHook } from "@cawco/core/hooks";
 import type { FsPayload } from "@cawco/core/protocol";
@@ -82,6 +83,7 @@ export type FleetSourcesContext = Pick<
   | "db"
   | "fleetMcp"
   | "fleetSyncs"
+  | "harnessReportOf"
   | "lifetime"
   | "machineName"
   | "mcpChanges"
@@ -101,23 +103,32 @@ interface FleetMoved {
   skills: ReadonlySet<string>;
 }
 
+/** The capability a machine reports for its harness that each refresh needs ({@link refreshesOf}). */
+const REFRESH_CAPABILITY = {
+  [CONTROL_RELOAD_PLUGINS]: "plugins",
+  [CONTROL_RELOAD_SKILLS]: "reloadSkills",
+  [CONTROL_REINITIALIZE]: "hooks",
+} as const satisfies Record<string, keyof HarnessCapabilities>;
+
 /**
- * The refreshes a live session takes for what moved: each one its harness
- * answers (core `answersControl`; a legacy row with no harness is Claude
- * Code's), its skills only when one it loads moved (any, for a session that
- * starts with everything installed; one of its starting set's otherwise),
- * and none of its skills beside `reloadPlugins`, which reloads them too.
+ * The refreshes a live session takes for what moved: each one its harness's
+ * sessions answer (core `answersControl`; a legacy row with no harness is
+ * Claude Code's) and its machine reports for that harness ({@link
+ * REFRESH_CAPABILITY}: a machine whose adapter serves fewer controls than
+ * the traits list refuses the rest as "unknown session function"), its
+ * skills only when one it loads moved (any, for a session that starts with
+ * everything installed; one of its starting set's otherwise), and none of
+ * its skills beside `reloadPlugins`, which reloads them too.
  */
 const refreshesOf = (
   row: Pick<PublicInstanceRow, "harness" | "startingSet">,
+  capabilities: HarnessCapabilities | undefined,
   moved: FleetMoved
-): (
-  | typeof CONTROL_REINITIALIZE
-  | typeof CONTROL_RELOAD_PLUGINS
-  | typeof CONTROL_RELOAD_SKILLS
-)[] => {
+): (keyof typeof REFRESH_CAPABILITY)[] => {
   const harness = row.harness ?? "claude";
-  const answers = (method: string) => answersControl(harness, method);
+  const answers = (method: keyof typeof REFRESH_CAPABILITY) =>
+    capabilities?.[REFRESH_CAPABILITY[method]] === true &&
+    answersControl(harness, method);
   const plugins = moved.plugins && answers(CONTROL_RELOAD_PLUGINS);
   const loads = row.startingSet
     ? row.startingSet.skills.some((name) => moved.skills.has(name))
@@ -247,7 +258,11 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       return;
     }
     for (const row of ctx.db.liveInstancesOn(machineId)) {
-      const methods = refreshesOf(row, moved);
+      const methods = refreshesOf(
+        row,
+        ctx.harnessReportOf(machineId, row.harness ?? "claude")?.capabilities,
+        moved
+      );
       for (const method of methods) {
         const requestId = crypto.randomUUID();
         const payload: AddressedControl = {
