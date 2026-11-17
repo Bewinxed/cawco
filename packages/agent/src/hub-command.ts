@@ -60,7 +60,7 @@ type Stop = "expired" | "overflowed" | "cancelled";
 interface Running {
   readonly runId: string | undefined;
   readonly stop: (why: Stop) => void;
-  /** The landing gate's step it is ({@link CommandRun.gate}), else the command as {@link shownCommand} shows it. */
+  /** The command as {@link shownCommand} shows it. */
   readonly words: string;
 }
 
@@ -328,12 +328,11 @@ const lines = (each: (line: string) => void) => {
 
 /**
  * Runs `go` under one of the machine's heavy-work slots (core
- * heavy-slots.ts), taken for `who` and let go as it ends: what a merge check
- * and a stage clone's install run under, so a machine runs no more of them,
- * and of every other heavy run (`bun run check`, a probe run), than it has
- * room for. `go` gets the lease's words, for the command's environment
- * ({@link HEAVY_SLOT_ENV}): what it runs (a merge check's `bun run check
- * --all`) takes no slot of its own. A run past the slots waits in line in
+ * heavy-slots.ts), taken for `who` and let go as it ends: what a stage
+ * clone's install runs under, so a machine runs no more of them, and of
+ * every other heavy run (`bun run check`, a probe run), than it has room
+ * for. `go` gets the lease's words, for the command's environment
+ * ({@link HEAVY_SLOT_ENV}): what it runs takes no slot of its own. A run past the slots waits in line in
  * the order it came, each change of its wait told to the hub under the
  * run's id as the `heavy` slot; its limit's clock has not started then
  * ({@link spawned} starts it). A cancel while it waits ({@link cancelCommand})
@@ -414,9 +413,8 @@ const underSlot = async (
  * outside it.
  *
  * A heavy run starts only under one of the machine's heavy-work slots
- * ({@link underSlot}): a merge check (the run names its `gate`), or a
- * command its caller here names `heavy` (stage-clone.ts's install), in
- * these words. Its shell first puts itself, and so all it runs, at nice 10
+ * ({@link underSlot}): a command its caller here names `heavy`
+ * (stage-clone.ts's install), in these words. Its shell first puts itself, and so all it runs, at nice 10
  * and, on Linux, the idle I/O class (core `BACKGROUND_SHELL`): inside a boundary that
  * is the runner's shell in the sandbox, which the executor outside it never
  * reaches.
@@ -465,9 +463,8 @@ async function runCommand(
     }
     return await movedCommand(cwd, cmd, timeoutMs, workspace, named);
   }
-  const who = named?.gate ?? heavy;
   const [file, args] = await commandLine(
-    who === undefined ? cmd : `${BACKGROUND_SHELL}${cmd}`,
+    heavy === undefined ? cmd : `${BACKGROUND_SHELL}${cmd}`,
     workspace,
     named
   );
@@ -477,9 +474,9 @@ async function runCommand(
   }
   const start = (env: Record<string, string>) =>
     spawned({ file, args, cwd, cmd, env, timeoutMs, workspace, named });
-  return who === undefined
+  return heavy === undefined
     ? await start({})
-    : await underSlot(who, named, (words) =>
+    : await underSlot(heavy, named, (words) =>
         start({ [HEAVY_SLOT_ENV]: words })
       );
 }
@@ -531,7 +528,7 @@ const spawned = ({
     let said = "";
     const running: Running = {
       runId: named?.id,
-      words: named?.gate ?? `the command \`${shownCommand(cmd)}\``,
+      words: `the command \`${shownCommand(cmd)}\``,
       stop: (why) => {
         // A spawn that made no process leaves nothing to signal.
         const leader = spawnedPid(child);

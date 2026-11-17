@@ -15,7 +15,7 @@
  * "this operation must be run in a work tree", and each delegate started
  * there worked in a view of the shared checkout itself: 39 commits behind
  * origin, among 85 files other sessions had changed, its commit in the
- * view's upper layer alone, its merge checks run over all of it.
+ * view's upper layer alone, its checks run over all of it.
  *
  * A clone is not cut from such a repository instead: its own git refuses
  * every work-tree command there, so the cut's reads of the source (its top

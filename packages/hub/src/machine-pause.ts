@@ -12,12 +12,11 @@
  *   (`deliverToSession`): kept at the hub as owed, and handed over in the
  *   order taken once the pause ends (`releaseOwed`, `flushOwedStarts`);
  * - a keep-alive's ping: not sent;
- * - a command the hub runs there, a landing gate step (the iOS build among
- *   them) (`runOnMachine`): it waits for the
- *   pause's end, its item's status naming the pause and the time. One
- *   already running as the pause begins is cancelled on the machine (core
- *   `CONTROL_CANCEL_COMMAND`) and waits the same way, then runs again from
- *   the start: never a failed step or an attempt. The machine's row says how many were stopped;
+ * - a command the hub runs there, a landing's git among them
+ *   (`runOnMachine`): it waits for the pause's end, its item's status
+ *   naming the pause and the time. One already running as the pause begins
+ *   is cancelled on the machine (core `CONTROL_CANCEL_COMMAND`) and waits
+ *   the same way, then runs again from the start: never a failed attempt. The machine's row says how many were stopped;
  * - a new delegate for the machine (work-items.ts `notPaused`): queued
  *   in its parent's tray, and started once the pause ends;
  * - a preview's listener: not started, the pane saying why.
@@ -28,7 +27,6 @@
  * hub's restart and its agent's; the timer is armed again as the hub starts.
  */
 
-import type { RunKind, StoppedCommands } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { cutShort } from "@cawco/core/words/helpers";
 import { pauseClock, stoppedWords } from "@cawco/core/words/machine-pause";
@@ -42,17 +40,6 @@ export const PAUSE_ORIGIN = "machine-pause";
 /** How a caller has the hub run a command on a machine (machine-commands.ts `runOnMachine`). */
 export interface CommandOptions {
   /**
-   * The run is one of a work item's merge checks, in these words (core
-   * `CommandRun.gate`).
-   */
-  readonly gate?: string;
-  /**
-   * A run a pause cancels answers `cancelled`, for its caller to run again
-   * where it chooses (the Apple build gate moves to a Mac not paused),
-   * rather than waiting the pause out and running again where it was.
-   */
-  readonly movable?: boolean;
-  /**
    * The command moves the workspace's worktree to this commit, a landing's
    * reset to its rebased commit or a checkout of it (core `CommandRun.moves`): the machine runs it on
    * its host, the workspace's sandbox down, when it writes a path the
@@ -64,8 +51,8 @@ export interface CommandOptions {
    * The run never waits: on a paused machine it does not start, and one that
    * begins to wait for a shared slot (any but its boundary's start), or that
    * a pause cancels, is cancelled there; each throws {@link WouldWait}. A
-   * landing turn's gate steps run so (landing.ts): an item there steps out to
-   * gate again rather than hold the queue.
+   * landing turn's git runs so (landing.ts): an item there steps out to
+   * rebase again rather than hold the queue.
    */
   readonly noWait?: boolean;
   /**
@@ -82,8 +69,6 @@ export interface CommandOptions {
    * {@link CommandStopped}.
    */
   readonly stop?: AbortSignal;
-  /** What it is, as a pause that stops it counts it; a plain command when not said. */
-  readonly what?: RunKind;
 }
 
 /**
@@ -103,7 +88,7 @@ export class CommandStopped extends Error {}
 export const throwIfStopped = (how: CommandOptions, cmd: string): void => {
   if (how.stop?.aborted) {
     throw new CommandStopped(
-      `the ${how.what ?? "command"} was stopped with its owner: \`${cutShort(cmd, 120)}\``
+      `the command was stopped with its owner: \`${cutShort(cmd, 120)}\``
     );
   }
 };
@@ -139,14 +124,14 @@ export interface MachinePauseDeps {
   readonly db: Pick<DbShape, "listAgents" | "setMachinePause">;
   readonly lifetime: HubLifetimeShape;
   /**
-   * The pause took effect (or moved): what runs there now stops. Answers the
-   * commands the machine says it stopped, which the machine's row keeps.
+   * The pause took effect (or moved): what runs there now stops. Answers how
+   * many commands the machine says it stopped, which the machine's row keeps.
    */
   readonly paused: (
     machineId: string,
     until: Date,
     caller?: PauseCaller
-  ) => Promise<StoppedCommands>;
+  ) => Promise<number>;
   /** The pause is over, by its time or the owner's word: what waited goes. */
   readonly resumed: (machineId: string) => void;
 }
@@ -237,10 +222,7 @@ export const createMachinePause = (deps: MachinePauseDeps): MachinePause => {
       arm(machineId);
       const stopped = await deps.paused(machineId, until, caller);
       // Kept only on the pause it belongs to: not one resumed or moved meanwhile.
-      if (
-        Object.keys(stopped).length > 0 &&
-        ends.get(machineId) === until.getTime()
-      ) {
+      if (stopped > 0 && ends.get(machineId) === until.getTime()) {
         db.setMachinePause(machineId, until, stopped);
         console.log(
           `[pause] ${machineId}: ${stoppedWords(stopped) ?? "stopped nothing"}`

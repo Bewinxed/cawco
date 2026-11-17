@@ -14,8 +14,7 @@ const iso = (at: Date | null) => at?.toISOString() ?? null;
  * A work item as the API answers it: its times the ISO strings they are
  * sent as, and what it landed as one `landed` (stored-types.ts
  * `WorkLanding`), as it was answered while that was one JSON column: null
- * when no commit of it was recorded. `passed` is its landing gate's
- * commands (project-work.ts `landedChecks`). A landing whose record did not
+ * when no commit of it was recorded. A landing whose record did not
  * read is `landedUnread` beside it, as it was stored. `outputs` are the
  * outputs it declared (project-work.ts `workItemOutputs`), answered as they
  * were while they were one JSON column: null when none. Its block is one
@@ -42,7 +41,6 @@ export const workItemOut = (
     waitLastReason,
     ...item
   }: WorkItemRow,
-  passed: string[],
   outputs: string[],
   waits: WaitWitness[]
 ) => {
@@ -63,9 +61,6 @@ export const workItemOut = (
             sha: landedSha,
             onto: landedOnto,
             ...(landedAt ? { at: landedAt.getTime() } : {}),
-            ...(landedGateTree
-              ? { gate: { passed, tree: landedGateTree } }
-              : {}),
           },
     createdAt: item.createdAt.toISOString(),
     dismissedAt: iso(item.dismissedAt),

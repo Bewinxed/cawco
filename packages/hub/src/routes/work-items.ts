@@ -1,5 +1,5 @@
 /**
- * Work items and the landing gate: starting, waiting on, finishing and reading them.
+ * Work items: starting, waiting on, finishing and reading them.
  */
 
 import { Elysia, ElysiaStatus, problem, t, ValidationError } from "elysia";
@@ -37,20 +37,6 @@ export const workItemRoutes = (
   const calls = workItemCalls(ctx);
   return (
     new Elysia()
-      // What the landing gate passed on a git tree, for a release of a commit
-      // holding it (scripts/release.ts, no dashboard call): the commands of
-      // the steps that passed on it, as gate.md writes them.
-      .get(
-        "/api/landing-gate",
-        {
-          ...hidden,
-          query: t.Object({ tree: t.String({ pattern: "^[0-9a-f]{40,64}$" }) }),
-        },
-        ({ query }) => ({
-          tree: query.tree,
-          passed: workItems.gatePassesOn(query.tree),
-        })
-      )
       // A parent's delegate tray as it opens; `work_item` frames keep it live.
       .get(
         "/api/work-items",
@@ -216,9 +202,9 @@ export const workItemRoutes = (
           return text instanceof ElysiaStatus ? text : { text };
         }
       )
-      // `finish_item`: the hub runs the item's landing gate, lands it, and
-      // answers what the tool returns. The gate may run for an hour (an iOS
-      // build), so the HTTP idle timer does not apply.
+      // `finish_item`: the hub lands the item and answers what the tool
+      // returns. A landing may wait its turn behind others, so the HTTP idle
+      // timer does not apply.
       .post(
         "/api/work-items/finish",
         {
@@ -233,7 +219,6 @@ export const workItemRoutes = (
             blocked: t.Optional(
               t.Object({ command: t.String(), error: t.String() })
             ),
-            ship: t.Optional(t.Object({ notes: t.String({ minLength: 1 }) })),
           }),
         },
         async ({ body, request, server }) => {
@@ -316,7 +301,6 @@ export const workItemRoutes = (
         return item
           ? workItemOut(
               item,
-              ctx.db.landedChecks(item.id),
               ctx.db.workItemOutputs(item.id),
               ctx.db.workItemWaits(item.id)
             )

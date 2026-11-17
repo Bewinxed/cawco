@@ -901,7 +901,6 @@ const WorkItemSubmissionShape = declared(
       .array(z.object({ title: z.string(), detail: z.string() }))
       .optional(),
     headline: z.string(),
-    ship: z.object({ notes: z.string() }).optional(),
     summary: z.string(),
   }),
   "WorkItemSubmission",

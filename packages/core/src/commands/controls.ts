@@ -12,7 +12,7 @@ import { HOUR_MS } from "../time";
  * a {@link CommandQueueFrame} under the run's id. A command that writes more than 8 MiB across
  * stdout and stderr is killed with its process group and the call fails with
  * an error naming the limit. The hub's one way to run something on a machine,
- * a work item's landing gate among them. A
+ * a work item's landing among them. A
  * {@link WorkspaceRef} runs the command inside that workspace's boundary,
  * exactly as its sessions' shell commands run; a machine that cannot start the
  * boundary fails the call with its reason.
@@ -52,8 +52,8 @@ export const QUEUE_MARKER = "CAWCO-QUEUE";
  * the one running in its directory (the machine runs those one after
  * another), and `boundary`, one waiting for its workspace's boundary to start
  * (agent hub-command.ts). `heavy` is one of the machine's heavy-work slots
- * (heavy-slots.ts): the runner waits for it before a merge check starts, and
- * `bun run check` prints its marker when it waits for one itself.
+ * (heavy-slots.ts): the runner waits for it before a heavy command starts,
+ * and `bun run check` prints its marker when it waits for one itself.
  */
 export const QUEUE_SLOTS = {
   boundary: "its workspace's boundary to start",
@@ -74,11 +74,6 @@ export const QUEUE_WAIT_MAX_MS = 3 * HOUR_MS;
  * (the hub sends {@link QUEUE_WAIT_MAX_MS}).
  */
 export interface CommandRun {
-  /**
-   * The run is one of a work item's merge checks, in these words (`the
-   * merge checks of “Fix the tray” (153fd0db): iOS build compiles`).
-   */
-  gate?: string;
   id: string;
   /**
    * The command moves the workspace's worktree to this commit: a landing's

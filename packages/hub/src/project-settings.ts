@@ -67,8 +67,7 @@
  * it came from (its own, its area's, the fleet's), and what dispatch would
  * do now.
  * Only the session's own project, named by its id or its name in any case:
- * naming another is refused. What its work's landing gate runs is the project's
- * gate.md (gate-file.ts), not a setting.
+ * naming another is refused.
  */
 
 import {

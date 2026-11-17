@@ -1,8 +1,7 @@
 /**
  * The machine's heavy-work slots: a heavy run takes one before it starts,
  * and holds it until it ends. Runs past the machine's slots wait in line, in
- * the order they came, saying who holds every slot. Heavy runs: a work
- * item's merge checks (the hub's gate steps, agent hub-command.ts), a stage
+ * the order they came, saying who holds every slot. Heavy runs: a stage
  * clone's install (agent stage-clone.ts), `bun run check` wherever it runs
  * (scripts/check.ts: `golar tsc -b`, Biome, Golar's lint and the house
  * checks). One pool for all of
@@ -13,7 +12,7 @@
  * running probe specs at once: the owner's live agent froze for up to 106 s
  * and the hub saw the machine away. Later that day, with probe runs held to
  * their slots, the 15-minute load still reached 154 and the owner's Brave
- * aborted (SIGABRT, 19:16:27): merge checks and delegates' own `bun run
+ * aborted (SIGABRT, 19:16:27): the hub's checks and delegates' own `bun run
  * check` (`golar tsc --builders 8`, Biome, each check's runner starting up
  * to half the machine's cores of checks at once) all started together.
  *
@@ -72,7 +71,7 @@ const HEAVY_SLOTS_DIR = join(workspaceCacheDir(), "heavy-slots");
 
 /**
  * Set for every process a lease's holder starts: they run under that lease
- * ("slot 3 of 8, <who>"). The agent sets it in a merge check's environment,
+ * ("slot 3 of 8, <who>"). The agent sets it in a heavy command's environment,
  * which a workspace's executor carries into its boundary (boundary/: "The
  * caller's environment").
  */
@@ -95,7 +94,7 @@ export const HEAVY_SLOT_ENV = "CAWCO_HEAVY_SLOT";
  * Apple silicon it holds a process to the efficiency cores and throttles its
  * I/O. Measured 2026-10-28 on a 10-core Mac (8 performance, 2 efficiency) at
  * load 30–40, Biome over the tree took 226 s in darwin background and 12 s
- * at nice 10; under it a merge check's golar tsc, Golar's lint, Biome and
+ * at nice 10; under it a check's golar tsc, Golar's lint, Biome and
  * three rendered-checks runs each ran past the check runner's 240 s and failed.
  */
 const HEAVY_NICE = 10;

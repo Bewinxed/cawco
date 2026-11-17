@@ -3,7 +3,7 @@
  * and MCP servers a session in the project starts with when its delegate
  * type names none (starting-set.ts `sessionStartingSet`). Files are the
  * truth (Projects spec §2): `starting-set.md` in the project's hub folder,
- * beside `gate.md` and `decides.md`.
+ * beside `decides.md`.
  *
  * ```
  * ---

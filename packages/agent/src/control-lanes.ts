@@ -48,7 +48,7 @@ export const imageLane: ControlLane<"generateImage"> = (control) =>
   control.requestId ? `image:${control.requestId}` : undefined;
 
 /**
- * A command the hub runs (a check, a landing gate step, up to an hour):
+ * A command the hub runs (a landing's git, up to an hour):
  * commands in one directory run one after another, and nothing else waits
  * for them.
  */

@@ -7,7 +7,6 @@
   import { type ConnectionView, readsGitHubApi } from "@cawco/core/connections";
   import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
   import { machineLabel } from "@cawco/core/machine-names";
-  import type { DeclaredStep, ProjectGate } from "@cawco/core/project-gate";
   import {
     type GithubProjectChoice,
     type IssueTracker,
@@ -25,9 +24,7 @@
   import DecidesRow from "#lib/cawco/decides/DecidesRow.svelte";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import {
-    folderFileHref,
     githubProjects,
-    readGate,
     readStages,
     readTracker,
     setTracker,
@@ -62,7 +59,7 @@
    *
    * One row per fact, each changed on its own row; a project that holds no
    * code (no repository, no place on a machine) shows none of its code's
-   * rows (Repositories, Large files, Work lands, Merge checks):
+   * rows (Repositories, Large files, Work lands):
    * - Place: where it lives, which CawCo can't move, and its places: a
    *   checkout other than the primary can be removed, another added (a
    *   machine and a folder on it). The primary and the project's folder on
@@ -74,9 +71,6 @@
    * - Large files: each origin's own LFS, or where the project declared
    *   they live, bound to a connection with a key (hub project-edit.ts).
    * - Work lands: where its attempts land when their task says nothing.
-   * - Merge checks: the steps the hub runs before it merges work, read from
-   *   the project folder's gate.md (`GET /api/projects/:id/gate`), with a
-   *   link to edit the file.
    * - Tasks: where they live (tracker). CawCo's files alone, or
    *   GitHub Issues or Linear through a connection, on one repository or
    *   team: picked, then bound with Use. With GitHub, a GitHub Project too
@@ -119,7 +113,7 @@
     lead,
     place,
     onclose,
-    afterChecks,
+    afterLands,
   }: {
     project: ProjectRow;
     /** The primary checkout's machine; null while it has none, or it left. */
@@ -128,8 +122,8 @@
     /** Where it lives, in the head's own words. */
     place: string;
     onclose: () => void;
-    /** Rows that stand under Merge checks. */
-    afterChecks?: Snippet;
+    /** Rows that stand under Work lands. */
+    afterLands?: Snippet;
   } = $props();
 
   const uid = $props.id();
@@ -238,72 +232,6 @@
       atLimitAsked = null;
     }
   }
-
-  /* ── Merge checks ───────────────────────────────────────────────── */
-
-  /** The project's gate.md as the hub last read it, read when the details open. */
-  type GateRead =
-    | { state: "reading" }
-    | { state: "failed"; reason: string }
-    | { state: "read"; gate: ProjectGate };
-
-  let gateRead = $state<GateRead>({ state: "reading" });
-  /** Which read is the latest: an older one answering late is dropped. */
-  let gateAsk = 0;
-
-  async function loadGate(projectId: string): Promise<void> {
-    gateAsk += 1;
-    const asked = gateAsk;
-    gateRead = { state: "reading" };
-    try {
-      const { gate } = await readGate(projectId);
-      if (asked === gateAsk) {
-        gateRead = { state: "read", gate };
-      }
-    } catch (error) {
-      if (asked === gateAsk) {
-        gateRead = { state: "failed", reason: failureWords(error) };
-      }
-    }
-  }
-
-  // Read again when the details show another project.
-  $effect(() => {
-    loadGate(project.id);
-  });
-
-  /** What the row draws: a declared gate naming no step reads as none. */
-  const gateShown = $derived.by(() => {
-    if (gateRead.state !== "read") {
-      return gateRead.state;
-    }
-    const { gate } = gateRead;
-    return gate.kind === "declared" && gate.steps.length === 0
-      ? "none"
-      : gate.kind;
-  });
-
-  const UNITS = [
-    { sec: 3600, unit: "h" },
-    { sec: 60, unit: "m" },
-  ] as const;
-  /** Seconds in the largest unit gate.md writes that holds them whole: 90s, 10m, 1h. */
-  const durationWords = (seconds: number): string => {
-    const fit = UNITS.find(({ sec }) => seconds % sec === 0);
-    return fit ? `${seconds / fit.sec}${fit.unit}` : `${seconds}s`;
-  };
-
-  /** A step's facts, those that apply, joined as its meta line says them. */
-  const stepFacts = (step: DeclaredStep): string =>
-    [
-      step.inputs?.length ? `on ${step.inputs.join(", ")}` : null,
-      step.targetMap ? `builds what ${step.targetMap} maps a change to` : null,
-      step.needs ? `needs ${step.needs}` : null,
-      step.timeoutSec ? `within ${durationWords(step.timeoutSec)}` : null,
-      step.stopsRest ? "stops the rest if it fails" : null,
-    ]
-      .filter(Boolean)
-      .join(" · ");
 
   /* ── Tasks: where they live ─────────────────────────────────────── */
 
@@ -617,7 +545,7 @@
   /**
    * The project holds code: a repository linked, or a place on a machine.
    * Only then do its code's rows stand (repository, large files, where work
-   * lands, merge checks): a project is code and more than code (PRODUCT.md),
+   * lands): a project is code and more than code (PRODUCT.md),
    * and a project with neither has none of them to set. A place added makes
    * it code, and they stand.
    */
@@ -1172,95 +1100,9 @@
           />
         </div>
       </div>
-
-      <!-- Merge checks: what the hub runs before it merges work, as gate.md declares it. -->
-      <div
-        data-slot="row"
-        class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
-        data-detail="gate"
-        data-gate={gateShown}
-      >
-        <p
-          data-slot="project-details-label"
-          class="type-label pt-space-1 text-ink-muted"
-        >
-          {projectWords.mergeChecks}
-        </p>
-        <div
-          data-slot="value"
-          class="flex min-w-0 flex-col gap-space-1 pt-space-1"
-        >
-          {#if gateRead.state === "reading"}
-            <p
-              data-slot="note"
-              class="mark-line flex items-center gap-space-2 type-meta text-ink-muted"
-            >
-              <LiveDot /><span>Reading gate.md…</span>
-            </p>
-          {:else if gateRead.state === "failed"}
-            <RowFault
-              again={() => loadGate(project.id)}
-              data-gate-fault
-              reason={gateRead.reason}
-            />
-          {:else if gateRead.gate.kind === "unreadable"}
-            {#each gateRead.gate.problems as problem, at (at)}
-              <RowFault data-gate-problem reason={problem} />
-            {/each}
-            <p data-slot="note" class="type-meta text-ink-muted">
-              {projectWords.mergeChecksUnread}
-            </p>
-          {:else if gateRead.gate.kind === "declared" && gateRead.gate.steps.length > 0}
-            <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops list semantics when list styles are removed; an explicit role="list" keeps them (scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
-            <ol
-              class="m-0 flex list-none flex-col gap-space-2 p-0"
-              data-gate-steps
-              role="list"
-            >
-              <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
-              {#each gateRead.gate.steps as each, at (at)}
-                {@const facts = stepFacts(each)}
-                <li class="flex min-w-0 flex-col" data-gate-step>
-                  <span
-                    data-slot="gate-name"
-                    class="min-w-0 type-label wrap-anywhere text-ink-strong"
-                    >{each.name}</span
-                  >
-                  {#if each.command !== each.name}
-                    <code
-                      class="min-w-0 type-meta font-mono whitespace-pre-wrap wrap-anywhere text-ink-muted"
-                      >{each.command}</code
-                    >
-                  {/if}
-                  {#if facts}
-                    <span
-                      data-slot="gate-facts"
-                      class="min-w-0 type-meta wrap-anywhere text-ink-muted"
-                      >{facts}</span
-                    >
-                  {/if}
-                </li>
-              {/each}
-            </ol>
-          {:else}
-            <p data-slot="note" class="type-meta text-ink-muted">
-              {projectWords.noMergeChecks}
-            </p>
-          {/if}
-          <Button
-            class="self-start"
-            pad="none"
-            data-gate-edit
-            href={folderFileHref(project.id, "gate.md")}
-            label="Edit gate.md"
-            size="xs"
-            variant="link"
-          />
-        </div>
-      </div>
     {/if}
 
-    {@render afterChecks?.()}
+    {@render afterLands?.()}
 
     <!-- Who decides: follows the fleet, or the kinds it handed over; the link to its page. -->
     <DecidesRow projectId={project.id} />

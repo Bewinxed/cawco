@@ -113,7 +113,7 @@
     onask,
     onfilter,
     setup,
-    detailsAfterChecks,
+    detailsAfterLands,
   }: {
     /** Filter the tasks, from the menu on a phone, where the strip has no room for it. */
     onfilter: (anchor: HTMLElement) => void;
@@ -128,8 +128,8 @@
     onask: ((anchor: HTMLElement) => void) | null;
     /** Its setup, from the menu: finish it, or change how it runs; null while Caw can't start. */
     setup: { label: string; run: () => void } | null;
-    /** Rows the details show under Merge checks (ProjectDetails). */
-    detailsAfterChecks?: Snippet;
+    /** Rows the details show under Work lands (ProjectDetails). */
+    detailsAfterLands?: Snippet;
   } = $props();
 
   const narrow = new MediaQuery(PHONE_QUERY);
@@ -593,7 +593,7 @@
 <!-- The project's details, under the head, from where its title starts. -->
 {#if details}
   <ProjectDetails
-    afterChecks={detailsAfterChecks}
+    afterLands={detailsAfterLands}
     {lead}
     {machine}
     onclose={closeDetails}

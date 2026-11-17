@@ -275,7 +275,7 @@ export type CarryRestored =
 
 /**
  * What a workspace was made from: a repository's root, which lands by git
- * (rebase onto its base, the merge checks, push), or any other folder, which
+ * (rebase onto its base, push), or any other folder, which
  * lands by its change set ({@link CONTROL_WORKSPACE_APPLY}).
  */
 export type WorkspaceKind = "repo" | "folder";
@@ -320,7 +320,7 @@ export const CONTROL_WORKSPACE_CHANGES = "workspaceChanges";
 
 /**
  * Lands a folder workspace's change set in its folder, by its machine's
- * agent outside every wall, once the folder's checks passed: the conflict
+ * agent outside every wall: the conflict
  * scan again first (any conflict refuses the whole set, nothing written),
  * then each written path by temp-and-rename, then the deletions. Args
  * `[WorkspaceRef]`; answers {@link WorkspaceApplied}.
@@ -471,9 +471,6 @@ export interface WorkspaceWorkEnd {
  * - `keep`: any keeps the clone, and the answer names it
  *   ({@link WorkspaceArchived} `held`); nothing is removed. What every
  *   archive is unless one of the others is named.
- * - `check`: a gate workspace, detached at its source workspace's commit;
- *   the commits it has are its source's, which keeps them, and what its
- *   build wrote is the build's. Not read.
  * - `unmade`: a create that never finished, whose clone nobody worked in.
  *   Not read; `path` may be absent, and the machine's create record names it.
  * - `drop`: its project was deleted for good (hub project-delete.ts): not
@@ -484,7 +481,7 @@ export interface WorkspaceWorkEnd {
 export type WorkspaceUnlanded = (typeof WORKSPACE_UNLANDED)[number];
 
 /** Every {@link WorkspaceUnlanded}, for a reader of the wire to check against. */
-export const WORKSPACE_UNLANDED = ["keep", "check", "unmade", "drop"] as const;
+export const WORKSPACE_UNLANDED = ["keep", "unmade", "drop"] as const;
 
 /** What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD} are asked. `skip`, its items' handed-over outputs, `git status` passes over; `base`, the branch it lands on, named first as the branch its `head` is on when that branch holds it. */
 export interface WorkspaceArchive {
@@ -596,9 +593,8 @@ export interface WorkspaceCommit {
 }
 
 /**
- * A workspace at another workspace's commit: a gate workspace (the landing
- * gate's iOS build on a Mac), or a new one cut `from` another, whose hub
- * then sets its branch there. Inside its boundary, it
+ * A workspace at another workspace's commit: a new one cut `from` another,
+ * whose hub then sets its branch there. Inside its boundary, it
  * fetches `origin/<base>`, then the bundle, and checks out `head` detached,
  * its tracked files as the commit has them and every untracked file gone
  * (ignored ones, a dependency install or a build, stay). Args

@@ -42,7 +42,7 @@ export const delegationMcp = (instanceId: string, credential?: string) => ({
   // marked few.
   // A hard wall clock on every call to this server, and the floor of its idle
   // limit: CawCo's one long-call wall clock. Claude's own default would cut
-  // finish_item's landing gate and a delegate's workspace creation.
+  // finish_item's landing and a delegate's workspace creation.
   timeout: LONG_CALL_WALL_MS,
 });
 

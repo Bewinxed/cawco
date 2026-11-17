@@ -106,8 +106,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * among them, and the rows of each project the machine holds, once each
    * (project-placements.ts): every project with a checkout there or a work
    * item there, since a workspace can be cut on a machine where its project
-   * has no checkout (`targetMachine` takes any `cwd`; a gate workspace
-   * falls back to `projectRepository`). The machine places them at the
+   * has no checkout (`targetMachine` takes any `cwd`). The machine places them at the
    * project's places itself, so a workspace opened or archived there moves
    * no item. Built on demand from what the hub holds now, and fast: nothing
    * is read off the machine and nothing waited for (fleet-sync.ts diffs it

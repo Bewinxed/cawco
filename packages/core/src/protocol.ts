@@ -882,16 +882,6 @@ export interface ScratchWorktree {
   root: string;
 }
 
-/**
- * What a command the hub runs on a machine is, as a pause that stops it
- * counts it: one of an item's merge checks (the iOS build among them), or
- * any other.
- */
-export type RunKind = "merge check" | "command";
-
-/** How many of each kind a machine's pause stopped as it began. */
-export type StoppedCommands = Partial<Record<RunKind, number>>;
-
 /** What a daemon reports about the checkout it was started from. */
 export interface BuildInfo {
   /** Short git SHA, when the checkout is a git one. */
@@ -1389,11 +1379,10 @@ export interface KeepAlive {
  */
 export interface WorkItemSummary {
   /**
-   * While its landing waits between `finish_item` and its outcome (the
-   * merge checks' shared machine slot, a machine's pause, its turn to land):
-   * "queued for the Mac's build slot behind …", and since when (epoch ms);
-   * null otherwise. Named for the checks it once was: shipped iOS builds
-   * decode it under this key.
+   * While its landing waits between `finish_item` and its outcome (a
+   * machine's pause, its turn to land): "queued to land on main behind …",
+   * and since when (epoch ms); null otherwise. Named for the checks it once
+   * was: shipped iOS builds decode it under this key.
    */
   checkQueue: { words: string; since: number } | null;
   createdAt: number;

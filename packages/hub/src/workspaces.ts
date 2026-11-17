@@ -180,8 +180,6 @@ export const ownCopy = (workspace: WorkspaceRow): boolean =>
  * - `hostFolder`: a host-scope delegate's own folder on the host
  *   (schema.ts `workspaces.host`): no clone, no boundary, nothing landed,
  *   held or archived; its scratch dir settles alone ({@link settleHost}).
- * - `gateClone`: the clone a merge check's step runs in on another machine,
- *   for workspace `checksFor`: no work item, archived with that one.
  * - `stageClone`: the clone a place's stage runs in (core
  *   `StageCloneFrame`): no work item, settled once that stage sleeps.
  *
@@ -192,16 +190,12 @@ export type Workspace =
   | { kind: "clone"; row: WorkspaceRow }
   | { kind: "folderOverlay"; row: WorkspaceRow }
   | { kind: "hostFolder"; row: WorkspaceRow }
-  | { kind: "gateClone"; row: WorkspaceRow; checksFor: string }
   | { kind: "stageClone"; row: WorkspaceRow; place: string };
 
 /** The member of {@link Workspace} `row` is. */
 export const workspaceOf = (row: WorkspaceRow): Workspace => {
   if (row.host) {
     return { kind: "hostFolder", row };
-  }
-  if (row.checksFor) {
-    return { kind: "gateClone", row, checksFor: row.checksFor };
   }
   if (row.stageFor) {
     return { kind: "stageClone", row, place: row.stageFor };
@@ -211,12 +205,6 @@ export const workspaceOf = (row: WorkspaceRow): Workspace => {
     : { kind: "clone", row };
 };
 
-/** The workspace whose work items `row`'s are: a gate clone's are the workspace it checks for, every other's its own. */
-export const itemsWorkspaceOf = (row: WorkspaceRow): string => {
-  const member = workspaceOf(row);
-  return member.kind === "gateClone" ? member.checksFor : row.id;
-};
-
 /** Whether `row` is a host-scope delegate's folder: no clone and no boundary. */
 export const isHostFolder = (row: WorkspaceRow): boolean =>
   workspaceOf(row).kind === "hostFolder";
@@ -224,10 +212,6 @@ export const isHostFolder = (row: WorkspaceRow): boolean =>
 /** Whether `row` is a delegate's view of a folder, landed by its change set. */
 export const isFolderOverlay = (row: WorkspaceRow): boolean =>
   workspaceOf(row).kind === "folderOverlay";
-
-/** Whether `row` is a gate clone: it takes no work item. */
-export const isGateClone = (row: WorkspaceRow): boolean =>
-  workspaceOf(row).kind === "gateClone";
 
 /**
  * A workspace as its machine is told about it: a clone and its boundary. A
@@ -671,13 +655,10 @@ export const createWorkspaces = ({
    * A copy that fails keeps the workspace: closing is
    * refused with why, and the next settle tries again. A host-scope one's
    * are read as they stand ({@link CONTROL_HOST_OUTPUTS}) before its scratch
-   * dir goes ({@link settleHost}). A gate workspace has no scratch outputs;
-   * an item of no project has no folder to copy into.
+   * dir goes ({@link settleHost}). An item of no project has no folder to
+   * copy into.
    */
   const keepScratchOutputs = async (workspace: WorkspaceRow) => {
-    if (isGateClone(workspace)) {
-      return;
-    }
     const item = db.workItemsIn(workspace.id).find((one) => one.projectId);
     if (!item?.projectId) {
       return;
@@ -1222,21 +1203,39 @@ export const createWorkspaces = ({
     }
     settleFailures.set(workspace.id, failure);
   };
-  /** The gate workspaces of `workspace` on other machines closed with it: the first problem that stopped one. */
-  const closeChecks = async (workspace: WorkspaceRow) => {
-    const closed = await Promise.all(
-      db
-        .checkWorkspacesOf(workspace.id)
-        .map((check) => closeWorkspace(check, "check"))
-    );
-    return closed.find((check) => check instanceof ElysiaStatus);
+  /**
+   * The closer of the landing gate's clones (2026-11-17: the hub runs no
+   * check of a project's, so none is cut any more): every workspace on
+   * `machineId` cut to run a gate step for another (`checks_for` set) and
+   * not archived yet is let go of there, its clone deleted unread (`drop`:
+   * its commits were its source's, and the rest a build's). Run as the
+   * machine registers, so a clone on a machine away at the hub's start goes
+   * once it is back. One whose close fails stays, and the next register
+   * tries it again. Goes in the release after this one, with the column.
+   */
+  const closeGateClones = async (machineId: string): Promise<void> => {
+    for (const clone of db.gateClonesOn(machineId)) {
+      const closed = await closeWorkspace(clone, "drop").catch(
+        (error: unknown) => (error instanceof Error ? error.message : String(error))
+      );
+      const failed =
+        typeof closed === "string"
+          ? closed
+          : closed instanceof ElysiaStatus
+            ? closed.response.detail
+            : undefined;
+      console.log(
+        failed === undefined
+          ? `[workspaces] ${clone.id}: the landing gate's clone on ${machineName(db, machineId)} is closed`
+          : `[workspaces] ${clone.id}: the landing gate's clone on ${machineName(db, machineId)} was not closed: ${failed}`
+      );
+    }
   };
   /**
    * A settled workspace closed on its machine ({@link closeWorkspace}): a
    * `keep`, or a `carry` when its items land none ({@link carriesOff}),
    * whose parent is told where the carry is ({@link carryNotice}), or when
-   * its starter never decides ({@link startedByNoOne}), told to no one;
-   * retired, its gate workspaces go with it.
+   * its starter never decides ({@link startedByNoOne}), told to no one.
    */
   const closeSettled = async (
     workspace: WorkspaceRow,
@@ -1261,10 +1260,6 @@ export const createWorkspaces = ({
     // A starter that never decides is told nothing: it reads nothing.
     if (closed.carry && !noOne) {
       carryNotice(closed.workspace, closed.carry);
-    }
-    const unclosed = await closeChecks(workspace);
-    if (unclosed) {
-      return unclosed;
     }
     console.log(
       `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: retired, its work over and nothing of it anywhere but on its remote${closed.carry ? ` or in its carry ${closed.carry}` : ""}; ${workspace.path} and what it owned there are gone`
@@ -1465,8 +1460,7 @@ export const createWorkspaces = ({
    * look (workspace-retire.ts); held only by its awake sessions, what they
    * left running there ends meanwhile ({@link endLeftWork}). Its sessions are
    * not ended: each is asleep or gone already, and a handoff to one goes on
-   * in a clone cut again ({@link recut}). A gate workspace goes with its
-   * source. `clones`, the folders its machine listed this sweep, tells a
+   * in a clone cut again ({@link recut}). `clones`, the folders its machine listed this sweep, tells a
    * copy gone ({@link copyGone}).
    */
   const settle = async (
@@ -1478,9 +1472,6 @@ export const createWorkspaces = ({
       return { kind: "none" };
     }
     const member = workspaceOf(workspace);
-    if (member.kind === "gateClone") {
-      return { kind: "none" };
-    }
     const items = db.workItemsIn(workspace.id);
     if (member.kind === "hostFolder") {
       return await settleHost(workspace, items);
@@ -1771,13 +1762,6 @@ export const createWorkspaces = ({
       if (closed.held) {
         return;
       }
-      const unclosed = await closeChecks(now);
-      if (unclosed) {
-        console.warn(
-          `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: a gate workspace of it was not closed: ${unclosed.response.detail}`
-        );
-        return;
-      }
       console.log(
         `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: retired, its commits landed through the workspace cut from it and nothing else of it anywhere but on its remote`
       );
@@ -1793,7 +1777,7 @@ export const createWorkspaces = ({
    * something still holds (a live item, an attached session, a preview) is
    * read now, by git inside its boundary, which that hold keeps up; never
    * waiting (a paused machine or a busy folder throws machine-pause.ts `WouldWait`).
-   * Undefined for one archived, gone, or a landing gate's. Throws the
+   * Undefined for one archived or gone. Throws the
    * machine's words when git cannot say.
    */
   const unlandedOf = (
@@ -1805,7 +1789,6 @@ export const createWorkspaces = ({
       if (
         !workspace ||
         workspace.state === "archived" ||
-        isGateClone(workspace) ||
         isHostFolder(workspace)
       ) {
         return;
@@ -1915,9 +1898,6 @@ export const createWorkspaces = ({
         detail: `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path} on ${machineName(db, workspace.machineId)}, not a clone: there is nothing to archive or discard, and nothing was deleted.`,
       });
     }
-    if (member.kind === "gateClone") {
-      return closeWorkspace(workspace, "check");
-    }
     const blocked = archiveBlocked(workspace, refused);
     if (blocked) {
       return blocked;
@@ -1959,12 +1939,11 @@ export const createWorkspaces = ({
         detail: holdsWorkWords(closed.held),
       });
     }
-    // Its gate workspaces on other machines go with it: none outlives it.
-    return (await closeChecks(workspace)) ?? closed;
+    return closed;
   };
   /**
-   * Whether a workspace is retired and may be cut again: archived, not a
-   * gate workspace, and a folder's (whose work is in its folder once it
+   * Whether a workspace is retired and may be cut again: archived, and a
+   * folder's (whose work is in its folder once it
    * landed, so it is made again from the folder as it is), or one whose
    * machine said where its clone's HEAD was as it
    * deleted it ({@link closeWorkspace}): on a branch of its remote, or, its
@@ -1975,7 +1954,7 @@ export const createWorkspaces = ({
    */
   const recuttable = (workspace: WorkspaceRow): boolean => {
     const member = workspaceOf(workspace);
-    if (workspace.state !== "archived" || member.kind === "gateClone") {
+    if (workspace.state !== "archived") {
       return false;
     }
     if (member.kind === "folderOverlay") {
@@ -1990,9 +1969,6 @@ export const createWorkspaces = ({
   const archivedWords = (workspace: WorkspaceRow): string => {
     if (workspace.carry) {
       return `its workspace ${handle(workspace.id)} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(db, workspace.machineId)}, and its clone is gone.`;
-    }
-    if (isGateClone(workspace)) {
-      return `its workspace ${handle(workspace.id)} is archived: its clone and boundary are gone.`;
     }
     const taker = db
       .workspacesCutFrom(workspace.id)
@@ -2282,12 +2258,6 @@ export const createWorkspaces = ({
         detail: `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path}, not a clone: continue its session with handoff, or delegate with host again.`,
       });
     }
-    if (member.kind === "gateClone") {
-      return problem(409, {
-        code: "workspace-continue-gate-clone",
-        detail: `Workspace ${handle(workspace.id)} runs the iOS build of the merge checks for workspace ${handle(member.checksFor)} on its machine and takes no work item. Delegate with workspace ${handle(member.checksFor)}, or without workspace to start a new one.`,
-      });
-    }
     const items = db.workItemsIn(workspace.id);
     const live = items.find((item) => LIVE.has(item.state));
     if (live) {
@@ -2396,7 +2366,6 @@ export const createWorkspaces = ({
    * A new workspace: the project's folder made ({@link cutOn}), then its
    * machine makes its private copy of the folder `cwd` is in, any folder
    * (agent layer.ts), and starts its boundary, and the hub files it.
-   * `checksFor` makes it the gate workspace of that one;
    * `account` is the Claude account its first session launches on
    * (work-items.ts `ItemPlacement`), whose user layer the boundary reads from its
    * first start; `first` is that session ({@link WorkspaceFirstSession}),
@@ -2410,11 +2379,9 @@ export const createWorkspaces = ({
     projectId: string | null,
     {
       account,
-      checksFor,
       first,
     }: {
       account?: string;
-      checksFor?: string;
       first?: WorkspaceFirstSession;
     } = {}
   ) => {
@@ -2471,7 +2438,6 @@ export const createWorkspaces = ({
         tmp: checkout.tmp,
         state: "active",
         createdByInstanceId: createdBy,
-        checksFor: checksFor ?? null,
       });
     } catch (error) {
       throw thrownAgain(
@@ -2498,7 +2464,7 @@ export const createWorkspaces = ({
    * one of a project's places (Projects spec §5.1: "places[] (checkouts on
    * any machine, delegate workspaces)"): one being cut for it
    * ({@link cuttingFor}), or one active or held there whose items are the
-   * project's, a gate workspace by its source's. A host-scope row is the
+   * project's. A host-scope row is the
    * machine's own folder, none of the project's.
    */
   const holdsProjectOn = (machineId: string, projectId: string): boolean => {
@@ -2511,31 +2477,12 @@ export const createWorkspaces = ({
     }
     const projectOf = (workspace: WorkspaceRow): boolean =>
       db
-        .workItemsIn(itemsWorkspaceOf(workspace))
+        .workItemsIn(workspace.id)
         .some((item) => item.projectId === projectId);
     return [
       ...db.activeWorkspacesOn(machineId),
       ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
     ].some((workspace) => !isHostFolder(workspace) && projectOf(workspace));
-  };
-  /**
-   * Records the repository a new workspace of the project was cut from, on
-   * its machine: a check that names that machine is cut from it, whatever
-   * becomes of the workspace. One cut from another workspace's clone records
-   * the repository that clone was cut from.
-   */
-  const recordRepository = (
-    projectId: string,
-    workspace: WorkspaceRow
-  ): void => {
-    const source = db
-      .activeWorkspacesOn(workspace.machineId)
-      .find((each) => ownCopy(each) && each.path === workspace.repoRoot);
-    db.recordProjectRepository({
-      projectId,
-      machineId: workspace.machineId,
-      path: source?.repoRoot ?? workspace.repoRoot,
-    });
   };
   /**
    * The workspace a `delegate` call's `from` names: one of the caller's
@@ -2570,15 +2517,12 @@ export const createWorkspaces = ({
     const member = workspaceOf(source);
     if (
       source.state === "archived" ||
-      member.kind === "gateClone" ||
       member.kind === "hostFolder"
     ) {
-      let why = "it is archived, its clone gone";
-      if (member.kind === "hostFolder") {
-        why = "it is a host-scope delegate's folder, not a clone";
-      } else if (member.kind === "gateClone") {
-        why = "it runs the iOS build of the merge checks";
-      }
+      const why =
+        member.kind === "hostFolder"
+          ? "it is a host-scope delegate's folder, not a clone"
+          : "it is archived, its clone gone";
       return problem(409, {
         code: "workspace-from-no-branch",
         detail: `Workspace ${handle(source.id)} has no branch to cut from: ${why}. Delegate without from.`,
@@ -2634,8 +2578,8 @@ export const createWorkspaces = ({
    * and its commits past its base bundled inside the source's boundary
    * ({@link CONTROL_WORKSPACE_BUNDLE}), taken inside the new workspace's
    * own ({@link CONTROL_WORKSPACE_AT}), and its branch set there, still
-   * tracking the default branch. Every git step runs inside a boundary, as
-   * the landing gate's own transfer does, but the checkout of the commit's
+   * tracking the default branch. Every git step runs inside a boundary but
+   * the checkout of the commit's
    * tracked files, which the agent runs on its host with the new
    * workspace's boundary closed (agent workspace.ts `workspaceAt`). A move
    * that fails archives the new workspace, unworked, and throws why.
@@ -2739,7 +2683,7 @@ export const createWorkspaces = ({
     fromSource,
     openWorkspace,
     detachNew,
-    recordRepository,
+    closeGateClones,
     goOnIn,
     namedWorkspace,
     boundaryUp,

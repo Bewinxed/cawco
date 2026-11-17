@@ -122,9 +122,6 @@ const RULES: readonly [string, RegExp, Access][] = [
   // A release just published on a machine (scripts/release.ts): the hub looks
   // at its release host now, not when its cached release ages out.
   ["POST", /^\/api\/binary-updates\/check$/u, "machine"],
-  // What the landing gate passed on a tree, which a release asks before it
-  // checks a commit again (scripts/release.ts `gatePassed`).
-  ["GET", /^\/api\/landing-gate$/u, "machine"],
   ["PUT", /^\/api\/binary-updates\/machines\/[^/]+\/state$/u, "machine"],
   // What the fleet does with a copy of a tool CawCo doesn't run, which a
   // build's pins ask before they go on ahead of its swap (agent

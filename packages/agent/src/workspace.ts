@@ -1363,8 +1363,7 @@ export const workspaceBundle = async (
 };
 
 /**
- * {@link CONTROL_WORKSPACE_AT}: a gate workspace at another workspace's
- * commit. The bundle is written into its scratch dir as a new file (never
+ * {@link CONTROL_WORKSPACE_AT}: a workspace at another workspace's commit. The bundle is written into its scratch dir as a new file (never
  * through one already there), then inside its boundary git fetches its base
  * and the bundle. The commit is checked out, detached, with every untracked
  * file gone, by git on this host with the boundary closed
@@ -2466,7 +2465,7 @@ const closeClone = async (
   // naming no mode is a `keep`), or its create never finished: no session
   // ran in it (layer.ts `markMade`). Unread, a Linux view is not started to
   // close it, so a view that cannot mount is still discarded.
-  const unread: WorkspaceUnlanded[] = ["check", "unmade", "drop"];
+  const unread: WorkspaceUnlanded[] = ["unmade", "drop"];
   const access =
     layer.made && !unread.includes(request.unlanded)
       ? await accessTo(workspace, layer)

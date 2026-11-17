@@ -14,7 +14,7 @@ import { isBlocked, type WorkItemRow } from "./db/project-work";
  * - `waiting`: it declared a wait (`waitUntil`, wait_item).
  * - `waitResuming`: a hub restart resumes its declared wait
  *   (`waitResumeBy`).
- * - `landing`: its merge checks or its landing run (`landingSince`, any
+ * - `landing`: its landing runs (`landingSince`, any
  *   phase but `completing`).
  * - `completing`: its submission waits on its own delegates (`landingSince`
  *   in phase `completing`).

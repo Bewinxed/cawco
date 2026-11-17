@@ -8,7 +8,7 @@
  * it, one still running answers when it ends (through whatever socket is up
  * then), and one this agent's last process was running when it ended is
  * answered that it was not run again. Workspace creates and archives, inputs
- * written and a landing gate's commands so run once however often the
+ * written and a landing's commands so run once however often the
  * request comes.
  *
  * Kept on disk (`requests.json` in CawCo's data dir), so a restart of this

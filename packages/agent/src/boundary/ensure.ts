@@ -89,8 +89,7 @@
  * No command holds a key or reaches a key agent: `~/.ssh` is under the
  * home dir's deny, the executor drops every agent socket's variable
  * (`AGENT_SOCKET_ENV`), and no host socket is reachable. A workspace reaches
- * another machine only through CawCo: the landing gate's iOS build runs in a
- * gate workspace on a Mac (the hub's `runGate`).
+ * another machine only through CawCo.
  */
 
 import { randomBytes } from "node:crypto";

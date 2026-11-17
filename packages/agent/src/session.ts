@@ -1407,7 +1407,7 @@ export class SessionSupervisor {
     const imageRequest = image?.requestId;
     let key = envelope.instanceId ?? "";
     // A slow image request must not block machine busy probes or other
-    // controls. Nor may a command the hub runs (a check, a landing gate step, up
+    // controls. Nor may a command the hub runs (a landing's git, up
     // to an hour): commands in one directory run one after another, and
     // nothing else waits for them. Each control's lane is declared with it
     // ({@link #controls}).

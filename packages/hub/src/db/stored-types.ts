@@ -252,7 +252,7 @@ export type TrashKind =
  * and it takes one turn of its own to file its open items, so it waits for
  * that turn to end, or for a stop of it (`filing`); or the
  * owner paused its machine until a time (`paused`, machine-pause.ts); or its
- * work item is finishing (`finishing`: its landing gate runs, or the turn
+ * work item is finishing (`finishing`: its landing runs, or the turn
  * that called `finish_item` is still ending, work-items.ts `finishingFor`),
  * so the send goes as its next turn and reopens the item if it landed; or an
  * interrupt holds its work item and only its parent, its conversation or the person
@@ -343,7 +343,7 @@ export interface DelegateCall {
    * they come: the route takes any list.
    */
   inputs?: unknown[];
-  /** Where its commits go once it passes the landing gate; `main` when left out. */
+  /** Where its commits go once it finishes; `main` when left out. */
   lands?: LandsMode;
   /** The machine a new workspace is cut on; the parent's by default. */
   machineId?: string;
@@ -426,20 +426,8 @@ export interface ItemBlock {
 }
 
 /**
- * A landing gate command that passed on a tree, with the stage it ran in
- * (`at finish_item`, `while gating on top of main`, `in its turn to land on
- * main`), for the line of a step its pass lets skip: a row of
- * `work_item_gate_passes` under what it passed on (gate.ts `passKey`).
- */
-export interface GatePass {
-  command: string;
-  stage: string;
-}
-
-/**
  * What a work item's landing put where: written to its `landed_*` columns
- * and its gate's commands to `work_item_landed_checks` (project-work.ts
- * `updateWorkItem`).
+ * (project-work.ts `updateWorkItem`).
  */
 export interface WorkLanding {
   /**
@@ -449,15 +437,6 @@ export interface WorkLanding {
    * before 2026-10-19.
    */
   at?: number;
-  /**
-   * The landing gate's passes on the tree that landed: that tree (`git
-   * rev-parse <sha>^{tree}`) and each step's command that passed on it, as
-   * written in gate.md. What a release asks the hub of a commit's tree
-   * (`GET /api/landing-gate`): a tree the gate passed is not checked again
-   * there. Unset on landings before 2026-10-23, and where git could not name
-   * the tree.
-   */
-  gate?: { passed: string[]; tree: string };
   /** The base commit its commits were rebased onto; null for a push to a branch of its own. */
   onto: string | null;
   sha: string;
@@ -469,12 +448,6 @@ export interface WorkItemSubmission {
   findings?: { title: string; detail: string }[];
   /** The outcome in one or two sentences, shown whole wherever a report is glanced at. */
   headline: string;
-  /**
-   * Ship the work once it lands on main: the project's declared ship command
-   * (gate.md `Ship:`, ship.ts) runs on the hub's machine with these end-user
-   * release notes.
-   */
-  ship?: { notes: string };
   /** The full report: what was done, and the real output of every command that proves it. */
   summary: string;
 }

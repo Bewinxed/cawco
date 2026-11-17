@@ -1,6 +1,6 @@
 /**
  * A project's Who decides (PRD §5.8, core decides.ts), as it declares it:
- * `decides.md` in its hub folder, beside `gate.md`. Each line hands a kind,
+ * `decides.md` in its hub folder. Each line hands a kind,
  * by its name, to a member, by its id; a kind the file leaves out goes to
  * its area's decides.md (`areas/<id>/decides.md`, core areas.ts) when the
  * project sits in one and that file hands it, else to the fleet's member

@@ -108,9 +108,6 @@ export const workWords = {
     "the hub restarted while its start was held, and the inputs it was to hand in went with it. Delegate it again.",
   inputsCleared: (why: string) =>
     `${why} What of them had landed was removed, so none of them was delivered.`,
-  /** Heads a gate step's stream cut to its tail (hub gate.ts `gateTails`): the cut part may hold the failure, so the reader runs the step itself. */
-  gateCut: (cut: number) =>
-    `… (${cut} chars cut; run the step yourself to read it whole)\n`,
   /** A task's acceptance criteria past the most one judgement reads (hub tasks.ts `acceptanceOf`). */
   criteriaTooMany: (named: number, limit: number) =>
     `The acceptance criteria hold ${named} criteria; a task states ${limit} at most, so every one is judged. Merge some or split the task.`,
@@ -132,8 +129,6 @@ export const workWords = {
   /** What a delegate of no project is told of its `$TMPDIR/outputs/`: nothing there is collected. */
   scratchOutputsNoProject:
     "This item belongs to no project, so nothing in $TMPDIR is collected: what your parent needs goes in your report or a commit.",
-  /** The heading of a report's merge checks section, over its checks' lines. */
-  gateHeading: "Merge checks, run by the hub:",
   /**
    * A start refused by its caller's may-start list (core `MayStart`; hub
    * work-items.ts `mayStartRefusal`), before anything spawns: a leaf that may

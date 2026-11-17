@@ -47,7 +47,7 @@
  * beside it are not.
  *
  * Why: the owner's word, 2026-10-22, replacing the heavy-run slots that
- * queued every probe, typecheck, landing gate and release behind 8 fixed
+ * queued every probe, typecheck, landing and release behind 8 fixed
  * slots: "the issue is runaway tests runaway processes etc, javascript
  * shouldn't crash such a machine, if a test leaks it should notify somehow so
  * the agent can fix it. But it doesn't stop it."

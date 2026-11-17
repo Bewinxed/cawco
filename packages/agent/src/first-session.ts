@@ -71,7 +71,7 @@ const SESSION_UUID =
 /**
  * The hub's `first` of a workspace's cut: the session it names when it is
  * one whose spill folder the cut reads, or none for anything else (none
- * named, a gate workspace's cut, a harness that spills nothing), so a cut
+ * named, a harness that spills nothing), so a cut
  * never fails for it. A resume that is no session id is none.
  */
 export const firstSessionOf = (

@@ -411,7 +411,6 @@ const ARGS: {
     maybe(WorkspaceRef),
     maybe(
       object({
-        gate: optional(text),
         id: text,
         moves: optional(text),
         queueMaxMs: count,

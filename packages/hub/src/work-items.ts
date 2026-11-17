@@ -12,12 +12,11 @@
  *
  * The hub is the one authority: `delegate` is a request to {@link start}, and
  * the frames that move a session move its item. It is `done` only when its
- * session calls `finish_item` and its work passes the hub's landing gate
- * (gate.ts `gateSteps`: the steps its project declares in gate.md, on the tree
- * about to land; gate-file.ts) and lands. No session declares what the hub
- * runs: the session's report, quoting the output of every command
- * that proves its work, is the proof, and the parent's report is that
- * report with the gate's lines, the landing and the commits under it.
+ * session calls `finish_item` and its work lands (landing.ts: rebased onto
+ * its base and pushed). The session runs its project's checks itself: its
+ * report, quoting the output of every command that proves its work, is the
+ * proof, and the parent's report is that report with the landing and the
+ * commits under it.
  *
  * Slice 7b of Projects P1 adds four rules. A **group** (`group`) under one
  * parent reports once, combined, when every item of it has ended; a failure
@@ -141,13 +140,6 @@ import type {
   WorkOrigin,
 } from "./db/stored-types";
 import type { designOnBase, designSection } from "./design-system";
-import { failedWith } from "./gate";
-import {
-  capableMachines,
-  capableOnline,
-  capableWaitFor,
-  capableWaitReason,
-} from "./gate-file";
 import { type HeldInput, handedInputs } from "./handed-input";
 import {
   type HandedBytes,
@@ -160,7 +152,7 @@ import { byId } from "./handles";
 import type { ReportingSession } from "./hub-shapes";
 import { holdsBut, type ItemHold, itemHold } from "./item-holds";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
-import { statusCommand } from "./landing";
+import { failedWith, statusCommand } from "./landing";
 import {
   createLandingRun,
   fenced,
@@ -206,9 +198,7 @@ import {
   GIT_TIMEOUT_MS,
   type HeldWork,
   isFolderOverlay,
-  isGateClone,
   isHostFolder,
-  itemsWorkspaceOf,
   outputsFolder,
   ownCopy,
   refOf,
@@ -657,8 +647,8 @@ interface WorkItemDeps extends Pick<
   /** Whether a verifier is judging the item's result now: its turns ending quietly are waiting, not idle. */
   readonly designHeld: (itemId: string) => boolean;
   /**
-   * The design check (design-verify.ts) of a `finish_item`, before its
-   * landing gate runs: the words the call answers while a verifier session
+   * The design check (design-verify.ts) of a `finish_item`, before it
+   * lands: the words the call answers while a verifier session
    * judges the result against its project's design system, or nothing when
    * the item goes on (not design work, no system to judge against, or passed
    * at its commit); or its project's task, which could not be read.
@@ -672,7 +662,7 @@ interface WorkItemDeps extends Pick<
    * kept at the hub goes now, in order (sends.ts `releaseOwed`).
    */
   readonly finishOver: (instanceId: string) => void;
-  /** What a landing run and its gate read of the hub, passed on whole (landing-run.ts). */
+  /** What a landing run reads of the hub, passed on whole (landing-run.ts). */
   readonly forLandings: LandingsHub;
   /** What workspaces read of the hub, passed on whole (workspaces.ts). */
   readonly forWorkspaces: WorkspacesHub;
@@ -726,7 +716,7 @@ interface WorkItemDeps extends Pick<
    * answers are another epoch's shapes. Undefined when it speaks it.
    */
   readonly olderBuild: (machineId: string) => string | undefined;
-  /** Whether `machineId`'s agent is connected now: the Apple build gate runs only on one that is. */
+  /** Whether `machineId`'s agent is connected now. */
   readonly online: (machineId: string) => boolean;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   /**
@@ -1518,8 +1508,8 @@ export const createWorkItems = ({
   /**
    * The {@link finishingFor} hold on `item` ends if nothing keeps it: not
    * its landing, and not its session's last turn (`lastTurnAt`, stored),
-   * unless `turnOver` (that turn has ended) or the item is live (a gate
-   * sent it back, and the turn goes on). What the hold kept goes now.
+   * unless `turnOver` (that turn has ended) or the item is live (its
+   * landing sent it back, and the turn goes on). What the hold kept goes now.
    */
   const closeTurn = (item: WorkItemRow, turnOver: boolean): void => {
     const now = db.workItem(item.id) ?? item;
@@ -1642,8 +1632,7 @@ export const createWorkItems = ({
   /**
    * THE declared wait of a live item: `minutes` from now, for `reason`. The
    * turn that ends with it is a waiting turn ({@link waitingTurn}), and its
-   * session is woken when it ends ({@link endWait}). wait_item declares one,
-   * and so does the gate, for an item no capable machine is online for.
+   * session is woken when it ends ({@link endWait}). wait_item declares one.
    */
   const declareWait = (
     item: WorkItemRow,
@@ -2405,7 +2394,6 @@ export const createWorkItems = ({
     followSessions();
     unblockReady();
     wakeAsleep();
-    wakeCapable();
   });
 
   // --- groups ---------------------------------------------------------------------
@@ -2649,7 +2637,7 @@ export const createWorkItems = ({
       )
       .join(
         "\n"
-      )}\n\nTick each one you finished with todo_write, and say in your summary why each other one stays open. Then call finish_item again: the next call runs the merge checks whatever is ticked.`;
+      )}\n\nTick each one you finished with todo_write, and say in your summary why each other one stays open. Then call finish_item again: the next call lands the work whatever is ticked.`;
   };
 
   /**
@@ -4117,7 +4105,6 @@ export const createWorkItems = ({
       await workspaces.detachNew(workspace, request.detachAt);
     }
     if (projectId) {
-      workspaces.recordRepository(projectId, workspace);
       // The machine placed the project's rows in the clone as it cut it.
       const gone = projectStands(projectId);
       if (gone) {
@@ -4676,37 +4663,35 @@ export const createWorkItems = ({
     }
     update(item.id, { submission: request, landingSince: new Date() });
     const settled = await landingRun.settleLanding(item, request);
-    return settled instanceof ElysiaStatus ? settled : settled.text;
+    return settled.text;
   };
 
   /**
    * A stored submission's landing, run to its end with no session's call
    * waiting on it (a hub restart's resume, a completing item's group's
    * end): a landing needs no word to the session, as its parent has the
-   * report; a failure, or a gate that cannot run, is sent to the session
-   * as the tool would have answered.
+   * report; a failure, or a landing that cannot run, is sent to the
+   * session as the tool would have answered.
    */
   const landStored = (
     item: WorkItemRow,
     submission: WorkItemSubmission
   ): void => {
     const [row] = db.getInstancesByIds([item.instanceId]);
-    /** The merge checks could not run: logged, and the session told to call finish_item again. */
+    /** The landing could not run: logged, and the session told to call finish_item again. */
     const notRun = (reason: string): void => {
       console.error(`[work-items] ${item.id}: ${reason}`);
       if (row) {
         tell(
           row,
-          `The merge checks of your work item could not run: ${reason}. Call finish_item again.`
+          `The landing of your work item could not run: ${reason}. Call finish_item again.`
         );
       }
     };
     landingRun
       .settleLanding(item, submission)
       .then((settled) => {
-        if (settled instanceof ElysiaStatus) {
-          notRun(settled.response.detail);
-        } else if (!settled.done && row) {
+        if (!settled.done && row) {
           tell(row, settled.text);
         }
       })
@@ -4761,7 +4746,6 @@ export const createWorkItems = ({
       update(item.id, {
         ...change,
         ...kept,
-        gatePasses: null,
         endedAt: new Date(),
       }) ?? item;
     workspaces.settleSoon(item.workspaceId);
@@ -4934,28 +4918,6 @@ export const createWorkItems = ({
       );
     }
   };
-  /**
-   * THE wake of an item waiting for a machine its gate needs
-   * ({@link capableWaitReason}): once one with that capability is online,
-   * its wait ends ({@link endWait}) and its session is told to call
-   * finish_item again. The sweep looks, so a machine that registers, or
-   * whose reported OS changes, wakes it within one sweep.
-   */
-  const wakeCapable = (): void => {
-    for (const item of db.waitingWorkItems()) {
-      const needs = capableWaitFor(item.waitReason);
-      const [machine] = needs
-        ? capableMachines(db.listAgents(), needs, online)
-        : [];
-      if (needs && machine && LIVE.has(item.state)) {
-        endWait(
-          item.id,
-          false,
-          capableOnline(needs, machineName(db, machine.machineId))
-        );
-      }
-    }
-  };
   const armWait = (item: WorkItemRow): void => {
     disarmWait(item.id);
     if (item.waitResumeBy && LIVE.has(item.state)) {
@@ -5031,13 +4993,10 @@ export const createWorkItems = ({
     call,
     command,
     db,
-    machinePaused,
-    online,
     report,
     closeTurn,
     published,
     update,
-    declareWait,
     finish,
     heldForGroup,
     workspaces,
@@ -5083,7 +5042,6 @@ export const createWorkItems = ({
     if (
       !workspace ||
       workspace.state === "archived" ||
-      isGateClone(workspace) ||
       isHostFolder(workspace)
     ) {
       return false;
@@ -5171,7 +5129,7 @@ export const createWorkItems = ({
       return problem(409, {
         code: "work-item-landing-runs",
         detail:
-          "the merge checks already run for this item; their outcome comes to you when they end",
+          "this item is landing already; its outcome comes to you when it ends",
       });
     }
     // A stop cancels every command its landing has running (landingStops);
@@ -5619,7 +5577,7 @@ export const createWorkItems = ({
       if (!LIVE.has(item.state) || item.landingSince) {
         return problem(409, {
           code: "work-item-wait-not-live",
-          detail: `${item.title} (${handle(item.id)}) cannot wait while ${item.landingSince ? "its merge checks run" : `it is ${item.state}`}. Continue a live item before calling wait_item.`,
+          detail: `${item.title} (${handle(item.id)}) cannot wait while ${item.landingSince ? "it lands" : `it is ${item.state}`}. Continue a live item before calling wait_item.`,
         });
       }
       const waitReason = reason.trim().replace(/\s+/gu, " ");
@@ -6009,8 +5967,8 @@ export const createWorkItems = ({
     /**
      * `finish_item` from the session `instanceId`: with `blocked`, the item
      * fails with that command and error. Otherwise the submission is stored
-     * and the item marked landing before the gate's first step starts, so a
-     * hub that dies mid-run resumes it ({@link resumeLandings}); then
+     * and the item marked landing before its landing starts, so a hub that
+     * dies mid-run resumes it ({@link resumeLandings}); then
      * landing-run.ts `settleLanding` runs it to its outcome. An item done already
      * answers its done result, unless its workspace holds work since, which
      * this lands ({@link finishable}); one landing already is refused.
@@ -6121,13 +6079,16 @@ export const createWorkItems = ({
     /**
      * An agent has registered: every item on its machine left landing by a
      * hub that stopped mid-run has its landing run again on the stored
-     * submission ({@link landStored}), its gate from the step it was on (each
-     * pass is kept, gate.ts `gateOnce`); a completing one lands if its own
+     * submission ({@link landStored}), from its first step again (a landing
+     * is safe to run again); a completing one lands if its own
      * delegates ended meanwhile ({@link completeIfDrained}). An item this
      * hub is running now is left to that run. Then each `finish_item` turn
      * the stopped hub never heard end is released once the machine says the
      * session is between turns ({@link releaseLastTurns}).
      */
+    /** The landing gate's clones on `machineId` closed (workspaces.ts `closeGateClones`). */
+    closeGateClones: workspaces.closeGateClones,
+
     resumeLandings(machineId: string): void {
       for (const item of liveItemsOn(machineId)) {
         const { submission } = item;
@@ -6143,16 +6104,8 @@ export const createWorkItems = ({
           completeIfDrained(item);
           continue;
         }
-        // Its gate goes on from the step it was on: what passed is kept
-        // in its rows (gate.ts `gateOnce`). Passes stored before they were
-        // rows that did not read vouch for no tree: every step runs again.
-        const kept = [...landingRun.passesOf(item.id).values()].flat().length;
-        const unread =
-          item.gatePassesUnread === null
-            ? ""
-            : ", its passes from before migration 0401 unread so none of them kept";
         console.log(
-          `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}, ${kept} merge check pass(es) kept${unread}`
+          `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}`
         );
         landStored(item, submission);
       }
@@ -6423,7 +6376,7 @@ export const createWorkItems = ({
     /**
      * The workspace whose own copy on `machineId` holds `path` (its clone,
      * or a folder inside it), with the project its work belongs to: its
-     * newest item's, a gate workspace's being the workspace it checks.
+     * newest item's.
      * Undefined when `path` is in no workspace's copy. A Linux view's path
      * is the person's folder ({@link ownCopy}), placed as that folder is.
      */
@@ -6443,7 +6396,7 @@ export const createWorkItems = ({
       if (!workspace) {
         return undefined;
       }
-      const [item] = db.workItemsIn(itemsWorkspaceOf(workspace));
+      const [item] = db.workItemsIn(workspace.id);
       return { projectId: item?.projectId ?? undefined };
     },
 
@@ -6574,9 +6527,7 @@ export const createWorkItems = ({
      */
     settleShown(machineId: string): void {
       for (const workspace of db.activeWorkspacesOn(machineId)) {
-        if (!isGateClone(workspace)) {
-          workspaces.settleSoon(workspace.id);
-        }
+        workspaces.settleSoon(workspace.id);
       }
     },
 
@@ -6664,15 +6615,6 @@ export const createWorkItems = ({
         )
       );
     },
-
-    /**
-     * What the landing gate passed on `tree`, a git tree's name: each step's
-     * command that passed on it, over every item that landed it
-     * (work_item_landed_checks). Empty when none did. A release asks it of
-     * its commit's tree (scripts/release.ts), and checks only what it does
-     * not find here.
-     */
-    gatePassesOn: (tree: string): string[] => db.landedChecksOnTree(tree),
 
     /**
      * What a session's delegate tray shows when it opens: the items it

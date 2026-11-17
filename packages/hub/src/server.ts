@@ -169,7 +169,6 @@ import {
   ENDED_STATUSES,
   OVER_STATUSES,
   resumedKey,
-  type StoppedCommands,
 } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import { artifactLink, sessionLink, taskLink } from "@cawco/core/references";
@@ -464,7 +463,6 @@ import {
 import { FleetSync, warmHashes } from "./fleet-sync";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { createForgePosts } from "./forge-posts";
-import { gateRoutes } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { githubReposOf } from "./github";
 import { createHandedInputs } from "./handed-inputs";
@@ -4194,7 +4192,7 @@ export const createServer = (
    * not failed. It is sent again, under the same id, on the machine's next
    * register ({@link resendHeld}), and the machine runs an id once however
    * often it comes (agent request-record.ts), so a create, an archive, an
-   * inputs write or a landing gate's step that ran answers with what it did.
+   * inputs write or a landing's command that ran answers with what it did.
    * Only a call whose own deadline passes with its machine still away fails,
    * with MACHINE_DISCONNECTED ({@link awaitReply}). A reply that comes on the
    * old socket later is refused, as any frame from it is.
@@ -8065,7 +8063,7 @@ export const createServer = (
    * file that does not read, where the session would start with it, is the
    * start's refusal, in words naming the file: it never starts with
    * everything because a file did not read, as a stages.md that does not
-   * read refuses a dispatch (dispatch.ts) and a gate.md one a landing.
+   * read refuses a dispatch (dispatch.ts).
    */
   function startingSetOf(
     payload: Pick<
@@ -8315,10 +8313,8 @@ export const createServer = (
         publishInstances(workspace.machineId);
       },
     },
-    // What a landing and its gate read of the hub (landing-run.ts `LandingsHub`).
+    // What a landing reads of the hub (landing-run.ts `LandingsHub`).
     forLandings: {
-      hubMachineId: () => ownMachineIdRead,
-      machineFree: (machineId) => machinePause.free(machineId),
       // What a pull request an attempt opens links back to and is titled by.
       sessionUrl: (instanceId) =>
         `${dashboardUrl(registry)}/session/${instanceId}`,
@@ -9006,13 +9002,13 @@ export const createServer = (
    * keeps at the hub until it ends ({@link deliverToSession}). The cut holds
    * no delegated work ({@link noteInterrupt}): that word is what wakes it.
    * Every command the hub runs there is cancelled, to run again once the
-   * pause is over ({@link stopCommands}); answers how many of each kind.
+   * pause is over ({@link stopCommands}); answers how many.
    */
   const pauseBegan = (
     machineId: string,
     until: Date,
     caller?: PauseCaller
-  ): Promise<StoppedCommands> => {
+  ): Promise<number> => {
     const stopped = stopCommands(machineId);
     for (const row of db.listInstances()) {
       if (
@@ -9296,9 +9292,7 @@ export const createServer = (
     designSection: (clone) =>
       designSection(
         (machineId, cwd, cmd, timeoutMs, workspace) =>
-          runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
-            what: "command",
-          }),
+          runOnMachine(machineId, cwd, cmd, timeoutMs, workspace),
         clone
       ),
     db,
@@ -10564,9 +10558,7 @@ export const createServer = (
   const designSystem = createDesignSystem({
     // Inside a live workspace's boundary when one is named (core safe-git.ts).
     run: (machineId, cwd, cmd, timeoutMs, workspace) =>
-      runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
-        what: "command",
-      }),
+      runOnMachine(machineId, cwd, cmd, timeoutMs, workspace),
     boundary: (workspaceId) => workItems.workspaceRef(workspaceId),
     ownMachineId,
     folderChanged: (projectId) => {
@@ -10657,10 +10649,14 @@ export const createServer = (
     // Inside the builder's workspace's boundary (core safe-git.ts), but a
     // move that writes a path the boundary keeps (`CommandOptions.moves`).
     run: (machineId, cwd, cmd, timeoutMs, workspace, movesTo) =>
-      runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
-        what: "command",
-        ...(movesTo ? { moves: movesTo } : {}),
-      }),
+      runOnMachine(
+        machineId,
+        cwd,
+        cmd,
+        timeoutMs,
+        workspace,
+        movesTo ? { moves: movesTo } : {}
+      ),
     tasks,
     workItems,
   });
@@ -13177,7 +13173,6 @@ export const createServer = (
             decisionsChanged(id);
           }
         ),
-        gateRoutes((id) => db.project(id) !== undefined),
         decidesRoutes({
           db: db.decides,
           types: delegateTypes,

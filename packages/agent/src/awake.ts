@@ -3,7 +3,7 @@
  * Live work is what the agent already knows runs, read where each is kept:
  *
  *  - a session's turn, every harness's (session.ts `turnsRunning`);
- *  - a command the hub asked of this machine, a landing gate's step among
+ *  - a command the hub asked of this machine, a landing's git among
  *    them (hub-command.ts `commandsRunning`);
  *  - a command in a workspace's boundary (boundary/processes.ts
  *    `workspacesWithCommands`, its executors' marks);
@@ -46,7 +46,7 @@
  * logind, which it refuses on), this piece does not start, said in one line.
  *
  * Why: on 2026-10-20 the owner's Mac idle-slept at 19:33 with fleet work
- * pending, and a landing gate waited on its "iOS build compiles" step until
+ * pending, and a landing waited on its iOS build until
  * someone woke it.
  */
 

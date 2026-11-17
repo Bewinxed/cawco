@@ -40,8 +40,8 @@ interface Worker {
 
 /**
  * The executors of the agent's own commands running in each workspace now,
- * by pid (hub-command.ts `runHubCommand`: a landing's push and
- * gate steps, the hub's checks and git reads): none is
+ * by pid (hub-command.ts `runHubCommand`: a landing's push and the
+ * hub's git reads): none is
  * a session's ({@link agentWork}).
  */
 const agentExecutors = new Map<string, Set<number>>();
@@ -361,10 +361,10 @@ const AGENT_LOOK_MS = 200;
 /**
  * macOS: {@link endSessionWork} in workspace `workspace`. What was born
  * before the earliest of the agent's own commands running there is ended at
- * once, so a landing gate's step finds nothing of the session's running
+ * once, so a landing's command finds nothing of the session's running
  * beside it. What was born since may be one of those
  * commands' own, moved out of its tree ({@link agentWork}): it is ended once
- * the commands running then have, a landing's push and gate step run to
+ * the commands running then have, a landing's push run to
  * their end, and so on while the agent's commands come. Meanwhile the
  * session's lane holds its next turn (session.ts queues a session's controls
  * in order), so nothing it starts after is swept.

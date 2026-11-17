@@ -141,6 +141,11 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // the moment it can run commands — waiting on nothing else the
     // register asks of the agent.
     ctx.workItems.resumeLandings(message.machineId);
+    // The landing gate's clones a hub before 2026-11-17 cut here go.
+    detach(
+      ctx.workItems.closeGateClones(message.machineId),
+      "close the landing gate's clones"
+    );
     // A checkout coming online can be where a ready task's
     // workspace is cut.
     ctx.dispatcher.machineOnline(message.machineId);

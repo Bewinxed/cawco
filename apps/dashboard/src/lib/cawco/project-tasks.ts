@@ -340,10 +340,6 @@ export const listTasksWaiting = async (
 export const readStages = (projectId: string) =>
   hubData(hub.api.projects({ id: projectId }).stages.get(), refusedOrUnreached);
 
-/** The project's merge checks as the hub reads its gate.md now (hub gate-file.ts `gateRoutes`). */
-export const readGate = (projectId: string) =>
-  hubData(hub.api.projects({ id: projectId }).gate.get(), refusedOrUnreached);
-
 /** What you did with a starter you pressed, as the composer sent: its words as they stood, or changed. */
 export const tellStarterOutcome = (
   projectId: string,

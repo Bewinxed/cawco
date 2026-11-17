@@ -38,8 +38,8 @@ export const createProjectOut =
     const { budgetMinutes, budgetTurns, budgetUnread, budgetUsd, ...shown } =
       project;
     const kept: KeptForShippedApps = {
-      // Read by nothing: the Apple build is a step a project declares in its
-      // gate.md (gate-file.ts). Kept for the shipped apps that require it
+      // Read by nothing: the hub runs no Apple build. Kept for the shipped
+      // apps that require it
       // (TestFlight 20261015.3 to 20261018); it goes once none is installable.
       appleGate: false,
       // Read by nothing: a project links a repository each (`links`). Kept

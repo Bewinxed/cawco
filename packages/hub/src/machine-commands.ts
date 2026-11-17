@@ -4,7 +4,6 @@ import {
   CONTROL_RUN_COMMAND,
   QUEUE_WAIT_MAX_MS,
 } from "@cawco/core/commands/controls";
-import type { RunKind, StoppedCommands } from "@cawco/core/protocol";
 import { cutShort } from "@cawco/core/words/helpers";
 import { queueWords } from "@cawco/core/words/queue";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
@@ -31,8 +30,8 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
    * THE way the hub runs a command on a machine: in `cwd`, killed after
    * `timeoutMs` (the machine's default when not given), answering its
    * complete stdout and stderr (past 8 MiB it fails). A work item's landing
-   * gate goes through it; a gate step names its workspace, so it
-   * runs inside that workspace's boundary, as its delegate's commands do.
+   * goes through it; its commands name its workspace, so they run inside
+   * that workspace's boundary, as its delegate's commands do.
    * The machine's clock stands while the command waits for a shared slot,
    * up to QUEUE_WAIT_MAX_MS, so the hub waits that much longer; each change
    * of that wait reaches `how.onWait`.
@@ -40,8 +39,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
    * On a paused machine (machine-pause.ts) it waits for the pause's end
    * before it starts, `onWait` saying so. One running as a pause begins is
    * cancelled there ({@link stopCommands}) and runs again from the start
-   * once the pause is over; a `movable` one answers `cancelled` instead, for
-   * its caller to run again where it chooses. A `noWait` one waits for
+   * once the pause is over. A `noWait` one waits for
    * nothing: a pause, or a slot it begins to wait for (it is cancelled
    * there), throws WouldWait with the words of what it would have waited for.
    *
@@ -74,7 +72,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
         how
       );
       throwIfStopped(how, cmd);
-      if (!result.cancelled || how.movable) {
+      if (!result.cancelled) {
         return result;
       }
       if (how.noWait) {
@@ -83,7 +81,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
         );
       }
       console.log(
-        `[pause] ${machineId}: a ${how.what ?? "command"} it stopped waits for the pause's end, then runs again`
+        `[pause] ${machineId}: a command it stopped waits for the pause's end, then runs again`
       );
     }
   };
@@ -107,24 +105,21 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
   };
 
   /** Each command the hub has running on a machine, by its run's id. */
-  const commandsInFlight = new Map<
-    string,
-    { machineId: string; what: RunKind }
-  >();
+  const commandsInFlight = new Map<string, { machineId: string }>();
 
   /**
    * A pause began: every command the hub has running on the machine is
    * cancelled there, each to run again once the pause is over
-   * ({@link runOnMachine}). Answers how many of each kind the machine says
-   * were running; one still queued there is cancelled before it starts, and
+   * ({@link runOnMachine}). Answers how many the machine says were
+   * running; one still queued there is cancelled before it starts, and
    * is not counted.
    */
-  const stopCommands = async (machineId: string): Promise<StoppedCommands> => {
+  const stopCommands = async (machineId: string): Promise<number> => {
     const runs = [...commandsInFlight].filter(
       ([, run]) => run.machineId === machineId
     );
     const answers = await Promise.all(
-      runs.map(async ([runId, run]) => {
+      runs.map(async ([runId]) => {
         const answer = await ctx
           .callAgent(machineId, CONTROL_CANCEL_COMMAND, [runId], 15_000)
           .catch((error: unknown) =>
@@ -132,36 +127,30 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
           );
         if (typeof answer === "string") {
           console.warn(
-            `[pause] ${machineId}: could not cancel ${run.what} ${runId}: ${answer}`
+            `[pause] ${machineId}: could not cancel command ${runId}: ${answer}`
           );
           return;
         }
         switch (answer.kind) {
           case "unanswered":
             console.warn(
-              `[pause] ${machineId}: whether ${run.what} ${runId} was cancelled is not known: ${ctx.silentWords(machineId, answer)}`
+              `[pause] ${machineId}: whether command ${runId} was cancelled is not known: ${ctx.silentWords(machineId, answer)}`
             );
             return;
           case "answered":
             if (answer.value.error) {
               console.warn(
-                `[pause] ${machineId}: could not cancel ${run.what} ${runId}: ${String(answer.value.error)}`
+                `[pause] ${machineId}: could not cancel command ${runId}: ${String(answer.value.error)}`
               );
               return;
             }
-            return answer.value.result === true ? run.what : undefined;
+            return answer.value.result === true;
           default:
             throw unreachable(answer);
         }
       })
     );
-    const stopped: StoppedCommands = {};
-    for (const what of answers) {
-      if (what) {
-        stopped[what] = (stopped[what] ?? 0) + 1;
-      }
-    }
-    return stopped;
+    return answers.filter(Boolean).length;
   };
 
   /**
@@ -201,7 +190,6 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     const run: CommandRun = {
       id: crypto.randomUUID(),
       queueMaxMs: QUEUE_WAIT_MAX_MS,
-      ...(how.gate ? { gate: how.gate } : {}),
       ...(how.moves ? { moves: how.moves } : {}),
     };
     const { onWait } = how;
@@ -212,7 +200,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
      */
     const cancel = (): void => {
       console.log(
-        `[command] ${machineId}: cancelling ${how.what ?? "command"} run ${run.id}, its owner stopped: \`${cutShort(cmd, 120)}\``
+        `[command] ${machineId}: cancelling command run ${run.id}, its owner stopped: \`${cutShort(cmd, 120)}\``
       );
       cancelRun(machineId, run.id).catch((error: unknown) =>
         console.warn(
@@ -240,7 +228,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
         );
       });
     }
-    commandsInFlight.set(run.id, { machineId, what: how.what ?? "command" });
+    commandsInFlight.set(run.id, { machineId });
     try {
       const response = await ctx.callAgent(
         machineId,

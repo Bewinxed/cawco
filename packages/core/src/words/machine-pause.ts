@@ -1,6 +1,5 @@
 /** What a machine's pause says: its end's clock and what it stopped. */
 
-import type { RunKind, StoppedCommands } from "../protocol";
 
 /**
  * A machine pause's end as the fleet says it (hub machine-pause.ts): the
@@ -18,11 +17,6 @@ export function pauseClock(at: number, now = Date.now()): string {
     : `${end.toLocaleDateString("en-GB", { weekday: "short" })} ${time}`;
 }
 
-const COMMAND_NOUNS: Record<RunKind, [string, string]> = {
-  "merge check": ["merge check", "merge checks"],
-  command: ["command", "commands"],
-};
-
 export const machinePauseWords = {
   /**
    * What a pause stopped when the hub kept its counts and could not read
@@ -33,19 +27,11 @@ export const machinePauseWords = {
 } as const;
 
 /**
- * "stopped 1 running merge check", "stopped 2 running merge checks and 1
- * running command"; undefined when the pause stopped nothing.
+ * "stopped 1 running command", "stopped 2 running commands": the commands
+ * a pause stopped; undefined when it stopped none.
  */
-export function stoppedWords(stopped: StoppedCommands): string | undefined {
-  // Library gap: `Object.keys` answers `string[]`, never the record's keys (https://github.com/microsoft/TypeScript/issues/12253).
-  const parts = (Object.keys(COMMAND_NOUNS) as RunKind[]).flatMap((kind) => {
-    const count = stopped[kind] ?? 0;
-    const [one, many] = COMMAND_NOUNS[kind];
-    return count > 0 ? [`${count} running ${count === 1 ? one : many}`] : [];
-  });
-  if (parts.length === 0) {
-    return;
-  }
-  const last = parts.pop();
-  return `stopped ${parts.length > 0 ? `${parts.join(", ")} and ${last}` : last}`;
+export function stoppedWords(stopped: number): string | undefined {
+  return stopped > 0
+    ? `stopped ${stopped} running ${stopped === 1 ? "command" : "commands"}`
+    : undefined;
 }

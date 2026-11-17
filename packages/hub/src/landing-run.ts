@@ -28,20 +28,9 @@ import type {
   WorkLanding,
 } from "./db/stored-types";
 import {
-  createGate,
-  failedWith,
-  type Gate,
-  type GateDeps,
-  type GateHow,
-  type GateRun,
-  type StepOutcome,
-  TREE_SHA,
-} from "./gate";
-import { capableWaitReason, GATE_FILE, projectShip } from "./gate-file";
-import {
   type BranchOutcome,
   branchPushCheck,
-  type Failed,
+  failedWith,
   type LandingTurn,
   land,
   landingQueue,
@@ -61,9 +50,8 @@ import {
   projectRoot,
   writeFolderFiles,
 } from "./project-folder";
-import { shipLanded } from "./ship";
-import { LIVE, WAIT_ITEM_MAX_MINUTES } from "./work-item-state";
-import type { WorkspacesDeps } from "./workspaces";
+import { LIVE } from "./work-item-state";
+import type { Workspaces, WorkspacesDeps } from "./workspaces";
 import {
   GIT_TIMEOUT_MS,
   isFolderOverlay,
@@ -86,6 +74,8 @@ export const reportLine = (item: WorkItemRow): string =>
 const DIFFSTAT_LINES = 40;
 /** A full commit id, as a machine names one: never an option or a ref. */
 const COMMIT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
+/** A git tree's name, as `git rev-parse <commit>^{tree}` prints it. */
+const TREE_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
 /** The branch an item that lands `branch` or `pr` is pushed to: `cawco/tsk-12`. */
 export const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
   `cawco/${landingKey(item)}`;
@@ -220,123 +210,26 @@ interface CheckoutHead {
   commit: string;
   tree: string;
 }
-/** What a landing that pushed says of a project that declares no gate. */
-const NO_CHECKS = "merged with no checks: this project declares none";
-/**
- * A gate step's wait as its item's status says it: `the step “iOS build
- * compiles” is waiting: obelisk-of-light is paused until 18:52`, `… is
- * queued for the Mac's build slot behind …`; the wait alone when no step
- * waits. Before 2026-10-18 the step's name ran straight into the wait
- * ("iOS build compiles waiting: …").
- */
-const stepWaitWords = (words: string, step: string | undefined): string =>
-  step ? `the step “${step}” is ${words}` : words;
-/** Whether a run fails: a step that failed, or one left unrun by one that did. */
-const runFailed = (run: GateRun): boolean =>
-  run.outcomes.some((outcome) => !outcome.passed);
 /** A fenced block that no command output can close early. */
 export const fenced = (text: string): string =>
   `\n\`\`\`\`\n${text.trimEnd()}\n\`\`\`\``;
 /**
- * A failed gate run as the delegate reads it: `head`, which steps failed
- * and which they left unrun; `lines`, the steps', failures first, each
- * failure with its output.
- */
-const failedRun = (run: GateRun): { head: string; lines: string } => {
-  const failing = run.outcomes.filter(
-    (outcome) => !(outcome.passed || outcome.unrun)
-  );
-  const unrun = run.outcomes.filter((outcome) => outcome.unrun);
-  const passing = run.outcomes.filter((outcome) => outcome.passed);
-  const names = (each: StepOutcome[]) =>
-    each.map((outcome) => outcome.step.name).join(" and ");
-  return {
-    head: `${names(failing)} failed${unrun.length > 0 ? `, so ${names(unrun)} did not run` : ""}`,
-    lines: [...failing, ...unrun, ...passing]
-      .map(stepResultLine)
-      .join("\n")
-      .trimEnd(),
-  };
-};
-/**
- * A step's line: its name, pass or fail, exit code and duration. A failure
- * carries its stdout tail under it; a pass is the line alone.
- */
-const stepLine = ({
-  step,
-  passed,
-  exitCode,
-  durationMs,
-  result,
-  skipped,
-  unrun,
-  where,
-  nothing,
-}: StepOutcome): string => {
-  if (nothing) {
-    return `- ${step.name}: ${nothing}`;
-  }
-  if (skipped) {
-    return `- ${step.name}: pass (not run again: ${skipped})`;
-  }
-  if (unrun) {
-    return `- ${step.name}: not run (${unrun})`;
-  }
-  const line = `- ${step.name}: ${passed ? "pass" : "fail"} (exit ${exitCode}, ${(durationMs / 1000).toFixed(1)}s${where ? `, ${where}` : ""})`;
-  // A pass is its line: its output is the report's length, not its news.
-  return !passed && result.stdout.trim()
-    ? `${line}${fenced(result.stdout)}`
-    : line;
-};
-/** A gate run as the report lists it: each step; empty when it ran nothing. */
-const gateLines = (run: GateRun): string =>
-  run.outcomes.map(stepLine).join("\n").trimEnd();
-/**
- * A finished landing's gate lines: its steps, or, for a project that
- * declares no gate, {@link NO_CHECKS} once it pushed something; empty
- * when it pushed nothing.
- */
-const landingGateLines = (
-  landing: Exclude<Landed, { kind: "retry" | "stopped" }>
-): string => {
-  if (landing.gate.declared) {
-    return gateLines(landing.gate);
-  }
-  return landing.kind === "done" && landing.landed ? NO_CHECKS : "";
-};
-/** A step as the delegate reads it: a failure carries its stderr too. */
-const stepResultLine = (outcome: StepOutcome): string =>
-  !outcome.passed && outcome.result.stderr.trim()
-    ? `${stepLine(outcome)}\nstderr:${fenced(outcome.result.stderr)}`
-    : stepLine(outcome);
-/**
- * The landing line of an item that landed on its base: where, what its turn
- * ran again after the turn's rebase (nothing when the branch had not moved
- * since it gated), and each time it stepped out of its turn. What its last
- * gate on top of the branch ran is the report's landing gate section.
+ * The landing line of an item that landed on its base: where, whether its
+ * turn rebased again, and each time it stepped out of its turn.
  */
 const landedLine = (
   base: string,
   landed: { rebased: boolean; sha: string },
-  turn: GateRun | undefined,
   steps: string[]
 ): string => {
-  const ran = turn?.outcomes
-    .filter((each) => !each.nothing)
-    .map((each) =>
-      each.skipped
-        ? `${each.step.name} not run again (${each.skipped})`
-        : `${each.step.name} ${each.passed ? "passed" : "failed"}`
-    )
-    .join(", ");
   const after = landed.rebased
-    ? `${base} had moved by its turn, so it rebased again${ran ? `: ${ran}` : ", with no merge checks to run"}`
-    : `${base} had not moved by its turn, so nothing ran again`;
+    ? `${base} had moved by its turn, so it rebased again`
+    : `${base} had not moved by its turn`;
   const stepped =
     steps.length > 0
-      ? `; it stepped out of its turn ${steps.length === 1 ? "once" : `${steps.length} times`} to run the merge checks again, the last time because ${steps.at(-1)}`
+      ? `; it stepped out of its turn ${steps.length === 1 ? "once" : `${steps.length} times`}, the last time because ${steps.at(-1)}`
       : "";
-  return `${workWords.landedOn(base)} at ${landed.sha.slice(0, 9)}, checked on top of ${base}; ${after}${stepped}.`;
+  return `${workWords.landedOn(base)} at ${landed.sha.slice(0, 9)}, rebased on top of ${base}; ${after}${stepped}.`;
 };
 /** The findings, numbered; nothing when there are none. */
 export const findingsBlock = (
@@ -347,19 +240,17 @@ export const findingsBlock = (
     : "";
 /**
  * What landing a finished item came to: done (with the pull request it
- * opened or found, landing `pr`), back to its session, or refused. `gate` is
- * the landing gate's run, for the report.
+ * opened or found, landing `pr`), back to its session, or refused.
  */
 type Landed =
   | {
       kind: "done";
       line: string;
-      gate: GateRun;
       /** What it put where, when it pushed (the item's `landed`). */
       landed?: WorkLanding;
       prUrl?: string;
     }
-  | { kind: "refused"; line: string; gate: GateRun; prUrl?: string }
+  | { kind: "refused"; line: string; prUrl?: string }
   | { kind: "retry"; text: string }
   | { kind: "stopped"; text: string };
 /**
@@ -384,7 +275,6 @@ const stoppedLanding = (item: WorkItemRow): Landed => ({
 /** The text that hands uncommitted work back to the session, for a landing that takes only commits. */
 const dirtyText = (files: string, where: string): string =>
   `Not landed: the workspace has changes that are not committed, new files included. The hub lands only commits, so landing now could leave ${where} without them. Commit them, delete them, or move scratch to $TMPDIR, then call finish_item again.${fenced(files)}`;
-/** The text that hands failed merge checks back to the session. */
 /** The paths a folder landing changed, as its report lists them. */
 const changedList = (changed: readonly ChangedPath[]): string =>
   fenced(
@@ -430,10 +320,6 @@ const conflictText = (
         `### ${each.path}\n\nIn ${folder} now:${versionWords(each.yours)}\n\nYours:${versionWords(each.delegate)}`
     ),
   ].join("\n\n");
-const gateFailedText = (run: GateRun, where: string): string => {
-  const { head, lines } = failedRun(run);
-  return `Not landed: the merge checks ran on ${where}, and ${head}. Fix it, commit, and call finish_item again.\n\n${lines}`;
-};
 /**
  * A refused landing's line, its first sentence what failed: the step git was
  * on, from which machine, and a branch that moved before every push, or a
@@ -450,7 +336,7 @@ const refusedLine = (
   const step: Record<Refusal["step"], string> = {
     fetch: `the fetch of origin/${workspace.base}`,
     rebase: `the rebase onto origin/${workspace.base}`,
-    "push check": `the push check (git push --dry-run to ${target}, before any merge check)`,
+    "push check": `the push check (git push --dry-run to ${target})`,
     push: `the push to ${target}`,
     read: "reading the workspace's git",
   };
@@ -462,14 +348,14 @@ const refusedLine = (
   } else if (refusal.cause === "cut-off") {
     said = `${step.push} was cut off, and ${target} does not hold the commits`;
   } else if (refusal.step === "push check") {
-    said = `${step["push check"]} from ${machine} was refused, so no merge check ran`;
+    said = `${step["push check"]} from ${machine} was refused`;
   } else if (refusal.step === "push") {
     said = `${step.push} was refused`;
   }
   return `${head}: ${said}.${fenced(refusal.detail)}\nThe commits are on branch ${workspace.branch} in workspace ${handle(workspace.id)}.`;
 };
 /**
- * Why a finished item that passed its landing gate fails, when it does: the
+ * Why a finished item fails, when it does: the
  * landing's line (its first sentence the step that failed), or, once it
  * landed, the line on the outputs that did not arrive.
  */
@@ -483,41 +369,10 @@ const failureOf = (
   return collected.ok ? undefined : collected.line.trim();
 };
 /**
- * The landing gate's section of a report: its lines under their heading;
- * nothing for a landing with no gate.
- */
-const gateSection = (
-  landing: Exclude<Landed, { kind: "retry" | "stopped" }>
-): string => {
-  const lines = landingGateLines(landing);
-  return lines ? `\n\n${workWords.gateHeading}\n${lines}` : "";
-};
-/**
- * The merge checks a done item's report names, heading and lines, as its
- * landing wrote them ({@link finishedReport}: its summary, then
- * {@link gateSection}); undefined when it names none. A landed item passed
- * every step, so each is one line.
- */
-export const reportedGate = (
-  item: Pick<WorkItemRow, "result" | "summary">
-): string | undefined => {
-  const { result, summary } = item;
-  if (!(result && summary !== null && result.startsWith(summary))) {
-    return;
-  }
-  const rest = result.slice(summary.length);
-  const head = `\n\n${workWords.gateHeading}\n`;
-  if (!rest.startsWith(head)) {
-    return;
-  }
-  const end = rest.indexOf("\n\n", head.length);
-  return rest.slice(2, end === -1 ? undefined : end);
-};
-/**
  * A finished item's report to its parent: what it said it did (its own
- * report, quoting what it ran), the landing gate's lines, how it landed and
- * its outputs, then `tail` (commits, diffstat, findings). A failure leads
- * it, so the parent reads why before what.
+ * report, quoting what it ran), how it landed and its outputs, then `tail`
+ * (commits, diffstat, findings). A failure leads it, so the parent reads why
+ * before what.
  */
 const finishedReport = (
   summary: string,
@@ -526,23 +381,21 @@ const finishedReport = (
   tail: string
 ): string => {
   const failure = failureOf(landing, collected);
-  const head = `${summary}${gateSection(landing)}`;
   if (!failure) {
-    return `${head}\n\n${landing.line}${collected.line}${tail}`;
+    return `${summary}\n\n${landing.line}${collected.line}${tail}`;
   }
   const landed =
     landing.kind === "done" ? `\n\n${landing.line}` : collected.line;
-  return `${failure}\n\n${head}${landed}${tail}`;
+  return `${failure}\n\n${summary}${landed}${tail}`;
 };
 /**
  * What `finish_item` answers once a landing ended its item: done, or failed
- * because it could not land or its outputs did not arrive. `gateSaid` is the
- * landing gate's lines, `held` the words on a group's held report.
+ * because it could not land or its outputs did not arrive. `held` is the
+ * words on a group's held report.
  */
 const landedText = (
   landing: Exclude<Landed, { kind: "retry" | "stopped" }>,
   collected: { ok: boolean; line: string },
-  gateSaid: string,
   held: string
 ): { done: boolean; text: string } => {
   if (landing.kind !== "done") {
@@ -554,7 +407,7 @@ const landedText = (
   return collected.ok
     ? {
         done: true,
-        text: `${landing.line}${collected.line}${gateSaid}\n\nThe item is done${held}. End your turn.`,
+        text: `${landing.line}${collected.line}\n\nThe item is done${held}. End your turn.`,
       }
     : {
         done: false,
@@ -567,8 +420,7 @@ const unpushed = (
   workspace: WorkspaceRow,
   branch: string,
   lands: LandsMode,
-  machine: string,
-  gate: GateRun
+  machine: string
 ): Landed => {
   switch (pushed.kind) {
     case "dirty":
@@ -576,19 +428,16 @@ const unpushed = (
     case "nothing":
       return {
         kind: "done",
-        gate,
         line: `Nothing to push: ${workspace.base} already holds every commit in this workspace${lands === "pr" ? ", so no pull request was opened" : ""}.`,
       };
     case "no-remote":
       return {
         kind: "done",
-        gate,
         line: "Not pushed: this workspace's repository has no remote.",
       };
     case "refused":
       return {
         kind: "refused",
-        gate,
         line: refusedLine(
           pushed,
           { head: "Not pushed", target: `branch ${branch}` },
@@ -606,13 +455,10 @@ const unpushed = (
 export const LANDING_ENDED = { landingSince: null, submission: null } as const;
 
 /**
- * What a landing run and its gate read of the hub that work items read
- * nothing of: the hub hands it to createWorkItems as one `forLandings`,
- * passed on whole.
+ * What a landing run reads of the hub that work items read nothing of: the
+ * hub hands it to createWorkItems as one `forLandings`, passed on whole.
  */
-export interface LandingsHub extends Pick<GateDeps, "machineFree"> {
-  /** The machine the hub runs on, once read (server.ts `ownMachineIdRead`): where a project ships from (ship.ts). */
-  readonly hubMachineId: () => string | undefined;
+export interface LandingsHub {
   /**
    * Where a reader opens a session in the dashboard: the link a pull request
    * carries back, and each landed commit's `Agent-Logs-Url` trailer.
@@ -628,14 +474,8 @@ export interface LandingsHub extends Pick<GateDeps, "machineFree"> {
 interface LandingRunDeps
   extends
     LandingsHub,
-    Pick<WorkspacesDeps, "call" | "command" | "db">,
-    Pick<GateDeps, "machinePaused" | "online" | "workspaces"> {
+    Pick<WorkspacesDeps, "call" | "command" | "db"> {
   readonly closeTurn: (item: WorkItemRow, turnOver: boolean) => void;
-  readonly declareWait: (
-    item: WorkItemRow,
-    minutes: number,
-    reason: string
-  ) => WorkItemRow;
   readonly finish: (
     item: WorkItemRow,
     change: Parameters<DbShape["updateWorkItem"]>[1],
@@ -657,6 +497,7 @@ interface LandingRunDeps
     id: string,
     asked: Parameters<DbShape["updateWorkItem"]>[1]
   ) => WorkItemRow | undefined;
+  readonly workspaces: Workspaces;
 }
 
 export const createLandingRun = ({
@@ -664,13 +505,8 @@ export const createLandingRun = ({
   closeTurn,
   command,
   db,
-  declareWait,
   finish,
   heldForGroup,
-  hubMachineId,
-  machineFree,
-  machinePaused,
-  online,
   published,
   report,
   sessionUrl,
@@ -681,10 +517,8 @@ export const createLandingRun = ({
   /**
    * Each landing this hub process runs, by item: aborted as its item ends
    * ({@link finish}), which cancels every command the landing has running,
-   * its gate's steps on every machine included, through the runner that
-   * started each (machine-commands.ts `runOnMachine`, `how.stop`). Before 2026-10-18 a
-   * stop ended a landing only at its next turn or push: three stopped items'
-   * iOS steps waited on in the Mac's queue, one for 1 h 22 m.
+   * through the runner that started each (machine-commands.ts
+   * `runOnMachine`, `how.stop`).
    */
   const landingStops = new Map<string, AbortController>();
   /** Whether this hub process runs item `itemId`'s landing now ({@link settleLanding}): a resume leaves it to that run. */
@@ -709,13 +543,10 @@ export const createLandingRun = ({
    * What an item's landing waits for, as its status says it (WorkItemSummary
    * `checkQueue`): a shared slot ("queued for …"), its machine's pause
    * ("waiting: Omars-MacBook-Pro is paused until 00:57"), another command in
-   * its folder, its gate on top of the branch ("gating on top of main: the
-   * step “iOS build compiles” is waiting: Omars-MacBook-Pro is paused until
-   * 00:57", {@link stepWaitWords}), or its turn
-   * to land ("queued to land on main behind …"); null once it waits no more.
-   * Every wait between `finish_item` and the item's
-   * outcome comes here: before 2026-10-16 only a step's own slot and pause
-   * waits did, and items queued to land sat with nothing said.
+   * its folder, or its turn to land ("queued to land on main behind …");
+   * null once it waits no more. Every wait between `finish_item` and the
+   * item's outcome comes here: before 2026-10-16 items queued to land sat
+   * with nothing said.
    */
   const landingWait = (itemId: string, words: string | null): void => {
     if (words) {
@@ -815,18 +646,6 @@ export const createLandingRun = ({
           ...(lands ? {} : { stop: landingStops.get(item.id)?.signal }),
         }
       );
-  const gateRun = createGate({
-    call,
-    command,
-    db,
-    machineFree,
-    machinePaused,
-    online,
-    workspaces,
-    landingStop: (itemId) => landingStops.get(itemId)?.signal,
-    runIn,
-  });
-
   /** HEAD of the workspace's checkout and the tree it holds, read whatever stops the item's landing; nothing when git cannot say. */
   const headOf = async (
     workspace: WorkspaceRow,
@@ -877,33 +696,6 @@ export const createLandingRun = ({
           };
     db.updateWorkspace(id, { movedUntold: move });
   };
-  /**
-   * How an item's landing gate runs in its landing on `base` (landing.ts):
-   * in its turn it never waits; while it gates on top of the branch, its
-   * status says so (and why, when it stepped out of its turn: `stepped`),
-   * with what each step waits for there.
-   */
-  const landingHow = (
-    itemId: string,
-    base: string,
-    turning: boolean,
-    stepped: string | undefined
-  ): GateHow => {
-    if (turning) {
-      return { inTurn: true, say: (words) => landingWait(itemId, words) };
-    }
-    const gating = stepped
-      ? `stepped out of its turn to land (${stepped}), so running the merge checks again on top of ${base}`
-      : `running the merge checks on top of ${base}`;
-    return {
-      inTurn: false,
-      say: (words, step) =>
-        landingWait(
-          itemId,
-          words ? `${gating}: ${stepWaitWords(words, step)}` : gating
-        ),
-    };
-  };
   /** The item in the landing queue: named as `“title” (id)`, its wait its status. */
   const turnOf = (item: WorkItemRow): LandingTurn => ({
     who: `“${item.title}” (${item.id.slice(0, 8)})`,
@@ -911,61 +703,25 @@ export const createLandingRun = ({
   });
   /**
    * Lands a finished item's commits on its workspace's base branch
-   * (landing.ts): it gates on top of the branch outside the queue, the
-   * landing gate's steps run on the rebased tree, its status saying so and
-   * what each step waits for there; then it takes its turn, where only the
-   * steps whose inputs the turn's rebase moved run again, and none waits.
-   * Answers the line the report and the delegate read when the item can be
-   * done; the text that hands it back to its delegate (`retry`: uncommitted
-   * work, a conflict, a gate that failed); or the line that says why it
-   * could not land (`refused`).
+   * (landing.ts): rebased on top of the branch outside the queue, then its
+   * turn. Answers the line the report and the delegate read when the item
+   * can be done; the text that hands it back to its delegate (`retry`:
+   * uncommitted work, a conflict); or the line that says why it could not
+   * land (`refused`).
    */
   const landOnBase = async (
     workspace: WorkspaceRow,
-    item: WorkItemRow,
-    gate: Gate
+    item: WorkItemRow
   ): Promise<Landed> => {
     const { base } = workspace;
-    /** The last gate's run on top of the branch and the turn's, for the report. */
-    const runs: { gate: GateRun; turn?: GateRun } = {
-      gate: { declared: gate.declared, outcomes: [] },
-    };
     /** The times it stepped out of its turn, and why the last time. */
     const stepped: string[] = [];
-    /** The landing gate on the tree the workspace holds. */
-    const onBaseGate = async (
-      turning: boolean
-    ): Promise<Failed<GateRun> | undefined> => {
-      const how = landingHow(item.id, base, turning, stepped.at(-1));
-      how.say(null);
-      landingAt(item, turning ? "turn" : "gating");
-      const run = await gateRun.gateOnce(
-        workspace,
-        item,
-        gate,
-        turning
-          ? `in its turn to land on ${base}`
-          : `while it ran the merge checks on top of ${base}`,
-        how
-      );
-      if (runFailed(run)) {
-        return { kind: "gate-failed", failing: run };
-      }
-      if (turning) {
-        runs.turn = run;
-      } else {
-        runs.gate = run;
-      }
-      // Gated, it says next that it waits its turn, or nothing when it takes
-      // it at once. A failure's or an error's words go as settleLanding ends.
-      landingWait(item.id, null);
-    };
+    landingAt(item, "turn");
     const before = await headOf(workspace, item);
-    const outcome = await land<GateRun>(base, {
+    const outcome = await land(base, {
       run: runIn(workspace, item),
       logsUrl: sessionUrl(item.instanceId),
       turn: turnOf(item),
-      check: onBaseGate,
       onStepOut: (words) => {
         stepped.push(words);
       },
@@ -977,38 +733,23 @@ export const createLandingRun = ({
     if (before && after && before.commit !== after.commit) {
       movedByLanding(workspace.id, base, before, after);
     }
-    const ran = runs.gate;
     switch (outcome.kind) {
       case "stopped":
         return stoppedLanding(item);
-      case "landed": {
-        const gated = await gateRun.gatePassOf(
-          workspace,
-          item,
-          outcome.sha,
-          runs.turn ?? ran
-        );
+      case "landed":
         return {
           kind: "done",
-          gate: ran,
-          landed: {
-            sha: outcome.sha,
-            onto: outcome.onto,
-            ...(gated ? { gate: gated } : {}),
-          },
-          line: landedLine(base, outcome, runs.turn, stepped),
+          landed: { sha: outcome.sha, onto: outcome.onto },
+          line: landedLine(base, outcome, stepped),
         };
-      }
       case "nothing":
         return {
           kind: "done",
-          gate: ran,
           line: `Nothing to land: ${base} already holds every commit in this workspace.`,
         };
       case "no-remote":
         return {
           kind: "done",
-          gate: ran,
           line: "Not landed: this workspace's repository has no remote.",
         };
       case "dirty":
@@ -1018,18 +759,9 @@ export const createLandingRun = ({
           kind: "retry",
           text: `Not landed: your commits conflict with origin/${base} in:${fenced(outcome.files)}\nThe hub undid its rebase. Rebase onto origin/${base} yourself, resolve the conflicts, commit, and call finish_item again.`,
         };
-      case "gate-failed":
-        return {
-          kind: "retry",
-          text: gateFailedText(
-            outcome.failing,
-            `your commits rebased onto origin/${base}, which your branch is now on top of`
-          ),
-        };
       case "refused":
         return {
           kind: "refused",
-          gate: ran,
           line: refusedLine(
             outcome,
             { head: "Not landed", target: base },
@@ -1065,19 +797,13 @@ export const createLandingRun = ({
     );
     return "";
   };
-  /** A pull request's body: what the delegate said it did, the landing gate's lines, and where its report is. */
-  const pullRequestBody = (
-    item: WorkItemRow,
-    summary: string,
-    gate: GateRun
-  ): string => {
+  /** A pull request's body: what the delegate said it did, and where its report is. */
+  const pullRequestBody = (item: WorkItemRow, summary: string): string => {
     const what = item.taskId
       ? `an attempt at the task “${item.title}”`
       : `work item ${handle(item.id)}`;
-    const lines = gate.declared ? gateLines(gate) : NO_CHECKS;
     return [
       summary.trim(),
-      ...(lines ? [`Merge checks, run by the CawCo hub:\n${lines}`] : []),
       `This is ${what}; its report and transcript: ${sessionUrl(item.instanceId)}`,
     ].join("\n\n");
   };
@@ -1116,14 +842,12 @@ export const createLandingRun = ({
    * Lands an item that lands `branch` or `pr`: its commits pushed as they are
    * to `cawco/<task or item>`, and for `pr`, a pull request against the base
    * branch opened, or the open one found. gh turning the pull request down
-   * refuses the landing in gh's words. `gate` is the landing gate's run at
-   * finish_item, on the tree pushed.
+   * refuses the landing in gh's words.
    */
   const landOnBranch = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    summary: string,
-    gate: GateRun
+    summary: string
   ): Promise<Landed> => {
     const { base } = workspace;
     const branch = landingBranch(item);
@@ -1145,8 +869,7 @@ export const createLandingRun = ({
         workspace,
         branch,
         item.lands,
-        machineName(db, workspace.machineId),
-        gate
+        machineName(db, workspace.machineId)
       );
     }
     const at = `${branch} at ${pushed.sha.slice(0, 9)}`;
@@ -1158,12 +881,11 @@ export const createLandingRun = ({
     if (item.lands !== "pr") {
       return {
         kind: "done",
-        gate,
         landed,
         line: `Pushed to branch ${at} on origin; ${base} is untouched.`,
       };
     }
-    return pullRequestFor(workspace, item, summary, gate, at, landed);
+    return pullRequestFor(workspace, item, summary, at, landed);
   };
   /**
    * Opens the pull or merge request for an item's pushed branch, or finds
@@ -1176,7 +898,6 @@ export const createLandingRun = ({
     workspace: WorkspaceRow,
     item: WorkItemRow,
     summary: string,
-    gate: GateRun,
     at: string,
     landed: WorkLanding
   ): Promise<Landed> => {
@@ -1195,7 +916,7 @@ export const createLandingRun = ({
       base,
       head: branch,
       title,
-      body: pullRequestBody(item, summary, gate),
+      body: pullRequestBody(item, summary),
     };
     let verdict: ForgeVerdict;
     try {
@@ -1213,13 +934,11 @@ export const createLandingRun = ({
     if (!(made.ok && made.url)) {
       return {
         kind: "refused",
-        gate,
         line: `Pushed to branch ${at}, but ${machine} did not open the pull or merge request. It said:${fenced(made.said)}\nOpen it by hand from ${branch} into ${base}, or start the task again once ${machine} can.`,
       };
     }
     return {
       kind: "done",
-      gate,
       landed,
       prUrl: made.url,
       line: made.existing
@@ -1228,23 +947,18 @@ export const createLandingRun = ({
     };
   };
   /**
-   * Lands a finished item the way it lands: on its base (the gate's steps
-   * run on top of it, {@link landOnBase}), on a branch, through a pull
-   * request, or not at all. `earlier` is the gate's run at finish_item: every
-   * step for a branch or a pull request, none for an item landing on its base.
+   * Lands a finished item the way it lands: on its base
+   * ({@link landOnBase}), on a branch, through a pull request, or not at all.
    */
   const landFinished = (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    gate: Gate,
-    earlier: GateRun,
     summary: string
   ): Promise<Landed> => {
     switch (item.lands) {
       case "none":
         return Promise.resolve({
           kind: "done",
-          gate: earlier,
           line:
             db.workItemOutputs(item.id).length > 0
               ? "Nothing pushed: this item lands none, and its outputs are what it hands in."
@@ -1256,11 +970,11 @@ export const createLandingRun = ({
         // A folder lands by its change set into the folder itself; a
         // repository by git, on its base or a branch of its own.
         if (isFolderOverlay(workspace)) {
-          return landFolder(workspace, item, gate);
+          return landFolder(workspace);
         }
         return item.lands === "main"
-          ? landOnBase(workspace, item, gate)
-          : landOnBranch(workspace, item, summary, earlier);
+          ? landOnBase(workspace, item)
+          : landOnBranch(workspace, item, summary);
     }
   };
   /**
@@ -1268,59 +982,22 @@ export const createLandingRun = ({
    * layer.ts): the change set read against the folder as it is now, any
    * path changed there too since the delegate's start a conflict that lands
    * nothing and goes back to the delegate with both versions; then the
-   * folder's checks (its project's gate.md, as a repository's merge checks
-   * are), run in the workspace's view of the folder; then the change set put
-   * into the folder by the agent on its machine, outside every wall, which
-   * scans for conflicts once more first. The services its work touched are
+   * change set put into the folder by the agent on its machine, outside
+   * every wall, which scans for conflicts once more first. The services its work touched are
    * the delegate's report's to name, and its parent's to restart.
    */
-  const landFolder = async (
-    workspace: WorkspaceRow,
-    item: WorkItemRow,
-    gate: Gate
-  ): Promise<Landed> => {
+  const landFolder = async (workspace: WorkspaceRow): Promise<Landed> => {
     const ref = refOf(workspace);
     const read = await call(workspace.machineId, CONTROL_WORKSPACE_CHANGES, [
       ref,
     ]);
-    const ran: GateRun = { declared: gate.declared, outcomes: [] };
     if (read.conflicts.length > 0) {
       return { kind: "retry", text: conflictText(read.conflicts, read.folder) };
     }
     if (read.changed.length === 0) {
       return {
         kind: "done",
-        gate: ran,
         line: `Nothing to land: ${read.folder} already holds every change in this workspace.`,
-      };
-    }
-    landingAt(item, "gating");
-    const how: GateHow = {
-      inTurn: false,
-      say: (words, step) =>
-        landingWait(
-          item.id,
-          words
-            ? `running the folder's checks: ${stepWaitWords(words, step)}`
-            : "running the folder's checks"
-        ),
-    };
-    how.say(null);
-    const checked = await gateRun.gateOnce(
-      workspace,
-      item,
-      gate,
-      `while it ran the folder's checks on its changes to ${read.folder}`,
-      how
-    );
-    landingWait(item.id, null);
-    if (runFailed(checked)) {
-      return {
-        kind: "retry",
-        text: gateFailedText(
-          checked,
-          `your changes over ${read.folder} as it is now`
-        ),
       };
     }
     const applied = await call(workspace.machineId, CONTROL_WORKSPACE_APPLY, [
@@ -1334,7 +1011,6 @@ export const createLandingRun = ({
     }
     return {
       kind: "done",
-      gate: checked,
       line: `Landed: ${applied.applied} ${applied.applied === 1 ? "path" : "paths"} of this workspace's changes are in ${read.folder} on ${machineName(db, workspace.machineId)}.${changedList(read.changed)}`,
     };
   };
@@ -1636,10 +1312,9 @@ export const createLandingRun = ({
     return { done: false, text: unready };
   };
   /**
-   * A finished item whose gate passed at finish_item, to its end: its
-   * outputs must be in its workspace (else it is back to running, told which
-   * are not); then it lands as its row says (on its base, the rest of the
-   * gate's steps run on the rebased tree) and its outputs are collected,
+   * A finished item, to its end: its outputs must be in its workspace (else
+   * it is back to running, told which are not); then it lands as its row
+   * says and its outputs are collected,
    * and it is done (or failed, when it could not land or its outputs did not
    * arrive) with the report the hub builds sent to its parent. Landed on its
    * base, what it was cut `from` is vouched landed ({@link vouchLanded}).
@@ -1648,21 +1323,13 @@ export const createLandingRun = ({
     item: WorkItemRow,
     row: InstanceRow,
     workspace: WorkspaceRow,
-    gate: Gate,
-    submission: WorkItemSubmission,
-    earlier: GateRun
+    submission: WorkItemSubmission
   ) => {
     const unready = await outputsUnready(workspace, item);
     if (unready) {
       return unready;
     }
-    const landing = await landFinished(
-      workspace,
-      item,
-      gate,
-      earlier,
-      submission.summary
-    );
+    const landing = await landFinished(workspace, item, submission.summary);
     if (landing.kind === "retry") {
       endLanding(item.id);
       return { done: false, text: landing.text };
@@ -1695,23 +1362,12 @@ export const createLandingRun = ({
     // its workspace, $TMPDIR with it, goes once nothing holds it.
     const collected = await collectOutputs(workspace, item);
     const failure = failureOf(landing, collected);
-    const shipping =
-      landing.kind === "done" && !failure && submission.ship
-        ? await shipWords(item, landing, submission.ship.notes)
-        : undefined;
-    // Its Ship: command's file does not read: the landing's failure, which finish_item answers.
-    if (shipping instanceof ElysiaStatus) {
-      return shipping;
-    }
-    const shipped = shipping === undefined ? "" : `\n\n${shipping}`;
     const body = finishedReport(
       submission.summary,
       landing,
       collected,
-      `${isHostFolder(workspace) ? "" : await reportedChanges(workspace, item, landing)}${findingsBlock(submission.findings)}${shipped}`
+      `${isHostFolder(workspace) ? "" : await reportedChanges(workspace, item, landing)}${findingsBlock(submission.findings)}`
     );
-    const lines = landingGateLines(landing);
-    const gateSaid = `${lines ? `\n\nMerge checks:\n${lines}` : ""}${shipped}`;
     const ended = finish(db.workItem(item.id) ?? item, {
       ...(failure ? { state: "failed", error: failure } : { state: "done" }),
       result: body,
@@ -1728,59 +1384,15 @@ export const createLandingRun = ({
       submission.headline,
       collected.paths
     );
-    return landedText(landing, collected, gateSaid, held);
-  };
-  /**
-   * What shipping a landed item said (ship.ts): its project's `Ship:`
-   * command run on the hub's machine with the landed commit and `notes`, or
-   * why it did not run.
-   */
-  const shipWords = async (
-    item: WorkItemRow,
-    landing: Extract<Landed, { kind: "done" }>,
-    notes: string
-  ) => {
-    const sha = landing.landed?.sha;
-    if (!(item.lands === "main" && landing.landed?.onto && sha)) {
-      return "Not shipped: only work that lands on main ships, and this item put nothing there.";
-    }
-    const ship = item.projectId ? await projectShip(item.projectId) : undefined;
-    if (ship instanceof ElysiaStatus) {
-      return ship;
-    }
-    if (!(ship && item.projectId)) {
-      return `Not shipped: this project's ${GATE_FILE} declares no Ship: command, so the hub has nothing to ship it with. The nightly ships it.`;
-    }
-    const hub = hubMachineId();
-    const checkout = hub
-      ? gateRun.repositoryOn(item.projectId, hub)
-      : undefined;
-    if (!checkout) {
-      return "Not shipped: the hub's machine holds no checkout of this project to run its Ship: command in. The nightly ships it.";
-    }
-    try {
-      return await shipLanded({
-        checkout,
-        command: ship,
-        commit: sha,
-        notes,
-      });
-    } catch (error) {
-      return `Not shipped: ${error instanceof Error ? error.message : String(error)}`;
-    }
+    return landedText(landing, collected, held);
   };
   /**
    * THE run of a `finish_item`, against the submission stored on its row, to
-   * an outcome. The live call and a hub start-up resume both come here. The
-   * landing gate (gate.ts `gateSteps`) runs on the tree that lands: for an
-   * item that lands on its base, on top of that base, inside the landing
-   * ({@link landOnBase}); for a branch or a pull request, here, on the tree
-   * it pushes. A gate that fails hands the item back to its
-   * session with the failing output; one that passes lands it and reports.
-   * Either way the row stops landing — also when a step cannot run at all,
-   * which throws, or the project's gate.md or Ship: cannot be read, which
-   * answers the folder's problem. Answers the text the delegate reads, and
-   * whether the item is done.
+   * an outcome. The live call and a hub start-up resume both come here. A
+   * landing that goes back to the item's session (uncommitted work, a
+   * conflict) or ends it, and one a command of it throws on, stops the row
+   * landing. Answers the text the delegate reads, and whether the item is
+   * done.
    */
   const settleLanding = async (
     item: WorkItemRow,
@@ -1789,12 +1401,7 @@ export const createLandingRun = ({
     const stop = new AbortController();
     landingStops.set(item.id, stop);
     try {
-      const settled = await landSubmitted(item, submission);
-      // A problem ends the landing, as a step that cannot run at all does.
-      if (settled instanceof ElysiaStatus) {
-        endLanding(item.id);
-      }
-      return settled;
+      return await landSubmitted(item, submission);
     } catch (error) {
       endLanding(item.id);
       if (error instanceof CommandStopped) {
@@ -1809,8 +1416,8 @@ export const createLandingRun = ({
       if (!LIVE.has((db.workItem(item.id) ?? item).state)) {
         workspaces.settleSoon(item.workspaceId);
       }
-      // What waited out the landing goes: into the turn a failed gate hands
-      // back, or, landed, once the turn that called finish_item is over.
+      // What waited out the landing goes: into the turn a refused landing
+      // hands back, or, landed, once the turn that called finish_item is over.
       closeTurn(item, false);
     }
   };
@@ -1833,7 +1440,7 @@ export const createLandingRun = ({
     };
   };
   /**
-   * A host-scope item's finish_item: no clone, so no gate, no landing and no
+   * A host-scope item's finish_item: no clone, so no landing and no
    * diffstat; its report and its `$TMPDIR/outputs/` are the whole of it, a
    * link or a file past the folder's limit there sent back first
    * ({@link outputsProblem}).
@@ -1851,12 +1458,11 @@ export const createLandingRun = ({
     return await reportLanding(item, row, workspace, submission, {
       kind: "done",
       line: "Nothing landed: it ran with host scope.",
-      gate: { declared: false, outcomes: [] },
     });
   };
   /**
-   * {@link settleLanding}'s run: the gate's steps read, the gate at
-   * finish_item run (none for an item landing on its base), and the landing.
+   * {@link settleLanding}'s run: a landing refused before it starts
+   * ({@link refusedBefore}) reported, every other landed and reported.
    */
   const landSubmitted = async (
     item: WorkItemRow,
@@ -1867,60 +1473,18 @@ export const createLandingRun = ({
     if (isHostFolder(workspace)) {
       return await reportHost(item, row, workspace, submission);
     }
-    const gate = await gateRun.gateSteps(workspace, item);
-    if (gate instanceof ElysiaStatus) {
-      return gate;
-    }
-    if ("refusal" in gate) {
-      const refused = endLanding(item.id) ?? item;
-      // No machine a due step needs is online: the item waits for one, never
-      // idle, the longest wait an item declares; the sweep wakes it sooner
-      // when one comes (work-items.ts `wakeCapable`).
-      if (gate.needs && LIVE.has(refused.state)) {
-        declareWait(
-          refused,
-          WAIT_ITEM_MAX_MINUTES,
-          capableWaitReason(gate.needs)
-        );
-      }
-      return { done: false, text: gate.refusal };
-    }
-    const refused = await refusedBefore(workspace, item, gate);
+    const refused = await refusedBefore(workspace, item);
     if (refused) {
       return await reportLanding(item, row, workspace, submission, refused);
     }
-    landingAt(item, "gating");
-    const run = await gateRun.gateOnce(
-      workspace,
-      item,
-      item.lands === "main" ? { ...gate, steps: [] } : gate,
-      "at finish_item",
-      {
-        inTurn: false,
-        say: (words, step) =>
-          landingWait(item.id, words && stepWaitWords(words, step)),
-      }
-    );
-    if (runFailed(run)) {
-      endLanding(item.id);
-      return { done: false, text: gateFailedText(run, "your commits") };
-    }
-    // The gate took its time: the item may have been stopped since.
-    const current = db.workItem(item.id) ?? item;
-    if (landingStopped(current)()) {
-      return {
-        done: false,
-        text: `${current.title} is ${current.state} now; nothing was landed or reported.`,
-      };
-    }
-    return await landAndReport(current, row, workspace, gate, submission, run);
+    return await landAndReport(item, row, workspace, submission);
   };
   /**
    * An item whose outputs did not read as they became rows (schema.ts
    * `workItems.outputsUnread`) lands nothing, whichever way it lands but
    * `none`: the hub cannot tell which of its files were declared outputs,
    * and an output its landing does not pass over is committed with the
-   * rest. Refused before any step runs; its outputs that read are still
+   * rest. Refused before anything is pushed; its outputs that read are still
    * collected ({@link reportLanding}). Nothing for any other item.
    */
   const outputsUnreadRefused = (
@@ -1929,21 +1493,18 @@ export const createLandingRun = ({
     item.outputsUnread !== null && item.lands !== "none"
       ? {
           kind: "refused",
-          gate: { declared: false, outcomes: [] },
           line: workWords.outputsUnreadRefused(item.outputsUnread),
         }
       : undefined;
   /**
-   * A landing refused before any gate step runs: one whose outputs did not
-   * read ({@link outputsUnreadRefused}); a branch or a pull request whose
-   * push will be refused, checked before it gates at finish_item
-   * (landing.ts `branchPushCheck`; a landing on its base checks inside
-   * `land`). The refused landing, or nothing.
+   * A landing refused before it starts: one whose outputs did not read
+   * ({@link outputsUnreadRefused}); a branch or a pull request whose push
+   * will be refused (landing.ts `branchPushCheck`; a landing on its base
+   * checks inside `land`). The refused landing, or nothing.
    */
   const refusedBefore = async (
     workspace: WorkspaceRow,
-    item: WorkItemRow,
-    gate: Gate
+    item: WorkItemRow
   ): Promise<Extract<Landed, { kind: "refused" }> | undefined> => {
     const unread = outputsUnreadRefused(item);
     if (unread) {
@@ -1961,7 +1522,6 @@ export const createLandingRun = ({
     return refused
       ? {
           kind: "refused",
-          gate: { declared: gate.declared, outcomes: [] },
           line: refusedLine(
             refused,
             { head: "Not pushed", target: `branch ${branch}` },
@@ -1981,6 +1541,5 @@ export const createLandingRun = ({
     stopLanding,
     settleLanding,
     runIn,
-    passesOf: gateRun.passesOf,
   };
 };

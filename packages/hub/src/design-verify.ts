@@ -10,7 +10,7 @@
  * need reviews"):
  *
  * - **When.** An attempt's `finish_item` (work-items.ts `designHold`), before
- *   its landing gate runs, when its task is design-shaped (design-offers.ts
+ *   it lands, when its task is design-shaped (design-offers.ts
  *   `designShaped`: the project's template, the task's labels, its outputs)
  *   and its workspace's base branch on origin holds a design system
  *   (design-system.ts `designOnBase`): the project's, by ancestry, never by
@@ -33,7 +33,7 @@
  *   `file:line` and its selector, each a must-fix; the builder fixes and
  *   calls `finish_item` again, which starts the next round on the new tree.
  *   No findings is a pass: the hub runs the builder's held `finish_item`
- *   itself, so its landing gate runs, it lands, and its task goes on to review. The
+ *   itself, so it lands, and its task goes on to review. The
  *   verdict also names the variant that holds to the system best, when the
  *   result offers several. It finishes the verifier's item, its clone put
  *   back first as it was cut ({@link RESTORE}): its stage serves that clone
@@ -548,7 +548,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     return onBase ? { projectId, taskId, workspace } : undefined;
   };
 
-  /** A pass: said on the task, and the builder's held finish_item run as it asked (landing gate, landing, review). */
+  /** A pass: said on the task, and the builder's held finish_item run as it asked (landing, review). */
   const passedVerdict = async (
     check: DesignCheckRow,
     live: WorkItemRow | undefined,

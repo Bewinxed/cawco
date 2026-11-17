@@ -3316,7 +3316,7 @@ const startDaemon = (rediscover = false) =>
       sessions: () => supervisor.boundedWorkspaces(),
       previews: previewNetworks,
     });
-    // While a turn, a gate step, a boundary's command or a run a session
+    // While a turn, a hub command, a boundary's command or a run a session
     // left working is live here, the OS does not idle-sleep this machine
     // (awake.ts).
     keepAwakeWhileWorking(() => supervisor.turnsRunning());

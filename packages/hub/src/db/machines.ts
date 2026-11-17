@@ -24,11 +24,7 @@ import {
   MachinePathRefused,
   machinePath,
 } from "@cawco/core/machine-path";
-import type {
-  AgentRow,
-  BuildInfo,
-  StoppedCommands,
-} from "@cawco/core/protocol";
+import type { AgentRow, BuildInfo } from "@cawco/core/protocol";
 import {
   AccountKindSchema,
   HarnessReportSchema,
@@ -309,7 +305,7 @@ export interface MachinesDb {
   readonly setMachinePause: (
     machineId: string,
     until: Date | null,
-    stopped: StoppedCommands | null
+    stopped: number | null
   ) => boolean;
   readonly touchAgent: (machineId: string) => void;
   /**
@@ -572,7 +568,7 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         home,
         machineCapabilities,
         pausedUntil,
-        pauseStoppedMergeChecks,
+        pauseStoppedMergeChecks: _mergeChecks,
         pauseStoppedCommands,
         pauseStoppedUnread,
         ...agent
@@ -587,10 +583,7 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           pausedUntil: pausedUntil?.getTime() ?? null,
           pauseStopped:
             pauseStoppedUnread === null
-              ? (stoppedWords({
-                  "merge check": pauseStoppedMergeChecks,
-                  command: pauseStoppedCommands,
-                }) ?? null)
+              ? (stoppedWords(pauseStoppedCommands) ?? null)
               : machinePauseWords.stoppedUncounted,
           ...(fleet ? { fleet } : {}),
           ...(fleetSync ? { fleetSync } : {}),
@@ -844,7 +837,6 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     setMachinePause: (machineId, until, stopped) => {
       const row = db
         .select({
-          mergeChecks: agents.pauseStoppedMergeChecks,
           commands: agents.pauseStoppedCommands,
           unread: agents.pauseStoppedUnread,
         })
@@ -859,10 +851,7 @@ export const machinesDb = (core: DbCore): MachinesDb => {
       db.update(agents)
         .set({
           pausedUntil: until,
-          pauseStoppedMergeChecks:
-            (until ? row.mergeChecks : 0) + (stopped?.["merge check"] ?? 0),
-          pauseStoppedCommands:
-            (until ? row.commands : 0) + (stopped?.command ?? 0),
+          pauseStoppedCommands: (until ? row.commands : 0) + (stopped ?? 0),
           pauseStoppedUnread: until ? row.unread : null,
         })
         .where(eq(agents.machineId, machineId))

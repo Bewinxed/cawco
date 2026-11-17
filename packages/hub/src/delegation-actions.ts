@@ -144,7 +144,7 @@ interface Machine {
   machineId: string;
   /** Paused by the owner until this time, epoch ms (machine-pause.ts); null or absent when not. */
   pausedUntil?: number | null;
-  /** What its pause stopped as it began: "stopped 1 running merge check"; null or absent when nothing. */
+  /** What its pause stopped as it began: "stopped 1 running command"; null or absent when nothing. */
   pauseStopped?: string | null;
   /** `online` while its daemon holds a socket to the hub. */
   status: string;

@@ -50,7 +50,7 @@
  *   as wait-targets.ts keeps it; `found_in` names a task or a pin.
  * - **Checks** are shell commands the attempt's brief lists for it to run
  *   and quote in its finish_item report (dispatch.ts `checksSection`); the
- *   hub runs only its landing gate. One written `host: <command>` cannot
+ *   hub runs none of them. One written `host: <command>` cannot
  *   run inside a boundary (a probe whose scratch fleet delegates, podman):
  *   the brief has the attempt list it under "Not run:" for the host.
  * - **Title** is the body's first line when it is a `# ` heading; a file
