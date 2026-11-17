@@ -10,7 +10,7 @@ import type { ReleaseManifest } from "../packages/core/src/release-manifest";
 import { hubClient, refusalText, unwrap } from "../packages/hub/src/client";
 
 /** How long the hub has to look at its release host and answer, each ask. */
-export const ANNOUNCE_MS = 30_000;
+const ANNOUNCE_MS = 30_000;
 /** How long the hub has to find the published build before announce fails. */
 const ANNOUNCE_FOUND_MS = 60_000;
 /** The first wait before asking again; each next one doubles, to {@link ANNOUNCE_WAIT_MAX_MS}. */

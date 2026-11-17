@@ -3,7 +3,7 @@
  * `vendorComponentSheets`, core css-layers.ts `layerFaults`): every style rule
  * the house writes stands in a cascade layer, and every layer it names is one
  * app.html's order states. The build stops on the same faults, only at
- * release (6286c7a37 passed every merge check and failed the release build on
+ * release (6286c7a37 passed every check and failed the release build on
  * two `:global` rules in glide-tip.svelte).
  *
  * It reads the house's sheets as they enter the bundle, without bundling:

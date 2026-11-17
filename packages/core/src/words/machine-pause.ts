@@ -1,6 +1,5 @@
 /** What a machine's pause says: its end's clock and what it stopped. */
 
-
 /**
  * A machine pause's end as the fleet says it (hub machine-pause.ts): the
  * local clock, "00:57", and the weekday too when it is not today ("Fri 08:00").

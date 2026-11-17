@@ -370,12 +370,6 @@ export interface WorkRowsDb {
    */
   readonly carryWorkItem: (itemId: string, from: string, to: string) => void;
   /**
-   * The landing gate's clones on `machineId` not archived yet: workspaces a
-   * hub before 2026-11-17 cut to run a gate step for another (`checks_for`
-   * set), which workspaces.ts `closeGateClones` lets go of.
-   */
-  readonly gateClonesOn: (machineId: string) => WorkspaceRow[];
-  /**
    * The ids of every session any of these started with itself as its
    * `parentInstanceId`, a work item or none (a harness's subagent, OpenCode's
    * `delegate`): delegation-tree.ts `treeSessions`.
@@ -397,6 +391,12 @@ export interface WorkRowsDb {
   readonly dropQueuedTaskStart: (projectId: string, taskId: string) => void;
   readonly dropQueuedWorkItem: (id: string) => void;
   readonly finishWorkspaceCreate: (id: string) => void;
+  /**
+   * The landing gate's clones on `machineId` not archived yet: workspaces a
+   * hub before 2026-11-17 cut to run a gate step for another (`checks_for`
+   * set), which workspaces.ts `closeGateClones` lets go of.
+   */
+  readonly gateClonesOn: (machineId: string) => WorkspaceRow[];
   /** A parent's items in one group that no combined report has carried yet, oldest first. */
   readonly groupWorkItems: (
     parentInstanceId: string,

@@ -599,10 +599,7 @@ async function landedRebase(
  * queue, then its turn; one that steps out of its turn rebases again on the
  * newer branch and queues again.
  */
-export function land(
-  base: string,
-  deps: LandingDeps
-): Promise<LandingOutcome> {
+export function land(base: string, deps: LandingDeps): Promise<LandingOutcome> {
   return untilStopped(landOn(base, deps));
 }
 

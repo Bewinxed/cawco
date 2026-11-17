@@ -313,7 +313,6 @@ as-cast	RemoteTarget | null	packages/preview/src/overlay/embeds.ts	1
 as-cast	RenameMap	scripts/codemods/theme-prune.ts	1
 as-cast	RenameMap	scripts/codemods/tokens-to-theme.proof.ts	1
 as-cast	RenameMap	scripts/codemods/tokens-to-theme.ts	1
-as-cast	RunKind[]	packages/core/src/words/machine-pause.ts	1
 as-cast	SceneId	site/src/stage.ts	1
 as-cast	Schema	packages/hub/scripts/openapi.ts	22
 as-cast	Schema	packages/hub/scripts/stored-compat.ts	1
@@ -802,7 +801,6 @@ suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib
 suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib/cawco/decisions/host/DecidedBy.svelte	1
 suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib/cawco/home/FirstRun.svelte	1
 suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib/cawco/home/NeedsCard.svelte	1
-suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib/cawco/project/ProjectDetails.svelte	1
 suppression	biome-ignore-start lint/correctness/noInvalidPositionAtImportRule	apps/dashboard/src/design.css	1
 suppression	biome-ignore-start lint/plugin/no-raw-css-values	apps/dashboard/src/design.css	1
 suppression	biome-ignore-start lint/style/noDescendingSpecificity	apps/dashboard/src/app.css	1

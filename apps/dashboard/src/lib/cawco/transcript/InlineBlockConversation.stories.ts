@@ -98,9 +98,7 @@ export const ReplacedPage = {
       {
         name: "checks-live",
         title: "Checks, live",
-        src: URL.createObjectURL(
-          new Blob([checksPage], { type: "text/html" })
-        ),
+        src: URL.createObjectURL(new Blob([checksPage], { type: "text/html" })),
       },
     ],
   },

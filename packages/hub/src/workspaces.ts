@@ -1216,14 +1216,15 @@ export const createWorkspaces = ({
   const closeGateClones = async (machineId: string): Promise<void> => {
     for (const clone of db.gateClonesOn(machineId)) {
       const closed = await closeWorkspace(clone, "drop").catch(
-        (error: unknown) => (error instanceof Error ? error.message : String(error))
+        (error: unknown) =>
+          error instanceof Error ? error.message : String(error)
       );
-      const failed =
-        typeof closed === "string"
-          ? closed
-          : closed instanceof ElysiaStatus
-            ? closed.response.detail
-            : undefined;
+      let failed: string | undefined;
+      if (typeof closed === "string") {
+        failed = closed;
+      } else if (closed instanceof ElysiaStatus) {
+        failed = closed.response.detail;
+      }
       console.log(
         failed === undefined
           ? `[workspaces] ${clone.id}: the landing gate's clone on ${machineName(db, machineId)} is closed`
@@ -2476,9 +2477,7 @@ export const createWorkspaces = ({
       return true;
     }
     const projectOf = (workspace: WorkspaceRow): boolean =>
-      db
-        .workItemsIn(workspace.id)
-        .some((item) => item.projectId === projectId);
+      db.workItemsIn(workspace.id).some((item) => item.projectId === projectId);
     return [
       ...db.activeWorkspacesOn(machineId),
       ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
@@ -2515,10 +2514,7 @@ export const createWorkspaces = ({
       });
     }
     const member = workspaceOf(source);
-    if (
-      source.state === "archived" ||
-      member.kind === "hostFolder"
-    ) {
+    if (source.state === "archived" || member.kind === "hostFolder") {
       const why =
         member.kind === "hostFolder"
           ? "it is a host-scope delegate's folder, not a clone"

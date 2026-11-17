@@ -2018,8 +2018,7 @@ export const workItems = sqliteTable(
      * it runs again: the commit pushed. Set, or {@link workItems}
      * `landedUnread` set, its work is landed (project-work.ts `landedWork`),
      * and a follow-up that ends without landing leaves it done (work-items.ts
-     * `finish`). Both null: nothing of it landed. The commands its landing
-     * gate passed on `landedGateTree` are {@link workItemLandedChecks}.
+     * `finish`). Both null: nothing of it landed.
      */
     landedSha: text("landed_sha"),
     /**

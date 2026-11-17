@@ -23,7 +23,7 @@ const CAPABILITY_OS: Record<RunsOnCapability, string> = {
   apple: "darwin",
   linux: "linux",
 };
-export const RUNS_ON_CAPABILITIES = keysOf(CAPABILITY_OS);
+const RUNS_ON_CAPABILITIES = keysOf(CAPABILITY_OS);
 
 /** What a capability needs, in a sentence's words. */
 const CAPABILITY_WORDS: Record<RunsOnCapability, string> = {
@@ -42,7 +42,7 @@ const isCapability = (value: string): value is RunsOnCapability =>
   Object.hasOwn(CAPABILITY_OS, value);
 
 /** The capabilities a machine has, by the OS it reported. */
-export const capabilitiesOf = (os: string): RunsOnCapability[] =>
+const capabilitiesOf = (os: string): RunsOnCapability[] =>
   RUNS_ON_CAPABILITIES.filter(
     (name) => os.split("-")[0] === CAPABILITY_OS[name]
   );

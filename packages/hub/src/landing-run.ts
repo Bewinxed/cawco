@@ -472,9 +472,7 @@ export interface LandingsHub {
 }
 
 interface LandingRunDeps
-  extends
-    LandingsHub,
-    Pick<WorkspacesDeps, "call" | "command" | "db"> {
+  extends LandingsHub, Pick<WorkspacesDeps, "call" | "command" | "db"> {
   readonly closeTurn: (item: WorkItemRow, turnOver: boolean) => void;
   readonly finish: (
     item: WorkItemRow,
