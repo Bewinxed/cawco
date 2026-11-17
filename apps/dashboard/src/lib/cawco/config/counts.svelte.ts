@@ -43,6 +43,7 @@ export function countOf(store: ConfigStore, slug: SectionSlug): number | null {
     case "connections":
     case "decides":
     case "devices":
+    case "helpers":
     case "models":
     case "phone":
     case "previews":

@@ -28,6 +28,7 @@ export const CONFIG_GROUPS = [
 type ConfigGroup = (typeof CONFIG_GROUPS)[number];
 
 export type ConfigSlug =
+  | "helpers"
   | "rules"
   | "hooks"
   | "delegate-types"
@@ -118,6 +119,17 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     badge: "fleet-faults",
     icon: "scale-bold-duotone",
     hue: "mark-4",
+  },
+  {
+    slug: "helpers",
+    group: "Agents",
+    label: "Helpers & step lists",
+    purpose:
+      "Whether sessions use CawCo's delegates and plan list, or their agent's own",
+    counted: false,
+    badge: "fleet-faults",
+    icon: "tuning-2-bold-duotone",
+    hue: "mark-2",
   },
   {
     slug: "subagents",

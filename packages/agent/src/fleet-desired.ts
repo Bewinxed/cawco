@@ -12,6 +12,7 @@
  * converges nothing that did not move. A workspace cut before that welcome
  * places its project's rows from here (fleet-converger.ts `placeClone`).
  */
+
 import {
   type FleetDelta,
   type FleetHeld,
@@ -29,6 +30,11 @@ import {
   itemKindOf,
   reportKeyOf,
 } from "@cawco/core/fleet-items";
+import {
+  OWN_TOOLS_DEFAULT,
+  type OwnTools,
+  OwnToolsSchema,
+} from "@cawco/core/own-tools";
 import { fleetDesiredFile } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
@@ -47,8 +53,15 @@ export interface DeltaApplied {
   removed: string[];
 }
 
-/** The fleet's policy item (core fleet-items.ts): the tools its sessions are denied. */
-const PolicyItem = z.object({ deniedTools: z.array(z.string()) });
+/**
+ * The fleet's policy item (core fleet-items.ts): the tools its sessions are
+ * denied, and whether they use CawCo's delegates and plan list or their
+ * agent's own (core own-tools.ts; CawCo's on both from a hub before them).
+ */
+const PolicyItem = z.object({
+  deniedTools: z.array(z.string()),
+  ownTools: OwnToolsSchema.default(OWN_TOOLS_DEFAULT),
+});
 
 /** What the disk keeps of what the agent holds ({@link FleetDesired.keep}). */
 const FleetDesiredShape = z.object({
@@ -154,9 +167,9 @@ export class FleetDesired {
     );
   }
 
-  /** The fleet's denied tools as held now; none before a delta carried the policy. */
-  get deniedTools(): string[] | undefined {
-    return PolicyItem.safeParse(this.#items.get("policy")).data?.deniedTools;
+  /** The fleet's policy as held now; none before a delta carried it. */
+  get policy(): { deniedTools: string[]; ownTools: OwnTools } | undefined {
+    return PolicyItem.safeParse(this.#items.get("policy")).data;
   }
 
   /** The generation whose converge has ended (fleet-converged.ts): 0 before the first. */

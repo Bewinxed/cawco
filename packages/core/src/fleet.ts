@@ -13,6 +13,7 @@ import type { FleetPlacement, FleetScope } from "./fleet-placement";
 import type { HarnessKind } from "./harness/kinds";
 import type { FleetHarnessConfig } from "./harness-config";
 import type { FleetHook } from "./hooks";
+import type { OwnTools } from "./own-tools";
 import type {
   McpHttpServerConfig,
   McpSSEServerConfig,
@@ -900,6 +901,12 @@ export interface FleetConfig {
    * which is what has a machine give back the copy cawco wrote it.
    */
   memory: FleetMemory | null;
+  /**
+   * Whether sessions use CawCo's delegates and plan list or their agent's
+   * own subagents and list (core own-tools.ts), sent with
+   * {@link deniedTools} as the `policy` item.
+   */
+  ownTools: OwnTools;
   /**
    * The project-scoped memory documents ({@link MemoryScope} with a project
    * and no role), sent with their project's rows

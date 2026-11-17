@@ -6,6 +6,7 @@ import {
   DEFAULT_IMAGE_SETTINGS,
   type ImageSettings,
 } from "@cawco/core/image-generation";
+import type { OwnTools, OwnToolsChosen } from "@cawco/core/own-tools";
 import { TOOL_UPDATES_DEFAULT, type ToolUpdates } from "@cawco/core/tools";
 import { eq } from "drizzle-orm";
 import type { DbCore } from "./core";
@@ -53,6 +54,8 @@ export interface HubSettingsDb {
   };
   /** The fleet's image default; core's `DEFAULT_IMAGE_SETTINGS` while no row says otherwise. */
   readonly imageSettings: () => ImageSettings;
+  /** The fleet's helpers and step lists (core own-tools.ts), each null until a person has chosen it. */
+  readonly ownTools: () => OwnToolsChosen;
   /** Raises (or replaces) the session's notice. */
   readonly putWatchNotice: (notice: FleetWatchNotice) => void;
   /** Sets {@link DbShape.cawMode}; null clears it. */
@@ -62,6 +65,8 @@ export interface HubSettingsDb {
   readonly setImageSettings: (settings: ImageSettings) => void;
   /** Store (or replace) the OpenRouter key from a completed PKCE exchange. */
   readonly setOpenRouterConnection: (apiKey: string) => void;
+  /** Sets whichever of the fleet's helpers and step lists `next` names. */
+  readonly setOwnTools: (next: Partial<OwnTools>) => void;
   /** Turn composer suggestions on or off. Only meaningful while Jev is on. */
   readonly setSuggestWhileTyping: (enabled: boolean) => void;
   /** Sets {@link HubSettingsDb.toolUpdates}. */
@@ -83,6 +88,17 @@ export const hubSettingsDb = (core: DbCore): HubSettingsDb => {
       supervisorChoices();
       db.update(supervisorConfig)
         .set({ cawMode: mode, updatedAt: new Date() })
+        .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
+        .run();
+    },
+    ownTools: () => {
+      const { helpers, stepLists } = supervisorChoices();
+      return { helpers, stepLists };
+    },
+    setOwnTools: (next) => {
+      supervisorChoices();
+      db.update(supervisorConfig)
+        .set({ ...next, updatedAt: new Date() })
         .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
         .run();
     },

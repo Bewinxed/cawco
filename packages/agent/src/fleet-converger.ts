@@ -34,6 +34,7 @@ import { HOSTED_PREFIX } from "@cawco/core/gateway-paths";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { descriptorOf } from "@cawco/core/harness/kinds";
 import { isRecord } from "@cawco/core/is-record";
+import type { OwnTools } from "@cawco/core/own-tools";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
 import {
   CONTROL_FLEET_SETTINGS,
@@ -310,9 +311,9 @@ export class FleetConverger {
         this.#reconverge = true;
       }
     }
-    const denied = this.#desired.deniedTools;
-    if (denied && (applied.policy || delta.welcome)) {
-      this.#writePolicy(denied, applied.policy);
+    const { policy } = this.#desired;
+    if (policy && (applied.policy || delta.welcome)) {
+      this.#writePolicy(policy, applied.policy);
     }
     await this.#desired.keep();
   }
@@ -325,11 +326,14 @@ export class FleetConverger {
    * earlier version wrote there is taken out (denied-tools.ts
    * `dropWrittenDenials`): the boundaries in use are looked at for it then.
    */
-  #writePolicy(denied: readonly string[], moved: boolean): void {
+  #writePolicy(
+    policy: { deniedTools: readonly string[]; ownTools: OwnTools },
+    moved: boolean
+  ): void {
     const generation = this.#desired.generation ?? 0;
     const hash = this.#desired.hashOf("policy");
     const started = Date.now();
-    applyFleetDenials(denied).then(
+    applyFleetDenials(policy.deniedTools, policy.ownTools).then(
       (cleanup) => {
         this.#desired.policyWritten();
         if (moved) {

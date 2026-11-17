@@ -123,7 +123,7 @@ import { CHROME_DEVTOOLS } from "../browser/door";
 import { toolVersion } from "../capabilities";
 import { gitIn, infoExcludeOf } from "../checkout-exclude";
 import { harnessMcpUrl } from "../delegation";
-import { sessionFleetDenials } from "../denied-tools";
+import { fleetOwnTools, sessionFleetDenials } from "../denied-tools";
 import { memoryState, syncMemory } from "../fleet";
 import { hookStatesInSet, readFleetHarnessSet } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
@@ -1062,8 +1062,8 @@ const placeOpencodeMcp = async (
 
 /**
  * OpenCode's `plan` agent, its plan mode: off in every server CawCo launches
- * ({@link OpencodeHarness.#launchConfig}), since a session's plan and spec
- * are CawCo's (core `NATIVE_TOOLS.todos`); never in the person's
+ * while the fleet's step lists are CawCo's plan list (core own-tools.ts,
+ * {@link OpencodeHarness.#launchConfig}); never in the person's
  * `opencode.json`, so his own `opencode` keeps it.
  */
 const PLAN_AGENT_OFF_CONFIG = { agents: { plan: { disabled: true } } } as const;
@@ -2427,10 +2427,21 @@ class OpencodeHarness implements Harness<"opencode"> {
     const fleet = await readOwnJson(OPENCODE_FLEET_MCP, opencodeFleetMcpOf);
     // The catalog too: a server reads it only as it starts.
     const catalog = holdsCatalog() ? await catalogDigest() : "";
-    if (!(placed || (fleet && Object.keys(fleet).length > 0) || catalog)) {
+    // The fleet's step lists too: a server takes its plan agent in its
+    // launch config ({@link PLAN_AGENT_OFF_CONFIG}).
+    const ownPlan = (await fleetOwnTools()).stepLists === "agent";
+    if (!(
+      placed ||
+      (fleet && Object.keys(fleet).length > 0) ||
+      catalog ||
+      ownPlan
+    )) {
       return configHashed;
     }
     const hash = createHash("sha256").update(configHashed);
+    if (ownPlan) {
+      hash.update("plan:own");
+    }
     if (placed) {
       hash.update(`placed:${placed}`);
     }
@@ -4801,7 +4812,8 @@ class OpencodeHarness implements Harness<"opencode"> {
    * What this agent's servers launch with: the fleet's static policy, CawCo's
    * plugin, its own hub's MCP server, and — the machine agent's — the fleet's
    * MCP servers ({@link OPENCODE_FLEET_MCP}), and its `plan` agent off
-   * ({@link PLAN_AGENT_OFF_CONFIG}). The launch
+   * while the fleet's step lists are CawCo's ({@link PLAN_AGENT_OFF_CONFIG}).
+   * The launch
    * config is the highest of a server's config documents but managed
    * settings (OpenCode's core/config.ts `load`: `...content, ...managedSettings`), so a
    * fleet server wins over a user's own of the same name.
@@ -4816,9 +4828,10 @@ class OpencodeHarness implements Harness<"opencode"> {
     const fleet = (await isMachineAgent())
       ? recordOf(await readOwnJson(OPENCODE_FLEET_MCP, opencodeFleetMcpOf))
       : {};
+    const { stepLists } = await fleetOwnTools();
     return {
       ...STATIC_POLICY,
-      ...PLAN_AGENT_OFF_CONFIG,
+      ...(stepLists === "cawco" ? PLAN_AGENT_OFF_CONFIG : {}),
       mcp: {
         servers: {
           ...fleet,

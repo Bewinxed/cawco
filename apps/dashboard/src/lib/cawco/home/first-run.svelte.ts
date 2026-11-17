@@ -8,7 +8,8 @@
  * (nothing claims a step while it is still being read).
  *
  * Its acts are the product's own: Add machine's window, Configure ›
- * Accounts to sign in, the relay's Set up (its journey, finished in
+ * Accounts to sign in, a pick of the fleet's helpers and step lists (saved
+ * at once, as Configure › Helpers & step lists saves it), the relay's Set up (its journey, finished in
  * Settings › Browsers) or Later, and New project.
  */
 
@@ -17,6 +18,7 @@ import { machineLabel } from "@cawco/core/machine-names";
 import { goto } from "$app/navigation";
 import { connect } from "../connect/installs.svelte";
 import { boardStore } from "../stores/board.svelte";
+import { chooseOwnTool, ownToolsStore } from "../stores/own-tools.svelte";
 import { projectsStore } from "../stores/projects.svelte";
 import { actOnRelay, relayStore } from "../stores/relay.svelte";
 import type { FirstRunState } from "./FirstRun.svelte";
@@ -66,7 +68,12 @@ function relayOf(): FirstRunState["relay"] {
 
 /** The row's steps while it stands; null once there is a project, or before the hub is read. */
 export function firstRunSteps(): FirstRunState | null {
-  if (!(home.ready && home.live && projectsStore.projectsRead)) {
+  if (!(
+    home.ready &&
+    home.live &&
+    projectsStore.projectsRead &&
+    (ownToolsStore.read || ownToolsStore.unread)
+  )) {
     return null;
   }
   if (projectsStore.projects.length > 0) {
@@ -75,6 +82,12 @@ export function firstRunSteps(): FirstRunState | null {
   return {
     machine: machineOf(),
     harness: harnessOf(),
+    ownTools: ownToolsStore.shown,
+    // Unread, both say why, and a pick waits for a read that lands.
+    ownToolsFaults: {
+      helpers: ownToolsStore.faultOf("helpers") ?? ownToolsStore.unread,
+      stepLists: ownToolsStore.faultOf("stepLists") ?? ownToolsStore.unread,
+    },
     relay: relayOf(),
     project: false,
   };
@@ -90,4 +103,5 @@ export const firstRunActs = {
   },
   onlater: () => actOnRelay({ act: "later" }),
   onnewproject: () => goto("/project/new"),
+  onchoose: chooseOwnTool,
 };

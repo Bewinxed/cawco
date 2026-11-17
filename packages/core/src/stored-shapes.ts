@@ -51,6 +51,7 @@ import type { MachinePath as MachinePathType } from "./machine-path";
 import { isMachinePath } from "./machine-path";
 import { MOVE_JOB_STEPS } from "./move";
 import type { MachineState as MachineStateType } from "./notifications";
+import { HELPERS, STEP_LISTS } from "./own-tools";
 import type { RoutineMadeBy as RoutineMadeByType } from "./project-conversation";
 import type {
   DelegateAskStatus as DelegateAskStatusType,
@@ -1054,6 +1055,27 @@ const FleetScopeShape = declared(
 );
 export const FleetScopeSchema: z.ZodType<FleetScopeType> = FleetScopeShape;
 export type FleetScopeOutput = z.output<typeof FleetScopeShape>;
+
+const HelpersShape = declared(
+  z.enum(HELPERS),
+  "Helpers",
+  "packages/core/src/own-tools.ts"
+);
+export type HelpersOutput = z.output<typeof HelpersShape>;
+
+const StepListsShape = declared(
+  z.enum(STEP_LISTS),
+  "StepLists",
+  "packages/core/src/own-tools.ts"
+);
+export type StepListsOutput = z.output<typeof StepListsShape>;
+
+export const OwnToolsShape = declared(
+  z.object({ helpers: HelpersShape, stepLists: StepListsShape }),
+  "OwnTools",
+  "packages/core/src/own-tools.ts"
+);
+export type OwnToolsOutput = z.output<typeof OwnToolsShape>;
 
 const ClaudeModelUsageShape = declared(
   z.object({

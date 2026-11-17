@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * Models CawCo uses › Images: the provider (and, on the Gemini API, the
    * model) `generate_image` goes to when a call names none, and where the
@@ -31,10 +30,11 @@
     type ImageFix,
     imageSettingsWords as words,
   } from "@cawco/core/words/image-settings";
-  import { blur } from "svelte/transition";
   import ProviderMark from "#lib/cawco/accounts/ProviderMark.svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import NoMachines from "#lib/cawco/config/NoMachines.svelte";
+  import SaveFault from "#lib/cawco/config/SaveFault.svelte";
+  import SaveLine from "#lib/cawco/config/SaveLine.svelte";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
@@ -46,17 +46,10 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconChevronRight,
-    IconError,
     IconImage,
     IconTick,
     IconWarningTriangle,
   } from "#lib/icons.js";
-  import {
-    dur,
-    easeOut,
-    motionOk,
-  } from "#lib/platform/motion/curves.svelte.js";
-  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
     hue,
@@ -150,12 +143,6 @@
     fix.kind === "page"
       ? `/config/${fix.slug}`
       : `/config/accounts/${encodeURIComponent(fix.accountId)}`;
-
-  const lineBlur = (tier: "--duration-panel" | "--duration-exit") => ({
-    duration: dur(tier),
-    easing: easeOut,
-    amount: 2,
-  });
 </script>
 
 <!-- The way to put something right: a link in the meta line it follows. -->
@@ -176,35 +163,7 @@
 >
   <SectionHeader {hue} icon={IconImage} label={words.heading} level={2}>
     {#snippet right()}
-      <!-- The save's line: one cell the words cross-fade in, so the head
-           keeps its height whatever it says. -->
-      <p
-        aria-live="polite"
-        class="mark-line m-0 grid min-h-c-btn-h-sm items-center type-meta text-ink-muted"
-        data-slot="save"
-      >
-        {#key phase}
-          <span
-            class="mark-line col-start-1 row-start-1 flex items-center gap-space-2"
-            in:blur={lineBlur("--duration-panel")}
-            out:blur={lineBlur("--duration-exit")}
-          >
-            {#if phase === "saving"}
-              <LiveDot data-pulse size="row" tone="muted" />
-              <span>{words.saving}</span>
-            {:else if phase === "saved"}
-              <IconTick class="size-icon-md flex-none text-status-done-glyph" />
-              <span class="text-ink-strong">{words.saved}</span>
-            {:else if phase === "failed"}
-              <IconError
-                aria-hidden="true"
-                class="size-icon-md flex-none text-status-fail-glyph"
-              />
-              <span class="text-status-fail-ink">{words.notSaved}</span>
-            {/if}
-          </span>
-        {/key}
-      </p>
+      <SaveLine {phase} {words} />
     {/snippet}
   </SectionHeader>
   <p data-slot="note" class="m-0 type-meta max-w-c-measure text-ink-muted">
@@ -307,21 +266,7 @@
           {/snippet}
         </Field>
       </div>
-      {#if fault}
-        <!-- Why the pick didn't hold, under the options it was made in,
-             brought into view once it has unfolded. -->
-        <p
-          class="m-0 type-meta text-pretty text-status-fail-ink"
-          onintroend={(event) =>
-            bringIntoView(event.currentTarget, {
-              behavior: motionOk.current ? "smooth" : "auto",
-            })}
-          role="alert"
-          transition:unfold
-        >
-          {fault}
-        </p>
-      {/if}
+      <SaveFault {fault} />
     </div>
 
     <div class="flex min-w-0 flex-col gap-space-5" data-slot="chosen">

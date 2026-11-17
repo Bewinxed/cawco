@@ -239,21 +239,23 @@ export const delegateTypeProblem = (
 };
 
 /**
- * What every session is denied beside the fleet's baseline, in Claude Code's
- * names (the OpenCode and pi adapters read each as their own tool, and find
- * none): the harness's own list and its plan mode. Added at spawn, in each
- * session's own start options, so no stored list carries the names; never
- * written into the person's own settings, so the `claude` they start
- * themselves keeps both.
+ * The harness's own list and its plan mode, in Claude Code's names (each
+ * adapter reads them as its own tools: Codex's goal tools, none on pi):
+ * denied beside the fleet's baseline while the fleet's step lists are
+ * CawCo's plan list (core own-tools.ts). Added at spawn, in each session's
+ * own start options, so no stored list carries the names; never written into
+ * the person's own settings, so the `claude` they start themselves keeps
+ * both.
  */
 export const OWN_LIST_DENIED: readonly string[] = CLAUDE.nativeTools.todos;
 
 /**
  * The harness's own subagents, in Claude Code's names (the OpenCode adapter
- * reads them as `subagent`; pi has none): denied to every session at spawn
- * as {@link OWN_LIST_DENIED} is, a fixed line of the fleet's policy, never
- * stored or asked about, and never written into the person's own settings.
- * Work a session hands off goes to CawCo's delegates.
+ * reads them as `subagent`, Codex's as its collaboration tools; pi has
+ * none): denied at spawn as {@link OWN_LIST_DENIED} is while the fleet's
+ * helpers are CawCo's delegates (core own-tools.ts), and never written into
+ * the person's own settings. Work that lands goes to CawCo's delegates
+ * either way.
  */
 export const SUBAGENTS_DENIED: readonly string[] = CLAUDE.nativeTools.subagents;
 
