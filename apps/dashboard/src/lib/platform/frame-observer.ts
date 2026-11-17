@@ -56,6 +56,14 @@ import type { Attachment } from "svelte/attachments";
  */
 export interface FrameObserver {
   disconnect: () => void;
+  /**
+   * A target observed, held or not, reports its size in the next delivery
+   * as a first report, changed or not (what `deliverWithRoot` and a row
+   * observed again to be read rely on). So an answer that observes a target
+   * it already holds asks for its own next answer, every frame: a target is
+   * observed as it comes (PreviewTools' groups, observed again from its
+   * answer: a frame loop at rest, nightly 8296).
+   */
   observe: (target: Element, options?: ResizeObserverOptions) => void;
   /** `read` and `inside` in the next frame's delivery, on that frame's layout, then the answer in the frame after, with nothing resized. */
   readNext: () => void;

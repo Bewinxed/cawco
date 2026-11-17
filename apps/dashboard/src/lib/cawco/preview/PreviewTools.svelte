@@ -56,6 +56,15 @@
    * Its need, heard as a group resizes (frameObserver, read inside the
    * delivery) or a group comes or goes (a mutation, read in the next
    * frame's delivery): the row's own box keeps its width as they change.
+   *
+   * A group is observed as it comes and let go as it goes, in the mutation
+   * that says so; the answer only writes the need. A target observed afresh
+   * reports its size in the next delivery whether or not it changed, so the
+   * answer observing every group again had each one report in the next
+   * frame, whose answer observed them again: a frame callback, a delivery
+   * and that frame's whole lifecycle on every frame the tools stood, at
+   * rest (the owner's trace of nightly 8296: 317 of 339 frame callbacks in
+   * 3.2s of a page at rest, with a comment's card open).
    */
   const measured: Attachment<HTMLElement> = (row) => {
     untrack(() => {
@@ -64,9 +73,6 @@
     let read = 0;
     const sized = frameObserver(
       () => {
-        for (const group of row.children) {
-          sized.observe(group);
-        }
         need = read;
       },
       {
@@ -79,11 +85,25 @@
     for (const group of row.children) {
       sized.observe(group);
     }
-    const added = new MutationObserver(() => sized.readNext());
-    added.observe(row, { childList: true });
+    const groups = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const gone of record.removedNodes) {
+          if (gone instanceof Element) {
+            sized.unobserve(gone);
+          }
+        }
+        for (const come of record.addedNodes) {
+          if (come instanceof Element) {
+            sized.observe(come);
+          }
+        }
+      }
+      sized.readNext();
+    });
+    groups.observe(row, { childList: true });
     return () => {
       sized.disconnect();
-      added.disconnect();
+      groups.disconnect();
     };
   };
 </script>
