@@ -28,6 +28,13 @@ const SUBAGENTS = [
   "collaborationinterrupt_agent",
   "collaborationlist_agents",
 ] as const;
+/**
+ * Its own list: the thread's goal, kept and continued by Codex itself, as
+ * the tools code mode offers (C-0); `features.goals = false` takes them away
+ * (C-tools). Its `update_plan` is offered only in its plan collaboration
+ * mode, which CawCo never starts (C-plan).
+ */
+const GOALS = ["create_goal", "get_goal", "update_goal"] as const;
 /** Its question tool, answered only in its plan collaboration mode, which CawCo never starts (C-h). */
 const QUESTIONS = [
   "functionsrequest_user_input",
@@ -90,15 +97,14 @@ export const CODEX = {
     fetch: [],
     search: SEARCH,
   },
-  // 0.169.0 offers the model no to-do or plan tool (its request's tools,
-  // captured 2026-11-17: `exec`, `wait`, `request_user_input`,
-  // `request_user_input_async`, `clock.sleep`, `collaboration.*`).
-  nativeTools: { subagents: SUBAGENTS, todos: [], questions: QUESTIONS },
+  // Its list is its goal tools; its plan mode is a collaboration mode CawCo
+  // never starts, so nothing stands for it.
+  nativeTools: { subagents: SUBAGENTS, todos: GOALS, questions: QUESTIONS },
   boardOnlyDenied: [...SUBAGENTS, ...SHELL, ...EDIT],
   curatorDenied: [...SUBAGENTS, ...SHELL, ...EDIT, ...SEARCH],
   // Its hook names, by Claude Code's names in order. An MCP tool is
   // `mcp__<server>__<tool>` (C-d). Its adapter holds back its subagents,
-  // its web search and CawCo's own tools, and refuses a spawn that denies
+  // its goals, its web search and CawCo's own tools, and refuses a spawn that denies
   // its shell or its edits (agent harnesses/codex-session.ts
   // `codexDenials`), which no hook of CawCo's holds back yet.
   deniedTools: {
@@ -121,11 +127,11 @@ export const CODEX = {
       PowerShell: [],
       Read: [],
       Task: SUBAGENTS,
-      TaskCreate: [],
-      TaskGet: [],
-      TaskList: [],
-      TaskUpdate: [],
-      TodoWrite: [],
+      TaskCreate: GOALS,
+      TaskGet: GOALS,
+      TaskList: GOALS,
+      TaskUpdate: GOALS,
+      TodoWrite: GOALS,
       WebFetch: [],
       WebSearch: SEARCH,
       Workflow: [],

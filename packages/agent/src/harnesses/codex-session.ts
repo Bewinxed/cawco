@@ -402,7 +402,7 @@ class CodexSession implements HarnessSession {
    * credential, over the connection and never argv (C-d), its tools
    * answered without Codex's own ask (the hub gates them); a clean session's
    * reads of project instructions and skills off (C-o); Codex's subagents
-   * off where the session's denials name them.
+   * and its goals off where the session's denials name them.
    */
   #threadConfig(spec: SpawnPayload): Record<string, JsonValue> {
     const cawco = delegationMcp(
@@ -432,6 +432,7 @@ class CodexSession implements HarnessSession {
           }
         : {}),
       ...(denied.subagents ? { agents: { enabled: false } } : {}),
+      ...(denied.goals ? { features: { goals: false } } : {}),
       ...(denied.webSearch ? { web_search: "disabled" } : {}),
     };
   }
@@ -1169,7 +1170,8 @@ const CAWCO_TOOL = new RegExp(`^mcp__${MCP_SERVER_NAME}__(.+)$`, "u");
 /**
  * A spawn's denied tools as Codex is held to them, by its descriptor's names
  * (core delegate-types.ts `deniedToolsOn`): its subagents off (`agents.enabled
- * = false`, C-z), its hosted web search off (`web_search = "disabled"`),
+ * = false`, C-z), its goals off (`features.goals = false`, C-tools), its
+ * hosted web search off (`web_search = "disabled"`),
  * CawCo's tools named one by one off on CawCo's server (`disabled_tools`).
  * Its question tool answers nothing outside its plan collaboration mode,
  * which CawCo never starts (C-h). What none of these holds back (its shell,
@@ -1179,6 +1181,7 @@ const CAWCO_TOOL = new RegExp(`^mcp__${MCP_SERVER_NAME}__(.+)$`, "u");
 const codexDenials = (spec: Pick<SpawnPayload, "denyTools">) => {
   const { tools } = deniedToolsOn("codex", spec.denyTools ?? []);
   const subagents: readonly string[] = CODEX.nativeTools.subagents;
+  const goals: readonly string[] = CODEX.nativeTools.todos;
   const questions: readonly string[] = CODEX.nativeTools.questions;
   const search: readonly string[] = CODEX.tools.search;
   const cawcoTools = tools.flatMap((tool) => {
@@ -1187,12 +1190,14 @@ const codexDenials = (spec: Pick<SpawnPayload, "denyTools">) => {
   });
   return {
     subagents: tools.some((tool) => subagents.includes(tool)),
+    goals: tools.some((tool) => goals.includes(tool)),
     webSearch: tools.some((tool) => search.includes(tool)),
     cawcoTools,
     unheld: tools.filter(
       (tool) =>
         !(
           subagents.includes(tool) ||
+          goals.includes(tool) ||
           questions.includes(tool) ||
           search.includes(tool) ||
           tool.startsWith("mcp__")
@@ -1222,7 +1227,7 @@ export const spawnCodex = async (
   const { unheld } = codexDenials(spec);
   if (unheld.length > 0) {
     throw new Error(
-      `Codex can't deny ${unheld.map((tool) => `“${tool}”`).join(", ")} yet: CawCo holds back its subagents, its web search and CawCo's own tools alone. Start it on another harness, or without that denial. Nothing was started.`
+      `Codex can't deny ${unheld.map((tool) => `“${tool}”`).join(", ")} yet: CawCo holds back its subagents, its goals, its web search and CawCo's own tools alone. Start it on another harness, or without that denial. Nothing was started.`
     );
   }
   const bin = await codexToStart();
