@@ -136,6 +136,38 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     return "continue";
   };
 
+  const effortAnswered = (run: FrameRun): FrameAnswer => {
+    const { message } = run;
+    const body = message.payload;
+    // A set-effort answered (relay-control.ts `noteControl`). The level is
+    // the session's chosen effort, which its next launch asks for, when its
+    // session applied it, and when its machine ran no process to ask (`not-
+    // running`: asleep, between a stop and its relaunch, mid-move): a
+    // choice made then takes hold at the next start, so its command is
+    // answered as taken. One the session refused (pi: its model has no
+    // such level) is not kept, and its command fails in the session's words.
+    const effortAsk =
+      body.kind === "control_result" && message.requestId
+        ? ctx.effortAsks.get(message.requestId)
+        : undefined;
+    if (effortAsk && message.requestId && body.kind === "control_result") {
+      ctx.effortAsks.delete(message.requestId);
+      const unasked = body.refusal?.kind === "not-running";
+      if (body.ok || unasked) {
+        ctx.db.chooseEffort(effortAsk.instanceId, effortAsk.effort);
+      }
+      if (unasked) {
+        message.payload = {
+          kind: "control_result",
+          requestId: body.requestId,
+          ...(body.instanceId ? { instanceId: body.instanceId } : {}),
+          ok: true,
+        };
+      }
+    }
+    return "continue";
+  };
+
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
   const fanOut = (run: FrameRun): FrameAnswer => {
     const { message } = run;
@@ -151,25 +183,6 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       body.kind === "control_result" &&
       message.requestId !== undefined &&
       ctx.streams.settleCommand(message.requestId, body);
-    // A set-effort answered (relay-control.ts `noteControl`). The level is
-    // the session's chosen effort, which its next launch asks for, when its
-    // session applied it, and when its machine ran no process to ask (`not-
-    // running`: asleep, between a stop and its relaunch, mid-move), so a
-    // choice made then takes hold at the next start. One the session
-    // refused (pi: its model has no such level) is not.
-    const effortAsk =
-      body.kind === "control_result" && message.requestId
-        ? ctx.effortAsks.get(message.requestId)
-        : undefined;
-    if (effortAsk && message.requestId) {
-      ctx.effortAsks.delete(message.requestId);
-      if (
-        body.kind === "control_result" &&
-        (body.ok || body.refusal?.kind === "not-running")
-      ) {
-        ctx.db.chooseEffort(effortAsk.instanceId, effortAsk.effort);
-      }
-    }
     // A rewind that never started: its transcript was never cut.
     const rewound =
       body.kind === "control_result" && message.requestId
@@ -231,5 +244,11 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     return "continue";
   };
 
-  return { installAnswered, syncAnswered, controlAnswered, fanOut };
+  return {
+    installAnswered,
+    syncAnswered,
+    effortAnswered,
+    controlAnswered,
+    fanOut,
+  };
 };

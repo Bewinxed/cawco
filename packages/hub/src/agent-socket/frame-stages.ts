@@ -108,6 +108,7 @@ export const frameStagesOf = (ctx: FrameStagesContext): FrameStage[] => {
     stages7.spawnFailed,
     stages8.installAnswered,
     stages8.syncAnswered,
+    stages8.effortAnswered,
     stages8.controlAnswered,
     stages8.fanOut,
   ];
