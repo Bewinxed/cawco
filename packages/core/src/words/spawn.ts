@@ -475,8 +475,6 @@ export const spawnWords = {
   /** The model picker. */
   model: {
     harness: "Harness",
-    comingSoon: "Coming soon",
-    soon: "soon",
     notInstalledOn: (machine: string) => `Not installed on ${machine}`,
     notInstalled: "not installed",
     search: "Search or paste a model id…",

@@ -51,7 +51,7 @@
     stagger?: boolean;
     /** What an item draws: its mark, and whatever else it carries. */
     item: Snippet<[Item, number]>;
-    /** Said after the name in the travelling label ("soon"). */
+    /** Said after the name in the travelling label ("not installed"). */
     tipExtra?: Snippet<[Item]>;
     /** The items show their names already: no travelling label to repeat them. */
     labelled?: boolean;

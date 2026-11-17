@@ -7,8 +7,8 @@
   import { modelRun } from "@cawco/core/model-names";
   /**
    * Model (§1.6, §2.9): harness tabs, one search/custom-id field, the model
-   * list with the slide-swap on harness change. Codex is shown but disabled
-   * ("Coming soon"); the list is the app's catalogue, canonical names only.
+   * list with the slide-swap on harness change; the list is the app's
+   * catalogue, canonical names only.
    */
   import { limitPickWords } from "@cawco/core/words/limit-picks";
   import { spawnWords } from "@cawco/core/words/spawn";
@@ -103,19 +103,10 @@
   const uid = $props.id();
   /** The list's one tooltip, gliding row to row (glide.ts), as a bar's glass has one. */
   const tips = provideGlide();
-  type TabId = HarnessKind | "codex";
-  // Codex's coming tab stands second, after the harness every machine runs.
-  const [firstTab, ...laterTabs] = HARNESSES.map(
-    (id): { id: TabId; name: string; soon?: boolean } => ({
-      id,
-      name: descriptorOf(id).words.name,
-    })
-  );
-  const TABS: { id: TabId; name: string; soon?: boolean }[] = [
-    ...(firstTab ? [firstTab] : []),
-    { id: "codex", name: "Codex", soon: true },
-    ...laterTabs,
-  ];
+  const TABS: { id: HarnessKind; name: string }[] = HARNESSES.map((id) => ({
+    id,
+    name: descriptorOf(id).words.name,
+  }));
   const VENDOR: Record<string, string> = {
     anthropic: "Anthropic",
     openai: "OpenAI",
@@ -139,14 +130,13 @@
   let list = $state<HTMLDivElement>();
   /**
    * The rail (motion/Rail) shows marks only; the name rides one label that
-   * slides and re-labels between them. Codex is listed but not pickable yet.
+   * slides and re-labels between them.
    */
   const railItems = $derived(
     TABS.map((tab) => ({
       id: tab.id,
       label: tab.name,
-      soon: tab.soon,
-      disabled: tab.soon || !installed.some((kind) => kind === tab.id),
+      disabled: !installed.some((kind) => kind === tab.id),
     }))
   );
   let accountOpen = $state(false);
@@ -324,33 +314,22 @@
         label={spawnWords.model.harness}
         onpick={(id: string) => {
           const picked = TABS.find((tab) => tab.id === id);
-          if (picked && picked.id !== "codex") {
+          if (picked) {
             onharness(picked.id);
           }
         }}
         value={harness}
       >
         {#snippet item(tab: (typeof railItems)[number])}
-          {#if tab.id === "codex"}
-            <ProviderLogo class="flex-none" provider="openai" size="control" />
-          {:else}
-            <HarnessLogo harness={tab.id} />
-          {/if}
+          <HarnessLogo harness={tab.id} />
           {#if tab.disabled}
             <span class="sr-only"
-              >{tab.soon
-                ? spawnWords.model.comingSoon
-                : spawnWords.model.notInstalledOn(machineName)}</span
+              >{spawnWords.model.notInstalledOn(machineName)}</span
             >
           {/if}
         {/snippet}
         {#snippet tipExtra(tab: (typeof railItems)[number])}
-          {#if tab.soon}
-            <span
-              class="font-sans text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
-              >{spawnWords.model.soon}</span
-            >
-          {:else if tab.disabled}
+          {#if tab.disabled}
             <span
               class="font-sans text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
               >{spawnWords.model.notInstalled}</span
