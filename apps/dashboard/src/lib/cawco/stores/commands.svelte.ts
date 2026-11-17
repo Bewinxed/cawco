@@ -13,7 +13,6 @@ import {
   type TurnImage,
 } from "@cawco/core/attachments";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
-import { detach } from "@cawco/core/detach";
 import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
 import { WIRE_PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { traitsOf } from "@cawco/core/harness/traits";
@@ -70,7 +69,7 @@ import {
   streamHost,
   streamState,
 } from "./ledger.svelte";
-import { detailsOpen, persistSettings } from "./session-detail.svelte";
+import { detailsOpen } from "./session-detail.svelte";
 import {
   clearTurnPhase,
   session,
@@ -1385,11 +1384,11 @@ function streamEffectsFor(
         submitted: () => {
           target.model = model;
         },
+        // The hub writes a pick it took on the session's row, which every
+        // tab reads; only a refused one is undone here.
         settled: (stage) => {
           if (stage === "failed") {
             target.model = previous;
-          } else {
-            detach(persistSettings(instanceId, { model }), "persistSettings");
           }
         },
       };
@@ -1404,11 +1403,6 @@ function streamEffectsFor(
         settled: (stage) => {
           if (stage === "failed") {
             target.permissionMode = previous;
-          } else {
-            detach(
-              persistSettings(instanceId, { permissionMode: mode }),
-              "persistSettings"
-            );
           }
         },
       };

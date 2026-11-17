@@ -1,14 +1,12 @@
 /**
  * What a session's details card and header ask its machine: the context
  * window's reading, the commands behind `/`, the MCP servers; each asked only
- * of a harness that said it can answer, and the settings the session
- * confirmed written back to its row.
+ * of a harness that said it can answer.
  */
 
 import type { Bounded } from "@cawco/core/bounded";
 import type { HarnessCapabilities } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type { PermissionMode } from "@cawco/core/harness/modes";
 import { answersControl } from "@cawco/core/harness/traits";
 import {
   CONTROL_CONTEXT_USAGE,
@@ -20,64 +18,15 @@ import { unhandled } from "@cawco/core/unhandled";
 import { machineFaultWords } from "@cawco/core/words/machine-names";
 import { untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
-import { hub } from "#lib/platform/hub.js";
-import { hubDone, failureWords as messageOf } from "#lib/platform/hub-read.js";
+import { failureWords as messageOf } from "#lib/platform/hub-read.js";
 import { askMachine, didntAnswer } from "../hub/control";
 import { answeredCommands } from "../slash-commands";
-import {
-  boardState,
-  instanceIndex,
-  machineConnected,
-  machineName,
-} from "./board.svelte";
+import { boardState, machineConnected, machineName } from "./board.svelte";
 import {
   type ContextUsage,
   type SessionState,
   session,
 } from "./sessions.svelte";
-
-/**
- * Writes back a setting the session has confirmed, so the next cold load starts
- * from what it is running rather than from what this browser once asked for.
- * Only what the row does not already say — an init repeats itself every turn.
- */
-export async function persistSettings(
-  instanceId: string,
-  settings: {
-    permissionMode?: PermissionMode;
-    model?: string;
-  }
-): Promise<void> {
-  const row = instanceIndex.byId.get(instanceId);
-  if (!row) {
-    return;
-  }
-
-  const patch: typeof settings = {};
-  if (
-    settings.permissionMode &&
-    settings.permissionMode !== row.permissionMode
-  ) {
-    patch.permissionMode = settings.permissionMode;
-  }
-  if (settings.model && settings.model !== row.model) {
-    patch.model = settings.model;
-  }
-  if (Object.keys(patch).length === 0) {
-    return;
-  }
-
-  try {
-    await hubDone(
-      hub.api.instances({ id: instanceId }).patch(patch),
-      ({ response }) => new Error(`${response.status} ${response.statusText}`)
-    );
-  } catch (error) {
-    // The session is already answering this way; only the row is behind, and
-    // the next init will try again — nothing the reader needs to act on.
-    console.error(`[cawco] persisting ${instanceId} settings failed:`, error);
-  }
-}
 
 /** Sessions whose details card stands now, by how many: their settings' failures are its to say. */
 export const detailsOpen = new SvelteMap<string, number>();

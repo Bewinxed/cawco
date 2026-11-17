@@ -4,14 +4,13 @@ import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
 import type { ArrivingAsk } from "@cawco/core/frames";
-import { harnessName, isEffortLevel } from "@cawco/core/harness/kinds";
+import { harnessName } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ControlPayload, InstanceRow } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import {
   CONTROL_INTERRUPT,
   CONTROL_RELOAD_SKILLS,
-  CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
 } from "@cawco/core/session/controls";
 import type { PermissionResult } from "@cawco/core/session-messages";
@@ -52,6 +51,7 @@ import {
 import { ElysiaStatus, problem } from "elysia";
 import { answeredWithOriginal } from "./ask-presentation";
 import type { ClosureContext } from "./closure-context";
+import type { PublicInstanceRow } from "./db/instances";
 import type { ControlResult } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 
@@ -59,6 +59,8 @@ import type { AnswerFrom } from "./pending";
 import { answerPermission } from "./pending";
 import type { AnyProblem } from "./refusal";
 import type { createSends } from "./sends";
+import { type SettingPick, settingPickOf } from "./setting-pick-shapes";
+import type { createSettingPicks } from "./setting-picks";
 import { unreachable } from "./unreachable";
 import type { ClientSocket } from "./wire-socket";
 
@@ -157,7 +159,7 @@ export type RelayControlContext = Pick<
   | "cutTurn"
   | "db"
   | "designSystem"
-  | "effortAsks"
+  | "pickAsks"
   | "endSession"
   | "forward"
   | "hubAsks"
@@ -182,7 +184,8 @@ export type RelayControlContext = Pick<
   | "silentWords"
   | "streams"
 > &
-  Pick<ReturnType<typeof createSends>, "deliverSend">;
+  Pick<ReturnType<typeof createSends>, "deliverSend"> &
+  Pick<ReturnType<typeof createSettingPicks>, "keepPick" | "processTakes">;
 
 export const createRelayControl = (ctx: RelayControlContext) => {
   /**
@@ -576,22 +579,18 @@ export const createRelayControl = (ctx: RelayControlContext) => {
   };
 
   /**
-   * How a model picked for `instanceId` goes, when the hub answers it
-   * itself: one that crosses an account provider ({@link crossModel}), or
-   * one picked while the session owes a move to another account
-   * (limit-moves.ts `pickWithMove`), judged against the account it lands
-   * on and carried with the move. Undefined for every other pick, which the
-   * session's process takes. Either way the process a move leaves is never
-   * asked to change: its account may be the one refusing it.
+   * How a model picked for `row` goes, when a move carries it: one that
+   * crosses an account provider ({@link crossModel}), or one picked while
+   * the session owes a move to another account (limit-moves.ts
+   * `pickWithMove`), judged against the account it lands on and carried
+   * with the move. Undefined for every other pick. Either way the process a
+   * move leaves is never asked to change: its account may be the one
+   * refusing it.
    */
-  const modelPickOf = (
-    instanceId: string,
+  const movedModelOf = (
+    row: PublicInstanceRow,
     model: string
   ): Promise<"carried" | { refusal: string }> | undefined => {
-    const [row] = ctx.db.getInstancesByIds([instanceId]);
-    if (!row) {
-      return;
-    }
     if (
       ctx.owedMoves.get(row.id)?.to === undefined &&
       crossesProvider(row, model)
@@ -603,29 +602,48 @@ export const createRelayControl = (ctx: RelayControlContext) => {
   };
 
   /**
-   * A dashboard's model change the hub answers itself ({@link modelPickOf}):
-   * never relayed. False for every other control, which goes on to the
-   * machine.
+   * How a setting picked for `instanceId` goes, when the hub answers it
+   * itself: a model a move carries ({@link movedModelOf}), or any pick no
+   * process takes now, kept on its row for its next launch
+   * (setting-picks.ts `keepPick`), in any state of the session. Undefined
+   * for a pick its running process takes, which goes on to its machine.
    */
-  const relayModelPick = (
+  const settingPickFor = (
+    instanceId: string,
+    pick: SettingPick
+  ): Promise<"carried" | "kept" | { refusal: string }> | undefined => {
+    const [row] = ctx.db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return;
+    }
+    if (pick.method === CONTROL_SET_MODEL) {
+      // A person picked its model: from here on it is theirs, never swapped
+      // for the hub's next pick at a refusal (start-model-moves.ts).
+      ctx.db.patchInstance(instanceId, { hubModel: false });
+      const moved = movedModelOf(row, pick.value);
+      if (moved !== undefined) {
+        return moved;
+      }
+    }
+    return ctx.processTakes(row)
+      ? undefined
+      : Promise.resolve(ctx.keepPick(row, pick));
+  };
+
+  /**
+   * A dashboard's pick of a setting the hub answers itself
+   * ({@link settingPickFor}): never relayed. False for every other control,
+   * and for a pick the session's running process takes, which goes on to
+   * the machine.
+   */
+  const relaySettingPick = (
     message: HubEnvelope<"control">,
     dashboard: ClientSocket,
     replyAsFrame: boolean
   ): boolean => {
     const { instanceId, payload } = message;
-    const asked = payload.args?.[0];
-    if (
-      payload.method !== CONTROL_SET_MODEL ||
-      !instanceId ||
-      typeof asked !== "string"
-    ) {
-      return false;
-    }
-    // A person picked its model: from here on it is theirs, never swapped
-    // for the hub's next pick at a refusal (start-model-moves.ts).
-    ctx.db.patchInstance(instanceId, { hubModel: false });
-    const pick = modelPickOf(instanceId, asked);
-    if (!pick) {
+    const read = settingPickOf(payload.method, payload.args?.[0]);
+    if (!(instanceId && read)) {
       return false;
     }
     const requestId = message.requestId ?? payload.requestId;
@@ -640,12 +658,19 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         ctx.streams.settleCommand(requestId, frame);
       }
     };
+    const pick =
+      "refusal" in read
+        ? Promise.resolve(read)
+        : settingPickFor(instanceId, read);
+    if (!pick) {
+      return false;
+    }
     // The receipt is sent when the pick is decided, or when deciding it
     // threw: a pick that failed says so on the command that asked for it.
     const decided = pick.then(
       (taken) => {
         receipt(
-          taken === "carried"
+          typeof taken === "string"
             ? { kind: "control_result", requestId, ok: true }
             : {
                 kind: "control_result",
@@ -659,7 +684,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       (error: unknown) => {
         const reason = error instanceof Error ? error.message : String(error);
         console.error(
-          `[hub] dashboard set-model for ${instanceId} failed: ${reason}`
+          `[hub] dashboard ${payload.method} for ${instanceId} failed: ${reason}`
         );
         receipt({
           kind: "control_result",
@@ -669,7 +694,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         });
       }
     );
-    detach(decided, "model pick");
+    detach(decided, "setting pick");
     return true;
   };
 
@@ -680,7 +705,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
   ): boolean => {
     const message = ctx.byIdNow(asked);
-    if (relayModelPick(message, dashboard, replyAsFrame)) {
+    if (relaySettingPick(message, dashboard, replyAsFrame)) {
       return true;
     }
     // The hub owns skill reloads: an unchanged catalog must retain the CLI's
@@ -831,24 +856,19 @@ export const createRelayControl = (ctx: RelayControlContext) => {
 
   /** A control that interrupts a session's turn cuts into it ({@link noteInterrupt}). */
   const noteControl = (message: HubEnvelope<"control">): void => {
-    // The operator's effort for the session, which every later launch of it
-    // asks for ({@link bounded}), once the machine answers: kept when the
-    // session applied it or no process was there to ask, never when the
-    // session refused it (pi, a level its model has none of), which every
-    // relaunch would otherwise ask for (agent-socket control-replies.ts).
-    // The CLI's reading of it only moves the chip.
-    const effort = message.payload.args?.[0];
+    // A setting's pick, which every later launch of the session runs on
+    // (launches.ts `bounded`), once the process answers: its row takes it
+    // when the process applied it, or keeps it when no process was there to
+    // take it, never when the process refused it (pi, a level its model has
+    // none of), which every relaunch would otherwise ask for (agent-socket
+    // control-replies.ts).
+    const pick = settingPickOf(
+      message.payload.method,
+      message.payload.args?.[0]
+    );
     const requestId = message.requestId ?? message.payload.requestId;
-    if (
-      message.payload.method === CONTROL_SET_EFFORT &&
-      message.instanceId &&
-      requestId &&
-      isEffortLevel(effort)
-    ) {
-      ctx.effortAsks.set(requestId, {
-        instanceId: message.instanceId,
-        effort,
-      });
+    if (pick && !("refusal" in pick) && message.instanceId && requestId) {
+      ctx.pickAsks.set(requestId, { instanceId: message.instanceId, pick });
     }
     if (message.payload.method === CONTROL_INTERRUPT && message.instanceId) {
       // Who stopped the turn, as a send's line says who sent it: the tab it

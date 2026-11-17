@@ -94,7 +94,7 @@ import {
   INSTALL_SESSION_CREDENTIAL,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
 } from "@cawco/core/harness";
-import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
   ACT_ORIGIN,
   ARTIFACT_ORIGIN,
@@ -698,6 +698,8 @@ import { sessionReads } from "./session-list";
 import { createSessionNotes } from "./session-notes";
 import { createSessionRuntime } from "./session-runtime";
 import { LIMIT_ORIGIN, sessionWord } from "./session-word";
+import type { HeldPicks, SettingPick } from "./setting-pick-shapes";
+import { createSettingPicks } from "./setting-picks";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
 import { createSetupPicksApply, isSetupPage, setupPicksOf } from "./setup";
@@ -1348,7 +1350,12 @@ export const createServer = (
     restore: () => restore,
     resumeCutTurn: () => resumeCutTurn,
     rewinds: () => rewinds,
-    effortAsks: () => effortAsks,
+    pickAsks: () => pickAsks,
+    heldPicks: () => heldPicks,
+    applyHeldPicks: () => applyHeldPicks,
+    keepPick: () => keepPick,
+    processTakes: () => processTakes,
+    sessionModeRefusal: () => sessionModeRefusal,
     ridingReported: () => ridingReported,
     routines: () => routines,
     settleLaunchesOn: () => settleLaunchesOn,
@@ -2100,6 +2107,7 @@ export const createServer = (
     settleMode,
     wakeOf,
   } = createLaunches(ctx);
+  const { applyHeldPicks, keepPick, processTakes } = createSettingPicks(ctx);
   const {
     flushOwedStarts,
     holdingStarts,
@@ -7984,14 +7992,14 @@ export const createServer = (
   /** A rewind's spawn, by its request: its transcript is read whole again if the spawn fails. */
   const rewinds = new Map<string, string>();
   /**
-   * A set-effort on its way to a session, by its request: the level becomes
-   * the session's chosen effort once the session says it applied it
-   * (agent-socket control-replies.ts), never one it refused.
+   * A setting's pick on its way to a session's process, by its request: the
+   * session's row takes it once the process says it applied it, and keeps
+   * it for its next launch when no process was there to take it (agent-
+   * socket control-replies.ts), never one it refused.
    */
-  const effortAsks = new Map<
-    string,
-    { effort: EffortLevel; instanceId: string }
-  >();
+  const pickAsks = new Map<string, { instanceId: string; pick: SettingPick }>();
+  /** The picks held for a session's process on a machine that is away (setting-picks.ts). */
+  const heldPicks = new Map<string, HeldPicks>();
 
   /**
    * What a dashboard's spawn does to a transcript. A fork reads its history

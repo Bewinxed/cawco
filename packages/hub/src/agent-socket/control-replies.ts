@@ -1,19 +1,24 @@
 /** A control's answer finding who waits on it, and the fan-out to dashboards. */
 
 import { FLEET_DELTA } from "@cawco/core/fleet";
+import {
+  CONTROL_SET_EFFORT,
+  CONTROL_SET_MODEL,
+} from "@cawco/core/session/controls";
 import { INSTALL_TOOL } from "@cawco/core/tools";
 import { AskCard } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
 import { answerOf, type ControlResult } from "../machine-answers";
 import { externalizeImages } from "../media";
+import type { SettingPick } from "../setting-pick-shapes";
 
 import type { FrameAnswer, FrameRun } from "./frame-run";
 
 export type ControlRepliesContext = Pick<
   HubContext,
   | "db"
-  | "effortAsks"
   | "fleetSyncs"
+  | "keepPick"
   | "keepCopiesOn"
   | "lateAnswer"
   | "lifecycle"
@@ -21,6 +26,7 @@ export type ControlRepliesContext = Pick<
   | "machineName"
   | "pending"
   | "pendingInstalls"
+  | "pickAsks"
   | "publishInstances"
   | "registry"
   | "rewinds"
@@ -136,35 +142,56 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     return "continue";
   };
 
-  const effortAnswered = (run: FrameRun): FrameAnswer => {
+  /** A pick its process applied: the session's row takes it, the mode from its receipt (launches.ts `noteSessionSettings`). */
+  const pickApplied = (
+    machineId: string,
+    instanceId: string,
+    pick: SettingPick
+  ): void => {
+    if (pick.method === CONTROL_SET_EFFORT) {
+      ctx.db.chooseEffort(instanceId, pick.value);
+    }
+    if (pick.method === CONTROL_SET_MODEL) {
+      ctx.db.patchInstance(instanceId, { model: pick.value });
+      ctx.publishInstances(machineId);
+    }
+  };
+
+  const pickAnswered = (run: FrameRun): FrameAnswer => {
     const { message } = run;
     const body = message.payload;
-    // A set-effort answered (relay-control.ts `noteControl`). The level is
-    // the session's chosen effort, which its next launch asks for, when its
-    // session applied it, and when its machine ran no process to ask (`not-
-    // running`: asleep, between a stop and its relaunch, mid-move): a
-    // choice made then takes hold at the next start, so its command is
-    // answered as taken. One the session refused (pi: its model has no
-    // such level) is not kept, and its command fails in the session's words.
-    const effortAsk =
-      body.kind === "control_result" && message.requestId
-        ? ctx.effortAsks.get(message.requestId)
-        : undefined;
-    if (effortAsk && message.requestId && body.kind === "control_result") {
-      ctx.effortAsks.delete(message.requestId);
-      const unasked = body.refusal?.kind === "not-running";
-      if (body.ok || unasked) {
-        ctx.db.chooseEffort(effortAsk.instanceId, effortAsk.effort);
-      }
-      if (unasked) {
-        message.payload = {
-          kind: "control_result",
-          requestId: body.requestId,
-          ...(body.instanceId ? { instanceId: body.instanceId } : {}),
-          ok: true,
-        };
-      }
+    // A setting's pick answered (relay-control.ts `noteControl`). Applied,
+    // its row takes it, which every later launch of the session runs on.
+    // With no process to take it (`not-running`: it ended or slept before
+    // the hub heard), it is kept on its row as any pick no process takes is
+    // (setting-picks.ts `keepPick`), and the command is answered with what
+    // that did. One the process refused (pi: its model has no such level)
+    // is not kept, and its command fails in the process's words.
+    if (body.kind !== "control_result" || !message.requestId) {
+      return "continue";
     }
+    const asked = ctx.pickAsks.get(message.requestId);
+    if (!asked) {
+      return "continue";
+    }
+    ctx.pickAsks.delete(message.requestId);
+    if (body.ok) {
+      pickApplied(message.machineId, asked.instanceId, asked.pick);
+      return "continue";
+    }
+    if (body.refusal?.kind !== "not-running") {
+      return "continue";
+    }
+    const [row] = ctx.db.getInstancesByIds([asked.instanceId]);
+    const kept = row
+      ? ctx.keepPick(row, asked.pick)
+      : { refusal: body.error ?? "" };
+    message.payload = {
+      kind: "control_result",
+      requestId: body.requestId,
+      ...(body.instanceId ? { instanceId: body.instanceId } : {}),
+      ...(kept === "kept" ? { ok: true } : { ok: false, error: kept.refusal }),
+    };
     return "continue";
   };
 
@@ -247,7 +274,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
   return {
     installAnswered,
     syncAnswered,
-    effortAnswered,
+    pickAnswered,
     controlAnswered,
     fanOut,
   };

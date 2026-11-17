@@ -99,6 +99,13 @@ const CONTROL_METHOD: Readonly<
   "set-effort": CONTROL_SET_EFFORT,
 };
 
+/** The commands that pick a session's setting, which the hub takes in any state of the session. */
+const SETTING_KINDS: ReadonlySet<CommandKind> = new Set([
+  "set-model",
+  "set-permission-mode",
+  "set-effort",
+]);
+
 /** Every command a client may send ({@link CommandKind}). */
 const COMMAND_KINDS = everyOf<CommandKind>()([
   "send",
@@ -545,8 +552,14 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     // An answer is the hub's own transaction (server.ts
     // `answerPendingPermission`): an ask the hub raised (an admin write) is
     // settled here with no machine involved, and one
-    // a machine raised says its machine is not connected from there.
-    if (kind !== "permission.answer" && !ports.isMachineConnected(machineId)) {
+    // a machine raised says its machine is not connected from there. A
+    // setting's pick is the hub's too: one no process takes now is kept on
+    // its session's row, its machine there or not (setting-picks.ts).
+    if (
+      kind !== "permission.answer" &&
+      !SETTING_KINDS.has(kind) &&
+      !ports.isMachineConnected(machineId)
+    ) {
       fail(socket, commandId, ports.machineAwayWords(machineId));
       return;
     }

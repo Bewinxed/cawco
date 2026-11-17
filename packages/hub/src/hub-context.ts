@@ -34,6 +34,7 @@ import type { createMachineCommands } from "./machine-commands";
 import type { createRelayControl } from "./relay-control";
 import type { createSends } from "./sends";
 import type { createSessionNotes } from "./session-notes";
+import type { createSettingPicks } from "./setting-picks";
 import type { createSpawns } from "./spawns";
 import type { createStartHolds } from "./start-holds";
 
@@ -89,6 +90,7 @@ export interface HubContext
       | "launchSettled"
       | "launchingOn"
       | "noteSessionSettings"
+      | "sessionModeRefusal"
       | "settleLaunchesOn"
     >,
     Pick<
@@ -125,6 +127,10 @@ export interface HubContext
     Pick<
       ReturnType<typeof createSessionNotes>,
       "endLeak" | "tellContainers" | "tellLeak"
+    >,
+    Pick<
+      ReturnType<typeof createSettingPicks>,
+      "applyHeldPicks" | "keepPick" | "processTakes"
     >,
     Pick<
       ReturnType<typeof createSpawns>,

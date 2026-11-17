@@ -260,13 +260,10 @@
           : NO_EFFORT_MODEL.reason,
       };
     }
-    if (effort === null) {
-      return editable
-        ? { label: "Effort…", reason: "Reading the session's effort" }
-        : {
-            label: "Not read",
-            reason: "Effort is read while the session runs",
-          };
+    // A session that runs is read; one that doesn't runs at what is picked
+    // here, the harness's own default until then.
+    if (effort === null && live) {
+      return { label: "Effort…", reason: "Reading the session's effort" };
     }
     return null;
   });
@@ -284,27 +281,19 @@
         )
       : []
   );
-  /**
-   * The live process's controls (effort, permission, a running session's
-   * model) take changes: its machine is connected and the session runs.
-   * The account is the session's, not its process's: it moves whenever the
-   * hub is reachable ({@link accountOpen}).
-   */
   const machineAway = $derived(!(machineId && machineConnected(machineId)));
-  const editable = $derived(!machineAway && boardStore.liveId(sessionId));
-  /** The settings take picks: a live session's changes, or a stored transcript's resume, once its machine has said what it ran with. */
-  const settable = $derived(editable || !!resume?.run);
-  /** A move can be asked: the hub takes it in any state of the session (accounts/switch.svelte.ts). */
-  const accountOpen = $derived(connectionStore.status === "connected");
-  /** Why the live controls are locked, and until when. */
-  const lockedWords = $derived.by(() => {
-    const what = kept
-      ? "Effort and permission"
-      : "Model, effort and permission";
-    return machineAway
-      ? `${what} unlock once ${machine?.hostname || machineId || "its machine"} is connected again.`
-      : `${what} unlock while the session is running.`;
-  });
+  /** Its process runs, as the hub last heard: a switch into Bypass or Full Send starts it again. */
+  const running = $derived(boardStore.liveId(sessionId));
+  /** Its process runs and its machine is connected: it answers reads (its context). */
+  const live = $derived(!machineAway && running);
+  /**
+   * A setting can be picked: the hub takes the model, effort, permission and
+   * account in any state of the session, and one no process takes now is
+   * kept for its next launch (hub setting-picks.ts, accounts/switch.svelte.ts).
+   */
+  const hubOpen = $derived(connectionStore.status === "connected");
+  /** The settings take picks: the session's, or a stored transcript's resume once its machine has said what it ran with. */
+  const settable = $derived(resume ? !!resume.run : hubOpen);
   /** `~/…/leaf`: the folder name is what tells sessions apart. */
   const shortPath = (path: string) => {
     const parts = path.replace(HOME, "~").split("/");
@@ -315,7 +304,7 @@
    * asks at the end of a turn it watched. A tab opened after a reload, or a
    * session mid-way through a long turn, has had nothing ask — so opening the
    * details asks, once per session shown, as soon as the session can answer.
-   * Once: `editable` re-derives on every change to the running list, and each
+   * Once: `live` re-derives on every change to the running list, and each
    * of those is not a reason to ask again.
    */
   /*
@@ -353,11 +342,11 @@
   $effect(() => {
     const id = sessionId;
     const mid = machineId;
-    if (!(editable && mid && asked !== id && rootEl)) {
+    if (!(live && mid && asked !== id && rootEl)) {
       return;
     }
     asked = id;
-    // `editable` re-derives on every change to the running list, so only a
+    // `live` re-derives on every change to the running list, so only a
     // new session (or the card closing) ends the wait, never a re-run.
     stopWaiting();
     stopWaiting = untrack(() =>
@@ -406,7 +395,7 @@
   });
   /** When a session that can no longer answer was last read. */
   const readAt = $derived(
-    !editable && session?.context?.readAt
+    !live && session?.context?.readAt
       ? new Date(session.context.readAt).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -775,7 +764,7 @@
       storedStore.pickResume(sessionId, { model: next });
       return;
     }
-    if (!(editable && machineId) || inFlight("model") || next === shownModel) {
+    if (!(hubOpen && machineId) || inFlight("model") || next === shownModel) {
       return;
     }
     submitCommand(sessionId, machineId, {
@@ -789,7 +778,7 @@
       return;
     }
     if (
-      !(editable && machineId) ||
+      !(hubOpen && machineId) ||
       pending("effort") ||
       next === session?.effort
     ) {
@@ -806,7 +795,7 @@
       return;
     }
     if (
-      !(editable && machineId) ||
+      !(hubOpen && machineId) ||
       pending("permission") ||
       next === session?.permissionMode
     ) {
@@ -814,9 +803,13 @@
     }
     relaunchFailure = null;
     // Bypass, and Full Send on top of it, are launch-time decisions for the
-    // harness: entering them from another mode starts the session again in
-    // place. Between the two the CLI stays in bypass, and a switch is enough.
-    if (!bypasses(next) || bypasses(session?.permissionMode)) {
+    // harness: entering them from another mode starts a running session
+    // again in place. Between the two the CLI stays in bypass, and a switch
+    // is enough. A session whose process doesn't run now, or whose machine
+    // is away, is kept on the mode by the hub and launches in it.
+    const relaunches =
+      live && bypasses(next) && !bypasses(session?.permissionMode);
+    if (!relaunches) {
       submitCommand(sessionId, machineId, {
         kind: "set-permission-mode",
         intent: {
@@ -1166,10 +1159,10 @@
               harness,
               permission: shownPermission,
               onpermission: changePermission,
-              // A resume starts in the mode picked: nothing runs to start again.
-              restartsOnFullSend: !(
-                resume || bypasses(session?.permissionMode)
-              ),
+              // A resume, or a session that doesn't run, starts in the mode
+              // picked: nothing runs to start again.
+              restartsOnFullSend:
+                !resume && running && !bypasses(session?.permissionMode),
             }}
           />
           <!-- The account the session bills: the group's fourth setting,
@@ -1178,7 +1171,7 @@
             <AccountSwitch
               instance={row}
               {quota}
-              readonly={!accountOpen}
+              readonly={!hubOpen}
               size="compact"
             />
           {:else if resume?.run && resume.run.account !== undefined && machineId && harness}
@@ -1199,7 +1192,7 @@
               }}
               onpick={(account) =>
                 storedStore.pickResume(sessionId, { account })}
-              readonly={!accountOpen}
+              readonly={!hubOpen}
               size="compact"
             />
           {/if}
@@ -1216,7 +1209,7 @@
           {@render feedback("permission")}
           {@render feedback("account")}
           <!-- The held line says one thing: a change's own line outranks
-               why the live controls are locked. -->
+               what a stored transcript resumes with. -->
           {#if resume && !machineAway}
             <!-- A stored transcript's settings are what its first message
                  resumes it with. -->
@@ -1230,16 +1223,6 @@
               {resume.run
                 ? transcriptWords.resumesWith
                 : transcriptWords.readingRun}
-            </p>
-          {:else if !(editable || SLOTS.some((slot) => failure(slot) || pending(slot) || done[slot]))}
-            <p
-              data-slot="feedback"
-              data-locked
-              class="mt-space-2 type-body wrap-anywhere text-ink-muted"
-              in:crossIn
-              out:crossOut
-            >
-              {lockedWords}
             </p>
           {/if}
         </div>

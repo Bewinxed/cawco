@@ -21,6 +21,7 @@ export type MachineReturnContext = Pick<
   | "SETTLED"
   | "advanceContinuation"
   | "agentProtocols"
+  | "applyHeldPicks"
   | "artifacts"
   | "binaryUpdateStates"
   | "browserStream"
@@ -644,6 +645,14 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     );
   };
 
+  const picksApplied = (ret: MachineReturn): void => {
+    const { message, agentFrame } = ret;
+    // Behind its ack, ahead of what was held for its sessions: a setting
+    // picked while it was away goes to the process it was picked for
+    // first, so the turn a held send starts runs on it (setting-picks.ts).
+    ctx.applyHeldPicks(message.machineId, agentFrame.instances);
+  };
+
   const heldResent = (ret: MachineReturn): void => {
     const { message, agentFrame } = ret;
     // Behind its ack, which it waits for to take requests: what
@@ -772,6 +781,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     restoresSent,
     boardPublished,
     ackSent,
+    picksApplied,
     heldResent,
     summarisersEnded,
     reconciled,

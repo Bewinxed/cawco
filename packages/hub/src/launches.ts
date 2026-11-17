@@ -90,6 +90,7 @@ export type LaunchesContext = Pick<
   ClosureContext,
   | "db"
   | "harnessReportOf"
+  | "heldPicks"
   | "hubAsks"
   | "identities"
   | "launchAccount"
@@ -536,7 +537,33 @@ export const createLaunches = (ctx: LaunchesContext) => {
     return payload.reattachOnly ? {} : ctx.launchModel(read.machineId, stored);
   };
 
-  const bounded = (payload: SpawnPayload, knownRow?: InstanceRow) => {
+  /**
+   * `given` with what a person picked while its machine was away, for the
+   * process this launch replaces (setting-picks.ts): the launch runs on it,
+   * whatever its payload was made with (a start kept while its machine was
+   * away), and the hold ends here. A reattach launches nothing and takes
+   * none: the hold goes to its process as its controls.
+   */
+  const withHeldPicks = (given: SpawnPayload): SpawnPayload => {
+    const held = given.reattachOnly
+      ? undefined
+      : ctx.heldPicks.get(given.instanceId);
+    if (!held) {
+      return given;
+    }
+    ctx.heldPicks.delete(given.instanceId);
+    return {
+      ...given,
+      ...(held.model === undefined ? {} : { model: held.model }),
+      ...(held.effort === undefined ? {} : { effort: held.effort }),
+      ...(held.permissionMode
+        ? { permissionMode: held.permissionMode.mode }
+        : {}),
+    };
+  };
+
+  const bounded = (given: SpawnPayload, knownRow?: InstanceRow) => {
+    const payload = withHeldPicks(given);
     const {
       scratchWorktree: _callerWorktree,
       account: _pick,
@@ -819,14 +846,24 @@ export const createLaunches = (ctx: LaunchesContext) => {
     if (!row) {
       return false;
     }
+    // A setting picked while its machine was away is held for the process
+    // until it takes it (setting-picks.ts): its word on that setting until
+    // then is what it ran on before the pick, never written over it.
+    const held = ctx.heldPicks.get(instanceId);
     const patch: { model?: string; permissionMode?: string } = {};
-    if (typeof model === "string" && model && model !== row.model) {
+    if (
+      typeof model === "string" &&
+      model &&
+      model !== row.model &&
+      held?.model === undefined
+    ) {
       patch.model = model;
     }
     if (
       typeof mode === "string" &&
       mode &&
       mode !== row.permissionMode &&
+      held?.permissionMode === undefined &&
       !sessionModeRefusal(instanceId, mode)
     ) {
       patch.permissionMode = mode;

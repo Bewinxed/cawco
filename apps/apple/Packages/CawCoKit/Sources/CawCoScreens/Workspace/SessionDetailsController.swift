@@ -214,8 +214,19 @@ public final class SessionDetailsController: ObservedViewController {
     private var effort: String? { row?.effort?.rawValue }
     private var permissionMode: String? { facts?.permissionMode?.rawValue ?? row?.permissionMode }
 
-    private var editable: Bool {
-        hub.state == .connected && machineId != nil && row?.status == .running
+    /// Its process runs, as the hub last heard: a switch into Bypass or Full Send starts it again.
+    private var runs: Bool { row?.status == .running }
+
+    /// Its process runs and its machine is connected: it answers reads (its context).
+    private var live: Bool {
+        hub.state == .connected && runs && machine?.status == "online"
+    }
+
+    /// A setting can be picked: the hub takes the model, effort and permission
+    /// in any state of the session, and one no process takes now is kept for
+    /// its next launch (hub setting-picks.ts).
+    private var settable: Bool {
+        hub.state == .connected && machineId != nil
     }
 
     /// The offered row that describes the model: its name and the effort scale it runs at (`describingRow`).
@@ -239,8 +250,10 @@ public final class SessionDetailsController: ObservedViewController {
         if effort == "none" {
             return ("No effort", efforts.isEmpty ? "This model has no effort setting" : "Effort is off for this session")
         }
-        if effort == nil {
-            return editable ? ("Effort…", "Reading the session's effort") : ("Not read", "Effort is read while the session runs")
+        // A session that runs is read; one that doesn't runs at what is picked
+        // here, the harness's own default until then.
+        if effort == nil, live {
+            return ("Effort…", "Reading the session's effort")
         }
         return nil
     }
@@ -316,7 +329,7 @@ public final class SessionDetailsController: ObservedViewController {
     }
 
     private func changeModel(_ next: String) {
-        guard editable, let machineId, !pending(.model), next != model else { return }
+        guard settable, let machineId, !pending(.model), next != model else { return }
         let id = sessionId
         Task { [hub] in
             do { try await hub.setModel(instanceId: id, machineId: machineId, model: next) } catch { hub.sessions.noteError(id, error.localizedDescription) }
@@ -325,7 +338,7 @@ public final class SessionDetailsController: ObservedViewController {
     }
 
     private func changeEffort(_ next: String) {
-        guard editable, let machineId, !pending(.effort), next != effort, let level = Components.Schemas.SpawnPayload.EffortPayload(rawValue: next) else { return }
+        guard settable, let machineId, !pending(.effort), next != effort, let level = Components.Schemas.SpawnPayload.EffortPayload(rawValue: next) else { return }
         let id = sessionId
         Task { [hub] in
             do { try await hub.setEffort(instanceId: id, machineId: machineId, effort: level) } catch { hub.sessions.noteError(id, error.localizedDescription) }
@@ -334,14 +347,16 @@ public final class SessionDetailsController: ObservedViewController {
     }
 
     private func changePermission(_ next: String) {
-        guard editable, let machineId, !pending(.permission), next != permissionMode,
+        guard settable, let machineId, !pending(.permission), next != permissionMode,
               let mode = Components.Schemas.SpawnPayload.PermissionModePayload(rawValue: next) else { return }
         relaunchFailure = nil
         let id = sessionId
         // Bypass, and Full Send on top of it, are launch-time decisions for the
-        // harness: entering them from another mode relaunches the session on
-        // them. Between the two the CLI stays in bypass, and a switch is enough.
-        guard PermissionLook.bypasses(next), !PermissionLook.bypasses(permissionMode) else {
+        // harness: entering them from another mode relaunches a running
+        // session on them. Between the two the CLI stays in bypass, and a
+        // switch is enough. A session whose process doesn't run now, or whose
+        // machine is away, is kept on the mode by the hub and launches in it.
+        guard live, PermissionLook.bypasses(next), !PermissionLook.bypasses(permissionMode) else {
             Task { [hub] in
                 do { try await hub.setPermissionMode(instanceId: id, machineId: machineId, mode: mode) } catch { hub.sessions.noteError(id, error.localizedDescription) }
             }
@@ -616,7 +631,7 @@ public final class SessionDetailsController: ObservedViewController {
     /// The reading only arrives when something asks for it: opening the
     /// details asks, once per session shown, as soon as the session can answer.
     private func ask() {
-        guard editable, let machineId, asked != sessionId else { return }
+        guard live, let machineId, asked != sessionId else { return }
         asked = sessionId
         readings.refreshContext(hub, sessionId, machineId)
         readings.loadMcp(hub, sessionId, machineId)
@@ -703,11 +718,11 @@ public final class SessionDetailsController: ObservedViewController {
         } else {
             modelChip.show(nsSized(Glyph.cpu.image, 15, template: true), tint: Palette.inkMuted, label: named)
         }
-        modelChip.plain = !editable
-        modelChip.isUserInteractionEnabled = editable
+        modelChip.plain = !settable
+        modelChip.isUserInteractionEnabled = settable
         modelChip.accessibilityValue = named
-        chips.readonly = !editable
-        let lockPermission = !editable || pending(.permission)
+        chips.readonly = !settable
+        let lockPermission = !settable || pending(.permission)
         chips.show(ModelTools(
             efforts: efforts,
             effort: effort.flatMap { $0 == "none" ? nil : $0 },
@@ -715,7 +730,8 @@ public final class SessionDetailsController: ObservedViewController {
             harness: harness,
             modes: modes.map { ($0, lockPermission) },
             permission: shownPermission,
-            restartsOnFullSend: !PermissionLook.bypasses(permissionMode),
+            // A session that doesn't run starts in the mode picked: nothing runs to start again.
+            restartsOnFullSend: runs && !PermissionLook.bypasses(permissionMode),
             onEffort: { [weak self] level in self?.changeEffort(level) },
             onPermission: { [weak self] mode in self?.changePermission(mode) }
         ))
@@ -733,7 +749,7 @@ public final class SessionDetailsController: ObservedViewController {
                                  paint: Palette.surfaceRecess, label: "Context")
             contextFigure.text = "\(Int(percent))% · \(Self.tokens(reading.totalTokens))/\(Self.tokens(reading.maxTokens))"
             // When a session that can no longer answer was last read.
-            contextBar.accessibilityHint = editable ? nil : "Read at \(reading.readAt.formatted(date: .omitted, time: .shortened))"
+            contextBar.accessibilityHint = live ? nil : "Read at \(reading.readAt.formatted(date: .omitted, time: .shortened))"
         } else {
             contextLabel.isHidden = true
             contextBar.isHidden = true
@@ -791,7 +807,6 @@ public final class SessionDetailsController: ObservedViewController {
                 check = true
             }
         }
-        if text.isEmpty, !editable { text = "Controls unlock while the session is running." }
         let key = "\(text)|\(check)"
         guard key != feedbackShown else { return }
         feedbackShown = key
@@ -852,7 +867,7 @@ public final class SessionDetailsController: ObservedViewController {
     // MARK: Models
 
     private func openModels() {
-        guard editable, let harness, modelPopover == nil else { return }
+        guard settable, let harness, modelPopover == nil else { return }
         let state = ModelSectionView.State(harness: harness, installed: [harness], machineName: machine?.name ?? "",
                                            machineIds: machineId.map { [$0] } ?? [], model: model ?? "", tools: nil)
         let picker = ModelPopover(hub: hub, state: state) { [weak self] id in

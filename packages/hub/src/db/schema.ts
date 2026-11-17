@@ -1328,7 +1328,7 @@ export const instances = sqliteTable("instances", {
    * (db/instances.ts `openInstance`) by a start that names one way or the
    * other: a resume or a fork that goes on with its conversation's model is
    * the person's choice from then on, and a model a person picks for it
-   * (relay-control.ts `relayModelPick`) ends it. A first turn a provider
+   * (relay-control.ts `settingPickFor`) ends it. A first turn a provider
    * refused on the hub's choice moves to its next pick
    * (start-model-moves.ts); a person's pick is never swapped.
    */

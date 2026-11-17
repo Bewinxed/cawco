@@ -57,7 +57,7 @@ import type {
   Presence,
 } from "@cawco/core/handover";
 import type { HarnessReport } from "@cawco/core/harness";
-import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type {
   FleetHarnessConfig,
   HarnessConfigKind,
@@ -226,6 +226,7 @@ import type { RuleEngine } from "./rules";
 import type { SessionCallsDeps } from "./session-calls";
 import type { createSessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
+import type { HeldPicks, SettingPick } from "./setting-pick-shapes";
 import type { SkillFolderReader } from "./skills";
 import type { SshTunnels } from "./ssh-tunnels";
 import type { createStartModelMoves } from "./start-model-moves";
@@ -517,8 +518,6 @@ export interface ClosureContext {
     plan: ReturnType<DbShape["atLimit"]["compaction"]>
   ) => void;
   dropMarketplaceLink: (source: string) => boolean;
-  /** A set-effort sent to a session and not yet answered, by its request (server.ts). */
-  effortAsks: Map<string, { effort: EffortLevel; instanceId: string }>;
   embedKeyOf: (id: string) => string | undefined;
   /** Ends the notices owed to a session nothing will wake (sends.ts `endOwedNotices`, owed-ends.ts). */
   endOwedNotices: (of: { instanceId: string } | "every") => void;
@@ -614,6 +613,8 @@ export interface ClosureContext {
     harness: string
   ) => HarnessReport | undefined;
   heldClaim: (rowId: string) => string | undefined;
+  /** The picks held for a session's process on a machine that is away, by session (setting-picks.ts). */
+  heldPicks: Map<string, HeldPicks>;
   heldSessions: Map<
     string,
     { machineId: string; since: number; reason: string }
@@ -1004,6 +1005,8 @@ export interface ClosureContext {
   pendingSignins: Map<string, PendingAccountSignin>;
   pendingToolSignins: Map<string, ToolSigninChallenge>;
   /** A model picked while a session owes a move, judged against the account it lands on and carried with it (limit-moves.ts). */
+  /** A setting's pick sent to a session's process and not yet answered, by its request (server.ts). */
+  pickAsks: Map<string, { instanceId: string; pick: SettingPick }>;
   pickWithMove: (
     row: StoredRow,
     model: string

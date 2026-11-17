@@ -477,24 +477,39 @@ export function hydrate(target: SessionState): void {
 /**
  * Seeds the permission mode and model this view shows from what the hub stored.
  *
- * Precedence, highest first: the newest `system.init` — the session's own word,
- * re-emitted every turn, so it also corrects a setting changed by something that
- * is not this dashboard; then a switch this browser made and the daemon
- * confirmed, until that next init; then this row, which is all a view has before
- * the session's first turn; then the default the header falls back to. The row
- * therefore only ever fills a blank: it can be older than what the session has
- * since said, and a broadcast must not walk a live value back to it.
+ * While the session's process runs, precedence, highest first: the newest
+ * `system.init` — the session's own word, re-emitted every turn, so it also
+ * corrects a setting changed by something that is not this dashboard; then a
+ * switch this browser made and the daemon confirmed, until that next init;
+ * then this row, which is all a view has before the session's first turn;
+ * then the default the header falls back to. The row therefore only fills a
+ * blank: it can be older than what the session has since said, and a
+ * broadcast must not walk a live value back to it.
+ *
+ * While no process runs, the row is the session's word: a pick any screen
+ * made is kept there for its next launch (hub setting-picks.ts), so it
+ * replaces what this view held, unless a pick of this tab's own is still on
+ * its way.
  */
 function adoptSettings(target: SessionState, row: BoardRow): void {
-  // Only a spawn, a confirmed switch or an init ever wrote the column, so its
-  // word on a mode is the SDK's — which is wider than the picker's four.
+  const runs =
+    row.status === "running" ||
+    row.status === "starting" ||
+    row.status === "moving";
+  const takes = (kind: "set-model" | "set-permission-mode") => {
+    const asked = latestCommandFor(target.instanceId, kind);
+    return !runs && asked?.stage !== "submitted" && asked?.stage !== "accepted";
+  };
+  // Only a spawn, a pick, a confirmed switch or an init ever wrote the
+  // column, so its word on a mode is the SDK's — which is wider than the
+  // picker's four.
   if (
-    target.permissionMode === null &&
+    (target.permissionMode === null || takes("set-permission-mode")) &&
     isOneOf(WIRE_PERMISSION_MODES, row.permissionMode)
   ) {
     target.permissionMode = row.permissionMode;
   }
-  if (target.model === null && row.model) {
+  if ((target.model === null || takes("set-model")) && row.model) {
     target.model = row.model;
   }
   // Effort on the row is the agent's reading of what the session sends — its
