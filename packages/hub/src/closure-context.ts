@@ -56,7 +56,7 @@ import type {
   Presence,
 } from "@cawco/core/handover";
 import type { HarnessReport } from "@cawco/core/harness";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import type {
   FleetHarnessConfig,
   HarnessConfigKind,
@@ -514,6 +514,8 @@ export interface ClosureContext {
     plan: ReturnType<DbShape["atLimit"]["compaction"]>
   ) => void;
   dropMarketplaceLink: (source: string) => boolean;
+  /** A set-effort sent to a session and not yet answered, by its request (server.ts). */
+  effortAsks: Map<string, { effort: EffortLevel; instanceId: string }>;
   embedKeyOf: (id: string) => string | undefined;
   /** Ends the notices owed to a session nothing will wake (sends.ts `endOwedNotices`, owed-ends.ts). */
   endOwedNotices: (of: { instanceId: string } | "every") => void;

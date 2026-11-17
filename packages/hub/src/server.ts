@@ -95,7 +95,7 @@ import {
   INSTALL_SESSION_CREDENTIAL,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
 } from "@cawco/core/harness";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import {
   ACT_ORIGIN,
   ARTIFACT_ORIGIN,
@@ -1341,6 +1341,7 @@ export const createServer = (
     restore: () => restore,
     resumeCutTurn: () => resumeCutTurn,
     rewinds: () => rewinds,
+    effortAsks: () => effortAsks,
     ridingReported: () => ridingReported,
     routines: () => routines,
     settleLaunchesOn: () => settleLaunchesOn,
@@ -7963,6 +7964,15 @@ export const createServer = (
 
   /** A rewind's spawn, by its request: its transcript is read whole again if the spawn fails. */
   const rewinds = new Map<string, string>();
+  /**
+   * A set-effort on its way to a session, by its request: the level becomes
+   * the session's chosen effort once the session says it applied it
+   * (agent-socket control-replies.ts), never one it refused.
+   */
+  const effortAsks = new Map<
+    string,
+    { effort: EffortLevel; instanceId: string }
+  >();
 
   /**
    * What a dashboard's spawn does to a transcript. A fork reads its history

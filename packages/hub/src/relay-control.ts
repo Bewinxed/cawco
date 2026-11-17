@@ -158,6 +158,7 @@ export type RelayControlContext = Pick<
   | "cutTurn"
   | "db"
   | "designSystem"
+  | "effortAsks"
   | "endSession"
   | "forward"
   | "hubAsks"
@@ -832,14 +833,22 @@ export const createRelayControl = (ctx: RelayControlContext) => {
   /** A control that interrupts a session's turn cuts into it ({@link noteInterrupt}). */
   const noteControl = (message: HubEnvelope<"control">): void => {
     // The operator's effort for the session, which every later launch of it
-    // asks for ({@link bounded}); the CLI's reading of it only moves the chip.
+    // asks for ({@link bounded}), once the session says it applied it: a
+    // level its model has none of is refused there (pi), and a refused
+    // level would otherwise be the one every relaunch asks for. The CLI's
+    // reading of it only moves the chip.
     const effort = message.payload.args?.[0];
+    const requestId = message.requestId ?? message.payload.requestId;
     if (
       message.payload.method === CONTROL_SET_EFFORT &&
       message.instanceId &&
+      requestId &&
       isEffortLevel(effort)
     ) {
-      ctx.db.chooseEffort(message.instanceId, effort);
+      ctx.effortAsks.set(requestId, {
+        instanceId: message.instanceId,
+        effort,
+      });
     }
     if (message.payload.method === CONTROL_INTERRUPT && message.instanceId) {
       // Who stopped the turn, as a send's line says who sent it: the tab it

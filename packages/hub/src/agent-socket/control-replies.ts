@@ -12,6 +12,7 @@ import type { FrameAnswer, FrameRun } from "./frame-run";
 export type ControlRepliesContext = Pick<
   HubContext,
   | "db"
+  | "effortAsks"
   | "fleetSyncs"
   | "keepCopiesOn"
   | "lateAnswer"
@@ -150,6 +151,19 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       body.kind === "control_result" &&
       message.requestId !== undefined &&
       ctx.streams.settleCommand(message.requestId, body);
+    // A set-effort answered: the level the session applied is its chosen
+    // effort from now on (relay-control.ts `noteControl`); a refused one is
+    // not.
+    const effortAsk =
+      body.kind === "control_result" && message.requestId
+        ? ctx.effortAsks.get(message.requestId)
+        : undefined;
+    if (effortAsk && message.requestId) {
+      ctx.effortAsks.delete(message.requestId);
+      if (body.kind === "control_result" && body.ok) {
+        ctx.db.chooseEffort(effortAsk.instanceId, effortAsk.effort);
+      }
+    }
     // A rewind that never started: its transcript was never cut.
     const rewound =
       body.kind === "control_result" && message.requestId

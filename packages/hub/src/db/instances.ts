@@ -517,8 +517,8 @@ export interface InstancesDb {
   readonly boardSessionsWrapping: (sessionIds: string[]) => BoardInstanceRow[];
   /**
    * The effort the operator chose for the session: what its every launch asks
-   * for. Written by a spawn that names one and by a `set-effort`, never by a
-   * reading ({@link DbShape.noteInstanceEffort}).
+   * for. Written by a spawn that names one and by a `set-effort` its session
+   * applied, never by a reading ({@link DbShape.noteInstanceEffort}).
    */
   readonly chooseEffort: (id: string, effort: EffortLevel) => void;
   /** Each listed Claude session on a machine with a conversation, and its account: no more of its row. */
