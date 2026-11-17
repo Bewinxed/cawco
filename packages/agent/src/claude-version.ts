@@ -252,7 +252,7 @@ export const versionRefusal = (
         return `Claude Code on this machine didn't say its version, so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it runs. ${UPDATE_FIX}`;
       }
       return olderThan(version.value, CLAUDE_VERSION_FLOOR)
-        ? `Claude Code ${version.value} on this machine is older than ${CLAUDE_VERSION_FLOOR}, the oldest CawCo runs, because older ones can sign an account out when a sign-in refresh is cut short. ${UPDATE_FIX}`
+        ? `Claude Code ${version.value} on this machine is older than ${CLAUDE_VERSION_FLOOR}, the oldest CawCo runs, because older ones can't take a session's MCP servers at its start, and can sign an account out when a sign-in refresh is cut short. ${UPDATE_FIX}`
         : undefined;
     default:
       return version satisfies never;

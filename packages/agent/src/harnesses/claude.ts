@@ -229,8 +229,7 @@ import { CHROME_DEVTOOLS, throughGate } from "../browser/door";
 import { indexedListing, listingRead, watchCatalogDir } from "../catalog-index";
 import { CLAUDE_QUIET_ENV } from "../claude-env";
 import {
-  mcpConfigOffArgv,
-  removeMcpConfig,
+  refuseCredentialOnArgv,
   removeMcpConfigsOf,
   sweepMcpConfigs,
 } from "../claude-mcp-config";
@@ -2649,11 +2648,12 @@ const sessionExtraArgs = (
 };
 
 /**
- * The SDK's command line, handed to sessiond with its MCP servers in a file
- * rather than inline ({@link mcpConfigOffArgv}): CawCo's carries the
- * session's bearer, and argv is every local user's to read. The file goes
- * when the child does. An attach launches nothing; the files its child was
- * launched with go when that child ends.
+ * The SDK's command line, handed to sessiond. Its MCP servers are not on it:
+ * they go in the initialize request (`mcpServersDelivery`), because CawCo's
+ * carries the session's bearer and argv is every local user's to read; a
+ * command line that would carry that bearer anyway is refused ({@link
+ * refuseCredentialOnArgv}). An attach launches nothing; the config file a
+ * child launched before that change was given goes when that child ends.
  */
 const launchUnderSessiond = (
   instanceId: string,
@@ -2669,36 +2669,23 @@ const launchUnderSessiond = (
   exited: (exit: ProcessExit | undefined) => void
 ): import("@anthropic-ai/claude-agent-sdk").SpawnedProcess => {
   const attachedAt = Date.now();
-  const launch = sessiond.attach
-    ? undefined
-    : mcpConfigOffArgv(instanceId, spawnOptions.args, ctx.sessionCredential);
-  const file = launch?.file;
-  try {
-    return sessiondBridge(
-      sessiond.client,
-      sessiond.procId,
-      // In a Linux view of its folder, the CLI runs inside it (layer.ts).
-      enterSpawn(
-        ctx.workspace,
-        launch ? { ...spawnOptions, args: launch.args } : spawnOptions
-      ),
-      { seqs, attach: sessiond.attach },
-      (refusal) => ctx.keeperRefused(refusal),
-      (exit) => {
-        exited(exit);
-        if (file) {
-          removeMcpConfig(file);
-        } else {
-          removeMcpConfigsOf(instanceId, attachedAt);
-        }
-      }
-    );
-  } catch (error) {
-    if (file) {
-      removeMcpConfig(file);
-    }
-    throw error;
+  if (!sessiond.attach) {
+    refuseCredentialOnArgv(spawnOptions.args, ctx.sessionCredential);
   }
+  return sessiondBridge(
+    sessiond.client,
+    sessiond.procId,
+    // In a Linux view of its folder, the CLI runs inside it (layer.ts).
+    enterSpawn(ctx.workspace, spawnOptions),
+    { seqs, attach: sessiond.attach },
+    (refusal) => ctx.keeperRefused(refusal),
+    (exit) => {
+      exited(exit);
+      if (sessiond.attach) {
+        removeMcpConfigsOf(instanceId, attachedAt);
+      }
+    }
+  );
 };
 
 class ClaudeSession implements HarnessSession {
@@ -2967,6 +2954,16 @@ class ClaudeSession implements HarnessSession {
         pathToClaudeCodeExecutable: sessiond.executable,
         extraArgs,
         mcpServers,
+        // Over stdin in the initialize request, off the command line: the
+        // SDK's `'argv'` default is deprecated (sdk.d.ts 0.3.326), and argv
+        // is every local user's to read. A spawn runs Claude Code at the
+        // floor or newer (core tools.ts `CLAUDE_VERSION_FLOOR`), which reads
+        // it. An attach launches nothing, and its CLI loads nothing from a
+        // repeated initialize; one started by an older Claude Code answers
+        // with no `mcp_servers_applied`, which the SDK ends the session for,
+        // so an attach sends its servers nowhere: `'argv'` on a command line
+        // that is never run.
+        mcpServersDelivery: sessiond.attach ? "argv" : "initialize",
         // Set after the caller's options so none of them undoes it.
         ...isolation(fence, clean, startingSet),
         // What the CLI holds for later, said at each turn's end: the SDK's
@@ -5285,11 +5282,11 @@ class ClaudeHarness implements Harness<"claude"> {
   #swept: Promise<void> | undefined;
 
   /**
-   * The MCP config files ({@link mcpConfigOffArgv}) of Claude children that
-   * no longer exist on any keeper: an agent that stopped before its child did
-   * never saw that child end. Done on the first connection, before this agent
-   * writes a file of its own; a failure is said and left to the next agent's
-   * start.
+   * The MCP config files Claude children were launched with before their
+   * servers went in the initialize request, of children that no longer
+   * exist on any keeper: an agent that stopped before its child did
+   * never saw that child end. Done on the first connection; a failure is
+   * said and left to the next agent's start.
    */
   async #sweepMcpConfigs(): Promise<void> {
     try {

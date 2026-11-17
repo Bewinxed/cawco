@@ -1,38 +1,29 @@
 /**
- * A Claude session's MCP servers, kept off its command line.
+ * The MCP config files Claude sessions were launched with before their
+ * servers went in the initialize request, and the guard that keeps the
+ * session's bearer off the command line.
  *
- * The Agent SDK hands the CLI its `mcpServers` as inline JSON on argv
- * (`--mcp-config <json>`, or `--mcp-config=<json>` for a value that starts
- * with a dash: `p_` in sdk.mjs 0.3.296), and CawCo's server in it carries the
- * session's bearer (`headers.Authorization`). Anything on argv is
- * `/proc/<pid>/cmdline` and `ps` to every local user. The CLI takes a file in
- * its place: "--mcp-config <configs...>  Load MCP servers from JSON files or
- * strings (space-separated)" (`claude --help`, 2.1.296).
+ * CawCo's MCP server carries the session's bearer (`headers.Authorization`),
+ * and anything on argv is `/proc/<pid>/cmdline` and `ps` to every local user.
+ * A session's servers now reach Claude Code over stdin, in the initialize
+ * request (harnesses/claude.ts, `mcpServersDelivery: "initialize"`), and a
+ * launch whose command line would carry the bearer anyway is refused
+ * ({@link refuseCredentialOnArgv}).
  *
- * So the JSON goes to a file named for the launch in {@link
- * claudeMcpConfigDir}: a directory of the agent's private credentials
- * ({@link sessionIdentityDir}), owner-only, and one every workspace boundary
- * hides from the commands it runs. The file lives as long as the child: it is
- * removed when the child exits, and an agent's first look at sessiond removes
- * any left by children that are gone ({@link sweepMcpConfigs}).
+ * Before that, the SDK put them on argv as inline JSON (`--mcp-config
+ * <json>`), and CawCo moved that JSON to a file named
+ * `<instanceId>.<launch>.json` in {@link claudeMcpConfigDir}: owner-only, and
+ * hidden from every workspace. A child launched that way may outlive the
+ * agent that launched it; its file is removed when it ends ({@link
+ * removeMcpConfigsOf}) or at an agent's first look at sessiond once it is
+ * gone ({@link sweepMcpConfigs}).
  */
-import { randomUUID } from "node:crypto";
-import { chmodSync, readdirSync, rmSync, statSync } from "node:fs";
+import { readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { makeFolderSync } from "@cawco/core/folders";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
-import {
-  stateTemporaryTarget,
-  writeStateFileSync,
-} from "@cawco/core/state-file";
+import { stateTemporaryTarget } from "@cawco/core/state-file";
 
-const MCP_CONFIG_FLAG = "--mcp-config";
-const INLINE_FLAG = `${MCP_CONFIG_FLAG}=`;
-
-/** An instance id as a file name can carry it: a UUID's characters, no path. */
-const FILE_SAFE_ID = /^[A-Za-z0-9-]+$/u;
-
-/** Where Claude sessions' MCP configs are kept: owner-only, hidden from every workspace. */
+/** Where Claude sessions' MCP configs were kept: owner-only, hidden from every workspace. */
 const claudeMcpConfigDir = (): string =>
   join(sessionIdentityDir(), "claude-mcp");
 
@@ -44,70 +35,23 @@ const instanceOf = (name: string): string | undefined => {
     : undefined;
 };
 
-/** Whether a `--mcp-config` value is the JSON itself rather than a file's path. */
-const inline = (value: string): boolean => value.trimStart().startsWith("{");
-
 /**
- * `args` with the inline `--mcp-config` JSON written to a file of its own and
- * the flag given that file's path: the launch's command line, safe to show.
- * Both forms the SDK writes are read. `credential`, when the session has one,
- * must appear nowhere in what is returned: a launch that would still carry it
- * is refused.
+ * Refuses a launch whose command line carries `credential`, the session's
+ * CawCo bearer, when it has one.
  */
-export const mcpConfigOffArgv = (
-  instanceId: string,
+export const refuseCredentialOnArgv = (
   args: readonly string[],
   credential: string | undefined
-): { args: string[]; file: string | undefined } => {
-  if (!FILE_SAFE_ID.test(instanceId)) {
-    throw new Error(
-      `Instance id ${JSON.stringify(instanceId)} cannot name an MCP config file.`
-    );
-  }
-  const rewritten = [...args];
-  const found: { at: number; json: string; joined: boolean }[] = [];
-  for (let at = 0; at < rewritten.length; at += 1) {
-    const arg = rewritten[at];
-    if (arg === MCP_CONFIG_FLAG && at + 1 < rewritten.length) {
-      if (inline(rewritten[at + 1])) {
-        found.push({ at: at + 1, json: rewritten[at + 1], joined: false });
-      }
-      at += 1;
-    } else if (
-      arg.startsWith(INLINE_FLAG) &&
-      inline(arg.slice(INLINE_FLAG.length))
-    ) {
-      found.push({ at, json: arg.slice(INLINE_FLAG.length), joined: true });
-    }
-  }
-  if (found.length > 1) {
-    throw new Error(
-      `The Claude launch carries ${found.length} inline --mcp-config values; the SDK writes one.`
-    );
-  }
-  let file: string | undefined;
-  const [config] = found;
-  if (config) {
-    const dir = claudeMcpConfigDir();
-    makeFolderSync(dir, { mode: 0o700 });
-    chmodSync(dir, 0o700);
-    file = join(dir, `${instanceId}.${randomUUID()}.json`);
-    writeStateFileSync(file, config.json, { mode: 0o600, exclusive: true });
-    rewritten[config.at] = config.joined ? `${INLINE_FLAG}${file}` : file;
-  }
-  if (credential && rewritten.some((arg) => arg.includes(credential))) {
-    if (file) {
-      rmSync(file, { force: true });
-    }
+): void => {
+  if (credential && args.some((arg) => arg.includes(credential))) {
     throw new Error(
       "The Claude launch would carry its CawCo session credential on its command line; it was not started."
     );
   }
-  return { args: rewritten, file };
 };
 
 /** Removes one launch's config file; a file already gone is the end asked for. */
-export const removeMcpConfig = (file: string): void => {
+const removeMcpConfig = (file: string): void => {
   try {
     rmSync(file, { force: true });
   } catch (error) {

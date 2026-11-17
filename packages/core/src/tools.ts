@@ -412,9 +412,13 @@ const OPENCODE_VERSION = "2.3.0";
  * middle of a token refresh". Below it, a refresh cut short can leave an
  * account dir's stored login blank (anthropics/claude-code#88583: the lock
  * "protect[s] the save, not the network call"), and every process on that
- * dir is signed out after.
+ * dir is signed out after. Raised to 2.1.326, the Claude Code bundled with
+ * Agent SDK 0.3.326: CawCo hands a session its MCP servers in the initialize
+ * request (agent harnesses/claude.ts, `mcpServersDelivery: "initialize"`),
+ * which "Requires the Claude Code bundled with this SDK or newer" (sdk.d.ts
+ * 0.3.326); an older one has its session ended by the SDK at start.
  */
-export const CLAUDE_VERSION_FLOOR = "2.1.301";
+export const CLAUDE_VERSION_FLOOR = "2.1.326";
 
 /**
  * The oldest pi CLI CawCo runs a pi session beside (agent tools.ts
