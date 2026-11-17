@@ -53,17 +53,22 @@ import {
 } from "../../packages/agent/src/sessiond-client";
 import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts/controls";
 import { CAWCO_ENV } from "../../packages/core/src/cawco-env";
-import type { Control } from "../../packages/core/src/control-table";
 import { INSPECT_CONFIG } from "../../packages/core/src/fleet";
 import {
   CAPABILITIES_NONE,
+  INSTALL_SESSION_CREDENTIAL,
   type MachineHarnessReport,
+  VERIFY_SESSION_CREDENTIAL,
 } from "../../packages/core/src/harness";
 import {
   HARNESSES,
   type HarnessKind,
 } from "../../packages/core/src/harness/kinds";
 import { claudeHome } from "../../packages/core/src/paths/claude";
+import {
+  CONTROL_INTERRUPT,
+  CONTROL_SET_PERMISSION_MODE,
+} from "../../packages/core/src/session/controls";
 import { sessionEnvironment } from "../../packages/core/src/session-env";
 import { MESSAGES_READ } from "../../packages/core/src/session-messages";
 
@@ -186,7 +191,17 @@ function session(
     harness: kind,
     sessionId: null,
     attached: () => undefined,
-    control: () => Promise.resolve(undefined),
+    // What the agent asks of a session it starts or attaches, answered as
+    // taken; anything else is refused, as a real harness refuses a control
+    // it has none for.
+    controls: {
+      [INSTALL_SESSION_CREDENTIAL]: () =>
+        Promise.resolve({ installed: true, harness: kind, instanceId }),
+      [VERIFY_SESSION_CREDENTIAL]: () => Promise.resolve(),
+      [CONTROL_SET_PERMISSION_MODE]: (mode) =>
+        Promise.resolve({ permissionMode: mode }),
+      [CONTROL_INTERRUPT]: () => Promise.resolve(),
+    },
     // Shutdown of the agent leaves the child with its holder, as a real session's is.
     dispose: () => Promise.resolve(),
     holding: () => undefined,
@@ -347,21 +362,20 @@ for (const kind of HARNESSES) {
     }),
     getSessionInfo: async () => null,
     storedRun: async () => ({}),
-    machine: ({ method }: Control) => {
-      if (method === INSPECT_CONFIG) {
-        return Promise.resolve({
+    machineControls: {
+      [INSPECT_CONFIG]: () =>
+        Promise.resolve({
           at: Date.now(),
           marketplaces: [],
           mcp: [],
           plugins: [],
           skills: [],
           memory: null,
-        });
-      }
+        }),
       // The hub reads a newly signed-in account's model catalog once; the test's sessions name a full model id, which the hub admits on an empty list.
-      if (method === CONTROL_PROBE_ACCOUNT && kind === "claude") {
-        return Promise.resolve({ models: [] });
-      }
+      ...(kind === "claude"
+        ? { [CONTROL_PROBE_ACCOUNT]: () => Promise.resolve({ models: [] }) }
+        : {}),
     },
     // The child is spawned under the session holder, under the id the real
     // harnesses use, unconditionally.

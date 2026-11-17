@@ -4,7 +4,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
 import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
-import type { Control } from "@cawco/core/control-table";
 import type {
   FleetHoldings,
   FleetItemState,
@@ -39,7 +38,6 @@ import type {
   NeutralSessionInfo,
   SessionMessage,
   StoredRun,
-  SupportedCommands,
 } from "@cawco/core/session-messages";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
@@ -79,7 +77,7 @@ import {
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import type { FleetPart } from "../fleet-parts";
 import { placedMcpKeys, placeSets } from "../fleet-place-set";
-import type { TranscriptSpan } from "../harness";
+import type { SomeControls, TranscriptSpan } from "../harness";
 import { writeJson } from "../json-file";
 import { readSettledOnce } from "../mcp-status";
 import { probeStarted } from "../probe-count";
@@ -1254,18 +1252,13 @@ export class PiProfile {
     servicesPromise = null;
     return Promise.resolve();
   }
-  async machine(control: Control): Promise<unknown> {
-    if (control.method === CONTROL_PI_DEFAULT_MODEL) {
-      return await piDefaultModel(control.args[0]);
-    }
+  /** The machine-scoped controls pi's harness answers. */
+  readonly machineControls: SomeControls = {
+    [CONTROL_PI_DEFAULT_MODEL]: (cwd) => piDefaultModel(cwd),
     // pi has no slash commands: its sessions answer the same empty list.
-    if (control.method === CONTROL_FOLDER_COMMANDS) {
-      return [] satisfies SupportedCommands;
-    }
-    return control.method === CONTROL_MODEL_CATALOG
-      ? await modelCatalog()
-      : undefined;
-  }
+    [CONTROL_FOLDER_COMMANDS]: () => Promise.resolve([]),
+    [CONTROL_MODEL_CATALOG]: () => modelCatalog(),
+  };
 
   /** pi's agent dir, where its skills, memory file and the fleet's sidecar are. */
   fleetHome() {

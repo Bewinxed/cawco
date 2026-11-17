@@ -19,7 +19,11 @@ import type { AskAnswer } from "@cawco/core/asks";
 import type { TextAttachment } from "@cawco/core/attachments";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import type { CutCommand } from "@cawco/core/commands/controls";
-import type { Control } from "@cawco/core/control-table";
+import type {
+  ControlArgs,
+  ControlName,
+  ControlResult,
+} from "@cawco/core/control-table";
 import type { MachineSend } from "@cawco/core/envelopes";
 import type { FleetSyncReport, PlacedFleetConfig } from "@cawco/core/fleet";
 import type { FramePayload } from "@cawco/core/frames";
@@ -30,12 +34,16 @@ import type {
   SignInFault,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type { KeeperHarnessKind } from "@cawco/core/harness/traits";
-import type { SendPayload, SpawnPayload } from "@cawco/core/protocol";
 import type {
-  CarrySessionOutcome,
-  CarrySessionRequest,
-  MoveEnded,
+  KeeperHarnessKind,
+  SessionControlOf,
+} from "@cawco/core/harness/traits";
+import type { SendPayload, SpawnPayload } from "@cawco/core/protocol";
+import {
+  type CarrySessionOutcome,
+  type CarrySessionRequest,
+  type MoveEnded,
+  unknownControlWords,
 } from "@cawco/core/session/controls";
 import type {
   AuthState,
@@ -208,17 +216,38 @@ export interface HarnessContext {
   readonly workspace?: string;
 }
 
+/**
+ * Control `K`'s handler in a harness: called with its own arguments (core
+ * control-table.ts), answering what the table says it answers, so one that
+ * answers anything else fails to type.
+ */
+type ControlHandler<K extends ControlName> = (
+  ...args: ControlArgs<K>
+) => Promise<ControlResult<K>>;
+
+/** A handler for each of controls `K`, under its own name. */
+export type ControlHandlers<K extends ControlName> = {
+  readonly [P in K]: ControlHandler<P>;
+};
+
+/** The controls a harness or a session has a handler for, each under its own name ({@link runControl}). */
+export type SomeControls = { readonly [P in ControlName]?: ControlHandler<P> };
+
+/** A live session of harness `H`'s controls: one for each its traits list (core traits.ts `sessionControls`), and no other. */
+export type SessionControls<H extends HarnessKind> = ControlHandlers<
+  SessionControlOf<H>
+>;
+
 /** One live session, owned by a harness. */
 export interface HarnessSession {
   /** Called only after the supervisor has installed this handle. */
   attached?: () => void;
   /**
-   * A neutral control ({@link CONTROL_INTERRUPT}, …), mapped to the runtime:
-   * called by its name with its own arguments (core control-table.ts). One
-   * the harness has no function for is refused in those words (core
-   * `unknownControlWords`).
+   * Its controls ({@link CONTROL_INTERRUPT}, …), each mapped to the runtime
+   * and run through {@link runControl}: one it has no handler for is
+   * refused in core's `unknownControlWords`.
    */
-  control: (control: Control) => Promise<unknown>;
+  readonly controls: SomeControls;
   /** Hard teardown, used on drain/shutdown. */
   dispose: () => Promise<void>;
   /**
@@ -300,6 +329,23 @@ export interface HarnessSession {
    */
   withdrawPermission: (requestId: string, message: string) => void;
 }
+
+/**
+ * Control `method` run by its handler in `controls` with its own arguments:
+ * one with no handler there is refused in core's `unknownControlWords`, the
+ * same refusal from every harness, so a read the harness can't answer comes
+ * back as a refusal and never as no answer.
+ */
+export const runControl = <K extends ControlName>(
+  controls: SomeControls,
+  method: K,
+  args: ControlArgs<K>
+): Promise<ControlResult<K>> => {
+  const handler: ControlHandler<K> | undefined = controls[method];
+  return handler
+    ? handler(...args)
+    : Promise.reject(new Error(unknownControlWords(method)));
+};
 
 /**
  * What the sends handed to a session's process and not read yet keep it
@@ -581,8 +627,8 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
   readonly kind: K;
   /** The stored sessions this harness can resume. */
   listSessions: (dir?: string) => Promise<NeutralSessionInfo[]>;
-  /** A machine-scoped control this harness owns; `undefined` when it is not its word. */
-  machine?: (control: Control) => Promise<unknown> | undefined;
+  /** The machine-scoped controls this harness owns, each under its own name. */
+  readonly machineControls?: SomeControls;
   /**
    * Every provider the harness's own catalog names, by id and name: the
    * providers an account can be for through it. Absent from a harness with

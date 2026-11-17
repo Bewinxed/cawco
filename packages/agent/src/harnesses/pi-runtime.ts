@@ -10,8 +10,6 @@ import {
 } from "@cawco/core/accounts";
 import type { BrowserDoor } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import { isControlOf } from "@cawco/core/control-args";
-import type { Control } from "@cawco/core/control-table";
 import type { StartingSet } from "@cawco/core/delegate-types";
 import { inStartingSet, piToolsFor } from "@cawco/core/delegate-types";
 import {
@@ -37,14 +35,9 @@ import {
   CONTROL_SUPPORTED_MODELS,
 } from "@cawco/core/session/controls";
 import { sessionEnvironment } from "@cawco/core/session-env";
-import type {
-  ModelTurnUsage,
-  SentMessage,
-  SupportedCommands,
-} from "@cawco/core/session-messages";
+import type { ModelTurnUsage, SentMessage } from "@cawco/core/session-messages";
 import { MESSAGES_READ, usageByModel } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
-import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import {
@@ -91,7 +84,12 @@ import { configAt, hooksAt, readFleetHarnessSet } from "../fleet-harness-set";
 import { type HookPlace, runFleetHooks } from "../fleet-hook-run";
 import { fleetMcpAt } from "../fleet-mcp-set";
 import { placeSetAt } from "../fleet-place-set";
-import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
+import type {
+  HarnessContext,
+  HarnessSession,
+  SessionControls,
+  TurnExtras,
+} from "../harness";
 import type { McpGate } from "../mcp-gate";
 import { placedMemoryIn } from "../placed-memory";
 import { acknowledgeSessionCredential } from "../session-identity";
@@ -1002,18 +1000,6 @@ class ProviderAnswers {
 /** A send that is pi's `/compact`, with its optional focus text. */
 const COMPACT_COMMAND = /^\/compact(?:\s+([\s\S]*))?$/u;
 
-/** The controls a pi session answers (`PiSession.control`); its credential's are answered first. */
-const PI_SESSION_CONTROLS = [
-  CONTROL_REFRESH_CAWCO_TOOLS,
-  CONTROL_MCP_FLEET_CHANGED,
-  CONTROL_MCP_FLEET_HEAL,
-  CONTROL_INTERRUPT,
-  CONTROL_SET_MODEL,
-  CONTROL_SUPPORTED_MODELS,
-  CONTROL_SUPPORTED_COMMANDS,
-  CONTROL_CONTEXT_USAGE,
-] as const;
-
 class PiSession implements HarnessSession {
   readonly harness = "pi" as const;
   sessionId: string | null = null;
@@ -1495,12 +1481,6 @@ class PiSession implements HarnessSession {
     this.#ctx.rejected(uuid, error);
   }
 
-  /** The session credential's install and verify ({@link credentialControls}). */
-  readonly #credentialControls = credentialControls(
-    (credential) => this.#installCredential(credential),
-    () => this.#verifyCredential()
-  );
-
   /** The credential the hub granted this session, installed: its tools and its shells act as it. */
   async #installCredential(
     credential: string
@@ -1536,91 +1516,77 @@ class PiSession implements HarnessSession {
     return undefined;
   }
 
-  async control(control: Control): Promise<unknown> {
-    const credential = this.#credentialControls(control);
-    if (credential) {
-      return await credential;
-    }
-    if (!isControlOf(PI_SESSION_CONTROLS, control)) {
-      console.warn(`[pi] no control verb ${control.method} — ignored`);
-      return undefined;
-    }
-    switch (control.method) {
-      case CONTROL_REFRESH_CAWCO_TOOLS: {
-        const count = await this.#tools.refresh();
-        console.error(`[pi] cawco tools refreshed: ${count} listed`);
-        return { listed: count };
-      }
-      // The agent sends the session's door with the changes (pi-sessiond.ts).
-      case CONTROL_MCP_FLEET_CHANGED: {
-        const [changes, door] = control.args;
-        // A fenced session takes no MCP server ({@link cawcosExtensionsAlone}).
-        return this.#fleetMcp
-          ? await this.#fleetMcp.take(changes, door ?? undefined)
-          : {
-              servers: changes.map(({ name, kind }) => ({
-                name,
-                kind,
-                status: "not taken: the session is fenced",
-                holds: false,
-              })),
-            };
-      }
-      // Named by the hub for a connect ask; the agent sends the door (pi-sessiond.ts).
-      case CONTROL_MCP_FLEET_HEAL: {
-        const names = control.args[0] ?? [];
-        return this.#fleetMcp
-          ? await this.#fleetMcp.heal(names, control.args[1] ?? undefined)
-          : ({
-              servers: names.map((name) => ({
-                name,
-                kind: "signed-in",
-                status: "not taken: the session is fenced",
-                holds: false,
-              })),
-            } satisfies FleetMcpTakeAnswer);
-      }
-      case CONTROL_INTERRUPT:
-        await this.interrupt();
-        return undefined;
-      case CONTROL_SET_MODEL: {
-        await this.#session.setModel(
-          await resolvePiModel(this.#runtime, control.args[0])
+  /**
+   * Its controls (core traits.ts `sessionControls`), with the session
+   * credential's install and verify ({@link credentialControls}).
+   */
+  readonly controls: SessionControls<"pi"> = {
+    ...credentialControls(
+      (credential) => this.#installCredential(credential),
+      () => this.#verifyCredential()
+    ),
+    [CONTROL_REFRESH_CAWCO_TOOLS]: async () => {
+      const count = await this.#tools.refresh();
+      console.error(`[pi] cawco tools refreshed: ${count} listed`);
+      return { listed: count };
+    },
+    // The agent sends the session's door with the changes (pi-sessiond.ts).
+    [CONTROL_MCP_FLEET_CHANGED]: async (changes, door) =>
+      // A fenced session takes no MCP server ({@link cawcosExtensionsAlone}).
+      this.#fleetMcp
+        ? await this.#fleetMcp.take(changes, door ?? undefined)
+        : {
+            servers: changes.map(({ name, kind }) => ({
+              name,
+              kind,
+              status: "not taken: the session is fenced",
+              holds: false,
+            })),
+          },
+    // Named by the hub for a connect ask; the agent sends the door (pi-sessiond.ts).
+    [CONTROL_MCP_FLEET_HEAL]: async (asked, door) => {
+      const names = asked ?? [];
+      return this.#fleetMcp
+        ? await this.#fleetMcp.heal(names, door ?? undefined)
+        : {
+            servers: names.map((name) => ({
+              name,
+              kind: "signed-in",
+              status: "not taken: the session is fenced",
+              holds: false,
+            })),
+          };
+    },
+    [CONTROL_INTERRUPT]: () => this.interrupt(),
+    [CONTROL_SET_MODEL]: async (model) => {
+      await this.#session.setModel(await resolvePiModel(this.#runtime, model));
+    },
+    [CONTROL_SUPPORTED_MODELS]: () => modelCatalog(this.#runtime),
+    // pi has no slash commands.
+    [CONTROL_SUPPORTED_COMMANDS]: () => Promise.resolve([]),
+    [CONTROL_CONTEXT_USAGE]: () => {
+      // The last message that carries a usage: an answer's, or a tool
+      // result's own (pi-ai types.d.ts `ToolResultMessage.usage`).
+      const [total = 0] = [...this.#session.messages]
+        .reverse()
+        .flatMap((m) => ("usage" in m && m.usage ? [m.usage.totalTokens] : []));
+      // The model's window in pi-ai's catalog is what a request may send:
+      // its input limit where that is below the context (gpt-5.5: 272000,
+      // providers/data/openai.json).
+      const window = this.#session.model?.contextWindow;
+      if (!window) {
+        return Promise.reject(
+          new Error("The pi session has no model, so it has no context window.")
         );
-        return undefined;
       }
-      case CONTROL_SUPPORTED_MODELS:
-        return await modelCatalog(this.#runtime);
-      case CONTROL_SUPPORTED_COMMANDS:
-        return [] satisfies SupportedCommands;
-      case CONTROL_CONTEXT_USAGE: {
-        // The last message that carries a usage: an answer's, or a tool
-        // result's own (pi-ai types.d.ts `ToolResultMessage.usage`).
-        const [total = 0] = [...this.#session.messages]
-          .reverse()
-          .flatMap((m) =>
-            "usage" in m && m.usage ? [m.usage.totalTokens] : []
-          );
-        // The model's window in pi-ai's catalog is what a request may send:
-        // its input limit where that is below the context (gpt-5.5: 272000,
-        // providers/data/openai.json).
-        const window = this.#session.model?.contextWindow;
-        if (!window) {
-          throw new Error(
-            "The pi session has no model, so it has no context window."
-          );
-        }
-        return {
-          totalTokens: total,
-          maxTokens: window,
-          percentage: Math.min(100, Math.round((total / window) * 100)),
-          categories: [],
-        };
-      }
-      default:
-        return unhandled("control", control);
-    }
-  }
+      return Promise.resolve({
+        totalTokens: total,
+        maxTokens: window,
+        percentage: Math.min(100, Math.round((total / window) * 100)),
+        categories: [],
+      });
+    },
+  };
   /** pi has no permission modes and no question tool, and puts no call to the hub: there is no ask to answer. */
   resolvePermission(): void {
     throw new Error(PI_ASKS_NOTHING);

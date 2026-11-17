@@ -123,6 +123,15 @@ interface HarnessTraitsBase {
    * itself. `assistant-before`: the assistant frame before it.
    */
   readonly rewindAnchor: "user-turn" | "assistant-before";
+  /**
+   * The controls a live session of it answers, by their names in the
+   * control table (core control-table.ts; agent harness.ts
+   * `SessionControls` fails to type on a name the table has not). Any other
+   * sent to one of its sessions is refused in core's `unknownControlWords`,
+   * so a sender asks only a harness that lists it ({@link answersControl});
+   * its agent's sessions answer exactly these.
+   */
+  readonly sessionControls: readonly string[];
   /** A row can start with no conversation of its own and take one at its first send; until then it is never started, not ended. */
   readonly startsWithoutConversation: boolean;
 }
@@ -176,6 +185,28 @@ const CLAUDE_TRAITS = {
   queuesSends: true,
   promptCacheMaxMs: HOUR_MS,
   boundaryBeforeCompactionFailure: false,
+  sessionControls: [
+    "installSessionCredential",
+    "verifySessionCredential",
+    "withdrawSend",
+    "fleetMcpChanged",
+    "fleetSettings",
+    "fleetMcpHeal",
+    "setEffort",
+    "getContextUsage",
+    "setPermissionMode",
+    "interrupt",
+    "setModel",
+    "supportedModels",
+    "supportedCommands",
+    "reloadSkills",
+    "reloadPlugins",
+    "reinitialize",
+    "mcpServerStatus",
+    "reconnectMcpServer",
+    "toggleMcpServer",
+    "getTaskOutput",
+  ],
   liveSkillReload: true,
 } as const satisfies HarnessTraits;
 
@@ -203,6 +234,23 @@ const OPENCODE_TRAITS = {
   queuesSends: false,
   promptCacheMaxMs: null,
   boundaryBeforeCompactionFailure: true,
+  sessionControls: [
+    "installSessionCredential",
+    "verifySessionCredential",
+    "interrupt",
+    "setModel",
+    "setEffort",
+    "setPermissionMode",
+    "getContextUsage",
+    "supportedModels",
+    "supportedCommands",
+    "reloadSkills",
+    "mcpServerStatus",
+    "reconnectMcpServer",
+    "toggleMcpServer",
+    "fleetMcpChanged",
+    "fleetMcpHeal",
+  ],
   liveSkillReload: false,
 } as const satisfies HarnessTraits;
 
@@ -229,6 +277,18 @@ const PI_TRAITS = {
   queuesSends: false,
   promptCacheMaxMs: null,
   boundaryBeforeCompactionFailure: false,
+  sessionControls: [
+    "installSessionCredential",
+    "verifySessionCredential",
+    "refreshCawcoTools",
+    "fleetMcpChanged",
+    "fleetMcpHeal",
+    "interrupt",
+    "setModel",
+    "supportedModels",
+    "supportedCommands",
+    "getContextUsage",
+  ],
   liveSkillReload: false,
   readsThroughCli: false,
 } as const satisfies HarnessTraits;
@@ -272,6 +332,7 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   promptCacheMaxMs: null, // nothing claimed
   boundaryBeforeCompactionFailure: false, // nothing claimed
   liveSkillReload: false, // nothing claimed
+  sessionControls: [], // nothing claimed
 };
 
 /** The traits of `harness`, a kind or whatever a row or a frame says one is. */
@@ -279,6 +340,14 @@ export const traitsOf = (harness: unknown): HarnessTraits => {
   const named = harnessNamed(harness);
   return named ? HARNESS_TRAITS[named] : UNKNOWN_TRAITS;
 };
+
+/** The controls a live session of `H` answers ({@link HarnessTraits.sessionControls}). */
+export type SessionControlOf<H extends HarnessKind> =
+  (typeof HARNESS_TRAITS)[H]["sessionControls"][number];
+
+/** Whether a live session of `harness`, a kind or whatever a row says one is, answers control `method`. */
+export const answersControl = (harness: unknown, method: string): boolean =>
+  traitsOf(harness).sessionControls.includes(method);
 
 /** Every kind a trait holds of, in {@link HARNESSES} order: for a query that filters on a column. */
 export const harnessesWith = (

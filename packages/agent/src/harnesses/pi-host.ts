@@ -10,7 +10,11 @@ import {
 } from "@cawco/core/harness/pi-host-state";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { MESSAGES_READ } from "@cawco/core/session-messages";
-import type { HarnessContext, HarnessSession } from "../harness";
+import {
+  type HarnessContext,
+  type HarnessSession,
+  runControl,
+} from "../harness";
 import { installOf } from "./credential-controls";
 import { startPiHost } from "./pi-runtime";
 import { backgroundShell, hostFailure, PI_ASKS_NOTHING } from "./pi-sessiond";
@@ -134,7 +138,11 @@ async function handle(command: HostCommand): Promise<void> {
       output({
         type: "reply",
         id: command.id,
-        value: await session.control(command.control),
+        value: await runControl(
+          session.controls,
+          command.control.method,
+          command.control.args
+        ),
       });
       return;
     case "stop":
