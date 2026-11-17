@@ -388,6 +388,12 @@ export const accountsWords = {
     unread: (fields: string) =>
       `Saved at-limit policy unreadable (${fields}). No automatic moves, compaction or filing until saved.`,
     move: "Move running sessions between accounts",
+    /**
+     * ChatGPT's block, in place of the move settings (core `isChatgptPlan`,
+     * `ACCOUNT_RULES.onePlanProviders`): none of its sessions moves at the limit.
+     */
+    onePlan:
+      "A ChatGPT session at its limit waits for its own plan to reset: OpenAI’s terms keep a ChatGPT session on its own plan. Its line offers to continue it on your OpenAI API key, charged per token, or on another agent or model.",
     wait: "Wait if the window resets within",
     minutes: "minutes",
     /** The floor under which a session moves whole, never compacted (core `AtLimit.moveWholeUnderK`). */

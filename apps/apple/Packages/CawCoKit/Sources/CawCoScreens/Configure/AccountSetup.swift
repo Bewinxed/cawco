@@ -114,6 +114,8 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
 
     private var provider: String? { choice?.provider }
     private var limits: Bool { provider.map(FleetAccounts.limits) ?? false }
+    /// ChatGPT: its sessions run on one plan (`FleetAccounts.onePlan`), and none moves at its limit.
+    private var onePlan: Bool { provider.map(FleetAccounts.onePlan) ?? false }
     private var full: Bool { existing != nil }
 
     /// A step, by the key its name stands under (`Words.Accounts.Setup.Steps`).
@@ -449,7 +451,8 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         case .atLimit:
             content.addArrangedSubview(heading(at.name))
             if let pair = pair(view), let view {
-                let block = AtLimitView(accounts: (pair[1], pair[0]), among: view.accounts, terms: provider == FleetAccounts.claude, value: atLimit)
+                let block = AtLimitView(accounts: (pair[1], pair[0]), among: view.accounts, terms: provider == FleetAccounts.claude,
+                                        onePlan: onePlan, value: atLimit)
                 block.onChange = { [weak self] next in self?.atLimit = next }
                 content.addArrangedSubview(block)
             }
@@ -459,7 +462,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
                                                                               second: FleetAccounts.name(pair[1], among: view.accounts))))
                 let lead = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
                 let line = FleetAccounts.routingLine(pair, yours: yours, delegates: delegates)
-                lead.text = limits && atLimit.move ? Words.Accounts.Setup.withMoves(line: line) : line
+                lead.text = limits && atLimit.move && !onePlan ? Words.Accounts.Setup.withMoves(line: line) : line
                 lead.wrap = .pretty
                 content.addArrangedSubview(lead)
             }

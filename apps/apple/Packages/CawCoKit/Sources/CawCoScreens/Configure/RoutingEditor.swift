@@ -76,7 +76,8 @@ final class RoutingEditorController: ConfigEditorController {
             order = mine.map(\.id)
             showPicker(animatedFrom: nil)
             if FleetAccounts.limits(provider) {
-                let block = AtLimitView(accounts: (mine[0], mine[1]), among: mine, terms: provider == FleetAccounts.claude, value: atLimit)
+                let block = AtLimitView(accounts: (mine[0], mine[1]), among: mine, terms: provider == FleetAccounts.claude,
+                                        onePlan: FleetAccounts.onePlan(provider), value: atLimit)
                 block.onChange = { [weak self] next in
                     self?.atLimit = next
                     self?.drawState()
@@ -631,7 +632,9 @@ final class OrderListView: UIStackView {
 /// whole, a large conversation then compacted there by Claude Code's own
 /// /compact after it files its open items. The figure under the numbers
 /// plays that policy, rebuilt as they change. Off, the numbers fold away
-/// with the figure and the terms.
+/// with the figure and the terms. For ChatGPT (`onePlan`, core
+/// `isChatgptPlan`) no session moves at its limit: a note says it waits on
+/// its own plan and what its line offers, in the move settings' place.
 final class AtLimitView: UIStackView, UITextFieldDelegate {
     var onChange: ((FleetAccounts.AtLimit) -> Void)?
     private(set) var value: FleetAccounts.AtLimit
@@ -648,7 +651,8 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
 
     /// `accounts`: the one that runs out, then the one that is free, each
     /// named beside `among`, their provider's accounts.
-    init(accounts: (FleetAccounts.Account, FleetAccounts.Account), among: [FleetAccounts.Account], terms: Bool, value: FleetAccounts.AtLimit) {
+    init(accounts: (FleetAccounts.Account, FleetAccounts.Account), among: [FleetAccounts.Account], terms: Bool, onePlan: Bool,
+         value: FleetAccounts.AtLimit) {
         self.value = value
         lanes = [accounts.0, accounts.1].map { FigureLane(name: FleetAccounts.name($0, among: among), hue: $0.hue) }
         figure = StrategyFigureView(board: .limit, lanes: lanes, policy: Self.policy(value))
@@ -660,6 +664,17 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
         head.accessibilityTraits = .header
         addArrangedSubview(head)
         setCustomSpacing(Space.space3, after: head)
+        if onePlan {
+            let note = KitLabel(TypeScale.typeBody, ink: Palette.inkRow, lines: 0)
+            note.text = Words.Accounts.AtLimit.onePlan
+            note.wrap = .pretty
+            note.accessibilityIdentifier = "routing.onePlan"
+            let noteLine = UIStackView(arrangedSubviews: [note])
+            noteLine.isLayoutMarginsRelativeArrangement = true
+            noteLine.directionalLayoutMargins = .init(top: Space.space2, leading: 0, bottom: Space.space3, trailing: 0)
+            addArrangedSubview(noteLine)
+            return
+        }
         let moveLabel = KitLabel(TypeScale.typeBody, ink: Palette.inkRow, lines: 0)
         moveLabel.text = Words.Accounts.AtLimit.move
         move.onTintColor = Palette.inkStrong

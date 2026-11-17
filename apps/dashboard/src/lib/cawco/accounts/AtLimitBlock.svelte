@@ -25,7 +25,6 @@
   } from "@cawco/core/accounts/kinds";
   import { HARNESSES } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
-  import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 
   import ModelSection from "#lib/cawco/spawn/ModelSection.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
@@ -120,7 +119,7 @@
       data-slot="one-plan"
       class="pt-space-2 pb-space-3 text-pretty text-ink-row"
     >
-      {chatgptPlanWords.atLimit}
+      {words.onePlan}
     </p>
   {:else}
     <div

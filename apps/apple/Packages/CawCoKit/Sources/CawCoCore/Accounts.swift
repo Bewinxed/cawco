@@ -16,6 +16,14 @@ public enum FleetAccounts {
         Words.Accounts.Rules.limitedProviders.contains(provider)
     }
 
+    /// Whether a provider runs each session on one plan alone (core
+    /// `isChatgptPlan`, `ACCOUNT_RULES.onePlanProviders`): ChatGPT, whose
+    /// routing offers Pinned alone and whose sessions move at no limit, as
+    /// OpenAI's terms keep a session on its own plan.
+    public static func onePlan(_ provider: String) -> Bool {
+        Words.Accounts.Rules.onePlanProviders.contains(provider)
+    }
+
     /// Whether a provider with this many accounts has a routing to choose
     /// (core `hasRouting`): the list's Routing, and the routing editor's page.
     public static func hasRouting(_ accounts: Int) -> Bool {
@@ -90,11 +98,13 @@ public enum FleetAccounts {
 
         /// A provider's routing until it is saved (core `defaultRouting`).
         public static func standard(_ provider: String) -> Routing {
-            limits(provider)
-                ? Routing(provider: provider, yours: .init(strategy: Words.Accounts.Rules.LimitedDefaults.yours),
-                          delegates: .init(strategy: Words.Accounts.Rules.LimitedDefaults.delegates), atLimit: .standard)
-                : Routing(provider: provider, yours: .init(strategy: Words.Accounts.Rules.UnlimitedDefaults.yours),
-                          delegates: .init(strategy: Words.Accounts.Rules.UnlimitedDefaults.delegates), atLimit: .standard)
+            let rules = Words.Accounts.Rules.self
+            let (yours, delegates) = onePlan(provider)
+                ? (rules.OnePlanDefaults.yours, rules.OnePlanDefaults.delegates)
+                : limits(provider)
+                ? (rules.LimitedDefaults.yours, rules.LimitedDefaults.delegates)
+                : (rules.UnlimitedDefaults.yours, rules.UnlimitedDefaults.delegates)
+            return Routing(provider: provider, yours: .init(strategy: yours), delegates: .init(strategy: delegates), atLimit: .standard)
         }
     }
 
@@ -305,9 +315,12 @@ public enum FleetAccounts {
     public static let strategies = Words.Accounts.strategies
 
     /// The strategies a provider's routing offers (core `strategiesFor`): all
-    /// four where CawCo reads its limits, Pinned and Fill first where it doesn't.
+    /// four where CawCo reads its limits, Pinned and Fill first where it
+    /// doesn't, Pinned alone for ChatGPT (`onePlan`).
     public static func strategies(for provider: String) -> [Strategy] {
-        limits(provider) ? strategies : strategies.filter { Words.Accounts.Rules.unlimitedStrategies.contains($0.id) }
+        let rules = Words.Accounts.Rules.self
+        if onePlan(provider) { return strategies.filter { rules.onePlanStrategies.contains($0.id) } }
+        return limits(provider) ? strategies : strategies.filter { rules.unlimitedStrategies.contains($0.id) }
     }
 
     public static func strategyLabel(_ id: String) -> String {

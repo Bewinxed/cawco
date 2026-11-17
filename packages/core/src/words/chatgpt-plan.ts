@@ -3,7 +3,8 @@
  * `isChatgptPlan`): CawCo moves it to no other ChatGPT plan, and a session
  * at its plan's limit, or left on no account, offers to continue on the
  * person's OpenAI API key or on another agent or model. Said on the
- * dashboard alone: the native app's words are `accountsWords`.
+ * dashboard and by the hub; the At the limit block's note, which the native
+ * app draws too, is `accountsWords.atLimit.onePlan`.
  */
 
 import { configurePage } from "./configure";
@@ -55,6 +56,4 @@ export const chatgptPlanWords = {
   // ── Configure › Accounts ─────────────────────────────────────────────────
   /** A routing save that asks ChatGPT for any strategy but Pinned. */
   pinnedOnly: `ChatGPT routes Pinned only: ${TERMS}, so CawCo spreads no sessions across plans. Choose Pinned.`,
-  /** The At the limit block for ChatGPT, in place of the move settings. */
-  atLimit: `A ChatGPT session at its limit waits for its own plan to reset: ${TERMS}. Its line offers to continue it on your OpenAI API key, charged per token, or on another agent or model.`,
 } as const;

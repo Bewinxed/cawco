@@ -132,13 +132,18 @@ export const LIMITED_PROVIDERS: readonly AccountProvider[] = [
  * limit, or loses its account, waits on its own plan and offers to continue
  * on the person's OpenAI API key ({@link isOpenaiKey}) or on another agent
  * or model; only the person moves it. Every rule that keeps a ChatGPT
- * session on its plan reads this, and nothing else names the provider.
+ * session on its plan reads this, and the native app reads the same rule
+ * from `ACCOUNT_RULES.onePlanProviders`.
  */
 export const isChatgptPlan = (account: {
   kind?: AccountKind;
   provider: AccountProvider;
 }): boolean =>
-  account.provider === "openai-codex" && (account.kind ?? "oauth") === "oauth";
+  ONE_PLAN_PROVIDERS.includes(account.provider) &&
+  (account.kind ?? "oauth") === "oauth";
+
+/** The providers whose sessions run on one plan alone ({@link isChatgptPlan}). */
+const ONE_PLAN_PROVIDERS: readonly AccountProvider[] = ["openai-codex"];
 
 /** Whether an account is an OpenAI API key: provider `openai`, a key, billed per token. */
 export const isOpenaiKey = (account: {
@@ -465,7 +470,7 @@ export const strategiesFor = (
   provider: AccountProvider
 ): readonly PlacementStrategy[] => {
   if (isChatgptPlan({ provider })) {
-    return ONE_PLAN_STRATEGIES;
+    return ACCOUNT_RULES.onePlanStrategies;
   }
   return LIMITED_PROVIDERS.includes(provider)
     ? PLACEMENT_STRATEGIES
@@ -491,7 +496,7 @@ export const defaultRouting = (provider: AccountProvider): ProviderRouting => {
 /** The strategies a provider's routing starts from ({@link defaultRouting}). */
 const defaultsOf = (provider: AccountProvider): StrategyDefaults => {
   if (isChatgptPlan({ provider })) {
-    return ONE_PLAN_DEFAULTS;
+    return ACCOUNT_RULES.onePlanDefaults;
   }
   return LIMITED_PROVIDERS.includes(provider)
     ? ACCOUNT_RULES.limitedDefaults
@@ -503,8 +508,9 @@ const defaultsOf = (provider: AccountProvider): StrategyDefaults => {
  * from here too (`bun run words` writes them as `Words.Accounts.Rules`):
  * when a provider's routing is offered, which providers' limits CawCo reads
  * (their accounts have a Limits section, an At the limit step and every
- * strategy), what the others offer, the routing each starts from, and the
- * at-limit policy a routing starts with.
+ * strategy), what the others offer, which run each session on one plan
+ * (ChatGPT: Pinned alone, and no move at the limit), the routing each starts
+ * from, and the at-limit policy a routing starts with.
  */
 /** The strategy a routing starts from, for your own sessions and for delegates. */
 interface StrategyDefaults {
@@ -538,6 +544,9 @@ export const ACCOUNT_RULES = {
   unlimitedStrategies: UNLIMITED_STRATEGIES,
   limitedDefaults: LIMITED_DEFAULTS,
   unlimitedDefaults: UNLIMITED_DEFAULTS,
+  onePlanProviders: ONE_PLAN_PROVIDERS,
+  onePlanStrategies: ONE_PLAN_STRATEGIES,
+  onePlanDefaults: ONE_PLAN_DEFAULTS,
   atLimit: DEFAULT_AT_LIMIT,
   /**
    * How long the hub waits on a machine's sign-in step: Claude Code printing

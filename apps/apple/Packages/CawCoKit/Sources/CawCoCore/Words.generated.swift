@@ -682,6 +682,9 @@ public enum Words {
 
             public static let move = "Move running sessions between accounts"
 
+            /// ChatGPT's block, in place of the move settings (core `isChatgptPlan`, `ACCOUNT_RULES.onePlanProviders`): none of its sessions moves at the limit.
+            public static let onePlan = "A ChatGPT session at its limit waits for its own plan to reset: OpenAI’s terms keep a ChatGPT session on its own plan. Its line offers to continue it on your OpenAI API key, charged per token, or on another agent or model."
+
             public static let wait = "Wait if the window resets within"
 
             public static let minutes = "minutes"
@@ -950,6 +953,19 @@ public enum Words {
                 public static let yours = "fill-first"
 
                 public static let delegates = "fill-first"
+
+                /// Each word by the key it stands under, for a lookup by data value.
+                public static let byKey: [String: String] = ["yours": yours, "delegates": delegates]
+            }
+
+            public static let onePlanProviders: [String] = ["openai-codex"]
+
+            public static let onePlanStrategies: [String] = ["pinned"]
+
+            public enum OnePlanDefaults {
+                public static let yours = "pinned"
+
+                public static let delegates = "pinned"
 
                 /// Each word by the key it stands under, for a lookup by data value.
                 public static let byKey: [String: String] = ["yours": yours, "delegates": delegates]
@@ -1527,6 +1543,11 @@ public enum Words {
 
         public static func cantReadLogins(host: String) -> String {
             "\(host) cannot read its logins"
+        }
+
+        /// The keychain unlocked, and Claude there gave no word on its sign-in yet (core `MachineHarnessReport.auth`).
+        public static func loginsUnsaid(host: String) -> String {
+            "\(host)'s keychain is unlocked, and Claude there has not said yet whether it is signed in. Its row says once it does."
         }
     }
 
@@ -2323,11 +2344,6 @@ public enum Words {
         /// The foot under a missing states file, whose own words say what draws it.
         public static func missingNext(more: Int) -> String {
             "\(more > 0 ? "\(more) more besides. " : "")The session is told."
-        }
-
-        /// Under the down card, when the hub's last read couldn't reach the stage (core `StageUnreached`): since when, and why in the hub's words.
-        public static func unreachedSince(since: String, why: String) -> String {
-            "Not reached since \(since): \(why)"
         }
 
         /// Where the page would be, when the stage did not start or failed its restarts.
