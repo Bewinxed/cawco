@@ -2,8 +2,10 @@
  * What the processes this user can see run and name, read from the system at
  * the moment of asking. Two readers: `prune`, which keeps every build a live
  * process runs or names (a session keeper's child whose CLI `--settings` carry
- * a hook under `versions/<v>/` needs that folder for as long as it lives), and
- * the agent, which names the process holding a port it cannot bind.
+ * a hook under `versions/<v>/` needs that folder for as long as it lives, and
+ * a workspace's srt host started with `runtime/<v>/srt/host.js` needs that
+ * one), and the agent, which names the process holding a port it cannot
+ * bind.
  *
  * macOS command lines come from the kernel (the process reader), its text
  * segments from `lsof` through an async spawn: it runs on the agent's loop
@@ -19,7 +21,6 @@ import {
   readlinkSync,
   realpathSync,
 } from "node:fs";
-import { join } from "node:path";
 import { commandLine, commandLines } from "./process-identity";
 import { hostEnvironment } from "./session-env";
 
@@ -138,17 +139,28 @@ const liveProcesses = (): Promise<LiveProcess[]> =>
     : macProcesses();
 
 /**
- * The builds under `<root>/versions/` that a live process runs or names: its
- * executable, its command line, and the settings file its command line names.
- * Read from what is running, never from a count of builds to keep. The asking
+ * The builds that a live process runs or names inside any of `folders` (each
+ * a folder of builds by version: the binary root's `versions/`, the runtime
+ * folders' root): its executable, its command line, and the settings file its
+ * command line names. A build named in one folder is in use in every one: a
+ * process of `versions/<v>/` reads `runtime/<v>/`, and an srt host named by
+ * its `runtime/<v>/srt/host.js` may run on another build's executable. Read
+ * from what is running, never from a count of builds to keep. The asking
  * process is not counted: the update helper that prunes runs from the build
  * it has just replaced, ends with the prune, and needs nothing on disk to do
  * so (a running executable outlives its file).
  */
-export async function versionsInUse(root: string): Promise<Set<string>> {
+export async function versionsInUse(
+  folders: readonly string[]
+): Promise<Set<string>> {
   const prefixes = [
-    ...new Set([root, readOr(() => realpathSync(root)) ?? root]),
-  ].map((path) => `${join(path, "versions")}/`);
+    ...new Set(
+      folders.flatMap((folder) => [
+        folder,
+        readOr(() => realpathSync(folder)) ?? folder,
+      ])
+    ),
+  ].map((path) => `${path}/`);
   const used = new Set<string>();
   const others = (await liveProcesses()).filter((p) => p.pid !== process.pid);
   for (const one of others) {

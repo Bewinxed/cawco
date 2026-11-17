@@ -54,13 +54,20 @@ export const runtimeCommit =
  * installs only a build whose range overlaps its hub's.
  */
 export const protocolRange = { min: 8, max: 8 } as const;
-export const runtimeDataDir = () =>
+/**
+ * The folder every build's runtime folder sits in, one per build by its
+ * version, beside the binary root's `versions/` (binary-installation.ts
+ * `binaryRoot`). Only `prune` deletes in it, by the rule that keeps
+ * `versions/`.
+ */
+export const runtimeRoot = (): string =>
   join(
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
     "cawco",
-    "runtime",
-    runtimeVersion
+    "runtime"
   );
+/** This build's runtime folder, where {@link publishRuntime} unpacks its runtime trees. */
+export const runtimeDataDir = (): string => join(runtimeRoot(), runtimeVersion);
 
 export function embeddedFile(name: string): string {
   const path = binaryAssets[name];

@@ -366,6 +366,8 @@ systemctl --user list-units --all --no-legend 'cawco-sessiond*' 2>&1
 grep -H 'Requires\|After\|Before\|RequiredBy' "$HOME/.config/systemd/user/cawco-agent.service" "$HOME/.config/systemd/user"/cawco-sessiond*.service 2>&1
 echo "== versions/"
 ls -la versions
+echo "== runtime/"
+ls -la "$data/runtime"
 for w in "$HOME"/.cawco/workspaces/*/; do
   [ -d "$w" ] || continue
   echo "== workspace $w"
@@ -768,6 +770,8 @@ keeper_link() { as_user "$1" readlink /home/cawco/.local/share/cawco/binary/keep
 current_link() { as_user "$1" readlink /home/cawco/.local/share/cawco/binary/current; }
 has_file() { as_user "$1" test -e "/home/cawco/.local/share/cawco/binary/$2"; }
 has_version() { as_user "$1" test -d "/home/cawco/.local/share/cawco/binary/versions/$2"; }
+# The builds in one of machine $1's folders of builds ($2: binary/versions or runtime), sorted, on one line.
+builds_in() { as_user "$1" sh -c 'cd "/home/cawco/.local/share/cawco/$1" 2> /dev/null && for b in */; do [ -d "$b" ] && echo "${b%/}"; done | LC_ALL=C sort | tr "\n" " "' sh "$2"; }
 install_order() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/binary/install-order.json 2> /dev/null || true' | json "d => d.join(' ')"; }
 custody_of() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.custody?.state"; }
 # What machine $1's update helper did, as it records it beside apply.log (cli apply-record.ts, apply-record.json): each
@@ -777,7 +781,7 @@ apply_record() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/binary/a
 # The machine has an IPv6 loopback (`::1` on lo), as the installer judges before it names [::1] in the dashboard socket.
 has_ipv6_loopback() { as_user "$1" grep -q '^00000000000000000000000000000001 ' /proc/net/if_inet6; }
 export TEST_RUNNER
-export -f diagnose as_user put_executable user_exec test_runner run_script need_hub hub_api json jsonl machine_id build_version phase field retiring kept_of update_row plant_in_unit wait_until use_feed put_policy learn install_now_request spawn_child watch_install watched_ids start_session keeper_lists child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children keeper_link current_link has_file has_version install_order custody_of apply_record has_ipv6_loopback
+export -f diagnose as_user put_executable user_exec test_runner run_script need_hub hub_api json jsonl machine_id build_version phase field retiring kept_of update_row plant_in_unit wait_until use_feed put_policy learn install_now_request spawn_child watch_install watched_ids start_session keeper_lists child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children keeper_link current_link has_file has_version builds_in install_order custody_of apply_record has_ipv6_loopback
 
 # ---------------------------------------------------------------- a rig's machines
 
@@ -1367,6 +1371,18 @@ handover_on_joined_machine() {
   [[ "$oldend" == "$(endpoint_of "$old")" && -n "$oldpid" ]]
   # Three sessions running on the joined machine's keeper before its update.
   start_before "$jid" "$joinerc" "$rigdir/handover-before.txt" handover-1 handover-2 handover-3
+  # The hub's machine holds what earlier updates left, as uwucloud held 322 runtime folders: builds no install keeps
+  # and no process runs, in runtime/ and versions/, and one runtime folder a live process runs from, as a workspace's
+  # srt host and its ripgrep run from the runtime folder of the build that started them (`sleep` copied in as its
+  # `srt/rg`, run in a unit of its own).
+  local held=0.0.0-held-runtime
+  on_exit 'as_user "$hubc" systemctl --user stop cawco-test-held-runtime.service'
+  as_user "$hubc" sh -c 'd=/home/cawco/.local/share/cawco; for i in $(seq 1 40); do
+    mkdir -p "$d/runtime/0.0.0-stale.$i/pi" "$d/binary/versions/0.0.0-stale.$i" && echo "{}" > "$d/runtime/0.0.0-stale.$i/pi/package.json"
+  done; mkdir -p "$d/runtime/$1/srt" && cp /bin/sleep "$d/runtime/$1/srt/rg"' sh "$held"
+  as_user "$hubc" systemd-run --user --quiet --collect --unit=cawco-test-held-runtime -- "/home/cawco/.local/share/cawco/runtime/$held/srt/rg" 86400
+  wait_until 30 '[[ "$(as_user "$hubc" systemctl --user show -p MainPID --value cawco-test-held-runtime.service)" != 0 ]]'
+  [[ "$(builds_in "$hubc" runtime)" == *"0.0.0-stale.40 "* && "$(builds_in "$hubc" binary/versions)" == *"0.0.0-stale.40 "* ]]
   # The new build reaches the hub's machine. While the helper decides its trial, the build it would restore is still on
   # disk; once the build is confirmed the trial is gone, the keeper has been handed over to it, and the build before
   # stays as one of the three installed builds the machine keeps (the install order names both).
@@ -1379,6 +1395,15 @@ handover_on_joined_machine() {
   wait_until 120 '[[ "$(keeper_link "$hubc")" == "versions/$NEXT" && "$(current_endpoint "$hubc")" == "$(endpoint_of $NEXT)" ]]'
   wait_until 120 '[[ "$(install_order "$hubc")" == *"'"$old"' $NEXT" ]]'
   has_version "$hubc" "$old"
+  # The confirmed update's prune leaves, in versions/ and in runtime/ alike, the build in use and the one before it,
+  # and in runtime/ the folder the live process runs from: every stale build is gone.
+  local runtime_kept versions_kept
+  runtime_kept=$(printf '%s\n' "$old" "$NEXT" "$held" | LC_ALL=C sort | tr '\n' ' ')
+  versions_kept=$(printf '%s\n' "$old" "$NEXT" | LC_ALL=C sort | tr '\n' ' ')
+  wait_until 120 '[[ "$(builds_in "$hubc" runtime)" == "'"$runtime_kept"'" && "$(builds_in "$hubc" binary/versions)" == "'"$versions_kept"'" ]]' \
+    || { echo "ASSERTION FAILED: runtime/ holds $(builds_in "$hubc" runtime)and versions/ $(builds_in "$hubc" binary/versions)"; return 1; }
+  as_user "$hubc" test -x "/home/cawco/.local/share/cawco/runtime/$held/srt/rg"
+  as_user "$hubc" systemctl --user stop cawco-test-held-runtime.service
   # The joined machine looks at what its hub offers now, and installs it with its sessions running.
   learn
   wait_until 120 '[[ "$(field $jid availableVersion)" == $NEXT ]]'
@@ -1455,7 +1480,7 @@ rig_handover() {
   [[ -n $SESSION_CAWCO_ALLOWED ]]
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
-  check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once (carrying only the CAWCO_* its tools read), the old sessions run on and answer through an agent restart, the old keeper is kept while its unit holds a process CawCo did not start (its update state and Update cell name it) and goes once that ends; the hub's machine keeps the build its trial would restore until the trial is confirmed" handover_on_joined_machine 1200
+  check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once (carrying only the CAWCO_* its tools read), the old sessions run on and answer through an agent restart, the old keeper is kept while its unit holds a process CawCo did not start (its update state and Update cell name it) and goes once that ends; the hub's machine keeps the build its trial would restore until the trial is confirmed, and its confirmed update leaves in runtime/ and versions/ only the build in use, the one before it and a runtime folder a live process runs from, of the 40 stale builds it held" handover_on_joined_machine 1200
 }
 
 # ---------------------------------------------------------------- sandbox: a delegate workspace's boundary
