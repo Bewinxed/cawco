@@ -40,8 +40,8 @@
  * password is …") may stand outside the snippet's few; a moment that comes
  * without them is masked harder, every password-shaped word cut
  * (`outOfSentenceRanges`), never withheld. A session the person purged
- * (its transcript deleted) is no hit: the engine leaves it out for an agent
- * (find.ts `FindWhere.unpurged`), though a machine's index still holds its
+ * (its transcript deleted) is no hit: the engine leaves it out of every
+ * find (find.ts `purgedOut`), though a machine's index still holds its
  * words.
  */
 import {
@@ -864,7 +864,6 @@ export const createFindTool = (deps: FindToolDeps) => {
     }
     return {
       where: {
-        unpurged: true as const,
         ...(projectId ? { projectId } : {}),
         ...(machineId ? { machineId } : {}),
         ...(since === undefined ? {} : { since }),

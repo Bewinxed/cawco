@@ -148,12 +148,6 @@ export interface FindWhere {
   projectId?: string;
   /** ms epoch. */
   since?: number;
-  /**
-   * An agent's find: a session the person purged (its transcript deleted,
-   * db `purged_sessions`) is no result, though its machine's index may still
-   * hold its words. The dashboard's Find, the person's, does not ask this.
-   */
-  unpurged?: true;
 }
 
 /** What a page of a find is asked for. */
@@ -221,13 +215,12 @@ const inWindow = (at: number | null, where: FindWhere): boolean =>
   (where.since === undefined || at === null || at >= where.since) &&
   (where.before === undefined || (at !== null && at <= where.before));
 
-/** Whether `where` leaves `result` out as a session the person purged. */
-const purgedOut = (
-  result: FindResult,
-  where: FindWhere,
-  purged: ReadonlySet<string>
-): boolean =>
-  where.unpurged === true &&
+/**
+ * Whether `result` is a session the person purged (its transcript deleted,
+ * db `purged_sessions`): no find answers with it, the person's or an
+ * agent's, though its machine's index may still hold its words.
+ */
+const purgedOut = (result: FindResult, purged: ReadonlySet<string>): boolean =>
   result.kind === "conversation" &&
   result.sessionId !== null &&
   purged.has(purgedKey(result.machine.id, result.sessionId));
@@ -240,7 +233,7 @@ const within = (
 ): FindResult | null => {
   if (
     (where.projectId && result.project?.id !== where.projectId) ||
-    purgedOut(result, where, purged)
+    purgedOut(result, purged)
   ) {
     return null;
   }
@@ -324,7 +317,7 @@ export interface FindDeps {
   needsYou: () => ReadonlySet<string>;
   /** Whether the hub holds `machineId`'s socket now. */
   online: (machineId: string) => boolean;
-  /** Every session the person purged, by {@link purgedKey}: what an agent's find leaves out. */
+  /** Every session the person purged, by {@link purgedKey}: what every find and catalog leaves out. */
   purged: () => ReadonlySet<string>;
   /** Runs the instance change log, which hands the changed ids to {@link Find.instancesChanged}. */
   refreshInstances: () => void;
@@ -648,7 +641,24 @@ export const createFind = (deps: FindDeps) => {
     if (!known && deps.online(machine.machineId)) {
       detach(relist(machine), `find: ${machine.machineId}'s stored sessions`);
     }
-    return known?.sessions ?? [];
+    return unpurged(machine.machineId, known?.sessions ?? []);
+  };
+  /**
+   * A machine's catalog less the sessions the person purged ({@link
+   * purgedOut}): a listing read before the purge, or one whose harness
+   * did not answer since, still names them.
+   */
+  const unpurged = (
+    machineId: string,
+    sessions: readonly NeutralSessionInfo[]
+  ): readonly NeutralSessionInfo[] => {
+    if (sessions.length === 0) {
+      return sessions;
+    }
+    const purged = deps.purged();
+    return sessions.filter(
+      (info) => !purged.has(purgedKey(machineId, info.sessionId))
+    );
   };
   /**
    * Each online machine whose last listing left a harness out, a sentence
@@ -1267,7 +1277,7 @@ export const createFind = (deps: FindDeps) => {
         )
       : [];
     foldTranscripts(found, asked, held, deps.needsYou(), now, []);
-    const purged = where.unpurged ? deps.purged() : new Set<string>();
+    const purged = deps.purged();
     const ranked = [...found.values()]
       .flatMap((result) => within(result, where, purged) ?? [])
       .filter((result) => momentsOf(result).length > 0)
@@ -1310,11 +1320,11 @@ export const createFind = (deps: FindDeps) => {
     const askTranscripts =
       request.transcripts && query.words.join("").length >= 2;
     const { where } = request;
-    const purged = where?.unpurged ? deps.purged() : new Set<string>();
+    const purged = deps.purged();
     const kept = (results: Iterable<FindResult>): FindResult[] =>
-      where
-        ? [...results].flatMap((result) => within(result, where, purged) ?? [])
-        : [...results];
+      [...results].flatMap(
+        (result) => within(result, where ?? {}, purged) ?? []
+      );
     if (!askTranscripts) {
       // No words: what moved last, newest first.
       const order =
@@ -1377,8 +1387,10 @@ export const createFind = (deps: FindDeps) => {
     ]);
     const kept = paging ? pages.get(key) : undefined;
     if (kept && Date.now() - kept.at < PAGE_KEPT_MS) {
+      // A session purged since the first page is on none after it.
+      const purged = deps.purged();
       return {
-        ranked: kept.answer,
+        ranked: kept.answer.filter((result) => !purgedOut(result, purged)),
         coverage: kept.coverage,
         namesMs: 0,
         transcriptsMs: kept.transcriptsMs,
@@ -1403,7 +1415,7 @@ export const createFind = (deps: FindDeps) => {
   return {
     /** One machine's catalog as last read; empty before its first read. */
     catalogOf: (machineId: string): readonly NeutralSessionInfo[] =>
-      storedCatalogs.get(machineId)?.sessions ?? [],
+      unpurged(machineId, storedCatalogs.get(machineId)?.sessions ?? []),
     /** Reads one machine's catalog again (a listing under way is the one waited on). */
     relist: (machineId: string): Promise<void> => {
       const machine = db

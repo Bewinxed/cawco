@@ -1,10 +1,11 @@
 /** Stored decisions own lifetime; connection-local work is only delivery. */
 import { traitsOf } from "@cawco/core/harness/traits";
-import type {
-  InstanceRow,
-  NamedStop,
-  SessionCustody,
-  SessionEndIntent,
+import {
+  deletesSession,
+  type InstanceRow,
+  type NamedStop,
+  type SessionCustody,
+  type SessionEndIntent,
 } from "@cawco/core/protocol";
 import type { DbShape } from "./db";
 
@@ -35,6 +36,11 @@ export const createSessionLifecycle = (ports: {
   deleteFailing: (row: InstanceRow, error: string, attempts: number) => void;
   /** That deletion landed: what was said of it goes. */
   deleteDone: (id: string) => void;
+  /**
+   * The session took a delete as its end: from here nothing the hub serves
+   * shows its conversation, though its row stays until its machine confirms.
+   */
+  deleteBegun: (id: string) => void;
   confirmed: (row: ReturnType<DbShape["sessionOwnership"]>[number]) => void;
   /** The rows this reconcile read (db `ownedToReconcile`): the machine's removed opencode sessions among them are recovered. */
   recoverRemoved: (
@@ -209,10 +215,7 @@ export const createSessionLifecycle = (ports: {
                 }
               : {}),
             discard: row.endIntent === "discard" && row.status !== "discarded",
-            ...(row.endIntent === "delete" ||
-            row.endIntent === "delete-transcript"
-              ? { forget: true as const }
-              : {}),
+            ...(deletesSession(row.endIntent) ? { forget: true as const } : {}),
           });
           if (delivered) {
             issued.set(row.id, { generation: generation(row), sequence });
@@ -263,6 +266,9 @@ export const createSessionLifecycle = (ports: {
     if (row && row.endIntent !== before) {
       delivering.delete(instanceId);
       issued.delete(instanceId);
+      if (deletesSession(row.endIntent)) {
+        ports.deleteBegun(instanceId);
+      }
     }
     if (row) {
       ports.changed(
