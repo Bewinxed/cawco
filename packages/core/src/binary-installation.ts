@@ -11,7 +11,7 @@ import { versionsInUse } from "./live-processes";
 import { hubDbPath } from "./paths/hub";
 import { markerIsLive, ProcessMarkerSchema } from "./process-identity";
 import type { ReleaseManifest } from "./release-manifest";
-import { runtimeVersion } from "./runtime";
+import { runtimeRoot, runtimeVersion } from "./runtime";
 import { readRecord, writeStateFile } from "./state-file";
 import {
   BinaryUpdateStateSchema,
@@ -300,35 +300,38 @@ async function removeFoldersBut(
   );
 }
 
+/** The folders that hold a build each, by its version: its executable's (`versions/`) and its runtime folder's ({@link runtimeRoot}). */
+const buildFolders = (): string[] => [
+  join(binaryRoot(), "versions"),
+  runtimeRoot(),
+];
+
 /**
- * Deletes the builds nothing keeps. In `versions/`, kept: the builds of the
- * install order ({@link readInstallOrder}: the installed one and the two
- * installed before it), what `current` and `keeper` name, what a pending
+ * The builds this machine keeps, in every folder of builds
+ * ({@link buildFolders}) alike: a build's executable and its runtime folder
+ * stay and go together, since a process of `versions/<v>/` reads
+ * `runtime/<v>/` and publishes it again when it is missing. Kept: the builds
+ * of the install order ({@link readInstallOrder}: the installed one and the
+ * two installed before it), what `current` and `keeper` name, what a pending
  * update trial would restore or has swapped in (`trial.json`), the build a
  * live helper is applying (named in `apply.lock`), the build staged for an
  * install no helper has taken up yet ({@link STAGED_PHASES}: a prune while it
  * waits, a retiring keeper's removal among them, left its helper no build to
- * apply), and every build a live process runs or names ({@link versionsInUse}):
- * a unit still on a build the links have left, a retiring keeper and its
- * children, and the hooks baked into their CLI settings. Such a build stays
- * while its process lives: the agent prunes again when it removes a retiring
- * keeper that holds nothing (binary-update.ts `#tendKeepers`), and that prune
+ * apply), and every build a live process runs from or names in either folder
+ * ({@link versionsInUse}): a unit still on a build the links have left, a
+ * retiring keeper and its sessions, the hooks baked into their CLI settings,
+ * and a workspace's srt host and its ripgrep, which run on from the runtime
+ * folder of the build that started them. Such a build stays while its
+ * process lives: the agent prunes again when it removes a retiring keeper
+ * that holds nothing (binary-update.ts `#tendKeepers`), and that prune
  * deletes it.
- *
- * In the hub's archive cache ({@link hubReleasesDir}), which no process runs
- * from (the hub reads an archive only to serve it, and fetches one it lacks
- * again), kept: the install order, what `current` names, and the update
- * state's `availableVersion` (the build this machine is fetching or holds
- * staged through the hub). The caller never supplies a keep-list.
  */
-export async function prune(): Promise<void> {
-  const state = await readUpdateState();
+async function keptBuilds(
+  state: BinaryUpdateState | undefined,
+  installed: readonly (string | undefined)[]
+): Promise<Set<string>> {
   const trial = await readTrial();
-  const installed = [
-    ...(await readInstallOrder()),
-    await linkedVersion(currentDirectory()),
-  ];
-  const builds = new Set(
+  return new Set(
     [
       ...installed,
       await linkedVersion(keeperPath()),
@@ -338,16 +341,38 @@ export async function prune(): Promise<void> {
       state && STAGED_PHASES.has(state.phase)
         ? state.availableVersion
         : undefined,
-      ...(await versionsInUse(binaryRoot())),
+      ...(await versionsInUse(buildFolders())),
     ].filter((version): version is string => Boolean(version))
   );
+}
+
+/**
+ * Deletes the builds nothing keeps. In `versions/` and the runtime folders'
+ * root, every build but those {@link keptBuilds} names: one rule for both, so
+ * a machine that held hundreds of runtime folders is cleared by its next
+ * prune (at a confirmed or rolled-back trial, a keeper handed over alone, a
+ * retiring keeper removed).
+ *
+ * In the hub's archive cache ({@link hubReleasesDir}), which no process runs
+ * from (the hub reads an archive only to serve it, and fetches one it lacks
+ * again), kept: the install order, what `current` names, and the update
+ * state's `availableVersion` (the build this machine is fetching or holds
+ * staged through the hub). The caller never supplies a keep-list.
+ */
+export async function prune(): Promise<void> {
+  const state = await readUpdateState();
+  const installed = [
+    ...(await readInstallOrder()),
+    await linkedVersion(currentDirectory()),
+  ];
+  const builds = await keptBuilds(state, installed);
   const archives = new Set(
     [...installed, state?.availableVersion].filter(
       (version): version is string => Boolean(version)
     )
   );
   await Promise.all([
-    removeFoldersBut(join(binaryRoot(), "versions"), builds),
+    ...buildFolders().map((folder) => removeFoldersBut(folder, builds)),
     removeFoldersBut(hubReleasesDir(), archives),
   ]);
 }

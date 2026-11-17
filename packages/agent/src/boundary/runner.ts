@@ -352,7 +352,8 @@ export const ripgrep = (): string =>
  * every boundary's `settings` part moved at each install with its policy
  * unchanged, and each was handed over for nothing (workspace 9eb7bb73,
  * 2026-10-27 17:57 and 18:31). The boundary that runs on keeps the folder
- * of its build, which no install takes away.
+ * of its build: its srt host's command line names it, and the prune keeps
+ * every build a live process names (core binary-installation.ts `prune`).
  */
 export const ripgrepForm = (): string =>
   standalone ? `srt/rg ${publishedHash("srt/rg") ?? runtimeVersion}` : rgPath;
