@@ -60,6 +60,7 @@ import {
   hookProblem,
   hookWorkspaceNote,
 } from "@cawco/core/hooks";
+import type { OwnTools } from "@cawco/core/own-tools";
 import {
   claudeHomeJson,
   claudeSkillsDir,
@@ -329,6 +330,12 @@ export interface ClaudeFleetSidecar {
    */
   memoryDocs: Record<string, string>;
   /**
+   * Whether sessions use CawCo's delegates and plan list or their agent's
+   * own (core own-tools.ts), synced with {@link deniedTools}. None on a
+   * sidecar a version before the switches wrote: CawCo's own way on both.
+   */
+  ownTools?: OwnTools;
+  /**
    * A project's MCP servers CawCo placed into a folder's map in
    * `.claude.json`, by `<name>@<place id>`, from before sessions took them
    * through the SDK: taken back out by the same cleanup as `mcp`. Absent
@@ -466,6 +473,21 @@ const scriptPathOf = (record: ManagedHook): string | undefined =>
  * What cawco put here last time; unreadable is the same as never written,
  * and a machine that never synced manages nothing.
  */
+/**
+ * The fleet's policy as the sidecar holds it, each field only where it
+ * does: the denied tools and the switches (none until the first sync: the
+ * machine has not heard them), and what earlier versions wrote, kept through
+ * every write of the sidecar (without it the next converge reads the machine
+ * as an earlier version's again).
+ */
+const policyFieldsOf = (
+  stored: Partial<ClaudeFleetSidecar> | undefined
+): Pick<ClaudeFleetSidecar, "deniedTools" | "deniedWritten" | "ownTools"> => ({
+  ...(stored?.deniedTools ? { deniedTools: stored.deniedTools } : {}),
+  ...(stored?.ownTools ? { ownTools: stored.ownTools } : {}),
+  ...(stored?.deniedWritten ? { deniedWritten: stored.deniedWritten } : {}),
+});
+
 const readSidecar = async (): Promise<ClaudeFleetSidecar> => {
   const stored = await readOwnJson(
     SIDECAR,
@@ -481,11 +503,7 @@ const readSidecar = async (): Promise<ClaudeFleetSidecar> => {
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
     memoryDocs: stored?.memoryDocs ?? {},
-    // None until the first sync: the machine has not heard the list.
-    ...(stored?.deniedTools ? { deniedTools: stored.deniedTools } : {}),
-    // Kept through every write of the sidecar: without it the next converge
-    // reads the machine as an earlier version's again.
-    ...(stored?.deniedWritten ? { deniedWritten: stored.deniedWritten } : {}),
+    ...policyFieldsOf(stored),
     hooks: stored?.hooks ?? {},
     harnessConfigFailed: stored?.harnessConfigFailed ?? {},
     ...(stored?.placedMcp ? { placedMcp: stored.placedMcp } : {}),
@@ -3669,7 +3687,10 @@ const converge = async (
         ...now,
         ...sidecar,
         ...(denials.kind === "known"
-          ? { deniedTools: [...denials.denials.deniedTools] }
+          ? {
+              deniedTools: [...denials.denials.deniedTools],
+              ownTools: denials.denials.ownTools,
+            }
           : {}),
       } satisfies SidecarFields);
     });

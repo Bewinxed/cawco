@@ -13007,6 +13007,20 @@
       "fullSend"
     ]
   },
+  "supervisor_config.helpers": {
+    "type": "string",
+    "enum": [
+      "delegates",
+      "subagents"
+    ]
+  },
+  "supervisor_config.step_lists": {
+    "type": "string",
+    "enum": [
+      "cawco",
+      "agent"
+    ]
+  },
   "task_links.author": {
     "type": "object",
     "properties": {

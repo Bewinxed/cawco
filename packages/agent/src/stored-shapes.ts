@@ -19,6 +19,7 @@ import {
   HookMatchTestShape,
   MediaPathShape,
   ModelInfoSchema,
+  OwnToolsShape,
 } from "@cawco/core/stored-shapes";
 import { declared } from "@cawco/core/stored-types";
 import { z } from "zod";
@@ -137,6 +138,7 @@ const ClaudeFleetSidecarShape = declared(
     mcpServers: z.array(z.string()),
     memory: z.string().optional(),
     memoryDocs: z.record(z.string(), z.string()),
+    ownTools: OwnToolsShape.optional(),
     placedMcp: z.record(z.string(), PlacedRecordShape).optional(),
     placedMemory: z.record(
       z.string(),

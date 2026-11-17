@@ -442,10 +442,13 @@
       onlater={none}
       onnewproject={none}
       onrelay={none}
+      onchoose={none}
       onsignin={none}
       steps={{
         machine: { state: "done", name: "obelisk" },
         harness: { state: "todo" },
+        ownTools: { helpers: null, stepLists: null },
+        ownToolsFaults: { helpers: null, stepLists: null },
         relay: "todo",
         project: false,
       }}

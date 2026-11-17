@@ -149,6 +149,8 @@ typeOverrides:
     NeutralUserMessageRole: OpenEnums.NeutralUserMessageRole
     OnCap: OpenEnums.OnCap
     OwedMoveWait: OpenEnums.OwedMoveWait
+    OwnToolsChosenHelpers: OpenEnums.OwnToolsChosenHelpers
+    OwnToolsChosenStepLists: OpenEnums.OwnToolsChosenStepLists
     PageAnchorFramework: OpenEnums.PageAnchorFramework
     PageAnchorScheme: OpenEnums.PageAnchorScheme
     PasskeyRelayStatus: OpenEnums.PasskeyRelayStatus

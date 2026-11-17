@@ -671,6 +671,7 @@ import { mcpRoutes } from "./routes/mcp";
 import { modelAccessRoutes } from "./routes/model-access";
 import { modelWindowRoutes } from "./routes/model-windows";
 import { moveRoutes } from "./routes/moves";
+import { ownToolRoutes } from "./routes/own-tools";
 import { pendingRoutes } from "./routes/pending";
 import { projectRoutes } from "./routes/projects";
 import { pulseRoutes } from "./routes/pulses";
@@ -12307,11 +12308,16 @@ export const createServer = (
     fleetMcpRoutes(ctx),
     ruleRoutes(ctx),
   ]);
+  // The fleet's settings, a statement of their own for its depth allowance.
+  const settingRoutes = new Elysia().use([
+    imageSettingRoutes(ctx),
+    ownToolRoutes(ctx),
+  ]);
   const hubRoutes = hubRoutesPart1.use([
     trashRoutes(ctx),
     ruleActivityRoutes(ctx),
     modelAccessRoutes(ctx),
-    imageSettingRoutes(ctx),
+    settingRoutes,
     fleetWatchRoutes(ctx),
     fleetMarketplaceRoutes(ctx),
     fleetPluginRoutes(ctx),

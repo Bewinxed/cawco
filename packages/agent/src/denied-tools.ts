@@ -5,12 +5,12 @@
  * (core paths/fleet.ts `claudeFleetSidecarFile`, in CawCo's data dir) caches the last-synced value so a machine
  * that loses its hub still has a policy.
  *
- * Every session is denied its harness's own to-do list and plan mode
- * besides (core `OWN_LIST_DENIED`): a session's plan is CawCo's list, always;
- * its own subagents (core `SUBAGENTS_DENIED`): work goes to CawCo's
- * delegates, always; and its own question tool (core
- * `QUESTION_TOOL_DENIED`), at spawn alone.
- * Those names are never stored in the baseline; they are added here.
+ * Beside the baseline, a session is denied its harness's own to-do list and
+ * plan mode (core `OWN_LIST_DENIED`) while the fleet's step lists are
+ * CawCo's, its own subagents (core `SUBAGENTS_DENIED`) while its helpers are
+ * CawCo's delegates (core own-tools.ts, the `policy` item's `ownTools`), and
+ * its own question tool (core `QUESTION_TOOL_DENIED`) always, at spawn
+ * alone. Those names are never stored in the baseline; they are added here.
  *
  * A machine that has not heard the list, or cannot read the sidecar, spawns
  * nothing: no compiled list stands in for the fleet's.
@@ -23,8 +23,8 @@
  * list at a spawn is a fault, said at once.
  *
  * The spawn paths (`claude.ts`, `opencode.ts`, `pi.ts`) read them through
- * {@link sessionFleetDenials}: the baseline, the own-list set, the subagents
- * and the question tool, carried in each session's own start options. They
+ * {@link sessionFleetDenials}: the baseline, the own-list set and the
+ * subagents as the fleet's switches say, and the question tool, carried in each session's own start options. They
  * are the only place the denials apply. Nothing CawCo denies is written into
  * the person's own settings: the `claude` they start themselves keeps every
  * tool their settings give it.
@@ -39,6 +39,11 @@ import {
   QUESTION_TOOL_DENIED,
   SUBAGENTS_DENIED,
 } from "@cawco/core/delegate-types";
+import {
+  OWN_TOOLS_DEFAULT,
+  type OwnTools,
+  OwnToolsSchema,
+} from "@cawco/core/own-tools";
 import { userLayerPath } from "@cawco/core/paths/claude";
 import { claudeFleetSidecarFile } from "@cawco/core/paths/fleet";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -69,9 +74,11 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined => {
 };
 
 /** The fleet's denials as this machine last heard them. */
-export interface FleetDenials {
+interface FleetDenials {
   /** The baseline. */
   deniedTools: readonly string[];
+  /** Whether sessions use CawCo's delegates and plan list or their agent's own. */
+  ownTools: OwnTools;
 }
 
 /**
@@ -128,9 +135,21 @@ export const readFleetDenials = async (): Promise<FleetDenialsRead> => {
       reason: `${SIDECAR}: deniedTools is not a list of tool names`,
     };
   }
+  // A sidecar a version before the switches wrote holds none: CawCo's own
+  // way on both, as that version spawned.
+  const own =
+    sidecar.ownTools === undefined
+      ? { success: true as const, data: OWN_TOOLS_DEFAULT }
+      : OwnToolsSchema.safeParse(sidecar.ownTools);
+  if (!own.success) {
+    return {
+      kind: "unreadable",
+      reason: `${SIDECAR}: ownTools is not the fleet's helpers and step lists`,
+    };
+  }
   return {
     kind: "known",
-    denials: { deniedTools: list },
+    denials: { deniedTools: list, ownTools: own.data },
   };
 };
 
@@ -163,7 +182,8 @@ export const sidecarTurn = <T>(work: () => Promise<T>): Promise<T> => {
  * refuses with them too.
  */
 export const applyFleetDenials = (
-  deniedTools: readonly string[]
+  deniedTools: readonly string[],
+  ownTools: OwnTools
 ): Promise<DeniedCleanup> => {
   const write = (async () => {
     try {
@@ -182,6 +202,7 @@ export const applyFleetDenials = (
             {
               ...stored,
               deniedTools: [...deniedTools],
+              ownTools,
               ...(written.kind === "known"
                 ? { deniedWritten: [...written.names] }
                 : {}),
@@ -249,19 +270,37 @@ const resolvedFleetDenials = async (): Promise<FleetDenials> => {
 };
 
 /**
- * What the fleet denies a session being spawned: the baseline, the own-list
- * set, the subagents, and the harness's own question tool (core
- * `QUESTION_TOOL_DENIED`: a session asks the person through CawCo's `ask`).
- * The spawn's own `denyTools` union on top, in each adapter.
+ * What the fleet denies a session being spawned: the baseline; the own-list
+ * set while the fleet's step lists are CawCo's; the subagents while its
+ * helpers are CawCo's delegates; and the harness's own question tool always
+ * (core `QUESTION_TOOL_DENIED`: a session asks the person through CawCo's
+ * `ask`). The spawn's own `denyTools` union on top, in each adapter, so a
+ * delegate type that denies the subagents keeps them denied either way.
  */
-export const sessionFleetDenials = async (): Promise<string[]> => [
-  ...new Set([
-    ...(await resolvedFleetDenials()).deniedTools,
-    ...OWN_LIST_DENIED,
-    ...SUBAGENTS_DENIED,
-    ...QUESTION_TOOL_DENIED,
-  ]),
-];
+export const sessionFleetDenials = async (): Promise<string[]> => {
+  const { deniedTools, ownTools } = await resolvedFleetDenials();
+  return [
+    ...new Set([
+      ...deniedTools,
+      ...(ownTools.stepLists === "cawco" ? OWN_LIST_DENIED : []),
+      ...(ownTools.helpers === "delegates" ? SUBAGENTS_DENIED : []),
+      ...QUESTION_TOOL_DENIED,
+    ]),
+  ];
+};
+
+/**
+ * Whether sessions use CawCo's delegates and plan list or their agent's own,
+ * as this machine last heard the fleet's switches (core own-tools.ts): what
+ * a harness reads that sets them per server rather than per session
+ * (OpenCode's plan agent). CawCo's own way on both while it has heard none
+ * or cannot read them; a spawn then refuses on its own
+ * ({@link sessionFleetDenials}).
+ */
+export const fleetOwnTools = async (): Promise<OwnTools> => {
+  const read = await readFleetDenials();
+  return read.kind === "known" ? read.denials.ownTools : OWN_TOOLS_DEFAULT;
+};
 
 const isNameList = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((tool) => typeof tool === "string");

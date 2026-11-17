@@ -20,6 +20,7 @@ import type {
   MachineFleetConfig,
 } from "./fleet";
 import type { FleetHarnessConfig } from "./harness-config";
+import { OWN_TOOLS_DEFAULT, OwnToolsSchema } from "./own-tools";
 import {
   FleetHarnessConfigSchema,
   FleetHookSchema,
@@ -125,7 +126,10 @@ export const noProjectRows = (): FleetProjectRows => ({
 /** The item ids and values of a machine's config, in a stable order. */
 export const fleetItemsOf = (config: MachineFleetConfig): FleetItems => {
   const items: FleetItems = new Map();
-  items.set("policy", { deniedTools: config.deniedTools });
+  items.set("policy", {
+    deniedTools: config.deniedTools,
+    ownTools: config.ownTools,
+  });
   for (const row of config.mcp) {
     items.set(`mcp:${row.name}`, row);
   }
@@ -266,7 +270,11 @@ const rowsOf = (
  * newer hub sends).
  */
 const ITEMS = {
-  policy: z.object({ deniedTools: z.array(z.string()) }),
+  // A hub before the switches sends no `ownTools`: CawCo's own way on both.
+  policy: z.object({
+    deniedTools: z.array(z.string()),
+    ownTools: OwnToolsSchema.default(OWN_TOOLS_DEFAULT),
+  }),
   mcp: FleetMcpServerSchema,
   skill: FleetSkillPayloadSchema,
   marketplace: FleetMarketplaceSchema,
@@ -302,6 +310,7 @@ const itemAs = <T>(id: string, schema: z.ZodType<T>, value: unknown): T => {
 export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
   const config: MachineFleetConfig = {
     deniedTools: [],
+    ownTools: OWN_TOOLS_DEFAULT,
     harnessConfig: [],
     hooks: [],
     marketplaces: [],
@@ -320,6 +329,9 @@ export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
     switch (kind) {
       case "policy":
         config.deniedTools = itemAs(id, ITEMS.policy, value).deniedTools;
+        // Parsed for its default: held whole, a hub before the switches
+        // sent none.
+        config.ownTools = ITEMS.policy.parse(value).ownTools;
         break;
       case "mcp":
         config.mcp.push(itemAs(id, ITEMS.mcp, value));

@@ -6183,6 +6183,82 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/OwnToolsChosenHelpers`.
+    public enum OwnToolsChosenHelpers: OpenEnum {
+        case delegates
+        case subagents
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "delegates": self = .delegates
+            case "subagents": self = .subagents
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .delegates: "delegates"
+            case .subagents: "subagents"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.delegates, .subagents]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/OwnToolsChosenStepLists`.
+    public enum OwnToolsChosenStepLists: OpenEnum {
+        case agent
+        case cawco
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "agent": self = .agent
+            case "cawco": self = .cawco
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .agent: "agent"
+            case .cawco: "cawco"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.agent, .cawco]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/PageAnchorFramework`.
     public enum PageAnchorFramework: OpenEnum {
         case codeInspector

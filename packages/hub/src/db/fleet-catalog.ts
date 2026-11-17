@@ -28,6 +28,7 @@ import {
   type HookVersion,
   hookEventNamed,
 } from "@cawco/core/hooks";
+import { ownToolsOf } from "@cawco/core/own-tools";
 import { fleetFilesWords } from "@cawco/core/words/fleet-files";
 import { and, asc, desc, eq, isNull, notInArray, type SQL } from "drizzle-orm";
 import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
@@ -824,7 +825,7 @@ export interface FleetCatalogDb {
 }
 
 export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
-  const { db, areasStore, deniedToolNames } = core;
+  const { db, areasStore, deniedToolNames, supervisorChoices } = core;
 
   /** The fleet's tool denials, in the order they were added. */
   const listHarnessConfig = (kind?: HarnessConfigKind): FleetHarnessConfig[] =>
@@ -1347,6 +1348,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
         harnessConfig: listHarnessConfig().filter((row) => row.enabled),
         // Always sent: a machine spawns nothing until it has heard it.
         deniedTools: deniedToolNames(),
+        ownTools: ownToolsOf(supervisorChoices()),
       };
     },
     putMarketplace: ({ name, source }) => {

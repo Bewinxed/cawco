@@ -86,6 +86,7 @@ import {
   takeWatchNotices,
 } from "./stores/needs.svelte";
 import { readProjectOffers, takeProjectOffer } from "./stores/offers.svelte";
+import { readOwnTools } from "./stores/own-tools.svelte";
 import { takePasskeyQr } from "./stores/passkey-qr.svelte";
 import { takePasskeyStatus } from "./stores/passkey-relay.svelte";
 import { plansState } from "./stores/plans.svelte";
@@ -224,6 +225,9 @@ async function refresh(): Promise<boolean> {
   // Whether CawCo updates a copy of a CLI it doesn't run by itself: a
   // harness block's press reads it.
   readToolUpdates();
+  // The fleet's helpers and step lists: the first run asks each one no
+  // person has chosen yet, and Configure shows them.
+  readOwnTools();
   // The person's presence: the rail's dot, and Needs you's row for this browser.
   readPerson().catch(() => undefined);
   // HTTPS on the tailnet name: Needs you shows its step while one stands.

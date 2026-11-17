@@ -29,6 +29,7 @@ import { HARNESS_CONFIG_KINDS } from "@cawco/core/harness-config";
 import { IMAGE_PROVIDERS } from "@cawco/core/image-generation";
 import { type CheckoutMove, LANDS_MODES } from "@cawco/core/injected";
 import type { MachinePath } from "@cawco/core/machine-path";
+import { HELPERS, STEP_LISTS } from "@cawco/core/own-tools";
 import {
   PLAN_EDIT_KINDS,
   PLAN_STEP_PRIORITIES,
@@ -4079,6 +4080,18 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
    * person last chose for its harness on its machine.
    */
   cawMode: storedEnum(z.enum(PERMISSION_MODES))("caw_mode"),
+  /**
+   * Whether sessions use CawCo's delegates or their agent's own subagents
+   * (core own-tools.ts `Helpers`), sent to every machine with the denied
+   * tools. Null until a person chooses, so the first run asks; a session
+   * then starts on CawCo's delegates.
+   */
+  helpers: storedEnum(z.enum(HELPERS))("helpers"),
+  /**
+   * Whether sessions keep CawCo's plan list or their agent's own to-do list
+   * and plan mode (core own-tools.ts `StepLists`), as {@link helpers} is.
+   */
+  stepLists: storedEnum(z.enum(STEP_LISTS))("step_lists"),
   updatedAt: stampedNow("updated_at"),
 });
 

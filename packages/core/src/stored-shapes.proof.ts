@@ -262,6 +262,11 @@ import type {
   MachineState as MachineStateType,
   PresenceClient as PresenceClientType,
 } from "./notifications";
+import type {
+  Helpers as HelpersType,
+  OwnTools as OwnToolsType,
+  StepLists as StepListsType,
+} from "./own-tools";
 import type { PairingOffAnswer as PairingOffAnswerType } from "./paths/hub";
 import type {
   PermissionPresentation as PermissionPresentationType,
@@ -572,6 +577,7 @@ import type {
   HeartbeatAckPayloadOutput,
   HeldAccountOutput,
   HeldReasonOutput,
+  HelpersOutput,
   HomeCredentialOutput,
   HomeLoginMovedOutput,
   HomeLoginOutput,
@@ -664,6 +670,7 @@ import type {
   OpenCodeGoLimitsOutput,
   OpencodeProviderOutput,
   OwedMoveWaitOutput,
+  OwnToolsOutput,
   PageErrorOutput,
   PageReportOutput,
   PageSectionOutput,
@@ -778,6 +785,7 @@ import type {
   StarterOutcomeOutput,
   StartingSetOutput,
   StatusOptionOutput,
+  StepListsOutput,
   StopPayloadOutput,
   StopRequestOutput,
   StoryOpOutput,
@@ -996,6 +1004,9 @@ prove<
     Same<FleetItemStateOutput, FleetItemStateType>,
     Same<HookEventOutput, HookEventType>,
     Same<FleetScopeOutput, FleetScopeType>,
+    Same<HelpersOutput, HelpersType>,
+    Same<StepListsOutput, StepListsType>,
+    Same<OwnToolsOutput, OwnToolsType>,
     Same<ClaudeModelUsageOutput, ClaudeModelUsageType>,
     Same<CommandResultOutput, CommandResultType>,
     Same<McpStdioServerConfigOutput, McpStdioServerConfigType>,

@@ -1364,7 +1364,13 @@
       // the dev benches in the shell.
       case "motion":
       case "dev":
-        // Command-line tools' bench stands for Configure, whose bar names nothing.
+        // Command-line tools' bench stands for Configure, whose bar names
+        // nothing; Helpers & step lists' for Configure or the fleet board.
+        if (id === "own-tools") {
+          return page.url.searchParams.get("place") === "settings"
+            ? ""
+            : "Fleet";
+        }
         return id === "tool-updates" ? "" : "Bench";
       default:
         // Every route under the app's layout has its name above, and a path

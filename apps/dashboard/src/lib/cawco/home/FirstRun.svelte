@@ -4,8 +4,9 @@
    * row, in the shape of the tailnet HTTPS row (NeedsCard `tailnet`): one
    * line and its meta, then every step in order, each with its control and
    * its tick as the hub finds it done. A machine online, a harness signed in
-   * on it, the stream relay (Set up, or Later, which ticks it as answered),
-   * the first project. A step shows its control only once the step before
+   * on it, the fleet's helpers and step lists (core own-tools.ts: each a
+   * pick in place, the recommended side keeping CawCo's way), the stream
+   * relay (Set up, or Later, which ticks it as answered), the first project. A step shows its control only once the step before
    * it that it needs is done (the relay and the project need a machine; the
    * project needs a harness), and the one step to do next takes the coral.
    *
@@ -19,7 +20,12 @@
    * Its state arrives as props (FirstRun.stories.ts): the board reads it
    * from the hub's machines, accounts and projects, and the relay's answer.
    */
+  import type { OwnToolsChosen } from "@cawco/core/own-tools";
   import { firstRunWords } from "@cawco/core/words/onboarding";
+  import { ownToolsWords } from "@cawco/core/words/own-tools";
+  import type { Snippet } from "svelte";
+  import ToolOptions from "#lib/cawco/config/own-tools/ToolOptions.svelte";
+  import type { OwnToolPick } from "#lib/cawco/stores/own-tools.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconFolder } from "#lib/icons.js";
   import Caw from "./Caw.svelte";
@@ -33,6 +39,10 @@
       | { state: "done"; harness: string };
     /** The first machine: none yet, joined and offline, or online. */
     machine: { state: "todo" } | { state: "offline" | "done"; name: string };
+    /** The fleet's helpers and step lists, each null while no person has chosen it. */
+    ownTools: OwnToolsChosen;
+    /** Why a pick of either didn't hold, or why neither could be read, in words. */
+    ownToolsFaults: { helpers: string | null; stepLists: string | null };
     /** The first project exists. */
     project: boolean;
     /** The stream relay: not answered, put off (Later), or set up. */
@@ -47,6 +57,7 @@
     onrelay,
     onlater,
     onnewproject,
+    onchoose,
   }: {
     steps: FirstRunState;
     /** The first machine has just registered: Caw arrives, saying where. */
@@ -56,6 +67,8 @@
     onrelay: () => void;
     onlater: () => void;
     onnewproject: () => void;
+    /** A side of the helpers' or the step lists' switch picked, saved at once. */
+    onchoose: (pick: OwnToolPick) => void;
   } = $props();
 
   const machineName = $derived(
@@ -67,11 +80,47 @@
   interface Step {
     /** Its control, once what it needs is done. */
     act?: { label: string; run: (anchor: HTMLElement) => void; later?: true };
+    body?: Snippet;
     done: boolean;
-    id: "machine" | "harness" | "relay" | "project";
+    id: string;
     label: string;
     note?: string;
   }
+
+  /**
+   * The fleet's two switches as steps: each asked in place while no person
+   * has chosen it, then its pick, with where it changes.
+   */
+  const ownToolSteps = (): Step[] => {
+    const { helpers, stepLists } = steps.ownTools;
+    const faults = steps.ownToolsFaults;
+    return [
+      {
+        id: "helpers",
+        done: helpers !== null,
+        label:
+          helpers === null
+            ? ownToolsWords.stepHelpers
+            : ownToolsWords.stepHelpersDone(helpers),
+        note:
+          faults.helpers ??
+          (helpers === null ? undefined : ownToolsWords.stepNote),
+        body: helpers === null ? helpersPick : undefined,
+      },
+      {
+        id: "step-lists",
+        done: stepLists !== null,
+        label:
+          stepLists === null
+            ? ownToolsWords.stepStepLists
+            : ownToolsWords.stepStepListsDone(stepLists),
+        note:
+          faults.stepLists ??
+          (stepLists === null ? undefined : ownToolsWords.stepNote),
+        body: stepLists === null ? stepListsPick : undefined,
+      },
+    ];
+  };
 
   const list = $derived.by<Step[]>(() => {
     const { harness } = steps;
@@ -106,6 +155,7 @@
             ? { label: firstRunWords.signIn, run: () => onsignin() }
             : undefined,
       },
+      ...ownToolSteps(),
       {
         id: "relay",
         done: steps.relay !== "todo",
@@ -137,6 +187,26 @@
   /** The one step to do next: its control takes the coral. */
   const next = $derived(list.find((step) => !step.done && step.act)?.id);
 </script>
+
+{#snippet helpersPick()}
+  <ToolOptions
+    label={ownToolsWords.stepHelpers}
+    onpick={(value) => onchoose({ key: "helpers", value })}
+    options={ownToolsWords.helpers.options}
+    recommended="delegates"
+    value={steps.ownTools.helpers}
+  />
+{/snippet}
+
+{#snippet stepListsPick()}
+  <ToolOptions
+    label={ownToolsWords.stepStepLists}
+    onpick={(value) => onchoose({ key: "stepLists", value })}
+    options={ownToolsWords.stepLists.options}
+    recommended="cawco"
+    value={steps.ownTools.stepLists}
+  />
+{/snippet}
 
 <section
   aria-label={firstRunWords.title}
@@ -187,16 +257,25 @@
           n={index + 1}
           step={one.id}
         >
-          {#if one.note && (!one.done || one.id === "relay")}
+          <!-- A done step's note goes, but the relay's answer and where the
+               two switches change stay. -->
+          {#if one.note && (!one.done || one.id === "relay" || one.id === "helpers" || one.id === "step-lists")}
             <span
               data-slot="step-note"
               class={[
                 "col-start-2 min-w-0 type-meta wrap-anywhere",
-                one.id === "harness" && steps.harness.state === "failed"
+                (one.id === "harness" && steps.harness.state === "failed") ||
+                (one.id === "helpers" && steps.ownToolsFaults.helpers) ||
+                (one.id === "step-lists" && steps.ownToolsFaults.stepLists)
                   ? "text-status-fail-ink"
                   : "text-ink-muted",
               ]}>{one.note}</span
             >
+          {/if}
+          {#if one.body}
+            <div class="col-start-2 mt-space-1 min-w-0">
+              {@render one.body()}
+            </div>
           {/if}
           {#if one.act}
             {@const act = one.act}
