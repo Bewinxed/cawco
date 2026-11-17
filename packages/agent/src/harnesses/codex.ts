@@ -265,8 +265,17 @@ class CodexHarness implements Harness<"codex"> {
       : undefined;
   }
 
-  listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
-    return listCodexThreads(dir);
+  /**
+   * Its threads are read through its own app-server, so a machine without
+   * Codex has none to list: none, never a listing that failed (which the
+   * hub says beside every find). A Codex the gate refuses for its version
+   * is there and fails as it is.
+   */
+  async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
+    if ((await toolGate(CODEX_SPEC)).refused === "not-installed") {
+      return [];
+    }
+    return await listCodexThreads(dir);
   }
 
   getSessionInfo(sessionKey: string): Promise<NeutralSessionInfo | null> {
