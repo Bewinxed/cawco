@@ -96,7 +96,10 @@ import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { contactWords } from "@cawco/core/words/contact";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
-import { opencodeSignInFaultWords } from "@cawco/core/words/harness-lines";
+import {
+  opencodeMoveUnconfirmedSentence,
+  opencodeSignInFaultWords,
+} from "@cawco/core/words/harness-lines";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type {
   IntegrationListOutput,
@@ -1317,6 +1320,41 @@ const sessionToInfo = (
   cwd: session.directory,
   ...(tag ? { tag } : {}),
 });
+
+/**
+ * The move of `sessionId` from `from`'s server to `to`'s confirmed
+ * ({@link OpencodeHarness.#bringHome}): `target`'s export of each session in
+ * `sent` holds as many messages as the export that was sent (both are
+ * OpenCode's settled messages, the export's own filter). A copy short of it
+ * throws, saying so, before the homes record or the source is touched.
+ */
+const confirmMoved = async (
+  target: OpencodeClient,
+  sent: readonly Awaited<ReturnType<OpencodeClient["session"]["export"]>>[],
+  sessionId: string,
+  from: string,
+  to: string
+): Promise<void> => {
+  for (const one of sent) {
+    const kept = answerOf(
+      await askOpencode((options) =>
+        target.session.export({ sessionID: one.info.id }, options)
+      ),
+      `the export of ${one.info.id} from ${homeName(to)} server`
+    );
+    if (kept.messages.length !== one.messages.length) {
+      console.warn(
+        `[opencode] session ${sessionId}: not moved from ${homeName(from)} server to ${homeName(to)}: ${one.info.id} read back there with ${kept.messages.length} of its ${one.messages.length} message(s); the source keeps it`
+      );
+      throw new Error(
+        opencodeMoveUnconfirmedSentence(
+          kept.messages.length,
+          one.messages.length
+        )
+      );
+    }
+  }
+};
 
 /** Every page of a server's sessions, root sessions only, filtered as `query` says. */
 const allSessions = async (
@@ -5792,7 +5830,9 @@ class OpencodeHarness implements Harness<"opencode"> {
    * run started on the host for it, `enterView`), imported into the target
    * at its own location (2.0's import keeps every id and ignores the
    * location the session carries, settled #7), its subagent sessions after
-   * it, then removed from the server it left. Undo follows it between the
+   * it, then removed from the server it left once the target's export of
+   * each holds as many messages as the one sent; a copy short of that
+   * leaves the source and the homes record as they were. Undo follows it between the
    * person's folders' servers, which keep their snapshots in the machine's
    * one dir; a view's keeps its own (`prepareHome`).
    */
@@ -5865,6 +5905,7 @@ class OpencodeHarness implements Harness<"opencode"> {
           throw error;
         }
       }
+      await confirmMoved(target, exported, sessionId, home, to);
       await setHome(
         exported.map((one) => one.info.id),
         to
