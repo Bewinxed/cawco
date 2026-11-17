@@ -61,8 +61,6 @@ interface HarnessTraitsBase {
   readonly custody: "keeper" | "server";
   /** Whether a machine's listing names every conversation it holds, so one it doesn't name is gone; a filtered listing proves nothing by leaving one out. */
   readonly listsAllConversations: boolean;
-  /** Whether a live session can reload its skills and reinitialize in place. */
-  readonly liveSkillReload: boolean;
   /**
    * Where a harness's model list comes from. `account`: read per account by
    * the hub. `machine`: the machine's own report.
@@ -207,7 +205,6 @@ const CLAUDE_TRAITS = {
     "toggleMcpServer",
     "getTaskOutput",
   ],
-  liveSkillReload: true,
 } as const satisfies HarnessTraits;
 
 const OPENCODE_TRAITS = {
@@ -251,7 +248,6 @@ const OPENCODE_TRAITS = {
     "fleetMcpChanged",
     "fleetMcpHeal",
   ],
-  liveSkillReload: false,
 } as const satisfies HarnessTraits;
 
 const PI_TRAITS = {
@@ -293,7 +289,6 @@ const PI_TRAITS = {
     "toggleMcpServer",
     "getContextUsage",
   ],
-  liveSkillReload: false,
   readsThroughCli: false,
 } as const satisfies HarnessTraits;
 
@@ -335,7 +330,6 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   queuesSends: false, // nothing claimed
   promptCacheMaxMs: null, // nothing claimed
   boundaryBeforeCompactionFailure: false, // nothing claimed
-  liveSkillReload: false, // nothing claimed
   sessionControls: [], // nothing claimed
 };
 

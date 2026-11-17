@@ -17,7 +17,7 @@ import {
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
 import { fleetItemsOf } from "@cawco/core/fleet-items";
-import { traitsOf } from "@cawco/core/harness/traits";
+import { answersControl } from "@cawco/core/harness/traits";
 import type { FleetHook } from "@cawco/core/hooks";
 import type { FsPayload } from "@cawco/core/protocol";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
@@ -199,10 +199,12 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * it seconds later (user, 2026-08-08). Fire-and-forget: a session racing
    * shutdown answers with an error nobody is waiting on.
    *
-   * `reloadSkills`/`reloadPlugins` are Claude Code Query methods; a harness
-   * with no such verb (opencode, pi) answers with an error that reads as a
-   * session failure, so only a claude session — and a legacy row whose
-   * `harness` predates the rework and is therefore claude — is told.
+   * Each session is told only the methods its harness answers (core traits
+   * `sessionControls`, {@link answersControl}): any other is refused there
+   * with an error that reads as a session failure. Claude Code answers all
+   * three; OpenCode and pi `reloadSkills` (pi by its own runtime reload,
+   * once the turn under way has ended). A legacy row whose `harness`
+   * predates the rework is Claude Code's.
    *
    * A changed hook report adds `reinitialize` — the SDK `Query`
    * method that actually re-reads settings, hooks included, rather than only
@@ -225,10 +227,10 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       return;
     }
     for (const row of ctx.db.liveInstancesOn(machineId)) {
-      if (row.harness && !traitsOf(row.harness).liveSkillReload) {
-        continue;
-      }
-      for (const method of methods) {
+      const harness = row.harness ?? "claude";
+      for (const method of methods.filter((one) =>
+        answersControl(harness, one)
+      )) {
         const requestId = crypto.randomUUID();
         const payload: AddressedControl = {
           instanceId: row.id,
