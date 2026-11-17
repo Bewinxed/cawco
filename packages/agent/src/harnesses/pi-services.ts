@@ -82,6 +82,7 @@ import { writeJson } from "../json-file";
 import { readSettledOnce } from "../mcp-status";
 import { probeStarted } from "../probe-count";
 import { toolGate } from "../tools";
+import { FULL_CAPABILITIES } from "./capabilities";
 import { type FleetSidecar, readSidecar } from "./fleet-common";
 import { lastPromptAt, timeOf } from "./last-prompt";
 import { machineWithAccountsRuntime } from "./pi-accounts";
@@ -200,35 +201,25 @@ const compactionEntries = (
   },
 ];
 
+/**
+ * What pi's sessions do: everything but what pi has no way to (pi 1.5.2,
+ * each reason by the flag).
+ */
 const PI_CAPABILITIES: HarnessCapabilities = {
-  interrupt: true,
+  ...FULL_CAPABILITIES,
+  // pi asks no approval before a tool call ("it does not ask for approval
+  // before every tool call", pi docs/security.md) and has no mode to set.
   permissionModes: [],
-  setModel: true,
-  effort: true,
-  contextUsage: true,
-  supportedModels: true,
-  supportedCommands: true,
-  reloadSkills: true,
-  mcpStatus: true,
-  mcpControl: true,
-  listSessions: true,
-  getSessionMessages: true,
-  renameSession: true,
-  deleteSession: true,
-  fork: true,
-  rewind: true,
+  // pi keeps no tag on a session: its labels mark one entry in the tree
+  // (`appendLabelChange`), not a conversation.
   tagSession: false,
-  skills: true,
+  // "Pi ships with powerful defaults but skips features like sub-agents and
+  // plan mode" (pi README.md): CawCo's delegation is its route.
   subagents: false,
+  // pi has no task or to-do list of its own.
   tasks: false,
-  compaction: true,
-  costUsd: true,
-  thinking: true,
-  images: true,
-  handoff: true,
-  hooks: true,
+  // A plugin is a Claude Code marketplace's (core fleet.ts); pi has none.
   plugins: false,
-  fleet: true,
 };
 
 export const textOf = (content: unknown): string => {

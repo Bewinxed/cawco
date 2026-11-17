@@ -1789,14 +1789,12 @@ class PiSession implements HarnessSession {
     await this.#session.waitForIdle();
     await this.#session.reload();
     return {
-      skills: this.#session.resourceLoader
-        .getSkills()
-        .skills.map((skill) => ({
-          name: skill.name,
-          description: skill.description,
-          argumentHint: "",
-          kind: "skill" as const,
-        })),
+      skills: this.#session.resourceLoader.getSkills().skills.map((skill) => ({
+        name: skill.name,
+        description: skill.description,
+        argumentHint: "",
+        kind: "skill" as const,
+      })),
     };
   }
 
@@ -1828,7 +1826,7 @@ class PiSession implements HarnessSession {
     Object.defineProperty(context, "ui", {
       value: {
         ...ui,
-        notify: (message: string, type: string = "info") => {
+        notify: (message: string, type = "info") => {
           said.push({ message, type });
         },
       } satisfies typeof ui,
