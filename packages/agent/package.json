@@ -42,7 +42,6 @@
     "@gitbeaker/rest": "43.8.0",
     "@modelcontextprotocol/sdk": "1.32.0",
     "@opencode/client": "2.3.0",
-    "@opencode/core": "2.3.0",
     "@vscode/ripgrep-universal": "1.18.0",
     "ai": "7.0.173",
     "bonjour-service": "^1.4.4",

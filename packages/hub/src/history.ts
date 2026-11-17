@@ -185,7 +185,6 @@ export type HistoryContext = Pick<
   | "machineName"
   | "machinePresence"
   | "nameFromFirstTurn"
-  | "publishInstances"
   | "readAgent"
   | "refusedHarness"
   | "registry"
@@ -471,22 +470,6 @@ export const createHistory = (ctx: HistoryContext) => {
     );
     if ("fault" in current) {
       return current;
-    }
-    // A conversation filed gone that its machine read back is there: the
-    // row is asleep on it again, and wakes on it (core `relaunchOf`). The
-    // machine decides gone where it resumes or reads it (an OpenCode
-    // session kept only in OpenCode's 1.x tables comes back there), and a
-    // person opening the session is this read.
-    if (
-      row?.lastErrorKind === "conversation-gone" &&
-      row.sessionId === where.sessionKey &&
-      current.entries.length > 0 &&
-      ctx.db.conversationFound(row.id)
-    ) {
-      console.info(
-        `[transcripts] ${row.id.slice(0, 8)}: its conversation, filed gone, read back from its machine; asleep on it again`
-      );
-      ctx.publishInstances(row.machineId);
     }
     const read = Date.now();
     const older = olderOf(prior.length, current.older);

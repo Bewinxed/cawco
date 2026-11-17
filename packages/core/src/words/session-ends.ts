@@ -8,9 +8,7 @@ export const RESTART_LOST =
  * What the hub records on a session whose conversation its harness no longer
  * stores (core relaunch.ts `conversationGone`): a Claude Code transcript
  * missing from its machine, an OpenCode session no database on its machine
- * holds, in 2.0's tables or 1.x's. It never runs on that conversation again
- * by itself; a read of it its machine answers files it asleep again (hub
- * history.ts `readHistory`).
+ * holds. It never runs on that conversation again.
  */
 export const CONVERSATION_GONE =
   "This conversation is gone and cannot be resumed. Start a new session to continue working.";

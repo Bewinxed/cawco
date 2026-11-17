@@ -96,14 +96,9 @@ import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { contactWords } from "@cawco/core/words/contact";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
-import {
-  opencodeMoveUnconfirmedSentence,
-  opencodeSignInFaultWords,
-  opencodeV1UnrecoveredSentence,
-} from "@cawco/core/words/harness-lines";
+import { opencodeSignInFaultWords } from "@cawco/core/words/harness-lines";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type {
-  ExperimentalSessionImportInput,
   IntegrationListOutput,
   SessionInfo,
   SessionMessageAssistantTool,
@@ -1222,15 +1217,6 @@ const writeTag = async (
 const SESSION_HOMES = join(OPENCODE_DIR, "cawco-session-homes.json");
 
 /**
- * The sessions CawCo brought back from OpenCode's 1.x tables into a server
- * ({@link OpencodeHarness.#recoverV1}), each with when, by id: each is
- * brought back once. Its 1.x rows stay after that (OpenCode's remove leaves
- * them, anomalyco/opencode#50260), so a session removed from 2.0 after it
- * came back would otherwise come back again.
- */
-const V1_RECOVERED = join(OPENCODE_DIR, "cawco-v1-recovered.json");
-
-/**
  * How long the session listing of every database is given on the agent's stores
  * thread (stores/opencode-reads.ts), ms: each database is a live OpenCode
  * server's, multi-gigabyte on obelisk, read there and never on the loop.
@@ -1300,39 +1286,23 @@ const sessionsOnMachine = async (
 };
 
 /**
- * Each of `sessions` imported into `target` through OpenCode's own import
- * (`POST /api/experimental/session/import`), in order, so a parent goes
- * before its children (the import refuses a child whose parent the server
- * does not hold). Each keeps its id, at its own location. One `target`
- * holds already (409, OpenCode's `ImportConflictError`) is left as it is.
+ * Why a resume or a fork of `sessionKey` failed, from the error its server
+ * answered. A server that holds no such session (`notFound`), when no
+ * OpenCode database on the machine holds it either ({@link sessionsOnMachine}
+ * reads every one by the id, root or not), is the conversation gone from
+ * OpenCode's store (core `conversationGone`): the hub files it so, and never
+ * starts it on that conversation again. Any other failure, and a session a
+ * database here still holds that its server did not answer for, is `what`
+ * with the server's words.
  */
-const importEach = async (
-  target: OpencodeClient,
-  sessions: readonly Pick<ExperimentalSessionImportInput, "info" | "messages">[]
-): Promise<void> => {
-  for (const one of sessions) {
-    try {
-      answerOf(
-        await askOpencode((options) =>
-          target.session.import(
-            {
-              info: one.info,
-              messages: one.messages,
-              location: { directory: one.info.location.directory },
-            },
-            options
-          )
-        ),
-        `the import of ${one.info.id}`
-      );
-    } catch (error) {
-      if (errorText(error).startsWith("ConflictError")) {
-        continue;
-      }
-      throw error;
-    }
-  }
-};
+const missingSession = async (
+  sessionKey: string,
+  error: unknown,
+  what: string
+): Promise<Error> =>
+  notFound(error) && (await sessionsOnMachine({ id: sessionKey })).length === 0
+    ? conversationGone()
+    : new Error(`${what}: ${errorText(error)}`, { cause: error });
 
 const sessionToInfo = (
   session: StoredSession,
@@ -2245,8 +2215,6 @@ class OpencodeHarness implements Harness<"opencode"> {
   readonly #reconcileAgain = new Set<OpencodeSession>();
   /** Session moves between servers in flight, by OpenCode session id: one at a time each. */
   readonly #moves = new Map<string, Promise<void>>();
-  /** Sessions being brought back from OpenCode's 1.x tables, by OpenCode session id ({@link #recoverV1}): one attempt at a time each. */
-  readonly #v1Recoveries = new Map<string, Promise<boolean>>();
 
   /** What provider accounts reach OpenCode's own sign-ins and servers through (daemon.ts hands it to them). */
   readonly accountsHost: OpencodeAccountsHost;
@@ -3279,11 +3247,6 @@ class OpencodeHarness implements Harness<"opencode"> {
         : []),
       ...(this.#moves.size > 0
         ? [`move of ${[...this.#moves.keys()].join(", ")}`]
-        : []),
-      ...(this.#v1Recoveries.size > 0
-        ? [
-            `return of ${[...this.#v1Recoveries.keys()].join(", ")} from OpenCode's 1.x tables`,
-          ]
         : []),
       ...(this.#pendingRecoveries.size > 0 ||
       this.#recovering > 0 ||
@@ -5823,102 +5786,6 @@ class OpencodeHarness implements Harness<"opencode"> {
   }
 
   /**
-   * Why a resume or a fork of `sessionKey` failed, from the error its server
-   * answered, or undefined once the session is back and is to be read again.
-   * A server that holds no such session (`notFound`), when no OpenCode
-   * database on the machine holds it in 2.0's tables either
-   * ({@link sessionsOnMachine} reads every one by the id, root or not), is
-   * looked for in their 1.x tables and brought back from there
-   * ({@link #recoverV1}): undefined. Only one no database holds at all is
-   * the conversation gone from OpenCode's store (core `conversationGone`):
-   * the hub files it so, and never starts it on that conversation again by
-   * itself. Any other failure, and a session a database here still holds in
-   * 2.0's tables that its server did not answer for, is `what` with the
-   * server's words.
-   */
-  async #missing(
-    sessionKey: string,
-    error: unknown,
-    what: string
-  ): Promise<Error | undefined> {
-    if (
-      !notFound(error) ||
-      (await sessionsOnMachine({ id: sessionKey })).length > 0
-    ) {
-      return new Error(`${what}: ${errorText(error)}`, { cause: error });
-    }
-    return (await this.#recoverV1(sessionKey)) ? undefined : conversationGone();
-  }
-
-  /**
-   * Session `sessionId`, which its server answered it does not hold, brought
-   * back from OpenCode's 1.x tables when a database on the machine keeps it
-   * only there (stores/opencode-reads.ts `v1Sessions`): its 1.x-only
-   * ancestors first, then it, then its subagent sessions, each made by
-   * OpenCode's own conversion and imported through OpenCode's own import
-   * into the server its record names (the machine's when none,
-   * {@link #homeClient}), a 409 read as already there. It counts as back
-   * once that server answers `session.get` for it. True then; false when no
-   * database keeps a 1.x copy of it, or it came back once already
-   * ({@link V1_RECOVERED}). One attempt at a time per session: a second
-   * caller waits on the first. A failed import throws, saying so.
-   */
-  #recoverV1(sessionId: string): Promise<boolean> {
-    const prior = this.#v1Recoveries.get(sessionId);
-    if (prior) {
-      return prior;
-    }
-    const recovering = (async (): Promise<boolean> => {
-      const recovered =
-        (await readOwnJson(V1_RECOVERED, opencodeWordsByKeyOf)) ?? {};
-      if (sessionId in recovered) {
-        return false;
-      }
-      const family = await storeWork("opencode.v1Sessions", sessionId);
-      if (family.length === 0) {
-        return false;
-      }
-      const home = (await readHomes())[sessionId] ?? "";
-      const ask = async <T>(
-        what: string,
-        read: (options: { signal: AbortSignal }) => Promise<T>
-      ): Promise<T> => answerOf(await askOpencode(read), what);
-      try {
-        const target = await this.#ensureHome(home);
-        await importEach(target, family);
-        await ask(`session ${sessionId}`, (options) =>
-          target.session.get({ sessionID: sessionId }, options)
-        );
-      } catch (error) {
-        console.warn(
-          `[opencode] session ${sessionId}: kept only in OpenCode's 1.x tables, and not brought back into ${homeName(home)} server: ${errorText(error)}`
-        );
-        throw new Error(opencodeV1UnrecoveredSentence(errorText(error)), {
-          cause: error,
-        });
-      }
-      const ids = family.map((one) => one.info.id);
-      await setHome(ids, home);
-      const when = new Date().toISOString();
-      await writeJson(V1_RECOVERED, {
-        ...((await readOwnJson(V1_RECOVERED, opencodeWordsByKeyOf)) ?? {}),
-        ...Object.fromEntries(ids.map((id) => [id, when])),
-      });
-      const messages = family.reduce(
-        (sum, one) => sum + one.messages.length,
-        0
-      );
-      const skipped = family.reduce((sum, one) => sum + one.skipped, 0);
-      console.info(
-        `[opencode] session ${sessionId}: kept only in OpenCode's 1.x tables, brought back into ${homeName(home)} server with ${family.length - 1} related session(s) and ${messages} message(s)${skipped > 0 ? `; OpenCode's conversion left out ${skipped} 1.x row(s)` : ""}`
-      );
-      return true;
-    })().finally(() => this.#v1Recoveries.delete(sessionId));
-    this.#v1Recoveries.set(sessionId, recovering);
-    return recovering;
-  }
-
-  /**
    * The session moved into the database of `to`'s server ({@link homeOf}:
    * the machine's, an account's, a view's) when another's holds it:
    * exported whole from the server that holds it (a view's that does not
@@ -5978,28 +5845,24 @@ class OpencodeHarness implements Harness<"opencode"> {
           )
         )),
       ];
-      // An import a move cut half-way already made answers 409: the same session.
-      await importEach(target, exported);
-      // The source goes only once the target reads each session back whole:
-      // its export there holds as many messages as the one sent (both are
-      // OpenCode's settled messages, the export's own filter). A copy short
-      // of it leaves the source and the record as they are.
       for (const one of exported) {
-        const kept = await ask(
-          `the export of ${one.info.id} from ${homeName(to)} server`,
-          (options) =>
-            target.session.export({ sessionID: one.info.id }, options)
-        );
-        if (kept.messages.length !== one.messages.length) {
-          console.warn(
-            `[opencode] session ${sessionId}: not moved from ${homeName(home)} server to ${homeName(to)}: ${one.info.id} read back there with ${kept.messages.length} of its ${one.messages.length} message(s); the source keeps it`
-          );
-          throw new Error(
-            opencodeMoveUnconfirmedSentence(
-              kept.messages.length,
-              one.messages.length
+        try {
+          await ask(`the import of ${one.info.id}`, (options) =>
+            target.session.import(
+              {
+                info: one.info,
+                messages: one.messages,
+                location: { directory: one.info.location.directory },
+              },
+              options
             )
           );
+        } catch (error) {
+          // An import a move cut half-way already made: 409, the same session.
+          if (errorText(error).startsWith("ConflictError")) {
+            continue;
+          }
+          throw error;
         }
       }
       await setHome(
@@ -6098,8 +5961,9 @@ class OpencodeHarness implements Harness<"opencode"> {
       assertOpencodeKey(spec.resume.sessionKey, "fork");
       const source = await this.#homeClient(spec.resume.sessionKey);
       const { sessionKey, atMessage } = spec.resume;
-      const fork = () =>
-        ask(`the fork of ${sessionKey}`, (options) =>
+      let forked: SessionInfo;
+      try {
+        forked = await ask(`the fork of ${sessionKey}`, (options) =>
           source.session.fork(
             {
               sessionID: sessionKey,
@@ -6108,20 +5972,12 @@ class OpencodeHarness implements Harness<"opencode"> {
             options
           )
         );
-      let forked: SessionInfo;
-      try {
-        forked = await fork();
       } catch (error) {
-        const missing = await this.#missing(
+        throw await missingSession(
           sessionKey,
           error,
           `opencode has no session ${sessionKey} to fork`
         );
-        if (missing) {
-          throw missing;
-        }
-        // Brought back into the server its record names, `source`.
-        forked = await fork();
       }
       sessionId = forked.id;
       await setHome(
@@ -6135,26 +5991,18 @@ class OpencodeHarness implements Harness<"opencode"> {
       // nobody holds is refused loudly rather than addressed blindly.
       assertOpencodeKey(spec.resume.sessionKey, "resume");
       const { sessionKey } = spec.resume;
-      const get = () =>
-        askOpencode((options) =>
-          client.session.get({ sessionID: sessionKey }, options)
-        );
       await this.#bringHome(sessionKey, home);
       let found: Bounded<SessionInfo>;
       try {
-        found = await get();
+        found = await askOpencode((options) =>
+          client.session.get({ sessionID: sessionKey }, options)
+        );
       } catch (error) {
-        const missing = await this.#missing(
+        throw await missingSession(
           sessionKey,
           error,
           `opencode has no session ${sessionKey} to resume`
         );
-        if (missing) {
-          throw missing;
-        }
-        // Brought back into the server its record names: moved here from it.
-        await this.#bringHome(sessionKey, home);
-        found = await get();
       }
       switch (found.kind) {
         case "answered":
@@ -6533,27 +6381,19 @@ class OpencodeHarness implements Harness<"opencode"> {
     }
     assertOpencodeKey(sessionKey, "getSessionMessages");
     const client = await this.#homeClient(sessionKey);
-    const look = async (): Promise<SessionInfo> =>
-      answerOf(
+    let info: SessionInfo;
+    try {
+      info = answerOf(
         await askOpencode((options) =>
           client.session.get({ sessionID: sessionKey }, options)
         ),
         `session ${sessionKey}`
       );
-    let info: SessionInfo;
-    try {
-      info = await look();
     } catch (error) {
-      if (!notFound(error)) {
-        throw error;
-      }
-      // One OpenCode keeps only in its 1.x tables is brought back into the
-      // server its record names, `client`, and read there; one it keeps
-      // nowhere has no messages.
-      if (!(await this.#recoverV1(sessionKey))) {
+      if (notFound(error)) {
         return { entries: [], older: null, newer: null };
       }
-      info = await look();
+      throw error;
     }
     const window = await read(client, info.revert?.messageID);
     const { messages } = window;
