@@ -2169,7 +2169,7 @@ const attach = (
       const report = await claude.detect();
       keepReport(report);
       beat({ harnesses: [report] });
-      return report.auth;
+      return report.auth ?? null;
     });
 
     // Who each account dir is signed in as, read again on a cadence

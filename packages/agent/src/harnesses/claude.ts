@@ -105,7 +105,10 @@ import {
   READ_SKILL_FOLDER,
 } from "@cawco/core/fleet";
 import { maskMcpConfig, openUrl } from "@cawco/core/fleet-secrets";
-import type { MachineHarnessReport } from "@cawco/core/harness";
+import type {
+  MachineHarnessReport,
+  SessionCredentialInstall,
+} from "@cawco/core/harness";
 import {
   ACCOUNT_READ,
   BOUNDARY_RELAUNCH,
@@ -4794,7 +4797,10 @@ class ClaudeSession implements HarnessSession {
     }
   }
 
-  async #installSessionCredential(credential: string, initial: boolean) {
+  async #installSessionCredential(
+    credential: string,
+    initial: boolean
+  ): Promise<SessionCredentialInstall> {
     // A connected slot and a host-side HTTP probe do not prove that the
     // child's static header changed. Never ACK a replacement for that child:
     // the hub must keep accepting its launch credential for its lifetime.
@@ -5720,13 +5726,13 @@ class ClaudeHarness implements Harness<"claude"> {
   async getSessionInfo(
     sessionKey: string,
     dir?: string
-  ): Promise<NeutralSessionInfo | undefined> {
+  ): Promise<NeutralSessionInfo | null> {
     const file = await claudeSessionFile(sessionKey, dir);
     if (!file) {
-      return;
+      return null;
     }
     const info = await sessionInfoAt(file, sessionKey);
-    return info ? { ...toInfo(info), ...(await wroteIn(file)) } : undefined;
+    return info ? { ...toInfo(info), ...(await wroteIn(file)) } : null;
   }
 
   /**

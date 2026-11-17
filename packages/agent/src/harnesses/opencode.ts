@@ -6278,17 +6278,17 @@ class OpencodeHarness implements Harness<"opencode"> {
   async getSessionInfo(
     sessionKey: string,
     _dir?: string
-  ): Promise<NeutralSessionInfo | undefined> {
+  ): Promise<NeutralSessionInfo | null> {
     // Read in the databases, binary or not ({@link listSessions}). A
     // read-only lookup: a key that cannot be an OpenCode session answers
     // "not held" rather than being sent.
     if (!OPENCODE_SESSION_ID.test(sessionKey)) {
-      return;
+      return null;
     }
     const [session] = await sessionsOnMachine({ id: sessionKey });
     return session
       ? sessionToInfo(session, (await readTags())[sessionKey])
-      : undefined;
+      : null;
   }
 
   /**

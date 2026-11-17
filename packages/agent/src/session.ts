@@ -569,6 +569,18 @@ const CATALOG_METHODS = [
   DELETE_SESSION,
 ] as const;
 
+/** A session-catalog control ({@link CATALOG_METHODS}). */
+type CatalogMethod = (typeof CATALOG_METHODS)[number];
+
+/** Catalog control `K`'s handler: its arguments, run by the harness that keeps the conversation, answering the table's result. */
+type CatalogControl<K extends CatalogMethod> = (
+  adapter: Harness,
+  ...args: ControlArgs<K>
+) => Promise<ControlResult<K>>;
+
+/** Every catalog control's handler, each under its own name. */
+type CatalogControls = { [K in CatalogMethod]: CatalogControl<K> };
+
 /**
  * The catalog controls that only read a stored conversation. Each waits for
  * a change of the same conversation already on its way (a rename, a tag, a
@@ -4827,83 +4839,85 @@ export class SessionSupervisor {
       : Promise.resolve(declared.call(...args));
   }
 
-  /** A catalog control, run by the harness that keeps its conversation ({@link CATALOG_METHODS}). */
-  async #catalog(
-    control: Control<(typeof CATALOG_METHODS)[number]>,
+  /**
+   * Each catalog control ({@link CATALOG_METHODS}), run by the harness that
+   * keeps its conversation, answering what the control table says it
+   * answers: a handler that could answer nothing where the table reads a
+   * value fails to type.
+   */
+  readonly #catalogs: CatalogControls = {
+    [CONTROL_GET_SESSION_INFO]: async (adapter, key, dir) => {
+      const info = await adapter.getSessionInfo(key, dirOf(dir));
+      return info ? titled(info) : null;
+    },
+    [CONTROL_STORED_RUN]: (adapter, key, dir) =>
+      adapter.storedRun(key, dirOf(dir)),
+    [CONTROL_READ_TRANSCRIPT_WINDOW]: async (
+      adapter,
+      key,
+      { dir, window: asked }
+    ) => {
+      const at = Date.now();
+      const window = await adapter.readTranscriptWindow(key, dir, asked);
+      catalogRead(
+        at,
+        `readTranscriptWindow ${adapter.kind} ${key.slice(0, 8)} ${JSON.stringify(asked)}: ${window.entries.length} message(s)`
+      );
+      return window;
+    },
+    [CONTROL_GET_SESSION_MESSAGES]: async (adapter, key, options) => {
+      const at = Date.now();
+      // `whole`: every message stored; else the active chain.
+      const span: TranscriptSpan = options?.whole ? "whole" : "chain";
+      const messages = await adapter.getSessionMessages(
+        key,
+        options?.dir,
+        options?.tail,
+        span
+      );
+      catalogRead(
+        at,
+        `getSessionMessages ${adapter.kind} ${key.slice(0, 8)}${span === "chain" ? "" : ` ${span}`}${options?.tail ? ` tail ${options.tail}` : ""}: ${messages.length} message(s)`
+      );
+      return messages;
+    },
+    [CONTROL_READ_CONTINUATION]: async (adapter, key, options) => {
+      const at = Date.now();
+      const [live, whole] = await Promise.all([
+        adapter.getSessionMessages(key, options?.dir),
+        adapter.getSessionMessages(key, options?.dir, undefined, "whole"),
+      ]);
+      const read = readContinuation(live, whole, options?.askers ?? []);
+      console.info(
+        `[catalog] readContinuation ${adapter.kind} ${key.slice(0, 8)}: ${whole.length} stored message(s), ${read.entries.scope} in its live scope, answered ${JSON.stringify(read).length} characters in ${Date.now() - at} ms`
+      );
+      return read;
+    },
+    [CONTROL_RENAME_SESSION]: (adapter, key, title, dir) =>
+      adapter.renameSession(key, title, dirOf(dir)),
+    [CONTROL_TAG_SESSION]: async (adapter, key, tag, dir) => {
+      await adapter.tagSession(key, tag, dirOf(dir));
+      this.#spinOffs.closeTagging(key);
+    },
+    [DELETE_SESSION]: async (adapter, key, dir) => {
+      await adapter.deleteSession(key, dirOf(dir));
+      await this.#transcriptDeleted(key);
+    },
+    // Answered whole, with the harnesses it left out ({@link #control}).
+    [CONTROL_LIST_SESSIONS]: () =>
+      Promise.reject(
+        new Error(`${CONTROL_LIST_SESSIONS} is answered by the machine`)
+      ),
+  };
+
+  /** Catalog control `method` run by `adapter` with its own arguments ({@link #catalogs}). */
+  #catalog<K extends CatalogMethod>(
+    method: K,
+    args: ControlArgs<K>,
     adapter: Harness
-  ): Promise<unknown> {
-    switch (control.method) {
-      case CONTROL_GET_SESSION_INFO: {
-        const [key, dir] = control.args;
-        const info = await adapter.getSessionInfo(key, dirOf(dir));
-        return info ? titled(info) : info;
-      }
-      case CONTROL_STORED_RUN: {
-        const [key, dir] = control.args;
-        return await adapter.storedRun(key, dirOf(dir));
-      }
-      case CONTROL_READ_TRANSCRIPT_WINDOW: {
-        const at = Date.now();
-        const [key, { dir, window: asked }] = control.args;
-        const window = await adapter.readTranscriptWindow(key, dir, asked);
-        catalogRead(
-          at,
-          `readTranscriptWindow ${adapter.kind} ${key.slice(0, 8)} ${JSON.stringify(asked)}: ${window.entries.length} message(s)`
-        );
-        return window;
-      }
-      case CONTROL_GET_SESSION_MESSAGES: {
-        const at = Date.now();
-        const [key, options] = control.args;
-        // `whole`: every message stored; else the active chain.
-        const span: TranscriptSpan = options?.whole ? "whole" : "chain";
-        const messages = await adapter.getSessionMessages(
-          key,
-          options?.dir,
-          options?.tail,
-          span
-        );
-        catalogRead(
-          at,
-          `getSessionMessages ${adapter.kind} ${key.slice(0, 8)}${span === "chain" ? "" : ` ${span}`}${options?.tail ? ` tail ${options.tail}` : ""}: ${messages.length} message(s)`
-        );
-        return messages;
-      }
-      case CONTROL_READ_CONTINUATION: {
-        const at = Date.now();
-        const [key, options] = control.args;
-        const [live, whole] = await Promise.all([
-          adapter.getSessionMessages(key, options?.dir),
-          adapter.getSessionMessages(key, options?.dir, undefined, "whole"),
-        ]);
-        const read = readContinuation(live, whole, options?.askers ?? []);
-        console.info(
-          `[catalog] readContinuation ${adapter.kind} ${key.slice(0, 8)}: ${whole.length} stored message(s), ${read.entries.scope} in its live scope, answered ${JSON.stringify(read).length} characters in ${Date.now() - at} ms`
-        );
-        return read;
-      }
-      case CONTROL_RENAME_SESSION: {
-        const [key, title, dir] = control.args;
-        return await adapter.renameSession(key, title, dirOf(dir));
-      }
-      case CONTROL_TAG_SESSION: {
-        const [key, tag, dir] = control.args;
-        await adapter.tagSession(key, tag, dirOf(dir));
-        this.#spinOffs.closeTagging(key);
-        return undefined;
-      }
-      case DELETE_SESSION: {
-        const [key, dir] = control.args;
-        await adapter.deleteSession(key, dirOf(dir));
-        await this.#transcriptDeleted(key);
-        return undefined;
-      }
-      case CONTROL_LIST_SESSIONS:
-        // Answered whole, with the harnesses it left out ({@link #control}).
-        throw new Error(`${control.method} is answered by the machine`);
-      default:
-        return unhandled("catalog control", control);
-    }
+  ): Promise<ControlResult<K>> {
+    const run: CatalogControl<K> = this.#catalogs[method];
+    return run(adapter, ...args);
   }
 
   async #call(control: AddressedControl): Promise<unknown> {
@@ -4923,7 +4937,11 @@ export class SessionSupervisor {
             `${control.method} names no harness: a session key is one harness's`
           );
         }
-        return await this.#catalog(control, adapterFor(kind));
+        return await this.#catalog(
+          control.method,
+          control.args,
+          adapterFor(kind)
+        );
       }
       // A machine-scoped control only one harness knows: try the named harness,
       // then every harness, until one claims it.

@@ -179,31 +179,48 @@ import type {
   WorkspaceWorkEnd,
 } from "./workspace/controls";
 
-/** A control's entry: the arguments it is called with, in order, and what its handler answers. */
-interface Entry<Args extends unknown[], Result> {
+/**
+ * What a control the hub reads answers: a value JSON carries, so never
+ * `undefined`. JSON drops an `undefined` result, its reply reaches the hub
+ * with none, and the reply's schema refuses it as no reply of its type
+ * (control-replies.ts): `getSessionInfo` answered nothing for a session no
+ * harness held, and every locate of a deleted session stood as unanswered
+ * (nightly 8207). "Not here" is `null`. A result type that includes
+ * `undefined`, or an optional one, fails this constraint.
+ */
+type WireResult = NonNullable<unknown> | null;
+
+/** A control's entry: the arguments it is called with, in order, and what its handler answers ({@link WireResult}). */
+interface Entry<Args extends unknown[], Result extends WireResult> {
   args: Args;
   result: Result;
 }
 
 /**
+ * A control whose answer no caller reads but for whether the call failed
+ * (control-replies.ts `UNREAD`): its handler answers what it likes, nothing
+ * included.
+ */
+interface Unread<Args extends unknown[]> {
+  args: Args;
+  result: unknown;
+}
+
+/**
  * Each control by its name: the value of its `CONTROL_*` constant (or its
- * module's own name for it), which the hub and the agent call it by. A
- * `result` of `unknown` is an answer no caller reads but for whether the
- * call failed; its handler answers what it likes.
+ * module's own name for it), which the hub and the agent call it by.
  */
 interface ControlTable {
   abandon: Entry<[requestId: string], { stopped: boolean }>;
-  accountLent: Entry<
+  accountLent: Unread<
     [
       requestId: string | null,
       answer: LentAccess | { error: string },
       accountId?: string | null,
-    ],
-    unknown
+    ]
   >;
-  acknowledgeSessionAddress: Entry<
-    [sessionId: string, generation: string, acknowledged: boolean],
-    unknown
+  acknowledgeSessionAddress: Unread<
+    [sessionId: string, generation: string, acknowledged: boolean]
   >;
   agentBusy: Entry<[], AgentBusyReport>;
   artifactPicture: Entry<[ask: PictureAsk], PictureTaken>;
@@ -228,20 +245,20 @@ interface ControlTable {
     HomeLoginMoved
   >;
   "browser.handback": Entry<[ask: BrowserKeyArgs], BrowserHandback>;
-  "browser.injectAdvert": Entry<[ask: BrowserInjectAdvertArgs], unknown>;
+  "browser.injectAdvert": Unread<[ask: BrowserInjectAdvertArgs]>;
   "browser.listen": Entry<[ask: BrowserListenArgs], BrowserListening>;
   "browser.page": Entry<[ask: BrowserPageArgs], BrowserAskedPage>;
-  "browser.remove": Entry<[ask: BrowserKeyArgs], unknown>;
+  "browser.remove": Unread<[ask: BrowserKeyArgs]>;
   "browser.rows": Entry<[], BrowserFrame>;
   "browser.shield": Entry<[ask: BrowserShieldArgs], BrowserRow>;
   "browser.start": Entry<[ask: BrowserStartArgs], BrowserRow>;
   "browser.stop": Entry<[ask: BrowserKeyArgs], BrowserRow | null>;
-  "browser.viewers": Entry<[ask: BrowserViewersArgs], unknown>;
+  "browser.viewers": Unread<[ask: BrowserViewersArgs]>;
   "browser.viewerToken": Entry<[ask: BrowserKeyArgs], BrowserViewerSession>;
-  cancelBinaryUpdate: Entry<[], unknown>;
+  cancelBinaryUpdate: Unread<[]>;
   cancelCommand: Entry<[runId: string], boolean>;
-  canvasScreenClose: Entry<[close: CanvasScreenClose], unknown>;
-  canvasScreenOpen: Entry<[open: CanvasScreenOpen], unknown>;
+  canvasScreenClose: Unread<[close: CanvasScreenClose]>;
+  canvasScreenOpen: Unread<[open: CanvasScreenOpen]>;
   carrySessions: Entry<
     [requests: CarrySessionRequest[]],
     Record<string, CarrySessionOutcome>
@@ -258,8 +275,8 @@ interface ControlTable {
   >;
   completeToolSignin: Entry<[tool: string, code?: string | null], ToolStatus>;
   /** `policy`, the hub's, which the machine reads again where it keeps it. */
-  configureBinaryUpdates: Entry<[policy: BinaryUpdatePolicy], unknown>;
-  deleteSession: Entry<[sessionKey: string, dir?: CatalogDir], unknown>;
+  configureBinaryUpdates: Unread<[policy: BinaryUpdatePolicy]>;
+  deleteSession: Unread<[sessionKey: string, dir?: CatalogDir]>;
   fleetDelta: Entry<[delta: FleetDelta], FleetAck>;
   /**
    * `door`, a session's browser door, is the agent's own word to a pi
@@ -273,16 +290,16 @@ interface ControlTable {
     [names?: string[] | null, door?: BrowserDoor | null],
     FleetMcpTakeAnswer
   >;
-  fleetSettings: Entry<[], unknown>;
-  fleetStatus: Entry<[], unknown>;
+  fleetSettings: Unread<[]>;
+  fleetStatus: Unread<[]>;
   folderCommands: Entry<
     [cwd: string, account?: string | null, model?: string | null],
     SupportedCommands
   >;
   forgePost: Entry<[ask: ForgeAsk], ForgeVerdict>;
-  forgetAccount: Entry<[account: string, into?: string | null], unknown>;
+  forgetAccount: Unread<[account: string, into?: string | null]>;
   forgetCredentials: Entry<[ids: string[]], { forgotten: number }>;
-  forgetProviderAccount: Entry<[account: string], unknown>;
+  forgetProviderAccount: Unread<[account: string]>;
   generateImage: Entry<
     [
       instanceId: string,
@@ -302,17 +319,17 @@ interface ControlTable {
     [sessionKey: string, ask?: MessagesAsk | null],
     SessionMessage[]
   >;
-  getTaskOutput: Entry<[taskId: string], TaskOutput | undefined>;
+  getTaskOutput: Entry<[taskId: string], TaskOutput>;
   ghAccounts: Entry<[], GhAccount[]>;
   ghToken: Entry<[host: string, login: string], GhToken>;
   gitChanges: Entry<[dir: string, since: string], GitChanges>;
   hostOutputs: Entry<[asked: HostScratchAsk], HostOutputs>;
-  hostScratchRemove: Entry<[asked: HostScratchAsk], unknown>;
+  hostScratchRemove: Unread<[asked: HostScratchAsk]>;
   inputsAdmit: Entry<
     [paths: string[], bound: WorkspaceRef | null, project: string | null],
     InputsAdmitted
   >;
-  inputsClear: Entry<[place: InputsPlace, names: string[]], unknown>;
+  inputsClear: Unread<[place: InputsPlace, names: string[]]>;
   inputsCopy: Entry<
     [
       paths: string[],
@@ -331,7 +348,7 @@ interface ControlTable {
   inspectConfig: Entry<[cwd?: string | null], ConfigInspection>;
   installSessionCredential: Entry<
     [credential: string, mode?: "initial" | null],
-    SessionCredentialInstall | undefined
+    SessionCredentialInstall
   >;
   installTool: Entry<
     [
@@ -343,7 +360,7 @@ interface ControlTable {
     ],
     ToolStatus
   >;
-  interrupt: Entry<[], unknown>;
+  interrupt: Unread<[]>;
   joinAccountLogin: Entry<
     [from: string, into: string, expected: AccountIdentity],
     AccountJoinedOn
@@ -377,8 +394,8 @@ interface ControlTable {
   movePrepare: Entry<[request: MovePrepareRequest], MovePrepared>;
   moveRemoteCredential: Entry<[path: string], MoveRemoteAuth>;
   moveSnapshot: Entry<[request: MoveSnapshotRequest], MoveSnapshotResult>;
-  "passkey.scanStart": Entry<[ask: PasskeyScanArgs], unknown>;
-  "passkey.scanStop": Entry<[ask: PasskeyScanArgs], unknown>;
+  "passkey.scanStart": Unread<[ask: PasskeyScanArgs]>;
+  "passkey.scanStop": Unread<[ask: PasskeyScanArgs]>;
   piDefaultModel: Entry<[cwd: string], string | null>;
   placeLfs: Entry<[path: string, rows: PlaceLfsRow[]], PlaceLfsMade>;
   placePush: Entry<
@@ -388,7 +405,7 @@ interface ControlTable {
   placeRepo: Entry<[path: string], PlaceRepo>;
   previewFolders: Entry<[dirs: string[]], (string | null)[]>;
   previewStart: Entry<[ask: PreviewStartArgs], PreviewStarted>;
-  previewStop: Entry<[ask: PreviewStopArgs], unknown>;
+  previewStop: Unread<[ask: PreviewStopArgs]>;
   previewWeight: Entry<[dir: string, path?: string | null], FolderWeight>;
   probeAccount: Entry<[account: string], AccountProbe>;
   probeCapabilities: Entry<[], MachineCapabilities>;
@@ -403,7 +420,7 @@ interface ControlTable {
   readMemoryFile: Entry<[], MachineMemorySet | null>;
   readSessionContext: Entry<
     [sessionKey: string, dir?: string | null],
-    SessionContextRead | undefined
+    SessionContextRead
   >;
   readSkillFiles: Entry<[name: string, cwd?: string | null], SkillFile[]>;
   readSkillFolder: Entry<[path: string], SkillFile[]>;
@@ -411,32 +428,26 @@ interface ControlTable {
     [sessionKey: string, ask: WindowRead],
     TranscriptWindow
   >;
-  reconnectMcpServer: Entry<[name: string], unknown>;
-  refreshCawcoTools: Entry<[], unknown>;
-  reinitialize: Entry<[], unknown>;
+  reconnectMcpServer: Unread<[name: string]>;
+  refreshCawcoTools: Unread<[]>;
+  reinitialize: Unread<[]>;
   "relay.certify": Entry<[ask: RelayCertifyArgs], RelayCertified>;
   "relay.prove": Entry<[ask: RelayProveArgs], string[]>;
-  "relay.remove": Entry<[], unknown>;
+  "relay.remove": Unread<[]>;
   "relay.renew": Entry<[ask: RelayRenewArgs], RelayRenewed>;
   "relay.runtime": Entry<[], RelayRuntimeRead>;
   "relay.start": Entry<[ask: RelayStartArgs], RelayFrame>;
   "relay.stop": Entry<[], RelayFrame>;
-  reloadPlugins: Entry<[], unknown>;
-  reloadSkills: Entry<[], unknown>;
+  reloadPlugins: Unread<[]>;
+  reloadSkills: Unread<[]>;
   removedSessionCustody: Entry<
     [rows: CustodyRow[], claimed: string[]],
     CustodyPresence[]
   >;
   removeFolder: Entry<[asked: RemoveFolder], FolderRemoved>;
-  renameSession: Entry<
-    [sessionKey: string, title: string, dir?: CatalogDir],
-    unknown
-  >;
+  renameSession: Unread<[sessionKey: string, title: string, dir?: CatalogDir]>;
   repoRoot: Entry<[path: string], string | null>;
-  resolvePermission: Entry<
-    [requestId: string, result: PermissionResult],
-    unknown
-  >;
+  resolvePermission: Unread<[requestId: string, result: PermissionResult]>;
   restless: Entry<[ids: string[]], Record<string, string>>;
   runCommand: Entry<
     [
@@ -453,8 +464,8 @@ interface ControlTable {
     TranscriptAnswer | null
   >;
   sessionCustody: Entry<[], SessionCustodyRead>;
-  setEffort: Entry<[effort: EffortLevel], unknown>;
-  setModel: Entry<[model: string], unknown>;
+  setEffort: Unread<[effort: EffortLevel]>;
+  setModel: Unread<[model: string]>;
   setPermissionMode: Entry<[mode: PermissionMode], PermissionModeSet>;
   setProviderKey: Entry<
     [
@@ -473,9 +484,8 @@ interface ControlTable {
   >;
   stageEnsure: Entry<[ref: WorkspaceRef, file: StageEnsure], StageOpened>;
   stagePicture: Entry<[ref: WorkspaceRef, ask: ServedPicture], PictureTaken>;
-  stagePin: Entry<
-    [ref: WorkspaceRef, pin: string] | [ref: null, pin: string, dir: string],
-    unknown
+  stagePin: Unread<
+    [ref: WorkspaceRef, pin: string] | [ref: null, pin: string, dir: string]
   >;
   stagePins: Entry<[served: string[]], number>;
   stageRender: Entry<[ref: WorkspaceRef, ask: RenderAsk], StageRendered>;
@@ -483,37 +493,32 @@ interface ControlTable {
     [workspace: string, serve: ServeSpec, pin?: string | null],
     StageState
   >;
-  stageUnpin: Entry<[pin: string], unknown>;
-  stageWarm: Entry<
-    [ref: WorkspaceRef, warm: StageWarm, pin?: string | null],
-    unknown
-  >;
+  stageUnpin: Unread<[pin: string]>;
+  stageWarm: Unread<[ref: WorkspaceRef, warm: StageWarm, pin?: string | null]>;
   stageWrite: Entry<
     [ref: WorkspaceRef, write: SheetWrite, pin?: string | null],
     SheetWritten
   >;
   storedRun: Entry<[sessionKey: string, dir?: CatalogDir], StoredRun>;
   supportedCommands: Entry<[], SupportedCommands>;
-  supportedModels: Entry<[], unknown>;
-  tagSession: Entry<
-    [sessionKey: string, tag: string | null, dir?: CatalogDir],
-    unknown
+  supportedModels: Unread<[]>;
+  tagSession: Unread<
+    [sessionKey: string, tag: string | null, dir?: CatalogDir]
   >;
-  toggleMcpServer: Entry<[name: string, enabled: boolean], unknown>;
+  toggleMcpServer: Unread<[name: string, enabled: boolean]>;
   transcriptPlaces: Entry<[query: TranscriptPlacesQuery], TranscriptPlace[]>;
   transcriptTurns: Entry<[query: TranscriptTurnsQuery], TranscriptTurns | null>;
   /** The machine's login keychain unlocked (macOS): answers the machine's word on Claude. */
-  unlockKeychain: Entry<[password: string], AuthState | undefined>;
+  unlockKeychain: Entry<[password: string], AuthState | null>;
   updateCawco: Entry<[ask?: UpdateAsk | null], UpdateReport>;
-  verifySessionCredential: Entry<[], unknown>;
-  withdrawPermission: Entry<[requestId: string, reason: string], unknown>;
+  verifySessionCredential: Unread<[]>;
+  withdrawPermission: Unread<[requestId: string, reason: string]>;
   withdrawSend: Entry<[uuid: string], SendWithdrawal>;
   workInFlight: Entry<[], WorkInFlight | null>;
   workspaceApply: Entry<[ref: WorkspaceRef], WorkspaceApplied>;
   workspaceArchive: Entry<[asked: WorkspaceArchive], WorkspaceArchived>;
-  workspaceAt: Entry<
-    [ref: WorkspaceRef, base: string, at: WorkspaceCommit, source: string],
-    unknown
+  workspaceAt: Unread<
+    [ref: WorkspaceRef, base: string, at: WorkspaceCommit, source: string]
   >;
   workspaceBoundary: Entry<[ref: WorkspaceRef], number>;
   workspaceBundle: Entry<[ref: WorkspaceRef, base: string], WorkspaceCommit>;
@@ -536,7 +541,7 @@ interface ControlTable {
     [ref: WorkspaceRef, named: string, png: string],
     WorkspaceSaved
   >;
-  workspaceWorkEnd: Entry<[asked: WorkspaceWorkEnd], unknown>;
+  workspaceWorkEnd: Unread<[asked: WorkspaceWorkEnd]>;
 }
 
 /** A control a machine's agent answers, by its name: every one the table holds, and no other. */

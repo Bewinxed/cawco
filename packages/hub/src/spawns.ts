@@ -46,7 +46,12 @@ import type { Located, SessionLocation, SettledSpawn } from "./hub-shapes";
 import type { LabelledRow } from "./labels";
 import { sessionLabel } from "./labels";
 import type { createLaunches } from "./launches";
-import { awayProblem, MachineProblem, silentProblem } from "./machine-answers";
+import {
+  awayProblem,
+  MALFORMED_REPLY,
+  MachineProblem,
+  silentProblem,
+} from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { PlacementInput, TaskAccounts } from "./placement";
 import {
@@ -265,6 +270,37 @@ export type SpawnsContext = Pick<
 
 export const createSpawns = (ctx: SpawnsContext) => {
   /**
+   * Each machine whose answer to a locate's ask (`getSessionInfo`) was no
+   * reply of its type, by machine and method ({@link sayUnlocating}).
+   */
+  const malformedSaid = new Set<string>();
+
+  /**
+   * A harness's failed answer to whether it holds session `id`, said in the
+   * log. A reply that is not its type ({@link MALFORMED_REPLY}) is a fault
+   * of that machine's agent, the same at every ask: said the first time
+   * per machine and method, not at every locate and harness that meets it.
+   */
+  const sayUnlocating = (
+    id: string,
+    machineId: string,
+    harness: HarnessKind,
+    failed: { error: string | undefined; code?: typeof MALFORMED_REPLY }
+  ): void => {
+    const malformed = failed.code === MALFORMED_REPLY;
+    const said = `${machineId}\n${CONTROL_GET_SESSION_INFO}`;
+    if (malformed && malformedSaid.has(said)) {
+      return;
+    }
+    if (malformed) {
+      malformedSaid.add(said);
+    }
+    console.warn(
+      `[hub] locating ${id}: ${ctx.machineName(machineId)}'s ${harness} couldn't say whether it holds it: ${failed.error ?? "no reason given"}`
+    );
+  };
+
+  /**
    * WHERE a conversation lives: which machine, which folder, which harness.
    *
    * A session id is a uuid and does not collide, so it identifies a
@@ -360,11 +396,10 @@ export const createSpawns = (ctx: SpawnsContext) => {
               // 404 for the hub's lifetime, past the store being readable
               // again. It counts as not answered, and is asked again.
               if (!answer.value.ok) {
-                console.warn(
-                  `[hub] locating ${id}: ${ctx.machineName(agent.machineId)}'s ${harness} couldn't say whether it holds it: ${answer.value.error ?? "no reason given"}`
-                );
+                sayUnlocating(id, agent.machineId, harness, answer.value);
                 return "unanswered" as const;
               }
+              // `null`: this harness there holds no session under the id.
               const info = answer.value.result;
               return info?.sessionId
                 ? { harness, sessionId: info.sessionId, info }

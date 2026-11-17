@@ -559,10 +559,11 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
   fleetHome?: () => string;
   /** What the harness has of what cawco last put on it, without changing it. */
   fleetStatus?: () => Promise<FleetSyncReport>;
+  /** The stored session under `sessionKey`; null when this harness keeps none under it. */
   getSessionInfo: (
     sessionKey: string,
     dir?: string
-  ) => Promise<NeutralSessionInfo | undefined>;
+  ) => Promise<NeutralSessionInfo | null>;
   getSessionMessages: (
     sessionKey: string,
     dir?: string,

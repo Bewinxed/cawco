@@ -267,9 +267,6 @@ export const createContextReads = (ctx: ContextReadsContext) => {
       return { reason: answer.value.error ?? "transcript read failed" };
     }
     const reading = answer.value.result;
-    if (!reading) {
-      return { reason: "agent has no context reader" };
-    }
     if (!("tokens" in reading)) {
       return reading;
     }

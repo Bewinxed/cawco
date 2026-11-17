@@ -488,8 +488,8 @@ const CONTROLS = {
   [CONTROL_READ_TRANSCRIPT_WINDOW]: reply<TranscriptWindow>(
     TranscriptWindowSchema
   ),
-  [CONTROL_READ_SESSION_CONTEXT]: reply<SessionContextRead | undefined>(
-    SessionContextReadSchema.optional()
+  [CONTROL_READ_SESSION_CONTEXT]: reply<SessionContextRead>(
+    SessionContextReadSchema
   ),
   [CONTROL_SEARCH_TRANSCRIPTS]: reply<TranscriptAnswer | null>(
     TranscriptAnswerSchema.nullable()
@@ -508,7 +508,7 @@ const CONTROLS = {
   [CONTROL_FOLDER_COMMANDS]: reply<SupportedCommands>(SupportedCommandsSchema),
   [CONTROL_GIT_CHANGES]: reply<GitChanges>(GitChangesSchema),
   [CONTROL_READ_CONTINUATION]: reply<ContinuationRead>(ContinuationReadSchema),
-  [GET_TASK_OUTPUT]: reply<TaskOutput | undefined>(TaskOutputSchema.optional()),
+  [GET_TASK_OUTPUT]: reply<TaskOutput>(TaskOutputSchema),
   [DELETE_SESSION]: UNREAD,
   [SESSION_CUSTODY]: reply<SessionCustodyRead>(SessionCustodyReadSchema),
   [REMOVED_SESSION_CUSTODY]: reply<CustodyPresence[]>(
@@ -521,8 +521,8 @@ const CONTROLS = {
   // A session's credential and its CawCo tools (harness.ts).
   [CONTROL_FORGET_CREDENTIALS]: UNREAD,
   [CONTROL_REFRESH_CAWCO_TOOLS]: UNREAD,
-  [INSTALL_SESSION_CREDENTIAL]: reply<SessionCredentialInstall | undefined>(
-    SessionCredentialInstallSchema.optional()
+  [INSTALL_SESSION_CREDENTIAL]: reply<SessionCredentialInstall>(
+    SessionCredentialInstallSchema
   ),
   // A machine's commands (commands/controls.ts).
   [CONTROL_RUN_COMMAND]: reply<CommandResult>(CommandResultSchema),
@@ -666,10 +666,14 @@ const CONTROLS = {
     .custom<SpinOffHeld>(isSpinOffHeld, controlWords.meant.discardHolds)
     .nullable(),
   [FLEET_STATUS]: UNREAD,
-  [UNLOCK_KEYCHAIN]: reply<AuthState | undefined>(AuthStateShape.optional()),
+  [UNLOCK_KEYCHAIN]: reply<AuthState | null>(AuthStateShape.nullable()),
   [PROBE_CAPABILITIES]: UNREAD,
 } satisfies {
-  readonly [K in ControlName]: z.ZodType<ControlResult<K>> | typeof UNREAD;
+  // An unread control's reply is read as nothing; any other's as its own
+  // result, which is never `undefined` (control-table.ts `WireResult`).
+  readonly [K in ControlName]: unknown extends ControlResult<K>
+    ? typeof UNREAD
+    : z.ZodType<ControlResult<K>> | typeof UNREAD;
 };
 
 /** What a session's start (a `spawn`) answers: the hub reads nothing of it but whether it started. */

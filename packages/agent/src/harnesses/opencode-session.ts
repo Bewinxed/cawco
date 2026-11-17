@@ -46,7 +46,12 @@ import {
 } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { SessionInstruction } from "@cawco/core/fleet";
-import { byPerson, EFFORT_READ, offeredMode } from "@cawco/core/harness";
+import {
+  byPerson,
+  EFFORT_READ,
+  offeredMode,
+  type SessionCredentialInstall,
+} from "@cawco/core/harness";
 import type {
   EffortLevel,
   ModelInfo,
@@ -3712,7 +3717,9 @@ export class OpencodeSession implements HarnessSession {
    * OpenCode session id and acknowledged with itself: a session this agent
    * launched installs the one the hub minted for this spawn.
    */
-  async #installCredential(credential: string) {
+  async #installCredential(
+    credential: string
+  ): Promise<SessionCredentialInstall> {
     await storeOpencodeCredential(this.#opencodeSessionId(), {
       containerEnv: this.#ctx.containerEnv ?? {},
       credential,

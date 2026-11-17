@@ -1129,9 +1129,11 @@ export class PiProfile {
   async getSessionInfo(
     sessionKey: string,
     dir?: string
-  ): Promise<NeutralSessionInfo | undefined> {
-    return (await this.listSessions(dir)).find(
-      (one) => one.sessionId === sessionKey
+  ): Promise<NeutralSessionInfo | null> {
+    return (
+      (await this.listSessions(dir)).find(
+        (one) => one.sessionId === sessionKey
+      ) ?? null
     );
   }
 
