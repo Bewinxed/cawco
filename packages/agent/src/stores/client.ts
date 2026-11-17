@@ -49,6 +49,7 @@ const reading: { [K in StoreOp]: Map<string, Promise<StoreAnswer<K>>> } = {
   "opencode.ownCredentials": new Map(),
   "opencode.sessions": new Map(),
   "opencode.backupV1": new Map(),
+  "opencode.v1Sessions": new Map(),
   "usage.scan": new Map(),
 };
 

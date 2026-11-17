@@ -18,6 +18,7 @@ const opsOf = {
   "opencode.ownCredentials": (_: undefined) => opencodeReads.ownCredentials(),
   "opencode.sessions": (query: SessionQuery) => opencodeReads.sessions(query),
   "opencode.backupV1": (dataHome: string) => opencodeReads.backupV1(dataHome),
+  "opencode.v1Sessions": (id: string) => opencodeReads.v1Sessions(id),
   "usage.scan": (now: number) => usageHost.scan(now),
 } satisfies Record<string, (arg: never, tell: Tell) => Promise<unknown>>;
 

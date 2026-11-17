@@ -531,6 +531,13 @@ export interface InstancesDb {
   /** A receipt for the current row's decision; deletes are finalized here. */
   readonly confirmInstanceEnd: (id: string, reason?: string) => void;
   /**
+   * Files a session filed `conversation-gone` (core relaunch.ts) as asleep
+   * once its machine read its conversation back: it was there after all
+   * (an OpenCode session brought back from OpenCode's 1.x tables), so it
+   * wakes on it again. False when the row was not filed so.
+   */
+  readonly conversationFound: (id: string) => boolean;
+  /**
    * A machine's catalog's word on when each stored conversation last changed,
    * written onto its rows that are not live, but for those whose newest send
    * is a keep-alive (read as each chunk is written). Returns how many rows
@@ -1947,6 +1954,21 @@ export const instancesDb = (core: DbCore): InstancesDb => {
             eq(instances.id, id),
             isNotNull(instances.sessionId),
             inArray(instances.status, ["running", "starting", "unknown"])
+          )
+        )
+        .returning({ id: instances.id })
+        .all().length > 0,
+    // `updatedAt` untouched: the hub correcting what it filed is not the
+    // session doing anything.
+    conversationFound: (id) =>
+      db
+        .update(instances)
+        .set({ status: "sleeping", lastError: null, lastErrorKind: null })
+        .where(
+          and(
+            eq(instances.id, id),
+            eq(instances.lastErrorKind, "conversation-gone"),
+            isNotNull(instances.sessionId)
           )
         )
         .returning({ id: instances.id })
