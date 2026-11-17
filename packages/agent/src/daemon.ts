@@ -248,7 +248,7 @@ import {
   workspaceLane,
 } from "./control-lanes";
 import { damagedRecords, sweepRecords } from "./damaged-records";
-import { convergeDeniedTools } from "./denied-tools";
+import { dropWrittenDenials } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
 import { moveLegacyFleetSidecar } from "./fleet-sidecar-move";
 import { forgePost } from "./forges/forge";
@@ -3257,17 +3257,16 @@ const startDaemon = (rediscover = false) =>
     // `CAWCO_*` at all (`serverEnvironment`).
     process.env[CAWCO_ENV.machineId] = machineIdValue;
     process.env[CAWCO_ENV.hubUrl] = url;
-    // The sessions this daemon spawns carry the deny list in their own options;
-    // the settings file is how the `claude` the user starts by hand gets it too.
-    const denied = yield* Effect.promise(() => convergeDeniedTools());
-    if (denied.state === "applied") {
+    // The sessions this daemon spawns carry the deny list in their own
+    // options, and only they: what an earlier version wrote into the
+    // person's own settings goes, once.
+    const denied = yield* Effect.promise(() => dropWrittenDenials());
+    if (denied.state === "dropped") {
       yield* Effect.logInfo(
-        `converged fleet denied-tools into ${userLayerPath("settings.json")}`
+        `took CawCo's denied tools out of ${userLayerPath("settings.json")}: ${denied.names.join(", ")}`
       );
     } else if (denied.state === "failed") {
       yield* Effect.logWarning(denied.detail);
-    } else if (denied.state === "unsynced") {
-      yield* Effect.logInfo(`${denied.detail}: spawns wait for it`);
     }
     // Size the transcript line indexes from machine config (if set).
     const machineConfig = yield* Effect.promise(() => readConfig());

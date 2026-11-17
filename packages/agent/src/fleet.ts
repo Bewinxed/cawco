@@ -228,6 +228,13 @@ export interface ClaudeFleetSidecar {
    */
   deniedTools?: string[];
   /**
+   * The names earlier versions wrote into the person's Claude Code settings
+   * (`permissions.deny`) that are still to come out (denied-tools.ts
+   * `dropWrittenDenials`), and only those; empty once they are out. Absent
+   * on a sidecar an earlier version left, which kept no such record.
+   */
+  deniedWritten?: string[];
+  /**
    * The harness config rows the last sync could not make ready, by their
    * report key (fleet-harness-config.ts `syncHarnessConfig`), each with its
    * words: a status read says them failed as the sync did, until a sync
@@ -374,6 +381,9 @@ const readSidecar = async (): Promise<ClaudeFleetSidecar> => {
     memoryDocs: stored?.memoryDocs ?? {},
     // None until the first sync: the machine has not heard the list.
     ...(stored?.deniedTools ? { deniedTools: stored.deniedTools } : {}),
+    // Kept through every write of the sidecar: without it the next converge
+    // reads the machine as an earlier version's again.
+    ...(stored?.deniedWritten ? { deniedWritten: stored.deniedWritten } : {}),
     hooks: stored?.hooks ?? {},
     harnessConfigFailed: stored?.harnessConfigFailed ?? {},
     ...(stored?.placedMcp ? { placedMcp: stored.placedMcp } : {}),

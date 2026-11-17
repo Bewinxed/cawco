@@ -22,16 +22,16 @@
  * and a spawn waits on nothing but a write already under way: a missing
  * list at a spawn is a fault, said at once.
  *
- * Two consumers read the resolved denials:
- *  1. The spawn paths (`claude.ts`, `opencode.ts`, `pi.ts`), through
- *     {@link sessionFleetDenials}: the baseline, plus the own-list set and the subagents.
- *  2. `convergeDeniedTools`, which writes the machine's share (the baseline,
- *     plus the own-list set and the subagents) into
- *     `~/.claude/settings.json` so the user's own `claude` sees the same
- *     denials — at daemon start, and again on every fleet sync.
+ * The spawn paths (`claude.ts`, `opencode.ts`, `pi.ts`) read them through
+ * {@link sessionFleetDenials}: the baseline, the own-list set, the subagents
+ * and the question tool, carried in each session's own start options. They
+ * are the only place the denials apply. Nothing CawCo denies is written into
+ * the person's own settings: the `claude` they start themselves keeps every
+ * tool their settings give it.
  *
- * Both read {@link resolvedFleetDenials} — the single source — so they cannot
- * drift from each other.
+ * Earlier versions wrote the baseline, the own-list set and the subagents
+ * into `~/.claude/settings.json` too. {@link dropWrittenDenials} takes those
+ * names back out once, at daemon start and on each fleet sync until it has.
  */
 
 import {
@@ -53,10 +53,10 @@ import {
   writeSettingsFile,
 } from "./claude-settings-file";
 
-/** Every `claude` this user starts reads it, daemon-spawned or not. */
+/** The person's own Claude Code settings, which earlier versions wrote the denials into. */
 const SETTINGS = userLayerPath("settings.json");
 
-/** The sidecar: the policy as each welcome or delta arrives, what the converge wrote after it. */
+/** The sidecar: the policy as each welcome or delta arrives, and what earlier versions wrote into {@link SETTINGS} until it is out. */
 const SIDECAR = claudeFleetSidecarFile();
 
 const said = (error: unknown): string =>
@@ -157,29 +157,38 @@ export const sidecarTurn = <T>(work: () => Promise<T>): Promise<T> => {
 
 /**
  * The fleet's denials, as a welcome or a delta carried them, into the
- * sidecar before the agent answers it; then the machine's own `claude`
- * follows the fleet at once (`permissions.deny` gains what the fleet now
- * denies, and drops what it denied before and no longer does). Throws in its
- * own words when the sidecar cannot be written: the agent refuses the delta
- * with them (NACK), and a spawn refuses with them too.
+ * sidecar before the agent answers it; then what earlier versions wrote into
+ * the person's settings goes, if it has not yet ({@link dropWrittenDenials}).
+ * Throws in its own words when the sidecar cannot be written: the agent
+ * refuses the delta with them (NACK), and a spawn refuses with them too.
  */
 export const applyFleetDenials = (
   deniedTools: readonly string[]
 ): Promise<void> => {
   const write = (async () => {
-    let before: string[] = [];
     try {
       await sidecarTurn(async () => {
-        const read = await readFleetDenials();
-        before = read.kind === "known" ? machineDenyList(read.denials) : [];
-        // A sidecar that does not parse holds nothing to keep: the converge
-        // after this rewrites it whole, as it always has. It is CawCo's own
-        // file, never the person's.
+        // A sidecar that does not parse holds nothing to keep: it is
+        // rewritten whole, as it always has been. It is CawCo's own file,
+        // never the person's.
         const sidecar = await readSettingsFile(SIDECAR);
         const stored = sidecar.state === "read" ? sidecar.settings : undefined;
+        // What an earlier version wrote, named before the list it was
+        // written from is replaced.
+        const written = writtenOf(stored);
         await writeStateFile(
           SIDECAR,
-          JSON.stringify({ ...stored, deniedTools: [...deniedTools] }, null, 2)
+          JSON.stringify(
+            {
+              ...stored,
+              deniedTools: [...deniedTools],
+              ...(written.kind === "known"
+                ? { deniedWritten: [...written.names] }
+                : {}),
+            },
+            null,
+            2
+          )
         );
       });
     } catch (error) {
@@ -188,9 +197,9 @@ export const applyFleetDenials = (
       throw new Error(reason, { cause: error });
     }
     lastFailure = undefined;
-    const settings = await convergeDeniedTools(before);
-    if (settings.state === "failed" || settings.state === "unsynced") {
-      console.warn(`[fleet] ${SETTINGS}: ${settings.detail}`);
+    const dropped = await dropWrittenDenials();
+    if (dropped.state === "failed") {
+      console.warn(`[fleet] ${dropped.detail}`);
     }
   })();
   writing = write.catch(() => undefined);
@@ -235,110 +244,163 @@ const resolvedFleetDenials = async (): Promise<FleetDenials> => {
   }
 };
 
-/** What the machine's own `claude` is denied: the baseline, the own-list set and the subagents. */
-const machineDenyList = ({ deniedTools }: FleetDenials): string[] => [
-  ...new Set([...deniedTools, ...OWN_LIST_DENIED, ...SUBAGENTS_DENIED]),
-];
-
 /**
  * What the fleet denies a session being spawned: the baseline, the own-list
- * set, and the harness's own question tool (core `QUESTION_TOOL_DENIED`: a
- * session asks the person through CawCo's `ask`), which the machine's own
- * `claude` keeps. The spawn's own `denyTools` union on top, in each adapter.
+ * set, the subagents, and the harness's own question tool (core
+ * `QUESTION_TOOL_DENIED`: a session asks the person through CawCo's `ask`).
+ * The spawn's own `denyTools` union on top, in each adapter.
  */
 export const sessionFleetDenials = async (): Promise<string[]> => [
   ...new Set([
-    ...machineDenyList(await resolvedFleetDenials()),
+    ...(await resolvedFleetDenials()).deniedTools,
+    ...OWN_LIST_DENIED,
+    ...SUBAGENTS_DENIED,
     ...QUESTION_TOOL_DENIED,
   ]),
 ];
 
+const isNameList = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((tool) => typeof tool === "string");
+
 /**
- * The settings with every `deny` name they did not already carry, and without
- * the `dropped` names the fleet no longer denies (what cawco wrote there
- * before), and whether that changed anything — `changed: false` is a caller
- * with nothing to write. Every other key, and every other rule, comes back
- * out exactly as it went in; only a `deny` that is not a list at all is
- * replaced, because nothing else can be appended to.
+ * What earlier versions wrote into the person's settings and is not out yet,
+ * as the sidecar `stored` says it:
+ * - `deniedWritten`, once a version that keeps it has written the sidecar:
+ *   the names still to come out, none once they are;
+ * - on a sidecar an earlier version left (a baseline and no
+ *   `deniedWritten`), what it wrote on every converge: the baseline, the
+ *   own-list set and the subagents. It put them back each time, so the file
+ *   cannot say whether one was also the person's; each is taken as CawCo's;
+ * - nothing on a machine that has never heard the list: nothing was written.
  */
-function withDeniedTools(
-  settings: unknown,
-  deny: readonly string[],
-  dropped: readonly string[] = []
-): { changed: boolean; next: Record<string, unknown> } {
-  const next = { ...(asRecord(settings) ?? {}) };
-  const permissions = { ...(asRecord(next.permissions) ?? {}) };
-  const current: unknown[] = Array.isArray(permissions.deny)
-    ? permissions.deny
-    : [];
-  const gone = new Set(dropped.filter((tool) => !deny.includes(tool)));
-  const kept = current.filter(
-    (tool) => !(typeof tool === "string" && gone.has(tool))
-  );
-  const missing = deny.filter((tool) => !kept.includes(tool));
-  if (missing.length === 0 && kept.length === current.length) {
-    return { changed: false, next };
+const writtenOf = (
+  stored: Record<string, unknown> | undefined
+):
+  | { kind: "known"; names: readonly string[] }
+  | { kind: "unreadable"; reason: string } => {
+  const written = stored?.deniedWritten;
+  if (isNameList(written)) {
+    return { kind: "known", names: written };
   }
-
-  permissions.deny = [...kept, ...missing];
-  next.permissions = permissions;
-  return { changed: true, next };
-}
-
-/** What a boot-time converge came to, so the daemon can say it in one line. */
-export type DenyConvergence =
-  | { state: "applied" | "unchanged" }
-  | { state: "failed" | "unsynced"; detail: string };
-
-/**
- * Converges `~/.claude/settings.json` with the machine's share of the fleet's
- * denials ({@link machineDenyList}), taking out `dropped`: the names cawco
- * wrote for the fleet before and the fleet no longer denies (a fleet sync
- * knows them; daemon start passes none). Writes only when that changes the
- * file. Nothing is written over a file that is there and could not be read
- * (claude-settings-file.ts): the rest of it is the user's own, and a rewrite
- * from an empty root would take their settings with it; that is `failed`,
- * said with why, and the next start or fleet sync converges again. Nothing
- * is ever waited on either: a pipe in its place is never opened, so the
- * daemon's start, which runs this first, goes on. Nothing is written either while the
- * fleet's denials are not known here: `unsynced` until the first sync,
- * `failed` with the sidecar's own fault.
- */
-export const convergeDeniedTools = async (
-  dropped: readonly string[] = []
-): Promise<DenyConvergence> => {
-  try {
-    const read = await readFleetDenials();
-    if (read.kind !== "known") {
-      return {
-        state: read.kind === "unsynced" ? "unsynced" : "failed",
-        detail: read.reason,
-      };
-    }
-    const deny = machineDenyList(read.denials);
-
-    const file = await readSettingsFile(SETTINGS);
-    if (file.state === "unread") {
-      return {
-        state: "failed",
-        detail: toolWords.settingsLeft(
-          toolWords.settingsSourceUnread(SETTINGS, file.why)
-        ),
-      };
-    }
-
-    const { changed, next } = withDeniedTools(settingsOf(file), deny, dropped);
-    if (!(changed && (await writeSettingsFile(SETTINGS, file, next)))) {
-      return { state: "unchanged" };
-    }
-    return { state: "applied" };
-  } catch (error) {
+  if (written !== undefined) {
     return {
-      state: "failed",
-      detail: `could not write ${SETTINGS}: ${said(error)}`,
+      kind: "unreadable",
+      reason: `${SIDECAR}: deniedWritten is not a list of tool names`,
     };
   }
+  const baseline = stored?.deniedTools;
+  if (baseline === undefined) {
+    return { kind: "known", names: [] };
+  }
+  if (!isNameList(baseline)) {
+    return {
+      kind: "unreadable",
+      reason: `${SIDECAR}: deniedTools is not a list of tool names`,
+    };
+  }
+  return {
+    kind: "known",
+    names: [...new Set([...baseline, ...OWN_LIST_DENIED, ...SUBAGENTS_DENIED])],
+  };
 };
+
+/**
+ * The settings without each of `names` in `permissions.deny`, and how many
+ * went. A rule is taken out only where it is one of `names` exactly; every
+ * other rule, and every other key, comes back out as it went in.
+ */
+const withoutNames = (
+  settings: Record<string, unknown>,
+  names: readonly string[]
+): { gone: string[]; next: Record<string, unknown> } => {
+  const permissions = asRecord(settings.permissions);
+  const deny: unknown = permissions?.deny;
+  if (!(permissions && Array.isArray(deny))) {
+    return { gone: [], next: settings };
+  }
+  const out = new Set(names);
+  const gone = deny.filter(
+    (rule): rule is string => typeof rule === "string" && out.has(rule)
+  );
+  if (gone.length === 0) {
+    return { gone, next: settings };
+  }
+  return {
+    gone,
+    next: {
+      ...settings,
+      permissions: {
+        ...permissions,
+        deny: deny.filter((rule) => !gone.includes(rule)),
+      },
+    },
+  };
+};
+
+/** What {@link dropWrittenDenials} came to, so the daemon can say it in one line. */
+export type DeniedCleanup =
+  | { state: "none" }
+  | { state: "dropped"; names: readonly string[] }
+  | { state: "failed"; detail: string };
+
+/**
+ * Takes out of `~/.claude/settings.json`'s `permissions.deny` what earlier
+ * versions wrote there ({@link writtenOf}), then records in the sidecar that
+ * nothing is left to take out, so it runs once: a name the person adds there
+ * afterwards stays. Run at daemon start and after each fleet sync's write
+ * of the sidecar; once done, each run reads the sidecar and stops.
+ *
+ * Nothing is written over a settings file that is there and could not be
+ * read (claude-settings-file.ts): the rest of it is the person's own. That
+ * is `failed`, said with why, and the record stays for the next start or
+ * sync to try again. A pipe in its place is never opened, so the daemon's
+ * start, which runs this first, goes on.
+ */
+export const dropWrittenDenials = (): Promise<DeniedCleanup> =>
+  sidecarTurn(async () => {
+    try {
+      const sidecar = await readSettingsFile(SIDECAR);
+      if (sidecar.state === "unread") {
+        return {
+          state: "failed",
+          detail: toolWords.settingsSourceUnread(SIDECAR, sidecar.why),
+        };
+      }
+      const stored = sidecar.state === "read" ? sidecar.settings : undefined;
+      const written = writtenOf(stored);
+      if (written.kind === "unreadable") {
+        return { state: "failed", detail: written.reason };
+      }
+      if (written.names.length === 0) {
+        return { state: "none" };
+      }
+      const file = await readSettingsFile(SETTINGS);
+      if (file.state === "unread") {
+        return {
+          state: "failed",
+          detail: toolWords.settingsLeft(
+            toolWords.settingsSourceUnread(SETTINGS, file.why)
+          ),
+        };
+      }
+      const { gone, next } = withoutNames(settingsOf(file), written.names);
+      if (gone.length > 0) {
+        await writeSettingsFile(SETTINGS, file, next);
+      }
+      await writeStateFile(
+        SIDECAR,
+        JSON.stringify({ ...stored, deniedWritten: [] }, null, 2)
+      );
+      return gone.length > 0
+        ? { state: "dropped", names: gone }
+        : { state: "none" };
+    } catch (error) {
+      return {
+        state: "failed",
+        detail: `could not take CawCo's denied tools out of ${SETTINGS}: ${said(error)}`,
+      };
+    }
+  });
 
 /** One rule of an OpenCode 2.0 session's permission set. */
 export interface OpencodeRule {

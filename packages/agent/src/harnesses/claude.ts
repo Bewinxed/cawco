@@ -2915,9 +2915,10 @@ class ClaudeSession implements HarnessSession {
         // Fleet baseline (from supervisor_config.denied_tools, cached in the
         // sidecar) + delegate-type denials + any the caller itself carried.
         // All three layers union: every layer can only add, never remove
-        // another layer's entries. Resolved once through `sessionFleetDenials()`
-        // so this path and `convergeDeniedTools` read the same value; it adds
-        // the harness's own list and plan mode, which every session is denied.
+        // another layer's entries. Resolved once through `sessionFleetDenials()`,
+        // which adds the harness's own list, plan mode, subagents and question
+        // tool, which every session is denied. These options are the only
+        // place a session gets them: the person's settings file holds none.
         disallowedTools: [
           ...new Set([
             ...(options.disallowedTools ?? []),

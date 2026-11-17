@@ -108,6 +108,7 @@ const PlacedRecordShape = declared(
 const ClaudeFleetSidecarShape = declared(
   z.object({
     deniedTools: z.array(z.string()).optional(),
+    deniedWritten: z.array(z.string()).optional(),
     harnessConfigFailed: z.record(z.string(), FleetItemStateShape),
     hooks: z.record(z.string(), ManagedHookShape),
     hubOnlyMarketplaces: z.array(z.string()),

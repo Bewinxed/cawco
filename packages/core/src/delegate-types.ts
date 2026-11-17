@@ -279,17 +279,19 @@ const NATIVE_TOOLS = {
 /**
  * What every session is denied beside the fleet's baseline, in Claude Code's
  * names (the OpenCode and pi adapters read each as their own tool, and find
- * none): the harness's own list and its plan mode. Added at spawn and to the
- * machine's own `claude` settings, so no stored list carries the names.
+ * none): the harness's own list and its plan mode. Added at spawn, in each
+ * session's own start options, so no stored list carries the names; never
+ * written into the person's own settings, so the `claude` they start
+ * themselves keeps both.
  */
 export const OWN_LIST_DENIED: readonly string[] = NATIVE_TOOLS.todos.claude;
 
 /**
  * The harness's own subagents, in Claude Code's names (the OpenCode adapter
- * reads them as `subagent`; pi has none): denied to every session and the
- * machine's own `claude` as {@link OWN_LIST_DENIED} is, a fixed line of the
- * fleet's policy, never stored or asked about. Work a session hands off goes
- * to CawCo's delegates.
+ * reads them as `subagent`; pi has none): denied to every session at spawn
+ * as {@link OWN_LIST_DENIED} is, a fixed line of the fleet's policy, never
+ * stored or asked about, and never written into the person's own settings.
+ * Work a session hands off goes to CawCo's delegates.
  */
 export const SUBAGENTS_DENIED: readonly string[] =
   NATIVE_TOOLS.subagents.claude;
@@ -297,7 +299,7 @@ export const SUBAGENTS_DENIED: readonly string[] =
 /**
  * The harness's own question tool, in Claude Code's name (the OpenCode
  * adapter reads it as `question`; pi has none): denied to every session at
- * spawn, never to the machine's own `claude`, so a question goes through
+ * spawn, so a question goes through
  * CawCo's `ask` (core `NATIVE_TOOLS.questions`).
  */
 export const QUESTION_TOOL_DENIED: readonly string[] =
