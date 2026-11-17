@@ -928,7 +928,8 @@ export interface OpencodeSessionOptions {
   skills: readonly string[];
   /**
    * A turn ended on `provider` (its last model step's): refused by it with
-   * `refusal` (an execution failed `provider.auth`, in the provider's words),
+   * `refusal` (an execution failed `provider.auth`, in the provider's words,
+   * and not a refusal of the turn's model alone, core `modelNotEnabled`),
    * or answered (undefined). The harness keeps it as a sign-in's fault.
    */
   turnOutcome: (provider: string, refusal: string | undefined) => void;
@@ -1733,8 +1734,16 @@ export class OpencodeSession implements HarnessSession {
         }
         this.#turnEnded();
         break;
-      case "session.execution.failed":
-        if (this.#turnProvider && event.data.error.type === "provider.auth") {
+      case "session.execution.failed": {
+        const refused = refusalOf(providerRefusal(event.data.error));
+        // OpenCode files every 401 and 403 as `provider.auth`; a 403 that
+        // refused the turn's model (core `modelNotEnabled`) says nothing of
+        // the sign-in, which stays as it was.
+        if (
+          this.#turnProvider &&
+          event.data.error.type === "provider.auth" &&
+          refused !== "access"
+        ) {
           const { message, status } = event.data.error;
           this.#turnOutcome(
             this.#turnProvider,
@@ -1745,9 +1754,10 @@ export class OpencodeSession implements HarnessSession {
           subtype: "error_during_execution",
           is_error: true,
           errors: [errorText(event.data.error)],
-          ...refusalFlags(refusalOf(providerRefusal(event.data.error))),
+          ...refusalFlags(refused),
         });
         break;
+      }
       case "session.execution.interrupted":
         if (event.data.reason === "user") {
           this.#turnEnded({ subtype: "aborted", is_error: false });

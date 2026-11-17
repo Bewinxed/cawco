@@ -3,6 +3,7 @@ import {
   type AccountAccess,
   type AccountBench,
   type AccountCredit,
+  type AccountMark,
   type AccountReading,
   type AccountSignin,
   accountNameAmong,
@@ -29,12 +30,17 @@ import {
   windowUsed,
   windowWords,
 } from "@cawco/core/usage/windows";
-import { clockWords, spanWords } from "@cawco/core/words/account-lines";
+import {
+  clockWords,
+  markWords,
+  spanWords,
+} from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { areaWords } from "@cawco/core/words/areas";
 import { configurePage } from "@cawco/core/words/configure";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { markOn } from "./account-marks";
 import type { DbShape } from "./db";
 import type { AccountPaces } from "./window-paces";
 
@@ -572,6 +578,16 @@ class Usage {
   /** The mark the start keeps off the account by, when its provider refused it the start's model ({@link PlacementInput.notEnabled}). */
   accessOut = (id: string): AccountAccess | undefined =>
     this.#input.notEnabled?.find((one) => one.accountId === id);
+
+  /** Either mark, as a held account's reason reads it (core `AccountMark`): its credit first. */
+  markOf = (id: string): AccountMark | null =>
+    markOn(
+      {
+        outOfCredit: this.#input.outOfCredit ?? [],
+        notEnabled: this.#input.notEnabled ?? [],
+      },
+      id
+    ) ?? null;
 
   /**
    * When an account with no room takes a session again: the latest of its
@@ -1169,7 +1185,19 @@ const NO_ROOM_GROUPS = [
  * that no reading says when), then each account by why it has no room and
  * when it is back, the detail for whoever wants it.
  */
-const noRoomRefusal = (full: Account[], usage: Usage, now: number): string => {
+const noRoomRefusal = (
+  noRoom: Account[],
+  usage: Usage,
+  now: number
+): string => {
+  // An account a provider refused the session's model, for want of credit
+  // or the model not enabled, is named by that refusal: no reset brings it
+  // back.
+  const marked = noRoom.flatMap((account) => {
+    const mark = usage.markOf(account.id);
+    return mark ? [`${markWords(mark, usage.name(account), now)}.`] : [];
+  });
+  const full = noRoom.filter((account) => usage.markOf(account.id) === null);
   const backs = full.map((account) => ({
     account,
     at: usage.backAt(account),
@@ -1206,6 +1234,7 @@ const noRoomRefusal = (full: Account[], usage: Usage, now: number): string => {
     "No account this session may run on has room for it now.",
     wayOn,
     ...groups,
+    ...marked,
   ].join(" ");
 };
 
@@ -1223,6 +1252,13 @@ export interface AccountRow {
   benchedUntil: number | null;
   createdAt: number;
   id: string;
+  /**
+   * A provider's refusal the hub keeps of it for the session's model, which
+   * a move keeps off ({@link PlacementInput.outOfCredit},
+   * {@link PlacementInput.notEnabled}); null when there is none, or none was
+   * given.
+   */
+  marked: AccountMark | null;
   neverBackup: boolean;
   /** The list that keeps it out: the session's project's, or its task's; null when both allow it. */
   notAllowedBy: "project" | "task" | null;
@@ -1290,6 +1326,7 @@ export const accountRows = (
         organization: account.identity?.organization || null,
         order: account.order,
         createdAt: account.createdAt,
+        marked: usage.markOf(account.id),
         neverBackup: account.neverBackup,
         signedIn: signedIn.includes(account),
         notAllowedBy: allowed.includes(account) ? null : notAllowedBy,

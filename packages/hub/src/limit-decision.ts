@@ -451,6 +451,11 @@ const reasonOf = (
   if (account.notAllowedBy) {
     return { kind: "allowed", by: account.notAllowedBy };
   }
+  // A provider's refusal of it for the session's model (hub
+  // account-marks.ts): nothing moves a session there.
+  if (account.marked) {
+    return account.marked;
+  }
   if (account.benchedUntil !== null) {
     return { kind: "benched" };
   }
@@ -597,7 +602,9 @@ const ordered = (input: StopInput, fit: readonly Weighed[]): Weighed[] => {
  * window and what it leaves after the moves already admitted there, and
  * whether the account lasts to its resets with the session's burn and what
  * already arrives there. An account fits when it is read, signed in on the
- * session's machine, allowed, off its bench, inside its reserve, under its
+ * session's machine, allowed, refused nothing for the session's model by its
+ * provider (hub account-marks.ts: out of credit, the model not enabled), off
+ * its bench, inside its reserve, under its
  * limits, left with room after the move, and lasts, or runs out only past
  * the policy's wait.
  *

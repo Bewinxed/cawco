@@ -26,7 +26,7 @@ import {
 import type { AccountHue, PlacementStrategy } from "@cawco/core/accounts/kinds";
 import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
-import { clockWords, dayWords } from "@cawco/core/words/account-lines";
+import { sinceWords } from "@cawco/core/words/account-lines";
 import { accountsWords as words } from "@cawco/core/words/accounts";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { accountsStore } from "../stores/accounts.svelte";
@@ -268,7 +268,7 @@ export function problemOf(account: Account): string | null {
   if (marked?.kind === "credit") {
     return spawnWords.startModel.creditProblem(
       marked.mark.provider,
-      sinceWords(marked.mark.since)
+      sinceWords(marked.mark.since, Date.now())
     );
   }
   if (marked?.kind === "access") {
@@ -276,7 +276,7 @@ export function problemOf(account: Account): string | null {
       spawnWords.startModel.notEnabled(
         marked.mark.model,
         nameOf(account),
-        sinceWords(marked.mark.since)
+        sinceWords(marked.mark.since, Date.now())
       ),
       marked.mark.model
     );
@@ -290,13 +290,6 @@ export function problemOf(account: Account): string | null {
   }
   return words.problem.missingOn(machineName(missing[0]), missing.length - 1);
 }
-
-/** When a mark began, as its words say it: its clock time today, else its day and time. */
-const sinceWords = (at: number): string =>
-  spawnWords.startModel.since(
-    dayWords(at) === dayWords(Date.now()) ? null : dayWords(at),
-    clockWords(at)
-  );
 
 /** A store a login moved from, by the harness that kept it. */
 const STORE_WORDS: Record<HomeStore, string> = words.harnesses;
