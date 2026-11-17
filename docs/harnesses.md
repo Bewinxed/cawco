@@ -133,11 +133,13 @@ pi: `~/.pi/agent` (`PI_CODING_AGENT_DIR`), hooks through the inline extension.
 
 **Stored sessions and transcripts.** Sessions run outside CawCo list, read
 back and resume as they ran (`listSessions`, `readTranscriptWindow`,
-`storedRun`); transcript search parses its format
+`storedRun`), and a name given to one is kept in the harness's own store
+(`renameSession`); transcript search parses its format
 (`packages/jsonl-parser`).
 Claude Code: JSONL (`claude-transcript.ts`, `claude-stored-run.ts`).
 OpenCode: its database (`opencode-transcript.ts`).
-pi: session files, line-indexed (`pi-services.ts`).
+pi: session files, line-indexed (`pi-services.ts`); a name is pi's own
+`session_info` entry, appended by its session manager.
 
 **Clean sessions.** A clean session starts with no instruction files,
 memory, skills or hooks, or the harness refuses it with a reason in

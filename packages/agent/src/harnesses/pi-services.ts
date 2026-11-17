@@ -213,7 +213,7 @@ const PI_CAPABILITIES: HarnessCapabilities = {
   mcpControl: false,
   listSessions: true,
   getSessionMessages: true,
-  renameSession: false,
+  renameSession: true,
   deleteSession: true,
   fork: true,
   rewind: false,
@@ -849,6 +849,10 @@ export async function piSessionPath(
   return name ? join(dir, name) : undefined;
 }
 
+/** An act on a pi conversation whose folder holds no session file of that id. */
+const piNotStored = (sessionKey: string): string =>
+  `pi keeps no conversation ${sessionKey} in that folder, so it can't be found`;
+
 let servicesPromise: Promise<AgentSessionServices> | null = null;
 const PI_AUTH_STATE: Record<PiCredentialState["state"], AuthState> = {
   "signed-in": "authenticated",
@@ -1222,19 +1226,30 @@ export class PiProfile {
   }
 
   /**
-   * pi keeps no name CawCo sets on a conversation (`renameSession: false`):
-   * the rename is refused in those words, never answered as done.
+   * The conversation named `title` in pi itself: a `session_info` entry
+   * appended to its session file by pi's own session manager
+   * (`SessionManager.appendSessionInfo`, what `AgentSession.setSessionName`
+   * and pi's `/name` write), which pi's listing reads back as the session's
+   * name, the latest one in the file wherever it sits in the tree
+   * (session-manager.js `buildSessionInfo`), so {@link listSessions} says it
+   * as the conversation's title after any restart. pi only appends to a
+   * session file, so a pi still writing it (its own terminal) keeps its
+   * entries whole. A conversation CawCo runs is named on its hub row, never
+   * here. One with no file (never answered) can't be found.
    */
-  renameSession(): Promise<void> {
-    return Promise.reject(
-      new Error(
-        harnessRefusedWords.keepsNo(
-          "pi",
-          "conversation name",
-          "this conversation wasn't renamed"
-        )
-      )
-    );
+  async renameSession(
+    sessionKey: string,
+    title: string,
+    dir?: string
+  ): Promise<void> {
+    if (!dir) {
+      throw new Error(piUnlocated(sessionKey));
+    }
+    const path = await piSessionPath(sessionKey, dir);
+    if (!path) {
+      throw new Error(piNotStored(sessionKey));
+    }
+    SessionManager.open(path, undefined, dir).appendSessionInfo(title);
   }
   /**
    * pi keeps no tag (`tagSession: false`): a tag cleared is one it never

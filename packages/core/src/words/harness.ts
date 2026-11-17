@@ -139,8 +139,8 @@ export const harnessRefusedWords = {
     `${name} isn't on this machine right now, so the providers it signs in to can't be listed`,
   /**
    * An act on a stored conversation that the harness keeps nothing for
-   * (pi: no name or tag CawCo can set, its capabilities say so): nothing
-   * was done. `what` is what it keeps none of, `undone` what wasn't done.
+   * (pi: no tag CawCo can set, its capabilities say so): nothing was
+   * done. `what` is what it keeps none of, `undone` what wasn't done.
    */
   keepsNo: (name: string, what: string, undone: string) =>
     `${name} keeps no ${what} CawCo can set, so ${undone}.`,
