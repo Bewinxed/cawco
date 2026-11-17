@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1a20dcc8-2cff-456f-b88b-ca087cb62439",
+  "id": "5b0a6a47-6934-4c59-9458-cf1feb1caa96",
   "prevId": "1492c90d-3bf7-424d-803b-9c0eacf37961",
   "tables": {
     "account_bench": {
@@ -8454,6 +8454,20 @@
         },
         "picked_model": {
           "name": "picked_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "carry_on": {
+          "name": "carry_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "carry_line": {
+          "name": "carry_line",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

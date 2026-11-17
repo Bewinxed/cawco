@@ -130,7 +130,7 @@ import type { LimitCompaction, MovedLine } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import type { BoardInstanceRow, PublicInstanceRow } from "./db/instances";
-import type { OwedMove } from "./db/owed-moves";
+import type { OwedCarry, OwedMove } from "./db/owed-moves";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
@@ -434,7 +434,7 @@ export interface ClosureContext {
   caps: ReturnType<typeof createCaps>;
   carryOn: (
     row: { id: string; machineId: string },
-    stopped: "limit" | "signin",
+    carry: OwedCarry,
     quiet?: boolean
   ) => void;
   carryTestFor: (
@@ -1093,7 +1093,7 @@ export interface ClosureContext {
   ) => Promise<void>;
   relaunchOnAccount: (
     instanceId: string,
-    carry?: "limit" | "signin",
+    carry?: OwedCarry,
     live?: boolean
   ) => void;
   relayingPreviews: Set<string>;
@@ -1379,7 +1379,7 @@ export interface ClosureContext {
   takeOwedMove: (row: StoredRow) => StoredRow;
   takeUpOwedMove: (
     instanceId: string,
-    carry?: "limit" | "signin"
+    carry?: OwedCarry
   ) => Promise<void> | undefined;
   taskAccounts: (
     projectId: string | null | undefined,
