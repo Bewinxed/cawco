@@ -52,6 +52,13 @@ export interface StreamHubShape {
   /** How many sockets follow a session — for tests and for reasoning about fan-out. */
   readonly followerCount: (sessionId: string) => number;
   /**
+   * The session is being deleted: its replay window goes, its sequence kept
+   * (as an idle ring's, {@link sweepStale}), and each socket following it is
+   * reset, so a resume and a follower both read its newest page again, which
+   * no longer answers with it.
+   */
+  readonly forget: (sessionId: string) => void;
+  /**
    * Handles a message on the dashboard socket that belongs to this protocol.
    * Returns true when it consumed it, so the envelope path never sees a shape
    * it would only log as malformed.

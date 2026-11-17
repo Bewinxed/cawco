@@ -112,6 +112,11 @@ export interface TranscriptPorts {
    * harness wrote "rejected" or "aborted".
    */
   readonly cuts: (instanceId: string) => TurnCut[];
+  /**
+   * Whether the session is being deleted (its row's end intent is a
+   * delete): what its process still says as it goes is no transcript of it.
+   */
+  readonly deleting: (instanceId: string) => boolean;
   /** Whether a dashboard follows the session's stream. */
   readonly followed: (instanceId: string) => boolean;
   /** The session's stream head: the seq a page is consistent with. */
@@ -243,6 +248,12 @@ interface Entry {
 }
 
 export interface TranscriptsShape {
+  /**
+   * The session is being deleted, or is gone: what is built of it goes, and
+   * a page of it is read again from what the hub still holds, which answers
+   * it as a session that never was.
+   */
+  readonly forget: (instanceId: string) => void;
   /** A session frame or a send's record, folded in; its changes go out on the stream. */
   readonly ingest: (instanceId: string, payload: TranscriptPayload) => void;
   /**
@@ -513,6 +524,9 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
   };
 
   const ingest = (instanceId: string, payload: Held): void => {
+    if (ports.deleting(instanceId)) {
+      return;
+    }
     const entry = entryFor(instanceId);
     if (entry.loading !== null) {
       entry.held.push(payload);
@@ -668,6 +682,9 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
   ports.lifetime.every(SWEEP_MS, sweep);
 
   return {
+    forget: (instanceId) => {
+      entries.delete(instanceId);
+    },
     ingest,
     line: (instanceId, message, harness) =>
       ingest(instanceId, { kind: "line", message, harness }),

@@ -165,6 +165,7 @@ import {
   AGENT_BUSY,
   CANCEL_BINARY_UPDATE,
   CONFIGURE_BINARY_UPDATES,
+  deletesSession,
   ENDED_STATUSES,
   OVER_STATUSES,
   resumedKey,
@@ -6101,6 +6102,7 @@ export const createServer = (
         );
     },
     deleteDone: (id) => watchPort.now()?.untell(id),
+    deleteBegun: (id) => forgetConversation(id),
     deleteTranscript: async (row) => {
       const { sessionId } = row;
       if (!sessionId) {
@@ -7952,6 +7954,8 @@ export const createServer = (
     },
     commands: (instanceId) => db.instanceCommands(instanceId) ?? undefined,
     cuts: (instanceId) => db.turnCuts.of(instanceId),
+    deleting: (instanceId) =>
+      deletesSession(db.ownedInstance(instanceId)?.endIntent),
     tooling: (instanceId) => db.instanceTooling(instanceId) ?? undefined,
   });
 
@@ -11099,12 +11103,49 @@ export const createServer = (
   toolsMayHaveChangedPort.fill(delegationMcp.toolsMayHaveChanged);
 
   /**
+   * What the hub keeps in memory of a session's conversation, ended as it is
+   * deleted (session-lifecycle `deleteBegun`) and again as its row goes: the
+   * transcript built of it, its stream's replay window (its followers reset)
+   * and the plan its followers last heard. Each is read again from the row,
+   * which a delete hides, so the session reads as one that never was.
+   */
+  const forgetConversation = (id: string): void => {
+    transcripts.forget(id);
+    streams.forget(id);
+    plans.forget(id);
+  };
+
+  /**
+   * Where a session's conversation was found (spawns.ts `locateSession`),
+   * under its id and under every key that named the same conversation:
+   * located again, a session whose row went is asked of the machines,
+   * which no longer hold it.
+   */
+  const forgetLocation = (id: string): void => {
+    const at = locations.get(id);
+    locations.delete(id);
+    if (!at) {
+      return;
+    }
+    for (const [key, other] of locations) {
+      if (
+        other?.machineId === at.machineId &&
+        other.sessionId === at.sessionId
+      ) {
+        locations.delete(key);
+      }
+    }
+  };
+
+  /**
    * What the hub holds in memory for sessions whose rows were just deleted —
    * the same forgetting a stopped session gets — so nothing points at a row
    * that is gone.
    */
   const forgetInstances = (ids: readonly string[]): void => {
     for (const id of ids) {
+      forgetConversation(id);
+      forgetLocation(id);
       forgetPending(id, UNREAD.ended);
       anchors.delete(id);
       settleBackoff.delete(id);

@@ -877,6 +877,21 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     return marks;
   };
 
+  /** Tells every socket following a session to read its newest page again (`stream.reset`). */
+  const resetFollowers = (sessionId: string): void => {
+    const reset: StreamReset = {
+      type: "stream.reset",
+      sessionId,
+      nextSeq: ringOf(sessionId).head + 1,
+    };
+    for (const socketId of followers.get(sessionId) ?? []) {
+      const follower = sockets.get(socketId);
+      if (follower) {
+        deliver(follower.socket, reset);
+      }
+    }
+  };
+
   return {
     sequence,
     admitFrame,
@@ -895,19 +910,11 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       }
     },
     followerCount: (sessionId) => followers.get(sessionId)?.size ?? 0,
-    resetFollowers: (sessionId) => {
-      const reset: StreamReset = {
-        type: "stream.reset",
-        sessionId,
-        nextSeq: ringOf(sessionId).head + 1,
-      };
-      for (const socketId of followers.get(sessionId) ?? []) {
-        const follower = sockets.get(socketId);
-        if (follower) {
-          deliver(follower.socket, reset);
-        }
-      }
+    forget: (sessionId) => {
+      rings.get(sessionId)?.forget();
+      resetFollowers(sessionId);
     },
+    resetFollowers,
     sweepStale,
   };
 };

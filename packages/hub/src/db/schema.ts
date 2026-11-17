@@ -5986,9 +5986,9 @@ export const declinedRewrites = sqliteTable(
 
 /**
  * Each session the person purged (its transcript deleted, from the
- * dashboard), by its machine and harness session id: what an agent's `find`
- * leaves out (find.ts `FindWhere.unpurged`), since the machine's transcript
- * index keeps the words it read. No foreign key: the hub's row for the
+ * dashboard), by its machine and harness session id: what every find and
+ * Recent's stored transcripts leave out (find.ts `purgedOut`), since the
+ * machine's transcript index keeps the words it read. No foreign key: the hub's row for the
  * session goes with the purge, and a machine removed later leaves its
  * purges standing.
  */

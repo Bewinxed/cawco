@@ -871,6 +871,10 @@ export interface SessionAddress {
 export type SessionEndIntent =
   "stop" | "discard" | "delete" | "delete-transcript";
 
+/** Whether an end deletes the session: nothing of it is shown from the moment it is taken. */
+export const deletesSession = (intent: SessionEndIntent | null | undefined) =>
+  intent === "delete" || intent === "delete-transcript";
+
 /** Creation provenance, stored by the agent and carried durably on its hub row. */
 export interface ScratchWorktree {
   dir: string;

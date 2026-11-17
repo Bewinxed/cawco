@@ -717,6 +717,15 @@ export const createPlans = (deps: PlansDeps) => {
   };
 
   return {
+    /**
+     * The session is being deleted: the plan its followers last heard goes,
+     * so a follower that subscribes is answered from its row, which no
+     * longer reads.
+     */
+    forget(instanceId: string): void {
+      held.delete(instanceId);
+    },
+
     /** What `GET /api/instances/:id/plan` answers: read now, and the followers told of any change. */
     async read(instanceId: string) {
       const settled = await settle(instanceId);
