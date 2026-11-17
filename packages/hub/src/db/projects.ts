@@ -46,7 +46,6 @@ import {
   projectNotes,
   projectOffers,
   projectPlaces,
-  projectRepositories,
   projects,
   queuedTaskStarts,
   queuedWorkItems,
@@ -331,11 +330,6 @@ export interface ProjectsDb {
   };
   /** A session's "make this a project" offer, answered or not (project-offers.ts). */
   readonly projectOffer: (instanceId: string) => ProjectOfferRow | undefined;
-  /** The project's repository on a machine, as the last workspace cut there recorded it. */
-  readonly projectRepository: (
-    projectId: string,
-    machineId: string
-  ) => MachinePath | undefined;
   /**
    * The project's spend over today and this month, each part from the usage
    * its sessions reported: its conversations', every attempt's session's and
@@ -381,12 +375,6 @@ export interface ProjectsDb {
   readonly projectsWorkedOn: (machineId: string) => string[];
   /** Stores what a session has done that taints its memory notes (memory.ts), replacing what it had. */
   readonly putSessionTaint: (row: SessionTaintRow) => void;
-  /** Records the folder a workspace of the project was just cut from on a machine; the last one stands. */
-  readonly recordProjectRepository: (repository: {
-    projectId: string;
-    machineId: string;
-    path: MachinePath;
-  }) => void;
   /**
    * Removes one of a project's places. Its primary checkout and its hub
    * folder are never removed here: forgetting the project is.
@@ -604,30 +592,6 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
         )
         .all()
         .flatMap(({ projectId }) => (projectId ? [projectId] : [])),
-    projectRepository: (projectId, machineId) =>
-      db
-        .select({ path: projectRepositories.path })
-        .from(projectRepositories)
-        .where(
-          and(
-            eq(projectRepositories.projectId, projectId),
-            eq(projectRepositories.machineId, machineId)
-          )
-        )
-        .get()?.path,
-    recordProjectRepository: (repository) => {
-      const row = { ...repository, recordedAt: new Date() };
-      db.insert(projectRepositories)
-        .values(row)
-        .onConflictDoUpdate({
-          target: [
-            projectRepositories.projectId,
-            projectRepositories.machineId,
-          ],
-          set: { path: row.path, recordedAt: row.recordedAt },
-        })
-        .run();
-    },
     projectByRemote: (remote) => {
       const [oldest] = db
         .select({ id: projects.id })
@@ -1148,28 +1112,6 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
                   .values({ ...link, projectId: keepId })
                   .onConflictDoNothing()
                   .run();
-              }
-            },
-            // Its repository on a machine where the kept project records none.
-            project_repositories: () => {
-              const machines = new Set(
-                tx
-                  .select({ machineId: projectRepositories.machineId })
-                  .from(projectRepositories)
-                  .where(eq(projectRepositories.projectId, keepId))
-                  .all()
-                  .map((row) => row.machineId)
-              );
-              for (const repository of tx
-                .select()
-                .from(projectRepositories)
-                .where(eq(projectRepositories.projectId, dupId))
-                .all()) {
-                if (!machines.has(repository.machineId)) {
-                  tx.insert(projectRepositories)
-                    .values({ ...repository, projectId: keepId })
-                    .run();
-                }
               }
             },
             instances: () => {

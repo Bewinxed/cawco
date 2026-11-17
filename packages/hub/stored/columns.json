@@ -4580,17 +4580,6 @@
       "headline": {
         "type": "string"
       },
-      "ship": {
-        "type": "object",
-        "properties": {
-          "notes": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "notes"
-        ]
-      },
       "summary": {
         "type": "string"
       }
@@ -13408,7 +13397,6 @@
     "type": "string",
     "enum": [
       "completing",
-      "gating",
       "turn"
     ]
   },
@@ -13552,17 +13540,6 @@
       },
       "headline": {
         "type": "string"
-      },
-      "ship": {
-        "type": "object",
-        "properties": {
-          "notes": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "notes"
-        ]
       },
       "summary": {
         "type": "string"

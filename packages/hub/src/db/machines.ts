@@ -568,7 +568,6 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         home,
         machineCapabilities,
         pausedUntil,
-        pauseStoppedMergeChecks: _mergeChecks,
         pauseStoppedCommands,
         pauseStoppedUnread,
         ...agent

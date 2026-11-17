@@ -396,13 +396,9 @@ export const agents = sqliteTable("agents", {
    */
   pausedUntil: timestamp("paused_until"),
   /**
-   * How many merge checks and how many commands the pause stopped as it
-   * began (machine-pause.ts): the machine's row says it. 0 when it stopped
-   * none; cleared with the pause.
+   * How many commands the pause stopped as it began (machine-pause.ts): the
+   * machine's row says it. 0 when it stopped none; cleared with the pause.
    */
-  pauseStoppedMergeChecks: integer("pause_stopped_merge_checks")
-    .notNull()
-    .default(0),
   pauseStoppedCommands: integer("pause_stopped_commands").notNull().default(0),
   /**
    * What the pause stopped as migration 0424 found it stored, kept as it
@@ -1094,25 +1090,6 @@ export const projectLinks = sqliteTable(
   ]
 );
 
-/**
- * A project's repository on a machine: the folder the hub last cut a
- * workspace of the project from there. A landing gate step on the machine
- * (the iOS build) cuts its gate workspace from it (gate.ts
- * `gateWorkspace`). It outlives
- * every workspace cut from it, and is no place: nothing else reads it.
- */
-export const projectRepositories = sqliteTable(
-  "project_repositories",
-  {
-    projectId: projectKey(),
-    /** Not a reference: a machine's repositories go with it in `deleteMachine`. */
-    machineId: machineColumn("machine_id").notNull(),
-    path: text("path").$type<MachinePath>().notNull(),
-    recordedAt: stampedNow("recorded_at"),
-  },
-  (table) => [primaryKey({ columns: [table.projectId, table.machineId] })]
-);
-
 /** A running or resumable `query()`. Messages live in SDK session storage, not here. */
 export const instances = sqliteTable("instances", {
   /** Removed machines keep ownership hidden without an end decision. */
@@ -1699,10 +1676,11 @@ export const workspaces = sqliteTable(
     tmp: text("tmp"),
     createdByInstanceId: sessionColumn("created_by_instance_id").notNull(),
     /**
-     * The workspace whose landing gate step this one runs on a machine other
-     * than that one's (the iOS build on a Mac): a gate workspace, cut there the
-     * first time one of its items' gates needs the machine, and archived with
-     * it. Null for a delegate's.
+     * The workspace whose landing gate step this one ran on another machine
+     * (the iOS build on a Mac), cut by a hub before 2026-11-17. Read only by
+     * the closer that lets those clones go as their machine registers
+     * (workspaces.ts `closeGateClones`); the next release's migration drops
+     * it once that has run. Null for every other workspace.
      */
     checksFor: text("checks_for"),
     /**
@@ -1812,7 +1790,7 @@ export type WorkItemState = import("@cawco/core/work-items").WorkItemState;
  * ending in a report. A follow-up is a new item in the same workspace, run by
  * the same session; the reader or the parent can also reopen finished work.
  * It is `done` only when its session called `finish_item` and its work
- * passed the hub's landing gate (gate.ts `gateSteps`) and landed.
+ * landed (landing.ts).
  */
 export const workItems = sqliteTable(
   "work_items",
@@ -1868,7 +1846,7 @@ export const workItems = sqliteTable(
      */
     stoppedBy: storedJson(EndedBySchema)("stopped_by"),
     /**
-     * Where its commits go once it passes the landing gate (landing.ts): onto the
+     * Where its commits go once it finishes (landing.ts): onto the
      * workspace's base branch, to `cawco/<task or item>` on origin, to that
      * branch with a pull request, or nowhere.
      */
@@ -1916,11 +1894,9 @@ export const workItems = sqliteTable(
       .notNull()
       .default("starting"),
     /**
-     * When the hub began landing it for a `finish_item` (its landing gate,
-     * then the push), while that runs. Set, the item is landing: a hub that
-     * starts finds it here and runs the landing again on {@link submission},
-     * each gate step that passed kept ({@link workItemGatePasses}), so its gate goes
-     * on from the step it was on.
+     * When the hub began landing it for a `finish_item` (its rebase, then the
+     * push), while that runs. Set, the item is landing: a hub that starts
+     * finds it here and runs the landing again on {@link submission}.
      */
     landingSince: timestamp("landing_since"),
     /**
@@ -1928,15 +1904,6 @@ export const workItems = sqliteTable(
      * (stored-types.ts `LandingPhase`); null while it runs from the first.
      */
     landingPhase: storedEnum(LandingPhaseSchema)("landing_phase"),
-    /**
-     * Its landing gate's passes as they were stored, when they were there
-     * and did not read whole as they became {@link workItemGatePasses} rows
-     * (migration 0401): not JSON, not an object of lists, or a pass that is
-     * not a command and a stage. None of it was placed: it vouches for no
-     * tree, so the gate runs each of its steps again. Cleared with the
-     * item's passes as it ends (work-items.ts `finish`).
-     */
-    gatePassesUnread: text("gate_passes_unread"),
     /**
      * When its session called `finish_item` (to land, or blocked) in the
      * turn still under way: that call is the turn's last step. While set, a
@@ -1976,7 +1943,7 @@ export const workItems = sqliteTable(
     /**
      * When an interrupt stopped its turn, or the sweep found its session
      * asleep past its limit, while that holds it: nothing the hub sends on
-     * its own (a quiet turn's reminder, a wait's end, a landing gate's
+     * its own (a quiet turn's reminder, a wait's end, a landing's
      * outcome, a rule's reply, another session's report) wakes it until its
      * parent, its project's conversation or the reader sends it something.
      */
@@ -2030,8 +1997,8 @@ export const workItems = sqliteTable(
     /** The `finish_item` the running landing answers, kept while it runs. */
     submission: storedJson(WorkItemSubmissionSchema)("submission"),
     /**
-     * The final report: the session's summary, the landing gate's lines, the
-     * landing, commits and findings, as the hub built them when it landed.
+     * The final report: the session's summary, the landing, commits and
+     * findings, as the hub built them when it landed.
      */
     result: text("result"),
     /**
@@ -2068,18 +2035,11 @@ export const workItems = sqliteTable(
      */
     landedAt: timestamp("landed_at"),
     /**
-     * The tree that landed (`git rev-parse <sha>^{tree}`), when its landing
-     * gate's passes on it were recorded: what a release asks the hub of a
-     * commit's tree (`GET /api/landing-gate`). Null on landings before
-     * 2026-10-23, and where git could not name the tree.
-     */
-    landedGateTree: text("landed_gate_tree"),
-    /**
      * Its landing as it was stored, when it was there and did not read whole
      * as landings became columns (migration 0400): not JSON, not an object,
      * or a field that is not its type. Its work is landed, so it is never
-     * landed again; the fields that read are placed beside it, a gate that
-     * does not read vouches for no tree, and it is no branch push's lease.
+     * landed again; the fields that read are placed beside it, and it is
+     * no branch push's lease.
      * A later landing of the item clears it.
      */
     landedUnread: text("landed_unread"),
@@ -2145,7 +2105,6 @@ export const workItems = sqliteTable(
     index("work_items_workspace").on(table.workspaceId, table.state),
     index("work_items_parent").on(table.parentInstanceId, table.state),
     index("work_items_task").on(table.projectId, table.taskId),
-    index("work_items_landed_gate_tree").on(table.landedGateTree),
     // The sweep's blocked items (work-items.ts `unblockReady`).
     index("work_items_blocked")
       .on(table.state)
@@ -2263,50 +2222,6 @@ export const workItemOutputs = sqliteTable(
     path: text("path").notNull(),
   },
   (table) => [primaryKey({ columns: [table.itemId, table.path] })]
-);
-
-/**
- * Each command of a work item's landing gate that passed on the tree that
- * landed ({@link workItems} `landedGateTree`), as gate.md writes it, one row
- * each, in the gate's order: what a release of a commit holding that tree
- * need not run again (work-items.ts `gatePassesOn`). Replaced whole by each
- * landing that records its gate.
- */
-export const workItemLandedChecks = sqliteTable(
-  "work_item_landed_checks",
-  {
-    itemId: text("item_id")
-      .notNull()
-      .references(() => workItems.id, { onDelete: "cascade" }),
-    command: text("command").notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.itemId, table.command] })]
-);
-
-/**
- * A landing gate step that passed for a live work item: its command as
- * gate.md writes it, trimmed, on what it passed on (gate.ts `passKey`: the
- * whole tree, or the trees of the paths the step declares), and the stage
- * it ran in, for the line of a later run it lets skip. Kept as each step
- * passes, read in the order kept (rowid): a step runs at most once on one
- * key, a hub restart included. A run whose workspace moved under it lets
- * its own rows go; the item's end drops them all (work-items.ts `finish`).
- */
-export const workItemGatePasses = sqliteTable(
-  "work_item_gate_passes",
-  {
-    itemId: text("item_id")
-      .notNull()
-      .references(() => workItems.id, { onDelete: "cascade" }),
-    passKey: text("pass_key").notNull(),
-    command: text("command").notNull(),
-    stage: text("stage").notNull(),
-  },
-  (table) => [
-    primaryKey({
-      columns: [table.itemId, table.passKey, table.command, table.stage],
-    }),
-  ]
 );
 
 /**

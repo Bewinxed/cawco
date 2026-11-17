@@ -62,7 +62,6 @@ import {
   projectNotes,
   projectOffers,
   projectPlaces,
-  projectRepositories,
   projects,
   purgedSessions,
   queuedTaskStarts,
@@ -216,11 +215,6 @@ export const OWNED_ROWS = [
     goesWithMachine: true,
   },
   {
-    column: projectRepositories.machineId,
-    rekey: "keyed",
-    goesWithMachine: true,
-  },
-  {
     column: accountSignins.machineId,
     rekey: "keyed",
     goesWithMachine: true,
@@ -238,10 +232,6 @@ export const OWNED_ROWS = [
   // A project folded into another (foldProject order).
   { column: projectPlaces.projectId, foldProject: "custom" },
   { column: projectLinks.projectId, foldProject: "custom" },
-  {
-    column: projectRepositories.projectId,
-    foldProject: "custom",
-  },
   { column: instances.projectId, foldProject: "custom" },
   { column: workItems.projectId, foldProject: "custom" },
   { column: projectNotes.projectId, foldProject: "move" },

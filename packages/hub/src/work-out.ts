@@ -32,7 +32,6 @@ export const workItemOut = (
     landedSha,
     landedOnto,
     landedAt,
-    landedGateTree,
     blockedKind,
     blockedName,
     blockedSince,

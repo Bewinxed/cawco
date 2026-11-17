@@ -433,7 +433,7 @@ export const KeepAliveStoppedSchema: z.ZodType<KeepAliveStoppedType> =
 export type KeepAliveStoppedOutput = z.output<typeof KeepAliveStoppedShape>;
 
 const LandingPhaseShape = declared(
-  z.enum(["completing", "gating", "turn"]),
+  z.enum(["completing", "turn"]),
   "LandingPhase",
   "packages/hub/src/db/stored-types.ts"
 );

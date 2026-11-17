@@ -124,6 +124,11 @@ const REWRITES: readonly Rewrite[] = [
     migration: "0438_hook_mcp_tool_fields",
     why: "the same rename and drop in each kept version of a handler",
   },
+  {
+    column: "work_items.landing_phase",
+    migration: "0443_landing_gate_goes",
+    why: "the landing gate is gone, so no landing is gating: a row in that phase is set to null, and its landing runs again from its first step",
+  },
 ];
 
 type Schema = Record<string, unknown>;

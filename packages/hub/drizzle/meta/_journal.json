@@ -3046,6 +3046,13 @@
       "when": 1794881742342,
       "tag": "0442_session_content_goes",
       "breakpoints": true
+    },
+    {
+      "idx": 443,
+      "version": "6",
+      "when": 1794904694881,
+      "tag": "0443_landing_gate_goes",
+      "breakpoints": true
     }
   ]
 }

@@ -612,13 +612,10 @@ export type WorkOrigin = Origin | "kept";
  * - `completing`: its `finish_item` stored while work it delegated is still
  *   live; it lands once every item it delegated, queued ones included, has
  *   ended (work-items.ts `completeIfDrained`).
- * - `gating`: its landing gate runs on its tree (at finish_item, or on top
- *   of its base); each step that passed is kept (schema `work_item_gate_passes`), so a
- *   gate a restart cut runs from the step it was on.
- * - `turn`: in its turn to land, rebased again, the steps the rebase moved
- *   run again, then the push.
+ * - `turn`: landing on its base: rebased onto it, waiting its turn, then
+ *   rebased again and pushed. A restart runs it again from the first step.
  */
-export type LandingPhase = "completing" | "gating" | "turn";
+export type LandingPhase = "completing" | "turn";
 
 /**
  * A workspace's life, which is its work items' (workspaces.ts `settle`):
