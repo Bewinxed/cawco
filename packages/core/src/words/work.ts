@@ -166,7 +166,7 @@ export const workWords = {
     `start held: ${why}; it starts once that is over`,
   /** When a parent hears from its delegate, as `delegate` and a continue answer it. */
   reportArrives:
-    "Its report arrives once it calls finish_item and its work passes the hub's merge checks.",
+    "Its report arrives once it calls finish_item and the hub has landed its work.",
   /**
    * The title of your notice of a blocked item: held because its session
    * slept past its limit (hub work-items.ts `blockAsleep`), or because what

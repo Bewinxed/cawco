@@ -214,13 +214,11 @@ const outputsLine = (outputs: string[] | undefined): string =>
 const scratchOutputsLine = (assets: string | undefined): string =>
   ` ${assets ? workWords.scratchOutputsCopied(assets) : workWords.scratchOutputsNoProject}`;
 
-/** The merge checks, as a delegate is told of them. */
-const GATE = "its merge checks (the checks its project's gate.md names)";
-
 /**
- * How a work item's workspace lands: the hub does it after `finish_item`,
- * after its merge checks pass (hub/src/landing.ts), so the session commits and
- * never pushes. The session's report, quoting what it ran, is the proof.
+ * How a work item's workspace lands: the hub rebases and pushes after
+ * `finish_item` (hub/src/landing.ts), so the session commits and never
+ * pushes. The session runs its project's checks itself, and its report,
+ * quoting what it ran, is the proof.
  */
 const hubLandLine = (
   base: string,
@@ -231,15 +229,15 @@ const hubLandLine = (
   const opening = `The repository's default branch is ${base}.`;
   switch (lands) {
     case "branch":
-      return `${opening} Commit your work and do not push: after finish_item, the hub runs ${GATE} on your commits and pushes your branch to origin; nothing goes onto ${base}.${outputsSaid}${compare}`;
+      return `${opening} Commit your work and do not push: after finish_item, the hub pushes your branch to origin; nothing goes onto ${base}.${outputsSaid}${compare}`;
     case "pr":
-      return `${opening} Commit your work and do not push: after finish_item, the hub runs ${GATE} on your commits, pushes your branch to origin and opens a pull request against ${base}.${outputsSaid}${compare}`;
+      return `${opening} Commit your work and do not push: after finish_item, the hub pushes your branch to origin and opens a pull request against ${base}.${outputsSaid}${compare}`;
     case "none":
       return outputs?.length
         ? `${opening} Nothing is pushed: after finish_item, your outputs (${outputs.join(", ")}) are collected into the project's folder, and a missing one comes back to you. They need not be committed.${scratchOutputsLine(assets)}${compare}`
         : `${opening} Nothing is pushed: finish_item hands your report to your parent.${scratchOutputsLine(assets)}${compare}`;
     case "main":
-      return `${opening} Commit your work and do not push: after finish_item, the hub rebases your commits onto origin/${base}, runs ${GATE} on the result, and pushes to ${base}; a failed check comes back to you with its output.${outputsSaid}${compare}`;
+      return `${opening} Commit your work and do not push: after finish_item, the hub rebases your commits onto origin/${base} and pushes to ${base}; a conflict comes back to you with its files.${outputsSaid}${compare}`;
   }
 };
 
@@ -302,9 +300,9 @@ const copyWords = ({ path, repoRoot }: WorkspacePlace): string =>
 
 /**
  * How a folder workspace lands: its change set goes into the folder after
- * `finish_item`, once a conflict scan and the folder's checks pass (hub
- * landing-run.ts `landFolder`); the services it touched are its report's to
- * name, and its parent's to restart.
+ * `finish_item`, once a conflict scan passes (hub landing-run.ts
+ * `landFolder`); the services it touched are its report's to name, and its
+ * parent's to restart.
  */
 const folderLandLine = (
   folder: string,
@@ -312,7 +310,7 @@ const folderLandLine = (
 ): string =>
   lands === "none"
     ? `Nothing of yours is written into ${folder}: finish_item hands your report to your parent.${outputsLine(outputs)}`
-    : `After finish_item, the files you changed are read against ${folder} as it is then: a file changed there too since you started comes back to you with both versions; otherwise the folder's checks (its project's gate.md) run on your changes, and the agent on this machine writes them into ${folder}. A service that must restart to take them (nginx, a systemd unit) is not yours to restart: name each in your finish_item summary, and your parent restarts it.${outputsLine(outputs)} Your finish_item summary is the proof of the work: quote the real output of each command that proves it.`;
+    : `After finish_item, the files you changed are read against ${folder} as it is then: a file changed there too since you started comes back to you with both versions; otherwise the agent on this machine writes them into ${folder}. A service that must restart to take them (nginx, a systemd unit) is not yours to restart: name each in your finish_item summary, and your parent restarts it.${outputsLine(outputs)} Your finish_item summary is the proof of the work: quote the real output of each command that proves it.`;
 
 /**
  * The opening of a work item's session in its workspace's private copy of

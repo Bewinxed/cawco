@@ -34,4 +34,6 @@ permissions and questions from the lock screen.
 
 ## Tests
 
+Run `bun run check` before `finish_item`: the hub rebases and pushes your commits as they are.
+
 No unit tests, and no test under another name: no script that runs product code and asserts what it does, no new probe spec, no new scenario in the binary's tests. What the code shows is not tested: read it and prove the change from the diff. A check in `bun run check` is a rule a tool enforces on the source: lint, types, a banned pattern, a measured contrast, a generated file kept current. Three things stay because the code cannot show them: the migration check on a copy of a real database, the sweep of the session handover's interleavings (`scripts/protocol-sweep.ts`), and the binary's smoke and end-to-end tests (`bun run test:binary`), run by hand before a change to how the daemon installs, updates or rolls back.

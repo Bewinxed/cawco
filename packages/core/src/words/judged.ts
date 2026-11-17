@@ -95,9 +95,6 @@ export const judgedWords = {
     removed: number;
   }): string =>
     `${cut.left} of ${cut.files} changed files are left out of this diff (${signed("+", cut.added)} ${signed("−", cut.removed)} lines), cut to fit: ${cut.paths.join(", ")}${cut.more > 0 ? `, and ${cut.more} more` : ""}.`,
-  /** A landed attempt whose report holds no merge-check lines: they passed, as every landing's do. */
-  checksUnsaid:
-    "Its merge checks passed, as the hub lands work only once they do; their lines are not in its report.",
   /** The hand-in's `check` lines' heading: the attempt's caveats. */
   caveatsHead: "What it said needs attention (its hand-in's caveats):",
   /** A landed attempt that named no caveat. */
@@ -112,5 +109,5 @@ export const judgedWords = {
     criteria: readonly string[],
     work: string
   ): string =>
-    `Judge ${task}: ${attempt} passed its checks and its work is in, and its acceptance criteria wait for your judgment (Jev is off; you did not do this work). Move the task to its done stage when the work shows every criterion met; else move it back to its todo stage with a task_comment naming what is missing.\n\nCriteria:\n${criteria.map((each) => `- ${each}`).join("\n")}\n\nThe attempt's work:\n\n${work}`,
+    `Judge ${task}: ${attempt} landed its work, and its acceptance criteria wait for your judgment (Jev is off; you did not do this work). Move the task to its done stage when the work shows every criterion met; else move it back to its todo stage with a task_comment naming what is missing.\n\nCriteria:\n${criteria.map((each) => `- ${each}`).join("\n")}\n\nThe attempt's work:\n\n${work}`,
 } as const;

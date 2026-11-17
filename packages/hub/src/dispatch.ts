@@ -169,7 +169,7 @@ import {
   tailOf,
 } from "./jev-placement";
 import type { LandedDiff } from "./landed";
-import { fenced, reportedGate } from "./landing-run";
+import { fenced } from "./landing-run";
 import type { HubLifetimeShape } from "./lifetime";
 import type { Memory } from "./memory";
 import type { ProblemsOf } from "./refusal";
@@ -408,7 +408,7 @@ const attemptReport = (item: WorkItemRow): string => {
 interface WorkReads {
   /** Of its landed diff, cut file by file. */
   diff: number;
-  /** Of its merge checks, and of its caveats, each. */
+  /** Of its caveats. */
   notes: number;
   /** Of its report, when it landed nothing: its end. */
   report: number;
@@ -494,23 +494,17 @@ const cutDiff = (
 };
 
 /**
- * A landed attempt's merge checks and caveats, as the judge reads them
- * after its diff: the merge checks the hub ran on it, as its landing wrote
- * them in its report (landing-run.ts `reportedGate`), then the `check`
- * lines of its hand-in on the task, which are its caveats.
+ * A landed attempt's caveats, as the judge reads them after its diff: the
+ * `check` lines of its hand-in on the task.
  */
 const landedNotes = (item: WorkItemRow, max: number): string => {
-  const checks = reportedGate(item) ?? judgedWords.checksUnsaid;
   const caveats = item.taskResult?.check ?? [];
-  return [
-    head(checks, max),
-    head(
-      caveats.length > 0
-        ? `${judgedWords.caveatsHead}\n${caveats.map((line) => `- ${line}`).join("\n")}`
-        : judgedWords.noCaveats,
-      max
-    ),
-  ].join("\n\n");
+  return head(
+    caveats.length > 0
+      ? `${judgedWords.caveatsHead}\n${caveats.map((line) => `- ${line}`).join("\n")}`
+      : judgedWords.noCaveats,
+    max
+  );
 };
 
 /**
@@ -518,8 +512,7 @@ const landedNotes = (item: WorkItemRow, max: number): string => {
  * (2026-11-15): "the proof is the commit and anything in a report should
  * only note any caveats or remainders or defects". An attempt that landed
  * commits is judged over the work itself: their diff (landed.ts
- * `landedDiff`, cut by {@link cutDiff}), the merge checks the hub ran on
- * them, and its hand-in's caveats ({@link landedNotes}); its finish_item
+ * `landedDiff`, cut by {@link cutDiff}) and its hand-in's caveats ({@link landedNotes}); its finish_item
  * report is not read. One that landed none is judged over its report and
  * hand-in ({@link attemptReport}). `reads` is how much of each the judge
  * takes.
@@ -598,8 +591,8 @@ const checkLine = (written: string): string => {
 
 /**
  * The brief's checks section: the task's checks are commands the attempt
- * runs itself and quotes in its report (finish_item's `summary`), never
- * something the hub runs; the hub runs only its merge checks.
+ * runs itself and quotes in its report (finish_item's `summary`); the hub
+ * runs none.
  */
 const checksSection = (task: TaskView): string =>
   task.checks.length > 0
@@ -664,10 +657,10 @@ const typeOf = (
 
 /** What the brief says happens at finish_item, by where the attempt lands. */
 const AT_FINISH: Record<LandsMode, string> = {
-  main: "When the work is committed, call finish_item: the hub rebases your commits onto the default branch, runs the merge checks its project's gate.md names, and then pushes them to it.",
+  main: "When the work is committed, call finish_item: the hub rebases your commits onto the default branch and pushes them to it.",
   branch:
-    "When the work is committed, call finish_item: the hub runs its merge checks on your commits and pushes your branch.",
-  pr: "When the work is committed, call finish_item: the hub runs its merge checks on your commits, then pushes your branch and opens a pull request.",
+    "When the work is committed, call finish_item: the hub pushes your branch.",
+  pr: "When the work is committed, call finish_item: the hub pushes your branch and opens a pull request.",
   none: "When the work is ready, call finish_item: nothing is pushed, and the hub collects your outputs.",
 };
 
@@ -2501,7 +2494,7 @@ export const createDispatcher = ({
    * Judged checks (§5.9) for an attempt that ended done at a task with
    * acceptance criteria: never by the session that did the work. Each is
    * judged over the work ({@link attemptWork}): what it landed (its diff,
-   * the merge checks the hub ran, its hand-in's caveats), or its report and
+   * its hand-in's caveats), or its report and
    * hand-in when it landed nothing. Jev on ({@link judgedByJev}): `done`,
    * `todo` with the attempt stamped unmet, or `stays`. Jev off: the
    * project's conversation judges them (`conversation`: it is woken with

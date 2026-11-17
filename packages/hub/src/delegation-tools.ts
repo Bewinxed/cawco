@@ -212,11 +212,12 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
   const refused = " A report pointing at a chat message is refused.";
   const ends =
     "the work's loose ends: each caveat, what is left undone, each defect found, what your boundary could not run. With none, one line saying so";
-  const commits = `${alone}${reader} Your commits are the evidence and the hub checks them, so \`summary\` is ${ends}.${refused}`;
+  const commits = `${alone}${reader} Your commits are the evidence, so \`summary\` is ${ends}.${refused}`;
   const whole = `${alone}${reader} \`summary\` carries the deliverable whole, or names the file in $TMPDIR/outputs/ holding a long one, then ${ends}.${refused}`;
-  const gate = "the merge checks your project's gate.md names";
+  const commit =
+    "Finish your work item. Run the checks your project's instructions name, commit, and do not push.";
   const back =
-    " A failed check or a conflict comes back with its output: fix, commit, call again.";
+    " Uncommitted work, a conflict or a refused push comes back with git's words: fix, commit, call again.";
   const outputs =
     " In a project, $TMPDIR/outputs/ and your declared outputs are copied to its folder's assets/; the report names each path. Everything else in $TMPDIR is deleted with the workspace.";
   const close =
@@ -225,13 +226,13 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
     case "host":
       return `Finish your work item. Nothing is landed: you ran on the machine itself.${alone}${reader} \`summary\` carries the findings and changes whole, then ${ends}.${refused} In a project, files you leave in $TMPDIR/outputs/ are copied to its folder's assets/, readable from any machine; the report names each path.${close}`;
     case "branch":
-      return `Finish your work item. Commit and do not push.${commits} Then ${gate} runs on your commits and the hub pushes your branch to origin, not the base branch.${back}${outputs}${close}`;
+      return `${commit}${commits} Then the hub pushes your branch to origin, not the base branch.${back}${outputs}${close}`;
     case "pr":
-      return `Finish your work item. Commit and do not push.${commits} Then ${gate} runs on your commits, the hub pushes your branch and opens a pull request against the base branch (or updates the open one).${back}${outputs}${close}`;
+      return `${commit}${commits} Then the hub pushes your branch and opens a pull request against the base branch (or updates the open one).${back}${outputs}${close}`;
     case "none":
       return `Finish your work item. Nothing is pushed.${whole}${outputs} A missing declared one comes back to you.${close}`;
     case "main":
-      return `Finish your work item. Commit and do not push.${commits} Then the hub rebases your commits onto the base branch, runs ${gate} on the result and pushes.${back}${outputs}${close}`;
+      return `${commit}${commits} Then the hub rebases your commits onto the base branch and pushes.${back}${outputs}${close}`;
   }
 };
 
@@ -665,7 +666,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "delegate",
-      "Run bounded work in a new session with its own workspace and fresh context. It reports back once its work passes the hub's merge checks (its project's gate.md lists them): its commits are the evidence, its report the loose ends you pick up.\n\n" +
+      "Run bounded work in a new session with its own workspace and fresh context. It reports back once the hub has rebased its commits and pushed them: its commits are the evidence, its report the loose ends you pick up.\n\n" +
         "A delegate costs a whole session: it reads the code again from nothing, its workspace is cut and its checks run, and you wait for its report. " +
         "That pays off for substantial work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs, independent pieces run at once. " +
         "It does not for one command whose exact output you need, git status, log or diff, grep, a few file reads, a port check, a log tail, a restart, edits to files you are changing, or what the user wants to watch: do those yourself.\n\n" +
@@ -741,7 +742,7 @@ export function handoffTools(view: ToolView) {
           .enum(LANDS_MODES)
           .optional()
           .describe(
-            "main (default): rebased onto the default branch after its merge checks pass. branch: pushed to cawco/<item>. pr: that, with a pull request. none: nothing pushed; name its deliverables in outputs. Work on a machine rather than a repository: host instead."
+            "main (default): rebased onto the default branch and pushed. branch: pushed to cawco/<item>. pr: that, with a pull request. none: nothing pushed; name its deliverables in outputs. Work on a machine rather than a repository: host instead."
           ),
         host: z
           .boolean()
@@ -915,12 +916,6 @@ export function handoffTools(view: ToolView) {
           .object({ command: z.string(), error: z.string() })
           .optional()
           .describe("The exact command and error."),
-        ship: z
-          .object({ notes: z.string().trim().min(1) })
-          .optional()
-          .describe(
-            "Release it once it lands on main, with notes telling the person updating what changed for them: the project's gate.md Ship: command runs it. Your call."
-          ),
       },
       (request, _format, bound) => bound.actions.finishItem(request),
       sentence

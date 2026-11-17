@@ -650,7 +650,7 @@ const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
   blocked:
     "Its work item is blocked: its delegate type, its machine or its account is missing, and its session isn't started again without it. The message is kept at the hub and goes to it once that is back; Needs you says what is missing.",
   finishing:
-    "It called finish_item, and its turn ends with that call, so the message is kept at the hub until the call answers: if the merge checks send the work back, the message joins the turn that goes on; if the work lands, it goes as the session's next turn once that turn is over, and reopens the item.",
+    "It called finish_item, and its turn ends with that call, so the message is kept at the hub until the call answers: if the landing sends the work back, the message joins the turn that goes on; if the work lands, it goes as the session's next turn once that turn is over, and reopens the item.",
   held: "An interrupt stopped it, and only its parent, its project's conversation or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
   recut:
     "Its workspace retired once its work was over, so the hub is cutting its clone again at the same path, at the commit its clone was on when it retired, its own commits with it; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",
@@ -887,7 +887,7 @@ export interface HandoffActions {
       clean?: boolean;
       /** What it is handed (hub handed-input.ts), written into its `$TMPDIR/inputs/` before its brief. */
       inputs?: unknown[];
-      /** Where its commits go once it passes the landing gate; `main` by default. */
+      /** Where its commits go once it finishes; `main` by default. */
       lands?: LandsMode;
       /** Runs on the machine itself with no clone or boundary, landing nothing (work-items.ts `startHost`). */
       host?: boolean;
@@ -929,8 +929,8 @@ export interface HandoffActions {
     asked?: { ask?: boolean; reason?: string }
   ) => ReturnType<WorkItemCalls["discard"]>;
   /**
-   * Finishes this session's work item: the hub runs its landing gate and
-   * lands it, or fails it as blocked. Answers what the hub says of it.
+   * Finishes this session's work item: the hub lands it, or fails it as
+   * blocked. Answers what the hub says of it.
    */
   readonly finishItem: (
     request: WorkItemSubmission
@@ -1925,8 +1925,7 @@ export const handoffActions = ({
         : started;
     },
 
-    // The landing gate may run for an hour (an iOS build behind others):
-    // nothing here times it out.
+    // A landing may wait its turn behind others: nothing here times it out.
     finishItem: (request) => work.finishItem(instanceId, request),
 
     waitItem: (minutes, reason) =>
@@ -2008,7 +2007,7 @@ export const handoffActions = ({
       });
       return (
         `Interrupted your delegate ${peer.label}${continuesWords(followed)}. Its current turn stopped; it keeps all state, ` +
-        `and stays idle: no reminder, wait or merge check outcome wakes it. Resume or redirect it with handoff("${peer.row.id}", ...).`
+        `and stays idle: no reminder, wait or landing outcome wakes it. Resume or redirect it with handoff("${peer.row.id}", ...).`
       );
     },
 
