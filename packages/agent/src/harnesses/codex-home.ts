@@ -173,12 +173,30 @@ const linkTo = async (link: string, target: string): Promise<void> => {
  * there (its trust of each folder, its hooks' trust): analytics and the
  * update check off, the sign-in kept in the home's file, the shared store's
  * SQLite dir, and each clone in `untrust` marked untrusted (C-k3).
+ *
+ * Plugins are off (`[features] plugins`, on by default): each app-server
+ * otherwise syncs OpenAI's plugin marketplace as it starts (Codex 0.169.0
+ * core-plugins `maybe_start_curated_repo_sync_for_config`, gated on
+ * `plugins_enabled`), a `git ls-remote https://github.com/openai/plugins.git`
+ * from the host, outside any boundary, once per session. CawCo hands Codex
+ * its skills and tools itself and installs no Codex plugin.
+ *
+ * Commands run in a plain shell (`allow_login_shell = false`), not
+ * `bash -lc`: inside a boundary the login profile adds no PATH entry (the
+ * app-server's environment, on `toolPath`, carries it, and the boundary hides
+ * `~/.profile`), and on desktop Ubuntu its `im-config` script's
+ * `systemd-cat`, cut off from journald, put three "Failed to create stream
+ * fd" lines before every command's output.
  */
 const CAWCO_CONFIG: Toml = {
+  allow_login_shell: false,
   check_for_update_on_startup: false,
   cli_auth_credentials_store: "file",
   analytics: { enabled: false },
 };
+
+/** Codex's feature flags CawCo sets, over the home's own `[features]`. */
+const CAWCO_FEATURES: Toml = { plugins: false };
 
 /** What a launch writes into its home first. */
 export interface HomeLaunch {
@@ -205,7 +223,12 @@ export const prepareHome = (
     await linkTo(join(home, "sessions"), join(store, "sessions"));
     await linkTo(join(home, "skills"), join(codexFleetRoot(), "skills"));
     const configPath = join(home, "config.toml");
-    const config = { ...(await readToml(configPath)), ...CAWCO_CONFIG };
+    const held = await readToml(configPath);
+    const config = { ...held, ...CAWCO_CONFIG };
+    config.features = {
+      ...(isTable(held.features) ? held.features : {}),
+      ...CAWCO_FEATURES,
+    };
     config.sqlite_home = join(store, "db");
     const projects = isTable(config.projects) ? { ...config.projects } : {};
     for (const folder of launch.untrust ?? []) {
