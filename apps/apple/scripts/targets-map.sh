@@ -9,19 +9,17 @@
 # files every build reads (Package.swift, Package.resolved, project.yml and
 # the map itself): a change to one builds every target.
 #
-# The merge checks read only this map (packages/hub app-targets.ts): a file
-# belongs to the target whose folder holds it, and the merge checks build the
-# targets the work changed plus every target that depends on them
-# (build-both.sh --targets). A file no target holds (README, scripts/,
-# StoreKit/) builds nothing.
+# A file belongs to the target whose folder holds it: a change builds the
+# targets it changed plus every target that depends on them
+# (build-both.sh --compile-only --targets). A file no target holds (README,
+# scripts/, StoreKit/) builds nothing.
 #
 #   bash apps/apple/scripts/targets-map.sh            # prints the map
 #   bash apps/apple/scripts/targets-map.sh --write    # writes apps/apple/targets.json
 #   bash apps/apple/scripts/targets-map.sh --check    # exits 1 naming the difference from the committed map
 #
-# Run on the Mac (Swift and XcodeGen). The gate's build runs --check on
-# every tree it compiles, so a map Package.swift or project.yml no longer
-# matches fails the gate. Paths are written from the repository's root and
+# Run on the Mac (Swift and XcodeGen). --check says when Package.swift or
+# project.yml no longer make the committed map. Paths are written from the repository's root and
 # folders only, never files: a new Swift file changes no map.
 set -euo pipefail
 
@@ -40,7 +38,7 @@ XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
 PACKAGES=()
 while IFS=$'\t' read -r name path; do
   [[ -n $name ]] || continue
-  # Its state in the scratch folder, not the tree or ~ (a gate workspace's
+  # Its state in the scratch folder, not the tree or ~ (a workspace's
   # boundary writes neither), and no manifest sandbox inside that boundary.
   (cd "$APPLE/$path" && swift package --scratch-path "$SCRATCH/swiftpm-$name" \
     --cache-path "$SCRATCH/swiftpm-cache" --config-path "$SCRATCH/swiftpm-config" \

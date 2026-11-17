@@ -48,9 +48,9 @@
  *
  * A run holds one of the machine's heavy-work slots (core heavy-slots.ts)
  * from before it reads the tree until it ends, taken in line behind every
- * other heavy run on the machine (merge checks, other checks);
- * one run under a merge check's slot (its environment says so) takes none
- * of its own. Either way it and every check it starts run at nice 10, in
+ * other heavy run on the machine (other checks, a stage clone's install);
+ * one run under its caller's slot (its environment says so) takes none of
+ * its own. Either way it and every check it starts run at nice 10, in
  * the idle I/O class on Linux and never in macOS's darwin background (core
  * `runInBackground`). Its own parallelism is its share of the machine's
  * cores as it starts: the cores over the runs holding a slot then
@@ -485,7 +485,7 @@ interface Gated {
    * The check it starts after, when not the sync: one whose output it reads
    * must have ended first, or it reads a file half written (resolution-check
    * read `.tsbuild/packages/core/src/asks.d.ts` while `golar tsc -b` rewrote
-   * it, and failed a merge check on TS1434).
+   * it, and failed a check on TS1434).
    */
   after?: string;
   argv: string[];

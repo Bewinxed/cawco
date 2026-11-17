@@ -12,7 +12,7 @@
  * package gives reads as unknown: its type-aware rules said nothing there.
  * At 2.6.3 and 2.6.5 a lint error a package's types make
  * (noUnnecessaryConditions on playwright's `headers()[name] ?? ""`) passed
- * every merge check, run in a workspace, and failed the release's, run in a
+ * every check run in a workspace, and failed the release's, run in a
  * checkout bun installed into a folder (2026-11-05).
  *
  * HOW. For the command's run alone, `node_modules` is a folder made here:

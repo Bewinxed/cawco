@@ -6,10 +6,8 @@
  * A release names its commit, and is built from exactly that commit: a
  * worktree of it under ~/.worktrees/release-<sha>, on real disk, made here
  * and removed when the build ends, whichever way, that builds and
- * signs. The repository's check (`bun run check --all`) runs only when the
- * hub's merge checks did not pass it on the commit's tree (`GET
- * /api/landing-gate`, hub work-items.ts `gatePassesOn`): then in a second
- * worktree, beside the builds, so it reads no file a build rewrites
+ * signs. The repository's check (`bun run check --all`) runs on every
+ * release, in a second worktree, beside the builds, so it reads no file a build rewrites
  * (SvelteKit's sync writes each route's `$types.d.ts` with a plain
  * writeFileSync on every run, kit 3.1.0 src/core/sync/write_types). The
  * checkout this runs from must be clean (this script and what it imports are
@@ -22,8 +20,8 @@
  * release-graph.ts), each starting as soon as the steps it needs have ended.
  * `--dry-run` prints that graph, with each step's expected time, and runs
  * nothing. What waits on what, and why:
- * - the check (when it runs) and the live database's migration check gate
- *   promotion and each darwin archive.
+ * - the check and the live database's migration check gate promotion and
+ *   each darwin archive.
  * - The info build (the binary build-info is asked of, which gives the manifest its protocol) comes before the
  *   `run` check of each linux archive. The container tests are not a release step: `bun run test:binary`
  *   (scripts/binary-tests.ts) runs them for any commit.
@@ -48,15 +46,11 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Subprocess } from "bun";
-import { machineFetch } from "../packages/agent/src/machine-fetch";
-import { readInstallation } from "../packages/core/src/binary-installation";
-import { readWithin } from "../packages/core/src/bounded";
 import {
   listedPid,
   signalGroup,
   signal as signalPid,
 } from "../packages/core/src/signal";
-import { hubClient, unwrap } from "../packages/hub/src/client";
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { requireDiskRoom } from "./lib/disk-room";
 import { holdAwake } from "./lib/hold-awake";
@@ -90,7 +84,6 @@ import {
 import { sign } from "./release/steps/sign";
 import { upload } from "./release/steps/upload";
 import { version } from "./release/steps/version";
-import { ANNOUNCE_MS } from "./release-announce";
 import { describeSteps, runSteps, type Step } from "./release-graph";
 import {
   missingSecrets,
@@ -123,53 +116,6 @@ const refuse = (why: string): never => {
   process.exit(2);
 };
 
-/** The merge check a release takes as its check (gate.md). */
-const LANDING_CHECK = "bun run check --all";
-
-/**
- * Whether the hub's merge checks passed {@link LANDING_CHECK} on the tree
- * `commit` holds: the hub on this host is asked (`GET /api/landing-gate`,
- * as this machine). No hub, no answer, or no such pass: the release runs
- * the check itself, and says why.
- */
-const gatePassed = async (commit: string): Promise<boolean> => {
-  const read = Bun.spawnSync(["git", "rev-parse", `${commit}^{tree}`], {
-    env: process.env,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const tree = read.stdout.toString().trim();
-  const installation = await readInstallation();
-  if (read.exitCode !== 0 || !installation?.hubUrl) {
-    console.log(
-      read.exitCode === 0
-        ? "This host has no CawCo installation naming a hub: the release runs its own check"
-        : `git could not name the tree of ${commit}: the release runs its own check`
-    );
-    return false;
-  }
-  const { hubUrl } = installation;
-  const asked = await readWithin(ANNOUNCE_MS, (signal) =>
-    hubClient(hubUrl, (url, init) =>
-      machineFetch(url, { ...init, signal })
-    ).api["landing-gate"].get({ query: { tree } })
-  );
-  if (asked.kind === "unanswered" || asked.value.error) {
-    console.log(
-      `The hub at ${hubUrl} ${asked.kind === "unanswered" ? `did not answer within ${ANNOUNCE_MS / 1000} s` : `answered ${asked.value.status}`} on the merge checks of tree ${tree.slice(0, 12)}: the release runs its own check`
-    );
-    return false;
-  }
-  const { passed } = unwrap(asked.value, () => new Error("unreachable"));
-  const ok = passed.includes(LANDING_CHECK);
-  console.log(
-    ok
-      ? `The merge checks passed \`${LANDING_CHECK}\` on tree ${tree.slice(0, 12)}: the release checks it no more`
-      : `The merge checks passed no \`${LANDING_CHECK}\` on tree ${tree.slice(0, 12)}: the release runs it`
-  );
-  return ok;
-};
-
 /**
  * Every step of one build of `current`, and what each waits for: the graph
  * `runSteps` runs and `--dry-run` prints. Nothing runs while it is made.
@@ -181,9 +127,7 @@ const releaseSteps = (
   learned: Learned,
   secrets: ReleaseSecretsTaken,
   /** Holds a GitHub call from starting while a stop is clearing the run: it never returns then. */
-  notStopped: () => Promise<void>,
-  /** The merge checks passed the check on this commit's tree ({@link gatePassed}). */
-  gated: boolean
+  notStopped: () => Promise<void>
 ): Step[] => {
   const context = stepContext(
     current,
@@ -271,25 +215,15 @@ const releaseSteps = (
     ),
     ...tree("build"),
     // The check reads its own tree, beside the builds; it gates the darwin archives
-    // and promotion, never the builds. None when the merge checks passed it
-    // on this tree.
-    ...(gated
-      ? []
-      : [
-          ...tree("check"),
-          step("check", ["install check"], 30, () => check(context)),
-        ]),
+    // and promotion, never the builds.
+    ...tree("check"),
+    step("check", ["install check"], 30, () => check(context)),
     step("live database", ["install build"], 15, () =>
       liveDatabase(run, trees.build, context.staging)
     ),
-    step(
-      "gate",
-      gated ? ["live database"] : ["check", "live database"],
-      0,
-      async () => {
-        // Nothing to run: what the darwin archives and promotion wait for.
-      }
-    ),
+    step("gate", ["check", "live database"], 0, async () => {
+      // Nothing to run: what the darwin archives and promotion wait for.
+    }),
     step("version", ["install build"], 1, () => version(context)),
     // The dashboard and every target-independent asset, once, for all seven compiles.
     step("prepare", ["install build"], 36, () => prepare(context)),
@@ -328,9 +262,7 @@ if (argv.includes("--dry-run")) {
         dry,
         {},
         {},
-        () => Promise.resolve(),
-        // As when the hub has no pass for the tree: the whole graph.
-        false
+        () => Promise.resolve()
       )
     )
   );
@@ -1026,8 +958,7 @@ const build = async (current: Request): Promise<void> => {
   const building = performance.now();
   const trees = treesOf(current.commit);
   const staging = stagingOf(current.commit);
-  const gated = await gatePassed(current.commit);
-  const checkouts = gated ? [trees.build] : Object.values(trees);
+  const checkouts = Object.values(trees);
   me.checkouts = checkouts;
   me.staging = staging;
   await writeHolder();
@@ -1047,8 +978,7 @@ const build = async (current: Request): Promise<void> => {
           if (stopped) {
             await stopped;
           }
-        },
-        gated
+        }
       ),
       {
         say: (line) => console.log(line),

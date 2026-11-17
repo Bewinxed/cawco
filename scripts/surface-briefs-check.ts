@@ -9,7 +9,7 @@
  *
  * Our own reading of the frontmatter, not `impeccable doctor`: impeccable is
  * no dependency of the repository's (bunx fetches it from the registry),
- * and the merge checks install from the lockfile alone.
+ * and `bun run check` installs from the lockfile alone.
  *
  * Exits 1 naming each brief, the target that does not exist and, where one
  * can be found, the path it should be.

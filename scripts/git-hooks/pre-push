@@ -4,12 +4,13 @@
 # directory, so edit it here and run `bun install` again.
 #
 # A push that updates main runs the repository's one check over the whole
-# tree, `bun run check --all` (scripts/check.ts), as the merge checks do. It
+# tree, `bun run check --all` (scripts/check.ts). It
 # runs on this checkout, so the commit pushed must be its HEAD, with nothing
 # uncommitted or untracked beside it (a file left out of the commit can make
 # the check pass here and fail on main). Pushes to other branches, and
 # deletions, pass untouched. The hub's own pushes run with hooks off
-# (packages/core/src/safe-git.ts), after it has run the gate itself.
+# (packages/core/src/safe-git.ts): a delegate runs `bun run check` itself
+# before finish_item (CLAUDE.md).
 #
 # Skipped only with CAWCO_SKIP_PRE_PUSH=1 in the push's environment.
 set -euo pipefail

@@ -20,8 +20,7 @@ const LIVE_DATABASE_LIMIT_S = 180;
  * only database that holds migrations (a joined machine keeps none). The
  * hub this host's installation names is the hub the release announces to
  * and updates (release-announce.ts); a release runs on that hub's own
- * machine, as its `Ship:` command does (hub ship.ts), since only there can
- * its database be read. Its file is the one the hub's installed unit opens
+ * machine, since only there can its database be read. Its file is the one the hub's installed unit opens
  * (cli service.ts `installedHubDbPath`, from the unit's recorded
  * environment), never this process's own `hubDbPath`: the release runs in a
  * unit of its own with only PATH and HOME set (ship.sh). Anything else is

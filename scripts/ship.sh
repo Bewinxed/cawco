@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# The one way a commit on main becomes a published release, for the nightly and for the agent that fixed something
-# (the hub runs it after a landing whose finish_item says `ship`, as gate.md's `Ship:` line declares it):
+# The one way a commit on main becomes a published release, for the nightly and for whoever releases by hand:
 #
 #   bash scripts/ship.sh --commit SHA --notes FILE [--channel nightly|stable] [--tag vX.Y.Z]
 #       Checks the commit is on origin/main and this host is the hub's (each refused, exit 2), then starts the

@@ -2,7 +2,7 @@
 # Builds the CawCo app on the Mac for an iPhone simulator, then for the Mac
 # (Mac Catalyst), and
 # proves each build starts and stays up for 8 s. A launch-time abort fails it.
-# Run from anywhere in the repo: bash apps/apple/scripts/build-both.sh [ios|macos] [--compile-only|--gate [--targets A,B,…]]
+# Run from anywhere in the repo: bash apps/apple/scripts/build-both.sh [ios|macos] [--compile-only [--targets A,B,…]]
 # (or `build-both.sh update-packages`, below).
 # With no argument it builds both and prints BUILT iOS, LAUNCHED iOS,
 # BUILT macOS, LAUNCHED macOS, BUILT iOS 18.5, LAUNCHED iOS 18.5.
@@ -13,25 +13,14 @@
 # generic iOS Simulator build compiles arm64 alone: the Mac's simulators are
 # Apple silicon, and the x86_64 slice the generic destination adds doubles
 # the compile for code no simulator here runs.
-# `--gate` is the iOS build among the merge checks, as the cockpit project's
-# gate.md declares it (packages/hub gate-file.ts, `needs: apple`): it
-# compiles as `--compile-only` does, in the one build root `gate` every
-# item's merge checks share instead of the checkout's own. That root stays warm
-# between items, so Xcode rebuilds only what the item's tree changed against
-# the last tree it compiled: the rsync below makes the root's apps/apple
-# that tree exactly (--checksum --delete; a changed file is written anew,
-# an unchanged one keeps its mtime), and Xcode's incremental build follows.
-# `--targets A,B,…` (with --compile-only or --gate) builds only those
-# schemes, in the order given (deps first), for each destination, and says
-# which in one TARGETS line; without it the one scheme built is the app,
-# CawCo, which compiles every target. The merge checks pass the targets
-# its map gives the item's change (apps/apple/targets.json, packages/hub
-# app-targets.ts) and runs nothing on the Mac when they are none. A --gate
-# run also holds the map to Package.swift and project.yml
-# (targets-map.sh --check) and fails when it differs.
-# No probe reads that root; a workspace's own builds stay in its own. Each
-# gate run's logs are a folder of their own there, logs/<commit>-<time>, so a
-# failure's log outlives the runs after it; the newest 20 stay.
+# The rsync below makes a build root's apps/apple the caller's tree exactly
+# (--checksum --delete; a changed file is written anew, an unchanged one
+# keeps its mtime), so Xcode's incremental build rebuilds only what changed.
+# `--targets A,B,…` (with --compile-only) builds only those schemes, in the
+# order given (deps first), for each destination, and says which in one
+# TARGETS line; without it the one scheme built is the app, CawCo, which
+# compiles every target. scripts/targets-map.sh names the targets a change
+# compiles (apps/apple/targets.json).
 # Every build compiles against the SwiftPM versions committed in
 # apps/apple/Package.resolved, resolution off (-disableAutomaticPackageResolution;
 # a resolved file Package.swift no longer matches fails the build, saying so),
@@ -48,8 +37,7 @@
 # sharing it lock its build.db. -skipPackagePluginValidation lets the
 # OpenAPIGenerator build plugin (CawCoAPI) run without Xcode's trust prompt.
 # Each workspace owns ~/build/cawco-apple.noindex/<workspace>, including DerivedData
-# and logs; `--gate` builds in ~/build/cawco-apple.noindex/gate. Every build
-# root's name ends in .noindex, so Spotlight indexes none of what a build
+# and logs. Every build root's name ends in .noindex, so Spotlight indexes none of what a build
 # writes (mds_stores and mdworker were among the Mac's top users while builds
 # ran). Mac-side locks cover retirement, rsync and both builds; a
 # second build of the same workspace, and builds from different
@@ -117,23 +105,16 @@ fi
 ROOT=$(git rev-parse --show-toplevel)
 PLATFORM=${1:-both}
 COMPILE_ONLY=${2:-}
-USAGE="usage: build-both.sh [ios|macos|both] [--compile-only|--gate [--targets A,B,…]]"
-[[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only || $COMPILE_ONLY == --gate ]] || { echo "$USAGE" >&2; exit 2; }
+USAGE="usage: build-both.sh [ios|macos|both] [--compile-only [--targets A,B,…]]"
+[[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only ]] || { echo "$USAGE" >&2; exit 2; }
 # The schemes to build, comma-separated: the app alone unless --targets names them.
 SCHEMES=CawCo
 if [[ -n ${3:-} ]]; then
-  [[ $3 == --targets && -n $COMPILE_ONLY && ${4:-} =~ ^[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$ && -z ${5:-} ]] || { echo "$USAGE (--targets compiles only, so it goes with --compile-only or --gate)" >&2; exit 2; }
+  [[ $3 == --targets && -n $COMPILE_ONLY && ${4:-} =~ ^[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$ && -z ${5:-} ]] || { echo "$USAGE (--targets compiles only, so it goes with --compile-only)" >&2; exit 2; }
   SCHEMES=$4
 fi
 BUILD=$(basename "$ROOT")
 if [[ $ROOT == "$HOME/cockpit" ]]; then BUILD=main; fi
-# A gate run's logs folder: the commit it compiles (the item's last) and when.
-LOG_RUN=
-if [[ $COMPILE_ONLY == --gate ]]; then
-  BUILD=gate
-  COMPILE_ONLY=--compile-only
-  LOG_RUN=$(git rev-parse --short=12 HEAD)-$(date +%Y%m%d-%H%M%S)
-fi
 [[ $BUILD =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "invalid workspace name: $BUILD" >&2; exit 2; }
 REMOTE=build/cawco-apple.noindex/$BUILD/apps/apple
 
@@ -152,9 +133,8 @@ if [[ -n ${CAWCO_WORKSPACE:-} && $PLATFORM != ios ]]; then
   exit 2
 fi
 # Pass the authoritative workspace inventory from this host, never the Mac's
-# copies. Fail before retirement if the inventory cannot be read. The gate's
-# root is the repository's, never a spent workspace's.
-LIVE=(main gate "$BUILD")
+# copies. Fail before retirement if the inventory cannot be read.
+LIVE=(main "$BUILD")
 [[ -d $HOME/.worktrees ]] || { echo "missing workspace inventory: $HOME/.worktrees" >&2; exit 2; }
 for workspace in "$HOME"/.worktrees/*; do
   [[ ! -d $workspace ]] || LIVE+=("$(basename "$workspace")")
@@ -221,8 +201,7 @@ trap 'GO=1' USR1
 ) <&0 &
 WAIT_PID=$!
 # One build per build root: a second run waits its turn (two of an item's
-# checks may start together; every item's gate shares the root `gate`), and
-# a caller that leaves ends the wait above. The wait is a build-slot queue
+# checks may start together), and a caller that leaves ends the wait above. The wait is a build-slot queue
 # (the queue marker below), so a check's clock stands through it.
 next_notice=0
 waited=
@@ -291,12 +270,6 @@ eval "$DISK_ROOM"
 disk_room "$ROOT" "build-both.sh $PLATFORM ($BUILD)"
 mkdir -p "$ROOT/$BUILD/apps/apple"
 rm -f "$ROOT/$BUILD/tree"
-# A gate run's logs are a folder of their own (LOG_RUN): the newest 19 before
-# it stay, with it 20.
-if [[ -n $LOG_RUN ]]; then
-  mkdir -p "$ROOT/$BUILD/logs"
-  ls -1t "$ROOT/$BUILD/logs" | tail -n +20 | while IFS= read -r old; do rm -rf -- "${ROOT:?}/$BUILD/logs/$old"; done
-fi
 echo READY
 # The same SSH process keeps the locks while the caller rsyncs; GO starts the
 # build. A failed sync ends the caller, and its EOF releases the locks.
@@ -317,7 +290,7 @@ PLATFORM=$2
 BUILD=$3
 COMPILE_ONLY=$4
 DD="$5/$BUILD/DerivedData"
-LOGS="$5/$BUILD/logs${LOG_RUN:+/$LOG_RUN}"
+LOGS="$5/$BUILD/logs"
 mkdir -p "$LOGS"
 SETTLE=8
 # The apps/apple synced here, as the caller stamped it with GO.
@@ -330,9 +303,6 @@ trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
 "$XCODEGEN" generate --quiet
-# The gate's targets came from apps/apple/targets.json: a map Package.swift
-# or project.yml no longer makes fails it here.
-if [[ $BUILD == gate ]]; then bash scripts/targets-map.sh --check; fi
 # The committed pins, in the generated project where Xcode reads them, over
 # whatever an earlier build of this root resolved: resolution is off below,
 # so this file alone says which version of each package the build compiles.
@@ -470,8 +440,8 @@ if [[ $PLATFORM != macos ]]; then ios 'iOS 18.5'; fi
 EOF
 
 DISK_ROOM=$(<scripts/lib/disk-room.sh)
-printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q LOG_RUN=%q SCHEMES=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
-  "$PLATFORM" "$COMPILE_ONLY" "$LOG_RUN" "$SCHEMES" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
+printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q SCHEMES=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
+  "$PLATFORM" "$COMPILE_ONLY" "$SCHEMES" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
 # The ssh link's stdin and stdout are two FIFOs held on fds 3 (to the Mac)
 # and 4 (from it): the Mac's /bin/bash 3.2 has no coproc and no {var}>&
