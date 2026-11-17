@@ -26,6 +26,15 @@ import {
   type ViewBox,
 } from "./wire";
 
+/**
+ * The surfaces a comment is written or read in, on the page through their
+ * outro once closed: the composer beside its pill, the rail's page-wide
+ * composer, a thread's card. A focus held in one, once none is open, is
+ * on its way out with it.
+ */
+const LEAVING =
+  '[data-slot="pin-composer"], [data-slot="page-composer"], [data-slot="pin-card"]';
+
 export interface PinThreadDeps {
   readonly changeTour: ChangeTour;
   readonly commentKit: CommentKit;
@@ -504,6 +513,13 @@ export class PinThread {
      * comment, V did nothing until he pressed into the page again (the
      * owner, 2026-11-12). The page's frame takes the focus back, where he
      * was working; a focus he moves elsewhere himself stays where it is.
+     * The surface that held it is still on the page as this runs, the
+     * focus in it: the composer pops out and the rail's page composer
+     * unfolds away over their outros, the card drains into its pill, and
+     * the browser drops the focus on the body only once they are gone.
+     * Focus in one of them is focus on its way out, taken back now: read
+     * as the body's alone, it stayed in the leaving composer, and after
+     * a comment V still did nothing (the owner, 2026-11-17).
      */
     let carded = false;
     $effect(() => {
@@ -511,7 +527,7 @@ export class PinThread {
       if (carded && !now) {
         tick().then(() => {
           const at = document.activeElement;
-          if (!at || at === document.body) {
+          if (!at || at === document.body || at.closest(LEAVING)) {
             this.#deps.previewFrame.iframe?.focus({ preventScroll: true });
           }
         });
