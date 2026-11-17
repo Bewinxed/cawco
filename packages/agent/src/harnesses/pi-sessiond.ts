@@ -4,8 +4,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrowserDoor } from "@cawco/core/browser";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
+import { CONTROL_REPLIES } from "@cawco/core/control-replies";
 import type { Control } from "@cawco/core/control-table";
-import { BOUNDARY_RELAUNCH, GATEWAY_RELAUNCH } from "@cawco/core/harness";
+import {
+  BOUNDARY_RELAUNCH,
+  CONTROL_REFRESH_CAWCO_TOOLS,
+  GATEWAY_RELAUNCH,
+  INSTALL_SESSION_CREDENTIAL,
+  VERIFY_SESSION_CREDENTIAL,
+} from "@cawco/core/harness";
 import {
   type PiHostCommand,
   type PiHostEvent,
@@ -23,9 +30,13 @@ import type {
   FleetMcpTakeAnswer,
 } from "@cawco/core/session/controls";
 import {
+  CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
+  CONTROL_SET_MODEL,
+  CONTROL_SUPPORTED_COMMANDS,
+  CONTROL_SUPPORTED_MODELS,
 } from "@cawco/core/session/controls";
 import type { NeutralMessage, SentMessage } from "@cawco/core/session-messages";
 import { MESSAGES_HELD, MESSAGES_READ } from "@cawco/core/session-messages";
@@ -37,6 +48,7 @@ import { sessionGitEnv } from "../git-credential";
 import {
   type HarnessContext,
   type HarnessSession,
+  type SessionControls,
   type TurnExtras,
   unreadSendsHeld,
 } from "../harness";
@@ -445,14 +457,42 @@ class PiRemoteSession implements HarnessSession {
       ? `${this.#background.size} shell command(s) it moved to the background are still running`
       : undefined;
   }
-  control(control: Control): Promise<unknown> {
-    if (control.method === CONTROL_MCP_FLEET_CHANGED) {
-      return this.#takeFleetMcp(control.args[0]);
-    }
-    return control.method === CONTROL_MCP_FLEET_HEAL
-      ? this.#healFleetMcp(control.args[0] ?? [])
-      : this.request({ type: "control", ...control });
+  /** `control`, asked of the host, which runs it (pi-runtime.ts `PiSession.controls`): its answer as the host gave it. */
+  #ask(control: Control): Promise<unknown> {
+    return this.request({ type: "control", ...control });
   }
+  /**
+   * Its controls (core traits.ts `sessionControls`), each asked of the host
+   * that runs the session, and its answer read there as its reply's type
+   * (core control-replies.ts): a fleet MCP change or heal with the door
+   * only this agent can make.
+   */
+  readonly controls: SessionControls<"pi"> = {
+    [INSTALL_SESSION_CREDENTIAL]: async (...args) =>
+      CONTROL_REPLIES[INSTALL_SESSION_CREDENTIAL].parse(
+        await this.#ask({ method: INSTALL_SESSION_CREDENTIAL, args })
+      ),
+    [VERIFY_SESSION_CREDENTIAL]: () =>
+      this.#ask({ method: VERIFY_SESSION_CREDENTIAL, args: [] }),
+    [CONTROL_REFRESH_CAWCO_TOOLS]: () =>
+      this.#ask({ method: CONTROL_REFRESH_CAWCO_TOOLS, args: [] }),
+    [CONTROL_MCP_FLEET_CHANGED]: (changes) => this.#takeFleetMcp(changes),
+    [CONTROL_MCP_FLEET_HEAL]: (names) => this.#healFleetMcp(names ?? []),
+    [CONTROL_INTERRUPT]: () =>
+      this.#ask({ method: CONTROL_INTERRUPT, args: [] }),
+    [CONTROL_SET_MODEL]: (...args) =>
+      this.#ask({ method: CONTROL_SET_MODEL, args }),
+    [CONTROL_SUPPORTED_MODELS]: () =>
+      this.#ask({ method: CONTROL_SUPPORTED_MODELS, args: [] }),
+    [CONTROL_SUPPORTED_COMMANDS]: async () =>
+      CONTROL_REPLIES[CONTROL_SUPPORTED_COMMANDS].parse(
+        await this.#ask({ method: CONTROL_SUPPORTED_COMMANDS, args: [] })
+      ),
+    [CONTROL_CONTEXT_USAGE]: async () =>
+      CONTROL_REPLIES[CONTROL_CONTEXT_USAGE].parse(
+        await this.#ask({ method: CONTROL_CONTEXT_USAGE, args: [] })
+      ),
+  };
   /**
    * A fleet MCP change, to the host, which registers the fleet's servers
    * anew (pi-runtime.ts `FleetMcp`), with the door only this agent can make;
@@ -489,7 +529,7 @@ class PiRemoteSession implements HarnessSession {
     return healed;
   }
   async interrupt(): Promise<void> {
-    await this.control({ method: CONTROL_INTERRUPT, args: [] });
+    await this.#ask({ method: CONTROL_INTERRUPT, args: [] });
   }
   /** pi raises no permission prompt and has no question tool: nothing waits on an answer. */
   resolvePermission(): void {

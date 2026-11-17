@@ -64,7 +64,7 @@ import {
 } from "./fleet-place";
 import { keepOnlyPlaceSets, keepPlaceSet } from "./fleet-place-set";
 import { laidOver } from "./fleet-report";
-import type { HarnessSession } from "./harness";
+import { type HarnessSession, runControl } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { isMachineAgent } from "./machine-agent";
 import { type HostedConfig, hostedEntry, mcpHost } from "./mcp-host";
@@ -197,14 +197,14 @@ export class FleetConverger {
         }
         if (mcp) {
           try {
-            await session.control({ method: CONTROL_MCP_FLEET_HEAL, args: [] });
+            await runControl(session.controls, CONTROL_MCP_FLEET_HEAL, []);
           } catch (error) {
             warn(`fleet MCP heal of ${instanceId} failed: ${errorText(error)}`);
           }
         }
         if (settings) {
           try {
-            await session.control({ method: CONTROL_FLEET_SETTINGS, args: [] });
+            await runControl(session.controls, CONTROL_FLEET_SETTINGS, []);
           } catch (error) {
             warn(
               `the fleet's hooks and settings did not reach ${instanceId}: ${errorText(error)}`

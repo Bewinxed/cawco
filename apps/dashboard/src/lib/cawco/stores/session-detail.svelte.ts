@@ -8,6 +8,7 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { HarnessCapabilities } from "@cawco/core/harness";
 import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
+import { answersControl } from "@cawco/core/harness/traits";
 import {
   CONTROL_CONTEXT_USAGE,
   CONTROL_MCP_STATUS,
@@ -325,7 +326,10 @@ export async function loadMcpServers(
   ) {
     return;
   }
-  if (!harnessCan({ machineId, harness: target.harness }, "mcpStatus")) {
+  // Asked only of a session whose harness answers it (core traits.ts
+  // `sessionControls`): pi's reports the fleet's MCP servers on its machine
+  // (its `mcpStatus` capability) but its sessions list none.
+  if (!answersControl(target.harness, CONTROL_MCP_STATUS)) {
     return;
   }
   target.mcpPending = true;

@@ -31,7 +31,6 @@ import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import type { Control } from "@cawco/core/control-table";
 import { HARNESS_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type {
@@ -137,6 +136,7 @@ import type {
   ServerCustody,
   ServerStop,
   ServerStopRequest,
+  SomeControls,
   TranscriptSpan,
 } from "../harness";
 import {
@@ -6471,17 +6471,15 @@ class OpencodeHarness implements Harness<"opencode"> {
     forgetBackground(sessionKey);
   }
 
-  async machine(control: Control): Promise<unknown> {
-    if (control.method === CONTROL_MODEL_CATALOG) {
-      return await this.#catalog();
-    }
+  /** The machine-scoped controls OpenCode's harness answers. */
+  readonly machineControls: SomeControls = {
+    [CONTROL_MODEL_CATALOG]: () => this.#catalog(),
     // The machine's own server's reading of the folder's lists: commands
     // and skills are read from the folder and the machine's config, which
     // every server here shares.
-    return control.method === CONTROL_FOLDER_COMMANDS
-      ? await opencodeSlashCommands(await this.#ensure(), control.args[0])
-      : undefined;
-  }
+    [CONTROL_FOLDER_COMMANDS]: async (cwd) =>
+      opencodeSlashCommands(await this.#ensure(), cwd),
+  };
 
   /**
    * Tear down the AGENT SIDE. The servers are deliberately left running: they

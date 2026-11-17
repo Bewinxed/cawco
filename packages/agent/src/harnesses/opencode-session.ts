@@ -36,8 +36,6 @@ import {
 import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import { type AskAnswer, FULL_SEND_ANSWER } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { isControlOf } from "@cawco/core/control-args";
-import type { Control } from "@cawco/core/control-table";
 import {
   ANY_TYPE,
   type MayStart,
@@ -121,7 +119,11 @@ import type {
 } from "@opencode/client";
 import { z } from "zod";
 import type { OpencodeRule } from "../denied-tools";
-import type { HarnessContext, HarnessSession } from "../harness";
+import type {
+  HarnessContext,
+  HarnessSession,
+  SessionControls,
+} from "../harness";
 import { placedMemoryIn } from "../placed-memory";
 import { holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
@@ -960,23 +962,6 @@ const endedToolResult = (
       : { error: event.data.error },
     event.type === "session.tool.failed"
   );
-
-/** The controls an OpenCode session answers (`OpencodeSession.control`); its credential's are answered first. */
-const OPENCODE_SESSION_CONTROLS = [
-  CONTROL_INTERRUPT,
-  CONTROL_SET_MODEL,
-  CONTROL_SET_EFFORT,
-  CONTROL_SET_PERMISSION_MODE,
-  CONTROL_CONTEXT_USAGE,
-  CONTROL_SUPPORTED_MODELS,
-  CONTROL_SUPPORTED_COMMANDS,
-  CONTROL_RELOAD_SKILLS,
-  CONTROL_MCP_STATUS,
-  CONTROL_MCP_RECONNECT,
-  CONTROL_MCP_TOGGLE,
-  CONTROL_MCP_FLEET_CHANGED,
-  CONTROL_MCP_FLEET_HEAL,
-] as const;
 
 export class OpencodeSession implements HarnessSession {
   attached?: () => void;
@@ -3523,138 +3508,129 @@ export class OpencodeSession implements HarnessSession {
     return opencodeSlashCommands(this.#client, this.#directory);
   }
 
-  async control(control: Control): Promise<unknown> {
-    // Config convergence gate: MCP mutations must not race a server replacement.
-    if (
-      this.#isConfigGateHeld() &&
-      (control.method === CONTROL_MCP_RECONNECT ||
-        control.method === CONTROL_MCP_TOGGLE)
-    ) {
-      throw new Error(`${control.method} blocked: config reload in progress`);
-    }
-    const credential = this.#credentialControls(control);
-    if (credential) {
-      return await credential;
-    }
-    if (!isControlOf(OPENCODE_SESSION_CONTROLS, control)) {
-      // An unsupported control verb is a silent no-op, never a user-facing
-      // failure: the hub may send a verb this harness has none for.
-      console.warn(`[opencode] no control verb ${control.method} — ignored`);
-      return;
-    }
-    switch (control.method) {
-      case CONTROL_INTERRUPT:
-        await this.interrupt();
-        return;
-      case CONTROL_SET_MODEL:
-        this.#model = control.args[0];
-        return;
-      case CONTROL_SET_EFFORT:
-        this.#effort = control.args[0];
-        this.sayEffort();
-        return;
-      case CONTROL_SET_PERMISSION_MODE:
-        this.#permissionMode = offeredMode(control.args[0]);
-        this.#answerOpen();
-        return;
-      case CONTROL_CONTEXT_USAGE: {
-        const tokens = this.#lastTokens;
-        const total =
-          tokens.input +
-          tokens.output +
-          tokens.reasoning +
-          tokens.cache.read +
-          tokens.cache.write;
-        const maxTokens = await this.#contextLimit();
-        return {
-          totalTokens: total,
-          maxTokens,
-          percentage: Math.min(100, Math.round((total / maxTokens) * 100)),
-          categories: [
-            {
-              name: "Input",
-              tokens: tokens.input,
-              color: "var(--flexoki-blue)",
-            },
-            {
-              name: "Output",
-              tokens: tokens.output,
-              color: "var(--flexoki-green)",
-            },
-            {
-              name: "Reasoning",
-              tokens: tokens.reasoning,
-              color: "var(--flexoki-orange)",
-            },
-          ],
-        };
-      }
-      case CONTROL_SUPPORTED_MODELS:
-        return await opencodeCatalog(this.#client, this.#directory);
-      case CONTROL_SUPPORTED_COMMANDS:
-        return await this.supportedCommands();
-      case CONTROL_RELOAD_SKILLS:
-        this.#commands = null;
-        return {
-          skills: (
-            await opencodeSlashCommands(this.#client, this.#directory)
-          ).filter((command) => command.kind === "skill"),
-        };
-      case CONTROL_MCP_STATUS: {
-        const listed = await this.#client.mcp.list(at(this.#directory));
-        return listed.data.map((server): McpServerStatus => ({
-          name: server.name,
-          status:
-            server.status.status === "needs_auth"
-              ? "needs-auth"
-              : server.status.status,
-          ...("error" in server.status ? { error: server.status.error } : {}),
-        }));
-      }
-      case CONTROL_MCP_RECONNECT: {
-        const [name] = control.args;
-        await this.#client.experimental.mcp.connect({
-          server: name,
-          ...at(this.#directory),
-        });
-        const listed = await this.#client.mcp.list(at(this.#directory));
-        const status = listed.data.find((server) => server.name === name)
-          ?.status.status;
-        if (status !== "connected") {
-          throw new Error(
-            `MCP ${name} is not connected (${status ?? "missing"}).`
-          );
-        }
-        return;
-      }
-      case CONTROL_MCP_TOGGLE: {
-        const [name, enabled] = control.args;
-        const target = { server: name, ...at(this.#directory) };
-        await (enabled
-          ? this.#client.experimental.mcp.connect(target)
-          : this.#client.experimental.mcp.disconnect(target));
-        return;
-      }
-      case CONTROL_MCP_FLEET_CHANGED: {
-        // Already taken by the fleet sync that came before this: the fleet's
-        // servers ride the launch config, so a change starts a new server and
-        // each session moves to it once idle; a fleet server OpenCode holds
-        // failed at a live session's directory is started again there
-        // (opencode.ts `#startFailed`). What each reads at this session's
-        // directory is the answer: OpenCode lists a connected server's
-        // tools at the session's next step.
-        const taken = await this.#fleetMcpHeld(control.args[0]);
-        console.info(
-          `[opencode] ${this.instanceId}: fleet MCP ${taken.servers.map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
-        );
-        return taken;
-      }
-      case CONTROL_MCP_FLEET_HEAL:
-        return await this.#healFleetMcp(control.args[0] ?? []);
-      default:
-        return unhandled("control", control);
+  /** An MCP change refused while a config reload replaces the server it would reach: the two must not race. */
+  #mcpUngated(method: string): void {
+    if (this.#isConfigGateHeld()) {
+      throw new Error(`${method} blocked: config reload in progress`);
     }
   }
+
+  /**
+   * Its controls (core traits.ts `sessionControls`), with the session
+   * credential's install and verify ({@link credentialControls}).
+   */
+  readonly controls: SessionControls<"opencode"> = {
+    ...credentialControls(
+      (credential) => this.#installCredential(credential),
+      () => this.#verifyCredential()
+    ),
+    [CONTROL_INTERRUPT]: () => this.interrupt(),
+    [CONTROL_SET_MODEL]: (model) => {
+      this.#model = model;
+      return Promise.resolve();
+    },
+    [CONTROL_SET_EFFORT]: (effort) => {
+      this.#effort = effort;
+      this.sayEffort();
+      return Promise.resolve();
+    },
+    [CONTROL_SET_PERMISSION_MODE]: (mode) => {
+      this.#permissionMode = offeredMode(mode);
+      this.#answerOpen();
+      return Promise.resolve({ permissionMode: mode });
+    },
+    [CONTROL_CONTEXT_USAGE]: async () => {
+      const tokens = this.#lastTokens;
+      const total =
+        tokens.input +
+        tokens.output +
+        tokens.reasoning +
+        tokens.cache.read +
+        tokens.cache.write;
+      const maxTokens = await this.#contextLimit();
+      return {
+        totalTokens: total,
+        maxTokens,
+        percentage: Math.min(100, Math.round((total / maxTokens) * 100)),
+        categories: [
+          {
+            name: "Input",
+            tokens: tokens.input,
+            color: "var(--flexoki-blue)",
+          },
+          {
+            name: "Output",
+            tokens: tokens.output,
+            color: "var(--flexoki-green)",
+          },
+          {
+            name: "Reasoning",
+            tokens: tokens.reasoning,
+            color: "var(--flexoki-orange)",
+          },
+        ],
+      };
+    },
+    [CONTROL_SUPPORTED_MODELS]: () =>
+      opencodeCatalog(this.#client, this.#directory),
+    [CONTROL_SUPPORTED_COMMANDS]: () => this.supportedCommands(),
+    [CONTROL_RELOAD_SKILLS]: async () => {
+      this.#commands = null;
+      return {
+        skills: (
+          await opencodeSlashCommands(this.#client, this.#directory)
+        ).filter((command) => command.kind === "skill"),
+      };
+    },
+    [CONTROL_MCP_STATUS]: async () => {
+      const listed = await this.#client.mcp.list(at(this.#directory));
+      return listed.data.map((server): McpServerStatus => ({
+        name: server.name,
+        status:
+          server.status.status === "needs_auth"
+            ? "needs-auth"
+            : server.status.status,
+        ...("error" in server.status ? { error: server.status.error } : {}),
+      }));
+    },
+    [CONTROL_MCP_RECONNECT]: async (name) => {
+      this.#mcpUngated(CONTROL_MCP_RECONNECT);
+      await this.#client.experimental.mcp.connect({
+        server: name,
+        ...at(this.#directory),
+      });
+      const listed = await this.#client.mcp.list(at(this.#directory));
+      const status = listed.data.find((server) => server.name === name)?.status
+        .status;
+      if (status !== "connected") {
+        throw new Error(
+          `MCP ${name} is not connected (${status ?? "missing"}).`
+        );
+      }
+    },
+    [CONTROL_MCP_TOGGLE]: async (name, enabled) => {
+      this.#mcpUngated(CONTROL_MCP_TOGGLE);
+      const target = { server: name, ...at(this.#directory) };
+      await (enabled
+        ? this.#client.experimental.mcp.connect(target)
+        : this.#client.experimental.mcp.disconnect(target));
+    },
+    // Already taken by the fleet sync that came before this: the fleet's
+    // servers ride the launch config, so a change starts a new server and
+    // each session moves to it once idle; a fleet server OpenCode holds
+    // failed at a live session's directory is started again there
+    // (opencode.ts `#startFailed`). What each reads at this session's
+    // directory is the answer: OpenCode lists a connected server's
+    // tools at the session's next step.
+    [CONTROL_MCP_FLEET_CHANGED]: async (changes) => {
+      const taken = await this.#fleetMcpHeld(changes);
+      console.info(
+        `[opencode] ${this.instanceId}: fleet MCP ${taken.servers.map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
+      );
+      return taken;
+    },
+    [CONTROL_MCP_FLEET_HEAL]: (names) => this.#healFleetMcp(names ?? []),
+  };
 
   /** Each changed server as OpenCode holds it at this session's directory: it lists a connected server's tools at the session's next step. */
   async #fleetMcpHeld(
@@ -3705,12 +3681,6 @@ export class OpencodeSession implements HarnessSession {
     );
     return after;
   }
-
-  /** The session credential's install and verify ({@link credentialControls}). */
-  readonly #credentialControls = credentialControls(
-    (credential) => this.#installCredential(credential),
-    () => this.#verifyCredential()
-  );
 
   /**
    * The credential the plugin stamps into each CawCo call, recorded by

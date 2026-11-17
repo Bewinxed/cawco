@@ -123,7 +123,6 @@ import {
   CONTROL_WORK_IN_FLIGHT,
   DELETE_SESSION,
   type SessionListAsk,
-  unknownControlWords,
 } from "@cawco/core/session/controls";
 import type {
   NeutralMessage,
@@ -218,6 +217,7 @@ import {
   isKeeperHarness,
   isServerHarness,
   ReattachFailed,
+  runControl,
   SessionAddressRefused,
 } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
@@ -4795,12 +4795,9 @@ export class SessionSupervisor {
         instanceId,
         requestId,
         ok: true,
-        // The mode is acknowledged only after the harness applied it. The hub
-        // persists this receipt for both socket controls and REST changes.
-        result:
-          control.method === CONTROL_SET_PERMISSION_MODE
-            ? { permissionMode: control.args[0] }
-            : this.fleet.answerWithoutSecrets(control.method, result),
+        // A mode's receipt is the harness's answer once it applied it; the
+        // hub persists it for both socket controls and REST changes.
+        result: this.fleet.answerWithoutSecrets(control.method, result),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -4943,21 +4940,29 @@ export class SessionSupervisor {
           adapterFor(kind)
         );
       }
-      // A machine-scoped control only one harness knows: try the named harness,
-      // then every harness, until one claims it.
-      const named = kind ? [adapterFor(kind)] : [];
-      for (const adapter of [...named, ...harnesses()]) {
-        const answer = await adapter.machine?.(control);
-        if (answer !== undefined) {
-          return answer;
-        }
-      }
-      throw new Error(unknownControlWords(control.method));
+      return await this.#harnessControl(control.method, control.args, kind);
     }
     return await this.#sessionCall(control, instanceId);
   }
 
-  /** A control of live session `instanceId`: the supervisor's own of it, else its process's ({@link HarnessSession.control}). */
+  /**
+   * A machine-scoped control only one harness knows ({@link
+   * Harness.machineControls}): run by the named harness's, else by the first
+   * harness that has one; refused when none does.
+   */
+  #harnessControl<K extends ControlName>(
+    method: K,
+    args: ControlArgs<K>,
+    kind: HarnessKind | undefined
+  ): Promise<ControlResult<K>> {
+    const named = kind ? [adapterFor(kind)] : [];
+    const owner = [...named, ...harnesses()].find(
+      (adapter) => adapter.machineControls?.[method]
+    );
+    return runControl(owner?.machineControls ?? {}, method, args);
+  }
+
+  /** A control of live session `instanceId`: the supervisor's own of it, else its process's ({@link HarnessSession.controls}). */
   async #sessionCall(
     control: AddressedControl,
     instanceId: string
@@ -4993,7 +4998,7 @@ export class SessionSupervisor {
     if (installing) {
       rememberCredential(instanceId, installing);
     }
-    return await session.control(control);
+    return await runControl(session.controls, control.method, control.args);
   }
 
   /** {@link installTool} of the tool the hub names, as it asked. */
@@ -5265,10 +5270,7 @@ async function applyStoredPermissionMode(
   mode: SpawnPayload["permissionMode"]
 ): Promise<void> {
   if (mode !== undefined) {
-    await session.control({
-      method: CONTROL_SET_PERMISSION_MODE,
-      args: [mode],
-    });
+    await runControl(session.controls, CONTROL_SET_PERMISSION_MODE, [mode]);
   }
 }
 
