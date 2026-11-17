@@ -885,27 +885,39 @@ export const linkUserLayer = async (account: string): Promise<void> => {
 };
 
 /**
- * Each account dir's link to the user layer's `entry` taken away, once the
- * user layer's `entry` itself is gone (agent fleet.ts
- * `dropUserLayerFolders`): a link {@link linkUserLayer} made, to a dir that
- * is no longer there. Anything else at that name is the account's, and stays.
+ * Each link {@link linkUserLayer} made in an account dir whose target is
+ * gone, taken away: the link at an entry's name ({@link USER_LAYER_DIRS},
+ * {@link USER_LAYER_FILES}) that names exactly the user layer's path for
+ * it, when nothing is at that path any more (a file or folder the fleet's
+ * cleanup took back, or one the person deleted). A link elsewhere, a real
+ * file or a real dir at that name is the account's, and stays. Answers the
+ * links taken away.
  */
-export const unlinkUserLayerDir = async (entry: string): Promise<void> => {
-  const target = userLayerPath(entry);
-  await Promise.all(
-    accountIds().map((account) => {
-      const path = join(accountConfigDir(account), entry);
-      return onePathAtATime(path, async () => {
-        const there = await lstat(path).catch(() => undefined);
-        if (
-          there?.isSymbolicLink() &&
-          (await readlink(path).catch(() => undefined)) === target
-        ) {
+export const dropDanglingUserLayerLinks = async (): Promise<string[]> => {
+  const entries = [...USER_LAYER_DIRS, ...USER_LAYER_FILES];
+  const dropped = await Promise.all(
+    accountIds().flatMap((account) =>
+      entries.map(async (entry) => {
+        const path = join(accountConfigDir(account), entry);
+        const target = userLayerPath(entry);
+        let gone = false;
+        await onePathAtATime(path, async () => {
+          const there = await lstat(path).catch(() => undefined);
+          if (
+            !there?.isSymbolicLink() ||
+            (await readlink(path).catch(() => undefined)) !== target ||
+            (await lstat(target).catch(() => undefined))
+          ) {
+            return;
+          }
           await rm(path, { force: true });
-        }
-      });
-    })
+          gone = true;
+        });
+        return gone ? [path] : [];
+      })
+    )
   );
+  return dropped.flat();
 };
 
 /** Two files with the same bytes; never two dirs. */

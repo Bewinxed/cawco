@@ -87,7 +87,7 @@ import { lastLines } from "@cawco/core/words/helpers";
 import { hookDriftUnparsed, hookUpdateKept } from "@cawco/core/words/hooks";
 import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
-import { accountClaudeJsons, unlinkUserLayerDir } from "./accounts";
+import { accountClaudeJsons, dropDanglingUserLayerLinks } from "./accounts";
 import { claudeExecutable } from "./auth";
 import { excludeFromCheckout } from "./checkout-exclude";
 import {
@@ -2597,8 +2597,8 @@ const withFoldersDropped = async (
 
 /**
  * Each of `folders` (paths under the user layer, {@link USER_LAYER_FOLDERS})
- * taken away while nothing is in it, in their order, and each account dir's
- * link to it with it. `rmdir` refuses a folder with anything in it, which
+ * taken away while nothing is in it, in their order (each account dir's
+ * link to one goes after, {@link dropDanglingUserLayerLinks}). `rmdir` refuses a folder with anything in it, which
  * is the check wanted: one that holds a document or a skill the person
  * kept is his, and stays, said once in the log. Answers each one an error
  * other than that left, for the next converge to try again.
@@ -2613,13 +2613,11 @@ const dropUserLayerFolders = async (
       () => undefined,
       (error: NodeJS.ErrnoException) => error.code ?? said(error)
     );
-    if (code === undefined || code === "ENOENT") {
-      await unlinkUserLayerDir(folder);
-    } else if (code === "ENOTEMPTY" || code === "EEXIST") {
+    if (code === "ENOTEMPTY" || code === "EEXIST") {
       console.info(
         `[fleet] ${path} stays: an earlier version made it, and something it did not write is in it`
       );
-    } else {
+    } else if (code !== undefined && code !== "ENOENT") {
       console.warn(`[fleet] ${path} stays for now: ${code}`);
       left.push(folder);
     }
@@ -3494,6 +3492,11 @@ const converge = async (
       managed.userLayer.folders,
       sidecar.userLayer
     );
+  }
+  // No account dir keeps a link CawCo made to what is no longer there: the
+  // user layer's CLAUDE.md the cleanup took back, a folder above.
+  for (const link of await dropDanglingUserLayerLinks()) {
+    console.info(`[fleet] ${link} named nothing any more; taken away`);
   }
   const into = [...new Set(ran.flatMap((part) => PARTS[part].writes()))].join(
     ", "
