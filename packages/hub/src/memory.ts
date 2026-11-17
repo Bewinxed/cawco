@@ -1864,6 +1864,8 @@ export interface MemoryDeps {
   readonly fleetDocs: {
     /** Every document the fleet keeps, with the sessions it is loaded into (core memory-scope.ts `scopeWords`). */
     list: () => { loadedInto: string; path: string }[];
+    /** The sessions the document at `path` loads into, in words: its scope's, or a new document's. */
+    loadedInto: (path: string) => string;
     read: (path: string) => string | undefined;
     write: (path: string, content: string) => string | { refused: string };
   };
@@ -2986,7 +2988,14 @@ export const createMemory = ({
         notes: proposal.notes,
         why: proposal.why,
         project: projectName,
-        ...(proposal.fleet ? { fleet: true } : {}),
+        // Where an approved fleet document loads, said on the card before
+        // the person answers it.
+        ...(proposal.fleet
+          ? {
+              fleet: true,
+              loadedInto: fleetDocs.loadedInto(proposal.files[0]?.path ?? ""),
+            }
+          : {}),
       },
       memoryProposal: proposal.id,
       projectId: proposal.projectId,

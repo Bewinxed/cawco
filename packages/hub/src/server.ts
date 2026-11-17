@@ -68,7 +68,7 @@ import type {
   MachineVerb,
 } from "@cawco/core/envelopes";
 import type { ExternalRef } from "@cawco/core/external-items";
-import type { FleetSyncReport } from "@cawco/core/fleet";
+import type { FleetSyncReport, MemoryScope } from "@cawco/core/fleet";
 import { FLEET_DELTA, machinePlatform, mcpRunsOn } from "@cawco/core/fleet";
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
 import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
@@ -8812,6 +8812,13 @@ export const createServer = (
     }
   };
 
+  /** The sessions a fleet memory document with `scope` loads into, in words (core memory-scope.ts). */
+  const fleetDocReach = (scope: MemoryScope | undefined): string =>
+    scopeWords(
+      scope,
+      (id) => db.project(id)?.name ?? id,
+      (id) => db.areas.get(id)?.name ?? id
+    );
   const projectMemory = createMemory({
     db,
     watch: memoryWatch,
@@ -8826,12 +8833,9 @@ export const createServer = (
       list: () =>
         db.listFleetMemoryDocs().map((doc) => ({
           path: doc.path,
-          loadedInto: scopeWords(
-            doc.scope,
-            (id) => db.project(id)?.name ?? id,
-            (id) => db.areas.get(id)?.name ?? id
-          ),
+          loadedInto: fleetDocReach(doc.scope),
         })),
+      loadedInto: (path) => fleetDocReach(db.getFleetMemoryDoc(path)?.scope),
       read: (path) => db.getFleetMemoryDoc(path)?.content,
       write: (path, content) => {
         const saved = fleetMemoryCalls(ctx).setDoc({ path, content });

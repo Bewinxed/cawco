@@ -1410,7 +1410,10 @@ function memoryProposal(input: Record<string, unknown>): Presented {
     detail: statWords(stat),
     changes,
     fields: [
-      ...fieldsOf(input, ["files", "notes", "project", "fleet"]),
+      ...fieldsOf(input, ["files", "notes", "project", "fleet", "loadedInto"]),
+      ...(input.fleet === true && typeof input.loadedInto === "string"
+        ? [{ key: "loaded into", value: input.loadedInto }]
+        : []),
       ...(notes.length > 0
         ? [{ key: "from notes", value: notes.join(", ") }]
         : []),
