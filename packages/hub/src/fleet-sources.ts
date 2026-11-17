@@ -23,13 +23,14 @@ import type { FsPayload } from "@cawco/core/protocol";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
 import {
   CONTROL_MCP_FLEET_CHANGED,
-  type CONTROL_REINITIALIZE,
-  type CONTROL_RELOAD_PLUGINS,
-  type CONTROL_RELOAD_SKILLS,
+  CONTROL_REINITIALIZE,
+  CONTROL_RELOAD_PLUGINS,
+  CONTROL_RELOAD_SKILLS,
 } from "@cawco/core/session/controls";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import type { FleetMcpTook } from "./connect-asks";
 import type { SourceNote } from "./db/fleet-catalog";
+import type { PublicInstanceRow } from "./db/instances";
 import type { FetchNews } from "./fleet-fetches";
 import { heardFetch } from "./fleet-fetches";
 import type { RidingChanges } from "./fleet-mcp-changes";
@@ -97,6 +98,45 @@ export type FleetSourcesContext = Pick<
   | "sendToMachine"
   | "toolsMayHaveChanged"
 >;
+
+/** What moved on a machine at a fleet sync, for its live sessions ({@link refreshesOf}). */
+interface FleetMoved {
+  hooks: boolean;
+  plugins: boolean;
+  /** The skills whose content moved on the machine, by name. */
+  skills: ReadonlySet<string>;
+}
+
+/**
+ * The refreshes a live session takes for what moved: each one its harness
+ * answers (core `answersControl`; a legacy row with no harness is Claude
+ * Code's), its skills only when one it loads moved (any, for a session that
+ * starts with everything installed; one of its starting set's otherwise),
+ * and none of its skills beside `reloadPlugins`, which reloads them too.
+ */
+const refreshesOf = (
+  row: Pick<PublicInstanceRow, "harness" | "startingSet">,
+  moved: FleetMoved
+): (
+  | typeof CONTROL_REINITIALIZE
+  | typeof CONTROL_RELOAD_PLUGINS
+  | typeof CONTROL_RELOAD_SKILLS
+)[] => {
+  const harness = row.harness ?? "claude";
+  const answers = (method: string) => answersControl(harness, method);
+  const plugins = moved.plugins && answers(CONTROL_RELOAD_PLUGINS);
+  const loads = row.startingSet
+    ? row.startingSet.skills.some((name) => moved.skills.has(name))
+    : moved.skills.size > 0;
+  const skills = !plugins && loads && answers(CONTROL_RELOAD_SKILLS);
+  return [
+    ...(plugins ? ([CONTROL_RELOAD_PLUGINS] as const) : []),
+    ...(skills ? ([CONTROL_RELOAD_SKILLS] as const) : []),
+    ...(moved.hooks && answers(CONTROL_REINITIALIZE)
+      ? ([CONTROL_REINITIALIZE] as const)
+      : []),
+  ];
+};
 
 export const createFleetSources = (ctx: FleetSourcesContext) => {
   /**
@@ -203,8 +243,14 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * `sessionControls`, {@link answersControl}): any other is refused there
    * with an error that reads as a session failure. Claude Code answers all
    * three; OpenCode and pi `reloadSkills` (pi by its own runtime reload,
-   * once the turn under way has ended). A legacy row whose `harness`
-   * predates the rework is Claude Code's.
+   * once the turn under way has ended, which also reconnects its MCP
+   * servers). A legacy row whose `harness` predates the rework is Claude
+   * Code's. A session is told to reload its skills only when one it loads
+   * moved: any, for one that starts with everything installed; one of its
+   * starting set's, for one that starts with a set
+   * ({@link SpawnPayload.startingSet}). `reloadPlugins` reloads a Claude
+   * session's skills with its plugins, so one told that is not also told
+   * `reloadSkills`.
    *
    * A changed hook report adds `reinitialize` — the SDK `Query`
    * method that actually re-reads settings, hooks included, rather than only
@@ -217,20 +263,14 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   const refreshSessions = (
     machineId: string,
     agent: MachineSocket,
-    methods: readonly (
-      | typeof CONTROL_REINITIALIZE
-      | typeof CONTROL_RELOAD_PLUGINS
-      | typeof CONTROL_RELOAD_SKILLS
-    )[]
+    moved: FleetMoved
   ): void => {
-    if (methods.length === 0) {
+    if (moved.skills.size === 0 && !moved.plugins && !moved.hooks) {
       return;
     }
     for (const row of ctx.db.liveInstancesOn(machineId)) {
-      const harness = row.harness ?? "claude";
-      for (const method of methods.filter((one) =>
-        answersControl(harness, one)
-      )) {
+      const methods = refreshesOf(row, moved);
+      for (const method of methods) {
         const requestId = crypto.randomUUID();
         const payload: AddressedControl = {
           instanceId: row.id,

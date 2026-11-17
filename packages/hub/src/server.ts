@@ -184,9 +184,6 @@ import {
   CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MCP_FLEET_HEAL,
-  CONTROL_REINITIALIZE,
-  CONTROL_RELOAD_PLUGINS,
-  CONTROL_RELOAD_SKILLS,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_TRANSCRIPT_TURNS,
@@ -7615,32 +7612,28 @@ export const createServer = (
     const previous = db
       .listAgents()
       .find((row) => row.machineId === machineId)?.fleet;
-    const sameHashes = (
+    /** The names whose content hash moved: added, removed or changed. */
+    const moved = (
       before: Record<string, string> = {},
       after: Record<string, string> = {}
-    ): boolean =>
-      Object.keys(before).length === Object.keys(after).length &&
-      Object.entries(before).every(([key, hash]) => after[key] === hash);
-    const skillsChanged = !sameHashes(
-      previous?.have?.skills,
-      report.have?.skills
-    );
-    const pluginsChanged = !sameHashes(
-      previous?.have?.plugins,
-      report.have?.plugins
-    );
+    ): Set<string> =>
+      new Set(
+        [...Object.keys(before), ...Object.keys(after)].filter(
+          (key) => before[key] !== after[key]
+        )
+      );
+    const pluginsChanged =
+      moved(previous?.have?.plugins, report.have?.plugins).size > 0;
     const hooksChanged =
       JSON.stringify(previous?.hooks ?? {}) !==
       JSON.stringify(report.hooks ?? {});
     db.setAgentFleet(machineId, report);
     publishInstances(machineId);
-    refreshSessions(machineId, agent, [
-      ...(pluginsChanged ? ([CONTROL_RELOAD_PLUGINS] as const) : []),
-      ...(skillsChanged && !pluginsChanged
-        ? ([CONTROL_RELOAD_SKILLS] as const)
-        : []),
-      ...(hooksChanged ? ([CONTROL_REINITIALIZE] as const) : []),
-    ]);
+    refreshSessions(machineId, agent, {
+      skills: moved(previous?.have?.skills, report.have?.skills),
+      plugins: pluginsChanged,
+      hooks: hooksChanged,
+    });
     sendMcpChanges(machineId, riding);
   };
 
