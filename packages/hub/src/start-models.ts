@@ -111,6 +111,8 @@ const accountLine = (
       return words.account(name, words.notAllowed(standing.by), null);
     case "out-of-credit":
       return words.account(name, creditWhy(standing, now), null);
+    case "not-enabled":
+      return accessWhy(standing, name, now);
     case "benched":
       return words.account(name, words.benched, back(standing.backAt));
     case "past-reserve":
@@ -130,17 +132,33 @@ const accountLine = (
   }
 };
 
+/** When a mark began, as its words say it: its clock time on `now`'s day, else its day and time. */
+const sinceWords = (at: number, now: number): string =>
+  spawnWords.startModel.since(
+    dayWords(at) === dayWords(now) ? null : dayWords(at),
+    clockWords(at)
+  );
+
 /** "out of credit for opencode since 23:41": an account a provider refused for want of credit. */
 export const creditWhy = (
   mark: { provider: string; since: number },
   now: number
 ): string =>
-  spawnWords.startModel.outOfCredit(
-    mark.provider,
-    spawnWords.startModel.since(
-      dayWords(mark.since) === dayWords(now) ? null : dayWords(mark.since),
-      clockWords(mark.since)
-    )
+  spawnWords.startModel.outOfCredit(mark.provider, sinceWords(mark.since, now));
+
+/**
+ * "opencode/claude-fable-5 is not enabled for team@acme.dev since 23:41": a
+ * model a provider refused `account` (as a sentence names it) the use of.
+ */
+export const accessWhy = (
+  mark: { model: string; since: number },
+  account: string,
+  now: number
+): string =>
+  spawnWords.startModel.notEnabled(
+    mark.model,
+    account,
+    sinceWords(mark.since, now)
   );
 
 /**

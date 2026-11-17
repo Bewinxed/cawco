@@ -3,9 +3,10 @@
 import { readFile } from "node:fs/promises";
 import {
   atProviderLimit,
+  modelNotEnabled,
   outOfCredit,
   type ProviderRefusal,
-  providerErrorCode,
+  providerErrorOf,
 } from "@cawco/core/accounts";
 import type { BrowserDoor } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
@@ -948,8 +949,10 @@ const loaderSources = async (
  * OpenAI client throws on a 429 before pi's `onResponse`, so its
  * `after_provider_response` is never heard for one, and its error message
  * keeps the status only in words. An error answer's body is read for the
- * provider's own error code too (core `providerErrorCode`): OpenAI's
- * no-credit answer is a 429 that only its code tells from a rate limit.
+ * provider's own error code and type too (core `providerErrorOf`): OpenAI's
+ * no-credit answer is a 429 that only its code tells from a rate limit, and
+ * a model the account may not use is a 403 that only its type tells
+ * (`permission_error`) from any other refusal.
  */
 class ProviderAnswers {
   #answer: ProviderRefusal = {};
@@ -960,18 +963,15 @@ class ProviderAnswers {
       init?: Parameters<typeof globalThis.fetch>[1]
     ): Promise<Response> => {
       const response = await globalThis.fetch(input, init);
-      const code = response.ok
-        ? undefined
-        : providerErrorCode(
+      const body = response.ok
+        ? {}
+        : providerErrorOf(
             await response
               .clone()
               .text()
               .catch(() => undefined)
           );
-      this.#answer = {
-        status: response.status,
-        ...(code === undefined ? {} : { code }),
-      };
+      this.#answer = { status: response.status, ...body };
       return response;
     },
     { preconnect: globalThis.fetch.preconnect }
@@ -1285,7 +1285,9 @@ class PiSession implements HarnessSession {
         const failed = errors.length > 0;
         // A failed turn whose last answer was a 402, or a 429 that names no
         // credit, ended for want of credit or on its account's limit (core
-        // `outOfCredit`, `atProviderLimit`), whatever its error's words say.
+        // `outOfCredit`, `atProviderLimit`); a 403 `permission_error`, on
+        // a model the account may not use (core `modelNotEnabled`),
+        // whatever its error's words say.
         const answer = this.#answers.take();
         const leaf = this.#leaf();
         const context = this.#contextTokens();
@@ -1301,6 +1303,7 @@ class PiSession implements HarnessSession {
           ...(failed ? { errors } : {}),
           ...(failed && atProviderLimit(answer) ? { atLimit: true } : {}),
           ...(failed && outOfCredit(answer) ? { outOfCredit: true } : {}),
+          ...(failed && modelNotEnabled(answer) ? { modelRefused: true } : {}),
           ...(context === undefined ? {} : { contextTokens: context }),
           ...this.#compactsAt(),
         });

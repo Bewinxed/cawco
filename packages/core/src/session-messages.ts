@@ -502,6 +502,19 @@ export type NeutralOrigin =
 
 export interface NeutralAssistantMessage {
   /**
+   * Claude Code's reason for an error frame it wrote itself rather than the
+   * API's answer (`hook_denied`, `max_output_tokens`, …; CLI 2.1.288, on
+   * the wire though the Agent SDK's type names it internal).
+   */
+  api_error?: string;
+  /** Claude Code: the HTTP status of the API error this frame is written in place of (CLI 2.1.288). */
+  api_error_status?: number | null;
+  /**
+   * Claude Code: the error type in the body of the API error this frame is
+   * written in place of (`permission_error`, `rate_limit_error`; CLI 2.1.288).
+   */
+  api_error_type?: string;
+  /**
    * This message is a compaction's summary, not an answer: opencode writes
    * its summary in the assistant's role (`summary: true` on the message).
    * Its text is the compaction's brief ({@link SessionMessage.compactSummary}).
@@ -978,6 +991,13 @@ export interface NeutralResultMessage {
   is_error: boolean;
   /** Agent receive time of the last main-loop requesting status, epoch ms. */
   lastRequestAt?: number;
+  /**
+   * pi and OpenCode: the provider refused the account the use of the
+   * turn's model, by the structured refusal its harness handed over (core
+   * `modelNotEnabled`). Claude's is its assistant frame's `api_error_status`
+   * and `api_error_type`.
+   */
+  modelRefused?: true;
   /**
    * Claude: what the session's process has spent so far, by model (the SDK
    * result's `modelUsage`), each field as Claude sent it, and the model's

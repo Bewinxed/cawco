@@ -1,5 +1,6 @@
 import {
   type Account,
+  type AccountAccess,
   type AccountBench,
   type AccountCatalog,
   type AccountCredit,
@@ -92,6 +93,8 @@ export interface StrandedSession {
 }
 
 export interface AccountsDb {
+  /** Every model a provider refused an account the use of (core `AccountAccess`). */
+  readonly access: () => AccountAccess[];
   /** Why the provider's saved at-limit policy does not read whole (migration 0399): its fields that don't, as a short reason; null when it reads or none is saved. */
   readonly atLimitUnread: (provider: AccountProvider) => string | null;
   readonly bench: (now?: number) => AccountBench[];
@@ -107,6 +110,12 @@ export interface AccountsDb {
     except?: string
   ) => Account | undefined;
   readonly catalogs: () => AccountCatalog[];
+  /**
+   * Ends the account's model-access marks: one model's (a turn on it
+   * succeeded), or every one (signed in again, Check again pressed). The
+   * models that were marked.
+   */
+  readonly clearAccess: (accountId: string, model?: string) => string[];
   /**
    * Ends the account's out-of-credit marks: one provider's (a turn on it
    * succeeded), or every one (signed in again, a top-up acknowledged). The
@@ -160,6 +169,8 @@ export interface AccountsDb {
    */
   readonly liftBench: (accountId: string) => string[];
   readonly list: () => Account[];
+  /** Marks `model` not enabled for the account, from `since`; a mark already held keeps its first moment and takes the new words. */
+  readonly markNotEnabled: (access: AccountAccess) => void;
   /** Marks the account out of credit for `provider`'s models, from `since`; a mark already held keeps its first moment and takes the new words. */
   readonly markOutOfCredit: (credit: AccountCredit) => void;
   /** The sessions still running from a moved credential, by instance id → machine id. */
@@ -1174,13 +1185,29 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           scope: row.scope === "" ? null : row.scope,
           until: row.until.getTime(),
         })),
+    // A credit mark is its provider's, with no model; an access mark is
+    // its model's (schema `accountCredit`).
     credit: () =>
       db
         .select()
         .from(accountCredit)
+        .where(eq(accountCredit.model, ""))
         .all()
         .map((row) => ({
           accountId: row.accountId,
+          provider: row.provider,
+          reason: row.reason,
+          since: row.since.getTime(),
+        })),
+    access: () =>
+      db
+        .select()
+        .from(accountCredit)
+        .where(ne(accountCredit.model, ""))
+        .all()
+        .map((row) => ({
+          accountId: row.accountId,
+          model: row.model,
           provider: row.provider,
           reason: row.reason,
           since: row.since.getTime(),
@@ -1189,16 +1216,31 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
       db
         .delete(accountCredit)
         .where(
-          provider === undefined
-            ? eq(accountCredit.accountId, accountId)
-            : and(
-                eq(accountCredit.accountId, accountId),
-                eq(accountCredit.provider, provider)
-              )
+          and(
+            eq(accountCredit.accountId, accountId),
+            eq(accountCredit.model, ""),
+            provider === undefined
+              ? undefined
+              : eq(accountCredit.provider, provider)
+          )
         )
         .returning()
         .all()
         .map((row) => row.provider),
+    clearAccess: (accountId, model) =>
+      db
+        .delete(accountCredit)
+        .where(
+          and(
+            eq(accountCredit.accountId, accountId),
+            model === undefined
+              ? ne(accountCredit.model, "")
+              : eq(accountCredit.model, model)
+          )
+        )
+        .returning()
+        .all()
+        .map((row) => row.model),
     markOutOfCredit: ({ accountId, provider, reason, since }) => {
       if (!get(accountId)) {
         return;
@@ -1206,7 +1248,27 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
       db.insert(accountCredit)
         .values({ accountId, provider, reason, since: new Date(since) })
         .onConflictDoUpdate({
-          target: [accountCredit.accountId, accountCredit.provider],
+          target: [
+            accountCredit.accountId,
+            accountCredit.provider,
+            accountCredit.model,
+          ],
+          set: { reason },
+        })
+        .run();
+    },
+    markNotEnabled: ({ accountId, model, provider, reason, since }) => {
+      if (!(model && get(accountId))) {
+        return;
+      }
+      db.insert(accountCredit)
+        .values({ accountId, provider, model, reason, since: new Date(since) })
+        .onConflictDoUpdate({
+          target: [
+            accountCredit.accountId,
+            accountCredit.provider,
+            accountCredit.model,
+          ],
           set: { reason },
         })
         .run();

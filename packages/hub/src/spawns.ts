@@ -30,8 +30,13 @@ import { secondsOf } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
+import {
+  accessMarksFor,
+  creditProviderOf,
+  type KeptOff,
+  keptOff,
+} from "./account-marks";
 import type { ClosureContext } from "./closure-context";
-import { creditMarksFor, creditProviderOf } from "./credit";
 import type { DbShape } from "./db/index";
 import type { InstanceKind } from "./db/stored-types";
 import { handleId, isHandle } from "./handles";
@@ -57,6 +62,7 @@ import { UNREAD } from "./sends";
 import type { SpawnProblem } from "./spawn-problems";
 import { type createStartHolds, StartsHeld } from "./start-holds";
 import {
+  accessWhy,
   creditWhy,
   noModelRuns,
   nothingListed,
@@ -930,24 +936,36 @@ export const createSpawns = (ctx: SpawnsContext) => {
     const opened = models.filter((one) =>
       providersOf(machineId, harness, one).includes(account.provider)
     );
-    const marks = ctx.db.accounts
-      .credit()
-      .filter((one) => one.accountId === account.id);
-    const markOf = (one: string) =>
-      creditMarksFor(
-        marks,
+    const name = accountNameAmong(account, ctx.db.accounts.list());
+    const now = Date.now();
+    const kept = keptOffOf(account.id);
+    /** Why `one` keeps off the account: its provider's credit mark, else its own access mark, in a refusal's words. */
+    const refusedOf = (one: string): string | undefined => {
+      const marks = keptOff(
+        kept,
         harness,
         ctx.resolvedModel(machineId, harness, one)
-      )[0];
-    const model = opened.find((one) => markOf(one) === undefined);
-    const [spent] = opened.flatMap((one) => markOf(one) ?? []);
-    if (!model && spent) {
+      );
+      const [credit] = marks.outOfCredit;
+      const [access] = marks.notEnabled;
+      if (credit) {
+        return spawnWords.startModel.account(
+          name,
+          creditWhy(credit, now),
+          null
+        );
+      }
+      return access ? accessWhy(access, name, now) : undefined;
+    };
+    const model = opened.find((one) => refusedOf(one) === undefined);
+    const refused = [...new Set(opened.flatMap((one) => refusedOf(one) ?? []))];
+    if (!model && refused.length > 0) {
       const [row] = ctx.db.getInstancesByIds([payload.instanceId]);
       return {
-        refusal: spawnWords.startModel.heldOutOfCredit(
+        refusal: spawnWords.startModel.heldRefused(
           row ? ctx.sessionName(row) : payload.title || "this session",
-          accountNameAmong(account, ctx.db.accounts.list()),
-          creditWhy(spent, Date.now()),
+          name,
+          refused,
           accountsWords.harnesses[harness],
           ctx.machineName(machineId)
         ),
@@ -958,7 +976,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       return {
         refusal: spawnWords.startModel.heldUnlisted(
           row ? ctx.sessionName(row) : payload.title || "this session",
-          accountNameAmong(account, ctx.db.accounts.list()),
+          name,
           accountsWords.harnesses[harness],
           ctx.machineName(machineId)
         ),
@@ -971,8 +989,9 @@ export const createSpawns = (ctx: SpawnsContext) => {
   /**
    * {@link modelFor} for a session no account holds: each model in
    * `order` placed as a picked one is ({@link placedNew}), the first that
-   * places and runs. Placement reads a model by its provider and its scope
-   * alone, so each pair is placed once, however many models share it.
+   * places and runs. Placement reads a model by its provider, its scope, the
+   * provider its credit marks are for and the accounts not enabled for it
+   * alone, so each such set is placed once, however many models share it.
    */
   const placedModel = (
     machineId: string,
@@ -982,6 +1001,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     runs: typeof runsOn | undefined
   ): Started | { refusal: string; status?: 409 } => {
     const placedBy = new Map<string, ReturnType<typeof placedNew>>();
+    const access = ctx.db.accounts.access();
     const refusals = new Map<AccountProvider, string[]>();
     const refusedBy = (provider: AccountProvider, refusal: string): void => {
       refusals.set(provider, [
@@ -998,13 +1018,14 @@ export const createSpawns = (ctx: SpawnsContext) => {
         continue;
       }
       const asked = { ...payload, model };
+      const resolved = ctx.resolvedModel(machineId, payload.harness, model);
       const key = [
         provider,
         modelScope(model) ?? "",
-        creditProviderOf(
-          payload.harness,
-          ctx.resolvedModel(machineId, payload.harness, model)
-        ) ?? "",
+        creditProviderOf(payload.harness, resolved) ?? "",
+        ...accessMarksFor(access, resolved)
+          .map((one) => one.accountId)
+          .sort(),
       ].join("\u0000");
       const placed =
         placedBy.get(key) ?? placedNew(machineId, asked, task, true);
@@ -1078,7 +1099,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       const asked = { ...payload, model };
       const read = standings({
         ...providerInput(provider, machineId, asked, lists, undefined),
-        outOfCredit: creditOf(machineId, asked),
+        ...keptOffBy(machineId, asked),
       });
       return {
         provider: providerName(provider),
@@ -1138,20 +1159,29 @@ export const createSpawns = (ctx: SpawnsContext) => {
 
   /**
    * The model a start would run on, as {@link placeSpawn} names it, asked
-   * and nothing claimed: what the placement explain query shows.
+   * and nothing claimed: what the placement explain query shows. A model
+   * the hub named comes with the marks its placement keeps off
+   * ({@link keptOffBy}), as the start's own does.
    */
   const startModelOf = (
     machineId: string,
     payload: NamedSpawn,
     task: { projectId?: string | null; taskId?: string | null },
     own: OwnDefault | undefined
-  ): { model: string } | { refusal: string; status?: 404 | 409 } => {
+  ):
+    | { model: string; keptOff?: KeptOff }
+    | { refusal: string; status?: 404 | 409 } => {
     const model = pickedModel(payload.model) ?? conversationModel(payload);
     if (model) {
       return { model };
     }
     const found = modelFor(machineId, payload, task, own, accountHeld(payload));
-    return "refusal" in found ? found : { model: found.model };
+    return "refusal" in found
+      ? found
+      : {
+          model: found.model,
+          keptOff: keptOffBy(machineId, { ...payload, model: found.model }),
+        };
   };
 
   /**
@@ -1164,7 +1194,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     machineId: string,
     payload: NamedSpawn,
     task: { projectId?: string | null; taskId?: string | null },
-    keepOffCredit = false
+    hubPicked = false
   ): { accountId?: string } | { refusal: string; status?: 409 } => {
     const allowed = taskAccounts(
       payload.projectId ?? task.projectId,
@@ -1198,19 +1228,31 @@ export const createSpawns = (ctx: SpawnsContext) => {
     return placedStart(
       machineId,
       payload,
-      keepOffCredit
-        ? { ...input, outOfCredit: creditOf(machineId, payload) }
-        : input
+      hubPicked ? { ...input, ...keptOffBy(machineId, payload) } : input
     );
   };
 
-  /** The credit marks a start of `payload` keeps off when the hub picks its model (credit.ts). */
-  const creditOf = (machineId: string, payload: NamedSpawn) =>
-    creditMarksFor(
-      ctx.db.accounts.credit(),
+  /**
+   * The marks a start of `payload` keeps off when the hub picks its model
+   * (account-marks.ts): its model's provider's credit marks, and the
+   * accounts its model is not enabled for.
+   */
+  const keptOffBy = (machineId: string, payload: NamedSpawn): KeptOff =>
+    keptOff(
+      { credit: ctx.db.accounts.credit(), access: ctx.db.accounts.access() },
       payload.harness,
       ctx.resolvedModel(machineId, payload.harness, payload.model)
     );
+
+  /** Every credit and access mark of `accountId`. */
+  const keptOffOf = (accountId: string) => ({
+    credit: ctx.db.accounts
+      .credit()
+      .filter((one) => one.accountId === accountId),
+    access: ctx.db.accounts
+      .access()
+      .filter((one) => one.accountId === accountId),
+  });
 
   /**
    * The account a start goes on, by placement, or none: on the machine's own

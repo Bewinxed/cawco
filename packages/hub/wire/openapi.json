@@ -32419,6 +32419,38 @@
           "provider"
         ]
       },
+      "AccountAccess": {
+        "description": "A model a provider refused an account the use of ({@link modelNotEnabled}):\naccess to it is disabled for the account (OpenCode Zen's \"Model access is\ndisabled\"), while the account's other models still run. Kept until a turn\nof that account on that model succeeds, the account is signed in again\nthrough CawCo, or a person presses Check again in Configure › Accounts. A\nmodel the hub picks for a start that picked none passes it over on that\naccount; a person's pick still runs it.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "model": {
+            "description": "The model refused, as its harness runs it (`opencode/claude-fable-5`).",
+            "type": "string"
+          },
+          "provider": {
+            "description": "The provider the model is billed to, as its harness names it (`opencode`, `anthropic`).",
+            "type": "string"
+          },
+          "reason": {
+            "description": "The provider's own words, as its harness handed them over.",
+            "type": "string"
+          },
+          "since": {
+            "description": "When the refusal came, epoch ms.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "accountId",
+          "model",
+          "provider",
+          "reason",
+          "since"
+        ]
+      },
       "AccountBench": {
         "description": "An account taken out of placement until its window resets.",
         "type": "object",
@@ -48328,6 +48360,18 @@
       "NeutralAssistantMessage": {
         "type": "object",
         "properties": {
+          "api_error": {
+            "description": "Claude Code's reason for an error frame it wrote itself rather than the\nAPI's answer (`hook_denied`, `max_output_tokens`, …; CLI 2.1.288, on\nthe wire though the Agent SDK's type names it internal).",
+            "type": "string"
+          },
+          "api_error_status": {
+            "description": "Claude Code: the HTTP status of the API error this frame is written in place of (CLI 2.1.288).",
+            "type": "number"
+          },
+          "api_error_type": {
+            "description": "Claude Code: the error type in the body of the API error this frame is\nwritten in place of (`permission_error`, `rate_limit_error`; CLI 2.1.288).",
+            "type": "string"
+          },
           "compactSummary": {
             "description": "This message is a compaction's summary, not an answer: opencode writes\nits summary in the assistant's role (`summary: true` on the message).\nIts text is the compaction's brief ({@link SessionMessage.compactSummary}).",
             "const": true,
@@ -49038,6 +49082,11 @@
           "lastRequestAt": {
             "description": "Agent receive time of the last main-loop requesting status, epoch ms.",
             "type": "number"
+          },
+          "modelRefused": {
+            "description": "pi and OpenCode: the provider refused the account the use of the\nturn's model, by the structured refusal its harness handed over (core\n`modelNotEnabled`). Claude's is its assistant frame's `api_error_status`\nand `api_error_type`.",
+            "const": true,
+            "type": "boolean"
           },
           "modelUsage": {
             "type": "object",
@@ -76385,6 +76434,12 @@
       "getApiAccounts200": {
         "type": "object",
         "properties": {
+          "access": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountAccess"
+            }
+          },
           "accounts": {
             "type": "array",
             "items": {
@@ -76447,6 +76502,7 @@
           }
         },
         "required": [
+          "access",
           "accounts",
           "bench",
           "catalogFaults",

@@ -359,6 +359,7 @@
       bench: [],
       catalogFaults: [],
       credit: [],
+      access: [],
       catalogs: ACCOUNTS.map((one) => ({
         accountId: one.id,
         defaultEfforts: {},

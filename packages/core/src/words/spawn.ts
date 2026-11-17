@@ -99,6 +99,23 @@ export const spawnWords = {
      */
     creditProblem: (provider: string, since: string) =>
       `Out of credit for ${provider} since ${since}. A model CawCo picks keeps off it until a turn on ${provider} is answered; top it up, then press Check again.`,
+    /**
+     * Its provider refused the account the use of a model: "opencode/claude-fable-5
+     * is not enabled for team@acme.dev since 23:41". A whole reason, its own
+     * subject the model.
+     */
+    notEnabled: (model: string, account: string, since: string) =>
+      `${model} is not enabled for ${account} since ${since}`,
+    /** The same, in placement's note of the accounts a start kept off. */
+    notEnabledNote: (model: string, account: string) =>
+      `${model} is not enabled for ${account}`,
+    /**
+     * An account's row in Configure › Accounts while a provider refuses it
+     * a model (`refused`, as {@link notEnabled} says it), above its Check
+     * again, which acknowledges the model was enabled.
+     */
+    accessProblem: (refused: string, model: string) =>
+      `${refused}. A model CawCo picks passes it over on this account until a turn on ${model} is answered; enable it with its provider, then press Check again.`,
     /** When a mark began: its clock time today, else its day and time ("2 Oct 23:41"). */
     since: (day: string | null, clock: string) =>
       day ? `${day} ${clock}` : clock,
@@ -151,18 +168,19 @@ export const spawnWords = {
       `${harness} on ${machine} lists no models, so a start that picks none has none to run. Sign an account in to it in ${configurePage("accounts")}. Nothing was started.`,
     /**
      * A session that stays on its account (`account`), whose start picked
-     * no model, where every model of it the harness lists is a provider's
-     * that refused the account for want of credit (`why`, as an account line
-     * says it).
+     * no model, where a provider refused the account every model of it the
+     * harness lists: for want of credit, or a model not enabled for it
+     * (`reasons`, each a whole reason: "team@acme.dev is out of credit for
+     * opencode since 23:41", {@link notEnabled}).
      */
-    heldOutOfCredit: (
+    heldRefused: (
       session: string,
       account: string,
-      why: string,
+      reasons: readonly string[],
       harness: string,
       machine: string
     ) =>
-      `${session} runs on ${account}, which is ${why}, and every model ${harness} on ${machine} lists for it is that provider's. Pick a model for it, or top the account up and press Check again in ${configurePage("accounts")}. Nothing was started.`,
+      `${session} runs on ${account}, and its provider refused it every model ${harness} on ${machine} lists for it: ${reasons.join("; ")}. Pick a model for it, or top the account up or enable the model, then press Check again in ${configurePage("accounts")}. Nothing was started.`,
     /**
      * A session that stays on its account (`account`), whose start picked
      * no model, where the harness lists none that account runs.
