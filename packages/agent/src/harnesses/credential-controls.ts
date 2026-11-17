@@ -1,4 +1,4 @@
-import type { Control } from "@cawco/core/control-table";
+import type { Control, ControlResult } from "@cawco/core/control-table";
 import {
   INSTALL_SESSION_CREDENTIAL,
   VERIFY_SESSION_CREDENTIAL,
@@ -72,7 +72,10 @@ export const verifyHeldCredential = async (
  */
 export const credentialControls =
   (
-    install: (credential: string, initial: boolean) => Promise<unknown>,
+    install: (
+      credential: string,
+      initial: boolean
+    ) => Promise<ControlResult<typeof INSTALL_SESSION_CREDENTIAL>>,
     verify: () => Promise<unknown>
   ) =>
   (control: Control): Promise<unknown> | undefined => {

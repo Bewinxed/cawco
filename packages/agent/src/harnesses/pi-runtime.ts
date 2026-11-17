@@ -14,7 +14,10 @@ import { isControlOf } from "@cawco/core/control-args";
 import type { Control } from "@cawco/core/control-table";
 import type { StartingSet } from "@cawco/core/delegate-types";
 import { inStartingSet, piToolsFor } from "@cawco/core/delegate-types";
-import { CONTROL_REFRESH_CAWCO_TOOLS } from "@cawco/core/harness";
+import {
+  CONTROL_REFRESH_CAWCO_TOOLS,
+  type SessionCredentialInstall,
+} from "@cawco/core/harness";
 import type { HookEvent } from "@cawco/core/hooks";
 import { hookToolCall, hookToolInputBack } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
@@ -1499,7 +1502,9 @@ class PiSession implements HarnessSession {
   );
 
   /** The credential the hub granted this session, installed: its tools and its shells act as it. */
-  async #installCredential(credential: string): Promise<unknown> {
+  async #installCredential(
+    credential: string
+  ): Promise<SessionCredentialInstall> {
     await this.#session.waitForIdle();
     this.#credential.value = credential;
     // This host runs one session: its shells act as that session.

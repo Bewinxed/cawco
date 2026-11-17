@@ -345,7 +345,7 @@ for (const kind of HARNESSES) {
       older: null,
       newer: null,
     }),
-    getSessionInfo: async () => undefined,
+    getSessionInfo: async () => null,
     storedRun: async () => ({}),
     machine: ({ method }: Control) => {
       if (method === INSPECT_CONFIG) {
