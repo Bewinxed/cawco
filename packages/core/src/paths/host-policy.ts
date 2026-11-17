@@ -1,7 +1,7 @@
 /** What a workspace may read or write of the host: its caches, its toolchains and every store that holds a credential. */
 
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import type { HarnessKind } from "../harness/kinds";
 import { hostEnvironment } from "../session-env";
 import { systemProgram } from "../workspace-needs";
@@ -148,6 +148,140 @@ const HARNESS_CREDENTIALS: Record<HarnessKind, () => string[]> = {
 };
 
 /**
+ * The dir an env var of this process names, `~` and `~/…` expanded as the
+ * tools below expand them; none when it is unset, empty or not absolute.
+ */
+const envDir = (name: string): string | undefined => {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    return;
+  }
+  if (value === "~") {
+    return homedir();
+  }
+  const path = value.startsWith("~/") ? join(homedir(), value.slice(2)) : value;
+  return isAbsolute(path) ? path : undefined;
+};
+
+/** {@link envDir} as a list: the dir, or nothing. */
+const envDirs = (name: string): string[] => {
+  const dir = envDir(name);
+  return dir ? [dir] : [];
+};
+
+/**
+ * Where a VS Code fork keeps its user data on this platform:
+ * `~/Library/Application Support/<app>` on macOS, `$XDG_CONFIG_HOME/<app>`
+ * elsewhere. Its `User/globalStorage/state.vscdb` holds the editor's sign-in.
+ */
+const editorDataDir = (app: string): string =>
+  process.platform === "darwin"
+    ? join(homedir(), "Library", "Application Support", app)
+    : join(xdgConfigHome(), app);
+
+/**
+ * Where coding agents CawCo does not run keep their sign-ins, which a person
+ * is likely to have beside it and no workspace reads ({@link credentialStores}).
+ * Each entry names its source; a dir an env var moves is hidden where the var
+ * puts it and at its default.
+ */
+const OTHER_AGENT_CREDENTIALS: Record<string, () => string[]> = {
+  // Oh My Pi (omp): `<root>/agent/agent.db` (every sign-in),
+  // `<root>/profiles/<name>/agent/agent.db`, `<root>/auth-broker.token`,
+  // `<root>/auth-gateway.token`, `<agent>/secret-placeholder.key`, the root
+  // `~/<PI_CONFIG_DIR or .omp>`; once migrated to XDG, `agent.db` in
+  // `$XDG_DATA_HOME/omp` and the key in `$XDG_STATE_HOME/omp`. The dirs of
+  // its runtime state (sockets, logs) go with them. Its
+  // `PI_CODING_AGENT_DIR` override is pi's (`HARNESS_CREDENTIALS.pi`).
+  // github.com/can1357/oh-my-pi packages/utils/src/dirs.ts (`getBaseConfigRoot`,
+  // `DirResolver`, `getAgentDbPath`, `getSecretPlaceholderKeyPath`),
+  // packages/ai/src/auth-broker/discover.ts, coding-agent/src/cli/auth-gateway-cli.ts.
+  omp: () => [
+    join(homedir(), ".omp"),
+    ...(process.env.PI_CONFIG_DIR
+      ? [join(homedir(), process.env.PI_CONFIG_DIR)]
+      : []),
+    join(xdgDataHome(), "omp"),
+    join(envDir("XDG_STATE_HOME") ?? join(homedir(), ".local", "state"), "omp"),
+    // The auth broker's sign-ins, encrypted with its token, cached
+    // (`getAuthBrokerSnapshotCachePath`).
+    join(
+      envDir("XDG_CACHE_HOME") ?? join(homedir(), ".cache"),
+      "omp",
+      "cache",
+      "auth-broker-snapshot.enc"
+    ),
+    ...envDirs("OMP_AUTH_BROKER_SNAPSHOT_CACHE"),
+  ],
+  // Hermes Agent: `.env` (API keys), `auth.json` (OAuth), `profiles/*/` with
+  // their own, and Slack, Google and WhatsApp tokens beside them, in
+  // `$HERMES_HOME`, default `~/.hermes` (hermes-agent.nousresearch.com/docs/
+  // user-guide/configuration, reference/environment-variables; hermes_cli/auth.py).
+  hermes: () => [join(homedir(), ".hermes"), ...envDirs("HERMES_HOME")],
+  // T3 Code: server secrets in `<state>/secrets`, each provider's own home
+  // (Codex's, Antigravity's sign-in) in `<state>/providers`, the state dir
+  // `userdata` or `dev` under `$T3CODE_HOME`, default `~/.t3`
+  // (github.com/pingdotgg/t3code apps/server/src/config.ts `deriveServerPaths`,
+  // os-jank.ts `resolveBaseDir`, provider/antigravityAuthSupport.ts).
+  t3: () =>
+    [join(homedir(), ".t3"), ...envDirs("T3CODE_HOME")].flatMap((base) =>
+      ["userdata", "dev"].flatMap((state) => [
+        join(base, state, "secrets"),
+        join(base, state, "providers"),
+      ])
+    ),
+  // Cursor: the CLI's `auth.json` (`$XDG_CONFIG_HOME/cursor` on Linux,
+  // `~/.cursor` on macOS beside the keychain), the editor's
+  // `User/globalStorage/state.vscdb` (`cursorAuth/accessToken`)
+  // (docs.rs/ai-usagebar cursor::db, docs.rs/quotas auth/cursor.rs).
+  cursor: () => [
+    join(xdgConfigHome(), "cursor", "auth.json"),
+    join(homedir(), ".cursor", "auth.json"),
+    join(editorDataDir("Cursor"), "User", "globalStorage"),
+  ],
+  // Windsurf, now Devin Desktop: the editor's `state.vscdb`
+  // (`windsurfAuthStatus`), the Codeium plugins' `~/.codeium/config.json`,
+  // the Devin CLI's `devin/credentials.toml` in the data dir
+  // (seanthegeek.net/doubleagent/research/windsurf.html; github.com/dwgx/
+  // WindsurfAPI src/dashboard/local-windsurf.js; oh-my-pi
+  // packages/ai/src/registry/oauth/devin-cli.ts).
+  windsurf: () => [
+    join(editorDataDir("Windsurf"), "User", "globalStorage"),
+    join(editorDataDir("Devin"), "User", "globalStorage"),
+    join(homedir(), ".codeium", "config.json"),
+    join(xdgDataHome(), ".codeium", "config.json"),
+    join(xdgDataHome(), "devin", "credentials.toml"),
+    join(
+      homedir(),
+      "Library",
+      "Application Support",
+      "devin",
+      "credentials.toml"
+    ),
+  ],
+  // Antigravity: the editor's `state.vscdb` (`antigravityAuthStatus`,
+  // `antigravityUnifiedStateSync.oauthToken`, unencrypted), under its old and
+  // new names (discuss.ai.google.dev/t/186209; github.com/robinebers/openusage
+  // PR 508). agy keeps its sign-in in `~/.gemini`, the app in the keyring.
+  antigravity: () => [
+    join(editorDataDir("Antigravity"), "User", "globalStorage"),
+    join(editorDataDir("Antigravity IDE"), "User", "globalStorage"),
+  ],
+  // Kiro: the CLI's `data.sqlite3` (`auth_kv`) in `kiro-cli` under the data
+  // dir (github.com/kirodotdev/Kiro issue 4847; github.com/vulnetix/cli
+  // pkg/kiroauth/import.go). The editor's token is in `~/.aws/sso/cache`.
+  kiro: () => [
+    join(xdgDataHome(), "kiro-cli"),
+    join(homedir(), "Library", "Application Support", "kiro-cli"),
+  ],
+  // Grok Build (xAI's `grok`): `auth.json`, `mcp_credentials.json`, model
+  // keys in `config.toml`, in `$GROK_HOME`, default `~/.grok`
+  // (github.com/xai-org/grok-build xai-grok-pager/docs/user-guide/
+  // 02-authentication.md; x.ai/cli/install.sh).
+  grok: () => [join(homedir(), ".grok"), ...envDirs("GROK_HOME")],
+};
+
+/**
  * Every place on this machine that holds a credential CawCo, a harness or
  * another tool keeps. Every workspace boundary hides each one from every
  * command it runs (packages/agent/src/boundary/): a directory with all that
@@ -183,6 +317,8 @@ export const credentialStores = (): string[] => {
     join(home, ".codex"),
     join(home, ".gemini"),
     join(xdgConfigHome(), "github-copilot"),
+    // Coding agents a person keeps beside CawCo ({@link OTHER_AGENT_CREDENTIALS}).
+    ...Object.values(OTHER_AGENT_CREDENTIALS).flatMap((stores) => stores()),
     // Other tools' tokens. `gh` inside runs with a config dir of its own
     // (`GH_CONFIG_DIR`) that sends it through the workspace's GitHub door,
     // which signs in on the host: no token of gh's enters a workspace.
