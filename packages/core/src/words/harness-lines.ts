@@ -67,3 +67,14 @@ export const opencodeSignInFaultWords = (
 
 /** A name read with a vowel sound first, by its first letter ("an Anthropic API key"). */
 const VOWEL_START = /^[aeiou]/iu;
+
+/**
+ * Why an OpenCode session did not move to the server it runs on now: its
+ * copy there read back short of what was sent, so the server it was on
+ * keeps it, and the next start tries the move again.
+ */
+export const opencodeMoveUnconfirmedSentence = (
+  kept: number,
+  sent: number
+): string =>
+  `This conversation didn't move to the OpenCode server it runs on now: its copy there read back ${kept} of its ${sent} messages, so it stays where it was. Start it again to try the move again.`;
