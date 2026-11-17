@@ -1229,7 +1229,7 @@ class TrialWatch {
  * The build stays: its landing and its keeper's outcome were written when it
  * answered ({@link settle}); a recorded failure it outlives ends (core
  * `failureAfterInstall`); it joins the install order, the trial ends, and
- * the prune keeps it and the two installed before it (and on the hub's
+ * the prune keeps it and the one installed before it (and on the hub's
  * machine, their archives), with every build a live process still runs from.
  */
 async function confirm(trial: TrialMarker): Promise<void> {

@@ -1,5 +1,5 @@
 /** Server-only runtime layout: only a server imports it. */
-import { chmodSync, existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { errnoCode } from "./absent";
@@ -142,6 +142,29 @@ const readOnly = (error: unknown): boolean => {
 };
 
 /**
+ * This process's open descriptor on its build's runtime folder, held for its
+ * whole life ({@link holdRuntime}): one at most.
+ */
+const heldRuntime: number[] = [];
+
+/**
+ * Opens this build's runtime folder and keeps it open while the process
+ * lives: the prune keeps every runtime folder a live process holds open (core
+ * live-processes.ts `foldersHeldOpen`), so a build started from anywhere, in
+ * `versions/` or not, keeps the folder it reads. Taken before anything is
+ * published into it, so no prune removes it under the publish. A child does
+ * not inherit it (Bun opens with `O_CLOEXEC`).
+ */
+const holdRuntime = (base: string): void => {
+  if (!existsSync(base)) {
+    makeFolderSync(base, { mode: 0o700 });
+  }
+  if (heldRuntime.length === 0) {
+    heldRuntime.push(openSync(base, "r"));
+  }
+};
+
+/**
  * A child process cannot open $bunfs, so every standalone process publishes
  * this build's runtime trees before anything reads one (scripts/binary
  * entry.ts): each file whose hash is not the marker's, or that is missing,
@@ -152,7 +175,8 @@ const readOnly = (error: unknown): boolean => {
  * workspace). With nothing to write, a marker of another build is still
  * replaced where the folder takes it, so a complete tree is checked once.
  * Processes that start together each write what they find; a rename lands
- * the same bytes whichever wins.
+ * the same bytes whichever wins. The process holds the folder first
+ * ({@link holdRuntime}).
  */
 export async function publishRuntime(): Promise<void> {
   const base = runtimeDataDir();
@@ -162,6 +186,7 @@ export async function publishRuntime(): Promise<void> {
   if (!hashes.length) {
     return;
   }
+  holdRuntime(base);
   const body = manifestBody(hashes);
   const set = Bun.hash(body).toString(36);
   const marker = join(base, PUBLISHED_MARKER);
