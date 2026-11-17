@@ -36,6 +36,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { readWithin } from "../packages/core/src/bounded";
+import { type Pid, signalGroup, spawnedPid } from "../packages/core/src/signal";
 import { CODEX_VERSION } from "../packages/core/src/tools";
 import { systemProgram } from "../packages/core/src/workspace-needs";
 
@@ -74,17 +75,27 @@ const run = (command: string, args: string[]): void => {
   }
 };
 
-const install = (pkg: string): string => {
+/**
+ * The packages, installed in one call: an install with `--no-save` prunes
+ * from its prefix whatever an earlier one put there, so a second call would
+ * remove the first one's package.
+ */
+const bin = (() => {
   const prefix = join(scratch, "install");
-  run("npm", ["install", "--no-save", "--prefix", prefix, pkg]);
+  run("npm", [
+    "install",
+    "--no-save",
+    "--prefix",
+    prefix,
+    ...(process.env.CODEX_BIN ? [] : [`@openai/codex@${CODEX_VERSION}`]),
+    `@copilotkit/aimock@${AIMOCK_VERSION}`,
+  ]);
   return join(prefix, "node_modules/.bin");
-};
+})();
 
-const codexBin =
-  process.env.CODEX_BIN ??
-  join(install(`@openai/codex@${CODEX_VERSION}`), "codex");
+const codexBin = process.env.CODEX_BIN ?? join(bin, "codex");
 /** aimock's server (its `aimock` bin is its fixture tools). */
-const llmock = join(install(`@copilotkit/aimock@${AIMOCK_VERSION}`), "llmock");
+const llmock = join(bin, "llmock");
 
 /** One scripted `exec` call (Codex's code mode) running `js`, keyed after `after`. */
 const execCall = (id: string, js: string) => ({
@@ -197,10 +208,29 @@ const pointAtMock = (homeDir: string): void => {
   );
 };
 
+/**
+ * Each app-server's process group: what an app-server starts (its plugin
+ * marketplace's `git ls-remote`, its exec-servers) outlives a signal to the
+ * app-server alone, so the group is ended, after its scenario and, for a
+ * scenario that never got there, as the check exits.
+ */
+const groups = new Set<Pid>();
+const endGroup = (pid: Pid | undefined): void => {
+  if (pid !== undefined && groups.delete(pid)) {
+    signalGroup(pid, "SIGKILL");
+  }
+};
+process.on("exit", () => {
+  for (const pid of [...groups]) {
+    endGroup(pid);
+  }
+});
+
 /** A held app-server, as the keeper holds a session's: its stdio kept while clients come and go. */
 const holdAppServer = (env: Record<string, string>) => {
   const child = spawn(codexBin, ["app-server"], {
     cwd: clone,
+    detached: true,
     // The scripted model is on loopback, past any proxy the machine names.
     env: {
       ...env,
@@ -210,6 +240,10 @@ const holdAppServer = (env: Record<string, string>) => {
     },
     stdio: ["pipe", "pipe", "inherit"],
   });
+  const pid = spawnedPid(child);
+  if (pid !== undefined) {
+    groups.add(pid);
+  }
   let receive: (line: string) => void = () => undefined;
   createInterface({ input: child.stdout }).on("line", (line) => {
     if (process.env.CODEX_CHECK_TRACE) {
@@ -230,7 +264,7 @@ const holdAppServer = (env: Record<string, string>) => {
     receive = (line) => peer.receive(line);
     return peer;
   };
-  return { child, client };
+  return { client, end: () => endGroup(pid) };
 };
 
 interface Outcome {
@@ -288,7 +322,7 @@ await scenario("config", async () => {
   });
   await turn.done;
   await Bun.sleep(1000);
-  held.child.kill();
+  held.end();
   if (existsSync(join(outside, "planted.txt"))) {
     throw new Error(
       "the clone's planted .codex/config.toml ran its MCP server on the host"
@@ -340,7 +374,7 @@ await scenario("ask and restart", async () => {
     excludeTurns: true,
   });
   await turn.done;
-  held.child.kill();
+  held.end();
   if (!(before && asks[0] === before.method)) {
     throw new Error(
       `thread/resume did not hand the open ask over again (asks: ${asks.join(", ") || "none"})`
@@ -398,7 +432,7 @@ await scenario("boundary", async () => {
     input: [{ type: "text", text: "CHECK-BOUNDARY", text_elements: [] }],
   });
   await turn.done;
-  held.child.kill();
+  held.end();
   const escaped = ["shell.txt", "patch.txt"].filter((name) =>
     existsSync(join(outside, name))
   );
