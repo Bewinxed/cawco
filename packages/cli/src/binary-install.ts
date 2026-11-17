@@ -160,7 +160,7 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     ...(options.releaseHost ? { releaseHost: options.releaseHost } : {}),
   } satisfies BinaryInstallation);
   // The first build in this machine's install order (core `prune` keeps it
-  // and the two installed after it); a reinstall puts its build at the end.
+  // and the one installed after it); a reinstall puts its build at the end.
   await recordInstall(runtimeVersion);
   await writeJsonAtomic(updateStatePath(), {
     phase: "none",

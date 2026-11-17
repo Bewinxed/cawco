@@ -189,6 +189,71 @@ export async function versionsInUse(
   return used;
 }
 
+/** The descriptors process `pid` has open, by number; none when it is gone or withholds them. */
+const descriptors = (pid: string): string[] => {
+  try {
+    return readdirSync(`/proc/${pid}/fd`);
+  } catch {
+    return [];
+  }
+};
+
+/** What every other process here has open, by the path its descriptor names (`/proc/<pid>/fd`). */
+const openedOnLinux = (): string[] =>
+  readdirSync("/proc")
+    .filter((name) => NUMERIC.test(name) && Number(name) !== process.pid)
+    .flatMap((name) =>
+      descriptors(name).map(
+        (fd) => readOr(() => readlinkSync(`/proc/${name}/fd/${fd}`)) ?? ""
+      )
+    );
+
+/** Which of `paths` another process here has open, as `lsof` names each. */
+const openedOnMac = async (paths: readonly string[]): Promise<string[]> => {
+  const opened: string[] = [];
+  let pid = 0;
+  for (const line of (
+    await printed(["lsof", "-nP", "-w", "-Fpn", "--", ...paths])
+  ).split("\n")) {
+    if (line.startsWith("p")) {
+      pid = Number(line.slice(1));
+    } else if (line.startsWith("n") && pid !== process.pid) {
+      opened.push(line.slice(1));
+    }
+  }
+  return opened;
+};
+
+/**
+ * Which of `folders` a live process other than this one holds open: a
+ * descriptor on the folder itself, as every standalone process holds its
+ * build's runtime folder (core runtime.ts `holdRuntime`). Linux reads each
+ * process's `/proc/<pid>/fd`, which names the folder by its real path; macOS
+ * asks `lsof` of the folders themselves.
+ */
+export async function foldersHeldOpen(
+  folders: readonly string[]
+): Promise<Set<string>> {
+  const byPath = new Map<string, string>();
+  for (const folder of folders) {
+    byPath.set(folder, folder);
+    byPath.set(readOr(() => realpathSync(folder)) ?? folder, folder);
+  }
+  if (byPath.size === 0) {
+    return new Set();
+  }
+  const opened =
+    process.platform === "linux"
+      ? openedOnLinux()
+      : await openedOnMac([...byPath.keys()]);
+  return new Set(
+    opened.flatMap((path) => {
+      const folder = byPath.get(path);
+      return folder ? [folder] : [];
+    })
+  );
+}
+
 /** A process that runs from inside a folder ({@link processesWithin}). */
 export interface ProcessWithin {
   command: string;

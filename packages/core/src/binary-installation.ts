@@ -2,12 +2,12 @@
 import type { Dirent } from "node:fs";
 import { readdir, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import type { BinaryUpdateState } from "./binary-updates";
 import { makeFolder } from "./folders";
-import { versionsInUse } from "./live-processes";
+import { foldersHeldOpen, versionsInUse } from "./live-processes";
 import { hubDbPath } from "./paths/hub";
 import { markerIsLive, ProcessMarkerSchema } from "./process-identity";
 import type { ReleaseManifest } from "./release-manifest";
@@ -232,11 +232,11 @@ const STAGED_PHASES: ReadonlySet<BinaryUpdateState["phase"]> = new Set([
 ]);
 
 /**
- * How many installed builds a machine keeps: the one installed and the two
- * installed before it, in `versions/` and, on the hub's machine, in the hub's
- * archive cache ({@link hubReleasesDir}).
+ * How many installed builds a machine keeps: the one installed and the one
+ * installed before it, in `versions/`, in `runtime/` and, on the hub's
+ * machine, in the hub's archive cache ({@link hubReleasesDir}).
  */
-const KEPT_INSTALLS = 3;
+const KEPT_INSTALLS = 2;
 
 /**
  * The builds this machine installed, in the order it installed them, newest
@@ -248,7 +248,9 @@ const KEPT_INSTALLS = 3;
  */
 const installOrderPath = (): string => join(binaryRoot(), "install-order.json");
 const readInstallOrder = async (): Promise<string[]> =>
-  (await readRecord(installOrderPath(), z.array(z.string()))) ?? [];
+  ((await readRecord(installOrderPath(), z.array(z.string()))) ?? []).slice(
+    -KEPT_INSTALLS
+  );
 
 /**
  * `version` goes to the end of the install order, and the order keeps its
@@ -306,25 +308,39 @@ const buildFolders = (): string[] => [
   runtimeRoot(),
 ];
 
+/** The builds whose runtime folder a live process holds open (runtime.ts `holdRuntime`): every standalone process holds its own, wherever it was started from. */
+async function runtimesHeld(): Promise<string[]> {
+  const present = await readdir(runtimeRoot(), { withFileTypes: true }).catch(
+    (): Dirent[] => []
+  );
+  const held = await foldersHeldOpen(
+    present
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(runtimeRoot(), entry.name))
+  );
+  return [...held].map((folder) => basename(folder));
+}
+
 /**
  * The builds this machine keeps, in every folder of builds
  * ({@link buildFolders}) alike: a build's executable and its runtime folder
  * stay and go together, since a process of `versions/<v>/` reads
  * `runtime/<v>/` and publishes it again when it is missing. Kept: the builds
  * of the install order ({@link readInstallOrder}: the installed one and the
- * two installed before it), what `current` and `keeper` name, what a pending
+ * one installed before it), what `current` and `keeper` name, what a pending
  * update trial would restore or has swapped in (`trial.json`), the build a
  * live helper is applying (named in `apply.lock`), the build staged for an
  * install no helper has taken up yet ({@link STAGED_PHASES}: a prune while it
  * waits, a retiring keeper's removal among them, left its helper no build to
- * apply), and every build a live process runs from or names in either folder
- * ({@link versionsInUse}): a unit still on a build the links have left, a
- * retiring keeper and its sessions, the hooks baked into their CLI settings,
- * and a workspace's srt host and its ripgrep, which run on from the runtime
- * folder of the build that started them. Such a build stays while its
- * process lives: the agent prunes again when it removes a retiring keeper
- * that holds nothing (binary-update.ts `#tendKeepers`), and that prune
- * deletes it.
+ * apply), and every build a live process runs from, names in either folder
+ * ({@link versionsInUse}) or holds the runtime folder of ({@link runtimesHeld}):
+ * a unit still on a build the links have left, a retiring keeper and its
+ * sessions, the hooks baked into their CLI settings, a workspace's srt host
+ * and its ripgrep, which run on from the runtime folder of the build that
+ * started them, and a build run from outside `versions/`. Such a build stays
+ * while its process lives: the agent prunes again when it removes a retiring
+ * keeper that holds nothing (binary-update.ts `#tendKeepers`), and that
+ * prune deletes it.
  */
 async function keptBuilds(
   state: BinaryUpdateState | undefined,
@@ -342,6 +358,7 @@ async function keptBuilds(
         ? state.availableVersion
         : undefined,
       ...(await versionsInUse(buildFolders())),
+      ...(await runtimesHeld()),
     ].filter((version): version is string => Boolean(version))
   );
 }
