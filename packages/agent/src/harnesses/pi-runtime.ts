@@ -1952,23 +1952,15 @@ const loadSkills = async (
  * pi settings (sdk.js `createAgentSession`). A level the model lacks (one
  * chosen on another model) is held by pi within the model's levels, as
  * Claude Code holds it, and the session's first effort reading says the
- * level it runs at ({@link PiSession}); the machine's log names the step.
+ * level it runs at ({@link PiSession}), which the session's chip shows.
  */
 const launchEffort = (
   session: AgentSession,
-  effort: EffortLevel | undefined,
-  instanceId: string
+  effort: EffortLevel | undefined
 ): void => {
-  if (!effort) {
-    return;
+  if (effort) {
+    session.setThinkingLevel(effort);
   }
-  const offered: string[] = session.getAvailableThinkingLevels();
-  if (!offered.includes(effort)) {
-    console.warn(
-      `[pi] ${instanceId}: launched at ${effort} effort, which its model has no level for (it has ${offered.join(", ")}): pi runs the nearest`
-    );
-  }
-  session.setThinkingLevel(effort);
 };
 
 /**
@@ -2127,15 +2119,15 @@ export async function startPiHost(
   // `session_start`, so call `session.bindExtensions()`", pi.dev/docs/latest/sdk).
   // A reload of the session (`#reloadSkills`) emits `session_start` again only
   // to a session bound to something ("hasBindings", agent-session.js
-  // `reload`): its extensions' errors, said on the host's log, are what it
-  // is bound to.
+  // `reload`): its extensions' errors, written to the host's stderr, are
+  // what it is bound to.
   await session.bindExtensions({
     onError: (error) =>
       console.error(
         `[pi] ${ctx.instanceId}: extension ${error.extensionPath} failed on ${error.event}: ${error.error}`
       ),
   });
-  launchEffort(session, spec.effort, ctx.instanceId);
+  launchEffort(session, spec.effort);
   await loadSkills(session, spec.skills ?? [], ctx.cwd);
   return new PiSession(
     ctx,
