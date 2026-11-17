@@ -554,7 +554,13 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     row: InstanceRow,
     model: string
   ): Promise<"carried" | { refusal: string }> => {
-    const next = ctx.accountProviderFor(row.machineId, row.harness, model);
+    // Read against the account it runs on, as `crossesProvider` reads it.
+    const next = ctx.accountProviderFor(
+      row.machineId,
+      row.harness,
+      model,
+      row.accountId ?? undefined
+    );
     const placed = next
       ? ctx.claimAccount(row.machineId, { ...row, model })
       : { accountId: undefined };
