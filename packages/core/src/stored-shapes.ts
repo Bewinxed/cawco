@@ -2100,7 +2100,11 @@ export const FleetItemStatusSchema = FleetItemStatusShape;
 export type FleetItemStatusOutput = z.output<typeof FleetItemStatusShape>;
 
 const FleetMarketplaceShape = declared(
-  FleetPlacementShape.extend({ name: z.string(), source: z.string() }),
+  FleetPlacementShape.extend({
+    createdAt: z.number().optional(),
+    name: z.string(),
+    source: z.string(),
+  }),
   "FleetMarketplace",
   "packages/core/src/fleet.ts"
 );

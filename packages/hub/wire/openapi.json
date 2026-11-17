@@ -42058,6 +42058,10 @@
             "description": "The hub `areas` row this is bound to, in place of one project: every\nproject in that area as the hub reads it (core areas.ts). A machine is\nsent it under each such project it holds, as that project's own row\n(hub project-placements.ts); a project's own row of the same key wins.\nOne of `projectId` and `areaId` is required unless `user`, never both.",
             "type": "string"
           },
+          "createdAt": {
+            "description": "When the hub's row was made, in ms since the epoch. Until 8263 an agent\nlinked each fleet marketplace under its name within seconds of it, so a\nlink dated then is CawCo's (agent fleet.ts `provenLinks`). None from a\nhub that sends none.",
+            "type": "number"
+          },
           "cwd": {
             "description": "The folder this copy is written into: set by the machine as it places a\nproject's row at one of the project's places there (agent\nfleet-place.ts), never by the hub, which sends each row once.",
             "type": "string"

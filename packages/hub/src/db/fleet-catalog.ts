@@ -1177,7 +1177,11 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
           .select()
           .from(marketplaces)
           .all()
-          .map(({ name, source }) => ({ name, source })),
+          .map(({ name, source, createdAt }) => ({
+            name,
+            source,
+            createdAt: createdAt.getTime(),
+          })),
         plugins: db
           .select({ id: plugins.id, enabled: plugins.enabled })
           .from(plugins)

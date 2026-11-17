@@ -15,6 +15,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { TREE_STORE_DIR } from "@cawco/core/claude-dirs";
 import {
   installedPluginsOf,
+  type KnownMarketplace,
   knownMarketplacesOf,
   projectMcpOf,
 } from "@cawco/core/claude-plugin-files";
@@ -27,6 +28,7 @@ import type {
   FleetFaultCause,
   FleetHoldings,
   FleetItemState,
+  FleetMarketplace,
   FleetMcpConfig,
   FleetMemory,
   FleetMemoryDoc,
@@ -267,8 +269,9 @@ export interface ClaudeFleetSidecar {
    * as Claude Code's own registries still hold them. Left in place: that
    * version recorded a link the person had made himself as well as its own
    * (`isLinked`, then the record), and the registries say nothing of who
-   * made one, so none is provably CawCo's. A row of one says so
-   * ({@link leftLinkWords}); each goes from here once the registry no
+   * made one. Only its time proves one CawCo's ({@link provenLinks}), and
+   * that one is removed; every other stays, and a row of one says so
+   * ({@link leftLinkWords}). Each goes from here once the registry no
    * longer holds it.
    */
   cliLinksLeft?: CliLinks;
@@ -1141,7 +1144,10 @@ const syncPlugins = async (
   report: FleetSyncReport
 ): Promise<Pick<ClaudeFleetSidecar, "vendoredPlugins" | "cliLinksLeft">> => {
   const wanted = config.plugins.filter((plugin) => plugin.enabled);
-  const left = await cliLinksStanding(managed.cliLinksLeft);
+  const left = await dropProvenLinks(
+    await cliLinksStanding(managed.cliLinksLeft),
+    config.marketplaces
+  );
   const payloads = new Map(
     config.pluginPayloads.map((plugin) => [payloadId(plugin), plugin])
   );
@@ -1244,6 +1250,133 @@ const cliLinksStanding = async (
     );
     return left;
   }
+};
+
+/**
+ * How long before a fleet row's `createdAt` an earlier agent's link of it
+ * may be dated: the clone of axiom-marketplace on obelisk-of-light is dated
+ * 0.4 s before its row, the hub's and the agent's writes racing.
+ */
+const LINKED_BEFORE_ROW_MS = 5000;
+
+/**
+ * How long after it: on obelisk-of-light the clones of six fleet
+ * marketplaces are dated 0.1 to 3.4 s after their rows, and the directory
+ * marketplace prepkit-product's `lastUpdated` 43.9 s after. Those of the
+ * person's own came months apart (interfaces, 77 days before its row).
+ */
+const LINKED_AFTER_ROW_MS = 60_000;
+
+/**
+ * When Claude Code linked `entry`, as far as its registry and disk tell:
+ * a directory marketplace's `lastUpdated`, which `marketplace add` sets and
+ * no clone moves; any other's clone under {@link PLUGINS_DIR}'s
+ * `marketplaces`, by the time the folder was made (an update pulls into
+ * it, a fresh clone makes it again). None when neither can be read.
+ */
+const linkedAt = async (
+  entry: KnownMarketplace
+): Promise<number | undefined> => {
+  if (entry.source?.source === "directory") {
+    const at = Date.parse(entry.lastUpdated ?? "");
+    return Number.isNaN(at) ? undefined : at;
+  }
+  const clone = entry.installLocation;
+  if (!clone || dirname(clone) !== join(PLUGINS_DIR, "marketplaces")) {
+    return;
+  }
+  const born = (await stat(clone).catch(() => undefined))?.birthtimeMs;
+  return born && born > 0 ? born : undefined;
+};
+
+/**
+ * Whether `entry` is the link an earlier agent made for fleet row `row`:
+ * from the row's own source, dated within the window around the row's
+ * making ({@link LINKED_BEFORE_ROW_MS}, {@link LINKED_AFTER_ROW_MS}) in
+ * which that agent ran `claude plugin marketplace add` for every new row.
+ */
+const linkedForRow = async (
+  entry: KnownMarketplace,
+  row: FleetMarketplace
+): Promise<boolean> => {
+  const from = [entry.source?.repo, entry.source?.url, entry.source?.path];
+  if (row.createdAt === undefined || !from.includes(row.source)) {
+    return false;
+  }
+  const at = await linkedAt(entry);
+  return (
+    at !== undefined &&
+    at >= row.createdAt - LINKED_BEFORE_ROW_MS &&
+    at <= row.createdAt + LINKED_AFTER_ROW_MS
+  );
+};
+
+/**
+ * The links of `left` its time proves CawCo's ({@link linkedForRow}) with
+ * no install from it but the ones the record names: removing a marketplace
+ * uninstalls every plugin from it, and one the person installed is his.
+ */
+const provenLinks = async (
+  left: CliLinks,
+  rows: readonly FleetMarketplace[]
+): Promise<string[]> => {
+  const [linked, installed] = await Promise.all([
+    readJson(KNOWN_MARKETPLACES, knownMarketplacesOf).catch(() => undefined),
+    installedIds(),
+  ]);
+  const proven: string[] = [];
+  for (const name of left.marketplaces) {
+    const entry = linked?.[name];
+    const row = rows.find((one) => one.name === name);
+    const hisInstall = [...installed].some(
+      (id) => marketplaceOf(id) === name && !left.plugins.includes(id)
+    );
+    if (entry && row && !hisInstall && (await linkedForRow(entry, row))) {
+      proven.push(name);
+    }
+  }
+  return proven;
+};
+
+/**
+ * The links an earlier version recorded, those its time proves CawCo's
+ * ({@link provenLinks}) removed through the CLI that made them (`claude
+ * plugin marketplace remove`, which takes its `extraKnownMarketplaces`
+ * entry and its installs too). Answers what the registries still hold.
+ */
+const dropProvenLinks = async (
+  left: CliLinks | undefined,
+  rows: readonly FleetMarketplace[]
+): Promise<CliLinks | undefined> => {
+  if (!left) {
+    return;
+  }
+  const proven = await provenLinks(left, rows);
+  if (proven.length === 0) {
+    return left;
+  }
+  let bin: string;
+  try {
+    bin = await claudeToStart();
+  } catch (error) {
+    if (!(error instanceof ClaudeRefused)) {
+      throw error;
+    }
+    console.warn(
+      `[fleet] the marketplaces an earlier version linked stay for now: ${error.message}`
+    );
+    return left;
+  }
+  await runWhileHeld(bin, proven, linkedNames, (name) => [
+    "plugin",
+    "marketplace",
+    "remove",
+    name,
+  ]);
+  console.info(
+    `[fleet] removed what an earlier version linked, dated by its fleet row: ${proven.join(", ")}`
+  );
+  return cliLinksStanding(left);
 };
 
 /** Each fleet row of a link or install an earlier version recorded, still applied, says it was left and why ({@link leftLinkWords}). */

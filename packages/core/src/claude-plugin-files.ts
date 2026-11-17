@@ -11,7 +11,15 @@
  * it; every other field is Claude Code's and stays as it is.
  */
 
-import { array, looseObject, optional, record, string, unknown } from "valibot";
+import {
+  array,
+  type InferOutput,
+  looseObject,
+  optional,
+  record,
+  string,
+  unknown,
+} from "valibot";
 import { wholeReaderOf } from "./reader-of";
 
 /**
@@ -21,6 +29,8 @@ import { wholeReaderOf } from "./reader-of";
  */
 const KNOWN_MARKETPLACE = looseObject({
   installLocation: optional(string()),
+  /** When Claude Code last added or updated it, as an ISO time. */
+  lastUpdated: optional(string()),
   source: optional(
     looseObject({
       source: optional(string()),
@@ -30,6 +40,9 @@ const KNOWN_MARKETPLACE = looseObject({
     })
   ),
 });
+
+/** One entry of {@link KNOWN_MARKETPLACES}, as the fleet reads it. */
+export type KnownMarketplace = InferOutput<typeof KNOWN_MARKETPLACE>;
 
 /** `known_marketplaces.json`: each marketplace Claude Code linked, by its name. */
 const KNOWN_MARKETPLACES = record(string(), KNOWN_MARKETPLACE);

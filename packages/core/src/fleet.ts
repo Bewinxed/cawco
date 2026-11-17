@@ -159,6 +159,13 @@ export interface Deleted {
  * marketplace.json URL — passed through verbatim.
  */
 export interface FleetMarketplace extends FleetPlacement {
+  /**
+   * When the hub's row was made, in ms since the epoch. Until 8263 an agent
+   * linked each fleet marketplace under its name within seconds of it, so a
+   * link dated then is CawCo's (agent fleet.ts `provenLinks`). None from a
+   * hub that sends none.
+   */
+  createdAt?: number;
   name: string;
   source: string;
 }
