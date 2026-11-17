@@ -8834,7 +8834,7 @@ export const createServer = (
     // document's scope left as it is, the replaced text kept.
     fleetDocs: {
       list: () => [
-        { path: FLEET_MAIN_MEMORY, loadedInto: memoryWords.everySession },
+        { path: FLEET_MAIN_MEMORY, loadedInto: memoryWords.scopeAll },
         ...db.listFleetMemoryDocs().map((doc) => ({
           path: doc.path,
           loadedInto: fleetDocReach(doc.scope),
@@ -8842,7 +8842,7 @@ export const createServer = (
       ],
       loadedInto: (path) =>
         path === FLEET_MAIN_MEMORY
-          ? memoryWords.everySession
+          ? memoryWords.scopeAll
           : fleetDocReach(db.getFleetMemoryDoc(path)?.scope),
       // The main CLAUDE.md is there to write before the fleet has one.
       read: (path) =>

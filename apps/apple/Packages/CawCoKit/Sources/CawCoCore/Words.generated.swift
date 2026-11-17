@@ -126,7 +126,7 @@ public enum Words {
             Section(slug: "hooks", group: "Automation", label: "Hooks", purpose: "Scripts each machine runs at a session's lifecycle events", counted: true, badge: "fleet-faults", icon: "routing-2-bold-duotone", hue: "mark-6"),
             Section(slug: "delegate-types", group: "Agents", label: "Delegate types", purpose: "Presets a session's delegate call picks from", counted: true, badge: "fleet-faults", icon: "users-group-rounded-bold-duotone", hue: "mark-6"),
             Section(slug: "decides", group: "Agents", label: "Who decides", purpose: "Who settles each kind of choice an agent can't make alone", counted: false, badge: "fleet-faults", icon: "scale-bold-duotone", hue: "mark-4"),
-            Section(slug: "subagents", group: "Agents", label: "Subagents", purpose: "Agent files written to ~/.claude/agents on every machine", counted: true, badge: "fleet-faults", icon: "branching-paths-down-bold-duotone", hue: "mark-2"),
+            Section(slug: "subagents", group: "Agents", label: "Subagents", purpose: "Agent files written to ~/.local/share/cawco/fleet-claude/.claude/agents on every machine", counted: true, badge: "fleet-faults", icon: "branching-paths-down-bold-duotone", hue: "mark-2"),
             Section(slug: "cli-tools", group: "Tools", label: "Command-line tools", purpose: "CLIs each machine must have", counted: true, badge: "fleet-faults", icon: "code-square-bold-duotone", hue: "mark-4"),
             Section(slug: "mcp", group: "Tools", label: "MCP servers", purpose: "Servers written to every machine", counted: true, badge: "fleet-faults", icon: "plug-circle-bold-duotone", hue: "mark-6"),
             Section(slug: "connections", group: "Tools", label: "Connections", purpose: "Outside services the hub signs in to, one row per account", counted: false, badge: "fleet-faults", icon: "link-bold-duotone", hue: "mark-6"),
@@ -4472,6 +4472,9 @@ public enum Words {
 
         /// The parts a document's sessions are said in (fleet.ts `scopeWords`).
         public static let scopeNone = "No session on its own: linked, read on purpose"
+
+        /// The fleet's main memory file's reach, said as a scoped document's is.
+        public static let scopeAll = "Every session"
 
         public static func scopeEvery(role: String) -> String {
             "Every \(role) session"

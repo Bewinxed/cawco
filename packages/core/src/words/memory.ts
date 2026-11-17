@@ -111,6 +111,8 @@ export const memoryWords = {
 
   /** The parts a document's sessions are said in (fleet.ts `scopeWords`). */
   scopeNone: "No session on its own: linked, read on purpose",
+  /** The fleet's main memory file's reach, said as a scoped document's is. */
+  scopeAll: "Every session",
   scopeEvery: (role: string) => `Every ${role} session`,
   scopeEveryIn: (projects: string) => `Every session in ${projects}`,
   scopeSessions: "Sessions",
