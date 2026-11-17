@@ -3060,6 +3060,15 @@ export const strandedSessions = sqliteTable("stranded_sessions", {
   accountName: text("account_name").notNull(),
   why: storedEnum(StrandedWhySchema)("why").notNull(),
   since: stampedNow("since"),
+  /**
+   * The account that left it, by id, and that account's provider; null on a
+   * row stranded before 0444. A session left by a ChatGPT plan (core
+   * `isChatgptPlan`) goes back on that plan alone, once it is signed in on
+   * its machine again, and on no other (launch-accounts.ts `accountLaunch`).
+   * No reference: a removed account's id stays named here.
+   */
+  accountId: text("account_id"),
+  provider: text("provider").$type<AccountProvider>(),
 });
 
 /** Where each account is signed in, as each machine's agent last reported it. */

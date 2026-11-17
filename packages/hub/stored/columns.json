@@ -3277,6 +3277,18 @@
                           "properties": {
                             "kind": {
                               "type": "string",
+                              "const": "plan"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
                               "const": "signin"
                             }
                           },
@@ -7486,6 +7498,18 @@
                       "properties": {
                         "kind": {
                           "type": "string",
+                          "const": "plan"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
                           "const": "signin"
                         }
                       },
@@ -9025,6 +9049,18 @@
                       "required": [
                         "kind",
                         "pct"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "plan"
+                        }
+                      },
+                      "required": [
+                        "kind"
                       ]
                     },
                     {

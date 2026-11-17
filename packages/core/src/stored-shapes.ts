@@ -178,6 +178,7 @@ const HeldReasonShape = declared(
     }),
     z.object({ kind: z.literal("allowed"), by: z.enum(["project", "task"]) }),
     z.object({ kind: z.literal("reserve"), pct: z.number() }),
+    z.object({ kind: z.literal("plan") }),
     z.object({ kind: z.literal("signin") }),
     z.object({ kind: z.literal("benched") }),
     z.object({ kind: z.literal("unread") }),

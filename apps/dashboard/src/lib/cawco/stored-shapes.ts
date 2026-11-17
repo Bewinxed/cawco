@@ -360,6 +360,13 @@ const ContinueSourceShape = z.object({
   instanceId: z.string(),
   machineId: z.string(),
   model: z.string().optional(),
+  target: z
+    .object({
+      account: z.string(),
+      harness: HarnessKindShape,
+      model: z.string(),
+    })
+    .optional(),
   title: z.string(),
 });
 export const ContinueSourceSchema = ContinueSourceShape;

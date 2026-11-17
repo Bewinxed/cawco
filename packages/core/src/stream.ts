@@ -416,12 +416,19 @@ import type { TailnetServing } from "./tailnet-https";
  *    `landed` carries no `gate`, and `finish_item` takes no `ship`. A page
  *    built for 82 asks for a gate the hub no longer serves, so it reloads
  *    first.
+ * 84: a ChatGPT session moves to no other ChatGPT plan (core
+ *    `isChatgptPlan`): a held move names another plan as one it can't take
+ *    (`HeldReason` `plan`), a routing save that asks ChatGPT for any
+ *    strategy but Pinned is refused (400 `chatgpt-pinned-only`), a stall
+ *    carries the offer it makes (`StallOffer`), and a continuation's target
+ *    may name its account. A page built for 83 reads the held reasons and
+ *    the refusal's codes closed, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 83;
+export const WIRE_PROTOCOL = 84;
 
 /**
  * What a session's stream carries: the changes each frame made to its

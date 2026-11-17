@@ -4,6 +4,7 @@ import {
   accountProvidersOf,
   CLAUDE_PROVIDER,
   DEFAULT_COMPACTION,
+  isChatgptPlan,
   LIMITED_PROVIDERS,
   namedAccount,
 } from "@cawco/core/accounts";
@@ -24,6 +25,7 @@ import {
   tokenWords,
 } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
+import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 import { configurePage } from "@cawco/core/words/configure";
 import { owedMoveWords } from "@cawco/core/words/owed-moves";
 import { relaunchWords } from "@cawco/core/words/relaunch";
@@ -1858,7 +1860,12 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     if (!(left && row) || ctx.processMayRun(row)) {
       return undefined;
     }
-    const words = accountsWords.stalled;
+    // One a ChatGPT plan left waits for that plan alone (core
+    // `isChatgptPlan`); its stall carries the offer (chatgpt-offer.ts).
+    const words =
+      left.provider && isChatgptPlan({ provider: left.provider })
+        ? chatgptPlanWords
+        : accountsWords.stalled;
     return {
       words:
         left.why === "removed"
@@ -2032,13 +2039,15 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         oweMoveOff(row.id, account.id, why)
       ) {
         moving += 1;
-      } else if (traitsOf(row.harness).accountDir) {
+      } else if (traitsOf(row.harness).accountDir || isChatgptPlan(account)) {
         // Its next send is refused for want of an account (placement's
-        // `noAccountRefusal`): its line says it stopped, and why.
+        // `noAccountRefusal`): its line says it stopped, and why. One on a
+        // ChatGPT plan goes back on that plan alone, and offers to continue
+        // elsewhere meanwhile (launch-accounts.ts `accountLaunch`).
         strandedIds.push(row.id);
       }
     }
-    ctx.db.accounts.strand(strandedIds, named, why);
+    ctx.db.accounts.strand(strandedIds, account, named, why);
     ctx.publishStalls();
     return {
       live: rows.filter(ctx.processMayRun),

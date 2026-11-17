@@ -3053,6 +3053,13 @@
       "when": 1794904694881,
       "tag": "0443_landing_gate_goes",
       "breakpoints": true
+    },
+    {
+      "idx": 444,
+      "version": "6",
+      "when": 1794909375547,
+      "tag": "0444_chatgpt_one_plan",
+      "breakpoints": true
     }
   ]
 }

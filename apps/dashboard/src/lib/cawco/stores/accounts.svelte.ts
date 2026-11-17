@@ -366,6 +366,8 @@ const placementFix = (code: string | undefined): PlacementFix | null => {
  * not answer in time), any of which refuses the start too.
  */
 export async function placementFor(query: {
+  /** The account the start names (an OpenAI API key a ChatGPT session's offer prefilled); absent: placed as any start is. */
+  account?: string;
   cwd?: string;
   harness: string;
   machineId: string;

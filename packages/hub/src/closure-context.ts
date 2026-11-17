@@ -301,7 +301,8 @@ export interface ClosureContext {
   accountProviderFor: (
     machineId: string,
     harness: string,
-    model: string | null | undefined
+    model: string | null | undefined,
+    account?: string
   ) => AccountProvider | undefined;
   accountStartRefusal: (
     machineId: string,

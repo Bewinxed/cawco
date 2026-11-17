@@ -373,6 +373,7 @@ import {
   type PersonsSend,
   PROJECT_ORIGIN,
 } from "./caw";
+import { stallOffer } from "./chatgpt-offer";
 import { createCompaction } from "./compaction";
 import {
   ARTIFACTS_ROOT,
@@ -11675,9 +11676,12 @@ export const createServer = (
     },
   });
   accountsMovedPort.fill(atLimit.accountsChanged);
-  stallOfPort.fill(
-    (instanceId) => atLimit.stall(instanceId) ?? strandedStall(instanceId)
-  );
+  stallOfPort.fill((instanceId) => {
+    const stall = atLimit.stall(instanceId) ?? strandedStall(instanceId);
+    // A ChatGPT session stopped on its plan offers its way on.
+    const offer = stall && stallOffer(db, resolvedModel, instanceId);
+    return offer ? { ...stall, offer } : stall;
+  });
   stalledNowPort.fill(() => [
     ...new Set([
       ...atLimit.stalled(),

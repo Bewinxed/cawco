@@ -34,6 +34,7 @@
     CLAUDE_PROVIDER,
     DEFAULT_AT_LIMIT,
     defaultRouting,
+    isChatgptPlan,
     type ProviderChoice,
     type StrategyChoice,
   } from "@cawco/core/accounts";
@@ -181,6 +182,8 @@
   /** The provider's one account, when this is its second: the setup goes on to routing. */
   let existing = $state<Account | null>(null);
   const provider = $derived(choice?.provider ?? null);
+  /** ChatGPT: its sessions run on one plan (core `isChatgptPlan`), and none moves at its limit. */
+  const onePlan = $derived(provider !== null && isChatgptPlan({ provider }));
   const limits = $derived(provider !== null && providerLimits(provider));
   /** A second account of its provider: not one whose sign-in joined the first. */
   const full = $derived.by(
@@ -735,6 +738,7 @@
                   </h2>
                   <AtLimitBlock
                     accounts={[pair[1], pair[0]]}
+                    {onePlan}
                     terms={provider === CLAUDE_PROVIDER}
                     bind:atLimit
                   />
@@ -748,7 +752,9 @@
                     {words.setUp(nameOf(pair[0]), nameOf(pair[1]))}
                   </h2>
                   <p data-slot="lead" class="text-pretty text-ink-muted">
-                    {limits && atLimit.move ? words.withMoves(line) : line}
+                    {limits && atLimit.move && !onePlan
+                      ? words.withMoves(line)
+                      : line}
                   </p>
                 </section>
               {/if}

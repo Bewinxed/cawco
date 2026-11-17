@@ -1132,6 +1132,18 @@ export interface SessionCommands {
 export type SessionOrigin = "person" | "delegate" | "project" | "check";
 
 /**
+ * What a ChatGPT session stopped at its plan's limit, or left on no account
+ * by its plan, offers (core `isChatgptPlan`): CawCo moves it to no other
+ * ChatGPT plan, so the person may continue it on their OpenAI API key or
+ * on another agent or model, each a Continue they press. `key`: the OpenAI
+ * API-key account signed in on its machine and the session's model as that
+ * key opens it; absent when no key is signed in there.
+ */
+export interface StallOffer {
+  key?: { accountId: string; model: string };
+}
+
+/**
  * The person's own work: a session they started, or one they wrote in. The
  * one rule for whose sessions a list holds (the dashboard's Recent, the
  * hub's {@link StoredRecent}).
@@ -1303,9 +1315,10 @@ export interface InstanceRow {
    * at-limit.ts `stall`): what happened and when it carries on; `until`,
    * epoch ms, the moment it does. Absent while it runs. Its row, its head and
    * its transcript show it as an error with the way out: another account
-   * from its menu.
+   * from its menu, or, for a ChatGPT session, the offer it makes
+   * ({@link StallOffer}).
    */
-  stalled?: { until?: number; words: string };
+  stalled?: { offer?: StallOffer; until?: number; words: string };
   /**
    * The skills and MCP servers it started with ({@link
    * SpawnPayload.startingSet}): written by its first spawn and kept, so every

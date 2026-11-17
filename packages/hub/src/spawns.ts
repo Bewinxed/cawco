@@ -6,6 +6,7 @@ import {
   accountNameAmong,
   accountProvidersOf,
   CLAUDE_PROVIDER,
+  isChatgptPlan,
   modelScope,
 } from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
@@ -29,6 +30,7 @@ import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { markWords } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
+import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
 import {
@@ -618,7 +620,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
     const provider = ctx.accountProviderFor(
       machineId,
       payload.harness,
-      payload.model
+      payload.model,
+      payload.account
     );
     return provider
       ? providerInput(provider, machineId, payload, task, fork)
@@ -1051,7 +1054,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
       const provider = ctx.accountProviderFor(
         machineId,
         payload.harness,
-        model
+        model,
+        payload.account
       );
       if (!provider) {
         continue;
@@ -1112,6 +1116,18 @@ export const createSpawns = (ctx: SpawnsContext) => {
           resolved,
           ctx.accountWords(accountId)
         ),
+      };
+    }
+    // A session a refusal moves on from one ChatGPT plan goes on no other
+    // (core `isChatgptPlan`): another model of another provider, or nothing.
+    const plan = accountId ? ctx.db.accounts.get(accountId) : undefined;
+    const ranOn = tried.find((one) => {
+      const before = ctx.db.accounts.get(one.accountId);
+      return before !== undefined && isChatgptPlan(before);
+    });
+    if (plan && isChatgptPlan(plan) && ranOn && ranOn.accountId !== plan.id) {
+      return {
+        refusal: chatgptPlanWords.otherPlan(ctx.accountWords(plan.id)),
       };
     }
     return runs ? runs(machineId, asked, placed) : placed;

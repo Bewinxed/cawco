@@ -12,6 +12,7 @@ import type {
 import { RESTART_WAIT_CAP_MS } from "../binary-updates";
 import { MINUTE_MS } from "../time";
 import { accountsWords } from "./accounts";
+import { chatgptPlanWords } from "./chatgpt-plan";
 import { configurePage } from "./configure";
 import { spawnWords } from "./spawn";
 
@@ -95,6 +96,8 @@ export const heldAccountWords = (one: HeldAccount, now: number): string => {
     one.backAt === undefined ? "" : ` until ${clockWords(one.backAt)}`;
   const { reason } = one;
   switch (reason.kind) {
+    case "plan":
+      return chatgptPlanWords.otherPlan(name);
     case "signin":
       return `${name} not signed in here`;
     case "allowed":

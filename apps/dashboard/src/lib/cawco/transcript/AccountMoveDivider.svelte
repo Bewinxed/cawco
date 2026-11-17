@@ -9,6 +9,10 @@
    * under the pointer or keyboard focus at narrow ones; the line is a button
    * that holds it open, for a finger, which has no hover.
    *
+   * A ChatGPT session stopped on its plan has its offer drawn under the
+   * stop (ChatgptOffer): CawCo moves it to no other plan, so the person
+   * continues it on their API key or on another agent or model.
+   *
    * A wait counts down to its reset and, once that has passed, says the
    * session went on there; a move counts down to the old account's reset in
    * its second line, as a stop (Caw off) does to its own account's. The
@@ -35,6 +39,7 @@
    * comes back open.
    */
   import type { AccountMove } from "@cawco/core/accounts";
+  import type { StallOffer } from "@cawco/core/protocol";
   import {
     accountMoveWords,
     accountRunWords,
@@ -43,15 +48,23 @@
   // The Solar Duotone Rule).
   import { IconChevronRight as IconChevron, IconTransfer } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import ChatgptOffer from "../accounts/ChatgptOffer.svelte";
   import { hueVar } from "../accounts/model.svelte";
+  import type { BoardRow } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { disclosureAt } from "./disclosure.svelte";
   import { moveOf, movesOf, type Row } from "./rows";
 
   let {
+    offer,
     row,
     stop,
   }: {
+    /**
+     * The stopped session is a ChatGPT one: its offer, drawn under the stop
+     * (ChatgptOffer). Undefined for any other stop, and for history.
+     */
+    offer?: { instance: BoardRow; offer: StallOffer };
     row: Extract<Row, { kind: "account" }>;
     /**
      * The session is stopped at its account's limit now and this is its
@@ -210,6 +223,15 @@
     >
       {stop}
     </p>
+    {#if offer}
+      <div class="pt-space-2">
+        <ChatgptOffer
+          align="center"
+          instance={offer.instance}
+          offer={offer.offer}
+        />
+      </div>
+    {/if}
   {/if}
   {#if open && row.brief !== null}
     <div

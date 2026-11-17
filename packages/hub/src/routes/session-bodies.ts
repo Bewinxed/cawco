@@ -32,6 +32,11 @@ export const continueBody = t.Object({
   target: t.Object({
     harness: harnessSchema,
     model: t.Optional(t.String({ minLength: 1 })),
+    // The account it runs on (an id, nickname or email); absent, placed as
+    // any start is. Its provider is the one the model is placed among
+    // (launch-accounts.ts `accountProviderFor`): an OpenAI API key runs an
+    // OpenCode `openai/…` model on that key, a ChatGPT plan signed in or not.
+    account: t.Optional(t.String({ minLength: 1 })),
     machineId: t.Optional(t.String({ minLength: 1 })),
     cwd: t.Optional(t.String({ minLength: 1 })),
     effort: t.Optional(t.UnionEnum(EFFORT_LEVELS)),

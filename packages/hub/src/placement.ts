@@ -7,6 +7,7 @@ import {
   type AccountReading,
   type AccountSignin,
   accountNameAmong,
+  isChatgptPlan,
   keepsGoingOnExtraUsage,
   modelScope,
   type PlacementExplain,
@@ -37,6 +38,7 @@ import {
 } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { areaWords } from "@cawco/core/words/areas";
+import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 import { configurePage } from "@cawco/core/words/configure";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { spawnWords } from "@cawco/core/words/spawn";
@@ -272,7 +274,10 @@ export const runsOutBy = (
   );
 
 /** An explicit pick: the account it names by id, nickname or email. */
-const picked = (accounts: Account[], asked: string): Account | undefined => {
+export const namedIn = (
+  accounts: readonly Account[],
+  asked: string
+): Account | undefined => {
   const lower = asked.toLowerCase();
   return (
     accounts.find((account) => account.id === asked) ??
@@ -793,7 +798,7 @@ const explicitPick = (
   signedIn: Account[],
   name: (id: string) => string
 ): Placement => {
-  const pick = picked(input.accounts, asked);
+  const pick = namedIn(input.accounts, asked);
   if (!pick) {
     return { ok: false, refusal: `There is no account ${asked}.` };
   }
@@ -1144,6 +1149,11 @@ const choose = (
     };
   }
 
+  // A ChatGPT session goes on its pinned plan alone: no other plan backs
+  // the pin up (core `isChatgptPlan`).
+  if (isChatgptPlan({ provider: input.routing.provider })) {
+    return onPinnedPlan(input, allowed, candidates, pinnedId, usage, name);
+  }
   const decided = decide(
     choice.strategy,
     candidates,
@@ -1167,6 +1177,43 @@ const choose = (
       usage,
       input.now
     ),
+  };
+};
+
+/**
+ * A ChatGPT session's account when nothing named one: its pinned plan, or
+ * nothing. A plan the pin can't take it on is never backed up by another
+ * (core `isChatgptPlan`): the refusal says why, and the hub's own pick of
+ * a model goes on to the next model it lists.
+ */
+const onPinnedPlan = (
+  input: PlacementInput,
+  allowed: Account[],
+  candidates: Account[],
+  pinnedId: string | undefined,
+  usage: Usage,
+  name: (id: string) => string
+): Placement => {
+  const pin = candidates.find((one) => one.id === pinnedId);
+  if (pin) {
+    return {
+      ok: true,
+      accountId: pin.id,
+      strategy: "pinned",
+      why: `${usage.name(pin)} is pinned (${usage.said(pin.id)}).`,
+    };
+  }
+  const full = allowed.find((one) => one.id === pinnedId);
+  if (full) {
+    return { ok: false, refusal: noRoomRefusal([full], usage, input.now) };
+  }
+  const named = pinnedId ? name(pinnedId) : chatgptPlanWords.thePin;
+  const machine = input.machineName ?? input.machineId;
+  return {
+    ok: false,
+    refusal: eligible(input).signedIn.some((one) => one.id === pinnedId)
+      ? chatgptPlanWords.pinNotAllowed(named)
+      : chatgptPlanWords.pinNotHere(named, machine),
   };
 };
 

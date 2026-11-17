@@ -293,11 +293,15 @@
    */
   const stop = $derived.by(() => {
     const instance = boardStore.instanceIndex.byId.get(session.instanceId);
-    const words = instance ? stopWords(instance) : undefined;
+    // A ChatGPT session's offer is drawn under the words (ChatgptOffer).
+    const words = instance ? stopWords(instance, true) : undefined;
     const key = words
       ? rowBuild.rows.findLast((one) => one.kind === "account")?.key
       : undefined;
-    return words && key ? { key, words } : undefined;
+    const offer = instance?.stalled?.offer;
+    return words && key && instance
+      ? { key, words, ...(offer ? { offer: { instance, offer } } : {}) }
+      : undefined;
   });
   /**
    * virtua's size for a row it has not measured yet — and a transcript's
@@ -453,6 +457,7 @@
     />
   {:else if row.kind === "account"}
     <AccountMoveDivider
+      offer={stop?.key === row.key ? stop.offer : undefined}
       {row}
       stop={stop?.key === row.key ? stop.words : undefined}
     />

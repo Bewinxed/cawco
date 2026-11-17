@@ -66,6 +66,7 @@
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { land } from "#lib/platform/motion/share.svelte.js";
+  import ChatgptOffer from "../accounts/ChatgptOffer.svelte";
   import { stopWords } from "../accounts/switch.svelte";
   import { age } from "../find/find-rows";
   import HoverPanel from "../HoverPanel.svelte";
@@ -1853,6 +1854,9 @@
         {#snippet children()}
           {#if openChip}
             {@const { item, tone } = openChip}
+            {@const stopped = boardStore.instanceIndex.byId.get(
+              item.instanceId
+            )}
             <!-- The panel's surface, motion and size are the house hover
                  panel's (HoverPanel); what is in it is drawn here. Its head:
                  the mark, the title, and at the end the time it has taken
@@ -1884,6 +1888,16 @@
                 <Button href={hrefOf(item)} size="sm" variant="outline"
                   >Open question</Button
                 >
+              </div>
+            {/if}
+            <!-- A ChatGPT delegate stopped on its plan: its way on, as its
+                 transcript line offers it (ChatgptOffer). -->
+            {#if stopped?.stalled?.offer}
+              <div data-slot="acts" class="mt-space-3">
+                <ChatgptOffer
+                  instance={stopped}
+                  offer={stopped.stalled.offer}
+                />
               </div>
             {/if}
           {/if}

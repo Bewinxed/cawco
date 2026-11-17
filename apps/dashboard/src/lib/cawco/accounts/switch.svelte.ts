@@ -10,6 +10,7 @@
  */
 import type { Account, AccountProvider } from "@cawco/core/accounts";
 import { accountsWords } from "@cawco/core/words/accounts";
+import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 import { type MoveWait, owedMoveWords } from "@cawco/core/words/owed-moves";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
@@ -174,13 +175,25 @@ export function accountFault(instance: BoardRow): string | undefined {
  * A session stopped at its account's limit, as an error says it (DESIGN.md's
  * error formula): what happened and when it carries on, in the hub's words
  * (its row's `stalled`); with no other account signed in on its machine,
- * then the way out (with one, the account picker above it is the way). Undefined while it
+ * then the way out (with one, the account picker above it is the way). A
+ * ChatGPT session's way out is its offer (core `StallOffer`), said here
+ * unless the caller draws it beside the words (`offerDrawn`). Undefined while it
  * runs, or while a move it was given is on its way (that move says itself).
  */
-export function stopWords(instance: BoardRow): string | undefined {
+export function stopWords(
+  instance: BoardRow,
+  offerDrawn = false
+): string | undefined {
   const { stalled } = instance;
   if (!stalled || movingTo(instance) !== undefined) {
     return;
+  }
+  // It goes on no other ChatGPT plan by itself: the person continues it.
+  if (stalled.offer) {
+    const way = stalled.offer.key
+      ? chatgptPlanWords.way
+      : chatgptPlanWords.wayNoKey;
+    return offerDrawn ? `${stalled.words}.` : `${stalled.words}. ${way}.`;
   }
   // With another account here the picker right above says the way out;
   // with none, the line names the one there is.

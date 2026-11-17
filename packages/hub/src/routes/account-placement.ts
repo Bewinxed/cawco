@@ -3,13 +3,19 @@ import type {
   PlacementPreview,
   ProviderForecast,
 } from "@cawco/core/accounts";
-import { CLAUDE_PROVIDER, strategiesFor } from "@cawco/core/accounts";
+import {
+  CLAUDE_PROVIDER,
+  isChatgptPlan,
+  strategiesFor,
+} from "@cawco/core/accounts";
 import {
   COMPACT_METHODS,
   PLACEMENT_STRATEGIES,
+  type PlacementStrategy,
 } from "@cawco/core/accounts/kinds";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { DAY_MS } from "@cawco/core/time";
+import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { accountForecasts, carrySequence, historyPoints } from "../forecast";
@@ -59,6 +65,45 @@ export const accountPlacementRoutes = ({
   | "startModelOf"
   | "taskAccounts"
 >) => {
+  /**
+   * Why a routing save can't route `provider` by `choice`, or undefined when
+   * it can. Spread and Soonest reset weigh the limits CawCo reads, so a
+   * provider it reads none for is routed Pinned or Fill first; ChatGPT is
+   * routed Pinned alone (core `isChatgptPlan`); a pin names an account.
+   */
+  const choiceRefusal = (
+    provider: string,
+    choice: { pinnedAccountId?: string; strategy: PlacementStrategy }
+  ) => {
+    if (!strategiesFor(provider).includes(choice.strategy)) {
+      if (isChatgptPlan({ provider })) {
+        return problem(400, {
+          code: "chatgpt-pinned-only",
+          detail: chatgptPlanWords.pinnedOnly,
+        });
+      }
+      const name =
+        provider === CLAUDE_PROVIDER
+          ? "Claude"
+          : (knownProviders().find((one) => one.id === provider)?.name ??
+            provider);
+      const asked = choice.strategy === "spread" ? "Spread" : "Soonest reset";
+      return problem(400, {
+        code: "cant-route-cawco-reads",
+        detail: `${asked} can't route ${name}: CawCo reads no limits for ${name}'s accounts, so there is no use or reset to weigh. Choose Pinned or Fill first.`,
+      });
+    }
+    if (
+      choice.strategy === "pinned" &&
+      choice.pinnedAccountId &&
+      !db.accounts.get(choice.pinnedAccountId)
+    ) {
+      return problem(400, {
+        code: "no-account-pin",
+        detail: `There is no account ${choice.pinnedAccountId} to pin.`,
+      });
+    }
+  };
   /**
    * Where a start would go says what its start would (spawns.ts
    * `placeSpawn`): a machine that refuses the harness refuses it, and a
@@ -113,32 +158,10 @@ export const accountPlacementRoutes = ({
           }),
         },
         ({ params, body }) => {
-          // Spread and Soonest reset weigh the limits CawCo reads; a provider
-          // it reads none for can only be routed Pinned or Fill first.
-          const offered = strategiesFor(params.provider);
           for (const choice of [body.yours, body.delegates]) {
-            if (!offered.includes(choice.strategy)) {
-              const name =
-                params.provider === CLAUDE_PROVIDER
-                  ? "Claude"
-                  : (knownProviders().find((one) => one.id === params.provider)
-                      ?.name ?? params.provider);
-              const asked =
-                choice.strategy === "spread" ? "Spread" : "Soonest reset";
-              return problem(400, {
-                code: "cant-route-cawco-reads",
-                detail: `${asked} can't route ${name}: CawCo reads no limits for ${name}'s accounts, so there is no use or reset to weigh. Choose Pinned or Fill first.`,
-              });
-            }
-            if (
-              choice.strategy === "pinned" &&
-              choice.pinnedAccountId &&
-              !db.accounts.get(choice.pinnedAccountId)
-            ) {
-              return problem(400, {
-                code: "no-account-pin",
-                detail: `There is no account ${choice.pinnedAccountId} to pin.`,
-              });
+            const refused = choiceRefusal(params.provider, choice);
+            if (refused) {
+              return refused;
             }
           }
           const saved = db.accounts.routing(params.provider).atLimit;

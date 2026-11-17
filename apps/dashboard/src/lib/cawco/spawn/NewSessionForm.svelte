@@ -486,9 +486,11 @@
   } | null>(null);
   $effect(() => {
     const view = accountsStore.accounts;
+    const named = prefilledAccount();
     const query = {
       harness,
       machineId,
+      ...(named ? { account: named } : {}),
       ...(model ? { model } : {}),
       ...(workdir ? { cwd: workdir } : {}),
       ...(projectId ? { projectId } : {}),
@@ -558,9 +560,9 @@
    * The account chip on the model section's heading, when two or more of the
    * session's provider's accounts are signed in on the chosen machine: Auto
    * with placement's reason, and each account with its rings and a key
-   * line. Not on a continuation: its request (the hub's `continueBody`) has
-   * no account to carry a pick in. Not on a fork either: it runs on its
-   * parent's account.
+   * line. Not on a continuation: it goes where placement puts it, or on
+   * the account its offer prefilled ({@link prefilledAccount}). Not on a
+   * fork either: it runs on its parent's account.
    */
   const accountTool = $derived.by((): AccountTool | null => {
     const provider = placement?.provider;
@@ -1263,7 +1265,22 @@
   );
   /** The harness the form opens on: a fork's own (it goes on in its conversation's), else the last start's. */
   function openingHarness(): HarnessKind {
-    return prefill?.fork?.harness ?? spawnPrefs.harness;
+    return (
+      continueFrom?.target?.harness ??
+      prefill?.fork?.harness ??
+      spawnPrefs.harness
+    );
+  }
+  /**
+   * The account a continuation prefilled with its target goes on (a ChatGPT
+   * session continued on the person's API key), while the harness and model
+   * are still the ones it prefilled: another pick is placed as any start is.
+   */
+  function prefilledAccount(): string | undefined {
+    const target = continueFrom?.target;
+    return target && harness === target.harness && model === target.model
+      ? target.account
+      : undefined;
   }
   /** What the form was opened with, as its kept picks name it: they are read back only for the same. */
   function openingKey(): string {
@@ -1340,7 +1357,7 @@
       summarizerModel = "";
       carry = "summary";
       estimate = null;
-      model = "";
+      model = continueFrom?.target?.model ?? "";
       effort = null;
       account = null;
       repo = undefined;
@@ -1998,6 +2015,7 @@
       // The person's own pick; "" when they left the harness's default.
       usedModel: model,
       ...(accountTool && account ? { account } : {}),
+      ...(prefilledAccount() ? { account: prefilledAccount() } : {}),
       ...(moveFromPick ? { moveFrom: moveFromPick } : {}),
       extras: {},
     };
@@ -2207,6 +2225,7 @@
         cwd: draft.cwd,
         harness: draft.harness,
         ...(draft.usedModel ? { model: draft.usedModel } : {}),
+        ...(draft.account ? { account: draft.account } : {}),
         ...(modeless || draft.permissionMode === null
           ? {}
           : { permissionMode: draft.permissionMode }),

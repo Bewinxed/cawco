@@ -12,6 +12,7 @@ import {
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import { RESTART_WAIT_CAP_MS } from "@cawco/core/binary-updates";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
+import type { StallOffer } from "@cawco/core/protocol";
 import type { MoveEnded } from "@cawco/core/session/controls";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
 import { MINUTE_MS } from "@cawco/core/time";
@@ -62,6 +63,8 @@ export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
  * when it carries on (epoch ms): the reset it waits for.
  */
 export interface Stall {
+  /** Stopped on a ChatGPT plan: what it offers the person (chatgpt-offer.ts `stallOffer`). */
+  offer?: StallOffer;
   /** Held past the cutoff: nothing carries it on until a person or its parent writes (at-limit.ts `goneStale`). */
   stale?: true;
   until?: number;
@@ -133,6 +136,12 @@ export type StopCause =
 interface StopAccount extends AccountRow {
   /** What admission holds of it for this session's move (admission.ts `ledger`). */
   ledger: Ledger;
+  /**
+   * It is another ChatGPT plan than the one the session is on (core
+   * `isChatgptPlan`): no move the hub makes lands there (at-limit.ts
+   * `accountsRead`). A person's own move still does.
+   */
+  otherPlan: boolean;
   proven: boolean;
 }
 
@@ -445,6 +454,11 @@ const reasonOf = (
   const { now, policy, strategy } = input;
   const { binding, carries, figure, runsOutAt } = weighed;
   const { left, movePct, roomAfter } = figure;
+  // One ChatGPT plan is never swapped for another: the session waits on
+  // its own, and offers the person its way on.
+  if (account.otherPlan) {
+    return { kind: "plan" };
+  }
   if (!account.signedIn) {
     return { kind: "signin" };
   }

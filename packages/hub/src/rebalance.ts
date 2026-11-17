@@ -5,6 +5,7 @@ import {
   type AccountProvider,
   accountName,
   accountNameAmong,
+  isChatgptPlan,
   keepsGoingOnExtraUsage,
   LIMITED_PROVIDERS,
   namedAccount,
@@ -1136,11 +1137,18 @@ export const createRebalancer = (deps: RebalancerDeps) => {
   >();
   const passKey = (provider: string, machineId: string) =>
     `${provider}\u0000${machineId}`;
+  /**
+   * Whether `provider`'s accounts are rebalanced: CawCo reads their limits,
+   * and a move between two of them is not one ChatGPT plan swapped for
+   * another (core `isChatgptPlan`), which is all a ChatGPT pass could make.
+   */
+  const balances = (provider: AccountProvider): boolean =>
+    LIMITED_PROVIDERS.includes(provider) && !isChatgptPlan({ provider });
 
   /**
    * Rebalances `provider`'s accounts on `machineId`, one pass at a time per
    * pair: a trigger while one runs runs it once more after, keeping the
-   * cause that came.
+   * cause that came. ChatGPT's never ({@link balances}).
    */
   const rebalance = async (
     provider: AccountProvider,
@@ -1149,7 +1157,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     /** Looks at the holds after: false for a look's own pass, which just did. */
     looks = true
   ): Promise<void> => {
-    if (!LIMITED_PROVIDERS.includes(provider) || lifetime.closed()) {
+    if (!balances(provider) || lifetime.closed()) {
       return;
     }
     const key = passKey(provider, machineId);
@@ -1182,11 +1190,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     >();
     for (const one of db.accounts.signins()) {
       const provider = db.accounts.get(one.accountId)?.provider;
-      if (
-        one.state === "signed-in" &&
-        provider &&
-        LIMITED_PROVIDERS.includes(provider)
-      ) {
+      if (one.state === "signed-in" && provider && balances(provider)) {
         const key = passKey(provider, one.machineId);
         const pair = seen.get(key) ?? {
           accounts: new Set(),

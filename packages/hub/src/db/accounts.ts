@@ -87,8 +87,12 @@ export interface AccountLeave {
 
 /** A session left on no account by its account's removal or sign-out there (`stranded_sessions`). */
 export interface StrandedSession {
+  /** The account that left it; null on a row stranded before migration 0444. */
+  accountId: string | null;
   accountName: string;
   instanceId: string;
+  /** That account's provider; null on a row stranded before migration 0444. */
+  provider: AccountProvider | null;
   why: "removed" | "signed-out";
 }
 
@@ -261,9 +265,10 @@ export interface AccountsDb {
   readonly setRefusalCheckedAt: (id: string, at: number) => void;
   readonly setRouting: (routing: ProviderRouting) => void;
   readonly signins: () => AccountSignin[];
-  /** `instanceIds` were left on no account: `accountName` was removed, or signed out on their machine (`why`). */
+  /** `instanceIds` were left on no account: `account`, named `accountName`, was removed, or signed out on their machine (`why`). */
   readonly strand: (
     instanceIds: readonly string[],
+    account: Pick<Account, "id" | "provider">,
     accountName: string,
     why: StrandedSession["why"]
   ) => void;
@@ -274,6 +279,15 @@ export interface AccountsDb {
   /** `instanceId` runs on an account again. Whether it was stranded. */
   readonly unstrand: (instanceId: string) => boolean;
 }
+
+/** A {@link StrandedSession} as `stranded_sessions` is read. */
+const STRANDED = {
+  instanceId: strandedSessions.instanceId,
+  accountId: strandedSessions.accountId,
+  accountName: strandedSessions.accountName,
+  provider: strandedSessions.provider,
+  why: strandedSessions.why,
+};
 
 type AccountRow = typeof accounts.$inferSelect;
 type RoutingRow = typeof accountRouting.$inferSelect;
@@ -851,36 +865,28 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .where(eq(movedFromSessions.instanceId, instanceId))
         .run();
     },
-    stranded: () =>
-      db
-        .select({
-          instanceId: strandedSessions.instanceId,
-          accountName: strandedSessions.accountName,
-          why: strandedSessions.why,
-        })
-        .from(strandedSessions)
-        .all(),
+    stranded: () => db.select(STRANDED).from(strandedSessions).all(),
     strandedOf: (instanceId) =>
       db
-        .select({
-          instanceId: strandedSessions.instanceId,
-          accountName: strandedSessions.accountName,
-          why: strandedSessions.why,
-        })
+        .select(STRANDED)
         .from(strandedSessions)
         .where(eq(strandedSessions.instanceId, instanceId))
         .get(),
-    strand: (instanceIds, accountName, why) => {
+    strand: (instanceIds, account, accountName, why) => {
       if (instanceIds.length === 0) {
         return;
       }
+      const left = {
+        accountName,
+        why,
+        accountId: account.id,
+        provider: account.provider,
+      };
       db.insert(strandedSessions)
-        .values(
-          instanceIds.map((instanceId) => ({ instanceId, accountName, why }))
-        )
+        .values(instanceIds.map((instanceId) => ({ instanceId, ...left })))
         .onConflictDoUpdate({
           target: strandedSessions.instanceId,
-          set: { accountName, why, since: new Date() },
+          set: { ...left, since: new Date() },
         })
         .run();
     },

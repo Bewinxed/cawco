@@ -8,7 +8,11 @@
    * on, and the place takes the new height. Save writes the routing, then
    * the order of every account whose place changed.
    */
-  import type { Account, ProviderRouting } from "@cawco/core/accounts";
+  import {
+    type Account,
+    isChatgptPlan,
+    type ProviderRouting,
+  } from "@cawco/core/accounts";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
@@ -215,6 +219,7 @@
     >
       <AtLimitBlock
         accounts={limitLanes}
+        onePlan={isChatgptPlan({ provider })}
         terms={provider === "anthropic"}
         bind:atLimit={draft.atLimit}
         unread={routing.atLimitUnread}

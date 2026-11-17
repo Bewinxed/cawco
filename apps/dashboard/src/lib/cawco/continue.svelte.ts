@@ -34,6 +34,12 @@ export interface ContinueSource {
   instanceId: string;
   machineId: string;
   model?: string;
+  /**
+   * The new session's harness, model and account, prefilled: a ChatGPT
+   * session continued on the person's OpenAI API key (core `StallOffer`).
+   * Absent: the form opens on its own picks.
+   */
+  target?: { account: string; harness: HarnessKind; model: string };
   title: string;
 }
 

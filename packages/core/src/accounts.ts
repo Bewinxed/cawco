@@ -123,6 +123,30 @@ export const LIMITED_PROVIDERS: readonly AccountProvider[] = [
 ];
 
 /**
+ * Whether an account is a ChatGPT plan: pi-ai's `openai-codex` signed in
+ * with OAuth, the only way it signs in. A provider alone (a routing, a
+ * rebalance pass) reads as its OAuth accounts. CawCo never puts a ChatGPT
+ * session on another ChatGPT plan by itself: OpenAI's Sign in with ChatGPT
+ * terms (2026-11-04) bar an app from "splitting usage, rotating accounts,
+ * or otherwise bypassing usage limits". A session that reaches its plan's
+ * limit, or loses its account, waits on its own plan and offers to continue
+ * on the person's OpenAI API key ({@link isOpenaiKey}) or on another agent
+ * or model; only the person moves it. Every rule that keeps a ChatGPT
+ * session on its plan reads this, and nothing else names the provider.
+ */
+export const isChatgptPlan = (account: {
+  kind?: AccountKind;
+  provider: AccountProvider;
+}): boolean =>
+  account.provider === "openai-codex" && (account.kind ?? "oauth") === "oauth";
+
+/** Whether an account is an OpenAI API key: provider `openai`, a key, billed per token. */
+export const isOpenaiKey = (account: {
+  kind: AccountKind;
+  provider: AccountProvider;
+}): boolean => account.provider === "openai" && account.kind === "api_key";
+
+/**
  * One row of the account picker: a provider and one way its accounts sign
  * in. A provider that takes both OAuth and a key is two rows, as Claude is
  * (a subscription, and a Console organization).
@@ -433,30 +457,45 @@ export const RESTRICTIVE_AT_LIMIT: AtLimit = {
  * long each account lasts and Soonest reset when its windows reset, both
  * read from the account's limits; a provider whose limits CawCo doesn't read
  * ({@link LIMITED_PROVIDERS}) has neither, so for it they would only ever
- * place as Fill first does. It offers Pinned and Fill first.
+ * place as Fill first does. It offers Pinned and Fill first. ChatGPT
+ * ({@link isChatgptPlan}) offers Pinned alone: every other strategy spreads
+ * new sessions across plans, which OpenAI's terms bar.
  */
 export const strategiesFor = (
   provider: AccountProvider
-): readonly PlacementStrategy[] =>
-  LIMITED_PROVIDERS.includes(provider)
+): readonly PlacementStrategy[] => {
+  if (isChatgptPlan({ provider })) {
+    return ONE_PLAN_STRATEGIES;
+  }
+  return LIMITED_PROVIDERS.includes(provider)
     ? PLACEMENT_STRATEGIES
     : ACCOUNT_RULES.unlimitedStrategies;
+};
 
 /**
  * A provider's routing until it is saved: a person's sessions pinned and a
  * session's delegates on the soonest reset where CawCo reads its limits;
- * both Fill first where it doesn't.
+ * both Fill first where it doesn't; both pinned for ChatGPT
+ * ({@link strategiesFor}).
  */
 export const defaultRouting = (provider: AccountProvider): ProviderRouting => {
-  const defaults = LIMITED_PROVIDERS.includes(provider)
-    ? ACCOUNT_RULES.limitedDefaults
-    : ACCOUNT_RULES.unlimitedDefaults;
+  const defaults = defaultsOf(provider);
   return {
     provider,
     yours: { strategy: defaults.yours },
     delegates: { strategy: defaults.delegates },
     atLimit: DEFAULT_AT_LIMIT,
   };
+};
+
+/** The strategies a provider's routing starts from ({@link defaultRouting}). */
+const defaultsOf = (provider: AccountProvider): StrategyDefaults => {
+  if (isChatgptPlan({ provider })) {
+    return ONE_PLAN_DEFAULTS;
+  }
+  return LIMITED_PROVIDERS.includes(provider)
+    ? ACCOUNT_RULES.limitedDefaults
+    : ACCOUNT_RULES.unlimitedDefaults;
 };
 
 /**
@@ -484,6 +523,12 @@ const LIMITED_DEFAULTS: StrategyDefaults = {
 const UNLIMITED_DEFAULTS: StrategyDefaults = {
   yours: "fill-first",
   delegates: "fill-first",
+};
+/** ChatGPT's one strategy, and its routing's start ({@link isChatgptPlan}). */
+const ONE_PLAN_STRATEGIES: readonly PlacementStrategy[] = ["pinned"];
+const ONE_PLAN_DEFAULTS: StrategyDefaults = {
+  yours: "pinned",
+  delegates: "pinned",
 };
 
 export const ACCOUNT_RULES = {
@@ -1186,6 +1231,24 @@ export const accountProvidersOf = (
   );
 };
 
+/**
+ * `model` (`provider/id`) as an account of `provider` opens it in `harness`
+ * ({@link providersOpenedBy}): the same id under that provider's own, as a
+ * ChatGPT session's `openai-codex/gpt-5.5` in pi is an OpenAI key's
+ * `openai/gpt-5.5`. Undefined for a model that names no provider.
+ */
+export const modelOn = (
+  harness: string,
+  model: string | null | undefined,
+  provider: AccountProvider
+): string | undefined => {
+  const slash = model?.indexOf("/") ?? -1;
+  const [opened] = providersOpenedBy(harness, provider);
+  return model && slash > 0 && opened
+    ? `${opened}/${model.slice(slash + 1)}`
+    : undefined;
+};
+
 /** The first provider {@link accountProvidersOf} names; undefined when none. */
 export const providerOf = (
   harness: string,
@@ -1232,7 +1295,7 @@ export const joinProviders = (
   const joined: ProviderInfo[] = pi
     .filter((one) => one.id !== CLAUDE_PROVIDER)
     .map((one) => {
-      const chatgpt = one.id === "openai-codex";
+      const chatgpt = isChatgptPlan({ provider: one.id });
       const [alias] = providersOpenedBy("opencode", one.id);
       return {
         ...one,
@@ -1354,7 +1417,9 @@ export type WaitReason =
 
 /**
  * Why another account didn't take a session held at its limit, or, for one
- * that could, that it could (`fits`). In order of the hub's rules: not signed
+ * that could, that it could (`fits`). In order of the hub's rules: another
+ * ChatGPT plan than the one the session is on (`plan`: {@link isChatgptPlan},
+ * never a target), not signed
  * in on its machine, not one its project or task allows, benched, past its
  * reserve, its limits never read, at its own limit, kept out of the pinned
  * strategy's backups, a move already landing there while its window isn't
@@ -1365,6 +1430,7 @@ export type WaitReason =
  * `access`) is read right after its lists.
  */
 export type HeldReason =
+  | { kind: "plan" }
   | { kind: "signin" }
   | { kind: "allowed"; by: "project" | "task" }
   | AccountMark

@@ -13,7 +13,10 @@
    * past its reset a stopped session is still carried on by itself (core
    * `AtLimit.staleAfterHours`). While the provider's saved policy can't be
    * read (`unread`), a warning heads the block: the settings shown are the
-   * restrictive policy the hub acts on, and a save here clears it.
+   * restrictive policy the hub acts on, and a save here clears it. For
+   * ChatGPT (`onePlan`, core `isChatgptPlan`) no session moves at its limit:
+   * a note says it waits on its own plan and what its line offers, in the
+   * move settings' place.
    */
   import type { Account, AtLimit } from "@cawco/core/accounts";
   import {
@@ -22,6 +25,7 @@
   } from "@cawco/core/accounts/kinds";
   import { HARNESSES } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
+  import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 
   import ModelSection from "#lib/cawco/spawn/ModelSection.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
@@ -37,9 +41,12 @@
   let {
     atLimit = $bindable(),
     accounts,
+    onePlan = false,
     terms,
     unread,
   }: {
+    /** ChatGPT: its sessions wait on their own plan and move to no other. */
+    onePlan?: boolean;
     atLimit: AtLimit;
     /** The saved policy's fields that can't be read (core `ProviderRouting.atLimitUnread`); undefined when it reads. */
     unread?: string;
@@ -108,13 +115,22 @@
       <AlertDescription>{words.unread(unread)}</AlertDescription>
     </Alert>
   {/if}
-  <div
-    class="flex items-center justify-between gap-space-4 pt-space-2 pb-space-3 text-ink-row"
-  >
-    <label for="{id}-move">{words.move}</label>
-    <Switch id="{id}-move" bind:checked={atLimit.move} />
-  </div>
-  {#if atLimit.move}
+  {#if onePlan}
+    <p
+      data-slot="one-plan"
+      class="pt-space-2 pb-space-3 text-pretty text-ink-row"
+    >
+      {chatgptPlanWords.atLimit}
+    </p>
+  {:else}
+    <div
+      class="flex items-center justify-between gap-space-4 pt-space-2 pb-space-3 text-ink-row"
+    >
+      <label for="{id}-move">{words.move}</label>
+      <Switch id="{id}-move" bind:checked={atLimit.move} />
+    </div>
+  {/if}
+  {#if atLimit.move && !onePlan}
     <div class="flex flex-col" in:unfold out:unfold>
       <p
         class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-row"

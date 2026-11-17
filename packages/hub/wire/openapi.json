@@ -15951,6 +15951,10 @@
                   "target": {
                     "type": "object",
                     "properties": {
+                      "account": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "bootstrap": {
                         "type": "object",
                         "properties": {
@@ -44313,7 +44317,7 @@
         ]
       },
       "HeldReason": {
-        "description": "Why another account didn't take a session held at its limit, or, for one\nthat could, that it could (`fits`). In order of the hub's rules: not signed\nin on its machine, not one its project or task allows, benched, past its\nreserve, its limits never read, at its own limit, kept out of the pinned\nstrategy's backups, a move already landing there while its window isn't\nmeasured in dollars (`alone`), too little left for this move (`room`:\nwhat it has left and what the move takes, percent of its window), or\nrunning out within the wait the policy allows with it (`runsOut`). A\nprovider's refusal of it the hub keeps ({@link AccountMark}: `credit`,\n`access`) is read right after its lists.",
+        "description": "Why another account didn't take a session held at its limit, or, for one\nthat could, that it could (`fits`). In order of the hub's rules: another\nChatGPT plan than the one the session is on (`plan`: {@link isChatgptPlan},\nnever a target), not signed\nin on its machine, not one its project or task allows, benched, past its\nreserve, its limits never read, at its own limit, kept out of the pinned\nstrategy's backups, a move already landing there while its window isn't\nmeasured in dollars (`alone`), too little left for this move (`room`:\nwhat it has left and what the move takes, percent of its window), or\nrunning out within the wait the policy allows with it (`runsOut`). A\nprovider's refusal of it the hub keeps ({@link AccountMark}: `credit`,\n`access`) is read right after its lists.",
         "anyOf": [
           {
             "type": "object",
@@ -44448,6 +44452,20 @@
                 "type": "string",
                 "enum": [
                   "limit"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "plan"
                 ]
               }
             },
@@ -46267,9 +46285,13 @@
             "type": "string"
           },
           "stalled": {
-            "description": "The session is stopped at its account's limit (or on its refused\nsign-in), in words, as the hub's at-limit controller holds it (hub\nat-limit.ts `stall`): what happened and when it carries on; `until`,\nepoch ms, the moment it does. Absent while it runs. Its row, its head and\nits transcript show it as an error with the way out: another account\nfrom its menu.",
+            "description": "The session is stopped at its account's limit (or on its refused\nsign-in), in words, as the hub's at-limit controller holds it (hub\nat-limit.ts `stall`): what happened and when it carries on; `until`,\nepoch ms, the moment it does. Absent while it runs. Its row, its head and\nits transcript show it as an error with the way out: another account\nfrom its menu, or, for a ChatGPT session, the offer it makes\n({@link StallOffer}).",
             "type": "object",
             "properties": {
+              "offer": {
+                "$ref": "#/components/schemas/StallOffer",
+                "description": "What a ChatGPT session stopped at its plan's limit, or left on no account\nby its plan, offers (core `isChatgptPlan`): CawCo moves it to no other\nChatGPT plan, so the person may continue it on their OpenAI API key or\non another agent or model, each a Continue they press. `key`: the OpenAI\nAPI-key account signed in on its machine and the session's model as that\nkey opens it; absent when no key is signed in there."
+              },
               "until": {
                 "type": "number"
               },
@@ -58613,6 +58635,10 @@
         "description": "A session stopped at its account's limit, as its tray chip and\n`delegate_list` say it (core `accountsWords.stalled`): the words, and\nwhen it carries on (epoch ms): the reset it waits for.",
         "type": "object",
         "properties": {
+          "offer": {
+            "$ref": "#/components/schemas/StallOffer",
+            "description": "Stopped on a ChatGPT plan: what it offers the person (chatgpt-offer.ts `stallOffer`)."
+          },
           "stale": {
             "description": "Held past the cutoff: nothing carries it on until a person or its parent writes (at-limit.ts `goneStale`).",
             "const": true,
@@ -58628,6 +58654,27 @@
         "required": [
           "words"
         ]
+      },
+      "StallOffer": {
+        "description": "What a ChatGPT session stopped at its plan's limit, or left on no account\nby its plan, offers (core `isChatgptPlan`): CawCo moves it to no other\nChatGPT plan, so the person may continue it on their OpenAI API key or\non another agent or model, each a Continue they press. `key`: the OpenAI\nAPI-key account signed in on its machine and the session's model as that\nkey opens it; absent when no key is signed in there.",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "object",
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId",
+              "model"
+            ]
+          }
+        }
       },
       "StarterGlyph": {
         "type": "string",
@@ -206417,6 +206464,42 @@
                 "type": "string",
                 "enum": [
                   "cant-route-cawco-reads"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "chatgpt-pinned-only"
                 ]
               },
               "detail": {

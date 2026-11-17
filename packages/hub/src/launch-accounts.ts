@@ -3,18 +3,20 @@ import {
   accountNameAmong,
   accountProvidersOf,
   CLAUDE_PROVIDER,
+  isChatgptPlan,
 } from "@cawco/core/accounts";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import type { SendRefusal } from "@cawco/core/session-messages";
+import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 import { configurePage } from "@cawco/core/words/configure";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { keptOffIn } from "./account-marks";
 import type { LoginMove } from "./db/accounts";
 import type { HubContext } from "./hub-context";
 import type { AccountUse } from "./hub-shapes";
-import { noAccountRefusal, place as placeAccount } from "./placement";
+import { namedIn, noAccountRefusal, place as placeAccount } from "./placement";
 
 export type LaunchAccountsContext = Pick<
   HubContext,
@@ -27,10 +29,19 @@ export type LaunchAccountsContext = Pick<
 >;
 
 export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
+  /**
+   * The provider whose accounts a session of `model` in `harness` on
+   * `machineId` is placed among: of those that open the model (core
+   * `accountProvidersOf`), the provider of the account the start names
+   * (`account`: an id, nickname or email) when it opens it, so a start that
+   * names an OpenAI API key runs on that key even where a ChatGPT plan is
+   * signed in; else the first with an account signed in there.
+   */
   const accountProviderFor = (
     machineId: string,
     harness: string,
-    model: string | null | undefined
+    model: string | null | undefined,
+    account?: string
   ): AccountProvider | undefined => {
     const candidates = accountProvidersOf(
       harness,
@@ -38,6 +49,12 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     );
     if (traitsOf(harness).soleProvider !== null) {
       return candidates[0];
+    }
+    const named = account
+      ? namedIn(ctx.db.accounts.list(), account)
+      : undefined;
+    if (named && candidates.includes(named.provider)) {
+      return named.provider;
     }
     const signedIn = new Set(
       ctx.db.accounts
@@ -50,9 +67,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     return candidates.find((provider) =>
       ctx.db.accounts
         .list()
-        .some(
-          (account) => account.provider === provider && signedIn.has(account.id)
-        )
+        .some((one) => one.provider === provider && signedIn.has(one.id))
     );
   };
   /**
@@ -137,6 +152,10 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     if (held) {
       return { accountId: held };
     }
+    const plan = backOnPlan(machineId, row.id);
+    if (plan) {
+      return plan;
+    }
     const moved =
       traitsOf(row.harness).accountDir && movedFrom().has(row.id)
         ? ctx.homeMovedAccountOn(machineId)
@@ -173,6 +192,49 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     return placed.accountId
       ? { accountId: placed.accountId, placed: placed.why }
       : {};
+  };
+
+  /**
+   * A row a ChatGPT plan's removal or sign-out left on no account: back on
+   * that plan once it is signed in on its machine again, and on no other
+   * (core `isChatgptPlan`). Till then it is refused, its refusal offering to
+   * continue it on the person's API key or on another agent or model.
+   * Undefined for any other row: it is placed as any is.
+   */
+  const backOnPlan = (
+    machineId: string,
+    rowId: string
+  ):
+    { accountId: string; placed: string } | { refusal: string } | undefined => {
+    const left = ctx.db.accounts.strandedOf(rowId);
+    if (!(left?.provider && isChatgptPlan({ provider: left.provider }))) {
+      return;
+    }
+    const plan = left.accountId
+      ? ctx.db.accounts.get(left.accountId)
+      : undefined;
+    const signedIn =
+      plan &&
+      ctx.db.accounts
+        .signins()
+        .some(
+          (one) =>
+            one.accountId === plan.id &&
+            one.machineId === machineId &&
+            one.state === "signed-in"
+        );
+    if (plan && signedIn) {
+      return {
+        accountId: plan.id,
+        placed: chatgptPlanWords.backOnPlan(left.accountName),
+      };
+    }
+    return {
+      refusal: chatgptPlanWords.leftRefusal(
+        left.accountName,
+        left.why === "removed" ? null : ctx.machineName(machineId)
+      ),
+    };
   };
 
   /**

@@ -4,6 +4,7 @@ import {
   type AccountProvider,
   type AccountReading,
   accountNameAmong,
+  isChatgptPlan,
   keepsGoingOnExtraUsage,
   namedAccount,
   type WaitReason,
@@ -176,7 +177,10 @@ export const accountsRead = (
     window: number | null;
   }
 ): AccountsRead => {
-  const provider = db.accounts.get(leaving)?.provider;
+  const from = db.accounts.get(leaving);
+  const provider = from?.provider;
+  // A ChatGPT plan is left for no other plan (core `isChatgptPlan`).
+  const onePlan = from !== undefined && isChatgptPlan(from);
   const now = Date.now();
   const accounts = db.accounts
     .list()
@@ -213,12 +217,17 @@ export const accountsRead = (
     },
     leaving
   );
+  const byId = new Map(accounts.map((account) => [account.id, account]));
   return {
-    accounts: rows.map((one) => ({
-      ...one,
-      ledger: admission.ledger(one.id, row.id, row.model, now),
-      proven: proven.has(one.id),
-    })),
+    accounts: rows.map((one) => {
+      const account = byId.get(one.id);
+      return {
+        ...one,
+        ledger: admission.ledger(one.id, row.id, row.model, now),
+        otherPlan: onePlan && account !== undefined && isChatgptPlan(account),
+        proven: proven.has(one.id),
+      };
+    }),
     burn: sessionBurn([...forecast.turns.values()].flat(), row.id, now),
     strategy,
     window: how.window,
