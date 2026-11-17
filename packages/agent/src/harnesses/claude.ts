@@ -239,7 +239,7 @@ import {
 import { reportDamaged } from "../damaged-records";
 import { delegationMcp, MCP_SERVER_NAME, openItemsText } from "../delegation";
 import { sessionFleetDenials } from "../denied-tools";
-import { claudeSpillDir, takeFirstSession } from "../first-session";
+import { claudeLaunchSpill } from "../first-session";
 import {
   fleetHoldings,
   fleetPluginsAt,
@@ -5361,31 +5361,15 @@ class ClaudeHarness implements Harness<"claude"> {
    * there: "Output has been saved to <config dir>/projects/<slug>/<session
    * id>/tool-results/mcp-crw-crw_scrape-….txt … Slice by character range via
    * Bash instead" (seen on 2026-10-17). So the session's id is known
-   * before its boundary starts: a resume goes on under its own; a new
-   * session or a fork takes one minted here, the SDK's `sessionId` ("Use a
-   * specific session ID … when `forkSession` is also set", sdk.d.ts
-   * 0.3.301). The config dir and slug are the ones {@link spawn} runs it in.
+   * before its boundary starts (first-session.ts `claudeLaunchSpill`). The
+   * config dir and slug are the ones {@link spawn} runs it in.
    */
   async spill(
     spec: SpawnPayload,
     cwd: string,
     workspace: string
   ): Promise<{ dir: string; spec: SpawnPayload }> {
-    const goesOn = spec.resume && !spec.resume.fork ? spec.resume : undefined;
-    // A new conversation takes the id minted for it as its workspace was cut,
-    // whose folder the boundary started with (first-session.ts); else one of
-    // its own.
-    const sessionId = goesOn
-      ? goesOn.sessionKey
-      : ((await takeFirstSession(workspace, spec.instanceId)) ??
-        crypto.randomUUID());
-    const account = await launchAccountOf(spec);
-    return {
-      dir: await claudeSpillDir(account, cwd, sessionId),
-      spec: goesOn
-        ? spec
-        : { ...spec, options: { ...(spec.options ?? {}), sessionId } },
-    };
+    return claudeLaunchSpill(spec, cwd, workspace, await launchAccountOf(spec));
   }
 
   async spawn(

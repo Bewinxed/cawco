@@ -25,12 +25,13 @@ import {
   workspaceSpillDir,
   workspaceStateDir,
 } from "@cawco/core/paths/workspace";
+import type { SpawnPayload } from "@cawco/core/protocol";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { WorkspaceFirstSession } from "@cawco/core/workspace/controls";
 import { z } from "zod";
 
 /** Where Claude Code session `sessionId`, on `account` (none: the machine's own login) in `cwd`, saves its tool results. */
-export const claudeSpillDir = async (
+const claudeSpillDir = async (
   account: string | null | undefined,
   cwd: string,
   sessionId: string
@@ -123,7 +124,7 @@ export const firstSpill = async (
  * this instance's or another's, ever uses it again. None for another
  * instance, whose launch mints its own.
  */
-export const takeFirstSession = async (
+const takeFirstSession = async (
   id: string,
   instanceId: string
 ): Promise<string | undefined> => {
@@ -142,6 +143,37 @@ export const takeFirstSession = async (
   }
   await rm(recordOf(id), { force: true });
   return record.sessionId;
+};
+
+/**
+ * The spill folder of Claude launch `spec` in workspace `workspace`, run on
+ * `account` (none: the machine's own login) in `cwd`, and the spec as it is
+ * launched to keep its results there. A resume goes on under its own session
+ * id; a new conversation or a fork takes the id minted for it as its
+ * workspace was cut ({@link takeFirstSession}), whose folder the boundary
+ * started with, else one of its own, passed as the SDK's `sessionId` ("Use a
+ * specific session ID … when `forkSession` is also set", sdk.d.ts 0.3.301).
+ * The one rule for every Claude launch, the binary tests' stand-in included,
+ * so a launch's folder is the one the cut placed and the boundary's form
+ * stays as it started.
+ */
+export const claudeLaunchSpill = async (
+  spec: SpawnPayload,
+  cwd: string,
+  workspace: string,
+  account: string | undefined
+): Promise<{ dir: string; spec: SpawnPayload }> => {
+  const goesOn = spec.resume && !spec.resume.fork ? spec.resume : undefined;
+  const sessionId = goesOn
+    ? goesOn.sessionKey
+    : ((await takeFirstSession(workspace, spec.instanceId)) ??
+      crypto.randomUUID());
+  return {
+    dir: await claudeSpillDir(account, cwd, sessionId),
+    spec: goesOn
+      ? spec
+      : { ...spec, options: { ...(spec.options ?? {}), sessionId } },
+  };
 };
 
 /** Instance `instanceId` stopped: the id minted for its first launch in workspace `id`, if it never launched, goes with it. */

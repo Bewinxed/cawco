@@ -35,6 +35,7 @@ import {
 } from "../../packages/agent/src/accounts";
 import { claudeExecutable } from "../../packages/agent/src/auth";
 import { sessionFleetDenials } from "../../packages/agent/src/denied-tools";
+import { claudeLaunchSpill } from "../../packages/agent/src/first-session";
 import {
   fleetHoldings,
   fleetStatus,
@@ -63,6 +64,7 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "../../packages/core/src/harness";
 import {
+  descriptorOf,
   HARNESSES,
   type HarnessKind,
 } from "../../packages/core/src/harness/kinds";
@@ -394,12 +396,18 @@ for (const kind of HARNESSES) {
     hubRestarted: () => Promise.resolve(),
     providerList: () => Promise.resolve([]),
     restartHolds: () => [],
-    // A spill folder of the workspace's own, as every real adapter keeps.
-    spill: (spec, _cwd, workspace) =>
-      Promise.resolve({
-        dir: workspaceSpillDir(workspace, spec.instanceId),
-        spec,
-      }),
+    // The spill folder its real adapter keeps, by the rule the workspace's
+    // cut placed its first session's by (first-session.ts `firstSpill`): a
+    // Claude session's in its account's config dir, any other's in the
+    // workspace's own. One that differs from the cut's changes the
+    // boundary's form at the spawn and hands it over.
+    spill: (spec, cwd, workspace) =>
+      descriptorOf(kind).accountDir
+        ? claudeLaunchSpill(spec, cwd, workspace, spec.accountDir?.accountId)
+        : Promise.resolve({
+            dir: workspaceSpillDir(workspace, spec.instanceId),
+            spec,
+          }),
     capabilities: CAPABILITIES_NONE,
     detect: () => detected(kind),
     listSessions: async () => [],
