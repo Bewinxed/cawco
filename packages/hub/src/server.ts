@@ -698,7 +698,7 @@ import { sessionReads } from "./session-list";
 import { createSessionNotes } from "./session-notes";
 import { createSessionRuntime } from "./session-runtime";
 import { LIMIT_ORIGIN, sessionWord } from "./session-word";
-import type { HeldPicks, SettingPick } from "./setting-pick-shapes";
+import type { SettingPick } from "./setting-pick-shapes";
 import { createSettingPicks } from "./setting-picks";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
@@ -1351,7 +1351,6 @@ export const createServer = (
     resumeCutTurn: () => resumeCutTurn,
     rewinds: () => rewinds,
     pickAsks: () => pickAsks,
-    heldPicks: () => heldPicks,
     applyHeldPicks: () => applyHeldPicks,
     keepPick: () => keepPick,
     processTakes: () => processTakes,
@@ -7998,8 +7997,6 @@ export const createServer = (
    * socket control-replies.ts), never one it refused.
    */
   const pickAsks = new Map<string, { instanceId: string; pick: SettingPick }>();
-  /** The picks held for a session's process on a machine that is away (setting-picks.ts). */
-  const heldPicks = new Map<string, HeldPicks>();
 
   /**
    * What a dashboard's spawn does to a transcript. A fork reads its history

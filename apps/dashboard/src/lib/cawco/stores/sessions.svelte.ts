@@ -31,6 +31,7 @@ import type { Message } from "../types";
 import {
   boardState,
   instanceIndex,
+  machineConnected,
   pulseOf,
   pulses,
   takePulse,
@@ -486,16 +487,21 @@ export function hydrate(target: SessionState): void {
  * blank: it can be older than what the session has since said, and a
  * broadcast must not walk a live value back to it.
  *
- * While no process runs, the row is the session's word: a pick any screen
- * made is kept there for its next launch (hub setting-picks.ts), so it
- * replaces what this view held, unless a pick of this tab's own is still on
- * its way.
+ * While no process runs, or its machine is away, the row is the session's
+ * word: a pick any screen made is kept there for its next launch, or held
+ * there for the process until its machine is back (hub setting-picks.ts), so
+ * it replaces what this view held, unless a pick of this tab's own is still
+ * on its way.
  */
 function adoptSettings(target: SessionState, row: BoardRow): void {
+  // A process the hub reaches: a running session on a connected machine.
+  // One on a machine that is away says nothing new, and a pick made for it
+  // meanwhile is held on its row (hub setting-picks.ts).
   const runs =
-    row.status === "running" ||
-    row.status === "starting" ||
-    row.status === "moving";
+    (row.status === "running" ||
+      row.status === "starting" ||
+      row.status === "moving") &&
+    machineConnected(row.machineId);
   const takes = (kind: "set-model" | "set-permission-mode") => {
     const asked = latestCommandFor(target.instanceId, kind);
     return !runs && asked?.stage !== "submitted" && asked?.stage !== "accepted";

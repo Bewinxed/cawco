@@ -40,6 +40,7 @@ import {
 import { type FleetCatalogDb, fleetCatalogDb } from "./fleet-catalog";
 import { type FoldDb, foldDb } from "./fold";
 import { type ForgetDb, forgetDb, schemaTables } from "./forget";
+import { type HeldPicksDb, heldPicksDb } from "./held-picks";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type HubSettingsDb, hubSettingsDb } from "./hub-settings";
 import { type IngressDb, ingressDb } from "./ingress";
@@ -136,6 +137,8 @@ interface HubStore {
    * handed to `keep` first (forget.ts); and those rows put back.
    */
   readonly forgetProject: ForgetDb["forget"];
+  /** The setting picks held for sessions' processes on machines that are away (held-picks.ts). */
+  readonly heldPicks: HeldPicksDb;
   /** Who may call the hub: the pairing setting, the person's devices, the machines' keys (hub-auth.ts). */
   readonly hubAuth: HubAuthDb;
   /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
@@ -332,6 +335,7 @@ const make = async (path: string): Promise<DbShape> => {
     moveEndings: moveEndingsDb(db),
     sessionTasks: sessionTasksDb(db),
     owedMoves: owedMovesDb(db),
+    heldPicks: heldPicksDb(db),
     previewPasses: previewPassesDb(db),
     streamRelay: streamRelayDb(db),
     browsers: browsersDb(db),

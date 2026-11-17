@@ -90,7 +90,6 @@ export type LaunchesContext = Pick<
   ClosureContext,
   | "db"
   | "harnessReportOf"
-  | "heldPicks"
   | "hubAsks"
   | "identities"
   | "launchAccount"
@@ -547,11 +546,11 @@ export const createLaunches = (ctx: LaunchesContext) => {
   const withHeldPicks = (given: SpawnPayload): SpawnPayload => {
     const held = given.reattachOnly
       ? undefined
-      : ctx.heldPicks.get(given.instanceId);
+      : ctx.db.heldPicks.get(given.instanceId);
     if (!held) {
       return given;
     }
-    ctx.heldPicks.delete(given.instanceId);
+    ctx.db.heldPicks.delete(given.instanceId);
     return {
       ...given,
       ...(held.model === undefined ? {} : { model: held.model }),
@@ -849,7 +848,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
     // A setting picked while its machine was away is held for the process
     // until it takes it (setting-picks.ts): its word on that setting until
     // then is what it ran on before the pick, never written over it.
-    const held = ctx.heldPicks.get(instanceId);
+    const held = ctx.db.heldPicks.get(instanceId);
     const patch: { model?: string; permissionMode?: string } = {};
     if (
       typeof model === "string" &&

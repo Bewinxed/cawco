@@ -209,7 +209,11 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
     ) {
       const { effort } = frame.message;
       const level = isEffortLevel(effort) ? effort : EFFORT_NONE;
-      if (ctx.db.noteInstanceEffort(instanceId, effortNamed(effort))) {
+      // An effort picked while its machine was away is held for the
+      // process until it takes it (setting-picks.ts): its reading until
+      // then is what it ran at before the pick, never shown over it.
+      const held = ctx.db.heldPicks.get(instanceId)?.effort !== undefined;
+      if (!held && ctx.db.noteInstanceEffort(instanceId, effortNamed(effort))) {
         ctx.publishInstances(message.machineId);
       }
       // Launched with no effort of its own: this is what its

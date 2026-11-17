@@ -5754,6 +5754,28 @@
       "discussions"
     ]
   },
+  "held_picks.effort": {
+    "type": "string",
+    "enum": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ]
+  },
+  "held_picks.permission_mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "bypassPermissions",
+      "plan",
+      "dontAsk",
+      "auto",
+      "fullSend"
+    ]
+  },
   "image_settings.provider": {
     "type": "string",
     "enum": [

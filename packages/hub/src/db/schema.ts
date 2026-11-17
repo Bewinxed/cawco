@@ -23,8 +23,15 @@ import { SESSION_ROLES } from "@cawco/core/delegate-types";
 import { everyOf } from "@cawco/core/every-of";
 import { EXTERNAL_KINDS, EXTERNAL_SOURCES } from "@cawco/core/external-items";
 import { MEMORY_ROLES } from "@cawco/core/fleet";
-import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
-import { PERMISSION_MODES } from "@cawco/core/harness/modes";
+import {
+  EFFORT_LEVELS,
+  HARNESSES,
+  type HarnessKind,
+} from "@cawco/core/harness/kinds";
+import {
+  PERMISSION_MODES,
+  WIRE_PERMISSION_MODES,
+} from "@cawco/core/harness/modes";
 import { HARNESS_CONFIG_KINDS } from "@cawco/core/harness-config";
 import { IMAGE_PROVIDERS } from "@cawco/core/image-generation";
 import { type CheckoutMove, LANDS_MODES } from "@cawco/core/injected";
@@ -3453,6 +3460,31 @@ export const owedMoves = sqliteTable("owed_moves", {
   carryOn: text("carry_on", { enum: OWED_CARRY_KINDS }),
   /** With `carryOn` `model`: the session's transcript line for the move. */
   carryLine: text("carry_line"),
+  createdAt: stampedNow("created_at"),
+});
+
+/**
+ * The setting picks held for a session's process that may still run on a
+ * machine that is away (setting-picks.ts `HeldPicks`), one row per session,
+ * each column the latest pick of its setting; null for one not held. Kept
+ * here so a hub that restarts while the machine is away still sends them
+ * to the process as the machine registers again. The row goes once each
+ * pick is applied, the process is gone, or the session's next launch takes
+ * them (launches.ts `withHeldPicks`), and with the session's row.
+ */
+export const heldPicks = sqliteTable("held_picks", {
+  instanceId: sessionColumn("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  model: text("model"),
+  effort: storedEnum(z.enum(EFFORT_LEVELS))("effort"),
+  permissionMode: storedEnum(z.enum(WIRE_PERMISSION_MODES))("permission_mode"),
+  /**
+   * With `permissionMode`: the mode the process ran in as the first mode
+   * was held (its row's then; null for none), which says whether the pick
+   * enters Bypass or Full Send and so relaunches it.
+   */
+  runsMode: text("runs_mode"),
   createdAt: stampedNow("created_at"),
 });
 

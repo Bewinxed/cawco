@@ -10,9 +10,11 @@
  * A process that may still run on a machine that is away is the one case a
  * row alone does not cover: the process keeps running on what it had, and
  * its own word on its settings (each turn's `init`) would write that back
- * over the pick. So its pick is also held for it ({@link HeldPicks}): its
- * word on a held setting is not recorded (launches.ts
- * `noteSessionSettings`), and as its machine registers again, before what
+ * over the pick. So its pick is also held for it ({@link HeldPicks}), in
+ * the hub's database (db held-picks.ts), so a hub that restarts meanwhile
+ * still holds it: its word on a held setting is not recorded (launches.ts
+ * `noteSessionSettings`, its effort reading in agent-socket
+ * session-signals.ts), and as its machine registers again, before what
  * was held for it is handed over, each held pick goes to the process as its
  * control ({@link applyHeldPicks}). A launch takes what is held for it in
  * place of what its payload named (`bounded`), and the hold ends there.
@@ -47,7 +49,6 @@ export type SettingPicksContext = Pick<
   ClosureContext,
   | "callAgent"
   | "db"
-  | "heldPicks"
   | "machineName"
   | "modelRefusal"
   | "owedMoves"
@@ -74,7 +75,7 @@ export const createSettingPicks = (ctx: SettingPicksContext) => {
    * away ({@link HeldPicks}).
    */
   const hold = (row: InstanceRow, pick: SettingPick): void => {
-    const held = ctx.heldPicks.get(row.id) ?? {};
+    const held = ctx.db.heldPicks.get(row.id) ?? {};
     switch (pick.method) {
       case CONTROL_SET_MODEL:
         held.model = pick.value;
@@ -91,7 +92,7 @@ export const createSettingPicks = (ctx: SettingPicksContext) => {
       default:
         break;
     }
-    ctx.heldPicks.set(row.id, held);
+    ctx.db.heldPicks.put(row.id, held);
   };
 
   /**
@@ -222,23 +223,27 @@ export const createSettingPicks = (ctx: SettingPicksContext) => {
 
   /** Each pick held for `row`'s process, sent to it ({@link sendHeld}) or relaunching it ({@link relaunchInto}). */
   const applyHeld = (row: InstanceRow, held: HeldPicks): void => {
-    const drop = (field: keyof HeldPicks) => () => {
-      const now = ctx.heldPicks.get(row.id);
-      if (!now) {
-        return;
-      }
-      delete now[field];
-      if (Object.keys(now).length === 0) {
-        ctx.heldPicks.delete(row.id);
-      }
-    };
+    // The hold on one setting ends as its process answers, unless a newer
+    // pick of it was held meanwhile: that one goes at the next register.
+    const drop =
+      <F extends keyof HeldPicks>(field: F, sent: HeldPicks[F]) =>
+      () => {
+        const now = ctx.db.heldPicks.get(row.id);
+        if (now && JSON.stringify(now[field]) === JSON.stringify(sent)) {
+          const { [field]: _answered, ...rest } = now;
+          ctx.db.heldPicks.put(row.id, rest);
+        }
+      };
     if (held.model !== undefined) {
       const pick = { method: CONTROL_SET_MODEL, value: held.model } as const;
-      detach(sendHeld(row, pick, drop("model")), "held model pick");
+      detach(sendHeld(row, pick, drop("model", held.model)), "held model pick");
     }
     if (held.effort !== undefined) {
       const pick = { method: CONTROL_SET_EFFORT, value: held.effort } as const;
-      detach(sendHeld(row, pick, drop("effort")), "held effort pick");
+      detach(
+        sendHeld(row, pick, drop("effort", held.effort)),
+        "held effort pick"
+      );
     }
     const mode = held.permissionMode;
     if (!mode) {
@@ -252,7 +257,7 @@ export const createSettingPicks = (ctx: SettingPicksContext) => {
       method: CONTROL_SET_PERMISSION_MODE,
       value: mode.mode,
     } as const;
-    detach(sendHeld(row, pick, drop("permissionMode")), "held mode pick");
+    detach(sendHeld(row, pick, drop("permissionMode", mode)), "held mode pick");
   };
 
   /**
@@ -264,7 +269,7 @@ export const createSettingPicks = (ctx: SettingPicksContext) => {
    * owed keeps it for that start's launch (`bounded`).
    */
   const applyHeldPicks = (machineId: string, live: readonly string[]) => {
-    for (const [id, held] of [...ctx.heldPicks]) {
+    for (const [id, held] of ctx.db.heldPicks.list()) {
       const [row] = ctx.db.getInstancesByIds([id]);
       if (row && row.machineId !== machineId) {
         continue;
@@ -272,7 +277,7 @@ export const createSettingPicks = (ctx: SettingPicksContext) => {
       if (row && live.includes(id)) {
         applyHeld(row, held);
       } else if (!ctx.db.owesSpawn(id)) {
-        ctx.heldPicks.delete(id);
+        ctx.db.heldPicks.delete(id);
       }
     }
   };

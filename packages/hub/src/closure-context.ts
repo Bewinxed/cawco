@@ -226,7 +226,7 @@ import type { RuleEngine } from "./rules";
 import type { SessionCallsDeps } from "./session-calls";
 import type { createSessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
-import type { HeldPicks, SettingPick } from "./setting-pick-shapes";
+import type { SettingPick } from "./setting-pick-shapes";
 import type { SkillFolderReader } from "./skills";
 import type { SshTunnels } from "./ssh-tunnels";
 import type { createStartModelMoves } from "./start-model-moves";
@@ -613,8 +613,6 @@ export interface ClosureContext {
     harness: string
   ) => HarnessReport | undefined;
   heldClaim: (rowId: string) => string | undefined;
-  /** The picks held for a session's process on a machine that is away, by session (setting-picks.ts). */
-  heldPicks: Map<string, HeldPicks>;
   heldSessions: Map<
     string,
     { machineId: string; since: number; reason: string }

@@ -210,9 +210,17 @@ public final class SessionDetailsController: ObservedViewController {
     private var harness: String? { row?.harness.rawValue ?? facts?.harness }
     private var report: Components.Schemas.HarnessReport? { harness.flatMap { kind in machine?.harnesses?.first { $0.harness.rawValue == kind } } }
     private var cwd: String { row?.cwd ?? "" }
-    private var model: String? { (facts?.model ?? row?.model).flatMap { $0.isEmpty ? nil : $0 } }
+    /// The model and mode the session shows: its process's last word while
+    /// the hub reaches it, else its row's, where a pick the hub keeps for its
+    /// next launch, or holds for a process on a machine that is away, is
+    /// (hub setting-picks.ts), as the web's session store reads them.
+    private var model: String? {
+        (live ? (facts?.model ?? row?.model) : (row?.model ?? facts?.model)).flatMap { $0.isEmpty ? nil : $0 }
+    }
     private var effort: String? { row?.effort?.rawValue }
-    private var permissionMode: String? { facts?.permissionMode?.rawValue ?? row?.permissionMode }
+    private var permissionMode: String? {
+        live ? (facts?.permissionMode?.rawValue ?? row?.permissionMode) : (row?.permissionMode ?? facts?.permissionMode?.rawValue)
+    }
 
     /// Its process runs, as the hub last heard: a switch into Bypass or Full Send starts it again.
     private var runs: Bool { row?.status == .running }
