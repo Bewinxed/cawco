@@ -32,6 +32,8 @@ import {
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
+  CONTROL_MCP_RECONNECT,
+  CONTROL_MCP_TOGGLE,
   CONTROL_RELOAD_SKILLS,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
@@ -501,6 +503,13 @@ class FleetMcp {
 
   /** The servers last applied ({@link #apply}): what a reload registers again. */
   #servers: Record<string, McpServerConfig> | undefined;
+  /** The fleet's servers switched off in this session ({@link toggle}): registered with `enabled: false`. */
+  readonly #off = new Set<string>();
+
+  /** `config` as this session registers it: switched off when {@link toggle} turned it off. */
+  #registered(name: string, config: McpServerConfig): McpServerConfig {
+    return this.#off.has(name) ? { ...config, enabled: false } : config;
+  }
 
   /**
    * The inline extension: holds pi's API and registers the session's first
@@ -569,7 +578,7 @@ class FleetMcp {
         if (this.#held.has(name)) {
           api.unregisterMcpServer(name);
         }
-        api.registerMcpServer(name, config);
+        api.registerMcpServer(name, this.#registered(name, config));
         this.#held.set(name, entry);
         done[name] = "registered";
       } catch (error) {
@@ -610,6 +619,32 @@ class FleetMcp {
           }
       ),
     };
+  }
+
+  /**
+   * One of the fleet's servers switched on or off in this session alone, as
+   * pi's own manager switches a registered one ("apply to the current
+   * session for registered servers", pi extensions/mcp/index.d.ts):
+   * registered again with `enabled` (pi docs/extensions.md: "`config` has
+   * the shape of an `mcpServers` entry … plus `exposure`, `toolExposure`,
+   * `description`, `enabled`"), on which pi's MCP extension closes it and
+   * hides its tools, or connects it. A server this session did not register
+   * (one of the person's own `mcp.json`, another extension's) is refused:
+   * pi switches those only by writing their file.
+   */
+  toggle(name: string, enabled: boolean): void {
+    const api = this.#api;
+    const config = this.#servers?.[name];
+    if (!(api && config && this.#held.has(name))) {
+      throw new Error(harnessRefusedWords.mcpNotOurs(name));
+    }
+    if (enabled) {
+      this.#off.delete(name);
+    } else {
+      this.#off.add(name);
+    }
+    api.unregisterMcpServer(name);
+    api.registerMcpServer(name, this.#registered(name, config));
   }
 
   /** A fleet change taken in place: the set read again and applied ({@link #apply}). */
@@ -1677,6 +1712,22 @@ class PiSession implements HarnessSession {
     // pi has no slash commands.
     [CONTROL_SUPPORTED_COMMANDS]: () => Promise.resolve([]),
     [CONTROL_RELOAD_SKILLS]: () => this.#reloadSkills(),
+    [CONTROL_MCP_RECONNECT]: (name) => this.#reconnectMcp(name),
+    // The fleet's servers, which CawCo registered for the session; a fenced
+    // session runs none ({@link cawcosExtensionsAlone}).
+    [CONTROL_MCP_TOGGLE]: (name, enabled) =>
+      new Promise<void>((resolve) => {
+        if (!this.#fleetMcp) {
+          throw new Error(
+            harnessRefusedWords.noMcp(
+              "pi",
+              `${name} wasn't switched ${enabled ? "on" : "off"}`
+            )
+          );
+        }
+        this.#fleetMcp.toggle(name, enabled);
+        resolve();
+      }),
     [CONTROL_CONTEXT_USAGE]: () => {
       // The last message that carries a usage: an answer's, or a tool
       // result's own (pi-ai types.d.ts `ToolResultMessage.usage`).
@@ -1723,6 +1774,48 @@ class PiSession implements HarnessSession {
           kind: "skill" as const,
         })),
     };
+  }
+
+  /**
+   * One MCP server reconnected by pi's own `/mcp reconnect <server>` (pi's
+   * MCP extension, extensions/mcp/index.js: "/mcp reconnect [server]"), any
+   * server its MCP extension holds, the fleet's and the person's own alike.
+   * The command's handler is run as `session.prompt` runs an extension's
+   * command (`_tryExecuteExtensionCommand`: the command found by name and
+   * handed the runner's command context), never through `prompt` itself,
+   * which sends a text no command takes to the model as a message. What
+   * the command says is read off its context's `ui.notify`, which in a
+   * session with no screen goes nowhere: an error or a warning (no such
+   * server, a disabled one, a reconnect that failed, a misread argument) is
+   * the call's failure in pi's own words, and its "Reconnected to MCP
+   * server" is its success.
+   */
+  async #reconnectMcp(name: string): Promise<void> {
+    const runner = this.#session.extensionRunner;
+    const command = runner.getCommand("mcp");
+    if (!command) {
+      throw new Error(
+        harnessRefusedWords.noMcp("pi", `${name} wasn't reconnected`)
+      );
+    }
+    const said: { message: string; type: string }[] = [];
+    const context = runner.createCommandContext();
+    const { ui } = context;
+    Object.defineProperty(context, "ui", {
+      value: {
+        ...ui,
+        notify: (message: string, type: string = "info") => {
+          said.push({ message, type });
+        },
+      } satisfies typeof ui,
+    });
+    await command.handler(`reconnect ${name}`, context);
+    const failed = said.find((one) => one.type !== "info");
+    if (failed || said.length === 0) {
+      throw new Error(
+        failed?.message ?? `pi said nothing of reconnecting ${name}.`
+      );
+    }
   }
 
   /** pi has no permission modes and no question tool, and puts no call to the hub: there is no ask to answer. */

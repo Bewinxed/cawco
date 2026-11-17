@@ -289,6 +289,8 @@ const PI_TRAITS = {
     "supportedModels",
     "supportedCommands",
     "reloadSkills",
+    "reconnectMcpServer",
+    "toggleMcpServer",
     "getContextUsage",
   ],
   liveSkillReload: false,

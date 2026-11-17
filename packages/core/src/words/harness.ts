@@ -157,6 +157,21 @@ export const harnessRefusedWords = {
     offered: readonly string[]
   ) =>
     `${name} has no ${level} effort for ${model}${offered.length > 0 ? `, only ${offered.join(", ")}` : ", which takes no effort level"}, so the effort wasn't changed.`,
+  /**
+   * An MCP server asked to reconnect, or to switch on or off, in a live
+   * session that runs no MCP client (pi: a fenced session, agent
+   * pi-runtime.ts): nothing was done. `undone` says what wasn't.
+   */
+  noMcp: (name: string, undone: string) =>
+    `${name} runs no MCP servers in this session, so ${undone}.`,
+  /**
+   * An MCP server asked to switch on or off in a live pi session that is not
+   * one CawCo's fleet registered for it (agent pi-runtime.ts `FleetMcp`): a
+   * server from the person's own pi `mcp.json` is switched only in pi's
+   * terminal manager, which writes the change to that file.
+   */
+  mcpNotOurs: (server: string) =>
+    `pi switches ${server} on or off only in its own MCP manager, which saves the change to its mcp.json; CawCo switches only the fleet's servers in a session, so ${server} wasn't changed.`,
   /** Needs you's notice for a stored conversation's deletion that keeps failing (hub session-lifecycle.ts): its title. */
   notDeletedTitle: "A conversation wasn't deleted",
   /** Its body: where, how often, the machine's last words, and that CawCo goes on trying. */
