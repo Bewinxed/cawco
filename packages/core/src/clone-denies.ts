@@ -139,6 +139,7 @@ const SCHEDULED_EMPTY = { kind: "file", text: '{"tasks":[]}\n' } as const;
  *   bare `.pi` directory does not require project trust" (pi docs), so an
  *   empty one stands in.
  * - OpenCode and pi: `.agents/skills`.
+ * - Codex ({@link CODEX_CONFIG_EMPTY}): `.codex` and `.agents/plugins`.
  */
 const HARNESS_CONFIG_EMPTY_BY: Record<
   HarnessKind,
@@ -170,9 +171,27 @@ const HARNESS_CONFIG_EMPTY_BY: Record<
     ".agents/skills": DIR,
   },
 };
+/**
+ * Codex's project config, held before its adapter exists: Codex's app-server
+ * marks any folder it starts a writable thread in as trusted, so a
+ * `.codex/config.toml` written in a clone started its MCP server on the host
+ * at the next Codex session there (Codex audit 2026-11-17, probes C-k and
+ * C-k2). `.agents/plugins` holds the repo plugin marketplace
+ * (`marketplace.json`) Codex also loads. The Codex kind's entry of
+ * {@link HARNESS_CONFIG_EMPTY_BY} takes these over when it is named.
+ */
+const CODEX_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
+  ".codex": DIR,
+  ".agents/plugins": DIR,
+};
+
 /** Every harness's config, as one table. */
 const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> =
-  Object.assign({}, ...Object.values(HARNESS_CONFIG_EMPTY_BY));
+  Object.assign(
+    {},
+    CODEX_CONFIG_EMPTY,
+    ...Object.values(HARNESS_CONFIG_EMPTY_BY)
+  );
 
 /**
  * {@link HARNESS_CONFIG_EMPTY}'s paths: the one list of harness config a
@@ -255,7 +274,7 @@ export const PROTECTED_PARENTS: ReadonlySet<string> = new Set(
  * ({@link GIT_EMPTY}): its config, its hooks, its submodules' git dirs. And
  * the harness project config the host
  * loads at the workspace's next session, outside any boundary, at the clone's
- * root ({@link HARNESS_CONFIG_EMPTY}: Claude Code's, OpenCode's and pi's);
+ * root ({@link HARNESS_CONFIG_EMPTY}: Claude Code's, OpenCode's, pi's and Codex's);
  * and what the fleet places ({@link FLEET_PLACED}): the project skills with
  * the store their links land in, and the project's memory documents.
  * On Linux a link in a dir the sandbox writes can be swapped for another,

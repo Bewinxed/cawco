@@ -72,7 +72,8 @@ on the host is emptied in a workspace: its entry of `HARNESS_CONFIG_EMPTY_BY`
 from a workspace: its entry of `HARNESS_CREDENTIALS`
 (`packages/core/src/paths.ts`).
 Claude Code: `.claude/*`, `.mcp.json`. OpenCode: `opencode.json(c)`,
-`.opencode`. pi: `.pi`, and `.agents/skills`.
+`.opencode`. pi: `.pi`, and `.agents/skills`. Codex (no adapter yet; held in
+`CODEX_CONFIG_EMPTY`): `.codex`, `.agents/plugins`.
 
 **CawCo MCP and fleet MCP.** The session reaches CawCo's tools with its own
 credential (`HarnessContext.sessionCredential`), kept off argv. In a
