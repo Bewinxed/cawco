@@ -222,7 +222,7 @@ const PI_CAPABILITIES: HarnessCapabilities = {
   subagents: false,
   tasks: false,
   compaction: true,
-  costUsd: false,
+  costUsd: true,
   thinking: true,
   images: true,
   handoff: true,

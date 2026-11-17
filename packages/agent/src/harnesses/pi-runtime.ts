@@ -1089,6 +1089,28 @@ class PiSession implements HarnessSession {
   #reading: string | undefined;
   /** What the turn's requests spent so far: its answers' and any compaction's. */
   #turnUsage: ModelTurnUsage[] = [];
+  /** What this process's turns before the one now ending cost, in dollars ({@link #costSoFar}). */
+  #costBase = 0;
+
+  /**
+   * What the session has cost since its host started, the turn now ending
+   * included: each request priced by CawCo as it ran ({@link #spent}, core
+   * `pricedRequest`), the price the turn's `turnUsage` carries to the hub's
+   * records, summed as OpenCode's session sums it (`total_cost_usd`). pi's
+   * own `usage.cost` is not read: the hub's one price is the truth, and the
+   * total is only the transcript's cost fact, which each result overwrites
+   * (core transcript-rules.ts: "`total_cost_usd` is cumulative, so the
+   * session overwrites rather than accumulates"), never added to a record.
+   * An unpriced model's spend is unknown, so it adds nothing.
+   */
+  #costSoFar(turnUsage: readonly ModelTurnUsage[]): number {
+    this.#costBase += turnUsage.reduce(
+      (sum, usage) => sum + (usage.costUsd ?? 0),
+      0
+    );
+    return this.#costBase;
+  }
+
   /**
    * The effort the person chose for the session: its spawn's, then each
    * set-effort's. A model switch puts the session back on it, as far as the
@@ -1415,6 +1437,7 @@ class PiSession implements HarnessSession {
           subtype: failed ? "error_during_execution" : "success",
           is_error: failed,
           turnUsage,
+          total_cost_usd: this.#costSoFar(turnUsage),
           ...(failed ? { errors } : {}),
           ...(failed && atProviderLimit(answer) ? { atLimit: true } : {}),
           ...(failed && outOfCredit(answer) ? { outOfCredit: true } : {}),
@@ -1507,6 +1530,7 @@ class PiSession implements HarnessSession {
         subtype: "success",
         is_error: false,
         turnUsage,
+        total_cost_usd: this.#costSoFar(turnUsage),
         ...(done.estimatedTokensAfter === undefined
           ? {}
           : { contextTokens: done.estimatedTokensAfter }),
