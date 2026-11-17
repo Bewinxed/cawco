@@ -108,6 +108,7 @@ typeOverrides:
     HarnessReportRefused: OpenEnums.HarnessReportRefused
     HeldReasonBy: OpenEnums.HeldReasonBy
     HomeCredentialKind: OpenEnums.HomeCredentialKind
+    HomeCredentialStore: OpenEnums.HomeCredentialStore
     HomeStore: OpenEnums.HomeStore
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell
     HookEvent: OpenEnums.HookEvent

@@ -1178,6 +1178,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/BlockMetadataCompactBy`.
     public enum BlockMetadataCompactBy: OpenEnum {
+        case codex
         case opencode
         case pi
         /// A value this app does not know: a newer hub's.
@@ -1185,6 +1186,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "codex": self = .codex
             case "opencode": self = .opencode
             case "pi": self = .pi
             default: self = .unrecognized(rawValue)
@@ -1193,6 +1195,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .codex: "codex"
             case .opencode: "opencode"
             case .pi: "pi"
             case let .unrecognized(rawValue): rawValue
@@ -1203,7 +1206,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.opencode, .pi]
+        public static let allCases: [Self] = [.codex, .opencode, .pi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -4114,6 +4117,7 @@ public enum OpenEnums {
     /// `#/components/schemas/HarnessKind`.
     public enum HarnessKind: OpenEnum {
         case claude
+        case codex
         case opencode
         case pi
         /// A value this app does not know: a newer hub's.
@@ -4122,6 +4126,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "claude": self = .claude
+            case "codex": self = .codex
             case "opencode": self = .opencode
             case "pi": self = .pi
             default: self = .unrecognized(rawValue)
@@ -4131,6 +4136,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .claude: "claude"
+            case .codex: "codex"
             case .opencode: "opencode"
             case .pi: "pi"
             case let .unrecognized(rawValue): rawValue
@@ -4141,7 +4147,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.claude, .opencode, .pi]
+        public static let allCases: [Self] = [.claude, .codex, .opencode, .pi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -4304,9 +4310,8 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/HomeStore`.
-    public enum HomeStore: OpenEnum {
-        case claude
+    /// `#/components/schemas/HomeCredentialStore`.
+    public enum HomeCredentialStore: OpenEnum {
         case opencode
         case pi
         /// A value this app does not know: a newer hub's.
@@ -4314,7 +4319,6 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
-            case "claude": self = .claude
             case "opencode": self = .opencode
             case "pi": self = .pi
             default: self = .unrecognized(rawValue)
@@ -4323,7 +4327,6 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
-            case .claude: "claude"
             case .opencode: "opencode"
             case .pi: "pi"
             case let .unrecognized(rawValue): rawValue
@@ -4334,7 +4337,51 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.claude, .opencode, .pi]
+        public static let allCases: [Self] = [.opencode, .pi]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/HomeStore`.
+    public enum HomeStore: OpenEnum {
+        case claude
+        case codex
+        case opencode
+        case pi
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "claude": self = .claude
+            case "codex": self = .codex
+            case "opencode": self = .opencode
+            case "pi": self = .pi
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .claude: "claude"
+            case .codex: "codex"
+            case .opencode: "opencode"
+            case .pi: "pi"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.claude, .codex, .opencode, .pi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -5527,6 +5574,7 @@ public enum OpenEnums {
     public enum MachineCapabilityId: OpenEnum {
         case browser
         case claude
+        case codex
         case containerRuntime
         case git
         case node
@@ -5543,6 +5591,7 @@ public enum OpenEnums {
             switch rawValue {
             case "browser": self = .browser
             case "claude": self = .claude
+            case "codex": self = .codex
             case "container-runtime": self = .containerRuntime
             case "git": self = .git
             case "node": self = .node
@@ -5560,6 +5609,7 @@ public enum OpenEnums {
             switch self {
             case .browser: "browser"
             case .claude: "claude"
+            case .codex: "codex"
             case .containerRuntime: "container-runtime"
             case .git: "git"
             case .node: "node"
@@ -5577,7 +5627,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.browser, .claude, .containerRuntime, .git, .node, .opencode, .passkeyRelay, .pi, .publicAddress, .serviceManager, .workspace]
+        public static let allCases: [Self] = [.browser, .claude, .codex, .containerRuntime, .git, .node, .opencode, .passkeyRelay, .pi, .publicAddress, .serviceManager, .workspace]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

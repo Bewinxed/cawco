@@ -274,6 +274,7 @@
                   "store": {
                     "enum": [
                       "claude",
+                      "codex",
                       "opencode",
                       "pi"
                     ],
@@ -611,6 +612,7 @@
                               "harness": {
                                 "enum": [
                                   "claude",
+                                  "codex",
                                   "opencode",
                                   "pi"
                                 ],
@@ -1998,6 +2000,7 @@
             "schema": {
               "enum": [
                 "claude",
+                "codex",
                 "opencode",
                 "pi"
               ],
@@ -6489,6 +6492,7 @@
                       "harness": {
                         "enum": [
                           "claude",
+                          "codex",
                           "opencode",
                           "pi"
                         ],
@@ -6619,6 +6623,7 @@
                       "harness": {
                         "enum": [
                           "claude",
+                          "codex",
                           "opencode",
                           "pi"
                         ],
@@ -7294,6 +7299,7 @@
                   "harness": {
                     "enum": [
                       "claude",
+                      "codex",
                       "opencode",
                       "pi"
                     ],
@@ -15934,6 +15940,7 @@
                       "harness": {
                         "enum": [
                           "claude",
+                          "codex",
                           "opencode",
                           "pi"
                         ],
@@ -15987,6 +15994,7 @@
                       "harness": {
                         "enum": [
                           "claude",
+                          "codex",
                           "opencode",
                           "pi"
                         ],
@@ -20386,6 +20394,7 @@
                   "harness": {
                     "enum": [
                       "claude",
+                      "codex",
                       "opencode",
                       "pi"
                     ],
@@ -23305,6 +23314,7 @@
                       "harness": {
                         "enum": [
                           "claude",
+                          "codex",
                           "opencode",
                           "pi"
                         ],
@@ -32937,6 +32947,9 @@
               "claude": {
                 "$ref": "#/components/schemas/AgentRowClaude"
               },
+              "codex": {
+                "$ref": "#/components/schemas/AgentRowClaude"
+              },
               "opencode": {
                 "$ref": "#/components/schemas/AgentRowClaude"
               },
@@ -35890,6 +35903,7 @@
       "BlockMetadataCompactBy": {
         "type": "string",
         "enum": [
+          "codex",
           "opencode",
           "pi"
         ]
@@ -37918,6 +37932,7 @@
             "description": "The harness the machine-scoped call is addressed at; session calls route by instance.",
             "enum": [
               "claude",
+              "codex",
               "opencode",
               "pi"
             ],
@@ -42673,6 +42688,9 @@
               "claude": {
                 "type": "object"
               },
+              "codex": {
+                "type": "object"
+              },
               "opencode": {
                 "type": "object"
               },
@@ -44119,6 +44137,7 @@
         "type": "string",
         "enum": [
           "claude",
+          "codex",
           "opencode",
           "pi"
         ]
@@ -44755,7 +44774,7 @@
             "type": "string"
           },
           "store": {
-            "$ref": "#/components/schemas/BlockMetadataCompactBy",
+            "$ref": "#/components/schemas/HomeCredentialStore",
             "description": "The kinds whose descriptor's `F` is a `V`."
           },
           "storeProvider": {
@@ -44776,6 +44795,13 @@
         "enum": [
           "api_key",
           "oauth"
+        ]
+      },
+      "HomeCredentialStore": {
+        "type": "string",
+        "enum": [
+          "opencode",
+          "pi"
         ]
       },
       "HomeLogin": {
@@ -44803,6 +44829,7 @@
         "type": "string",
         "enum": [
           "claude",
+          "codex",
           "opencode",
           "pi"
         ]
@@ -47210,6 +47237,7 @@
         "enum": [
           "browser",
           "claude",
+          "codex",
           "container-runtime",
           "git",
           "node",
@@ -57867,6 +57895,7 @@
             "description": "Which harness runs the session. Every start names it: the hub refuses one\nthat does not (`enforceRowSessionKey`), and the agent starts none without\nit. Optional on the wire only until TestFlight 20261015, 20261015.3,\n20261017 and 20261018 are expired (the app they hold declares it\noptional); then it is required here.",
             "enum": [
               "claude",
+              "codex",
               "opencode",
               "pi"
             ],
@@ -58880,6 +58909,7 @@
             "description": "The row's harness, which ends its process and its server custody without\nadoption. The hub names it on every stop it sends a machine, and the\nagent ends nothing without it; a dashboard's or an app's ask is a\n{@link StopRequest}. Optional on the wire only until TestFlight 20261015,\n20261015.3, 20261017 and 20261018 are expired (the app they hold sends\nthis type); then it is required here.",
             "enum": [
               "claude",
+              "codex",
               "opencode",
               "pi"
             ],
@@ -77688,6 +77718,9 @@
               "type": "object",
               "properties": {
                 "claude": {
+                  "$ref": "#/components/schemas/AgentRowClaude"
+                },
+                "codex": {
                   "$ref": "#/components/schemas/AgentRowClaude"
                 },
                 "opencode": {
@@ -152201,6 +152234,9 @@
               "claude": {
                 "$ref": "#/components/schemas/AgentRowClaude"
               },
+              "codex": {
+                "$ref": "#/components/schemas/AgentRowClaude"
+              },
               "opencode": {
                 "$ref": "#/components/schemas/AgentRowClaude"
               },
@@ -152690,6 +152726,9 @@
             "type": "object",
             "properties": {
               "claude": {
+                "$ref": "#/components/schemas/AgentRowClaude"
+              },
+              "codex": {
                 "$ref": "#/components/schemas/AgentRowClaude"
               },
               "opencode": {

@@ -84,8 +84,9 @@ export const listCodexThreads = (dir?: string): Promise<NeutralSessionInfo[]> =>
         ...(dir ? { cwd: dir } : {}),
         limit: 100,
         cursor,
-        sortKey: "updated_at",
-        useStateDbOnly: true,
+        // Every provider's: a listing names only its home's own provider's
+        // otherwise, and the reading home names none.
+        modelProviders: [],
       });
       threads.push(
         ...page.data

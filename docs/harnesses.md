@@ -86,9 +86,10 @@ relaunched at rest when the form changes.
 folder and runs on the host is emptied in a workspace: descriptor
 `cloneConfig`. Its logins on the host are unreadable from a workspace:
 descriptor `credentialPlaces`. A path left out of either runs a clone's
-config on the host or hands its credential to a workspace. Codex's config is
-held in `CODEX_CONFIG_EMPTY` (`packages/core/src/clone-denies.ts`) until its
-descriptor carries it.
+config on the host or hands its credential to a workspace. A harness that
+trusts a folder by itself (Codex's app-server does, for any folder it starts
+a writable thread in) is told the clone is untrusted before its first
+thread (agent `harnesses/codex-home.ts` `prepareHome`).
 
 **CawCo MCP and fleet MCP.** The session reaches CawCo's tools with its own
 credential (`HarnessContext.sessionCredential`), kept off argv. In a
@@ -106,6 +107,12 @@ same on every harness that offers it. Its own question, to-do and subagent
 tools are denied so CawCo's `ask` and delegation are the one route:
 descriptor `nativeTools`; a denied-tool list, written in Claude Code's names,
 reaches it as descriptor `deniedTools` says.
+
+**A harness pinned to one release.** One whose adapter speaks a protocol
+its release generates (Codex's app-server) pins that release in its catalog
+entry (`exactVersion`) and moves only with its generated types and its
+scripted-model check: `bun scripts/codex-protocol.ts --check` and
+`bun scripts/codex-check.ts`.
 
 **Custody under sessiond.** A running session survives an agent restart.
 Descriptor `custody` says how: `keeper`, a process per session under

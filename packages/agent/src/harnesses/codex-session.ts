@@ -21,7 +21,6 @@ import {
   type OfferedMode,
   permissionModeNamed,
 } from "@cawco/core/harness/modes";
-import { workspaceSpillDir } from "@cawco/core/paths/workspace";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import {
   CONTROL_CONTEXT_USAGE,
@@ -48,6 +47,7 @@ import {
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
+import { sessionGitEnv } from "../git-credential";
 import type {
   HarnessContext,
   HarnessSession,
@@ -56,7 +56,6 @@ import type {
 } from "../harness";
 import { unreadSendsHeld } from "../harness";
 import { KeeperPool } from "../keepers";
-import { enterSpawn } from "../layer";
 import { procIdFor } from "../proc-id";
 import { acknowledgeSessionCredential } from "../session-identity";
 import {
@@ -336,15 +335,25 @@ class CodexSession implements HarnessSession {
     }
   }
 
+  /**
+   * The execution environment a workspace session's every turn names: its
+   * boundary's (C-a3). Named on each turn as well as at the start, so a
+   * thread resumed or forked, which takes no environment as it opens, runs
+   * its first turn in it too. None for a session with no boundary.
+   */
+  #environments(): V2.TurnEnvironmentParams[] | undefined {
+    const ctx = this.#ctx;
+    return ctx.boundary && ctx.workspace
+      ? [{ environmentId: environmentId(ctx.workspace), cwd: ctx.cwd }]
+      : undefined;
+  }
+
   /** The handshake, then the thread: started, resumed, or forked off a stored one. */
   async open(spec: SpawnPayload, launch: CodexLaunch): Promise<void> {
     await this.#peer.handshake();
     const model = codexModelOf(launch.model);
     const ctx = this.#ctx;
-    const environments =
-      ctx.boundary && ctx.workspace
-        ? [{ environmentId: environmentId(ctx.workspace), cwd: ctx.cwd }]
-        : undefined;
+    const environments = this.#environments();
     const settings = {
       cwd: ctx.cwd,
       approvalPolicy: CODEX_MODES[this.#mode].approval,
@@ -898,6 +907,9 @@ class CodexSession implements HarnessSession {
             ? { model: codexModelOf(this.#model)?.id }
             : {}),
           ...(this.#effort ? { effort: this.#effort } : {}),
+          ...(this.#environments()
+            ? { environments: this.#environments() }
+            : {}),
         });
     sent.catch((error: unknown) => {
       this.#unread.delete(message.uuid);
@@ -1111,12 +1123,18 @@ class CodexSession implements HarnessSession {
   }
 }
 
-/** The app-server's environment beyond its home: the session's container doors and scratch. */
+/**
+ * The app-server's environment beyond its home, which its commands take
+ * (C-env): git reaching the hub's remote as this session
+ * (git-credential.ts), its container runtimes through its own doors
+ * (session-containers.ts), and a host-scope delegate's scratch as its
+ * `TMPDIR` (host-scratch.ts). A workspace's commands run in its boundary,
+ * whose `TMPDIR` is the boundary's own; Codex saves no output of its own to
+ * read back (C-s).
+ */
 const sessionExtras = (ctx: HarnessContext): Record<string, string> => ({
+  ...sessionGitEnv(),
   ...ctx.containerEnv,
-  ...(ctx.boundary && ctx.workspace
-    ? { TMPDIR: workspaceSpillDir(ctx.workspace, ctx.instanceId) }
-    : {}),
   ...(ctx.hostTmp ? { TMPDIR: ctx.hostTmp } : {}),
 });
 
@@ -1186,12 +1204,14 @@ export const spawnCodex = async (
   await codexKeepers.replaceElsewhere(procId, client);
   await client.spawnProc(
     procId,
-    enterSpawn(ctx.workspace, {
+    // On the host, where its account's sign-in is: a workspace's tools run
+    // in the workspace's environment, inside its boundary (C-a2).
+    {
       command: bin,
       args: ["app-server"],
       cwd: ctx.cwd,
       env: codexEnv(accountId, sessionExtras(ctx)),
-    })
+    }
   );
   const held = await codexKeepers.holding(procId);
   if (!held) {

@@ -68,12 +68,7 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import {
-  heldSkills,
-  memoryState,
-  syncMemory,
-  syncSkillFiles,
-} from "../fleet";
+import { heldSkills, memoryState, syncMemory, syncSkillFiles } from "../fleet";
 import { hookStatesInSet, readFleetHarnessSet } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import type { FleetPart } from "../fleet-parts";
