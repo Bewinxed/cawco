@@ -15,9 +15,10 @@
    * step it stands at, and the row opens the setup there again.
    *
    * An account Claude Code refused account-wide, or one a provider refused
-   * for want of credit, carries Check again under its problem, in the
-   * name's column and outside the link: the hub's check runs now (for
-   * credit, it acknowledges a top-up), the button working while it does. Answered, the button goes
+   * for want of credit or the use of a model, carries Check again under its
+   * problem, in the name's column and outside the link: the hub's check
+   * runs now (for credit or a model, it acknowledges a top-up or the model
+   * enabled), the button working while it does. Answered, the button goes
    * with the answer and the refusal as the accounts are read again; refused
    * again, or with no verdict, a meta line under it says so until the next
    * press.

@@ -32,7 +32,7 @@ import { traitsOf } from "@cawco/core/harness/traits";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { ElysiaStatus, problem } from "elysia";
-
+import { marksRenewed } from "./account-marks";
 import {
   accountOfIdentity,
   keepProbe,
@@ -44,7 +44,6 @@ import type {
   HomeCredentialFound,
   SigninFinished,
 } from "./closure-context";
-import { creditRenewed } from "./credit";
 import type { LoginMove } from "./db/accounts";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import {
@@ -56,7 +55,7 @@ import {
 } from "./machine-answers";
 import { unreachable } from "./unreachable";
 
-/** Why an account's credit marks end as it signs in (credit.ts `creditRenewed`). */
+/** Why an account's marks end as it signs in (account-marks.ts `marksRenewed`). */
 const SIGNED_IN_AGAIN = "it was signed in again through CawCo";
 
 export type AccountSigninContext = Pick<
@@ -80,8 +79,8 @@ export type AccountSigninContext = Pick<
 export const createAccountSignin = (ctx: AccountSigninContext) => {
   /**
    * A sign-in through CawCo kept as it came out on `machineId`: no longer a
-   * login that was moved, and, signed in, out of none of the credit marks
-   * it held (credit.ts `creditRenewed`); every screen hears it.
+   * login that was moved, and, signed in, out of every credit and access
+   * mark it held (account-marks.ts `marksRenewed`); every screen hears it.
    */
   const keepSignin = (
     accountId: string,
@@ -90,7 +89,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
   ): void => {
     ctx.db.accounts.putSignin({ accountId, machineId, state, moved: null });
     if (state === "signed-in") {
-      creditRenewed(ctx.db, accountId, SIGNED_IN_AGAIN);
+      marksRenewed(ctx.db, accountId, SIGNED_IN_AGAIN);
     }
     ctx.publishUsage(machineId);
   };

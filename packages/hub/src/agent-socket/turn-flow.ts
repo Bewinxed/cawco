@@ -3,6 +3,7 @@
 import {
   CLAUDE_PROVIDER,
   LIMITED_PROVIDERS,
+  modelNotEnabled,
   outOfCredit,
 } from "@cawco/core/accounts";
 import { FULL_SEND_ANSWER } from "@cawco/core/asks";
@@ -10,12 +11,17 @@ import { detach } from "@cawco/core/detach";
 import type { ArrivingAsk } from "@cawco/core/frames";
 import { asLastErrorKind } from "@cawco/core/relaunch";
 import {
+  type NeutralAssistantMessage,
   type NeutralMessage,
   PROVIDER_RETRY,
 } from "@cawco/core/session-messages";
 import { unreadAskWords } from "@cawco/core/words/ask-lines";
+import {
+  noteAnswered,
+  noteNotEnabled,
+  noteOutOfCredit,
+} from "../account-marks";
 import { briefingsObserve } from "../briefings";
-import { noteCreditAnswered, noteOutOfCredit } from "../credit";
 import type { HubContext } from "../hub-context";
 import { outlivesSession, unreadFields } from "../pending";
 import { type FrameAnswer, type FrameRun, onSessionFrame } from "./frame-run";
@@ -58,6 +64,7 @@ export type TurnFlowContext = TurnEndedContext &
     | "publishUsage"
     | "pulses"
     | "push"
+    | "resolvedModel"
     | "ruleEngine"
     | "settleRefusal"
     | "takeCredentialTurn"
@@ -365,8 +372,8 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
     return "continue";
   });
 
-  /** A credit refusal's words: its result's errors, or the text Claude Code answered in the model's place. */
-  const creditWords = (neutral: NeutralMessage): string => {
+  /** A refusal's words: its result's errors, or the text Claude Code answered in the model's place. */
+  const refusalWords = (neutral: NeutralMessage): string => {
     if (neutral.type === "result") {
       return neutral.errors?.join(" ") || neutral.subtype;
     }
@@ -383,20 +390,57 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
   };
 
   /**
-   * What a session's frame says of its account's credit (credit.ts): a
-   * pi or OpenCode turn its provider refused for want of credit, as its
-   * harness typed the refusal it ended on, or Claude Code's answer in its
-   * place (`billing_error`), marks the account out of credit for the
-   * session's model's provider; a turn that ends answered ends the mark.
+   * Claude Code's error frame written in place of an API answer that
+   * refused the account the use of its model: a 403 whose body's error
+   * type is a permission one (core `modelNotEnabled`, read off the frame's
+   * `api_error_status` and `api_error_type`), and not a mod's fetch hook,
+   * which Claude Code answers with that type itself (`hook_denied`). The
+   * session's own, not a subagent's, whose model may be another.
    */
-  const noteCredit = (instanceId: string, neutral: NeutralMessage): void => {
-    const refused =
-      (neutral.type === "result" &&
-        neutral.is_error &&
-        neutral.outOfCredit === true) ||
-      (neutral.type === "assistant" &&
-        neutral.error !== undefined &&
-        outOfCredit({ type: neutral.error }));
+  const claudeModelRefused = (neutral: NeutralAssistantMessage): boolean =>
+    !neutral.parent_tool_use_id &&
+    neutral.api_error !== "hook_denied" &&
+    modelNotEnabled({
+      ...(typeof neutral.api_error_status === "number"
+        ? { status: neutral.api_error_status }
+        : {}),
+      ...(neutral.api_error_type ? { errorType: neutral.api_error_type } : {}),
+    });
+
+  /**
+   * How a session's frame says its provider refused its account, as its
+   * harness typed the refusal: for want of credit (a pi or OpenCode result's
+   * `outOfCredit`, Claude Code's `billing_error` in the model's place), or
+   * the use of its model (a pi or OpenCode result's `modelRefused`, Claude
+   * Code's 403 `permission_error`); none for any other frame.
+   */
+  const refusalOf = (
+    neutral: NeutralMessage
+  ): "credit" | "access" | undefined => {
+    if (neutral.type === "result" && neutral.is_error) {
+      if (neutral.outOfCredit === true) {
+        return "credit";
+      }
+      return neutral.modelRefused === true ? "access" : undefined;
+    }
+    if (neutral.type !== "assistant" || neutral.error === undefined) {
+      return;
+    }
+    if (outOfCredit({ type: neutral.error })) {
+      return "credit";
+    }
+    return claudeModelRefused(neutral) ? "access" : undefined;
+  };
+
+  /**
+   * What a session's frame says of its account (account-marks.ts): a turn
+   * its provider refused for want of credit marks the account out of
+   * credit for the session's model's provider; one refused the use of its
+   * model marks that model not enabled for the account; a turn that ends
+   * answered ends both marks for its provider and model.
+   */
+  const noteMarks = (instanceId: string, neutral: NeutralMessage): void => {
+    const refused = refusalOf(neutral);
     const answered = neutral.type === "result" && !neutral.is_error;
     if (!(refused || answered)) {
       return;
@@ -405,9 +449,21 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
     if (!row) {
       return;
     }
-    const moved = answered
-      ? noteCreditAnswered(ctx.db, row)
-      : noteOutOfCredit(ctx.db, row, creditWords(neutral));
+    // The model as its harness runs it: what an access mark is keyed by,
+    // and a start's candidates are read as (spawns.ts `modelFor`).
+    const ran = {
+      accountId: row.accountId,
+      harness: row.harness,
+      model: ctx.resolvedModel(row.machineId, row.harness, row.model),
+    };
+    let moved = false;
+    if (refused === "credit") {
+      moved = noteOutOfCredit(ctx.db, ran, refusalWords(neutral));
+    } else if (refused === "access") {
+      moved = noteNotEnabled(ctx.db, ran, refusalWords(neutral));
+    } else {
+      moved = noteAnswered(ctx.db, ran);
+    }
     if (moved) {
       ctx.publishUsage(row.machineId);
     }
@@ -445,7 +501,7 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
           ctx.limitRefused.add(message.instanceId);
         }
       }
-      noteCredit(message.instanceId, neutral);
+      noteMarks(message.instanceId, neutral);
       // Every tool call the session's model makes, at the top of
       // its turn or inside one (a Code Mode program's, a
       // subagent's): work of its own ends a declared wait at rest.

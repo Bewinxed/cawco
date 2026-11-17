@@ -9,6 +9,7 @@
 import {
   ACCOUNT_RULES,
   type Account,
+  type AccountAccess,
   type AccountCredit,
   type AccountProvider,
   type AccountSignin,
@@ -180,18 +181,32 @@ function refusedAccountWideAt(account: Account): number | null {
   return times.length > 0 ? Math.max(...times) : null;
 }
 
+/** A provider's refusal of the account the hub keeps (hub account-marks.ts): for want of credit, or the use of one model. */
+type AccountMark =
+  | { kind: "credit"; mark: AccountCredit }
+  | { kind: "access"; mark: AccountAccess };
+
 /**
- * The newest mark of a provider refusing the account for want of credit
- * (hub credit.ts), or none: a model the hub picks keeps off it until a turn
- * on that provider is answered, it signs in again, or Check again
- * acknowledges a top-up.
+ * The newest mark of a provider refusing the account, for want of credit
+ * or the use of a model (hub account-marks.ts), or none: a model the hub
+ * picks keeps off it until a turn on that provider or model is answered,
+ * it signs in again, or Check again acknowledges a top-up or the model
+ * enabled.
  */
-function creditOutOf(account: Account): AccountCredit | null {
-  const marks = (accountsStore.accounts?.credit ?? []).filter(
-    (one) => one.accountId === account.id
-  );
-  return marks.reduce<AccountCredit | null>(
-    (newest, one) => (newest && newest.since >= one.since ? newest : one),
+function markOf(account: Account): AccountMark | null {
+  const marks: AccountMark[] = [
+    ...(accountsStore.accounts?.credit ?? []).map((mark) => ({
+      kind: "credit" as const,
+      mark,
+    })),
+    ...(accountsStore.accounts?.access ?? []).map((mark) => ({
+      kind: "access" as const,
+      mark,
+    })),
+  ].filter((one) => one.mark.accountId === account.id);
+  return marks.reduce<AccountMark | null>(
+    (newest, one) =>
+      newest && newest.mark.since >= one.mark.since ? newest : one,
     null
   );
 }
@@ -199,16 +214,17 @@ function creditOutOf(account: Account): AccountCredit | null {
 /**
  * What Check again under the account's row answers, as the moment it was
  * written, or null when nothing does: an account-wide refusal it checks
- * again ({@link refusedAccountWideAt}), or a credit mark it acknowledges a
- * top-up of ({@link creditOutOf}). A newer one reads a newer time.
+ * again ({@link refusedAccountWideAt}), or a credit or access mark it
+ * acknowledges a top-up or the model enabled of ({@link markOf}). A newer
+ * one reads a newer time.
  */
 export function checkableAt(account: Account): number | null {
   const refused = refusedAccountWideAt(account);
-  const credit = creditOutOf(account)?.since ?? null;
-  if (refused === null || credit === null) {
-    return refused ?? credit;
+  const marked = markOf(account)?.mark.since ?? null;
+  if (refused === null || marked === null) {
+    return refused ?? marked;
   }
-  return Math.max(refused, credit);
+  return Math.max(refused, marked);
 }
 
 /** Where the account stands on a machine; signed out when the hub has no row. */
@@ -248,11 +264,21 @@ export function problemOf(account: Account): string | null {
     const refused = signins.find((one) => one.reason)?.reason;
     return refused ?? words.problem.nowhere;
   }
-  const credit = creditOutOf(account);
-  if (credit) {
+  const marked = markOf(account);
+  if (marked?.kind === "credit") {
     return spawnWords.startModel.creditProblem(
-      credit.provider,
-      sinceWords(credit.since)
+      marked.mark.provider,
+      sinceWords(marked.mark.since)
+    );
+  }
+  if (marked?.kind === "access") {
+    return spawnWords.startModel.accessProblem(
+      spawnWords.startModel.notEnabled(
+        marked.mark.model,
+        nameOf(account),
+        sinceWords(marked.mark.since)
+      ),
+      marked.mark.model
     );
   }
   const missing = online.filter(

@@ -662,6 +662,27 @@ export interface AccountCredit {
   since: number;
 }
 
+/**
+ * A model a provider refused an account the use of ({@link modelNotEnabled}):
+ * access to it is disabled for the account (OpenCode Zen's "Model access is
+ * disabled"), while the account's other models still run. Kept until a turn
+ * of that account on that model succeeds, the account is signed in again
+ * through CawCo, or a person presses Check again in Configure › Accounts. A
+ * model the hub picks for a start that picked none passes it over on that
+ * account; a person's pick still runs it.
+ */
+export interface AccountAccess {
+  accountId: string;
+  /** The model refused, as its harness runs it (`opencode/claude-fable-5`). */
+  model: string;
+  /** The provider the model is billed to, as its harness names it (`opencode`, `anthropic`). */
+  provider: AccountProvider;
+  /** The provider's own words, as its harness handed them over. */
+  reason: string;
+  /** When the refusal came, epoch ms. */
+  since: number;
+}
+
 /** An account taken out of placement until its window resets. */
 export interface AccountBench {
   accountId: string;
@@ -938,8 +959,14 @@ export type ProviderSigninResult =
  * `SDKAssistantMessageError`, `rate_limit`).
  */
 export interface ProviderRefusal {
-  /** The provider's own error code in its answer's body ({@link providerErrorCode}). */
+  /** The provider's own error code in its answer's body ({@link providerErrorOf}). */
   code?: string;
+  /**
+   * The provider's own error type in its answer's body ({@link
+   * providerErrorOf}: Anthropic-shaped `permission_error`), or as Claude
+   * Code copies it onto its error frame (`api_error_type`).
+   */
+  errorType?: string;
   status?: number;
   type?: string;
 }
@@ -969,29 +996,72 @@ export const outOfCredit = ({ code, status, type }: ProviderRefusal): boolean =>
   (type !== undefined && CREDIT_TYPES.has(type)) ||
   (code !== undefined && CREDIT_CODES.has(code));
 
-/** A provider's error answer as OpenAI-shaped APIs give it: `{"error":{"code":…}}`. */
+/**
+ * Providers' own error types for a model the account may not use: the
+ * Anthropic-shaped `permission_error`, which OpenCode Zen answers with a 403
+ * ("Model access is disabled. Change model access at …") and Anthropic's
+ * API with a 403 for a model the organization has no access to.
+ */
+const ACCESS_TYPES: ReadonlySet<string> = new Set(["permission_error"]);
+
+/**
+ * Providers' own error codes for a model the account may not use: OpenAI's
+ * `model_not_found` ("The model … does not exist or you do not have access
+ * to it").
+ */
+const ACCESS_CODES: ReadonlySet<string> = new Set(["model_not_found"]);
+
+/**
+ * Whether a provider refused the account the use of the model it was asked
+ * for: a 403 whose body's error type is a permission one, or the provider's
+ * own code for a model the account has no access to. Per model: the
+ * account's other models still run. Its words are never read.
+ */
+export const modelNotEnabled = ({
+  code,
+  errorType,
+  status,
+}: ProviderRefusal): boolean =>
+  (status === 403 && errorType !== undefined && ACCESS_TYPES.has(errorType)) ||
+  (code !== undefined && ACCESS_CODES.has(code));
+
+/**
+ * A provider's error answer, as OpenAI-shaped APIs give it
+ * (`{"error":{"code":…,"type":…}}`) and Anthropic-shaped ones
+ * (`{"type":"error","error":{"type":…}}`).
+ */
 const ERROR_BODY = object({
-  error: object({ code: optional(nullable(string())) }),
+  error: object({
+    code: optional(nullable(string())),
+    type: optional(nullable(string())),
+  }),
 });
 
 /**
- * The provider's own error code in the body of its error answer, when that
- * is JSON that names one; undefined for any other body.
+ * The provider's own error code and type in the body of its error answer,
+ * when that is JSON that names them; neither for any other body.
  */
-export const providerErrorCode = (
+export const providerErrorOf = (
   body: string | undefined
-): string | undefined => {
+): Pick<ProviderRefusal, "code" | "errorType"> => {
   if (!body) {
-    return;
+    return {};
   }
   let read: unknown;
   try {
     read = JSON.parse(body);
   } catch {
-    return;
+    return {};
   }
   const parsed = safeParse(ERROR_BODY, read);
-  return parsed.success ? (parsed.output.error.code ?? undefined) : undefined;
+  if (!parsed.success) {
+    return {};
+  }
+  const { code, type } = parsed.output.error;
+  return {
+    ...(code ? { code } : {}),
+    ...(type ? { errorType: type } : {}),
+  };
 };
 
 /** The harnesses' sorts of a provider refusing at the account's limits: OpenCode's, then Claude Code's. */

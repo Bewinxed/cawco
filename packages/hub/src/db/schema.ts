@@ -3369,10 +3369,13 @@ export const accountModelEfforts = sqliteTable(
 );
 
 /**
- * Accounts a provider refused for want of credit (core `AccountCredit`), by
- * the model provider the refusal was for: a model the hub picks for a start
- * that picked none keeps off them until a turn on that provider succeeds,
- * the account is signed in again, or a person acknowledges a top-up.
+ * What providers refused accounts, which a model the hub picks for a start
+ * that picked none keeps off until it ends: a refusal for want of credit
+ * (core `AccountCredit`), by the model provider it was for, `model` empty;
+ * or one model not enabled for the account (core `AccountAccess`), by that
+ * model, `provider` the one it bills to. A mark ends when a turn on its
+ * provider (credit) or its model (access) succeeds, the account is signed
+ * in again, or a person presses Check again on it.
  */
 export const accountCredit = sqliteTable(
   "account_credit",
@@ -3381,10 +3384,14 @@ export const accountCredit = sqliteTable(
       .notNull()
       .references(() => accounts.id, { onDelete: "cascade" }),
     provider: text("provider").notNull(),
+    /** The model an access mark is for; empty for a credit mark, which is the provider's. */
+    model: text("model").notNull().default(""),
     reason: text("reason").notNull(),
     since: timestamp("since").notNull(),
   },
-  (table) => [primaryKey({ columns: [table.accountId, table.provider] })]
+  (table) => [
+    primaryKey({ columns: [table.accountId, table.provider, table.model] }),
+  ]
 );
 
 /**

@@ -29,8 +29,9 @@ import { join } from "node:path";
 import type { ProviderRefusal } from "@cawco/core/accounts";
 import {
   atProviderLimit,
+  modelNotEnabled,
   outOfCredit,
-  providerErrorCode,
+  providerErrorOf,
 } from "@cawco/core/accounts";
 import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import { type AskAnswer, FULL_SEND_ANSWER } from "@cawco/core/asks";
@@ -671,36 +672,60 @@ const missedTurnEnd = (
 /**
  * How a turn closes when not as `success`: its subtype and errors, and
  * `atLimit` when the provider refused it at the account's limit,
- * `outOfCredit` when for want of credit.
+ * `outOfCredit` when for want of credit, `modelRefused` when the account
+ * may not use the turn's model.
  */
 interface TurnClosing {
   atLimit?: true;
   errors?: string[];
   is_error: boolean;
+  modelRefused?: true;
   outOfCredit?: true;
   serverStopped?: true;
   subtype: string;
 }
 
-/** Why the provider refused an account's turn, which ends it: its limit, or its credit (core `atProviderLimit`, `outOfCredit`). */
-type AccountRefusal = "limit" | "credit";
+/**
+ * Why the provider refused an account's turn, which ends it: its limit, its
+ * credit, or the turn's model not enabled for it (core `atProviderLimit`,
+ * `outOfCredit`, `modelNotEnabled`).
+ */
+type AccountRefusal = "limit" | "credit" | "access";
+
+/** What the session's line says of each refusal as it ends the turn on it. */
+const REFUSAL_LINES: Record<AccountRefusal, string> = {
+  limit: "its account's usage limit refused the request",
+  credit: "its account's credit refused the request",
+  access: "its account may not use this model",
+};
+
+/** A refusal's flags on a turn's result. */
+type RefusalFlags = Pick<
+  TurnClosing,
+  "atLimit" | "modelRefused" | "outOfCredit"
+>;
+
+/** Each refusal's flag on the turn's result. */
+const REFUSAL_FLAGS: Record<AccountRefusal, RefusalFlags> = {
+  limit: { atLimit: true },
+  credit: { outOfCredit: true },
+  access: { modelRefused: true },
+};
 
 /**
  * A refusal as OpenCode structures it, read as the provider's: its sort,
- * status and the provider's own error code in the body it answered.
+ * status, and the provider's own error code and type in the body it
+ * answered (core `providerErrorOf`).
  */
 const providerRefusal = (error: {
   response?: { body: string };
   status?: number;
   type: string;
-}): ProviderRefusal => {
-  const code = providerErrorCode(error.response?.body);
-  return {
-    type: error.type,
-    ...(error.status === undefined ? {} : { status: error.status }),
-    ...(code === undefined ? {} : { code }),
-  };
-};
+}): ProviderRefusal => ({
+  type: error.type,
+  ...(error.status === undefined ? {} : { status: error.status }),
+  ...providerErrorOf(error.response?.body),
+});
 
 /** How a turn the provider's refusal of its account ended closes: an error, flagged by why. */
 const refusedClosing = (refusal: {
@@ -710,30 +735,30 @@ const refusedClosing = (refusal: {
   subtype: "error_during_execution",
   is_error: true,
   errors: [refusal.words],
-  ...(refusal.kind === "credit"
-    ? { outOfCredit: true as const }
-    : { atLimit: true as const }),
+  ...REFUSAL_FLAGS[refusal.kind],
 });
 
-/** Why a refusal with these flags ends an account's turn; none when it doesn't. */
-const refusedFor = (
-  flags: Pick<TurnClosing, "atLimit" | "outOfCredit">
-): AccountRefusal | undefined => {
-  if (flags.outOfCredit) {
+/** Why the provider refused an account's turn, which ends it; none when it doesn't. */
+const refusalOf = (refusal: ProviderRefusal): AccountRefusal | undefined => {
+  if (outOfCredit(refusal)) {
     return "credit";
   }
-  return flags.atLimit ? "limit" : undefined;
+  if (modelNotEnabled(refusal)) {
+    return "access";
+  }
+  return atProviderLimit(refusal) ? "limit" : undefined;
 };
 
+/** The refusal flags a turn's closing carries, each only where it is set. */
+const refusalFlagsOn = (closing: TurnClosing | undefined): RefusalFlags => ({
+  ...(closing?.atLimit ? { atLimit: true } : {}),
+  ...(closing?.outOfCredit ? { outOfCredit: true } : {}),
+  ...(closing?.modelRefused ? { modelRefused: true } : {}),
+});
+
 /** The flags a turn's result carries for the provider's refusal of it. */
-const refusalFlags = (
-  refusal: ProviderRefusal
-): Pick<TurnClosing, "atLimit" | "outOfCredit"> => {
-  if (outOfCredit(refusal)) {
-    return { outOfCredit: true };
-  }
-  return atProviderLimit(refusal) ? { atLimit: true } : {};
-};
+const refusalFlags = (kind: AccountRefusal | undefined): RefusalFlags =>
+  kind ? REFUSAL_FLAGS[kind] : {};
 
 /** A message's blocks, by their key (`text:<n>`, `reasoning:<n>`, `tool:<id>`), in the order they began. */
 interface MessageBlocks {
@@ -1087,7 +1112,7 @@ export class OpencodeSession implements HarnessSession {
   #open = false;
   /**
    * The provider's refusal the open turn ends on, once asked to stop: at
-   * the account's usage limit, or for want of credit.
+   * the account's usage limit, for want of credit, or of its model.
    */
   #limitRefusal: { kind: AccountRefusal; words: string } | undefined;
   /** Armed while a turn is open without any server event; see STALLED_TURN_MS. */
@@ -1720,7 +1745,7 @@ export class OpencodeSession implements HarnessSession {
           subtype: "error_during_execution",
           is_error: true,
           errors: [errorText(event.data.error)],
-          ...refusalFlags(providerRefusal(event.data.error)),
+          ...refusalFlags(refusalOf(providerRefusal(event.data.error))),
         });
         break;
       case "session.execution.interrupted":
@@ -2063,7 +2088,8 @@ export class OpencodeSession implements HarnessSession {
   /**
    * A provider retry, said once per distinct note; at the account's limit
    * (its error's type or status, core `atProviderLimit`), or out of its
-   * credit (core `outOfCredit`, which no retry mends), the turn ends on it.
+   * credit (core `outOfCredit`, which no retry mends), or refused its model
+   * (core `modelNotEnabled`, which none mends either), the turn ends on it.
    */
   #retry(
     error: {
@@ -2075,8 +2101,8 @@ export class OpencodeSession implements HarnessSession {
     next: number
   ): void {
     const { message } = error;
-    const flags = refusalFlags(providerRefusal(error));
-    const atLimit = flags.atLimit === true;
+    const kind = refusalOf(providerRefusal(error));
+    const atLimit = kind === "limit";
     this.#turnRevision += 1;
     this.#busyValue = true;
     this.#turnOpen = true;
@@ -2097,7 +2123,6 @@ export class OpencodeSession implements HarnessSession {
         },
       });
     }
-    const kind = refusedFor(flags);
     if (this.account !== undefined && kind) {
       this.refuseAtLimit(message, kind).catch((cause: unknown) =>
         console.warn(
@@ -2158,8 +2183,7 @@ export class OpencodeSession implements HarnessSession {
       subtype: result?.subtype ?? "success",
       is_error: result?.is_error ?? false,
       ...(result?.errors ? { errors: result.errors } : {}),
-      ...(result?.atLimit ? { atLimit: true } : {}),
-      ...(result?.outOfCredit ? { outOfCredit: true } : {}),
+      ...refusalFlagsOn(result),
       ...(result?.serverStopped ? { serverStopped: true } : {}),
       total_cost_usd: this.#costBase + turnCost,
       turnUsage,
@@ -3734,7 +3758,7 @@ export class OpencodeSession implements HarnessSession {
     }
     this.#limitRefusal = { kind, words: error };
     console.info(
-      `[opencode] ${this.instanceId}: its account's ${kind === "credit" ? "credit" : "usage limit"} refused the request; ending the turn on it`
+      `[opencode] ${this.instanceId}: ${REFUSAL_LINES[kind]}; ending the turn on it`
     );
     await this.interrupt();
   }

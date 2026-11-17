@@ -5,7 +5,7 @@ import {
   CONTROL_SET_PROVIDER_KEY,
 } from "@cawco/core/accounts/controls";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
-import { creditRenewed } from "../credit";
+import { marksRenewed } from "../account-marks";
 import type { HubContext } from "../hub-context";
 import { SIGNIN_TIMEOUT_MS } from "../login-moves";
 import { unansweredIn } from "../machine-answers";
@@ -57,8 +57,9 @@ export const accountSigninRoutes = ({
       // verdict: `back` on those machines, `refused` with Claude Code's
       // words, `none` with why there was none, or `not-refused` for an
       // account no account-wide refusal holds out. Pressed for an account
-      // a provider refused for want of credit, it acknowledges its top-up:
-      // the marks end (credit.ts), and the next refusal marks it again.
+      // a provider refused for want of credit or the use of a model, it
+      // acknowledges its top-up or the model enabled: the marks end
+      // (account-marks.ts), and the next refusal marks it again.
       .post("/api/accounts/:id/refusal-check", async ({ params }) => {
         if (!accountOf(params.id)) {
           return problem(404, {
@@ -66,10 +67,10 @@ export const accountSigninRoutes = ({
             detail: `There is no account ${params.id}.`,
           });
         }
-        creditRenewed(
+        marksRenewed(
           db,
           params.id,
-          "a person pressed Check again after topping it up"
+          "a person pressed Check again on it in Configure › Accounts"
         );
         const verdict = await checkRefused(params.id);
         publishUsage();

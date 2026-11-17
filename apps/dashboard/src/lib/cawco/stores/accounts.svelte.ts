@@ -6,6 +6,7 @@
  */
 import type {
   Account,
+  AccountAccess,
   AccountBench,
   AccountCatalog,
   AccountCatalogFault,
@@ -59,13 +60,15 @@ export const accountsState = $state<{
 
 /** What `/api/accounts` answers. */
 export interface AccountsView {
+  /** Models a provider refused accounts the use of, by account and model (hub account-marks.ts). */
+  access: AccountAccess[];
   accounts: Account[];
   /** Accounts out of placement until a window resets. */
   bench: AccountBench[];
   /** Why accounts with no catalog have none: their last probe's fault. */
   catalogFaults: AccountCatalogFault[];
   catalogs: AccountCatalog[];
-  /** Accounts a provider refused for want of credit, by the model provider (hub credit.ts). */
+  /** Accounts a provider refused for want of credit, by the model provider (hub account-marks.ts). */
   credit: AccountCredit[];
   /** Sign-ins started on a machine and not finished: the link or code each showed. */
   pending: PendingAccountSignin[];

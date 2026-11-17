@@ -282,7 +282,11 @@ export const accountPlacementRoutes = ({
               model: resolved,
             } satisfies PlacementPreview;
           }
-          const placed = placeAccount(input);
+          // A model the hub named keeps off the accounts its start would
+          // (spawns.ts `keptOffBy`): out of credit for it, or not enabled.
+          const placed = placeAccount(
+            named.keptOff ? { ...input, ...named.keptOff } : input
+          );
           if (!placed.ok) {
             return problem(400, { code: "not-placed", detail: placed.refusal });
           }
