@@ -753,7 +753,7 @@
   --spacing-c-pin-gone-ring: 1px;
   /* The Comments rail beside the page (the artifact panel's surface brief, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot. */
   --spacing-c-comments-w: 320px;
-  /* A pin's peek and a chip's peek at most (the artifact panel's surface brief, A pin's pill), and the app's comment card. On the web the composer and the thread beside a pin take `c-pin-card-reading-w`, never under this. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph. */
+  /* A chip's peek at most (the artifact panel's surface brief, A pin's pill), and the app's comment card. On the web the composer and the thread beside a pin take `c-pin-card-reading-w`, never under this. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph. */
   --spacing-c-pin-card-w: 280px;
   /* A comment's composer and its thread beside its pin over the page (the artifact panel's surface brief, Placing a comment; A thread beside its pin; the owner's pick "Beside the comment", comment-card-sizing): one width for both, so a card never changes width as it goes from composer to thread. Two fifths of the well (the pin room is the size container), held between 280px and 480px: 415px at a 1357px pane with the 320px rail open, about 50 characters a line (Google Docs: 35 to 50; Radix Themes maxWidth 480). Web only. */
   --spacing-c-pin-card-reading-w: clamp(280px, 40cqi, 480px);
@@ -1327,7 +1327,7 @@
   --duration-ghost: 80ms;
   --duration-control: 120ms;
   --duration-menu: 140ms;
-  /* How long the pointer rests on a comment's pill before its peek comes, one within this of the last coming at once; and how long the peek stays once the pointer has left the pill and the peek (the artifact panel's surface brief, A pin's pill). */
+  /* How long the pointer rests on a comment's pill before its thread comes beside it, uncommitted, one within this of the last coming at once; and how long it stays once the pointer has left the pill and the thread (the artifact panel's surface brief, Where a thread opens). Also a chip's peek. */
   --duration-peek: 300ms;
   /* A switch's knob and a checkbox's tick. */
   --duration-toggle: 160ms;

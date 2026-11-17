@@ -57,14 +57,16 @@
   there. The card stays on the page through its close: `open` turns its
   clock, and only once a close has landed does it say so (`onclosed`) for
   its holder to take it away. Taken away, it goes at once: where another
-  pin's card takes its place, or once its close has landed. With no pill on
+  pin's card takes its place, or once its close has landed. A thread the
+  pointer's rest on its pill drew is this same card, uncommitted
+  (`oncommit`): a press in it or on its pill commits it as it stands, and
+  the pointer leaving it closes it as any close does. With no pill on
   the page to pour from, or without motion, it fades. The composer, whose
   own pill is its surface, opens as every kit popover does (`popMotion`),
   out of the pill; the foot sheet fades in over `--duration-menu` and out over
   `--duration-control`.
 -->
 <script lang="ts">
-  import { commentWords as said } from "@cawco/core/words/comments";
   import { type Snippet, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { popMotion } from "#lib/components/ui/popover/index.js";
@@ -103,7 +105,7 @@
     pin,
     open = true,
     onclosed,
-    onpress,
+    oncommit,
     onrest,
     float = $bindable(),
     children,
@@ -129,14 +131,14 @@
     /** What it is, read out. */
     label: string;
     /** Its `data-slot`: what the pane and the probes call it. */
-    slot: "pin-card" | "pin-composer" | "pin-peek";
+    slot: "pin-card" | "pin-composer";
     /**
-     * The peek's: a press anywhere on it opens what it peeks, its pin's whole
-     * thread (one button over all it holds, named for that). What it holds
-     * takes no press of its own.
+     * A thread drawn by the pointer resting on its pill, uncommitted: a
+     * press anywhere in it, or the focus coming into it, commits it, before
+     * what was pressed takes the press. The card stays as it stands.
      */
-    onpress?: () => void;
-    /** The peek's: the pointer came onto it (true) or left it (false). */
+    oncommit?: () => void;
+    /** An uncommitted thread's: the pointer came onto it (true) or left it (false). */
     onrest?: (on: boolean) => void;
     /** The thread's pin, by its number: its hook (`data-pin-card`). */
     pin?: number;
@@ -589,6 +591,8 @@
   data-slot={slot}
   data-state={popState}
   data-pin-card={pin}
+  onfocusincapture={oncommit}
+  onpointerdowncapture={oncommit}
   onpointerenter={onrest ? () => onrest(true) : undefined}
   onpointerleave={onrest ? () => onrest(false) : undefined}
   role="dialog"
@@ -662,14 +666,4 @@
       {@render children()}
     </div>
   </div>
-  {#if onpress && pin !== undefined}
-    <!-- The peek pressed anywhere: its whole thread opens. -->
-    <button
-      aria-label={said.openThread(pin)}
-      class="absolute inset-0 z-1 m-0 p-0 border-none bg-transparent rounded-lg outline-off focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
-      data-slot="pin-peek-open"
-      onclick={onpress}
-      type="button"
-    ></button>
-  {/if}
 </div>

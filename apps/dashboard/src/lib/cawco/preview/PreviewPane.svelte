@@ -86,7 +86,7 @@
   import { PaneSheet } from "./pane-sheet.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
   import { PinComposer } from "./pin-composer.svelte";
-  import { PinPeek } from "./pin-peek.svelte";
+  import { PinHover } from "./pin-hover.svelte";
   import { PinThread } from "./pin-thread.svelte";
   import { PreviewFrame } from "./preview-frame.svelte";
   import { PreviewReach } from "./preview-reach.svelte";
@@ -231,11 +231,12 @@
     pinComposer,
     pinThread: () => pinThread,
   });
-  const pinPeek = new PinPeek({
+  const pinHover = new PinHover({
     paneLayout,
     paneDoc,
     pinComposer,
     openPin: () => pinThread.openPin,
+    leaving: (id: string) => pinThread.hoverLeft(id),
   });
   const changeTour = new ChangeTour({
     instanceId: () => instanceId,
@@ -243,7 +244,7 @@
     paneNotice,
     previewFrame,
     paneDoc,
-    cardPin: () => pinThread.cardPin,
+    cardPin: () => (pinThread.cardOpen ? pinThread.cardPin : null),
     openCard: (id: string, via?: "key" | "pointer") =>
       pinThread.openCard(id, via),
     unread: () => pinThread.unread,
@@ -258,7 +259,7 @@
     commentKit,
     pinComposer,
     paneMode,
-    pinPeek,
+    pinHover,
     changeTour,
   });
   const pageCover = new PageCover({
@@ -302,7 +303,7 @@
     commentKit,
     pinComposer,
     paneMode,
-    pinPeek,
+    pinHover,
     changeTour,
     pinThread,
     paneKeys,
@@ -836,16 +837,10 @@
   {/if}
 {/snippet}
 
-<!-- A pin's thread as its card holds it: the drawn pin's whole, or the
-     rested-on pin's as its peek (`peek`), the same card; `pushed`, opened
-     in the Comments sheet over its list, Back leading. -->
-{#snippet thread(
-  pin: Pin,
-  draft: ComposerDraft,
-  peek: boolean,
-  pushed = false,
-  sheet = false
-)}
+<!-- A pin's thread as its card holds it, open or a hover's alike (PinHover):
+     one card; `pushed`, opened in the Comments sheet over its list, Back
+     leading. -->
+{#snippet thread(pin: Pin, draft: ComposerDraft, pushed = false, sheet = false)}
   {#if commentKit.kit}
     {@const Card = commentKit.kit.PinCard}
     <Card
@@ -853,7 +848,7 @@
       changes={(paneDoc.view?.activity[pin.id]?.length ?? 0) > 0
         ? threadChanges
         : undefined}
-      marked={peek || !!pinThread.pinAt?.mark}
+      marked={!!pinThread.drawnAt?.mark}
       session={paneSubject.owner ? instanceId : null}
       {draft}
       link={pinThread.pinLink(pin.number)}
@@ -874,14 +869,13 @@
       onreply={(text) => pinThread.reply(text)}
       onresolve={(resolved) => pinThread.resolvePin(resolved)}
       onretry={() => paneSend.retryPin(pin.id)}
-      parent={!peek && pinThread.cardParent?.id === pin.id
+      parent={pinThread.cardParent?.id === pin.id
         ? pinThread.cardParent.name
         : null}
-      {peek}
       {pin}
       placing={paneMode.placing === pin.id}
-      problem={peek ? null : pinThread.cardError}
-      sending={!peek && pinThread.replying}
+      problem={pinThread.cardError}
+      sending={pinThread.replying}
       retrying={paneSend.pinsRetrying.has(pin.id)}
       whyNotSent={paneSend.notSentWhy(pin)}
     />
@@ -892,8 +886,7 @@
   {#if pinThread.hungPin && commentKit.drafts}
     {@render thread(
       pinThread.hungPin,
-      commentKit.drafts.draft(pinThread.hungPin.id),
-      false
+      commentKit.drafts.draft(pinThread.hungPin.id)
     )}
   {/if}
 {/snippet}
@@ -1526,13 +1519,7 @@
     >
       {#if pinThread.threadPushed && pinThread.cardPin && commentKit.kit && commentKit.replyDraft}
         {#key pinThread.cardPin.id}
-          {@render thread(
-            pinThread.cardPin,
-            commentKit.replyDraft,
-            false,
-            true,
-            true
-          )}
+          {@render thread(pinThread.cardPin, commentKit.replyDraft, true, true)}
         {/key}
       {:else}
         {@render railOf("sheet")}
@@ -1540,8 +1527,8 @@
     </ThreadSheet>
   {/if}
   <!-- What stands over the page beside a pill, in the frame's box:
-       the composer while a comment is written, the thread once it is, and
-       the peek while the pointer rests on one. -->
+       the composer while a comment is written, and the thread once it is,
+       open or uncommitted while the pointer rests on its pill. -->
   <!-- The size container a card's width reads (`--spacing-c-pin-card-reading-w`, two fifths of the well).
        It stands where the frame stands (a component artifact's stage, a page under the head's room), so a place the page says is a place on it. -->
   <div
@@ -1573,8 +1560,13 @@
       {@render composerCard(pinThread.roomW, pinThread.roomH)}
     {/if}
     <!-- The drawn pin's card (`drawnPin`); each pin's card is its own, so
-         another's never moves to it. -->
-    {#if pinThread.cardPin && commentKit.kit && commentKit.replyDraft && !pinThread.threadPushed && !pinThread.threadHung}
+         another's never moves to it. The pointer resting on a pill draws
+         its thread here uncommitted (PinHover), and a press on the pill or
+         anywhere in the card commits that same card (`oncommit`): it stays
+         mounted and only its `open` holds. Where an open thread stands in
+         the Comments card or sheet instead (`threadHung`, `threadPushed`),
+         the hover is drawn here until it commits. -->
+    {#if pinThread.cardPin && commentKit.kit && commentKit.replyDraft && !pinThread.threadPushed && !(pinThread.threadHung && pinThread.openPin)}
       {#key pinThread.cardPin.id}
         {#if paneLayout.floatSheet}
           <!-- On a phone and under a finger, the thread is the well's
@@ -1599,55 +1591,32 @@
               pinThread.cardPin,
               commentKit.replyDraft,
               false,
-              false,
               true
             )}
           </ThreadSheet>
         {:else}
+          {@const pinId = pinThread.cardPin.id}
+          {@const hovered = pinHover.hoverPin?.id === pinId}
           <PinFloat
-            box={pinThread.pinAt?.box ?? null}
+            box={pinThread.drawnAt?.box ?? null}
             label={`Comment ${pinThread.cardPin.number}`}
-            mark={pinThread.pinAt?.mark ?? null}
+            mark={pinThread.drawnAt?.mark ?? null}
+            oncommit={hovered ? () => pinThread.openCard(pinId) : undefined}
             onclosed={() => {
               if (!pinThread.openPin) {
                 pinThread.closingPin = null;
               }
             }}
-            open={pinThread.openPin !== null}
+            onrest={hovered ? pinHover.restOn : undefined}
+            open={pinThread.openPin !== null || pinHover.hoverPin !== null}
             pin={pinThread.cardPin.number}
             room={{ w: pinThread.roomW, h: pinThread.roomH }}
             slot="pin-card"
             bind:float={pinThread.cardFloat}
           >
-            {@render thread(pinThread.cardPin, commentKit.replyDraft, false)}
+            {@render thread(pinThread.cardPin, commentKit.replyDraft)}
           </PinFloat>
         {/if}
-      {/key}
-    {/if}
-    <!-- The rested-on pin's peek: the same card beside its pill, his words
-         and the latest reply alone; a press on it opens the whole thread. -->
-    {#if pinPeek.peekPin && pinPeek.peekAt && commentKit.drafts}
-      {#key pinPeek.peekPin.id}
-        <PinFloat
-          label={`Comment ${pinPeek.peekPin.number}`}
-          mark={pinPeek.peekAt.mark}
-          onpress={() => {
-            const id = pinPeek.peekPin?.id;
-            if (id) {
-              pinThread.openCard(id);
-            }
-          }}
-          onrest={pinPeek.restOnPeek}
-          pin={pinPeek.peekPin.number}
-          room={{ w: pinThread.roomW, h: pinThread.roomH }}
-          slot="pin-peek"
-        >
-          {@render thread(
-            pinPeek.peekPin,
-            commentKit.drafts.draft(pinPeek.peekPin.id),
-            true
-          )}
-        </PinFloat>
       {/key}
     {/if}
   </div>

@@ -17,13 +17,13 @@ import type { PaneMode } from "./pane-mode.svelte";
 import type { PaneNotice } from "./pane-notice.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
 import type { PinComposer } from "./pin-composer.svelte";
-import type { PinPeek } from "./pin-peek.svelte";
+import type { PinHover } from "./pin-hover.svelte";
 import type { PreviewFrame } from "./preview-frame.svelte";
 import {
-  type PreviewPinAt,
   previewCompose,
   previewPinAt,
   previewPinId,
+  type ViewBox,
 } from "./wire";
 
 export interface PinThreadDeps {
@@ -36,7 +36,7 @@ export interface PinThreadDeps {
   readonly paneNotice: PaneNotice;
   readonly paneSubject: PaneSubject;
   readonly pinComposer: PinComposer;
-  readonly pinPeek: PinPeek;
+  readonly pinHover: PinHover;
   readonly previewFrame: PreviewFrame;
 }
 export class PinThread {
@@ -51,8 +51,12 @@ export class PinThread {
   /** The pin whose thread is open. */
   openPin = $state<string | null>(null);
 
-  /** Its pill in the page's viewport, as the page tells it while it scrolls. */
-  pinAt = $state<PreviewPinAt | null>(null);
+  /**
+   * Its pill in the page's viewport and the box of what it stands on, as
+   * the page tells it while it scrolls; from the moment it opens, where its
+   * pill was rested on, when a hover committed it (`openCard`).
+   */
+  pinAt = $state<{ box: ViewBox | null; mark: ViewBox } | null>(null);
 
   /**
    * The pin the page has told where it stands since its thread opened (its
@@ -101,13 +105,19 @@ export class PinThread {
    * or with no page to answer). While another pin's place is still on its
    * way, the last card stays where it stood, so the swap is one frame: no
    * frame without a card, none with the new card anywhere but its place.
-   * Closed, it is the one going back into its pill (`closingPin`), if any.
+   * With none open, the pin the pointer rests on, its thread uncommitted
+   * (PinHover): the same card a press then commits, never another. Else
+   * the one going back into its pill (`closingPin`), while it is the one
+   * drawn.
    */
   lastDrawn: string | null = null;
 
   readonly drawnPin = $derived.by(() => {
     if (!this.openPin) {
-      this.lastDrawn = this.closingPin;
+      const hovered = this.#deps.pinHover.hoverPin?.id ?? null;
+      this.lastDrawn =
+        hovered ??
+        (this.closingPin === this.lastDrawn ? this.closingPin : null);
     } else if (
       this.#deps.paneLayout.floatSheet ||
       this.threadPushed ||
@@ -123,6 +133,29 @@ export class PinThread {
     () =>
       this.#deps.paneDoc.pins.find((pin) => pin.id === this.drawnPin) ?? null
   );
+
+  /** The drawn card is a thread opened, or a hover's (false): it stays until dismissed, its answers seen. */
+  readonly cardOpen = $derived(
+    this.openPin !== null && this.drawnPin === this.openPin
+  );
+
+  /** Where the drawn card's pill stands: the open thread's as the page tells it, or the rested-on pill's. */
+  readonly drawnAt = $derived.by(() => {
+    const hovered = this.#deps.pinHover.hoverPin;
+    return !this.openPin && hovered && hovered.id === this.drawnPin
+      ? { mark: hovered.mark, box: hovered.box }
+      : this.pinAt;
+  });
+
+  /**
+   * The pointer left the card its rest drew, uncommitted: it goes back into
+   * its pill as a closed thread does, drawn until it has (`closingPin`).
+   */
+  hoverLeft = (id: string) => {
+    if (!this.openPin && this.drawnPin === id) {
+      this.closingPin = id;
+    }
+  };
 
   /** The open thread's element's nearest parent, as the page names its chain (`cawco:pin-chain`). */
   cardParent = $state<{ id: string; name: string | null } | null>(null);
@@ -199,7 +232,11 @@ export class PinThread {
   /** Pin `id`'s thread opens; `via`, a key or a press. A composer standing goes, and another thread closes. */
   openCard = (id: string, via: "key" | "pointer" = "pointer") => {
     this.#deps.commentKit.loadKit();
-    this.#deps.pinPeek.dropPeek();
+    // The pointer's rest drew this thread already: the press commits that
+    // card in place, where it stands, never a second one built after it.
+    const hovered = this.#deps.pinHover.hoverPin;
+    const committed = hovered?.id === id && this.drawnPin === id;
+    this.#deps.pinHover.drop();
     if (this.closingPin) {
       // Another pin's card going back into its pill goes at once; its own turns back.
       if (this.closingPin !== id) {
@@ -215,7 +252,11 @@ export class PinThread {
     }
     // A key or a press inside the page, which the host never hears: the page's last input is it.
     lastInput.current = via;
-    if (this.openPin !== id) {
+    if (committed && hovered) {
+      // Its place is where the page said its pill stands as the pointer came onto it.
+      this.pinAt = { mark: hovered.mark, box: hovered.box };
+      this.pinHeard = id;
+    } else if (this.openPin !== id) {
       // Its place is the page's to say; the card drawn now keeps its own until it does (`drawnPin`).
       this.pinHeard = null;
     }
@@ -399,9 +440,9 @@ export class PinThread {
 
   constructor(deps: PinThreadDeps) {
     this.#deps = deps;
-    // The open thread is looked at: what the agent answered there is seen, on every device.
+    // The open thread is looked at: what the agent answered there is seen, on every device. A hover's is not, until a press commits it.
     $effect(() => {
-      const pin = this.cardPin;
+      const pin = this.cardOpen ? this.cardPin : null;
       if (
         !(pin && this.#deps.paneDoc.doc && newAnswer(pin)) ||
         this.#deps.paneDoc.onlyOnPage(pin.id)

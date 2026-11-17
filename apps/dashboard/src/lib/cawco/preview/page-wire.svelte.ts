@@ -40,7 +40,7 @@ import type { PaneNotice } from "./pane-notice.svelte";
 import type { PaneSheet } from "./pane-sheet.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
 import type { PinComposer } from "./pin-composer.svelte";
-import type { PinPeek } from "./pin-peek.svelte";
+import type { PinHover } from "./pin-hover.svelte";
 import type { PinThread } from "./pin-thread.svelte";
 import type { PreviewFrame } from "./preview-frame.svelte";
 import type { PreviewReach } from "./preview-reach.svelte";
@@ -82,7 +82,7 @@ export interface PageWireDeps {
   readonly paneSheet: PaneSheet;
   readonly paneSubject: PaneSubject;
   readonly pinComposer: PinComposer;
-  readonly pinPeek: PinPeek;
+  readonly pinHover: PinHover;
   readonly pinThread: PinThread;
   readonly previewFrame: PreviewFrame;
   readonly previewReach: PreviewReach;
@@ -120,7 +120,7 @@ export class PageWire {
    * canvas's through its stage (CanvasStages, `SlotActions.composer`).
    */
   heardComposer = (message: ComposerMessage) => {
-    const { commentKit, pinComposer, pinPeek, pinThread } = this.#deps;
+    const { commentKit, pinComposer, pinHover, pinThread } = this.#deps;
     switch (message.type) {
       case "cawco:compose": {
         // A press on the page (or a radial's Comment) opened a comment's composer: nothing is written yet.
@@ -132,7 +132,7 @@ export class PageWire {
           pinThread.closeCard();
         }
         commentKit.loadKit();
-        pinPeek.dropPeek();
+        pinHover.drop();
         // The press was the page's, which the host never hears: the page's last input is it.
         lastInput.current = message.via === "key" ? "key" : "pointer";
         pinComposer.opened(said, message);
@@ -158,7 +158,7 @@ export class PageWire {
       paneSheet,
       paneSubject,
       pinComposer,
-      pinPeek,
+      pinHover,
       pinThread,
       previewFrame,
       previewReach,
@@ -281,7 +281,7 @@ export class PageWire {
         pinThread.heardChain(message);
         break;
       case "cawco:peek":
-        pinPeek.heardPeek(message);
+        pinHover.heard(message);
         break;
       case "cawco:change-stops":
         changeTour.heardStops(message);

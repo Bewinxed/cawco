@@ -41,7 +41,7 @@ export const commentWords = {
   resolvedAgo: (age: string) =>
     age === "now" ? "Resolved just now" : `Resolved ${age} ago`,
   close: "Close",
-  /** A pin's peek pressed: its whole thread opens. */
+  /** A pin's spot pressed: its thread opens. */
   openThread: (n: number) => `Open comment ${n}`,
   // The rail.
   comments: "Comments",

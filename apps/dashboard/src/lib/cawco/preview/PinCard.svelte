@@ -38,11 +38,9 @@
    *
    * It closes by its Close or Esc, or a press on another row or pin, never
    * by a press on the page. Delete is asked in the card itself, under its bar.
-   *
-   * As a pin's peek (`peek`: a mouse resting on its pill), the same card
-   * holds what it stands on, his words and only the latest reply: no
-   * actions, no status lines, no change lines and no reply, since a press
-   * anywhere on it opens the whole thread (PinFloat `onpress`).
+   * A mouse resting on its pin draws this card, whole, before any press
+   * (PinFloat `oncommit`); the element's parent, which the page names once
+   * the thread is open, unfolds under its title then.
    */
   import type { CommentAttachment, Pin } from "@cawco/core/comments/model";
   import { referenceHref } from "@cawco/core/references";
@@ -74,6 +72,7 @@
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import { hub } from "#lib/platform/hub.js";
   import { hubAsk } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
@@ -120,10 +119,7 @@
     ondraft,
     changes,
     fromChip = false,
-    peek = false,
   }: {
-    /** A pin's peek: what it stands on, his words and the latest reply alone, taking no press of its own. */
-    peek?: boolean;
     /**
      * Opened from its chip in a conversation (the transcript's popover): its
      * head keeps Resolve or Reopen and Close, without Delete comment and ⋯,
@@ -193,16 +189,14 @@
    * an id held twice is reported with both entries (repeated-keys.ts)
    * before the keyed each throws on it.
    */
-  const thread = $derived.by(() => {
-    const all = keysChecked(
+  const thread = $derived(
+    keysChecked(
       `comment ${pin.number}'s thread`,
       pin.thread,
       (entry) => entry.id,
       (entry) => `${entry.by}'s entry at ${entry.at}`
-    );
-    // The peek: his words, and the latest reply after them.
-    return peek && all.length > 2 ? [all[0], ...all.slice(-1)] : all;
-  });
+    )
+  );
   let roomEl = $state<HTMLDivElement | null>(null);
   /** The thread stands where it opened and the person hasn't scrolled it: a new entry keeps it there. */
   let atPlace = true;
@@ -213,7 +207,7 @@
     const newest = holder.querySelector<HTMLElement>(
       '[data-slot="thread"] > li:last-child'
     );
-    if ((fromChip && pin.thread.length <= 2) || peek || pin.thread.length < 2) {
+    if ((fromChip && pin.thread.length <= 2) || pin.thread.length < 2) {
       holder.scrollTop = 0;
     } else {
       holder.scrollTop = newest ? newest.offsetTop : holder.scrollHeight;
@@ -517,121 +511,115 @@
      the page; trailing, Resolve or Reopen, Delete comment and Copy link (or
      More) as one glass, and on a desk Close in its own. Under the bar the
      element's parent where it says more, Delete's question where Delete was
-     pressed, then the thread, the one part that scrolls. The peek takes no
-     press, so it has none. -->
+     pressed, then the thread, the one part that scrolls. -->
 <div
   bind:this={head}
   class="flex shrink-0 flex-col gap-space-2"
   data-slot="pin-top"
 >
-  {#if !peek}
-    <div
-      class="flex min-h-c-top-bar-h items-center gap-space-2"
-      data-slot="bar"
-    >
-      {#if sheet}
-        <BarGlass form="group">
-          <BarItem
-            data-slot="close"
-            icon={IconClose}
-            label={said.close}
-            onclick={onclose}
-          />
-          {#if back}
-            <BarItem
-              data-slot="back"
-              icon={IconChevronLeft}
-              label={commonWords.backTo(back.to)}
-              onclick={back.onback}
-            />
-          {/if}
-        </BarGlass>
-      {:else if back}
-        <BarGlass form="group">
+  <div class="flex min-h-c-top-bar-h items-center gap-space-2" data-slot="bar">
+    {#if sheet}
+      <BarGlass form="group">
+        <BarItem
+          data-slot="close"
+          icon={IconClose}
+          label={said.close}
+          onclick={onclose}
+        />
+        {#if back}
           <BarItem
             data-slot="back"
             icon={IconChevronLeft}
             label={commonWords.backTo(back.to)}
             onclick={back.onback}
           />
-        </BarGlass>
-      {/if}
-      {#if !marked}
-        <!-- The pin's pill, what the card is, while the page's own is out of view. -->
-        {@render headPill()}
-      {/if}
-      {#if !sheet}
-        <!-- On a desk the title takes the bar's leading room. -->
-        {@render title(!back && marked)}
-      {:else}
-        <span class="flex-1"></span>
-      {/if}
-      <div class="flex flex-none items-center gap-space-2">
-        <BarGlass form="group">
-          {#if pin.resolvedAt}
+        {/if}
+      </BarGlass>
+    {:else if back}
+      <BarGlass form="group">
+        <BarItem
+          data-slot="back"
+          icon={IconChevronLeft}
+          label={commonWords.backTo(back.to)}
+          onclick={back.onback}
+        />
+      </BarGlass>
+    {/if}
+    {#if !marked}
+      <!-- The pin's pill, what the card is, while the page's own is out of view. -->
+      {@render headPill()}
+    {/if}
+    {#if !sheet}
+      <!-- On a desk the title takes the bar's leading room. -->
+      {@render title(!back && marked)}
+    {:else}
+      <span class="flex-1"></span>
+    {/if}
+    <div class="flex flex-none items-center gap-space-2">
+      <BarGlass form="group">
+        {#if pin.resolvedAt}
+          <BarItem
+            icon={IconReopenLinear}
+            label={said.reopen}
+            onclick={() => onresolve(false)}
+          />
+        {:else}
+          <BarItem
+            icon={IconSuccessLinear}
+            label={said.resolve}
+            onclick={() => onresolve(true)}
+          />
+        {/if}
+        {#if !fromChip}
+          <!-- One press asks, under the bar where it was pressed (AskHere). -->
+          <!-- Its question standing under the bar, it stands pressed, as a
+                 control whose card is open does. -->
+          <BarItem
+            data-slot="delete"
+            expanded={asks.pending?.at === "delete"}
+            icon={IconTrashLinear}
+            label={said.deleteComment}
+            onclick={askDelete}
+            open={asks.pending?.at === "delete"}
+          />
+          {#if moreActions.length === 1 && moreActions[0]}
+            {@const only = moreActions[0]}
+            <!-- One thing is a button of its own, never a More holding it. -->
             <BarItem
-              icon={IconReopenLinear}
-              label={said.reopen}
-              onclick={() => onresolve(false)}
+              icon={only.barIcon}
+              label={only.label}
+              onclick={only.onselect}
             />
           {:else}
-            <BarItem
-              icon={IconSuccessLinear}
-              label={said.resolve}
-              onclick={() => onresolve(true)}
-            />
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <BarItem
+                    icon={IconMoreLinear}
+                    label={commonWords.moreFor(`comment ${pin.number}`)}
+                    {props}
+                  />
+                {/snippet}
+              </DropdownMenu.Trigger>
+              <!-- Hung from the group's glass as one shape with it (BarMenu). -->
+              <BarMenu label={commonWords.moreFor(`comment ${pin.number}`)}>
+                {#each moreActions as action (action.label)}
+                  <DropdownMenu.Item onSelect={action.onselect}>
+                    <action.icon /><span>{action.label}</span>
+                  </DropdownMenu.Item>
+                {/each}
+              </BarMenu>
+            </DropdownMenu.Root>
           {/if}
-          {#if !fromChip}
-            <!-- One press asks, under the bar where it was pressed (AskHere). -->
-            <!-- Its question standing under the bar, it stands pressed, as a
-                 control whose card is open does. -->
-            <BarItem
-              data-slot="delete"
-              expanded={asks.pending?.at === "delete"}
-              icon={IconTrashLinear}
-              label={said.deleteComment}
-              onclick={askDelete}
-              open={asks.pending?.at === "delete"}
-            />
-            {#if moreActions.length === 1 && moreActions[0]}
-              {@const only = moreActions[0]}
-              <!-- One thing is a button of its own, never a More holding it. -->
-              <BarItem
-                icon={only.barIcon}
-                label={only.label}
-                onclick={only.onselect}
-              />
-            {:else}
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger>
-                  {#snippet child({ props })}
-                    <BarItem
-                      icon={IconMoreLinear}
-                      label={commonWords.moreFor(`comment ${pin.number}`)}
-                      {props}
-                    />
-                  {/snippet}
-                </DropdownMenu.Trigger>
-                <!-- Hung from the group's glass as one shape with it (BarMenu). -->
-                <BarMenu label={commonWords.moreFor(`comment ${pin.number}`)}>
-                  {#each moreActions as action (action.label)}
-                    <DropdownMenu.Item onSelect={action.onselect}>
-                      <action.icon /><span>{action.label}</span>
-                    </DropdownMenu.Item>
-                  {/each}
-                </BarMenu>
-              </DropdownMenu.Root>
-            {/if}
-          {/if}
-        </BarGlass>
-        {#if !sheet}
-          <BarGlass form="group">
-            <BarItem icon={IconClose} label={said.close} onclick={onclose} />
-          </BarGlass>
         {/if}
-      </div>
+      </BarGlass>
+      {#if !sheet}
+        <BarGlass form="group">
+          <BarItem icon={IconClose} label={said.close} onclick={onclose} />
+        </BarGlass>
+      {/if}
     </div>
-  {/if}
+  </div>
   <!-- Its title, standing put while the thread scrolls under it (the
          owner's pick on comment-card-sizing: "Its title and the reply box
          stay put while a long reply scrolls between them"): the pill while
@@ -641,44 +629,27 @@
          It has the card's whole width under the bar, as a large title stands
          under its bar (HIG, Navigation bars), never squeezed beside the
          groups. -->
-  {#if sheet && !peek}
+  {#if sheet}
     <!-- In a phone's sheet the bar holds its controls, and the title stands
          under it at the sheet's whole width, as a sheet's large title does. -->
     {@render title(true)}
   {/if}
-  {#if peek || (parent && parent !== name)}
-    <div data-slot="head" class="flex shrink-0 items-start gap-space-2">
-      {#if peek && !marked}
-        {@render headPill()}
-      {/if}
-      <div class="flex min-w-0 flex-1 flex-col gap-space-row">
-        {#if peek}
-          <!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule). -->
-          <p
-            data-slot="name"
-            class="m-0 min-w-0 text-start text-ink-strong type-label"
-            title={name}
-          >
-            <span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span>
-          </p>
-        {/if}
-        {#if parent && parent !== name}
-          <p
-            data-slot="chain"
-            class="m-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
-            title={`on ${parent}`}
-          >
-            on {parent}
-          </p>
-        {/if}
-      </div>
-    </div>
+  {#if parent && parent !== name}
+    <!-- The page names it once the thread is open: it unfolds under the
+         title of a card already standing (a hover pressed), so what was
+         being read slides rather than jumps. -->
+    <p
+      data-slot="chain"
+      class="m-0 min-w-0 shrink-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
+      title={`on ${parent}`}
+      transition:unfold
+    >
+      on {parent}
+    </p>
   {/if}
-  {#if !peek}
-    <!-- Delete, asked here, under the bar where it was pressed: a question
-         of its own (AskHere), never a line of the foot's. -->
-    <AskHere asker={asks} at="delete" />
-  {/if}
+  <!-- Delete, asked here, under the bar where it was pressed: a question
+       of its own (AskHere), never a line of the foot's. -->
+  <AskHere asker={asks} at="delete" />
 </div>
 <!-- What the comment holds, the one part that scrolls, between the title
      and the reply; the house edge fade says there is more past either edge.
@@ -692,7 +663,7 @@
   onscroll={readAt}
   bind:this={roomEl}
 >
-  {#if !peek && pin.movedAt}
+  {#if pin.movedAt}
     <!-- Its element is gone: said once, and pinned anew with the next tap on the page. Its action a small outline button, never the link's coral beside Reply's (one coral per view). -->
     <div
       data-slot="gone"
@@ -708,7 +679,7 @@
         variant="outline"
       />
     </div>
-  {:else if !peek && pin.resolvedAt}
+  {:else if pin.resolvedAt}
     <!-- Resolved, and when: Reopen is the floating group's, said once. -->
     <p
       data-slot="resolved"
@@ -718,7 +689,7 @@
       {said.resolvedAgo(resolvedAge)}
     </p>
   {/if}
-  {#if !peek && whyNotSent}
+  {#if whyNotSent}
     <!-- Its delivery reached no one, it stands only on the page, or the hub refused a write of it: why, with Try again (the pane's `notSentWhy` says when). -->
     <div
       data-slot="not-sent"
@@ -787,65 +758,63 @@
       </li>
     {/each}
   </ol>
-  {#if changes && !peek}
+  {#if changes}
     <div data-slot="pin-changes">{@render changes(pin)}</div>
   {/if}
 </div>
-{#if !peek}
-  <div
-    bind:this={foot}
-    data-slot="foot"
-    class="flex shrink-0 flex-col gap-space-2"
-  >
-    {#if sent && session}
-      <!-- Who has the comment, as its status, never as a reply: "Sent to" the
+<div
+  bind:this={foot}
+  data-slot="foot"
+  class="flex shrink-0 flex-col gap-space-2"
+>
+  {#if sent && session}
+    <!-- Who has the comment, as its status, never as a reply: "Sent to" the
          session's chip, and while the session is on it "· working on it"
          with the live dot (core `words/comments.ts`). -->
-      <p
-        data-slot="sent-to"
-        class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-1 gap-y-0 text-ink-muted type-meta"
-      >
-        <span>{said.sentTo}</span>
-        {#if sentTo?.draw === "element"}
-          <sentTo.element id={sentTo.id} kind={sentTo.kind} label={agentName} />
-        {:else}
-          <span>{agentName}</span>
-        {/if}
-        {#if live}
-          <span
-            class="inline-flex items-center gap-space-1 mark-line"
-            data-slot="working"
-            ><span aria-hidden="true">·</span><span
-              class="grid place-items-center"
-              data-box><LiveDot /></span
-            ><span>{said.workingOnIt}</span></span
-          >
-        {/if}
-      </p>
-    {/if}
-    <!-- A Copy link the browser refused, over the reply, with Try again and
+    <p
+      data-slot="sent-to"
+      class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-1 gap-y-0 text-ink-muted type-meta"
+    >
+      <span>{said.sentTo}</span>
+      {#if sentTo?.draw === "element"}
+        <sentTo.element id={sentTo.id} kind={sentTo.kind} label={agentName} />
+      {:else}
+        <span>{agentName}</span>
+      {/if}
+      {#if live}
+        <span
+          class="inline-flex items-center gap-space-1 mark-line"
+          data-slot="working"
+          ><span aria-hidden="true">·</span><span
+            class="grid place-items-center"
+            data-box><LiveDot /></span
+          ><span>{said.workingOnIt}</span></span
+        >
+      {/if}
+    </p>
+  {/if}
+  <!-- A Copy link the browser refused, over the reply, with Try again and
        the link under Show details: the menu that asked has closed. -->
-    <RowFault
-      again={copyLink}
-      data-copy-refused
-      details={link}
-      end="var(--spacing-space-3)"
-      indent="var(--spacing-space-3)"
-      reason={linkRefused ? copyRefused("Link") : null}
-    />
-    <!-- The reply takes the keyboard only when he reaches for it (a tap or a
+  <RowFault
+    again={copyLink}
+    data-copy-refused
+    details={link}
+    end="var(--spacing-space-3)"
+    indent="var(--spacing-space-3)"
+    reason={linkRefused ? copyRefused("Link") : null}
+  />
+  <!-- The reply takes the keyboard only when he reaches for it (a tap or a
        click in the field, Tab): a thread opens to be read, and a phone's
        keyboard rising with it covered most of what it says. Its caret is its
        focus (The Caret Rule). -->
-    <CommentComposer
-      action="Reply"
-      {draft}
-      onchange={ondraft}
-      {onhold}
-      onsubmit={onreply}
-      {placeholder}
-      sendError={problem ?? ""}
-      {sending}
-    />
-  </div>
-{/if}
+  <CommentComposer
+    action="Reply"
+    {draft}
+    onchange={ondraft}
+    {onhold}
+    onsubmit={onreply}
+    {placeholder}
+    sendError={problem ?? ""}
+    {sending}
+  />
+</div>

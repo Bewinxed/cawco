@@ -1068,17 +1068,13 @@ export function startPins(deps: PinsDeps): Pins {
       if (!where?.pill) {
         return;
       }
-      const { box } = where.pill;
       deps.outline(where.el, true);
-      const shown = where.page ? 0 : 1;
+      // Where the open thread's card is told it stands (`tell`): the thread
+      // the rest draws is the card a press keeps, standing where it will.
       deps.post("cawco:peek", {
         id,
-        mark: {
-          x: box.x - shown * scrollX,
-          y: box.y - shown * scrollY,
-          w: box.w,
-          h: box.h,
-        },
+        mark: shownBox(where, where.pill),
+        box: shownStanding(where),
       });
     });
     g.addEventListener("pointerleave", () => {
