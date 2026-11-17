@@ -11679,7 +11679,9 @@ export const createServer = (
   stallOfPort.fill((instanceId) => {
     const stall = atLimit.stall(instanceId) ?? strandedStall(instanceId);
     // A ChatGPT session stopped on its plan offers its way on.
-    const offer = stall && stallOffer(db, resolvedModel, instanceId);
+    const offer =
+      stall &&
+      stallOffer(db, { listing: modelListing, resolvedModel }, instanceId);
     return offer ? { ...stall, offer } : stall;
   });
   stalledNowPort.fill(() => [

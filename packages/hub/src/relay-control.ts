@@ -528,8 +528,16 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     const current = row.accountId
       ? ctx.db.accounts.get(row.accountId)?.provider
       : undefined;
+    // Read against the account it runs on: an OpenCode `openai/…` model
+    // stays on the OpenAI API key it runs on, a ChatGPT plan signed in or
+    // not (launch-accounts.ts `accountProviderFor`).
     return (
-      ctx.accountProviderFor(row.machineId, row.harness, model) !== current
+      ctx.accountProviderFor(
+        row.machineId,
+        row.harness,
+        model,
+        row.accountId ?? undefined
+      ) !== current
     );
   };
 

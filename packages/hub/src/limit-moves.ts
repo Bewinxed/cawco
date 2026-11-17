@@ -250,7 +250,12 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   ): string | undefined => {
     const to = accountId ? ctx.db.accounts.get(accountId) : undefined;
     const toName = ctx.accountWords(accountId);
-    const provider = ctx.accountProviderFor(row.machineId, row.harness, model);
+    const provider = ctx.accountProviderFor(
+      row.machineId,
+      row.harness,
+      model,
+      to?.id
+    );
     if (to && to.provider !== provider) {
       return provider
         ? owedMoveWords.pickRefused.otherProvider(

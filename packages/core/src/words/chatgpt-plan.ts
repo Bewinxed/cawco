@@ -24,8 +24,8 @@ export const chatgptPlanWords = {
   other: "Continue on another agent or model",
   /** The way on after what stopped it, with an API key signed in on its machine. */
   way: "Continue it on your API key or on another agent or model",
-  /** The same with none signed in there. */
-  wayNoKey: `Continue it on another agent or model, or add an OpenAI API key in ${configurePage("accounts")}`,
+  /** The same with no API key that can run it there. */
+  wayNoKey: "Continue it on another agent or model",
 
   // ── Left on no account by its plan's removal or sign-out (hub `strandedStall`) ─
   /** Its plan was removed: it goes on no other. */

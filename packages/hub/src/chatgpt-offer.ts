@@ -1,4 +1,11 @@
-import { isChatgptPlan, isOpenaiKey, modelOn } from "@cawco/core/accounts";
+import {
+  isChatgptPlan,
+  isOpenaiKey,
+  modelOn,
+  providersOpenedBy,
+} from "@cawco/core/accounts";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
+import { type ModelListing, modelAdmitted } from "@cawco/core/model-names";
 import type { StallOffer } from "@cawco/core/protocol";
 import type { DbShape } from "./db";
 import { signedInOn } from "./placement";
@@ -21,17 +28,24 @@ const stoppedOnPlan = (db: DbShape, instanceId: string): boolean => {
 /**
  * What a session stopped on a ChatGPT plan offers the person (core
  * `StallOffer`), or undefined for any other stop: to continue on the
- * OpenAI API-key account signed in on its machine, first by order, on its
- * model as that key opens it, and always on another agent or model.
- * `resolvedModel` names a bare model as its harness resolves it (server.ts).
+ * OpenAI API-key account signed in on its machine, first by order, and
+ * always on another agent or model. The key's model is the session's own
+ * as that key opens it, where its harness lists it there; else the first
+ * model of the key's provider the harness lists. With none listed, the key
+ * can't run it there, and only another agent or model is offered.
+ * `resolvedModel` names a bare model as its harness resolves it, `listing`
+ * is what the harness lists on a machine (server.ts).
  */
 export const stallOffer = (
   db: DbShape,
-  resolvedModel: (
-    machineId: string,
-    harness: string,
-    model: string | null | undefined
-  ) => string | null | undefined,
+  how: {
+    listing: (machineId: string, harness: HarnessKind) => ModelListing;
+    resolvedModel: (
+      machineId: string,
+      harness: string,
+      model: string | null | undefined
+    ) => string | null | undefined;
+  },
   instanceId: string
 ): StallOffer | undefined => {
   const [row] = db.getInstancesByIds([instanceId]);
@@ -45,12 +59,22 @@ export const stallOffer = (
       (one) => isOpenaiKey(one) && signedInOn(signins, one.id, row.machineId)
     )
     .sort((a, b) => a.order - b.order);
-  const model = key
-    ? modelOn(
-        row.harness,
-        resolvedModel(row.machineId, row.harness, row.model),
-        key.provider
-      )
-    : undefined;
-  return key && model ? { key: { accountId: key.id, model } } : {};
+  const harness = harnessNamed(row.harness);
+  if (!(key && harness)) {
+    return {};
+  }
+  const listing = how.listing(row.machineId, harness);
+  const own = modelOn(
+    harness,
+    how.resolvedModel(row.machineId, harness, row.model),
+    key.provider
+  );
+  const [opened] = providersOpenedBy(harness, key.provider);
+  const model =
+    own && modelAdmitted(harness, own, listing)
+      ? own
+      : (listing.read ? listing.rows : []).find((one) =>
+          one.value.startsWith(`${opened}/`)
+        )?.value;
+  return model ? { key: { accountId: key.id, model } } : {};
 };

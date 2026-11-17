@@ -1523,8 +1523,15 @@ export const place = (asked: PlacementInput): Placement => {
     };
   }
   // One account with room: no choice to make. Without room, the refusal.
+  // A ChatGPT session's one plan here is still its pinned one or none
+  // ({@link onPinnedPlan}).
   const [only] = allowed;
-  if (allowed.length === 1 && only && new Usage(input).room(only)) {
+  if (
+    allowed.length === 1 &&
+    only &&
+    new Usage(input).room(only) &&
+    !isChatgptPlan(only)
+  ) {
     return {
       ok: true,
       accountId: only.id,

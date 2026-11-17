@@ -18,6 +18,7 @@
   import { IconChat } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import { crossIn, rise } from "#lib/platform/motion/curves.svelte.js";
+  import ChatgptOffer from "../accounts/ChatgptOffer.svelte";
   import { stopWords } from "../accounts/switch.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
@@ -302,6 +303,20 @@
     return words && key && instance
       ? { key, words, ...(offer ? { offer: { instance, offer } } : {}) }
       : undefined;
+  });
+  /**
+   * A ChatGPT session stopped on its plan whose transcript holds no account
+   * line to draw the stop on (one its plan's removal or sign-out left on no
+   * account): the stop and its offer stand after its rows instead.
+   */
+  const looseStop = $derived.by(() => {
+    if (stop) {
+      return;
+    }
+    const instance = boardStore.instanceIndex.byId.get(session.instanceId);
+    const offer = instance?.stalled?.offer;
+    const words = instance && offer ? stopWords(instance, true) : undefined;
+    return instance && offer && words ? { instance, offer, words } : undefined;
   });
   /**
    * virtua's size for a row it has not measured yet — and a transcript's
@@ -700,6 +715,26 @@
   </div>
   {#if afterRows && shown}
     <div class="isolate" data-slot="after-rows">{@render afterRows()}</div>
+  {/if}
+  {#if looseStop && shown}
+    <!-- The stop is an error: what happened and the way out, at every
+         width, as an account line's stop says it (AccountMoveDivider). -->
+    <div
+      class="isolate flex flex-col gap-space-2 mt-space-3 mb-space-1"
+      data-slot="loose-stop"
+    >
+      <p
+        class="text-center type-meta text-status-fail-ink wrap-anywhere"
+        role="alert"
+      >
+        {looseStop.words}
+      </p>
+      <ChatgptOffer
+        align="center"
+        instance={looseStop.instance}
+        offer={looseStop.offer}
+      />
+    </div>
   {/if}
   <!-- Room past the end for what rises past the composer (the ask it grows
        into, an offer on its tray row), which stands over the transcript's
