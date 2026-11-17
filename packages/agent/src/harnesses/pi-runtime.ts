@@ -32,13 +32,18 @@ import {
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
+  CONTROL_RELOAD_SKILLS,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
 } from "@cawco/core/session/controls";
 import { sessionEnvironment } from "@cawco/core/session-env";
-import type { ModelTurnUsage, SentMessage } from "@cawco/core/session-messages";
+import type {
+  ModelTurnUsage,
+  SentMessage,
+  SlashCommand,
+} from "@cawco/core/session-messages";
 import { MESSAGES_READ, usageByModel } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { pricedRequest } from "@cawco/core/usage/pricing";
@@ -388,11 +393,19 @@ class CawcoTools {
     this.#credential = credential;
   }
 
-  /** The inline extension: holds pi's API and registers the first list. */
+  /**
+   * The inline extension: holds pi's API and registers the first list. pi
+   * runs it again on each reload of the session's runtime (`AgentSession.reload`,
+   * {@link CONTROL_RELOAD_SKILLS}) with a fresh API that holds no tool of
+   * CawCo's, so a reload registers the list the session last had.
+   */
   extension(first: ToolDefinition[]): ExtensionFactory {
     return (pi) => {
       this.#api = pi;
-      this.#register(first);
+      const listed =
+        this.#registered.size > 0 ? [...this.#registered.values()] : first;
+      this.#registered.clear();
+      this.#register(listed);
     };
   }
 
@@ -486,11 +499,22 @@ class FleetMcp {
     this.#set = set;
   }
 
-  /** The inline extension: holds pi's API and registers the session's first set. */
+  /** The servers last applied ({@link #apply}): what a reload registers again. */
+  #servers: Record<string, McpServerConfig> | undefined;
+
+  /**
+   * The inline extension: holds pi's API and registers the session's first
+   * set. pi runs it again on each reload of the session's runtime
+   * (`AgentSession.reload`, {@link CONTROL_RELOAD_SKILLS}) with a fresh API
+   * whose registrations are empty ("Registrations are not saved: register
+   * again on every load", pi docs/extensions.md), so a reload registers the
+   * set last applied anew.
+   */
   extension(first: Record<string, McpServerConfig>): ExtensionFactory {
     return (pi) => {
       this.#api = pi;
-      this.#apply(first, new Set());
+      this.#held.clear();
+      this.#apply(this.#servers ?? first, new Set());
     };
   }
 
@@ -524,6 +548,7 @@ class FleetMcp {
     if (!api) {
       throw new Error("pi has not loaded the CawCo fleet MCP extension.");
     }
+    this.#servers = servers;
     const done: Record<string, string> = {};
     for (const name of this.#held.keys()) {
       if (!(name in servers)) {
@@ -655,8 +680,9 @@ const resultText = (content: readonly { type: string; text?: string }[]) =>
  *   what a hook says (a block's reason, `additionalContext`) is added to the
  *   result the model reads, as Claude Code shows the model a PostToolUse
  *   hook's stderr;
- * - SessionStart on `session_start`, its reason the matcher's value: what it
- *   says goes with the session's first prompt;
+ * - SessionStart on `session_start`, its reason the matcher's value (a
+ *   reload of the session's runtime is none): what it says goes with the
+ *   session's first prompt;
  * - UserPromptSubmit on `before_agent_start` for a person's prompt: what it
  *   says goes with the prompt; a block ends the run before its first
  *   request ("An abort requested while the run was starting, e.g. during
@@ -762,6 +788,11 @@ class FleetHooks {
           : undefined;
       });
       pi.on("session_start", async (event, context) => {
+        // A reload of the running session's runtime (`#reloadSkills`)
+        // starts no session: no Claude Code event matches it.
+        if (event.reason === "reload") {
+          return;
+        }
         const verdict = await this.#run(
           "SessionStart",
           event.reason,
@@ -1645,6 +1676,7 @@ class PiSession implements HarnessSession {
     [CONTROL_SUPPORTED_MODELS]: () => modelCatalog(this.#runtime),
     // pi has no slash commands.
     [CONTROL_SUPPORTED_COMMANDS]: () => Promise.resolve([]),
+    [CONTROL_RELOAD_SKILLS]: () => this.#reloadSkills(),
     [CONTROL_CONTEXT_USAGE]: () => {
       // The last message that carries a usage: an answer's, or a tool
       // result's own (pi-ai types.d.ts `ToolResultMessage.usage`).
@@ -1668,6 +1700,31 @@ class PiSession implements HarnessSession {
       });
     },
   };
+  /**
+   * The folder's skills read again in the running session, by pi's own
+   * reload (`AgentSession.reload`, what its `/reload` runs: "Run `/reload`
+   * after editing a skill during an active session", pi docs/skills.md),
+   * once the turn under way has ended, since pi refuses a reload while one
+   * streams. pi's reload is its whole runtime's: it reads its settings,
+   * context files and extensions again too, and its MCP extension
+   * reconnects its servers on the `session_start` that follows. Answers the
+   * skills pi lists now, each as the `/` menu's skill.
+   */
+  async #reloadSkills(): Promise<{ skills: SlashCommand[] }> {
+    await this.#session.waitForIdle();
+    await this.#session.reload();
+    return {
+      skills: this.#session.resourceLoader
+        .getSkills()
+        .skills.map((skill) => ({
+          name: skill.name,
+          description: skill.description,
+          argumentHint: "",
+          kind: "skill" as const,
+        })),
+    };
+  }
+
   /** pi has no permission modes and no question tool, and puts no call to the hub: there is no ask to answer. */
   resolvePermission(): void {
     throw new Error(PI_ASKS_NOTHING);
@@ -1916,7 +1973,16 @@ export async function startPiHost(
   // `session_start` reaches the extensions, on which the MCP extension
   // connects its servers ("The MCP extension connects its servers on
   // `session_start`, so call `session.bindExtensions()`", pi.dev/docs/latest/sdk).
-  await session.bindExtensions({});
+  // A reload of the session (`#reloadSkills`) emits `session_start` again only
+  // to a session bound to something ("hasBindings", agent-session.js
+  // `reload`): its extensions' errors, said on the host's log, are what it
+  // is bound to.
+  await session.bindExtensions({
+    onError: (error) =>
+      console.error(
+        `[pi] ${ctx.instanceId}: extension ${error.extensionPath} failed on ${error.event}: ${error.error}`
+      ),
+  });
   launchEffort(session, spec.effort, ctx.instanceId);
   await loadSkills(session, spec.skills ?? [], ctx.cwd);
   return new PiSession(

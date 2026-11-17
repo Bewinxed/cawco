@@ -288,6 +288,7 @@ const PI_TRAITS = {
     "setEffort",
     "supportedModels",
     "supportedCommands",
+    "reloadSkills",
     "getContextUsage",
   ],
   liveSkillReload: false,

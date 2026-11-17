@@ -208,7 +208,7 @@ const PI_CAPABILITIES: HarnessCapabilities = {
   contextUsage: true,
   supportedModels: true,
   supportedCommands: true,
-  reloadSkills: false,
+  reloadSkills: true,
   mcpStatus: true,
   mcpControl: false,
   listSessions: true,
