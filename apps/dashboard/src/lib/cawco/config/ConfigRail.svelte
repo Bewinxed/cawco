@@ -17,7 +17,7 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { badgeOf, countOf } from "./counts.svelte";
   import { unsavedIn } from "./drafts.svelte";
-  import { GROUPS, type SectionSlug } from "./sections";
+  import { type SectionSlug, shownGroups } from "./sections";
   import { configStore } from "./store.svelte";
 
   let {
@@ -86,7 +86,7 @@
   })}
   {@attach shown}
 >
-  {#each GROUPS as { group, sections } (group)}
+  {#each shownGroups() as { group, sections } (group)}
     <div data-slot="group" class="flex flex-col">
       <h2
         data-slot="config-rail-label"

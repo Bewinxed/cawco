@@ -4,7 +4,6 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import { unhandled } from "@cawco/core/unhandled";
   import { configureWords } from "@cawco/core/words/configure";
-  import { ownToolsWords } from "@cawco/core/words/own-tools";
   import DeleteFault from "#lib/cawco/config/DeleteFault.svelte";
   import { deleteAgent } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -24,13 +23,11 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
-  import { ownToolsStore } from "#lib/cawco/stores/own-tools.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
-    IconChevronRight,
     IconDownload,
     IconLaptop,
     IconPlus,
@@ -40,8 +37,8 @@
 
   /**
    * Subagents, fleet-wide: define one and every Claude Code session CawCo
-   * starts loads it, called only while the fleet's helpers are the agent's
-   * own subagents (Configure › Helpers & step lists). Two lists, because there are two truths — what the
+   * starts loads it, shown only while the fleet's helpers are the agent's own
+   * subagents (Configure › Helpers & step lists). Two lists, because there are two truths — what the
    * fleet keeps, and what the machines really have, read live off disk.
    */
   const store = configStore();
@@ -201,24 +198,6 @@
     </Button>
   {/snippet}
 
-  {#if ownToolsStore.read && ownToolsStore.shown.helpers !== "subagents"}
-    <!-- Sessions are denied their own subagents while their helpers are
-         CawCo's delegates (core own-tools.ts): these load, and none calls
-         them. -->
-    <p
-      class="m-0 flex max-w-c-measure flex-wrap items-center gap-x-space-2 type-meta text-pretty text-ink-muted"
-      data-slot="note"
-    >
-      <span>{ownToolsWords.subagentsUncalled}</span>
-      <a
-        class="mark-line touch-hit pointer-hit inline-flex items-center gap-space-row type-meta whitespace-nowrap text-link-ink no-underline transition-[opacity] duration-(--duration-control) ease-out hover:text-link-hover active:opacity-72"
-        href="/config/helpers"
-      >
-        <span>{ownToolsWords.subagentsSwitch}</span>
-        <IconChevronRight aria-hidden="true" class="size-icon-sm" data-box />
-      </a>
-    </p>
-  {/if}
   {#if agents.length === 0}
     <EmptyState
       icon={section.icon}

@@ -7,7 +7,11 @@
    */
   import { onMount } from "svelte";
   import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
-  import { LAST_KEY, SECTIONS } from "#lib/cawco/config/sections.js";
+  import {
+    LAST_KEY,
+    SECTIONS,
+    sectionShown,
+  } from "#lib/cawco/config/sections.js";
   import {
     ConfigStore,
     provideConfig,
@@ -15,8 +19,10 @@
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import { onFleetFetch } from "#lib/cawco/stores/machines.js";
   import { mcpServersStore } from "#lib/cawco/stores/mcp-servers.svelte.js";
+  import { ownToolsStore } from "#lib/cawco/stores/own-tools.svelte.js";
   import { pageIn, pageOut } from "#lib/platform/motion/route.svelte.js";
   import { store as storeLocally } from "#lib/platform/storage.js";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
 
   let { children } = $props();
@@ -58,6 +64,14 @@
     SECTIONS.find((section) => section.slug === page.url.pathname.split("/")[2])
       ?.slug
   );
+
+  // A section that isn't shown, opened by its address, goes to the page that
+  // switches it on, once the hub has said which way the switch is set.
+  $effect(() => {
+    if (slug && ownToolsStore.read && !sectionShown(slug)) {
+      detach(goto("/config/helpers", { replaceState: true }), "goto");
+    }
+  });
 
   $effect(() => {
     if (slug) {

@@ -48,7 +48,11 @@
   } from "../platform/motion/share.svelte";
   import { stored } from "../platform/storage";
   import { epochOf } from "./board.svelte";
-  import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
+  import {
+    LAST_KEY as CONFIG_LAST_KEY,
+    SECTIONS,
+    sectionShown,
+  } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
   import { files, filesCount } from "./files/files.svelte";
   import { areaIdOf, areas } from "./home/areas.svelte";
@@ -158,7 +162,7 @@
     } else {
       last = stored("local", CONFIG_LAST_KEY);
     }
-    return `/config/${SECTIONS.some((section) => section.slug === last) ? last : "rules"}`;
+    return `/config/${SECTIONS.some((section) => section.slug === last && sectionShown(section.slug)) ? last : "rules"}`;
   });
   const configuring = $derived(path.startsWith("/config"));
   /**

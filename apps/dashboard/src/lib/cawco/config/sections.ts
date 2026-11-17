@@ -5,6 +5,7 @@ import {
   type ConfigSlug,
 } from "@cawco/core/words/configure";
 import type { Component } from "svelte";
+import { ownToolsStore } from "#lib/cawco/stores/own-tools.svelte.js";
 import {
   IconAccounts,
   IconBolt,
@@ -100,3 +101,18 @@ export const GROUPS = CONFIG_GROUPS.map((group) => ({
 
 /** Where the Configure sidebar link goes: the section last opened. */
 export const LAST_KEY = "cawco.config.last";
+
+/**
+ * Whether a section is on the rail. Subagents show only while the fleet's
+ * helpers are the agent's own subagents (Configure › Helpers & step lists);
+ * a switch not yet chosen counts as CawCo's way.
+ */
+export const sectionShown = (slug: SectionSlug): boolean =>
+  slug !== "subagents" || ownToolsStore.shown.helpers === "subagents";
+
+/** The rail's groups with the sections shown; reads the switch, so call it in a reactive scope. */
+export const shownGroups = () =>
+  GROUPS.map(({ group, sections }) => ({
+    group,
+    sections: sections.filter((section) => sectionShown(section.slug)),
+  }));

@@ -144,9 +144,4 @@ export const ownToolsWords = {
     `Step lists: ${nameOf(STEP_LIST_OPTIONS, picked)}`,
   /** Under the last of the two steps done. */
   stepNote: "Change it in Configure › Helpers & step lists.",
-
-  /** Configure › Subagents, while helpers are CawCo's delegates. */
-  subagentsUncalled:
-    "Sessions can't call these while their helpers are CawCo's delegates.",
-  subagentsSwitch: "Change it in Helpers & step lists",
 };
