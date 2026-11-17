@@ -326,10 +326,16 @@ export async function loadMcpServers(
   ) {
     return;
   }
-  // Asked only of a session whose harness answers it (core traits.ts
-  // `sessionControls`): pi's reports the fleet's MCP servers on its machine
-  // (its `mcpStatus` capability) but its sessions list none.
-  if (!answersControl(target.harness, CONTROL_MCP_STATUS)) {
+  // Asked only of a session whose machine reports its harness lists MCP
+  // servers (`mcpStatus`), as every read here is gated on what the machine
+  // reported, and whose harness's sessions answer the control (core
+  // traits.ts `sessionControls`): pi's reports the fleet's MCP servers on its
+  // machine but its sessions list none, and a machine whose Claude reports no
+  // `mcpStatus` (the binary suite's test harness) holds sessions that refuse it.
+  if (!(
+    harnessCan({ machineId, harness: target.harness }, "mcpStatus") &&
+    answersControl(target.harness, CONTROL_MCP_STATUS)
+  )) {
     return;
   }
   target.mcpPending = true;
