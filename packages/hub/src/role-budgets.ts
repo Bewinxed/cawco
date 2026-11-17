@@ -151,6 +151,10 @@ import {
  * document"): memory_note takes `fleet`, memory_propose takes `fleet` for a
  * fleet document, and the curator's memory_read reads the fleet's documents
  * with `fleet` (worker 30,973, delegate 11,430, curator 1,372 measured).
+ * 2026-11-17: finish_item and delegate say the hub lands by rebase and push
+ * and the delegate runs its project's checks itself, and finish_item takes
+ * no `ship` (the owner that day: "this whole gate thing is made up")
+ * (worker 30,961, delegate 11,346 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 30_985,

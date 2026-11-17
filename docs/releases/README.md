@@ -2,9 +2,9 @@
 
 Every build carries its own notes. A stable release reads `docs/releases/<version>.md`.
 A nightly takes them from a file: `bash scripts/ship.sh --commit <sha> --notes /abs/notes.md`,
-which the nightly and the hub (an item whose `finish_item` asks to `ship`, through gate.md's
-`Ship:` line) both run. It starts `scripts/release.ts --publish` from a clean worktree of the
-commit as a user unit of its own and returns. Every TestFlight build takes notes too:
+which the nightly runs, and anyone releasing by hand on the hub's machine. It starts
+`scripts/release.ts --publish` from a clean worktree of the commit as a user unit of its own
+and returns. Every TestFlight build takes notes too:
 `apps/apple/scripts/testflight.sh --commit <sha> --notes <file>`. To correct a build that
 has already shipped, run `testflight.sh --set-notes <build> <file>`.
 

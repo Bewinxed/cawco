@@ -18,7 +18,7 @@ Any work: a project is code and more than code, a repository, a launch, an X acc
 
 It is self-hosted and watches the whole fleet. When several agents are running unattended across different machines and one stalls on a permission gate, breaks, or goes silent, CawCo shows which session needs attention without opening every terminal or SSHing into every box. The operator can approve, redirect, or kill it before it wastes context, cost, or blocks downstream work.
 
-A project is one identity across machines and kinds of work. The operator talks to it through Caw, in the project's conversation (a session whose scope is the project); work that must outlive a chat becomes tasks; code runs the tasks, the merge checks and the landing; models judge; the operator decides. "Done" means on main, or a pull request that exists.
+A project is one identity across machines and kinds of work. The operator talks to it through Caw, in the project's conversation (a session whose scope is the project); work that must outlive a chat becomes tasks; code runs the tasks and the landing; models judge; the operator decides. "Done" means on main, or a pull request that exists.
 
 Success means the operator trusts the board: an empty board with a live connection genuinely means nothing needs them, and a "needs you" signal is never a false negative.
 
@@ -56,7 +56,7 @@ Away from a desk, the operator uses the Caw&Co app on iPhone, iPad and Mac, or t
 - Projects: one identity across places (checkouts on any machine, delegates' workspaces, the hub folder); made by talking to Caw, or offered once by Caw when a plain session outgrows itself
 - The project's conversation: a session whose scope is the project, which its events reach (a routine, a report, a GitHub event) while the project's switch is on; off, only the person's words reach it
 - Tasks: task files with stages the project names on six fixed kinds, to-dos, edges and attempts, shown in views (board, table, calendar, pipeline, canvas, or one Caw builds); a tracker of CawCo's files, GitHub Issues or Linear, never two-way
-- Delegation and landing: every session that changes code works in its own workspace; the hub lands its commits on main through the merge checks the project's gate.md names; the delegation tree is how multi-step work runs (no workflow engine)
+- Delegation and landing: every session that changes code works in its own workspace; the session runs its project's checks, and the hub lands its commits on main by rebase and push; the delegation tree is how multi-step work runs (no workflow engine)
 - Routines: scheduled or event-fired work that starts a delegate, an orchestrator or a message to Caw, once per slot
 - Plans: every session keeps its plan in CawCo's list on every harness; the person's edits reach it at its next step
 - Artifacts: pages, canvases, previews, component canvases and the project's browser, kept by the hub, with picks, pins, comments and ink that reach the session that made them
