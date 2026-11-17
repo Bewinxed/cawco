@@ -212,9 +212,7 @@ import {
   claudeSignins,
   dirIdentity,
   folderCommands,
-  linkProjectMemory,
   probeAccount,
-  projectMemoryRoot,
 } from "../accounts";
 import { CLAUDE_NOT_INSTALLED, claudeExecutable } from "../auth";
 import {
@@ -1971,13 +1969,22 @@ const compactionHooks = (
       };
 
 /**
- * A clean session's environment: no auto memory, which `settingSources: []`
- * keeps (its `MEMORY.md` still reached a request with no setting source,
- * 2.1.319), and no CLAUDE.md from anywhere, an added directory's included
+ * Every session's environment: no auto memory, so what lasts goes through
+ * CawCo's `memory_note`. The env var outranks every settings layer ("Set to
+ * `1` to disable auto memory. Set to `0` to force auto memory on even when
+ * `--bare` mode or `autoMemoryEnabled: false` would otherwise disable it",
+ * code.claude.com/docs/en/env-vars), so it is set last, over the caller's.
+ */
+const SESSION_ENV = {
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+} as const;
+
+/**
+ * A clean session's environment besides {@link SESSION_ENV}: no CLAUDE.md
+ * from anywhere, an added directory's included
  * (`fI(){return Boolean(i.CLAUDE_CODE_DISABLE_CLAUDE_MDS||…)}`, 2.1.319).
  */
 const CLEAN_ENV = {
-  CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
   CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1",
 } as const;
 
@@ -2389,6 +2396,7 @@ const sessionSpecOf = (
               CLAUDE_CONFIG_DIR: undefined,
               CLAUDE_SECURESTORAGE_CONFIG_DIR: undefined,
             }),
+        ...SESSION_ENV,
         ...(clean ? CLEAN_ENV : {}),
       },
     },
@@ -5299,11 +5307,6 @@ class ClaudeHarness implements Harness<"claude"> {
       );
     }
     const cwd = await realpath(ctx.cwd).catch(() => ctx.cwd);
-    // The project's auto memory is the user's, whichever account runs it.
-    await linkProjectMemory(
-      configDir,
-      projectSlug(await projectMemoryRoot(cwd))
-    );
     // Whether the conversation it resumes is where its CLI reads it: asked
     // before the launch, and again of a CLI that ends on its own, which is
     // then that conversation gone ({@link processEnded}).

@@ -52,6 +52,7 @@ import {
   listDelegateTypesTool,
   loadsUpfront,
   type ToolView,
+  type UpfrontFor,
 } from "./delegation-tools";
 import type {
   DelegateList,
@@ -143,13 +144,12 @@ const TOOL_USE_META = CLAUDE_CALL_META;
 
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
-/** Whether `row` is a session that searches most: an orchestrator or a project's Caw ({@link loadsUpfront}). */
-const searcher = (row: InstanceRow | undefined): boolean =>
-  row !== undefined && memoryRoleOf(row) === "orchestrator";
-
-/** Whether `session` files and links tasks: its core task tools load upfront together ({@link loadsUpfront}). */
-const filesTasks = (row: InstanceRow | undefined): boolean =>
-  row !== undefined && allows(row, "task_link");
+/** The role-bound groups that load upfront for `row` ({@link loadsUpfront}); none for discovery, which has no session. */
+const upfrontFor = (row: InstanceRow | undefined): UpfrontFor => ({
+  searcher: row !== undefined && memoryRoleOf(row) === "orchestrator",
+  filesTasks: row !== undefined && allows(row, "task_link"),
+  notes: row !== undefined && !!row.projectId && allows(row, "memory_note"),
+});
 
 /**
  * A tool as `tools/list` answers it to `row`. One that loads upfront for it
@@ -181,7 +181,7 @@ export const listedFor =
       description,
       inputSchema: objectSchema,
       ...("annotations" in entry ? { annotations: entry.annotations } : {}),
-      ...(loadsUpfront(name, searcher(row), filesTasks(row))
+      ...(loadsUpfront(name, upfrontFor(row))
         ? { _meta: { "anthropic/alwaysLoad": true } }
         : {}),
     };
@@ -1264,11 +1264,7 @@ export function createDelegationMcp(options: {
     const namesOf = (row: InstanceRow | undefined) =>
       toolsFor(row).map((tool) => tool.name);
     const upfrontOf = (listed: string[]) =>
-      new Set(
-        listed.filter((name) =>
-          loadsUpfront(name, searcher(bound), filesTasks(bound))
-        )
-      );
+      new Set(listed.filter((name) => loadsUpfront(name, upfrontFor(bound))));
     if (!bound) {
       const names = namesOf(undefined);
       return {

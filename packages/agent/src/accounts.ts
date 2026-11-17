@@ -1,13 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-  lstat,
-  readdir,
-  realpath,
-  rename,
-  rm,
-  rmdir,
-  symlink,
-} from "node:fs/promises";
+import { lstat, readdir, rename, rm, rmdir, symlink } from "node:fs/promises";
 import { platform, userInfo } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { query, type SlashCommand } from "@anthropic-ai/claude-agent-sdk";
@@ -27,7 +19,6 @@ import {
   accountConfigDir,
   accountIds,
   claudeHome,
-  projectMemoryDir,
   removeAccountRoot,
   sessionConfigDir,
   USER_LAYER_DIRS,
@@ -42,7 +33,6 @@ import { z } from "zod";
 import { idle } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
-import { hostGit } from "./git/run";
 import { keychainLocked, loginKeychainPath } from "./login-keychain";
 import { probeStarted } from "./probe-count";
 
@@ -840,10 +830,9 @@ export const folderCommands = async (
  * of its dirs ({@link USER_LAYER_DIRS}, made in {@link claudeHome} when it is
  * not there yet, so an account never starts a copy of its own) and each of
  * its files `claudeHome` has ({@link USER_LAYER_FILES}) becomes a symlink to
- * the user's one copy; and so does each project's auto memory either side
- * has ({@link memorySlugs}, {@link linkProjectMemory}). A dir the account already has of its own
- * is moved into the user's copy first ({@link shareDir}); a file of its own
- * is left alone and said in the log.
+ * the user's one copy. A dir the account already has of its own is moved
+ * into the user's copy first ({@link shareDir}); a file of its own is left
+ * alone and said in the log.
  */
 export const linkUserLayer = async (account: string): Promise<void> => {
   const dir = accountConfigDir(account);
@@ -873,58 +862,6 @@ export const linkUserLayer = async (account: string): Promise<void> => {
       });
     }),
   ]);
-  for (const slug of await memorySlugs(dir)) {
-    await linkProjectMemory(dir, slug);
-  }
-};
-
-/**
- * The projects whose auto memory an account dir links at link time: each one
- * {@link claudeHome} has a memory for, and each one the account dir has a
- * memory of its own for (moved into the user's copy as it is linked). A
- * project neither has one for is linked when a session launches in it.
- */
-const memorySlugs = async (configDir: string): Promise<string[]> => {
-  const withMemory = async (root: string): Promise<string[]> => {
-    const projects = await readdir(join(root, "projects"), {
-      withFileTypes: true,
-    }).catch(() => []);
-    const found = await Promise.all(
-      projects.map(async (project) =>
-        project.isDirectory() &&
-        (await lstat(projectMemoryDir(root, project.name)).catch(
-          () => undefined
-        ))
-          ? project.name
-          : undefined
-      )
-    );
-    return found.filter((slug): slug is string => slug !== undefined);
-  };
-  return [
-    ...new Set([
-      ...(await withMemory(claudeHome())),
-      ...(await withMemory(configDir)),
-    ]),
-  ];
-};
-
-/**
- * The folder Claude Code keys a project's auto memory by: the canonical git
- * root (the dir holding `--git-common-dir`'s `.git`, so every worktree of a
- * repo shares its main checkout's memory), else the dir itself, each by its
- * real path. Found by a rig run of Claude Code 2.1.289: a linked worktree's
- * memory went under the main repo's slug.
- */
-export const projectMemoryRoot = async (cwd: string): Promise<string> => {
-  const common = await hostGit(cwd, [
-    "rev-parse",
-    "--path-format=absolute",
-    "--git-common-dir",
-  ]).catch(() => undefined);
-  const dir = common?.exitCode === 0 ? common.stdout.toString().trim() : "";
-  const root = dir.endsWith("/.git") ? dirname(dir) : cwd;
-  return await realpath(root).catch(() => root);
 };
 
 /** Two files with the same bytes; never two dirs. */
@@ -943,11 +880,11 @@ const sameFile = async (a: string, b: string): Promise<boolean> => {
 /**
  * The link being made now at each config-dir path, as a promise that never
  * rejects. A link is a look then a change (lstat, then move and symlink), and
- * launches run in parallel: ten sessions started at once in one project each
- * link its memory, and every one that looked before the first had linked
- * failed its symlink with EEXIST, its launch with it. So one path is linked by
- * one call at a time: a later call waits for the earlier one to end, then
- * looks, finds the link, and returns.
+ * an account's user layer can be linked by two callers at once (a fleet sync
+ * and a login), where every one that looked before the first had linked
+ * failed its symlink with EEXIST. So one path is linked by one call at a
+ * time: a later call waits for the earlier one to end, then looks, finds the
+ * link, and returns.
  */
 const linking = new Map<string, Promise<void>>();
 
@@ -1023,25 +960,6 @@ const shareDirNow = async (
   }
   await makeFolder(dirname(path));
   await symlink(target, path);
-};
-
-/**
- * Links a project's auto memory (`projects/<slug>/memory`) in a config dir to
- * the user's one copy in {@link claudeHome} ({@link shareDir}): every
- * account's session in the project reads and writes that one memory.
- */
-export const linkProjectMemory = async (
-  configDir: string,
-  slug: string
-): Promise<void> => {
-  if (resolve(configDir) === resolve(claudeHome())) {
-    return;
-  }
-  await shareDir(
-    projectMemoryDir(configDir, slug),
-    projectMemoryDir(claudeHome(), slug),
-    basename(dirname(resolve(configDir)))
-  );
 };
 
 /** Every account dir's own `.claude.json`, where its MCP servers live. */

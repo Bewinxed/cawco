@@ -284,7 +284,7 @@ const VERDICTS: readonly Verdict[] = ["lasting", ...NOT_LASTING];
 /** The verdicts as Jev's criteria: what each means for the project's lasting memory. */
 const VERDICT_CRITERIA: Record<Verdict, string> = {
   lasting:
-    "A fact about the project that stays true and helps any later session: a convention, a command, a decision, where something is.",
+    "A fact about the project that stays true and helps any later session: a convention, a command, a decision, where something is, or the person's correction or preference about how to work.",
   scaffolding:
     "About one task or this moment: a step taken, progress, a temporary state, a to-do.",
   secret: "Holds a credential, key, token, password or someone's private data.",
@@ -321,6 +321,15 @@ const answeredNote = (
 };
 
 /**
+ * Where a project keeps a short free-form document, said where knowledge/
+ * refuses one: knowledge/ takes dated fact lines alone (memory-facts.ts),
+ * and reference/ is a plain folder `folder_write` writes (Projects PRD, the
+ * project folder).
+ */
+const REFERENCE_HOME =
+  "A free-form document, such as how something is operated or made, goes in reference/, written with folder_write.";
+
+/**
  * Why no agent may write `rel` in a project's folder, or nothing: AGENTS.md
  * and `knowledge/` are the person's, `memory/` is the inbox and its
  * proposals, written through the memory tools alone, and `design/` is the
@@ -331,7 +340,7 @@ export const personsTier = (rel: string): string | undefined => {
     return "AGENTS.md is written with memory_propose, which checks the notes it cites.";
   }
   if (rel === KNOWLEDGE_DIR || rel.startsWith(`${KNOWLEDGE_DIR}/`)) {
-    return "knowledge/ is the curated tier: write it with memory_propose, which checks the notes it cites.";
+    return `knowledge/ is the curated tier of dated fact lines: write it with memory_propose, which checks the notes it cites. ${REFERENCE_HOME}`;
   }
   if (rel === MEMORY_DIR || rel.startsWith(`${MEMORY_DIR}/`)) {
     return "memory/ is the agents' inbox: write a note with memory_note.";
@@ -1109,18 +1118,26 @@ const rulingsOf = (files: FactFile[]): Set<string> =>
     )
   );
 
-/** Every line a proposal writes reads as a fact line; one already in its file unread is the person's to fix, and stays. */
+/**
+ * Every line a proposal writes reads as a fact line; one already in its file
+ * unread is the person's to fix, and stays. A new file refused this way is
+ * often a free-form document, so its refusal names that document's home,
+ * {@link REFERENCE_HOME}.
+ */
 const checkReadable = (facts: ProposalFile[]) => {
+  let made = false;
   const bad = facts.flatMap((file) => {
     const was = new Set(file.before.split("\n"));
-    return parseFactFile(file.path, file.content).unreadable.filter(
+    const unread = parseFactFile(file.path, file.content).unreadable.filter(
       (each) => !was.has(each.text)
     );
+    made ||= unread.length > 0 && file.before === "";
+    return unread;
   });
   if (bad.length > 0) {
     return problem(400, {
       code: "memory-facts-unread",
-      detail: `These lines do not read as facts: ${bad.map(lineWords).join("; ")}. Write each as \`- <fact> (since <date>, from <note ids>, used <date>)\`, with at most one indented \`  Why: <grounding>\` line under it; a replaced one under \`## Formerly\` with \`until\` and \`replaced by\`.`,
+      detail: `These lines do not read as facts: ${bad.map(lineWords).join("; ")}. Write each as \`- <fact> (since <date>, from <note ids>, used <date>)\`, with at most one indented \`  Why: <grounding>\` line under it; a replaced one under \`## Formerly\` with \`until\` and \`replaced by\`.${made ? ` ${REFERENCE_HOME}` : ""}`,
     });
   }
 };
@@ -4916,7 +4933,7 @@ export const memoryRoutes = (memory: Memory) =>
 
 const MEMORY_NOTE_DEFINITION = defineTool(
   "memory_note",
-  "A lasting fact for this project's later sessions (a convention, command, decision, place), not a step of your task, into its inbox; the person decides what is kept.",
+  "Into this project's inbox: a lasting fact (convention, command, decision, place) or the person's correction or preference on how to work; the person decides what is kept.",
   {
     text: z.string().max(NOTE_LIMIT),
     since: z

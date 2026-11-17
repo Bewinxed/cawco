@@ -22,9 +22,8 @@ import { piAgentDir } from "./harnesses";
  * is in one of three classes, each read from Claude Code's own docs
  * (https://code.claude.com/docs/en/claude-directory) and from real listings
  * of `~/.claude` and account dirs:
- * - the user layer ({@link USER_LAYER_DIRS}, {@link USER_LAYER_FILES},
- *   {@link projectMemoryDir}): one copy
- *   in {@link claudeHome}, linked into every account dir;
+ * - the user layer ({@link USER_LAYER_DIRS}, {@link USER_LAYER_FILES}): one
+ *   copy in {@link claudeHome}, linked into every account dir;
  * - per session ({@link SESSION_ENTRIES}): in the session's own dir,
  *   {@link sessionConfigDir}, carried whole when its account changes;
  * - per account: everything else (the credential, `.claude.json`, caches,
@@ -148,14 +147,6 @@ export const USER_LAYER_FILES = [
   "settings.json",
   "keybindings.json",
 ] as const;
-
-/**
- * A project's auto memory, `projects/<slug>/memory` ("Global only… Claude's
- * notes to itself across sessions", claude-directory docs): the user's, one
- * copy in {@link claudeHome}, linked into each account dir per project.
- */
-export const projectMemoryDir = (configDir: string, slug: string): string =>
-  join(configDir, "projects", slug, "memory");
 
 /** The longest slug Claude Code keeps whole (the SDK's `lo`, 0.3.289). */
 const SLUG_MAX = 200;
