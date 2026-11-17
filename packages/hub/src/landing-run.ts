@@ -1391,11 +1391,22 @@ export const createLandingRun = ({
    * conflict) or ends it, and one a command of it throws on, stops the row
    * landing. Answers the text the delegate reads, and whether the item is
    * done.
+   *
+   * The row is read here, never handed in: its `landingSince` is what names
+   * this landing ({@link landingStopped}), and a copy read before the
+   * landing was marked names none, so it reads as stopped at its first
+   * check. On 2026-11-17 every landing ended so (the gate's removal took the
+   * re-read the gate made after it ran), and nothing landed for an hour.
    */
-  const settleLanding = async (
-    item: WorkItemRow,
-    submission: WorkItemSubmission
-  ) => {
+  const settleLanding = async (itemId: string) => {
+    const item = db.workItem(itemId);
+    const submission = item?.submission;
+    if (!(item && submission && item.landingSince && LIVE.has(item.state))) {
+      return {
+        done: false,
+        text: `${item ? `${item.title} is ${item.state} and not landing` : "The item is gone"}; nothing was landed or reported.`,
+      };
+    }
     const stop = new AbortController();
     landingStops.set(item.id, stop);
     try {

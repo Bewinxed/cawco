@@ -4635,8 +4635,8 @@ export const createWorkItems = ({
       `[work-items] ${now.id}: every item it delegated has ended; it lands now`
     );
     landingRun.landingWait(now.id, null);
-    const landing = update(now.id, { landingPhase: null }) ?? now;
-    landStored(landing, now.submission);
+    update(now.id, { landingPhase: null });
+    landStored(now);
   };
 
   /**
@@ -4662,7 +4662,7 @@ export const createWorkItems = ({
       return completingText(group);
     }
     update(item.id, { submission: request, landingSince: new Date() });
-    const settled = await landingRun.settleLanding(item, request);
+    const settled = await landingRun.settleLanding(item.id);
     return settled.text;
   };
 
@@ -4673,10 +4673,7 @@ export const createWorkItems = ({
    * report; a failure, or a landing that cannot run, is sent to the
    * session as the tool would have answered.
    */
-  const landStored = (
-    item: WorkItemRow,
-    submission: WorkItemSubmission
-  ): void => {
+  const landStored = (item: WorkItemRow): void => {
     const [row] = db.getInstancesByIds([item.instanceId]);
     /** The landing could not run: logged, and the session told to call finish_item again. */
     const notRun = (reason: string): void => {
@@ -4689,7 +4686,7 @@ export const createWorkItems = ({
       }
     };
     landingRun
-      .settleLanding(item, submission)
+      .settleLanding(item.id)
       .then((settled) => {
         if (!settled.done && row) {
           tell(row, settled.text);
@@ -6107,7 +6104,7 @@ export const createWorkItems = ({
         console.log(
           `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}`
         );
-        landStored(item, submission);
+        landStored(item);
       }
       releaseLastTurns(machineId);
     },
