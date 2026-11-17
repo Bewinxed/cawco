@@ -450,8 +450,16 @@ mkfifo "$req/out" "$req/err"
 [ -z "$claude" ] || mkfifo "$req/in"
 # Cut off: the runner ends the command's group, in the sandbox's own pid
 # space, where the pid it wrote means that group (the runner's "cancel").
-trap 'p=$(cat "$req/pid" 2>/dev/null); [ -n "$p" ] && printf "cancel %s\\n" "$p" > "$fifo"; rm -rf "$req"; exit 143' TERM INT HUP
-${guardBefore(id, held)}printf '%s\\n' "$req" > "$fifo"
+# A pid is there only once the request went over fd 4.
+trap 'p=$(cat "$req/pid" 2>/dev/null); [ -n "$p" ] && printf "cancel %s\\n" "$p" >&4; rm -rf "$req"; exit 143' TERM INT HUP
+# The request goes over the runner's FIFO on fd 4, held open until this
+# executor exits. The runner reads the FIFO to its end and opens it again
+# (runner.ts \`runnerText\`): a request written and closed between that end
+# and the close was dropped with the pipe, and its executor waited on output
+# that never came until its caller killed it (a PreToolUse hook, 600 s). While
+# a writer holds it the FIFO has no end, and a close keeps what is written.
+${guardBefore(id, held)}exec 4> "$fifo"
+printf '%s\\n' "$req" >&4
 # This executor's stdin, to the command: an asynchronous command's own is
 # /dev/null unless it names another, so it takes it on fd 3. A closed one is
 # an empty one, so the command still reads its end. Copied by perl, a read at
@@ -459,11 +467,11 @@ ${guardBefore(id, held)}printf '%s\\n' "$req" > "$fifo"
 # closed, so a server never saw its first request.
 if [ -n "$claude" ]; then
   { exec 3<&0; } 2>/dev/null || exec 3</dev/null
-  ${shellQuote(perl())} -e 'while (sysread(STDIN, my $read, 65536)) { syswrite(STDOUT, $read) or last }' <&3 > "$req/in" 3<&- & feed=$!
+  ${shellQuote(perl())} -e 'while (sysread(STDIN, my $read, 65536)) { syswrite(STDOUT, $read) or last }' <&3 > "$req/in" 3<&- 4>&- & feed=$!
   exec 3<&-
 fi
-cat "$req/out" & out=$!
-cat "$req/err" >&2 & err=$!
+cat "$req/out" 4>&- & out=$!
+cat "$req/err" >&2 4>&- & err=$!
 wait "$out" "$err"
 ${linux ? followTaker(id, held.gen) : `taker=${pid}`}
 # A sandbox stopped mid-command leaves no status: the command is cut off.

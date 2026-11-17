@@ -124,7 +124,11 @@ const LAUNCH = [
 
 /**
  * The runner inside the boundary: takes each request off the FIFO and runs
- * it. A `cancel <pgid>` ends that command's group; a pgid of 0, 1 or with a
+ * it. It reads the FIFO to its end and opens it again, and only a writer that
+ * still holds it open across that gap keeps its request: each executor holds
+ * it until it exits (exec.ts `execScript`, fd 4). The runner cannot hold it
+ * open for writing itself: macOS's profile lets nothing inside write the
+ * folder it is in. A `cancel <pgid>` ends that command's group; a pgid of 0, 1 or with a
  * leading zero is never one its launch made, and a group of 0 or -1 would
  * be its own group or every process it may signal, so it is no request. The
  * group follows the signal with no `--`, a form every shell's `kill` reads
