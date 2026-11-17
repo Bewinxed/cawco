@@ -595,6 +595,7 @@
 <Content
   preventOverflowTextSelection={false}
   data-glass-card={glass || undefined}
+  data-safe-bottom
   {...kitSurface ? { motion: "hang" as const } : {}}
   {...glass ? { portalProps: { disabled: true } } : {}}
   {...menuLook}

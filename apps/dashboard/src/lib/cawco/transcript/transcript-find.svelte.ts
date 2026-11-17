@@ -206,7 +206,15 @@ export class TranscriptFind {
       };
     });
 
-    $effect(() => () => markFind(this.#host.session.instanceId, [], null));
+    // Its marks go with it: those of the conversation it was showing, read
+    // while that conversation is still given. Read in the teardown, the
+    // session was the pane's own prop as it went, already null where its
+    // conversation left first (Ask Caw on a phone's project page: "Cannot
+    // read properties of null (reading 'instanceId')", the page stopped).
+    $effect(() => {
+      const { instanceId } = this.#host.session;
+      return () => markFind(instanceId, [], null);
+    });
 
     $effect(() => {
       const node = this.#host.pin.scroller;

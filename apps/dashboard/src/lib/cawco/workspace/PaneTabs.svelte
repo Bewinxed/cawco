@@ -1866,7 +1866,6 @@
       as={Popover.Content}
       collisionPadding={12}
       customAnchor={detailAnchor}
-      data-safe-bottom
       folded={takeFolded}
       frame="details"
       class="z-(--layer-float) w-(--hang-width)"

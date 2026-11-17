@@ -41,12 +41,13 @@
  *    the attribute (design.css `@property --safe-bottom`), so anywhere
  *    else it reads 0px and what stands on the screen's bottom covers the
  *    end of what scrolls behind it on a phone with a home indicator (the
- *    transcript's last line under the composer's chips). A value built in
- *    a script and handed to the tag by name is not seen here.
+ *    transcript's last line under the composer's chips). A name the
+ *    component's script declares from the inset counts as reading it
+ *    where a tag draws with it (a style directive, `style`, `class`).
  * Prints `file:line: text` under the rule each match breaks; exits 1 on any.
  */
 import { resolve } from "node:path";
-import { parse } from "svelte/compiler";
+import { type AST, parse } from "svelte/compiler";
 
 // Read at run time beyond its imports; check.ts keys the check on them.
 export const checkReads = ["apps/dashboard/src/"];
@@ -183,6 +184,8 @@ const READS_INSET = /--safe-bottom\b|(?<![\w-])pb-safe-/u;
 interface TagAttribute {
   end: number;
   name?: string;
+  start: number;
+  type: string;
 }
 interface Tag {
   attributes: TagAttribute[];
@@ -194,14 +197,64 @@ const isTag = (node: object): node is Tag =>
   Array.isArray(node.attributes) &&
   "start" in node &&
   typeof node.start === "number";
-/** The tag reads the inset and does not carry `data-safe-bottom`: its source through its last attribute. */
-function readsInsetUnset(source: string, tag: Tag): boolean {
+/** An attribute that draws: a style directive, or the `style` or `class` attribute. */
+const draws = (attribute: TagAttribute) =>
+  attribute.type === "StyleDirective" ||
+  attribute.name === "style" ||
+  attribute.name === "class";
+/**
+ * The tag reads the inset and does not carry `data-safe-bottom`: the inset
+ * written anywhere in its source, or a name its script built from it
+ * (`named`) in what it draws with.
+ */
+function readsInsetUnset(
+  source: string,
+  tag: Tag,
+  named: RegExp | null
+): boolean {
   const last = tag.attributes.at(-1);
+  if (
+    last === undefined ||
+    tag.attributes.some((attribute) => attribute.name === "data-safe-bottom")
+  ) {
+    return false;
+  }
   return (
-    last !== undefined &&
-    READS_INSET.test(source.slice(tag.start, last.end)) &&
-    !tag.attributes.some((attribute) => attribute.name === "data-safe-bottom")
+    READS_INSET.test(source.slice(tag.start, last.end)) ||
+    (named !== null &&
+      tag.attributes.some(
+        (attribute) =>
+          draws(attribute) &&
+          named.test(source.slice(attribute.start, attribute.end))
+      ))
   );
+}
+/** Where a node of a component's script stands in its source: svelte's parser places each one. */
+const placed = (node: object): { end: number; start: number } | null =>
+  "start" in node &&
+  typeof node.start === "number" &&
+  "end" in node &&
+  typeof node.end === "number"
+    ? { start: node.start, end: node.end }
+    : null;
+/** The names a component's script declares from the inset (`const reserved = \`calc(… var(--safe-bottom) …)\``): a tag that draws with one reads it. */
+function insetNames(
+  source: string,
+  body: NonNullable<AST.Root["instance"]>["content"]["body"]
+): string[] {
+  return body.flatMap((statement) => {
+    const at = placed(statement);
+    if (
+      statement.type !== "VariableDeclaration" ||
+      at === null ||
+      !READS_INSET.test(source.slice(at.start, at.end))
+    ) {
+      return [];
+    }
+    return statement.declarations.flatMap((declaration) =>
+      declaration.id.type === "Identifier" ? [declaration.id.name] : []
+    );
+  });
 }
 /** Each node under `node` in the markup, attributes left out (an attribute's value holds no tag). */
 function* markupNodes(node: unknown): Generator<object> {
@@ -223,9 +276,13 @@ function* markupNodes(node: unknown): Generator<object> {
 }
 /** Each opening tag in a component's markup that reads the inset and does not carry `data-safe-bottom`: its line. */
 function insetsUnset(source: string): number[] {
+  const ast = parse(source, { modern: true });
+  const names = insetNames(source, ast.instance?.content.body ?? []);
+  const named =
+    names.length > 0 ? new RegExp(`\\b(?:${names.join("|")})\\b`, "u") : null;
   const lines: number[] = [];
-  for (const node of markupNodes(parse(source, { modern: true }).fragment)) {
-    if (isTag(node) && readsInsetUnset(source, node)) {
+  for (const node of markupNodes(ast.fragment)) {
+    if (isTag(node) && readsInsetUnset(source, node, named)) {
       lines.push(source.slice(0, node.start).split("\n").length);
     }
   }

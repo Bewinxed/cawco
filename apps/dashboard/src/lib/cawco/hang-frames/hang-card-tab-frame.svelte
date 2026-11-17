@@ -119,7 +119,6 @@
           class="z-(--layer-float) w-(--hang-width)"
           collisionPadding={12}
           customAnchor={anchor}
-          data-safe-bottom
           data-session-details-popover
           frame="details"
           onneck={(neck) => {
