@@ -116,6 +116,7 @@
              its width and its narrow screen's edges (Composer `dock`). -->
         <div
           class="pointer-events-none absolute inset-x-0 bottom-(--dock-foot) flex justify-center"
+          data-safe-bottom
           style:--dock-foot={"calc(var(--spacing-space-4) + var(--safe-bottom, 0px))"}
         >
           <div

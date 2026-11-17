@@ -33,6 +33,7 @@
       : "max-h-(--sheet-room) overflow-y-auto overscroll-contain rounded-t-lg px-space-4 pb-safe-space-4",
     layout
   )}
+  data-safe-bottom
   data-slot="body"
 >
   {#if form === "phone"}

@@ -1614,6 +1614,13 @@
    * showing conversation's in every pane, and changed under the arriving
    * one after it had started to draw (the rows under a pinned tail moved
    * 35px as a switch's glide ended, when two tabs' trays differed).
+   *
+   * The composer stands on the screen's bottom inset (Composer `--dock-foot`:
+   * `space-4` and `--safe-bottom`), so the room under it counts the same
+   * inset (`--composer-clearance`, `reserved`), read on the box that
+   * carries both (`body`, data-safe-bottom): without it, on a phone with a home
+   * indicator the composer and its tray row stood 34px higher than the
+   * room kept for them, over the transcript's last line.
    */
   const composerRoom = $derived(
     writable
@@ -1890,9 +1897,10 @@
   <div
     data-slot="body"
     class="relative flex min-h-0 min-w-0 flex-auto flex-col pb-(--reserved)"
+    data-safe-bottom
     style:--composer-clearance={reserved
       ? "var(--spacing-space-4)"
-      : `calc(${composerRoom} + var(--spacing-space-4) + var(--spacing-space-4))`}
+      : `calc(var(--spacing-space-4) + var(--safe-bottom) + ${composerRoom} + var(--spacing-space-4))`}
     style:--reserved={reserved}
   >
     <!-- The transcript area. Movement between conversations is owned by the

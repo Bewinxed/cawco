@@ -142,6 +142,7 @@
      Ask Caw trailing. Its list rises from the bar's whole width. -->
 <div
   class="absolute inset-x-space-3 bottom-(--off-bottom) z-(--layer-dock) phone:hidden"
+  data-safe-bottom
   style:--off-bottom="calc(var(--spacing-space-4) + var(--safe-bottom))"
 >
   <div

@@ -637,6 +637,7 @@
         <div
           data-slot="pane"
           class="@container relative flex min-h-0 min-w-0 flex-auto flex-col bg-surface-recess pb-(--reserved)"
+          data-safe-bottom
           style:--composer-clearance="var(--spacing-space-4)"
           style:--reserved={reserved}
         >

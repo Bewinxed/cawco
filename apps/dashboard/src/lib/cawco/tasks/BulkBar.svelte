@@ -112,6 +112,7 @@
 <div
   data-floating
   data-slot="bulk"
+  data-safe-bottom
   aria-label="Selected tasks"
   class="fixed inset-x-space-3 bottom-(--off-bottom) z-(--layer-toolbar) flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto border border-border-control rounded-lg bg-surface-raised shadow-overlay py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
   role="toolbar"

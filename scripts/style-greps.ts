@@ -35,9 +35,18 @@
  *    tree-lines.ts); without it a child row stands flush with its parent
  *    and its lines stand at the root's. Read from each row's opening tag
  *    whole, so it may span lines.
+ *  - an opening tag that reads the screen's bottom inset (`--safe-bottom`,
+ *    or a `pb-safe-*` class) without carrying `data-safe-bottom`: the
+ *    inset is a non-inherited property set only on the boxes that carry
+ *    the attribute (design.css `@property --safe-bottom`), so anywhere
+ *    else it reads 0px and what stands on the screen's bottom covers the
+ *    end of what scrolls behind it on a phone with a home indicator (the
+ *    transcript's last line under the composer's chips). A value built in
+ *    a script and handed to the tag by name is not seen here.
  * Prints `file:line: text` under the rule each match breaks; exits 1 on any.
  */
 import { resolve } from "node:path";
+import { parse } from "svelte/compiler";
 
 // Read at run time beyond its imports; check.ts keys the check on them.
 export const checkReads = ["apps/dashboard/src/"];
@@ -169,7 +178,78 @@ const nestHits = (
   )
 ).flat();
 
+/** What reads the screen's bottom inset in a tag's source: the property, or the padding utility built on it. */
+const READS_INSET = /--safe-bottom\b|(?<![\w-])pb-safe-/u;
+interface TagAttribute {
+  end: number;
+  name?: string;
+}
+interface Tag {
+  attributes: TagAttribute[];
+  start: number;
+}
+/** A markup node that opens a tag (an element, a component, a `svelte:` one): it has attributes and a place. */
+const isTag = (node: object): node is Tag =>
+  "attributes" in node &&
+  Array.isArray(node.attributes) &&
+  "start" in node &&
+  typeof node.start === "number";
+/** The tag reads the inset and does not carry `data-safe-bottom`: its source through its last attribute. */
+function readsInsetUnset(source: string, tag: Tag): boolean {
+  const last = tag.attributes.at(-1);
+  return (
+    last !== undefined &&
+    READS_INSET.test(source.slice(tag.start, last.end)) &&
+    !tag.attributes.some((attribute) => attribute.name === "data-safe-bottom")
+  );
+}
+/** Each node under `node` in the markup, attributes left out (an attribute's value holds no tag). */
+function* markupNodes(node: unknown): Generator<object> {
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      yield* markupNodes(item);
+    }
+    return;
+  }
+  if (typeof node !== "object" || node === null) {
+    return;
+  }
+  yield node;
+  for (const [key, value] of Object.entries(node)) {
+    if (key !== "attributes") {
+      yield* markupNodes(value);
+    }
+  }
+}
+/** Each opening tag in a component's markup that reads the inset and does not carry `data-safe-bottom`: its line. */
+function insetsUnset(source: string): number[] {
+  const lines: number[] = [];
+  for (const node of markupNodes(parse(source, { modern: true }).fragment)) {
+    if (isTag(node) && readsInsetUnset(source, node)) {
+      lines.push(source.slice(0, node.start).split("\n").length);
+    }
+  }
+  return lines;
+}
+const insetHits = (
+  await Promise.all(
+    styled
+      .filter((file) => file.endsWith(".svelte"))
+      .map(async (file) =>
+        insetsUnset(await Bun.file(resolve(ROOT, file)).text()).map(
+          (line) => `${file}:${line}`
+        )
+      )
+  )
+).flat();
+
 let found = 0;
+if (insetHits.length > 0) {
+  found += insetHits.length;
+  console.log(
+    `a tag that reads the screen's bottom inset (--safe-bottom, pb-safe-*) carries data-safe-bottom, or the inset is 0px there (design.css @property --safe-bottom):\n${insetHits.map((hit) => `  ${hit}`).join("\n")}`
+  );
+}
 if (nestHits.length > 0) {
   found += nestHits.length;
   console.log(
@@ -196,7 +276,7 @@ for (const [i, rule] of RULES.entries()) {
 }
 console.log(
   found === 0
-    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast, no @keyframes that cuts and moves, no kit-tree-row without its depth"
+    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast, no @keyframes that cuts and moves, no kit-tree-row without its depth, no bottom inset read off a box without data-safe-bottom"
     : `style greps: ${found} match${found === 1 ? "" : "es"}`
 );
 process.exit(found === 0 ? 0 : 1);

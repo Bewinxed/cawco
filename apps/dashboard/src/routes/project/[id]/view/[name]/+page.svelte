@@ -106,6 +106,7 @@
      side, as theirs do. Never inside a notch's safe area. -->
 <main
   class="min-h-dvh bg-surface-recess pt-space-6 pr-(--pad-right) pb-(--pad-bottom) pl-(--pad-left) max-desk:pr-(--pad-right-narrow) max-desk:pl-(--pad-left-narrow)"
+  data-safe-bottom
   data-view-alone={name}
   style:--pad-bottom="max(var(--spacing-space-6), var(--safe-bottom))"
   style:--pad-left="max(var(--spacing-space-7), env(safe-area-inset-left))"
