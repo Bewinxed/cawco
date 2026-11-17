@@ -122,11 +122,7 @@ import {
   sessionFleetDenials,
 } from "../denied-tools";
 import { memoryState, syncMemory } from "../fleet";
-import {
-  hookStatesInSet,
-  hookStatesOn,
-  readFleetHarnessSet,
-} from "../fleet-harness-set";
+import { hookStatesInSet, readFleetHarnessSet } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import type { FleetPart } from "../fleet-parts";
 import { placeSets } from "../fleet-place-set";
@@ -6585,14 +6581,9 @@ class OpencodeHarness implements Harness<"opencode"> {
       marketplaces: {},
       plugins: {},
       skills: {},
-      // CawCo's plugin runs the fleet's hooks from the harness set; what it
-      // cannot run is said unsupported here.
-      hooks: parts.has("hooks")
-        ? hookStatesOn(
-            "opencode",
-            config.hooks.filter((hook) => hook.enabled)
-          )
-        : {},
+      // CawCo's plugin runs the fleet's hooks from the harness set, which
+      // Claude Code's converge writes: their states are read from it once
+      // every harness's converge has ended (`fleetHooks`).
       at: Date.now(),
     };
     const memory = parts.has("memory")
@@ -6682,6 +6673,15 @@ class OpencodeHarness implements Harness<"opencode"> {
     };
   }
 
+  /** Each fleet hook as CawCo's plugin runs it: from the harness set and the places' files, as last written; what it cannot run, unsupported. */
+  async fleetHooks(): Promise<Record<string, FleetItemState>> {
+    return hookStatesInSet(
+      "opencode",
+      await readFleetHarnessSet(),
+      await placeSets()
+    );
+  }
+
   async fleetStatus(): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(OPENCODE_SIDECAR);
     const report: FleetSyncReport = {
@@ -6691,11 +6691,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       marketplaces: {},
       plugins: {},
       skills: {},
-      hooks: hookStatesInSet(
-        "opencode",
-        await readFleetHarnessSet(),
-        await placeSets()
-      ),
+      hooks: await this.fleetHooks(),
       at: Date.now(),
     };
     if (sidecar.memory !== undefined) {

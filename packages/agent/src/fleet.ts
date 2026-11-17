@@ -9,16 +9,8 @@
  * outlives every sync this daemon runs.
  */
 
-import {
-  chmod,
-  lstat,
-  readdir,
-  realpath,
-  rm,
-  rmdir,
-  stat,
-} from "node:fs/promises";
-import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
+import { lstat, readdir, realpath, rm, rmdir, stat } from "node:fs/promises";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   installedPluginsOf,
@@ -61,6 +53,7 @@ import {
 import type { FleetScope } from "@cawco/core/fleet-placement";
 import { makeFolder } from "@cawco/core/folders";
 import type { FleetHarnessConfig } from "@cawco/core/harness-config";
+import { scriptParseError } from "@cawco/core/hook-script";
 import type { FleetHook, HookEvent, HookHandler } from "@cawco/core/hooks";
 import {
   hookMatchTest,
@@ -91,6 +84,7 @@ import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { versionSaid } from "@cawco/core/version-said";
 import { lastLines } from "@cawco/core/words/helpers";
+import { hookDriftUnparsed, hookUpdateKept } from "@cawco/core/words/hooks";
 import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
@@ -2853,79 +2847,6 @@ function withoutHooks(
 /** Where a hook's own script lands: `~/.claude/cawco-hooks/<id>.sh`. */
 const hookScriptPath = (id: string): string => join(HOOKS_DIR, `${id}.sh`);
 
-/** How long one `bash -n` gets. Our choice: a parse of a hook script is
- * milliseconds, and one that hangs is not a script worth registering. */
-const PARSE_TIMEOUT_MS = 5000;
-
-const WHITESPACE = /\s+/u;
-
-/**
- * The shell a script's shebang runs it with, when that shell is one `-n` can
- * check. No shebang is `sh`: Claude Code spawns the command through a shell,
- * and a file with no `#!` that the kernel refuses (ENOEXEC) is run by that
- * shell as an `sh` script. Any other interpreter is not checked.
- */
-const shellOf = (script: string): "bash" | "sh" | undefined => {
-  const first = script.split("\n", 1)[0] ?? "";
-  if (!first.startsWith("#!")) {
-    return "sh";
-  }
-  const words = first.slice(2).trim().split(WHITESPACE);
-  const program =
-    basename(words[0] ?? "") === "env"
-      ? words.slice(1).find((word) => !word.startsWith("-"))
-      : words[0];
-  const name = basename(program ?? "");
-  return name === "bash" || name === "sh" ? name : undefined;
-};
-
-/**
- * The parser's error line when a shell script does not parse, undefined when
- * it does or is not a shell script. A hook runs before every matching tool
- * call on the machine, so one that cannot parse locks every session out; it is
- * never registered.
- */
-const scriptParseError = async (
-  script: string
-): Promise<string | undefined> => {
-  const shell = shellOf(script);
-  if (!shell) {
-    return undefined;
-  }
-  const parsed = await readWithin(PARSE_TIMEOUT_MS, async (signal) => {
-    const child = Bun.spawn([shell, "-n"], {
-      env: toolEnv(),
-      stdin: new TextEncoder().encode(script),
-      stdout: "ignore",
-      stderr: "pipe",
-      signal,
-    });
-    const stderr = await new Response(child.stderr).text();
-    const code = await child.exited;
-    if (child.signalCode) {
-      return `${shell} -n was ended by ${child.signalCode}`;
-    }
-    if (code === 0) {
-      return;
-    }
-    return (
-      stderr
-        .split("\n")
-        .find((line) => line.trim() !== "")
-        ?.trim() ?? `${shell} -n exited ${code}`
-    );
-  });
-  switch (parsed.kind) {
-    case "answered":
-      return parsed.value;
-    case "unanswered":
-      // Not known to parse: never registered on a parse nobody finished.
-      return `${shell} -n did not answer within ${PARSE_TIMEOUT_MS / 1000}s`;
-    default:
-      unhandled("read", parsed);
-  }
-};
-
 /**
  * A project's copy of a hook, placed at one of its folders here: it goes to
  * the folder's sessions through its place's file (fleet-place-set.ts),
@@ -3009,10 +2930,24 @@ interface SyncedHooks {
  */
 interface SettledHooks {
   hashes: Map<string, string>;
-  /** The records kept for a hook this pass could not settle: it stays as it was. */
+  /**
+   * The records of the hooks this pass could not settle that had a version
+   * installed before, by id. That version keeps running: its record, its
+   * script on disk and its registration (its entry in the user settings,
+   * the harness set or its place's file) all stay as they were, and its
+   * report says the new version failed and why. A hook with no earlier
+   * version is not here: nothing is installed for it.
+   */
   kept: Record<string, ManagedHook>;
   scriptPaths: Map<string, string>;
   settled: FleetHook[];
+  /**
+   * The records of the hooks whose copy edited on this machine does not
+   * parse, by id: the copy stays on disk to compare or adopt, its record
+   * with it, and it is not registered, since a hook that cannot parse fails
+   * every call it matches.
+   */
+  unregistered: Record<string, ManagedHook>;
 }
 
 /**
@@ -3036,11 +2971,24 @@ const settleHooks = async (
   if ((await fileHashAt(hookGuardFile())) !== hashText(HOOK_GUARD_SOURCE)) {
     await writeStateFile(hookGuardFile(), HOOK_GUARD_SOURCE);
   }
+  // A hook this pass cannot settle: reported failed, and the version
+  // installed before it, if any, kept running ({@link SettledHooks.kept}).
   const kept: Record<string, ManagedHook> = {};
-  const keep = (id: string): void => {
-    if (managed[id]) {
-      kept[id] = managed[id];
+  const unregistered: Record<string, ManagedHook> = {};
+  const refuse = (
+    id: string,
+    failed: Extract<FleetItemState, { state: "failed" }>
+  ): void => {
+    const before = managed[id];
+    if (!before) {
+      report[id] = failed;
+      return;
     }
+    kept[id] = before;
+    report[id] = {
+      ...failed,
+      detail: hookUpdateKept(failed.detail ?? failed.cause),
+    };
   };
 
   // A disabled hook is simply not written — that is the whole of per-hook
@@ -3054,21 +3002,19 @@ const settleHooks = async (
     }
     const problems = Object.values(hookProblem(hook));
     if (problems.length > 0) {
-      keep(hook.id);
-      report[hook.id] = {
+      refuse(hook.id, {
         state: "failed",
         cause: "unknown",
         detail: problems[0],
-      };
+      });
       continue;
     }
     if (hook.scope && hook.scope !== "user" && !hook.cwd) {
-      keep(hook.id);
-      report[hook.id] = {
+      refuse(hook.id, {
         state: "failed",
         cause: "no-checkout",
         detail: "bound to a project this machine has no checkout for",
-      };
+      });
       continue;
     }
     wanted.push(hook);
@@ -3102,20 +3048,34 @@ const settleHooks = async (
             managed[hook.id]?.hash
           );
     // What would run once registered: the machine's own edit when it drifted,
-    // the fleet's script otherwise. One that does not parse is neither written
-    // nor registered, and whatever this file registered for it before comes
-    // out below; the file on disk stays, so a drifted copy can still be
-    // compared and adopted.
+    // the fleet's script otherwise. One that does not parse is neither
+    // written nor registered: the version installed before it, if any, keeps
+    // its script, its record and its registration, so it keeps running
+    // ({@link SettledHooks.kept}). A drifted copy that does not parse stays
+    // on disk to be compared and adopted, unregistered
+    // ({@link SettledHooks.unregistered}).
     const parseError = await scriptParseError(
-      plan === "drift" ? await Bun.file(path).text() : hook.script
+      plan === "drift" ? await Bun.file(path).text() : hook.script,
+      toolEnv()
     );
-    if (parseError) {
-      keep(hook.id);
+    if (parseError && plan === "drift") {
+      const before = managed[hook.id];
+      if (before) {
+        unregistered[hook.id] = before;
+      }
       report[hook.id] = {
         state: "failed",
-        cause: "unknown",
-        detail: parseError,
+        cause: "drifted",
+        detail: hookDriftUnparsed(parseError.said),
       };
+      continue;
+    }
+    if (parseError) {
+      refuse(hook.id, {
+        state: "failed",
+        cause: "unknown",
+        detail: parseError.said,
+      });
       continue;
     }
     if (plan === "drift") {
@@ -3128,23 +3088,23 @@ const settleHooks = async (
     hashes.set(hook.id, scriptHash);
     if (plan === "write") {
       try {
-        await writeStateFile(path, hook.script);
-        // Claude Code spawns it directly, so it has to carry its own execute bit.
-        await chmod(path, 0o755);
+        // Claude Code spawns it directly, so it has to carry its own execute
+        // bit; set before the file takes the path, so a write that fails
+        // leaves the version before it whole.
+        await writeStateFile(path, hook.script, { mode: 0o755 });
       } catch (error) {
-        keep(hook.id);
-        report[hook.id] = {
+        refuse(hook.id, {
           state: "failed",
           cause: "unwritable",
           detail: tail(said(error)),
-        };
+        });
         continue;
       }
     }
     scriptPaths.set(hook.id, path);
     settled.push(hook);
   }
-  return { hashes, kept, scriptPaths, settled };
+  return { hashes, kept, scriptPaths, settled, unregistered };
 };
 
 /** What a settled hook runs as a session takes it (fleet-harness-set.ts). */
@@ -3196,22 +3156,27 @@ const placedHookOf = (
  * of the fleet's own in `~/.claude/settings.json`, and answers every one as
  * the harness set holds it (fleet-harness-set.ts): the fleet's for OpenCode
  * and pi, a project's copies for every harness. It takes back out whatever
- * a disabled or deleted hook, or one that no longer passes validation, used
- * to have registered. The one row here that is executable: a hook that
- * reaches this function runs on a shell, unprompted, on every machine that
- * gets it, which is why it is checked again rather than trusted on the wire
- * — the hub already refused an invalid one at the door, but that is the
- * hub's process, not this one's guarantee.
+ * a disabled or deleted hook used to have registered. A hook whose new
+ * version fails a check keeps the version installed before it, registered
+ * as it was ({@link SettledHooks.kept}). The one row here that is
+ * executable: a hook that reaches this function runs on a shell,
+ * unprompted, on every machine that gets it, which is why it is checked
+ * again rather than trusted on the wire — the hub already refused an
+ * invalid one at the door, but that is the hub's process, not this one's
+ * guarantee.
  */
 const syncHooks = async (
   desired: FleetHook[],
   managed: Record<string, ManagedHook>,
   report: Record<string, FleetItemState>
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: registers the fleet's own in the user settings, then removes what a disabled/deleted/invalid hook used to have
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: registers the fleet's own in the user settings, then removes what a disabled/deleted hook used to have, keeping a failed update's version before
 ): Promise<SyncedHooks> => {
   const settledHooks = await settleHooks(desired, managed, report);
   const { hashes, scriptPaths, settled } = settledHooks;
-  const written: Record<string, ManagedHook> = { ...settledHooks.kept };
+  const written: Record<string, ManagedHook> = {
+    ...settledHooks.unregistered,
+    ...settledHooks.kept,
+  };
   const keep = (id: string): void => {
     if (managed[id]) {
       written[id] = managed[id];
@@ -3235,6 +3200,26 @@ const syncHooks = async (
   const set: SyncedHooks["set"] = { hooks: {} };
   const placed: SyncedHooks["placed"] = {};
   const fleetWide: FleetHook[] = [];
+  // A hook whose new version failed keeps the version installed before it
+  // ({@link SettledHooks.kept}): its entry in the harness set or its place's
+  // file is carried over as the last sync wrote it, and its settings entry
+  // is left where it is (it is not in `registeredHere` below).
+  const previousSet = await readFleetHarnessSet();
+  for (const [id, record] of Object.entries(settledHooks.kept)) {
+    if (!record.cwd) {
+      const entry = previousSet.hooks[id];
+      if (entry) {
+        set.hooks[id] = entry;
+      }
+      continue;
+    }
+    const entry = record.placed
+      ? (await readPlaceSet(record.cwd))?.hooks[id]
+      : undefined;
+    if (entry) {
+      placed[record.cwd] = { ...placed[record.cwd], [id]: entry };
+    }
+  }
   for (const hook of settled) {
     const { cwd } = hook;
     if (!(placedHook(hook) && cwd)) {
@@ -3274,9 +3259,10 @@ const syncHooks = async (
     // Everything cawco registered out of this file last time, whatever event
     // it ran on — a hook that moved to a different event still needs its old
     // row gone, not just left orphaned under the event it used to fire on.
-    const registeredHere = Object.values(managed)
-      .filter((record) => !record.cwd)
-      .map((record) => record.command);
+    // A kept hook's entry stays: its version before keeps running.
+    const registeredHere = Object.entries(managed)
+      .filter(([id, record]) => !(record.cwd || settledHooks.kept[id]))
+      .map(([, record]) => record.command);
 
     const byEvent = new Map<string, FleetHook[]>();
     for (const hook of fleetWide) {
@@ -3348,10 +3334,11 @@ const syncHooks = async (
 
   await dropCheckoutHooks(managed);
 
-  // A hook that is disabled, deleted, or failed validation this round and had
-  // nothing kept alive for it above is one whose registration and script (if
-  // cawco wrote one) are cawco's to take away. A script still at the user
-  // layer's old path goes once the hook is registered at its new one.
+  // A hook that is disabled or deleted, or failed this round with no version
+  // installed before it, has nothing kept alive for it above: its
+  // registration and script (if cawco wrote one) are cawco's to take away.
+  // A script still at the user layer's old path goes once the hook is
+  // registered at its new one.
   const stillHere = new Set(settled.map((hook) => hook.id));
   const scripts = new Set(
     Object.values(written).flatMap((one) => (one.script ? [one.script] : []))
@@ -3474,7 +3461,19 @@ export const placeFolder = (
     }
     const settled = await settleHooks(copies.hooks, managed.hooks, hookStates);
     const placedHooks: Record<string, SetHook> = {};
-    const records: Record<string, ManagedHook> = { ...settled.kept };
+    const records: Record<string, ManagedHook> = {
+      ...settled.unregistered,
+      ...settled.kept,
+    };
+    // A hook whose new version failed keeps its entry as the place's file
+    // holds it ({@link SettledHooks.kept}).
+    const before = (await readPlaceSet(cwd))?.hooks ?? {};
+    for (const id of Object.keys(settled.kept)) {
+      const entry = before[id];
+      if (entry) {
+        placedHooks[id] = entry;
+      }
+    }
     for (const hook of settled.settled) {
       const { entry, record } = placedHookOf(hook, cwd, settled, hookStates);
       placedHooks[hook.id] = entry;
@@ -3674,6 +3673,34 @@ const PARTS: Record<FleetPart, ConvergePart> = {
   },
 };
 
+/**
+ * Each item of `report` that failed, as a log line names it: its section,
+ * its key and why. An MCP server's is said by its cause alone: what its
+ * runtime said can carry the values of its secrets, which are cut out only
+ * where the machine's report is made (fleet-converger.ts).
+ */
+const failedItems = (report: FleetSyncReport): string[] => {
+  const sections: Record<string, Record<string, FleetItemState>> = {
+    mcp: report.mcp,
+    marketplace: report.marketplaces,
+    plugin: report.plugins,
+    skill: report.skills ?? {},
+    "memory document": report.memoryDocs ?? {},
+    hook: report.hooks ?? {},
+    "harness config": report.harnessConfig ?? {},
+    memory: report.memory ? { "user layer": report.memory } : {},
+  };
+  return Object.entries(sections).flatMap(([section, items]) =>
+    Object.entries(items).flatMap(([key, item]) => {
+      if (item.state !== "failed") {
+        return [];
+      }
+      const why = section === "mcp" ? item.cause : (item.detail ?? item.cause);
+      return [`${section} ${key}: ${why}`];
+    })
+  );
+};
+
 /** The parts whose writes put a new entry in `~/.claude`, which each account's dir links to. */
 const USER_LAYER_PARTS: readonly FleetPart[] = [
   "plugins",
@@ -3725,9 +3752,19 @@ const converge = async (
       }
     }
   }
-  console.info(
-    `[fleet] Claude Code: ${ran.join(", ")} converged, into ${[...new Set(ran.flatMap((part) => PARTS[part].writes()))].join(", ")}`
+  const into = [...new Set(ran.flatMap((part) => PARTS[part].writes()))].join(
+    ", "
   );
+  const failed = failedItems(report);
+  if (failed.length === 0) {
+    console.info(
+      `[fleet] Claude Code: ${ran.join(", ")} converged, into ${into}`
+    );
+  } else {
+    console.warn(
+      `[fleet] Claude Code: ${ran.join(", ")} ran, into ${into}; ${failed.length} failed: ${failed.join("; ")}`
+    );
+  }
   // What every CawCo session on this machine takes as it starts, written
   // after the files it names (fleet-harness-set.ts): each part's entries,
   // the rest as the set holds them.
@@ -3826,9 +3863,9 @@ const hookState = async (
       return { state: "failed", cause: "absent", detail: "not on disk" };
     }
     const script = await scriptFile.text();
-    const parseError = await scriptParseError(script);
+    const parseError = await scriptParseError(script, toolEnv());
     if (parseError) {
-      return { state: "failed", cause: "unknown", detail: parseError };
+      return { state: "failed", cause: "unknown", detail: parseError.said };
     }
     if (hashText(script) !== record.hash) {
       return { state: "failed", cause: "drifted", detail: DRIFTED };

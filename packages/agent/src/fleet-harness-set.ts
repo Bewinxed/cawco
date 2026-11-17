@@ -64,9 +64,9 @@ export const writeFleetHarnessSet = (set: FleetHarnessSet): Promise<void> =>
  * applied (with what a workspace session makes of one that could rewrite a
  * call's input, core `hookWorkspaceNote`), or unsupported with why (core
  * `hookUnsupported`), never left out.
- * The sync's enabled rows (`hooks` of its config), or a status read's set.
+ * The hooks the harness set and the places' files hold ({@link hookStatesInSet}).
  */
-export const hookStatesOn = (
+const hookStatesOn = (
   harness: HookHarness,
   hooks: readonly Pick<FleetHook, "event" | "handler" | "id">[]
 ): Record<string, FleetItemState> =>
@@ -85,7 +85,7 @@ export const hookStatesOn = (
     })
   );
 
-/** {@link hookStatesOn} for every hook of the set and of every place's file: a status read's. */
+/** {@link hookStatesOn} for every hook of the set and of every place's file: what OpenCode's and pi's sessions run (harness.ts `fleetHooks`). */
 export const hookStatesInSet = (
   harness: HookHarness,
   set: FleetHarnessSet,

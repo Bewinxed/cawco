@@ -9015,6 +9015,16 @@
               }
             }
           },
+          "400": {
+            "description": "postApiFleetHooksRestore 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFleetHooksRestore400"
+                }
+              }
+            }
+          },
           "404": {
             "description": "postApiFleetHooksRestore 404",
             "content": {
@@ -129656,6 +129666,42 @@
             "type": "number",
             "enum": [
               504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiFleetHooksRestore400": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "hook-invalid"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              400
             ]
           },
           "title": {

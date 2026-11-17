@@ -922,8 +922,8 @@ export class FleetConverger {
     // row the worst of the harnesses' words on it.
     const harnessConfig: Record<string, State> = {};
     // Each harness's word on each hook: Claude Code's registration, and
-    // whether OpenCode and pi run it at all (fleet-harness-set.ts
-    // `hookStatesOn`), merged below as MCP servers are.
+    // whether OpenCode and pi run it, as the harness set holds it
+    // (harness.ts `fleetHooks`), merged below as MCP servers are.
     const hooksByHarness: Partial<Record<HarnessKind, Record<string, State>>> =
       {};
     let memory: FleetSyncReport["memory"];
@@ -1015,6 +1015,18 @@ export class FleetConverger {
       }
       if (report.toolchain) {
         toolchain = { ...toolchain, ...report.toolchain };
+      }
+    }
+    // OpenCode's and pi's sessions run the fleet's hooks from the harness
+    // set and the places' files, which Claude Code's converge writes: each
+    // says what it runs once every harness's converge has ended, read from
+    // what was written rather than from what the fleet asked for.
+    if (incoming && parts.has("hooks")) {
+      for (const outcome of settled) {
+        if (!("error" in outcome) && outcome.adapter.fleetHooks) {
+          hooksByHarness[outcome.adapter.kind] =
+            await outcome.adapter.fleetHooks();
+        }
       }
     }
     // A hook's row is the worst of its harnesses' words, each harness's

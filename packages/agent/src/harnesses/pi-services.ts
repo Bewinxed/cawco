@@ -69,11 +69,7 @@ import {
   syncMemory,
   syncSkillFiles,
 } from "../fleet";
-import {
-  hookStatesInSet,
-  hookStatesOn,
-  readFleetHarnessSet,
-} from "../fleet-harness-set";
+import { hookStatesInSet, readFleetHarnessSet } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import type { FleetPart } from "../fleet-parts";
 import { placedMcpKeys, placeSets } from "../fleet-place-set";
@@ -1283,14 +1279,9 @@ export class PiProfile {
       plugins: {},
       skills: skillStates,
       // CawCo's inline extension runs the fleet's hooks from the harness
-      // set (pi-runtime.ts `FleetHooks`); what it cannot run is said
-      // unsupported here.
-      hooks: parts.has("hooks")
-        ? hookStatesOn(
-            "pi",
-            config.hooks.filter((hook) => hook.enabled)
-          )
-        : {},
+      // set (pi-runtime.ts `FleetHooks`), which Claude Code's converge
+      // writes: their states are read from it once every harness's converge
+      // has ended (`fleetHooks`).
       at: Date.now(),
     };
     const enabled = config.mcp.filter((row) => row.enabled);
@@ -1328,6 +1319,15 @@ export class PiProfile {
     };
   }
 
+  /** Each fleet hook as CawCo's inline extension runs it: from the harness set and the places' files, as last written; what it cannot run, unsupported. */
+  async fleetHooks(): Promise<Record<string, FleetItemState>> {
+    return hookStatesInSet(
+      "pi",
+      await readFleetHarnessSet(),
+      await placeSets()
+    );
+  }
+
   async fleetStatus(): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(PI_SIDECAR);
     const places = await placeSets();
@@ -1337,7 +1337,7 @@ export class PiProfile {
       marketplaces: {},
       plugins: {},
       skills: skillStates,
-      hooks: hookStatesInSet("pi", await readFleetHarnessSet(), places),
+      hooks: await this.fleetHooks(),
       at: Date.now(),
     };
     const set = await readFleetMcpSet();

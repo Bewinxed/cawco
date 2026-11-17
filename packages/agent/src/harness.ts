@@ -603,6 +603,18 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
    * Every harness that has `syncFleet` has it.
    */
   fleetHome?: () => string;
+  /**
+   * Each fleet hook as this harness's sessions run it: the hooks the harness
+   * set and the places' files hold as they were last written
+   * (fleet-harness-set.ts `hookStatesInSet`). A harness that runs the
+   * fleet's hooks from that set has it; Claude Code, whose own converge
+   * writes the set and reports what it registered, does not. A converge of
+   * the hooks reads it once every harness's converge has ended
+   * (fleet-converger.ts `#syncFleet`), so it reads what Claude Code's wrote.
+   */
+  fleetHooks?: () => Promise<
+    Record<string, import("@cawco/core/fleet").FleetItemState>
+  >;
   /** What the harness has of what cawco last put on it, without changing it. */
   fleetStatus?: () => Promise<FleetSyncReport>;
   /** The stored session under `sessionKey`; null when this harness keeps none under it. */

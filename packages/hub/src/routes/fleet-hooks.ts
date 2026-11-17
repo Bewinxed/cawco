@@ -3,7 +3,14 @@
  */
 
 import { FLEET_SCOPES } from "@cawco/core/fleet-placement";
-import { HOOK_TEMPLATES, type HookDraft, hookProblem } from "@cawco/core/hooks";
+import { scriptParseError } from "@cawco/core/hook-script";
+import {
+  HOOK_TEMPLATES,
+  type HookDraft,
+  type HookDraftForm,
+  hookProblem,
+} from "@cawco/core/hooks";
+import { hookScriptUnparsed } from "@cawco/core/words/hooks";
 import { Elysia, ElysiaStatus, problem, status, t } from "elysia";
 import type { Static } from "typebox";
 import { hashHookMaterial } from "../db/fleet-catalog";
@@ -38,6 +45,28 @@ export const hookBody = t.Object({
   expectedHash: t.Optional(t.String()),
 });
 
+/** Why the shell its shebang names does not parse a hook's script: a machine's `settleHooks` check, run on the hub. */
+const scriptRefusal = async (
+  draft: Pick<HookDraftForm, "handler" | "script">
+): Promise<string | undefined> => {
+  const unparsed =
+    draft.handler?.type === "command" && draft.script
+      ? await scriptParseError(draft.script, process.env)
+      : undefined;
+  return unparsed && hookScriptUnparsed(unparsed.shell, unparsed.said);
+};
+
+/**
+ * What refuses a hook before it is kept: the first of its draft's problems
+ * (core `hookProblem`), then its script's parse by the shell its shebang
+ * names (core hook-script.ts), the same two checks every machine runs before
+ * it installs it (agent fleet.ts `settleHooks`), so the hub never keeps a
+ * hook every machine would refuse. On a hub with no such shell on its PATH
+ * the parse cannot run, and the hook is refused saying so.
+ */
+const hookRefusal = async (draft: HookDraftForm): Promise<string | undefined> =>
+  Object.values(hookProblem(draft))[0] ?? (await scriptRefusal(draft));
+
 /**
  * Hooks (NEW.md §11): the one fleet row that is executable, so the gate
  * here is `hookProblem` — the same validator the editor refuses a save
@@ -60,7 +89,7 @@ export const fleetHookCalls = ({
     hooks: db.listFleetHooks(),
     templates: HOOK_TEMPLATES,
   }),
-  put: (id: string, body: Static<typeof hookBody>) => {
+  put: async (id: string, body: Static<typeof hookBody>) => {
     const { expectedHash, ...patch } = body;
     const current = db.getFleetHook(id);
     // The same conflict a memory document's save answers with: what the
@@ -78,10 +107,7 @@ export const fleetHookCalls = ({
     if (typeof draft === "string") {
       return problem(400, { code: "hook-invalid", detail: draft });
     }
-    const [first] = [
-      boundProblem(draft),
-      ...Object.values(hookProblem(draft)),
-    ].filter(Boolean);
+    const first = boundProblem(draft) ?? (await hookRefusal(draft));
     if (first) {
       return problem(400, { code: "hook-invalid", detail: first });
     }
@@ -181,7 +207,7 @@ export const fleetHookRoutes = (
       .post(
         "/api/fleet/hooks/restore",
         { body: t.Object({ id: t.Number() }) },
-        ({ body }) => {
+        async ({ body }) => {
           const version = db.fleetHookVersion(body.id);
           if (!version) {
             return problem(404, {
@@ -189,14 +215,7 @@ export const fleetHookRoutes = (
               detail: `no hook version ${body.id}`,
             });
           }
-
-          const current = db.getFleetHook(version.hookId);
-          if (current) {
-            keepHookVersion(current);
-          }
-
-          const hook = db.putFleetHook({
-            id: version.hookId,
+          const restored: HookDraft = {
             name: version.name,
             enabled: version.enabled,
             event: version.event,
@@ -205,7 +224,20 @@ export const fleetHookRoutes = (
             script: version.script,
             scope: version.scope,
             projectId: version.projectId,
-          });
+          };
+          // A version kept before the hub parsed what it keeps can be one no
+          // machine installs.
+          const first = await scriptRefusal(restored);
+          if (first) {
+            return problem(400, { code: "hook-invalid", detail: first });
+          }
+
+          const current = db.getFleetHook(version.hookId);
+          if (current) {
+            keepHookVersion(current);
+          }
+
+          const hook = db.putFleetHook({ ...restored, id: version.hookId });
           fleetChanged();
           return hook;
         }
@@ -253,7 +285,7 @@ export const fleetHookRoutes = (
             scope: current.scope,
             projectId: current.projectId,
           };
-          const [first] = Object.values(hookProblem(draft));
+          const first = await hookRefusal(draft);
           if (first) {
             return problem(400, { code: "hook-invalid", detail: first });
           }
