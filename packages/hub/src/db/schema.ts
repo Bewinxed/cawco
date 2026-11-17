@@ -3503,6 +3503,9 @@ export const sessionTasks = sqliteTable(
  * `machine`, its machine connected again. Gone once carried, replaced by a
  * newer move, or with the session's row.
  */
+/** Every kind of carry-on an owed move keeps (db/owed-moves.ts `OwedCarry`), as its column does. */
+export const OWED_CARRY_KINDS = ["limit", "signin", "model"] as const;
+
 export const owedMoves = sqliteTable("owed_moves", {
   instanceId: sessionColumn("instance_id")
     .primaryKey()
@@ -3520,6 +3523,15 @@ export const owedMoves = sqliteTable("owed_moves", {
    * account it lands on: the row takes it as the move lands. Null for none.
    */
   pickedModel: text("picked_model"),
+  /**
+   * What the session is told once the move lands (db/owed-moves.ts
+   * `OwedCarry`): to carry on past its limit (`limit`) or its refused
+   * sign-in (`signin`), or to answer its refused first turn on the model the
+   * move lands it on (`model`, its line in `carryLine`). Null for nothing.
+   */
+  carryOn: text("carry_on", { enum: OWED_CARRY_KINDS }),
+  /** With `carryOn` `model`: the session's transcript line for the move. */
+  carryLine: text("carry_line"),
   createdAt: stampedNow("created_at"),
 });
 

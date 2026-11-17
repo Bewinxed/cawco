@@ -11531,7 +11531,7 @@ export const createServer = (
       }
       unnoteAtLimit(row, plan.lineId);
     },
-    resume: carryOn,
+    resume: (row, stopped, quiet) => carryOn(row, { kind: stopped }, quiet),
     // A stale hold's notice in Needs you, kept and gone as a held item's is.
     stale: (row, title, body) => watchPort.now()?.tellYou(row, title, body),
     unstale: (row) => watchPort.now()?.untell(row.id),

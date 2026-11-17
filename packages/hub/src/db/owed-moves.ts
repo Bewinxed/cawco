@@ -2,7 +2,19 @@ import type { AccountMove } from "@cawco/core/accounts";
 import type { OwedMoveWait } from "@cawco/core/protocol";
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { unreachable } from "../unreachable";
 import { owedMoves } from "./schema";
+
+/**
+ * What a session is told once the move it owes lands (compaction.ts
+ * `carryOn`), kept beside the move so a hub that restarts under it still
+ * tells it: to carry on past what stopped its turn, its account's limit or
+ * its refused sign-in; or to answer the first turn its provider refused on
+ * the model the hub chose, on the model the move lands it on (`line`: its
+ * transcript's line for the move, start-model-moves.ts).
+ */
+export type OwedCarry =
+  { kind: "limit" } | { kind: "signin" } | { kind: "model"; line: string };
 
 /**
  * A move a session owes to its next launch (schema `owedMoves`), read the
@@ -12,6 +24,8 @@ import { owedMoves } from "./schema";
 export interface OwedMove {
   /** A person asked for it ({@link OwedMovesDb}): the at-limit controller only carries it out. */
   byHand?: true;
+  /** What the session is told once it lands ({@link OwedCarry}); told once, by whoever lands it (limit-moves.ts). */
+  carry?: OwedCarry;
   /**
    * A model a person picked while the move waited, checked against the
    * account it lands on (limit-moves.ts `pickWithMove`): the launch that
@@ -47,13 +61,34 @@ export interface OwedMovesDb {
 
 type Row = typeof owedMoves.$inferSelect;
 
-const toOwed = (row: Row): OwedMove => ({
-  move: row.move ?? null,
-  waits: row.waits,
-  ...(row.toAccountId === null ? {} : { to: row.toAccountId }),
-  ...(row.byHand ? { byHand: true as const } : {}),
-  ...(row.pickedModel === null ? {} : { model: row.pickedModel }),
-});
+/** The carry-on a row keeps ({@link OwedCarry}); none for a model's with no line, which no write makes. */
+const carryOf = (row: Row): OwedCarry | undefined => {
+  switch (row.carryOn) {
+    case null:
+      return;
+    case "limit":
+    case "signin":
+      return { kind: row.carryOn };
+    case "model":
+      return row.carryLine === null
+        ? undefined
+        : { kind: "model", line: row.carryLine };
+    default:
+      throw unreachable(row.carryOn);
+  }
+};
+
+const toOwed = (row: Row): OwedMove => {
+  const carry = carryOf(row);
+  return {
+    move: row.move ?? null,
+    waits: row.waits,
+    ...(row.toAccountId === null ? {} : { to: row.toAccountId }),
+    ...(row.byHand ? { byHand: true as const } : {}),
+    ...(row.pickedModel === null ? {} : { model: row.pickedModel }),
+    ...(carry ? { carry } : {}),
+  };
+};
 
 export const owedMovesDb = (db: BunSQLiteDatabase): OwedMovesDb => {
   const get = (instanceId: string): OwedMove | undefined => {
@@ -80,6 +115,8 @@ export const owedMovesDb = (db: BunSQLiteDatabase): OwedMovesDb => {
         move: owed.move,
         waits: owed.waits,
         pickedModel: owed.model ?? null,
+        carryOn: owed.carry?.kind ?? null,
+        carryLine: owed.carry?.kind === "model" ? owed.carry.line : null,
         createdAt: new Date(),
       };
       db.insert(owedMoves)

@@ -18,10 +18,12 @@ import type { NeutralSystemMessage } from "@cawco/core/session-messages";
 import { ContextLineSchema } from "@cawco/core/stored-shapes";
 import { contextWords } from "@cawco/core/words/context";
 import { noticeWords } from "@cawco/core/words/notices";
+import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 import type { ClosureContext } from "./closure-context";
 import type { LimitCompaction, MovedLine } from "./db/at-limit";
+import type { OwedCarry } from "./db/owed-moves";
 import { fileDue } from "./limit-decision";
 import {
   COMPACT_FOCUS,
@@ -119,25 +121,50 @@ export const createCompaction = (ctx: CompactionContext) => {
   };
 
   /**
+   * What a session is told as it carries on (db/owed-moves.ts `OwedCarry`):
+   * its words, and its transcript's line for them. A first turn refused on
+   * the hub's model is answered on the model its row now runs.
+   */
+  const carryWords = (
+    row: { id: string },
+    carry: OwedCarry
+  ): { content: string; line: string } | undefined => {
+    if (carry.kind !== "model") {
+      return {
+        content: CARRY_ON[carry.kind],
+        line: noticeWords.carryOn[carry.kind],
+      };
+    }
+    const model = ctx.db.getInstancesByIds([row.id])[0]?.model;
+    return model
+      ? { content: spawnWords.startModel.carryOn(model), line: carry.line }
+      : undefined;
+  };
+
+  /**
    * Has a session carry on where its account's limit, or a sign-in failure,
-   * stopped it. `quiet`: a note its next turn reads, starting none (the
-   * at-limit controller's `resume` of a stale hold a person's or its
-   * parent's word took up, whose own turn it rides).
+   * stopped it, or answer its first turn on the hub's next model
+   * ({@link carryWords}). `quiet`: a note its next turn reads, starting
+   * none (the at-limit controller's `resume` of a stale hold a person's or
+   * its parent's word took up, whose own turn it rides).
    */
   const carryOn = (
     row: { id: string; machineId: string },
-    stopped: "limit" | "signin",
+    carry: OwedCarry,
     quiet = false
   ): void => {
+    const words = carryWords(row, carry);
+    if (!words) {
+      console.warn(
+        `[context] ${row.id}'s carry-on was not sent: its row names no model to answer on.`
+      );
+      return;
+    }
     const sent = ctx.deliverSend(
       sessionWord(
         row,
-        CARRY_ON[stopped],
-        {
-          kind: "system",
-          name: LIMIT_ORIGIN,
-          line: noticeWords.carryOn[stopped],
-        },
+        words.content,
+        { kind: "system", name: LIMIT_ORIGIN, line: words.line },
         quiet ? { shouldQuery: false } : {}
       )
     );

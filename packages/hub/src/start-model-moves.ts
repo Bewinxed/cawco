@@ -10,12 +10,14 @@
  *    turn already ran on;
  * 2. the session moves there by the move a person's model pick takes
  *    (relay-control.ts `crossModel`): a relaunch owed to it on the account
- *    and the model (limit-moves.ts `takeUpOwedMove`, `relaunchOnAccount`),
- *    its conversation carried whole, the refused message in it with its
- *    words, attachments and pictures;
+ *    and the model (limit-moves.ts `relaunchOnAccount`), its conversation
+ *    carried whole, the refused message in it with its words, attachments
+ *    and pictures;
  * 3. it is told to answer that message there, the hub's word to its process
- *    as at its account's limit (sends.ts `LIMIT_ORIGIN`), whose line in its
- *    transcript says which model was refused and which it tries next.
+ *    as at its account's limit (session-word.ts `LIMIT_ORIGIN`), whose line
+ *    in its transcript says which model was refused and which it tries
+ *    next. The word rides with the move it owes (db/owed-moves.ts
+ *    `OwedCarry`), so the move and its word never come apart.
  *
  * Its first turn is the one no turn of it ended before (`turnEndedAt`): the
  * refused turn this moves ends nothing, so each try is its first turn still.
@@ -25,17 +27,13 @@
  * refusal is marked and its turn fails, as before.
  */
 
-import { detach } from "@cawco/core/detach";
-import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { NeutralMessage } from "@cawco/core/session-messages";
 import { markWords } from "@cawco/core/words/account-lines";
 import { spawnWords } from "@cawco/core/words/spawn";
-import { ElysiaStatus } from "elysia";
 import { keptOffIn, markOn } from "./account-marks";
 import type { DbShape } from "./db";
 import type { PublicInstanceRow } from "./db/instances";
 import type { OwedMove } from "./db/owed-moves";
-import { LIMIT_ORIGIN, sessionWord } from "./session-word";
 import type { TriedPick } from "./start-models";
 
 /** What the rule reads of the hub (server.ts builds it), each as the hub names it. */
@@ -44,7 +42,6 @@ export interface StartModelMovesContext {
   /** Sessions whose turn their account's refused credential ended: the at-limit controller's (limit-moves.ts `takeCredentialTurn`). */
   credentialTurns: ReadonlySet<string>;
   db: DbShape;
-  deliverSend: (asked: HubEnvelope<"send">) => unknown;
   owedMoves: { set: (instanceId: string, owed: OwedMove) => void };
   relaunchOnAccount: (instanceId: string) => void;
   resolvedModel: (
@@ -58,7 +55,6 @@ export interface StartModelMovesContext {
     row: PublicInstanceRow,
     tried: readonly TriedPick[]
   ) => { accountId?: string; model: string } | { refusal: string };
-  takeUpOwedMove: (instanceId: string) => Promise<void> | undefined;
 }
 
 /** What a refused first turn does at its end: moves to its next pick, or fails with why none is left. */
@@ -197,32 +193,14 @@ export const createStartModelMoves = (ctx: StartModelMovesContext) => {
   const moving = (instanceId: string): boolean =>
     decided.get(instanceId)?.kind === "move";
 
-  /** The session, moved, is told to answer its refused message there, under the move's line. */
-  const carryOn = (instanceId: string, model: string, line: string): void => {
-    const [row] = ctx.db.getInstancesByIds([instanceId]);
-    if (!row) {
-      return;
-    }
-    const sent = ctx.deliverSend(
-      sessionWord(row, spawnWords.startModel.carryOn(model), {
-        kind: "system",
-        name: LIMIT_ORIGIN,
-        line,
-      })
-    );
-    if (sent instanceof ElysiaStatus) {
-      console.warn(
-        `[hub] ${ctx.sessionName(row)} moved to its next model, and its word to answer there was not sent: ${sent.response.detail}`
-      );
-    }
-  };
-
   /**
    * The end of a turn that moves to its next pick ({@link refusedFrame}):
    * nothing ended, so no report goes up, no rule answers it and no item
-   * fails. Its relaunch is owed on the pick's account and model, carried now
-   * as a person's model pick is (relay-control.ts `crossModel`), and the
-   * session is told to answer there once it is. False for any other end.
+   * fails. Its relaunch is owed on the pick's account and model, with its
+   * word to answer there beside it (db/owed-moves.ts `OwedCarry`), and
+   * carried now as a person's model pick is (relay-control.ts
+   * `crossModel`): whoever lands the move tells it, a hub that restarts
+   * under it included. False for any other end.
    */
   const movesAtEnd = (instanceId: string): boolean => {
     const decision = decided.get(instanceId);
@@ -243,17 +221,9 @@ export const createStartModelMoves = (ctx: StartModelMovesContext) => {
       model: decision.model,
       move: null,
       waits: "turn",
+      carry: { kind: "model", line: decision.line },
     });
-    const told = () => carryOn(row.id, decision.model, decision.line);
-    const going = to === undefined ? undefined : ctx.takeUpOwedMove(row.id);
-    if (going !== undefined) {
-      detach(going.then(told), "start model move");
-      return true;
-    }
-    if (to === undefined) {
-      ctx.relaunchOnAccount(row.id);
-    }
-    told();
+    ctx.relaunchOnAccount(row.id);
     return true;
   };
 

@@ -37,7 +37,7 @@ import type { DbShape } from "./db";
 import type { MovedLine } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { PublicInstanceRow } from "./db/instances";
-import type { OwedMove } from "./db/owed-moves";
+import type { OwedCarry, OwedMove } from "./db/owed-moves";
 import type { ContinuationAsker, ContinueRequest } from "./db/stored-types";
 import type { MoveOffWhy, StoredRow } from "./hub-shapes";
 import { cacheWarmNow, measuredCold, promptCacheExpiresAt } from "./keep-alive";
@@ -127,6 +127,28 @@ export type LimitMovesContext = Pick<
 >;
 
 export const createLimitMoves = (ctx: LimitMovesContext) => {
+  /**
+   * An owed move whose carry cannot happen, dropped ({@link keepUncarried}):
+   * a model picked to go with it goes with it, and the person who was shown
+   * it waiting is shown it didn't happen. A refused first turn's answer is
+   * asked where it stays: its refusal comes back and its pass goes on or
+   * ends (start-model-moves.ts), never left read and unanswered.
+   */
+  const dropUncarried = (
+    stored: StoredRow,
+    owed: OwedMove,
+    to: string,
+    why: string
+  ): void => {
+    ctx.owedMoves.delete(stored.id);
+    if (owed.byHand || owed.model !== undefined) {
+      refuseMove(stored, to, why);
+    }
+    if (owed.carry?.kind === "model") {
+      ctx.carryOn(stored, owed.carry);
+    }
+  };
+
   /**
    * The owed moves being carried now ({@link takeUpOwedMove}), by session:
    * a second ask for one joins its carry, never starts another. Only what
@@ -401,6 +423,19 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       : null;
   };
 
+  /** What a carry-on says stopped its session's turn, as a move reads it ({@link stoppedNow}): its limit or its sign-in; none for a refused first turn, which holds nothing. */
+  const stopOf = (
+    carry: OwedCarry | undefined
+  ): "limit" | "signin" | undefined =>
+    carry?.kind === "limit" || carry?.kind === "signin"
+      ? carry.kind
+      : undefined;
+
+  /** The carry-on of a turn `stopped` cut ({@link OwedCarry}); none when nothing stopped it. */
+  const carryAfter = (
+    stopped: "limit" | "signin" | undefined
+  ): OwedCarry | undefined => (stopped ? { kind: stopped } : undefined);
+
   /**
    * What `instanceId` is stopped by now: `carry` when its caller knows (its
    * turn was just refused at its limit, or on its sign-in), else what the
@@ -569,7 +604,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     // One at rest is relaunched only when its limit or sign-in cut its last
     // turn: its carry-on starts it there ({@link relaunchOnAccount}).
     if (live || stopped) {
-      relaunchOnAccount(row.id, stopped, live);
+      relaunchOnAccount(row.id, carryAfter(stopped), live);
     }
     if (move) {
       ctx.noteAtLimit(row, move);
@@ -691,16 +726,18 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * into that account's server. A person's move it owes ({@link
    * owedMoves}) is carried first, its process ended at rest for it,
    * and its row names the account only once its data is there; one whose
-   * carry cannot happen stays on its account and in place. `carry`: its
-   * turn was refused at its account's limit (or on its sign-in), so it is
-   * told to carry on there, relaunched or not, and answers there what that
-   * turn was asked. `live`: whether its process worked before the carry
-   * ended it ({@link processWorks}), read now when no carry came first; only
-   * then is it relaunched.
+   * carry cannot happen stays on its account and in place. `carry`: what
+   * stopped its turn (its account's limit, its refused sign-in, a first
+   * turn its provider refused on the hub's model), so it is told to carry
+   * on there, relaunched or not, and answers there what that turn was asked;
+   * absent, the carry-on the move it owes keeps ({@link OwedCarry}). `live`:
+   * whether its process worked before the carry ended it
+   * ({@link processWorks}), read now when no carry came first; only then is
+   * it relaunched.
    */
   const relaunchOnAccount = (
     instanceId: string,
-    carry?: "limit" | "signin",
+    carry?: OwedCarry,
     live?: boolean
   ): void => {
     const going = takeUpOwedMove(instanceId, carry);
@@ -710,6 +747,8 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       return;
     }
     const [stored] = ctx.db.getInstancesByIds([instanceId]);
+    // Read before the launch lands the move it owes, which takes its record.
+    const told = carry ?? (stored && ctx.owedMoves.get(stored.id)?.carry);
     const row = stored && takeOwedMove(stored);
     const agent = row ? ctx.registry.agent(row.machineId) : undefined;
     if (!(row?.sessionId && agent)) {
@@ -728,11 +767,11 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
           ctx.accountWords(row.accountId),
           row.status,
           ctx.launchInFlight(row.id),
-          carry !== undefined
+          told !== undefined
         )
       );
-      if (carry) {
-        ctx.carryOn(row, carry);
+      if (told) {
+        ctx.carryOn(row, told);
       }
       return;
     }
@@ -740,7 +779,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       relaunchWords.onAccount(
         ctx.sessionName(row),
         ctx.accountWords(row.accountId),
-        carry ? " and told to carry on past the limit that stopped it" : ""
+        told ? " and told to carry on past what stopped it" : ""
       )
     );
     ctx.resumeSpawn(
@@ -749,8 +788,8 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       { ...row, sessionId: row.sessionId },
       true
     );
-    if (carry) {
-      ctx.carryOn(row, carry);
+    if (told) {
+      ctx.carryOn(row, told);
     }
   };
 
@@ -827,12 +866,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     } else if (mine && away) {
       ctx.owedMoves.set(stored.id, { ...now, waits: "machine" });
     } else if (mine) {
-      // Dropped, and a model picked to go with it with it: the person who
-      // was shown it waiting is shown it didn't happen.
-      ctx.owedMoves.delete(stored.id);
-      if (now.byHand || now.model !== undefined) {
-        refuseMove(stored, to, why.why);
-      }
+      dropUncarried(stored, now, to, why.why);
     }
     const next = away
       ? `It moves as soon as ${ctx.machineName(stored.machineId)} is connected again.`
@@ -861,7 +895,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    */
   const takeUpOwedMove = (
     instanceId: string,
-    carry?: "limit" | "signin"
+    carry?: OwedCarry
   ): Promise<void> | undefined => {
     const inFlight = owedCarries.get(instanceId);
     if (inFlight !== undefined) {
@@ -879,6 +913,13 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     const { to } = owed;
     /** The record is still this move's: no newer ask replaced it. */
     const still = () => ctx.owedMoves.get(stored.id)?.to === to;
+    // Its carry-on rides beside the move from here, so a hub that restarts
+    // under the carry tells it as it carries the move again
+    // ({@link takeUpMovesOn}); whoever lands the move tells it once.
+    if (carry) {
+      ctx.owedMoves.set(stored.id, { ...owed, carry });
+    }
+    const told = carry ?? owed.carry;
     // A provider refused the target its model since the move was owed: it
     // doesn't go, in the words of any move a carry left where it was.
     const marked = owedMark(stored, owed);
@@ -896,7 +937,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       );
       return undefined;
     }
-    const stopped = stoppedNow(stored.id, carry);
+    const stopped = stoppedNow(stored.id, stopOf(told));
     // Weighed now it goes: a move owed before it was compacted (a person's,
     // a rebalance's) compacts as the policy says; one whose line already
     // says how it was compacted goes as it is.
@@ -948,7 +989,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         // Behind the carry's own end, so its relaunch (and a newer move
         // asked meanwhile) is taken up afresh, never joined to this one.
         if (landed) {
-          relaunchOnAccount(stored.id, stopped, live);
+          relaunchOnAccount(stored.id, told ?? carryAfter(stopped), live);
           ctx.releaseOwed({ instanceId: stored.id });
         }
       });
@@ -1092,7 +1133,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     console.info(
       `[at-limit] ${ctx.sessionName(row)}'s turn was refused: ${ctx.accountWords(row.accountId)} is at its limit. It already owed a move to ${accountNameAmong(to, ctx.db.accounts.list())}, which has room, so it moves there now and carries on there.`
     );
-    relaunchOnAccount(row.id, "limit");
+    relaunchOnAccount(row.id, { kind: "limit" });
     return true;
   };
 
@@ -1475,7 +1516,56 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       return;
     }
     if (stopped) {
-      ctx.carryOn(now, stopped);
+      ctx.carryOn(now, { kind: stopped });
+    }
+  };
+
+  /**
+   * `carrying`, the carry of `row` to `accountId` ({@link carryTo}), with
+   * what stopped its turn (`stopped`) kept beside it as the move's carry-on
+   * while it runs (db/owed-moves.ts `OwedCarry`): a hub that restarts under
+   * it carries the move again as the machine registers and tells it then
+   * ({@link takeUpMovesOn}), and a take of the move meanwhile joins this
+   * carry ({@link owedCarries}). Once it is over, landed or not, the record
+   * is the one before it again; the carry-on is told as it relaunches.
+   */
+  const carriedWithWord = async <T>(
+    row: { id: string },
+    accountId: string,
+    stopped: "limit" | "signin" | undefined,
+    carrying: Promise<T>
+  ): Promise<T> => {
+    if (!stopped) {
+      return await carrying;
+    }
+    const carry: OwedCarry = { kind: stopped };
+    const before = ctx.owedMoves.get(row.id);
+    ctx.owedMoves.set(row.id, {
+      ...(before ?? { move: null, waits: "turn" }),
+      to: accountId,
+      carry,
+    });
+    const joined = !owedCarries.has(row.id);
+    if (joined) {
+      owedCarries.set(
+        row.id,
+        carrying.then(() => undefined)
+      );
+    }
+    try {
+      return await carrying;
+    } finally {
+      if (joined) {
+        owedCarries.delete(row.id);
+      }
+      const now = ctx.owedMoves.get(row.id);
+      if (now?.to === accountId && now.carry?.kind === carry.kind) {
+        if (before) {
+          ctx.owedMoves.set(row.id, before);
+        } else {
+          ctx.owedMoves.delete(row.id);
+        }
+      }
     }
   };
 
@@ -1510,13 +1600,18 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       };
     }
     const live = processWorks(row);
-    const { kept, ended } = await ctx.moveRowsToAccount(
-      row.machineId,
-      [row],
+    const { kept, ended } = await carriedWithWord(
+      row,
       accountId,
-      true,
       stopped || undefined,
-      laterSince
+      ctx.moveRowsToAccount(
+        row.machineId,
+        [row],
+        accountId,
+        true,
+        stopped || undefined,
+        laterSince
+      )
     );
     const why = kept.get(row.id);
     if (why) {
@@ -1526,8 +1621,8 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       ctx.db.patchInstance(row.id, { model: picked });
     }
     const agent = ctx.registry.agent(row.machineId);
-    const [now] = ctx.db.getInstancesByIds([row.id]);
-    if (!(agent && now?.sessionId)) {
+    const [moved] = ctx.db.getInstancesByIds([row.id]);
+    if (!(agent && moved?.sessionId)) {
       return {
         kept: {
           running: false,
@@ -1537,7 +1632,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     }
     relaunchMoved(
       agent,
-      { ...now, sessionId: now.sessionId },
+      { ...moved, sessionId: moved.sessionId },
       stopped,
       compact,
       live
