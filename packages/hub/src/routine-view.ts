@@ -3,7 +3,7 @@
  * the words that show it (presenters/project.ts) read it.
  */
 
-import type { OfferedMode } from "@cawco/core/harness/kinds";
+import type { OfferedMode } from "@cawco/core/harness/modes";
 import type { LandsMode } from "@cawco/core/injected";
 import type {
   RoutineMadeEvent,

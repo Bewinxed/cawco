@@ -11,7 +11,7 @@ import {
 } from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import { RESTART_WAIT_CAP_MS } from "@cawco/core/binary-updates";
-import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
+import { COMPACT_NAMED_HARNESSES } from "@cawco/core/harness/traits";
 import type { StallOffer } from "@cawco/core/protocol";
 import type { MoveEnded } from "@cawco/core/session/controls";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
@@ -310,18 +310,11 @@ export const fileDue = (how: {
 export const WHOLE_MOVE_NOTICE_MS = 5 * MINUTE_MS;
 
 /**
- * Each harness as a moved line's stored `compactBy` names the one whose own
- * `/compact` ran: none for Claude Code, which a line without one means.
+ * The `compactBy` a moved line of `harness` stores, when its descriptor
+ * names it on one (core harness/traits.ts `compactorOf`).
  */
-const COMPACT_BY: Record<
-  HarnessKind,
-  Extract<AccountMove, { kind: "moved" }>["compactBy"]
-> = { claude: undefined, opencode: "opencode", pi: "pi" };
-
-/** The `compactBy` a moved line of `harness` stores, when it names one. */
 const compactByOf = (harness: string) => {
-  const kind = harnessNamed(harness);
-  const by = kind ? COMPACT_BY[kind] : undefined;
+  const by = COMPACT_NAMED_HARNESSES.find((kind) => kind === harness);
   return by ? { compactBy: by } : {};
 };
 

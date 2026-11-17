@@ -33,6 +33,7 @@ import { secretValuesOf, withoutSecrets } from "@cawco/core/fleet-secrets";
 import type { FleetReportFrame } from "@cawco/core/frames";
 import { HOSTED_PREFIX } from "@cawco/core/gateway-paths";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { descriptorOf } from "@cawco/core/harness/kinds";
 import { isRecord } from "@cawco/core/is-record";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
 import {
@@ -937,26 +938,20 @@ export class FleetConverger {
     // for its server's first line) no longer holds the others' convergence
     // and the machine's whole report behind it.
     const settled = await Promise.all(
-      harnesses()
-        .filter((adapter) =>
-          incoming ? adapter.syncFleet : adapter.fleetStatus
-        )
-        .map(async (adapter) => {
-          try {
-            const report =
-              incoming && config
-                ? // biome-ignore lint/style/noNonNullAssertion: filtered to adapters that have it above
-                  await adapter.syncFleet!(
-                    adapter.capabilities.mcpStatus ? config : incoming,
-                    parts
-                  )
-                : // biome-ignore lint/style/noNonNullAssertion: filtered to adapters that have it above
-                  await adapter.fleetStatus!();
-            return { adapter, report } as const;
-          } catch (error) {
-            return { adapter, error } as const;
-          }
-        })
+      harnesses().map(async (adapter) => {
+        try {
+          const report =
+            incoming && config
+              ? await adapter.syncFleet(
+                  adapter.capabilities.mcpStatus ? config : incoming,
+                  parts
+                )
+              : await adapter.fleetStatus();
+          return { adapter, report } as const;
+        } catch (error) {
+          return { adapter, error } as const;
+        }
+      })
     );
     for (const outcome of settled) {
       const { adapter } = outcome;
@@ -1023,7 +1018,10 @@ export class FleetConverger {
     // what was written rather than from what the fleet asked for.
     if (incoming && parts.has("hooks")) {
       for (const outcome of settled) {
-        if (!("error" in outcome) && outcome.adapter.fleetHooks) {
+        if (
+          !("error" in outcome) &&
+          descriptorOf(outcome.adapter.kind).hooks.runs === "cawco"
+        ) {
           hooksByHarness[outcome.adapter.kind] =
             await outcome.adapter.fleetHooks();
         }
@@ -1258,9 +1256,6 @@ async function fleetHoldings(): Promise<FleetHoldings> {
   const skillClaims: Record<string, string>[] = [];
   const pluginClaims: Record<string, string>[] = [];
   for (const adapter of harnesses()) {
-    if (!adapter.fleetHoldings) {
-      continue;
-    }
     try {
       const held = await adapter.fleetHoldings();
       if (held.skills) {
@@ -1295,11 +1290,7 @@ const PLACE_FILE_PARTS: readonly FleetPart[] = [
 const convergeBasis = async (): Promise<ConvergeBasis> => ({
   build: await buildKey(),
   homes: Object.fromEntries(
-    harnesses().flatMap((adapter) =>
-      adapter.syncFleet && adapter.fleetHome
-        ? [[adapter.kind, adapter.fleetHome()]]
-        : []
-    )
+    harnesses().map((adapter) => [adapter.kind, adapter.fleetHome()])
   ),
 });
 

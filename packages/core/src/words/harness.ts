@@ -1,7 +1,7 @@
 import type { HarnessKind } from "../harness/kinds";
+import { harnessName } from "../harness/kinds";
 import { firstCopy } from "../tool-updates";
 import type { ToolStatus } from "../tools";
-import { accountsWords } from "./accounts";
 import { andList } from "./helpers";
 
 /**
@@ -13,10 +13,10 @@ import { andList } from "./helpers";
 export const harnessWords = {
   /** Keep-alive asked of a session whose harness is none of `kept`, those whose prompt cache the hub times. */
   keepAliveIsFor: (kept: readonly HarnessKind[]) =>
-    `Keep-alive is for ${andList(kept.map((kind) => accountsWords.harnesses[kind]))} sessions`,
+    `Keep-alive is for ${andList(kept.map((kind) => harnessName(kind)))} sessions`,
   /** Keep-alive asked of a `harness` session mid-turn, or waiting on a question. */
   keepAliveNotIdle: (harness: HarnessKind) =>
-    `Keep-alive requires an idle ${accountsWords.harnesses[harness]} session.`,
+    `Keep-alive requires an idle ${harnessName(harness)} session.`,
   /** A mode named that CawCo offers no harness ({@link PERMISSION_MODES}). */
   modeNotOffered: (mode: string, offered: readonly string[]) =>
     `CawCo offers no "${mode}" permission mode; it offers ${offered.join(", ")}.`,
@@ -38,13 +38,6 @@ export const harnessWords = {
   /** One that ended on its own with `code`, in the last of what it said on stderr. */
   claudeExited: (code: number, said: string) =>
     `Claude Code stopped on its own (exit ${code}) and said “${said}”. A message to it starts it again.`,
-  /**
-   * A clean start asked of OpenCode (core `cleanStartRefusal`): its server,
-   * which every session of an account shares, reads the global and the
-   * project's `AGENTS.md` for each of them, and no session can opt out.
-   */
-  openCodeNotClean:
-    "OpenCode can't start a session clean: the server every session of an account shares reads its global and project AGENTS.md into each of them. Start it on Claude Code or pi, or without clean. Nothing was started.",
   /** A clean start asked together with what would bring context back into it. */
   cleanWith: (what: string) =>
     `A clean start takes no ${what}: drop ${what}, or start without clean. Nothing was started.`,

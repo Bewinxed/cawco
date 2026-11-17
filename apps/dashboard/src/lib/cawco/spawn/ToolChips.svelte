@@ -1,10 +1,7 @@
 <script lang="ts" module>
-  import type {
-    EffortLevel,
-    HarnessKind,
-    PermissionMode,
-  } from "@cawco/core/harness/kinds";
-  import { accountsWords } from "@cawco/core/words/accounts";
+  import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
+  import { harnessName } from "@cawco/core/harness/kinds";
+  import type { PermissionMode } from "@cawco/core/harness/modes";
   import { spawnWords } from "@cawco/core/words/spawn";
 
   /** Why the effort chip offers no level, in the chip's words and its title's. */
@@ -19,12 +16,10 @@
     reason: spawnWords.effort.noneWhy,
   };
 
-  const HARNESS_NAMES: Record<HarnessKind, string> = accountsWords.harnesses;
-
   /** A harness that can neither report nor change effort. */
   export const effortNotExposed = (harness: HarnessKind): EffortOff => ({
     label: spawnWords.effort.notExposed,
-    reason: spawnWords.effort.notExposedWhy(HARNESS_NAMES[harness]),
+    reason: spawnWords.effort.notExposedWhy(harnessName(harness)),
   });
 
   /** The run settings that ride on a model: its effort and the session's permission mode. */

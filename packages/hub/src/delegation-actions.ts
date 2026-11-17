@@ -15,12 +15,12 @@ import type { AddressedControl } from "@cawco/core/control-table";
 import type { DelegateType, MayStart } from "@cawco/core/delegate-types";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { ForgeWrite } from "@cawco/core/forge-post";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
-  type HarnessKind,
   type PermissionMode,
   type SessionChosenMode,
   WIRE_PERMISSION_MODES,
-} from "@cawco/core/harness/kinds";
+} from "@cawco/core/harness/modes";
 import type {
   GeneratedImage,
   ImageGenerationRequest,

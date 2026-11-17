@@ -28,9 +28,9 @@ import {
   CONTROL_READ_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
 import type { Bounded } from "@cawco/core/bounded";
+import { harnessName } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { ElysiaStatus, problem } from "elysia";
 import { marksRenewed } from "./account-marks";
 import {
@@ -205,7 +205,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
           } satisfies HomeCredentialFound)
         : problem(409, {
             code: "home-login-refused",
-            detail: `${accountsWords.harnesses[store]} on ${machine} isn't signed in, so there is no login to move.`,
+            detail: `${harnessName(store)} on ${machine} isn't signed in, so there is no login to move.`,
           });
     }
     const read = said(

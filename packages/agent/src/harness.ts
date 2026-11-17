@@ -56,6 +56,7 @@ import type {
 } from "@cawco/core/session-messages";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import type { FleetPart } from "./fleet-parts";
+import type { HarnessCli } from "./harness-cli";
 import type { KeeperReading } from "./keepers";
 import type { KeeperRefused } from "./sessiond-client";
 
@@ -241,7 +242,7 @@ export type SessionControls<H extends HarnessKind> = ControlHandlers<
 /** One live session, owned by a harness. */
 export interface HarnessSession {
   /** Called only after the supervisor has installed this handle. */
-  attached?: () => void;
+  attached: () => void;
   /**
    * Its controls ({@link CONTROL_INTERRUPT}, …), each mapped to the runtime
    * and run through {@link runControl}: one it has no handler for is
@@ -255,7 +256,7 @@ export interface HarnessSession {
    * read before it ends: each background task with the last of its output,
    * and the one-time wake-ups, for the session to hear on the new account.
    */
-  endedForMove?: () => Promise<MoveEnded>;
+  endedForMove: () => Promise<MoveEnded>;
   readonly harness: HarnessKind;
   /**
    * For a move's stop: the work this process holds for later that a resume
@@ -265,13 +266,13 @@ export interface HarnessSession {
    * the restart bound (core `RESTART_WAIT_CAP_MS`), then ends it with the
    * process ({@link endedForMove}). Empty when it holds none.
    */
-  heldForLater?: () => RestartHold[];
+  heldForLater: () => RestartHold[];
   /**
    * Since when what {@link heldForLater} counts has run, epoch ms: its oldest
    * background command's start as this daemon first heard of it. Undefined
    * when it holds none, or none whose start is known.
    */
-  heldSince?: () => number | undefined;
+  heldSince: () => number | undefined;
   /**
    * What stopping this session's processes now would lose, in words, beyond
    * what the supervisor sees for itself (a running turn, a parked ask): work
@@ -281,7 +282,7 @@ export interface HarnessSession {
    * that resume brings back is not counted, and what it holds for later is
    * {@link heldForLater}'s to say.
    */
-  holding?: (forMove?: boolean) => string | undefined;
+  holding: (forMove?: boolean) => string | undefined;
   /** Interrupt the current turn. */
   interrupt: () => Promise<void>;
   /**
@@ -291,7 +292,7 @@ export interface HarnessSession {
    * live one did. A runtime that starts no turn of its own between sends
    * cannot loop that way, and has none.
    */
-  noteStopped?: (words: string) => Promise<void>;
+  noteStopped: (words: string) => Promise<void>;
   /**
    * This process runs a version of its harness other than the machine's
    * (Claude: its initialize reply's `claude_code_version` against the
@@ -301,13 +302,13 @@ export interface HarnessSession {
    * while either version is not read yet, or while the machine's is below the
    * floor no session starts on (a sleep would leave it nothing to wake on).
    */
-  outdated?: () => Promise<{ uuid: string; words: string } | undefined>;
+  outdated: () => Promise<{ uuid: string; words: string } | undefined>;
   /**
    * The process the session's commands run under: its CLI's (Claude Code,
    * pi's host) or its server's (OpenCode). Undefined while there is none
    * (agent left-running.ts).
    */
-  processId?: () => Promise<number | undefined>;
+  processId: () => Promise<number | undefined>;
   /** Settle a parked permission by its `requestId`. */
   resolvePermission: (requestId: string, result: PermissionResult) => void;
   /** Push one user turn into the session's prompt stream. */
@@ -321,7 +322,7 @@ export interface HarnessSession {
    * name: summed across live sessions into the agent's memory line
    * ({@link import("./memory").memoryLine}).
    */
-  tables?: () => Record<string, number>;
+  tables: () => Record<string, number>;
   /**
    * Take back a parked permission nobody could be shown (WITHDRAW_PERMISSION):
    * denied with `message`, and recorded as withdrawn, never as the reader's
@@ -346,6 +347,35 @@ export const runControl = <K extends ControlName>(
     ? handler(...args)
     : Promise.reject(new Error(unknownControlWords(method)));
 };
+
+/**
+ * What a harness cannot do, refused in its own words: an adapter's member
+ * for an operation its harness has no way to run. Every member of
+ * {@link Harness} and {@link HarnessSession} is required, so a harness that
+ * lacks one says so here rather than leaving it out.
+ */
+class HarnessCannot extends Error {}
+
+/** A member that refuses, every time, with `why`. */
+export const cannot = (why: string) => (): Promise<never> =>
+  Promise.reject(new HarnessCannot(why));
+
+/**
+ * The carrier of a harness whose sessions keep no account dir to carry a
+ * conversation between (its descriptor's `accountDir`): every request is
+ * answered as failed, with `why`, and nothing moves.
+ */
+export const noCarry = (why: string): SessionCarry => ({
+  carrySessions: (requests) =>
+    Promise.resolve(
+      Object.fromEntries(
+        requests.map((request) => [
+          request.instanceId,
+          { state: "failed", error: why } as const,
+        ])
+      )
+    ),
+});
 
 /**
  * What the sends handed to a session's process and not read yet keep it
@@ -557,43 +587,52 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
    * or forgotten): the harness takes the change into what it runs. Absent
    * from a harness that reads the accounts afresh on its own.
    */
-  accountsChanged?: () => Promise<void>;
+  accountsChanged: () => Promise<void>;
   /** What `register` reports as this harness's auth, cached from {@link detect}. */
   auth: AuthState;
+  /**
+   * Whether its {@link auth}, {@link authReason} or {@link signInFaults} can
+   * move between its reports, as its sessions run (pi's sign-in checked at a
+   * spawn, OpenCode's server refusing or a provider refusing a turn): the
+   * daemon sends a moved word on its next heartbeat.
+   */
+  readonly authMovesLive: boolean;
   /**
    * Why a session of this harness cannot start here, when the harness can
    * say, cached beside {@link auth}: pi's sign-in, OpenCode's server refusing
    * to start ({@link HarnessReport.authReason}).
    */
-  readonly authReason?: string;
+  readonly authReason: string | undefined;
   readonly capabilities: HarnessCapabilities;
   /**
    * The carry of this harness's sessions between account directories, for
-   * the supervisor `host` (the account-model trait's `dir`, whose session
-   * data lives in an account's directory). Absent from a harness whose
-   * sessions move with no data of theirs.
+   * the supervisor `host` (its descriptor's `accountDir`, whose session data
+   * lives in an account's directory). A harness whose sessions move with no
+   * data of theirs refuses each request ({@link noCarry}).
    */
-  carrier?: (host: CarryHost) => SessionCarry;
+  carrier: (host: CarryHost) => SessionCarry;
   /**
    * `true` when {@link listSessions} reads the harness's servers' databases
    * on the stores thread (OpenCode's, multi-gigabyte on obelisk). The
    * register carries only the catalogs read from plain files; this one
    * follows on a beat, so no register waits on that read.
    */
-  readonly catalogFromServer?: true;
+  readonly catalogFromServer: boolean;
+  /** Its CLI on this machine, as the machine's capability probe reports it (capabilities.ts `probeCapabilities`). */
+  readonly cli: HarnessCli;
   /** How it holds a session that outlives the agent ({@link HarnessTraits.custody}, which the table states and this type holds it to). */
   readonly custody: CustodyOf<K>;
   deleteSession: (sessionKey: string, dir?: string) => Promise<void>;
   /** What this machine can do with the harness — install, version, auth. */
   detect: () => Promise<MachineHarnessReport>;
   /** Its `detect` starts nothing, so a tool move re-reads it unasked (daemon.ts `reportTools`). */
-  readonly detectStartsNothing?: true;
-  dispose?: () => Promise<void>;
+  readonly detectStartsNothing: boolean;
+  dispose: () => Promise<void>;
   /**
    * The fleet content this harness's own copy holds on disk now, hashed as the
    * hub hashes it. Absent from a harness that converges no content.
    */
-  fleetHoldings?: () => Promise<import("@cawco/core/fleet").FleetHoldings>;
+  fleetHoldings: () => Promise<import("@cawco/core/fleet").FleetHoldings>;
   /**
    * Where this harness's fleet sync ({@link syncFleet}) writes: the dir every
    * file it writes or links for the fleet hangs from, as this process
@@ -602,7 +641,7 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
    * elsewhere now converges every part once (fleet-converged.ts `homes`).
    * Every harness that has `syncFleet` has it.
    */
-  fleetHome?: () => string;
+  fleetHome: () => string;
   /**
    * Each fleet hook as this harness's sessions run it: the hooks the harness
    * set and the places' files hold as they were last written
@@ -612,11 +651,11 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
    * the hooks reads it once every harness's converge has ended
    * (fleet-converger.ts `#syncFleet`), so it reads what Claude Code's wrote.
    */
-  fleetHooks?: () => Promise<
+  fleetHooks: () => Promise<
     Record<string, import("@cawco/core/fleet").FleetItemState>
   >;
   /** What the harness has of what cawco last put on it, without changing it. */
-  fleetStatus?: () => Promise<FleetSyncReport>;
+  fleetStatus: () => Promise<FleetSyncReport>;
   /** The stored session under `sessionKey`; null when this harness keeps none under it. */
   getSessionInfo: (
     sessionKey: string,
@@ -629,24 +668,24 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
     span?: TranscriptSpan
   ) => Promise<SessionMessage[]>;
   /** A heal of a live session's fleet MCP servers reaches it ({@link CONTROL_MCP_FLEET_HEAL}). */
-  readonly healsFleetMcp?: true;
+  readonly healsFleetMcp: boolean;
   /**
    * The hub restarted since this harness's live sessions connected to it:
    * whatever connection to the hub they hold that does not come back by
    * itself is made again. Absent for a harness whose connections do.
    */
-  hubRestarted?: () => Promise<void>;
+  hubRestarted: () => Promise<void>;
   readonly kind: K;
   /** The stored sessions this harness can resume. */
   listSessions: (dir?: string) => Promise<NeutralSessionInfo[]>;
   /** The machine-scoped controls this harness owns, each under its own name. */
-  readonly machineControls?: SomeControls;
+  readonly machineControls: SomeControls;
   /**
    * Every provider the harness's own catalog names, by id and name: the
    * providers an account can be for through it. Absent from a harness with
    * no catalog of providers of its own.
    */
-  providerList?: () => Promise<{ id: string; name: string }[]>;
+  providerList: () => Promise<{ id: string; name: string }[]>;
   /**
    * The session's messages, oldest first, over the {@link TranscriptSpan}
    * asked for (`chain` when none). `tail` keeps only the newest.
@@ -663,12 +702,12 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
     ask: WindowAsk
   ) => Promise<TranscriptWindow>;
   /** Reopen surviving custody, or leave the instance sleeping if it is gone. */
-  reattach?: (
+  reattach: (
     spec: SpawnPayload,
     ctx: HarnessContext
   ) => Promise<HarnessSession | undefined>;
   /** A manual `/compact` replaces its process at rest ({@link COMPACT_RELAUNCH}). */
-  readonly relaunchesOnManualCompact?: true;
+  readonly relaunchesOnManualCompact: boolean;
   renameSession: (
     sessionKey: string,
     title: string,
@@ -679,9 +718,9 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
    * it runs in the agent's process, never its runtime's turns. Absent for an
    * adapter whose runtime holds all of it under the keeper.
    */
-  restartHolds?: () => import("@cawco/core/binary-updates").RestartHold[];
+  restartHolds: () => import("@cawco/core/binary-updates").RestartHold[];
   /** The machine's own sign-ins their providers last refused, cached beside {@link auth} (OpenCode's, {@link HarnessReport.signInFaults}). */
-  readonly signInFaults?: SignInFault[];
+  readonly signInFaults: SignInFault[];
   /** Start a session; resolves once the runtime handle is in place. */
   spawn: (spec: SpawnPayload, ctx: HarnessContext) => Promise<HarnessSession>;
   /**
@@ -691,7 +730,7 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
    * `boundaryFor`), and the spawn as it is launched to keep its results
    * there. Absent for a harness that saves none.
    */
-  spill?: (
+  spill: (
     spec: SpawnPayload,
     cwd: string,
     workspace: string
@@ -705,7 +744,7 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
    * this harness's own files, every other part left as its last converge
    * wrote it; reports per entry of those parts.
    */
-  syncFleet?: (
+  syncFleet: (
     config: PlacedFleetConfig,
     parts: ReadonlySet<FleetPart>
   ) => Promise<FleetSyncReport>;

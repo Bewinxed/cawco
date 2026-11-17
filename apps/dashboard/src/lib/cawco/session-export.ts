@@ -10,11 +10,11 @@
  * (real money) stay in their own columns, never one.
  */
 
+import { harnessLabel } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { machineLabel } from "@cawco/core/machine-names";
 import { unhandled } from "@cawco/core/unhandled";
 import type { UsageSummaryRow } from "@cawco/core/usage/types";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { instanceTitle, lastAt } from "./home/home-state.svelte";
 import { catalogTitle } from "./links";
 import { asksStore } from "./stores/asks.svelte";
@@ -25,8 +25,6 @@ import {
 } from "./stores/session-detail.svelte";
 import { sessionsStore } from "./stores/sessions.svelte";
 import { storedStore } from "./stores/stored.svelte";
-
-const HARNESS: Record<string, string> = accountsWords.harnesses;
 
 const machineName = (machineId: string): string => {
   const machine = boardStore.machines.find((m) => m.machineId === machineId);
@@ -130,7 +128,7 @@ export async function sessionsCsv(spend: SessionSpend): Promise<string> {
     return [
       instanceTitle(row),
       machineName(row.machineId),
-      HARNESS[harness] ?? harness,
+      harnessLabel(harness),
       stats.turns === null ? "" : String(stats.turns),
       contextCell(read),
       at ? new Date(at).toISOString() : "",
@@ -147,7 +145,7 @@ export async function sessionsCsv(spend: SessionSpend): Promise<string> {
         return [
           catalogTitle(info, boardStore.instanceIndex, machine.machineId),
           machineLabel(machine.hostname),
-          HARNESS[info.harness] ?? info.harness,
+          harnessLabel(info.harness),
           "",
           "",
           new Date(info.lastModified).toISOString(),
@@ -161,7 +159,7 @@ export async function sessionsCsv(spend: SessionSpend): Promise<string> {
     .map(([, entry]) => [
       entry.row.label,
       entry.row.machine ? machineLabel(entry.row.machine.hostname) : "",
-      HARNESS[entry.harness] ?? entry.harness,
+      harnessLabel(entry.harness),
       "",
       "",
       "",

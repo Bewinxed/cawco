@@ -24,13 +24,16 @@
  */
 
 import type { HarnessReport } from "./harness";
+import type { UnlistedModels } from "./harness/descriptor";
 import {
+  descriptorOf,
   type HarnessKind,
+  harnessName,
   harnessNamed,
   type ModelInfo,
 } from "./harness/kinds";
 import { traitsOf } from "./harness/traits";
-import { accountsWords } from "./words/accounts";
+import { unhandled } from "./unhandled";
 import { decidesWords } from "./words/decides";
 import { spawnWords } from "./words/spawn";
 
@@ -225,18 +228,28 @@ const CLAUDE_ALIASES = new Set([
  */
 const CLAUDE_MODEL_ID = /^claude-[a-z0-9-]+$/u;
 
-/** What each harness takes that no row lists; see {@link modelListed}. */
-const UNLISTED_TAKEN: Record<
-  HarnessKind,
-  (id: string, rows: readonly ModelInfo[]) => boolean
-> = {
-  claude: (id) =>
-    CLAUDE_ALIASES.has(id) ||
-    CLAUDE_MODEL_ID.test(id.replace(LONG_CONTEXT, "")),
-  opencode: () => false,
-  pi: (id, rows) =>
-    providerOf(id) === undefined &&
-    rows.filter((row) => row.value.endsWith(`/${id}`)).length === 1,
+/** Whether a harness that takes `unlisted` takes `id`, which no row lists; see {@link modelListed}. */
+const unlistedTaken = (
+  unlisted: UnlistedModels,
+  id: string,
+  rows: readonly ModelInfo[]
+): boolean => {
+  switch (unlisted) {
+    case "claude-names":
+      return (
+        CLAUDE_ALIASES.has(id) ||
+        CLAUDE_MODEL_ID.test(id.replace(LONG_CONTEXT, ""))
+      );
+    case "unique-bare-id":
+      return (
+        providerOf(id) === undefined &&
+        rows.filter((row) => row.value.endsWith(`/${id}`)).length === 1
+      );
+    case "none":
+      return false;
+    default:
+      return unhandled("unlisted models", unlisted);
+  }
 };
 
 /**
@@ -258,7 +271,7 @@ const modelListed = (
   if (id === "default" || modelNameIn(rows, id) !== null) {
     return true;
   }
-  return UNLISTED_TAKEN[harness](id, rows);
+  return unlistedTaken(descriptorOf(harness).unlistedModels, id, rows);
 };
 
 /** What splits a model id into words (`deepseek-v4.1-flash`: `deepseek`, …). */
@@ -347,7 +360,7 @@ export const unlistedModelRefusal = (
     return;
   }
   const rows = listing.read ? listing.rows : [];
-  const name = accountsWords.harnesses[harness];
+  const name = harnessName(harness);
   if (!listing.read) {
     return spawnWords.unlistedModel.unread(name, machine, model, listing.why);
   }

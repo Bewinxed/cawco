@@ -7,8 +7,8 @@
 import type { FleetReportSection } from "../fleet";
 import type { FaultReason } from "../fleet-fault-reason";
 import type { HarnessKind } from "../harness/kinds";
+import { harnessName } from "../harness/kinds";
 import { type HarnessConfigKind, harnessConfigLabel } from "../harness-config";
-import { accountsWords } from "./accounts";
 import { andList } from "./helpers";
 
 const TRAILING_STOP = /\.$/u;
@@ -49,7 +49,7 @@ export const fleetFaultWords = {
   ): string => {
     const on =
       harnesses.length > 0
-        ? ` on ${andList(harnesses.map((harness) => accountsWords.harnesses[harness]))}`
+        ? ` on ${andList(harnesses.map((harness) => harnessName(harness)))}`
         : "";
     const why = reason ? `: ${because(reason)}` : "";
     return `${what} didn't set up${on}${why}.`;

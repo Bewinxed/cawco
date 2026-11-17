@@ -107,7 +107,7 @@ export const harnesses: FleetOffer["harnesses"] = [
 
 /** The same fleet with OpenCode on no machine: its tile can't be picked. */
 export const harnessesNoOpenCode: FleetOffer["harnesses"] = harnesses.map(
-  (offer) => (offer.id === "opencode" ? { ...offer, machines: [] } : offer)
+  (offer) => (offer.name === "OpenCode" ? { ...offer, machines: [] } : offer)
 );
 
 export const skills: FleetOffer["skills"] = [

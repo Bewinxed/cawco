@@ -6,7 +6,8 @@
  */
 
 import type { OnCap, ProjectCap } from "./areas";
-import type { HarnessKind, OfferedMode, PermissionMode } from "./harness/kinds";
+import type { HarnessKind } from "./harness/kinds";
+import type { OfferedMode, PermissionMode } from "./harness/modes";
 import type { ItemEnd } from "./work-items";
 import type { PlaceLfsRow } from "./workspace/controls";
 

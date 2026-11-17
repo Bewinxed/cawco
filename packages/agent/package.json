@@ -8,6 +8,7 @@
     "./passkey-inject": "./src/browser/passkey-inject.ts",
     "./passkey-capture": "./src/browser/passkey-capture.ts",
     "./capabilities": "./src/capabilities.ts",
+    "./machine-capabilities": "./src/machine-capabilities.ts",
     "./claude-settings": "./src/claude-settings.ts",
     "./config": "./src/config.ts",
     "./daemon": "./src/daemon.ts",

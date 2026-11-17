@@ -12,7 +12,8 @@
  * flight — is {@link TranscriptTail}, and is all that moves between frames.
  */
 
-import type { HarnessKind, PermissionMode } from "./harness/kinds";
+import type { HarnessKind } from "./harness/kinds";
+import type { PermissionMode } from "./harness/modes";
 import type {
   ModeAsk,
   NeutralStatus,

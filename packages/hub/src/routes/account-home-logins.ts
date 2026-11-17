@@ -1,9 +1,9 @@
-import type { HomeLogin, HomeStore } from "@cawco/core/accounts";
+import type { HomeLogin } from "@cawco/core/accounts";
 import {
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
-import { everyOf } from "@cawco/core/every-of";
+import { HARNESSES } from "@cawco/core/harness/kinds";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { SIGNIN_TIMEOUT_MS } from "../login-moves";
@@ -15,9 +15,7 @@ import { unreachable } from "../unreachable";
  * One of a machine's own stores a credential is moved out of, in the order
  * the apps' generated schema has it.
  */
-const homeStore = t.UnionEnum(
-  everyOf<HomeStore>()(["claude", "pi", "opencode"])
-);
+const homeStore = t.UnionEnum(HARNESSES);
 
 export const accountHomeLoginRoutes = (
   ctx: Pick<

@@ -34,9 +34,11 @@ import {
 } from "@cawco/core/accounts";
 import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import { type AskAnswer, FULL_SEND_ANSWER } from "@cawco/core/asks";
+import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   ANY_TYPE,
+  deniedToolsOn,
   type MayStart,
   SPAWNING_TOOLS,
   spawningToolAllowed,
@@ -49,12 +51,10 @@ import {
   offeredMode,
   type SessionCredentialInstall,
 } from "@cawco/core/harness";
-import type {
-  EffortLevel,
-  ModelInfo,
-  PermissionMode,
-} from "@cawco/core/harness/kinds";
+import type { EffortLevel, ModelInfo } from "@cawco/core/harness/kinds";
 import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
+import { OPENCODE } from "@cawco/core/harness/opencode";
 import { isRecord } from "@cawco/core/is-record";
 import { machineLabel } from "@cawco/core/machine-names";
 import { unlistedModelRefusal } from "@cawco/core/model-names";
@@ -118,13 +118,13 @@ import type {
   V2Event,
 } from "@opencode/client";
 import { z } from "zod";
-import type { OpencodeRule } from "../denied-tools";
 import { readFleetMemory } from "../fleet-memory";
 import type {
   HarnessContext,
   HarnessSession,
   SessionControls,
 } from "../harness";
+import { cannot } from "../harness";
 import { placedMemoryIn } from "../placed-memory";
 import { holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
@@ -426,12 +426,32 @@ const passedOver = (
 ): event is Extract<V2Event, { type: (typeof PASSED_OVER)[number] }> =>
   PASSED_OVER_TYPES.has(event.type);
 
+/** One rule of an OpenCode 2.0 session's permission set. */
+export interface OpencodeRule {
+  action: string;
+  effect: "allow" | "ask" | "deny";
+  resource: string;
+}
+
 /** One permission rule of the session's whole set. */
 const deny = (action: string): OpencodeRule => ({
   action,
   resource: "*",
   effect: "deny",
 });
+
+/**
+ * OpenCode 2.0's denial of each tool a denied-tool list names (the fleet
+ * baseline, a delegate type's, a spawn's), written in Claude's names: one
+ * session rule per OpenCode action (core delegate-types.ts `deniedToolsOn`), `deny` over
+ * every resource. 2.0 drops a tool so denied from the model's list (and from
+ * Code Mode's catalog) and refuses a call to it (settled #9: "A rule
+ * `{action, resource:"*", effect:"deny"}` drops the tool from the list
+ * entirely"). Names OpenCode has no tool for are left out; the hub refuses
+ * them on an OpenCode type.
+ */
+export const opencodeDenyRules = (denied: readonly string[]): OpencodeRule[] =>
+  deniedToolsOn(OPENCODE.kind, denied).tools.map((action) => deny(action));
 
 /**
  * The CawCo tools that start or steer other sessions a session that may
@@ -975,8 +995,28 @@ const endedToolResult = (
   );
 
 export class OpencodeSession implements HarnessSession {
-  attached?: () => void;
+  /** Set when the agent attaches to a session its server already held (opencode.ts). */
+  attached: () => void = () => undefined;
   readonly harness = "opencode" as const;
+
+  readonly endedForMove = cannot(
+    "An OpenCode session is never carried between accounts: its conversation stays in its account's server."
+  );
+
+  /** It holds no work for later outside a turn: no background task and no one-time wake-up. */
+  heldForLater(): RestartHold[] {
+    return [];
+  }
+
+  /** Nothing it holds for later, so no start of it to say. */
+  heldSince(): number | undefined {
+    return undefined;
+  }
+
+  /** Its server runs the one OpenCode version CawCo runs, checked as it starts. */
+  outdated(): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
 
   /** Its server's process: what its commands run under (agent left-running.ts). */
   processId(): Promise<number | undefined> {

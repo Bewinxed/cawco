@@ -12,7 +12,11 @@ import {
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { ClientSpawn, HubEnvelope } from "@cawco/core/envelopes";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { HARNESSES, harnessNamed } from "@cawco/core/harness/kinds";
+import {
+  HARNESSES,
+  harnessName,
+  harnessNamed,
+} from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { type ModelListing, modelListingOn } from "@cawco/core/model-names";
@@ -29,7 +33,6 @@ import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { markWords } from "@cawco/core/words/account-lines";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
@@ -1005,7 +1008,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
           row ? ctx.sessionName(row) : payload.title || "this session",
           name,
           refused,
-          accountsWords.harnesses[harness],
+          harnessName(harness),
           ctx.machineName(machineId)
         ),
       };
@@ -1016,7 +1019,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
         refusal: spawnWords.startModel.heldUnlisted(
           row ? ctx.sessionName(row) : payload.title || "this session",
           name,
-          accountsWords.harnesses[harness],
+          harnessName(harness),
           ctx.machineName(machineId)
         ),
       };

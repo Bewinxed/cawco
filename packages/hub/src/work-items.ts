@@ -51,8 +51,9 @@ import {
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { BriefTarget } from "@cawco/core/fleet";
 import { byPerson } from "@cawco/core/harness";
-import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { WORK_ITEM_ORIGIN } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 import type { CheckoutMove } from "@cawco/core/injected";
 import {
   type DashboardReach,

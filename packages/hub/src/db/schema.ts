@@ -23,11 +23,8 @@ import { SESSION_ROLES } from "@cawco/core/delegate-types";
 import { everyOf } from "@cawco/core/every-of";
 import { EXTERNAL_KINDS, EXTERNAL_SOURCES } from "@cawco/core/external-items";
 import { MEMORY_ROLES } from "@cawco/core/fleet";
-import {
-  HARNESSES,
-  type HarnessKind,
-  PERMISSION_MODES,
-} from "@cawco/core/harness/kinds";
+import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
+import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { HARNESS_CONFIG_KINDS } from "@cawco/core/harness-config";
 import { IMAGE_PROVIDERS } from "@cawco/core/image-generation";
 import { type CheckoutMove, LANDS_MODES } from "@cawco/core/injected";

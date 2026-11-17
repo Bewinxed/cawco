@@ -41,6 +41,7 @@
   import type { AccountHue } from "@cawco/core/accounts/kinds";
   import { detach } from "@cawco/core/detach";
   import type { HarnessKind } from "@cawco/core/harness/kinds";
+  import { harnessName } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { configureWords } from "@cawco/core/words/configure";
   import { onMount, untrack } from "svelte";
@@ -883,7 +884,7 @@
           {:else}
             <Tip
               label={words.noMachineRuns(
-                row.harnesses.map((one) => accountsWords.harnesses[one])
+                row.harnesses.map((one) => harnessName(one))
               )}
             >
               {#snippet children(props)}

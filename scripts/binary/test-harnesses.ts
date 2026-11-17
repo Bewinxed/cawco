@@ -40,9 +40,11 @@ import {
   fleetStatus,
   syncFleetConfig,
 } from "../../packages/agent/src/fleet";
-import type {
-  Harness,
-  SessiondAdoption,
+import {
+  cannot,
+  type Harness,
+  noCarry,
+  type SessiondAdoption,
 } from "../../packages/agent/src/harness";
 import { neutralSubagentChange } from "../../packages/agent/src/harnesses/neutral-subagents";
 import { KeeperPool } from "../../packages/agent/src/keepers";
@@ -65,6 +67,7 @@ import {
   type HarnessKind,
 } from "../../packages/core/src/harness/kinds";
 import { claudeHome } from "../../packages/core/src/paths/claude";
+import { workspaceSpillDir } from "../../packages/core/src/paths/workspace";
 import {
   CONTROL_INTERRUPT,
   CONTROL_SET_PERMISSION_MODE,
@@ -204,7 +207,14 @@ function session(
     },
     // Shutdown of the agent leaves the child with its holder, as a real session's is.
     dispose: () => Promise.resolve(),
+    endedForMove: cannot("A test session is never carried between accounts."),
+    heldForLater: () => [],
+    heldSince: () => undefined,
     holding: () => undefined,
+    noteStopped: () => Promise.resolve(),
+    outdated: () => Promise.resolve(undefined),
+    processId: () => Promise.resolve(undefined),
+    tables: () => ({}),
     interrupt: () => Promise.resolve(),
     resolvePermission: () => undefined,
     // A turn, as far as a session with no model takes one: the message goes
@@ -296,13 +306,27 @@ const detected = async (kind: HarnessKind): Promise<MachineHarnessReport> => {
 };
 
 /** The real Claude adapter's fleet convergence (claude.ts `syncFleet`, `fleetStatus`, `fleetHoldings`). */
-const claudeFleet: Required<
-  Pick<Harness, "fleetHoldings" | "fleetHome" | "fleetStatus" | "syncFleet">
+const claudeFleet: Pick<
+  Harness,
+  "fleetHoldings" | "fleetHome" | "fleetStatus" | "syncFleet"
 > = {
   fleetHome: () => claudeHome(),
   syncFleet: (config, parts) => syncFleetConfig(config, parts),
   fleetStatus: () => fleetStatus(),
   fleetHoldings: () => fleetHoldings(),
+};
+
+/** The other test harnesses' convergence: nothing of the fleet's is theirs, so each reports none. */
+const noFleet: Pick<
+  Harness,
+  "fleetHoldings" | "fleetHome" | "fleetStatus" | "syncFleet"
+> = {
+  fleetHome: () => claudeHome(),
+  syncFleet: () =>
+    Promise.resolve({ at: Date.now(), marketplaces: {}, mcp: {}, plugins: {} }),
+  fleetStatus: () =>
+    Promise.resolve({ at: Date.now(), marketplaces: {}, mcp: {}, plugins: {} }),
+  fleetHoldings: () => Promise.resolve({}),
 };
 
 const registry = new Map<HarnessKind, Harness>();
@@ -348,9 +372,34 @@ for (const kind of HARNESSES) {
   const adapter: Harness = {
     custody: { kind: "keeper", ...adoption },
     subagentChange: neutralSubagentChange,
-    ...(kind === "claude" ? claudeFleet : {}),
+    ...(kind === "claude" ? claudeFleet : noFleet),
     kind,
     auth: "unauthenticated",
+    authReason: undefined,
+    signInFaults: [],
+    authMovesLive: false,
+    catalogFromServer: false,
+    detectStartsNothing: true,
+    healsFleetMcp: false,
+    relaunchesOnManualCompact: false,
+    cli: {
+      find: () => Promise.resolve(undefined),
+      missing: undefined,
+      version: () => Promise.resolve({ kind: "answered", value: undefined }),
+    },
+    accountsChanged: () => Promise.resolve(),
+    carrier: () => noCarry("A test session is never carried between accounts."),
+    dispose: () => Promise.resolve(),
+    fleetHooks: () => Promise.resolve({}),
+    hubRestarted: () => Promise.resolve(),
+    providerList: () => Promise.resolve([]),
+    restartHolds: () => [],
+    // A spill folder of the workspace's own, as every real adapter keeps.
+    spill: (spec, _cwd, workspace) =>
+      Promise.resolve({
+        dir: workspaceSpillDir(workspace, spec.instanceId),
+        spec,
+      }),
     capabilities: CAPABILITIES_NONE,
     detect: () => detected(kind),
     listSessions: async () => [],

@@ -18,7 +18,7 @@
    * and its effort chip the sibling the picker's surface glides to.
    */
   import { CAPABILITIES_NONE } from "@cawco/core/harness";
-  import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
+  import { PERMISSION_MODES } from "@cawco/core/harness/modes";
   import type { WorkItemSummary } from "@cawco/core/protocol";
   import { onMount } from "svelte";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";

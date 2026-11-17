@@ -3,6 +3,7 @@
  * harness, one of the traits table's keeper-held kinds; infrastructure procs
  * are never sessions.
  */
+import { descriptorOf } from "@cawco/core/harness/kinds";
 import {
   KEEPER_HARNESSES,
   type KeeperHarnessKind,
@@ -41,9 +42,8 @@ export const isBoundaryOf = (procId: string, workspace: string): boolean =>
   procId.startsWith(`${procIdFor("boundary", workspace)}-`);
 
 /**
- * The keeper's name for a session's child of harness `kind`, `kind:id`, or
- * for a workspace's boundary. Claude Code's children predate the prefix: a
- * bare id is Claude Code's.
+ * The keeper's name for a session's child of harness `kind`, its
+ * descriptor's `procIdPrefix` and the id, or for a workspace's boundary.
  */
 export function procIdFor(
   kind: KeeperHarnessKind | "boundary",
@@ -52,8 +52,23 @@ export function procIdFor(
   if (kind === "boundary") {
     return `boundary-${id}`;
   }
-  return kind === "claude" ? id : `${kind}:${id}`;
+  return `${descriptorOf(kind).procIdPrefix ?? `${kind}:`}${id}`;
 }
+
+/**
+ * The harness whose children's ids carry no prefix (its descriptor's
+ * `procIdPrefix` is empty): a bare id is its. Claude Code's, whose children
+ * predate the prefix.
+ */
+const BARE_KIND: KeeperHarnessKind = (() => {
+  const bare = KEEPER_HARNESSES.find(
+    (kind) => descriptorOf(kind).procIdPrefix === ""
+  );
+  if (!bare) {
+    throw new Error("No keeper-held harness's children carry a bare id");
+  }
+  return bare;
+})();
 
 export function parseProcId(procId: string): ProcId {
   if (
@@ -74,7 +89,7 @@ export function parseProcId(procId: string): ProcId {
       return { kind, instanceId: procId.slice(prefix.length) };
     }
   }
-  return { kind: "claude", instanceId: procId };
+  return { kind: BARE_KIND, instanceId: procId };
 }
 
 /** A keeper child that is a session's, with whose: every other child (a boundary, a judge, a server) is the machine's. */

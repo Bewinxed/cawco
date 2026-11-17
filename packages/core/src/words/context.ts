@@ -9,7 +9,7 @@
  * the model and agents read, whole ("137,000").
  */
 import type { ContextLine, FilingStage, FilingWrote } from "../context-filing";
-import { accountsWords } from "./accounts";
+import { harnessName } from "../harness/kinds";
 import { andList } from "./helpers";
 
 const NUMBER = new Intl.NumberFormat("en-US");
@@ -102,7 +102,7 @@ export const contextWords = {
    * move a person asked for does (core accounts.ts `aheadWords`).
    */
   line: (line: ContextLine): { title: string; detail: string } => {
-    const harness = accountsWords.harnesses[line.harness];
+    const harness = harnessName(line.harness);
     if (line.kind === "filing") {
       return {
         title: FILING_TITLE[line.stage](

@@ -91,7 +91,6 @@ import {
   COMPACT_RELAUNCH,
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_REFRESH_CAWCO_TOOLS,
-  HARNESS_TOOL,
   INSTALL_SESSION_CREDENTIAL,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
 } from "@cawco/core/harness";
@@ -102,14 +101,18 @@ import {
   ASK_ORIGIN,
   COMPACTION_ORIGIN,
   DELEGATE_WAIT_ORIGIN,
+  descriptorOf,
   HARNESSES,
+  harnessName,
   harnessNamed,
   type ModelInfo,
   PLAN_ORIGIN,
-  permissionModeNamed,
-  WIRE_PERMISSION_MODES,
   WORK_ITEM_ORIGIN,
 } from "@cawco/core/harness/kinds";
+import {
+  permissionModeNamed,
+  WIRE_PERMISSION_MODES,
+} from "@cawco/core/harness/modes";
 import { traitsOf } from "@cawco/core/harness/traits";
 import {
   type FleetHarnessConfig,
@@ -249,7 +252,6 @@ import {
   accountMoveSentence,
   rebalanceWords,
 } from "@cawco/core/words/account-lines";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { areaWords } from "@cawco/core/words/areas";
 import { ARTIFACT_GONE } from "@cawco/core/words/artifact-session";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
@@ -3610,7 +3612,7 @@ export const createServer = (
       ? harnessRefusal(
           report,
           machineName(machineId),
-          db.agentTools(machineId)[HARNESS_TOOL[harness]]
+          db.agentTools(machineId)[descriptorOf(harness).tool]
         )?.why
       : undefined;
   };
@@ -4609,7 +4611,7 @@ export const createServer = (
       }));
       return {
         id: harness,
-        name: accountsWords.harnesses[harness],
+        name: harnessName(harness),
         machines: [
           ...new Set(
             reports.map(({ machine }) =>
@@ -4647,7 +4649,7 @@ export const createServer = (
     delegateType: (name) => db.delegateTypes.get(name),
     harnessName: (harness) => {
       const named = harnessNamed(harness);
-      return named ? accountsWords.harnesses[named] : harness;
+      return named ? harnessName(named) : harness;
     },
     harnessOnline: (harness) =>
       machinesOnline().some((machine) =>

@@ -13,11 +13,8 @@ import type {
 import type { SendAttachment } from "@cawco/core/attachments";
 import type { Extracted } from "@cawco/core/continuation-read";
 import type { MayStart } from "@cawco/core/delegate-types";
-import type {
-  EffortLevel,
-  HarnessKind,
-  PermissionMode,
-} from "@cawco/core/harness/kinds";
+import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 import type { LandsMode } from "@cawco/core/injected";
 import type { Install, InstallDraft } from "@cawco/core/install";
 import type { MachinePath } from "@cawco/core/machine-path";

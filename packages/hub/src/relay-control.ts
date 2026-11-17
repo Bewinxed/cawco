@@ -4,7 +4,7 @@ import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
 import type { ArrivingAsk } from "@cawco/core/frames";
-import { isEffortLevel } from "@cawco/core/harness/kinds";
+import { harnessName, isEffortLevel } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ControlPayload, InstanceRow } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
@@ -23,7 +23,6 @@ import {
   STAGE_WRITE,
 } from "@cawco/core/stage";
 import { PermissionResultSchema } from "@cawco/core/stored-shapes";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { unshownAskMessage } from "@cawco/core/words/ask-lines";
 import { turnCutWords } from "@cawco/core/words/cuts";
 import { pictureWords } from "@cawco/core/words/pictures";
@@ -225,7 +224,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         code: "picture-type-refused",
         detail: pictureWords.typeRefused(
           unsent.mediaType,
-          accountsWords.harnesses[row.harness],
+          harnessName(row.harness),
           pictureTypes
         ),
       });

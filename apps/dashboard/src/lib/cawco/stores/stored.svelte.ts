@@ -11,9 +11,11 @@ import {
   type EffortLevel,
   type HarnessKind,
   isEffortLevel,
+} from "@cawco/core/harness/kinds";
+import {
   type PermissionMode,
   WIRE_PERMISSION_MODES,
-} from "@cawco/core/harness/kinds";
+} from "@cawco/core/harness/modes";
 import { isOneOf } from "@cawco/core/one-of";
 import type { StoredRecent, StoredTranscript } from "@cawco/core/protocol";
 import { CONTROL_STORED_RUN } from "@cawco/core/session/controls";

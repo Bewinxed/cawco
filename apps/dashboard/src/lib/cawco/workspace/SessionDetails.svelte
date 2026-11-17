@@ -12,11 +12,11 @@
     EFFORT_NONE,
     type EffortLevel,
     type HarnessKind,
+    harnessName,
     isEffortLevel,
-    type PermissionMode,
   } from "@cawco/core/harness/kinds";
+  import type { PermissionMode } from "@cawco/core/harness/modes";
   import { clockWords } from "@cawco/core/words/account-lines";
-  import { accountsWords } from "@cawco/core/words/accounts";
   import { commonWords } from "@cawco/core/words/common";
   import { limitPickWords } from "@cawco/core/words/limit-picks";
   import { sessionStatWords } from "@cawco/core/words/session-stats";
@@ -246,7 +246,7 @@
         ? {
             label: transcriptWords.ownDefault,
             reason: transcriptWords.ownDefaultWhy(
-              harness ? harnessNames[harness] : ""
+              harness ? harnessName(harness) : ""
             ),
           }
         : { label: "Effort…", reason: transcriptWords.readingRun };
@@ -305,7 +305,6 @@
       ? `${what} unlock once ${machine?.hostname || machineId || "its machine"} is connected again.`
       : `${what} unlock while the session is running.`;
   });
-  const harnessNames: Record<HarnessKind, string> = accountsWords.harnesses;
   /** `~/…/leaf`: the folder name is what tells sessions apart. */
   const shortPath = (path: string) => {
     const parts = path.replace(HOME, "~").split("/");
@@ -970,10 +969,10 @@
           <!-- Level with the title's first line, like the copy button beside
                it. -->
           <span
-            aria-label={harnessNames[harness]}
+            aria-label={harnessName(harness)}
             class="inline-flex h-c-btn-h-sm flex-none items-center"
             role="img"
-            title={harnessNames[harness]}
+            title={harnessName(harness)}
           >
             {#key harness}
               <span class="inline-flex" in:harnessIn>

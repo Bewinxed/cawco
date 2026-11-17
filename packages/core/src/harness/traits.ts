@@ -1,9 +1,10 @@
 /**
- * What each harness is, one table: the per-kind facts the hub, core and the
- * dashboard need, which only ever know a {@link HarnessKind}. A fact that
- * varies by machine is a capability (`HarnessCapabilities`, reported by each
- * machine's own adapter); one fixed by what the harness is sits here, so an
- * older daemon on the far end changes nothing.
+ * Reading what a harness is from its plugin's descriptor (./descriptor.ts,
+ * registered in ./kinds.ts `HARNESS_PLUGINS`), for the hub, core and the
+ * dashboard, which only ever know a {@link HarnessKind}. A fact that varies
+ * by machine is a capability (`HarnessCapabilities`, reported by each
+ * machine's own adapter); one fixed by what the harness is sits in its
+ * descriptor, so an older daemon on the far end changes nothing.
  *
  * Read a harness's traits through {@link traitsOf}, whatever the type of its
  * name says: a stored row and a frame off the wire can name a harness this
@@ -11,293 +12,49 @@
  * one", never as a failure ({@link UNKNOWN_TRAITS}).
  */
 
+import { IMAGE_MEDIA_TYPES } from "../attachments";
+import type { HarnessDescriptor, HarnessHomeLogin } from "./descriptor";
 import {
-  CLAUDE_IMAGE_MEDIA_TYPES,
-  IMAGE_MEDIA_TYPES,
-  type ImageMediaType,
-} from "../attachments";
-import { HOUR_MS } from "../time";
-import { harnessWords } from "../words/harness";
-import { HARNESSES, type HarnessKind, harnessNamed } from "./kinds";
-
-interface HarnessTraitsBase {
-  /**
-   * Whether a session runs in its account's own config dir, which holds the
-   * account's login and its conversations: a launch picks the dir, a session
-   * that changes account has its conversation carried to the new one, and
-   * the machine reports each dir's sign-in. Without one, an account is a
-   * credential the harness is handed, and a session's model picks which.
-   */
-  readonly accountDir: boolean;
-  /** Whether it can report a compaction failed after it already reported that compaction's boundary. */
-  readonly boundaryBeforeCompactionFailure: boolean;
-  /**
-   * Whether a stored conversation its machine's catalog leaves out is gone:
-   * the catalog is the harness's whole store.
-   */
-  readonly catalogProvesGone: boolean;
-  /**
-   * Why a session of it can't start clean (none of the machine's fleet
-   * content), in the words it is refused with; null when one can. A harness
-   * that can't is refused, never started half clean.
-   */
-  readonly cleanStartRefused: string | null;
-  /**
-   * Where a model's context window comes from. `hub`: the hub learns it from
-   * the harness's results (Claude Code's `modelUsage`). `catalog`: the
-   * harness's model list carries it.
-   */
-  readonly contextWindow: "hub" | "catalog";
-  /**
-   * Whether a session's cost is its real spend, or an estimate at API prices
-   * of work a plan may already cover.
-   */
-  readonly costMeaning: "estimated" | "real";
-  /**
-   * How a session outlives the agent. `keeper`: its process is the keeper's
-   * child. `server`: it lives in a server that outlives the agent, and so
-   * proves no absence by not being listed.
-   */
-  readonly custody: "keeper" | "server";
-  /** Whether a machine's listing names every conversation it holds, so one it doesn't name is gone; a filtered listing proves nothing by leaving one out. */
-  readonly listsAllConversations: boolean;
-  /**
-   * Where a harness's model list comes from. `account`: read per account by
-   * the hub. `machine`: the machine's own report.
-   */
-  readonly modelCatalog: "account" | "machine";
-  /** Whether it names providers by ids of its own rather than pi-ai's. */
-  readonly ownProviderIds: boolean;
-  /** Whether it takes a permission mode at all. */
-  readonly permissionModes: boolean;
-  /**
-   * The picture types a send to it can carry (core attachments.ts): Claude
-   * Code's are Anthropic's four; a harness that hands a picture on to its
-   * provider as it is takes any a provider takes.
-   */
-  readonly pictureTypes: readonly ImageMediaType[];
-  /**
-   * The longest its prompt cache lives after a request, for a harness whose
-   * results report the cache's use; null for one whose don't. The hub times
-   * an idle session's cache from those reports and keeps it warm with
-   * keep-alive turns; a session with no measurement, or no recorded turn,
-   * reads its cache as expired at the latest this long after its last
-   * activity.
-   */
-  readonly promptCacheMaxMs: number | null;
-  /**
-   * Which provider limit a session reads against. `account`: the account's
-   * own windows. `go`: OpenCode Go's, for models under its prefix. `none`:
-   * the harness reports none.
-   */
-  readonly providerLimit: "account" | "go" | "none";
-  /**
-   * Whether a send handed to a busy session waits in the harness's own queue
-   * until the session reads it: it shows as queued, and can be taken back
-   * while it waits. Without one, a session stores a send as it is handed it.
-   */
-  readonly queuesSends: boolean;
-  /** Whether its machine can read a stored conversation's context back. */
-  readonly readsStoredContext: boolean;
-  /**
-   * Whether its machine reads a stored conversation through the harness's
-   * own CLI (OpenCode: its server, which only a version CawCo runs is
-   * started as): a machine that refuses the CLI (core harness-refusal.ts)
-   * cannot read one until it runs it. Without: the conversation is read
-   * from the files the harness stored, CLI or none.
-   */
-  readonly readsThroughCli: boolean;
-  /** Whether a machine with this harness missing fails the fleet's check: the one every machine runs, and that accounts sign in on. */
-  readonly requiredOnEveryMachine: boolean;
-  /**
-   * Whether it resolves a model name to `provider/id` itself, on each
-   * machine: a bare id (one unique among its providers' rows) by the
-   * machine's report of its resolution, and no model or `default` by its
-   * pick in the session's directory, asked of the machine at the start.
-   */
-  readonly resolvesModelNames: boolean;
-  /**
-   * Which row is the anchor of a rewind. `user-turn`: the selected user turn
-   * itself. `assistant-before`: the assistant frame before it.
-   */
-  readonly rewindAnchor: "user-turn" | "assistant-before";
-  /**
-   * The controls a live session of it answers, by their names in the
-   * control table (core control-table.ts; agent harness.ts
-   * `SessionControls` fails to type on a name the table has not). Any other
-   * sent to one of its sessions is refused in core's `unknownControlWords`,
-   * so a sender asks only a harness that lists it ({@link answersControl});
-   * its agent's sessions answer exactly these.
-   */
-  readonly sessionControls: readonly string[];
-  /** A row can start with no conversation of its own and take one at its first send; until then it is never started, not ended. */
-  readonly startsWithoutConversation: boolean;
-}
+  descriptorOf,
+  HARNESSES,
+  type HarnessKind,
+  type HarnessPlugin,
+  harnessNamed,
+  type PluginOf,
+} from "./kinds";
 
 /**
- * What the machine's own sign-in to a harness is, the one CawCo can move into
- * an account, and the one provider every account of it is of (null when a
- * session's model names its provider). A home login that is one whole dir is
- * one provider's login, so a harness with one names its provider.
+ * The facts a stored row or a frame's harness name is read for, whatever
+ * build wrote it: a descriptor's plain answers, which a name this build does
+ * not know answers too ({@link UNKNOWN_TRAITS}).
  */
-type HomeLoginTraits =
-  | {
-      /** One login, its whole home config dir (`~/.claude`). */
-      readonly homeLogin: "dir";
-      readonly soleProvider: string;
-    }
-  | {
-      /** A store holding a credential per provider. */
-      readonly homeLogin: "credentials";
-      readonly soleProvider: string | null;
-    };
-
-export type HarnessTraits = HarnessTraitsBase & HomeLoginTraits;
-
-/*
- * Every row lists its traits in one order, by topic: accounts and what a
- * session's cost means; its models; starting a session; where its
- * conversations live and what a listing of them proves; its turns.
- */
-const CLAUDE_TRAITS = {
-  accountDir: true,
-  homeLogin: "dir",
-  soleProvider: "anthropic",
-  ownProviderIds: false,
-  pictureTypes: CLAUDE_IMAGE_MEDIA_TYPES,
-  providerLimit: "account",
-  costMeaning: "estimated",
-  modelCatalog: "account",
-  resolvesModelNames: false,
-  contextWindow: "hub",
-  cleanStartRefused: null,
-  permissionModes: true,
-  requiredOnEveryMachine: true,
-  startsWithoutConversation: false,
-  custody: "keeper",
-  listsAllConversations: true,
-  catalogProvesGone: true,
-  readsStoredContext: true,
-  readsThroughCli: false,
-  rewindAnchor: "assistant-before",
-  queuesSends: true,
-  promptCacheMaxMs: HOUR_MS,
-  boundaryBeforeCompactionFailure: false,
-  sessionControls: [
-    "installSessionCredential",
-    "verifySessionCredential",
-    "withdrawSend",
-    "fleetMcpChanged",
-    "fleetSettings",
-    "fleetMcpHeal",
-    "setEffort",
-    "getContextUsage",
-    "setPermissionMode",
-    "interrupt",
-    "setModel",
-    "supportedModels",
-    "supportedCommands",
-    "reloadSkills",
-    "reloadPlugins",
-    "reinitialize",
-    "mcpServerStatus",
-    "reconnectMcpServer",
-    "toggleMcpServer",
-    "getTaskOutput",
-  ],
-} as const satisfies HarnessTraits;
-
-const OPENCODE_TRAITS = {
-  accountDir: false,
-  homeLogin: "credentials",
-  soleProvider: null,
-  ownProviderIds: true,
-  pictureTypes: IMAGE_MEDIA_TYPES,
-  providerLimit: "go",
-  costMeaning: "real",
-  modelCatalog: "machine",
-  resolvesModelNames: false,
-  contextWindow: "catalog",
-  cleanStartRefused: harnessWords.openCodeNotClean,
-  permissionModes: true,
-  requiredOnEveryMachine: false,
-  startsWithoutConversation: true,
-  custody: "server",
-  listsAllConversations: false,
-  catalogProvesGone: false,
-  readsStoredContext: false,
-  readsThroughCli: true,
-  rewindAnchor: "user-turn",
-  queuesSends: false,
-  promptCacheMaxMs: null,
-  boundaryBeforeCompactionFailure: true,
-  sessionControls: [
-    "installSessionCredential",
-    "verifySessionCredential",
-    "interrupt",
-    "setModel",
-    "setEffort",
-    "setPermissionMode",
-    "getContextUsage",
-    "supportedModels",
-    "supportedCommands",
-    "reloadSkills",
-    "mcpServerStatus",
-    "reconnectMcpServer",
-    "toggleMcpServer",
-    "fleetMcpChanged",
-    "fleetMcpHeal",
-  ],
-} as const satisfies HarnessTraits;
-
-const PI_TRAITS = {
-  accountDir: false,
-  homeLogin: "credentials",
-  soleProvider: null,
-  ownProviderIds: false,
-  pictureTypes: IMAGE_MEDIA_TYPES,
-  providerLimit: "none",
-  costMeaning: "real",
-  modelCatalog: "machine",
-  resolvesModelNames: true,
-  contextWindow: "catalog",
-  cleanStartRefused: null,
-  permissionModes: false,
-  requiredOnEveryMachine: false,
-  startsWithoutConversation: false,
-  custody: "keeper",
-  listsAllConversations: true,
-  catalogProvesGone: false,
-  readsStoredContext: false,
-  rewindAnchor: "assistant-before",
-  queuesSends: false,
-  promptCacheMaxMs: null,
-  boundaryBeforeCompactionFailure: false,
-  sessionControls: [
-    "installSessionCredential",
-    "verifySessionCredential",
-    "refreshCawcoTools",
-    "fleetMcpChanged",
-    "fleetMcpHeal",
-    "interrupt",
-    "setModel",
-    "setEffort",
-    "supportedModels",
-    "supportedCommands",
-    "reloadSkills",
-    "reconnectMcpServer",
-    "toggleMcpServer",
-    "getContextUsage",
-  ],
-  readsThroughCli: false,
-} as const satisfies HarnessTraits;
-
-/** Each harness's traits: the one table. */
-const HARNESS_TRAITS = {
-  claude: CLAUDE_TRAITS,
-  opencode: OPENCODE_TRAITS,
-  pi: PI_TRAITS,
-} as const satisfies Record<HarnessKind, HarnessTraits>;
+export type HarnessTraits = HarnessHomeLogin &
+  Pick<
+    HarnessDescriptor,
+    | "accountDir"
+    | "boundaryBeforeCompactionFailure"
+    | "catalogProvesGone"
+    | "cleanStartRefused"
+    | "contextWindow"
+    | "costMeaning"
+    | "custody"
+    | "listsAllConversations"
+    | "modelCatalog"
+    | "ownProviderIds"
+    | "permissionModes"
+    | "pictureTypes"
+    | "promptCacheMaxMs"
+    | "providerLimit"
+    | "queuesSends"
+    | "readsStoredContext"
+    | "readsThroughCli"
+    | "requiredOnEveryMachine"
+    | "resolvesModelNames"
+    | "rewindAnchor"
+    | "sessionControls"
+    | "startsWithoutConversation"
+    | "subagentEndsWithCall"
+  >;
 
 /**
  * The traits of a name this build does not know, or of none: every question
@@ -331,38 +88,89 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   promptCacheMaxMs: null, // nothing claimed
   boundaryBeforeCompactionFailure: false, // nothing claimed
   sessionControls: [], // nothing claimed
+  subagentEndsWithCall: false, // nothing claimed
 };
 
 /** The traits of `harness`, a kind or whatever a row or a frame says one is. */
 export const traitsOf = (harness: unknown): HarnessTraits => {
   const named = harnessNamed(harness);
-  return named ? HARNESS_TRAITS[named] : UNKNOWN_TRAITS;
+  return named ? descriptorOf(named) : UNKNOWN_TRAITS;
 };
 
 /** The controls a live session of `H` answers ({@link HarnessTraits.sessionControls}). */
 export type SessionControlOf<H extends HarnessKind> =
-  (typeof HARNESS_TRAITS)[H]["sessionControls"][number];
+  PluginOf<H>["sessionControls"][number];
 
 /** Whether a live session of `harness`, a kind or whatever a row says one is, answers control `method`. */
 export const answersControl = (harness: unknown, method: string): boolean =>
   traitsOf(harness).sessionControls.includes(method);
 
-/** Every kind a trait holds of, in {@link HARNESSES} order: for a query that filters on a column. */
+/** Every kind a fact of its descriptor holds of, in {@link HARNESSES} order: for a query that filters on a column. */
 export const harnessesWith = (
-  holds: (traits: HarnessTraits) => boolean
-): HarnessKind[] => HARNESSES.filter((kind) => holds(HARNESS_TRAITS[kind]));
+  holds: (plugin: HarnessDescriptor) => boolean
+): HarnessKind[] => HARNESSES.filter((kind) => holds(descriptorOf(kind)));
 
 /** The kinds whose sessions are a keeper's children, per the table. */
 export type KeeperHarnessKind = {
-  [K in HarnessKind]: (typeof HARNESS_TRAITS)[K]["custody"] extends "keeper"
-    ? K
-    : never;
+  [K in HarnessKind]: PluginOf<K>["custody"] extends "keeper" ? K : never;
 }[HarnessKind];
 
 /** Whether `kind`'s sessions are a keeper's children. */
 const isKeeperHarness = (kind: HarnessKind): kind is KeeperHarnessKind =>
-  HARNESS_TRAITS[kind].custody === "keeper";
+  descriptorOf(kind).custody === "keeper";
 
 /** Every kind whose sessions are a keeper's children, in {@link HARNESSES} order. */
 export const KEEPER_HARNESSES: readonly KeeperHarnessKind[] =
   HARNESSES.filter(isKeeperHarness);
+
+/** The kinds whose descriptor's `F` is a `V`. */
+type KindsWhere<F extends keyof HarnessPlugin, V> = {
+  [K in HarnessKind]: PluginOf<K>[F] extends V ? K : never;
+}[HarnessKind];
+
+const isCredentialStore = (
+  kind: HarnessKind
+): kind is KindsWhere<"homeLogin", "credentials"> =>
+  descriptorOf(kind).homeLogin === "credentials";
+
+/** Every kind whose machine sign-in is a store of credentials, in {@link HARNESSES} order. */
+export const CREDENTIAL_STORE_HARNESSES: readonly KindsWhere<
+  "homeLogin",
+  "credentials"
+>[] = HARNESSES.filter(isCredentialStore);
+
+/** A harness whose own store holds a credential per provider, which an account can hold one of. */
+export type CredentialStoreKind = (typeof CREDENTIAL_STORE_HARNESSES)[number];
+
+const isCompactNamed = (
+  kind: HarnessKind
+): kind is KindsWhere<"compactByOnMovedLine", "named"> =>
+  descriptorOf(kind).compactByOnMovedLine === "named";
+
+/** Every kind a moved line names as its compactor, in {@link HARNESSES} order. */
+export const COMPACT_NAMED_HARNESSES: readonly KindsWhere<
+  "compactByOnMovedLine",
+  "named"
+>[] = HARNESSES.filter(isCompactNamed);
+
+/** A harness a moved line's `compactBy` names. */
+export type CompactNamedKind = (typeof COMPACT_NAMED_HARNESSES)[number];
+
+/**
+ * The harness whose `/compact` a moved line says ran: the one its
+ * `compactBy` names, else the one whose descriptor says `unnamed`, as every
+ * line before the field was.
+ */
+export const compactorOf = (
+  compactBy: CompactNamedKind | undefined
+): HarnessKind => {
+  if (compactBy) {
+    return compactBy;
+  }
+  for (const kind of HARNESSES) {
+    if (!isCompactNamed(kind)) {
+      return kind;
+    }
+  }
+  throw new Error("No harness's moved lines go without a compactBy");
+};

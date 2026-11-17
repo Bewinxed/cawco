@@ -9,7 +9,7 @@
    * surface on the page (bits-ui's portal), under its chip. A press on a
    * machine's row checks or unchecks it, as the form's own handler does.
    */
-  import type { PermissionMode } from "@cawco/core/harness/kinds";
+  import type { PermissionMode } from "@cawco/core/harness/modes";
   import { spawnWords } from "@cawco/core/words/spawn";
   import {
     IconChevronDown as Down,

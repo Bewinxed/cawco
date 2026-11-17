@@ -10,6 +10,8 @@ import type {
   WaitReason,
 } from "../accounts";
 import { RESTART_WAIT_CAP_MS } from "../binary-updates";
+import { harnessName } from "../harness/kinds";
+import { compactorOf } from "../harness/traits";
 import { MINUTE_MS } from "../time";
 import { accountsWords } from "./accounts";
 import { chatgptPlanWords } from "./chatgpt-plan";
@@ -355,7 +357,7 @@ const compactedMoveWords = (
 
 /** The harness whose /compact runs, by name. */
 const compactHarness = (move: Extract<AccountMove, { kind: "moved" }>) =>
-  accountsWords.harnesses[move.compactBy ?? "claude"];
+  harnessName(compactorOf(move.compactBy));
 
 /** A compaction on `to` after the move, by its stage. */
 const compactedAfterWords = (

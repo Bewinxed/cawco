@@ -6,7 +6,7 @@
  * (accounts/limit-picker-bench.svelte) stand their machines on it.
  */
 import { CAPABILITIES_NONE } from "@cawco/core/harness";
-import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
+import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 import type { Machine } from "./stores/board.svelte";
 
 export const benchClaudeReport: NonNullable<Machine["harnesses"]>[number] = {

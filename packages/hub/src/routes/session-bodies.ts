@@ -1,8 +1,6 @@
 import { IMAGE_MEDIA_TYPES } from "@cawco/core/attachments";
-import {
-  EFFORT_LEVELS,
-  WIRE_PERMISSION_MODES,
-} from "@cawco/core/harness/kinds";
+import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
+import { WIRE_PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { pictureWords } from "@cawco/core/words/pictures";
 import { t } from "elysia";
 import { harnessSchema } from "./harness-schema";

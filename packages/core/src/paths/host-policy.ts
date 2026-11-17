@@ -2,8 +2,10 @@
 
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
-import type { HarnessKind } from "../harness/kinds";
+import type { CredentialPlace } from "../harness/descriptor";
+import { HARNESS_PLUGINS } from "../harness/kinds";
 import { hostEnvironment } from "../session-env";
+import { unhandled } from "../unhandled";
 import { systemProgram } from "../workspace-needs";
 import { redactionStoreDir, sessionIdentityDir } from "./cawco";
 import { accountsRoot, claudeConfigDirs, claudeHomeJson } from "./claude";
@@ -128,23 +130,27 @@ const SECRET_FILE_NAME = String.raw`\.env[^/]*|[^/]*\.env(\.[^/]*)?`;
 export const isSecretFileName = (name: string): boolean =>
   new RegExp(`^(${SECRET_FILE_NAME})$`, "u").test(name);
 
-/** Where each harness keeps its logins on the host, which no workspace reads ({@link credentialStores}). */
-const HARNESS_CREDENTIALS: Record<HarnessKind, () => string[]> = {
-  // Claude Code: each config dir's login (the machine's own, each
-  // account's, any it was pointed at), and the fleet's MCP servers with
-  // their headers and env.
-  claude: () => [
-    ...claudeConfigDirs().map((dir) => join(dir, ".credentials.json")),
-    claudeHomeJson(),
-  ],
-  // OpenCode: `auth.json`, `mcp-auth.json`; `opencode.json` with provider
-  // keys and MCP headers.
-  opencode: () => [
-    join(xdgDataHome(), "opencode"),
-    join(xdgConfigHome(), "opencode"),
-  ],
-  // pi: `auth.json`, the CLIProxyAPI key; CLIProxyAPI's own logins.
-  pi: () => [piAgentDir(), join(homedir(), ".cli-proxy-api")],
+/**
+ * The paths one place a harness keeps its logins in names on this machine
+ * (its descriptor's `credentialPlaces`, which no workspace reads).
+ */
+const credentialPaths = (place: CredentialPlace): string[] => {
+  switch (place.in) {
+    case "claude-config-dirs":
+      return claudeConfigDirs().map((dir) => join(dir, place.file));
+    case "claude-home-json":
+      return [claudeHomeJson()];
+    case "xdg-data":
+      return [join(xdgDataHome(), place.path)];
+    case "xdg-config":
+      return [join(xdgConfigHome(), place.path)];
+    case "pi-agent-dir":
+      return [piAgentDir()];
+    case "home":
+      return [join(homedir(), place.path)];
+    default:
+      return unhandled("credential place", place);
+  }
 };
 
 /**
@@ -192,7 +198,7 @@ const OTHER_AGENT_CREDENTIALS: Record<string, () => string[]> = {
   // `~/<PI_CONFIG_DIR or .omp>`; once migrated to XDG, `agent.db` in
   // `$XDG_DATA_HOME/omp` and the key in `$XDG_STATE_HOME/omp`. The dirs of
   // its runtime state (sockets, logs) go with them. Its
-  // `PI_CODING_AGENT_DIR` override is pi's (`HARNESS_CREDENTIALS.pi`).
+  // `PI_CODING_AGENT_DIR` override is pi's (its descriptor's `credentialPlaces`).
   // github.com/can1357/oh-my-pi packages/utils/src/dirs.ts (`getBaseConfigRoot`,
   // `DirResolver`, `getAgentDbPath`, `getSecretPlaceholderKeyPath`),
   // packages/ai/src/auth-broker/discover.ts, coding-agent/src/cli/auth-gateway-cli.ts.
@@ -311,8 +317,10 @@ export const credentialStores = (): string[] => {
     cawcoDataDir(),
     hubDataDir(),
     dirname(hubDbPath()),
-    // Each harness's own logins ({@link HARNESS_CREDENTIALS}).
-    ...Object.values(HARNESS_CREDENTIALS).flatMap((stores) => stores()),
+    // Each harness's own logins (its descriptor's `credentialPlaces`).
+    ...HARNESS_PLUGINS.flatMap((plugin) =>
+      plugin.credentialPlaces.flatMap(credentialPaths)
+    ),
     // Other agents' logins: Codex, Gemini, GitHub Copilot.
     join(home, ".codex"),
     join(home, ".gemini"),

@@ -1,91 +1,73 @@
 /**
  * The harness vocabulary everything in core sits on: which harnesses CawCo
- * runs, the permission modes and effort levels they take, the models they
- * report, and the `system` origins a send comes from. It imports no module
- * that could reach back up (only {@link everyOf}, which imports nothing).
+ * runs (the plugin registry), the permission modes and effort levels they
+ * take, the models they report, and the `system` origins a send comes from.
+ * It imports no module that could reach back up: the descriptors, which
+ * import leaf modules alone, and {@link everyOf}, which imports nothing.
  */
 
 import { everyOf } from "../every-of";
+import { CLAUDE } from "./claude";
+import type { HarnessDescriptor } from "./descriptor";
+import { OPENCODE } from "./opencode";
+import { PI } from "./pi";
 
 /**
- * Every harness, in the order a machine's are named and brought up: Claude
- * Code first, which every machine runs. Adding one starts from
- * docs/harnesses.md, the checklist of what every harness must do and every
- * place outside the adapters that names one.
+ * Every harness plugin's descriptor, in the order a machine's are named and
+ * brought up: Claude Code first, which every machine runs. A new harness is
+ * one descriptor here and one adapter (agent harnesses/index.ts); the
+ * type-checker names every field and member either one is missing
+ * (docs/harnesses.md).
  */
-export const HARNESSES = ["claude", "opencode", "pi"] as const;
+export const HARNESS_PLUGINS = [
+  CLAUDE,
+  OPENCODE,
+  PI,
+] as const satisfies readonly HarnessDescriptor[];
 
-/** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
+/** A registered plugin's descriptor. */
+export type HarnessPlugin = (typeof HARNESS_PLUGINS)[number];
+
+const [FIRST_PLUGIN, ...LATER_PLUGINS] = HARNESS_PLUGINS;
+
+/** Every harness, by its plugin's kind, in {@link HARNESS_PLUGINS} order: never empty, as a schema's enum of them needs. */
+export const HARNESSES = [
+  FIRST_PLUGIN.kind,
+  ...LATER_PLUGINS.map((plugin) => plugin.kind),
+] as const;
+
+/** The harnesses cawco can spawn sessions on: a registered plugin's kind. */
 export type HarnessKind = (typeof HARNESSES)[number];
+
+/** The descriptor of harness `K`, as its plugin wrote it. */
+export type PluginOf<K extends HarnessKind> = Extract<
+  HarnessPlugin,
+  { kind: K }
+>;
 
 /** The harness a value off the wire, a URL or storage names, when it names one CawCo runs. */
 export const harnessNamed = (value: unknown): HarnessKind | undefined =>
   HARNESSES.find((harness) => harness === value);
 
-/** Every permission mode the wire may name ({@link PermissionMode}). */
-export const WIRE_PERMISSION_MODES = [
-  "default",
-  "acceptEdits",
-  "bypassPermissions",
-  "plan",
-  "dontAsk",
-  "auto",
-  "fullSend",
-] as const;
+/** The descriptor of `kind`: what everything outside its plugin asks of it. */
+export const descriptorOf = (kind: HarnessKind): HarnessPlugin => {
+  for (const plugin of HARNESS_PLUGINS) {
+    if (plugin.kind === kind) {
+      return plugin;
+    }
+  }
+  throw new Error(`No harness plugin is registered as ${kind}`);
+};
 
-/**
- * How a session answers tool permissions. The union is Claude Code's, plus
- * `fullSend`, CawCo's own: bypass, with every approval approved for the
- * session (the owner, 2026-10-22: "FULL SEND LITERALLY MEANS FULL SEND"):
- * on Claude Code the host answers the checks and ask rules the CLI still
- * raises in bypass, and on every harness the hub approves CawCo's admin
- * writes (hub asks.ts). A question to the person still asks; a
- * fleet-denied tool still never runs. Each adapter maps `fullSend` onto its
- * harness; none hands it to an SDK as is.
- */
-export type PermissionMode = (typeof WIRE_PERMISSION_MODES)[number];
+/** What `kind` is called, as the operator knows it and a sentence names it. */
+export const harnessName = (kind: HarnessKind): string =>
+  descriptorOf(kind).words.name;
 
-/**
- * The permission modes CawCo offers: the one list every machine reports for
- * each harness that has modes (agent claude.ts `CLAUDE_CAPABILITIES`,
- * opencode.ts `OPENCODE_CAPABILITIES`; pi has none), and so the one list
- * every tool schema and picker takes its modes from. Claude Code's
- * `dontAsk` and `auto` are not among them: no harness here is offered either.
- *
- * {@link PermissionMode} stays wider, as the wire names a mode: a CLI may
- * report `dontAsk` or `auto` as its mode, and the TestFlight builds still
- * installable (20261015 to 20261018) were built to send either (hub
- * scripts/wire-compat.ts). The hub refuses a start in one with the
- * machine's own list (hub launches.ts `modeRefusal`), and an agent refuses one
- * that reaches it ({@link offeredMode}).
- */
-export const PERMISSION_MODES = [
-  "default",
-  "acceptEdits",
-  "plan",
-  "bypassPermissions",
-  "fullSend",
-] as const satisfies readonly PermissionMode[];
-
-export type OfferedMode = (typeof PERMISSION_MODES)[number];
-
-/**
- * The modes one session may start or continue another in: every
- * {@link PERMISSION_MODES} but `fullSend`, which only the owner chooses. A
- * session in Full Send passes it on by naming none.
- */
-export const SESSION_CHOSEN_MODES = [
-  "default",
-  "acceptEdits",
-  "plan",
-  "bypassPermissions",
-] as const satisfies readonly OfferedMode[];
-
-export type SessionChosenMode = (typeof SESSION_CHOSEN_MODES)[number];
-
-/** `value` as an {@link OfferedMode}, when it is one CawCo offers. */
-export const permissionModeNamed = (value: unknown): OfferedMode | undefined =>
-  PERMISSION_MODES.find((mode) => mode === value);
+/** What a harness a row or a frame names is called: its name, or the value as it is when it names none this build runs. */
+export const harnessLabel = (value: string): string => {
+  const kind = harnessNamed(value);
+  return kind ? harnessName(kind) : value;
+};
 
 /**
  * How hard the model thinks, and how much it spends doing it: Claude Code's

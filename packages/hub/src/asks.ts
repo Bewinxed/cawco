@@ -72,7 +72,8 @@ import {
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
 import type { ArrivingAsk } from "@cawco/core/frames";
-import { ASK_ORIGIN, type PermissionMode } from "@cawco/core/harness/kinds";
+import { ASK_ORIGIN } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { settledQuestionResult } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";

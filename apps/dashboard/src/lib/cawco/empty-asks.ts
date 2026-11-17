@@ -16,7 +16,8 @@
  * The words live here, not in core's words, because they are the
  * dashboard's alone: the app draws none of these surfaces.
  */
-import { accountsWords } from "@cawco/core/words/accounts";
+
+import { harnessName } from "@cawco/core/harness/kinds";
 import { newSession, type SpawnPrefill } from "./spawn/new-session.svelte";
 import { spawnPrefs } from "./spawnPrefs.svelte";
 import { boardStore } from "./stores/board.svelte";
@@ -38,7 +39,7 @@ export const sessionCanStart = (): boolean =>
 
 /** "Ask" takes its object by name (DESIGN.md, Voice): the form's own agent, as it opens. */
 export const askLabel = (what: string): string =>
-  `Ask ${accountsWords.harnesses[spawnPrefs.harness]} for ${what}`;
+  `Ask ${harnessName(spawnPrefs.harness)} for ${what}`;
 
 /**
  * What each empty Configure list asks for, as the person would ask it. The

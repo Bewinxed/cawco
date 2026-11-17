@@ -7,12 +7,11 @@
 
 import type { AvailableCommand } from "@cawco/core/fleet";
 import type { BrowserAskFrame, ConnectAskFrame } from "@cawco/core/frames";
+import type { HarnessKind, SessionEffort } from "@cawco/core/harness/kinds";
 import {
-  type HarnessKind,
   type PermissionMode,
-  type SessionEffort,
   WIRE_PERMISSION_MODES,
-} from "@cawco/core/harness/kinds";
+} from "@cawco/core/harness/modes";
 import { isOneOf } from "@cawco/core/one-of";
 import type { PermissionPresentation } from "@cawco/core/permission-presentation";
 import type { SessionTooling } from "@cawco/core/protocol";

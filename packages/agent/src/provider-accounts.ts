@@ -35,6 +35,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import { GITHUB_API_VERSION_HEADER } from "@cawco/core/github-api";
+import { descriptorOf } from "@cawco/core/harness/kinds";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
   accountCredentialPath,
@@ -1241,13 +1242,14 @@ const readStoreEntry = async (
 ): Promise<StoreEntry | undefined> =>
   await READ_STORE[store](storeProvider, ports);
 
-/** The account provider an OAuth entry in a store is for, where the store's own id for it differs. */
-const STORE_OAUTH_PROVIDER: Record<
-  HomeCredential["store"],
-  Partial<Record<string, string>>
-> = {
-  opencode: { openai: "openai-codex" },
-  pi: {},
+/** The account provider an OAuth entry in `store` is for, where the store's own id for it differs (its descriptor's `storeOAuthProviders`). */
+const oauthProviderIn = (
+  store: HomeCredential["store"],
+  storeProvider: string
+): string | undefined => {
+  const providers: Readonly<Record<string, string>> =
+    descriptorOf(store).storeOAuthProviders;
+  return providers[storeProvider];
 };
 
 /** The account provider an entry in a store is for. */
@@ -1257,7 +1259,7 @@ const providerOfEntry = (
   credential: HeldCredential
 ): string =>
   credential.type === "oauth"
-    ? (STORE_OAUTH_PROVIDER[store][storeProvider] ?? storeProvider)
+    ? (oauthProviderIn(store, storeProvider) ?? storeProvider)
     : storeProvider;
 
 /**

@@ -68,7 +68,8 @@ import type {
 } from "./fleet";
 import type { ForgeAsk, ForgeVerdict } from "./forge-post";
 import type { AgentBusyReport, SessionCredentialInstall } from "./harness";
-import type { EffortLevel, ModelInfo, PermissionMode } from "./harness/kinds";
+import type { EffortLevel, ModelInfo } from "./harness/kinds";
+import type { PermissionMode } from "./harness/modes";
 import type {
   GeneratedImage,
   ImageGenerationRequest,

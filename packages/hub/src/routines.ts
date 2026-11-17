@@ -84,7 +84,7 @@ import { ANY_TYPE } from "@cawco/core/delegate-types";
 import {
   type OfferedMode,
   SESSION_CHOSEN_MODES,
-} from "@cawco/core/harness/kinds";
+} from "@cawco/core/harness/modes";
 import type { LandsMode } from "@cawco/core/injected";
 import { LANDS_MODES } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";

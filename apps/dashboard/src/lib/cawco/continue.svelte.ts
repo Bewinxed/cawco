@@ -10,11 +10,8 @@
  * happens to the form.
  */
 
-import type {
-  EffortLevel,
-  HarnessKind,
-  PermissionMode,
-} from "@cawco/core/harness/kinds";
+import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 import type { ContinuationJob } from "@cawco/core/protocol";
 import { ContinueSourceSchema } from "#lib/cawco/stored-shapes.js";
 import { hub } from "#lib/platform/hub.js";

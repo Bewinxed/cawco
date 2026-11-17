@@ -4,7 +4,8 @@
  * bench (hub/socket.svelte.ts `BenchHub`), which the store reads, can name
  * one.
  */
-import type { EffortLevel, PermissionMode } from "@cawco/core/harness/kinds";
+import type { EffortLevel } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import type { CommandKind } from "@cawco/core/stream";
 import type { SendExtras } from "../send-store";

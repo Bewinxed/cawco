@@ -88,7 +88,6 @@ import type { CutCommand } from "@cawco/core/commands/controls";
 import { isObject } from "@cawco/core/comments/model";
 import type { StartingSet } from "@cawco/core/delegate-types";
 import {
-  HARNESS_TOOLS,
   inStartingSet,
   PERSON_AND_READ_TOOLS,
 } from "@cawco/core/delegate-types";
@@ -106,6 +105,7 @@ import { maskMcpConfig, openUrl } from "@cawco/core/fleet-secrets";
 import type {
   MachineHarnessReport,
   SessionCredentialInstall,
+  SignInFault,
 } from "@cawco/core/harness";
 import {
   ACCOUNT_READ,
@@ -118,12 +118,9 @@ import {
   SESSION_DIR_READ,
   SESSION_STOPPED,
 } from "@cawco/core/harness";
-import {
-  type EffortLevel,
-  isEffortLevel,
-  type OfferedMode,
-  type PermissionMode,
-} from "@cawco/core/harness/kinds";
+import { CLAUDE } from "@cawco/core/harness/claude";
+import { type EffortLevel, isEffortLevel } from "@cawco/core/harness/kinds";
+import type { OfferedMode, PermissionMode } from "@cawco/core/harness/modes";
 import { CLAUDE_SETTINGS_REFUSED } from "@cawco/core/harness-config";
 import type { ClaudeHookHandler } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
@@ -196,7 +193,6 @@ import { HOUR_MS } from "@cawco/core/time";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
 import { harnessWords } from "@cawco/core/words/harness";
 import { pictureWords } from "@cawco/core/words/pictures";
@@ -271,6 +267,7 @@ import type { SetHook } from "../fleet-set-rows";
 import { sessionGitEnv } from "../git-credential";
 import {
   type CarryHost,
+  cannot,
   type Harness,
   type HarnessContext,
   type HarnessSession,
@@ -283,6 +280,7 @@ import {
   type TurnExtras,
   unreadSendsHeld,
 } from "../harness";
+import type { HarnessCli } from "../harness-cli";
 import { HUB_AWAY_BOUND_MS } from "../hub-away";
 import { fieldOf } from "../json-field";
 import { KeeperPool } from "../keepers";
@@ -1092,7 +1090,7 @@ const wireBlock = (block: NeutralContentBlock): ContentBlock => {
           throw new Error(
             pictureWords.typeRefused(
               mediaType,
-              accountsWords.harnesses.claude,
+              CLAUDE.words.name,
               CLAUDE_IMAGE_MEDIA_TYPES
             )
           );
@@ -1164,7 +1162,7 @@ const claudeImages = (
       throw new Error(
         pictureWords.typeRefused(
           mediaType,
-          accountsWords.harnesses.claude,
+          CLAUDE.words.name,
           CLAUDE_IMAGE_MEDIA_TYPES
         )
       );
@@ -1287,12 +1285,12 @@ const SEND_NOW = { priority: "now", origin: { kind: "human" } } as const;
 
 /** The tools whose running call Claude Code moves aside for a send-now ({@link SEND_NOW}). */
 const MOVES_ASIDE: ReadonlySet<string> = new Set([
-  ...HARNESS_TOOLS.claude.shell,
-  ...HARNESS_TOOLS.claude.powershell,
+  ...CLAUDE.tools.shell,
+  ...CLAUDE.tools.powershell,
   "Agent",
   "Task",
-  ...HARNESS_TOOLS.claude.fetch,
-  ...HARNESS_TOOLS.claude.search,
+  ...CLAUDE.tools.fetch,
+  ...CLAUDE.tools.search,
 ]);
 
 /** Whether a running call of `tool` moves aside for a send-now: {@link MOVES_ASIDE}, or any MCP tool's. */
@@ -1301,8 +1299,8 @@ const movesAside = (tool: string): boolean =>
 
 /** The CLI's shell tools: a command one runs is cut with its process. */
 const SHELL_TOOLS: ReadonlySet<string> = new Set([
-  ...HARNESS_TOOLS.claude.shell,
-  ...HARNESS_TOOLS.claude.powershell,
+  ...CLAUDE.tools.shell,
+  ...CLAUDE.tools.powershell,
 ]);
 
 /** The command a shell tool's call runs, as its input names it; none for any other block. */
@@ -1740,7 +1738,7 @@ class SessionMode {
   #fullSend: boolean;
 
   constructor(
-    mode: import("@cawco/core/harness/kinds").PermissionMode | undefined
+    mode: import("@cawco/core/harness/modes").PermissionMode | undefined
   ) {
     this.#fullSend = mode === "fullSend";
     this.#cli = mode && sdkMode(mode);
@@ -1753,7 +1751,7 @@ class SessionMode {
   }
 
   /** CawCo sets the mode: a mode control's, or an answer's `setMode`. */
-  choose(mode: import("@cawco/core/harness/kinds").PermissionMode): void {
+  choose(mode: import("@cawco/core/harness/modes").PermissionMode): void {
     this.#fullSend = mode === "fullSend";
     this.#cli = sdkMode(mode);
   }
@@ -5032,6 +5030,15 @@ class ClaudeSession implements HarnessSession {
     await forgetWakeups(this.instanceId);
   }
 
+  /**
+   * Claude Code starts no turn of its own between sends, so it never loops
+   * into the supervisor's stop; its history is the CLI's own file, which
+   * CawCo writes nothing into.
+   */
+  noteStopped(): Promise<void> {
+    return Promise.resolve();
+  }
+
   // biome-ignore lint/suspicious/useAwait: HarnessSession.dispose returns Promise<void>; dropping async would need an explicit Promise.resolve() wrapper instead
   async dispose(): Promise<void> {
     this.#input.end();
@@ -5181,8 +5188,50 @@ class ClaudeHarness implements Harness<"claude"> {
   readonly detectStartsNothing = true;
   readonly healsFleetMcp = true;
   readonly relaunchesOnManualCompact = true;
+  /** Its stored conversations are each account dir's files, read from disk. */
+  readonly catalogFromServer = false;
+  /** Its account dirs' sign-ins move only on a re-read of its report. */
+  readonly authMovesLive = false;
+  /** Why it cannot start rides its report ({@link detect}), never the adapter. */
+  readonly authReason = undefined;
+  /** Its sign-ins are account dirs, each reported in its report's `accounts`; no home sign-in of its own is refused. */
+  readonly signInFaults: SignInFault[] = [];
   readonly subagentChange = neutralSubagentChange;
   readonly kind = "claude" as const;
+  /** The Claude Code its sessions run (auth.ts), its version the version gate's own read (claude-version.ts). */
+  readonly cli: HarnessCli = {
+    find: claudeExecutable,
+    missing: CLAUDE_NOT_INSTALLED,
+    version: () => claudeHostVersion(),
+  };
+
+  /** Its sessions read their account dir at each launch; nothing of the harness holds the machine's provider accounts. */
+  accountsChanged(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /** Each session is its own keeper-held process; nothing of the harness's runs to end. */
+  dispose(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /** Its sessions' MCP clients reconnect to a restarted hub by themselves. */
+  hubRestarted(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /** Every turn runs in its session's own keeper-held process, which an agent's restart leaves running. */
+  restartHolds(): RestartHold[] {
+    return [];
+  }
+
+  readonly fleetHooks = cannot(
+    "Claude Code runs the fleet's hooks itself, from the settings its launch takes; its converge's report says each"
+  );
+
+  readonly providerList = cannot(
+    "Claude Code's accounts are Anthropic's alone: it lists no providers"
+  );
   readonly capabilities = CLAUDE_CAPABILITIES;
   auth: AuthState = "authenticated";
 

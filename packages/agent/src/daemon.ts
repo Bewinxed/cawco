@@ -68,6 +68,7 @@ import {
 } from "@cawco/core/handover";
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import { MACHINE_PART_MS } from "@cawco/core/harness";
+import { harnessName } from "@cawco/core/harness/kinds";
 import {
   KEEPER_HARNESSES,
   type KeeperHarnessKind,
@@ -238,7 +239,6 @@ import {
   shieldBrowser,
 } from "./browser/shield";
 import { buildInfo } from "./build";
-import { probeCapabilities } from "./capabilities";
 import { onVersionAnswered } from "./claude-version";
 import { readConfig, writeConfig } from "./config";
 import {
@@ -285,6 +285,7 @@ import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
 import { holdHubLink, isMachineAgent } from "./machine-agent";
+import { probeMachineCapabilities } from "./machine-capabilities";
 import { startMcpGateway } from "./mcp-oauth";
 import { MEMORY_LOG_INTERVAL_MS, memoryLine } from "./memory";
 import {
@@ -618,15 +619,17 @@ const custodyWord = (
       }
     : reading;
 
-/** OpenCode, told the machine's provider accounts changed, when it takes such a change. */
-const tellOpencodeAccountsChanged = (): void => {
-  harness("opencode")
-    ?.accountsChanged?.()
-    .catch((error: unknown) =>
-      console.warn(
-        `[accounts] OpenCode did not take the accounts' change: ${errorWords(error)}`
-      )
-    );
+/** Every harness, told the machine's provider accounts changed ({@link Harness.accountsChanged}). */
+const tellAccountsChanged = (): void => {
+  for (const adapter of harnesses()) {
+    adapter
+      .accountsChanged()
+      .catch((error: unknown) =>
+        console.warn(
+          `[accounts] ${harnessName(adapter.kind)} did not take the accounts' change: ${errorWords(error)}`
+        )
+      );
+  }
 };
 
 /**
@@ -635,7 +638,7 @@ const tellOpencodeAccountsChanged = (): void => {
  * stores' fingerprint when the caller has just read it, else read anew.
  */
 let providerAccountsChanged: (homeStores?: string) => void =
-  tellOpencodeAccountsChanged;
+  tellAccountsChanged;
 
 /**
  * The providers an account can be for here, as each harness lists them,
@@ -651,7 +654,7 @@ const machineProviders = async (): Promise<
     readPart("pi's providers", piProviders),
     readPart("OpenCode's providers", async () => {
       const adapter = harness("opencode");
-      return adapter?.providerList ? await adapter.providerList() : [];
+      return adapter ? await adapter.providerList() : [];
     }),
   ]);
   if (!(pi || opencode)) {
@@ -1523,7 +1526,7 @@ const reconnectAfterHubRestart = async (
   await Promise.all(
     harnesses().map((adapter) =>
       adapter
-        .hubRestarted?.()
+        .hubRestarted()
         .catch((error: unknown) =>
           Effect.runFork(
             Effect.logWarning(
@@ -1921,7 +1924,7 @@ const attach = (
           )
         );
       }
-      readPart("the machine's capabilities", probeCapabilities)
+      readPart("the machine's capabilities", probeMachineCapabilities)
         .then((machineCapabilities) => {
           if (machineCapabilities) {
             beat({ machineCapabilities });
@@ -1970,7 +1973,7 @@ const attach = (
             (async () => {
               const machineCapabilities = await readPart(
                 "the machine's capabilities",
-                probeCapabilities
+                probeMachineCapabilities
               );
               if (machineCapabilities) {
                 beat({ machineCapabilities });
@@ -2009,7 +2012,7 @@ const attach = (
         providerAccounts: reportedProviderAccounts,
         ...(reportedHomeStores ? { homeStores: reportedHomeStores } : {}),
       });
-      tellOpencodeAccountsChanged();
+      tellAccountsChanged();
       reportPiSoon();
       if (homeStores === undefined) {
         // The stores read again, off the loop: the next beat carries it.
@@ -2069,7 +2072,7 @@ const attach = (
     // `needUnmet`) answered otherwise than what was known: the install
     // advice they carry is read again and sent.
     const stopNeedsWatch = onNeedsAnswered(() => {
-      readPart("the machine's capabilities", probeCapabilities)
+      readPart("the machine's capabilities", probeMachineCapabilities)
         .then((machineCapabilities) => {
           if (machineCapabilities) {
             beat({ machineCapabilities });
@@ -2238,9 +2241,7 @@ const attach = (
     // machine's own OpenCode sign-ins refused or answering again: a changed
     // word on either goes out on the next heartbeat, the other harnesses'
     // reports kept.
-    const authed = [pi, harness("opencode")].filter(
-      (adapter): adapter is Harness => adapter !== undefined
-    );
+    const authed = harnesses().filter((adapter) => adapter.authMovesLive);
     const changedAuth = (): MachineHarnessReport[] | undefined => {
       const moved = authed.filter((adapter) => {
         const old = reportedHarnesses.find(
@@ -2251,7 +2252,7 @@ const attach = (
           (old.auth !== adapter.auth ||
             old.authReason !== adapter.authReason ||
             JSON.stringify(old.signInFaults ?? []) !==
-              JSON.stringify(adapter.signInFaults ?? []))
+              JSON.stringify(adapter.signInFaults))
         );
       });
       if (moved.length === 0) {
@@ -2271,7 +2272,7 @@ const attach = (
           ...rest,
           auth: adapter.auth,
           ...(adapter.authReason ? { authReason: adapter.authReason } : {}),
-          ...(adapter.signInFaults?.length
+          ...(adapter.signInFaults.length
             ? { signInFaults: adapter.signInFaults }
             : {}),
         };
@@ -3327,7 +3328,7 @@ const startDaemon = (rediscover = false) =>
     // The usage scanner outlives connections too: its store (usage.db) is the
     // machine's, so a reconnect picks up where the last scan stopped.
     const scanner = yield* Effect.sync(() => new UsageScans());
-    supervisor.declareControl(PROBE_CAPABILITIES, probeCapabilities);
+    supervisor.declareControl(PROBE_CAPABILITIES, probeMachineCapabilities);
 
     // Updates arrive only as signed builds from the hub: this one object owns
     // the update tick, the "Install now" command and the policy the hub pushes.

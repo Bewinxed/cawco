@@ -16,43 +16,17 @@
 
 import { USER_LAYER_SHELL, userLayerLabel } from "./claude-dirs";
 import { type FleetPlacement, placementProblem } from "./fleet-placement";
-import type { HarnessKind } from "./harness/kinds";
+import type { HookRunner, HookToolName } from "./harness/descriptor";
+import {
+  descriptorOf,
+  type HarnessKind,
+  harnessName,
+  type PluginOf,
+} from "./harness/kinds";
+import type { HookEvent } from "./hook-events";
 import { isRecord } from "./is-record";
-import { accountsWords } from "./words/accounts";
 
-/** Every lifecycle point a hook can attach to. */
-export type HookEvent =
-  | "SessionStart"
-  | "Setup"
-  | "InstructionsLoaded"
-  | "UserPromptSubmit"
-  | "UserPromptExpansion"
-  | "MessageDisplay"
-  | "PreToolUse"
-  | "PermissionRequest"
-  | "PostToolUse"
-  | "PostToolUseFailure"
-  | "PostToolBatch"
-  | "PermissionDenied"
-  | "Notification"
-  | "SubagentStart"
-  | "SubagentStop"
-  | "TaskCreated"
-  | "TaskCompleted"
-  | "Stop"
-  | "StopFailure"
-  | "TeammateIdle"
-  | "ConfigChange"
-  | "CwdChanged"
-  | "DirectoryAdded"
-  | "FileChanged"
-  | "WorktreeCreate"
-  | "WorktreeRemove"
-  | "PreCompact"
-  | "PostCompact"
-  | "SessionEnd"
-  | "Elicitation"
-  | "ElicitationResult";
+export type { HookEvent } from "./hook-events";
 
 /** How the picker files an event, so thirty-one of them stay findable. */
 type HookGroup =
@@ -417,83 +391,26 @@ export function hookMatches(
 }
 
 /**
- * The harnesses that run the fleet's hooks from CawCo's harness set (agent
- * fleet-harness-set.ts): CawCo's OpenCode plugin and its inline pi
- * extension. Claude Code runs them itself.
+ * The harnesses whose fleet hooks CawCo runs from its harness set (agent
+ * fleet-harness-set.ts), each on the events and with the tool names its
+ * descriptor's `hooks` gives: those whose `hooks.runs` is `cawco` (an
+ * OpenCode plugin, a pi inline extension). The rest run them themselves.
  */
-export type HookHarness = Exclude<HarnessKind, "claude">;
+export type HookHarness = {
+  [K in HarnessKind]: PluginOf<K>["hooks"] extends { runs: "cawco" }
+    ? K
+    : never;
+}[HarnessKind];
 
-/**
- * The events each harness runs a command hook on, by the point it raises:
- * OpenCode 2.0's plugin tool hooks, `execute.before` and `execute.after`
- * ("Inspect or replace tool input before execution",
- * opencode.ai/v2/docs/build/plugins); pi's extension events, `tool_call`
- * ("can mutate input or block execution"), `tool_result`, `session_start`,
- * `before_agent_start` and `agent_end` (pi 1.3.0 docs/extensions.md). Any
- * other event is unsupported on that harness, and said so on the machine's
- * row ({@link hookUnsupported}).
- */
-const HOOK_EVENTS_ON = {
-  opencode: ["PreToolUse", "PostToolUse", "PostToolUseFailure"],
-  pi: [
-    "PreToolUse",
-    "PostToolUse",
-    "PostToolUseFailure",
-    "SessionStart",
-    "UserPromptSubmit",
-    "Stop",
-  ],
-} as const satisfies Record<HookHarness, readonly HookEvent[]>;
-
-/** One harness tool in Claude Code's words: its name, and its input's keys renamed to Claude Code's. */
-interface HookToolName {
-  input?: Readonly<Record<string, string>>;
-  name: string;
-}
-
-/**
- * Each harness's tools by Claude Code's names, which a fleet hook's matcher
- * and its `tool_name` read, so `Bash` and `Edit|Write` mean the same on
- * every harness. OpenCode 2.0.29's `shell`, `read`, `write` and `edit` (their
- * `path`, and `edit`'s `oldString`, `newString`, `replaceAll`: the schemas
- * its binary defines, `o({path:…,content:…})` for `write`), `patch`, `glob`,
- * `grep`, `webfetch`, `websearch`, `subagent` and `skill`; pi 1.3.0's `bash`,
- * `powershell`, `read`, `write` and `edit` (their `path`, and `edit`'s
- * `edits` kept as they are), `ls`, `find` and `grep`. A tool not named here
- * (an MCP tool, a plugin's or an extension's) is matched by its own name.
- */
-const HOOK_TOOL_NAMES: Record<HookHarness, Record<string, HookToolName>> = {
-  opencode: {
-    shell: { name: "Bash" },
-    read: { name: "Read", input: { path: "file_path" } },
-    write: { name: "Write", input: { path: "file_path" } },
-    edit: {
-      name: "Edit",
-      input: {
-        path: "file_path",
-        oldString: "old_string",
-        newString: "new_string",
-        replaceAll: "replace_all",
-      },
-    },
-    patch: { name: "Edit" },
-    glob: { name: "Glob" },
-    grep: { name: "Grep" },
-    webfetch: { name: "WebFetch" },
-    websearch: { name: "WebSearch" },
-    subagent: { name: "Agent" },
-    skill: { name: "Skill" },
-  },
-  pi: {
-    bash: { name: "Bash" },
-    powershell: { name: "PowerShell" },
-    read: { name: "Read", input: { path: "file_path" } },
-    write: { name: "Write", input: { path: "file_path" } },
-    edit: { name: "Edit", input: { path: "file_path" } },
-    ls: { name: "LS" },
-    find: { name: "Glob" },
-    grep: { name: "Grep" },
-  },
+/** The hooks CawCo runs for `harness`'s sessions, as its descriptor gives them. */
+const cawcoHooksOf = (
+  harness: HookHarness
+): Extract<HookRunner, { runs: "cawco" }> => {
+  const runner = descriptorOf(harness).hooks;
+  if (runner.runs !== "cawco") {
+    throw new Error(`${harness} runs its hooks itself`);
+  }
+  return runner;
 };
 
 /** A harness's tool call as a fleet hook reads it: Claude Code's name for the tool, and its input with Claude Code's keys. */
@@ -502,7 +419,7 @@ export const hookToolCall = (
   tool: string,
   input: unknown
 ): { input: unknown; name: string } => {
-  const known: HookToolName | undefined = HOOK_TOOL_NAMES[harness][tool];
+  const known: HookToolName | undefined = cawcoHooksOf(harness).toolNames[tool];
   if (!known) {
     return { name: tool, input };
   }
@@ -528,7 +445,8 @@ export const hookToolInputBack = (
   tool: string,
   input: Record<string, unknown>
 ): Record<string, unknown> => {
-  const keys: HookToolName["input"] = HOOK_TOOL_NAMES[harness][tool]?.input;
+  const keys: HookToolName["input"] =
+    cawcoHooksOf(harness).toolNames[tool]?.input;
   if (!keys) {
     return input;
   }
@@ -586,7 +504,7 @@ export const hookWorkspaceNote = (
 
 /**
  * Why `harness` cannot run `hook`, in a sentence, or undefined when it runs
- * it: an event it raises no point for ({@link HOOK_EVENTS_ON}), a handler
+ * it: an event it raises no point for (its descriptor's `hooks.events`), a handler
  * that is not a command (a prompt, an agent, an HTTP post or an MCP tool are
  * Claude Code's own), or a condition (`if`), which is Claude Code's
  * permission-rule syntax.
@@ -595,8 +513,8 @@ export const hookUnsupported = (
   harness: HookHarness,
   hook: Pick<FleetHook, "event" | "handler">
 ): string | undefined => {
-  const name = accountsWords.harnesses[harness];
-  const events: readonly HookEvent[] = HOOK_EVENTS_ON[harness];
+  const name = harnessName(harness);
+  const events: readonly HookEvent[] = cawcoHooksOf(harness).events;
   if (!events.includes(hook.event)) {
     return `${name} raises no ${hook.event}: it runs hooks on ${events.join(", ")}.`;
   }

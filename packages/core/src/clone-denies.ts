@@ -14,13 +14,8 @@
  */
 import { join } from "node:path";
 import { z } from "zod";
-import {
-  PLACED_MEMORY,
-  PLACED_SYNCED,
-  PROJECT_SKILLS,
-  projectClaudeRelative,
-} from "./claude-dirs";
-import type { HarnessKind } from "./harness/kinds";
+import { PLACED_MEMORY, PLACED_SYNCED } from "./claude-dirs";
+import { HARNESS_PLUGINS } from "./harness/kinds";
 
 /**
  * What stands in for a clone-side deny path its clone does not have, before
@@ -52,29 +47,7 @@ export const CloneDenySchema = z
 export type CloneDeny = z.infer<typeof CloneDenySchema>;
 
 const DIR = { kind: "dir" } as const;
-const EMPTY_JSON = { kind: "file", text: "{}\n" } as const;
 const EMPTY = { kind: "file", text: "" } as const;
-
-/**
- * OpenCode's empty config: its schema alone. OpenCode writes `$schema` into a
- * config file that has none ("if (!data.$schema) { … fs.writeFileString(
- * options.path, updated)", `loadConfig` in packages/opencode/src/config/
- * config.ts at v1.18.34), so a `{}` stand-in is written over on the host.
- */
-const OPENCODE_EMPTY = {
-  kind: "file",
-  text: '{"$schema":"https://opencode.ai/config.json"}\n',
-} as const;
-
-/**
- * OpenCode's config dir, empty and read-only. OpenCode writes a `.gitignore`
- * into each `.opencode` dir it loads and installs `@opencode-ai/plugin` there
- * (`ensureGitignore`, `npm.install` in the same file); without write bits
- * both fail quietly (the first catches PermissionDenied, the second is a
- * background fork that logs a warning), and the clone loads as one without
- * `.opencode` does (OpenCode 1.18.34: `/config` and `/agent` the same).
- */
-const OPENCODE_DIR = { kind: "dir", readOnly: true } as const;
 
 /**
  * srt's own mandatory deny names at its working directory, the clone, that
@@ -96,89 +69,23 @@ const SRT_FILES = [
 ];
 const SRT_DIRS = [".vscode", ".idea"];
 
-/**
- * Claude Code's empty preview launch config: its version and no server.
- * "Claude automatically detects your dev server setup and stores the
- * configuration in `.claude/launch.json` … `{ "version": "0.0.1",
- * "configurations": [ … ] }`" (code.claude.com/docs/en/desktop, "Configure
- * preview servers").
- */
-const LAUNCH_EMPTY = {
-  kind: "file",
-  text: '{"version":"0.0.1","configurations":[]}\n',
-} as const;
-
-/**
- * Claude Code's empty scheduled tasks: a `tasks` list with none. Its reader
- * takes anything else as no task too (CLI 0.3.302: `if(!r||typeof
- * r!=="object")return[];let i=r;if(!Array.isArray(i.tasks))return[]`).
- */
-const SCHEDULED_EMPTY = { kind: "file", text: '{"tasks":[]}\n' } as const;
-
-/**
- * Every project file or dir Claude Code, OpenCode or pi loads and runs (or
- * follows as instructions only it may change, `output-styles`), by its path
- * from the dir it is found in, with the stand-in its harness parses as
+/*
+ * Every project file or dir a harness loads and runs (or follows as
+ * instructions only it may change) is its descriptor's `cloneConfig`, by its
+ * path from the dir it is found in, with the stand-in its harness parses as
  * nothing set (a clone holds one at its root on Linux, {@link cloneDenies}).
  * Each is the harness's own and a fleet admin tool's, never a workspace's:
  * the owner picked "Admin tools only" (2026-10-23).
- *
- * - Claude Code: `.mcp.json`; `.claude/` settings (hooks, env, helpers,
- *   plugins), `hooks`, `commands` and `skills` (`` !`cmd` `` lines,
- *   frontmatter hooks), `agents`, `workflows` (JS scripts), `routines`,
- *   `scheduled_tasks.json`, `loop.md` (scheduled prompts), `launch.json`
- *   (the preview server's command), `output-styles`: Claude Code's own
- *   write-protected list (CLI 0.3.302: `Ae(st(Z,".claude","launch.json")…
- *   "workflows"…"routines"…"output-styles"…"scheduled_tasks.json"…
- *   "loop.md"…".mcp.json")`).
- * - OpenCode: `opencode.json(c)` and `.opencode/` (plugins, commands' shell
- *   blocks, MCP commands), from cwd to the filesystem root
- *   (opencode.ai/v2/docs/config).
- * - pi: `.pi/` (extensions, packages, `mcp.json`, settings; CawCo's pi takes
- *   every folder as trusted, pi-runtime.ts `SettingsManager.create`). "A
- *   bare `.pi` directory does not require project trust" (pi docs), so an
- *   empty one stands in.
- * - OpenCode and pi: `.agents/skills`.
- * - Codex ({@link CODEX_CONFIG_EMPTY}): `.codex` and `.agents/plugins`.
  */
-const HARNESS_CONFIG_EMPTY_BY: Record<
-  HarnessKind,
-  Readonly<Record<string, CloneDenyEmpty>>
-> = {
-  claude: {
-    ".mcp.json": { kind: "file", text: '{"mcpServers":{}}\n' },
-    [projectClaudeRelative("settings.json")]: EMPTY_JSON,
-    [projectClaudeRelative("settings.local.json")]: EMPTY_JSON,
-    [projectClaudeRelative("hooks")]: DIR,
-    [projectClaudeRelative("commands")]: DIR,
-    [projectClaudeRelative("agents")]: DIR,
-    [PROJECT_SKILLS]: DIR,
-    [projectClaudeRelative("workflows")]: DIR,
-    [projectClaudeRelative("routines")]: DIR,
-    [projectClaudeRelative("output-styles")]: DIR,
-    [projectClaudeRelative("launch.json")]: LAUNCH_EMPTY,
-    [projectClaudeRelative("scheduled_tasks.json")]: SCHEDULED_EMPTY,
-    [projectClaudeRelative("loop.md")]: EMPTY,
-  },
-  opencode: {
-    "opencode.json": OPENCODE_EMPTY,
-    "opencode.jsonc": OPENCODE_EMPTY,
-    ".opencode": OPENCODE_DIR,
-  },
-  // `.agents/skills` is OpenCode's too; it stands here once.
-  pi: {
-    ".pi": DIR,
-    ".agents/skills": DIR,
-  },
-};
+
 /**
  * Codex's project config, held before its adapter exists: Codex's app-server
  * marks any folder it starts a writable thread in as trusted, so a
  * `.codex/config.toml` written in a clone started its MCP server on the host
  * at the next Codex session there (Codex audit 2026-11-17, probes C-k and
  * C-k2). `.agents/plugins` holds the repo plugin marketplace
- * (`marketplace.json`) Codex also loads. The Codex kind's entry of
- * {@link HARNESS_CONFIG_EMPTY_BY} takes these over when it is named.
+ * (`marketplace.json`) Codex also loads. Codex's descriptor's `cloneConfig`
+ * takes these over when it is registered.
  */
 const CODEX_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
   ".codex": DIR,
@@ -190,7 +97,7 @@ const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> =
   Object.assign(
     {},
     CODEX_CONFIG_EMPTY,
-    ...Object.values(HARNESS_CONFIG_EMPTY_BY)
+    ...HARNESS_PLUGINS.map((plugin) => plugin.cloneConfig)
   );
 
 /**

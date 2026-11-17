@@ -7,7 +7,8 @@
 
 import type { Bounded } from "@cawco/core/bounded";
 import type { HarnessCapabilities } from "@cawco/core/harness";
-import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 import { answersControl } from "@cawco/core/harness/traits";
 import {
   CONTROL_CONTEXT_USAGE,

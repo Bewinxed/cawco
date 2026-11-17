@@ -13,8 +13,11 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
-import { HARNESS_TOOL } from "@cawco/core/harness";
-import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
+import {
+  descriptorOf,
+  HARNESSES,
+  type HarnessKind,
+} from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import {
   type HarnessRefusalKind,
@@ -105,7 +108,7 @@ export function harnessBlockOf(
     return null;
   }
   const name = machineLabel(machine.hostname);
-  const tool = machine.tools?.[HARNESS_TOOL[harness]];
+  const tool = machine.tools?.[descriptorOf(harness).tool];
   const refusal = harnessRefusal(report, name, tool);
   if (!refusal) {
     return null;
@@ -302,7 +305,7 @@ export async function fixHarness(
   relaunch?: string
 ): Promise<Bounded<ToolStatus>> {
   followHarness(machineId, harness, relaunch);
-  return await installTool(machineId, HARNESS_TOOL[harness]);
+  return await installTool(machineId, descriptorOf(harness).tool);
 }
 
 /**

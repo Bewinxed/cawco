@@ -1,7 +1,7 @@
 /** The hub's own settings rows: the supervisor's mode, images, the fleet watch, connections, what Jev may spend, out-of-date tools. */
 
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
-import type { OfferedMode } from "@cawco/core/harness/kinds";
+import type { OfferedMode } from "@cawco/core/harness/modes";
 import {
   DEFAULT_IMAGE_SETTINGS,
   type ImageSettings,

@@ -78,7 +78,7 @@ import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { ArrivingAsk, PermissionRequestFrame } from "@cawco/core/frames";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { harnessName } from "@cawco/core/harness/kinds";
 import type { PairingRequest } from "@cawco/core/hub-auth";
 import { type Install, installName } from "@cawco/core/install";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -128,7 +128,6 @@ import {
   taskCollapseId,
   turnCollapseId,
 } from "./notifications";
-
 import type { Decided } from "./settling-answers";
 import type { TaskEvent } from "./tasks";
 
@@ -699,13 +698,6 @@ export interface PushServices {
     taskId: string
   ) => Promise<{ kind: string | null; title: string } | undefined>;
 }
-
-/** Each harness as the operator knows it. */
-const HARNESS_NAMES: Record<HarnessKind, string> = {
-  claude: "Claude Code",
-  opencode: "OpenCode",
-  pi: "pi",
-};
 
 /** Which category an ask goes as: a question, a permission to open, or one Approve may answer. */
 /** What Cawrier says of a push it refused, as far as the hub reads it. */
@@ -1620,7 +1612,7 @@ export const createPush = ({
     if (owned) {
       return owned;
     }
-    const harness = HARNESS_NAMES[row.harness];
+    const harness = harnessName(row.harness);
     const host = db
       .listAgents()
       .find((agent) => agent.machineId === row.machineId)?.hostname;

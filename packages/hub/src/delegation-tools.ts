@@ -6,10 +6,11 @@ import {
 } from "@cawco/core/delegate-types";
 import type { ForgeWrite } from "@cawco/core/forge-post";
 import {
+  descriptorOf,
   HARNESSES,
   type HarnessKind,
-  SESSION_CHOSEN_MODES,
 } from "@cawco/core/harness/kinds";
+import { SESSION_CHOSEN_MODES } from "@cawco/core/harness/modes";
 import {
   DEFAULT_IMAGE_PROVIDER,
   IMAGE_GENERATION_DESCRIPTION,
@@ -309,31 +310,6 @@ const READ_ONLY = {
 
 /** Hub-owned tool definitions; every harness discovers this same registry. */
 
-/**
- * What {@link NO_REPLY_TOOL} says on each harness. Claude Code and pi end
- * the turn at the call (core no-reply.ts `END_TURN_META`). OpenCode's loop
- * takes one more step after any step that called a tool, and the turn is
- * no news only when that step writes nothing (server.ts `endsOnNoReply`).
- */
-const ENDS_AT_THE_CALL = {
-  description:
-    "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them. The turn ends at the call: you take no step after it. It changes nothing else.",
-  result: "This turn ended here with no reply.",
-};
-const NO_REPLY_WORDS: Record<
-  HarnessKind,
-  { readonly description: string; readonly result: string }
-> = {
-  claude: ENDS_AT_THE_CALL,
-  pi: ENDS_AT_THE_CALL,
-  opencode: {
-    description:
-      "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them, and write nothing after it: text after it reaches them as a reply. It changes nothing else.",
-    result:
-      "No reply this turn. End your step with no text: anything written now reaches the person as a reply.",
-  },
-};
-
 /** The tools themselves, separated from the server so they can be exercised directly. */
 /**
  * What listing a session's tools reads of it: their words and which tools
@@ -343,7 +319,7 @@ const NO_REPLY_WORDS: Record<
 export interface ToolView {
   /**
    * The harness the tools are listed for and called from: what a tool's
-   * words say can differ by it ({@link NO_REPLY_WORDS}).
+   * words say can differ by it (its descriptor's `words.noReply`).
    */
   readonly harness: HarnessKind;
   /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
@@ -1105,7 +1081,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       NO_REPLY_TOOL,
-      NO_REPLY_WORDS[view.harness].description,
+      descriptorOf(view.harness).words.noReply.description,
       {},
       (_asked, _format, bound) => {
         // Thrown, the result is an error with no end-of-turn mark: the model
@@ -1113,7 +1089,7 @@ export function handoffTools(view: ToolView) {
         if (bound.personOwed()) {
           throw new Error(NO_REPLY_OWED);
         }
-        return Promise.resolve(NO_REPLY_WORDS[view.harness].result);
+        return Promise.resolve(descriptorOf(view.harness).words.noReply.result);
       },
       sentence,
       {

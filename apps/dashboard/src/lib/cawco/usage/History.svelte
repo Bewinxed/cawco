@@ -1,5 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { descriptorOf } from "@cawco/core/harness/kinds";
   import { traitsOf } from "@cawco/core/harness/traits";
   import { HOUR_MS } from "@cawco/core/time";
   /**
@@ -10,6 +11,7 @@
    * a month. Table swaps both charts for their figures.
    */
   import type { UsageHarness, UsageSummary } from "@cawco/core/usage/types";
+  import { USAGE_HARNESSES } from "@cawco/core/usage/types";
   import {
     TabItem,
     Tabs,
@@ -181,15 +183,16 @@
     byHour ? hourLabel.format(at) : dayLabel.format(at);
 
   const charts = $derived(
-    (["claude", "opencode"] as const).map((harness) => {
+    USAGE_HARNESSES.map((harness) => {
       const start = shown?.since[harness] ?? null;
       const points = pointsOf(shown?.series[harness] ?? null, start, byHour);
       return {
         harness,
-        title:
+        title: `${descriptorOf(harness).words.usageName}, ${
           traitsOf(harness).costMeaning === "estimated"
-            ? "Claude, at API prices"
-            : "opencode, real spend",
+            ? "at API prices"
+            : "real spend"
+        }`,
         approx: traitsOf(harness).costMeaning === "estimated" ? "~" : "",
         points,
         total: points.reduce((sum, p) => sum + p.cost, 0),
@@ -275,7 +278,7 @@
               <Skeleton class="w-full" height="plot" />
             </div>
           {:else}
-            {@const i = chart.harness === "claude" ? 0 : 1}
+            {@const i = USAGE_HARNESSES.indexOf(chart.harness)}
             <!-- One slot: the old view leaves over its top while the new one
                  waits for it, and the slot's height morphs to the new. -->
             <div data-slot="body" class="relative" in:reveal {@attach morph()}>

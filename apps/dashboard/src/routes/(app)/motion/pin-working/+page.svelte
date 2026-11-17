@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Pin, ThreadEntry } from "@cawco/core/comments/model";
+  import { CLAUDE } from "@cawco/core/harness/claude";
   /**
    * PIN WORKING BENCH — a comment's thread (the real PinCard in the real
    * PinFloat, as the artifact panel stands it beside its pill) while the
@@ -12,7 +13,6 @@
    * and `show` close and open the card again, so the probe reads it grow
    * out of its pill and rise to stand whole.
    */
-  import { accountsWords } from "@cawco/core/words/accounts";
   import { MediaQuery } from "svelte/reactivity";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
@@ -181,7 +181,7 @@
         slot="pin-card"
       >
         <PinCard
-          agentName={accountsWords.harnesses.claude}
+          agentName={CLAUDE.words.name}
           {draft}
           link="/artifact/bench#pin-12"
           {live}

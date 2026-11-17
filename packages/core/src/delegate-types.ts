@@ -6,15 +6,18 @@
  * builds a `SpawnPayload`.
  */
 
+import { CLAUDE } from "./harness/claude";
+import type { DeniedToolNames, HarnessToolNames } from "./harness/descriptor";
 import {
+  descriptorOf,
   EFFORT_LEVELS,
   type EffortLevel,
   HARNESSES,
   type HarnessKind,
+  harnessName,
   harnessNamed,
 } from "./harness/kinds";
 import { NO_REPLY_TOOL } from "./no-reply";
-import { accountsWords } from "./words/accounts";
 import { delegateTypesWords } from "./words/delegate-types";
 
 /** One named preset. `name` is the key a `delegate` call's `type` asks for. */
@@ -236,47 +239,6 @@ export const delegateTypeProblem = (
 };
 
 /**
- * Each harness's own tools for the two things CawCo keeps itself (Projects
- * spec §2, §5.2): native subagents, which every session is denied (work
- * goes to CawCo's delegates), and the native to-do list with its plan mode,
- * which every session is denied: a session's plan is CawCo's list
- * (`todo_write`'s session scope, core plan.ts), always.
- *
- * - Claude Code: its list, `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`
- *   and `TodoWrite` (each in agent SDK 0.3.302's `BUILTIN_TOOL_NAMES`), and
- *   its plan mode, `EnterPlanMode`/`ExitPlanMode`: the session's spec,
- *   written through CawCo, replaces it.
- * - OpenCode 2.0 has no list ("The `todowrite` tool is no longer available
- *   and must not be called", 2.0.29's V2 migration; no `todoread` at all);
- *   its plan mode is an agent, `plan`, which the OpenCode adapter turns off
- *   on every server it launches.
- * - pi has neither (1.3.0's built-ins are `read`, `bash`, `powershell`,
- *   `edit`, `write`, `grep`, `find` and `ls`).
- *
- * And the harness's own question tool, which every session CawCo starts is
- * denied: a question to the person is CawCo's `ask` (hub asks.ts), which
- * answers at once and keeps the question. Claude Code's `AskUserQuestion`;
- * OpenCode's `question`; pi has none.
- */
-const NATIVE_TOOLS = {
-  subagents: { claude: ["Task", "Agent"], opencode: ["subagent"], pi: [] },
-  todos: {
-    claude: [
-      "TaskCreate",
-      "TaskUpdate",
-      "TaskList",
-      "TaskGet",
-      "TodoWrite",
-      "EnterPlanMode",
-      "ExitPlanMode",
-    ],
-    opencode: [],
-    pi: [],
-  },
-  questions: { claude: ["AskUserQuestion"], opencode: ["question"], pi: [] },
-} as const satisfies Record<string, Record<HarnessKind, readonly string[]>>;
-
-/**
  * What every session is denied beside the fleet's baseline, in Claude Code's
  * names (the OpenCode and pi adapters read each as their own tool, and find
  * none): the harness's own list and its plan mode. Added at spawn, in each
@@ -284,7 +246,7 @@ const NATIVE_TOOLS = {
  * written into the person's own settings, so the `claude` they start
  * themselves keeps both.
  */
-export const OWN_LIST_DENIED: readonly string[] = NATIVE_TOOLS.todos.claude;
+export const OWN_LIST_DENIED: readonly string[] = CLAUDE.nativeTools.todos;
 
 /**
  * The harness's own subagents, in Claude Code's names (the OpenCode adapter
@@ -293,17 +255,16 @@ export const OWN_LIST_DENIED: readonly string[] = NATIVE_TOOLS.todos.claude;
  * stored or asked about, and never written into the person's own settings.
  * Work a session hands off goes to CawCo's delegates.
  */
-export const SUBAGENTS_DENIED: readonly string[] =
-  NATIVE_TOOLS.subagents.claude;
+export const SUBAGENTS_DENIED: readonly string[] = CLAUDE.nativeTools.subagents;
 
 /**
  * The harness's own question tool, in Claude Code's name (the OpenCode
  * adapter reads it as `question`; pi has none): denied to every session at
  * spawn, so a question goes through
- * CawCo's `ask` (core `NATIVE_TOOLS.questions`).
+ * CawCo's `ask` (each descriptor's `nativeTools.questions`).
  */
 export const QUESTION_TOOL_DENIED: readonly string[] =
-  NATIVE_TOOLS.questions.claude;
+  CLAUDE.nativeTools.questions;
 
 /**
  * CawCo's own tools that only reach the person or only read, by their bare
@@ -368,68 +329,20 @@ export const SESSION_ROLES = [
 ] as const;
 export type SessionRole = (typeof SESSION_ROLES)[number];
 
+/** A kind of tool each harness's descriptor names (`tools`). */
+type HarnessToolKind = keyof HarnessToolNames;
+
 /**
- * Each harness's own tools of the kinds CawCo's permissions read, by the
- * name the harness calls and asks under: one table, so a rule written for a
- * kind (web-reads.ts's taint, a push's open-only
- * asks) holds the same on every harness, and a new harness fails the types
- * until its names are given here.
- *
- * - `shell`: a POSIX shell. Claude Code's `Bash`, OpenCode 2.0's `shell`
- *   (its permission action, opencode.ai/v2/docs/permissions), pi 1.3.0's
- *   `bash`.
- * - `powershell`: Claude Code's Windows `PowerShell` (agent SDK 0.3.302's
- *   `BUILTIN_TOOL_NAMES`), pi 1.3.0's built-in `powershell`
- *   (dist/core/tools/index.js); OpenCode 2.0 has none.
- * - `edit`: the tools that write files, by the name each asks permission
- *   under. Claude Code's `Edit`, `Write`, `MultiEdit` and `NotebookEdit`;
- *   OpenCode 2.0's `edit`, which covers `write` and `patch` ("In V2, use
- *   permissions, shell, and subagent instead of permission, bash, and
- *   task", opencode.ai/v2/docs/permissions); pi 1.3.0's `edit` and `write`.
- * - `fetch` and `search`: the built-in web tools. Claude Code's `WebFetch`
- *   and `WebSearch`, OpenCode 2.0's `webfetch` and `websearch`; pi has no
- *   web tool of its own ({@link PI_EQUIVALENTS}).
+ * Every harness's tools of `kinds`, by their own names (each descriptor's
+ * `tools`): one set, so a rule written for a kind (web-reads.ts's taint, a
+ * push's open-only asks) holds the same on every harness.
  */
-export const HARNESS_TOOLS = {
-  claude: {
-    shell: ["Bash"],
-    powershell: ["PowerShell"],
-    edit: ["Edit", "Write", "MultiEdit", "NotebookEdit"],
-    fetch: ["WebFetch"],
-    search: ["WebSearch"],
-  },
-  opencode: {
-    shell: ["shell"],
-    powershell: [],
-    edit: ["edit"],
-    fetch: ["webfetch"],
-    search: ["websearch"],
-  },
-  pi: {
-    shell: ["bash"],
-    powershell: ["powershell"],
-    edit: ["edit", "write"],
-    fetch: [],
-    search: [],
-  },
-} as const satisfies Record<
-  HarnessKind,
-  Record<
-    "edit" | "fetch" | "powershell" | "search" | "shell",
-    readonly string[]
-  >
->;
-
-/** A kind of tool {@link HARNESS_TOOLS} names on each harness. */
-type HarnessToolKind = keyof (typeof HARNESS_TOOLS)[HarnessKind];
-
-/** Every harness's tools of `kinds`, by their own names ({@link HARNESS_TOOLS}). */
 const harnessToolsOf = (
   ...kinds: readonly HarnessToolKind[]
 ): ReadonlySet<string> =>
   new Set(
     HARNESSES.flatMap((harness) =>
-      kinds.flatMap((kind) => HARNESS_TOOLS[harness][kind])
+      kinds.flatMap((kind) => descriptorOf(harness).tools[kind])
     )
   );
 
@@ -482,89 +395,7 @@ export const spawningToolAllowed = (
   startsAny(mayStart) ||
   (mayStart.length > 0 && LEAF_STARTING_TOOLS.has(name));
 
-/**
- * What a session on the board alone may never call: no subagent, monitor,
- * worktree, shell or edit tool. A fleet-watch triage run (`overseer`)
- * decides one thing and exits. Claude's `Monitor` runs a script and
- * `EnterWorktree`/`ExitWorktree` make and remove git worktrees; `Agent` (its
- * old name `Task`) and `Workflow` start subagents; OpenCode's `Agent` is its
- * `subagent`. pi has no subagent, monitor or worktree tool.
- */
-export const BOARD_ONLY_DENIED_TOOLS = {
-  claude: [
-    "Monitor",
-    "EnterWorktree",
-    "ExitWorktree",
-    "Agent",
-    "Task",
-    "Workflow",
-    ...HARNESS_TOOLS.claude.shell,
-    ...HARNESS_TOOLS.claude.powershell,
-    ...HARNESS_TOOLS.claude.edit,
-  ],
-  opencode: ["Agent", "Bash", "Edit", "Write"],
-  pi: [
-    ...HARNESS_TOOLS.pi.powershell,
-    ...HARNESS_TOOLS.pi.shell,
-    ...HARNESS_TOOLS.pi.edit,
-  ],
-} as const satisfies Record<HarnessKind, readonly string[]>;
-
-/** Claude Code's web tools, the names a denied-tool list is written in (the OpenCode adapter maps each to its own). */
-const CLAUDE_WEB_TOOLS = [
-  ...HARNESS_TOOLS.claude.fetch,
-  ...HARNESS_TOOLS.claude.search,
-] as const;
-
-/**
- * What a project's memory curator may never call (Projects spec §5.4): the
- * board-only list, and the web. It reads agents' inbox notes, which are
- * untrusted words, and answers only with proposals the person approves; it
- * has no reason to fetch anything, so a note cannot send it to a page. It
- * gets CawCo's MCP server and no other (`SpawnPayload.fence`).
- */
-export const CURATOR_DENIED_TOOLS = {
-  claude: [...BOARD_ONLY_DENIED_TOOLS.claude, ...CLAUDE_WEB_TOOLS],
-  opencode: [...BOARD_ONLY_DENIED_TOOLS.opencode, ...CLAUDE_WEB_TOOLS],
-  // pi has no web tool of its own ({@link PI_EQUIVALENTS}), and a fenced pi
-  // session has none from anywhere else (agent pi-runtime.ts `cawcosExtensionsAlone`).
-  pi: BOARD_ONLY_DENIED_TOOLS.pi,
-} as const satisfies Record<HarnessKind, readonly string[]>;
-
-/**
- * Claude Code's tool names as OpenCode 2.0's permission actions. Denied-tool
- * lists (the fleet baseline, a delegate type's, a spawn's) are written in
- * Claude's names — Claude Code refuses a lowercase rule in settings.json —
- * so the OpenCode adapter reads them through this. 2.0's file writers
- * (`write`, `patch`) ask as `edit`, so `Write` denies `edit` too. Its to-do
- * list, plan-mode tools and `LS` do not exist in 2.0 (a directory is read by
- * `read`): those names deny nothing there, and are no tool to refuse.
- */
-const OPENCODE_EQUIVALENTS: Record<string, readonly string[]> = {
-  Agent: ["subagent"],
-  Task: ["subagent"],
-  TaskCreate: [],
-  TaskUpdate: [],
-  TaskList: [],
-  TaskGet: [],
-  TodoWrite: [],
-  EnterPlanMode: [],
-  ExitPlanMode: [],
-  AskUserQuestion: ["question"],
-  Bash: ["shell"],
-  Edit: ["edit"],
-  Write: ["edit"],
-  Read: ["read"],
-  Glob: ["glob"],
-  Grep: ["grep"],
-  LS: [],
-  WebFetch: ["webfetch"],
-  WebSearch: ["websearch"],
-  Skill: ["skill"],
-};
-
 const CLAUDE_MCP_TOOL = /^mcp__([^_]+(?:_[^_]+)*?)(?:__(.+))?$/u;
-const OPENCODE_UNSAFE = /[^A-Za-z0-9_-]/gu;
 const LOWERCASE_START = /^[a-z]/u;
 
 /**
@@ -581,7 +412,7 @@ const mcpDenial = (
 
 /**
  * The name in a denied-tool list that denies every tool of the MCP server
- * `server`, read as each harness's spawn reads it ({@link harnessToolsFor});
+ * `server`, read as each harness's spawn reads it ({@link deniedToolsOn});
  * undefined when the list leaves some of them.
  */
 export const mcpServerDeniedBy = (
@@ -594,31 +425,35 @@ export const mcpServerDeniedBy = (
   });
 
 /**
- * A harness's tool ids for a denied-tool list: a Claude name through
- * `equivalents`; `mcp__server__tool` through `mcpId`, with each character
- * `unsafe` matches as `_` (a bare `mcp__server` or `mcp__server__*` is every
- * tool of it, `*`); a lowercase name as it is, already the harness's form.
- * Anything else is `unmapped`.
+ * `harness`'s own tool ids for a denied-tool list written in Claude Code's
+ * names, as its descriptor's `deniedTools` says: a Claude name through its
+ * `equivalents`; `mcp__server__tool` as the harness names an MCP tool, with
+ * each character its `mcpUnsafe` matches as `_` (a bare `mcp__server` or
+ * `mcp__server__*` is every tool of it, `*`); a lowercase name as it is,
+ * already the harness's form. Anything else is `unmapped`: the harness has
+ * no tool by that name to deny. A harness whose own settings take Claude
+ * Code's names takes the list as it is.
  */
-const harnessToolsFor = (
-  names: readonly string[],
-  equivalents: Record<string, readonly string[]>,
-  unsafe: RegExp,
-  mcpId: (server: string, tool: string) => string
+export const deniedToolsOn = (
+  harness: HarnessKind,
+  names: readonly string[]
 ): { tools: string[]; unmapped: string[] } => {
+  const map: DeniedToolNames = descriptorOf(harness).deniedTools;
+  if (map.by === "own-settings") {
+    return { tools: [...names], unmapped: [] };
+  }
+  const unsafe = new RegExp(map.mcpUnsafe, "gu");
   const tools = new Set<string>();
   const unmapped: string[] = [];
   for (const name of names) {
     const mcp = mcpDenial(name);
+    const equivalent: readonly string[] | undefined = map.equivalents[name];
     if (mcp) {
-      tools.add(
-        mcpId(
-          mcp.server.replace(unsafe, "_"),
-          mcp.tool === "*" ? "*" : mcp.tool.replace(unsafe, "_")
-        )
-      );
-    } else if (equivalents[name]) {
-      for (const id of equivalents[name]) {
+      const server = mcp.server.replace(unsafe, "_");
+      const tool = mcp.tool === "*" ? "*" : mcp.tool.replace(unsafe, "_");
+      tools.add(`${map.mcpPrefix}${server}${map.mcpSeparator}${tool}`);
+    } else if (equivalent) {
+      for (const id of equivalent) {
         tools.add(id);
       }
     } else if (LOWERCASE_START.test(name)) {
@@ -631,106 +466,21 @@ const harnessToolsFor = (
 };
 
 /**
- * OpenCode's tool ids for a denied-tool list. A Claude name with an OpenCode
- * equivalent maps to it; `mcp__server__tool` becomes OpenCode's
- * `server_tool` (a bare `mcp__server` or `mcp__server__*` every tool of
- * it); a name already in OpenCode's lowercase form passes through. Anything
- * else is `unmapped`: OpenCode has no tool by that name to deny.
- */
-export const opencodeToolsFor = (
-  names: readonly string[]
-): { tools: string[]; unmapped: string[] } =>
-  harnessToolsFor(
-    names,
-    OPENCODE_EQUIVALENTS,
-    OPENCODE_UNSAFE,
-    (server, tool) => `${server}_${tool}`
-  );
-
-/**
- * Claude Code's tool names as pi's (1.3.0): its built-ins `read`, `bash`,
- * `powershell`, `edit`, `write`, `grep`, `find` and `ls`. pi has no
- * subagent, monitor, worktree, workflow, to-do, plan-mode, notebook or web
- * tool: those names deny nothing there, and are no tool to refuse.
- */
-const PI_EQUIVALENTS: Record<string, readonly string[]> = {
-  Agent: [],
-  Task: [],
-  Workflow: [],
-  Monitor: [],
-  EnterWorktree: [],
-  ExitWorktree: [],
-  TaskCreate: [],
-  TaskUpdate: [],
-  TaskList: [],
-  TaskGet: [],
-  TodoWrite: [],
-  EnterPlanMode: [],
-  ExitPlanMode: [],
-  AskUserQuestion: [],
-  NotebookEdit: [],
-  WebFetch: [],
-  WebSearch: [],
-  Bash: ["bash"],
-  PowerShell: ["powershell"],
-  Edit: ["edit"],
-  MultiEdit: ["edit"],
-  Write: ["write"],
-  Read: ["read"],
-  Glob: ["find"],
-  Grep: ["grep"],
-  LS: ["ls"],
-};
-
-/** What pi turns into `_` in an MCP tool's name: "every character other than letters, digits, and `_`" (pi docs/mcp.md). */
-const PI_MCP_UNSAFE = /[^A-Za-z0-9_]/gu;
-
-/**
- * pi's tool names (or `*` patterns, which pi's `excludeTools` matches) for a
- * denied-tool list. A Claude name with a pi equivalent maps to it;
- * `mcp__server__tool` becomes pi's `mcp__<server>__<tool>` with its
- * characters as pi writes them (a bare `mcp__server` or `mcp__server__*`
- * every tool of it); a name already in pi's lowercase form passes through.
- * Anything else is `unmapped`: pi has no tool by that name to deny.
- */
-export const piToolsFor = (
-  names: readonly string[]
-): { tools: string[]; unmapped: string[] } =>
-  harnessToolsFor(
-    names,
-    PI_EQUIVALENTS,
-    PI_MCP_UNSAFE,
-    (server, tool) => `mcp__${server}__${tool}`
-  );
-
-/** How a denied-tool list maps onto a harness's own tool names; none for one whose settings name them. */
-const TOOLS_FOR: Record<
-  HarnessKind,
-  ((names: readonly string[]) => { unmapped: string[] }) | undefined
-> = {
-  claude: undefined,
-  opencode: opencodeToolsFor,
-  pi: piToolsFor,
-};
-
-/**
  * Why `harness` cannot carry this denied-tool list, in a sentence, or nothing
- * when it can. Claude denies by its own settings; OpenCode through its
- * session config, pi through its session's `excludeTools`, each for the
- * names it has an equivalent for ({@link opencodeToolsFor},
- * {@link piToolsFor}). A name nothing would enforce is refused rather than
+ * when it can, by its descriptor's `deniedTools` ({@link deniedToolsOn}):
+ * a harness denies by its own settings, or for the names it has an
+ * equivalent for. A name nothing would enforce is refused rather than
  * stored as a promise.
  */
 const denyToolsProblem = (
   harness: HarnessKind,
   names: readonly string[]
 ): string | undefined => {
-  const mapped = TOOLS_FOR[harness];
-  if (names.length === 0 || !mapped) {
+  if (names.length === 0) {
     return undefined;
   }
-  const { unmapped } = mapped(names);
-  const label = accountsWords.harnesses[harness];
+  const { unmapped } = deniedToolsOn(harness, names);
+  const label = harnessName(harness);
   return unmapped.length > 0
     ? `${label} has no tool for ${unmapped.map((name) => `“${name}”`).join(", ")}, so it cannot deny ${unmapped.length === 1 ? "it" : "them"}`
     : undefined;

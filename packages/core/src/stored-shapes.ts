@@ -36,7 +36,12 @@ import type {
   ConnectAccess as ConnectAccessType,
   ProjectOfferReason as ProjectOfferReasonType,
 } from "./frames";
-import { HARNESSES, WIRE_PERMISSION_MODES } from "./harness/kinds";
+import { HARNESSES } from "./harness/kinds";
+import { WIRE_PERMISSION_MODES } from "./harness/modes";
+import {
+  COMPACT_NAMED_HARNESSES,
+  CREDENTIAL_STORE_HARNESSES,
+} from "./harness/traits";
 import { HARNESS_CONFIG_KINDS } from "./harness-config";
 import type { DeviceKind as DeviceKindType } from "./hub-auth";
 import { IMAGE_FORMATS, IMAGE_PROVIDERS } from "./image-generation";
@@ -108,12 +113,12 @@ const CompactStageShape = declared(
 );
 export type CompactStageOutput = z.output<typeof CompactStageShape>;
 
-export const HarnessKindShape = declared(
-  z.enum(HARNESSES),
-  "HarnessKind",
-  "packages/core/src/harness/kinds.ts"
+const CompactNamedKindShape = declared(
+  z.enum(COMPACT_NAMED_HARNESSES),
+  "CompactNamedKind",
+  "packages/core/src/harness/traits.ts"
 );
-export type HarnessKindOutput = z.output<typeof HarnessKindShape>;
+export type CompactNamedKindOutput = z.output<typeof CompactNamedKindShape>;
 
 const AccountHueShape = declared(
   z.enum(ACCOUNT_HUES),
@@ -244,7 +249,7 @@ const AccountMoveShape = declared(
       signedOutOn: z.string().optional(),
       compact: CompactStageShape.optional(),
       compactFirst: z.literal(true).optional(),
-      compactBy: HarnessKindShape.exclude(["claude"]).optional(),
+      compactBy: CompactNamedKindShape.optional(),
       summaryRefused: z.string().optional(),
       relaunched: z.literal(true).optional(),
       from: NamedAccountShape,
@@ -483,6 +488,13 @@ const AtPlanLimitShape = declared(
 );
 export const AtPlanLimitSchema: z.ZodType<AtPlanLimitType> = AtPlanLimitShape;
 export type AtPlanLimitOutput = z.output<typeof AtPlanLimitShape>;
+
+export const HarnessKindShape = declared(
+  z.enum(HARNESSES),
+  "HarnessKind",
+  "packages/core/src/harness/kinds.ts"
+);
+export type HarnessKindOutput = z.output<typeof HarnessKindShape>;
 
 export const LandsModeShape = declared(
   z.enum(LANDS_MODES),
@@ -1031,7 +1043,7 @@ export const HookEventShape = declared(
     "ElicitationResult",
   ]),
   "HookEvent",
-  "packages/core/src/hooks.ts"
+  "packages/core/src/hook-events.ts"
 );
 export type HookEventOutput = z.output<typeof HookEventShape>;
 
@@ -1624,7 +1636,7 @@ export type EffortLevelOutput = z.output<typeof EffortLevelShape>;
 export const PermissionModeShape = declared(
   z.enum(WIRE_PERMISSION_MODES),
   "PermissionMode",
-  "packages/core/src/harness/kinds.ts"
+  "packages/core/src/harness/modes.ts"
 );
 export type PermissionModeOutput = z.output<typeof PermissionModeShape>;
 
@@ -2693,19 +2705,21 @@ export type HeartbeatAckPayloadOutput = z.output<
   typeof HeartbeatAckPayloadShape
 >;
 
-const HomeStoreShape = declared(
-  HarnessKindShape,
-  "HomeStore",
-  "packages/core/src/accounts.ts"
+const CredentialStoreKindShape = declared(
+  z.enum(CREDENTIAL_STORE_HARNESSES),
+  "CredentialStoreKind",
+  "packages/core/src/harness/traits.ts"
 );
-export type HomeStoreOutput = z.output<typeof HomeStoreShape>;
+export type CredentialStoreKindOutput = z.output<
+  typeof CredentialStoreKindShape
+>;
 
 const HomeCredentialShape = declared(
   z.object({
     identity: AccountIdentityShape,
     kind: z.enum(["oauth", "api_key"]),
     provider: AccountProviderShape,
-    store: HomeStoreShape.exclude(["claude"]),
+    store: CredentialStoreKindShape,
     storeProvider: z.string(),
   }),
   "HomeCredential",

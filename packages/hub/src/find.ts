@@ -54,13 +54,13 @@ import {
   type Query,
 } from "@cawco/core/find-match";
 import type { HarnessFailed, HarnessUnanswered } from "@cawco/core/frames";
+import { harnessLabel } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { AgentRow } from "@cawco/core/protocol";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { StageKind } from "@cawco/core/views";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { noticePartWords, reasonLine } from "@cawco/core/words/artifact-needs";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { catalogWords } from "@cawco/core/words/catalog";
@@ -674,17 +674,13 @@ export const createFind = (deps: FindDeps) => {
       const words = [
         ...known.unanswered.map(({ harness, after }) =>
           catalogWords.harnessDidntAnswer(
-            accountsWords.harnesses[harness] ?? harness,
+            harnessLabel(harness),
             name,
             secondsOf(after)
           )
         ),
         ...known.failed.map(({ harness, error }) =>
-          catalogWords.harnessCouldntList(
-            accountsWords.harnesses[harness] ?? harness,
-            name,
-            error
-          )
+          catalogWords.harnessCouldntList(harnessLabel(harness), name, error)
         ),
       ];
       return words.length > 0 ? [{ machineId: machine.machineId, words }] : [];

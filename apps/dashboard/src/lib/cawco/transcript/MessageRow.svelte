@@ -11,7 +11,8 @@
 
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
-  import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
+  import type { HarnessKind } from "@cawco/core/harness/kinds";
+  import type { PermissionMode } from "@cawco/core/harness/modes";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { tick, untrack } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";

@@ -13,12 +13,11 @@ import {
   machinePlatform,
 } from "@cawco/core/fleet";
 import type { HarnessReport, NamedHarnessReport } from "@cawco/core/harness";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import {
-  type HarnessKind,
-  harnessNamed,
   type PermissionMode,
   permissionModeNamed,
-} from "@cawco/core/harness/kinds";
+} from "@cawco/core/harness/modes";
 import {
   type MachinePath,
   MachinePathRefused,

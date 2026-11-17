@@ -10,7 +10,8 @@ import { IMAGE_MEDIA_TYPES } from "@cawco/core/attachments";
 import { SESSION_ROLES } from "@cawco/core/delegate-types";
 import { EXTERNAL_KINDS, EXTERNAL_SOURCES } from "@cawco/core/external-items";
 import { MEMORY_ROLES } from "@cawco/core/fleet";
-import { HARNESSES, WIRE_PERMISSION_MODES } from "@cawco/core/harness/kinds";
+import { HARNESSES } from "@cawco/core/harness/kinds";
+import { WIRE_PERMISSION_MODES } from "@cawco/core/harness/modes";
 import {
   PLAN_EDIT_KINDS,
   PLAN_STEP_PRIORITIES,

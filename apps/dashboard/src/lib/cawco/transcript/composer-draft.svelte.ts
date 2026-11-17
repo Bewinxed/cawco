@@ -14,9 +14,9 @@ import { type ImageMediaType, isImageMediaType } from "@cawco/core/attachments";
 import { eachFileOnce } from "@cawco/core/comments/model";
 import { detach } from "@cawco/core/detach";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { harnessName } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { StarterPlace } from "@cawco/core/starters";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { pictureWords } from "@cawco/core/words/pictures";
 import { SvelteSet } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
@@ -407,7 +407,7 @@ export class ComposerDraft {
       if (harness && isImageMediaType(type) && !takes.includes(type)) {
         this.notice = pictureWords.typeRefused(
           type,
-          accountsWords.harnesses[harness],
+          harnessName(harness),
           takes
         );
         continue;

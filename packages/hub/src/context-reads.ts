@@ -2,7 +2,9 @@ import {
   CONTINUATION_CANCELLED,
   estimateTokens,
 } from "@cawco/core/continuation";
-import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { harnessName } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { GitChanges } from "@cawco/core/session/controls";
@@ -16,7 +18,6 @@ import {
 } from "@cawco/core/session/controls";
 import type { SessionMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { ElysiaStatus, problem } from "elysia";
 import { machineAccount } from "./accounts";
 import type { ClosureContext } from "./closure-context";
@@ -240,12 +241,12 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     }
     if (!traitsOf(row.harness).readsStoredContext) {
       return {
-        reason: `${accountsWords.harnesses[row.harness]} keeps no context its machine can read back`,
+        reason: `${harnessName(row.harness)} keeps no context its machine can read back`,
       };
     }
     if (!row.sessionId) {
       return {
-        reason: `no stored ${accountsWords.harnesses[row.harness]} conversation`,
+        reason: `no stored ${harnessName(row.harness)} conversation`,
       };
     }
     const answer = await ctx.readAgent(

@@ -63,7 +63,7 @@ import { detach } from "@cawco/core/detach";
 import {
   type OfferedMode,
   SESSION_CHOSEN_MODES,
-} from "@cawco/core/harness/kinds";
+} from "@cawco/core/harness/modes";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { githubTarget, type WaitTarget } from "@cawco/core/wait-targets";

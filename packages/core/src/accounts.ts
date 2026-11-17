@@ -947,7 +947,7 @@ export interface HomeCredential {
   kind: "oauth" | "api_key";
   /** The account provider it is for. */
   provider: AccountProvider;
-  store: Exclude<HomeStore, "claude">;
+  store: import("./harness/traits").CredentialStoreKind;
   /** The provider's id in that store, as the store names it (`openai` in OpenCode's for ChatGPT). */
   storeProvider: string;
 }
@@ -1514,8 +1514,8 @@ export type AccountMove =
        * policy's `beforeMove`. Absent: it runs on `to` after the move.
        */
       compactFirst?: true;
-      /** The harness whose own `/compact` runs, when it is not Claude Code's: what its compaction keeps is less. */
-      compactBy?: Exclude<import("./harness/kinds").HarnessKind, "claude">;
+      /** The harness whose own `/compact` runs, when its descriptor names it on a moved line (core harness/traits.ts `compactorOf`): what its compaction keeps is less. */
+      compactBy?: import("./harness/traits").CompactNamedKind;
       /**
        * The policy said to go on from a summary, which could not be written
        * for this move, in the hub's words: its harness's `/compact` ran

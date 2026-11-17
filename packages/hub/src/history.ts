@@ -3,11 +3,14 @@ import {
   ACCOUNT_MOVE,
   CUSTODY_HELD,
   FLEET_WATCH,
-  HARNESS_TOOL,
   MOVED_HERE,
   PROJECT_NOTE,
 } from "@cawco/core/harness";
-import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
+import {
+  descriptorOf,
+  type HarnessKind,
+  harnessNamed,
+} from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { harnessSpec } from "@cawco/core/harness-refusal";
 import { isRecord } from "@cawco/core/is-record";
@@ -310,7 +313,7 @@ export const createHistory = (ctx: HistoryContext) => {
           };
     }
     const { name } = harnessSpec(harness);
-    const cell = ctx.db.agentTools(machineId)[HARNESS_TOOL[harness]];
+    const cell = ctx.db.agentTools(machineId)[descriptorOf(harness).tool];
     if (cell?.state === "installing") {
       return {
         fault: "updating",

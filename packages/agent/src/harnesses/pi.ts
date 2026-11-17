@@ -1,19 +1,25 @@
 /** Pi's agent adapter owns only custody and transport, never a running SDK turn. */
 
+import type { RestartHold } from "@cawco/core/binary-updates";
+import type { SignInFault } from "@cawco/core/harness";
 import { workspaceSpillDir } from "@cawco/core/paths/workspace";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { resumeCursor } from "@cawco/core/stream";
+import { toolVersion } from "../capabilities";
 import { sessionFleetDenials } from "../denied-tools";
 import type {
   Harness,
   HarnessContext,
   HarnessSession,
   KeeperCustody,
+  SessionCarry,
 } from "../harness";
+import { cannot, noCarry } from "../harness";
+import type { HarnessCli } from "../harness-cli";
 import { procIdFor } from "../proc-id";
 import { withAccountReads } from "../provider-usage";
 import { procEpoch } from "../sessiond-client";
-import { toolGate } from "../tools";
+import { resolveBin, toolGate } from "../tools";
 import { keeperCustody } from "./keeper-custody";
 import { neutralSubagentChange } from "./neutral-subagents";
 import { PI_SPEC, PiProfile } from "./pi-services";
@@ -21,6 +27,50 @@ import { adoptPi, piKeepers, piSnapshot, spawnPi } from "./pi-sessiond";
 
 class PiHarness extends PiProfile implements Harness<"pi"> {
   readonly subagentChange = neutralSubagentChange;
+  /** The `pi` on the machine's PATH, its version its `--version`. */
+  readonly cli: HarnessCli = {
+    find: () => Promise.resolve(resolveBin("pi")),
+    missing: undefined,
+    version: toolVersion,
+  };
+  /** Its stored conversations are session files, read from disk. */
+  readonly catalogFromServer = false;
+  /** A spawn checks its sign-in, which can move its word between reports. */
+  readonly authMovesLive = true;
+  /** Its `detect` reads its registry and sign-ins in-process, which a tool move does not re-read unasked. */
+  readonly detectStartsNothing = false;
+  /** No heal control reaches its sessions: each reconnects its fleet servers through its own `/mcp reconnect`. */
+  readonly healsFleetMcp = false;
+  /** Its `/compact` runs in its session's own pi host, which holds no epoch to replay. */
+  readonly relaunchesOnManualCompact = false;
+  /** Its sign-in faults are its credential checks' ({@link authReason}); no home sign-in of its own is refused apart. */
+  readonly signInFaults: SignInFault[] = [];
+
+  /** Each session reads its account's credential at its start; nothing of the harness holds the machine's provider accounts. */
+  accountsChanged(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /** Its sessions keep no account dir: a session on another account runs its provider from that account's credential (descriptor `accountDir`). */
+  carrier(): SessionCarry {
+    return noCarry(
+      "A pi session keeps no account dir: it runs on another account's credential with its conversation where it is."
+    );
+  }
+
+  /** Its sessions' MCP servers reconnect to a restarted hub by themselves. */
+  hubRestarted(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /** Every turn runs in its session's own keeper-held pi host, which an agent's restart leaves running. */
+  restartHolds(): RestartHold[] {
+    return [];
+  }
+
+  readonly providerList = cannot(
+    "pi's providers are its registry's, read with how each signs in (provider-accounts.ts `piProviders`)"
+  );
 
   /**
    * pi's bash saves the whole output of a command it cuts to its host's

@@ -9,8 +9,9 @@
  * CawCo doesn't run), else ours.
  */
 
-import { HARNESS_TOOL, type HarnessReport } from "./harness";
+import type { HarnessReport } from "./harness";
 import type { HarnessKind } from "./harness/kinds";
+import { descriptorOf } from "./harness/kinds";
 import { traitsOf } from "./harness/traits";
 import { type ToolSpec, type ToolStatus, toolRuns, toolSpec } from "./tools";
 import { harnessRefusedWords } from "./words/harness";
@@ -27,7 +28,7 @@ export interface HarnessRefusal {
 
 /** A harness's catalog entry; every harness has one (core `HARNESS_TOOL`). */
 export const harnessSpec = (harness: HarnessKind): ToolSpec => {
-  const spec = toolSpec(HARNESS_TOOL[harness]);
+  const spec = toolSpec(descriptorOf(harness).tool);
   if (!spec) {
     throw new Error(`The tool catalog names no ${harness}`);
   }

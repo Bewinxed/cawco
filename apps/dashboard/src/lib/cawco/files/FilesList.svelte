@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { harnessName } from "@cawco/core/harness/kinds";
   /**
    * What Files holds for one session: a search over all of it, then its
    * artifacts and its attachments, both in sight the moment it opens, each
@@ -42,7 +43,6 @@
    * attachments and artifacts a better fit here?").
    */
   import type { ArtifactSummary } from "@cawco/core/protocol";
-  import { accountsWords } from "@cawco/core/words/accounts";
   import { filesWords } from "@cawco/core/words/files";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
@@ -130,12 +130,12 @@
   /**
    * The Empty Starts Work Rule, a session's own case: "Ask" takes its
    * object by name (DESIGN.md, Voice), the session's own agent by its harness, as
-   * a sentence names it (core `accountsWords.harnesses`: Claude Code,
+   * a sentence names it (its descriptor's `words.name`: Claude Code,
    * OpenCode, pi).
    */
   const askLabel = $derived.by(() => {
     const harness = sessionsStore.session(instanceId)?.harness;
-    const agent = harness ? accountsWords.harnesses[harness] : "the agent";
+    const agent = harness ? harnessName(harness) : "the agent";
     return `Ask ${agent} for a page`;
   });
 

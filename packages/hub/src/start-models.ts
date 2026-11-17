@@ -1,11 +1,11 @@
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { harnessName } from "@cawco/core/harness/kinds";
 import { type ModelListing, modelRun } from "@cawco/core/model-names";
 import {
   clockWords,
   markWords,
   spanWords,
 } from "@cawco/core/words/account-lines";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { spawnWords } from "@cawco/core/words/spawn";
 import type { Standing } from "./placement";
 import { unreachable } from "./unreachable";
@@ -80,15 +80,8 @@ export const nothingListed = (
   listing: ModelListing
 ): string =>
   listing.read
-    ? spawnWords.startModel.noneListed(
-        accountsWords.harnesses[harness],
-        machine
-      )
-    : spawnWords.startModel.unread(
-        accountsWords.harnesses[harness],
-        machine,
-        listing.why
-      );
+    ? spawnWords.startModel.noneListed(harnessName(harness), machine)
+    : spawnWords.startModel.unread(harnessName(harness), machine, listing.why);
 
 /** One provider's accounts as a refusal reads them: its name, and each account's {@link Standing}. */
 export interface ProviderStandings {
@@ -183,7 +176,7 @@ export const noModelRuns = (
   }
   const first = backs.length > 0 ? Math.min(...backs) : null;
   return words.refused(
-    accountsWords.harnesses[harness],
+    harnessName(harness),
     machine,
     reasons,
     first === null ? null : words.at(spanWords(first - now), clockWords(first))

@@ -16,7 +16,6 @@ import type {
   CompactMethod,
   PlacementStrategy,
 } from "../accounts/kinds";
-import type { HarnessKind } from "../harness/kinds";
 import { commonWords } from "./common";
 import { andList, pad2 } from "./helpers";
 
@@ -108,12 +107,6 @@ export const accountsWords = {
   /** Claude's two picker rows ("Claude", "Anthropic Console"), and its name. */
   claude: "Claude",
   anthropicConsole: "Anthropic Console",
-  /** The harnesses that use an account, as a sentence names them. */
-  harnesses: {
-    claude: "Claude Code",
-    opencode: "OpenCode",
-    pi: "pi",
-  } satisfies Record<HarnessKind, string>,
   /** "Claude Code and OpenCode". */
   harnessList: (names: readonly string[]) => andList(names),
 

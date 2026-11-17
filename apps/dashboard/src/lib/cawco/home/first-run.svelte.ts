@@ -12,8 +12,8 @@
  * Settings › Browsers) or Later, and New project.
  */
 
+import { harnessName } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { goto } from "$app/navigation";
 import { connect } from "../connect/installs.svelte";
 import { boardStore } from "../stores/board.svelte";
@@ -43,7 +43,7 @@ function harnessOf(): FirstRunState["harness"] {
     (report) => report.installed && report.auth === "authenticated"
   );
   if (signed) {
-    return { state: "done", harness: accountsWords.harnesses[signed.harness] };
+    return { state: "done", harness: harnessName(signed.harness) };
   }
   const refused = reports.find(
     (report) =>

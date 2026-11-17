@@ -14,7 +14,7 @@
  * same order to what they read.
  */
 import type { ProjectAtLimit } from "./accounts";
-import type { OfferedMode } from "./harness/kinds";
+import type { OfferedMode } from "./harness/modes";
 
 /** Where a setting in effect came from: the project's own, its area's, or the fleet's. */
 export type SettingSource = "project" | "area" | "fleet";

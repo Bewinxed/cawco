@@ -3,8 +3,8 @@ import {
   type EffortLevel,
   type HarnessKind,
   harnessNamed,
-  type PermissionMode,
 } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 import { z } from "zod";
 import { SpawnPrefsShape } from "#lib/cawco/stored-shapes.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";

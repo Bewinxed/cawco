@@ -2,7 +2,8 @@
 
 import type { CutCommand } from "./commands/controls";
 import { everyOf } from "./every-of";
-import type { EffortLevel, HarnessKind, PermissionMode } from "./harness/kinds";
+import type { EffortLevel, HarnessKind } from "./harness/kinds";
+import type { PermissionMode } from "./harness/modes";
 import { isOneOf } from "./one-of";
 
 /** A session's own word on what it is doing right now. */

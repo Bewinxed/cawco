@@ -6,7 +6,7 @@
 
 import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
-import type { PermissionMode } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { relaunchOf } from "@cawco/core/relaunch";
 import { HOUR_MS } from "@cawco/core/time";

@@ -1,4 +1,4 @@
-import type { PermissionMode } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 
 /**
  * The mode a session the hub starts on its own runs in — a work item's

@@ -1,9 +1,8 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { AddressedControl, ControlArgs } from "@cawco/core/control-table";
 import type { HubEnvelope } from "@cawco/core/envelopes";
-import { HARNESS_TOOL } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { HARNESSES } from "@cawco/core/harness/kinds";
+import { descriptorOf, HARNESSES } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 
 import { toolUpdateOf } from "@cawco/core/tool-updates";
@@ -526,8 +525,8 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
   ): Promise<
     { runs: string } | { failed: string } | { left: string } | { skipped: true }
   > => {
-    const spec = toolSpec(HARNESS_TOOL[harness]);
-    const has = tools.find((tool) => tool.id === HARNESS_TOOL[harness]);
+    const spec = toolSpec(descriptorOf(harness).tool);
+    const has = tools.find((tool) => tool.id === descriptorOf(harness).tool);
     if (!(spec && has)) {
       // A build whose catalog lacks it: Claude Code is what every machine
       // runs, so its absence fails the step; the others are not asked.

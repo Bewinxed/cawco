@@ -14,10 +14,8 @@ import {
 } from "@cawco/core/attachments";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { detach } from "@cawco/core/detach";
-import {
-  EFFORT_LEVELS,
-  WIRE_PERMISSION_MODES,
-} from "@cawco/core/harness/kinds";
+import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
+import { WIRE_PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ControlPayload, SendPayload } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";

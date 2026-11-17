@@ -10,15 +10,13 @@ import type {
   MachineCapabilities,
   MachineCapability,
 } from "@cawco/core/capabilities";
-import { HARNESS_TOOL } from "@cawco/core/harness";
-import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
+import { descriptorOf } from "@cawco/core/harness/kinds";
 import { isPublicAddress } from "@cawco/core/public-address";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { spawnRead, untether } from "@cawco/core/tether";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { packageInstall, workspaceNeeds } from "@cawco/core/workspace-needs";
-import { CLAUDE_NOT_INSTALLED, claudeExecutable } from "./auth";
 import { mediaForwarding } from "./browser/media-forwarding";
 import { detectPasskeyRelay } from "./browser/passkey-detect";
 import { routerAddress } from "./browser/relay-reach";
@@ -28,8 +26,7 @@ import {
   runtimeInstallCommand,
   runtimeMissing,
 } from "./browser/runtime";
-import { claudeHostVersion } from "./claude-version";
-import { opencodeBinary } from "./harnesses/opencode-client";
+import type { HarnessCliRead } from "./harness-cli";
 import { probeStarted } from "./probe-count";
 import { installAdvice, resolveBin } from "./tools";
 
@@ -155,7 +152,7 @@ function linuxInstall(pkg: string): string {
   );
 }
 
-const VERSIONED: readonly string[] = ["git", ...HARNESSES, "node"];
+const VERSIONED: readonly string[] = ["git", "node"];
 const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/u;
 
 /**
@@ -168,7 +165,9 @@ const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/u;
  * command failed), or unanswered when it said nothing within
  * {@link TOOL_VERSION_MS}: its version is then not known, never "none".
  */
-function toolVersion(path: string): Promise<Bounded<string | undefined>> {
+export function toolVersion(
+  path: string
+): Promise<Bounded<string | undefined>> {
   return readWithin(TOOL_VERSION_MS, async (signal) => {
     // Tethered (core tether.ts `spawnRead`): ended at the wait's end, and
     // with the agent however it ends, never left running past it.
@@ -191,31 +190,35 @@ function toolVersion(path: string): Promise<Bounded<string | undefined>> {
 /** How long a tool's `--version` may take to answer. */
 const TOOL_VERSION_MS = 5000;
 
-async function readVersion(item: MachineCapability): Promise<void> {
-  if (!(item.available && item.path && VERSIONED.includes(item.id))) {
+/**
+ * Reads `item`'s version into it, by `read` (a harness's own, as its version
+ * gate reads it, so the two never disagree), or its `--version` for a tool
+ * {@link VERSIONED} names.
+ */
+async function readVersion(
+  item: MachineCapability,
+  read?: (path: string) => Promise<Bounded<string | undefined>>
+): Promise<void> {
+  if (!(item.available && item.path && (read || VERSIONED.includes(item.id)))) {
     return;
   }
-  // Claude Code's version is the version gate's own read (claude-version.ts), so the two never disagree.
-  const read =
-    item.id === HARNESS_TOOL.claude
-      ? await claudeHostVersion()
-      : await toolVersion(item.path);
-  switch (read.kind) {
+  const answer = await (read ?? toolVersion)(item.path);
+  switch (answer.kind) {
     case "answered":
-      if (read.value) {
-        item.version = read.value;
+      if (answer.value) {
+        item.version = answer.value;
       } else {
         item.reason = "Installed tool did not answer its version command";
       }
       break;
     case "unanswered":
       console.info(
-        `[capabilities] ${item.path} --version did not answer within ${read.after / 1000} s; its version is not known`
+        `[capabilities] ${item.path} --version did not answer within ${answer.after / 1000} s; its version is not known`
       );
-      item.reason = `Installed tool did not answer its version command within ${secondsOf(read.after)} s; its version is not known`;
+      item.reason = `Installed tool did not answer its version command within ${secondsOf(answer.after)} s; its version is not known`;
       break;
     default:
-      unhandled("read", read);
+      unhandled("read", answer);
   }
 }
 
@@ -236,12 +239,17 @@ async function foundRuntimeFacts(
   };
 }
 
-/** Presence is read fresh on registration and every explicit probe. */
-export async function probeCapabilities(): Promise<MachineCapabilities> {
+/**
+ * Presence is read fresh on registration and every explicit probe. Each
+ * harness's CLI is read by its adapter's `cli`, in `adapters`' order
+ * (machine-capabilities.ts hands the registry's).
+ */
+export async function probeCapabilities(
+  adapters: readonly HarnessCliRead[]
+): Promise<MachineCapabilities> {
   probeStarted();
   const mac = platform() === "darwin";
   const git = resolveBin("git");
-  const claude = await claudeExecutable();
   const node = resolveBin("node");
   const browser = browserExecutable();
   const passkeyRelay = await detectPasskeyRelay();
@@ -253,50 +261,37 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
   }
   const nodeInstall =
     'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . "$HOME/.nvm/nvm.sh" && nvm install 24';
-  const opencode = await opencodeBinary();
   const runtime = await findRuntime();
   const runtimeFacts =
     "missing" in runtime
       ? { reason: runtimeMissing() }
       : await foundRuntimeFacts(runtime);
   const reach = await publicAddressItem();
-  // What the install action runs here for each harness CLI (tools.ts
-  // `installAdvice`): the way its copy got here, or the first way this
-  // machine can run, or why there is none.
-  const [claudeAdvice, opencodeAdvice, piAdvice] = await Promise.all([
-    installAdvice("claude"),
-    installAdvice("opencode"),
-    installAdvice("pi"),
-  ]);
-  const adviceOf = (
-    advice: Awaited<ReturnType<typeof installAdvice>>
-  ): Pick<MachineCapability, "installCommand" | "reason"> =>
-    "command" in advice
-      ? { installCommand: advice.command }
-      : { installCommand: "", reason: advice.refusal };
-  // Each harness CLI, in HARNESSES' order among the items.
-  const harnessItems: Record<HarnessKind, MachineCapability> = {
-    // The Claude Code sessions run (auth.ts), so the same lookup reports it.
-    claude: {
-      id: "claude",
-      available: !!claude,
-      path: claude,
-      ...adviceOf(claudeAdvice),
-      ...(claude ? {} : { reason: CLAUDE_NOT_INSTALLED }),
-    },
-    opencode: {
-      id: "opencode",
-      available: !!opencode,
-      path: opencode,
-      ...adviceOf(opencodeAdvice),
-    },
-    pi: {
-      id: "pi",
-      available: !!resolveBin("pi"),
-      path: resolveBin("pi"),
-      ...adviceOf(piAdvice),
-    },
-  };
+  // Each harness CLI, in its adapters' order among the items, with what the
+  // install action runs here for it (tools.ts `installAdvice`): the way its
+  // copy got here, or the first way this machine can run, or why there is
+  // none.
+  const harnessItems = await Promise.all(
+    adapters.map(async (adapter) => {
+      const id = descriptorOf(adapter.kind).tool;
+      const [path, advice] = await Promise.all([
+        adapter.cli.find(),
+        installAdvice(id),
+      ]);
+      const item: MachineCapability = {
+        id,
+        available: !!path,
+        path,
+        ...("command" in advice
+          ? { installCommand: advice.command }
+          : { installCommand: "", reason: advice.refusal }),
+        ...(path || adapter.cli.missing === undefined
+          ? {}
+          : { reason: adapter.cli.missing }),
+      };
+      return { item, read: adapter.cli.version };
+    })
+  );
   const items: MachineCapability[] = [
     {
       id: "git",
@@ -304,7 +299,7 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
       path: git,
       installCommand: mac ? "xcode-select --install" : linuxInstall("git"),
     },
-    ...HARNESSES.map((kind) => harnessItems[kind]),
+    ...harnessItems.map(({ item }) => item),
     {
       id: "node",
       available: !!node,
@@ -362,6 +357,11 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
     // What a delegate's workspace needs here, read as a delegate is refused by it.
     workspaceNeeds(),
   ];
-  await Promise.all(items.map(readVersion));
+  const harnessReads = new Map(
+    harnessItems.map(({ item, read }) => [item, read])
+  );
+  await Promise.all(
+    items.map((item) => readVersion(item, harnessReads.get(item)))
+  );
   return { at: Date.now(), platform: platform(), items };
 }

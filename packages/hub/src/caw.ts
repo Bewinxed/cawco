@@ -45,20 +45,17 @@ import {
 } from "@cawco/core/blocks";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import type { ConnectionView } from "@cawco/core/connections";
-import {
-  BOARD_ONLY_DENIED_TOOLS,
-  CURATOR_DENIED_TOOLS,
-} from "@cawco/core/delegate-types";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import {
   ACT_ORIGIN,
   type ARTIFACT_ORIGIN,
+  descriptorOf,
   HARNESSES,
   type HarnessKind,
   harnessNamed,
-  type OfferedMode,
   type PLAN_ORIGIN,
 } from "@cawco/core/harness/kinds";
+import type { OfferedMode } from "@cawco/core/harness/modes";
 import type { MachinePath } from "@cawco/core/machine-path";
 import {
   CAW_NO_MACHINE,
@@ -180,7 +177,7 @@ const modelAfter = (
   return rehomed ? null : had;
 };
 
-/** A fleet-watch triage run's denied tools on `harness` (core `BOARD_ONLY_DENIED_TOOLS`): the board alone. */
+/** A fleet-watch triage run's denied tools on `harness` (its descriptor's `boardOnlyDenied`): the board alone. */
 const boardOnlyDenied = (harness: string): readonly string[] => {
   const named = harnessNamed(harness);
   if (!named) {
@@ -188,10 +185,10 @@ const boardOnlyDenied = (harness: string): readonly string[] => {
       `Fleet-watch triage does not run on ${harness}: it cannot be fenced to CawCo's tools alone.`
     );
   }
-  return BOARD_ONLY_DENIED_TOOLS[named];
+  return descriptorOf(named).boardOnlyDenied;
 };
 
-/** A memory curator's denied tools on `harness` (core `CURATOR_DENIED_TOOLS`); refused on one that cannot fence it. */
+/** A memory curator's denied tools on `harness` (its descriptor's `curatorDenied`); refused on one that cannot fence it. */
 const curatorDenied = (harness: string): readonly string[] => {
   const named = harnessNamed(harness);
   if (!named) {
@@ -199,7 +196,7 @@ const curatorDenied = (harness: string): readonly string[] => {
       `The memory curator does not run on ${harness}: it cannot be fenced to CawCo's tools alone.`
     );
   }
-  return CURATOR_DENIED_TOOLS[named];
+  return descriptorOf(named).curatorDenied;
 };
 
 /**

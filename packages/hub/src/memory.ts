@@ -112,7 +112,7 @@ import {
 } from "@cawco/core/decisions";
 import { frontMatterBlock } from "@cawco/core/fleet";
 import type { ArrivingAsk } from "@cawco/core/frames";
-import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { isRecord } from "@cawco/core/is-record";
 import {
   DELEGATE_TYPE_PROPOSAL_TOOL,
@@ -380,20 +380,9 @@ const fleetDocUnknown = (path: string) =>
 export const ROUTINE_ORIGIN = "routine:";
 /** A keep-alive's send (keep-alive.ts): the hub's heartbeat, not a delivery. */
 const KEEPALIVE = "keepalive";
-/**
- * Harnesses whose subagent ends with its call's result (OpenCode's
- * `subagent`). Claude's says it ended itself, in a `task_notification`: a
- * background one's call answers at once and the subagent runs on.
- */
-const ENDS_WITH_CALL: Record<HarnessKind, boolean> = {
-  claude: false,
-  opencode: true,
-  pi: false,
-};
-const endsWithCall = (harness: string | undefined): boolean => {
-  const kind = harnessNamed(harness);
-  return kind !== undefined && ENDS_WITH_CALL[kind];
-};
+/** Whether a subagent of `harness` ends with its call's result (its descriptor's `subagentEndsWithCall`). */
+const endsWithCall = (harness: string | undefined): boolean =>
+  traitsOf(harness).subagentEndsWithCall;
 
 /** Where the watch keeps each session's state (db `session_taints`), and what it reads of the fleet. */
 export interface TaintStore {

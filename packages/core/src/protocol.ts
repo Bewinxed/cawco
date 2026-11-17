@@ -259,7 +259,7 @@ export interface SpawnPayload {
    * it is the one option the user keeps choosing — and the only one they can
    * still change afterwards, with a `setPermissionMode` {@link ControlPayload}.
    */
-  permissionMode?: import("./harness/kinds").PermissionMode;
+  permissionMode?: import("./harness/modes").PermissionMode;
   /** `false` asks the harness never to store this session's transcript. */
   persistSession?: boolean;
   /** Hub-owned launch identity, retained when reattaching a surviving process. */
@@ -785,7 +785,7 @@ export interface AgentRow {
   chosenModes?: Partial<
     Record<
       import("./harness/kinds").HarnessKind,
-      import("./harness/kinds").PermissionMode
+      import("./harness/modes").PermissionMode
     >
   >;
   /** Last register's sessiond read, distinct from an available empty list. */

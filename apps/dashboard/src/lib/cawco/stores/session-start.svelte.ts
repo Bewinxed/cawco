@@ -7,12 +7,11 @@
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { MachineHarnessReport } from "@cawco/core/harness";
+import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import {
-  type EffortLevel,
-  type HarnessKind,
   type PermissionMode,
   WIRE_PERMISSION_MODES,
-} from "@cawco/core/harness/kinds";
+} from "@cawco/core/harness/modes";
 import { isOneOf } from "@cawco/core/one-of";
 import type { NamedSpawn, SpawnPayload } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";

@@ -294,7 +294,7 @@ export class ClaudeCarry implements SessionCarry {
       };
     }
     let endsTasks = false;
-    if (awake && running.endedForMove) {
+    if (awake) {
       const work = await running.endedForMove();
       ended.set(instanceId, work);
       endsTasks = work.tasks.length > 0;

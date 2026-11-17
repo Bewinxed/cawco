@@ -16,6 +16,7 @@
  * (db/json-reads.ts): SQLite may run the right side of an AND first.
  */
 import type { Database } from "bun:sqlite";
+import { COMPACT_NAMED_HARNESSES } from "@cawco/core/harness/traits";
 import {
   anyOf,
   FLAG,
@@ -90,7 +91,7 @@ export const MOVED_FIELDS = {
     signedOutOn: TEXT,
     compact: oneOf("filing", "compacting", "compacted", "stopped"),
     compactFirst: TRUE,
-    compactBy: oneOf("opencode", "pi"),
+    compactBy: oneOf(...COMPACT_NAMED_HARNESSES),
     summaryRefused: TEXT,
     relaunched: TRUE,
     because: BECAUSE,

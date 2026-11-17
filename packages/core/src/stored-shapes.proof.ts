@@ -26,7 +26,6 @@ import type {
   HomeCredential as HomeCredentialType,
   HomeLoginMoved as HomeLoginMovedType,
   HomeLogin as HomeLoginType,
-  HomeStore as HomeStoreType,
   MachineProviderLists as MachineProviderListsType,
   MoveBecause as MoveBecauseType,
   NamedAccount as NamedAccountType,
@@ -198,18 +197,22 @@ import type {
   EffortLevel as EffortLevelType,
   HarnessKind as HarnessKindType,
   ModelInfo as ModelInfoType,
-  PermissionMode as PermissionModeType,
 } from "./harness/kinds";
+import type { PermissionMode as PermissionModeType } from "./harness/modes";
+import type {
+  CompactNamedKind as CompactNamedKindType,
+  CredentialStoreKind as CredentialStoreKindType,
+} from "./harness/traits";
 import type {
   FleetHarnessConfig as FleetHarnessConfigType,
   HarnessConfigKind as HarnessConfigKindType,
 } from "./harness-config";
+import type { HookEvent as HookEventType } from "./hook-events";
 import type {
   FleetHook as FleetHookType,
   HookAgentHandler as HookAgentHandlerType,
   HookCommandHandler as HookCommandHandlerType,
   HookDraft as HookDraftType,
-  HookEvent as HookEventType,
   HookHandler as HookHandlerType,
   HookHttpHandler as HookHttpHandlerType,
   HookMatchTest as HookMatchTestType,
@@ -473,6 +476,7 @@ import type {
   CliInstallOutput,
   CommandAckStageOutput,
   CommandResultOutput,
+  CompactNamedKindOutput,
   CompactStageOutput,
   ComponentDocOutput,
   ConfigInspectionOutput,
@@ -486,6 +490,7 @@ import type {
   ContinuationReadOutput,
   ContinueStepOutput,
   ControlPayloadOutput,
+  CredentialStoreKindOutput,
   CustodyPresenceOutput,
   DelegateAskStatusOutput,
   DelegateEventOutput,
@@ -570,7 +575,6 @@ import type {
   HomeCredentialOutput,
   HomeLoginMovedOutput,
   HomeLoginOutput,
-  HomeStoreOutput,
   HookAgentHandlerOutput,
   HookCommandHandlerOutput,
   HookDraftOutput,
@@ -924,7 +928,7 @@ prove<
     Same<AccountJoinedOnOutput, AccountJoinedOnType>,
     Same<AccountKindOutput, AccountKindType>,
     Same<CompactStageOutput, CompactStageType>,
-    Same<HarnessKindOutput, HarnessKindType>,
+    Same<CompactNamedKindOutput, CompactNamedKindType>,
     Same<AccountHueOutput, AccountHueType>,
     Same<NamedAccountOutput, NamedAccountType>,
     Same<MoveBecauseOutput, MoveBecauseType>,
@@ -951,6 +955,7 @@ prove<
     Same<ArtifactThumbnailOutput, ArtifactThumbnailType>,
     Same<AskStateOutput, AskStateType>,
     Same<AtPlanLimitOutput, AtPlanLimitType>,
+    Same<HarnessKindOutput, HarnessKindType>,
     Same<LandsModeOutput, LandsModeType>,
     Same<MayStartOutput, MayStartType>,
     Same<ResultArtifactOutput, ResultArtifactType>,
@@ -1108,7 +1113,7 @@ prove<
     Same<SessionLimitsOutput, SessionLimitsType>,
     Same<TailnetServingOutput, TailnetServingType>,
     Same<HeartbeatAckPayloadOutput, HeartbeatAckPayloadType>,
-    Same<HomeStoreOutput, HomeStoreType>,
+    Same<CredentialStoreKindOutput, CredentialStoreKindType>,
     Same<HomeCredentialOutput, HomeCredentialType>,
     Same<HomeLoginOutput, HomeLoginType>,
     Same<HomeLoginMovedOutput, HomeLoginMovedType>,

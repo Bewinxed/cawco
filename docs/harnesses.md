@@ -1,161 +1,138 @@
 # Adding a harness
 
-**The invariant:** a CawCo session works the same whichever harness runs it,
-delegates included. It takes the same sends, raises the same asks, reaches
-the same CawCo and fleet tools, runs every shell command and file write of a
-work item inside its workspace's boundary, survives an agent restart under
-sessiond, and reads back as the same transcript. Where a harness cannot meet
-a part, its capabilities say so and the product refuses or hides that
-feature for it; it never half-does it.
+**The invariant.** Everything CawCo knows about one harness lives in that
+harness's plugin, and the TypeScript compiler names everything a new plugin
+is missing. Code outside the plugins asks the plugin; it never compares a
+harness kind to a name.
 
-The code is the list of what a harness provides: the `Harness`,
-`HarnessSession` and `HarnessContext` interfaces in
-`packages/agent/src/harness.ts`, `SessiondAdoption` in
-`packages/agent/src/session.ts`, and `FULL_CAPABILITIES` in
-`packages/agent/src/harnesses/capabilities.ts`, each member with its comment.
-This page holds what the code cannot say: the order of the work, and the
-parts that span several members.
+A plugin is two halves:
+
+- **The descriptor** (`packages/core/src/harness/<kind>.ts`, typed by
+  `HarnessDescriptor` in `descriptor.ts`): what the harness is. Plain data,
+  wire-safe, read by the hub, core, the agent and the dashboard. Every field
+  is required; a capability the harness lacks is an explicit value
+  (`{ lacks: "…" }`, `null`, `false`, an empty list) with its reason beside
+  it. Where a behaviour differs by harness, the field is a tag
+  (`unlistedModels`, `callNaming`, `deniedTools`, `hooks`,
+  `credentialPlaces`) and the module that owns the mechanism switches on
+  the tag, ending in `unhandled()`.
+- **The adapter** (`packages/agent/src/harnesses/`, typed by `Harness` and
+  `HarnessSession` in `packages/agent/src/harness.ts`): what the harness
+  does on a machine. Every member is required; an operation the harness
+  cannot run is a member that refuses with its reason (`cannot(why)`,
+  `noCarry(why)`), and a query with nothing to report answers empty.
+
+The registry derives everything else: `HARNESS_PLUGINS` in
+`packages/core/src/harness/kinds.ts` gives `HARNESSES` and `HarnessKind`;
+`ADAPTERS` in `packages/agent/src/harnesses/index.ts` maps each kind to its
+adapter. The lint rule `scripts/lint/no-harness-compare.grit` refuses a
+harness name compared, switched on, looked for or looked up outside the two
+plugin folders.
 
 ## Steps
 
-1. **Write the adapter.** Implement `Harness` and its `HarnessSession` in
-   `packages/agent/src/harnesses/`, and register it in that folder's
-   `index.ts`. Read Claude Code's (`claude.ts`), OpenCode's (`opencode.ts`,
-   `opencode-session.ts`) and pi's (`pi.ts`, `pi-services.ts`,
-   `pi-sessiond.ts`) beside each member you write.
-2. **Name the kind.** Add it to `HARNESSES` in `packages/core/src/harness.ts`
-   and run `bun run check`. The type-checker names every harness-keyed table
-   (`Record<HarnessKind, …>`, `everyOf`, a switch ending in `unhandled()`);
-   fill each one for the new kind. Two of them guard the host and are
-   security: `HARNESS_CONFIG_EMPTY_BY` and `HARNESS_CREDENTIALS` (below).
-3. **Read the comparisons it falls through.** Single-harness tests stay
-   comparisons where they name one harness's own mechanism (Claude Code's
-   SDK result frames, accounts and version gate; OpenCode's shared server).
-   Find them with
-   `git grep -nE '[!=]== "(claude|opencode|pi)"' -- packages apps/dashboard`
-   and read each by file: the new kind takes the other branch, which is
-   right unless it shares that mechanism. The iOS app
-   (`apps/apple/Packages/CawCoKit`) keys harnesses by string; grep it for
-   `"opencode"` and add the new kind beside each hit.
-4. **Set its capabilities.** Start from `FULL_CAPABILITIES` and turn off only
-   what it cannot do, each with its reason in a comment, as
-   `OPENCODE_CAPABILITIES` and `PI_CAPABILITIES` do.
-5. **Add its words.** Its name in `packages/core/src/words/accounts.ts`
-   (`harnesses`), its refusals and not-installed text in
-   `packages/core/src/words/harness.ts`, written to DESIGN.md's Words section.
-6. **Meet every part below** before any work item runs on it. A harness that
+1. **Write the descriptor.** Copy the shape of `claude.ts`, `opencode.ts` or
+   `pi.ts` beside it, with `as const satisfies HarnessDescriptor<"<kind>">`,
+   and its words in `packages/core/src/words/harness-plugins.ts`, written to
+   DESIGN.md's Words section. Register it in `HARNESS_PLUGINS`.
+2. **Write the adapter.** Implement `Harness<"<kind>">` and its sessions'
+   `HarnessSession`, and register it in `ADAPTERS`. Read Claude Code's
+   (`claude.ts`), OpenCode's (`opencode.ts`, `opencode-session.ts`) and
+   pi's (`pi.ts`, `pi-services.ts`, `pi-sessiond.ts`) beside each member you
+   write.
+3. **Run `bun run check`** until it passes. The type-checker names the
+   missing descriptor fields and adapter members (the first four and a
+   count per error, and every read of a missing field where it is read), and
+   each switch over a tag that a new value needs. Fill each.
+4. **Set its capabilities.** Start from `FULL_CAPABILITIES`
+   (`packages/agent/src/harnesses/capabilities.ts`) and turn off only what it
+   cannot do, each with its reason, as `OPENCODE_CAPABILITIES` and
+   `PI_CAPABILITIES` do.
+5. **Meet every part below** before any work item runs on it. A harness that
    cannot close the workspace boundary runs no work item.
+
+The places that still key a table by harness, each typed so a new kind fails
+to compile until it is filled: the dashboard's marks (`HarnessLogo.svelte`,
+pictures that cannot live in core), the workspace judge's file tools
+(`packages/core/src/workspace-judge.ts`, a standalone script that imports
+nothing), the usage scanner's sources (`UsageHarness`, for a descriptor whose
+`usage` is scanned) and the home credential stores' readers
+(`CredentialStoreKind`, for a descriptor whose `homeLogin` is
+`credentials`). The daemon still reaches three harnesses by name for beats
+of their own (OpenCode's file watch and providers, pi's credential check,
+Claude Code's re-read on a version answer and a keychain unlock), named in
+the lint rule; and the wire names OpenCode and pi in a few fields of its
+own (a machine's providers, its OpenCode custody).
+The iOS app (`apps/apple/Packages/CawCoKit`) keys harnesses by string and is
+on hold.
 
 ## Parts no single member covers
 
-Each says what must hold, then where Claude Code, OpenCode and pi meet it.
+Each says what must hold and which descriptor field or adapter member
+carries it.
 
 **Workspace boundary, shell.** Every shell command of a work item runs
-through the workspace's executor, inside the boundary.
-Claude Code: the shell prefix, `CLAUDE_CODE_SHELL_PREFIX` set from
-`claudePrefixScript` (`packages/agent/src/boundary.ts`).
-OpenCode: CawCo's plugin's `shell` (`opencode-plugin.ts`).
-pi: `sessionBash` (`pi-runtime.ts`).
+through the workspace's executor, inside the boundary: Claude Code through
+its shell prefix (`CLAUDE_CODE_SHELL_PREFIX`), OpenCode through CawCo's
+plugin's `shell`, pi through `sessionBash`.
 
 **Workspace boundary, files.** Every file tool and its path arguments are
 judged by the workspace's policy, whose table of each harness's file tools is
-`BUILT_INS` (`packages/core/src/workspace-judge.ts`). A host that keeps the
-judge it started with records its gate form (`packages/agent/src/gate-form.ts`)
-and is relaunched at rest when the form changes.
-Claude Code: the judge hook (`packages/agent/src/boundary-judge.ts`).
-OpenCode: the judge in its plugin.
-pi: `boundedFileTools` (`pi-runtime.ts`).
+`BUILT_INS` in the standalone judge. A host that keeps the judge it started
+with records its gate form (`packages/agent/src/gate-form.ts`) and is
+relaunched at rest when the form changes.
 
-**Clone denies.** Every config file the harness loads from a folder and runs
-on the host is emptied in a workspace: its entry of `HARNESS_CONFIG_EMPTY_BY`
-(`packages/core/src/clone-denies.ts`). Its logins on the host are unreadable
-from a workspace: its entry of `HARNESS_CREDENTIALS`
-(`packages/core/src/paths.ts`).
-Claude Code: `.claude/*`, `.mcp.json`. OpenCode: `opencode.json(c)`,
-`.opencode`. pi: `.pi`, and `.agents/skills`. Codex (no adapter yet; held in
-`CODEX_CONFIG_EMPTY`): `.codex`, `.agents/plugins`.
+**Clone denies (security).** Every config file the harness loads from a
+folder and runs on the host is emptied in a workspace: descriptor
+`cloneConfig`. Its logins on the host are unreadable from a workspace:
+descriptor `credentialPlaces`. A path left out of either runs a clone's
+config on the host or hands its credential to a workspace. Codex's config is
+held in `CODEX_CONFIG_EMPTY` (`packages/core/src/clone-denies.ts`) until its
+descriptor carries it.
 
 **CawCo MCP and fleet MCP.** The session reaches CawCo's tools with its own
 credential (`HarnessContext.sessionCredential`), kept off argv. In a
 workspace it starts no fleet server with a command itself: each comes
-through the workspace's MCP gate (`HarnessContext.mcpGate`,
-`packages/agent/src/mcp-gate.ts`), which runs it on the host, and
-chrome-devtools comes through the workspace's browser door
-(`HarnessContext.browserDoor`).
-Claude Code: `fleetMcpFor` (`claude.ts`); CawCo's server from a private file
-(`packages/agent/src/claude-mcp-config.ts`).
-OpenCode: its plugin's `ctx.mcp.transform` and `cawco_*` tools, the
-credential stamped per call (`opencode-credentials.ts`), since one server
-runs every session.
-pi: `FleetMcp` (`pi-runtime.ts`), its servers registered by CawCo's inline
-extension (`pi-mcp.ts`). A live session reconnects any server through pi's
-own `/mcp reconnect` handler, and switches only the fleet's servers on or
-off: pi switches a server of the person's own `mcp.json` only by writing
-that file.
+through the workspace's MCP gate (`HarnessContext.mcpGate`), which runs it on
+the host, and chrome-devtools through the browser door
+(`HarnessContext.browserDoor`). How its calls name a server is descriptor
+`callNaming`.
 
-**Permission modes and asks.** The modes the harness offers are its
-`permissionModes` capability, drawn from `PERMISSION_MODES`
-(`packages/core/src/harness.ts`); a mode means the same on every harness
-that offers it, and the dashboard says what it means there (`DESCRIPTIONS`,
-`apps/dashboard/src/lib/cawco/permission-modes.ts`). Its
-own question, todo and subagent tools are denied so CawCo's `ask` and
-delegation are the one route (`NATIVE_TOOLS`, `HARNESS_TOOLS`,
-`packages/core/src/delegate-types.ts`).
-Claude Code: the SDK's `permissionMode` and `canUseTool`; `fullSend` is
-`bypassPermissions`; denials through `disallowedTools`.
-OpenCode: its permission ruleset (`opencode-session.ts`), denials through
-`opencodeToolsFor`.
-pi: no modes; denials through `piToolsFor`.
+**Permission modes and asks.** Whether it takes modes is descriptor
+`permissionModes`; which it takes, its `permissionModes` capability, drawn
+from `PERMISSION_MODES` (`packages/core/src/harness/modes.ts`); what each
+means there, descriptor `words.modes` and `words.fullSend`. A mode means the
+same on every harness that offers it. Its own question, to-do and subagent
+tools are denied so CawCo's `ask` and delegation are the one route:
+descriptor `nativeTools`; a denied-tool list, written in Claude Code's names,
+reaches it as descriptor `deniedTools` says.
 
 **Custody under sessiond.** A running session survives an agent restart.
-When each session is a keeper process of its own, mark it in `OWN_PROCESS`
-(`packages/agent/src/proc-id.ts`), give it a procId in `procIdFor` and
-`parseProcId`, and implement `SessiondAdoption`.
-Claude Code: an Agent SDK child under sessiond, adopted.
-OpenCode: one server per account under sessiond, holding many sessions;
-the agent reattaches to it (`Harness.reattach`).
-pi: a pi host per session under sessiond, adopted.
+Descriptor `custody` says how: `keeper`, a process per session under
+sessiond, named with descriptor `procIdPrefix`, adopted through the
+adapter's `SessiondAdoption`; or `server`, one server per account holding
+many sessions, reattached through `Harness.reattach`.
 
-**Accounts and sign-in.** A session runs on one account or the machine's own
-sign-in, and the hub reads which (`HomeStore`,
-`packages/core/src/accounts.ts`; `STORE_ENTRY`,
-`packages/agent/src/provider-accounts.ts`).
-Claude Code: a config dir per account (`CLAUDE_CONFIG_DIR`,
-`packages/agent/src/accounts.ts`).
-OpenCode: an account's own server.
-pi: a composite credential store over the account's credential
-(`pi-accounts.ts`).
+**Accounts and sign-in.** A session runs on one account or the machine's
+own sign-in. Descriptor `accountDir` says whether an account is a config dir
+(and so whether a session's conversation is carried between accounts,
+`Harness.carrier`); `homeLogin` and `soleProvider` what the machine's own
+sign-in is; `storeOAuthProviders` how its store names an OAuth provider.
 
 **Fleet config placement.** The hub's fleet config (skills, memory, hooks,
 MCP servers, plugins, subagents) lands in files of CawCo's own under its data
-dir (`packages/core/src/paths/fleet.ts`, `Harness.syncFleet`), and each
-session takes it through its own launch. Nothing is written into the
-person's own agent config; what earlier versions wrote there is taken back
-out once, by CawCo's own records of it (`fleet.ts` `dropUserLayerWrites`,
-`fleet-common.ts` `dropHarnessUserLayer`).
-Claude Code: memory in the system prompt append, skills and subagents as an
-added directory (`additionalDirectories`), plugins as local plugins
-(`plugins`), hooks and settings in the flag settings (`claude.ts`
-`launchFleet`).
-OpenCode: memory as an instruction entry (`opencode-session.ts`), skills in
-the launch config's `skills`, hooks through CawCo's plugin
-(`HOOK_EVENTS_ON`, `packages/core/src/hooks.ts`).
-pi: memory as a context file, skills through `additionalSkillPaths`, hooks
-through the inline extension (`pi-runtime.ts`).
+dir (`Harness.syncFleet`, `Harness.fleetHome`), and each session takes it
+through its own launch. Nothing is written into the person's own agent
+config. Who runs the fleet's hooks, on which events and with which tool
+names, is descriptor `hooks`.
 
 **Stored sessions and transcripts.** Sessions run outside CawCo list, read
 back and resume as they ran (`listSessions`, `readTranscriptWindow`,
 `storedRun`), and a name given to one is kept in the harness's own store
 (`renameSession`); transcript search parses its format
-(`packages/jsonl-parser`).
-Claude Code: JSONL (`claude-transcript.ts`, `claude-stored-run.ts`).
-OpenCode: its database (`opencode-transcript.ts`).
-pi: session files, line-indexed (`pi-services.ts`); a name is pi's own
-`session_info` entry, appended by its session manager.
+(`packages/jsonl-parser`). What a listing proves is descriptor
+`listsAllConversations` and `catalogProvesGone`.
 
 **Clean sessions.** A clean session starts with no instruction files,
-memory, skills or hooks, or the harness refuses it with a reason in
-`CLEAN_START_REFUSAL` (`packages/core/src/harness.ts`).
-Claude Code: `CLEAN_OPTIONS` (`claude.ts`).
-OpenCode: refused.
-pi: `noContextFiles` (`pi-runtime.ts`).
+memory, skills or hooks, or the harness refuses it: descriptor
+`cleanStartRefused`, its words.

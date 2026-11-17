@@ -1176,6 +1176,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/BlockMetadataCompactBy`.
+    public enum BlockMetadataCompactBy: OpenEnum {
+        case opencode
+        case pi
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "opencode": self = .opencode
+            case "pi": self = .pi
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .opencode: "opencode"
+            case .pi: "pi"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.opencode, .pi]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/BlockMetadataCompactResult`.
     public enum BlockMetadataCompactResult: OpenEnum {
         case failed
@@ -2956,44 +2994,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.area, .project]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/Exclude_1`.
-    public enum Exclude_1: OpenEnum {
-        case opencode
-        case pi
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "opencode": self = .opencode
-            case "pi": self = .pi
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .opencode: "opencode"
-            case .pi: "pi"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.opencode, .pi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

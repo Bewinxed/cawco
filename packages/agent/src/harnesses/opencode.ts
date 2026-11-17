@@ -31,9 +31,9 @@ import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import { HARNESS_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type {
+  FleetHoldings,
   FleetItemState,
   FleetMcpConfig,
   FleetMcpServer,
@@ -53,6 +53,7 @@ import {
   offeredMode,
 } from "@cawco/core/harness";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
+import { OPENCODE } from "@cawco/core/harness/opencode";
 import {
   opencodeConfigOf,
   opencodeCredentialValue,
@@ -119,13 +120,10 @@ import type {
   OpencodeOwnCredential,
 } from "../agent-ports";
 import { CHROME_DEVTOOLS } from "../browser/door";
+import { toolVersion } from "../capabilities";
 import { gitIn, infoExcludeOf } from "../checkout-exclude";
 import { harnessMcpUrl } from "../delegation";
-import {
-  type OpencodeRule,
-  opencodeDenyRules,
-  sessionFleetDenials,
-} from "../denied-tools";
+import { sessionFleetDenials } from "../denied-tools";
 import { memoryState, syncMemory } from "../fleet";
 import { hookStatesInSet, readFleetHarnessSet } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
@@ -140,14 +138,17 @@ import type {
   ServerCustody,
   ServerStop,
   ServerStopRequest,
+  SessionCarry,
   SomeControls,
   TranscriptSpan,
 } from "../harness";
 import {
   HarnessRecoveryRefused,
+  noCarry,
   ReattachFailed,
   SessionAddressRefused,
 } from "../harness";
+import type { HarnessCli } from "../harness-cli";
 import {
   readJson,
   readJsonOrLeave,
@@ -234,8 +235,10 @@ import {
   askOpencode,
   forgetBackground,
   NO_WORKFLOW_SKILLS,
+  type OpencodeRule,
   OpencodeSession,
   opencodeCatalog,
+  opencodeDenyRules,
   splitModel,
   turnWasOpen,
 } from "./opencode-session";
@@ -303,12 +306,12 @@ const USER_LAYER_WRITES = {
  */
 const STATIC_POLICY = {
   permissions: [
-    ...HARNESS_TOOLS.opencode.shell.map(
+    ...OPENCODE.tools.shell.map(
       (action) => ({ action, resource: "*", effect: "ask" }) as const
     ),
     { action: "edit", resource: "*", effect: "ask" },
     NO_WORKFLOW_SKILLS,
-    ...[...HARNESS_TOOLS.opencode.fetch, ...HARNESS_TOOLS.opencode.search].map(
+    ...[...OPENCODE.tools.fetch, ...OPENCODE.tools.search].map(
       (action) => ({ action, resource: "*", effect: "deny" }) as const
     ),
   ],
@@ -2007,9 +2010,35 @@ class OpencodeHarness implements Harness<"opencode"> {
       this.unclaimedRunners(directory, claimed),
   };
   readonly kind = "opencode" as const;
+  /** The OpenCode binary its servers run, its version its `--version`. */
+  readonly cli: HarnessCli = {
+    find: opencodeBinary,
+    missing: undefined,
+    version: toolVersion,
+  };
   /** Its catalog is its servers' databases, read on the stores thread ({@link listSessions}). */
-  readonly catalogFromServer = true as const;
+  readonly catalogFromServer = true;
+  /** Its server can refuse to start or start again, and a provider refuse one of the machine's own sign-ins, as its sessions run. */
+  readonly authMovesLive = true;
+  /** Its `detect` may start its machine's server, so a tool move does not re-read it unasked. */
+  readonly detectStartsNothing = false;
+  /** No heal control reaches its sessions: their fleet MCP servers are its plugin's, mended by the fleet sync ({@link #mendFleetMcp}). */
+  readonly healsFleetMcp = false;
+  /** Its `/compact` runs in its account's server, which holds no epoch to replay. */
+  readonly relaunchesOnManualCompact = false;
   readonly capabilities = OPENCODE_CAPABILITIES;
+
+  /** Its sessions keep no account dir: a conversation stays in its account's server (descriptor `accountDir`). */
+  carrier(): SessionCarry {
+    return noCarry(
+      "An OpenCode session keeps no account dir: its conversation stays in its account's server."
+    );
+  }
+
+  /** It keeps no fleet skill or plugin copy of its own: its launch config names the fleet's places. */
+  fleetHoldings(): Promise<FleetHoldings> {
+    return Promise.resolve({});
+  }
   auth: import("@cawco/core/session-messages").AuthState = "authenticated";
 
   /** The machine's keepers as OpenCode's servers reach them. */

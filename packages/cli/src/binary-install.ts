@@ -8,7 +8,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
-import { probeCapabilities } from "@cawco/agent/capabilities";
 import {
   requireLinger,
   systemdActive,
@@ -97,7 +96,9 @@ async function runAllowed(id: string): Promise<boolean> {
 async function offerTools(ask: boolean): Promise<boolean> {
   let installed = false;
   try {
-    const { items } = await probeCapabilities();
+    const { probeMachineCapabilities } =
+      await import("@cawco/agent/machine-capabilities");
+    const { items } = await probeMachineCapabilities();
     for (const item of items) {
       if (item.available) {
         console.log(

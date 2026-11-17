@@ -1,5 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { descriptorOf } from "@cawco/core/harness/kinds";
   /**
    * Where it goes (owner pick f): one block, one
    * harness at a time, by session, model or machine, over the page's range.
@@ -21,7 +22,6 @@
    * machine ran sessions of both. Each group's height is driven
    * (motion/relay-boxes) so an old row never overflows into the group below.
    */
-  import { everyOf } from "@cawco/core/every-of";
   import { traitsOf } from "@cawco/core/harness/traits";
   import type {
     UsageGroupBy,
@@ -29,6 +29,7 @@
     UsageSummary,
     UsageSummaryRow,
   } from "@cawco/core/usage/types";
+  import { USAGE_HARNESSES } from "@cawco/core/usage/types";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
@@ -54,10 +55,7 @@
   type Harness = UsageHarness;
   /** The folds a reader picks between, in the order offered. */
   type Grouping = Extract<UsageGroupBy, "session" | "model" | "machine">;
-  const HARNESSES: readonly Harness[] = everyOf<Harness>()([
-    "claude",
-    "opencode",
-  ]);
+  const HARNESSES: readonly Harness[] = USAGE_HARNESSES;
   const GROUPINGS: Grouping[] = ["session", "model", "machine"];
 
   let {
@@ -71,7 +69,7 @@
   } = $props();
 
   /** The switches as chosen; the list follows once their rows are read. */
-  let harness = $state<Harness>("claude");
+  let harness = $state<Harness>(USAGE_HARNESSES[0] ?? "claude");
   let grouping = $state<Grouping>("session");
   /** The list shows every row rather than the first eight. */
   let all = $state(false);
@@ -371,8 +369,9 @@
         value={harness}
       >
         <TabsList aria-label="Harness">
-          <TabItem label="Claude" value="claude" />
-          <TabItem label="opencode" value="opencode" />
+          {#each HARNESSES as one (one)}
+            <TabItem label={descriptorOf(one).words.usageName} value={one} />
+          {/each}
         </TabsList>
       </Tabs>
       <Tabs
@@ -396,7 +395,7 @@
   {#if start === null}
     <p data-slot="note" class="type-meta text-ink-muted">
       This range follows a 5-hour window, and none is running for
-      {harness === "claude" ? "Claude" : "opencode"}.
+      {descriptorOf(harness).words.usageName}.
     </p>
   {:else if failed && !view}
     <ReadFailed {read} said="Could not read where it goes. {failed}" />

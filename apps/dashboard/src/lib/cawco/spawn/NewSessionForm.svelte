@@ -14,13 +14,14 @@
   } from "@cawco/core/continuation";
   import { detach } from "@cawco/core/detach";
   import type { AvailableCommand } from "@cawco/core/fleet";
-  import { cleanStartRefusal, HARNESS_TOOL } from "@cawco/core/harness";
+  import { cleanStartRefusal } from "@cawco/core/harness";
   import {
+    descriptorOf,
     type EffortLevel,
     HARNESSES,
     type HarnessKind,
-    type PermissionMode,
   } from "@cawco/core/harness/kinds";
+  import type { PermissionMode } from "@cawco/core/harness/modes";
   import { traitsOf } from "@cawco/core/harness/traits";
   import { modelRun } from "@cawco/core/model-names";
   import { type MoveEstimate, moveSize as sizeWords } from "@cawco/core/move";
@@ -530,7 +531,7 @@
               slug: fix,
               href:
                 fix === "cli-tools"
-                  ? `/config/cli-tools#tool-${HARNESS_TOOL[query.harness]}`
+                  ? `/config/cli-tools#tool-${descriptorOf(query.harness).tool}`
                   : `/config/${fix}`,
             };
           }

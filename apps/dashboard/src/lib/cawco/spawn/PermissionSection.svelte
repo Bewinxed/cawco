@@ -1,6 +1,7 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
-  import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
+  import type { HarnessKind } from "@cawco/core/harness/kinds";
+  import type { PermissionMode } from "@cawco/core/harness/modes";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
@@ -57,7 +58,7 @@
       asks.ask({
         at: "fullSend",
         title: spawnWords.switchToFullSendTitle,
-        body: restarts ? [...copy.confirm, copy.restarts] : copy.confirm,
+        body: restarts ? [...copy.confirm, copy.restarts] : [...copy.confirm],
         confirmLabel: spawnWords.switchToFullSend,
         pendingLabel: spawnWords.switching,
         grant: true,

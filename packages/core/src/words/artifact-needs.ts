@@ -5,8 +5,8 @@ import {
   type ArtifactReason,
   reasonWords,
 } from "../artifact-needs";
+import { harnessName } from "../harness/kinds";
 import { unhandled } from "../unhandled";
-import { accountsWords } from "./accounts";
 import { artifactWords } from "./artifacts";
 
 /** The row's line: every reason, strongest first ("3 of 9 answered · 1 new answer"). */
@@ -41,9 +41,7 @@ export const noticePartWords = (
       return artifactWords.closedAnswers(title, part.count, part.pin);
     case "ended":
       return artifactWords.ended(
-        part.harness
-          ? accountsWords.harnesses[part.harness]
-          : artifactWords.itsSession,
+        part.harness ? harnessName(part.harness) : artifactWords.itsSession,
         neverDone(part.reason, title)
       );
     default:

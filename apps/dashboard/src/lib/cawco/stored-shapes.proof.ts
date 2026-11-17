@@ -79,14 +79,14 @@ import type {
 import type {
   EffortLevel as EffortLevelType,
   HarnessKind as HarnessKindType,
-  PermissionMode as PermissionModeType,
 } from "@cawco/core/harness/kinds";
+import type { PermissionMode as PermissionModeType } from "@cawco/core/harness/modes";
+import type { HookEvent as HookEventType } from "@cawco/core/hook-events";
 import type {
   FleetHook as FleetHookType,
   HookAgentHandler as HookAgentHandlerType,
   HookCommandHandler as HookCommandHandlerType,
   HookDraft as HookDraftType,
-  HookEvent as HookEventType,
   HookHandler as HookHandlerType,
   HookHttpHandler as HookHttpHandlerType,
   HookMcpToolHandler as HookMcpToolHandlerType,

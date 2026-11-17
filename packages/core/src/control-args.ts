@@ -50,11 +50,9 @@ import type {
   ControlName,
 } from "./control-table";
 import { TRANSCRIPT_AUTHORS } from "./find";
-import {
-  HARNESSES,
-  isEffortLevel,
-  WIRE_PERMISSION_MODES,
-} from "./harness/kinds";
+import { HARNESSES, isEffortLevel } from "./harness/kinds";
+import { WIRE_PERMISSION_MODES } from "./harness/modes";
+import { CREDENTIAL_STORE_HARNESSES } from "./harness/traits";
 import {
   IMAGE_PROVIDERS,
   IMAGE_QUALITIES,
@@ -113,7 +111,7 @@ const LentAccessShape = object({
   identity: AccountIdentity,
   provider: text,
 });
-const CredentialStore = picklist(["opencode", "pi"]);
+const CredentialStore = picklist(CREDENTIAL_STORE_HARNESSES);
 const AccountKind = picklist(ACCOUNT_KINDS);
 const PermissionMode = picklist(
   WIRE_PERMISSION_MODES,

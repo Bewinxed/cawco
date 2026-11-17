@@ -35084,8 +35084,8 @@
                     "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively ({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
                   },
                   "compactBy": {
-                    "$ref": "#/components/schemas/Exclude_1",
-                    "description": "The harness whose own `/compact` runs, when it is not Claude Code's: what its compaction keeps is less."
+                    "$ref": "#/components/schemas/BlockMetadataCompactBy",
+                    "description": "The harness whose own `/compact` runs, when its descriptor names it on a moved line (core harness/traits.ts `compactorOf`): what its compaction keeps is less."
                   },
                   "compactFirst": {
                     "description": "The compaction runs on `from`, warm, and the move follows it: the\npolicy's `beforeMove`. Absent: it runs on `to` after the move.",
@@ -35885,6 +35885,13 @@
           "compacting",
           "filing",
           "stopped"
+        ]
+      },
+      "BlockMetadataCompactBy": {
+        "type": "string",
+        "enum": [
+          "opencode",
+          "pi"
         ]
       },
       "BlockMetadataCompactResult": {
@@ -40332,13 +40339,6 @@
           "project"
         ]
       },
-      "Exclude_1": {
-        "type": "string",
-        "enum": [
-          "opencode",
-          "pi"
-        ]
-      },
       "ExternalActor": {
         "description": "Who wrote or opened something on a source.",
         "type": "object",
@@ -44111,7 +44111,7 @@
         ]
       },
       "HarnessKind": {
-        "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter.",
+        "description": "The harnesses cawco can spawn sessions on: a registered plugin's kind.",
         "type": "string",
         "enum": [
           "claude",
@@ -44245,7 +44245,7 @@
           },
           "refused": {
             "$ref": "#/components/schemas/HarnessReportRefused",
-            "description": "Why the machine refuses every start of this harness's CLI, its sentence\nin {@link authReason}: `not-installed`, or `version` (not a version the\nharness's catalog entry runs: below Claude Code's or pi's floor, not\nOpenCode's one version, or no version said). Claude's gate is agent\nclaude-version.ts `claudeToStart`; OpenCode's and pi's tools.ts\n`toolGate`. Absent when it runs. Where the dashboard puts the refusal in\nplace of what it blocks, with the catalog's install of the harness's\ntool ({@link HARNESS_TOOL}) as its one press (`HarnessBlock`)."
+            "description": "Why the machine refuses every start of this harness's CLI, its sentence\nin {@link authReason}: `not-installed`, or `version` (not a version the\nharness's catalog entry runs: below Claude Code's or pi's floor, not\nOpenCode's one version, or no version said). Claude's gate is agent\nclaude-version.ts `claudeToStart`; OpenCode's and pi's tools.ts\n`toolGate`. Absent when it runs. Where the dashboard puts the refusal in\nplace of what it blocks, with the catalog's install of the harness's\ntool (its descriptor's `tool`) as its one press (`HarnessBlock`)."
           },
           "signInFaults": {
             "description": "OpenCode only: each of the machine's own OpenCode sign-ins (not a CawCo\naccount) whose provider refused it the last time a session here used\nit, until a turn on that provider succeeds. The home says each on the\nmachine's row, with the fix ({@link opencodeSignInFaultWords}).",
@@ -44751,7 +44751,8 @@
             "type": "string"
           },
           "store": {
-            "$ref": "#/components/schemas/Exclude_1"
+            "$ref": "#/components/schemas/BlockMetadataCompactBy",
+            "description": "The kinds whose descriptor's `F` is a `V`."
           },
           "storeProvider": {
             "description": "The provider's id in that store, as the store names it (`openai` in OpenCode's for ChatGPT).",
@@ -49709,8 +49710,8 @@
                     "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively ({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
                   },
                   "compactBy": {
-                    "$ref": "#/components/schemas/Exclude_1",
-                    "description": "The harness whose own `/compact` runs, when it is not Claude Code's: what its compaction keeps is less."
+                    "$ref": "#/components/schemas/BlockMetadataCompactBy",
+                    "description": "The harness whose own `/compact` runs, when its descriptor names it on a moved line (core harness/traits.ts `compactorOf`): what its compaction keeps is less."
                   },
                   "compactFirst": {
                     "description": "The compaction runs on `from`, warm, and the move follows it: the\npolicy's `beforeMove`. Absent: it runs on `to` after the move.",
@@ -56079,7 +56080,7 @@
           },
           "harness": {
             "$ref": "#/components/schemas/HarnessKind",
-            "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter."
+            "description": "The harnesses cawco can spawn sessions on: a registered plugin's kind."
           },
           "machineId": {
             "type": "string"

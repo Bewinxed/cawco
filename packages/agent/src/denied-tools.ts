@@ -36,7 +36,6 @@
 
 import {
   OWN_LIST_DENIED,
-  opencodeToolsFor,
   QUESTION_TOOL_DENIED,
   SUBAGENTS_DENIED,
 } from "@cawco/core/delegate-types";
@@ -401,27 +400,3 @@ export const dropWrittenDenials = (): Promise<DeniedCleanup> =>
       };
     }
   });
-
-/** One rule of an OpenCode 2.0 session's permission set. */
-export interface OpencodeRule {
-  action: string;
-  effect: "allow" | "ask" | "deny";
-  resource: string;
-}
-
-/**
- * OpenCode 2.0's denial of each tool a denied-tool list names (the fleet
- * baseline, a delegate type's, a spawn's), written in Claude's names: one
- * session rule per OpenCode action ({@link opencodeToolsFor}), `deny` over
- * every resource. 2.0 drops a tool so denied from the model's list (and from
- * Code Mode's catalog) and refuses a call to it (settled #9: "A rule
- * `{action, resource:"*", effect:"deny"}` drops the tool from the list
- * entirely"). Names OpenCode has no tool for are left out; the hub refuses
- * them on an OpenCode type.
- */
-export const opencodeDenyRules = (deny: readonly string[]): OpencodeRule[] =>
-  opencodeToolsFor(deny).tools.map((action) => ({
-    action,
-    resource: "*",
-    effect: "deny",
-  }));

@@ -2,6 +2,7 @@
 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { RestartHold } from "@cawco/core/binary-updates";
 import type { BrowserDoor } from "@cawco/core/browser";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { CONTROL_REPLIES } from "@cawco/core/control-replies";
@@ -50,6 +51,7 @@ import { fleetMcpAt } from "../fleet-mcp-set";
 import { gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import {
+  cannot,
   type HarnessContext,
   type HarnessSession,
   type SessionControls,
@@ -157,6 +159,35 @@ const staleHosts = new Map<string, string>();
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
 class PiRemoteSession implements HarnessSession {
+  readonly endedForMove = cannot(
+    "A pi session is never carried between accounts: it keeps no account dir."
+  );
+
+  /** It holds no work for later outside a turn: no background task and no one-time wake-up. */
+  heldForLater(): RestartHold[] {
+    return [];
+  }
+
+  /** Nothing it holds for later, so no start of it to say. */
+  heldSince(): number | undefined {
+    return undefined;
+  }
+
+  /** pi starts no turn of its own between sends, so it never loops into the supervisor's stop. */
+  noteStopped(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /** Its host is the machine's pi, checked against its floor as it starts. */
+  outdated(): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  /** It keeps no table of its own that grows. */
+  tables(): Record<string, number> {
+    return {};
+  }
+
   readonly harness = "pi" as const;
   sessionId: string | null = null;
   readonly #pending = new Map<

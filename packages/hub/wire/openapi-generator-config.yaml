@@ -35,6 +35,7 @@ typeOverrides:
     BlockMetadataAction: OpenEnums.BlockMetadataAction
     BlockMetadataAt: OpenEnums.BlockMetadataAt
     BlockMetadataCompact: OpenEnums.BlockMetadataCompact
+    BlockMetadataCompactBy: OpenEnums.BlockMetadataCompactBy
     BlockMetadataCompactResult: OpenEnums.BlockMetadataCompactResult
     BlockMetadataHandoffKind: OpenEnums.BlockMetadataHandoffKind
     BlockMetadataReportKind: OpenEnums.BlockMetadataReportKind
@@ -78,7 +79,6 @@ typeOverrides:
     ErrorSaidKind: OpenEnums.ErrorSaidKind
     EventRouteViewMode: OpenEnums.EventRouteViewMode
     Exclude: OpenEnums.Exclude
-    Exclude_1: OpenEnums.Exclude_1
     ExternalActorKind: OpenEnums.ExternalActorKind
     ExternalCommentDirection: OpenEnums.ExternalCommentDirection
     ExternalKind: OpenEnums.ExternalKind

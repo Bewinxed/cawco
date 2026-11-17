@@ -15,14 +15,13 @@ import type {
 } from "@cawco/core/decides";
 import type { DelegateType } from "@cawco/core/delegate-types";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { harnessLabel } from "@cawco/core/harness/kinds";
 import { unhandled } from "@cawco/core/unhandled";
-import { accountsWords } from "@cawco/core/words/accounts";
 import { decidesWords } from "@cawco/core/words/decides";
 import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
 import { modelLabel } from "#lib/cawco/models.svelte.js";
 import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
 import type { ProjectRow } from "#lib/cawco/projects.js";
-
 import { failureWords } from "#lib/platform/hub-read.js";
 import {
   type AgentBody,
@@ -238,7 +237,7 @@ export class WhoDecides {
       this.read.state === "read"
         ? this.read.fleet.harnesses.find((one) => one.id === id)
         : undefined;
-    return { offer, name: offer?.name ?? accountsWords.harnesses[id] ?? id };
+    return { offer, name: offer?.name ?? harnessLabel(id) };
   }
 
   /** A model as its harness offers it, else as the model list names it. */

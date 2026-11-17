@@ -6,7 +6,7 @@
  * draws none of it, so it is not written into it (scripts/words-swift.ts).
  */
 
-import type { OfferedMode } from "../harness/kinds";
+import type { OfferedMode } from "../harness/modes";
 import { configurePage } from "./configure";
 
 /** The mode chip's name, before the mode it names. */
@@ -36,7 +36,7 @@ export const spawnWords = {
   /**
    * A start refused on a model its harness does not list (hub server.ts
    * `modelRefusal`), to the agent or person who asked: the harness by name
-   * (`harness`, accountsWords.harnesses), the model ids it does list, and
+   * (`harness`, core `harnessName`), the model ids it does list, and
    * how many more.
    */
   unlistedModel: {

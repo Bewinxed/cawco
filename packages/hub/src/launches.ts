@@ -1,10 +1,9 @@
 import { cleanStartRefusal } from "@cawco/core/harness";
+import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import {
-  type EffortLevel,
-  type HarnessKind,
   type PermissionMode,
   WIRE_PERMISSION_MODES,
-} from "@cawco/core/harness/kinds";
+} from "@cawco/core/harness/modes";
 import { forkNotice } from "@cawco/core/injected";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { MachinePathRefused } from "@cawco/core/machine-path";

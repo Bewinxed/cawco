@@ -66,6 +66,7 @@ import {
   SESSION_DIR_READ,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { descriptorOf } from "@cawco/core/harness/kinds";
 import {
   harnessesWith,
   type KeeperHarnessKind,
@@ -381,11 +382,11 @@ const heldBy = (
   session: HarnessSession,
   forMove: boolean
 ): { why: string; later?: true } | undefined => {
-  const held = session.holding?.(forMove);
+  const held = session.holding(forMove);
   if (held) {
     return { why: held };
   }
-  const later = forMove ? (session.heldForLater?.() ?? []) : [];
+  const later = forMove ? session.heldForLater() : [];
   return later.length > 0
     ? { why: waitingWords(later), later: true }
     : undefined;
@@ -656,7 +657,7 @@ export const resumableSessions = async (
   const found: { lastModified: number; sessionId: string }[] = [];
   let sawAny = false;
   for (const adapter of harnesses().filter(
-    (one) => (one.catalogFromServer === true) === (from === "server")
+    (one) => one.catalogFromServer === (from === "server")
   )) {
     try {
       for (const info of await adapter.listSessions()) {
@@ -737,7 +738,7 @@ export class SessionSupervisor {
     gaugeGroup("session", () => {
       const totals: Record<string, number> = {};
       for (const session of this.#live.sessions.values()) {
-        for (const [name, size] of Object.entries(session.tables?.() ?? {})) {
+        for (const [name, size] of Object.entries(session.tables())) {
           totals[name] = (totals[name] ?? 0) + size;
         }
       }
@@ -801,19 +802,22 @@ export class SessionSupervisor {
   });
   /**
    * The carry of sessions between account directories
-   * ({@link Harness.carrier}): its requests name Claude sessions (core
-   * `RegisterAckPayload.sessions`, {@link CONTROL_CARRY_SESSIONS}), so it is
-   * the Claude adapter's.
+   * ({@link Harness.carrier}): the adapter's whose sessions keep their data
+   * in an account's dir (its descriptor's `accountDir`), whose sessions its
+   * requests name (core `RegisterAckPayload.sessions`,
+   * {@link CONTROL_CARRY_SESSIONS}).
    */
-  readonly #carrier = harnessOf("claude")?.carrier?.({
-    adopting: (instanceId) => this.#adopting.has(instanceId),
-    awakeForMove: (instanceId, session) =>
-      this.#awakeForMove(instanceId, session),
-    drop: (instanceId, how) => this.#live.drop(instanceId, how),
-    endWork: (instanceId, why) => this.#endWork(instanceId, why),
-    queued: (instanceId) => this.#queues.has(instanceId),
-    running: (instanceId) => this.#live.sessions.get(instanceId),
-  });
+  readonly #carrier = harnesses()
+    .find((adapter) => descriptorOf(adapter.kind).accountDir)
+    ?.carrier({
+      adopting: (instanceId) => this.#adopting.has(instanceId),
+      awakeForMove: (instanceId, session) =>
+        this.#awakeForMove(instanceId, session),
+      drop: (instanceId, how) => this.#live.drop(instanceId, how),
+      endWork: (instanceId, why) => this.#endWork(instanceId, why),
+      queued: (instanceId) => this.#queues.has(instanceId),
+      running: (instanceId) => this.#live.sessions.get(instanceId),
+    });
 
   /** The carry of sessions between account directories ({@link CONTROL_CARRY_SESSIONS}). */
   get carrier(): SessionCarry {
@@ -1794,7 +1798,7 @@ export class SessionSupervisor {
         { reason: "workspace", ids: queued("workspace:") },
         { reason: "command", ids: queued("command:") },
       ],
-      ...harnesses().map((adapter) => adapter.restartHolds?.() ?? [])
+      ...harnesses().map((adapter) => adapter.restartHolds())
     );
   }
 
@@ -2182,7 +2186,7 @@ export class SessionSupervisor {
     const serverBusy = await serverBusyInstances();
     const now = Date.now();
     for (const [instanceId, session] of carried) {
-      const outdated = await session.outdated?.();
+      const outdated = await session.outdated();
       if (outdated) {
         this.#retire(instanceId, session, outdated);
         continue;
@@ -2806,7 +2810,7 @@ export class SessionSupervisor {
       // reattach launches nothing, and its folder is read already.
       const spill =
         place && !spec.reattachOnly
-          ? await adapter.spill?.(spec, workdir, place.id)
+          ? await adapter.spill(spec, workdir, place.id)
           : undefined;
       const holder: { session: HarnessSession | null } = { session: null };
       const { boundary, ctx } = await this.#sessionContext(
@@ -2832,7 +2836,7 @@ export class SessionSupervisor {
       this.#failures.delete(instanceId);
       this.#unsentFailures.delete(instanceId);
       const session = spec.reattachOnly
-        ? await adapter.reattach?.(spec, ctx)
+        ? await adapter.reattach(spec, ctx)
         : await adapter.spawn(spill?.spec ?? spec, ctx);
       if (!session) {
         this.#recoveryUnavailable(
@@ -2861,7 +2865,7 @@ export class SessionSupervisor {
           `boundary: relaunched ${instanceId} onto the fail-closed hook`
         );
       }
-      session.attached?.();
+      session.attached();
       if (payload.reattachOnly) {
         detach(
           this.#dateActivity(instanceId, adapter, session, workdir),
@@ -3435,7 +3439,7 @@ export class SessionSupervisor {
     const { session } = holder;
     session
       ?.interrupt()
-      .then(() => session.noteStopped?.(words))
+      .then(() => session.noteStopped(words))
       .catch((error: unknown) => {
         console.warn(
           `[agent] ${instanceId}: stopping its repeated failure failed: ${String(error)}`
@@ -3705,7 +3709,7 @@ export class SessionSupervisor {
       this.#dateActivity(spec.instanceId, adapter, session, spec.cwd),
       "dateActivity"
     );
-    session.attached?.();
+    session.attached();
     if (this.#live.turnRunning(spec.instanceId)) {
       this.#live.emitPulse(spec.instanceId, true);
     }
@@ -4244,7 +4248,7 @@ export class SessionSupervisor {
     holder: { session: HarnessSession | null }
   ): void {
     holder.session
-      ?.processId?.()
+      ?.processId()
       .then((pid) => {
         if (pid !== undefined) {
           this.#leftRunning.commandStarted(instanceId, pid);
@@ -4957,7 +4961,7 @@ export class SessionSupervisor {
   ): Promise<ControlResult<K>> {
     const named = kind ? [adapterFor(kind)] : [];
     const owner = [...named, ...harnesses()].find(
-      (adapter) => adapter.machineControls?.[method]
+      (adapter) => adapter.machineControls[method]
     );
     return runControl(owner?.machineControls ?? {}, method, args);
   }
@@ -5032,11 +5036,11 @@ export class SessionSupervisor {
    */
   #workInFlight(instanceId: string): WorkInFlight | null {
     const session = this.#live.sessions.get(instanceId);
-    const later = session?.heldForLater?.() ?? [];
+    const later = session?.heldForLater() ?? [];
     if (!session || later.length === 0) {
       return null;
     }
-    return { why: waitingWords(later), since: session.heldSince?.() ?? null };
+    return { why: waitingWords(later), since: session.heldSince() ?? null };
   }
 
   #session(instanceId: string): HarnessSession {

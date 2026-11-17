@@ -59,7 +59,7 @@ import {
   TRIAGE_DECISIONS,
   type TriageDecision,
 } from "@cawco/core/fleet-watch";
-import type { PermissionMode } from "@cawco/core/harness/kinds";
+import type { PermissionMode } from "@cawco/core/harness/modes";
 import { fleetWatchNudge } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
 import { isMachineSilence } from "@cawco/core/machine-names";

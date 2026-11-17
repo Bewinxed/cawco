@@ -8,10 +8,11 @@ import {
   type ProviderRefusal,
   providerErrorOf,
 } from "@cawco/core/accounts";
+import type { RestartHold } from "@cawco/core/binary-updates";
 import type { BrowserDoor } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import type { StartingSet } from "@cawco/core/delegate-types";
-import { inStartingSet, piToolsFor } from "@cawco/core/delegate-types";
+import { deniedToolsOn, inStartingSet } from "@cawco/core/delegate-types";
 import {
   CONTROL_REFRESH_CAWCO_TOOLS,
   EFFORT_READ,
@@ -19,6 +20,7 @@ import {
   SPENT_READ,
 } from "@cawco/core/harness";
 import { type EffortLevel, isEffortLevel } from "@cawco/core/harness/kinds";
+import { PI } from "@cawco/core/harness/pi";
 import type { HookEvent } from "@cawco/core/hooks";
 import { hookToolCall, hookToolInputBack } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
@@ -106,6 +108,7 @@ import type {
   SessionControls,
   TurnExtras,
 } from "../harness";
+import { cannot } from "../harness";
 import type { McpGate } from "../mcp-gate";
 import { placedMemoryIn } from "../placed-memory";
 import { acknowledgeSessionCredential } from "../session-identity";
@@ -1161,6 +1164,50 @@ const storedCost = (session: AgentSession): number => {
 const COMPACT_COMMAND = /^\/compact(?:\s+([\s\S]*))?$/u;
 
 class PiSession implements HarnessSession {
+  /** It runs inside its pi host, which the agent reaches through its own session (pi-sessiond.ts). */
+  attached(): void {
+    // The host's own session needs nothing at an attach.
+  }
+
+  readonly endedForMove = cannot(
+    "A pi session is never carried between accounts: it keeps no account dir."
+  );
+
+  /** It holds no work for later outside a turn: no background task and no one-time wake-up. */
+  heldForLater(): RestartHold[] {
+    return [];
+  }
+
+  /** Nothing it holds for later, so no start of it to say. */
+  heldSince(): number | undefined {
+    return undefined;
+  }
+
+  /** Nothing it holds in its own process beyond a turn the supervisor sees. */
+  holding(): string | undefined {
+    return undefined;
+  }
+
+  /** pi starts no turn of its own between sends, so it never loops into the supervisor's stop. */
+  noteStopped(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /** Its host is the machine's pi, checked against its floor as it starts. */
+  outdated(): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  /** It runs inside its host's process, which its remote session names (pi-sessiond.ts). */
+  processId(): Promise<number | undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  /** It keeps no table of its own that grows. */
+  tables(): Record<string, number> {
+    return {};
+  }
+
   readonly harness = "pi" as const;
   sessionId: string | null = null;
   readonly #ctx: HarnessContext;
@@ -2207,7 +2254,7 @@ export async function startPiHost(
   const model = spec.model
     ? await resolvePiModel(runtime, spec.model)
     : undefined;
-  const denied = piToolsFor(spec.denyTools ?? []).tools;
+  const denied = deniedToolsOn(PI.kind, spec.denyTools ?? []).tools;
   const { session } = await createAgentSession({
     cwd: ctx.cwd,
     agentDir,

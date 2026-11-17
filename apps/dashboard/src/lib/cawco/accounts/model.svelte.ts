@@ -15,7 +15,6 @@ import {
   type AccountSignin,
   accountNameAmong,
   CLAUDE_PROVIDER,
-  type HomeStore,
   LIMITED_PROVIDERS,
   type NameableAccount,
   type ProviderChoice,
@@ -24,7 +23,11 @@ import {
   type SigninState,
 } from "@cawco/core/accounts";
 import type { AccountHue, PlacementStrategy } from "@cawco/core/accounts/kinds";
-import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
+import {
+  HARNESSES,
+  type HarnessKind,
+  harnessName,
+} from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import { sinceWords } from "@cawco/core/words/account-lines";
 import { accountsWords as words } from "@cawco/core/words/accounts";
@@ -106,7 +109,7 @@ export const harnessWords = (provider: AccountProvider): string =>
   words.harnessList(
     HARNESSES.filter((harness) =>
       providerHarnesses(provider).includes(harness)
-    ).map((harness) => words.harnesses[harness])
+    ).map((harness) => harnessName(harness))
   );
 
 // ── Machines ────────────────────────────────────────────────────────────
@@ -291,9 +294,6 @@ export function problemOf(account: Account): string | null {
   return words.problem.missingOn(machineName(missing[0]), missing.length - 1);
 }
 
-/** A store a login moved from, by the harness that kept it. */
-const STORE_WORDS: Record<HomeStore, string> = words.harnesses;
-
 /**
  * A machine's own login moved into CawCo: the account it went into, the
  * store and machine it came from and when, and whether a machine that runs
@@ -344,7 +344,7 @@ export function movedLogins(seen: ReadonlySet<string>): MovedLogin[] {
         {
           account,
           at: signin.movedAt,
-          from: `from ${STORE_WORDS[signin.movedFrom]} on ${machineLabel(from.hostname)}`,
+          from: `from ${harnessName(signin.movedFrom)} on ${machineLabel(from.hostname)}`,
           id,
           missing: machinesFor(account.provider).filter(
             (machine) =>

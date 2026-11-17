@@ -1,12 +1,15 @@
 <script lang="ts">
-  import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
+  import {
+    descriptorOf,
+    HARNESSES,
+    type HarnessKind,
+  } from "@cawco/core/harness/kinds";
   import { modelRun } from "@cawco/core/model-names";
   /**
    * Model (§1.6, §2.9): harness tabs, one search/custom-id field, the model
    * list with the slide-swap on harness change. Codex is shown but disabled
    * ("Coming soon"); the list is the app's catalogue, canonical names only.
    */
-  import { accountsWords } from "@cawco/core/words/accounts";
   import { limitPickWords } from "@cawco/core/words/limit-picks";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { untrack } from "svelte";
@@ -101,11 +104,17 @@
   /** The list's one tooltip, gliding row to row (glide.ts), as a bar's glass has one. */
   const tips = provideGlide();
   type TabId = HarnessKind | "codex";
+  // Codex's coming tab stands second, after the harness every machine runs.
+  const [firstTab, ...laterTabs] = HARNESSES.map(
+    (id): { id: TabId; name: string; soon?: boolean } => ({
+      id,
+      name: descriptorOf(id).words.name,
+    })
+  );
   const TABS: { id: TabId; name: string; soon?: boolean }[] = [
-    { id: "claude", name: accountsWords.harnesses.claude },
+    ...(firstTab ? [firstTab] : []),
     { id: "codex", name: "Codex", soon: true },
-    { id: "opencode", name: accountsWords.harnesses.opencode },
-    { id: "pi", name: accountsWords.harnesses.pi },
+    ...laterTabs,
   ];
   const VENDOR: Record<string, string> = {
     anthropic: "Anthropic",

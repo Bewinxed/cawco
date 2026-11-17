@@ -3,23 +3,28 @@
  * (USAGE-SPEC.md §4.1). Pure types only; no runtime imports.
  */
 
-import { everyOf } from "../every-of";
-import type { HarnessKind } from "../harness/kinds";
+import {
+  descriptorOf,
+  HARNESSES,
+  type HarnessKind,
+  type PluginOf,
+} from "../harness/kinds";
 import { HOUR_MS } from "../time";
 
-/** Whether CawCo scans each harness's usage and limits (agent usage/scanner.ts): Claude Code's and OpenCode's; pi's not yet. */
-interface UsageScanned {
-  claude: true;
-  opencode: true;
-  pi: false;
-}
-/** The harnesses whose usage CawCo scans ({@link UsageScanned}). */
+/** The harnesses whose usage CawCo scans (agent usage/scanner.ts): those whose descriptor's `usage` says `scanned`. */
 export type UsageHarness = {
-  [K in HarnessKind]: UsageScanned[K] extends true ? K : never;
+  [K in HarnessKind]: PluginOf<K>["usage"] extends { scanned: true }
+    ? K
+    : never;
 }[HarnessKind];
 
-/** Every {@link UsageHarness}. */
-export const USAGE_HARNESSES = everyOf<UsageHarness>()(["claude", "opencode"]);
+/** Whether CawCo scans `kind`'s usage. */
+const isUsageHarness = (kind: HarnessKind): kind is UsageHarness =>
+  descriptorOf(kind).usage.scanned;
+
+/** Every {@link UsageHarness}, in `HARNESSES` order. */
+export const USAGE_HARNESSES: readonly UsageHarness[] =
+  HARNESSES.filter(isUsageHarness);
 
 export interface UsageTokens {
   cacheCreation: number; // Claude: see cacheCreationCount() rule in tokens.ts

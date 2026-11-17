@@ -3,7 +3,7 @@
  * it), and as the words that show it (presenters/project.ts) read it.
  */
 
-import type { OfferedMode } from "@cawco/core/harness/kinds";
+import type { OfferedMode } from "@cawco/core/harness/modes";
 import type { GitHubCursors } from "./db/ingress";
 import type { InboundVia } from "./db/stored-types";
 

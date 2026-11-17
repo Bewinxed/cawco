@@ -29,7 +29,8 @@ import {
   identityOf,
   sameIdentity,
 } from "@cawco/core/accounts";
-import { isEffortLevel, PERMISSION_MODES } from "@cawco/core/harness/kinds";
+import { isEffortLevel } from "@cawco/core/harness/kinds";
+import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { isRecord } from "@cawco/core/is-record";
 import {
   accountClaudeJson,

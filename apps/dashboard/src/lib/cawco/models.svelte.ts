@@ -7,8 +7,8 @@
  * why ({@link models}`.unread`).
  */
 
-import { HARNESS_TOOL } from "@cawco/core/harness";
 import {
+  descriptorOf,
   type HarnessKind,
   harnessNamed,
   isEffortLevel,
@@ -175,7 +175,7 @@ function unread(harness: string, machineIds?: string[]): string | null {
               ? harnessRefusal(
                   report,
                   machineLabel(machine.hostname),
-                  machine.tools?.[HARNESS_TOOL[kind]]
+                  machine.tools?.[descriptorOf(kind).tool]
                 )
               : undefined;
           if (refused) {

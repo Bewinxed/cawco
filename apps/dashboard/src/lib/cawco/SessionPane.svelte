@@ -1,7 +1,7 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
-  import { HARNESS_TOOL } from "@cawco/core/harness";
   import type { HarnessKind } from "@cawco/core/harness/kinds";
+  import { descriptorOf } from "@cawco/core/harness/kinds";
   import { harnessSpec } from "@cawco/core/harness-refusal";
   import { questionsOf } from "@cawco/core/question";
   import type { PermissionResult } from "@cawco/core/session-messages";
@@ -949,7 +949,7 @@
     }
     return boardStore.machines.find(
       (one) => one.machineId === waitsOn.machineId
-    )?.tools?.[HARNESS_TOOL[waitsOn.harness]];
+    )?.tools?.[descriptorOf(waitsOn.harness).tool];
   });
   /** The harness CLI the conversation is read through, by its name. */
   const harnessName = $derived.by(() => {

@@ -26,25 +26,17 @@ import {
   ASK_ORIGIN,
   type HarnessKind,
   type ModelInfo,
+  PLAN_ORIGIN,
+} from "./harness/kinds";
+import {
   type OfferedMode,
   PERMISSION_MODES,
   type PermissionMode,
-  PLAN_ORIGIN,
   permissionModeNamed,
-} from "./harness/kinds";
+} from "./harness/modes";
 import { traitsOf } from "./harness/traits";
 import type { AuthState, LeakFound, NeutralOrigin } from "./session-messages";
 import { harnessWords } from "./words/harness";
-
-/**
- * Each harness's CLI, by its tool catalog id (core tools.ts `TOOL_CATALOG`):
- * what installing or updating the harness puts on a machine.
- */
-export const HARNESS_TOOL: Record<HarnessKind, string> = {
-  claude: "claude",
-  opencode: "opencode",
-  pi: "pi",
-};
 
 /**
  * How long one part of a machine's report may take before the agent gives
@@ -583,7 +575,7 @@ export interface HarnessReport {
    * claude-version.ts `claudeToStart`; OpenCode's and pi's tools.ts
    * `toolGate`. Absent when it runs. Where the dashboard puts the refusal in
    * place of what it blocks, with the catalog's install of the harness's
-   * tool ({@link HARNESS_TOOL}) as its one press (`HarnessBlock`).
+   * tool (its descriptor's `tool`) as its one press (`HarnessBlock`).
    */
   refused?: "not-installed" | "version";
   /**

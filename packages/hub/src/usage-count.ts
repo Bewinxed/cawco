@@ -1,10 +1,12 @@
 import { existsSync, statSync } from "node:fs";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { CallNaming } from "@cawco/core/harness/descriptor";
+import { descriptorOf, type HarnessKind } from "@cawco/core/harness/kinds";
 import { isRecord } from "@cawco/core/is-record";
 import { listClaudeFiles } from "@cawco/core/paths/claude";
 import type { NeutralMessage } from "@cawco/core/session-messages";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import type { DbShape } from "./db";
 import type { CapabilityCallsIn } from "./db/capability-calls";
 
@@ -17,7 +19,7 @@ import type { CapabilityCallsIn } from "./db/capability-calls";
  *
  * - A `tool_use` counts one `tool` call of its name.
  * - An MCP server's tool also counts one `mcp` call of the server
- *   ({@link CALL_NAMING}): Claude Code and pi name it `mcp__<server>__<tool>`,
+ *   (each descriptor's `callNaming`): Claude Code and pi name it `mcp__<server>__<tool>`,
  *   OpenCode `<server>_<tool>`.
  * - A skill counts a `skill` call instead of a tool call: Claude Code's
  *   `Skill` tool (`input.skill`), OpenCode's `skill` tool (`input.name`),
@@ -83,28 +85,22 @@ const commandSkill = (
   return command && known.has(command) ? command : undefined;
 };
 
-/** How one harness's calls name the server that answered them and the skill they load. */
-interface CallNaming {
-  /**
-   * The MCP server a tool's name says answered it, as {@link mcpUsageName}
-   * keeps it; undefined for a tool of no server. `known` is the servers'
-   * usage names.
-   */
-  server: (tool: string, known: readonly string[]) => string | undefined;
-  /** A skill loaded by a call other than the `Skill` and `skill` tools. */
-  skillCall?: (
-    tool: string,
-    input: Record<string, unknown>
-  ) => string | undefined;
-  /** The skill a user turn's words load. */
-  turnSkill: (words: string, known: Set<string>) => string | undefined;
-}
-
-const CALL_NAMING: Record<HarnessKind, CallNaming> = {
-  claude: { server: prefixedServer, turnSkill: commandSkill },
-  // OpenCode's `<server>_<tool>`, read by the longest known server it starts with.
-  opencode: {
-    server: (tool, known) => {
+/**
+ * The MCP server a tool's name says answered it, as {@link mcpUsageName}
+ * keeps it, by how the harness names one (its descriptor's
+ * `callNaming.server`); undefined for a tool of no server. `known` is the
+ * servers' usage names.
+ */
+const serverOf = (
+  naming: CallNaming["server"],
+  tool: string,
+  known: readonly string[]
+): string | undefined => {
+  switch (naming) {
+    case "mcp-prefix":
+      return prefixedServer(tool);
+    // `<server>_<tool>`, read by the longest known server it starts with.
+    case "longest-known": {
       let found: string | undefined;
       for (const server of known) {
         if (
@@ -115,25 +111,37 @@ const CALL_NAMING: Record<HarnessKind, CallNaming> = {
         }
       }
       return found;
-    },
-    turnSkill: commandSkill,
-  },
-  // pi's prefix lost each `-`, so it is given back the name of the server it
-  // stands for; a skill is loaded by reading its SKILL.md, and a turn names
-  // one as an expanded `/skill:x`.
-  pi: {
-    server: (tool, known) => {
+    }
+    // The prefix lost each `-`, so it is given back the name of the server
+    // it stands for.
+    case "mcp-prefix-safe": {
       const server = prefixedServer(tool);
       return server === undefined
         ? undefined
         : (known.find((name) => piForm(name) === server) ?? server);
-    },
-    skillCall: (tool, input) =>
-      tool === "read" && typeof input.path === "string"
+    }
+    default:
+      return unhandled("call naming", naming);
+  }
+};
+
+/** A skill loaded by a call other than the `Skill` and `skill` tools, by how the harness loads one (its descriptor's `callNaming.skillCall`). */
+const skillCallOf = (
+  naming: CallNaming["skillCall"],
+  tool: string,
+  input: Record<string, unknown>
+): string | undefined => {
+  switch (naming) {
+    // A read of the skill's SKILL.md.
+    case "read-skill-file":
+      return tool === "read" && typeof input.path === "string"
         ? SKILL_FILE.exec(input.path)?.[1]
-        : undefined,
-    turnSkill: (words) => PI_SKILL.exec(words)?.[1],
-  },
+        : undefined;
+    case "none":
+      return undefined;
+    default:
+      return unhandled("skill call", naming);
+  }
 };
 
 /** The skill a call loads, if it is one: by each harness's way of loading one. */
@@ -148,7 +156,7 @@ const skillOf = (
   if (tool === "skill" && typeof input.name === "string") {
     return input.name;
   }
-  return CALL_NAMING[harness].skillCall?.(tool, input);
+  return skillCallOf(descriptorOf(harness).callNaming.skillCall, tool, input);
 };
 
 /** How a session's calls are read: its harness, and the servers it may name. */
@@ -181,7 +189,8 @@ function usesInBlocks(blocks: unknown, reading: Reading): CapabilityUse[] {
       continue;
     }
     uses.push({ kind: "tool", name: block.name });
-    const server = CALL_NAMING[reading.harness].server(
+    const server = serverOf(
+      descriptorOf(reading.harness).callNaming.server,
       block.name,
       reading.servers
     );
@@ -212,7 +221,17 @@ function turnSkill(
   known: Set<string>,
   harness: HarnessKind
 ): string | undefined {
-  return CALL_NAMING[harness].turnSkill(wordsOf(content), known);
+  const words = wordsOf(content);
+  const naming = descriptorOf(harness).callNaming.turnSkill;
+  switch (naming) {
+    case "command-name":
+      return commandSkill(words, known);
+    // An expanded `/skill:x`.
+    case "skill-tag":
+      return PI_SKILL.exec(words)?.[1];
+    default:
+      return unhandled("turn skill", naming);
+  }
 }
 
 /** Folds one session's uses into its per-day rows, ready for `capabilityCalls.add`. */

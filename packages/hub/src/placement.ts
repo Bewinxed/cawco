@@ -16,7 +16,7 @@ import {
 } from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { SettingsInEffect } from "@cawco/core/areas";
-import { harnessNamed } from "@cawco/core/harness/kinds";
+import { harnessLabel } from "@cawco/core/harness/kinds";
 import { HOUR_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {
@@ -146,12 +146,6 @@ export type Placement =
 export const noAccountRefusal = (machine: string): string =>
   `No Claude account is signed in on ${machine}. Add one in ${configurePage("accounts")} and sign it in there.`;
 
-/** A harness as a sentence names it (core words/accounts.ts `harnesses`), or the value as given when it names none. */
-const harnessName = (harness: string): string => {
-  const kind = harnessNamed(harness);
-  return kind ? accountsWords.harnesses[kind] : harness;
-};
-
 /**
  * Why a session can't start on a machine that has not reported its harness
  * yet. A machine's agent registers before it reads its harnesses, whose CLIs
@@ -163,7 +157,7 @@ export const unreportedHarnessRefusal = (
   machine: string,
   harness: string
 ): string =>
-  `${machine} hasn't said yet whether it can run ${harnessName(harness)}: its agent is still checking. Start the session again in a moment. Nothing was started.`;
+  `${machine} hasn't said yet whether it can run ${harnessLabel(harness)}: its agent is still checking. Start the session again in a moment. Nothing was started.`;
 
 const pct = (value: number): string => `${Math.round(value)}%`;
 

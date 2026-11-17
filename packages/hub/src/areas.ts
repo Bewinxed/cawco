@@ -30,7 +30,7 @@ import {
   type OnCap,
   type SettingSource,
 } from "@cawco/core/areas";
-import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/kinds";
+import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { type AreaSettingName, areaWords } from "@cawco/core/words/areas";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";

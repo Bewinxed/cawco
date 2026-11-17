@@ -107,8 +107,8 @@
     EFFORT_LEVELS,
     isEffortLevel,
     type ModelInfo,
-    PERMISSION_MODES,
   } from "@cawco/core/harness/kinds";
+  import { PERMISSION_MODES } from "@cawco/core/harness/modes";
   import type { InstanceRow } from "@cawco/core/protocol";
   import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
   import type { ClaudeLimits, LimitWindow } from "@cawco/core/usage/types";

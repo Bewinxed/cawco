@@ -18,7 +18,7 @@
 
 import { readFile, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { descriptorOf } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { projectSlug, sessionConfigDir } from "@cawco/core/paths/claude";
 import {
@@ -54,13 +54,6 @@ const FirstSessionSchema = z.object({
 });
 type FirstSession = z.infer<typeof FirstSessionSchema>;
 
-/** The harnesses whose sessions keep a spill folder. */
-const SPILLING: Record<HarnessKind, boolean> = {
-  claude: true,
-  opencode: true,
-  pi: true,
-};
-
 /** A CawCo instance id as one path component, as the workspace's policy reads a spill folder's (core workspace-policy.ts). */
 const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 
@@ -79,7 +72,7 @@ export const firstSessionOf = (
 ): WorkspaceFirstSession | null => {
   if (!(
     given &&
-    SPILLING[given.harness] &&
+    descriptorOf(given.harness).spills &&
     INSTANCE_ID.test(given.instanceId)
   )) {
     return null;

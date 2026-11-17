@@ -68,7 +68,7 @@ import {
   refOfUrl,
   type TaskLinkSummary,
 } from "@cawco/core/external-items";
-import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
+import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { todoProgress } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";

@@ -955,8 +955,9 @@ const run = async (argv: string[]): Promise<number> => {
     case "pi-mcp-list":
       return runPiEntry(args.command);
     case "capabilities": {
-      const { probeCapabilities } = await import("@cawco/agent/capabilities");
-      console.log(JSON.stringify(await probeCapabilities(), null, 2));
+      const { probeMachineCapabilities } =
+        await import("@cawco/agent/machine-capabilities");
+      console.log(JSON.stringify(await probeMachineCapabilities(), null, 2));
       return 0;
     }
     case "browser":

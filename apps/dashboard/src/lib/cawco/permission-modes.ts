@@ -12,13 +12,14 @@
  * offered; a session that reports one is named by it.
  */
 import type { HarnessReport } from "@cawco/core/harness";
+import type { FullSendCopy } from "@cawco/core/harness/descriptor";
+import { descriptorOf, type HarnessKind } from "@cawco/core/harness/kinds";
 import {
-  type HarnessKind,
   type OfferedMode,
   PERMISSION_MODES,
   type PermissionMode,
   permissionModeNamed,
-} from "@cawco/core/harness/kinds";
+} from "@cawco/core/harness/modes";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { speakerName } from "./transcript/speaker";
 
@@ -42,33 +43,14 @@ const ORDER = [...PERMISSION_MODES].sort((a, b) => RANK[a] - RANK[b]);
 const LABELS: Record<OfferedMode, string> = spawnWords.modes;
 
 /**
- * What each mode does on each harness that has modes, in a line the picker's
- * row holds whole. Claude Code's `default` runs reads and what your allow
- * rules cover without asking; its Bypass still stops for the CLI's own safety
- * checks. OpenCode's own permission settings decide what it asks about; its
- * Bypass already allows every one of them. On both, Bypass still asks you
- * before CawCo's fleet changes; Full Send approves everything but questions.
+ * What each mode does on `harness`, in a line the picker's row holds whole
+ * (its descriptor's `words.modes`); none for a harness with no modes.
  */
-const DESCRIPTIONS: Record<
-  HarnessKind,
-  Record<OfferedMode, string> | undefined
-> = {
-  claude: {
-    default: "Reads and allow-listed tools run; others ask.",
-    plan: "Read-only until you approve a plan.",
-    acceptEdits: "File edits run without asking.",
-    bypassPermissions: "Tools run unasked; safety checks still ask.",
-    fullSend: "Everything is approved; only questions ask.",
-  },
-  opencode: {
-    default: "OpenCode's permission asks come to you.",
-    plan: "Runs OpenCode's plan agent.",
-    acceptEdits: "Edit asks are allowed; the rest come to you.",
-    bypassPermissions: "Every permission ask is allowed.",
-    fullSend: "Bypass, and fleet changes are approved too.",
-  },
-  // pi has no permission modes (agent pi-services.ts `capabilities`).
-  pi: undefined,
+const modeWordsOf = (
+  harness: HarnessKind
+): Readonly<Record<OfferedMode, string>> | undefined => {
+  const { modes } = descriptorOf(harness).words;
+  return "lacks" in modes ? undefined : modes;
 };
 
 /** What a mode is called, including one a harness named but the product does not offer. */
@@ -83,14 +65,14 @@ export function permissionModeDescription(
   harness: HarnessKind | undefined
 ): string {
   const offered = permissionModeNamed(mode);
-  return (harness && offered && DESCRIPTIONS[harness]?.[offered]) || "";
+  return (harness && offered && modeWordsOf(harness)?.[offered]) || "";
 }
 
 /** The modes a person picks between on `harness`, each described for it. */
 export function permissionModesFor(
   harness: HarnessKind
 ): PermissionModeOption[] {
-  const described = DESCRIPTIONS[harness];
+  const described = modeWordsOf(harness);
   return described
     ? ORDER.map((value) => ({
         value,
@@ -139,58 +121,13 @@ export function modeRefusal(
     : `${machine}'s ${speakerName(harness)} doesn't take ${permissionModeLabel(mode)}. Pick a mode it takes.`;
 }
 
-/** What a person reads before Full Send applies, and while it stands chosen. */
-export interface FullSendCopy {
-  /**
-   * The confirmation's two sentences: what it approves, and what still
-   * reaches the person. It stands inside the mode picker and fits there
-   * unscrolled at a phone's 390 px.
-   */
-  confirm: string[];
-  /** Said under the confirmation when switching restarts a running session. */
-  restarts: string;
-  /** The New Session form's standing warning while Full Send is chosen. */
-  warning: string;
-}
-
-/** What still reaches the person in Full Send, on every harness. */
-const STILL_ASKS = "Questions still reach you; denied tools never run.";
-
-/** Said when switching into Full Send starts a running session again. */
-const RESTARTS =
-  "Switching restarts this session in place; its conversation carries over.";
-
-/**
- * Full Send's words, for the harnesses it is offered on: it approves every
- * ask that is an approval (the owner, 2026-10-22: "FULL SEND LITERALLY MEANS
- * FULL SEND"), CawCo's own admin writes included (hub asks.ts). The
- * safety checks are the ones Claude Code still raises in its bypass mode.
- */
-const FULL_SEND: Record<HarnessKind, FullSendCopy | undefined> = {
-  claude: {
-    confirm: [
-      "Approves without asking: safety checks, plan approval, your ask rules, and fleet changes like memory, skills, hooks and MCP servers.",
-      STILL_ASKS,
-    ],
-    restarts: RESTARTS,
-    warning:
-      "Safety checks, plan approval, your ask rules and fleet changes run without asking you. Pick Bypass to have them ask again.",
-  },
-  opencode: {
-    confirm: [
-      "Approves without asking, fleet changes like memory, skills, hooks and MCP servers included.",
-      STILL_ASKS,
-    ],
-    restarts: RESTARTS,
-    warning:
-      "Fleet changes run without asking you. Pick Bypass to have them ask again.",
-  },
-  pi: undefined,
-};
-
 /** Full Send's words for `harness`; null where it is not offered. */
 export function fullSendCopy(
   harness: HarnessKind | undefined
 ): FullSendCopy | null {
-  return (harness && FULL_SEND[harness]) || null;
+  if (!harness) {
+    return null;
+  }
+  const copy = descriptorOf(harness).words.fullSend;
+  return "lacks" in copy ? null : copy;
 }
