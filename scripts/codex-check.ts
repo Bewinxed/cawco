@@ -17,8 +17,11 @@
  *   `reopen`).
  * - boundary: a workspace's tools run in the execution environment the
  *   adapter names (`workspaceEnvironment`), its executor stood in for by
- *   bwrap: writes outside the clone fail at the file system, inside they
- *   land (C-a2). It needs namespaces; `--without-boundary` skips it, said.
+ *   bwrap: the shell's and apply_patch's writes outside the clone fail at the
+ *   file system, inside they land (C-a2); the Codex home, where the sign-in
+ *   lives, is out of sight of the shell and of view_image, which still reads
+ *   a picture in the clone (C-v); a subagent's shell and edits are held the
+ *   same (C-j). It needs namespaces; `--without-boundary` skips it, said.
  *
  * Exits non-zero when any scenario fails.
  */
@@ -105,8 +108,44 @@ const execCall = (id: string, js: string) => ({
 const tool = (call: string) =>
   `try { const r = await tools.${call}; text("RESULT " + JSON.stringify(r)); } catch (e) { text("ERROR " + String(e)); }`;
 
+const sh = (cmd: string) =>
+  tool(`exec_command(${JSON.stringify({ cmd, yield_time_ms: 5000 })})`);
+const addFile = (path: string) =>
+  tool(
+    `apply_patch(${JSON.stringify(`*** Begin Patch\n*** Add File: ${path}\n+x\n*** End Patch\n`)})`
+  );
+/** view_image of `path`, and `mark` written in the clone only once it was read. */
+const viewThenMark = (path: string, mark: string) =>
+  `try { await tools.view_image(${JSON.stringify({ path })}); await tools.exec_command(${JSON.stringify({ cmd: `echo seen > ${mark}`, yield_time_ms: 5000 })}); text("SEEN"); } catch (e) { text("ERROR " + String(e)); }`;
+
 const clone = join(scratch, "clone");
 const outside = join(scratch, "outside");
+const ACCOUNT = "check-account";
+/** The account's Codex home, where its sign-in lives (codex-home.ts `codexAccountHome`). */
+const accountHome = join(
+  process.env.HOME ?? "",
+  ".cawco/accounts",
+  ACCOUNT,
+  "codex"
+);
+const HOME_DECOY = "CODEX-HOME-DECOY";
+/** An 8×8 PNG, for view_image. */
+const PICTURE = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC",
+  "base64"
+);
+/** Each step of the boundary scenario's turn, keyed by the step before it. */
+const boundaryChain: [string, string][] = [
+  [
+    "b_1",
+    sh(
+      `echo a > ${outside}/shell.txt; echo b > inside.txt; cat ${accountHome}/decoy.txt > home-read.txt 2>&1`
+    ),
+  ],
+  ["b_2", addFile(`${outside}/patch.txt`)],
+  ["b_3", viewThenMark(join(accountHome, "decoy.png"), "view-home.txt")],
+  ["b_4", viewThenMark(join(clone, "picture.png"), "view-clone.txt")],
+];
 const fixtures = {
   fixtures: [
     { match: { userMessage: "CHECK-HELLO" }, response: { content: "hello" } },
@@ -127,25 +166,61 @@ const fixtures = {
       ),
     },
     { match: { toolCallId: "perm_2" }, response: { content: "PERM-DONE" } },
+    ...boundaryChain.map(([id, js], at) => ({
+      match:
+        at === 0
+          ? { userMessage: "CHECK-BOUNDARY", hasToolResult: false }
+          : { toolCallId: boundaryChain[at - 1]?.[0] },
+      response: execCall(id, js),
+    })),
     {
-      match: { userMessage: "CHECK-BOUNDARY", hasToolResult: false },
+      match: { toolCallId: boundaryChain.at(-1)?.[0] },
+      response: {
+        toolCalls: [
+          {
+            name: "spawn_agent",
+            namespace: "collaboration",
+            id: "b_spawn",
+            arguments: JSON.stringify({
+              task_name: "check_sub",
+              message: "CHECK-SUBAGENT",
+              fork_turns: "none",
+            }),
+          },
+        ],
+      },
+    },
+    {
+      match: { toolCallId: "b_spawn" },
+      response: {
+        toolCalls: [
+          {
+            name: "wait_agent",
+            namespace: "collaboration",
+            id: "b_wait",
+            arguments: JSON.stringify({ timeout_ms: 30_000 }),
+          },
+        ],
+      },
+    },
+    { match: { toolCallId: "b_wait" }, response: { content: "BOUNDARY-DONE" } },
+    // The subagent's first request, told by the system message Codex gives
+    // a subagent: its own user message is not the last one aimock reads.
+    {
+      match: {
+        systemMessage: "You are an agent in a team of agents",
+        hasToolResult: false,
+      },
       response: execCall(
-        "b_1",
-        tool(
-          `exec_command({"cmd":"echo a > ${outside}/shell.txt; echo b > inside.txt","yield_time_ms":5000})`
-        )
+        "sub_1",
+        sh(`echo s > ${outside}/sub-shell.txt; echo s > sub-inside.txt`)
       ),
     },
     {
-      match: { toolCallId: "b_1" },
-      response: execCall(
-        "b_2",
-        tool(
-          `apply_patch("*** Begin Patch\\n*** Add File: ${outside}/patch.txt\\n+c\\n*** End Patch\\n")`
-        )
-      ),
+      match: { toolCallId: "sub_1" },
+      response: execCall("sub_2", addFile(`${outside}/sub-patch.txt`)),
     },
-    { match: { toolCallId: "b_2" }, response: { content: "BOUNDARY-DONE" } },
+    { match: { toolCallId: "sub_2" }, response: { content: "SUB-DONE" } },
     { match: {}, response: { content: "CATCH-ALL" } },
   ],
 };
@@ -180,7 +255,6 @@ await Bun.sleep(1500);
 const home = await import("../packages/agent/src/harnesses/codex-home");
 const rpc = await import("../packages/agent/src/harnesses/codex-rpc");
 
-const ACCOUNT = "check-account";
 /** The scripted model as the account home's provider. */
 const pointAtMock = (homeDir: string): void => {
   const path = join(homeDir, "config.toml");
@@ -393,12 +467,6 @@ await scenario("boundary", async () => {
   if (WITHOUT_BOUNDARY) {
     return "skipped (--without-boundary)";
   }
-  const accountHome = join(
-    process.env.HOME ?? "",
-    ".cawco/accounts",
-    ACCOUNT,
-    "codex"
-  );
   // The workspace executor's `exec --claude COMMAND`, stood in for by bwrap:
   // the clone writable, the rest read-only, the account's home out of sight.
   const exec = join(scratch, "exec");
@@ -412,10 +480,20 @@ await scenario("boundary", async () => {
     untrust: [clone],
     environments: [environment],
   });
+  // What a tool would read in the home if it could see it, and a picture
+  // in the clone that view_image reads through the environment.
+  writeFileSync(join(accountHome, "decoy.txt"), `${HOME_DECOY}\n`);
+  writeFileSync(join(accountHome, "decoy.png"), PICTURE);
+  writeFileSync(join(clone, "picture.png"), PICTURE);
   const held = holdAppServer(home.codexEnv(ACCOUNT));
   const turn = turnEnds();
+  let threadId = "";
   const peer = held.client({
-    notification: (m) => m.method === "turn/completed" && turn.ended(),
+    // The parent's turn: the subagent's thread ends its own turn first.
+    notification: (m) =>
+      m.method === "turn/completed" &&
+      m.params.threadId === threadId &&
+      turn.ended(),
     request: (m) => {
       peer.refuse(m.id, "check").catch(() => undefined);
     },
@@ -427,22 +505,38 @@ await scenario("boundary", async () => {
     sandbox: "danger-full-access",
     environments: [{ environmentId: environment.id, cwd: clone }],
   });
+  threadId = thread.id;
   await peer.request("turn/start", {
     threadId: thread.id,
     input: [{ type: "text", text: "CHECK-BOUNDARY", text_elements: [] }],
   });
   await turn.done;
   held.end();
-  const escaped = ["shell.txt", "patch.txt"].filter((name) =>
-    existsSync(join(outside, name))
-  );
+  const escaped = [
+    "shell.txt",
+    "patch.txt",
+    "sub-shell.txt",
+    "sub-patch.txt",
+  ].filter((name) => existsSync(join(outside, name)));
   if (escaped.length > 0) {
     throw new Error(`written outside the clone: ${escaped.join(", ")}`);
   }
-  if (!existsSync(join(clone, "inside.txt"))) {
-    throw new Error("the command inside the environment did not run");
+  const missing = ["inside.txt", "view-clone.txt", "sub-inside.txt"].filter(
+    (name) => !existsSync(join(clone, name))
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `what should have run inside the environment left nothing: ${missing.join(", ")}`
+    );
   }
-  return "nothing written outside the clone; the write inside landed";
+  const homeRead = readFileSync(join(clone, "home-read.txt"), "utf8");
+  if (homeRead.includes(HOME_DECOY)) {
+    throw new Error("the shell read a file in the Codex home");
+  }
+  if (existsSync(join(clone, "view-home.txt"))) {
+    throw new Error("view_image read a picture in the Codex home");
+  }
+  return "nothing written outside the clone by the thread or its subagent; the writes inside landed; the Codex home was out of sight of the shell and view_image, which read the clone's picture";
 });
 
 mock.kill();
