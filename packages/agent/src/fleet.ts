@@ -327,6 +327,12 @@ interface ManagedHook {
   note?: string;
   /** A project's copy, handed to its sessions through the harness set. */
   placed?: true;
+  /**
+   * The failed state of the newer version this machine refused, while this
+   * one keeps running ({@link SettledHooks.kept}): what a status reports for
+   * it until a version installs.
+   */
+  refused?: FleetItemState;
   scope: FleetScope;
   /** The script cawco wrote for it, in {@link HOOKS_DIR}. */
   script?: string;
@@ -2939,6 +2945,12 @@ interface SettledHooks {
    * version is not here: nothing is installed for it.
    */
   kept: Record<string, ManagedHook>;
+  /**
+   * The script each hook's path held before this pass wrote the new one
+   * over it, by id: what {@link syncHooks} puts back when the user settings
+   * cannot take the new version, so the version before keeps running.
+   */
+  replaced: Map<string, string>;
   scriptPaths: Map<string, string>;
   settled: FleetHook[];
   /**
@@ -2950,19 +2962,48 @@ interface SettledHooks {
   unregistered: Record<string, ManagedHook>;
 }
 
+/** A failed item state. */
+type FailedState = Extract<FleetItemState, { state: "failed" }>;
+
+/**
+ * A hook update this machine could not install, against the record of the
+ * version installed before it: that record kept, marked with the update's
+ * failure ({@link ManagedHook.refused}), and the report that says the
+ * update failed and the version before runs on. Without a version before,
+ * the failure as it is, and nothing kept.
+ */
+const refusedUpdate = (
+  before: ManagedHook | undefined,
+  failed: FailedState
+): { kept?: ManagedHook; state: FailedState } => {
+  if (!before) {
+    return { state: failed };
+  }
+  const state: FailedState = {
+    ...failed,
+    detail: hookUpdateKept(failed.detail ?? failed.cause),
+  };
+  return { kept: { ...before, refused: state }, state };
+};
+
 /**
  * Each enabled hook of `desired` checked and its script written, the one
  * step every hook takes before it is handed to sessions: one that fails a
  * check, or whose script does not parse, is reported and keeps the record
  * it had; one whose script was edited on this machine stays drifted, not
- * overwritten unless `force`. The hooks dir is made first: a workspace's
- * boundary binds it read only as it starts (core `fleetSyncedPaths`), and a
- * dir that comes later is not in a boundary already running.
+ * overwritten unless `force`. `fleetWideRefused`: why the user settings
+ * cannot take a fleet-wide hook this pass (a file there that could not be
+ * read); each fleet-wide hook is then refused before its script is written,
+ * since its script's path is the one its registration there runs. The hooks
+ * dir is made first: a workspace's boundary binds it read only as it starts
+ * (core `fleetSyncedPaths`), and a dir that comes later is not in a
+ * boundary already running.
  */
 const settleHooks = async (
   desired: readonly FleetHook[],
   managed: Record<string, ManagedHook>,
-  report: Record<string, FleetItemState>
+  report: Record<string, FleetItemState>,
+  fleetWideRefused?: string
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: checks every enabled hook, then writes each one's script by its drift plan and parse check
 ): Promise<SettledHooks> => {
   await makeFolder(HOOKS_DIR);
@@ -2975,20 +3016,12 @@ const settleHooks = async (
   // installed before it, if any, kept running ({@link SettledHooks.kept}).
   const kept: Record<string, ManagedHook> = {};
   const unregistered: Record<string, ManagedHook> = {};
-  const refuse = (
-    id: string,
-    failed: Extract<FleetItemState, { state: "failed" }>
-  ): void => {
-    const before = managed[id];
-    if (!before) {
-      report[id] = failed;
-      return;
+  const refuse = (id: string, failed: FailedState): void => {
+    const refused = refusedUpdate(managed[id], failed);
+    if (refused.kept) {
+      kept[id] = refused.kept;
     }
-    kept[id] = before;
-    report[id] = {
-      ...failed,
-      detail: hookUpdateKept(failed.detail ?? failed.cause),
-    };
+    report[id] = refused.state;
   };
 
   // A disabled hook is simply not written — that is the whole of per-hook
@@ -3017,6 +3050,14 @@ const settleHooks = async (
       });
       continue;
     }
+    if (fleetWideRefused && !placedHook(hook)) {
+      refuse(hook.id, {
+        state: "failed",
+        cause: "unparsable",
+        detail: fleetWideRefused,
+      });
+      continue;
+    }
     wanted.push(hook);
   }
 
@@ -3025,6 +3066,7 @@ const settleHooks = async (
   // never overwritten out from under whoever edited it.
   const scriptPaths = new Map<string, string>();
   const hashes = new Map<string, string>();
+  const replaced = new Map<string, string>();
   const settled: FleetHook[] = [];
   for (const hook of wanted) {
     if (hook.handler.type !== "command" || !hook.script) {
@@ -3087,6 +3129,9 @@ const settleHooks = async (
     }
     hashes.set(hook.id, scriptHash);
     if (plan === "write") {
+      if (onDisk !== null) {
+        replaced.set(hook.id, await Bun.file(path).text());
+      }
       try {
         // Claude Code spawns it directly, so it has to carry its own execute
         // bit; set before the file takes the path, so a write that fails
@@ -3104,7 +3149,7 @@ const settleHooks = async (
     scriptPaths.set(hook.id, path);
     settled.push(hook);
   }
-  return { hashes, kept, scriptPaths, settled, unregistered };
+  return { hashes, kept, replaced, scriptPaths, settled, unregistered };
 };
 
 /** What a settled hook runs as a session takes it (fleet-harness-set.ts). */
@@ -3171,16 +3216,27 @@ const syncHooks = async (
   report: Record<string, FleetItemState>
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: registers the fleet's own in the user settings, then removes what a disabled/deleted hook used to have, keeping a failed update's version before
 ): Promise<SyncedHooks> => {
-  const settledHooks = await settleHooks(desired, managed, report);
+  // Registration in the user settings, read before any script is written.
+  // Nothing is written over a file that is there and could not be read
+  // (claude-settings-file.ts): the rest of it is the user's own permissions
+  // and plugins, and a rewrite from an empty root would take them with it.
+  // Every fleet-wide hook is then refused before its script moves, its
+  // version before kept running.
+  const stored = await readSettingsJson(SETTINGS_PATH);
+  const settledHooks = await settleHooks(
+    desired,
+    managed,
+    report,
+    stored.state === "unread"
+      ? toolWords.settingsLeft(
+          toolWords.settingsSourceUnread(SETTINGS_PATH, stored.why)
+        )
+      : undefined
+  );
   const { hashes, scriptPaths, settled } = settledHooks;
   const written: Record<string, ManagedHook> = {
     ...settledHooks.unregistered,
     ...settledHooks.kept,
-  };
-  const keep = (id: string): void => {
-    if (managed[id]) {
-      written[id] = managed[id];
-    }
   };
 
   // The script cawco wrote for a hook, which a later sync's drift check and
@@ -3209,7 +3265,7 @@ const syncHooks = async (
     if (!record.cwd) {
       const entry = previousSet.hooks[id];
       if (entry) {
-        set.hooks[id] = entry;
+        set.hooks[id] = { ...entry, refused: record.refused };
       }
       continue;
     }
@@ -3217,9 +3273,48 @@ const syncHooks = async (
       ? (await readPlaceSet(record.cwd))?.hooks[id]
       : undefined;
     if (entry) {
-      placed[record.cwd] = { ...placed[record.cwd], [id]: entry };
+      placed[record.cwd] = {
+        ...placed[record.cwd],
+        [id]: { ...entry, refused: record.refused },
+      };
     }
   }
+  // A fleet-wide hook the user settings could not take after its script
+  // was written: the script the path held before goes back, so the
+  // registration there runs the version before; that version's record and
+  // set entry are kept, marked with the refusal, or with none before, the
+  // new script is taken away and nothing is registered for it.
+  const refuseUnregistered = async (id: string, why: string): Promise<void> => {
+    const path = scriptPaths.get(id);
+    const before = settledHooks.replaced.get(id);
+    let detail = why;
+    try {
+      if (path && before !== undefined) {
+        await writeStateFile(path, before, { mode: 0o755 });
+      } else if (path && !managed[id]) {
+        await rm(path, { force: true });
+      }
+    } catch (error) {
+      detail = `${why}; ${tail(said(error))}`;
+    }
+    const refused = refusedUpdate(managed[id], {
+      state: "failed",
+      cause: "unwritable",
+      detail,
+    });
+    report[id] = refused.state;
+    const entry = previousSet.hooks[id];
+    if (refused.kept && entry) {
+      set.hooks[id] = { ...entry, refused: refused.state };
+    } else {
+      delete set.hooks[id];
+    }
+    if (refused.kept) {
+      written[id] = refused.kept;
+    } else {
+      delete written[id];
+    }
+  };
   for (const hook of settled) {
     const { cwd } = hook;
     if (!(placedHook(hook) && cwd)) {
@@ -3239,20 +3334,9 @@ const syncHooks = async (
   }
 
   // Registration in the user settings — a hook whose row was disabled or
-  // deleted still gets its old entry taken out of it.
-  const stored = await readSettingsJson(SETTINGS_PATH);
-  // Nothing is written over a file that is there and could not be read
-  // (claude-settings-file.ts): the rest of it is the user's own permissions
-  // and plugins, and a rewrite from an empty root would take them with it.
-  if (stored.state === "unread") {
-    const detail = toolWords.settingsLeft(
-      toolWords.settingsSourceUnread(SETTINGS_PATH, stored.why)
-    );
-    for (const hook of fleetWide) {
-      keep(hook.id);
-      report[hook.id] = { state: "failed", cause: "unparsable", detail };
-    }
-  } else {
+  // deleted still gets its old entry taken out of it. An unread file took
+  // no fleet-wide hook (settleHooks above), and is left as it is.
+  if (stored.state !== "unread") {
     const root = stored.settings;
     const settingsHooks = { ...root.hooks };
 
@@ -3318,13 +3402,10 @@ const syncHooks = async (
     }
     for (const hook of fleetWide) {
       if (unwritable) {
-        delete written[hook.id];
-        keep(hook.id);
-        report[hook.id] = {
-          state: "failed",
-          cause: "unwritable",
-          detail: unwritable,
-        };
+        // The settings still register the version before, at the same
+        // script path: its script goes back there, and it keeps running on
+        // every harness, the new version refused.
+        await refuseUnregistered(hook.id, unwritable);
       } else {
         // One reported failed or drifted above keeps that word.
         report[hook.id] ??= applied(written[hook.id]?.note);
@@ -3468,10 +3549,10 @@ export const placeFolder = (
     // A hook whose new version failed keeps its entry as the place's file
     // holds it ({@link SettledHooks.kept}).
     const before = (await readPlaceSet(cwd))?.hooks ?? {};
-    for (const id of Object.keys(settled.kept)) {
+    for (const [id, record] of Object.entries(settled.kept)) {
       const entry = before[id];
       if (entry) {
-        placedHooks[id] = entry;
+        placedHooks[id] = { ...entry, refused: record.refused };
       }
     }
     for (const hook of settled.settled) {
@@ -3874,10 +3955,15 @@ const hookState = async (
   // The last question for every hook: whether the entry cawco registered
   // is still where sessions take it — a project's copy in its place's
   // file, the fleet's own in the user settings. A script that was refused
-  // registration is kept on disk, so a matching file is not enough.
-  const applied: FleetItemState = record.note
+  // registration is kept on disk, so a matching file is not enough. A
+  // version kept running past a refused update reports that update failed
+  // ({@link ManagedHook.refused}).
+  let applied: FleetItemState = record.note
     ? { state: "applied", detail: record.note }
     : { state: "applied" };
+  if (record.refused) {
+    applied = record.refused;
+  }
   if (record.placed && record.cwd) {
     const one = (await readPlaceSet(record.cwd))?.hooks[id];
     return one && identityOf(one.handler) === record.command

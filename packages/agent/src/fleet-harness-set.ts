@@ -19,7 +19,6 @@
 import type { FleetItemState } from "@cawco/core/fleet";
 import type { HarnessConfigKind } from "@cawco/core/harness-config";
 import {
-  type FleetHook,
   type HookHarness,
   hookUnsupported,
   hookWorkspaceNote,
@@ -63,12 +62,13 @@ export const writeFleetHarnessSet = (set: FleetHarnessSet): Promise<void> =>
  * What `harness` makes of each hook, by the id the machine reports it under:
  * applied (with what a workspace session makes of one that could rewrite a
  * call's input, core `hookWorkspaceNote`), or unsupported with why (core
- * `hookUnsupported`), never left out.
+ * `hookUnsupported`), or the failed update it refused while the version
+ * before runs on (`SetHook.refused`), never left out.
  * The hooks the harness set and the places' files hold ({@link hookStatesInSet}).
  */
 const hookStatesOn = (
   harness: HookHarness,
-  hooks: readonly Pick<FleetHook, "event" | "handler" | "id">[]
+  hooks: readonly SetHook[]
 ): Record<string, FleetItemState> =>
   Object.fromEntries(
     hooks.map((hook) => {
@@ -78,6 +78,8 @@ const hookStatesOn = (
       let state: FleetItemState = { state: "applied" };
       if (why) {
         state = { state: "unsupported", detail: why };
+      } else if (hook.refused) {
+        state = hook.refused;
       } else if (note) {
         state = { state: "applied", detail: note };
       }

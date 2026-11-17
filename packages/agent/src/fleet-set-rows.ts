@@ -4,6 +4,8 @@
  * fleet-place-set.ts (a project's placed copies) both read these from here,
  * so neither imports the other's file for them.
  */
+
+import type { FleetItemState } from "@cawco/core/fleet";
 import type { HarnessConfigKind } from "@cawco/core/harness-config";
 import type { HookEvent, HookHandler, HookMatchTest } from "@cawco/core/hooks";
 
@@ -15,6 +17,12 @@ export interface SetHook {
   id: string;
   matcher?: string;
   name: string;
+  /**
+   * The failed state of the newer version this machine refused, while this
+   * one keeps running (agent fleet.ts `SettledHooks.kept`): what every
+   * harness reports for it until a version installs.
+   */
+  refused?: FleetItemState;
   /** Its matcher as Claude Code reads it (core `hookMatchTest`), for the harnesses that run it themselves. */
   test: HookMatchTest;
 }
