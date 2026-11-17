@@ -1473,7 +1473,41 @@ handover_on_joined_machine() {
   as_user "$joinerc" sh -c 'printf "[Unit]\nDescription=CawCo sessiond 0.0.0-stray\n[Service]\nExecStart=/bin/false\n" > ~/.config/systemd/user/cawco-sessiond-0.0.0-stray.service && systemctl --user daemon-reload'
   wait_until 90 '[[ "$(as_user "$joinerc" systemctl --user list-unit-files --no-legend "cawco-sessiond*.service" | awk "{print \$1}")" == "$(unit_of "'"$new"'")" ]]'
 }
-export -f env_is_clean handover_on_joined_machine
+# A machine the update helper of a build before the runtime/ prune updated keeps every runtime folder earlier updates
+# left, as obelisk-of-light held 475 (76 GB) after 0.1.13-nightly.8241 was applied by 8236's helper. With no update
+# pending, its agent's start prunes them by its own build's rule (agent binary-update.ts `#pruneAtStart`) and says what
+# went and what stayed in its journal: the joined machine, on BASE, its trial long confirmed, holds 40 stale builds in
+# runtime/ and versions/ and a runtime folder a live process holds open; its agent restarts, and only BASE and the held
+# folder are left.
+start_prunes_stale() {
+  need_hub
+  local open=0.0.0-held-open-joiner since line
+  [[ "$(builds_in "$joinerc" runtime)" == "$BASE " && "$(builds_in "$joinerc" binary/versions)" == "$BASE " ]] \
+    || { echo "ASSERTION FAILED: the joined machine holds runtime/ $(builds_in "$joinerc" runtime)and versions/ $(builds_in "$joinerc" binary/versions)before the check plants anything"; return 1; }
+  # No update is pending: no trial is open and nothing is staged or on its way.
+  if has_file "$joinerc" trial.json; then echo "ASSERTION FAILED: the joined machine has a trial open"; return 1; fi
+  [[ "$(phase $jid)" != @(ready|installing|downloading|waiting-sessions) ]]
+  on_exit 'as_user "$joinerc" systemctl --user stop cawco-test-held-open-joiner.service'
+  as_user "$joinerc" sh -c 'd=/home/cawco/.local/share/cawco; for i in $(seq 1 40); do
+    mkdir -p "$d/runtime/0.0.0-stale.$i/pi" "$d/binary/versions/0.0.0-stale.$i" && echo "{}" > "$d/runtime/0.0.0-stale.$i/pi/package.json"
+  done; mkdir -p "$d/runtime/$1"' sh "$open"
+  as_user "$joinerc" systemd-run --user --quiet --collect --unit=cawco-test-held-open-joiner -- sh -c 'exec 3< "$1"; exec sleep 86400' sh "/home/cawco/.local/share/cawco/runtime/$open"
+  wait_until 30 '[[ "$(as_user "$joinerc" systemctl --user show -p MainPID --value cawco-test-held-open-joiner.service)" != 0 ]]'
+  [[ "$(builds_in "$joinerc" runtime)" == *"0.0.0-stale.40 "* && "$(builds_in "$joinerc" binary/versions)" == *"0.0.0-stale.40 "* ]]
+  since=$(as_user "$joinerc" date +%s)
+  as_user "$joinerc" systemctl --user restart cawco-agent.service
+  local runtime_kept
+  runtime_kept=$(printf '%s\n' "$BASE" "$open" | LC_ALL=C sort | tr '\n' ' ')
+  wait_until 120 '[[ "$(builds_in "$joinerc" runtime)" == "'"$runtime_kept"'" && "$(builds_in "$joinerc" binary/versions)" == "$BASE " ]]' \
+    || { echo "ASSERTION FAILED: runtime/ holds $(builds_in "$joinerc" runtime)and versions/ $(builds_in "$joinerc" binary/versions)"; return 1; }
+  wait_until 30 'as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service --since "@'"$since"'" | grep -q "\[update\] pruned at start: "'
+  line=$(as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service --since "@$since" | grep "\[update\] pruned at start: ")
+  echo "the agent's line: $line"
+  [[ $line == *"removed 80 folders (runtime/ 40, versions/ 40) of 40 builds, "*"; kept 3 folders (runtime/ 2, versions/ 1) of 2 builds, "*": $open, $BASE"* ]] \
+    || { echo "ASSERTION FAILED: the agent's prune line does not say what went and what stayed"; return 1; }
+  as_user "$joinerc" systemctl --user stop cawco-test-held-open-joiner.service
+}
+export -f env_is_clean handover_on_joined_machine start_prunes_stale
 rig_handover() {
   # The CAWCO_* a session may carry (env_is_clean), read from core so a renamed one cannot fall out of step: those its
   # tools read (SESSION_CAWCO_ENV), and the keeper's tree mark (CAWCO_ENV.sessiondTree), which sessiond itself puts in
@@ -1483,6 +1517,7 @@ rig_handover() {
   [[ -n $SESSION_CAWCO_ALLOWED ]]
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
+  check "a machine whose earlier updates left 40 stale builds, with no update pending, keeps in runtime/ and versions/ only its installed build and a runtime folder a live process holds open once its agent restarts, and its agent's journal says what it removed and kept" start_prunes_stale 300
   check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once (carrying only the CAWCO_* its tools read), the old sessions run on and answer through an agent restart, the old keeper is kept while its unit holds a process CawCo did not start (its update state and Update cell name it) and goes once that ends; the hub's machine keeps the build its trial would restore until the trial is confirmed, and its confirmed update leaves in runtime/ and versions/ only the build in use, the one before it and the runtime folders a live process runs from or holds open, of the 40 stale builds it held" handover_on_joined_machine 1200
 }
 

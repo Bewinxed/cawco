@@ -31,6 +31,7 @@ import {
   helperIsLive,
   liveHelper,
   prune,
+  pruneLine,
   readInstallation,
   readKeeperVersion,
   readRunningManifest,
@@ -418,6 +419,14 @@ const logFailure = (error: unknown): void => {
   );
 };
 
+/** Deletes the builds nothing keeps (core binary-installation.ts `prune`), and says in the journal what went and what stayed, and `when`; never rejects. */
+const pruneAndSay = (when: string): Promise<void> =>
+  prune()
+    .then((report) =>
+      console.info(`[update] pruned ${when}: ${pruneLine(report)}`)
+    )
+    .catch(logFailure);
+
 /**
  * The hub could not be reached at all: no answer, not an answer that refused.
  * Nothing is tried or written on it; the command stands, and the next tick
@@ -638,6 +647,8 @@ export class BinaryUpdater {
   #resumedAt = 0;
   /** When this agent last launched a helper to hand the keeper to its build. */
   #handedAt = 0;
+  /** This agent's one prune as it started, once begun ({@link #pruneAtStart}). */
+  #startPrune: Promise<void> | undefined;
   /**
    * The fence this updater raised, while it stands: on this agent, and on the
    * hub when its restart is part of the update (the hub's url then). Lowered
@@ -1275,7 +1286,7 @@ export class BinaryUpdater {
       removed = true;
     }
     if (removed) {
-      await prune().catch(logFailure);
+      await pruneAndSay("as a retiring keeper went");
     }
   }
 
@@ -1382,10 +1393,46 @@ export class BinaryUpdater {
     if (this.#state.phase === "unmanaged") {
       return Promise.resolve();
     }
-    this.#running ??= this.#pass().finally(() => {
-      this.#running = undefined;
-    });
+    this.#running ??= this.#pass()
+      .then(() => this.#pruneAtStart())
+      .finally(() => {
+        this.#running = undefined;
+      });
     return this.#running;
+  }
+
+  /**
+   * THE AGENT PRUNES ONCE AS IT STARTS, BY THIS BUILD'S RULE (core
+   * binary-installation.ts `prune`), at the end of its first pass that finds
+   * the build it runs from confirmed: no trial is open, no update helper is
+   * applying or rolling back, and its trial did not end undecided
+   * (`unconfirmedVersion`). Every other prune runs at an update's end, by the
+   * helper of the build that was running, whose rule may be older: a machine
+   * whose helper knew only `versions/` kept every runtime folder it had (on
+   * 2026-11-17 obelisk-of-light held 475, 76 GB, after 0.1.13-nightly.8241
+   * was applied by 8236's helper), and is cleared here with no further
+   * update. Inside a pass, so no pass stages a build while it runs (a staged
+   * folder is kept by its phase only once the pass writes it, `#stage`). A
+   * build a live process runs from or holds open stays (`keptBuilds`).
+   * Never rejects: what fails is said, and a reading that failed is tried
+   * again at the next pass.
+   */
+  async #pruneAtStart(): Promise<void> {
+    try {
+      if (
+        this.#startPrune ||
+        this.#state.unconfirmedVersion === runtimeVersion ||
+        (await readTrial()) !== undefined ||
+        (await helperIsLive())
+      ) {
+        return;
+      }
+    } catch (error) {
+      logFailure(error);
+      return;
+    }
+    this.#startPrune = pruneAndSay("at start");
+    await this.#startPrune;
   }
 
   async #pass(): Promise<void> {

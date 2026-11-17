@@ -31,6 +31,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import type { ControlArgs } from "@cawco/core/control-table";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
+import { folderBytes } from "@cawco/core/folder-bytes";
 import { makeFolder } from "@cawco/core/folders";
 import { processesWithin } from "@cawco/core/live-processes";
 import { ownCommitsShell } from "@cawco/core/own-commits";
@@ -1896,17 +1897,6 @@ const carriedFrom = async (
   return COMMIT.test(commit) ? { branch: base, commit } : undefined;
 };
 
-/** A folder's size on disk in bytes (`du -sk`), 0 when it cannot be read. */
-const sizeOf = async (path: string): Promise<number> => {
-  const du = Bun.spawn(["du", "-sk", path], {
-    env: hostEnvironment(),
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  const [out] = await Promise.all([new Response(du.stdout).text(), du.exited]);
-  return Number(out.split("\t")[0]) * 1024 || 0;
-};
-
 /** Trees a search for a clone's Swift packages passes over: never a package of the clone's own. */
 const NOT_PACKAGES = new Set([
   ...PACKAGE_TREES,
@@ -2417,9 +2407,9 @@ const keepHeld = async (
   }
   const kept: WorkspaceHolding = {
     ...held,
-    bytes: await sizeOf(
-      access.layer.form === "overlay" ? layerDir(workspace.id) : workspace.path
-    ),
+    bytes: await folderBytes([
+      access.layer.form === "overlay" ? layerDir(workspace.id) : workspace.path,
+    ]),
   };
   console.info(
     `[workspace] ${workspace.id}: not archived: its copy ${workspace.path} holds ${holdingWords(kept)}; its boundary is closed and nothing was deleted`

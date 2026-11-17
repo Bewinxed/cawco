@@ -56,6 +56,7 @@ import {
   keeperPath,
   lockFilePath,
   prune,
+  pruneLine,
   readInstallation,
   readKeeperVersion,
   readRunningManifest,
@@ -677,7 +678,7 @@ async function handOverKeeperAlone(version: string): Promise<void> {
   await say(
     `keeper ${version}: ${move.outcome}${move.outcome === "failed" ? ` (${move.error})` : ""}`
   );
-  await prune();
+  await say(`pruned: ${pruneLine(await prune())}`);
   const waited = (await readUpdateState())?.phase === "waiting-sessions";
   await writeState({
     ...(await keeperState(move, version)),
@@ -1246,7 +1247,7 @@ async function confirm(trial: TrialMarker): Promise<void> {
   await say(`confirmed ${trial.version}`);
   // What went on for it before the swap stays on.
   await forgetPins();
-  await prune();
+  await say(`pruned: ${pruneLine(await prune())}`);
 }
 
 /**
@@ -1350,7 +1351,7 @@ async function rollBack(start: TrialMarker): Promise<void> {
   });
   await rm(trialPath(), { force: true });
   await say(`rolled back ${trial.version}`);
-  await prune();
+  await say(`pruned: ${pruneLine(await prune())}`);
 }
 
 /** What a rollback the hub's silence decided says of the build's next try ({@link rolledBack}), and one a sleep lost that it slept; nothing for the build's own fault. */

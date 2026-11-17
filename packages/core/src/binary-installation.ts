@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import type { BinaryUpdateState } from "./binary-updates";
+import { folderBytes } from "./folder-bytes";
 import { makeFolder } from "./folders";
 import { foldersHeldOpen, versionsInUse } from "./live-processes";
 import { hubDbPath } from "./paths/hub";
@@ -17,6 +18,7 @@ import {
   BinaryUpdateStateSchema,
   ReleaseManifestSchema,
 } from "./stored-shapes";
+import { sizeWords } from "./words/workspace-holding";
 
 const BinaryInstallationSchema = z.object({
   /** Where this machine's dashboard answers, when it runs one. */
@@ -281,25 +283,29 @@ export async function recordInstall(
 export const hubReleasesDir = (): string =>
   join(dirname(hubDbPath()), "binary-releases");
 
-/** Removes every folder in `dir` not named in `keep`; unfinished folders (`.partial`) stay. */
-async function removeFoldersBut(
+/** One folder of builds a prune went through: what it held, by build, sorted into what goes and what stays. */
+interface PrunedPlace {
+  dir: string;
+  kept: string[];
+  removed: string[];
+}
+
+/** The folders in `dir`, sorted by `keep`; unfinished folders (`.partial`) are in neither, and stay. */
+async function sortFolders(
   dir: string,
   keep: ReadonlySet<string>
-): Promise<void> {
-  const present = await readdir(dir, { withFileTypes: true }).catch(
-    (): Dirent[] => []
-  );
-  await Promise.all(
-    present
-      .filter(
-        (entry) =>
-          entry.isDirectory() &&
-          !(keep.has(entry.name) || entry.name.includes(".partial"))
-      )
-      .map((entry) =>
-        rm(join(dir, entry.name), { recursive: true, force: true })
-      )
-  );
+): Promise<PrunedPlace> {
+  const present = (
+    await readdir(dir, { withFileTypes: true }).catch((): Dirent[] => [])
+  )
+    .filter((entry) => entry.isDirectory() && !entry.name.includes(".partial"))
+    .map((entry) => entry.name)
+    .sort();
+  return {
+    dir,
+    kept: present.filter((name) => keep.has(name)),
+    removed: present.filter((name) => !keep.has(name)),
+  };
 }
 
 /** The folders that hold a build each, by its version: its executable's (`versions/`) and its runtime folder's ({@link runtimeRoot}). */
@@ -363,12 +369,21 @@ async function keptBuilds(
   );
 }
 
+/** What a {@link prune} removed and kept in each place, and the bytes on disk of each side, read before anything went. */
+export interface PruneReport {
+  keptBytes: number;
+  places: PrunedPlace[];
+  removedBytes: number;
+}
+
 /**
- * Deletes the builds nothing keeps. In `versions/` and the runtime folders'
- * root, every build but those {@link keptBuilds} names: one rule for both, so
- * a machine that held hundreds of runtime folders is cleared by its next
- * prune (at a confirmed or rolled-back trial, a keeper handed over alone, a
- * retiring keeper removed).
+ * Deletes the builds nothing keeps, and says what it removed and kept
+ * ({@link pruneLine}). In `versions/` and the runtime folders' root, every
+ * build but those {@link keptBuilds} names: one rule for both, so a machine
+ * that held hundreds of runtime folders is cleared by its next prune (the
+ * agent's once at its start, binary-update.ts `#pruneAtStart`, and at a
+ * confirmed or rolled-back trial, a keeper handed over alone, a retiring
+ * keeper removed).
  *
  * In the hub's archive cache ({@link hubReleasesDir}), which no process runs
  * from (the hub reads an archive only to serve it, and fetches one it lacks
@@ -376,7 +391,7 @@ async function keptBuilds(
  * state's `availableVersion` (the build this machine is fetching or holds
  * staged through the hub). The caller never supplies a keep-list.
  */
-export async function prune(): Promise<void> {
+export async function prune(): Promise<PruneReport> {
   const state = await readUpdateState();
   const installed = [
     ...(await readInstallOrder()),
@@ -388,8 +403,50 @@ export async function prune(): Promise<void> {
       (version): version is string => Boolean(version)
     )
   );
-  await Promise.all([
-    ...buildFolders().map((folder) => removeFoldersBut(folder, builds)),
-    removeFoldersBut(hubReleasesDir(), archives),
+  const places = await Promise.all([
+    ...buildFolders().map((folder) => sortFolders(folder, builds)),
+    sortFolders(hubReleasesDir(), archives),
   ]);
+  const paths = (pick: "kept" | "removed"): string[] =>
+    places.flatMap((place) => place[pick].map((name) => join(place.dir, name)));
+  const removed = paths("removed");
+  const [keptBytes, removedBytes] = await Promise.all([
+    folderBytes(paths("kept")),
+    folderBytes(removed),
+  ]);
+  await Promise.all(
+    removed.map((path) => rm(path, { recursive: true, force: true }))
+  );
+  return { keptBytes, places, removedBytes };
 }
+
+/** How many build names a {@link pruneLine} spells out on each side before it counts the rest. */
+const NAMED_BUILDS = 8;
+
+/**
+ * A prune's journal line: on each side the folders by place, their bytes, and
+ * the builds they belong to. "removed 80 folders (runtime/ 40, versions/ 40)
+ * of 40 builds, 6.1 GB: 0.0.0-stale.1, … and 32 more; kept 3 folders
+ * (runtime/ 2, versions/ 1) of 2 builds, 312 MB: 0.0.0-held-open,
+ * 0.1.13-nightly.8241".
+ */
+export const pruneLine = (report: PruneReport): string => {
+  const said = (pick: "kept" | "removed", bytes: number): string => {
+    const counted = report.places.filter((place) => place[pick].length > 0);
+    const folders = counted.reduce((sum, place) => sum + place[pick].length, 0);
+    if (folders === 0) {
+      return `${pick} nothing`;
+    }
+    const builds = [...new Set(counted.flatMap((place) => place[pick]))].sort();
+    const named = builds.slice(0, NAMED_BUILDS).join(", ");
+    const more =
+      builds.length > NAMED_BUILDS
+        ? ` and ${builds.length - NAMED_BUILDS} more`
+        : "";
+    const where = counted
+      .map((place) => `${basename(place.dir)}/ ${place[pick].length}`)
+      .join(", ");
+    return `${pick} ${folders} folder${folders === 1 ? "" : "s"} (${where}) of ${builds.length} build${builds.length === 1 ? "" : "s"}, ${sizeWords(bytes)}: ${named}${more}`;
+  };
+  return `${said("removed", report.removedBytes)}; ${said("kept", report.keptBytes)}`;
+};
