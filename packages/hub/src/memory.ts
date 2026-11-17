@@ -110,7 +110,7 @@ import {
   recordOf,
   recordPath,
 } from "@cawco/core/decisions";
-import { frontMatterBlock, memoryDocProblem } from "@cawco/core/fleet";
+import { frontMatterBlock } from "@cawco/core/fleet";
 import type { ArrivingAsk } from "@cawco/core/frames";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { isRecord } from "@cawco/core/is-record";
@@ -359,6 +359,22 @@ export const personsTier = (rel: string): string | undefined => {
 
 /** How long what the web test reads of the fleet (its hostnames, its MCP servers' URLs) is kept before it is read again. */
 const FLEET_READ_MS = 60_000;
+
+/**
+ * The path a fleet proposal names the fleet's main CLAUDE.md by: the one
+ * text every session loads ({@link MemoryDeps} `fleetDocs`).
+ */
+export const FLEET_MAIN_MEMORY = "CLAUDE.md";
+
+/**
+ * The refusal of a fleet document the fleet does not keep: a fleet
+ * proposal changes one it keeps, or the main CLAUDE.md.
+ */
+const fleetDocUnknown = (path: string) =>
+  problem(404, {
+    code: "memory-fleet-doc-unknown",
+    detail: `The fleet keeps no ${path}. A fleet proposal changes a document the fleet keeps, or ${FLEET_MAIN_MEMORY}, which every session loads; memory_read with fleet lists them.`,
+  });
 
 /** The origin a conversation's wake carries when a routine woke it (caw.ts). */
 export const ROUTINE_ORIGIN = "routine:";
@@ -1854,17 +1870,20 @@ export interface MemoryDeps {
     | "workItem"
   >;
   /**
-   * The fleet's memory documents (routes/fleet-memory.ts), where a fleet
+   * The fleet's memory (routes/fleet-memory.ts): its main CLAUDE.md, by
+   * {@link FLEET_MAIN_MEMORY}, and its linked documents, where a fleet
    * proposal ({@link Proposal} `fleet`) reads its document and, approved,
    * writes it, and the curator reads them (`memory_read` with `fleet`):
-   * `read` answers undefined for one the fleet does not keep,
-   * `write` is `admin_memory_write`'s `set_doc`, its scope left as it is,
-   * and answers the saved document's hash, or why it was refused.
+   * `read` answers undefined for a document the fleet does not keep (the
+   * main CLAUDE.md is always there, empty before it is written),
+   * `write` is `admin_memory_write`'s `set` for CLAUDE.md and `set_doc`,
+   * its scope left as it is, for a document, and answers the saved hash,
+   * or why it was refused.
    */
   readonly fleetDocs: {
-    /** Every document the fleet keeps, with the sessions it is loaded into (core memory-scope.ts `scopeWords`). */
+    /** CLAUDE.md and every document the fleet keeps, with the sessions each is loaded into (core memory-scope.ts `scopeWords`). */
     list: () => { loadedInto: string; path: string }[];
-    /** The sessions the document at `path` loads into, in words: its scope's, or a new document's. */
+    /** The sessions the document at `path` loads into, in words: every session for CLAUDE.md, its scope's for a document. */
     loadedInto: (path: string) => string;
     read: (path: string) => string | undefined;
     write: (path: string, content: string) => string | { refused: string };
@@ -3215,9 +3234,10 @@ export const createMemory = ({
   };
 
   /**
-   * A fleet proposal's one file, checked: a fleet memory document's path
-   * (core fleet.ts `memoryDocProblem`), as the fleet keeps it now and as
-   * asked, changed; its reason and its cited notes as any proposal's.
+   * A fleet proposal's one file, checked: the fleet's CLAUDE.md or a
+   * document it keeps ({@link fleetDocUnknown} for any other path), as the
+   * fleet keeps it now and as asked, changed; its reason and its cited
+   * notes as any proposal's.
    */
   const askedFleetChange = async (
     projectId: string,
@@ -3236,9 +3256,9 @@ export const createMemory = ({
           "A fleet proposal changes one fleet memory document: give its path and whole new text as the one file.",
       });
     }
-    const misfit = memoryDocProblem(file.path);
-    if (misfit) {
-      return problem(400, { code: "memory-fleet-path-unfit", detail: misfit });
+    const before = fleetDocs.read(file.path);
+    if (before === undefined) {
+      return fleetDocUnknown(file.path);
     }
     const why = reasonOf(asked.why);
     if (why instanceof ElysiaStatus) {
@@ -3254,7 +3274,6 @@ export const createMemory = ({
     if (notes instanceof ElysiaStatus) {
       return notes;
     }
-    const before = fleetDocs.read(file.path) ?? "";
     if (before === file.content) {
       return problem(409, {
         code: "memory-change-empty",
@@ -3493,11 +3512,13 @@ export const createMemory = ({
    * so does every commit that changes one of its files ({@link folderCommitted}).
    */
   const mergedNow = (proposal: Proposal) =>
-    appliesNow(proposal.files, (path) =>
-      proposal.fleet
-        ? Promise.resolve(fleetDocs.read(path) ?? "")
-        : fileOr(proposal.projectId, path)
-    );
+    appliesNow(proposal.files, async (path) => {
+      if (!proposal.fleet) {
+        return await fileOr(proposal.projectId, path);
+      }
+      // A fleet document removed since stays removed: the proposal no longer applies.
+      return fleetDocs.read(path) ?? fleetDocUnknown(path);
+    });
 
   /** {@link mergedNow}'s writes; a proposal that no longer applies throws, saying why. */
   const writesNow = async (proposal: Proposal) => {
@@ -4556,10 +4577,7 @@ export const createMemory = ({
     }
     const content = fleetDocs.read(path);
     if (content === undefined) {
-      return problem(404, {
-        code: "memory-fleet-doc-unknown",
-        detail: `The fleet keeps no ${path}: a fleet proposal for it adds it.`,
-      });
+      return fleetDocUnknown(path);
     }
     const file: FolderFile = { path, content, size: content.length };
     return file;

@@ -200,7 +200,7 @@ Sort each lasting note against the fact lines listed under it:
 - conflicts (same subject and property, a different value over the same period): put both lines under \`## Conflict\`, together, each with its sources. Never pick a side: the person settles it.
 - unrelated, or no line listed: a new fact line, in the file whose topic it is.
 How the project's work is done, the person's corrections and preferences included, goes in AGENTS.md.
-A note marked fleet-wide holds for every project: read the fleet's memory documents with memory_read and \`fleet\`, then propose the one it belongs in, or a new one, as memory_propose with \`fleet\`: one document's path and whole new text, citing the note.
+A note marked fleet-wide holds for every project: read the fleet's documents with memory_read and \`fleet\`. It goes into the fleet document it belongs in when that document is loaded into the sessions the note is for; otherwise into CLAUDE.md, loaded into every session, as one line under the section it belongs to. Propose it as memory_propose with \`fleet\`: that one document's path and whole new text, citing the note. CLAUDE.md is the person's whole instruction file: change only the line the note needs and keep every other line as it is.
 
 memory_propose takes each file's whole new text and the ids of the notes it comes from; several files are one change. Keep every line and source a file has; a change keeps its history. Every other note: memory_classify it.
 

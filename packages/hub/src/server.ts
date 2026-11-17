@@ -266,6 +266,7 @@ import {
   machineSilenceWords,
 } from "@cawco/core/words/machine-names";
 import { pauseClock } from "@cawco/core/words/machine-pause";
+import { memoryWords } from "@cawco/core/words/memory";
 import { scopeWords } from "@cawco/core/words/memory-scope";
 import { noticeWords } from "@cawco/core/words/notices";
 import {
@@ -533,6 +534,7 @@ import { mediaBase64 } from "./media";
 import {
   createMemory,
   createTurnWatch,
+  FLEET_MAIN_MEMORY,
   inboxNotes,
   memoryRoutes,
   ROUTINE_ORIGIN,
@@ -8824,17 +8826,31 @@ export const createServer = (
       inboxPassed: (projectId) => routines.inboxPassed(projectId),
     }),
     // A fleet proposal's document, through the write admin_memory_write's
-    // set_doc makes: its scope left as it is, its replaced text kept.
+    // set (the main CLAUDE.md) or set_doc (a linked document) makes: a
+    // document's scope left as it is, the replaced text kept.
     fleetDocs: {
-      list: () =>
-        db.listFleetMemoryDocs().map((doc) => ({
+      list: () => [
+        { path: FLEET_MAIN_MEMORY, loadedInto: memoryWords.everySession },
+        ...db.listFleetMemoryDocs().map((doc) => ({
           path: doc.path,
           loadedInto: fleetDocReach(doc.scope),
         })),
-      loadedInto: (path) => fleetDocReach(db.getFleetMemoryDoc(path)?.scope),
-      read: (path) => db.getFleetMemoryDoc(path)?.content,
+      ],
+      loadedInto: (path) =>
+        path === FLEET_MAIN_MEMORY
+          ? memoryWords.everySession
+          : fleetDocReach(db.getFleetMemoryDoc(path)?.scope),
+      // The main CLAUDE.md is there to write before the fleet has one.
+      read: (path) =>
+        path === FLEET_MAIN_MEMORY
+          ? (db.getFleetMemory()?.content ?? "")
+          : db.getFleetMemoryDoc(path)?.content,
       write: (path, content) => {
-        const saved = fleetMemoryCalls(ctx).setDoc({ path, content });
+        const calls = fleetMemoryCalls(ctx);
+        const saved =
+          path === FLEET_MAIN_MEMORY
+            ? calls.set({ content })
+            : calls.setDoc({ path, content });
         if (!(saved instanceof ElysiaStatus)) {
           return saved.hash;
         }
