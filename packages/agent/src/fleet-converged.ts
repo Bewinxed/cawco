@@ -7,12 +7,8 @@
  * converges only what moved while it was away, with no probe; the report is
  * the one a partial converge lays its parts over (session.ts
  * `#convergeSoon`).
- *
- * A Linux workspace boundary's form names what the fleet sync wrote that it
- * binds by these hashes ({@link syncedHeld}), never by a stat of the disk.
  */
 import type { FleetSyncReport } from "@cawco/core/fleet";
-import { itemKindOf } from "@cawco/core/fleet-items";
 import { fleetConvergedFile } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { FleetSyncReportSchema } from "@cawco/core/stored-shapes";
@@ -116,24 +112,4 @@ export const keepConverged = (converged: FleetConverged): Promise<void> => {
   );
   writing = next.catch(() => undefined);
   return next;
-};
-
-/**
- * What of the fleet sync's writes a Linux boundary binds as a file, named by
- * the hashes of the items converged into it (core `fleetSyncedPaths`): a
- * file bind keeps the file it was made over, so each item written into a
- * bound file is named by its hash (the policy). Everything else the sync
- * writes lies in a dir of CawCo's own (the fleet's memory, skills,
- * subagents and plugins, the hook scripts, the MCP installs), made before
- * any boundary starts (boundary/plan.ts `planFor`), and a dir bind shows
- * what the dir holds as it changes: those name nothing. A project's rows
- * sit inside the clone the boundary binds and name nothing here either.
- */
-export const syncedHeld = async (): Promise<string> => {
-  const { items } = await readConverged();
-  return Object.entries(items)
-    .sort(([a], [b]) => (a < b ? -1 : Number(a > b)))
-    .filter(([id]) => itemKindOf(id) === "policy")
-    .map(([id, hash]) => `${id} ${hash}`)
-    .join("\n");
 };

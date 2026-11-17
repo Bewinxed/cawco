@@ -4,9 +4,10 @@
  */
 
 import { createHash } from "node:crypto";
-import { realpath } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
+import { USER_LAYER_FILES, userLayerPath } from "@cawco/core/paths/claude";
 import {
   fleetHooksDir,
   fleetLoadedDirs,
@@ -32,7 +33,6 @@ import {
   srtSettings,
 } from "../boundary-policy";
 import { bunNodeShim } from "../bun-node-shim";
-import { syncedHeld } from "../fleet-converged";
 import { githubDoorOf } from "../github-door";
 import { gitDoorOf } from "../hub-git";
 import { hubPreviewsPath } from "../hub-previews";
@@ -92,17 +92,40 @@ interface Plan {
 }
 
 /**
- * The part of a Linux form that is what the fleet sync wrote that the
- * boundary binds, named by the hashes of the items it converged into each
- * (fleet-converged.ts `syncedHeld`): srt binds a read path back only when
- * it resolves ("Not restoring … nothing there resolves (absent, dangling or
- * unreadable)", its linux-sandbox-utils.js 0.0.81), and a file's bind keeps
- * the file it was made over, so a bound file written again, or a bound dir
- * made since the boundary started, is a later form, and a boundary in use is
- * handed over to it (looks.ts `rearmMoved`). Seatbelt grants by path rule,
- * there or not.
+ * The part of a Linux form that is the user layer's files a boundary binds
+ * one by one (core paths/claude.ts `USER_LAYER_FILES`, bound through
+ * `fleetSyncedPaths`), named by what each holds ({@link userLayerHeld}):
+ * a file's bind keeps the file it was made over, and srt binds a read path
+ * back only when it resolves ("Not restoring … nothing there resolves
+ * (absent, dangling or unreadable)", its linux-sandbox-utils.js 0.0.81), so
+ * a bound file written again, made or taken away since the boundary started
+ * is a later form, and a boundary in use is handed over to it (looks.ts
+ * `rearmMoved`). CawCo writes them only to take out what earlier versions
+ * wrote (denied-tools.ts `dropWrittenDenials`, fleet.ts
+ * `dropUserLayerWrites`); the person writes them too. Every other path the
+ * fleet sync writes lies in a dir a boundary binds whole, which shows what
+ * the dir holds as it changes, so it names nothing here. Seatbelt grants by
+ * path rule, there or not.
  */
-export const SYNCED_PART = "synced";
+export const USER_LAYER_PART = "userLayer";
+
+/**
+ * What each user layer file a boundary binds holds now ({@link
+ * USER_LAYER_PART}): its name and the hash of its bytes, or that it is not
+ * there or could not be read, one line each.
+ */
+export const userLayerHeld = async (): Promise<string> => {
+  const lines = await Promise.all(
+    USER_LAYER_FILES.map(async (name) => {
+      const held = await readFile(userLayerPath(name)).then(
+        (bytes) => createHash("sha256").update(bytes).digest("hex"),
+        (error: NodeJS.ErrnoException) => `none: ${error.code ?? "unread"}`
+      );
+      return `${name} ${held}`;
+    })
+  );
+  return lines.join("\n");
+};
 
 /**
  * A form, and its parts, from what it is made of, in order: the form hashes
@@ -315,7 +338,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   }
   // CawCo's own dirs the fleet sync writes into, which a boundary binds
   // whole: made before any boundary starts, so none is made under one
-  // running, and the form names them by nothing ({@link SYNCED_PART}).
+  // running, and the form names them by nothing ({@link USER_LAYER_PART}).
   await Promise.all(
     [fleetHooksDir(), fleetMcpInstallsDir(), ...fleetLoadedDirs()].map((dir) =>
       makeFolder(dir)
@@ -360,7 +383,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     ],
     ...formFrom([
       ["settings", settingsWith(ripgrepForm())],
-      [SYNCED_PART, await syncedHeld()],
+      [USER_LAYER_PART, await userLayerHeld()],
       ["launcher", launcher],
       ["runner", runnerText()],
       ["exec", exec],

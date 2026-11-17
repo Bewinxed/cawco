@@ -28,7 +28,6 @@ import {
   worstFleetState,
 } from "@cawco/core/fleet";
 import { readingLines, shortDetail } from "@cawco/core/fleet-fault-reason";
-import type { FleetItemKind } from "@cawco/core/fleet-items";
 import { secretValuesOf, withoutSecrets } from "@cawco/core/fleet-secrets";
 import type { FleetReportFrame } from "@cawco/core/frames";
 import { HOSTED_PREFIX } from "@cawco/core/gateway-paths";
@@ -44,6 +43,7 @@ import {
 import { FleetMcpTakeAnswerSchema } from "@cawco/core/stored-shapes";
 import { recordAgentState } from "./agent-state";
 import { rearmMoved, recheckNarrowed } from "./boundary/looks";
+import { userLayerHeld } from "./boundary/plan";
 import { buildKey } from "./build";
 import { harnessMcpUrl } from "./delegation";
 import { applyFleetDenials } from "./denied-tools";
@@ -319,21 +319,28 @@ export class FleetConverger {
   /**
    * The fleet's denied tools written (denied-tools.ts `applyFleetDenials`,
    * which every spawn waits on while it runs), and said as the `policy`
-   * item's converge; `moved`: the policy changed, and so did
-   * `~/.claude/settings.json`, which a boundary binds.
+   * item's converge when it `moved`. They go into CawCo's sidecar, which no
+   * boundary reads, so a policy that moved hands no boundary over. The one
+   * write a boundary reads is the user layer's `settings.json`, when what an
+   * earlier version wrote there is taken out (denied-tools.ts
+   * `dropWrittenDenials`): the boundaries in use are looked at for it then.
    */
   #writePolicy(denied: readonly string[], moved: boolean): void {
     const generation = this.#desired.generation ?? 0;
     const hash = this.#desired.hashOf("policy");
     const started = Date.now();
     applyFleetDenials(denied).then(
-      () => {
+      (cleanup) => {
         this.#desired.policyWritten();
         if (moved) {
           this.#converging(generation, [
             { id: "policy", hash, state: "ok", ms: Date.now() - started },
           ]);
-          rearmBoundaries("the fleet's policy");
+        }
+        if (cleanup.state === "dropped") {
+          rearmBoundaries(
+            "the user layer's settings.json, with the denied tools an earlier version wrote there taken out"
+          );
         }
       },
       (error: unknown) => {
@@ -498,7 +505,10 @@ export class FleetConverger {
    * (fleet-parts.ts), and only what read them is told: a live session takes
    * the fleet's servers or settings again only when they, or its own place's
    * copies, moved ({@link #reachedBy}), and the boundaries in use are looked
-   * at only when an item they bind moved ({@link BOUND_KINDS}). A delta that
+   * at only when the pass wrote a user layer file they bind one by one
+   * (boundary/plan.ts `userLayerHeld`): every other path the fleet sync
+   * writes lies in a dir a boundary binds whole, which shows it as it
+   * changes. A delta that
    * moved nothing but the policy converges nothing; one a person asked for
    * (`reconverge`) converges every part.
    */
@@ -530,6 +540,7 @@ export class FleetConverger {
         }))
       );
       const started = Date.now();
+      const layerBefore = await userLayerHeld();
       const { report, thrown, places } = await this.#convergeParts(moves);
       if (thrown) {
         warn(`the fleet's gen ${generation} did not converge: ${thrown}`);
@@ -558,14 +569,8 @@ export class FleetConverger {
         this.#sendReport(report, generation);
       }
       this.healFleetMcp(this.#reachedBy(moves, places));
-      const bound = [...moves.wide].filter((kind) => BOUND_KINDS.has(kind));
-      if (
-        bound.length > 0 ||
-        [...moves.projects.values()].some(
-          (parts) => parts.has("hooks") || parts.has("mcp")
-        )
-      ) {
-        rearmBoundaries(bound.join(", ") || "a project's hooks or servers");
+      if ((await userLayerHeld()) !== layerBefore) {
+        rearmBoundaries("the user layer's files");
       }
     })
       .catch((error: unknown) =>
@@ -1295,25 +1300,10 @@ const convergeBasis = async (): Promise<ConvergeBasis> => ({
 });
 
 /**
- * The kinds of fleet-wide items a Linux boundary's form names
- * (fleet-converged.ts `syncedHeld`): one of them moved, the boundaries in
- * use are looked at again ({@link rearmBoundaries}); no other converge
- * looks at any.
- */
-const BOUND_KINDS: ReadonlySet<FleetItemKind> = new Set<FleetItemKind>([
-  "memory",
-  "hook",
-  "plugin",
-  "pluginPayload",
-  "skill",
-  "mcp",
-]);
-
-/**
- * What a converge (or the policy's write) moved, `what`, is in what a
- * boundary binds: each boundary in use whose form's synced part moved is
- * handed over to one that has it (boundary/looks.ts `rearmMoved`). Nothing waits
- * on it.
+ * A converge (or the policy's write) wrote `what`, a user layer file a
+ * boundary binds one by one: each boundary in use whose form's user layer
+ * part moved is handed over to one that has it (boundary/looks.ts
+ * `rearmMoved`). Nothing waits on it.
  */
 function rearmBoundaries(what: string): void {
   rearmMoved(`the fleet sync wrote ${what}, which a boundary reads`).catch(

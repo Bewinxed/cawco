@@ -62,7 +62,7 @@ import {
   narrowedGenerations,
 } from "./narrowing";
 import { type Seen, snapshot } from "./place-guard";
-import { formNow, movedParts, SYNCED_PART } from "./plan";
+import { formNow, movedParts, USER_LAYER_PART } from "./plan";
 import { busyOld, executors, lookAtPreTag, QUIET_SWEEP_MS } from "./processes";
 import { endMembers } from "./sandboxes";
 import {
@@ -272,19 +272,19 @@ const inUseNow = async (): Promise<string[]> => {
 };
 
 /**
- * Each boundary in use whose form's part the fleet sync writes moved since
- * it started ({@link SYNCED_PART}, fleet-converged.ts `syncedHeld`), handed over to one
- * of the form now as soon as nothing runs in it (ensure.ts `ensure`'s
- * ensure.ts `replaceOlder`), so a session's next command, hook or server start
- * runs in it: after a fleet sync made a path a boundary reads (the fleet's
- * hook scripts), a session started before it reaches what it holds. A sync
- * that moved nothing a boundary reads moves no form part of its own, and
- * nothing is handed over for it: a form that moved otherwise (a build, the
- * workspace's policy) is the boundary's next use's to take (ensure.ts `ensure`),
- * and one already waiting for its work to end (staleness.ts `stale`) is handed over
- * by the look that waits (ensure.ts `handOverStale`). One started by a build
- * that kept no parts is its next use's too. One not in use takes the form
- * now at its next ensure.
+ * Each boundary in use whose user layer files moved since it started
+ * ({@link USER_LAYER_PART}, plan.ts `userLayerHeld`), handed over to one of
+ * the form now as soon as nothing runs in it (ensure.ts `ensure`'s
+ * ensure.ts `replaceOlder`), so a session's next command runs with the files
+ * as they are: after CawCo took out of one what an earlier version wrote, a
+ * session started before it reads it as it is now. A write that moved
+ * nothing a boundary reads moves no part, and nothing is handed over for it:
+ * a form that moved otherwise (a build, the workspace's policy) is the
+ * boundary's next use's to take (ensure.ts `ensure`), and one already
+ * waiting for its work to end (staleness.ts `stale`) is handed over by the
+ * look that waits (ensure.ts `handOverStale`). One started by a build that
+ * kept no parts is its next use's too. One not in use takes the form now at
+ * its next ensure.
  */
 export const rearmMoved = async (why: string): Promise<void> => {
   for (const id of await inUseNow()) {
@@ -299,7 +299,7 @@ export const rearmMoved = async (why: string): Promise<void> => {
     const now = await formNow(ref);
     if (
       held.form === now.form ||
-      held.parts[SYNCED_PART] === now.parts[SYNCED_PART]
+      held.parts[USER_LAYER_PART] === now.parts[USER_LAYER_PART]
     ) {
       continue;
     }

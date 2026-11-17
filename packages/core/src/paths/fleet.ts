@@ -86,9 +86,7 @@ export const fleetDesiredFile = (): string =>
  * What this machine's harnesses last converged of the fleet (agent
  * fleet-converged.ts): each item's hash as a converge wrote it, and the
  * report that converge came to. The converge's basis (an item whose hash
- * the file already holds is not written again, through a restart too), and
- * what a workspace boundary's form names of what the fleet sync wrote
- * (agent boundary/plan.ts `SYNCED_PART`).
+ * the file already holds is not written again, through a restart too).
  */
 export const fleetConvergedFile = (): string =>
   join(cawcoDataDir(), "fleet-converged.json");
@@ -158,8 +156,8 @@ export const fleetLoadedDirs = (): string[] => [
  * boundary binds a file as the file it was when the boundary started, and
  * a write replaces a file whole (a new inode), so a boundary in use keeps
  * the old one until it is handed over: the user layer's files are in its
- * form, named by the hashes of the fleet items written into them (agent
- * fleet-converged.ts `syncedHeld`). Every workspace reads each and writes
+ * form, named by what each holds (agent boundary/plan.ts
+ * `USER_LAYER_PART`). Every workspace reads each and writes
  * none (core workspace-policy.ts): a harness hands its model a skill's path,
  * and the model reads the skill's other files from there with its own
  * tools, through the boundary.

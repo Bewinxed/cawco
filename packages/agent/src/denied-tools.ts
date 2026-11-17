@@ -157,13 +157,14 @@ export const sidecarTurn = <T>(work: () => Promise<T>): Promise<T> => {
 /**
  * The fleet's denials, as a welcome or a delta carried them, into the
  * sidecar before the agent answers it; then what earlier versions wrote into
- * the person's settings goes, if it has not yet ({@link dropWrittenDenials}).
- * Throws in its own words when the sidecar cannot be written: the agent
- * refuses the delta with them (NACK), and a spawn refuses with them too.
+ * the person's settings goes, if it has not yet ({@link dropWrittenDenials}),
+ * which is what it answers. Throws in its own words when the sidecar cannot
+ * be written: the agent refuses the delta with them (NACK), and a spawn
+ * refuses with them too.
  */
 export const applyFleetDenials = (
   deniedTools: readonly string[]
-): Promise<void> => {
+): Promise<DeniedCleanup> => {
   const write = (async () => {
     try {
       await sidecarTurn(async () => {
@@ -200,8 +201,12 @@ export const applyFleetDenials = (
     if (dropped.state === "failed") {
       console.warn(`[fleet] ${dropped.detail}`);
     }
+    return dropped;
   })();
-  writing = write.catch(() => undefined);
+  writing = write.then(
+    () => undefined,
+    () => undefined
+  );
   return write;
 };
 

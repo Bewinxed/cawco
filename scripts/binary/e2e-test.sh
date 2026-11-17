@@ -1605,6 +1605,13 @@ workspace_opens() {
   # Its first turn declared its wait: the item is live, held open as a delegate holds one on a command it started.
   wait_until 30 ws_item_live || { echo "ASSERTION FAILED: the work item is $(ws_item_says)"; echo "its session said: $(transcript_of "$(cat "$rigdir/ws-delegate")")"; return 1; }
   echo "the work item: $(ws_item_says)"
+  # The session started in the boundary the cut armed: its first session's account, project and spill folder were
+  # placed at the cut, so nothing at its spawn moved the form, and nothing handed the boundary over.
+  [[ "$(ws_gen)" == "$gen" ]] || {
+    echo "ASSERTION FAILED: the boundary was handed over from $gen to $(ws_gen) once its session ran; its decisions:"
+    as_user "$joinerc" cat "$(ws_state)/boundary-decisions.json" || echo "(no boundary-decisions.json)"
+    return 1
+  }
   # A command through the executor runs in the clone, as the workspace, in the sandbox's own pid namespace.
   [[ "$(ws_exec 'cat README.md')" == test ]]
   [[ "$(ws_exec 'printf %s "$CAWCO_WORKSPACE"')" == "$id" ]]
