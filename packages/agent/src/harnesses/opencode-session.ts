@@ -176,11 +176,15 @@ export const askOpencode = <T>(
   );
 
 /**
- * How long a turn may go with no server event at all before the wait itself
- * is framed as a `provider_stalled` system note. Our choice: the hangs seen
- * live ran 6+ silent minutes, while first tokens on huge contexts can
- * legitimately take one or two — 3 minutes sits between "slow" and "stuck".
- * Fires at most once per turn; any server event re-arms it.
+ * How long a turn may wait on the provider with no server event at all before
+ * the wait itself is framed as a `provider_stalled` system note. Our choice:
+ * the hangs seen live ran 6+ silent minutes, while first tokens on huge
+ * contexts can legitimately take one or two — 3 minutes sits between "slow"
+ * and "stuck". Fires at most once per wait; any server event re-arms it. A
+ * turn waiting on the person (an ask parked) or on a tool call (a shell, a
+ * subagent, a CawCo tool waiting on the person or the hub) is not waiting on
+ * the provider, so the watch is off for that wait and starts afresh once the
+ * last one ends.
  */
 const STALLED_TURN_MS = 3 * 60_000;
 
@@ -1106,8 +1110,12 @@ export class OpencodeSession implements HarnessSession {
    * the account's usage limit, for want of credit, or of its model.
    */
   #limitRefusal: { kind: AccountRefusal; words: string } | undefined;
-  /** Armed while a turn is open without any server event; see STALLED_TURN_MS. */
+  /** Armed while a turn waits on the provider without any server event; see STALLED_TURN_MS. */
   #stallTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The open turn's asks parked with the person, until each is settled. */
+  readonly #parkedAsks = new Set<string>();
+  /** The open turn's tool calls running, from `session.tool.called` to their end. */
+  readonly #runningTools = new Set<string>();
   /** Sends held while the config gate is up, each under the message id it will become. */
   readonly #queue: {
     text: string;
@@ -1604,6 +1612,9 @@ export class OpencodeSession implements HarnessSession {
       case "session.tool.called":
         this.#toolInputs.set(event.data.id, event.data.input);
         this.#toolUse(event.data.assistantMessageID, event.data.id);
+        if (this.#toolsEmitted.get(event.data.id) !== "resolved") {
+          this.#waitBegan(this.#runningTools, event.data.id);
+        }
         break;
       case "session.tool.progress":
         this.#toolProgress(
@@ -1616,6 +1627,7 @@ export class OpencodeSession implements HarnessSession {
       case "session.tool.success":
       case "session.tool.failed": {
         const { id, assistantMessageID } = event.data;
+        this.#waitEnded(this.#runningTools, id);
         if (event.type === "session.tool.success") {
           this.#backgrounded(event.data.metadata);
         }
@@ -1771,6 +1783,7 @@ export class OpencodeSession implements HarnessSession {
         break;
       case "permission.replied":
         this.#resolvedGates.add(event.data.requestID);
+        this.#waitEnded(this.#parkedAsks, event.data.requestID);
         this.#ctx.permissionResolved?.(event.data.requestID);
         break;
       case "form.created":
@@ -1784,6 +1797,7 @@ export class OpencodeSession implements HarnessSession {
       case "form.cancelled":
         this.#resolvedGates.add(event.data.id);
         this.#questions.delete(event.data.id);
+        this.#waitEnded(this.#parkedAsks, event.data.id);
         this.#ctx.permissionResolved?.(
           event.data.id,
           event.type === "form.cancelled" ? "cancelled" : "answered"
@@ -1908,6 +1922,10 @@ export class OpencodeSession implements HarnessSession {
 
   #turnEnded(closing?: TurnClosing): void {
     this.#turnRevision += 1;
+    // What the turn waited on ends with it: OpenCode drops a turn's open asks
+    // as the turn ends, and its tool calls with it.
+    this.#parkedAsks.clear();
+    this.#runningTools.clear();
     this.#busyValue = false;
     this.#ctx.busy(false);
     if (this.#compacting) {
@@ -2235,6 +2253,7 @@ export class OpencodeSession implements HarnessSession {
       );
       return;
     }
+    this.#waitBegan(this.#parkedAsks, asked.id);
     this.#ctx.permission({
       requestId: asked.id,
       toolName: asked.action,
@@ -2258,6 +2277,7 @@ export class OpencodeSession implements HarnessSession {
     const { questions, keys } = formQuestions(form);
     this.#questions.set(form.id, { form, keys });
     const tool = form.metadata?.tool;
+    this.#waitBegan(this.#parkedAsks, form.id);
     this.#ctx.permission({
       requestId: form.id,
       toolName: ASK_USER_QUESTION,
@@ -2431,6 +2451,7 @@ export class OpencodeSession implements HarnessSession {
     }
     this.#resolvedGates.add(requestId);
     this.#questions.delete(requestId);
+    this.#waitEnded(this.#parkedAsks, requestId);
     if (outcome === "answered") {
       this.#ctx.permissionResolved?.(requestId);
     }
@@ -2454,6 +2475,7 @@ export class OpencodeSession implements HarnessSession {
       return;
     }
     this.#resolvedGates.add(requestId);
+    this.#waitEnded(this.#parkedAsks, requestId);
     if (settled.outcome === "answered") {
       this.#ctx.permissionResolved?.(requestId, "answered", settled.answer);
     }
@@ -3016,15 +3038,27 @@ export class OpencodeSession implements HarnessSession {
     this.#sleepAfterRecoveryValue = true;
   }
 
-  /** Any server event is progress: re-arm the stall notice while a turn is open. */
+  /**
+   * Whether the open turn waits on the provider alone: no ask parked with the
+   * person and no tool call running. Only such a wait can be a provider stall.
+   */
+  get #waitsOnProvider(): boolean {
+    return (
+      this.#turnOpen &&
+      this.#parkedAsks.size === 0 &&
+      this.#runningTools.size === 0
+    );
+  }
+
+  /** Any server event is progress: re-arm the stall notice while the turn waits on the provider. */
   #noteServerActivity(): void {
-    if (!this.#turnOpen) {
+    this.#clearStallTimer();
+    if (!this.#waitsOnProvider) {
       return;
     }
-    this.#clearStallTimer();
     this.#stallTimer = setTimeout(() => {
       this.#stallTimer = undefined;
-      if (!this.#turnOpen) {
+      if (!this.#waitsOnProvider) {
         return;
       }
       this.#ctx.frame({
@@ -3035,6 +3069,19 @@ export class OpencodeSession implements HarnessSession {
           "Still waiting on the provider with no output — the turn is open and may yet complete. If this persists, interrupt and retry.",
       });
     }, STALLED_TURN_MS);
+  }
+
+  /** The turn waits on `id` (a parked ask, a running tool call): the provider is not the one silent. */
+  #waitBegan(waits: Set<string>, id: string): void {
+    waits.add(id);
+    this.#clearStallTimer();
+  }
+
+  /** `id` is no longer waited on; once nothing else is, the provider's silence is timed from now. */
+  #waitEnded(waits: Set<string>, id: string): void {
+    if (waits.delete(id)) {
+      this.#noteServerActivity();
+    }
   }
 
   #clearStallTimer(): void {
@@ -3823,6 +3870,8 @@ export class OpencodeSession implements HarnessSession {
     this.#lifetime.abort();
     this.#onRelease();
     this.#turnOpen = false;
+    this.#parkedAsks.clear();
+    this.#runningTools.clear();
     this.#clearStallTimer();
     await this.#client.session
       .interrupt({ sessionID: this.#opencodeSessionId() })
