@@ -2,7 +2,7 @@
  * The page's pin layer as its users hold it (pins.ts `startPins` makes
  * one): apart from pins.ts, so ink.ts, which pins.ts imports, can hold one.
  */
-import type { PinnedElement } from "@cawco/core/comments/anchor";
+import type { PageAnchor, PinnedElement } from "@cawco/core/comments/anchor";
 import type { InkGroup } from "@cawco/core/ink";
 import type { Box } from "./frames";
 
@@ -18,6 +18,13 @@ export interface DraftTarget {
 }
 
 export interface Pins {
+  /**
+   * Each pin a draw places by its anchor, with the element it stands on as
+   * the last draw placed it (none while it stands nowhere): what ink.ts
+   * `whereNow` reads to tell whether a draw would place a pin otherwise.
+   * None while no pin is drawn on the page.
+   */
+  anchored: () => Iterable<{ anchor: PageAnchor; on: Element | null }>;
   /**
    * The apps' Comment-mode tap (page.ts `appCommenting`, until tsk-59): a
    * comment pinned on `el` where the viewport's `x`, `y` landed, its thread

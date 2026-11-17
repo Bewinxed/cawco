@@ -171,38 +171,46 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
   const sheet = document.createElement("style");
   sheet.textContent = `${TOKENS}\n${CHROME}`;
   shadow.prepend(sheet);
-  const probe = document.createElement("span");
-  probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none";
-  shadow.append(probe);
-
-  const token: InkChrome["token"] = (name, property = "color") => {
-    probe.style.setProperty(property, `var(${name})`);
-    const value = getComputedStyle(probe).getPropertyValue(property);
-    probe.style.removeProperty(property);
-    return value;
+  /**
+   * Each token's probe, by property and name: made and put in the shadow
+   * root the first time it is asked, and kept, so reading a token writes
+   * nothing to the page. Probes made and taken out on every read put nodes
+   * in and out and restyled the page on every draw of the pins. Each read
+   * is the page's style as it computes now: a theme or a scheme changed is
+   * read at once.
+   */
+  const probes = new Map<string, HTMLSpanElement>();
+  const probeOf = (name: string, property: TokenProperty) => {
+    const key = `${property} ${name}`;
+    let probe = probes.get(key);
+    if (!probe) {
+      probe = document.createElement("span");
+      probe.style.cssText =
+        "position:fixed;visibility:hidden;pointer-events:none";
+      probe.style.setProperty(property, `var(${name})`);
+      shadow.append(probe);
+      probes.set(key, probe);
+    }
+    return probe;
   };
+
+  const token: InkChrome["token"] = (name, property = "color") =>
+    getComputedStyle(probeOf(name, property)).getPropertyValue(property);
   const tokens: InkChrome["tokens"] = (asked) => {
-    const probes = Object.entries(asked).map(([key, entry]) => {
+    // Every probe in before any is read: the page's style is computed once for all.
+    const read = Object.entries(asked).map(([key, entry]) => {
       const [name, property = "color"] = entry as readonly [
         string,
         TokenProperty?,
       ];
-      const one = document.createElement("span");
-      one.style.cssText = probe.style.cssText;
-      one.style.setProperty(property, `var(${name})`);
-      shadow.append(one);
-      return { key, one, property };
+      return { key, one: probeOf(name, property), property };
     });
-    const read = Object.fromEntries(
-      probes.map(({ key, one, property }) => [
+    return Object.fromEntries(
+      read.map(({ key, one, property }) => [
         key,
         getComputedStyle(one).getPropertyValue(property),
       ])
     ) as Record<keyof typeof asked, string>;
-    for (const { one } of probes) {
-      one.remove();
-    }
-    return read;
   };
   const ms = (name: string) => durationMs(token(name, "transition-duration"));
   /** `--ease-out`, the curve every entrance and exit here runs on. */

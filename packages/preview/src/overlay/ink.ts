@@ -179,8 +179,6 @@ export interface InkDeps {
   anchorOf: (el: Element, point?: { x: number; y: number }) => PageAnchor;
   /** A mark's anchor as this page may read it, `at` when the mark was made (page.ts `anchorToday`). */
   anchorToday: (anchor: PageAnchor, at: string) => PageAnchor;
-  /** The count of the page's changes an anchor may read otherwise after (its nodes, words and names: page.ts `changesNow`). */
-  changes: () => number;
   chrome: InkChrome;
   describe: (el: Element) => PinnedElement;
   /** The deepest element at each of the viewport's points, inside same-origin frames; one hit test pass. */
@@ -203,6 +201,10 @@ export interface InkDeps {
   pageSized: (el: Element) => boolean;
   /** The pins, drawn after the ink each time it is drawn. */
   pins: () => Pins;
+  /** The count of the page's changes of more than words: an element put in, taken out or renamed, or the window's width (page.ts `shapesNow`). */
+  shapes: () => number;
+  /** `el`'s words as an anchor reads them (page.ts `textOf`). */
+  textOf: (el: Element) => string;
   /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
   waiting: (anchor: PageAnchor) => boolean;
 }
@@ -1225,22 +1227,60 @@ export function startInk(deps: InkDeps): Ink {
   };
 
   /**
-   * Where the marks stand, read and nothing written: the count of the
-   * page's changes an anchor reads (its nodes, words and names), the page's
-   * extent, and the box in the page of each element a mark stands on as the
-   * last draw placed it. Two reads alike mean a draw would place every mark
-   * where it stands.
+   * What a draw reads for `anchor` now, the mark standing on `on`: whether
+   * it finds that element still, by what, and the words of what it finds
+   * (a mark follows its words, and a pin stands past its line's end); null
+   * where it finds nothing. The page as a whole has no words of its own.
    */
-  const whereNow = () =>
-    JSON.stringify([
-      deps.changes(),
+  const foundNow = (anchor: PageAnchor, on: Element | null) => {
+    const found = deps.locate(anchor);
+    if (!found) {
+      return null;
+    }
+    const { by, el } = found;
+    const doc = el.ownerDocument;
+    const whole = el === doc.body || el === doc.documentElement;
+    return [el === on, by, whole ? "" : deps.textOf(el)];
+  };
+
+  /**
+   * Where the marks stand, read and nothing written: the count of the
+   * page's changes of more than words, the page's extent, the box in the
+   * page of each element a mark stands on as the last draw placed it, and
+   * what each mark's anchor finds now ({@link foundNow}). Two reads alike
+   * mean a draw would place every mark where it stands: words the page
+   * writes elsewhere (a counter, a clock, a progress label on every scroll
+   * frame) draw nothing again.
+   */
+  const whereNow = () => {
+    const { ink, moved } = maps();
+    // A canvas places no mark by an anchor: its draw stands down.
+    const found = onCanvas()
+      ? []
+      : [
+          ...[...ink.values(), ...moved.values()].map((group) =>
+            "selector" in group.anchor
+              ? foundNow(
+                  deps.anchorToday(group.anchor, group.at),
+                  placed.get(group.id)?.anchor ?? null
+                )
+              : null
+          ),
+          ...[...deps.pins().anchored()].map(({ anchor, on }) =>
+            foundNow(anchor, on)
+          ),
+        ];
+    return JSON.stringify([
+      deps.shapes(),
       document.body?.scrollWidth ?? 0,
       document.body?.scrollHeight ?? 0,
       [
         ...[...placed.values()].map(({ anchor }) => anchor),
         ...deps.pins().standingOn(),
       ].map((el) => (el?.isConnected ? pageBox(el) : null)),
+      found,
     ]);
+  };
   /** {@link whereNow} as the last draw left the marks. */
   let drawnWhere = "";
 

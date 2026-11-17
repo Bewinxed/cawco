@@ -113,12 +113,14 @@ import {
 import {
   type Box,
   deepElementAt,
+  forgetPositions,
   frameDocument,
   frameLoading,
   frameOrigin,
   framesOf,
   frameWindows,
   isFrame,
+  pinnedToView,
   rectOf,
   staysInView,
   watchFrames,
@@ -605,7 +607,8 @@ const ink = startInk({
   ended: (id) => requestAnimationFrame(() => groupPicture(id)),
   pageSized,
   freehand,
-  changes: () => changesNow(document),
+  shapes: () => shapesNow(document),
+  textOf,
   locate,
   pins: () => pins,
   waiting,
@@ -700,10 +703,12 @@ addEventListener("cawco:hmr", (event) => {
  * scroll leaves in the viewport as it carries the layers on. Read as it scrolls
  * and never as a draw: a page whose document never scrolls pays nothing.
  */
-const marksStayInView = () =>
-  [...ink.standingOn(), ...pins.standingOn()].some(
+const marksStayInView = () => {
+  positionsNow();
+  return [...ink.standingOn(), ...pins.standingOn()].some(
     (el) => !!el && staysInView(el)
   );
+};
 addEventListener(
   "scroll",
   (event) => {
@@ -2176,15 +2181,70 @@ const ANCHOR_READS: MutationObserverInit = {
  * of it again.
  */
 let changesSeen = 0;
-const anchorReads = new MutationObserver((records) => {
-  if (records.some((record) => !ownNode(record.target))) {
+/**
+ * Of {@link changesSeen}, those that changed more than words: an element put
+ * in, taken out or renamed, or the window's width. Words alone (a text
+ * node's own, or text nodes put in or taken out) never change which element
+ * a selector names, nor put one under another, so the ink's draw reads only
+ * whether each mark still finds its element and its words (ink.ts
+ * `whereNow`): a page writing a counter on every scroll frame draws no mark
+ * again for it.
+ */
+let shapesSeen = 0;
+/** Whether a change wrote words alone: a text node's data, or text nodes alone put in or taken out. */
+const wordsAlone = (record: MutationRecord): boolean =>
+  record.type === "characterData" ||
+  (record.type === "childList" &&
+    ![...record.addedNodes, ...record.removedNodes].some(
+      (node) => node.nodeType === Node.ELEMENT_NODE
+    ));
+/** The page's own changes among `records`, counted ({@link changesSeen}, {@link shapesSeen}). */
+const tally = (records: MutationRecord[]) => {
+  const page = records.filter((record) => !ownNode(record.target));
+  if (page.length > 0) {
     changesSeen += 1;
   }
-});
+  if (page.some((record) => !wordsAlone(record))) {
+    shapesSeen += 1;
+  }
+};
+const anchorReads = new MutationObserver(tally);
 const readDocs = new WeakSet<Document>();
 addEventListener("resize", () => {
   changesSeen += 1;
+  shapesSeen += 1;
 });
+
+/** Whether a change may change an element's computed style: anything but words, and words in a stylesheet. */
+const restyles = (record: MutationRecord): boolean => {
+  // Watched in this page's document alone: its elements are this window's.
+  const { target } = record;
+  const el = target instanceof Element ? target : target.parentElement;
+  return !wordsAlone(record) || el?.localName === "style";
+};
+/** Lets go of the kept positions (frames.ts `positionOf`) when one of the page's own `records` may restyle it. */
+const forgetIfRestyled = (records: MutationRecord[]) => {
+  if (records.some((record) => !ownNode(record.target) && restyles(record))) {
+    forgetPositions();
+  }
+};
+/**
+ * The page's changes that may change an element's position (frames.ts
+ * `positionOf`): an attribute (a class, a style), an element or a
+ * stylesheet put in or taken out. A stylesheet finishing its load, and the
+ * viewport's size (a media query), change it too.
+ */
+const restyled = new MutationObserver(forgetIfRestyled);
+restyled.observe(document, {
+  attributes: true,
+  characterData: true,
+  childList: true,
+  subtree: true,
+});
+addEventListener("resize", forgetPositions);
+addEventListener("load", forgetPositions, { capture: true });
+/** The kept positions as the page's style stands now: a write this very task taken first. */
+const positionsNow = () => forgetIfRestyled(restyled.takeRecords());
 
 /**
  * How tall the page's own foot bar stands over the viewport's foot, px: a
@@ -2192,9 +2252,14 @@ addEventListener("resize", () => {
  * three points along the viewport's last pixel row, the overlay's own nodes
  * left out; 0 for none. Told to the host (`cawco:page-foot`) as it changes,
  * read on load, scroll and resize in the next frame, so what the host floats
- * over the page's foot (Changed since you looked) stands clear of it.
+ * over the page's foot (Changed since you looked) stands clear of it. Read
+ * on every frame of a scroll: the hit tests and the bar's box share one
+ * layout, and each element's position is read once while the page's style
+ * stands (frames.ts `positionOf`), so the elements scrolling past the foot
+ * cost a lookup each, not a style read of every ancestor.
  */
 function pageFootNow(): number {
+  positionsNow();
   const y = innerHeight - 1;
   let top = innerHeight;
   for (const share of [0.25, 0.5, 0.75]) {
@@ -2203,8 +2268,7 @@ function pageFootNow(): number {
         continue;
       }
       for (let at: Element | null = el; at; at = at.parentElement) {
-        const { position } = getComputedStyle(at);
-        if (position === "fixed" || position === "sticky") {
+        if (pinnedToView(at)) {
           const box = at.getBoundingClientRect();
           if (box.bottom >= innerHeight - 1 && box.height < innerHeight / 2) {
             top = Math.min(top, box.top);
@@ -2237,16 +2301,25 @@ addEventListener("scroll", tellPageFoot, { passive: true, capture: true });
 addEventListener("resize", tellPageFoot);
 addEventListener("load", tellPageFoot);
 
-/** The count of the page's changes as they stand now, `doc` watched from here on: changes not yet delivered (a write this very task) taken first. */
-function changesNow(doc: Document): number {
+/** The page's changes counted as they stand now, `doc` watched from here on: changes not yet delivered (a write this very task) taken first. */
+function tallyNow(doc: Document) {
   if (!readDocs.has(doc)) {
     readDocs.add(doc);
     anchorReads.observe(doc, ANCHOR_READS);
   }
-  if (anchorReads.takeRecords().some((record) => !ownNode(record.target))) {
-    changesSeen += 1;
-  }
+  tally(anchorReads.takeRecords());
+}
+
+/** The count of the page's changes as they stand now ({@link changesSeen}). */
+function changesNow(doc: Document): number {
+  tallyNow(doc);
   return changesSeen;
+}
+
+/** The count of the page's changes of more than words as they stand now ({@link shapesSeen}). */
+function shapesNow(doc: Document): number {
+  tallyNow(doc);
+  return shapesSeen;
 }
 
 /** What {@link locate} found, in which document, at which count of the page's changes; null where nothing was. */

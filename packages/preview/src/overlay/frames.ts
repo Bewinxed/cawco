@@ -284,6 +284,36 @@ export const clipOf = (el: Element, own = false): DOMRect | null => {
 };
 
 /**
+ * Each top-document element's computed `position` as last read. A scroll
+ * changes no element's style, so what the page's scroll asks of it on every
+ * frame (the page's foot bar, the marks on what stays in view) is read once
+ * per element and kept until the page's style may have changed:
+ * {@link forgetPositions}.
+ */
+let positions = new WeakMap<Element, string>();
+
+/** `el`'s computed `position`, `el` of the top document, read once while the page's style stands ({@link positions}). */
+const positionOf = (el: Element): string => {
+  let position = positions.get(el);
+  if (position === undefined) {
+    ({ position } = getComputedStyle(el));
+    positions.set(el, position);
+  }
+  return position;
+};
+
+/** Every kept {@link positionOf} let go: an attribute, an element or a stylesheet changed, or the viewport's size. */
+export const forgetPositions = () => {
+  positions = new WeakMap();
+};
+
+/** Whether `el`, of the top document, stands where the page's scroll leaves it: fixed or sticky. */
+export const pinnedToView = (el: Element): boolean => {
+  const position = positionOf(el);
+  return position === "fixed" || position === "sticky";
+};
+
+/**
  * Whether the top page's scroll leaves `el` where it stands in the viewport
  * while it carries the marks' layers on: it, or what holds it in the top
  * document (its outermost frame's), is fixed or sticky. A frame's own fixed
@@ -295,8 +325,7 @@ export const staysInView = (el: Element): boolean => {
     at;
     at = at.parentElement
   ) {
-    const { position } = getComputedStyle(at);
-    if (position === "fixed" || position === "sticky") {
+    if (pinnedToView(at)) {
       return true;
     }
   }

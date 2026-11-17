@@ -1091,9 +1091,30 @@ export function startPins(deps: PinsDeps): Pins {
     return g;
   };
 
-  /** A pin's pill painted at `pill`, in its kept `<g>`. */
+  /** What each kept pill was last painted from ({@link pinPill}). */
+  const pillLooks = new WeakMap<SVGGElement, { look: string; paint: Paint }>();
+
+  /**
+   * A pin's pill painted at `pill`, in its kept `<g>`; one painted from the
+   * same paint, place and state is left as it stands, so a scroller moving
+   * one pill writes nothing to the rest.
+   */
   const pinPill = (pin: Pin, pill: Pill, paint: Paint): SVGGElement => {
     const g = pillOf(pin.id);
+    const look = JSON.stringify([
+      pin.number,
+      stateOf(pin),
+      pill,
+      keyed && pin.id === focused,
+      live.has(pin.id),
+      unread.has(pin.id),
+      coarse(),
+    ]);
+    const was = pillLooks.get(g);
+    if (was?.look === look && was.paint === paint) {
+      return g;
+    }
+    pillLooks.set(g, { look, paint });
     g.setAttribute("data-pin", String(pin.number));
     paintPill(g, pin, pill, paint, { under: [hitArea(pill.box)] });
     return g;
@@ -1797,6 +1818,14 @@ export function startPins(deps: PinsDeps): Pins {
       open(pin.id, true);
       return pin.id;
     },
+    anchored: () =>
+      onPage() && artifact.keeps()
+        ? [...pinsMap().values()].flatMap((pin) =>
+            "selector" in pin.anchor
+              ? [{ anchor: pin.anchor, on: placed.get(pin.id)?.el ?? null }]
+              : []
+          )
+        : [],
     standingOn: () => [
       ...[...placed.values()].map(({ el }) => el),
       ...(drafted ? [drafted.el] : []),
