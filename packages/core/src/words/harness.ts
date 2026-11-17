@@ -144,6 +144,19 @@ export const harnessRefusedWords = {
    */
   keepsNo: (name: string, what: string, undone: string) =>
     `${name} keeps no ${what} CawCo can set, so ${undone}.`,
+  /**
+   * An effort level asked of a live session whose model has no such level
+   * in its harness (agent pi-runtime.ts `CONTROL_SET_EFFORT`): `offered` are
+   * the CawCo levels the model has, by the harness's own list. Its effort
+   * stays as it was; no other level is put in its place.
+   */
+  effortNotOffered: (
+    name: string,
+    model: string,
+    level: string,
+    offered: readonly string[]
+  ) =>
+    `${name} has no ${level} effort for ${model}${offered.length > 0 ? `, only ${offered.join(", ")}` : ", which takes no effort level"}, so the effort wasn't changed.`,
   /** Needs you's notice for a stored conversation's deletion that keeps failing (hub session-lifecycle.ts): its title. */
   notDeletedTitle: "A conversation wasn't deleted",
   /** Its body: where, how often, the machine's last words, and that CawCo goes on trying. */

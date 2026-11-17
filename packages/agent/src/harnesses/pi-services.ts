@@ -12,8 +12,8 @@ import type {
   PlacedFleetConfig,
 } from "@cawco/core/fleet";
 import type { HarnessCapabilities, HarnessReport } from "@cawco/core/harness";
-import type { ModelInfo } from "@cawco/core/harness/kinds";
-import { isEffortLevel } from "@cawco/core/harness/kinds";
+import type { EffortLevel, ModelInfo } from "@cawco/core/harness/kinds";
+import { EFFORT_LEVELS, isEffortLevel } from "@cawco/core/harness/kinds";
 import {
   type PiMessage,
   type PiShellEnd,
@@ -49,7 +49,11 @@ import {
   type TranscriptRecord,
   typeFilter,
 } from "@cawco/jsonl-parser";
-import type { Api, Model } from "@earendil-works/pi-ai/compat";
+import {
+  type Api,
+  getSupportedThinkingLevels,
+  type Model,
+} from "@earendil-works/pi-ai/compat";
 import {
   type AgentSessionServices,
   CURRENT_SESSION_VERSION,
@@ -200,7 +204,7 @@ const PI_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
   permissionModes: [],
   setModel: true,
-  effort: false,
+  effort: true,
   contextUsage: true,
   supportedModels: true,
   supportedCommands: true,
@@ -369,6 +373,20 @@ const piDefaultModel = async (cwd: string): Promise<string | null> => {
     : null;
 };
 
+/**
+ * The effort levels a pi model takes: pi's own thinking levels for it
+ * (pi-ai `getSupportedThinkingLevels`: `off` alone for a model without
+ * reasoning, else `off`, `minimal`, `low`, `medium`, `high`, and `xhigh` and
+ * `max` where its `thinkingLevelMap` names them) that are CawCo's effort
+ * levels by the same name. pi's `off` and `minimal` have no CawCo level, so
+ * none is offered for them, and no CawCo level is mapped onto another of
+ * pi's.
+ */
+const piEffortLevels = (model: Model<Api>): EffortLevel[] => {
+  const levels: string[] = getSupportedThinkingLevels(model);
+  return EFFORT_LEVELS.filter((level) => levels.includes(level));
+};
+
 /** The models `runtime` (the machine's own with its accounts, unless a session's is given) can run. */
 export const modelCatalog = async (
   runtime?: ModelRuntime
@@ -376,11 +394,17 @@ export const modelCatalog = async (
   const { modelRuntime, settingsManager } = await PiProfile.services();
   await settingsManager.reload();
   const available = await (runtime ?? modelRuntime).getAvailable();
-  const rows: ModelInfo[] = available.map((model) => ({
-    value: piModelValue(model),
-    displayName: model.name,
-    contextWindow: model.contextWindow,
-  }));
+  const rows: ModelInfo[] = available.map((model) => {
+    const supportedEffortLevels = piEffortLevels(model);
+    return {
+      value: piModelValue(model),
+      displayName: model.name,
+      contextWindow: model.contextWindow,
+      ...(supportedEffortLevels.length > 0
+        ? { supportsEffort: true, supportedEffortLevels }
+        : {}),
+    };
+  });
   const id = settingsManager.getDefaultModel();
   const provider = settingsManager.getDefaultProvider();
   const resolved = id

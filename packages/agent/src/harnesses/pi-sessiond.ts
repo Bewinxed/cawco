@@ -34,6 +34,7 @@ import {
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
+  CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
@@ -482,6 +483,8 @@ class PiRemoteSession implements HarnessSession {
       this.#ask({ method: CONTROL_INTERRUPT, args: [] }),
     [CONTROL_SET_MODEL]: (...args) =>
       this.#ask({ method: CONTROL_SET_MODEL, args }),
+    [CONTROL_SET_EFFORT]: (...args) =>
+      this.#ask({ method: CONTROL_SET_EFFORT, args }),
     [CONTROL_SUPPORTED_MODELS]: () =>
       this.#ask({ method: CONTROL_SUPPORTED_MODELS, args: [] }),
     [CONTROL_SUPPORTED_COMMANDS]: async () =>

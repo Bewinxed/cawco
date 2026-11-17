@@ -14,8 +14,10 @@ import type { StartingSet } from "@cawco/core/delegate-types";
 import { inStartingSet, piToolsFor } from "@cawco/core/delegate-types";
 import {
   CONTROL_REFRESH_CAWCO_TOOLS,
+  EFFORT_READ,
   type SessionCredentialInstall,
 } from "@cawco/core/harness";
+import { type EffortLevel, isEffortLevel } from "@cawco/core/harness/kinds";
 import type { HookEvent } from "@cawco/core/hooks";
 import { hookToolCall, hookToolInputBack } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
@@ -30,6 +32,7 @@ import {
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
+  CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
@@ -39,6 +42,7 @@ import type { ModelTurnUsage, SentMessage } from "@cawco/core/session-messages";
 import { MESSAGES_READ, usageByModel } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { pricedRequest } from "@cawco/core/usage/pricing";
+import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import {
   judgeCall,
@@ -1019,6 +1023,59 @@ class PiSession implements HarnessSession {
   #reading: string | undefined;
   /** What the turn's requests spent so far: its answers' and any compaction's. */
   #turnUsage: ModelTurnUsage[] = [];
+  /**
+   * The effort the person chose for the session: its spawn's, then each
+   * set-effort's. A model switch puts the session back on it, as far as the
+   * new model goes ({@link CONTROL_SET_MODEL}).
+   */
+  #effort: EffortLevel | undefined;
+
+  /**
+   * Says the effort the session sends on its next request ({@link
+   * EFFORT_READ}), read back from pi rather than remembered from an ask: its
+   * thinking level now, which pi holds within what the session's model
+   * takes (agent-session.js `setThinkingLevel`: "Clamps to model
+   * capabilities"). pi's `off` is no effort sent. Its `minimal`, which only
+   * the person's own pi settings put a session on (CawCo offers no level of
+   * that name, `piEffortLevels`), is no CawCo level: it is said nowhere, and
+   * the session's chip reads not yet known.
+   */
+  #sayEffort(): void {
+    const level: string = this.#session.thinkingLevel;
+    if (level !== "off" && !isEffortLevel(level)) {
+      console.warn(
+        `[pi] ${this.#ctx.instanceId}: pi runs it at thinking level ${level}, which is no CawCo effort level`
+      );
+      return;
+    }
+    this.#ctx.frame({
+      type: "system",
+      subtype: EFFORT_READ,
+      effort: level === "off" ? null : level,
+    });
+  }
+
+  /**
+   * The session put on effort `level`, refused when its model has no such
+   * level in pi (`getAvailableThinkingLevels`): pi would otherwise run the
+   * nearest it has without a word. Said back as pi then holds it.
+   */
+  #setEffort(level: EffortLevel): void {
+    const offered: string[] = this.#session.getAvailableThinkingLevels();
+    if (!offered.includes(level)) {
+      throw new Error(
+        harnessRefusedWords.effortNotOffered(
+          "pi",
+          this.#session.model ? piModelValue(this.#session.model) : "its model",
+          level,
+          offered.filter(isEffortLevel)
+        )
+      );
+    }
+    this.#effort = level;
+    this.#session.setThinkingLevel(level);
+    this.#sayEffort();
+  }
 
   /** One request's pi-ai `Usage` on `model` (`provider/id`), priced at `at` (epoch ms). */
   #spent(model: string, usage: Usage | undefined, at: number): void {
@@ -1099,9 +1156,11 @@ class PiSession implements HarnessSession {
     tools: CawcoTools,
     runtime: ModelRuntime,
     shells: PiShells,
-    fleetMcp: FleetMcp | undefined
+    fleetMcp: FleetMcp | undefined,
+    effort: EffortLevel | undefined
   ) {
     this.#ctx = ctx;
+    this.#effort = effort;
     this.#session = session;
     this.#credential = credential;
     this.#tools = tools;
@@ -1130,6 +1189,7 @@ class PiSession implements HarnessSession {
       cwd: ctx.cwd,
       ...(session.model ? { model: piModelValue(session.model) } : {}),
     });
+    this.#sayEffort();
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: translates each pi event shape once into the neutral stream
@@ -1296,8 +1356,14 @@ class PiSession implements HarnessSession {
           ...(context === undefined ? {} : { contextTokens: context }),
           ...this.#compactsAt(),
         });
+        this.#sayEffort();
         break;
       }
+      // Its effort moved (a set-effort, a model switch, pi's own clamp): said
+      // as pi now holds it.
+      case "thinking_level_changed":
+        this.#sayEffort();
+        break;
       case "agent_settled":
       case "agent_start":
       case "auto_retry_end":
@@ -1310,7 +1376,6 @@ class PiSession implements HarnessSession {
       case "summarization_retry_attempt_start":
       case "summarization_retry_finished":
       case "summarization_retry_scheduled":
-      case "thinking_level_changed":
       case "tool_execution_start":
       case "tool_execution_update":
       case "turn_end":
@@ -1558,9 +1623,25 @@ class PiSession implements HarnessSession {
           };
     },
     [CONTROL_INTERRUPT]: () => this.interrupt(),
+    // A model switch keeps the session's chosen effort as far as the new
+    // model goes, as Claude Code's does: pi's own switch puts it on the
+    // person's pi settings default instead (`_getThinkingLevelForModelSwitch`),
+    // so the chosen one is asked again, which pi holds within the model's
+    // levels and the read-back says.
     [CONTROL_SET_MODEL]: async (model) => {
       await this.#session.setModel(await resolvePiModel(this.#runtime, model));
+      if (this.#effort) {
+        this.#session.setThinkingLevel(this.#effort);
+      }
+      this.#sayEffort();
     },
+    // Refused, never another level put in its place, when the model has
+    // none of that name ({@link #setEffort}).
+    [CONTROL_SET_EFFORT]: (effort) =>
+      new Promise<void>((resolve) => {
+        this.#setEffort(effort);
+        resolve();
+      }),
     [CONTROL_SUPPORTED_MODELS]: () => modelCatalog(this.#runtime),
     // pi has no slash commands.
     [CONTROL_SUPPORTED_COMMANDS]: () => Promise.resolve([]),
@@ -1691,6 +1772,33 @@ const loadSkills = async (
   }
 };
 
+/**
+ * The effort a launch asks for (the hub's: a first spawn's, else the one
+ * chosen for the session, which every wake, restore, move and relaunch asks
+ * for), put on the session as its thinking level. With none, pi's own pick
+ * stands: the level a resumed conversation was left on, else the person's
+ * pi settings (sdk.js `createAgentSession`). A level the model lacks (one
+ * chosen on another model) is held by pi within the model's levels, as
+ * Claude Code holds it, and the session's first effort reading says the
+ * level it runs at ({@link PiSession}); the machine's log names the step.
+ */
+const launchEffort = (
+  session: AgentSession,
+  effort: EffortLevel | undefined,
+  instanceId: string
+): void => {
+  if (!effort) {
+    return;
+  }
+  const offered: string[] = session.getAvailableThinkingLevels();
+  if (!offered.includes(effort)) {
+    console.warn(
+      `[pi] ${instanceId}: launched at ${effort} effort, which its model has no level for (it has ${offered.join(", ")}): pi runs the nearest`
+    );
+  }
+  session.setThinkingLevel(effort);
+};
+
 /** The session's store: the one it resumes or forks, else a new one. */
 const sessionManagerFor = async (
   spec: SpawnPayload,
@@ -1809,6 +1917,7 @@ export async function startPiHost(
   // connects its servers ("The MCP extension connects its servers on
   // `session_start`, so call `session.bindExtensions()`", pi.dev/docs/latest/sdk).
   await session.bindExtensions({});
+  launchEffort(session, spec.effort, ctx.instanceId);
   await loadSkills(session, spec.skills ?? [], ctx.cwd);
   return new PiSession(
     ctx,
@@ -1817,6 +1926,7 @@ export async function startPiHost(
     tools,
     runtime,
     shells,
-    fleetMcp
+    fleetMcp,
+    spec.effort
   );
 }

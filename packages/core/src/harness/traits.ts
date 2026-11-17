@@ -285,6 +285,7 @@ const PI_TRAITS = {
     "fleetMcpHeal",
     "interrupt",
     "setModel",
+    "setEffort",
     "supportedModels",
     "supportedCommands",
     "getContextUsage",
