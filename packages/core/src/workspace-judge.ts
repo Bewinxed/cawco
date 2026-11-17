@@ -310,9 +310,9 @@ const judge = (policy: Policy, path: string, access: Access): Verdict => {
 
 /**
  * The policy a Claude session judges by: the workspace's, with the session's
- * own `projects/<slug>/` dir (its transcripts and tool results) readable and
- * its auto memory there readable and writable. The transcript is named by the
- * CLI, never by the model. A transcript in no `projects/<slug>/` adds nothing.
+ * own `projects/<slug>/` dir (its transcripts and tool results) readable. The
+ * transcript is named by the CLI, never by the model. A transcript in no
+ * `projects/<slug>/` adds nothing.
  */
 const claudeSession = (
   policy: Policy,
@@ -325,12 +325,9 @@ const claudeSession = (
   if (basename(dirname(project)) !== "projects") {
     return policy;
   }
-  const own = resolveReal(project);
-  const memory = resolveReal(join(project, "memory"));
   return {
     ...policy,
-    allowRead: [...policy.allowRead, own, memory],
-    allowWrite: [...policy.allowWrite, memory],
+    allowRead: [...policy.allowRead, resolveReal(project)],
   };
 };
 

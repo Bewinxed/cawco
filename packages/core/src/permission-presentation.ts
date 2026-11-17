@@ -1398,12 +1398,19 @@ function memoryProposal(input: Record<string, unknown>): Presented {
     summary =
       first.before === "" ? `Add ${first.path}` : `Change ${first.path}`;
   }
+  // A fleet proposal's one file is a fleet memory document (hub memory.ts).
+  if (input.fleet === true && first) {
+    summary =
+      first.before === ""
+        ? `Add ${first.path} to the fleet's memory`
+        : `Change the fleet's ${first.path}`;
+  }
   return {
     summary,
     detail: statWords(stat),
     changes,
     fields: [
-      ...fieldsOf(input, ["files", "notes", "project"]),
+      ...fieldsOf(input, ["files", "notes", "project", "fleet"]),
       ...(notes.length > 0
         ? [{ key: "from notes", value: notes.join(", ") }]
         : []),

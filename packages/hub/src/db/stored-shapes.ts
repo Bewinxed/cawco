@@ -690,6 +690,7 @@ const ProposalShape = declared(
     base: z.string(),
     by: z.string(),
     files: z.array(ProposalFileShape),
+    fleet: z.literal(true).optional(),
     id: z.string(),
     kind: z.enum(["archive", "rewrite"]).optional(),
     notes: z.array(z.string()),

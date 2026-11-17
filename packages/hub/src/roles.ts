@@ -24,7 +24,8 @@
  * - **web-facing**: a session that reads the outside world: it finishes its
  *   work and tells you, with no posting, spawning or admin tools.
  * - **curator**: a project's memory curator run (memory.ts): it reads the
- *   inbox, proposes changes to AGENTS.md and `knowledge/` for you to approve,
+ *   inbox, proposes changes to AGENTS.md and `knowledge/`, and a fleet-wide
+ *   note's to a fleet memory document, for you to approve,
  *   archives the notes that are not lasting facts, and finishes. No edit,
  *   shell or web tools in its harness either (caw.ts `fencedSpawn`).
  * - **trimmer**: a run of the unused skills and servers routine

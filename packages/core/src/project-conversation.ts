@@ -220,9 +220,9 @@ export type ProjectNoteEvent =
     }
   | {
       kind: "file";
-      /** The project memory file (`AGENTS.md`, `knowledge/<topic>.md`). */
+      /** The project memory file (`AGENTS.md`, `knowledge/<topic>.md`), or the fleet memory document a fleet proposal changes. */
       path: string;
-      /** Its commit; null for a change you declined. */
+      /** Its commit, or a fleet document's hash; null for a change you declined. */
       sha: string | null;
       /** Caw wrote it, or you answered his proposal for it. */
       what: "wrote" | "approved" | "declined";

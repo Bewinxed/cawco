@@ -110,7 +110,7 @@ import {
   recordOf,
   recordPath,
 } from "@cawco/core/decisions";
-import { frontMatterBlock } from "@cawco/core/fleet";
+import { frontMatterBlock, memoryDocProblem } from "@cawco/core/fleet";
 import type { ArrivingAsk } from "@cawco/core/frames";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { isRecord } from "@cawco/core/is-record";
@@ -186,6 +186,7 @@ import { typeFileProblem } from "./project-delegate-types";
 import {
   changeFolderFiles,
   type FolderAuthor,
+  type FolderFile,
   folderBlame,
   folderFileNames,
   folderHistory,
@@ -297,14 +298,15 @@ const VERDICT_CRITERIA: Record<Verdict, string> = {
 const isVerdict = (word: string | null): word is Verdict =>
   VERDICTS.some((one) => one === word);
 
-/** Your answer to a proposal for `paths`, as its note in the project's conversation: `sha` is your commit, null when you declined; it links the first file. */
+/** Your answer to a proposal for `paths`, as its note in the project's conversation: `sha` is your commit (a fleet document's hash for a `fleet` one), null when you declined; it links the first file. */
 const answeredNote = (
   paths: string[],
   sha: string | null,
-  result: PermissionResult
+  result: PermissionResult,
+  fleet: boolean
 ): ProjectNote => {
   const path = paths[0] ?? "";
-  const named = paths.join(", ");
+  const named = fleet ? `the fleet's ${paths.join(", ")}` : paths.join(", ");
   return sha === null
     ? {
         title: `You declined the change to ${named}`,
@@ -315,7 +317,9 @@ const answeredNote = (
       }
     : {
         title: `You approved the change to ${named}`,
-        body: `Committed as your commit ${sha.slice(0, 9)}.`,
+        body: fleet
+          ? "Saved to the fleet's memory documents."
+          : `Committed as your commit ${sha.slice(0, 9)}.`,
         event: { kind: "file", what: "approved", path, sha },
       };
 };
@@ -622,6 +626,12 @@ export interface Note {
   author: string;
   /** Who sorted it (`rules`, `jev`, `curator`); null while nobody has. */
   by: string | null;
+  /**
+   * It holds for every project, not its own alone (`memory_note`'s `fleet`):
+   * Jev neither sorts nor prefills it, and the curator proposes it to a fleet
+   * memory document ({@link Proposal} `fleet`).
+   */
+  fleet: boolean;
   id: string;
   /** Archived only: what came of it (`applied <sha>`, `rejected`, `tainted`, its verdict). */
   outcome: string | null;
@@ -712,6 +722,7 @@ const renderNote = (note: Note): string =>
     ...(note.task ? [`task: ${note.task}`] : []),
     `time: ${note.time}`,
     ...(note.since ? [`since: ${note.since}`] : []),
+    ...(note.fleet ? ["fleet: true"] : []),
     ...(note.taint.length > 0 ? [`taint: [${note.taint.join(", ")}]`] : []),
     ...(note.verdict ? [`verdict: ${note.verdict}`] : []),
     ...(note.by ? [`by: ${note.by}`] : []),
@@ -747,6 +758,7 @@ const parseNote = (path: string, content: string): Note | undefined => {
     task: field("task"),
     time: field("time") ?? "",
     since: since && DAY.test(since) ? since : null,
+    fleet: field("fleet") === "true",
     taint: (taintLine ? listOf(taintLine) : undefined) ?? [],
     verdict: isVerdict(verdict) ? verdict : null,
     by: field("by"),
@@ -962,8 +974,9 @@ const candidate = (note: Note, cited: ReadonlySet<string>): boolean =>
 
 /**
  * `card` and `drop` as asked, refused when they do not go together: `drop`
- * needs a card, a card's pick is neither an ask nor the curator's, and a
- * write gives files, or with a card notes to drop and nothing cited.
+ * needs a card, a card's pick is neither an ask, the curator's nor a fleet
+ * document's (always the person's to approve), and a write gives files, or
+ * with a card notes to drop and nothing cited.
  */
 const cardAskUnfit = (
   asked: {
@@ -971,10 +984,18 @@ const cardAskUnfit = (
     card?: string;
     drop: string[];
     files: unknown[];
+    fleet: boolean;
     notes: string[];
   },
   curatorRun: boolean
 ) => {
+  if (asked.card !== undefined && asked.fleet) {
+    return problem(400, {
+      code: "memory-fleet-card",
+      detail:
+        "A fleet memory document is the person's to approve: propose it without card.",
+    });
+  }
   if (asked.card === undefined) {
     if (asked.drop.length > 0) {
       return problem(400, {
@@ -1056,6 +1077,19 @@ const withNote = (agents: string, text: string): string => {
   return joined.endsWith("\n") ? joined : `${joined}\n`;
 };
 
+/**
+ * Whether a proposal waits for the person's answer instead of being written
+ * at once (`propose`, the one place a proposal is written without
+ * one): the curator's, one asked with `ask`, and every fleet one. A fleet
+ * memory document reaches every project, so its change waits whoever
+ * proposed it and whatever their session's mode: a proposal is parked here,
+ * never through asks.ts, where Full Send approves an ask.
+ */
+const waitsForPerson = (
+  asked: { ask: boolean; fleet: boolean },
+  curatorRun: boolean
+): boolean => curatorRun || asked.ask || asked.fleet;
+
 /** A proposal's reason, one line under {@link WHY_LIMIT}; refused blank or longer. */
 const reasonOf = (raw: string) => {
   const why = raw.trim();
@@ -1093,6 +1127,10 @@ const logUnread = (projectId: string, files: FactFile[]): void => {
     }
   }
 };
+
+/** What the curator's brief says under a fleet note ({@link Note} `fleet`) in place of the fact lines it is paired with. */
+const FLEET_NOTE_BRIEF =
+  "Fleet-wide: it goes to a fleet memory document, never to this project's files.";
 
 /** A fact line as an error names it: `knowledge/x.md:12 (why): the line`. */
 const lineWords = (bad: Unreadable): string =>
@@ -1501,12 +1539,20 @@ interface Paired {
   unsorted: Note[];
 }
 
-/** The notes a curator run reads, each with the lines that share its subject: at most {@link RUN_NOTES} notes and {@link PAIRS_MAX} pairs. */
+/**
+ * The notes a curator run reads, each with the lines that share its subject:
+ * at most {@link RUN_NOTES} notes and {@link PAIRS_MAX} pairs. A fleet note
+ * ({@link Note} `fleet`) is the curator's alone: no project line is paired
+ * with it, and Jev is not asked to sort it.
+ */
 const pairUp = (waiting: Note[], files: FactFile[]): Paired => {
   const lines = files.flatMap((file) => file.facts);
   const considered = waiting.slice(0, RUN_NOTES);
   const related = new Map(
-    considered.map((each) => [each.id, relatedLines(each, lines)])
+    considered.map((each) => [
+      each.id,
+      each.fleet ? [] : relatedLines(each, lines),
+    ])
   );
   return {
     considered,
@@ -1516,7 +1562,7 @@ const pairUp = (waiting: Note[], files: FactFile[]): Paired => {
         (related.get(each.id) ?? []).map((fact) => ({ note: each, fact }))
       )
       .slice(0, PAIRS_MAX),
-    unsorted: considered.filter((each) => each.verdict === null),
+    unsorted: considered.filter((each) => each.verdict === null && !each.fleet),
   };
 };
 
@@ -1807,6 +1853,20 @@ export interface MemoryDeps {
     | "project"
     | "workItem"
   >;
+  /**
+   * The fleet's memory documents (routes/fleet-memory.ts), where a fleet
+   * proposal ({@link Proposal} `fleet`) reads its document and, approved,
+   * writes it, and the curator reads them (`memory_read` with `fleet`):
+   * `read` answers undefined for one the fleet does not keep,
+   * `write` is `admin_memory_write`'s `set_doc`, its scope left as it is,
+   * and answers the saved document's hash, or why it was refused.
+   */
+  readonly fleetDocs: {
+    /** Every document the fleet keeps, with the sessions it is loaded into (core memory-scope.ts `scopeWords`). */
+    list: () => { loadedInto: string; path: string }[];
+    read: (path: string) => string | undefined;
+    write: (path: string, content: string) => string | { refused: string };
+  };
   /** The project's folder changed under its tasks (a commit landed). */
   readonly folderChanged: (projectId: string) => void;
   /** A note to the person in the project's conversation (caw.ts `notice`); wakes no model. */
@@ -1831,6 +1891,7 @@ export interface MemoryDeps {
 export const createMemory = ({
   curator,
   db,
+  fleetDocs,
   folderChanged,
   notice,
   park,
@@ -1983,9 +2044,15 @@ export const createMemory = ({
   /**
    * An agent's note into its project's inbox, one commit, its taint the
    * hub's. `since`: the day its fact became true, when that is before today
-   * (a backfill); a day to come is refused.
+   * (a backfill); a day to come is refused. `fleet`: it holds for every
+   * project ({@link Note} `fleet`).
    */
-  const note = async (actor: InstanceRow, raw: string, since?: string) => {
+  const note = async (
+    actor: InstanceRow,
+    raw: string,
+    since?: string,
+    fleet = false
+  ) => {
     const project = inboxOf(actor);
     if (project instanceof ElysiaStatus) {
       return project;
@@ -2007,7 +2074,7 @@ export const createMemory = ({
     if (ruled instanceof ElysiaStatus) {
       return ruled;
     }
-    const made = noteOf(actor, at, held, ruled);
+    const made = noteOf(actor, at, held, ruled, fleet);
     const written = await writeNote(projectId, made, actor.id);
     if (written instanceof ElysiaStatus) {
       return written;
@@ -2032,12 +2099,13 @@ export const createMemory = ({
     };
   };
 
-  /** `actor`'s note made `at`, true since `since`, in the words and with the verdict the rules gave it. */
+  /** `actor`'s note made `at`, true since `since`, in the words and with the verdict the rules gave it; `fleet` when it holds for every project. */
   const noteOf = (
     actor: InstanceRow,
     at: Date,
     since: string | null,
-    { text, verdict }: { text: string; verdict: Verdict | null }
+    { text, verdict }: { text: string; verdict: Verdict | null },
+    fleet: boolean
   ): Note => {
     const item = actor.workItemId ? db.workItem(actor.workItemId) : undefined;
     const id = idAt("n", at);
@@ -2051,6 +2119,7 @@ export const createMemory = ({
       task: item?.taskId ?? null,
       time: at.toISOString(),
       since,
+      fleet,
       taint: taintOf(actor),
       verdict,
       by: verdict ? "rules" : null,
@@ -2661,7 +2730,9 @@ export const createMemory = ({
       return proposals;
     }
     const touched = new Set(
-      proposals.flatMap((proposal) => proposal.files.map((file) => file.path))
+      proposals
+        .filter((proposal) => !proposal.fleet)
+        .flatMap((proposal) => proposal.files.map((file) => file.path))
     );
     const converted = await proposeConversions(project, factFiles, touched);
     if (converted instanceof ElysiaStatus) {
@@ -2718,7 +2789,7 @@ export const createMemory = ({
     const taken = jev
       ? await prefill(
           project,
-          kept.filter((each) => each.verdict === "lasting"),
+          kept.filter((each) => each.verdict === "lasting" && !each.fleet),
           related,
           sortOf,
           factFiles
@@ -2832,16 +2903,18 @@ export const createMemory = ({
     const listed = notes
       .map((each) => {
         const lines = given.related.get(each.id) ?? [];
-        const against =
-          lines.length > 0
-            ? `Fact lines grep found on its subject:\n${lines
-                .map(
-                  (fact) =>
-                    `- ${fact.path}:${fact.line}${fact.section === "conflict" ? " (Conflict)" : ""} \`${fact.raw}\`${leaning(given.sortOf(each, fact))}`
-                )
-                .join("\n")}`
-            : "No fact line shares its subject: it is new.";
-        return `### ${each.id}\n\nFrom “${each.author}” (${each.source}${each.task ? `, ${each.task}` : ""}), ${each.time}${each.since ? `; true since ${each.since}` : ""}${each.verdict === "lasting" ? "; Jev read it as a lasting fact" : ""}.\n\n${each.text}\n\n${against}`;
+        let against = "No fact line shares its subject: it is new.";
+        if (each.fleet) {
+          against = FLEET_NOTE_BRIEF;
+        } else if (lines.length > 0) {
+          against = `Fact lines grep found on its subject:\n${lines
+            .map(
+              (fact) =>
+                `- ${fact.path}:${fact.line}${fact.section === "conflict" ? " (Conflict)" : ""} \`${fact.raw}\`${leaning(given.sortOf(each, fact))}`
+            )
+            .join("\n")}`;
+        }
+        return `### ${each.id}\n\nFrom “${each.author}” (${each.source}${each.task ? `, ${each.task}` : ""}), ${each.time}${each.since ? `; true since ${each.since}` : ""}${each.fleet ? "; fleet-wide" : ""}${each.verdict === "lasting" ? "; Jev read it as a lasting fact" : ""}.\n\n${each.text}\n\n${against}`;
       })
       .join("\n\n");
     const files =
@@ -2913,6 +2986,7 @@ export const createMemory = ({
         notes: proposal.notes,
         why: proposal.why,
         project: projectName,
+        ...(proposal.fleet ? { fleet: true } : {}),
       },
       memoryProposal: proposal.id,
       projectId: proposal.projectId,
@@ -3131,6 +3205,74 @@ export const createMemory = ({
     return { paths, sha, notes: proposal.notes, committed: true };
   };
 
+  /**
+   * A fleet proposal's one file, checked: a fleet memory document's path
+   * (core fleet.ts `memoryDocProblem`), as the fleet keeps it now and as
+   * asked, changed; its reason and its cited notes as any proposal's.
+   */
+  const askedFleetChange = async (
+    projectId: string,
+    asked: {
+      files: { content: string; path: string }[];
+      notes: string[];
+      why: string;
+    },
+    curatorRun: boolean
+  ) => {
+    const [file, ...more] = asked.files;
+    if (!file || more.length > 0) {
+      return problem(400, {
+        code: "memory-fleet-one-document",
+        detail:
+          "A fleet proposal changes one fleet memory document: give its path and whole new text as the one file.",
+      });
+    }
+    const misfit = memoryDocProblem(file.path);
+    if (misfit) {
+      return problem(400, { code: "memory-fleet-path-unfit", detail: misfit });
+    }
+    const why = reasonOf(asked.why);
+    if (why instanceof ElysiaStatus) {
+      return why;
+    }
+    const notes = await citable(
+      projectId,
+      asked.notes,
+      curatorRun,
+      [file.path],
+      false
+    );
+    if (notes instanceof ElysiaStatus) {
+      return notes;
+    }
+    const before = fleetDocs.read(file.path) ?? "";
+    if (before === file.content) {
+      return problem(409, {
+        code: "memory-change-empty",
+        detail: `The fleet's ${file.path} already says exactly that; nothing to change.`,
+      });
+    }
+    const files: ProposalFile[] = [
+      { path: file.path, before, content: file.content },
+    ];
+    return { paths: [file.path], why, notes, files };
+  };
+
+  /** A proposal's change as asked: a fleet document's ({@link askedFleetChange}) or the project's files' ({@link askedChange}). */
+  const changeAsked = (
+    projectId: string,
+    asked: {
+      files: { content: string; path: string }[];
+      fleet: boolean;
+      notes: string[];
+      why: string;
+    },
+    curatorRun: boolean
+  ) =>
+    asked.fleet
+      ? askedFleetChange(projectId, asked, curatorRun)
+      : askedChange(projectId, asked, curatorRun, false);
+
   const propose = async (
     actor: InstanceRow,
     asked: {
@@ -3138,6 +3280,8 @@ export const createMemory = ({
       card?: string;
       drop: string[];
       files: { content: string; path: string }[];
+      /** Its one file is a fleet memory document ({@link askedFleetChange}). */
+      fleet: boolean;
       notes: string[];
       why: string;
     },
@@ -3159,7 +3303,7 @@ export const createMemory = ({
       return viaCard;
     }
     const curatorRun = actor.role === "curator";
-    const change = await askedChange(projectId, asked, curatorRun, false);
+    const change = await changeAsked(projectId, asked, curatorRun);
     if (change instanceof ElysiaStatus) {
       return change;
     }
@@ -3177,8 +3321,9 @@ export const createMemory = ({
       session: actor.id,
       time: at.toISOString(),
       ...(toolUseId ? { toolUseId } : {}),
+      ...(asked.fleet ? { fleet: true as const } : {}),
     };
-    if (!(curatorRun || asked.ask)) {
+    if (!waitsForPerson(asked, curatorRun)) {
       return await writeAtOnce(proposal, paths);
     }
     const kept = await keep(proposal, project);
@@ -3339,7 +3484,11 @@ export const createMemory = ({
    * so does every commit that changes one of its files ({@link folderCommitted}).
    */
   const mergedNow = (proposal: Proposal) =>
-    appliesNow(proposal.files, (path) => fileOr(proposal.projectId, path));
+    appliesNow(proposal.files, (path) =>
+      proposal.fleet
+        ? Promise.resolve(fleetDocs.read(path) ?? "")
+        : fileOr(proposal.projectId, path)
+    );
 
   /** {@link mergedNow}'s writes; a proposal that no longer applies throws, saying why. */
   const writesNow = async (proposal: Proposal) => {
@@ -3414,6 +3563,7 @@ export const createMemory = ({
       (proposal) =>
         open.get(proposal.id) === projectId &&
         !answering.has(proposal.id) &&
+        !proposal.fleet &&
         proposal.files.some((file) => paths.has(file.path))
     );
     for (const proposal of touched) {
@@ -3508,6 +3658,9 @@ export const createMemory = ({
     kept: boolean
   ) => {
     const { projectId } = proposal;
+    if (proposal.fleet) {
+      return await applyFleet(proposal, kept);
+    }
     const change = await changeNow(proposal);
     if (change instanceof ElysiaStatus) {
       return change;
@@ -3528,6 +3681,39 @@ export const createMemory = ({
       `[memory] ${projectId}: ${kept ? `${proposal.id} approved` : "Caw wrote"}, ${pathsOf(proposal)} at ${written.sha.slice(0, 9)}`
     );
     return written.sha;
+  };
+
+  /**
+   * An approved fleet proposal: its document written through the fleet's
+   * memory ({@link MemoryDeps} `fleetDocs`), merged onto the fleet's copy as
+   * it is now, then its notes archived as applied at the saved document's
+   * hash, its kept file with them. Answers that hash.
+   */
+  const applyFleet = async (proposal: Proposal, kept: boolean) => {
+    const writes = await writesNow(proposal);
+    if (writes instanceof ElysiaStatus) {
+      return writes;
+    }
+    let hash = "";
+    for (const each of writes) {
+      const saved = fleetDocs.write(each.path, each.content);
+      if (typeof saved !== "string") {
+        return problem(400, {
+          code: "memory-fleet-doc-unwritten",
+          detail: `The fleet's ${each.path} was not written: ${saved.refused}`,
+        });
+      }
+      hash = saved;
+    }
+    const archivedNotes = await archiveApplied(proposal, hash, kept);
+    if (archivedNotes instanceof ElysiaStatus) {
+      return archivedNotes;
+    }
+    folderChanged(proposal.projectId);
+    console.log(
+      `[memory] ${proposal.projectId}: ${proposal.id} approved, the fleet's ${pathsOf(proposal)} at ${hash.slice(0, 12)}`
+    );
+    return hash;
   };
 
   /**
@@ -4241,6 +4427,7 @@ export const createMemory = ({
       card?: string;
       drop: string[];
       files: { content: string; path: string }[];
+      fleet: boolean;
       notes: string[];
       why: string;
     }
@@ -4348,6 +4535,25 @@ export const createMemory = ({
       });
     }
     return await readFolderFile(projectId, rel);
+  };
+
+  /**
+   * The fleet's memory documents as a fleet proposal starts from: one whole,
+   * by its path, or with none, every one with the sessions it loads into.
+   */
+  const readFleet = (path: string | undefined) => {
+    if (!path) {
+      return { fleet: fleetDocs.list() };
+    }
+    const content = fleetDocs.read(path);
+    if (content === undefined) {
+      return problem(404, {
+        code: "memory-fleet-doc-unknown",
+        detail: `The fleet keeps no ${path}: a fleet proposal for it adds it.`,
+      });
+    }
+    const file: FolderFile = { path, content, size: content.length };
+    return file;
   };
 
   // --- the person's own note ----------------------------------------------------------
@@ -4767,7 +4973,8 @@ export const createMemory = ({
         answeredNote(
           proposal.files.map((file) => file.path),
           approved ? sha : null,
-          result
+          result,
+          proposal.fleet === true
         )
       );
     }
@@ -4875,11 +5082,11 @@ export const createMemory = ({
         return actor;
       };
       return [
-        MEMORY_NOTE_DEFINITION.run(({ text, since }) =>
-          note(me(), text, since)
+        MEMORY_NOTE_DEFINITION.run(({ text, since, fleet }) =>
+          note(me(), text, since, fleet ?? false)
         ),
         MEMORY_PROPOSE_DEFINITION.run(
-          ({ files, notes, why, ask, card, drop }) =>
+          ({ files, notes, why, ask, card, drop, fleet }) =>
             propose(
               me(),
               {
@@ -4889,12 +5096,15 @@ export const createMemory = ({
                 ask: ask ?? false,
                 ...(card === undefined ? {} : { card }),
                 drop: drop ?? [],
+                fleet: fleet ?? false,
               },
               toolUseId
             )
         ),
         MEMORY_CLASSIFY_DEFINITION.run(({ notes }) => classify(me(), notes)),
-        MEMORY_READ_DEFINITION.run(({ path }) => read(me(), path)),
+        MEMORY_READ_DEFINITION.run(({ path, fleet }) =>
+          fleet ? Promise.resolve(readFleet(path)) : read(me(), path)
+        ),
       ];
     },
   };
@@ -4940,6 +5150,7 @@ const MEMORY_NOTE_DEFINITION = defineTool(
       .string()
       .optional()
       .describe("YYYY-MM-DD it became true, if before today."),
+    fleet: z.boolean().optional().describe("It holds for every project."),
   },
   memoryNotedWords
 );
@@ -4956,6 +5167,10 @@ const MEMORY_PROPOSE_DEFINITION = defineTool(
     ask: z.boolean().optional(),
     card: z.string().optional().describe("<page>#<card>"),
     drop: z.array(z.string()).optional(),
+    fleet: z
+      .boolean()
+      .optional()
+      .describe("files is one fleet memory document; waits for the person."),
   },
   memoryProposedWords
 );
@@ -4975,7 +5190,13 @@ const MEMORY_CLASSIFY_DEFINITION = defineTool(
 const MEMORY_READ_DEFINITION = defineTool(
   "memory_read",
   "Read AGENTS.md, a knowledge/ file or an inbox note; no path: the inbox's waiting notes and knowledge/'s files.",
-  { path: z.string().optional() },
+  {
+    path: z.string().optional(),
+    fleet: z
+      .boolean()
+      .optional()
+      .describe("path is a fleet memory document; no path: their list."),
+  },
   memoryReadWords
 );
 

@@ -267,6 +267,7 @@ import {
   machineSilenceWords,
 } from "@cawco/core/words/machine-names";
 import { pauseClock } from "@cawco/core/words/machine-pause";
+import { scopeWords } from "@cawco/core/words/memory-scope";
 import { noticeWords } from "@cawco/core/words/notices";
 import {
   continuedInWords,
@@ -650,7 +651,7 @@ import { fleetHarnessConfigRoutes } from "./routes/fleet-harness-configs";
 import { fleetHookRoutes } from "./routes/fleet-hooks";
 import { fleetMarketplaceRoutes } from "./routes/fleet-marketplaces";
 import { fleetMcpRoutes } from "./routes/fleet-mcp";
-import { fleetMemoryRoutes } from "./routes/fleet-memory";
+import { fleetMemoryCalls, fleetMemoryRoutes } from "./routes/fleet-memory";
 import { fleetPluginRoutes } from "./routes/fleet-plugins";
 import { fleetSkillRoutes } from "./routes/fleet-skills";
 import { fleetSyncRoutes } from "./routes/fleet-sync";
@@ -8819,6 +8820,35 @@ export const createServer = (
       ensure: (projectId) => routines.ensureCurator(projectId),
       inboxPassed: (projectId) => routines.inboxPassed(projectId),
     }),
+    // A fleet proposal's document, through the write admin_memory_write's
+    // set_doc makes: its scope left as it is, its replaced text kept.
+    fleetDocs: {
+      list: () =>
+        db.listFleetMemoryDocs().map((doc) => ({
+          path: doc.path,
+          loadedInto: scopeWords(
+            doc.scope,
+            (id) => db.project(id)?.name ?? id,
+            (id) => db.areas.get(id)?.name ?? id
+          ),
+        })),
+      read: (path) => db.getFleetMemoryDoc(path)?.content,
+      write: (path, content) => {
+        const saved = fleetMemoryCalls(ctx).setDoc({ path, content });
+        if (!(saved instanceof ElysiaStatus)) {
+          return saved.hash;
+        }
+        const { response } = saved;
+        return {
+          refused:
+            typeof response === "object" &&
+            response !== null &&
+            "detail" in response
+              ? String(response.detail)
+              : `the hub answered ${saved.status}`,
+        };
+      },
+    },
     folderChanged: (projectId) => tasks.touched(projectId),
     // The conversation's notes are made further down; read once a call runs.
     notice: noticeProject,

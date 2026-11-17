@@ -130,6 +130,12 @@ export interface Proposal {
   by: string;
   /** Every file it changes, in the order the card draws them. */
   files: ProposalFile[];
+  /**
+   * Its one file is a fleet memory document (by its path under the fleet's
+   * memories), not the project's: read and written through the fleet's
+   * memory, and always the person's to approve (hub memory.ts `propose`).
+   */
+  fleet?: true;
   id: string;
   /**
    * What the hub proposed it as, when its rejection says something to

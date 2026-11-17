@@ -120,8 +120,17 @@ export const memoryReadWords = (
         prose: string[];
         unreadable: string[];
       }
+    | { fleet: { loadedInto: string; path: string }[] }
     | FolderFile
 ): string => {
+  if ("fleet" in read) {
+    return lines(
+      read.fleet.length === 0
+        ? "The fleet keeps no memory document."
+        : "The fleet's memory documents:",
+      read.fleet.map((doc) => `- ${doc.path}: ${doc.loadedInto}`)
+    );
+  }
   if ("inbox" in read) {
     const shelf = read;
     return lines(

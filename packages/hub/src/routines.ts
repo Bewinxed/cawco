@@ -200,6 +200,7 @@ Sort each lasting note against the fact lines listed under it:
 - conflicts (same subject and property, a different value over the same period): put both lines under \`## Conflict\`, together, each with its sources. Never pick a side: the person settles it.
 - unrelated, or no line listed: a new fact line, in the file whose topic it is.
 How the project's work is done, the person's corrections and preferences included, goes in AGENTS.md.
+A note marked fleet-wide holds for every project: read the fleet's memory documents with memory_read and \`fleet\`, then propose the one it belongs in, or a new one, as memory_propose with \`fleet\`: one document's path and whole new text, citing the note.
 
 memory_propose takes each file's whole new text and the ids of the notes it comes from; several files are one change. Keep every line and source a file has; a change keeps its history. Every other note: memory_classify it.
 

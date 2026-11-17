@@ -69,7 +69,7 @@ export const filingPrompt = (
     "",
     "- Every open step, every promise made, and every question still waiting on an answer: your plan, `todo_write` with `steps`, one line each, pending or in_progress.",
     "- Every decision taken and its reason, every constraint the person set (in plain words, never quoting them), every approach ruled out and why, and the files, paths, commands, ids and links to read again: your spec, `todo_write` with `spec`, the whole document.",
-    "- In a project: work that must outlive this conversation, `task_create`; your task's to-dos, `todo_write` with `task`; a lasting fact for the project's later sessions (a convention, a decision), `memory_note`.",
+    "- In a project: work that must outlive this conversation, `task_create`; your task's to-dos, `todo_write` with `task`; a lasting fact (convention, command, decision, place) or the person's correction or preference on how to work, `memory_note`.",
     "",
     "Write again only what changed or is missing. Then end your turn.",
     ...(fill ? ["", contextWords.filingLater] : []),
