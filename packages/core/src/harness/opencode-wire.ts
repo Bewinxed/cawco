@@ -18,10 +18,13 @@ import {
   literal,
   looseObject,
   null_,
+  nullable,
   number,
   object,
   optional,
   parse,
+  parseJson,
+  pipe,
   record,
   safeParse,
   string,
@@ -32,7 +35,7 @@ import {
 import { readerOf, wholeReaderOf } from "../reader-of";
 
 /** A JSON value, as OpenCode's `Schema.Json` holds one. */
-type JsonValue =
+export type JsonValue =
   null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 const JSON_VALUE: GenericSchema<JsonValue> = lazy(() =>
@@ -81,6 +84,94 @@ const STORED_MESSAGE = object({
     object({ created: optional(number()), completed: optional(number()) })
   ),
 });
+
+/**
+ * A 1.x `session` row, as far as a session kept only there is read back
+ * into 2.0 (OpenCode 1.18.34's `SessionTable`, in its core package's
+ * session SQL module): its ids, place and title, its totals,
+ * its agent and model (a JSON column), and its times. Its `revert`,
+ * `permission`, `metadata` and `summary_diffs` are 1.x's shapes, which 2.0's
+ * own conversion writes nothing of either.
+ */
+const V1_SESSION_ROW = object({
+  id: string(),
+  project_id: string(),
+  workspace_id: nullable(string()),
+  parent_id: nullable(string()),
+  slug: string(),
+  directory: string(),
+  path: nullable(string()),
+  title: string(),
+  version: string(),
+  share_url: nullable(string()),
+  summary_additions: nullable(number()),
+  summary_deletions: nullable(number()),
+  summary_files: nullable(number()),
+  cost: number(),
+  tokens_input: number(),
+  tokens_output: number(),
+  tokens_reasoning: number(),
+  tokens_cache_read: number(),
+  tokens_cache_write: number(),
+  agent: nullable(string()),
+  model: nullable(
+    pipe(
+      string(),
+      parseJson(),
+      object({
+        id: string(),
+        providerID: string(),
+        variant: optional(string()),
+      })
+    )
+  ),
+  time_created: number(),
+  time_updated: number(),
+  time_compacting: nullable(number()),
+  time_archived: nullable(number()),
+});
+
+/**
+ * A 1.x `message` or `part` row as 2.0's own conversion reads it
+ * (`@opencode/core` `database/v1-migration.bun` `SourceMessage` and
+ * `SourcePart`): its ids, times and `data`, the JSON text the conversion
+ * decodes itself. A message's row carries no `message_id`.
+ */
+const V1_MESSAGE_ROW = object({
+  id: string(),
+  session_id: string(),
+  time_created: number(),
+  time_updated: number(),
+  data: string(),
+});
+const V1_PART_ROW = object({
+  ...V1_MESSAGE_ROW.entries,
+  message_id: string(),
+});
+
+export type OpencodeV1SessionRow = InferOutput<typeof V1_SESSION_ROW>;
+
+/** A 1.x `session` row; throws on one not in its shape. */
+export const opencodeV1SessionRow = (row: unknown): OpencodeV1SessionRow =>
+  parse(V1_SESSION_ROW, row);
+
+/** A 1.x session's `message` rows; throws on one not in their shape. */
+export const opencodeV1MessageRows = (
+  rows: unknown
+): InferOutput<typeof V1_MESSAGE_ROW>[] => parse(array(V1_MESSAGE_ROW), rows);
+
+/** A 1.x session's `part` rows; throws on one not in their shape. */
+export const opencodeV1PartRows = (
+  rows: unknown
+): InferOutput<typeof V1_PART_ROW>[] => parse(array(V1_PART_ROW), rows);
+
+/**
+ * `value` as the JSON it is sent as (`@opencode/client` `JsonValue`, what
+ * `POST /api/experimental/session/import` takes each message as); throws on
+ * one that is not JSON.
+ */
+export const opencodeJson = (value: unknown): JsonValue =>
+  parse(JSON_VALUE, value);
 
 export type OpencodeStoredToolState = InferOutput<typeof STORED_TOOL_STATE>;
 export type OpencodeStoredMessage = InferOutput<typeof STORED_MESSAGE>;

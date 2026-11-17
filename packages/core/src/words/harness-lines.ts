@@ -67,3 +67,25 @@ export const opencodeSignInFaultWords = (
 
 /** A name read with a vowel sound first, by its first letter ("an Anthropic API key"). */
 const VOWEL_START = /^[aeiou]/iu;
+
+/**
+ * Why an OpenCode session did not move to the server it runs on now: its
+ * copy there read back short of what was sent, so the server it was on
+ * keeps it, and the next start tries the move again.
+ */
+export const opencodeMoveUnconfirmedSentence = (
+  kept: number,
+  sent: number
+): string =>
+  `This conversation didn't move to the OpenCode server it runs on now: its copy there read back ${kept} of its ${sent} messages, so it stays where it was. Start it again to try the move again.`;
+
+/** A sentence's closing full stop, taken off words put inside another sentence. */
+const FINAL_STOP = /\.$/u;
+
+/**
+ * Why a conversation OpenCode keeps only in its 1.x tables did not come
+ * back into OpenCode: what OpenCode's import answered. Its 1.x copy is
+ * left as it was, and the next open or start tries again.
+ */
+export const opencodeV1UnrecoveredSentence = (why: string): string =>
+  `This conversation is kept in OpenCode's older tables, and it didn't come back into OpenCode: ${why.trim().replace(FINAL_STOP, "")}. Open or start it again to try again.`;
