@@ -664,7 +664,7 @@ const typeOf = (
 
 /** What the brief says happens at finish_item, by where the attempt lands. */
 const AT_FINISH: Record<LandsMode, string> = {
-  main: "When the work is committed, call finish_item: the hub rebases your commits onto the default branch, runs the merge checks its project's gate.md names (for CawCo: the dependency install, `bun run check --all`, and the iOS build when you changed the app), and then pushes them to it.",
+  main: "When the work is committed, call finish_item: the hub rebases your commits onto the default branch, runs the merge checks its project's gate.md names, and then pushes them to it.",
   branch:
     "When the work is committed, call finish_item: the hub runs its merge checks on your commits and pushes your branch.",
   pr: "When the work is committed, call finish_item: the hub runs its merge checks on your commits, then pushes your branch and opens a pull request.",
