@@ -216,7 +216,7 @@ const PI_CAPABILITIES: HarnessCapabilities = {
   renameSession: true,
   deleteSession: true,
   fork: true,
-  rewind: false,
+  rewind: true,
   tagSession: false,
   skills: true,
   subagents: false,

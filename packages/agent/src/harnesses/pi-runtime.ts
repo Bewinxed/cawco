@@ -1949,7 +1949,26 @@ const launchEffort = (
   session.setThinkingLevel(effort);
 };
 
-/** The session's store: the one it resumes or forks, else a new one. */
+/**
+ * The custom type of the entry a rewind leaves at the message it resumes at
+ * ({@link sessionManagerFor}): pi keeps it out of the model's context
+ * (session-format.md: "`custom` … not in LLM context"), and no transcript
+ * draws it.
+ */
+const REWOUND = "cawco-rewind";
+
+/**
+ * The session's store: the one it resumes or forks, else a new one. A
+ * resume at a message (`resume.atMessage`, a rewind: the entry of the answer
+ * before the turn said again, core traits `rewindAnchor`) moves pi's leaf
+ * there, as pi's own `/tree` does (`SessionManager.branch`), and writes a
+ * {@link REWOUND} entry under it: pi reads a session file's last entry as
+ * its leaf, so without one a restart before the next message would resume
+ * the abandoned branch, and every read of the file would show it. A fork
+ * at a message is pi's branched session (`createBranchedSession`: a new
+ * session file holding only the path to that entry). pi restores no file a
+ * rewound turn changed.
+ */
 const sessionManagerFor = async (
   spec: SpawnPayload,
   cwd: string
@@ -1957,15 +1976,33 @@ const sessionManagerFor = async (
   if (!spec.resume) {
     return SessionManager.create(cwd);
   }
-  const source = await piSessionPath(spec.resume.sessionKey, cwd);
+  const { sessionKey, fork, atMessage } = spec.resume;
+  const source = await piSessionPath(sessionKey, cwd);
   // Its session file is gone: the conversation is, as a Claude Code
   // transcript or an OpenCode session can be (core relaunch.ts).
   if (!source) {
     throw conversationGone();
   }
-  return spec.resume.fork
-    ? SessionManager.forkFrom(source, cwd)
-    : SessionManager.open(source, undefined, cwd);
+  if (fork && !atMessage) {
+    return SessionManager.forkFrom(source, cwd);
+  }
+  const manager = SessionManager.open(source, undefined, cwd);
+  if (!atMessage) {
+    return manager;
+  }
+  if (!manager.getEntry(atMessage)) {
+    throw new Error(
+      `pi's conversation ${sessionKey} has no entry ${atMessage} to go back to.`
+    );
+  }
+  if (fork) {
+    manager.createBranchedSession(atMessage);
+    return manager;
+  }
+  const from = manager.getLeafId();
+  manager.branch(atMessage);
+  manager.appendCustomEntry(REWOUND, { from });
+  return manager;
 };
 
 export async function startPiHost(
