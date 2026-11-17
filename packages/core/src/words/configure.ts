@@ -124,8 +124,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     slug: "helpers",
     group: "Agents",
     label: "Helpers & step lists",
-    purpose:
-      "Whether sessions use CawCo's delegates and plan list, or their agent's own",
+    purpose: "Who a session gives work to, and where it keeps its steps",
     counted: false,
     badge: "fleet-faults",
     icon: "tuning-2-bold-duotone",

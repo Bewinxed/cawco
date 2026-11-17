@@ -46,7 +46,7 @@
   const RUNNING = 7;
   const SAVE_MS = 700;
   const REFUSED =
-    "The hub didn't answer (timed out after 10 s). Sessions keep the setting before it.";
+    "The hub didn't answer (timed out after 10 s). The earlier setting stays.";
 
   let chosen = $state<OwnToolsChosen>(
     page.url.searchParams.get("place") === "settings"

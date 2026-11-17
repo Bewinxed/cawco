@@ -102,9 +102,12 @@
           helpers === null
             ? ownToolsWords.stepHelpers
             : ownToolsWords.stepHelpersDone(helpers),
+        // Where they change, once, under the last of the two done.
         note:
           faults.helpers ??
-          (helpers === null ? undefined : ownToolsWords.stepNote),
+          (helpers === null || stepLists !== null
+            ? undefined
+            : ownToolsWords.stepNote),
         body: helpers === null ? helpersPick : undefined,
       },
       {
