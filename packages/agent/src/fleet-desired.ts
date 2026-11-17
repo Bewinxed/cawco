@@ -26,6 +26,7 @@ import {
   type FleetItems,
   fleetConfigOf,
   itemKind,
+  itemKindOf,
   reportKeyOf,
 } from "@cawco/core/fleet-items";
 import { fleetDesiredFile } from "@cawco/core/paths/fleet";
@@ -72,6 +73,9 @@ const readDesired = async (): Promise<
   }
 };
 
+/** Whether item `id` is of a kind this build knows (core fleet-items.ts `itemKindOf`). */
+const isKnown = (id: string): boolean => itemKindOf(id) !== undefined;
+
 export class FleetDesired {
   readonly #items: FleetItems = new Map();
   readonly #hashes = new Map<string, string>();
@@ -91,18 +95,32 @@ export class FleetDesired {
   constructor() {
     this.loaded = Promise.all([readConverged(), readDesired()]).then(
       ([converged, desired]) => {
-        this.#converged = converged;
+        // An item of a kind this build no longer knows, which an earlier
+        // build held (`hubOnly`, gone at wire epoch 9), is neither claimed
+        // at the register nor read as owed a converge: no hub this build
+        // speaks to sends it, or acts on it.
+        this.#converged = {
+          ...converged,
+          items: Object.fromEntries(
+            Object.entries(converged.items).filter(([id]) => isKnown(id))
+          ),
+        };
         if (!desired) {
           return;
         }
         this.#generation = desired.generation;
         this.#kept = desired.generation;
         for (const [id, { hash, value }] of Object.entries(desired.items)) {
+          if (!isKnown(id)) {
+            continue;
+          }
           this.#items.set(id, value);
           this.#hashes.set(id, hash);
         }
         for (const id of desired.forced) {
-          this.#forced.add(id);
+          if (isKnown(id)) {
+            this.#forced.add(id);
+          }
         }
       }
     );
@@ -407,7 +425,6 @@ const reported = (
     case "projectHarnessConfig":
       return placedState(report, "harnessConfig", key);
     case "policy":
-    case "hubOnly":
     case "pluginPayload":
     case "projectCheckout":
       // No report names them: written as asked.

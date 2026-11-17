@@ -25,6 +25,7 @@ import {
 import { fleetMemoryFile } from "@cawco/core/paths/fleet";
 import {
   piAgentDir,
+  piFleetSidecarFile,
   piFleetSkillsDir,
   piMemoryFile,
   piSkillsDir,
@@ -113,7 +114,7 @@ export const PI_SPEC: ToolSpec = PI_TOOL;
 const PI_SKILLS = piFleetSkillsDir();
 /** The fleet's memory, in CawCo's own file, which each session takes as a context file (pi-runtime.ts `loaderSources`). */
 const PI_MEMORY = fleetMemoryFile();
-const PI_SIDECAR = join(piAgentDir(), "cawco-fleet.json");
+const PI_SIDECAR = piFleetSidecarFile();
 /**
  * Where earlier versions wrote the fleet's memory and skills for pi: its own
  * agent dir's `AGENTS.md` and `skills`, which every `pi` reads. Taken back
@@ -1300,7 +1301,7 @@ export class PiProfile {
     [CONTROL_MODEL_CATALOG]: () => modelCatalog(),
   };
 
-  /** pi's agent dir, where the fleet's sidecar is (its skills and memory are CawCo's own, core `piFleetSkillsDir` and `fleetMemoryFile`). */
+  /** pi's agent dir, which the fleet's one cleanups read (its sidecar is CawCo's own, core `piFleetSidecarFile`; its skills and memory are CawCo's own, core `piFleetSkillsDir` and `fleetMemoryFile`). */
   fleetHome() {
     return piAgentDir();
   }

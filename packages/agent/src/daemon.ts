@@ -255,6 +255,7 @@ import { forgePost } from "./forges/forge";
 import { setHubCredential } from "./git/hub-credential";
 import { setHubGitOrigins } from "./git-credential";
 import { type Harness, isServerHarness } from "./harness";
+import { moveHarnessRecords } from "./harness-records-move";
 import { harness, harnesses } from "./harnesses";
 import { transcriptIndexes } from "./harnesses/claude-transcript";
 import {
@@ -3968,6 +3969,12 @@ export const runDaemon = (rediscover = false): void => {
       // so no session starts without them. One that cannot be written fails
       // the start below.
       Effect.andThen(Effect.promise(() => moveHookFields())),
+      // Before anything reads a harness record, and before the fold below
+      // writes the Claude Code sidecar: CawCo's records that earlier versions
+      // kept in the person's agent config dirs moved into its data dir
+      // (harness-records-move.ts). One that cannot be moved fails the start
+      // below.
+      Effect.andThen(Effect.promise(() => moveHarnessRecords())),
       // Before anything can sync the fleet: the sidecar the agent kept before
       // CawCo was named CawCo folded into the current one
       // (fleet-sidecar-move.ts), so only the current one is ever read. One

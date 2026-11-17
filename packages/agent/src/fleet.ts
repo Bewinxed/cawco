@@ -243,6 +243,18 @@ const said = (error: unknown): string =>
 
 export interface ClaudeFleetSidecar {
   /**
+   * The fleet marketplaces linked and plugins installed through the claude
+   * CLI under their own names that an earlier version recorded
+   * ({@link ClaudeFleetSidecar.marketplaces}, {@link ClaudeFleetSidecar.plugins}),
+   * as Claude Code's own registries still hold them. Left in place: that
+   * version recorded a link the person had made himself as well as its own
+   * (`isLinked`, then the record), and the registries say nothing of who
+   * made one, so none is provably CawCo's. A row of one says so
+   * ({@link leftLinkWords}); each goes from here once the registry no
+   * longer holds it.
+   */
+  cliLinksLeft?: CliLinks;
+  /**
    * The fleet's denied-tools list, synced from `fleet_denied_tools`. None
    * before the machine's first sync: the machine has not heard the list,
    * and {@link readFleetDenials} says so.
@@ -268,6 +280,13 @@ export interface ClaudeFleetSidecar {
    * with the harness set's or the place's entry.
    */
   hooks: Record<string, ManagedHook>;
+  /**
+   * What versions before the fleet's plugins loaded at launch recorded
+   * linking through the claude CLI, by fleet marketplace name: read only by
+   * the fold ({@link foldUserLayer}), which moves it into
+   * {@link cliLinksLeft}.
+   */
+  marketplaces?: string[];
   /**
    * The fleet's servers CawCo wrote into `.claude.json` files, from before
    * sessions took them through the SDK (fleet-mcp-set.ts): what the one
@@ -306,6 +325,12 @@ export interface ClaudeFleetSidecar {
    * hash written into `<cwd>/.claude/skills/<name>/`.
    */
   placedSkills: Record<string, PlacedRecord & { hash: string }>;
+  /**
+   * What those versions recorded installing at user scope through the
+   * claude CLI, by fleet plugin id (`plugin@marketplace`): read only by the
+   * fold, as {@link marketplaces} is.
+   */
+  plugins?: string[];
   /** Skill name → the hash of the files written, which is what makes a sync a no-op. */
   skills: Record<string, string>;
   /**
@@ -348,6 +373,16 @@ interface UserLayerWritten {
   /** Each skill's hash written under its `skills`, by name. */
   skills?: Record<string, string>;
 }
+
+/** Marketplace links and plugin installs in Claude Code's own registries, by marketplace name and plugin id. */
+interface CliLinks {
+  marketplaces: string[];
+  plugins: string[];
+}
+
+/** What a row of a link or install an earlier version recorded says ({@link ClaudeFleetSidecar.cliLinksLeft}). */
+const leftLinkWords = (what: string): string =>
+  `an earlier CawCo linked or found ${what} through the claude CLI; it stays, since you may have made it yourself, and claude plugin can remove it`;
 
 /** Where one placed copy of a project's row went: its folder and its name. */
 interface PlacedRecord {
@@ -426,8 +461,17 @@ const readSidecar = async (): Promise<ClaudeFleetSidecar> => {
     placedSkills: stored?.placedSkills ?? {},
     ...(stored?.userLayer ? { userLayer: stored.userLayer } : {}),
     ...(stored?.userLayerMoved ? { userLayerMoved: true as const } : {}),
+    ...(stored?.cliLinksLeft ? { cliLinksLeft: stored.cliLinksLeft } : {}),
   };
-  return read.userLayerMoved ? read : foldUserLayer(read);
+  return read.userLayerMoved
+    ? read
+    : foldUserLayer({
+        ...read,
+        // An earlier version's records of its CLI links, read before the
+        // fold drops them: without them the links it made stay unnamed.
+        marketplaces: stored?.marketplaces ?? [],
+        plugins: stored?.plugins ?? [],
+      });
 };
 
 /**
@@ -437,7 +481,13 @@ const readSidecar = async (): Promise<ClaudeFleetSidecar> => {
  * every part a new build runs as the hub welcomes it (fleet-converged.ts
  * `basisMoved`) writes each item there afresh. A fleet-wide hook keeps its
  * record, marked as handed through the harness set, so its script is not
- * read as an edit; only its entry in the settings is to come out.
+ * read as an edit; only its entry in the settings is to come out. The
+ * plugins it installed and the marketplaces it registered out of its
+ * vendored copies (`<plugin>@cawco-<marketplace>`, `cawco-<marketplace>`)
+ * are CawCo's by their names and come out; the links and installs it
+ * recorded under the fleet's own names are kept as
+ * {@link ClaudeFleetSidecar.cliLinksLeft}, since it recorded the person's
+ * own among them.
  */
 const foldUserLayer = (earlier: ClaudeFleetSidecar): ClaudeFleetSidecar => {
   const plugins = Object.keys(earlier.vendoredPlugins ?? {});
@@ -455,8 +505,16 @@ const foldUserLayer = (earlier: ClaudeFleetSidecar): ClaudeFleetSidecar => {
       ...new Set(plugins.map((id) => vendorName(marketplaceOf(id)))),
     ],
   };
+  const { marketplaces: _marketplaces, plugins: _plugins, ...kept } = earlier;
+  const cliLinksLeft: CliLinks = {
+    marketplaces: earlier.marketplaces ?? [],
+    plugins: earlier.plugins ?? [],
+  };
   return {
-    ...earlier,
+    ...kept,
+    ...(cliLinksLeft.marketplaces.length + cliLinksLeft.plugins.length > 0
+      ? { cliLinksLeft }
+      : {}),
     memory: undefined,
     memoryDocs: {},
     skills: {},
@@ -1027,8 +1085,9 @@ const syncPlugins = async (
   config: PlacedFleetConfig,
   managed: ClaudeFleetSidecar,
   report: FleetSyncReport
-): Promise<Pick<ClaudeFleetSidecar, "vendoredPlugins">> => {
+): Promise<Pick<ClaudeFleetSidecar, "vendoredPlugins" | "cliLinksLeft">> => {
   const wanted = config.plugins.filter((plugin) => plugin.enabled);
+  const left = await cliLinksStanding(managed.cliLinksLeft);
   const payloads = new Map(
     config.pluginPayloads.map((plugin) => [payloadId(plugin), plugin])
   );
@@ -1090,7 +1149,70 @@ const syncPlugins = async (
     report.plugins,
     report.marketplaces
   );
-  return { vendoredPlugins: written };
+  sayLeftLinks(left, report);
+  return {
+    vendoredPlugins: written,
+    cliLinksLeft: left,
+  };
+};
+
+/**
+ * The links and installs an earlier version recorded
+ * ({@link ClaudeFleetSidecar.cliLinksLeft}) that Claude Code's own
+ * registries still hold. A registry there and unread keeps them all, to be
+ * read again at the next sync. None when none stands.
+ */
+const cliLinksStanding = async (
+  left: CliLinks | undefined
+): Promise<CliLinks | undefined> => {
+  if (!left) {
+    return;
+  }
+  try {
+    const installed = (await readJson(INSTALLED_PLUGINS, installedPluginsOf))
+      ?.plugins;
+    const linked = await readJson(KNOWN_MARKETPLACES, knownMarketplacesOf);
+    const standing: CliLinks = {
+      marketplaces: left.marketplaces.filter((name) =>
+        Object.hasOwn(linked ?? {}, name)
+      ),
+      plugins: left.plugins.filter((id) => Object.hasOwn(installed ?? {}, id)),
+    };
+    return standing.marketplaces.length + standing.plugins.length > 0
+      ? standing
+      : undefined;
+  } catch (error) {
+    if (!(error instanceof UnreadJson)) {
+      throw error;
+    }
+    console.warn(
+      `[fleet] ${error.message}; the links an earlier version recorded are read again next sync`
+    );
+    return left;
+  }
+};
+
+/** Each fleet row of a link or install an earlier version recorded, still applied, says it was left and why ({@link leftLinkWords}). */
+const sayLeftLinks = (
+  left: CliLinks | undefined,
+  report: Pick<FleetSyncReport, "marketplaces" | "plugins">
+): void => {
+  for (const name of left?.marketplaces ?? []) {
+    if (report.marketplaces[name]?.state === "applied") {
+      report.marketplaces[name] = {
+        state: "applied",
+        detail: leftLinkWords(`the marketplace ${name}`),
+      };
+    }
+  }
+  for (const id of left?.plugins ?? []) {
+    if (report.plugins[id]?.state === "applied") {
+      report.plugins[id] = {
+        state: "applied",
+        detail: `${leftLinkWords(`the install of ${id}`)}. Sessions load that install, and no second copy`,
+      };
+    }
+  }
 };
 
 /**

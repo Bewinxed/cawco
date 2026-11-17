@@ -4,6 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { HarnessKind } from "../harness/kinds";
 import { cawcoDataDir, xdgDataHome } from "./roots";
 
 /**
@@ -83,6 +84,36 @@ export const harnessStoresDir = (): string =>
 /** Where every account's OpenCode server keeps its data home, one dir per account ({@link opencodeAccountHome}). */
 const opencodeAccountsDir = (): string =>
   join(harnessStoresDir(), "opencode-accounts");
+
+/**
+ * CawCo's own records about one harness on this machine: what the fleet
+ * sync last wrote for it (its sidecar), and, for OpenCode, the agent's
+ * bookkeeping of its sessions and servers. No harness reads them; the agent
+ * alone does. Under CawCo's data dir, never in the person's own agent config
+ * dirs, where earlier versions kept them (agent harness-records-move.ts
+ * moves each once, as the agent starts).
+ */
+export const harnessRecordsDir = (harness: HarnessKind): string =>
+  join(cawcoDataDir(), "harness-records", harness);
+
+/**
+ * One of the agent's OpenCode records, by its name: `fleet.json` (the fleet
+ * sync's sidecar), `fleet-mcp.json`, `tags.json`, `session-homes.json`,
+ * `open-turns.json`, `background.json`, `account-catalogs.json`,
+ * `server-facts.json`, `sign-in-faults.json`, `placed-mcp.revision` and
+ * `placed-mcp.seen.json`. Earlier versions kept each in OpenCode's global
+ * config dir as `cawco-<name>`.
+ */
+export const opencodeRecordFile = (name: string): string =>
+  join(harnessRecordsDir("opencode"), name);
+
+/**
+ * What the fleet sync manages for pi, by what it last wrote (agent
+ * pi-services.ts `PI_SIDECAR`). Earlier versions kept it in
+ * {@link piAgentDir} as `cawco-fleet.json`.
+ */
+export const piFleetSidecarFile = (): string =>
+  join(harnessRecordsDir("pi"), "fleet.json");
 
 /**
  * The data home (`XDG_DATA_HOME`) of an account's own OpenCode server: 2.0

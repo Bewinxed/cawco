@@ -2,7 +2,7 @@
  * Fleet-wide tool denials. The fleet baseline lives in the hub's
  * `supervisor_config.denied_tools` column and reaches every machine through
  * the normal fleet-sync path (`FleetConfig.deniedTools`). The sidecar
- * (`~/.claude/cawco-fleet.json`) caches the last-synced value so a machine
+ * (core paths/fleet.ts `claudeFleetSidecarFile`, in CawCo's data dir) caches the last-synced value so a machine
  * that loses its hub still has a policy.
  *
  * Every session is denied its harness's own to-do list and plan mode

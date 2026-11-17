@@ -191,8 +191,6 @@ function itemWords(id: string): string {
       return "the project's checkout";
     case "policy":
       return "the fleet's denied tools";
-    case "hubOnly":
-      return "the hub-only marketplaces";
     // A kind this build does not know (a newer machine's): its id as it is.
     case undefined:
       return id;

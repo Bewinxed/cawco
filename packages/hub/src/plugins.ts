@@ -174,15 +174,6 @@ const hubPath = (source: string): string | undefined => {
 };
 
 /**
- * Whether a marketplace source is a directory on the hub's own disk: an
- * absolute path or a `file://` URL. Such a path means something on the hub's
- * machine only, so every other machine is sent its plugins as bytes and links
- * nothing for it (`FleetConfig.hubOnlyMarketplaces`).
- */
-export const isHubDirectory = (source: string): boolean =>
-  hubPath(source) !== undefined;
-
-/**
  * A marketplace linked from a directory on the hub's own disk. It is read
  * where it stands, on every resolve, so a refresh picks up whatever the
  * directory holds now. The hub reads it and sync carries the bytes, so a

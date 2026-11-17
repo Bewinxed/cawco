@@ -41828,15 +41828,13 @@
         ]
       },
       "FleetFaultCause": {
-        "description": "Why one entry did not converge on a machine, named where it failed:\n- `cli-too-old`: the claude CLI the sync ran is older than\n  `CLAUDE_VERSION_FLOOR` (agent claude-version.ts), by its version;\n- `cli-missing`: the machine has no claude CLI to run;\n- `marketplace-unlinked`: a plugin's marketplace is not linked here;\n- `hub-only`: a plugin of a marketplace that is a directory on the hub's\n  machine, which the hub could not carry;\n- `drifted`: the machine edited the copy CawCo wrote;\n- `absent`: what CawCo recorded writing is no longer there;\n- `unparsable`, `unwritable`: a config file it could not read, or write;\n- `timed-out`: a run or a server that did not answer in time;\n- `no-checkout`: bound to a project this machine has no checkout of;\n- `missing-bytes`: the hub named a version and sent no files for it;\n- `unsafe-path`: a file the hub sent names a path outside its directory;\n- `unknown`: anything else, said as it was in `detail`.",
+        "description": "Why one entry did not converge on a machine, named where it failed:\n- `cli-too-old`: the claude CLI the sync ran is older than\n  `CLAUDE_VERSION_FLOOR` (agent claude-version.ts), by its version;\n- `cli-missing`: the machine has no claude CLI to run;\n- `drifted`: the machine edited the copy CawCo wrote;\n- `absent`: what CawCo recorded writing is no longer there;\n- `unparsable`, `unwritable`: a config file it could not read, or write;\n- `timed-out`: a run or a server that did not answer in time;\n- `no-checkout`: bound to a project this machine has no checkout of;\n- `missing-bytes`: the hub named a version and sent no files for it;\n- `unsafe-path`: a file the hub sent names a path outside its directory;\n- `unknown`: anything else, said as it was in `detail`.",
         "type": "string",
         "enum": [
           "absent",
           "cli-missing",
           "cli-too-old",
           "drifted",
-          "hub-only",
-          "marketplace-unlinked",
           "missing-bytes",
           "no-checkout",
           "timed-out",

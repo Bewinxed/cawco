@@ -264,11 +264,11 @@ export const opencodeConfigOf = wholeReaderOf(CONFIG);
 // ------------------------------------------------------------- CawCo's records
 
 /**
- * A record CawCo keeps beside OpenCode's files that maps each key to a
- * word: the hash of each place's servers by its folder
- * (`cawco-placed-mcp.seen.json`), each session's tag by its id
- * (`cawco-tags.json`), and the server each session's database is on by its
- * id (`cawco-session-homes.json`).
+ * A record CawCo keeps of OpenCode (core paths/harnesses.ts
+ * `opencodeRecordFile`) that maps each key to a word: the hash of each
+ * place's servers by its folder (`placed-mcp.seen.json`), each session's tag
+ * by its id (`tags.json`), and the server each session's database is on by
+ * its id (`session-homes.json`).
  */
 const WORDS_BY_KEY = record(string(), string());
 
@@ -277,7 +277,7 @@ export const opencodeWordsByKeyOf = readerOf(WORDS_BY_KEY);
 
 /**
  * The fleet's MCP servers as CawCo writes them for OpenCode
- * (`cawco-fleet-mcp.json`), by name, each in the shape OpenCode's
+ * (`fleet-mcp.json`), by name, each in the shape OpenCode's
  * `mcp.servers` takes, which a server's launch config carries whole.
  */
 const FLEET_MCP = record(string(), unknown());

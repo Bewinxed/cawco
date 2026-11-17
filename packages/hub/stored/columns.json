@@ -606,8 +606,6 @@
                   "enum": [
                     "cli-too-old",
                     "cli-missing",
-                    "marketplace-unlinked",
-                    "hub-only",
                     "drifted",
                     "absent",
                     "unparsable",
@@ -698,8 +696,6 @@
                   "enum": [
                     "cli-too-old",
                     "cli-missing",
-                    "marketplace-unlinked",
-                    "hub-only",
                     "drifted",
                     "absent",
                     "unparsable",
@@ -767,8 +763,6 @@
                   "enum": [
                     "cli-too-old",
                     "cli-missing",
-                    "marketplace-unlinked",
-                    "hub-only",
                     "drifted",
                     "absent",
                     "unparsable",
@@ -836,8 +830,6 @@
                   "enum": [
                     "cli-too-old",
                     "cli-missing",
-                    "marketplace-unlinked",
-                    "hub-only",
                     "drifted",
                     "absent",
                     "unparsable",
@@ -915,8 +907,6 @@
                     "enum": [
                       "cli-too-old",
                       "cli-missing",
-                      "marketplace-unlinked",
-                      "hub-only",
                       "drifted",
                       "absent",
                       "unparsable",
@@ -980,8 +970,6 @@
                 "enum": [
                   "cli-too-old",
                   "cli-missing",
-                  "marketplace-unlinked",
-                  "hub-only",
                   "drifted",
                   "absent",
                   "unparsable",
@@ -1048,8 +1036,6 @@
                   "enum": [
                     "cli-too-old",
                     "cli-missing",
-                    "marketplace-unlinked",
-                    "hub-only",
                     "drifted",
                     "absent",
                     "unparsable",
@@ -1112,8 +1098,6 @@
                 "enum": [
                   "cli-too-old",
                   "cli-missing",
-                  "marketplace-unlinked",
-                  "hub-only",
                   "drifted",
                   "absent",
                   "unparsable",
@@ -1197,8 +1181,6 @@
                       "enum": [
                         "cli-too-old",
                         "cli-missing",
-                        "marketplace-unlinked",
-                        "hub-only",
                         "drifted",
                         "absent",
                         "unparsable",
@@ -1268,8 +1250,6 @@
                   "enum": [
                     "cli-too-old",
                     "cli-missing",
-                    "marketplace-unlinked",
-                    "hub-only",
                     "drifted",
                     "absent",
                     "unparsable",
@@ -1337,8 +1317,6 @@
                   "enum": [
                     "cli-too-old",
                     "cli-missing",
-                    "marketplace-unlinked",
-                    "hub-only",
                     "drifted",
                     "absent",
                     "unparsable",

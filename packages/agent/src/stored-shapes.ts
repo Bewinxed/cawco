@@ -83,6 +83,12 @@ const BrowserRecordShape = declared(
 export const BrowserRecordSchema = BrowserRecordShape;
 export type BrowserRecordOutput = z.output<typeof BrowserRecordShape>;
 
+const CliLinksShape = declared(
+  z.object({ marketplaces: z.array(z.string()), plugins: z.array(z.string()) }),
+  "CliLinks",
+  "packages/agent/src/fleet.ts"
+);
+
 const ManagedHookShape = declared(
   z.object({
     command: z.string(),
@@ -120,10 +126,12 @@ const UserLayerWrittenShape = declared(
 
 const ClaudeFleetSidecarShape = declared(
   z.object({
+    cliLinksLeft: CliLinksShape.optional(),
     deniedTools: z.array(z.string()).optional(),
     deniedWritten: z.array(z.string()).optional(),
     harnessConfigFailed: z.record(z.string(), FleetItemStateShape),
     hooks: z.record(z.string(), ManagedHookShape),
+    marketplaces: z.array(z.string()).optional(),
     mcp: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()),
     memory: z.string().optional(),
@@ -137,6 +145,7 @@ const ClaudeFleetSidecarShape = declared(
       z.string(),
       PlacedRecordShape.extend({ hash: z.string() })
     ),
+    plugins: z.array(z.string()).optional(),
     skills: z.record(z.string(), z.string()),
     userLayer: UserLayerWrittenShape.optional(),
     userLayerMoved: z.literal(true).optional(),

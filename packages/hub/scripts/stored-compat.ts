@@ -129,6 +129,11 @@ const REWRITES: readonly Rewrite[] = [
     migration: "0443_landing_gate_goes",
     why: "the landing gate is gone, so no landing is gating: a row in that phase is set to null, and its landing runs again from its first step",
   },
+  {
+    column: "agents.fleet",
+    migration: "0445_fleet_report_causes",
+    why: "no machine links a marketplace, so the hub-only and marketplace-unlinked causes are gone: a machine's last report naming either is set to null, and the machine's next sync reports again",
+  },
 ];
 
 type Schema = Record<string, unknown>;

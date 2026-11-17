@@ -41,11 +41,7 @@ import type { FetchedCopy } from "./hub-shapes";
 import type { CallAnswer, FsAnswer } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { ResolvedPlugin } from "./plugins";
-import {
-  isHubDirectory,
-  readMarketplace,
-  resolveMarketplacePlugins,
-} from "./plugins";
+import { readMarketplace, resolveMarketplacePlugins } from "./plugins";
 import { projectRowsFor, unbound } from "./project-placements";
 import { resolveSkill } from "./skills";
 import { unreachable } from "./unreachable";
@@ -89,7 +85,6 @@ export type FleetSourcesContext = Pick<
   | "lifetime"
   | "machineName"
   | "mcpChanges"
-  | "ownMachineIdRead"
   | "readAgent"
   | "readSkillFolder"
   | "registry"
@@ -155,17 +150,6 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     const config = ctx.db.fleetConfig();
     // A project's documents go with its rows alone.
     const { placedMemory: _projectDocs, ...fleetRows } = config;
-    // A directory on the hub's disk names nothing on any other machine, so
-    // only the hub's own machine links it; every other one is told which
-    // marketplaces those are and installs their plugins from the bytes.
-    const hubOnly =
-      ctx.ownMachineIdRead === machineId
-        ? new Set<string>()
-        : new Set(
-            config.marketplaces
-              .filter(({ source }) => isHubDirectory(source))
-              .map(({ name }) => name)
-          );
     // A plugin the hub could not carry reaches no machine any other way
     // (agent fleet.ts `syncPlugins`), so the hub's reason goes with its row.
     const hubErrors = new Map(
@@ -192,7 +176,6 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
           ...fleetRows,
           // The fleet's own, for every folder; each project's apart, below.
           skills: unbound(config.skills),
-          hubOnlyMarketplaces: [...hubOnly],
           plugins: config.plugins.map((plugin) => {
             const error = hubErrors.get(plugin.id);
             return error ? { ...plugin, error } : plugin;

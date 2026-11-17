@@ -65,7 +65,6 @@ const partsOfKind = (kind: FleetItemKind): readonly FleetPart[] => {
     case "marketplace":
     case "plugin":
     case "pluginPayload":
-    case "hubOnly":
       return ["plugins"];
     case "skill":
       return ["skills"];

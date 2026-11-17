@@ -3500,8 +3500,6 @@ public enum OpenEnums {
         case cliMissing
         case cliTooOld
         case drifted
-        case hubOnly
-        case marketplaceUnlinked
         case missingBytes
         case noCheckout
         case timedOut
@@ -3518,8 +3516,6 @@ public enum OpenEnums {
             case "cli-missing": self = .cliMissing
             case "cli-too-old": self = .cliTooOld
             case "drifted": self = .drifted
-            case "hub-only": self = .hubOnly
-            case "marketplace-unlinked": self = .marketplaceUnlinked
             case "missing-bytes": self = .missingBytes
             case "no-checkout": self = .noCheckout
             case "timed-out": self = .timedOut
@@ -3537,8 +3533,6 @@ public enum OpenEnums {
             case .cliMissing: "cli-missing"
             case .cliTooOld: "cli-too-old"
             case .drifted: "drifted"
-            case .hubOnly: "hub-only"
-            case .marketplaceUnlinked: "marketplace-unlinked"
             case .missingBytes: "missing-bytes"
             case .noCheckout: "no-checkout"
             case .timedOut: "timed-out"
@@ -3554,7 +3548,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.absent, .cliMissing, .cliTooOld, .drifted, .hubOnly, .marketplaceUnlinked, .missingBytes, .noCheckout, .timedOut, .unknown, .unparsable, .unsafePath, .unwritable]
+        public static let allCases: [Self] = [.absent, .cliMissing, .cliTooOld, .drifted, .missingBytes, .noCheckout, .timedOut, .unknown, .unparsable, .unsafePath, .unwritable]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

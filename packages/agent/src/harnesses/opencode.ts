@@ -71,6 +71,7 @@ import { fleetMemoryFile } from "@cawco/core/paths/fleet";
 import {
   opencodeAccountHome,
   opencodeDataDir,
+  opencodeRecordFile,
   opencodeViewHome,
   opencodeViewsDir,
 } from "@cawco/core/paths/harnesses";
@@ -260,7 +261,7 @@ interface RecoveryWave {
 }
 
 const OPENCODE_CONFIG = join(OPENCODE_DIR, "opencode.json");
-const OPENCODE_SIDECAR = join(OPENCODE_DIR, "cawco-fleet.json");
+const OPENCODE_SIDECAR = opencodeRecordFile("fleet.json");
 
 /**
  * The fleet's MCP servers for OpenCode, by name, in 2.0's
@@ -270,7 +271,7 @@ const OPENCODE_SIDECAR = join(OPENCODE_DIR, "cawco-fleet.json");
  * anomalyco/opencode/packages/core/src/config/discovery.ts `names`, v2.0.29). Why not `opencode.json`:
  * {@link syncOpencodeMcp}.
  */
-const OPENCODE_FLEET_MCP = join(OPENCODE_DIR, "cawco-fleet-mcp.json");
+const OPENCODE_FLEET_MCP = opencodeRecordFile("fleet-mcp.json");
 
 /**
  * The fleet's memory, in CawCo's own file (core `fleetMemoryFile`), which
@@ -949,10 +950,7 @@ const syncOpencodeMcp = async (
  * (OpencodeHarness `#hashConfig`): moved only when a place this machine
  * already had changed its servers.
  */
-const OPENCODE_PLACED_REVISION = join(
-  OPENCODE_DIR,
-  "cawco-placed-mcp.revision"
-);
+const OPENCODE_PLACED_REVISION = opencodeRecordFile("placed-mcp.revision");
 
 /**
  * The hash of each place's servers as OpenCode takes them, by its folder,
@@ -961,7 +959,7 @@ const OPENCODE_PLACED_REVISION = join(
  * are in each place's file (fleet-place-set.ts), which CawCo's plugin hands
  * a location as it boots (its `placeMcp`).
  */
-const OPENCODE_PLACED_SEEN = join(OPENCODE_DIR, "cawco-placed-mcp.seen.json");
+const OPENCODE_PLACED_SEEN = opencodeRecordFile("placed-mcp.seen.json");
 
 /** Each place's enabled servers in `desired`, as OpenCode takes them, hashed, by its folder. */
 const serversByPlace = (
@@ -1206,7 +1204,7 @@ const OPENCODE_CAPABILITIES: HarnessCapabilities = {
 };
 
 /** The scratch tag sidecar — OpenCode sessions have no tag, so CawCo keeps its own. */
-const TAGS_PATH = join(OPENCODE_DIR, "cawco-tags.json");
+const TAGS_PATH = opencodeRecordFile("tags.json");
 
 const readTags = async (): Promise<Record<string, string>> =>
   (await readOwnJson(TAGS_PATH, opencodeWordsByKeyOf)) ?? {};
@@ -1231,7 +1229,7 @@ const writeTag = async (
  * session this file does not name is in the machine's: every session 1.x
  * stored was in the machine's database, which 2.0 converted in place.
  */
-const SESSION_HOMES = join(OPENCODE_DIR, "cawco-session-homes.json");
+const SESSION_HOMES = opencodeRecordFile("session-homes.json");
 
 /**
  * How long the session listing of every database is given on the agent's stores
@@ -1771,7 +1769,7 @@ interface ServerSlot {
 type ViewSlot = ServerSlot & { readonly view: string };
 
 /** Each account's OpenCode models, by OpenCode's provider id, as its own server last listed them. */
-const ACCOUNT_CATALOGS = join(OPENCODE_DIR, "cawco-account-catalogs.json");
+const ACCOUNT_CATALOGS = opencodeRecordFile("account-catalogs.json");
 
 /**
  * What the machine's OpenCode says of itself: its models (`GET /api/model`
@@ -1783,7 +1781,7 @@ const ACCOUNT_CATALOGS = join(OPENCODE_DIR, "cawco-account-catalogs.json");
  * ({@link OpencodeServerFacts.inputs}). The daemon looks at the
  * file and reports OpenCode again when it moves.
  */
-const OPENCODE_SERVER_FACTS = join(OPENCODE_DIR, "cawco-server-facts.json");
+const OPENCODE_SERVER_FACTS = opencodeRecordFile("server-facts.json");
 
 /** What the machine's OpenCode says of itself: its models and its providers, and what they were read on. */
 export interface OpencodeServerFacts {
@@ -1902,7 +1900,7 @@ export const OPENCODE_REPORTED_FILES: readonly string[] = [
 ];
 
 /** The machine's own OpenCode sign-ins their providers last refused, by provider ({@link HarnessReport.signInFaults}), kept across an agent's restart. */
-const SIGN_IN_FAULTS = join(OPENCODE_DIR, "cawco-sign-in-faults.json");
+const SIGN_IN_FAULTS = opencodeRecordFile("sign-in-faults.json");
 
 /** How often the machine's own sign-ins are checked when none changed, and the least time between two requests for one key. Ours: an hour, so a check spends at most one request per key an hour. */
 const SIGN_IN_CHECK_MS = HOUR_MS;
@@ -6572,7 +6570,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     }
   }
 
-  /** OpenCode's global config dir, where its `opencode.json` and the fleet's sidecar are. */
+  /** OpenCode's global config dir, where its `opencode.json` is (the fleet's sidecar is CawCo's own, core `opencodeRecordFile`). */
   fleetHome() {
     return OPENCODE_DIR;
   }

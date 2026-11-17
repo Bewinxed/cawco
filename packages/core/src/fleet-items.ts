@@ -47,7 +47,6 @@ const FLEET_ITEM_KINDS = [
   "marketplace",
   "plugin",
   "pluginPayload",
-  "hubOnly",
   "memory",
   "memoryDoc",
   "hook",
@@ -127,7 +126,6 @@ export const noProjectRows = (): FleetProjectRows => ({
 export const fleetItemsOf = (config: MachineFleetConfig): FleetItems => {
   const items: FleetItems = new Map();
   items.set("policy", { deniedTools: config.deniedTools });
-  items.set("hubOnly", config.hubOnlyMarketplaces);
   for (const row of config.mcp) {
     items.set(`mcp:${row.name}`, row);
   }
@@ -244,7 +242,6 @@ export const reportKeyOf = (id: string): string | undefined => {
     case "memory":
       return "";
     case "policy":
-    case "hubOnly":
     case "pluginPayload":
     case "projectCheckout":
       return;
@@ -283,22 +280,6 @@ const ITEMS = {
   placedMemoryDoc: FleetPlacedMemoryDocSchema,
 };
 
-/**
- * The hub-only marketplaces' names. A machine that holds the item forced
- * spreads the list into an object beside `force` (agent fleet-desired.ts
- * `config`): read back as the list it was, in its order.
- */
-const HUB_ONLY = z.union([
-  z.array(z.string()),
-  z
-    .looseObject({ force: z.literal(true) })
-    .transform((forced) =>
-      Object.entries(forced).flatMap(([key, name]) =>
-        key !== "force" && typeof name === "string" ? [name] : []
-      )
-    ),
-]);
-
 /** Why item `id` is not its kind's content, thrown: a converge of the rest would take away what the item holds. */
 const notItsContent = (id: string, error: z.ZodError): Error =>
   new Error(
@@ -317,15 +298,6 @@ const itemAs = <T>(id: string, schema: z.ZodType<T>, value: unknown): T => {
   return z.custom<T>((held) => schema.safeParse(held).success).parse(value);
 };
 
-/** The hub-only marketplaces item's names ({@link HUB_ONLY}); one that is not is thrown ({@link notItsContent}). */
-const hubOnlyOf = (id: string, value: unknown): string[] => {
-  const read = HUB_ONLY.safeParse(value);
-  if (!read.success) {
-    throw notItsContent(id, read.error);
-  }
-  return read.data;
-};
-
 /** The config whole again, from the items a machine holds. */
 export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
   const config: MachineFleetConfig = {
@@ -338,7 +310,6 @@ export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
     pluginPayloads: [],
     plugins: [],
     skills: [],
-    hubOnlyMarketplaces: [],
     projects: {},
   };
   const docs: FleetMemoryDoc[] = [];
@@ -349,9 +320,6 @@ export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
     switch (kind) {
       case "policy":
         config.deniedTools = itemAs(id, ITEMS.policy, value).deniedTools;
-        break;
-      case "hubOnly":
-        config.hubOnlyMarketplaces = hubOnlyOf(id, value);
         break;
       case "mcp":
         config.mcp.push(itemAs(id, ITEMS.mcp, value));

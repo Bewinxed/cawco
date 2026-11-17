@@ -5880,7 +5880,7 @@ class ClaudeHarness implements Harness<"claude"> {
       changingSignins(joinAccountLogin(from, into, expected)),
   };
 
-  /** The user layer, where the fleet's sidecar is, and from whose home `~/.claude.json` and the account dirs hang, which the fleet's one cleanups read (its skills, memory, subagents and plugins are CawCo's own, core `fleetClaudeRoot`, `fleetMemoryDir`, `fleetPluginsDir`). */
+  /** The user layer, from whose home `~/.claude.json` and the account dirs hang, which the fleet's one cleanups read (its skills, memory, subagents and plugins are CawCo's own, core `fleetClaudeRoot`, `fleetMemoryDir`, `fleetPluginsDir`). */
   fleetHome() {
     return claudeHome();
   }

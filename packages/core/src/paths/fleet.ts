@@ -8,7 +8,7 @@ import {
   USER_LAYER_FILES,
   userLayerPath,
 } from "./claude";
-import { piFleetRoot } from "./harnesses";
+import { harnessRecordsDir, piFleetRoot } from "./harnesses";
 import { cawcoDataDir } from "./roots";
 
 /**
@@ -31,11 +31,17 @@ export const fleetMcpSetFile = (): string =>
   join(cawcoDataDir(), "fleet-mcp-set.json");
 
 /**
- * What the fleet sync manages in Claude Code's user layer, by what it last
- * wrote (agent fleet.ts `ClaudeFleetSidecar`): anything it does not name is
- * never touched.
+ * What the fleet sync manages for Claude Code, by what it last wrote (agent
+ * fleet.ts `ClaudeFleetSidecar`), and the fleet's denied tools as the hub
+ * last sent them (agent denied-tools.ts): anything it does not name is never
+ * touched. Earlier versions kept it in the user layer
+ * ({@link earlierClaudeFleetSidecarFile}).
  */
 export const claudeFleetSidecarFile = (): string =>
+  join(harnessRecordsDir("claude"), "fleet.json");
+
+/** Where earlier versions kept {@link claudeFleetSidecarFile}: moved from there once, as the agent starts (agent harness-records-move.ts). */
+export const earlierClaudeFleetSidecarFile = (): string =>
   userLayerPath("cawco-fleet.json");
 
 /**

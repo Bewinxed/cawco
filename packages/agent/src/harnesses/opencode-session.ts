@@ -25,7 +25,6 @@
 
 import { createHash } from "node:crypto";
 import { hostname } from "node:os";
-import { join } from "node:path";
 import type { ProviderRefusal } from "@cawco/core/accounts";
 import {
   atProviderLimit,
@@ -59,6 +58,7 @@ import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
 import { isRecord } from "@cawco/core/is-record";
 import { machineLabel } from "@cawco/core/machine-names";
 import { unlistedModelRefusal } from "@cawco/core/model-names";
+import { opencodeRecordFile } from "@cawco/core/paths/harnesses";
 import { isUserAnswers } from "@cawco/core/question";
 import type {
   FleetMcpChange,
@@ -146,7 +146,6 @@ import {
   readOpencodeCredentials,
   storeOpencodeCredential,
 } from "./opencode-credentials";
-import { OPENCODE_DIR } from "./opencode-plugin";
 import {
   codeModeCalls,
   compactBoundary,
@@ -571,7 +570,7 @@ const instructionEntries = async (
  * session reads it here, and ends that turn from the server's own history if
  * the server finished it meanwhile (see `watchResumedTurn`).
  */
-const OPEN_TURNS_PATH = join(OPENCODE_DIR, "cawco-open-turns.json");
+const OPEN_TURNS_PATH = opencodeRecordFile("open-turns.json");
 let openTurns: Set<string> | undefined;
 
 const loadOpenTurns = (): Set<string> => {
@@ -610,7 +609,7 @@ export const turnWasOpen = (sessionId: string): boolean =>
  * (`inheritBackground`), then drops those whose completion note the server
  * stored meanwhile (`reconcileBackground`).
  */
-const BACKGROUND_PATH = join(OPENCODE_DIR, "cawco-background.json");
+const BACKGROUND_PATH = opencodeRecordFile("background.json");
 let backgroundJobs: Map<string, readonly string[]> | undefined;
 
 const loadBackground = (): Map<string, readonly string[]> => {

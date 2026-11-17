@@ -49,11 +49,16 @@ export const runtimeCommit =
  * controls, throws on READ's bound as no list of paths, and writes each
  * piece whole over its file, so the hub sends it no inputs and reads none
  * from it (hub work-items.ts `olderBuild`); an epoch-7 hub sends READ and
- * WRITE their whole-file shapes, which an epoch-8 agent refuses. A hub sends a
+ * WRITE their whole-file shapes, which an epoch-8 agent refuses. Epoch 9: no
+ * machine links a fleet marketplace, so a fleet delta carries no `hubOnly`
+ * item and a machine's report names no `hub-only` or `marketplace-unlinked`
+ * cause (core fleet.ts `FAULT_CAUSES`); an epoch-8 hub sends the item, which
+ * an epoch-9 agent does not know and throws on, and an epoch-8 agent may
+ * report either cause, which an epoch-9 hub does not keep. A hub sends a
  * launch only to an agent whose range holds its own, and a joined machine
  * installs only a build whose range overlaps its hub's.
  */
-export const protocolRange = { min: 8, max: 8 } as const;
+export const protocolRange = { min: 9, max: 9 } as const;
 /**
  * The folder every build's runtime folder sits in, one per build by its
  * version, beside the binary root's `versions/` (binary-installation.ts

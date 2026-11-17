@@ -83,10 +83,11 @@ export const CAUSE: Record<FaultCause, CauseCopy> = {
     action: "resync",
     toolchain: true,
   },
-  // agent/fleet.ts syncPlugins: `claude CLI not found`.
+  // agent/claude-version.ts ClaudeRefused `itemState`: the MCP status read
+  // (mcp-status.ts `readMcpRuntime`) found no claude to start.
   "cli-missing": {
     title: "No claude CLI on this machine",
-    why: "Marketplaces and plugins are registered through the claude CLI, and this machine has none on any path CawCo can see.",
+    why: "CawCo reads whether each fleet MCP server connects by starting this machine’s Claude Code, and this machine has none on any path CawCo can see.",
     fix: "Install Claude Code on this machine, then sync it again.",
     action: "resync",
     toolchain: true,
@@ -98,21 +99,6 @@ export const CAUSE: Record<FaultCause, CauseCopy> = {
     why: "The repository is public, but the plugin manifest names an ssh remote, and this machine’s git had no key or token it would accept — an expired gh login does exactly this.",
     fix: "The fleet does not need this machine to reach github at all: refresh the row at the hub and the bytes are carried to every machine instead. Fixing the machine’s gh login also works.",
     action: "refresh",
-  },
-  // agent/fleet.ts syncPlugins: `marketplace ${marketplace} is not linked`.
-  "marketplace-unlinked": {
-    title: "Its marketplace is not linked on this machine",
-    why: "A plugin is installed out of a marketplace, and the one this plugin’s id names never linked here — the marketplace’s own row says why.",
-    fix: "Resolve the marketplace failure first; this plugin follows it.",
-    action: "none",
-  },
-  // agent/fleet.ts hubOnlyMiss — `… and its marketplace X is a directory on the
-  // hub's machine`, on the plugin's row and on its marketplace's.
-  "hub-only": {
-    title: "Only the hub’s machine can install this",
-    why: "Its marketplace is a directory on the hub’s machine, so every other machine gets its plugins as files the hub carries, and the hub could not carry this one.",
-    fix: "Publish the marketplace where every machine can reach it, such as a git repository, and point its row there. Or bring the plugin under the size the hub carries.",
-    action: "none",
   },
   // agent/fleet.ts DRIFTED — `edited on this machine — adopt it or overwrite`.
   drifted: {
@@ -190,9 +176,8 @@ export const CAUSE: Record<FaultCause, CauseCopy> = {
 const SSH_REFUSED =
   /Permission denied \(publickey\)|Could not read from remote repository|Host key verification failed/iu;
 const CLI_TOO_OLD = /unknown option|unknown argument|unknown command/iu;
-const CLI_MISSING = /claude CLI not found/iu;
-const MARKETPLACE_UNLINKED = /marketplace .+ is not linked/iu;
-const HUB_ONLY = /is a directory on the hub's machine/iu;
+/** agent auth.ts `CLAUDE_NOT_INSTALLED`, the detail of a `cli-missing` refusal. */
+const CLI_MISSING = /Claude Code is not installed on this machine/iu;
 const DRIFTED = /edited on this machine/iu;
 const MISSING_BYTES = /the hub sent no files/iu;
 const UNSAFE_PATH = /^unsafe path/iu;
@@ -219,14 +204,6 @@ export function causeOf(
   }
   if (SSH_REFUSED.test(said)) {
     return "ssh-refused";
-  }
-  if (MARKETPLACE_UNLINKED.test(said)) {
-    return "marketplace-unlinked";
-  }
-  // The hub's own refusal is quoted inside; what the machine reports is that
-  // nothing but the hub's machine could install the plugin.
-  if (HUB_ONLY.test(said)) {
-    return "hub-only";
   }
   if (DRIFTED.test(said)) {
     return "drifted";

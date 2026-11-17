@@ -957,21 +957,6 @@ export interface FleetProjectRows {
 /** What the hub sends one machine to converge on: the fleet's state, and the rows of each project it holds. */
 export interface MachineFleetConfig extends Omit<FleetConfig, "placedMemory"> {
   /**
-   * The marketplaces, by name, whose source is a directory on the hub's own
-   * machine, sent to a machine that is not that machine. Such a path names
-   * nothing here, so the machine links nothing for it: its plugins arrive as
-   * {@link pluginPayloads}, and its row reports what they came to. The hub's
-   * own machine is sent an empty list and links the directory where it stands.
-   * The hub knows its own machine by the id that machine registers under, the
-   * same for every install type, so it always decides.
-   *
-   * A plugin of such a marketplace that the hub could not carry has no other
-   * way onto this machine, so its row in {@link plugins} is sent with the
-   * hub's `error`: the one case a machine is given that bookkeeping, because
-   * it is the whole of what the machine's failure has to say.
-   */
-  hubOnlyMarketplaces: string[];
-  /**
    * The rows of each project this machine holds, by project id: every
    * project with a checkout here, and every one with a work item here
    * (a workspace of it was cut here, whatever checkout it has), when it
@@ -1130,8 +1115,6 @@ export const FAULT_CAUSES = [
   "cli-too-old",
   "cli-missing",
   "ssh-refused",
-  "marketplace-unlinked",
-  "hub-only",
   "drifted",
   "absent",
   "unparsable",
@@ -1150,9 +1133,6 @@ export type FaultCause = (typeof FAULT_CAUSES)[number];
  * - `cli-too-old`: the claude CLI the sync ran is older than
  *   `CLAUDE_VERSION_FLOOR` (agent claude-version.ts), by its version;
  * - `cli-missing`: the machine has no claude CLI to run;
- * - `marketplace-unlinked`: a plugin's marketplace is not linked here;
- * - `hub-only`: a plugin of a marketplace that is a directory on the hub's
- *   machine, which the hub could not carry;
  * - `drifted`: the machine edited the copy CawCo wrote;
  * - `absent`: what CawCo recorded writing is no longer there;
  * - `unparsable`, `unwritable`: a config file it could not read, or write;

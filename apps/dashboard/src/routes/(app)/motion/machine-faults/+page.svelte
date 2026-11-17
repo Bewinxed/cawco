@@ -58,9 +58,9 @@
     state: "failed",
     ...(error ? { error } : {}),
   });
-  /** 141 items: the hub-only list, the policy, 12 servers and 127 skills, every one failed for the one cause. */
+  /** 141 items: the memory, the policy, 12 servers and 127 skills, every one failed for the one cause. */
   const NIFTY: FleetItemStatus[] = [
-    failed("hubOnly", OPENCODE),
+    failed("memory", OPENCODE),
     failed("policy", OPENCODE),
     ...MCP.map((name) => failed(`mcp:${name}`, OPENCODE)),
     ...SKILLS.map((name) => failed(`skill:${name}`, OPENCODE)),
