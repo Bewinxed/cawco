@@ -45,8 +45,8 @@
 
 <script lang="ts">
   import {
+    fleetClaudeLabel,
     projectClaudeRelative,
-    userLayerLabel,
   } from "@cawco/core/claude-dirs";
   import { detach } from "@cawco/core/detach";
   /**
@@ -244,7 +244,7 @@
           <span class="type-code"
             >{project
               ? projectClaudeRelative("skills", held.skillName || "name")
-              : userLayerLabel("skills", held.skillName || "name")}</span
+              : fleetClaudeLabel("skills", held.skillName || "name")}</span
           >{project ? words.inProjectFolders(project.name) : ""}
         {/snippet}
         <Input

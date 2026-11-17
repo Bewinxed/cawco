@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { userLayerLabel } from "@cawco/core/claude-dirs";
+  import { fleetClaudeLabel } from "@cawco/core/claude-dirs";
   import { detach } from "@cawco/core/detach";
   import {
     agentProblem,
@@ -197,9 +197,10 @@ You are a <role>, working in one repository at a time.
     <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       The file is the definition. It lands at
       <span class="type-code"
-        >{userLayerLabel("agents", `${target ?? "name"}.md`)}</span
+        >{fleetClaudeLabel("agents", `${target ?? "name"}.md`)}</span
       >
-      on every machine, and Claude Code picks it up within seconds.
+      on every machine, and every CawCo session on Claude Code started after it takes
+      it.
     </p>
     {#if refused}
       <p class="type-meta text-status-fail-ink" role="alert" in:appear>

@@ -37389,7 +37389,7 @@
                 }
               },
               "memory": {
-                "description": "The machine's own user CLAUDE.md, or null when it has none. `managed` says\ncawco wrote what is there — an unmanaged one is worth adopting. `docs`\nis whatever the machine has under `~/.claude/memories/`, read the same way.",
+                "description": "The machine's copy of the fleet's CLAUDE.md, or on a machine that holds\nnone yet the person's own user CLAUDE.md, or null when it has neither.\n`managed` says cawco wrote what is there — an unmanaged one is worth\nadopting. `docs` is whatever lies beside it in its memories dir, read\nthe same way.",
                 "type": "object",
                 "properties": {
                   "bytes": {
@@ -47283,7 +47283,7 @@
         ]
       },
       "MachineMemorySet": {
-        "description": "A machine's own memory set: the user CLAUDE.md and whatever is under\n`~/.claude/memories/`. What {@link READ_MEMORY_FILE} answers with, and what a\npeek and an adoption read.",
+        "description": "A machine's own memory set: its copy of the fleet's CLAUDE.md (or, on a\nmachine that holds none yet, the person's own user CLAUDE.md) and\nwhatever lies beside it in its memories dir. What {@link READ_MEMORY_FILE}\nanswers with, and what a peek and an adoption read.",
         "type": "object",
         "properties": {
           "content": {
@@ -47479,7 +47479,7 @@
         ]
       },
       "MemoryScope": {
-        "description": "Which sessions a fleet memory document reaches. No scope at all is a\nlinked document under `~/.claude/memories/`, read on purpose. A scope\nmakes it instructions every matching session loads at its start; each\nfield narrows, and the fields are ANDed:\n\n- `role`: the sessions of that role;\n- `delegateTypes`: the sessions started as one of those delegate types;\n- `model`: the sessions whose model id contains it, in any case (`opus`\n  covers every dated build of it, as a rule's model scope does);\n- `projectIds`: the sessions in a checkout or workspace of one of those\n  projects. With nothing else, the document is written into each such\n  place as `.claude/rules/cawco/<path>` ({@link FleetPlacedMemoryDoc}).\n\nA document scoped by role, type or model reaches its sessions as they\nlaunch, from the hub ({@link SessionInstruction}), in the instructions a\ncompaction keeps.\n\n`briefer` turns the scope around: the document is guidance for writing a\nbrief, and reaches the session that calls `delegate`, never the delegate.\n`delegateTypes` and `model` then name the delegates it is about (none:\nevery delegate); the hub hands it to the caller once before the first\nsuch delegate goes out, and again after the caller's next compaction\n(hub briefings.ts). It takes no `role`, `projectIds` or `areaIds`.\n\n`areaIds` names areas (core areas.ts): a document scoped to an area is\nscoped to every project in it as the hub reads it, a project moved in or\nout taking it or leaving it then ({@link inScopedProjects}).",
+        "description": "Which sessions a fleet memory document reaches. No scope at all is a\nlinked document under the fleet's memories dir, read on purpose. A scope\nmakes it instructions every matching session loads at its start; each\nfield narrows, and the fields are ANDed:\n\n- `role`: the sessions of that role;\n- `delegateTypes`: the sessions started as one of those delegate types;\n- `model`: the sessions whose model id contains it, in any case (`opus`\n  covers every dated build of it, as a rule's model scope does);\n- `projectIds`: the sessions in a checkout or workspace of one of those\n  projects. With nothing else, the document is written into each such\n  place as `.claude/rules/cawco/<path>` ({@link FleetPlacedMemoryDoc}).\n\nA document scoped by role, type or model reaches its sessions as they\nlaunch, from the hub ({@link SessionInstruction}), in the instructions a\ncompaction keeps.\n\n`briefer` turns the scope around: the document is guidance for writing a\nbrief, and reaches the session that calls `delegate`, never the delegate.\n`delegateTypes` and `model` then name the delegates it is about (none:\nevery delegate); the hub hands it to the caller once before the first\nsuch delegate goes out, and again after the caller's next compaction\n(hub briefings.ts). It takes no `role`, `projectIds` or `areaIds`.\n\n`areaIds` names areas (core areas.ts): a document scoped to an area is\nscoped to every project in it as the hub reads it, a project moved in or\nout taking it or leaving it then ({@link inScopedProjects}).",
         "type": "object",
         "properties": {
           "areaIds": {

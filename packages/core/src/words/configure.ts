@@ -13,7 +13,7 @@
  * (scripts/words-swift.ts): template literals, `?:`, comparisons, `??`,
  * `.length`, `.join(…)` and the helpers in ./helpers.
  */
-import { userLayerLabel } from "../claude-dirs";
+import { fleetClaudeLabel } from "../claude-dirs";
 import { commonWords } from "./common";
 
 /** The rail's groups, in its order. */
@@ -123,7 +123,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     slug: "subagents",
     group: "Agents",
     label: "Subagents",
-    purpose: `Agent files written to ${userLayerLabel("agents")} on every machine`,
+    purpose: `Agent files written to ${fleetClaudeLabel("agents")} on every machine`,
     counted: true,
     badge: "fleet-faults",
     icon: "branching-paths-down-bold-duotone",

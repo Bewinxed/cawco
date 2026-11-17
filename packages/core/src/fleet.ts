@@ -7,7 +7,7 @@
  * a code catalog — the entries are the user's own rows.
  */
 
-import { userLayerLabel } from "./claude-dirs";
+import { fleetMemoryLabel } from "./claude-dirs";
 import { everyOf } from "./every-of";
 import type { FleetPlacement, FleetScope } from "./fleet-placement";
 import type { HarnessKind } from "./harness/kinds";
@@ -569,7 +569,7 @@ export const agentProblem = (
  * Why this path cannot be a linked document, in a sentence, or nothing when it
  * can. One rule for the hub's refusal and the daemon's write, so nothing is
  * ever stored that a machine would then have to turn away — and nothing under
- * `~/.claude/memories/` is ever a write anywhere else.
+ * the fleet's memories dir is ever a write anywhere else.
  */
 const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:/u;
 
@@ -578,7 +578,7 @@ export const memoryDocProblem = (path: string): string | undefined => {
     return memoryWords.problemNotMarkdown;
   }
   if (path.startsWith("/") || WINDOWS_DRIVE_PREFIX.test(path)) {
-    return memoryWords.problemAbsolute(path, userLayerLabel("memories"));
+    return memoryWords.problemAbsolute(path, fleetMemoryLabel("memories"));
   }
   if (path.includes("\\")) {
     return memoryWords.problemBackslash(path);
@@ -597,8 +597,9 @@ export const memoryDocProblem = (path: string): string | undefined => {
 };
 
 /**
- * One document the main memory links, by its path under `~/.claude/memories/`
- * (`models/claude-opus-5.md`). Its own hash, because a set converges file by
+ * One document the main memory links, by its path under the fleet's
+ * memories dir on each machine (core paths/fleet.ts `fleetMemoriesDir`;
+ * `models/claude-opus-5.md`). Its own hash, because a set converges file by
  * file: a doc edited on a machine holds up itself and nothing else.
  *
  * The path is relative and always forward-slashed — it is the same string on
@@ -629,7 +630,7 @@ export const isMemoryRole = (value: string): value is MemoryRole =>
 
 /**
  * Which sessions a fleet memory document reaches. No scope at all is a
- * linked document under `~/.claude/memories/`, read on purpose. A scope
+ * linked document under the fleet's memories dir, read on purpose. A scope
  * makes it instructions every matching session loads at its start; each
  * field narrows, and the fields are ANDed:
  *
@@ -851,9 +852,11 @@ export interface SessionInstruction {
 }
 
 /**
- * The user-scope memory: `~/.claude/CLAUDE.md` and the documents it links.
+ * The fleet's memory: its `CLAUDE.md` and the documents it links, written
+ * into CawCo's own dir on each machine (core paths/fleet.ts
+ * `fleetMemoryFile`).
  *
- * The main file is loaded flat into every session, so it stays the part every
+ * The main file is loaded flat into every session at its launch, so it stays the part every
  * session should read. The linked ones (no {@link MemoryScope}) are read on
  * purpose; a scoped one never lands here, the hub delivers it.
  */
@@ -899,15 +902,15 @@ export interface FleetConfig {
   placedMemory: FleetPlacedMemoryDoc[];
   /**
    * Vendored plugins, files inline: the ones the hub could resolve. A daemon
-   * writes its own marketplace and installs from that directory, and reaches
-   * the network for nothing; a plugin the hub could not fetch is absent here,
-   * and the daemon installs it from its marketplace.
+   * writes each into CawCo's own plugins dir, which its sessions load as
+   * local plugins, and reaches the network for nothing; a plugin the hub
+   * could not fetch is absent here, and its row on the machine says so.
    */
   pluginPayloads: FleetPluginPayload[];
   plugins: FleetPlugin[];
   /**
    * Directly-fetched skills, files inline (NEW.md §11). A daemon writes a
-   * skill's directory under `~/.claude/skills/` only when the hash differs
+   * skill's directory under the fleet's skills dirs only when the hash differs
    * from what its sidecar recorded. User-scope only: a project's skills are
    * {@link FleetProjectRows.skills}.
    */
@@ -1546,9 +1549,11 @@ export interface ConfigInspection {
   marketplaces: string[];
   mcp: DiscoveredMcp[];
   /**
-   * The machine's own user CLAUDE.md, or null when it has none. `managed` says
-   * cawco wrote what is there — an unmanaged one is worth adopting. `docs`
-   * is whatever the machine has under `~/.claude/memories/`, read the same way.
+   * The machine's copy of the fleet's CLAUDE.md, or on a machine that holds
+   * none yet the person's own user CLAUDE.md, or null when it has neither.
+   * `managed` says cawco wrote what is there — an unmanaged one is worth
+   * adopting. `docs` is whatever lies beside it in its memories dir, read
+   * the same way.
    */
   memory?: {
     hash: string;
@@ -1569,9 +1574,10 @@ export interface MachineMemoryDoc {
 }
 
 /**
- * A machine's own memory set: the user CLAUDE.md and whatever is under
- * `~/.claude/memories/`. What {@link READ_MEMORY_FILE} answers with, and what a
- * peek and an adoption read.
+ * A machine's own memory set: its copy of the fleet's CLAUDE.md (or, on a
+ * machine that holds none yet, the person's own user CLAUDE.md) and
+ * whatever lies beside it in its memories dir. What {@link READ_MEMORY_FILE}
+ * answers with, and what a peek and an adoption read.
  */
 export interface MachineMemorySet {
   content: string;

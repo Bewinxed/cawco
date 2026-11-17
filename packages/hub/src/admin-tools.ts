@@ -9,7 +9,11 @@
  * delegation-scoped.
  */
 import { accountNames } from "@cawco/core/accounts";
-import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
+import {
+  fleetClaudeLabel,
+  fleetMemoryLabel,
+  fleetPluginsLabel,
+} from "@cawco/core/claude-dirs";
 import type { ConnectionAuth } from "@cawco/core/connections";
 import {
   type FleetAgent,
@@ -658,7 +662,7 @@ export function adminTools() {
     ...admin(
       "skills",
       "the fleet's skills: the slash-command skill directories synced to every " +
-        `machine under ${userLayerLabel("skills")}/.`,
+        `machine under ${fleetClaudeLabel("skills")}/.`,
       ["list"],
       ["install", "enable", "disable", "remove"],
       {
@@ -666,7 +670,7 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            `The skill name (its directory name under ${userLayerLabel("skills")}/). Required for all ` +
+            "The skill name (its directory name). Required for all " +
               "actions except list."
           ),
         source: z
@@ -735,7 +739,7 @@ export function adminTools() {
     ...admin(
       "plugins",
       "the fleet's Claude Code plugins: whole marketplace bundles synced to " +
-        `every machine under ${userLayerLabel("plugins")}/. A plugin is the unit to reach for when ` +
+        `every machine under ${fleetPluginsLabel()}/. A plugin is the unit to reach for when ` +
         "a repo ships MANY skills, or skills that read shared files beside them " +
         "(references/, agents/, commands/); a skill copies one directory and " +
         "cannot carry those.",
@@ -813,7 +817,7 @@ export function adminTools() {
     // ── MCP servers ──────────────────────────────────────────────────────
     ...admin(
       "mcp_servers",
-      `the fleet's MCP servers: the servers synced to every machine's ${CLAUDE_JSON_LABEL}.`,
+      "the fleet's MCP servers: the servers every CawCo session on every machine loads at its launch.",
       ["list"],
       ["put", "remove"],
       {
@@ -821,7 +825,7 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            `The server name, as in ${CLAUDE_JSON_LABEL}. Required for put and remove.`
+            "The server name, as sessions see it. Required for put and remove."
           ),
         config: z
           .record(z.string(), z.unknown())
@@ -1133,7 +1137,7 @@ export function adminTools() {
     // ── subagents ────────────────────────────────────────────────────────
     ...admin(
       "subagents",
-      `the fleet's Claude Code subagents, the files in every machine's ${userLayerLabel("agents")}/. ` +
+      `the fleet's Claude Code subagents, the files under ${fleetClaudeLabel("agents")}/. ` +
         "'list': names and descriptions; 'get': one file and its hash.",
       ["list", "get"],
       ["put", "remove"],
@@ -1263,7 +1267,7 @@ export function adminTools() {
     ...admin(
       "memory",
       "the fleet's CLAUDE.md, loaded into every session, and its documents: " +
-        `unscoped, linked under ${userLayerLabel("memories")}/; scoped, loaded into the ` +
+        `unscoped, linked under ${fleetMemoryLabel("memories")}/; scoped, loaded into the ` +
         "sessions matching every `scope` field (role: orchestrator has delegate, else leaf; " +
         "model: substring). `briefer`: handed to the delegate's caller instead. " +
         "'get': CLAUDE.md; 'list_docs': the documents.",

@@ -1,6 +1,7 @@
 /** What the fleet sync writes and reads back on this machine. */
 
 import { join } from "node:path";
+import { FLEET_MEMORY_DIR } from "../claude-dirs";
 import {
   fleetClaudeRoot,
   fleetPluginsDir,
@@ -113,11 +114,11 @@ export const fleetHarnessSetFile = (): string =>
  * prompt append, OpenCode's instruction entries, pi's context files); the
  * person's own `claude`, `opencode` and `pi` read none of it.
  */
-const fleetMemoryDir = (): string => join(cawcoDataDir(), "fleet-memory");
+const fleetMemoryDir = (): string => join(cawcoDataDir(), FLEET_MEMORY_DIR);
 
 /** The fleet's main memory document, which every harness's converge writes (agent fleet.ts `syncMemory`). */
 export const fleetMemoryFile = (): string =>
-  join(fleetMemoryDir(), "memory.md");
+  join(fleetMemoryDir(), "CLAUDE.md");
 
 /** The documents the fleet's main memory links, one file per path the set names, read on purpose. */
 export const fleetMemoriesDir = (): string =>

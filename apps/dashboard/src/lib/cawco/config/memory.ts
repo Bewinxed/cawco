@@ -1,4 +1,4 @@
-import { userLayerLabel } from "@cawco/core/claude-dirs";
+import { fleetMemoryLabel } from "@cawco/core/claude-dirs";
 import { type MemoryScope, scoped } from "@cawco/core/fleet";
 import { scopeWords } from "@cawco/core/words/memory-scope";
 import type { Machine } from "../stores/board.svelte";
@@ -10,7 +10,7 @@ import type { Machine } from "../stores/board.svelte";
 export const MAIN = "CLAUDE.md";
 
 export const fileLabel = (path: string): string =>
-  path === MAIN ? userLayerLabel(MAIN) : userLayerLabel("memories", path);
+  path === MAIN ? fleetMemoryLabel(MAIN) : fleetMemoryLabel("memories", path);
 
 /**
  * A document's name on the page: a linked one by the file it lands at, a

@@ -5,6 +5,8 @@ import { basename, dirname, join } from "node:path";
 import {
   CLAUDE_DIR_NAME,
   CLAUDE_JSON_NAME,
+  FLEET_CLAUDE_DIR,
+  FLEET_PLUGINS_DIR,
   PLACED_MEMORY,
   PROJECT_SKILLS,
   TREE_STORE_DIR,
@@ -145,7 +147,7 @@ export const VENDOR_MARKETPLACES_DIR = "cawco-marketplaces";
  * its data dir: the person's own `claude` never reads it.
  */
 export const fleetClaudeRoot = (): string =>
-  join(cawcoDataDir(), "fleet-claude");
+  join(cawcoDataDir(), FLEET_CLAUDE_DIR);
 
 /** The fleet's skills for Claude Code, which OpenCode loads too (its launch config's `skills`). */
 export const claudeSkillsDir = (): string =>
@@ -169,7 +171,7 @@ export const userLayerSkillsDir = (): string => userLayerPath("skills");
  * nowhere.
  */
 export const fleetPluginsDir = (): string =>
-  join(cawcoDataDir(), "fleet-plugins");
+  join(cawcoDataDir(), FLEET_PLUGINS_DIR);
 
 /** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */
 export const placedSkillsDir = (cwd: string): string =>

@@ -36,9 +36,6 @@ export const projectClaudeRelative = (...parts: string[]): string =>
 /** The file name `paths.ts` gives the `.claude.json` beside or inside a config dir. */
 export const CLAUDE_JSON_NAME = `${CLAUDE_DIR}.json`;
 
-/** The user's own `.claude.json`, as a person reads it: `~/.claude.json`. */
-export const CLAUDE_JSON_LABEL = `~/${CLAUDE_JSON_NAME}`;
-
 /** The dir name `paths.ts` joins onto a home or a project. */
 export const CLAUDE_DIR_NAME = CLAUDE_DIR;
 
@@ -68,6 +65,34 @@ export const PLACED_SYNCED: readonly string[] = [
   PROJECT_SKILLS,
   projectClaudeRelative(TREE_STORE_DIR),
 ];
+
+/**
+ * The dirs of CawCo's own under its data dir that the fleet sync writes and
+ * CawCo's sessions take at their launch (paths/claude.ts, paths/fleet.ts):
+ * the fleet's memory, the root whose `.claude` holds its skills and
+ * subagents, and its plugins.
+ */
+export const FLEET_MEMORY_DIR = "fleet-memory";
+export const FLEET_CLAUDE_DIR = "fleet-claude";
+export const FLEET_PLUGINS_DIR = "fleet-plugins";
+
+/**
+ * CawCo's data dir as a person reads it on any machine (paths/roots.ts
+ * `cawcoDataDir`, `$XDG_DATA_HOME/cawco`, by default this).
+ */
+const CAWCO_DATA_LABEL = "~/.local/share/cawco";
+
+/** A path under the fleet's memory dir, as a person reads it: `~/.local/share/cawco/fleet-memory/memories/x.md`. */
+export const fleetMemoryLabel = (...parts: string[]): string =>
+  [CAWCO_DATA_LABEL, FLEET_MEMORY_DIR, ...parts].join("/");
+
+/** A path under the `.claude` of the fleet's root, as a person reads it: `~/.local/share/cawco/fleet-claude/.claude/skills/x`. */
+export const fleetClaudeLabel = (...parts: string[]): string =>
+  [CAWCO_DATA_LABEL, FLEET_CLAUDE_DIR, CLAUDE_DIR, ...parts].join("/");
+
+/** A path under the fleet's plugins dir, as a person reads it. */
+export const fleetPluginsLabel = (...parts: string[]): string =>
+  [CAWCO_DATA_LABEL, FLEET_PLUGINS_DIR, ...parts].join("/");
 
 /** Where the fleet places a project's memory documents, relative to the project (paths/claude.ts `placedMemoryDir`). */
 export const PLACED_MEMORY = projectClaudeRelative("rules", "cawco");

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { userLayerLabel } from "@cawco/core/claude-dirs";
+  import { fleetMemoryLabel } from "@cawco/core/claude-dirs";
   /**
    * A new memory document, from the section's primary button: its path under
    * ~/.claude/memories/, then the editor. A write to a path the hub has never
@@ -99,7 +99,7 @@
     <form class="flex flex-col gap-space-3" onsubmit={create}>
       <Field
         id="memory-path"
-        label={words.pathUnder(userLayerLabel("memories"))}
+        label={words.pathUnder(fleetMemoryLabel("memories"))}
         {problem}
       >
         {#snippet hint()}
