@@ -3741,7 +3741,13 @@ class OpencodeHarness implements Harness<"opencode"> {
    * (`refusal`, the provider's words), or answered. A refusal is a sign-in's
    * fault only when the machine's own OpenCode holds a sign-in for that
    * provider (Zen's keyless free tier refusing is no sign-in's); an answer
-   * clears the provider's fault. Kept across a restart, said once.
+   * clears the provider's fault. Kept across a restart, said once. A turn
+   * refused its model alone (a 403 `permission_error`, core
+   * `modelNotEnabled`) never reaches here (opencode-session.ts
+   * `session.execution.failed`): it fails that turn, flagged
+   * `modelRefused`, and the sign-in stays good. Such a session runs on no
+   * CawCo account, so the hub has no account to mark either: nothing is
+   * recorded of it.
    */
   #signInOutcome(provider: string, refusal: string | undefined): void {
     if (refusal !== undefined) {

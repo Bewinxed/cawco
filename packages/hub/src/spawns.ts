@@ -27,6 +27,7 @@ import { resumedKey } from "@cawco/core/protocol";
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
+import { markWords } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
@@ -34,7 +35,8 @@ import {
   accessMarksFor,
   creditProviderOf,
   type KeptOff,
-  keptOff,
+  keptOffIn,
+  markOn,
 } from "./account-marks";
 import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db/index";
@@ -62,8 +64,6 @@ import { UNREAD } from "./sends";
 import type { SpawnProblem } from "./spawn-problems";
 import { type createStartHolds, StartsHeld } from "./start-holds";
 import {
-  accessWhy,
-  creditWhy,
   noModelRuns,
   nothingListed,
   type OwnDefault,
@@ -938,24 +938,13 @@ export const createSpawns = (ctx: SpawnsContext) => {
     );
     const name = accountNameAmong(account, ctx.db.accounts.list());
     const now = Date.now();
-    const kept = keptOffOf(account.id);
     /** Why `one` keeps off the account: its provider's credit mark, else its own access mark, in a refusal's words. */
     const refusedOf = (one: string): string | undefined => {
-      const marks = keptOff(
-        kept,
-        harness,
-        ctx.resolvedModel(machineId, harness, one)
+      const mark = markOn(
+        keptOffIn(ctx.db, harness, ctx.resolvedModel(machineId, harness, one)),
+        account.id
       );
-      const [credit] = marks.outOfCredit;
-      const [access] = marks.notEnabled;
-      if (credit) {
-        return spawnWords.startModel.account(
-          name,
-          creditWhy(credit, now),
-          null
-        );
-      }
-      return access ? accessWhy(access, name, now) : undefined;
+      return mark ? markWords(mark, name, now) : undefined;
     };
     const model = opened.find((one) => refusedOf(one) === undefined);
     const refused = [...new Set(opened.flatMap((one) => refusedOf(one) ?? []))];
@@ -1238,21 +1227,11 @@ export const createSpawns = (ctx: SpawnsContext) => {
    * accounts its model is not enabled for.
    */
   const keptOffBy = (machineId: string, payload: NamedSpawn): KeptOff =>
-    keptOff(
-      { credit: ctx.db.accounts.credit(), access: ctx.db.accounts.access() },
+    keptOffIn(
+      ctx.db,
       payload.harness,
       ctx.resolvedModel(machineId, payload.harness, payload.model)
     );
-
-  /** Every credit and access mark of `accountId`. */
-  const keptOffOf = (accountId: string) => ({
-    credit: ctx.db.accounts
-      .credit()
-      .filter((one) => one.accountId === accountId),
-    access: ctx.db.accounts
-      .access()
-      .filter((one) => one.accountId === accountId),
-  });
 
   /**
    * The account a start goes on, by placement, or none: on the machine's own

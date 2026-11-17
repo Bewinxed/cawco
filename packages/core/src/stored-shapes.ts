@@ -141,16 +141,26 @@ const MoveBecauseShape = declared(
 );
 export type MoveBecauseOutput = z.output<typeof MoveBecauseShape>;
 
+const AccountMarkShape = declared(
+  z.union([
+    z.object({
+      kind: z.literal("credit"),
+      provider: z.string(),
+      since: z.number(),
+    }),
+    z.object({
+      kind: z.literal("access"),
+      model: z.string(),
+      since: z.number(),
+    }),
+  ]),
+  "AccountMark",
+  "packages/core/src/accounts.ts"
+);
+export type AccountMarkOutput = z.output<typeof AccountMarkShape>;
+
 const HeldReasonShape = declared(
   z.union([
-    z.object({ kind: z.literal("signin") }),
-    z.object({ kind: z.literal("allowed"), by: z.enum(["project", "task"]) }),
-    z.object({ kind: z.literal("benched") }),
-    z.object({ kind: z.literal("reserve"), pct: z.number() }),
-    z.object({ kind: z.literal("unread") }),
-    z.object({ kind: z.literal("limit") }),
-    z.object({ kind: z.literal("backup") }),
-    z.object({ kind: z.literal("alone") }),
     z.object({
       kind: z.literal("room"),
       leftPct: z.number(),
@@ -166,6 +176,15 @@ const HeldReasonShape = declared(
       carries: z.boolean(),
       leftPct: z.number(),
     }),
+    z.object({ kind: z.literal("allowed"), by: z.enum(["project", "task"]) }),
+    z.object({ kind: z.literal("reserve"), pct: z.number() }),
+    z.object({ kind: z.literal("signin") }),
+    z.object({ kind: z.literal("benched") }),
+    z.object({ kind: z.literal("unread") }),
+    z.object({ kind: z.literal("limit") }),
+    z.object({ kind: z.literal("backup") }),
+    z.object({ kind: z.literal("alone") }),
+    AccountMarkShape,
   ]),
   "HeldReason",
   "packages/core/src/accounts.ts"

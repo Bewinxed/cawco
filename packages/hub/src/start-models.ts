@@ -2,7 +2,7 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { type ModelListing, modelRun } from "@cawco/core/model-names";
 import {
   clockWords,
-  dayWords,
+  markWords,
   spanWords,
 } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
@@ -110,9 +110,17 @@ const accountLine = (
     case "not-allowed":
       return words.account(name, words.notAllowed(standing.by), null);
     case "out-of-credit":
-      return words.account(name, creditWhy(standing, now), null);
+      return markWords(
+        { kind: "credit", provider: standing.provider, since: standing.since },
+        name,
+        now
+      );
     case "not-enabled":
-      return accessWhy(standing, name, now);
+      return markWords(
+        { kind: "access", model: standing.model, since: standing.since },
+        name,
+        now
+      );
     case "benched":
       return words.account(name, words.benched, back(standing.backAt));
     case "past-reserve":
@@ -131,35 +139,6 @@ const accountLine = (
       throw unreachable(standing);
   }
 };
-
-/** When a mark began, as its words say it: its clock time on `now`'s day, else its day and time. */
-const sinceWords = (at: number, now: number): string =>
-  spawnWords.startModel.since(
-    dayWords(at) === dayWords(now) ? null : dayWords(at),
-    clockWords(at)
-  );
-
-/** "out of credit for opencode since 23:41": an account a provider refused for want of credit. */
-export const creditWhy = (
-  mark: { provider: string; since: number },
-  now: number
-): string =>
-  spawnWords.startModel.outOfCredit(mark.provider, sinceWords(mark.since, now));
-
-/**
- * "opencode/claude-fable-5 is not enabled for team@acme.dev since 23:41": a
- * model a provider refused `account` (as a sentence names it) the use of.
- */
-export const accessWhy = (
-  mark: { model: string; since: number },
-  account: string,
-  now: number
-): string =>
-  spawnWords.startModel.notEnabled(
-    mark.model,
-    account,
-    sinceWords(mark.since, now)
-  );
 
 /**
  * Why no model a harness lists on a machine can start for a start that

@@ -10,6 +10,7 @@ import type { SpawnPayload } from "@cawco/core/protocol";
 import type { SendRefusal } from "@cawco/core/session-messages";
 import { configurePage } from "@cawco/core/words/configure";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { keptOffIn } from "./account-marks";
 import type { LoginMove } from "./db/accounts";
 import type { HubContext } from "./hub-context";
 import type { AccountUse } from "./hub-shapes";
@@ -154,7 +155,18 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
       { projectId: row.projectId },
       undefined
     );
-    const placed = input ? placeAccount(input) : undefined;
+    // It keeps off an account a provider refused its model, as a start
+    // whose model the hub picks does (account-marks.ts).
+    const placed = input
+      ? placeAccount({
+          ...input,
+          ...keptOffIn(
+            ctx.db,
+            row.harness,
+            ctx.resolvedModel(machineId, row.harness, row.model)
+          ),
+        })
+      : undefined;
     if (!placed?.ok) {
       return placed ? { refusal: placed.refusal } : {};
     }

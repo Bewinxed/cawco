@@ -44468,8 +44468,30 @@
         ]
       },
       "HeldReason": {
-        "description": "Why another account didn't take a session held at its limit, or, for one\nthat could, that it could (`fits`). In order of the hub's rules: not signed\nin on its machine, not one its project or task allows, benched, past its\nreserve, its limits never read, at its own limit, kept out of the pinned\nstrategy's backups, a move already landing there while its window isn't\nmeasured in dollars (`alone`), too little left for this move (`room`:\nwhat it has left and what the move takes, percent of its window), or\nrunning out within the wait the policy allows with it (`runsOut`).",
+        "description": "Why another account didn't take a session held at its limit, or, for one\nthat could, that it could (`fits`). In order of the hub's rules: not signed\nin on its machine, not one its project or task allows, benched, past its\nreserve, its limits never read, at its own limit, kept out of the pinned\nstrategy's backups, a move already landing there while its window isn't\nmeasured in dollars (`alone`), too little left for this move (`room`:\nwhat it has left and what the move takes, percent of its window), or\nrunning out within the wait the policy allows with it (`runsOut`). A\nprovider's refusal of it the hub keeps ({@link AccountMark}: `credit`,\n`access`) is read right after its lists.",
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "access"
+                ]
+              },
+              "model": {
+                "type": "string"
+              },
+              "since": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "since"
+            ]
+          },
           {
             "type": "object",
             "properties": {
@@ -44528,6 +44550,28 @@
             },
             "required": [
               "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "credit"
+                ]
+              },
+              "provider": {
+                "type": "string"
+              },
+              "since": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "provider",
+              "since"
             ]
           },
           {

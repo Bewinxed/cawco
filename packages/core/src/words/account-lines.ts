@@ -1,6 +1,7 @@
 /** What the fleet says of an account's limits, spans, moves and rebalances. */
 
 import type {
+  AccountMark,
   AccountMove,
   EndedBy,
   HeldAccount,
@@ -12,6 +13,7 @@ import { RESTART_WAIT_CAP_MS } from "../binary-updates";
 import { MINUTE_MS } from "../time";
 import { accountsWords } from "./accounts";
 import { configurePage } from "./configure";
+import { spawnWords } from "./spawn";
 
 /** "12 min", "2h 10m", "3d 4h": a span ahead, rounded up to the minute. */
 export const spanWords = (ms: number): string => {
@@ -62,8 +64,32 @@ const WAIT_WHY: Record<WaitReason, (tokens: string) => string> = {
 const leftWords = (pct: number): string =>
   `${Math.max(0, Math.floor(pct))}% left`;
 
-/** One other account and why it didn't take the session, or that it could: "design@ 1% left, runs out by 11:52". */
-export const heldAccountWords = (one: HeldAccount): string => {
+/** When a mark began, at `now`: its clock time on `now`'s day, else its day and time ("2 Oct 23:41"). */
+export const sinceWords = (at: number, now: number): string =>
+  spawnWords.startModel.since(
+    dayWords(at) === dayWords(now) ? null : dayWords(at),
+    clockWords(at)
+  );
+
+/**
+ * A provider's refusal of `name`'s account, as a whole reason at `now`:
+ * "team@acme.dev is out of credit for opencode since 23:41",
+ * "opencode/claude-fable-5 is not enabled for team@acme.dev since 23:41".
+ */
+export const markWords = (
+  mark: AccountMark,
+  name: string,
+  now: number
+): string => {
+  const words = spawnWords.startModel;
+  const since = sinceWords(mark.since, now);
+  return mark.kind === "credit"
+    ? words.account(name, words.outOfCredit(mark.provider, since), null)
+    : words.notEnabled(mark.model, name, since);
+};
+
+/** One other account and why it didn't take the session, or that it could, at `now`: "design@ 1% left, runs out by 11:52". */
+export const heldAccountWords = (one: HeldAccount, now: number): string => {
   const { name } = one.account;
   const until =
     one.backAt === undefined ? "" : ` until ${clockWords(one.backAt)}`;
@@ -73,6 +99,9 @@ export const heldAccountWords = (one: HeldAccount): string => {
       return `${name} not signed in here`;
     case "allowed":
       return `${name} not allowed by this ${reason.by}`;
+    case "credit":
+    case "access":
+      return markWords(reason, name, now);
     case "benched":
       return `${name} benched${until}`;
     case "reserve":
@@ -124,7 +153,7 @@ const waitingDetail = (
     lead,
     ...(move.accounts.length === 0
       ? ["no other account is signed in for it"]
-      : move.accounts.map(heldAccountWords)),
+      : move.accounts.map((one) => heldAccountWords(one, now))),
     ...(then ? [then] : []),
   ].join(" · ");
 };

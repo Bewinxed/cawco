@@ -20,6 +20,7 @@ import { windowWords } from "@cawco/core/usage/windows";
 import { clockWords, dayWords } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
+import type { KeptOff } from "./account-marks";
 import { type Admission, NEXT_TURN_ALLOWANCE_USD, usdWords } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
@@ -155,7 +156,8 @@ type Cause = Exclude<StopCause, "forecast">;
  * sessions on their way to an account), the ledger's figures (admission.ts),
  * and whether a turn on `row`'s machine proved its sign-in since
  * `how.provenSince`; `row`'s own burn, its kind's strategy (`how.asks`),
- * its model's window.
+ * its model's window; and the provider's refusals the hub keeps for its
+ * model (`how.keptOff`, hub account-marks.ts), which no move lands on.
  */
 export const accountsRead = (
   db: DbShape,
@@ -167,6 +169,7 @@ export const accountsRead = (
       PlacementInput,
       "kind" | "projectAccounts" | "taskAccounts" | "typeAccount"
     >;
+    keptOff: KeptOff;
     machineName: string;
     owed: ReadonlyMap<string, string>;
     provenSince: number;
@@ -203,6 +206,7 @@ export const accountsRead = (
       machineName: how.machineName,
       ...(row.model ? { model: row.model } : {}),
       ...asks,
+      ...how.keptOff,
       paces: forecast.paces,
       arrivals: forecast.arrivals.filter((one) => one.instanceId !== row.id),
       now,

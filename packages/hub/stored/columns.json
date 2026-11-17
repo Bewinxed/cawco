@@ -3181,114 +3181,6 @@
                           "properties": {
                             "kind": {
                               "type": "string",
-                              "const": "signin"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "allowed"
-                            },
-                            "by": {
-                              "type": "string",
-                              "enum": [
-                                "project",
-                                "task"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "by"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "benched"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "reserve"
-                            },
-                            "pct": {
-                              "type": "number"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "pct"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "unread"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "limit"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "backup"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "alone"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
                               "const": "room"
                             },
                             "leftPct": {
@@ -3342,6 +3234,158 @@
                             "kind",
                             "carries",
                             "leftPct"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "allowed"
+                            },
+                            "by": {
+                              "type": "string",
+                              "enum": [
+                                "project",
+                                "task"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "by"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "reserve"
+                            },
+                            "pct": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "pct"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "signin"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "benched"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "unread"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "limit"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "backup"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "alone"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "credit"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                },
+                                "since": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "provider",
+                                "since"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "access"
+                                },
+                                "model": {
+                                  "type": "string"
+                                },
+                                "since": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "model",
+                                "since"
+                              ]
+                            }
                           ]
                         }
                       ]
@@ -7357,114 +7401,6 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "const": "signin"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "allowed"
-                        },
-                        "by": {
-                          "type": "string",
-                          "enum": [
-                            "project",
-                            "task"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "by"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "benched"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "reserve"
-                        },
-                        "pct": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "pct"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "unread"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "limit"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "backup"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "alone"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
                           "const": "room"
                         },
                         "leftPct": {
@@ -7518,6 +7454,158 @@
                         "kind",
                         "carries",
                         "leftPct"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "allowed"
+                        },
+                        "by": {
+                          "type": "string",
+                          "enum": [
+                            "project",
+                            "task"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "by"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "reserve"
+                        },
+                        "pct": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "pct"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "signin"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "benched"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "unread"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "limit"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "backup"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "alone"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "credit"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "since": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "provider",
+                            "since"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "access"
+                            },
+                            "model": {
+                              "type": "string"
+                            },
+                            "since": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model",
+                            "since"
+                          ]
+                        }
                       ]
                     }
                   ]
@@ -8859,114 +8947,6 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "const": "signin"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "allowed"
-                        },
-                        "by": {
-                          "type": "string",
-                          "enum": [
-                            "project",
-                            "task"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "by"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "benched"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "reserve"
-                        },
-                        "pct": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "pct"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "unread"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "limit"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "backup"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "alone"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
                           "const": "room"
                         },
                         "leftPct": {
@@ -9020,6 +9000,158 @@
                         "kind",
                         "carries",
                         "leftPct"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "allowed"
+                        },
+                        "by": {
+                          "type": "string",
+                          "enum": [
+                            "project",
+                            "task"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "by"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "reserve"
+                        },
+                        "pct": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "pct"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "signin"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "benched"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "unread"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "limit"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "backup"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "alone"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "credit"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "since": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "provider",
+                            "since"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "access"
+                            },
+                            "model": {
+                              "type": "string"
+                            },
+                            "since": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model",
+                            "since"
+                          ]
+                        }
                       ]
                     }
                   ]

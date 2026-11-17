@@ -407,12 +407,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    pictures are of a type a provider takes (core `IMAGE_MEDIA_TYPES`),
  *    and an MCP tool hook names its `server` and `tool`. A page built for 80
  *    reads those closed, so it reloads first.
+ * 82: a held move names an account a provider refused the session's model
+ *    (`HeldReason` `credit`: out of credit for its provider, `access`: the
+ *    model not enabled for it). A page built for 81 reads the held reasons
+ *    closed, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 81;
+export const WIRE_PROTOCOL = 82;
 
 /**
  * What a session's stream carries: the changes each frame made to its

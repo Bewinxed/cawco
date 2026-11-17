@@ -1,6 +1,7 @@
 import type {
   AccountAccess,
   AccountCredit,
+  AccountMark,
   AccountProvider,
 } from "@cawco/core/accounts";
 import { traitsOf } from "@cawco/core/harness/traits";
@@ -167,12 +168,12 @@ export const accessMarksFor = (
  * `outOfCredit`, `notEnabled`).
  */
 export interface KeptOff {
-  notEnabled: AccountAccess[];
-  outOfCredit: AccountCredit[];
+  notEnabled: readonly AccountAccess[];
+  outOfCredit: readonly AccountCredit[];
 }
 
 /** The marks of `marks` a start of `harness` on `model` (as its harness runs it) keeps off. */
-export const keptOff = (
+const keptOff = (
   marks: {
     access: readonly AccountAccess[];
     credit: readonly AccountCredit[];
@@ -183,6 +184,37 @@ export const keptOff = (
   outOfCredit: creditMarksFor(marks.credit, harness, model),
   notEnabled: accessMarksFor(marks.access, model),
 });
+
+/** Every mark in `db` a session of `harness` on `model` (as its harness runs it) keeps off. */
+export const keptOffIn = (
+  db: DbShape,
+  harness: string,
+  model: string | null | undefined
+): KeptOff =>
+  keptOff(
+    { credit: db.accounts.credit(), access: db.accounts.access() },
+    harness,
+    model
+  );
+
+/**
+ * The mark of `kept` on `accountId`, as a held account's reason and its
+ * words read it (core `AccountMark`): its credit first, then its model's
+ * access; none when it has neither.
+ */
+export const markOn = (
+  kept: KeptOff,
+  accountId: string
+): AccountMark | undefined => {
+  const credit = kept.outOfCredit.find((one) => one.accountId === accountId);
+  if (credit) {
+    return { kind: "credit", provider: credit.provider, since: credit.since };
+  }
+  const access = kept.notEnabled.find((one) => one.accountId === accountId);
+  return access
+    ? { kind: "access", model: access.model, since: access.since }
+    : undefined;
+};
 
 /**
  * Every mark of `accountId` ends, credit and access: it was signed in again

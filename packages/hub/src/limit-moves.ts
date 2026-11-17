@@ -1,4 +1,4 @@
-import type { Account, AccountMove } from "@cawco/core/accounts";
+import type { Account, AccountMark, AccountMove } from "@cawco/core/accounts";
 import {
   accountNameAmong,
   accountProvidersOf,
@@ -20,6 +20,7 @@ import { windowWords } from "@cawco/core/usage/windows";
 import {
   accountMoveSentence,
   clockWords,
+  markWords,
   tokenWords,
 } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
@@ -27,6 +28,7 @@ import { configurePage } from "@cawco/core/words/configure";
 import { owedMoveWords } from "@cawco/core/words/owed-moves";
 import { relaunchWords } from "@cawco/core/words/relaunch";
 import { ElysiaStatus } from "elysia";
+import { type KeptOff, keptOffIn, markOn } from "./account-marks";
 import { machineAccount } from "./accounts";
 import { pricedTokens, projectedMove, usdWords } from "./admission";
 import { accountsRead } from "./at-limit";
@@ -877,6 +879,23 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     const { to } = owed;
     /** The record is still this move's: no newer ask replaced it. */
     const still = () => ctx.owedMoves.get(stored.id)?.to === to;
+    // A provider refused the target its model since the move was owed: it
+    // doesn't go, in the words of any move a carry left where it was.
+    const marked = owedMark(stored, owed);
+    if (marked) {
+      keepUncarried(
+        stored,
+        owed,
+        to,
+        {
+          running: false,
+          target: true,
+          why: markWords(marked, ctx.accountWords(to), Date.now()),
+        },
+        still()
+      );
+      return undefined;
+    }
     const stopped = stoppedNow(stored.id, carry);
     // Weighed now it goes: a move owed before it was compacted (a person's,
     // a rebalance's) compacts as the policy says; one whose line already
@@ -1065,7 +1084,8 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         to.id,
         row.model,
         now
-      ) !== null
+      ) !== null ||
+      (owed !== undefined && owedMark(row, owed) !== undefined)
     ) {
       return false;
     }
@@ -1103,6 +1123,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       machineName: ctx.machineName(row.machineId),
       ...(row.model ? { model: row.model } : {}),
       ...asks,
+      ...rowKeptOff(row),
       ...ctx.carryTestFor(
         provider,
         routing[asks.kind].strategy,
@@ -1115,6 +1136,37 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     });
     return placed.ok ? placed.accountId : null;
   };
+
+  /**
+   * The provider's refusals the hub keeps for `row`'s model, as its harness
+   * runs it (`model`: the one a move picked with it, else its own): no move
+   * lands it on an account out of credit for that model's provider or not
+   * enabled for that model (account-marks.ts).
+   */
+  const rowKeptOff = (
+    row: { harness: string; machineId: string; model?: string | null },
+    model = row.model
+  ): KeptOff =>
+    keptOffIn(
+      ctx.db,
+      row.harness,
+      ctx.resolvedModel(row.machineId, row.harness, model)
+    );
+
+  /**
+   * The provider's refusal the hub keeps of the account a move the hub owes
+   * `row` goes to, for the model it runs there (account-marks.ts): none for
+   * a person's move, which goes where they said, as their pick of a model
+   * runs. Rebalance and the at-limit controller weigh the marks as they
+   * decide ({@link limitRows}); this reads them again as the move goes.
+   */
+  const owedMark = (
+    row: { harness: string; machineId: string; model?: string | null },
+    owed: OwedMove
+  ): AccountMark | undefined =>
+    owed.to === undefined || owed.byHand
+      ? undefined
+      : markOn(rowKeptOff(row, owed.model ?? row.model), owed.to);
 
   /** What a running session asks of placement: its kind, its project's and task's lists, its type's account. */
   const rowAsks = (
@@ -1370,6 +1422,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   ): AccountsRead =>
     accountsRead(ctx.db, ctx.admission, row, leaving, {
       asks: rowAsks(row),
+      keptOff: rowKeptOff(row),
       machineName: ctx.machineName(row.machineId),
       owed: ctx.owedTargets(),
       provenSince: Date.now() - SIGNIN_PROVEN_MS,

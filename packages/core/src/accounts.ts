@@ -683,6 +683,16 @@ export interface AccountAccess {
   since: number;
 }
 
+/**
+ * A provider's refusal the hub keeps of an account, as a start or a move
+ * that picks its account keeps off it: out of credit for the session's
+ * model's provider ({@link AccountCredit}), or the session's model not
+ * enabled for it ({@link AccountAccess}).
+ */
+export type AccountMark =
+  | { kind: "credit"; provider: string; since: number }
+  | { kind: "access"; model: string; since: number };
+
 /** An account taken out of placement until its window resets. */
 export interface AccountBench {
   accountId: string;
@@ -1350,11 +1360,14 @@ export type WaitReason =
  * strategy's backups, a move already landing there while its window isn't
  * measured in dollars (`alone`), too little left for this move (`room`:
  * what it has left and what the move takes, percent of its window), or
- * running out within the wait the policy allows with it (`runsOut`).
+ * running out within the wait the policy allows with it (`runsOut`). A
+ * provider's refusal of it the hub keeps ({@link AccountMark}: `credit`,
+ * `access`) is read right after its lists.
  */
 export type HeldReason =
   | { kind: "signin" }
   | { kind: "allowed"; by: "project" | "task" }
+  | AccountMark
   | { kind: "benched" }
   | { kind: "reserve"; pct: number }
   | { kind: "unread" }
