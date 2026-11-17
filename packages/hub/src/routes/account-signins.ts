@@ -31,9 +31,11 @@ export const accountSigninRoutes = ({
   noteCodexSignin,
   pendingKey,
   pendingSignins,
+  processMayRun,
   publishUsage,
   settleProviderSignin,
   settleSignin,
+  signOutCodex,
   undoRemovedSignin,
 }: Pick<
   HubContext,
@@ -49,9 +51,11 @@ export const accountSigninRoutes = ({
   | "noteCodexSignin"
   | "pendingKey"
   | "pendingSignins"
+  | "processMayRun"
   | "publishUsage"
   | "settleProviderSignin"
   | "settleSignin"
+  | "signOutCodex"
   | "undoRemovedSignin"
 >) => {
   /** The account `id`, or its problem: the hub has none. */
@@ -377,13 +381,32 @@ export const accountSigninRoutes = ({
         }
       )
       // Signs Codex out of the account's Codex home on a machine; the
-      // account's own sign-in there, pi's and OpenCode's, stays.
+      // account's own sign-in there, pi's and OpenCode's, stays. Its Codex
+      // sessions there go as an account's own sign-out takes its sessions
+      // (limit-moves.ts `signOutCodex`): with one still running there, the
+      // home is signed out once none runs (`leaveCodexHomes`), since a
+      // sign-out under a turn would fail that turn.
       .delete(
         "/api/accounts/:id/machines/:machineId/codex-signin",
         async ({ params }) => {
           const account = known(params.id);
           if (account instanceof ElysiaStatus) {
             return account;
+          }
+          const named = accountNameAmong(account, db.accounts.list());
+          const leaves = db
+            .instancesOnAccount(account.id)
+            .some(
+              (row) =>
+                row.machineId === params.machineId &&
+                row.harness === "codex" &&
+                processMayRun(row)
+            );
+          if (leaves) {
+            return {
+              ok: true as const,
+              ...signOutCodex(account, named, params.machineId, true),
+            };
           }
           const answer = await codexAsk(
             params.machineId,
@@ -394,9 +417,10 @@ export const accountSigninRoutes = ({
           if (answer instanceof ElysiaStatus) {
             return answer;
           }
-          noteCodexSignin(account.id, params.machineId, false);
-          publishUsage(params.machineId);
-          return { ok: true as const };
+          return {
+            ok: true as const,
+            ...signOutCodex(account, named, params.machineId, false),
+          };
         }
       )
       // A key account's key, typed once in the dashboard: relayed to each

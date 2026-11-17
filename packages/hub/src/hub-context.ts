@@ -50,11 +50,10 @@ export interface HubContext
     >,
     Pick<
       ReturnType<typeof createAccountSignin>,
-      | "codexSignedIn"
+      | "codexLeaving"
       | "codexSignins"
       | "forgetCodexEverywhere"
       | "homeStamps"
-      | "noteCodexSignin"
       | "unknownAccountsOf"
     >,
     Pick<ReturnType<typeof createArtifactPages>, "endPreviews" | "foldersSeen">,

@@ -89,6 +89,12 @@ export interface PlacementInput {
   explicit?: string;
   /** A fork runs on the account of the session it forks, whatever else holds. */
   fork?: { accountId: string | null };
+  /**
+   * The session's harness, which {@link signins} were read for
+   * ({@link harnessSignins}): its refusals say "signed in for Codex" of a
+   * Codex session. Absent: a sign-in reads as any harness's.
+   */
+  harness?: string;
   /** `yours`: a person started it; `delegates`: a session did. */
   kind: "yours" | "delegates";
   machineId: string;
@@ -129,6 +135,10 @@ export interface PlacementInput {
   projectAccounts?: string[] | null;
   readings: AccountReading[];
   routing: ProviderRouting;
+  /**
+   * The sign-ins the session can run on, read for its harness
+   * ({@link harnessSignins}): a Codex session's are Codex's own.
+   */
   signins: AccountSignin[];
   /** The task's allow-list (`accounts:`); null or absent: every account. Held to its providers as the project's is. */
   taskAccounts?: string[] | null;
@@ -801,7 +811,7 @@ const explicitPick = (
   if (!signedIn.some((account) => account.id === pick.id)) {
     return {
       ok: false,
-      refusal: `${pickName} is not signed in on ${machine}; sign it in there or pick another account.`,
+      refusal: `${pickName} is not signed in${signedInForWords(input.harness)} on ${machine}; sign it in there in ${configurePage("accounts")} or pick another account.`,
     };
   }
   for (const [list, what] of [
@@ -1207,7 +1217,11 @@ const onPinnedPlan = (
     ok: false,
     refusal: eligible(input).signedIn.some((one) => one.id === pinnedId)
       ? chatgptPlanWords.pinNotAllowed(named)
-      : chatgptPlanWords.pinNotHere(named, machine),
+      : chatgptPlanWords.pinNotHere(
+          named,
+          machine,
+          signedInForWords(input.harness)
+        ),
   };
 };
 
@@ -1504,7 +1518,26 @@ export const place = (asked: PlacementInput): Placement => {
     return project;
   }
   if (signedIn.length === 0) {
-    return { ok: false, refusal: noAccountRefusal(machine) };
+    // A ChatGPT session goes on its pinned plan alone, which isn't signed
+    // in here for its harness either ({@link onPinnedPlan}).
+    if (isChatgptPlan({ provider: input.routing.provider })) {
+      const pinnedId = pinnedOf(input.routing[input.kind], input.accounts);
+      return {
+        ok: false,
+        refusal: chatgptPlanWords.pinNotHere(
+          pinnedId ? name(pinnedId) : chatgptPlanWords.thePin,
+          machine,
+          signedInForWords(input.harness)
+        ),
+      };
+    }
+    const forWhat = signedInForWords(input.harness);
+    return {
+      ok: false,
+      refusal: forWhat
+        ? `No account is signed in${forWhat} on ${machine}. Sign one in${forWhat} there in ${configurePage("accounts")}.`
+        : noAccountRefusal(machine),
+    };
   }
   if (allowed.length === 0) {
     const limits = [
@@ -1536,12 +1569,56 @@ export const place = (asked: PlacementInput): Placement => {
   return choose(input, allowed, name);
 };
 
-/** What placing a session reads of `provider`'s accounts: its accounts, their sign-ins, readings and the bench. */
-export const accountFacts = (db: DbShape, provider: string) => ({
+/**
+ * What placing a session reads of `provider`'s accounts: its accounts, the
+ * sign-ins its harness can run on (`signins`, {@link harnessSignins}),
+ * readings and the bench.
+ */
+export const accountFacts = (
+  db: DbShape,
+  provider: string,
+  signins: AccountSignin[]
+) => ({
   accounts: db.accounts
     .list()
     .filter((account) => account.provider === provider),
-  signins: db.accounts.signins(),
+  signins,
   readings: db.accounts.readings(),
   bench: db.accounts.bench(),
 });
+
+/**
+ * The sign-ins a session in `harness` can run on. Codex runs in the
+ * account's Codex home on a machine, signed in there by Codex itself (a
+ * ChatGPT account's device code, or an OpenAI key handed to it), so a
+ * Codex session's are those homes alone (`codexOn`: hub account-signin.ts
+ * `codexSignins`), each read as signed in; the account's own sign-in there
+ * says nothing of Codex. Any other harness runs on the account's own
+ * sign-ins (`signins`).
+ */
+export const harnessSignins = (
+  harness: string,
+  signins: readonly AccountSignin[],
+  codexOn: readonly { accountId: string; machineId: string }[]
+): AccountSignin[] => {
+  if (harness !== "codex") {
+    return [...signins];
+  }
+  return codexOn.map(({ accountId, machineId }) => ({
+    accountId,
+    machineId,
+    checkedAt:
+      signins.find(
+        (one) => one.accountId === accountId && one.machineId === machineId
+      )?.checkedAt ?? 0,
+    movedAt: null,
+    movedFrom: null,
+    reason: null,
+    refusalReach: null,
+    state: "signed-in",
+  }));
+};
+
+/** " for Codex" of a Codex session's sign-in ({@link harnessSignins}), else nothing. */
+export const signedInForWords = (harness: string | undefined): string =>
+  harness === "codex" ? ` for ${harnessLabel(harness)}` : "";

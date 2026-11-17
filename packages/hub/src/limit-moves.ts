@@ -95,6 +95,7 @@ export type LimitMovesContext = Pick<
   | "forgetPendingOf"
   | "inFlightFor"
   | "inputRefusal"
+  | "keepCodexLeave"
   | "keptNextWords"
   | "knownProviders"
   | "launchClaims"
@@ -103,6 +104,7 @@ export type LimitMovesContext = Pick<
   | "modelRefusal"
   | "moveRowsToAccount"
   | "noteAtLimit"
+  | "noteCodexSignin"
   | "owedMoves"
   | "owedTargets"
   | "prepareContinuation"
@@ -121,6 +123,7 @@ export type LimitMovesContext = Pick<
   | "rowsLeave"
   | "sessionIdle"
   | "sessionName"
+  | "signinsFor"
   | "startCompaction"
   | "startContinuation"
   | "taskAccounts"
@@ -1165,7 +1168,8 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     const asks = rowAsks(row);
     const now = Date.now();
     const placed = placeAccount({
-      ...accountFacts(ctx.db, provider),
+      ...accountFacts(ctx.db, provider, ctx.signinsFor(row.harness)),
+      harness: row.harness,
       routing,
       machineId: row.machineId,
       machineName: ctx.machineName(row.machineId),
@@ -1474,6 +1478,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       machineName: ctx.machineName(row.machineId),
       owed: ctx.owedTargets(),
       provenSince: Date.now() - SIGNIN_PROVEN_MS,
+      signins: ctx.signinsFor(row.harness),
       window: contextWindowNow(row),
     });
 
@@ -2009,24 +2014,27 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
 
   /**
    * Every session on `account` (on `machineId` alone, when a person signs it
-   * out there; on every machine, when he removes it) owes a move to the
-   * account placement carries it to ({@link oweMoveOff}): one at rest is
-   * never woken for it, one in a turn moves at its end. A move owed to
-   * `account` there is dropped. Answers how many move and how many have no
-   * account to go to, and the rows whose process may still run (`live`).
+   * out there; on every machine, when he removes it; of `harness` alone,
+   * when Codex alone is signed out) owes a move to the account placement
+   * carries it to ({@link oweMoveOff}): one at rest is never woken for it,
+   * one in a turn moves at its end. A move owed to `account` there is
+   * dropped. Answers how many move and how many have no account to go to,
+   * and the rows whose process may still run (`live`).
    */
   const moveOff = (
     account: Account,
     why: "removed" | "signed-out",
-    machineId?: string
+    machineId?: string,
+    harness?: HarnessKind
   ): {
     live: PublicInstanceRow[];
     moving: number;
     staying: number;
   } => {
     const named = accountNameAmong(account, ctx.db.accounts.list());
-    const there = (row: { machineId: string }) =>
-      machineId === undefined || row.machineId === machineId;
+    const there = (row: { harness: string; machineId: string }) =>
+      (machineId === undefined || row.machineId === machineId) &&
+      (harness === undefined || row.harness === harness);
     for (const [id, owed] of ctx.owedMoves.list()) {
       const [row] =
         owed.to === account.id ? ctx.db.getInstancesByIds([id]) : [];
@@ -2155,6 +2163,46 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     return { moving, staying };
   };
 
+  /**
+   * Signs Codex alone out of `account` (`named`) on `machineId`, as a person
+   * asked: the same rule as {@link signOutMachine}, for its Codex sessions
+   * there alone (the account's own sign-in there, pi's and OpenCode's,
+   * stays). Each owes its move ({@link moveOff}); one on a ChatGPT plan,
+   * which goes on no other plan, is left stopped with the way on and goes
+   * back on its plan once Codex is signed in there again. With a Codex
+   * session there still running (`leaves`), the account counts as signed
+   * out for Codex at once, so nothing new starts on it, and its Codex home
+   * is signed out once none runs (account-carry.ts `leaveCodexHomes`): one
+   * up between turns that owes a move moves now; one in a turn finishes it.
+   * Otherwise the machine has already signed Codex out.
+   */
+  const signOutCodex = (
+    account: Account,
+    named: string,
+    machineId: string,
+    leaves: boolean
+  ): { moving: number; staying: number } => {
+    ctx.noteCodexSignin(account.id, machineId, false);
+    if (leaves) {
+      ctx.keepCodexLeave(account.id, machineId, true);
+    }
+    const { moving, staying, live } = moveOff(
+      account,
+      "signed-out",
+      machineId,
+      "codex"
+    );
+    if (leaves) {
+      carryBetweenTurns(live);
+      ctx.tickLeaves();
+    }
+    console.log(
+      `[accounts] ${named} signed out for Codex on ${ctx.machineName(machineId)}: ${moving} Codex session${moving === 1 ? " owes" : "s owe"} a move to another account there, ${staying} ${staying === 1 ? "has" : "have"} none to go to${leaves ? "; Codex signs out there once no Codex session there runs on it" : ""}.`
+    );
+    ctx.publishUsage(machineId);
+    return { moving, staying };
+  };
+
   return {
     owedCarries,
     takeOwedMove,
@@ -2184,6 +2232,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     oweMoveOff,
     removalOf,
     removeWithSessions,
+    signOutCodex,
     signOutMachine,
   };
 };

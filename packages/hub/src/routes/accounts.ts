@@ -283,8 +283,9 @@ export const accountRoutes = ({
       // removed, by the record `remove` keeps (`unknownAccountsOf`). One
       // that is online and fails says why.
       // Codex signs out of the account's Codex homes first: a home that
-      // holds Codex's own sign-in outlives the account's other stores.
-      await forgetCodexEverywhere(account.id);
+      // holds Codex's own sign-in outlives the account's other stores. One
+      // where a session still runs waits for its Codex sessions there.
+      await forgetCodexEverywhere(account.id, leavesOn);
       const { failed, silent, later } = await signOutEverywhere(
         account,
         signins

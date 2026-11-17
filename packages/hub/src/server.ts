@@ -1297,8 +1297,11 @@ export const createServer = (
     goneWithProcess: () => goneWithProcess,
     handAgain: () => handAgain,
     homeStamps: () => homeStamps,
-    codexSignedIn: () => codexSignedIn,
+    codexLeaving: () => codexLeaving,
     codexSignins: () => codexSignins,
+    keepCodexLeave: () => keepCodexLeave,
+    pendingCodexLeaves: () => pendingCodexLeaves,
+    signinsFor: () => signinsFor,
     noteCodexSignin: () => noteCodexSignin,
     forgetCodexEverywhere: () => forgetCodexEverywhere,
     hubGitOrigins: () => hubGitOrigins,
@@ -1750,6 +1753,7 @@ export const createServer = (
     removalOf: () => removalOf,
     removeWithSessions: () => removeWithSessions,
     signOutEverywhere: () => signOutEverywhere,
+    signOutCodex: () => signOutCodex,
     signOutMachine: () => signOutMachine,
     askedStart: () => askedStart,
     checkRefused: () => checkRefused,
@@ -1865,6 +1869,7 @@ export const createServer = (
     removalOf,
     removeWithSessions,
     replaceAtWake,
+    signOutCodex,
     signOutMachine,
     strandedStall,
     summarizerOf,
@@ -1939,9 +1944,13 @@ export const createServer = (
     adoptHomeCredentials,
     awayWords,
     codexAccountsOn,
-    codexSignedIn,
+    codexBeat,
+    codexLeaving,
     codexSignins,
+    keepCodexLeave,
     noteCodexSignin,
+    pendingCodexLeaves,
+    signinsFor,
     forgetCodexEverywhere,
     completeOn,
     finishJoined,
@@ -12648,17 +12657,8 @@ export const createServer = (
     }
     lendToWaiting(machineId);
     const { codexAccounts, providerAccounts, providers } = agentFrame;
-    if (codexAccounts) {
-      const was = codexAccountsOn.get(machineId);
-      const now = new Set(codexAccounts);
-      codexAccountsOn.set(machineId, now);
-      if (!(
-        was &&
-        was.size === now.size &&
-        [...now].every((id) => was.has(id))
-      )) {
-        publishUsage(machineId);
-      }
+    if (codexAccounts && codexBeat(machineId, codexAccounts)) {
+      publishUsage(machineId);
     }
     if (providerAccounts) {
       syncAccounts(machineId, "providers", {

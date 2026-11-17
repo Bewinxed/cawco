@@ -34,11 +34,11 @@ export const chatgptPlanWords = {
   /** Its plan was signed out on `machine`: it goes back on it once signed in there again. */
   signedOut: (from: string, machine: string) =>
     `Stopped: ${from} was signed out on ${machine}; continues once ${from} is signed in there again`,
-  /** Why its launch is refused meanwhile (hub launch-accounts.ts `backOnPlan`), `machine` null when its plan was removed. */
-  leftRefusal: (from: string, machine: string | null) =>
+  /** Why its launch is refused meanwhile (hub launch-accounts.ts `backOnPlan`), `machine` null when its plan was removed (`forWhat`: " for Codex" of a Codex session, else ""). */
+  leftRefusal: (from: string, machine: string | null, forWhat = "") =>
     machine === null
       ? `${from} was removed, and ${TERMS}, so nothing started. Continue it on your API key or on another agent or model.`
-      : `${from} was signed out on ${machine}, and ${TERMS}, so nothing started. Sign ${from} in on ${machine} in ${configurePage("accounts")}, or continue it on your API key or on another agent or model.`,
+      : `${from} was signed out${forWhat} on ${machine}, and ${TERMS}, so nothing started. Sign ${from} in${forWhat} on ${machine} in ${configurePage("accounts")}, or continue it on your API key or on another agent or model.`,
   /** Why it launches on its plan again, for the hub's log. */
   backOnPlan: (from: string) =>
     `it goes back on ${from}, the ChatGPT plan it was left by`,
@@ -49,9 +49,9 @@ export const chatgptPlanWords = {
   /** A new session its project or task doesn't allow on its pinned plan. */
   pinNotAllowed: (pin: string) =>
     `${pin} is the pinned ChatGPT plan, and this project or task doesn’t allow it, so nothing started. Pick an account for the session that it allows.`,
-  /** A new session where its pinned plan isn't signed in. */
-  pinNotHere: (pin: string, machine: string) =>
-    `${pin} isn’t signed in on ${machine}, and new ChatGPT sessions run on the pinned plan alone, so nothing started. Sign ${pin} in on ${machine} in ${configurePage("accounts")}, or pick an account for the session.`,
+  /** A new session where its pinned plan isn't signed in (`forWhat`: " for Codex" of a Codex session, else ""). */
+  pinNotHere: (pin: string, machine: string, forWhat = "") =>
+    `${pin} isn’t signed in${forWhat} on ${machine}, and new ChatGPT sessions run on the pinned plan alone, so nothing started. Sign ${pin} in${forWhat} on ${machine} in ${configurePage("accounts")}, or pick an account for the session.`,
 
   // ── Configure › Accounts ─────────────────────────────────────────────────
   /** A routing save that asks ChatGPT for any strategy but Pinned. */

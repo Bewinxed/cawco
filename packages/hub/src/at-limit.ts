@@ -3,6 +3,7 @@ import {
   type AccountMove,
   type AccountProvider,
   type AccountReading,
+  type AccountSignin,
   accountNameAmong,
   isChatgptPlan,
   keepsGoingOnExtraUsage,
@@ -174,6 +175,8 @@ export const accountsRead = (
     machineName: string;
     owed: ReadonlyMap<string, string>;
     provenSince: number;
+    /** The sign-ins `row`'s harness can run on (placement.ts `harnessSignins`). */
+    signins: AccountSignin[];
     window: number | null;
   }
 ): AccountsRead => {
@@ -202,7 +205,8 @@ export const accountsRead = (
   const rows = accountRows(
     {
       accounts,
-      signins: db.accounts.signins(),
+      signins: how.signins,
+      harness: row.harness,
       readings: db.accounts.readings(),
       bench: db.accounts.bench(),
       routing: db.accounts.routing(provider),

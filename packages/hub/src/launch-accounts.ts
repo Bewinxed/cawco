@@ -16,20 +16,45 @@ import { keptOffIn } from "./account-marks";
 import type { LoginMove } from "./db/accounts";
 import type { HubContext } from "./hub-context";
 import type { AccountUse } from "./hub-shapes";
-import { namedIn, noAccountRefusal, place as placeAccount } from "./placement";
+import {
+  namedIn,
+  noAccountRefusal,
+  place as placeAccount,
+  signedInForWords,
+} from "./placement";
 
 export type LaunchAccountsContext = Pick<
   HubContext,
-  | "codexSignedIn"
   | "db"
   | "homeMovedAccountOn"
   | "machineName"
   | "placementInput"
   | "refusedHarness"
   | "resolvedModel"
+  | "signinsFor"
 >;
 
 export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
+  /**
+   * Whether `accountId` can run `harness` on `machineId`: signed in there
+   * for that harness, as placement reads it (placement.ts
+   * `harnessSignins`): Codex on the account's Codex home, signed in by
+   * Codex itself; any other on the account's own sign-in. The launch's
+   * last guard, after placement chose only such accounts.
+   */
+  const signedInFor = (
+    harness: HarnessKind,
+    accountId: string,
+    machineId: string
+  ): boolean =>
+    ctx
+      .signinsFor(harness)
+      .some(
+        (one) =>
+          one.accountId === accountId &&
+          one.machineId === machineId &&
+          one.state === "signed-in"
+      );
   /**
    * The provider whose accounts a session of `model` in `harness` on
    * `machineId` is placed among: of those that open the model (core
@@ -57,18 +82,31 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     if (named && candidates.includes(named.provider)) {
       return named.provider;
     }
+    // Signed in for its harness: a Codex session's providers by Codex's
+    // own sign-ins (placement.ts `harnessSignins`).
     const signedIn = new Set(
-      ctx.db.accounts
-        .signins()
+      ctx
+        .signinsFor(harness)
         .filter(
           (one) => one.machineId === machineId && one.state === "signed-in"
         )
         .map((one) => one.accountId)
     );
-    return candidates.find((provider) =>
-      ctx.db.accounts
-        .list()
-        .some((one) => one.provider === provider && signedIn.has(one.id))
+    const accounts = ctx.db.accounts.list();
+    const found = candidates.find((provider) =>
+      accounts.some((one) => one.provider === provider && signedIn.has(one.id))
+    );
+    // A harness with no machine login of its own (Codex) runs on an account
+    // or not at all: with none signed in for it here, it is placed among
+    // its provider's accounts anyway, so placement refuses it in words
+    // (placement.ts `place`) rather than it starting on none.
+    if (found || traitsOf(harness).homeLogin !== "none") {
+      return found;
+    }
+    return (
+      candidates.find((provider) =>
+        accounts.some((one) => one.provider === provider)
+      ) ?? candidates[0]
     );
   };
   /**
@@ -153,7 +191,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     if (held) {
       return { accountId: held };
     }
-    const plan = backOnPlan(machineId, row.id);
+    const plan = backOnPlan(machineId, row);
     if (plan) {
       return plan;
     }
@@ -197,34 +235,25 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
 
   /**
    * A row a ChatGPT plan's removal or sign-out left on no account: back on
-   * that plan once it is signed in on its machine again, and on no other
-   * (core `isChatgptPlan`). Till then it is refused, its refusal offering to
-   * continue it on the person's API key or on another agent or model.
-   * Undefined for any other row: it is placed as any is.
+   * that plan once it is signed in for the row's harness on its machine
+   * again ({@link signedInFor}), and on no other (core `isChatgptPlan`).
+   * Till then it is refused, its refusal offering to continue it on the
+   * person's API key or on another agent or model. Undefined for any other
+   * row: it is placed as any is.
    */
   const backOnPlan = (
     machineId: string,
-    rowId: string
+    row: { harness: HarnessKind; id: string }
   ):
     { accountId: string; placed: string } | { refusal: string } | undefined => {
-    const left = ctx.db.accounts.strandedOf(rowId);
+    const left = ctx.db.accounts.strandedOf(row.id);
     if (!(left?.provider && isChatgptPlan({ provider: left.provider }))) {
       return;
     }
     const plan = left.accountId
       ? ctx.db.accounts.get(left.accountId)
       : undefined;
-    const signedIn =
-      plan &&
-      ctx.db.accounts
-        .signins()
-        .some(
-          (one) =>
-            one.accountId === plan.id &&
-            one.machineId === machineId &&
-            one.state === "signed-in"
-        );
-    if (plan && signedIn) {
+    if (plan && signedInFor(row.harness, plan.id, machineId)) {
       return {
         accountId: plan.id,
         placed: chatgptPlanWords.backOnPlan(left.accountName),
@@ -233,7 +262,8 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     return {
       refusal: chatgptPlanWords.leftRefusal(
         left.accountName,
-        left.why === "removed" ? null : ctx.machineName(machineId)
+        left.why === "removed" ? null : ctx.machineName(machineId),
+        signedInForWords(row.harness)
       ),
     };
   };
@@ -302,26 +332,6 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
       ? { homeLoginMove: { accountId: move.accountId } }
       : accountLaunch(machineId, row, session, use);
   };
-  /**
-   * Whether `accountId` can run `harness` on `machineId`: Codex on the
-   * account's Codex home, signed in by Codex itself; any other on the
-   * account's own sign-in there.
-   */
-  const signedInFor = (
-    harness: HarnessKind,
-    accountId: string,
-    machineId: string
-  ): boolean =>
-    harness === "codex"
-      ? ctx.codexSignedIn(accountId, machineId)
-      : ctx.db.accounts
-          .signins()
-          .some(
-            (one) =>
-              one.accountId === accountId &&
-              one.machineId === machineId &&
-              one.state === "signed-in"
-          );
   /** Why a session can't run on an account not signed in for its harness there. */
   const signedOutWords = (
     harness: HarnessKind,
@@ -329,7 +339,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     machine: string,
     session: string
   ): string => {
-    const forWhat = harness === "codex" ? " for Codex" : "";
+    const forWhat = signedInForWords(harness);
     return `${named} isn't signed in${forWhat} on ${machine}, so ${session} can't run there. Sign ${named} in${forWhat} on ${machine} in ${configurePage("accounts")}, or continue the session on another account.`;
   };
   /** {@link launchAccount} for a session on a CawCo account, or to be placed on one. */

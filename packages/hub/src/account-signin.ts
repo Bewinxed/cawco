@@ -4,6 +4,7 @@ import type {
   AccountJoined,
   AccountKind,
   AccountProvider,
+  AccountSignin,
   AccountSigninResult,
   HomeStore,
   MachineProviderLists,
@@ -54,6 +55,7 @@ import {
   silentProblem,
   type Unanswered,
 } from "./machine-answers";
+import { harnessSignins } from "./placement";
 import { unreachable } from "./unreachable";
 
 /** Why an account's marks end as it signs in (account-marks.ts `marksRenewed`). */
@@ -119,13 +121,70 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
    */
   const codexAccountsOn = new Map<string, ReadonlySet<string>>();
 
-  /** Whether `accountId` runs Codex on `machineId`: its Codex home there is signed in. */
-  const codexSignedIn = (accountId: string, machineId: string): boolean =>
-    codexAccountsOn.get(machineId)?.has(accountId) ?? false;
+  /**
+   * Codex sign-outs a person asked for while a Codex session on the account
+   * still ran on the machine, by machine: the account counts as signed out
+   * for Codex there at once ({@link codexBeat} keeps it out), and its Codex
+   * home is signed out once no Codex session there runs on it (account-carry.ts
+   * `leaveCodexHomes`), as an account's own sign-out waits for its sessions
+   * (`leaveAccounts`). Live, like {@link codexAccountsOn}.
+   */
+  const codexLeaves = new Map<string, Set<string>>();
+
+  /** Whether a Codex sign-out of `accountId` on `machineId` waits there ({@link codexLeaves}). */
+  const codexLeaving = (accountId: string, machineId: string): boolean =>
+    codexLeaves.get(machineId)?.has(accountId) ?? false;
+
+  /**
+   * A Codex sign-out of `accountId` on `machineId` waits for its sessions
+   * there ({@link codexLeaves}), or (`waits` false) is over.
+   */
+  const keepCodexLeave = (
+    accountId: string,
+    machineId: string,
+    waits: boolean
+  ): void => {
+    const now = new Set(codexLeaves.get(machineId));
+    if (waits) {
+      now.add(accountId);
+    } else {
+      now.delete(accountId);
+    }
+    if (now.size > 0) {
+      codexLeaves.set(machineId, now);
+    } else {
+      codexLeaves.delete(machineId);
+    }
+  };
+
+  /** Every Codex sign-out still waiting for its sessions ({@link codexLeaves}). */
+  const pendingCodexLeaves = (): { accountId: string; machineId: string }[] =>
+    [...codexLeaves].flatMap(([machineId, ids]) =>
+      [...ids].map((accountId) => ({ accountId, machineId }))
+    );
+
+  /**
+   * A machine's beat on the accounts whose Codex home holds a sign-in there:
+   * kept, but for one whose sign-out waits ({@link codexLeaves}). Whether
+   * that changed what the hub holds.
+   */
+  const codexBeat = (machineId: string, accountIds: readonly string[]) => {
+    const was = codexAccountsOn.get(machineId);
+    const now = new Set(
+      accountIds.filter((id) => !codexLeaving(id, machineId))
+    );
+    codexAccountsOn.set(machineId, now);
+    return !(
+      was &&
+      was.size === now.size &&
+      [...now].every((id) => was.has(id))
+    );
+  };
 
   /**
    * What a machine's answer to a Codex sign-in or sign-out just settled,
-   * kept at once: its next beat says it again.
+   * kept at once: its next beat says it again. A sign-in ends a sign-out
+   * still waiting there ({@link codexLeaves}).
    */
   const noteCodexSignin = (
     accountId: string,
@@ -134,6 +193,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
   ): void => {
     const now = new Set(codexAccountsOn.get(machineId));
     if (signedIn) {
+      keepCodexLeave(accountId, machineId, false);
       now.add(accountId);
     } else {
       now.delete(accountId);
@@ -144,11 +204,22 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
   /**
    * An account removed: Codex signs out of its Codex home on every machine
    * that holds one, as far as each answers. One that doesn't drops the
-   * home when it next names its stores (`unknownAccountsOf`).
+   * home when it next names its stores (`unknownAccountsOf`). On `waitOn`,
+   * the machines where a session still runs on the account, the sign-out
+   * waits for its Codex sessions there ({@link codexLeaves}), as the
+   * account's own store waits for its sessions (`leaveAccounts`).
    */
-  const forgetCodexEverywhere = async (accountId: string): Promise<void> => {
+  const forgetCodexEverywhere = async (
+    accountId: string,
+    waitOn: readonly string[]
+  ): Promise<void> => {
     for (const [machineId, ids] of codexAccountsOn) {
       if (!ids.has(accountId)) {
+        continue;
+      }
+      if (waitOn.includes(machineId)) {
+        noteCodexSignin(accountId, machineId, false);
+        keepCodexLeave(accountId, machineId, true);
         continue;
       }
       const answer = await ctx.callAgent(
@@ -171,6 +242,14 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     [...codexAccountsOn].flatMap(([machineId, ids]) =>
       [...ids].map((accountId) => ({ accountId, machineId }))
     );
+
+  /**
+   * The sign-ins a session in `harness` can run on (placement.ts
+   * `harnessSignins`): Codex's own sign-ins for a Codex session, the
+   * accounts' own for any other. Placement and the launch read the same.
+   */
+  const signinsFor = (harness: string): AccountSignin[] =>
+    harnessSignins(harness, ctx.db.accounts.signins(), codexSignins());
 
   /** Every provider any machine knows, one entry each, the first machine's word on it. */
   const knownProviders = (): ProviderInfo[] => {
@@ -778,8 +857,12 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
   return {
     undoRemovedSignin,
     codexAccountsOn,
-    codexSignedIn,
+    codexBeat,
+    codexLeaving,
     codexSignins,
+    keepCodexLeave,
+    pendingCodexLeaves,
+    signinsFor,
     noteCodexSignin,
     forgetCodexEverywhere,
     machineProviders,

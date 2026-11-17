@@ -263,6 +263,7 @@ export type SpawnsContext = Pick<
   | "sessionName"
   | "ownMachineIdRead"
   | "settleMode"
+  | "signinsFor"
   | "startHold"
   | "typeSettingsOf"
   | "workItems"
@@ -643,7 +644,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
     const routing = ctx.db.accounts.routing(provider);
     const now = Date.now();
     return {
-      ...accountFacts(ctx.db, provider),
+      ...accountFacts(ctx.db, provider, ctx.signinsFor(payload.harness)),
+      harness: payload.harness,
       routing,
       machineId,
       machineName: ctx.db

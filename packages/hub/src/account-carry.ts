@@ -2,6 +2,7 @@ import type { Account } from "@cawco/core/accounts";
 import { accountNameAmong, CLAUDE_PROVIDER } from "@cawco/core/accounts";
 import {
   CONTROL_FORGET_ACCOUNT,
+  CONTROL_FORGET_CODEX_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
 } from "@cawco/core/accounts/controls";
 import { RESTART_WAIT_CAP_MS, waitedOut } from "@cawco/core/binary-updates";
@@ -47,14 +48,18 @@ export type AccountCarryContext = Pick<
   | "awayWords"
   | "callAgent"
   | "db"
+  | "keepCodexLeave"
   | "launchInFlight"
   | "lifetime"
   | "machineName"
   | "mayRun"
+  | "noteCodexSignin"
   | "owedCarries"
   | "owedMoves"
+  | "pendingCodexLeaves"
   | "publishInstances"
   | "publishStalls"
+  | "publishUsage"
   | "readAgent"
   | "registry"
   | "reportedMachinePath"
@@ -668,6 +673,50 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
         await leaveOne(leave);
       }
     }
+    await leaveCodexHomes();
+  };
+  /**
+   * Signs Codex out of each account's Codex home whose sign-out waited for
+   * the Codex sessions there (account-signin.ts `codexLeaves`), once none
+   * runs on it: Codex reads its `auth.json` again for every request, so a
+   * sign-out under a turn fails that turn. A Codex session still up is put
+   * to sleep at rest first, as {@link leaveOne} does; a machine away, or one
+   * whose sign-out fails, is asked again at the next tick.
+   */
+  const leaveCodexHomes = async (): Promise<void> => {
+    for (const { accountId, machineId } of ctx.pendingCodexLeaves()) {
+      if (!ctx.registry.agent(machineId)) {
+        continue;
+      }
+      const running = ctx.db
+        .listInstancesOn(machineId)
+        .filter(
+          (row) =>
+            row.accountId === accountId &&
+            row.harness === "codex" &&
+            processMayRun(row)
+        );
+      if (running.length > 0) {
+        sleepUnmoved(machineId, running);
+        continue;
+      }
+      const answer = await ctx.callAgent(
+        machineId,
+        CONTROL_FORGET_CODEX_LOGIN,
+        [accountId],
+        SIGNIN_TIMEOUT_MS
+      );
+      if (answer.kind !== "answered" || !answer.value.ok) {
+        continue;
+      }
+      ctx.keepCodexLeave(accountId, machineId, false);
+      ctx.noteCodexSignin(accountId, machineId, false);
+      console.log(
+        `[accounts] ${ctx.machineName(machineId)} signed ${accountId} out for Codex, signed out while a Codex session there still ran on it: none does now.`
+      );
+      ctx.publishUsage(machineId);
+      ctx.publishStalls();
+    }
   };
   /** {@link leaveAccounts} on one machine. */
   const leaveOne = async (leave: AccountLeave): Promise<void> => {
@@ -733,7 +782,10 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
    */
   const tickLeaves = (): void => {
     leaveTicker ??= ctx.lifetime.every(ctx.MOVE_TICK_MS, () => {
-      if (ctx.db.accounts.leaves().length === 0) {
+      if (
+        ctx.db.accounts.leaves().length === 0 &&
+        ctx.pendingCodexLeaves().length === 0
+      ) {
         ctx.lifetime.cancel(leaveTicker);
         leaveTicker = undefined;
         return;

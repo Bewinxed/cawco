@@ -64447,15 +64447,23 @@
       "deleteApiAccountsByIdMachinesByMachineIdCodexSignin200": {
         "type": "object",
         "properties": {
+          "moving": {
+            "type": "number"
+          },
           "ok": {
             "type": "boolean",
             "enum": [
               true
             ]
+          },
+          "staying": {
+            "type": "number"
           }
         },
         "required": [
-          "ok"
+          "moving",
+          "ok",
+          "staying"
         ]
       },
       "deleteApiAccountsByIdMachinesByMachineIdCodexSignin404": {

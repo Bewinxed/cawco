@@ -17,6 +17,7 @@ import type {
   AccountKind,
   AccountMove,
   AccountProvider,
+  AccountSignin,
   AccountSigninResult,
   CompactStage,
   EndedBy,
@@ -704,6 +705,15 @@ export interface ClosureContext {
     identity: AccountIdentity
   ) => Promise<AccountJoined | { error: string }>;
   keepAliveScheduler: ReturnType<typeof createKeepAliveScheduler>;
+  /**
+   * A Codex sign-out of the account on the machine waits for its Codex
+   * sessions there (`waits`), or is over (account-signin.ts `codexLeaves`).
+   */
+  keepCodexLeave: (
+    accountId: string,
+    machineId: string,
+    waits: boolean
+  ) => void;
   /** Runs the hub's tool pass for a machine, or every connected one (tool-installs.ts `keepCopiesOn`). */
   keepCopiesOn: (machineId?: string) => void;
   keepCustody: (machineId: string, custody: SessionCustody) => void;
@@ -894,6 +904,12 @@ export interface ClosureContext {
     id?: string,
     at?: number
   ) => void;
+  /** What a machine's answer to a Codex sign-in or sign-out settled (account-signin.ts `noteCodexSignin`). */
+  noteCodexSignin: (
+    accountId: string,
+    machineId: string,
+    signedIn: boolean
+  ) => void;
   noteFetch: (
     row: { skill: string } | { plugin: string },
     before: FetchedCopy,
@@ -955,6 +971,8 @@ export interface ClosureContext {
   parkForPerson: (envelope: ArrivingAsk, outlivesHub?: boolean) => void;
   passkeyRelay: ReturnType<typeof createPasskeyRelay>;
   pending: PendingShape;
+  /** Every Codex sign-out still waiting for its sessions (account-signin.ts `codexLeaves`). */
+  pendingCodexLeaves: () => { accountId: string; machineId: string }[];
   pendingInstalls: Map<
     string,
     {
@@ -1263,6 +1281,19 @@ export interface ClosureContext {
     target: PreviewTarget,
     open: boolean
   ) => PreviewFrame;
+  /**
+   * The sign-ins a session in `harness` can run on: Codex's own for a
+   * Codex session (account-signin.ts `signinsFor`, placement.ts
+   * `harnessSignins`).
+   */
+  signinsFor: (harness: string) => AccountSignin[];
+  /** Signs Codex alone out of an account on a machine, its Codex sessions there first (limit-moves.ts `signOutCodex`). */
+  signOutCodex: (
+    account: Account,
+    named: string,
+    machineId: string,
+    leaves: boolean
+  ) => { moving: number; staying: number };
   signOutEverywhere: (
     account: Account,
     machineIds: string[]
