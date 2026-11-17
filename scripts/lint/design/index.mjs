@@ -130,6 +130,9 @@ const INLINE_STYLES = {
     "width",
   ],
   "src/lib/cawco/preview/PinCard.svelte": ["left", "max-width", "top"],
+  // A comment's card follows its pill as the page scrolls: moved by its
+  // transform alone, its pop's origin with it.
+  "src/lib/cawco/preview/PinFloat.svelte": ["transform", "transform-origin"],
   "src/lib/cawco/project/CardFace.svelte": ["color"],
   "src/lib/cawco/project/NewProject.svelte": ["block-size"],
   "src/lib/cawco/project/TemplateCards.svelte": ["translate"],

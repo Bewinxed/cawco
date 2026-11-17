@@ -38,6 +38,14 @@
   again while it stands, it travels to its new place over `--duration-morph` on
   `--ease-drawer`, never a jump.
 
+  It moves by its `transform` alone, on a layer of its own
+  (`will-change-transform`), so each step of a scroll is the compositor's
+  to draw (the owner: "scrolling while a comment bubble is open nukes the
+  fps"). Its place was a custom property under `top` and `start`: each step
+  restyled the whole thread under it (an inherited property), laid it out
+  and laid the pane's layers out again, 5 to 10ms a step in his trace of
+  2026-11-17.
+
   The thread's card pours out of its pill (the owner: "a gooey animation
   that morphs out of the comment just how the caw/search/machine bar on the
   top right does it", and transitions.dev's gooey plus menu he linked): the
@@ -178,6 +186,9 @@
       if (untrack(() => card)) {
         pour();
       } else {
+        if (place) {
+          popOrigin = originOf(place);
+        }
         // biome-ignore lint/suspicious/noUnusedExpressions: the read takes its closed look at the side it was placed on, the start the kit's transition runs from
         getComputedStyle(el).translate;
       }
@@ -231,6 +242,21 @@
     };
   });
 
+  /**
+   * The composer's pop (`popMotion`, `popOut`) scales it about its pill. Its
+   * box is moved by `transform`, which the scale applies after, so the
+   * scale's origin is the pill's spot in the box plus the box's move. It
+   * scales only as it opens and as it leaves, so the origin is written then
+   * (`placed`, `leave`), and a scroll in between changes its transform
+   * alone, which the compositor moves without painting it again.
+   */
+  let popOrigin = $state<string>();
+  const originOf = (at: {
+    left: number;
+    origin: { x: number; y: number };
+    top: number;
+  }) => `${at.left + at.origin.x}px ${at.top + at.origin.y}px`;
+
   // A new plan while it stands: it travels from where it stood to its new
   // place, over --duration-morph on --ease-drawer (The Interruptible Rule: a
   // second one starts from where the first has it).
@@ -260,12 +286,21 @@
    * the composer closing by Esc changed its `mark` in that very flush.
    * Written while it stands.
    */
-  let drawn: { card: boolean; side: PopSide | undefined } = {
+  let drawn: {
+    card: boolean;
+    origin: string | undefined;
+    side: PopSide | undefined;
+  } = {
     card: untrack(() => card),
+    origin: undefined,
     side: undefined,
   };
   $effect(() => {
-    drawn = { card, side: place?.side };
+    drawn = {
+      card,
+      origin: place ? originOf(place) : undefined,
+      side: place?.side,
+    };
   });
 
   // ---- The pour ----------------------------------------------------------
@@ -338,7 +373,10 @@
     };
     const { cardR: CARD_R, hair, join: JOIN } = tokens;
     const k = unit(poured);
-    const p = pinHere;
+    // At rest the card is its own box: the pill neither shapes it nor is cut
+    // out of it, so where the pill stands is not read, and the page's scroll
+    // (each `cawco:pin-at`) draws nothing again.
+    const p = run === null && poured >= 1 ? null : pinHere;
     const from: Rect = p ?? { x: 0, y: 0, w: cardW, h: cardH };
     const pinR = p ? p.h / 2 : CARD_R;
     const shape: Rect = {
@@ -559,7 +597,8 @@
    * Out: the composer by the kit's `popOut`, the foot sheet by its opacity,
    * both CSS a resume turns back. The card has closed while it stood
    * (`drain`), or another pin's card takes its place: it goes at once. It
-   * reads what was last drawn (`drawn`), never a derived.
+   * reads what was last drawn (`drawn`), never a derived; the composer's
+   * scale goes about its pill as it last stood (`originOf`).
    */
   function leave(node: HTMLElement): TransitionConfig {
     if (drawn.card) {
@@ -572,6 +611,9 @@
         css: (t: number) => `opacity: ${t}`,
       };
     }
+    if (drawn.origin) {
+      node.style.transformOrigin = drawn.origin;
+    }
     return popOut(node, { side: drawn.side ?? "bottom" });
   }
 </script>
@@ -582,8 +624,8 @@
     "group/pour pointer-events-auto absolute z-2 flex flex-col max-h-(--float-max)",
     sheet
       ? "inset-x-0 bottom-(--keyboard-lift,0px) w-full max-h-over-keyboard-70"
-      : "start-(--float-x) top-(--float-y) w-(--float-w)",
-    !(sheet || card) && ["origin-(--float-origin)", popMotion],
+      : "left-0 top-0 w-(--float-w) will-change-transform",
+    !(sheet || card) && popMotion,
   ]}
   data-bare={bare || undefined}
   data-sheet={sheet || undefined}
@@ -597,11 +639,10 @@
   onpointerleave={onrest ? () => onrest(false) : undefined}
   role="dialog"
   bind:this={float}
-  style:--float-x={place ? `${place.left}px` : undefined}
-  style:--float-y={place ? `${place.top}px` : undefined}
-  style:--float-origin={place
-    ? `${place.origin.x}px ${place.origin.y}px`
-    : "bottom center"}
+  style:transform={place
+    ? `translate(${place.left}px, ${place.top}px)`
+    : undefined}
+  style:transform-origin={popOrigin}
   style:--float-w={FLOAT_W}
   style:--float-max={place
     ? `${place.max}px`
