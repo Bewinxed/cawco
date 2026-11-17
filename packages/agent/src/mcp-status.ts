@@ -142,6 +142,7 @@ export const readMcpRuntime = async (
       env,
       pathToClaudeCodeExecutable: executable,
       mcpServers: servers,
+      mcpServersDelivery: "initialize",
       strictMcpConfig: true,
     },
   });
