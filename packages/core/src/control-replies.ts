@@ -26,10 +26,12 @@ import type {
 import {
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
+  CONTROL_BEGIN_CODEX_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_BORROW_ACCOUNT,
   CONTROL_CHECK_ACCOUNT,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
+  CONTROL_COMPLETE_CODEX_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_ACCOUNT,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
@@ -447,6 +449,12 @@ const CONTROLS = {
     ProviderSigninChallengeSchema
   ),
   [CONTROL_COMPLETE_PROVIDER_LOGIN]: reply<ProviderSigninResult>(
+    ProviderSigninResultSchema
+  ),
+  [CONTROL_BEGIN_CODEX_LOGIN]: reply<ProviderSigninChallenge>(
+    ProviderSigninChallengeSchema
+  ),
+  [CONTROL_COMPLETE_CODEX_LOGIN]: reply<ProviderSigninResult>(
     ProviderSigninResultSchema
   ),
   [CONTROL_SET_PROVIDER_KEY]: reply<ProviderSigninResult>(

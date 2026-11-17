@@ -435,6 +435,17 @@ export const CLAUDE_VERSION_FLOOR = "2.1.326";
  */
 const PI_VERSION_FLOOR = "1.3.0";
 
+/**
+ * The one Codex release CawCo runs: its adapter speaks this release's
+ * app-server protocol, whose types are generated from it
+ * (packages/agent/src/harnesses/codex-protocol/, `bun scripts/codex-protocol.ts`),
+ * and runs each workspace session's tools in an execution environment, a
+ * part Codex marks experimental (Codex audit 2026-11-17). A new release
+ * moves only with its types regenerated and the scripted-model check
+ * (`bun scripts/codex-check.ts`) passing on it.
+ */
+export const CODEX_VERSION = "0.169.0";
+
 const VERSION_PARTS = /^(\d+)\.(\d+)\.(\d+)/u;
 
 /** Whether `version` (`x.y.z`, anything after it ignored) is older than `than`. */
@@ -733,6 +744,38 @@ export const TOOL_CATALOG: ToolSpec[] = [
         needs: "curl",
         command:
           "curl -fsSL https://pi.dev/install.sh -o pi-install.sh && sh pi-install.sh",
+      },
+    ],
+  },
+  {
+    id: "codex",
+    name: "Codex",
+    homepage: "https://github.com/openai/codex",
+    bin: "codex",
+    versionCommand: "codex --version",
+    exactVersion: CODEX_VERSION,
+    // Its sign-ins are CawCo's per-account Codex homes (agent
+    // harnesses/codex-home.ts), never the machine's `~/.codex`, so the
+    // catalog asks no machine-wide sign-in of it.
+    //
+    // `@openai/codex` installs a `codex` bin whose native binary is an
+    // optional dependency per platform (npm view @openai/codex@0.169.0).
+    install: [
+      {
+        label: "npm",
+        platforms: ["linux", "darwin", "win32"],
+        needs: "npm",
+        footprint: { kind: "npm-global" },
+        command: "npm install -g @openai/codex@{version}",
+        pinnedCommand: "npm install -g @openai/codex@{version}",
+      },
+      {
+        label: "bun",
+        platforms: ["linux", "darwin"],
+        needs: "bun",
+        footprint: { kind: "bun-global" },
+        command: "bun install -g --trust @openai/codex@{version}",
+        pinnedCommand: "bun install -g --trust @openai/codex@{version}",
       },
     ],
   },

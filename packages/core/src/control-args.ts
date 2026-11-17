@@ -254,6 +254,8 @@ const ARGS: {
     maybe(text),
   ]),
   beginProviderLogin: tuple([text, text]),
+  beginCodexLogin: tuple([text]),
+  completeCodexLogin: tuple([text]),
   completeProviderLogin: tuple([nullable(text), text, maybe(AccountIdentity)]),
   setProviderKey: tuple([text, text, text, maybe(AccountIdentity)]),
   forgetProviderAccount: tuple([text]),

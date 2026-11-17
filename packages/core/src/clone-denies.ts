@@ -78,27 +78,9 @@ const SRT_DIRS = [".vscode", ".idea"];
  * the owner picked "Admin tools only" (2026-10-23).
  */
 
-/**
- * Codex's project config, held before its adapter exists: Codex's app-server
- * marks any folder it starts a writable thread in as trusted, so a
- * `.codex/config.toml` written in a clone started its MCP server on the host
- * at the next Codex session there (Codex audit 2026-11-17, probes C-k and
- * C-k2). `.agents/plugins` holds the repo plugin marketplace
- * (`marketplace.json`) Codex also loads. Codex's descriptor's `cloneConfig`
- * takes these over when it is registered.
- */
-const CODEX_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
-  ".codex": DIR,
-  ".agents/plugins": DIR,
-};
-
 /** Every harness's config, as one table. */
 const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> =
-  Object.assign(
-    {},
-    CODEX_CONFIG_EMPTY,
-    ...HARNESS_PLUGINS.map((plugin) => plugin.cloneConfig)
-  );
+  Object.assign({}, ...HARNESS_PLUGINS.map((plugin) => plugin.cloneConfig));
 
 /**
  * {@link HARNESS_CONFIG_EMPTY}'s paths: the one list of harness config a

@@ -229,6 +229,7 @@ interface ControlTable {
     [account: string, kind: AccountKind],
     ProviderSigninChallenge
   >;
+  beginCodexLogin: Entry<[account: string], ProviderSigninChallenge>;
   beginProviderLogin: Entry<
     [account: string, provider: string],
     ProviderSigninChallenge
@@ -270,6 +271,7 @@ interface ControlTable {
     [code: string | null, account: string, expected?: AccountIdentity | null],
     AccountSigninResult
   >;
+  completeCodexLogin: Entry<[account: string], ProviderSigninResult>;
   completeProviderLogin: Entry<
     [code: string | null, account: string, expected?: AccountIdentity | null],
     ProviderSigninResult

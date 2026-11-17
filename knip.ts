@@ -209,6 +209,9 @@ export default {
         "scripts/hooks/delegate-nudge.ts",
         // Run on obelisk by artifacts/srt-eval/run-mac-checks.sh:192 and artifacts/srt-eval/mac-boundary-check.sh:23.
         "artifacts/srt-eval/home-toolchains.ts",
+        // Run by hand on each Codex version bump: packages/core/src/tools.ts `CODEX_VERSION`.
+        "scripts/codex-protocol.ts",
+        "scripts/codex-check.ts",
       ],
       // The root workspace's code is scripts/ (golar.config.ts and
       // artifacts/srt-eval/home-toolchains.ts join as entries, an entry being
@@ -307,6 +310,9 @@ export default {
       },
     },
     "packages/agent": {
+      // Codex's whole app-server protocol as its release generates it
+      // (scripts/codex-protocol.ts): the adapter names the types it uses.
+      ignore: ["src/harnesses/codex-protocol/**"],
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
       includeEntryExports: true,
       entry: [

@@ -68,6 +68,7 @@ import {
   HARNESSES,
   type HarnessKind,
 } from "../../packages/core/src/harness/kinds";
+import type { KeeperHarnessKind } from "../../packages/core/src/harness/traits";
 import { claudeHome } from "../../packages/core/src/paths/claude";
 import { workspaceSpillDir } from "../../packages/core/src/paths/workspace";
 import {
@@ -186,7 +187,7 @@ const toolCalls = async (procId: string, text: string): Promise<string[]> => {
 
 /** A session held by `client`'s keeper, as a real session keeps the keeper it was started or adopted on. */
 function session(
-  kind: "claude" | "pi",
+  kind: KeeperHarnessKind,
   instanceId: string,
   ctx: Context,
   client: SessiondClient

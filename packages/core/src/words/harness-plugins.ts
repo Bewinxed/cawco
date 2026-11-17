@@ -23,6 +23,18 @@ const ENDS_AT_THE_CALL: NoReplyWords = {
   result: "This turn ended here with no reply.",
 };
 
+/**
+ * The no-reply tool on a harness whose loop takes one more step after a
+ * step that called a tool (OpenCode's, Codex's), so the turn is no news
+ * only when that step writes nothing (hub server.ts `endsOnNoReply`).
+ */
+const STEPS_ON_AFTER_THE_CALL: NoReplyWords = {
+  description:
+    "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them, and write nothing after it: text after it reaches them as a reply. It changes nothing else.",
+  result:
+    "No reply this turn. End your step with no text: anything written now reaches the person as a reply.",
+};
+
 /** No permission modes, and so no Full Send: pi raises no permission prompt (agent pi-services.ts `capabilities`). */
 const PI_NO_MODES: Lacks = {
   lacks: "pi has no permission modes: it raises no permission prompt.",
@@ -81,12 +93,7 @@ export const OPENCODE_WORDS = {
     warning:
       "Fleet changes run without asking you. Pick Bypass to have them ask again.",
   },
-  noReply: {
-    description:
-      "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them, and write nothing after it: text after it reaches them as a reply. It changes nothing else.",
-    result:
-      "No reply this turn. End your step with no text: anything written now reaches the person as a reply.",
-  },
+  noReply: STEPS_ON_AFTER_THE_CALL,
   usageName: "opencode",
 } as const satisfies HarnessWords;
 
@@ -105,4 +112,31 @@ export const PI_WORDS = {
   fullSend: PI_NO_MODES,
   noReply: ENDS_AT_THE_CALL,
   usageName: "pi",
+} as const satisfies HarnessWords;
+
+/**
+ * Codex's. CawCo answers each ask Codex raises for a command or an edit
+ * (agent harnesses/codex.ts `CODEX_MODES`); Codex's own sandbox stays off
+ * in a workspace, whose boundary holds every command.
+ */
+export const CODEX_WORDS = {
+  name: "Codex",
+  modes: {
+    default: "Every command and edit asks.",
+    plan: "Read-only: nothing is written.",
+    acceptEdits: "File edits run without asking; commands ask.",
+    bypassPermissions: "Commands and edits run unasked.",
+    fullSend: "Bypass, and fleet changes are approved too.",
+  },
+  fullSend: {
+    confirm: [
+      "Approves without asking, fleet changes like memory, skills, hooks and MCP servers included.",
+      STILL_ASKS,
+    ],
+    restarts: RESTARTS,
+    warning:
+      "Fleet changes run without asking you. Pick Bypass to have them ask again.",
+  },
+  noReply: STEPS_ON_AFTER_THE_CALL,
+  usageName: "Codex",
 } as const satisfies HarnessWords;

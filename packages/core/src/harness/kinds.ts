@@ -8,6 +8,7 @@
 
 import { everyOf } from "../every-of";
 import { CLAUDE } from "./claude";
+import { CODEX } from "./codex";
 import type { HarnessDescriptor } from "./descriptor";
 import { OPENCODE } from "./opencode";
 import { PI } from "./pi";
@@ -23,6 +24,7 @@ export const HARNESS_PLUGINS = [
   CLAUDE,
   OPENCODE,
   PI,
+  CODEX,
 ] as const satisfies readonly HarnessDescriptor[];
 
 /** A registered plugin's descriptor. */

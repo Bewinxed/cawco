@@ -1,18 +1,19 @@
 <script lang="ts" module>
   import type { HarnessKind } from "@cawco/core/harness/kinds";
-  import { LogoAntigravity, LogoClaude } from "@cawco/icons/marks";
+  import { LogoAntigravity, LogoClaude, LogoOpenai } from "@cawco/icons/marks";
   import OpenCodeLogo from "./OpenCodeLogo.svelte";
   import PiLogo from "./PiLogo.svelte";
 
   /**
    * Each CLI's mark, by its id: the harnesses CawCo runs, and the CLIs it
    * installs beside them (core TOOL_CATALOG). Antigravity's is Iconify's
-   * `logos:antigravity`.
+   * `logos:antigravity`; Codex's is OpenAI's, `logos:openai-icon`.
    */
   const MARKS = {
     claude: LogoClaude,
     opencode: OpenCodeLogo,
     pi: PiLogo,
+    codex: LogoOpenai,
     antigravity: LogoAntigravity,
   } satisfies Record<HarnessKind | "antigravity", unknown>;
 

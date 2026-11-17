@@ -155,9 +155,12 @@ import {
  * and the delegate runs its project's checks itself, and finish_item takes
  * no `ship` (the owner that day: "this whole gate thing is made up")
  * (worker 30,961, delegate 11,346 measured).
+ * 2026-11-17: Codex joins the harnesses (tsk-387): every tool schema that
+ * names a harness lists `codex` beside the others (worker 30,996
+ * measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_985,
+  worker: 31_000,
   delegate: 11_440,
   overseer: 770,
   "web-facing": 3400,

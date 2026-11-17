@@ -16,11 +16,10 @@ import type {
 } from "../harness";
 import { cannot, noCarry } from "../harness";
 import type { HarnessCli } from "../harness-cli";
-import { procIdFor } from "../proc-id";
 import { withAccountReads } from "../provider-usage";
 import { procEpoch } from "../sessiond-client";
 import { resolveBin, toolGate } from "../tools";
-import { keeperCustody } from "./keeper-custody";
+import { keeperCustody, liveChild } from "./keeper-custody";
 import { neutralSubagentChange } from "./neutral-subagents";
 import { PI_SPEC, PiProfile } from "./pi-services";
 import { adoptPi, piKeepers, piSnapshot, spawnPi } from "./pi-sessiond";
@@ -151,10 +150,7 @@ class PiHarness extends PiProfile implements Harness<"pi"> {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession | undefined> {
-    const { procs } = await this.custody.candidates();
-    const proc = procs.find(
-      (one) => one.alive && one.procId === procIdFor("pi", spec.instanceId)
-    );
+    const proc = await liveChild(this.custody, "pi", spec.instanceId);
     return proc
       ? await this.adopt(spec, ctx, {
           head: proc.head,

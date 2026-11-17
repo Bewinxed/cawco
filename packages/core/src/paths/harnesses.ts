@@ -171,3 +171,26 @@ export const opencodeDatabases = (): string[] => {
     ...opencodeViewHomes().map((home) => join(home, "opencode", "opencode.db")),
   ].filter((path) => existsSync(path));
 };
+
+/**
+ * One account's Codex home (`CODEX_HOME`): its own sign-in (`auth.json`,
+ * which Codex itself writes and CawCo never reads), CawCo's `config.toml`
+ * and `environments.toml`, and links to the machine's thread store
+ * ({@link codexStoreDir}) and the fleet's skills and rules. Beside the
+ * account's other stores (the accounts root of paths/claude.ts, named here
+ * without importing it: that module imports this one), which no workspace
+ * reads.
+ */
+export const codexAccountHome = (accountId: string): string =>
+  join(homedir(), ".cawco", "accounts", accountId, "codex");
+
+/**
+ * Every Codex home's one thread store on this machine: `sessions/` (its
+ * rollout files) and `db/` (its SQLite stores, `sqlite_home`), so a thread
+ * one account began resumes on another (the owner's pick "Move only to an
+ * API key", 2026-11-17) and one listing reads every account's.
+ */
+export const codexStoreDir = (): string => join(cawcoDataDir(), "codex-store");
+
+/** What the fleet sync writes for Codex (skills, rules), linked into every account's home. */
+export const codexFleetRoot = (): string => join(cawcoDataDir(), "fleet-codex");

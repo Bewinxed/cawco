@@ -24,7 +24,6 @@ import { PI } from "@cawco/core/harness/pi";
 import type { HookEvent } from "@cawco/core/hooks";
 import { hookToolCall, hookToolInputBack } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
-import { fleetMemoryFile } from "@cawco/core/paths/fleet";
 import { piFleetSkillsDir } from "@cawco/core/paths/harnesses";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { conversationGone } from "@cawco/core/relaunch";
@@ -100,7 +99,6 @@ import {
 import { configAt, hooksAt, readFleetHarnessSet } from "../fleet-harness-set";
 import { type HookPlace, runFleetHooks } from "../fleet-hook-run";
 import { fleetMcpAt } from "../fleet-mcp-set";
-import { readFleetMemory } from "../fleet-memory";
 import { placeSetAt } from "../fleet-place-set";
 import type {
   HarnessContext,
@@ -110,7 +108,6 @@ import type {
 } from "../harness";
 import { cannot } from "../harness";
 import type { McpGate } from "../mcp-gate";
-import { placedMemoryIn } from "../placed-memory";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { piCompactsAt } from "./compaction-points";
 import { credentialControls } from "./credential-controls";
@@ -130,6 +127,7 @@ import {
   toBlocks,
 } from "./pi-services";
 import { PI_ASKS_NOTHING, piOpenTurns } from "./pi-sessiond";
+import { sessionMemory } from "./session-memory";
 
 type BashExec = BashOperations["exec"];
 
@@ -1004,21 +1002,8 @@ const loaderSources = async (
   }
   const set = await readFleetHarnessSet();
   const placed = await placeSetAt(cwd);
-  const fleetMemory = await readFleetMemory();
   return {
-    memory: [
-      ...(fleetMemory?.trim()
-        ? [{ path: fleetMemoryFile(), content: fleetMemory }]
-        : []),
-      ...(await placedMemoryIn(cwd)).map(({ file, content }) => ({
-        path: file,
-        content,
-      })),
-      ...(spec.instructions ?? []).map(({ path, content }) => ({
-        path: `cawco memory: ${path}`,
-        content,
-      })),
-    ],
+    memory: await sessionMemory(spec, cwd),
     loader: {
       ...skillsHeldTo(spec.startingSet),
       additionalSkillPaths: [

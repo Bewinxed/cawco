@@ -111,6 +111,19 @@ export const CONTROL_BEGIN_PROVIDER_LOGIN = "beginProviderLogin";
 export const CONTROL_COMPLETE_PROVIDER_LOGIN = "completeProviderLogin";
 export const CONTROL_SET_PROVIDER_KEY = "setProviderKey";
 /**
+ * Machine controls (arg: account id) for Codex's own sign-in, into the
+ * account's Codex home on the machine (agent harnesses/codex-home.ts), which
+ * CawCo never reads (the owner's pick "Codex's own sign-in", 2026-11-17):
+ * Begin starts Codex's device-code sign-in and answers its page and code
+ * ({@link ProviderSigninChallenge}); Complete waits up to a minute for the
+ * person to enter it and answers how it stands
+ * ({@link ProviderSigninResult}), who it is as Codex says. An OpenAI key an
+ * account is given ({@link CONTROL_SET_PROVIDER_KEY}) is handed to the
+ * account's Codex home too, where Codex is installed.
+ */
+export const CONTROL_BEGIN_CODEX_LOGIN = "beginCodexLogin";
+export const CONTROL_COMPLETE_CODEX_LOGIN = "completeCodexLogin";
+/**
  * Machine control (arg: account id): the account's windows read now from
  * its provider's own usage endpoint with the credential this machine holds
  * (agent provider-usage.ts), for an account of any provider with a reader:

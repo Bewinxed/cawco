@@ -77,7 +77,8 @@
     "enum": [
       "claude",
       "opencode",
-      "pi"
+      "pi",
+      "codex"
     ]
   },
   "account_routing.delegates_strategy": {
@@ -103,7 +104,8 @@
     "enum": [
       "claude",
       "opencode",
-      "pi"
+      "pi",
+      "codex"
     ]
   },
   "account_signins.refusal_reach": {
@@ -889,7 +891,8 @@
           "enum": [
             "claude",
             "opencode",
-            "pi"
+            "pi",
+            "codex"
           ]
         },
         "additionalProperties": {
@@ -2033,7 +2036,8 @@
     "enum": [
       "claude",
       "opencode",
-      "pi"
+      "pi",
+      "codex"
     ]
   },
   "config_trash.kind": {
@@ -2769,7 +2773,8 @@
                 "type": "string",
                 "enum": [
                   "opencode",
-                  "pi"
+                  "pi",
+                  "codex"
                 ]
               },
               "summaryRefused": {
@@ -4052,7 +4057,8 @@
             "enum": [
               "claude",
               "opencode",
-              "pi"
+              "pi",
+              "codex"
             ]
           },
           "instanceId": {
@@ -4190,7 +4196,8 @@
             "enum": [
               "claude",
               "opencode",
-              "pi"
+              "pi",
+              "codex"
             ]
           },
           "model": {
@@ -4243,7 +4250,8 @@
             "enum": [
               "claude",
               "opencode",
-              "pi"
+              "pi",
+              "codex"
             ]
           },
           "machineId": {
@@ -4493,7 +4501,8 @@
     "enum": [
       "claude",
       "opencode",
-      "pi"
+      "pi",
+      "codex"
     ]
   },
   "design_checks.findings": {
@@ -5766,7 +5775,8 @@
     "enum": [
       "claude",
       "opencode",
-      "pi"
+      "pi",
+      "codex"
     ]
   },
   "instance_starting_set.kind": {
@@ -5818,7 +5828,8 @@
     "enum": [
       "claude",
       "opencode",
-      "pi"
+      "pi",
+      "codex"
     ]
   },
   "instances.keep_alive_stopped": {
@@ -5970,7 +5981,8 @@
             "enum": [
               "claude",
               "opencode",
-              "pi"
+              "pi",
+              "codex"
             ]
           },
           "homeLoginMove": {
@@ -6397,7 +6409,8 @@
         "type": "string",
         "enum": [
           "opencode",
-          "pi"
+          "pi",
+          "codex"
         ]
       },
       "summaryRefused": {
@@ -6655,7 +6668,8 @@
             "type": "string",
             "enum": [
               "opencode",
-              "pi"
+              "pi",
+              "codex"
             ]
           },
           "summaryRefused": {
@@ -7818,7 +7832,8 @@
     "enum": [
       "claude",
       "opencode",
-      "pi"
+      "pi",
+      "codex"
     ]
   },
   "mcp_server_platforms.platform": {
@@ -8449,7 +8464,8 @@
             "enum": [
               "claude",
               "opencode",
-              "pi"
+              "pi",
+              "codex"
             ]
           },
           "model": {
@@ -8548,7 +8564,8 @@
             "type": "string",
             "enum": [
               "opencode",
-              "pi"
+              "pi",
+              "codex"
             ]
           },
           "summaryRefused": {
@@ -9833,7 +9850,8 @@
             "enum": [
               "claude",
               "opencode",
-              "pi"
+              "pi",
+              "codex"
             ]
           },
           "input": {
@@ -10818,7 +10836,8 @@
     "enum": [
       "claude",
       "opencode",
-      "pi"
+      "pi",
+      "codex"
     ]
   },
   "projects.caw_mode": {
@@ -10920,7 +10939,8 @@
         "enum": [
           "claude",
           "opencode",
-          "pi"
+          "pi",
+          "codex"
         ]
       },
       "inputs": {
@@ -11026,7 +11046,8 @@
         "enum": [
           "claude",
           "opencode",
-          "pi"
+          "pi",
+          "codex"
         ]
       },
       "host": {
@@ -11197,7 +11218,8 @@
     "enum": [
       "claude",
       "opencode",
-      "pi"
+      "pi",
+      "codex"
     ]
   },
   "rules.scope_role": {
@@ -12809,7 +12831,8 @@
             "enum": [
               "claude",
               "opencode",
-              "pi"
+              "pi",
+              "codex"
             ]
           },
           "machineId": {
@@ -13404,7 +13427,8 @@
     "enum": [
       "claude",
       "opencode",
-      "pi"
+      "pi",
+      "codex"
     ]
   },
   "work_items.landing_phase": {

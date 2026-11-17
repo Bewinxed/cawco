@@ -17,7 +17,14 @@
  * and {@link dropHarnessUserLayer} takes those writes back out.
  */
 
-import { syncMemory, syncSkillFiles } from "../fleet";
+import type { FleetItemState } from "@cawco/core/fleet";
+import {
+  heldSkills,
+  skillDrift,
+  skillRecords,
+  syncMemory,
+  syncSkillFiles,
+} from "../fleet";
 import { readOwnJson } from "../json-file";
 import { FleetSidecarSchema } from "../stored-shapes";
 
@@ -116,4 +123,29 @@ export const dropHarnessUserLayer = async (
     ...(Object.keys(skills).length > 0 ? { skills } : {}),
   };
   return Object.keys(left).length > 0 ? left : undefined;
+};
+
+/**
+ * Each skill a harness's sidecar names, as it stands in `dir` now: applied,
+ * gone from disk, or changed there since CawCo wrote it (OpenCode's, pi's
+ * and Codex's `fleetStatus`).
+ */
+export const skillStatesIn = async (
+  dir: string,
+  written: FleetSidecar["skills"]
+): Promise<Record<string, FleetItemState>> => {
+  const held = await heldSkills(dir, Object.keys(written));
+  const records = await skillRecords(dir, written, held);
+  const states: Record<string, FleetItemState> = {};
+  for (const [name, recorded] of Object.entries(records)) {
+    const drift = skillDrift(held[name], recorded, recorded);
+    let state: FleetItemState = { state: "applied" };
+    if (held[name] === undefined) {
+      state = { state: "failed", cause: "absent", detail: "not on disk" };
+    } else if (drift) {
+      state = { state: "failed", cause: "drifted", detail: drift };
+    }
+    states[name] = state;
+  }
+  return states;
 };

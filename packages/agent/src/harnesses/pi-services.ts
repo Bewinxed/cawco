@@ -71,8 +71,6 @@ import {
 import {
   heldSkills,
   memoryState,
-  skillDrift,
-  skillRecords,
   syncMemory,
   syncSkillFiles,
 } from "../fleet";
@@ -90,6 +88,7 @@ import {
   dropHarnessUserLayer,
   type FleetSidecar,
   readSidecar,
+  skillStatesIn,
 } from "./fleet-common";
 import { lastPromptAt, timeOf } from "./last-prompt";
 import { machineWithAccountsRuntime } from "./pi-accounts";
@@ -1397,18 +1396,7 @@ export class PiProfile {
     };
     const set = await readFleetMcpSet();
     report.mcp = await piFleetMcp(set.servers, placedMcpKeys(places));
-    const held = await heldSkills(PI_SKILLS, Object.keys(sidecar.skills));
-    const records = await skillRecords(PI_SKILLS, sidecar.skills, held);
-    for (const [name, recorded] of Object.entries(records)) {
-      const drift = skillDrift(held[name], recorded, recorded);
-      let state: FleetItemState = { state: "applied" };
-      if (held[name] === undefined) {
-        state = { state: "failed", cause: "absent", detail: "not on disk" };
-      } else if (drift) {
-        state = { state: "failed", cause: "drifted", detail: drift };
-      }
-      skillStates[name] = state;
-    }
+    Object.assign(skillStates, await skillStatesIn(PI_SKILLS, sidecar.skills));
     if (sidecar.memory !== undefined) {
       report.memory = await memoryState(PI_MEMORY, sidecar.memory);
     }

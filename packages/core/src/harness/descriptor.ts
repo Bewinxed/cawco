@@ -190,6 +190,15 @@ export type HarnessHomeLogin =
       /** A store holding a credential per provider. */
       readonly homeLogin: "credentials";
       readonly soleProvider: string | null;
+    }
+  | {
+      /**
+       * None CawCo moves in: each account signs the harness in itself, in a
+       * home CawCo keeps for the account, and CawCo never reads the
+       * credential it holds (Codex's own sign-in).
+       */
+      readonly homeLogin: "none";
+      readonly soleProvider: null;
     };
 
 /**

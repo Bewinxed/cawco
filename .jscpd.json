@@ -7,6 +7,7 @@
     "**/build/**",
     "**/dist/**",
     "**/fixtures/**",
+    "packages/agent/src/harnesses/codex-protocol/**",
     "packages/core/src/stored-shapes.ts",
     "packages/hub/src/db/stored-shapes.ts",
     "packages/agent/src/stored-shapes.ts",

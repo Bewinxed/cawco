@@ -351,13 +351,15 @@ const SESSION_POLICY: Record<
   claude: (policy, call) => claudeSession(policy, call.transcript),
   opencode: opencodeSession,
   pi: undefined,
+  codex: undefined,
 };
 
 /**
  * The policy a call is judged by: the workspace's, with what the harness
  * itself keeps for the session to read back. Claude: {@link claudeSession}.
  * OpenCode: {@link opencodeSession}. pi keeps its saved outputs in the
- * session's own folder, which the policy already reads.
+ * session's own folder, which the policy already reads. Codex saves none
+ * (it keeps a large output's head and tail).
  */
 const sessionPolicy = (policy: Policy, call: Call): Policy => {
   const session = SESSION_POLICY[call.harness];
@@ -372,7 +374,7 @@ interface Field {
   /** A glob pattern: its part before the first wildcard is the path. */
   readonly glob?: boolean;
   readonly key: string;
-  /** OpenCode's patch: the paths its patch text names. */
+  /** OpenCode's and Codex's patch: the paths its patch text names. */
   readonly patch?: boolean;
 }
 
@@ -435,6 +437,16 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
       read("pattern", { glob: true }),
     ],
     grep: [read("path", { defaultsToCwd: true })],
+  },
+  // Codex 0.169.0's hook payloads: `exec_command` as `Bash` with its
+  // `command`, `apply_patch` with its patch text as `command`, in the patch
+  // format OpenCode's is (Codex audit 2026-11-17, probe C-a). Its workspace
+  // sessions run every tool in the boundary's execution environment, which
+  // judges a file by the file system; this table judges the hook route.
+  codex: {
+    Bash: [],
+    apply_patch: [write("command", { patch: true })],
+    view_image: [read("path")],
   },
 };
 
@@ -534,11 +546,12 @@ const handedToHub = (policy: Policy, path: string): boolean => {
   }
 };
 
-/** The cawco tool a harness's tool name is: Claude Code's `mcp__cawco__<tool>`, OpenCode's `cawco_<tool>`. */
+/** The cawco tool a harness's tool name is: Claude Code's and Codex's `mcp__cawco__<tool>`, OpenCode's `cawco_<tool>`. */
 const CAWCO_PREFIX: Record<Call["harness"], string | undefined> = {
   claude: "mcp__cawco__",
   opencode: "cawco_",
   pi: undefined,
+  codex: "mcp__cawco__",
 };
 
 const cawcoTool = (call: Call): string | undefined => {

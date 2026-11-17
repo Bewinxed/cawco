@@ -5,8 +5,10 @@ import { dirname, join } from "node:path";
 import type { MachineProviderLists } from "@cawco/core/accounts";
 import {
   CONTROL_ACCOUNT_LENT,
+  CONTROL_BEGIN_CODEX_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_BORROW_ACCOUNT,
+  CONTROL_COMPLETE_CODEX_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
@@ -258,6 +260,11 @@ import { type Harness, isServerHarness } from "./harness";
 import { moveHarnessRecords } from "./harness-records-move";
 import { harness, harnesses } from "./harnesses";
 import { transcriptIndexes } from "./harnesses/claude-transcript";
+import {
+  beginCodexLogin,
+  completeCodexLogin,
+  keyCodexHome,
+} from "./harnesses/codex-home";
 import {
   OPENCODE_REPORTED_FILES,
   opencodeAccounts,
@@ -843,7 +850,24 @@ const registerProviderAccounts = (
   supervisor.declareControl(
     CONTROL_SET_PROVIDER_KEY,
     (id, provider, key, expected) =>
-      changing(() => setProviderKey(id, provider, key, expected ?? null))()
+      changing(async () => {
+        const result = await setProviderKey(
+          id,
+          provider,
+          key,
+          expected ?? null
+        );
+        // An OpenAI key runs Codex too: Codex keeps it in the account's
+        // Codex home, where Codex is installed (codex-home.ts).
+        if (result.state === "signed-in") {
+          await keyCodexHome(id, provider, key);
+        }
+        return result;
+      })()
+  );
+  supervisor.declareControl(CONTROL_BEGIN_CODEX_LOGIN, beginCodexLogin);
+  supervisor.declareControl(CONTROL_COMPLETE_CODEX_LOGIN, (id) =>
+    changing(() => completeCodexLogin(id))()
   );
   supervisor.declareControl(CONTROL_FORGET_PROVIDER_ACCOUNT, (id) =>
     changing(async () => {

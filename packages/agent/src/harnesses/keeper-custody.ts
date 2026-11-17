@@ -5,7 +5,7 @@
 import type { KeeperHarnessKind } from "@cawco/core/harness/traits";
 import type { SessiondAdoption } from "../harness";
 import type { KeeperPool } from "../keepers";
-import { parseProcId } from "../proc-id";
+import { parseProcId, procIdFor } from "../proc-id";
 
 /** The keeper pool as custody reads it; {@link current} is what a start goes to, and may do its adapter's own preparation first. */
 export type CustodyPool = Pick<
@@ -36,4 +36,15 @@ export const keeperCustody = (
       return { procs: (await pool.held()).filter(isOwn) };
     },
   };
+};
+
+/** The live child of a `kind` session `instanceId` a keeper holds, as custody lists it: what a reattach takes back. */
+export const liveChild = async (
+  custody: Pick<SessiondAdoption, "candidates">,
+  kind: KeeperHarnessKind,
+  instanceId: string
+) => {
+  const procId = procIdFor(kind, instanceId);
+  const { procs } = await custody.candidates();
+  return procs.find((one) => one.alive && one.procId === procId);
 };
