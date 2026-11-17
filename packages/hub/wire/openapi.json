@@ -50079,6 +50079,13 @@
               "type": "string"
             }
           },
+          "spent": {
+            "description": "Spend outside any turn ({@link SPENT_READ}), by model, priced.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelTurnUsage"
+            }
+          },
           "status": {
             "type": "string"
           },

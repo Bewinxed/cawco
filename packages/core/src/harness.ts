@@ -141,6 +141,16 @@ export const offeredMode = (
 export const EFFORT_READ = "effort";
 
 /**
+ * The `system` subtype an agent says a session's spend in when its harness
+ * made paid requests outside any turn (pi keeping its prompt cache warm
+ * between runs, agent pi-runtime.ts), which no result carries: `spent` is
+ * those requests by model, priced as a turn's `turnUsage` is, under `uuid`,
+ * the harness's own id for them, so a frame replayed is recorded once. The
+ * hub records it beside the session's turns; it never reaches a screen.
+ */
+export const SPENT_READ = "spent";
+
+/**
  * The `system` subtype an agent says, for a Claude session it attached to,
  * that the session's CLI runs a boundary hook that fails open (the form
  * before the workspace's hook script, naming cawco's versioned binary): said

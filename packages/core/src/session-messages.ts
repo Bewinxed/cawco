@@ -1195,6 +1195,8 @@ export interface NeutralSystemMessage {
   session_id?: string;
   skills?: string[];
   slash_commands?: string[];
+  /** Spend outside any turn ({@link SPENT_READ}), by model, priced. */
+  spent?: ModelTurnUsage[];
   // status — the session's own word (`compacting`/`requesting`/null), and the
   // task-notification status (`completed`/`failed`/`stopped`), which the SDK
   // also names `status`. Kept as one loose field; the folder reads it per subtype.

@@ -16,6 +16,7 @@ import {
   CONTROL_REFRESH_CAWCO_TOOLS,
   EFFORT_READ,
   type SessionCredentialInstall,
+  SPENT_READ,
 } from "@cawco/core/harness";
 import { type EffortLevel, isEffortLevel } from "@cawco/core/harness/kinds";
 import type { HookEvent } from "@cawco/core/hooks";
@@ -1514,20 +1515,35 @@ class PiSession implements HarnessSession {
         this.#sayEffort();
         break;
       }
-      // A request pi made of its own between turns, which no answer of the
-      // session's carries: its prompt cache kept warm (cache-warmer.js
+      // A request pi made of its own, which no answer of the session's
+      // carries: its prompt cache kept warm (cache-warmer.js
       // `appendUsage("cache_warm", …)`, on by default: `cacheWarming:
-      // "idle"`, "Global only because each refresh costs money"). Its spend
-      // goes with the session's next result, as a compaction's does.
+      // "idle"`, "Global only because each refresh costs money"). One made
+      // while a turn runs goes with its result, as a compaction's does; one
+      // made between turns ("idle … for up to 30 minutes between runs", pi
+      // docs/settings.md) is said as it is spent ({@link SPENT_READ}).
       case "entry_appended": {
         const { entry } = event;
-        if (entry.type === "usage") {
-          this.#spent(
-            `${entry.provider}/${entry.model}`,
-            entry.usage,
-            Date.parse(entry.timestamp)
-          );
+        if (entry.type !== "usage") {
+          break;
         }
+        const model = `${entry.provider}/${entry.model}`;
+        const at = Date.parse(entry.timestamp);
+        // A turn runs ({@link #setBusy}): it goes with the turn's result.
+        if (piOpenTurns.has(this.#session.sessionId)) {
+          this.#spent(model, entry.usage, at);
+          break;
+        }
+        const spent = priced(model, entry.usage, at);
+        this.#costBase += spent.costUsd ?? 0;
+        this.#ctx.frame({
+          type: "system",
+          subtype: SPENT_READ,
+          uuid: entry.id,
+          timestamp: entry.timestamp,
+          session_id: this.sessionId ?? undefined,
+          spent: [spent],
+        });
         break;
       }
       // Its effort moved (a set-effort, a model switch, pi's own clamp): said

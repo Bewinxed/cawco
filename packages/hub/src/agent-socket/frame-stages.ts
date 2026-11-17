@@ -94,6 +94,7 @@ export const frameStagesOf = (ctx: FrameStagesContext): FrameStage[] => {
     stages5.sessionDirRead,
     stages5.relaunchAsked,
     stages5.effortRead,
+    stages5.spentRead,
     stages6.accountRead,
     stages7.turnFrames,
     stages7.permissionAsked,

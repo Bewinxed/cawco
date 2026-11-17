@@ -1,6 +1,6 @@
 /** What a session says of its conversation, its settings, its sends and its effort. */
 
-import { EFFORT_READ, SESSION_DIR_READ } from "@cawco/core/harness";
+import { EFFORT_READ, SESSION_DIR_READ, SPENT_READ } from "@cawco/core/harness";
 import { EFFORT_NONE, isEffortLevel } from "@cawco/core/harness/kinds";
 import { cutCommandsWords } from "../cut-turns";
 import type { HubContext } from "../hub-context";
@@ -226,7 +226,35 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
     return "continue";
   });
 
+  const spentRead = onSessionFrame((_run, frame, instanceId) => {
+    // What the session spent outside any turn (pi's prompt cache kept warm
+    // between runs): recorded as a turn's spend is, under the harness's own
+    // id for it, which a replayed frame repeats and the record ignores. No
+    // screen's line.
+    const neutral = frame.message;
+    if (neutral.type !== "system" || neutral.subtype !== SPENT_READ) {
+      return "continue";
+    }
+    const [row] = ctx.db.getInstancesByIds([instanceId]);
+    if (row && neutral.uuid && neutral.spent) {
+      ctx.recordTurnUsage(
+        row,
+        {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          uuid: neutral.uuid,
+          ...(neutral.timestamp ? { timestamp: neutral.timestamp } : {}),
+          turnUsage: neutral.spent,
+        },
+        false
+      );
+    }
+    return "stop";
+  });
+
   return {
+    spentRead,
     sessionNamed,
     settingsFiled,
     sendSignalHeard,
