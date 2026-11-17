@@ -97,7 +97,10 @@ export const CODEX = {
   boardOnlyDenied: [...SUBAGENTS, ...SHELL, ...EDIT],
   curatorDenied: [...SUBAGENTS, ...SHELL, ...EDIT, ...SEARCH],
   // Its hook names, by Claude Code's names in order. An MCP tool is
-  // `mcp__<server>__<tool>` (C-d).
+  // `mcp__<server>__<tool>` (C-d). Its adapter holds back its subagents,
+  // its web search and CawCo's own tools, and refuses a spawn that denies
+  // its shell or its edits (agent harnesses/codex-session.ts
+  // `codexDenials`), which no hook of CawCo's holds back yet.
   deniedTools: {
     by: "equivalents",
     equivalents: {

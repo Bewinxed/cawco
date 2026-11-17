@@ -31,6 +31,7 @@ import type {
 import { resumeCursor } from "@cawco/core/stream";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { toolVersion } from "../capabilities";
+import { sessionFleetDenials } from "../denied-tools";
 import { heldSkills, syncSkillFiles } from "../fleet";
 import type { FleetPart } from "../fleet-parts";
 import type {
@@ -220,8 +221,25 @@ class CodexHarness implements Harness<"codex"> {
 
   readonly machineControls = {};
 
-  spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {
-    return spawnCodex(spec, ctx);
+  /**
+   * The fleet's baseline and every session's own-list, subagent and
+   * question denials beside the spawn's own, as every harness takes them
+   * (denied-tools.ts `sessionFleetDenials`): Codex's subagents go with
+   * `agents.enabled = false` (C-z), its question tool answers nothing outside
+   * its plan collaboration mode, which CawCo never starts (C-h).
+   */
+  async spawn(
+    spec: SpawnPayload,
+    ctx: HarnessContext
+  ): Promise<HarnessSession> {
+    const fleet = await sessionFleetDenials();
+    return await spawnCodex(
+      {
+        ...spec,
+        denyTools: [...new Set([...fleet, ...(spec.denyTools ?? [])])],
+      },
+      ctx
+    );
   }
 
   readonly custody: KeeperCustody = {

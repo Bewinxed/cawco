@@ -16,7 +16,9 @@
  * dirs.
  */
 import type { RestartHold } from "@cawco/core/binary-updates";
+import { deniedToolsOn } from "@cawco/core/delegate-types";
 import type { SessionCredentialInstall } from "@cawco/core/harness";
+import { CODEX } from "@cawco/core/harness/codex";
 import {
   type OfferedMode,
   permissionModeNamed,
@@ -407,9 +409,7 @@ class CodexSession implements HarnessSession {
       this.#ctx.instanceId,
       this.#ctx.sessionCredential
     );
-    const subagentsDenied = (spec.denyTools ?? []).some(
-      (name) => name === "Agent" || name === "Task"
-    );
+    const denied = codexDenials(spec);
     return {
       mcp_servers: {
         [MCP_SERVER_NAME]: {
@@ -417,6 +417,9 @@ class CodexSession implements HarnessSession {
           ...(cawco.headers ? { http_headers: cawco.headers } : {}),
           default_tools_approval_mode: "approve",
           tool_timeout_sec: Math.ceil(cawco.timeout / 1000),
+          ...(denied.cawcoTools.length > 0
+            ? { disabled_tools: denied.cawcoTools }
+            : {}),
         },
       },
       ...(spec.clean
@@ -428,7 +431,8 @@ class CodexSession implements HarnessSession {
             },
           }
         : {}),
-      ...(subagentsDenied ? { agents: { enabled: false } } : {}),
+      ...(denied.subagents ? { agents: { enabled: false } } : {}),
+      ...(denied.webSearch ? { web_search: "disabled" } : {}),
     };
   }
 
@@ -1159,6 +1163,44 @@ const instructionsOf = async (
     : undefined;
 };
 
+/** CawCo's own server's tools as Codex names them (C-d). */
+const CAWCO_TOOL = new RegExp(`^mcp__${MCP_SERVER_NAME}__(.+)$`, "u");
+
+/**
+ * A spawn's denied tools as Codex is held to them, by its descriptor's names
+ * (core delegate-types.ts `deniedToolsOn`): its subagents off (`agents.enabled
+ * = false`, C-z), its hosted web search off (`web_search = "disabled"`),
+ * CawCo's tools named one by one off on CawCo's server (`disabled_tools`).
+ * Its question tool answers nothing outside its plan collaboration mode,
+ * which CawCo never starts (C-h). What none of these holds back (its shell,
+ * its edits) is `unheld`: a spawn that names one is refused, never started
+ * with a denial nothing keeps.
+ */
+const codexDenials = (spec: Pick<SpawnPayload, "denyTools">) => {
+  const { tools } = deniedToolsOn("codex", spec.denyTools ?? []);
+  const subagents: readonly string[] = CODEX.nativeTools.subagents;
+  const questions: readonly string[] = CODEX.nativeTools.questions;
+  const search: readonly string[] = CODEX.tools.search;
+  const cawcoTools = tools.flatMap((tool) => {
+    const named = CAWCO_TOOL.exec(tool)?.[1];
+    return named && named !== "*" ? [named] : [];
+  });
+  return {
+    subagents: tools.some((tool) => subagents.includes(tool)),
+    webSearch: tools.some((tool) => search.includes(tool)),
+    cawcoTools,
+    unheld: tools.filter(
+      (tool) =>
+        !(
+          subagents.includes(tool) ||
+          questions.includes(tool) ||
+          search.includes(tool) ||
+          tool.startsWith("mcp__")
+        )
+    ),
+  };
+};
+
 /** The permission mode a spawn starts in, refused when it names one CawCo does not offer. */
 const codexModeOf = (spec: SpawnPayload): OfferedMode => {
   const mode = permissionModeNamed(spec.permissionMode ?? "default");
@@ -1176,6 +1218,12 @@ export const spawnCodex = async (
   const accountId = spec.accountDir?.accountId;
   if (!accountId) {
     throw new Error(CODEX_NEEDS_ACCOUNT);
+  }
+  const { unheld } = codexDenials(spec);
+  if (unheld.length > 0) {
+    throw new Error(
+      `Codex can't deny ${unheld.map((tool) => `“${tool}”`).join(", ")} yet: CawCo holds back its subagents, its web search and CawCo's own tools alone. Start it on another harness, or without that denial. Nothing was started.`
+    );
   }
   const bin = await codexToStart();
   const instructions = await instructionsOf(spec, ctx.cwd);
