@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { lstat, readdir, rename, rm, rmdir, symlink } from "node:fs/promises";
+import {
+  lstat,
+  readdir,
+  readlink,
+  rename,
+  rm,
+  rmdir,
+  symlink,
+} from "node:fs/promises";
 import { platform, userInfo } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { query, type SlashCommand } from "@anthropic-ai/claude-agent-sdk";
@@ -23,6 +31,7 @@ import {
   sessionConfigDir,
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
+  USER_LAYER_LEFT_DIRS,
   userLayerPath,
 } from "@cawco/core/paths/claude";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -834,15 +843,24 @@ export const folderCommands = async (
  * its files `claudeHome` has ({@link USER_LAYER_FILES}) becomes a symlink to
  * the user's one copy. A dir the account already has of its own is moved
  * into the user's copy first ({@link shareDir}); a file of its own is left
- * alone and said in the log.
+ * alone and said in the log. A dir earlier versions made for their own
+ * writes ({@link USER_LAYER_LEFT_DIRS}) is linked only while the user's
+ * copy is there, and never made.
  */
 export const linkUserLayer = async (account: string): Promise<void> => {
   const dir = accountConfigDir(account);
   await makeFolder(dir, { mode: 0o700 });
   await Promise.all([
-    ...USER_LAYER_DIRS.map((entry) =>
-      shareDir(join(dir, entry), userLayerPath(entry), account)
-    ),
+    ...USER_LAYER_DIRS.map(async (entry) => {
+      const target = userLayerPath(entry);
+      if (
+        USER_LAYER_LEFT_DIRS.has(entry) &&
+        !(await lstat(target).catch(() => undefined))
+      ) {
+        return;
+      }
+      await shareDir(join(dir, entry), target, account);
+    }),
     ...USER_LAYER_FILES.map((entry) => {
       const target = userLayerPath(entry);
       const path = join(dir, entry);
@@ -864,6 +882,30 @@ export const linkUserLayer = async (account: string): Promise<void> => {
       });
     }),
   ]);
+};
+
+/**
+ * Each account dir's link to the user layer's `entry` taken away, once the
+ * user layer's `entry` itself is gone (agent fleet.ts
+ * `dropUserLayerFolders`): a link {@link linkUserLayer} made, to a dir that
+ * is no longer there. Anything else at that name is the account's, and stays.
+ */
+export const unlinkUserLayerDir = async (entry: string): Promise<void> => {
+  const target = userLayerPath(entry);
+  await Promise.all(
+    accountIds().map((account) => {
+      const path = join(accountConfigDir(account), entry);
+      return onePathAtATime(path, async () => {
+        const there = await lstat(path).catch(() => undefined);
+        if (
+          there?.isSymbolicLink() &&
+          (await readlink(path).catch(() => undefined)) === target
+        ) {
+          await rm(path, { force: true });
+        }
+      });
+    })
+  );
 };
 
 /** Two files with the same bytes; never two dirs. */

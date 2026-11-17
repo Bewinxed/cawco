@@ -100,16 +100,18 @@ export const treeStoreOf = (dir: string): string =>
  * in {@link claudeHome}, each linked into every account dir. Each is a
  * global-scope entry of https://code.claude.com/docs/en/claude-directory
  * ("files in `~/.claude` are personal configuration that applies across all
- * your projects"), or CawCo's own (`memories`, the documents CLAUDE.md
- * links). `plans` too: plan mode writes there by default, by a random name a
- * transcript then names by its full path, so one copy keeps that path good
- * on every account. And {@link TREE_STORE_DIR}, where each fleet skill in
- * `skills` links to by a relative link (`../.cawco-trees/skills/<tree>`):
- * a workspace's boundary on Linux binds `skills` at the account dir's own
- * name, so the link resolves beside that name, and an account dir without
- * the store there read every fleet skill as missing (`ls
- * $CLAUDE_CONFIG_DIR/skills/interface-craft/`: "No such file or directory",
- * 2026-10-16).
+ * your projects"), or one earlier versions made for their own writes
+ * ({@link USER_LAYER_LEFT_DIRS}). `plans` too: plan mode writes there by
+ * default, by a random name a transcript then names by its full path, so
+ * one copy keeps that path good on every account. And
+ * {@link TREE_STORE_DIR}, where each fleet skill earlier versions wrote
+ * into `skills` links to by a relative link
+ * (`../.cawco-trees/skills/<tree>`): a workspace's boundary on Linux binds
+ * `skills` at the account dir's own name, so the link resolves beside that
+ * name, and an account dir without the store there read every fleet skill
+ * as missing (`ls $CLAUDE_CONFIG_DIR/skills/interface-craft/`: "No such
+ * file or directory", 2026-10-16). A skill the person edited is left as
+ * that link.
  */
 export const USER_LAYER_DIRS = [
   "memories",
@@ -125,6 +127,20 @@ export const USER_LAYER_DIRS = [
   "themes",
   "plans",
 ] as const;
+
+/**
+ * The dirs of {@link USER_LAYER_DIRS} earlier versions made for their own
+ * writes, which CawCo writes into no longer: `memories`, the documents the
+ * user layer's CLAUDE.md linked, and {@link TREE_STORE_DIR}, the trees the
+ * fleet skills in `skills` linked into. One the person kept something in
+ * stays shared with every account; none is made again (agent accounts.ts
+ * `linkUserLayer`), and an empty one goes (agent fleet.ts
+ * `dropUserLayerFolders`).
+ */
+export const USER_LAYER_LEFT_DIRS: ReadonlySet<string> = new Set([
+  "memories",
+  TREE_STORE_DIR,
+]);
 
 /**
  * The dir in {@link claudeHome} where earlier versions wrote the fleet's

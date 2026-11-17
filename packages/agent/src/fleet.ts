@@ -12,6 +12,7 @@
 import { lstat, readdir, realpath, rm, rmdir, stat } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { TREE_STORE_DIR } from "@cawco/core/claude-dirs";
 import {
   installedPluginsOf,
   knownMarketplacesOf,
@@ -86,7 +87,7 @@ import { lastLines } from "@cawco/core/words/helpers";
 import { hookDriftUnparsed, hookUpdateKept } from "@cawco/core/words/hooks";
 import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
-import { accountClaudeJsons } from "./accounts";
+import { accountClaudeJsons, unlinkUserLayerDir } from "./accounts";
 import { claudeExecutable } from "./auth";
 import { excludeFromCheckout } from "./checkout-exclude";
 import {
@@ -221,6 +222,23 @@ const HOOKS_DIR = fleetHooksDir();
  */
 const USER_LAYER_HOOKS_DIR = userLayerPath("cawco-hooks");
 
+/**
+ * The folders earlier versions made in the user layer for their own
+ * writes, by path under it, each before the folder it is in: the
+ * memory's linked documents (`memories`, which account linking made too,
+ * accounts.ts `linkUserLayer`, before core `USER_LAYER_LEFT_DIRS`), the
+ * hooks' scripts ({@link USER_LAYER_HOOKS_DIR}) and the tree store the
+ * skills there linked into (`.cawco-trees/skills`). Each is taken away once its
+ * contents are out ({@link dropUserLayerFolders}); one still holding
+ * something holds what the person keeps, and stays.
+ */
+const USER_LAYER_FOLDERS = [
+  "memories",
+  "cawco-hooks",
+  join(TREE_STORE_DIR, "skills"),
+  TREE_STORE_DIR,
+] as const;
+
 const PLUGINS_DIR = userLayerPath("plugins");
 /** The CLI's own account of what is linked and what is installed: the person's, read and never written. */
 const KNOWN_MARKETPLACES = join(PLUGINS_DIR, "known_marketplaces.json");
@@ -340,6 +358,12 @@ export interface ClaudeFleetSidecar {
    */
   userLayer?: UserLayerWritten;
   /**
+   * Set once the folders earlier versions made in the user layer were put
+   * on {@link userLayer}'s list ({@link UserLayerWritten.folders}): by the
+   * fold itself, or on a sidecar a build folded before the list was kept.
+   */
+  userLayerFolders?: true;
+  /**
    * Set once the records of what earlier versions wrote into the user layer
    * were folded into {@link userLayer}: from then on every record names
    * CawCo's own dirs.
@@ -360,6 +384,11 @@ export interface ClaudeFleetSidecar {
  * those are taken back out.
  */
 interface UserLayerWritten {
+  /**
+   * Each folder earlier versions made in it ({@link USER_LAYER_FOLDERS}), by
+   * its path under the user layer: taken away once nothing is in it.
+   */
+  folders?: string[];
   /** Each hook entry registered in its `settings.json`, by its identity ({@link entryKey}). */
   hooks?: string[];
   /** Each vendored marketplace registered with Claude Code, as `cawco-<marketplace>`. */
@@ -461,18 +490,37 @@ const readSidecar = async (): Promise<ClaudeFleetSidecar> => {
     placedSkills: stored?.placedSkills ?? {},
     ...(stored?.userLayer ? { userLayer: stored.userLayer } : {}),
     ...(stored?.userLayerMoved ? { userLayerMoved: true as const } : {}),
+    ...(stored?.userLayerFolders ? { userLayerFolders: true as const } : {}),
     ...(stored?.cliLinksLeft ? { cliLinksLeft: stored.cliLinksLeft } : {}),
   };
-  return read.userLayerMoved
-    ? read
-    : foldUserLayer({
+  if (!read.userLayerMoved) {
+    return foldUserLayer(
+      {
         ...read,
         // An earlier version's records of its CLI links, read before the
         // fold drops them: without them the links it made stay unnamed.
         marketplaces: stored?.marketplaces ?? [],
         plugins: stored?.plugins ?? [],
-      });
+      },
+      stored !== undefined
+    );
+  }
+  return withFoldersListed(read);
 };
+
+/**
+ * A sidecar folded by a build that kept no list of the folders earlier
+ * versions made in the user layer, with them on it now, once: the next
+ * converge takes away each that is empty.
+ */
+const withFoldersListed = (read: ClaudeFleetSidecar): ClaudeFleetSidecar =>
+  read.userLayerFolders
+    ? read
+    : {
+        ...read,
+        userLayer: { ...read.userLayer, folders: [...USER_LAYER_FOLDERS] },
+        userLayerFolders: true,
+      };
 
 /**
  * The sidecar as an earlier version left it, its records of what it wrote
@@ -487,9 +535,13 @@ const readSidecar = async (): Promise<ClaudeFleetSidecar> => {
  * are CawCo's by their names and come out; the links and installs it
  * recorded under the fleet's own names are kept as
  * {@link ClaudeFleetSidecar.cliLinksLeft}, since it recorded the person's
- * own among them.
+ * own among them. When an earlier version left a sidecar (`earlierRan`),
+ * the folders it made there go on the list too ({@link USER_LAYER_FOLDERS}).
  */
-const foldUserLayer = (earlier: ClaudeFleetSidecar): ClaudeFleetSidecar => {
+const foldUserLayer = (
+  earlier: ClaudeFleetSidecar,
+  earlierRan: boolean
+): ClaudeFleetSidecar => {
   const plugins = Object.keys(earlier.vendoredPlugins ?? {});
   const registered = Object.entries(earlier.hooks).filter(
     ([, record]) => !(record.cwd || record.placed)
@@ -504,6 +556,7 @@ const foldUserLayer = (earlier: ClaudeFleetSidecar): ClaudeFleetSidecar => {
     marketplaces: [
       ...new Set(plugins.map((id) => vendorName(marketplaceOf(id)))),
     ],
+    ...(earlierRan ? { folders: [...USER_LAYER_FOLDERS] } : {}),
   };
   const { marketplaces: _marketplaces, plugins: _plugins, ...kept } = earlier;
   const cliLinksLeft: CliLinks = {
@@ -527,6 +580,7 @@ const foldUserLayer = (earlier: ClaudeFleetSidecar): ClaudeFleetSidecar => {
     },
     userLayer,
     userLayerMoved: true,
+    userLayerFolders: true,
   };
 };
 
@@ -2528,6 +2582,97 @@ const dropUserLayerWrites = async (
 };
 
 /**
+ * What is still to come out of the user layer (`rest`) once `folders` are
+ * dropped ({@link dropUserLayerFolders}): the folders still to go on it,
+ * and nothing when nothing is left.
+ */
+const withFoldersDropped = async (
+  folders: readonly string[],
+  rest: UserLayerWritten | undefined
+): Promise<UserLayerWritten | undefined> => {
+  const left = await dropUserLayerFolders(folders);
+  const next = { ...rest, ...(left.length > 0 ? { folders: left } : {}) };
+  return Object.keys(next).length > 0 ? next : undefined;
+};
+
+/**
+ * Each of `folders` (paths under the user layer, {@link USER_LAYER_FOLDERS})
+ * taken away while nothing is in it, in their order, and each account dir's
+ * link to it with it. `rmdir` refuses a folder with anything in it, which
+ * is the check wanted: one that holds a document or a skill the person
+ * kept is his, and stays, said once in the log. Answers each one an error
+ * other than that left, for the next converge to try again.
+ */
+const dropUserLayerFolders = async (
+  folders: readonly string[]
+): Promise<string[]> => {
+  const left: string[] = [];
+  for (const folder of folders) {
+    const path = userLayerPath(folder);
+    const code = await rmdir(path).then(
+      () => undefined,
+      (error: NodeJS.ErrnoException) => error.code ?? said(error)
+    );
+    if (code === undefined || code === "ENOENT") {
+      await unlinkUserLayerDir(folder);
+    } else if (code === "ENOTEMPTY" || code === "EEXIST") {
+      console.info(
+        `[fleet] ${path} stays: an earlier version made it, and something it did not write is in it`
+      );
+    } else {
+      console.warn(`[fleet] ${path} stays for now: ${code}`);
+      left.push(folder);
+    }
+  }
+  return left;
+};
+
+/** The ids Claude Code's registry holds installed; unreadable is none. */
+const installedIds = async (): Promise<Set<string>> =>
+  new Set(
+    Object.keys(
+      (
+        await readJson(INSTALLED_PLUGINS, installedPluginsOf).catch(
+          () => undefined
+        )
+      )?.plugins ?? {}
+    )
+  );
+
+/** The marketplace names Claude Code's registry holds; unreadable is none. */
+const linkedNames = async (): Promise<Set<string>> =>
+  new Set(
+    Object.keys(
+      (await readJson(KNOWN_MARKETPLACES, knownMarketplacesOf).catch(
+        () => undefined
+      )) ?? {}
+    )
+  );
+
+/**
+ * `claude <command(name)>` for each of `names` that `held` still holds,
+ * one at a time, and what the CLI said for each it still holds after.
+ */
+const runWhileHeld = async (
+  bin: string,
+  names: readonly string[],
+  held: () => Promise<Set<string>>,
+  command: (name: string) => string[]
+): Promise<void> => {
+  for (const name of names) {
+    if (!(await held()).has(name)) {
+      continue;
+    }
+    const ran = await runClaude(bin, command(name));
+    if ((await held()).has(name)) {
+      console.warn(
+        `[fleet] ${name} is still there after claude ${command(name).join(" ")}: ${ran.output}`
+      );
+    }
+  }
+};
+
+/**
  * The plugins an earlier version installed at user scope out of its
  * vendored marketplaces, and those marketplaces' registrations, taken back
  * out through the CLI that made them (`claude plugin uninstall <id> --scope
@@ -2556,40 +2701,28 @@ const dropVendoredInstalls = async (
     );
     return { plugins, marketplaces };
   }
-  const installed = async (): Promise<Set<string>> =>
-    new Set(
-      Object.keys(
-        (
-          await readJson(INSTALLED_PLUGINS, installedPluginsOf).catch(
-            () => undefined
-          )
-        )?.plugins ?? {}
-      )
-    );
-  for (const id of plugins) {
-    if ((await installed()).has(id)) {
-      await runClaude(bin, ["plugin", "uninstall", id, "--scope", "user"]);
-    }
-  }
-  const pluginsLeft = [...(await installed())].filter((id) =>
-    plugins.includes(id)
-  );
-  const linked = async (): Promise<Set<string>> =>
-    new Set(
-      Object.keys(
-        (await readJson(KNOWN_MARKETPLACES, knownMarketplacesOf).catch(
-          () => undefined
-        )) ?? {}
-      )
-    );
-  for (const name of marketplaces) {
-    if ((await linked()).has(name)) {
-      await runClaude(bin, ["plugin", "marketplace", "remove", name]);
-    }
-  }
-  const marketplacesLeft = [...(await linked())].filter((name) =>
-    marketplaces.includes(name)
-  );
+  await runWhileHeld(bin, plugins, installedIds, (id) => [
+    "plugin",
+    "uninstall",
+    id,
+    "--scope",
+    "user",
+  ]);
+  await runWhileHeld(bin, marketplaces, linkedNames, (name) => [
+    "plugin",
+    "marketplace",
+    "remove",
+    name,
+  ]);
+  // Read once every command has run: `marketplace remove` uninstalls each
+  // plugin installed from the marketplace, so a plugin its own uninstall
+  // left is out once its marketplace is removed.
+  const [installedNow, linkedNow] = await Promise.all([
+    installedIds(),
+    linkedNames(),
+  ]);
+  const pluginsLeft = plugins.filter((id) => installedNow.has(id));
+  const marketplacesLeft = marketplaces.filter((name) => linkedNow.has(name));
   if (pluginsLeft.length === 0 && marketplacesLeft.length === 0) {
     await rm(USER_LAYER_VENDOR_ROOT, { recursive: true, force: true });
     return {};
@@ -3352,6 +3485,15 @@ const converge = async (
         });
       }
     }
+  }
+  // Then the folders those writes were in, once the parts have run too: a
+  // hook's script leaves the user layer's old dir as the hooks part hands
+  // it out from its new one.
+  if (managed.userLayer?.folders) {
+    sidecar.userLayer = await withFoldersDropped(
+      managed.userLayer.folders,
+      sidecar.userLayer
+    );
   }
   const into = [...new Set(ran.flatMap((part) => PARTS[part].writes()))].join(
     ", "

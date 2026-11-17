@@ -113,6 +113,7 @@ const PlacedRecordShape = declared(
 
 const UserLayerWrittenShape = declared(
   z.object({
+    folders: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
     marketplaces: z.array(z.string()).optional(),
     memory: z.string().optional(),
@@ -148,6 +149,7 @@ const ClaudeFleetSidecarShape = declared(
     plugins: z.array(z.string()).optional(),
     skills: z.record(z.string(), z.string()),
     userLayer: UserLayerWrittenShape.optional(),
+    userLayerFolders: z.literal(true).optional(),
     userLayerMoved: z.literal(true).optional(),
     vendoredPlugins: z.record(z.string(), z.string()).optional(),
   }),
