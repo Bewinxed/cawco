@@ -67,6 +67,7 @@ export type TurnFlowContext = TurnEndedContext &
     | "resolvedModel"
     | "ruleEngine"
     | "settleRefusal"
+    | "startModelMoves"
     | "takeCredentialTurn"
     | "turnInFlight"
     | "turnUnderWay"
@@ -80,8 +81,107 @@ export type TurnFlowContext = TurnEndedContext &
 export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
   const turnEndedSteps = turnEndedStepsOf(ctx);
 
+  /** A refusal's words: its result's errors, or the text Claude Code answered in the model's place. */
+  const refusalWords = (neutral: NeutralMessage): string => {
+    if (neutral.type === "result") {
+      return neutral.errors?.join(" ") || neutral.subtype;
+    }
+    if (neutral.type === "assistant") {
+      return (
+        neutral.message.content
+          .flatMap((block) => (block.type === "text" ? [block.text] : []))
+          .join(" ")
+          .trim() ||
+        (neutral.error ?? "")
+      );
+    }
+    return "";
+  };
+
+  /**
+   * Claude Code's error frame written in place of an API answer that
+   * refused the account the use of its model: a 403 whose body's error
+   * type is a permission one (core `modelNotEnabled`, read off the frame's
+   * `api_error_status` and `api_error_type`), and not a mod's fetch hook,
+   * which Claude Code answers with that type itself (`hook_denied`). The
+   * session's own, not a subagent's, whose model may be another.
+   */
+  const claudeModelRefused = (neutral: NeutralAssistantMessage): boolean =>
+    !neutral.parent_tool_use_id &&
+    neutral.api_error !== "hook_denied" &&
+    modelNotEnabled({
+      ...(typeof neutral.api_error_status === "number"
+        ? { status: neutral.api_error_status }
+        : {}),
+      ...(neutral.api_error_type ? { errorType: neutral.api_error_type } : {}),
+    });
+
+  /**
+   * How a session's frame says its provider refused its account, as its
+   * harness typed the refusal: for want of credit (a pi or OpenCode result's
+   * `outOfCredit`, Claude Code's `billing_error` in the model's place), or
+   * the use of its model (a pi or OpenCode result's `modelRefused`, Claude
+   * Code's 403 `permission_error`); none for any other frame.
+   */
+  const refusalOf = (
+    neutral: NeutralMessage
+  ): "credit" | "access" | undefined => {
+    if (neutral.type === "result" && neutral.is_error) {
+      if (neutral.outOfCredit === true) {
+        return "credit";
+      }
+      return neutral.modelRefused === true ? "access" : undefined;
+    }
+    if (neutral.type !== "assistant" || neutral.error === undefined) {
+      return;
+    }
+    if (outOfCredit({ type: neutral.error })) {
+      return "credit";
+    }
+    return claudeModelRefused(neutral) ? "access" : undefined;
+  };
+
+  /**
+   * What a session's frame says of its account (account-marks.ts): a turn
+   * its provider refused for want of credit marks the account out of
+   * credit for the session's model's provider; one refused the use of its
+   * model marks that model not enabled for the account; a turn that ends
+   * answered ends both marks for its provider and model. Whether its
+   * provider refused it.
+   */
+  const noteMarks = (instanceId: string, neutral: NeutralMessage): boolean => {
+    const refused = refusalOf(neutral);
+    const answered = neutral.type === "result" && !neutral.is_error;
+    if (!(refused || answered)) {
+      return false;
+    }
+    const [row] = ctx.db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return false;
+    }
+    // The model as its harness runs it: what an access mark is keyed by,
+    // and a start's candidates are read as (spawns.ts `modelFor`).
+    const ran = {
+      accountId: row.accountId,
+      harness: row.harness,
+      model: ctx.resolvedModel(row.machineId, row.harness, row.model),
+    };
+    let moved = false;
+    if (refused === "credit") {
+      moved = noteOutOfCredit(ctx.db, ran, refusalWords(neutral));
+    } else if (refused === "access") {
+      moved = noteNotEnabled(ctx.db, ran, refusalWords(neutral));
+    } else {
+      moved = noteAnswered(ctx.db, ran);
+    }
+    if (moved) {
+      ctx.publishUsage(row.machineId);
+    }
+    return refused !== undefined;
+  };
+
   const turnFrames = onSessionFrame(
-    ({ message, agentFrame }, frame, instanceId) => {
+    ({ message, agentFrame, internal }, frame, instanceId) => {
       // A turn's first frame opens it before anything reads it:
       // a refusal below reads this turn's state, not the last's.
       if (
@@ -111,6 +211,16 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         if (word) {
           ctx.takeCredentialTurn(instanceId);
         }
+      }
+      // What its provider said of its account is marked, and a refusal of
+      // a first turn on a model the hub chose decides where that turn
+      // goes, before anything fails what it read (start-model-moves.ts).
+      if (!internal) {
+        ctx.startModelMoves.frame(
+          instanceId,
+          frame.message,
+          noteMarks(instanceId, frame.message)
+        );
       }
       ctx.observeTurn(instanceId, frame);
       ctx.afterPausingCall(instanceId, frame.message);
@@ -372,103 +482,6 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
     return "continue";
   });
 
-  /** A refusal's words: its result's errors, or the text Claude Code answered in the model's place. */
-  const refusalWords = (neutral: NeutralMessage): string => {
-    if (neutral.type === "result") {
-      return neutral.errors?.join(" ") || neutral.subtype;
-    }
-    if (neutral.type === "assistant") {
-      return (
-        neutral.message.content
-          .flatMap((block) => (block.type === "text" ? [block.text] : []))
-          .join(" ")
-          .trim() ||
-        (neutral.error ?? "")
-      );
-    }
-    return "";
-  };
-
-  /**
-   * Claude Code's error frame written in place of an API answer that
-   * refused the account the use of its model: a 403 whose body's error
-   * type is a permission one (core `modelNotEnabled`, read off the frame's
-   * `api_error_status` and `api_error_type`), and not a mod's fetch hook,
-   * which Claude Code answers with that type itself (`hook_denied`). The
-   * session's own, not a subagent's, whose model may be another.
-   */
-  const claudeModelRefused = (neutral: NeutralAssistantMessage): boolean =>
-    !neutral.parent_tool_use_id &&
-    neutral.api_error !== "hook_denied" &&
-    modelNotEnabled({
-      ...(typeof neutral.api_error_status === "number"
-        ? { status: neutral.api_error_status }
-        : {}),
-      ...(neutral.api_error_type ? { errorType: neutral.api_error_type } : {}),
-    });
-
-  /**
-   * How a session's frame says its provider refused its account, as its
-   * harness typed the refusal: for want of credit (a pi or OpenCode result's
-   * `outOfCredit`, Claude Code's `billing_error` in the model's place), or
-   * the use of its model (a pi or OpenCode result's `modelRefused`, Claude
-   * Code's 403 `permission_error`); none for any other frame.
-   */
-  const refusalOf = (
-    neutral: NeutralMessage
-  ): "credit" | "access" | undefined => {
-    if (neutral.type === "result" && neutral.is_error) {
-      if (neutral.outOfCredit === true) {
-        return "credit";
-      }
-      return neutral.modelRefused === true ? "access" : undefined;
-    }
-    if (neutral.type !== "assistant" || neutral.error === undefined) {
-      return;
-    }
-    if (outOfCredit({ type: neutral.error })) {
-      return "credit";
-    }
-    return claudeModelRefused(neutral) ? "access" : undefined;
-  };
-
-  /**
-   * What a session's frame says of its account (account-marks.ts): a turn
-   * its provider refused for want of credit marks the account out of
-   * credit for the session's model's provider; one refused the use of its
-   * model marks that model not enabled for the account; a turn that ends
-   * answered ends both marks for its provider and model.
-   */
-  const noteMarks = (instanceId: string, neutral: NeutralMessage): void => {
-    const refused = refusalOf(neutral);
-    const answered = neutral.type === "result" && !neutral.is_error;
-    if (!(refused || answered)) {
-      return;
-    }
-    const [row] = ctx.db.getInstancesByIds([instanceId]);
-    if (!row) {
-      return;
-    }
-    // The model as its harness runs it: what an access mark is keyed by,
-    // and a start's candidates are read as (spawns.ts `modelFor`).
-    const ran = {
-      accountId: row.accountId,
-      harness: row.harness,
-      model: ctx.resolvedModel(row.machineId, row.harness, row.model),
-    };
-    let moved = false;
-    if (refused === "credit") {
-      moved = noteOutOfCredit(ctx.db, ran, refusalWords(neutral));
-    } else if (refused === "access") {
-      moved = noteNotEnabled(ctx.db, ran, refusalWords(neutral));
-    } else {
-      moved = noteAnswered(ctx.db, ran);
-    }
-    if (moved) {
-      ctx.publishUsage(row.machineId);
-    }
-  };
-
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
   const turnEnded = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
@@ -501,7 +514,6 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
           ctx.limitRefused.add(message.instanceId);
         }
       }
-      noteMarks(message.instanceId, neutral);
       // Every tool call the session's model makes, at the top of
       // its turn or inside one (a Code Mode program's, a
       // subagent's): work of its own ends a declared wait at rest.
@@ -572,6 +584,14 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
             ctx.limitAnswerFailed(refused, "its account's limit", error);
           });
         }
+      } else if (
+        neutral.type === "result" &&
+        ctx.startModelMoves.movesAtEnd(message.instanceId)
+      ) {
+        // A first turn its provider refused on a model the hub chose:
+        // nothing ended. The session moves to the hub's next pick and
+        // answers there (start-model-moves.ts).
+        ctx.turnInFlight.over(message.instanceId);
       } else if (neutral.type === "result") {
         runTurnEnded(turnEndedSteps, {
           instanceId: message.instanceId,

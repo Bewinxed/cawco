@@ -1348,6 +1348,17 @@ export const instances = sqliteTable("instances", {
   permissionMode: text("permission_mode"),
   model: text("model"),
   /**
+   * Whether the hub chose `model` (spawns.ts `modelFor`): its start picked
+   * none, or its delegate type's `default`. Written as its row opens
+   * (db/instances.ts `openInstance`) by a start that names one way or the
+   * other: a resume or a fork that goes on with its conversation's model is
+   * the person's choice from then on, and a model a person picks for it
+   * (relay-control.ts `relayModelPick`) ends it. A first turn a provider
+   * refused on the hub's choice moves to its next pick
+   * (start-model-moves.ts); a person's pick is never swapped.
+   */
+  hubModel: integer("hub_model", { mode: "boolean" }).notNull().default(false),
+  /**
    * The third: how hard that model thinks, as the session's agent last read it
    * back from the harness (`EFFORT_READ`) — a level, or `none` when the session
    * sends no effort. Null until the first reading. What the session runs at,

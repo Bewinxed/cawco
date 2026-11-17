@@ -70,6 +70,7 @@ import {
   type ProviderStandings,
   pickedModel,
   startCandidates,
+  type TriedPick,
 } from "./start-models";
 import { TaskDoc } from "./task-file";
 import { unreachable } from "./unreachable";
@@ -132,9 +133,16 @@ export const enforceRowSessionKey = (
   return undefined;
 };
 
-/** Where a start goes: the account it runs on (none: no CawCo account), and the model it runs, which its harness is handed. */
+/**
+ * Where a start goes: the account it runs on (none: no CawCo account), and
+ * the model it runs, which its harness is handed; `hubModel`, whether the hub
+ * chose that model ({@link modelFor}) rather than the start or the
+ * conversation it goes on with, which its row keeps (schema
+ * `instances.hubModel`).
+ */
 export interface Started {
   accountId?: string;
+  hubModel: boolean;
   model: string;
 }
 
@@ -211,6 +219,7 @@ export type SpawnsContext = Pick<
   ClosureContext,
   | "accountProviderFor"
   | "accountStartRefusal"
+  | "accountWords"
   | "awaitStart"
   | "awaitingFirstTurn"
   | "awayError"
@@ -787,12 +796,12 @@ export const createSpawns = (ctx: SpawnsContext) => {
       : withModel(runsOn(machineId, asked, placed), model);
   };
 
-  /** `chosen` with the model it runs on, or its refusal as it is. */
+  /** `chosen` with the model it runs on, the start's or its conversation's, or its refusal as it is. */
   const withModel = <T extends object>(
     chosen: T | { refusal: string },
     model: string
-  ): (T & { model: string }) | { refusal: string } =>
-    "refusal" in chosen ? chosen : { ...chosen, model };
+  ): (T & { hubModel: false; model: string }) | { refusal: string } =>
+    "refusal" in chosen ? chosen : { ...chosen, model, hubModel: false };
 
   /**
    * `chosen` when the session can run on it on `machineId`: held, resumed,
@@ -845,8 +854,10 @@ export const createSpawns = (ctx: SpawnsContext) => {
    * model whose account is benched, past its reserve or at its limit is
    * passed over, as is one that runs on no CawCo account. `runs`: whether
    * the session can run on what was chosen ({@link runsOn}); absent, it is
-   * only asked of placement, nothing claimed. None: why, naming each
-   * account ({@link noModelRuns}).
+   * only asked of placement, nothing claimed. `tried`: the models and
+   * accounts a refused first turn already ran on ({@link startModelAfter}),
+   * none of which is named again. None: why, naming each account
+   * ({@link noModelRuns}).
    */
   const modelFor = (
     machineId: string,
@@ -854,7 +865,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
     task: { projectId?: string | null; taskId?: string | null },
     own: OwnDefault | undefined,
     held: { accountId?: string } | undefined,
-    runs?: typeof runsOn
+    runs?: typeof runsOn,
+    tried: readonly TriedPick[] = []
   ): Started | { refusal: string; status?: 404 | 409 } => {
     const listing = listingFor(machineId, payload);
     const order = startCandidates(listing, own);
@@ -873,7 +885,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     const found =
       held && heldOn
         ? heldModel(machineId, payload, order.models, heldOn, held, runs)
-        : placedModel(machineId, payload, task, order, runs);
+        : placedModel(machineId, payload, task, order, runs, tried);
     if (!("refusal" in found)) {
       console.info(
         spawnWords.startModel.namedLine(
@@ -972,7 +984,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       };
     }
     const chosen = runs ? runs(machineId, { ...payload, model }, held) : held;
-    return "refusal" in chosen ? chosen : { ...chosen, model };
+    return "refusal" in chosen ? chosen : { ...chosen, model, hubModel: true };
   };
 
   /**
@@ -981,13 +993,16 @@ export const createSpawns = (ctx: SpawnsContext) => {
    * places and runs. Placement reads a model by its provider, its scope, the
    * provider its credit marks are for and the accounts not enabled for it
    * alone, so each such set is placed once, however many models share it.
+   * A model whose account is one it ran on among `tried` is passed over,
+   * whatever placement reads of that account now.
    */
   const placedModel = (
     machineId: string,
     payload: NamedSpawn,
     task: { projectId?: string | null; taskId?: string | null },
     order: { models: string[]; own: string | null },
-    runs: typeof runsOn | undefined
+    runs: typeof runsOn | undefined,
+    tried: readonly TriedPick[]
   ): Started | { refusal: string; status?: 409 } => {
     const placedBy = new Map<string, ReturnType<typeof placedNew>>();
     const access = ctx.db.accounts.access();
@@ -1022,16 +1037,49 @@ export const createSpawns = (ctx: SpawnsContext) => {
       if ("refusal" in placed && placed.status) {
         return placed;
       }
-      const chosen =
-        "refusal" in placed || !runs ? placed : runs(machineId, asked, placed);
+      const chosen = pickOn(machineId, asked, placed, resolved, tried, runs);
       if (!("refusal" in chosen)) {
-        return { ...chosen, model };
+        return { ...chosen, model, hubModel: true };
       }
       refusedBy(provider, chosen.refusal);
     }
     return {
       refusal: whyNoModelRuns(machineId, payload, task, order, refusals),
     };
+  };
+
+  /**
+   * {@link placedModel}'s account for `asked`, as placement put it
+   * (`placed`), when the session can run on it there ({@link runsOn},
+   * when `runs` asks). Passed over, in placement's words, when it is an
+   * account the model (`resolved`, as its harness runs it) already ran on
+   * among `tried`.
+   */
+  const pickOn = (
+    machineId: string,
+    asked: NamedSpawn,
+    placed: { accountId?: string } | { refusal: string },
+    resolved: string | null | undefined,
+    tried: readonly TriedPick[],
+    runs: typeof runsOn | undefined
+  ): { accountId?: string } | { refusal: string } => {
+    if ("refusal" in placed) {
+      return placed;
+    }
+    const { accountId } = placed;
+    if (
+      accountId &&
+      resolved &&
+      tried.some((one) => one.accountId === accountId && one.model === resolved)
+    ) {
+      return {
+        refusal: spawnWords.startModel.tried(
+          resolved,
+          ctx.accountWords(accountId)
+        ),
+      };
+    }
+    return runs ? runs(machineId, asked, placed) : placed;
   };
 
   /**
@@ -1117,8 +1165,9 @@ export const createSpawns = (ctx: SpawnsContext) => {
    * The model a launch of `row` names when its row names none (a session
    * started before every start named one), as a start that picked none is
    * named ({@link modelFor}): on the account its launch runs on when it has
-   * one, else as placement finds one. Its row names it from here on, so the
-   * account its launch is granted is that model's. A refusal when none can.
+   * one, else as placement finds one. Its row names it from here on, as the
+   * hub's choice (schema `instances.hubModel`), so the account its launch is
+   * granted is that model's. A refusal when none can.
    */
   const launchModel = (
     machineId: string,
@@ -1142,8 +1191,44 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if ("refusal" in found) {
       return found;
     }
-    ctx.db.patchInstance(row.id, { model: found.model });
+    ctx.db.patchInstance(row.id, { model: found.model, hubModel: true });
     return { model: found.model };
+  };
+
+  /**
+   * Where session `row`, whose model the hub chose, goes on after a provider
+   * refused its first turn on the model and account it ran (start-model-moves.ts):
+   * the next model its start would have been named ({@link modelFor}), with
+   * the marks that refusal just wrote, placed anew as its start was, on any
+   * account its project, task and type allow, and never on a model and
+   * account among `tried`. Nothing is claimed: the move that takes it there
+   * launches it as any move does. The refusal when none is left, in
+   * {@link noModelRuns}'s words.
+   */
+  const startModelAfter = (
+    row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
+    tried: readonly TriedPick[]
+  ): Started | { refusal: string } => {
+    const item = row.workItemId ? ctx.db.workItem(row.workItemId) : undefined;
+    return modelFor(
+      row.machineId,
+      {
+        instanceId: row.id,
+        cwd: row.cwd,
+        harness: row.harness,
+        ...(row.projectId ? { projectId: row.projectId } : {}),
+        ...(row.parentInstanceId
+          ? { parent: { instanceId: row.parentInstanceId } }
+          : {}),
+        ...(row.namedAccount ? { account: row.namedAccount } : {}),
+        ...ctx.typeSettingsOf(row),
+      },
+      { projectId: row.projectId, taskId: item?.taskId },
+      undefined,
+      undefined,
+      undefined,
+      tried
+    );
   };
 
   /**
@@ -1637,6 +1722,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       kind: peekKind(payload),
       permissionMode,
       model: payload.model,
+      hubModel: placed.hubModel,
       mayStart: payload.mayStart,
       ...peekParent(payload),
       ...(workItemId ? { workItemId } : {}),
@@ -1946,6 +2032,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       kind,
       permissionMode: settled.permissionMode,
       model: payload.model,
+      hubModel: placed.hubModel,
       ...peekParent(payload),
       ...(workItemId ? { workItemId } : {}),
       ...carried.row(payload),
@@ -2059,6 +2146,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     openedAccount,
     placeSpawn,
     launchModel,
+    startModelAfter,
     startModelOf,
     askedStart,
     placeItem,

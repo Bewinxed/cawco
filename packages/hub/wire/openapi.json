@@ -86146,6 +86146,9 @@
             "harness": {
               "$ref": "#/components/schemas/HarnessKind"
             },
+            "hubModel": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -86283,6 +86286,7 @@
             "createdAt",
             "cwd",
             "harness",
+            "hubModel",
             "id",
             "keepAlive",
             "kind",
@@ -112291,6 +112295,9 @@
           "harness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
+          "hubModel": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
@@ -112393,6 +112400,7 @@
           "createdAt",
           "cwd",
           "harness",
+          "hubModel",
           "id",
           "keepAlive",
           "kind",

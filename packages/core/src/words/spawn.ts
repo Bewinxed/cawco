@@ -208,6 +208,28 @@ export const spawnWords = {
       own
         ? `the first model its harness lists that an account can take, since no account can take its own default ${own}`
         : "the first model its harness lists that an account can take",
+    /**
+     * A refused first turn on a model the hub chose goes on to its next pick
+     * (hub start-model-moves.ts): the session's line where it moves, and
+     * the hub's log of it. `refused`, the provider's refusal as a whole
+     * reason ("opencode/claude-fable-5 is not enabled for go-key since
+     * 03:12").
+     */
+    nextPick: (refused: string, model: string, account: string) =>
+      `${refused}; trying ${model} on ${account}.`,
+    /** What the session reads as it goes on there: its last turn's message, which it answers now. */
+    carryOn: (model: string) =>
+      `Your provider refused the model your last turn ran on, so this session now runs on ${model}. Answer the message that turn was asked.`,
+    /** In placement's words for a start, a model and account a refused first turn already ran on. */
+    tried: (model: string, account: string) =>
+      `${model} on ${account} already refused this session's first turn`,
+    /**
+     * A refused first turn with no next pick left: each refusal it met
+     * (`refused`, as {@link nextPick} takes one), then why no other model
+     * runs (`noneLeft`, {@link refused}'s words).
+     */
+    noPickLeft: (refused: readonly string[], noneLeft: string) =>
+      `Its first turn was refused on every model tried: ${refused.join("; ")}. ${noneLeft}`,
   },
   /** Between a session and the account its launch places it on, in the line the hub logs of it. */
   launchesOn: "launches on",

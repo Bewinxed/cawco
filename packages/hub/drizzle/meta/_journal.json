@@ -3032,6 +3032,13 @@
       "when": 1794872761649,
       "tag": "0440_account_model_access",
       "breakpoints": true
+    },
+    {
+      "idx": 441,
+      "version": "6",
+      "when": 1794877525392,
+      "tag": "0441_hub_model",
+      "breakpoints": true
     }
   ]
 }

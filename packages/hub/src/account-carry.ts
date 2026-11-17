@@ -29,8 +29,7 @@ import type { Kept } from "./limit-decision";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { createSends } from "./sends";
-import { LIMIT_ORIGIN } from "./sends";
-import { sessionWord } from "./session-word";
+import { LIMIT_ORIGIN, sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
 
 /**

@@ -682,7 +682,7 @@ import { workspaceRoutes } from "./routes/workspaces";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { createRuleRows } from "./rule-rows";
 import { RuleEngine } from "./rules";
-import { BACK_ORIGIN, createSends, LIMIT_ORIGIN, UNREAD } from "./sends";
+import { BACK_ORIGIN, createSends, UNREAD } from "./sends";
 import {
   ATTACHMENT_PAGE_LIMIT,
   attachmentsOfPages,
@@ -694,7 +694,7 @@ import { sessionLimitRoutes } from "./session-limits";
 import { sessionReads } from "./session-list";
 import { createSessionNotes } from "./session-notes";
 import { createSessionRuntime } from "./session-runtime";
-import { sessionWord } from "./session-word";
+import { LIMIT_ORIGIN, sessionWord } from "./session-word";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
 import { createSetupPicksApply, isSetupPage, setupPicksOf } from "./setup";
@@ -720,6 +720,7 @@ import {
 import { createSshTunnels } from "./ssh-tunnels";
 import { templateOf } from "./stages";
 import { createStartHolds } from "./start-holds";
+import { createStartModelMoves } from "./start-model-moves";
 import { sessionStartingSet } from "./starting-set";
 import { isStoredShapeError, keptAs } from "./stored-json";
 import { createStoredRecent } from "./stored-recent";
@@ -1533,6 +1534,8 @@ export const createServer = (
     sessionStartOf: () => sessionStartOf,
     spawnFromHub: () => spawnFromHub,
     launchModel: () => launchModel,
+    startModelAfter: () => startModelAfter,
+    startModelMoves: () => startModelMoves,
     startModelOf: () => startModelOf,
     startingSetOf: () => startingSetOf,
     projectAtFolder: () => projectAtFolder,
@@ -1998,12 +2001,14 @@ export const createServer = (
     sendFromHub,
     spawnFromHub,
     spawnSession,
+    startModelAfter,
     startModelOf,
     projectAtFolder,
     tabNamed,
     taskAccounts,
     turnWaiters,
   } = createSpawns(ctx);
+  const startModelMoves = createStartModelMoves(ctx);
   const {
     allowGranted,
     answerPendingPermission,
@@ -11105,6 +11110,7 @@ export const createServer = (
       settleBackoff.delete(id);
       unanswered.delete(id);
       forgetSessionRuntime(id);
+      startModelMoves.forget(id);
       releaseHeld(id);
     }
   };
@@ -11888,6 +11894,7 @@ export const createServer = (
       kind: peekKind(message.payload),
       permissionMode: settled.permissionMode,
       model: payload.model,
+      hubModel: placed.hubModel,
       // A start that is a leaf is one on its row too: its machine withholds
       // the spawning tools from it, and the hub reads its row for every
       // other answer about it (what it may start, its memory role, a restore).

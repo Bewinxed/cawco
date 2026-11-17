@@ -64,7 +64,7 @@ import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages, mediaNameOf } from "./media";
 import { OWED_NOTICE_DAYS, owedNoticeEnd, unsentLine } from "./owed-ends";
 import { talksWithPerson } from "./roles";
-import { sessionWord } from "./session-word";
+import { LIMIT_ORIGIN, sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
 
 /** What the hub did with a send, as `handoff` tells its sender. */
@@ -88,8 +88,6 @@ export interface SendDelivery {
   woke?: "fresh" | "resume";
 }
 
-/** The system origin name of the hub's word that a session at its account's limit may go on (at-limit.ts `CARRY_ON_ORIGIN`). */
-export const LIMIT_ORIGIN = "limit";
 /** The system origin name of the hub's word that the person is back, to a session holding news for them (`tellBack`). */
 export const BACK_ORIGIN = "back";
 /** Whether `origin` is the hub's word that the person is back: its wake goes in its turn among the hub's own launches. */
@@ -427,6 +425,7 @@ export type SendsContext = Pick<
   | "sessionName"
   | "silentWords"
   | "startHold"
+  | "startModelMoves"
   | "startsTurnIn"
   | "stepUuids"
   | "stepWords"
@@ -1516,10 +1515,13 @@ export const createSends = (ctx: SendsContext) => {
     // reads it when it goes on — carried on at the reset or on another
     // account, or from a summary that carries its last turns verbatim. Nor
     // does one its credential ended that the hub sends again or carries on
-    // elsewhere ({@link credentialTurns}).
+    // elsewhere ({@link credentialTurns}), nor a first turn its provider
+    // refused on a model the hub chose, which answers it on the hub's next
+    // pick (start-model-moves.ts).
     if (
       limitRefusesTurn(instanceId, neutral) ||
-      ctx.credentialTurns.has(instanceId)
+      ctx.credentialTurns.has(instanceId) ||
+      ctx.startModelMoves.moving(instanceId)
     ) {
       unanswered.delete(instanceId);
       return;

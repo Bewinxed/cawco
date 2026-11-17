@@ -227,6 +227,7 @@ import type { createSessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
 import type { SkillFolderReader } from "./skills";
 import type { SshTunnels } from "./ssh-tunnels";
+import type { createStartModelMoves } from "./start-model-moves";
 import type { OwnDefault } from "./start-models";
 import type { createStoredRecent } from "./stored-recent";
 import type { createStreamRelay } from "./stream-relay";
@@ -1305,6 +1306,8 @@ export interface ClosureContext {
       | "skills"
     >
   ) => { startingSet: StartingSet | null } | { refusal: string };
+  /** A first turn refused on a model the hub chose, moved to its next pick (start-model-moves.ts). */
+  startModelMoves: ReturnType<typeof createStartModelMoves>;
   startMove: (
     machineId: string,
     store: HomeStore,

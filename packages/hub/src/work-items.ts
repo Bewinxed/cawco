@@ -826,7 +826,7 @@ interface WorkItemDeps extends Pick<
     payload: NamedSpawn,
     workItemId: string,
     fallbackMode: PermissionMode,
-    placed?: { accountId?: string; model: string }
+    placed?: { accountId?: string; hubModel: boolean; model: string }
   ) =>
     | undefined
     | ReturnType<
@@ -1015,6 +1015,8 @@ type PlacementProblem =
 
 export interface ItemPlacement {
   accountId?: string;
+  /** Whether the hub chose that model (spawns.ts `Started`), which its row keeps. */
+  hubModel: boolean;
   launchesOn?: string;
   /** The model placement named for it (spawns.ts `placeSpawn`), which its spawn runs. */
   model: string;
@@ -4360,6 +4362,7 @@ export const createWorkItems = ({
             ? { accountId: ahead.placement.accountId }
             : {}),
           model: ahead.placement.model,
+          hubModel: ahead.placement.hubModel,
         }
       );
       if (spawned instanceof ElysiaStatus) {

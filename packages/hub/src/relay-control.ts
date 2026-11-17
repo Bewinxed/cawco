@@ -607,6 +607,9 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     ) {
       return false;
     }
+    // A person picked its model: from here on it is theirs, never swapped
+    // for the hub's next pick at a refusal (start-model-moves.ts).
+    ctx.db.patchInstance(instanceId, { hubModel: false });
     const pick = modelPickOf(instanceId, asked);
     if (!pick) {
       return false;

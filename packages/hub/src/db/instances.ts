@@ -760,6 +760,13 @@ export interface InstancesDb {
     permissionMode: string | null;
     model?: string;
     /**
+     * Whether the hub chose `model` (schema `instances.hubModel`): named by
+     * a start, which decides it for the row (a resume or fork that goes on
+     * with its conversation's model is a person's choice); absent on a
+     * restore, revive or relaunch of a row, which keeps what it had.
+     */
+    hubModel?: boolean;
+    /**
      * The delegate types it may start (core `MayStart`). Absent at its first
      * spawn: a session nobody delegated work to, which may start any (none
      * for a work item's session or a summariser); absent later leaves what
@@ -858,6 +865,8 @@ export interface InstancesDb {
       kind?: InstanceKind;
       permissionMode?: string;
       model?: string;
+      /** Whether the hub chose its model (schema `instances.hubModel`). */
+      hubModel?: boolean;
       workItemId?: string | null;
       parentInstanceId?: string;
       /**
@@ -1614,6 +1623,7 @@ export const instancesDb = (core: DbCore): InstancesDb => {
       kind,
       permissionMode,
       model,
+      hubModel,
       mayStart,
       workItemId,
       role,
@@ -1698,6 +1708,7 @@ export const instancesDb = (core: DbCore): InstancesDb => {
           kind,
           permissionMode,
           model,
+          hubModel: hubModel === true,
           workItemId,
           role,
           delegateType: delegateType?.name,
@@ -1730,6 +1741,7 @@ export const instancesDb = (core: DbCore): InstancesDb => {
             kind,
             permissionMode,
             ...(model ? { model } : {}),
+            ...(hubModel === undefined ? {} : { hubModel }),
             // A session keeps the account it started on: its transcript and
             // its prompt cache are that account's.
             ...(accountId
