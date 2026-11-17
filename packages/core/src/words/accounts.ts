@@ -173,6 +173,19 @@ export const accountsWords = {
     codexOut: "Codex not signed in",
     /** Codex's own sign-in on a machine, signed out alone. */
     signOutCodex: "Sign Codex out on this machine",
+    /**
+     * A Codex row whose sign-out waits for the Codex sessions still running
+     * on it there (hub limit-moves.ts `signOutCodex`): Codex signs out once
+     * the last is at rest.
+     */
+    codexLeaving: (sessions: number) => {
+      if (sessions === 0) {
+        return "Signing out…";
+      }
+      return sessions === 1
+        ? "Signs out once its session rests"
+        : `Signs out once its ${sessions} sessions rest`;
+    },
     /** What a row's sign-in is for, beside the machine: "pi and OpenCode", "Codex". */
     signsInFor: (harnesses: readonly string[]) => andList(harnesses),
     /** A row's ⋯ menu's subject: "you@x.com on obelisk". */
@@ -466,9 +479,9 @@ export const accountsWords = {
     /** A person removed its account and no other could take it: it runs on no account (hub `strandedStall`). */
     removed: (from: string) =>
       `Stopped: ${from} was removed; continues once an account can take it`,
-    /** A person signed its account out on its machine, `machine`, and no other account there could take it (hub `strandedStall`). */
-    signedOut: (from: string, machine: string) =>
-      `Stopped: ${from} was signed out on ${machine}; continues once an account can take it`,
+    /** A person signed its account out on its machine, `machine` (`forWhat`: " for Codex" when Codex alone was), and no other account there could take it (hub `strandedStall`). */
+    signedOut: (from: string, machine: string, forWhat = "") =>
+      `Stopped: ${from} was signed out${forWhat} on ${machine}; continues once an account can take it`,
     /**
      * Held past the cutoff (core `AtLimit.staleAfterHours`) since `day`
      * ("2 Oct"): nothing carries it on until a person or its parent writes.

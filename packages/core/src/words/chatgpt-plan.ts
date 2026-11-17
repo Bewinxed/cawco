@@ -31,9 +31,9 @@ export const chatgptPlanWords = {
   // ── Left on no account by its plan's removal or sign-out (hub `strandedStall`) ─
   /** Its plan was removed: it goes on no other. */
   removed: (from: string) => `Stopped: ${from} was removed`,
-  /** Its plan was signed out on `machine`: it goes back on it once signed in there again. */
-  signedOut: (from: string, machine: string) =>
-    `Stopped: ${from} was signed out on ${machine}; continues once ${from} is signed in there again`,
+  /** Its plan was signed out on `machine` (`forWhat`: " for Codex" when Codex alone was): it goes back on it once signed in there again. */
+  signedOut: (from: string, machine: string, forWhat = "") =>
+    `Stopped: ${from} was signed out${forWhat} on ${machine}; continues once ${from} is signed in${forWhat} there again`,
   /** Why its launch is refused meanwhile (hub launch-accounts.ts `backOnPlan`), `machine` null when its plan was removed (`forWhat`: " for Codex" of a Codex session, else ""). */
   leftRefusal: (from: string, machine: string | null, forWhat = "") =>
     machine === null

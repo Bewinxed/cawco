@@ -361,6 +361,7 @@
       credit: [],
       access: [],
       codexSignins: [],
+      codexLeaving: [],
       catalogs: ACCOUNTS.map((one) => ({
         accountId: one.id,
         defaultEfforts: {},

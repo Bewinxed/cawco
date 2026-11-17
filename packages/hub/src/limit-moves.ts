@@ -40,7 +40,11 @@ import type { MovedLine } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { PublicInstanceRow } from "./db/instances";
 import type { OwedCarry, OwedMove } from "./db/owed-moves";
-import type { ContinuationAsker, ContinueRequest } from "./db/stored-types";
+import type {
+  ContinuationAsker,
+  ContinueRequest,
+  StrandedWhy,
+} from "./db/stored-types";
 import type { MoveOffWhy, StoredRow } from "./hub-shapes";
 import { cacheWarmNow, measuredCold, promptCacheExpiresAt } from "./keep-alive";
 import {
@@ -59,6 +63,7 @@ import {
   accountFacts,
   place as placeAccount,
   runningAccounts,
+  signedInForWords,
 } from "./placement";
 import { sessionBurn } from "./rebalance";
 import { unreachable } from "./unreachable";
@@ -105,6 +110,7 @@ export type LimitMovesContext = Pick<
   | "moveRowsToAccount"
   | "noteAtLimit"
   | "noteCodexSignin"
+  | "outOfStore"
   | "owedMoves"
   | "owedTargets"
   | "prepareContinuation"
@@ -1880,7 +1886,13 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       words:
         left.why === "removed"
           ? words.removed(left.accountName)
-          : words.signedOut(left.accountName, ctx.machineName(row.machineId)),
+          : words.signedOut(
+              left.accountName,
+              ctx.machineName(row.machineId),
+              left.why === "codex-signed-out"
+                ? signedInForWords(row.harness)
+                : ""
+            ),
     };
   };
 
@@ -2014,27 +2026,32 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
 
   /**
    * Every session on `account` (on `machineId` alone, when a person signs it
-   * out there; on every machine, when he removes it; of `harness` alone,
-   * when Codex alone is signed out) owes a move to the account placement
-   * carries it to ({@link oweMoveOff}): one at rest is never woken for it,
-   * one in a turn moves at its end. A move owed to `account` there is
-   * dropped. Answers how many move and how many have no account to go to,
-   * and the rows whose process may still run (`live`).
+   * out there; on every machine, when he removes it; of the harnesses
+   * `scope.of` keeps, when one sign-in alone goes and another stays) owes a
+   * move to the account placement carries it to ({@link oweMoveOff}): one
+   * at rest is never woken for it, one in a turn moves at its end. A move
+   * owed to `account` there is dropped. One left on no account is stranded
+   * as `scope.strand` (else `why`) says. Answers how many move and how many
+   * have no account to go to, and the rows whose process may still run
+   * (`live`).
    */
   const moveOff = (
     account: Account,
     why: "removed" | "signed-out",
     machineId?: string,
-    harness?: HarnessKind
+    scope?: {
+      of: (row: { harness: HarnessKind }) => boolean;
+      strand?: StrandedWhy;
+    }
   ): {
     live: PublicInstanceRow[];
     moving: number;
     staying: number;
   } => {
     const named = accountNameAmong(account, ctx.db.accounts.list());
-    const there = (row: { harness: string; machineId: string }) =>
+    const there = (row: { harness: HarnessKind; machineId: string }) =>
       (machineId === undefined || row.machineId === machineId) &&
-      (harness === undefined || row.harness === harness);
+      (scope === undefined || scope.of(row));
     for (const [id, owed] of ctx.owedMoves.list()) {
       const [row] =
         owed.to === account.id ? ctx.db.getInstancesByIds([id]) : [];
@@ -2060,7 +2077,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         strandedIds.push(row.id);
       }
     }
-    ctx.db.accounts.strand(strandedIds, account, named, why);
+    ctx.db.accounts.strand(strandedIds, account, named, scope?.strand ?? why);
     ctx.publishStalls();
     return {
       live: rows.filter(ctx.processMayRun),
@@ -2138,7 +2155,11 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * already signed it out, and every row there names no account. A row that
    * names no account is placed at its next wake like a new session, among
    * the accounts signed in on its machine, and is refused with the way back
-   * (core `SendRefusal` `no-account`) when there is none.
+   * (core `SendRefusal` `no-account`) when there is none. Its Codex
+   * sessions there are left as they are while its Codex home there stays
+   * signed in: the machine keeps that home through this sign-out (agent
+   * provider-accounts.ts `removeAccount`), and Codex runs on it alone
+   * (placement.ts `harnessSignins`).
    */
   const signOutMachine = (
     account: Account,
@@ -2146,15 +2167,21 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     machineId: string,
     leaves: boolean
   ): { moving: number; staying: number } => {
-    const { moving, staying, live } = moveOff(account, "signed-out", machineId);
+    const of = ctx.outOfStore(account.id, machineId);
+    const { moving, staying, live } = moveOff(
+      account,
+      "signed-out",
+      machineId,
+      { of }
+    );
     if (leaves) {
       ctx.db.accounts.leaveMachine(account.id, machineId);
-      ctx.rowsLeave(account.id, null, [machineId], "at-rest");
+      ctx.rowsLeave(account.id, null, [machineId], "at-rest", of);
       carryBetweenTurns(live);
       ctx.tickLeaves();
     } else {
       ctx.db.accounts.removeSignin(account.id, machineId);
-      ctx.rowsLeave(account.id, null, [machineId]);
+      ctx.rowsLeave(account.id, null, [machineId], "all", of);
     }
     console.log(
       `[accounts] ${named} signed out on ${ctx.machineName(machineId)}: ${moving} session${moving === 1 ? " owes" : "s owe"} a move to another account there, ${staying} ${staying === 1 ? "has" : "have"} none to go to${leaves ? "; its store goes once no session there runs on it" : ""}.`
@@ -2190,7 +2217,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       account,
       "signed-out",
       machineId,
-      "codex"
+      { of: (row) => row.harness === "codex", strand: "codex-signed-out" }
     );
     if (leaves) {
       carryBetweenTurns(live);

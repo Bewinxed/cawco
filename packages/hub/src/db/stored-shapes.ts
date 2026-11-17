@@ -826,7 +826,7 @@ export const StoredSendRefusalSchema: z.ZodType<StoredSendRefusalType> =
 export type StoredSendRefusalOutput = z.output<typeof StoredSendRefusalShape>;
 
 const StrandedWhyShape = declared(
-  z.enum(["removed", "signed-out"]),
+  z.enum(["removed", "signed-out", "codex-signed-out"]),
   "StrandedWhy",
   "packages/hub/src/db/stored-types.ts"
 );

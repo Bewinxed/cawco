@@ -708,6 +708,7 @@
         credit: [],
         access: [],
         codexSignins: [],
+        codexLeaving: [],
         catalogs: [],
         pending: [],
         readings: [],

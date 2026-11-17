@@ -12941,7 +12941,8 @@
     "type": "string",
     "enum": [
       "removed",
-      "signed-out"
+      "signed-out",
+      "codex-signed-out"
     ]
   },
   "stream_relay_journey.closed": {

@@ -68,6 +68,11 @@ export interface AccountsView {
   /** Why accounts with no catalog have none: their last probe's fault. */
   catalogFaults: AccountCatalogFault[];
   catalogs: AccountCatalog[];
+  /**
+   * Codex sign-outs waiting for the Codex sessions still running there
+   * (hub limit-moves.ts `signOutCodex`), each with how many still run.
+   */
+  codexLeaving: { accountId: string; machineId: string; sessions: number }[];
   /** Where each account runs Codex: the machines whose Codex home of it holds a sign-in. */
   codexSignins: { accountId: string; machineId: string }[];
   /** Accounts a provider refused for want of credit, by the model provider (hub account-marks.ts). */

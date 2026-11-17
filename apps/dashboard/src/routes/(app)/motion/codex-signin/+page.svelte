@@ -165,6 +165,7 @@
     bench: [],
     catalogFaults: [],
     catalogs: [],
+    codexLeaving: [],
     codexSignins: [
       { accountId: "acc-maya", machineId: "m-nifty" },
       { accountId: "acc-maya", machineId: "m-omar" },

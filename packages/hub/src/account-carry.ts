@@ -64,6 +64,7 @@ export type AccountCarryContext = Pick<
   | "registry"
   | "reportedMachinePath"
   | "sessionName"
+  | "signinsFor"
   | "silentWords"
   | "takeUpOwedMove"
 > &
@@ -618,14 +619,17 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     into: string | null,
     machines?: readonly string[],
     /** `at-rest`: only rows whose process is gone ({@link processMayRun}); a running one reads the store until its machine signs it out. */
-    which: "all" | "at-rest" = "all"
+    which: "all" | "at-rest" = "all",
+    /** The rows that ran on the store that went ({@link outOfStore}); absent: every one. */
+    of?: (row: { harness: HarnessKind }) => boolean
   ): void => {
     const rows = ctx.db
       .instancesOnAccount(accountId)
       .filter(
         (row) =>
           (machines === undefined || machines.includes(row.machineId)) &&
-          (which === "all" || !processMayRun(row))
+          (which === "all" || !processMayRun(row)) &&
+          (of === undefined || of(row))
       );
     for (const row of rows) {
       ctx.db.patchInstance(row.id, { accountId: into });
@@ -637,6 +641,26 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
       );
       ctx.publishInstances("");
     }
+  };
+
+  /**
+   * Which of `accountId`'s rows on `machineId` ran on the store its sign-out
+   * there takes away. A Codex session runs on the account's Codex home,
+   * which the machine keeps through that sign-out while Codex is signed in
+   * there (agent provider-accounts.ts `removeAccount`): while it is, and
+   * the account is still the hub's, its Codex sessions are none of that
+   * sign-out's. A removed account's go with it, Codex's too.
+   */
+  const outOfStore = (accountId: string, machineId: string) => {
+    const codexStays =
+      ctx.db.accounts.get(accountId) !== undefined &&
+      ctx
+        .signinsFor("codex")
+        .some(
+          (one) => one.accountId === accountId && one.machineId === machineId
+        );
+    return (row: { harness: HarnessKind }): boolean =>
+      !(codexStays && row.harness === "codex");
   };
 
   /**
@@ -683,6 +707,8 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
    * to sleep at rest first, as {@link leaveOne} does; a machine away, or one
    * whose sign-out fails, is asked again at the next tick.
    */
+  /** How many Codex sessions each waiting sign-out last waited for, so its row is told when that changes. */
+  const codexWaitedFor = new Map<string, number>();
   const leaveCodexHomes = async (): Promise<void> => {
     for (const { accountId, machineId } of ctx.pendingCodexLeaves()) {
       if (!ctx.registry.agent(machineId)) {
@@ -696,6 +722,11 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
             row.harness === "codex" &&
             processMayRun(row)
         );
+      const waitKey = `${accountId}\u0000${machineId}`;
+      if (codexWaitedFor.get(waitKey) !== running.length) {
+        codexWaitedFor.set(waitKey, running.length);
+        ctx.publishUsage(machineId);
+      }
       if (running.length > 0) {
         sleepUnmoved(machineId, running);
         continue;
@@ -710,6 +741,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
         continue;
       }
       ctx.keepCodexLeave(accountId, machineId, false);
+      codexWaitedFor.delete(waitKey);
       ctx.noteCodexSignin(accountId, machineId, false);
       console.log(
         `[accounts] ${ctx.machineName(machineId)} signed ${accountId} out for Codex, signed out while a Codex session there still ran on it: none does now.`
@@ -721,9 +753,12 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
   /** {@link leaveAccounts} on one machine. */
   const leaveOne = async (leave: AccountLeave): Promise<void> => {
     const { accountId, machineId } = leave;
+    const of = outOfStore(accountId, machineId);
     const running = ctx.db
       .listInstancesOn(machineId)
-      .filter((row) => row.accountId === accountId && processMayRun(row));
+      .filter(
+        (row) => row.accountId === accountId && of(row) && processMayRun(row)
+      );
     if (running.length > 0) {
       sleepUnmoved(machineId, running);
       return;
@@ -739,7 +774,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     console.log(
       `[accounts] ${ctx.machineName(machineId)} signed out ${accountId}, removed while a session there still ran on it: none does now.`
     );
-    rowsLeave(accountId, null, [machineId]);
+    rowsLeave(accountId, null, [machineId], "all", of);
     // A session it left on no account is stopped from now on.
     ctx.publishStalls();
   };
@@ -814,6 +849,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     forgetOn,
     signOutEverywhere,
     rowsLeave,
+    outOfStore,
     processMayRun,
     tickLeaves,
   };

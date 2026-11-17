@@ -664,8 +664,13 @@ export type DelegateRequestKind = "question" | "tool";
 /** Why an account was removed (schema `removed_accounts.why`): taken out, or joined into another. */
 export type RemovedAccountWhy = "removed" | "joined";
 
-/** Why a session was left without its account (schema `stranded_sessions.why`): the account was removed, or signed out. */
-export type StrandedWhy = "removed" | "signed-out";
+/**
+ * Why a session was left without its account (schema `stranded_sessions.why`):
+ * the account was removed, signed out on its machine, or signed out for
+ * Codex alone there (hub limit-moves.ts `signOutCodex`), its own sign-in
+ * kept.
+ */
+export type StrandedWhy = "removed" | "signed-out" | "codex-signed-out";
 
 /** Where a tool call stands (schema `tool_call_keys.state`). */
 export type ToolCallKeyState = "running" | "answered" | "interrupted";

@@ -36,6 +36,8 @@ export const accountsListed = (
     codexSignins,
     db,
     livePendingSignins,
+    pendingCodexLeaves,
+    processMayRun,
     rebalanceNotices,
   }: Pick<
     HubContext,
@@ -43,6 +45,8 @@ export const accountsListed = (
     | "codexSignins"
     | "db"
     | "livePendingSignins"
+    | "pendingCodexLeaves"
+    | "processMayRun"
     | "rebalanceNotices"
   >,
   provider: Static<typeof accountProvider> | undefined
@@ -58,6 +62,19 @@ export const accountsListed = (
     signins: mine(db.accounts.signins()),
     // Where each account runs Codex: its Codex home signed in on a machine.
     codexSignins: mine(codexSignins()),
+    // Codex sign-outs waiting for the Codex sessions still running there
+    // (limit-moves.ts `signOutCodex`), each with how many still run.
+    codexLeaving: mine(pendingCodexLeaves()).map((leave) => ({
+      ...leave,
+      sessions: db
+        .listInstancesOn(leave.machineId)
+        .filter(
+          (row) =>
+            row.accountId === leave.accountId &&
+            row.harness === "codex" &&
+            processMayRun(row)
+        ).length,
+    })),
     // Sign-ins started and not finished: the link or code each
     // showed, for a screen that reloads or reopens to show again.
     pending: livePendingSignins().filter((one) => ids.has(one.accountId)),
@@ -101,6 +118,8 @@ export const accountRoutes = ({
   knownProviders,
   livePendingSignins,
   machineName,
+  outOfStore,
+  pendingCodexLeaves,
   processMayRun,
   readAccountUsageNow,
   rebalanceNotices,
@@ -120,6 +139,8 @@ export const accountRoutes = ({
   | "knownProviders"
   | "livePendingSignins"
   | "machineName"
+  | "outOfStore"
+  | "pendingCodexLeaves"
   | "processMayRun"
   | "readAccountUsageNow"
   | "rebalanceNotices"
@@ -144,6 +165,8 @@ export const accountRoutes = ({
             codexSignins,
             db,
             livePendingSignins,
+            pendingCodexLeaves,
+            processMayRun,
             rebalanceNotices,
           },
           query.provider
@@ -342,11 +365,14 @@ export const accountRoutes = ({
       // A process there still running in its store keeps the store
       // until none does (`leaveAccounts`), as an account's
       // removal does: signed out under a turn, the turn would lose its
-      // credential and its transcript.
+      // credential and its transcript. A Codex session runs on the
+      // account's Codex home, which stays (`outOfStore`).
+      const of = outOfStore(account.id, params.machineId);
       const leaves = db
         .instancesOnAccount(account.id)
         .some(
-          (row) => row.machineId === params.machineId && processMayRun(row)
+          (row) =>
+            row.machineId === params.machineId && of(row) && processMayRun(row)
         );
       if (leaves) {
         return {

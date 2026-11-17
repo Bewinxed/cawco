@@ -932,6 +932,15 @@ export interface ClosureContext {
   openItems: ReturnType<typeof createOpenItems>;
   originKeyOf: (id: string) => string | undefined;
   outcomeOf: SessionCallsDeps["outcomeOf"];
+  /**
+   * Which of an account's rows on a machine ran on the store its sign-out
+   * there takes away: all but its Codex sessions while its Codex home there
+   * stays signed in (account-carry.ts `outOfStore`).
+   */
+  outOfStore: (
+    accountId: string,
+    machineId: string
+  ) => (row: { harness: HarnessKind }) => boolean;
   owedAfterBoard: () => ClientPayload[];
   owedCarries: Map<string, Promise<void>>;
   owedMoves: {
@@ -1173,7 +1182,8 @@ export interface ClosureContext {
     accountId: string,
     into: string | null,
     machines?: readonly string[],
-    which?: "all" | "at-rest"
+    which?: "all" | "at-rest",
+    of?: (row: { harness: HarnessKind }) => boolean
   ) => void;
   ruleEngine: RuleEngine;
   ruleRowsOf: ReturnType<typeof createRuleRows>;

@@ -46,6 +46,7 @@ import {
   strandedSessions,
   usageLimitHistory,
 } from "./schema";
+import type { StrandedWhy } from "./stored-types";
 import type { Tx } from "./tx";
 
 /** 30 days — long enough to cover several weekly windows, short enough that the table stays small. */
@@ -93,7 +94,7 @@ export interface StrandedSession {
   instanceId: string;
   /** That account's provider; null on a row stranded before migration 0444. */
   provider: AccountProvider | null;
-  why: "removed" | "signed-out";
+  why: StrandedWhy;
 }
 
 export interface AccountsDb {

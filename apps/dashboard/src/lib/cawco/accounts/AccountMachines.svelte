@@ -75,6 +75,7 @@
   import KeyPanel from "./KeyPanel.svelte";
   import {
     type AccountMachine,
+    codexLeaving,
     codexState,
     harnessesOn,
     machineName,
@@ -314,6 +315,9 @@
       {@const open = openOn === place.key}
       {@const block = claude ? harnessBlockOf(machine, "claude") : null}
       {@const parked = open ? null : parkedWord(place)}
+      {@const leaving = place.codex
+        ? codexLeaving(account.id, machine.machineId)
+        : null}
       {@const resume =
         parked === words.machines.waitingPaste
           ? words.machines.pasteCode
@@ -354,10 +358,11 @@
                 />
               {/if}
               <span
-                >{#if block && online}{blockWords.row(block)}{:else}{parked &&
-                  online
-                    ? parked
-                    : WORDS[word]}{/if}</span
+                >{#if block && online}{blockWords.row(
+                    block
+                  )}{:else if parked && online}{parked}{:else if leaving !== null && online}{words.machines.codexLeaving(
+                    leaving
+                  )}{:else}{WORDS[word]}{/if}</span
               >
             </span>
           {/if}

@@ -76960,6 +76960,28 @@
               "$ref": "#/components/schemas/AccountCatalog"
             }
           },
+          "codexLeaving": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "sessions": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "accountId",
+                "machineId",
+                "sessions"
+              ]
+            }
+          },
           "codexSignins": {
             "type": "array",
             "items": {
@@ -77021,6 +77043,7 @@
           "bench",
           "catalogFaults",
           "catalogs",
+          "codexLeaving",
           "codexSignins",
           "credit",
           "pending",

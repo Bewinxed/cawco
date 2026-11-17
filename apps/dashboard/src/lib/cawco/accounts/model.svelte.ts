@@ -149,6 +149,19 @@ export const codexState = (
     ? "signed-in"
     : "signed-out";
 
+/**
+ * How many Codex sessions a Codex sign-out of the account on the machine
+ * waits for, while it waits (hub limit-moves.ts `signOutCodex`); null when
+ * none waits.
+ */
+export const codexLeaving = (
+  accountId: string,
+  machineId: string
+): number | null =>
+  accountsStore.accounts?.codexLeaving.find(
+    (one) => one.accountId === accountId && one.machineId === machineId
+  )?.sessions ?? null;
+
 export const machineName = (machine: AccountMachine): string =>
   machineLabel(machine.hostname);
 
