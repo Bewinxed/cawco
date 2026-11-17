@@ -4,7 +4,7 @@
  * revises its block in place, a long conversation of revisions whose every
  * replaced version is frozen to markup, and a block kept as an artifact.
  */
-import mergeChecksPage from "./block-fixtures/merge-checks.html?raw";
+import checksPage from "./block-fixtures/checks.html?raw";
 import paywallStory from "./block-fixtures/paywall-story.mp4?url";
 import releaseNarration from "./block-fixtures/release-narration.mp3?url";
 import InlineBlockConversation from "./inline-block-conversation-frame.svelte";
@@ -76,13 +76,13 @@ export const ReplacedVideo = {
   },
 };
 
-/** The narration and the merge-checks page, as a reply names them. */
+/** The narration and the checks page, as a reply names them. */
 const NARRATION = "assets/4a0d95d4/release-narration.mp3";
 const checks = (caption: string): string =>
   fence(
-    "Merge checks",
+    "Checks",
     `root = Column([page, voice])
-page = Preview("merge-checks-live", "${caption}")
+page = Preview("checks-live", "${caption}")
 voice = Audio("${NARRATION}", "Release narration, Alice voice")`
   );
 
@@ -96,10 +96,10 @@ export const ReplacedPage = {
     files: { [NARRATION]: releaseNarration },
     pages: [
       {
-        name: "merge-checks-live",
-        title: "Merge checks, live",
+        name: "checks-live",
+        title: "Checks, live",
         src: URL.createObjectURL(
-          new Blob([mergeChecksPage], { type: "text/html" })
+          new Blob([checksPage], { type: "text/html" })
         ),
       },
     ],

@@ -411,12 +411,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    (`HeldReason` `credit`: out of credit for its provider, `access`: the
  *    model not enabled for it). A page built for 81 reads the held reasons
  *    closed, so it reloads first.
+ * 83: the hub runs no check of a project's around a landing: a project's
+ *    gate (`GET /api/projects/:id/gate`) is no longer served, a work item's
+ *    `landed` carries no `gate`, and `finish_item` takes no `ship`. A page
+ *    built for 82 asks for a gate the hub no longer serves, so it reloads
+ *    first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 82;
+export const WIRE_PROTOCOL = 83;
 
 /**
  * What a session's stream carries: the changes each frame made to its

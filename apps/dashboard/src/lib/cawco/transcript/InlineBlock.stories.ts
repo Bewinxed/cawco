@@ -14,7 +14,7 @@
 
 import { madeWords } from "@cawco/core/words/made";
 import cawTap from "./block-fixtures/caw-tap.webp?url";
-import mergeChecksPage from "./block-fixtures/merge-checks.html?raw";
+import checksPage from "./block-fixtures/checks.html?raw";
 import paywallStory from "./block-fixtures/paywall-story.mp4?url";
 import releaseNarration from "./block-fixtures/release-narration.mp3?url";
 import replyScroll from "./block-fixtures/reply-scroll.mp4?url";
@@ -154,7 +154,7 @@ export const SmallChart = {
     asked: "where did this week's agent time go?",
     before: "Most of it went to design, as you asked:",
     after:
-      "Review stayed small because the merge checks caught the two failures before anyone read them.",
+      "Review stayed small because the checks caught the two failures before anyone read them.",
     source: `root = Column([chart])
 chart = Diagram("pie title Hours by kind\\n\\"Design\\" : 42\\n\\"Build\\" : 31\\n\\"Review\\" : 12\\n\\"Research\\" : 9", "Session records, this week", "small")`,
   },
@@ -181,7 +181,7 @@ export const FullDiagram = {
     before: "Nine working days from the pitch to main:",
     after: "The build ran two pieces side by side, which saved two days.",
     source: `root = Column([plan])
-plan = Diagram("gantt\\ntitle Inline blocks, pitch to main\\ndateFormat YYYY-MM-DD\\nsection Shape\\nPitch drawn :a1, 2026-11-02, 2d\\nOwner picks :a2, after a1, 1d\\nsection Build\\nLibrary and prompt :b1, after a2, 2d\\nTranscript block :b2, after a2, 3d\\nKeep as artifact :b3, after b2, 2d\\nsection Land\\nMerge checks :c1, after b3, 1d\\nShipped :milestone, after c1, 0d", "Session records, November", "full")`,
+plan = Diagram("gantt\\ntitle Inline blocks, pitch to main\\ndateFormat YYYY-MM-DD\\nsection Shape\\nPitch drawn :a1, 2026-11-02, 2d\\nOwner picks :a2, after a1, 1d\\nsection Build\\nLibrary and prompt :b1, after a2, 2d\\nTranscript block :b2, after a2, 3d\\nKeep as artifact :b3, after b2, 2d\\nsection Land\\nRebase and push :c1, after b3, 1d\\nOn main :milestone, after c1, 0d", "Session records, November", "full")`,
   },
 };
 
@@ -194,7 +194,7 @@ export const LongFlow = {
     after:
       "A failed check or a conflict goes back to the same session, which fixes and finishes again.",
     source: `root = Column([flow])
-flow = Diagram("---\\ntitle: A delegate's path to main\\n---\\nflowchart TB\\nA[Brief] --> B[Workspace cut]\\nB --> C[Session reads the code]\\nC --> D[Edits and commits]\\nD --> E[finish_item]\\nE --> F[Rebase onto main]\\nF --> G{Merge checks}\\nG -->|pass| H[Pushed to main]\\nG -->|fail| I[Back to the session]\\nF -->|conflict| I\\nI --> D\\nH --> J[Report to parent]")`,
+flow = Diagram("---\\ntitle: A delegate's path to main\\n---\\nflowchart TB\\nA[Brief] --> B[Workspace cut]\\nB --> C[Session reads the code]\\nC --> D[Edits and commits]\\nD --> D2[Runs its checks]\\nD2 --> E[finish_item]\\nE --> F[Rebase onto main]\\nF -->|clean| H[Pushed to main]\\nF -->|conflict| I[Back to the session]\\nI --> D\\nH --> J[Report to parent]")`,
   },
 };
 
@@ -206,13 +206,13 @@ export const ShortFlow = {
     before: "Four steps, each waiting on the one before:",
     after: "Everything else is a way back into the second step.",
     source: `root = Column([flow])
-flow = Diagram("flowchart LR\\nA[Brief] --> B[Delegate works] --> C[Merge checks] --> D[Main]")`,
+flow = Diagram("flowchart LR\\nA[Brief] --> B[Delegate works and checks] --> C[Rebase and push] --> D[Main]")`,
   },
 };
 
-/** The merge-checks page as its own document, as a page artifact stands at its own address. */
-const mergeChecks = URL.createObjectURL(
-  new Blob([mergeChecksPage], { type: "text/html" })
+/** The checks page as its own document, as a page artifact stands at its own address. */
+const checksUrl = URL.createObjectURL(
+  new Blob([checksPage], { type: "text/html" })
 );
 
 /** Where the media stories' files sit in the project's folder, as a delegate's outputs land there. */
@@ -364,32 +364,31 @@ export const Slideshow = {
   args: {
     name: "How a delegate lands",
     asked: "walk me through what a delegate does after it finishes",
-    before: "Four steps, one per slide:",
-    after: "A failed check or a conflict sends it back to the second step.",
+    before: "Three steps, one per slide:",
+    after: "A conflict sends it back to the session, which finishes again.",
     source: `root = Column([steps])
-steps = Slides([brief, work, checks, main], "From a delegate's finish to main")
-brief = Column([Text("1. Finish", "title"), Text("The delegate calls finish_item with its report and its proof: each command it ran, with the output."), Badge("Report written", "done")])
+steps = Slides([brief, work, main], "From a delegate's finish to main")
+brief = Column([Text("1. Finish", "title"), Text("The delegate runs its project's checks, commits, and calls finish_item with its report."), Badge("Report written", "done")])
 work = Column([Text("2. Rebase", "title"), Text("The hub rebases its commits onto main. A conflict goes straight back to the same session, which fixes it and finishes again."), Badge("Rebased onto main", "done")])
-checks = Column([Text("3. Merge checks", "title"), Text("The checks the project's gate names run on the rebased branch: types, lint, the house checks and formatting."), Row([StatTile("Passed", 3, "done"), StatTile("Running", 1, "live")])])
-main = Column([Text("4. Main", "title"), Text("Once every check passes the hub pushes to main and the parent reads the report."), Badge("Pushed", "done")])`,
+main = Column([Text("3. Main", "title"), Text("The hub pushes to main and the parent reads the report."), Badge("Pushed", "done")])`,
   },
 };
 
 /** An HTML page the agent made as an artifact, live in the reply: its bars fill as the checks run. */
 export const LivePage = {
   args: {
-    name: "Merge checks",
-    asked: "can you show the merge checks as they'd look running?",
+    name: "Checks",
+    asked: "can you show the checks as they'd look running?",
     before: "I made it as a page; here it is live:",
     after: "Each bar is one check, at the time it took on the last run.",
     pages: [
       {
-        name: "merge-checks-live",
-        title: "Merge checks, live",
-        src: mergeChecks,
+        name: "checks-live",
+        title: "Checks, live",
+        src: checksUrl,
       },
     ],
     source: `root = Column([page])
-page = Preview("merge-checks-live", "Last run's times, looped")`,
+page = Preview("checks-live", "Last run's times, looped")`,
   },
 };

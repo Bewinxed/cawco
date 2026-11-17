@@ -225,7 +225,7 @@
   };
   const ERRORS = [
     "bun run typecheck exited 2: 3 errors in apps/dashboard",
-    "The machine went away while the merge checks ran.",
+    "The machine went away while the work landed.",
     "Budget reached: 40 turns.",
     "finish_item: the probe spec failed 2 of 9 assertions",
     "Rebase onto main conflicted in DelegateTray.svelte",

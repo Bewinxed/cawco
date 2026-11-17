@@ -119,7 +119,7 @@ const SIXTEEN: PickRow[] = [
   }),
   row("a60", {
     kind: "attempt",
-    title: "Retry a delegate's merge check after a lockfile race",
+    title: "Retry a delegate's install after a lockfile race",
     ran: "7m",
   }),
   row("d901", {
