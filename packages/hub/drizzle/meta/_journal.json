@@ -3039,6 +3039,13 @@
       "when": 1794880000167,
       "tag": "0441_hub_model",
       "breakpoints": true
+    },
+    {
+      "idx": 442,
+      "version": "6",
+      "when": 1794881742342,
+      "tag": "0442_session_content_goes",
+      "breakpoints": true
     }
   ]
 }

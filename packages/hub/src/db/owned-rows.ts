@@ -145,22 +145,29 @@ export const OWNED_ROWS = [
   },
   { column: workspaces.createdByInstanceId, fold: "move" },
   { column: projects.conversationInstanceId, fold: "move" },
-  { column: projectNotes.instanceId, fold: "move" },
+  // A session's own words and records go with its row, as its transcript
+  // does: the hub's notes that are lines of its transcript, what it asked,
+  // its parked asks, its plan, its design proposals, its project offer and
+  // the turns it claimed. Read by its id alone, none has a reader once it
+  // is gone.
+  { column: projectNotes.instanceId, fold: "move", drop: "delete" },
   {
     column: limitEvents.instanceId,
     fold: "move",
     drop: "delete",
   },
+  // Kept: the spend admission.ts reads of an account's window since its
+  // reading (`db.turnUsage.list`), whoever spent it; pruned after 14 days.
   { column: turnUsage.instanceId, fold: "move" },
   { column: artifacts.instanceId, fold: "move" },
   { column: artifacts.madeBy, fold: "move" },
-  { column: designProposals.instanceId, fold: "move" },
-  { column: asks.instanceId, fold: "move" },
+  { column: designProposals.instanceId, fold: "move", drop: "delete" },
+  { column: asks.instanceId, fold: "move", drop: "delete" },
   { column: sessionLines.instanceId, fold: "move" },
   { column: lineAnchors.instanceId, fold: "move" },
-  { column: completedTurns.instanceId, fold: "once" },
-  { column: sessionPlans.instanceId, fold: "once" },
-  { column: projectOffers.instanceId, fold: "once" },
+  { column: completedTurns.instanceId, fold: "once", drop: "delete" },
+  { column: sessionPlans.instanceId, fold: "once", drop: "delete" },
+  { column: projectOffers.instanceId, fold: "once", drop: "delete" },
   {
     column: fleetWatchNotices.instanceId,
     fold: "once",
@@ -178,7 +185,7 @@ export const OWNED_ROWS = [
     fold: "drop",
     drop: "delete",
   },
-  { column: parkedAsks.instanceId, fold: "drop" },
+  { column: parkedAsks.instanceId, fold: "drop", drop: "delete" },
   { column: ruleState.instanceId, fold: "drop", drop: "delete" },
   { column: movedFromSessions.instanceId, fold: "drop" },
   { column: limitStops.instanceId, drop: "delete" },

@@ -13,7 +13,9 @@ import { walkOwned } from "./owned-rows";
 import {
   artifacts,
   fleetDeniedTools,
+  instanceConversations,
   instances,
+  purgedSessions,
   SUPERVISOR_CONFIG_ID,
   supervisorConfig,
 } from "./schema";
@@ -48,6 +50,74 @@ export const dbCore = (
   const { revokeIdentities } = credentials;
 
   /**
+   * Every conversation of the sessions `ids` that no other session still
+   * holds, recorded purged (`purged_sessions`, by its machine and harness
+   * key): find and Recent leave it out though its machine's index keeps its
+   * words. Its current one and each it went on from (`instance_conversations`)
+   * are on its machine; one a fold handed to the survivor, which reads it as
+   * its own earlier conversation, stays.
+   */
+  const purgeConversations = (tx: Tx, ids: string[]): void => {
+    const going = new Set(ids);
+    const named = [
+      ...tx
+        .select({
+          instanceId: instances.id,
+          machineId: instances.machineId,
+          sessionId: instances.sessionId,
+        })
+        .from(instances)
+        .where(inArray(instances.id, ids))
+        .all(),
+      ...tx
+        .select({
+          instanceId: instanceConversations.instanceId,
+          machineId: instances.machineId,
+          sessionId: instanceConversations.sessionId,
+        })
+        .from(instanceConversations)
+        .innerJoin(
+          instances,
+          eq(instances.id, instanceConversations.instanceId)
+        )
+        .where(inArray(instanceConversations.instanceId, ids))
+        .all(),
+    ].flatMap(({ machineId, sessionId }) =>
+      sessionId ? [{ machineId, sessionId }] : []
+    );
+    if (named.length === 0) {
+      return;
+    }
+    const keys = [...new Set(named.map((one) => one.sessionId))];
+    const held = new Set(
+      [
+        ...tx
+          .select({ id: instances.id, sessionId: instances.sessionId })
+          .from(instances)
+          .where(inArray(instances.sessionId, keys))
+          .all(),
+        ...tx
+          .select({
+            id: instanceConversations.instanceId,
+            sessionId: instanceConversations.sessionId,
+          })
+          .from(instanceConversations)
+          .where(inArray(instanceConversations.sessionId, keys))
+          .all(),
+      ].flatMap(({ id, sessionId }) =>
+        going.has(id) || !sessionId ? [] : [sessionId]
+      )
+    );
+    const purgedAt = new Date();
+    const purged = named
+      .filter((one) => !held.has(one.sessionId))
+      .map((one) => ({ ...one, purgedAt }));
+    if (purged.length > 0) {
+      tx.insert(purgedSessions).values(purged).onConflictDoNothing().run();
+    }
+  };
+
+  /**
    * Deletes session rows and everything keyed to them, inside the caller's
    * transaction — the one way a session leaves the hub, whether its machine
    * went with it or it never started at all.
@@ -57,6 +127,7 @@ export const dbCore = (
       return;
     }
     const list = [...ids];
+    purgeConversations(tx, list);
     // What belonged to those sessions goes with them; what only pointed at
     // one keeps its own history, pointing nowhere (a delegate whose parent
     // went); and what their credentials granted ends.
