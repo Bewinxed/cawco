@@ -27,12 +27,12 @@ const HELPER_OPTIONS = [
   {
     value: "delegates",
     name: "CawCo's delegates",
-    line: "Each is a session of its own on the board: its own workspace and branch, any agent or model, its commits landed and a report back. It starts cold and reads the code again.",
+    line: "Each is a separate session on the board, with its own workspace and branch, on any agent or model. Its commits land. It reads the code again before it starts work.",
   },
   {
     value: "subagents",
     name: "The agent's own subagents",
-    line: "Quick helpers inside the session, sharing its workspace and folded into its transcript. They can't land work or outlive the session, so work that lands still goes to a delegate.",
+    line: "Quick helpers inside the session, sharing its workspace and shown in its transcript. They end with the session, and work that lands still goes to a delegate.",
   },
 ] as const satisfies readonly OwnToolOption<Helpers>[];
 
@@ -40,19 +40,27 @@ const STEP_LIST_OPTIONS = [
   {
     value: "cawco",
     name: "CawCo's plan list",
-    line: "The session's steps on the board and the phone. Your edits reach it at its next step, and it recaps them when you're back.",
+    line: "The session's steps, on the board and the phone. Your edits reach the session at its next step.",
   },
   {
     value: "agent",
     name: "The agent's own to-do list and plan mode",
-    line: "Claude Code keeps its own list and asks you to leave plan mode. CawCo shows them only as tool calls in the transcript.",
+    line: "The agent keeps its own list, and CawCo shows it only as tool calls in the transcript. Claude Code asks you before it leaves plan mode.",
   },
 ] as const satisfies readonly OwnToolOption<StepLists>[];
+
+/** An option name's leading "The", lowercased mid-line. */
+const LEADING_THE = /^The /u;
 
 const nameOf = <T extends string>(
   options: readonly OwnToolOption<T>[],
   value: T
-): string => options.find((option) => option.value === value)?.name ?? value;
+): string =>
+  // Mid-line after a colon, so "The agent's own …" reads "the agent's own …".
+  (options.find((option) => option.value === value)?.name ?? value).replace(
+    LEADING_THE,
+    "the "
+  );
 
 export const ownToolsWords = {
   recommended: "Recommended",
@@ -74,7 +82,11 @@ export const ownToolsWords = {
           tools: "spawn_agent and its other collaboration tools",
           state,
         },
-        { harness: "pi", tools: "Hands off to delegates", state: "none" },
+        {
+          harness: "pi",
+          tools: "Always uses CawCo's delegates",
+          state: "none",
+        },
       ];
     },
   },
@@ -92,7 +104,11 @@ export const ownToolsWords = {
         },
         { harness: "opencode", tools: "The plan agent", state },
         { harness: "codex", tools: "Its goal tools", state },
-        { harness: "pi", tools: "Keeps CawCo's plan list", state: "none" },
+        {
+          harness: "pi",
+          tools: "Always uses CawCo's plan list",
+          state: "none",
+        },
       ];
     },
   },
@@ -104,30 +120,30 @@ export const ownToolsWords = {
     denied: "Denied",
     none: "Has none",
   } satisfies Record<OwnToolState, string>,
-  /** Under the options. */
-  whenItApplies: (running: number) =>
-    running === 0
-      ? "Set as each session starts."
-      : `Set as each session starts: ${running} running ${running === 1 ? "session keeps" : "sessions keep"} what it started with until it restarts.`,
-  untouched:
-    "Your own Claude Code, OpenCode and Codex settings stay as they are: CawCo passes this to the sessions it starts.",
+  /** At the page's foot, while sessions run (none says nothing). */
+  stillRunning: (running: number) =>
+    running === 1
+      ? "1 running session keeps what it started with until it restarts."
+      : `${running} running sessions keep what they started with until they restart.`,
+  untouched: "Only the sessions CawCo starts take these two settings.",
 
   /** A save the hub refused, in its words, with what still holds. */
-  refused: (said: string) => `${said}. Sessions keep the setting before it.`,
+  refused: (said: string) => `${said}. The earlier setting stays.`,
   /** A save that never reached the hub: why, as a sentence of its own. */
-  unsent: (why: string) => `${why} Sessions keep the setting before it.`,
+  unsent: (why: string) => `${why} The earlier setting stays.`,
   /** The settings couldn't be read. */
   unread: (clause: string) =>
-    `Could not read the helpers and step lists — ${clause}.`,
+    `Could not read the helpers and step lists settings — ${clause}.`,
 
   /** First-run steps. */
   stepHelpers: "Choose a session's helpers",
   stepHelpersDone: (picked: Helpers) =>
     `Helpers: ${nameOf(HELPER_OPTIONS, picked)}`,
-  stepStepLists: "Choose where a session keeps its step list",
+  stepStepLists: "Choose where a session keeps its steps",
   stepStepListsDone: (picked: StepLists) =>
     `Step lists: ${nameOf(STEP_LIST_OPTIONS, picked)}`,
-  stepNote: "Change it any time in Configure › Helpers & step lists.",
+  /** Under the last of the two steps done. */
+  stepNote: "Change it in Configure › Helpers & step lists.",
 
   /** Configure › Subagents, while helpers are CawCo's delegates. */
   subagentsUncalled:

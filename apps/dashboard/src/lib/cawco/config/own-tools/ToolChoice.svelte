@@ -37,7 +37,6 @@
     lines,
     phase = "idle",
     fault = null,
-    running,
     onchoose,
   }: {
     id: string;
@@ -53,8 +52,6 @@
     phase?: SavePhase;
     /** Why the last save failed, in words. */
     fault?: string | null;
-    /** Running sessions, said under the sides; none leaves the line out. */
-    running?: number;
     onchoose: (value: T) => void;
   } = $props();
 
@@ -140,9 +137,4 @@
       </ul>
     </div>
   </div>
-  {#if running !== undefined}
-    <p class="m-0 max-w-c-measure type-meta text-pretty text-ink-muted">
-      {words.whenItApplies(running)}
-    </p>
-  {/if}
 </div>

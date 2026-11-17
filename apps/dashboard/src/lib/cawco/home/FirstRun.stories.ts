@@ -93,7 +93,7 @@ export const HelpersNotSaved = {
       ...SIGNED_IN,
       ownToolsFaults: {
         helpers:
-          "The hub didn't answer (timed out after 10 s). Sessions keep the setting before it.",
+          "The hub didn't answer (timed out after 10 s). The earlier setting stays.",
         stepLists: null,
       },
     },

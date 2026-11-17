@@ -4,8 +4,8 @@
    * use CawCo's delegates and plan list, or their agent's own subagents,
    * to-do list and plan mode, as two switches (the owner's pick on decision
    * page `harness-tools-shape`). Each pick saves at once and reaches every
-   * machine; a session takes it as it starts, so the helpers' switch says
-   * how many running sessions keep what they started with.
+   * machine; a session takes it as it starts, so the foot says how many
+   * running sessions keep what they started with.
    *
    * Every value comes in as props (the route reads the store), so the bench
    * draws it with no hub.
@@ -65,7 +65,6 @@
         options={words.helpers.options}
         phase={phases.helpers}
         recommended="delegates"
-        {running}
         value={chosen.helpers}
       />
       <ToolChoice
@@ -81,11 +80,15 @@
         recommended="cawco"
         value={chosen.stepLists}
       />
-      <p
-        class="m-0 max-w-c-measure border-t border-border-hairline pt-space-4 type-meta text-pretty text-ink-muted"
+      <!-- True of both switches, so at the foot under both. -->
+      <div
+        class="flex max-w-c-measure flex-col gap-space-1 border-t border-border-hairline pt-space-4 type-meta text-pretty text-ink-muted"
       >
-        {words.untouched}
-      </p>
+        <p class="m-0">{words.untouched}</p>
+        {#if running > 0}
+          <p class="m-0">{words.stillRunning(running)}</p>
+        {/if}
+      </div>
     </div>
   {/if}
 </SectionFrame>
