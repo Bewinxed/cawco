@@ -210,7 +210,7 @@ const PI_CAPABILITIES: HarnessCapabilities = {
   supportedCommands: true,
   reloadSkills: true,
   mcpStatus: true,
-  mcpControl: false,
+  mcpControl: true,
   listSessions: true,
   getSessionMessages: true,
   renameSession: true,

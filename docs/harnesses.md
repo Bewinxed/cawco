@@ -88,7 +88,10 @@ OpenCode: its plugin's `ctx.mcp.transform` and `cawco_*` tools, the
 credential stamped per call (`opencode-credentials.ts`), since one server
 runs every session.
 pi: `FleetMcp` (`pi-runtime.ts`), its servers registered by CawCo's inline
-extension (`pi-mcp.ts`).
+extension (`pi-mcp.ts`). A live session reconnects any server through pi's
+own `/mcp reconnect` handler, and switches only the fleet's servers on or
+off: pi switches a server of the person's own `mcp.json` only by writing
+that file.
 
 **Permission modes and asks.** The modes the harness offers are its
 `permissionModes` capability, drawn from `PERMISSION_MODES`
