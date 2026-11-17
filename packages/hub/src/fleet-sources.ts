@@ -43,7 +43,6 @@ import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { ResolvedPlugin } from "./plugins";
 import {
   isHubDirectory,
-  pluginMarketplace,
   readMarketplace,
   resolveMarketplacePlugins,
 } from "./plugins";
@@ -167,12 +166,12 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
               .filter(({ source }) => isHubDirectory(source))
               .map(({ name }) => name)
           );
+    // A plugin the hub could not carry reaches no machine any other way
+    // (agent fleet.ts `syncPlugins`), so the hub's reason goes with its row.
     const hubErrors = new Map(
-      hubOnly.size
-        ? ctx.db
-            .listPlugins()
-            .flatMap(({ id, error }) => (error ? [[id, error] as const] : []))
-        : []
+      ctx.db
+        .listPlugins()
+        .flatMap(({ id, error }) => (error ? [[id, error] as const] : []))
     );
     const listed = ctx.db.listProjects();
     const places = listed.flatMap((project) => project.places);
@@ -194,13 +193,9 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
           // The fleet's own, for every folder; each project's apart, below.
           skills: unbound(config.skills),
           hubOnlyMarketplaces: [...hubOnly],
-          // What the hub could not carry of a hub-only marketplace reaches
-          // that machine no other way, so the hub's reason goes with the row.
           plugins: config.plugins.map((plugin) => {
             const error = hubErrors.get(plugin.id);
-            return error && hubOnly.has(pluginMarketplace(plugin.id))
-              ? { ...plugin, error }
-              : plugin;
+            return error ? { ...plugin, error } : plugin;
           }),
           mcp: unbound(mcpRows),
           hooks: unbound(config.hooks),
@@ -466,10 +461,13 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   };
 
   /**
-   * Writes every fleet subagent into the user layer's `agents/` on one machine
-   * (NEW.md §11). Claude Code re-scans that directory within seconds, so a
-   * definition saved here is delegatable out there without anything being
-   * restarted.
+   * Writes every fleet subagent into the fleet's own subagents dir on one
+   * machine (NEW.md §11; core paths/claude.ts `fleetAgentsDir`), which every
+   * CawCo session on Claude Code takes at its launch as an added directory's
+   * `.claude/agents`, and no `claude` the person starts reads. Claude Code
+   * reads an added directory's subagents as a session starts ("Yes, without
+   * live reload", code.claude.com/docs/en/permissions), so a definition saved
+   * here reaches each session started after it.
    *
    * Every reconnect resends definitions without an extra read round-trip. The
    * daemon skips identical bytes locally before writing or invalidating cache.
@@ -487,8 +485,8 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     for (const file of files) {
       const answer = await callFs(machineId, agent, {
         op: "write",
-        root: "claude-home",
-        path: `agents/${file.name}.md`,
+        root: "fleet-agents",
+        path: `${file.name}.md`,
         content: file.content,
       });
       switch (answer.kind) {
@@ -534,9 +532,8 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    *
    * So the bytes are resolved here and stored, and sync carries them. What
    * cannot be resolved keeps its sentence on the row, and the last files that
-   * worked when it had some (`putPluginPayload`); one that never had files is
-   * left to the old path, which is the only one that still needs a machine to
-   * reach github.
+   * worked when it had some (`putPluginPayload`); one that never had files
+   * reaches no machine, and each machine's row says why.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: groups ids by marketplace, resolves each group, and stores every outcome (resolved or errored) in one place; splitting it would scatter the per-marketplace fallback this depends on.
   const resolvePlugins = async (ids: readonly string[]): Promise<void> => {

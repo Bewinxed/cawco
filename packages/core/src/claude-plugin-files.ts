@@ -11,15 +11,7 @@
  * it; every other field is Claude Code's and stays as it is.
  */
 
-import {
-  array,
-  type InferInput,
-  looseObject,
-  optional,
-  record,
-  string,
-  unknown,
-} from "valibot";
+import { array, looseObject, optional, record, string, unknown } from "valibot";
 import { wholeReaderOf } from "./reader-of";
 
 /**
@@ -44,8 +36,9 @@ const KNOWN_MARKETPLACES = record(string(), KNOWN_MARKETPLACE);
 
 /**
  * `installed_plugins.json`: each plugin Claude Code installed, by its id
- * (`plugin@marketplace`), one entry per scope it is installed at, with its
- * unpacked copy and the version it computed at install.
+ * (`plugin@marketplace`), one entry per scope it is installed at, with the
+ * project a project or local one is for, its unpacked copy and the version
+ * it computed at install.
  */
 const INSTALLED_PLUGINS = looseObject({
   plugins: optional(
@@ -55,6 +48,7 @@ const INSTALLED_PLUGINS = looseObject({
         looseObject({
           scope: optional(string()),
           installPath: optional(string()),
+          projectPath: optional(string()),
           version: optional(string()),
         })
       )
@@ -66,12 +60,6 @@ const INSTALLED_PLUGINS = looseObject({
 const PROJECT_MCP = looseObject({
   mcpServers: optional(record(string(), unknown())),
 });
-
-/** A marketplace in Claude Code's registry ({@link KNOWN_MARKETPLACE}). */
-export type KnownMarketplace = InferInput<typeof KNOWN_MARKETPLACE>;
-
-/** Claude Code's registry of linked marketplaces ({@link KNOWN_MARKETPLACES}). */
-export type KnownMarketplaces = InferInput<typeof KNOWN_MARKETPLACES>;
 
 /** `known_marketplaces.json`, whole, or undefined when it is not in its shape. */
 export const knownMarketplacesOf = wholeReaderOf(KNOWN_MARKETPLACES);

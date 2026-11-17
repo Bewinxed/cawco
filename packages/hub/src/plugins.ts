@@ -53,9 +53,6 @@ const HTTP_URL_PREFIX = /^https?:\/\//u;
 const LEADING_SLASHES = /^\/+/u;
 const DOT_GIT_SUFFIX = /\.git$/u;
 
-/** A plugin id is `name@marketplace`: the marketplace after the `@`. */
-export const pluginMarketplace = (id: string): string => id.split("@")[1] ?? "";
-
 /**
  * A path inside a downloaded tree, refused if it climbs out of it. The manifest
  * is fetched from the internet, so `../../` in a source is a file the hub would

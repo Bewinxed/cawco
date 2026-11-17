@@ -31,11 +31,30 @@ export const piAgentDir = (): string => {
   return named.startsWith("file://") ? fileURLToPath(named) : named;
 };
 
-/** The fleet's skills for pi. */
+/**
+ * pi's own skills dir, where earlier versions wrote the fleet's skills for
+ * pi. Read only by the cleanup that takes them back out (agent
+ * fleet-common.ts `dropHarnessUserLayer`).
+ */
 export const piSkillsDir = (): string => join(piAgentDir(), "skills");
 
-/** The fleet's memory document for pi. */
+/**
+ * pi's own global context file, where earlier versions wrote the fleet's
+ * memory. Read only by that cleanup.
+ */
 export const piMemoryFile = (): string => join(piAgentDir(), "AGENTS.md");
+
+/**
+ * The fleet's skills for pi: one `<name>/SKILL.md` dir each, handed to every
+ * pi session CawCo starts through its resource loader's
+ * `additionalSkillPaths` (pi's `--skill <path>`, "Loads a skill file or
+ * directory", docs/cli.md). CawCo's own, under its data dir: the person's
+ * own `pi` never reads it.
+ */
+export const piFleetSkillsDir = (): string => join(piFleetRoot(), "skills");
+
+/** What the fleet sync writes for pi: its skills, and the tree store their links land in. */
+export const piFleetRoot = (): string => join(cawcoDataDir(), "fleet-pi");
 
 /**
  * The machine's own OpenCode data dir, `$XDG_DATA_HOME/opencode`: the

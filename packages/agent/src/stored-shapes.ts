@@ -105,14 +105,25 @@ const PlacedRecordShape = declared(
   "packages/agent/src/fleet.ts"
 );
 
+const UserLayerWrittenShape = declared(
+  z.object({
+    hooks: z.array(z.string()).optional(),
+    marketplaces: z.array(z.string()).optional(),
+    memory: z.string().optional(),
+    memoryDocs: z.record(z.string(), z.string()).optional(),
+    plugins: z.array(z.string()).optional(),
+    skills: z.record(z.string(), z.string()).optional(),
+  }),
+  "UserLayerWritten",
+  "packages/agent/src/fleet.ts"
+);
+
 const ClaudeFleetSidecarShape = declared(
   z.object({
     deniedTools: z.array(z.string()).optional(),
     deniedWritten: z.array(z.string()).optional(),
     harnessConfigFailed: z.record(z.string(), FleetItemStateShape),
     hooks: z.record(z.string(), ManagedHookShape),
-    hubOnlyMarketplaces: z.array(z.string()),
-    marketplaces: z.array(z.string()),
     mcp: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()),
     memory: z.string().optional(),
@@ -126,8 +137,9 @@ const ClaudeFleetSidecarShape = declared(
       z.string(),
       PlacedRecordShape.extend({ hash: z.string() })
     ),
-    plugins: z.array(z.string()),
     skills: z.record(z.string(), z.string()),
+    userLayer: UserLayerWrittenShape.optional(),
+    userLayerMoved: z.literal(true).optional(),
     vendoredPlugins: z.record(z.string(), z.string()).optional(),
   }),
   "ClaudeFleetSidecar",
@@ -203,6 +215,13 @@ const FleetSidecarShape = declared(
     memory: z.string().optional(),
     planAgentDisabled: z.literal(true).optional(),
     skills: z.record(z.string(), z.string()),
+    userLayer: z
+      .object({
+        memory: z.string().optional(),
+        skills: z.record(z.string(), z.string()).optional(),
+      })
+      .optional(),
+    userLayerMoved: z.literal(true).optional(),
   }),
   "FleetSidecar",
   "packages/agent/src/harnesses/fleet-common.ts"

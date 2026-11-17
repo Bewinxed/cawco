@@ -4,13 +4,18 @@
  * transfer — anything bigger belongs in a session, not in this tunnel.
  */
 
-import { lstat, readdir } from "node:fs/promises";
+import { lstat, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
-import { claudeHome } from "@cawco/core/paths/claude";
+import {
+  claudeHome,
+  fleetAgentsDir,
+  userLayerPath,
+} from "@cawco/core/paths/claude";
 import type { FsEntry, FsMedia, FsPayload } from "@cawco/core/protocol";
 import { MEDIA_LIMIT_BYTES } from "@cawco/core/protocol";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 
 /**
  * `~` is the shell's, not a path: anything handed a literal `~` — a spawn's
@@ -167,14 +172,51 @@ const write = async (
   return { bytes: next.byteLength };
 };
 
-/** A path under the user layer, kept inside it. */
-const userLayerTarget = (path: string): string => {
-  const root = claudeHome();
+/** A path under `root`, kept inside it. */
+const under = (root: string, path: string): string => {
   const target = resolve(root, path);
   if (target !== root && !target.startsWith(`${root}/`)) {
     throw new Error(`${path} is not under ${root}`);
   }
   return target;
+};
+
+/**
+ * A fleet subagent written into the fleet's own dir, and the copy an earlier
+ * version wrote of it into the person's user layer (`agents/<path>`) taken
+ * back out while it still holds exactly these bytes: the hub writes the same
+ * file it wrote there, so a copy that differs is the person's own edit, or an
+ * older version of the fleet's, and stays.
+ */
+const writeFleetAgent = async (
+  path: string,
+  content: string
+): Promise<{ bytes: number }> => {
+  const written = await write(under(fleetAgentsDir(), path), content);
+  const earlier = userLayerPath("agents", path);
+  const file = Bun.file(earlier);
+  if (
+    resolve(earlier).startsWith(`${userLayerPath("agents")}/`) &&
+    (await file.exists()) &&
+    (await file.text()) === content
+  ) {
+    await rm(earlier, { force: true });
+  }
+  return written;
+};
+
+/** `path` as `root` places it on this machine ({@link FsPayload.root}). */
+const rootedPath = (root: FsPayload["root"], path: string): string => {
+  switch (root) {
+    case "claude-home":
+      return under(claudeHome(), path);
+    case "fleet-agents":
+      return under(fleetAgentsDir(), path);
+    case undefined:
+      return safePath(expandHome(path));
+    default:
+      return unhandled("root", root);
+  }
 };
 
 export const runFs = async ({
@@ -183,15 +225,21 @@ export const runFs = async ({
   content,
   root,
 }: FsPayload): Promise<unknown> => {
-  const target =
-    root === "claude-home" ? userLayerTarget(path) : safePath(expandHome(path));
+  const target = rootedPath(root, path);
   switch (op) {
     case "list":
       return await list(target);
     case "read":
       return await read(target);
     case "write":
-      return await write(target, content ?? "");
+      if (root === "claude-home") {
+        throw new Error(
+          `${target} is the person's own Claude Code config: CawCo lists and reads it, and writes nothing there`
+        );
+      }
+      return root === "fleet-agents"
+        ? await writeFleetAgent(path, content ?? "")
+        : await write(target, content ?? "");
     case "media":
       return await media(target);
     default:

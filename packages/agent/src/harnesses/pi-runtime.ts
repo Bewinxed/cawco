@@ -22,6 +22,8 @@ import { type EffortLevel, isEffortLevel } from "@cawco/core/harness/kinds";
 import type { HookEvent } from "@cawco/core/hooks";
 import { hookToolCall, hookToolInputBack } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
+import { fleetMemoryFile } from "@cawco/core/paths/fleet";
+import { piFleetSkillsDir } from "@cawco/core/paths/harnesses";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { conversationGone } from "@cawco/core/relaunch";
 import type {
@@ -96,6 +98,7 @@ import {
 import { configAt, hooksAt, readFleetHarnessSet } from "../fleet-harness-set";
 import { type HookPlace, runFleetHooks } from "../fleet-hook-run";
 import { fleetMcpAt } from "../fleet-mcp-set";
+import { readFleetMemory } from "../fleet-memory";
 import { placeSetAt } from "../fleet-place-set";
 import type {
   HarnessContext,
@@ -964,9 +967,14 @@ const skillsHeldTo = (
  * What a session's resource loader reads beside pi's own discovery, and the
  * context files CawCo adds to pi's. pi reads `AGENTS.md` and `CLAUDE.md` up
  * from its folder itself (resource-loader.js `loadContextFileFromDir`,
- * 1.0.1); the project's memory documents CawCo placed in its folder (fleet.ts
+ * 1.0.1); the fleet's main memory, from CawCo's own file (fleet-memory.ts),
+ * the project's memory documents CawCo placed in its folder (fleet.ts
  * `placedMemoryIn`) and its role's, which it launches with, join them as
- * context files. The project's skills placed at its folder: pi reads no
+ * context files (`agentsFilesOverride`, "Discover AGENTS.md files walking up
+ * from cwd" and add to them, examples/sdk/07-context-files.ts). The fleet's
+ * skills, from CawCo's own dir: pi's `--skill <path>` "Loads a skill file or
+ * directory" (docs/cli.md), as `additionalSkillPaths` does, and no `pi` the
+ * person starts reads them. The project's skills placed at its folder: pi reads no
  * `.claude/skills` (its place's file, fleet-place-set.ts), and "if a
  * directory contains SKILL.md, treat it as a skill root" (pi 1.3.0
  * skills.js). The fleet's pi extensions and its folder's project's, as the
@@ -993,8 +1001,12 @@ const loaderSources = async (
   }
   const set = await readFleetHarnessSet();
   const placed = await placeSetAt(cwd);
+  const fleetMemory = await readFleetMemory();
   return {
     memory: [
+      ...(fleetMemory?.trim()
+        ? [{ path: fleetMemoryFile(), content: fleetMemory }]
+        : []),
       ...(await placedMemoryIn(cwd)).map(({ file, content }) => ({
         path: file,
         content,
@@ -1006,7 +1018,10 @@ const loaderSources = async (
     ],
     loader: {
       ...skillsHeldTo(spec.startingSet),
-      additionalSkillPaths: Object.values(placed?.skills ?? {}),
+      additionalSkillPaths: [
+        ...Object.values(placed?.skills ?? {}),
+        piFleetSkillsDir(),
+      ],
       additionalExtensionPaths: configAt(set, placed, "piExtensions").flatMap(
         (extension) => (extension.entry ? [extension.entry] : [])
       ),

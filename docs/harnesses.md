@@ -127,12 +127,21 @@ pi: a composite credential store over the account's credential
 (`pi-accounts.ts`).
 
 **Fleet config placement.** The hub's fleet config (skills, memory, hooks,
-MCP servers, plugins) lands in the harness's own config home
-(`Harness.fleetHome`, `Harness.syncFleet`, through `fleet-common.ts`).
-Claude Code: `~/.claude` or the account's config dir, hooks in its settings.
-OpenCode: `~/.config/opencode` (`XDG_CONFIG_HOME`), hooks through CawCo's
-plugin (`HOOK_EVENTS_ON`, `packages/core/src/hooks.ts`).
-pi: `~/.pi/agent` (`PI_CODING_AGENT_DIR`), hooks through the inline extension.
+MCP servers, plugins, subagents) lands in files of CawCo's own under its data
+dir (`packages/core/src/paths/fleet.ts`, `Harness.syncFleet`), and each
+session takes it through its own launch. Nothing is written into the
+person's own agent config; what earlier versions wrote there is taken back
+out once, by CawCo's own records of it (`fleet.ts` `dropUserLayerWrites`,
+`fleet-common.ts` `dropHarnessUserLayer`).
+Claude Code: memory in the system prompt append, skills and subagents as an
+added directory (`additionalDirectories`), plugins as local plugins
+(`plugins`), hooks and settings in the flag settings (`claude.ts`
+`launchFleet`).
+OpenCode: memory as an instruction entry (`opencode-session.ts`), skills in
+the launch config's `skills`, hooks through CawCo's plugin
+(`HOOK_EVENTS_ON`, `packages/core/src/hooks.ts`).
+pi: memory as a context file, skills through `additionalSkillPaths`, hooks
+through the inline extension (`pi-runtime.ts`).
 
 **Stored sessions and transcripts.** Sessions run outside CawCo list, read
 back and resume as they ran (`listSessions`, `readTranscriptWindow`,

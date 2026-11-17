@@ -726,11 +726,16 @@ export interface FsPayload {
   path: string;
   requestId: string;
   /**
-   * `claude-home`: `path` is under the machine's user layer, Claude Code's
-   * own dir (`~/.claude`), as the machine itself places it (core paths/claude.ts
-   * `claudeHome`): no caller has to know a machine's home to reach it.
+   * Where `path` is, as the machine itself places it, so no caller has to
+   * know a machine's home to reach it:
+   * - `claude-home`: under the machine's user layer, Claude Code's own dir
+   *   (`~/.claude`, core paths/claude.ts `claudeHome`), the person's own:
+   *   listed and read, never written;
+   * - `fleet-agents`: under the dir of the fleet's subagents, which every
+   *   CawCo session on Claude Code takes at its launch (core paths/claude.ts
+   *   `fleetAgentsDir`).
    */
-  root?: "claude-home";
+  root?: "claude-home" | "fleet-agents";
 }
 
 /**

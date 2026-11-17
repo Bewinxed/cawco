@@ -10,6 +10,7 @@ import {
   TREE_STORE_DIR,
 } from "../claude-dirs";
 import { piAgentDir } from "./harnesses";
+import { cawcoDataDir } from "./roots";
 
 /**
  * Node-only paths shared across packages. Kept out of the main entry, which
@@ -124,18 +125,51 @@ export const USER_LAYER_DIRS = [
 ] as const;
 
 /**
- * The dir in {@link claudeHome} CawCo writes the fleet's marketplaces into,
- * one per fleet marketplace, each registered with Claude Code as a
- * `directory` marketplace (agent fleet.ts `VENDOR_ROOT`). Claude Code runs a
- * directory marketplace's plugins from there: their hooks' `${CLAUDE_PLUGIN_ROOT}`
- * is a path inside it, so a session that may not read it runs none of them.
- * Each marketplace keeps its plugins' tree store inside it
- * (`<marketplace>/.cawco-trees/plugins`).
+ * The dir in {@link claudeHome} where earlier versions wrote the fleet's
+ * marketplaces, one per fleet marketplace, each registered with Claude Code
+ * as a `directory` marketplace and its plugins installed at user scope.
+ * Read only by the one cleanup that takes them back out (agent fleet.ts
+ * `dropUserLayerWrites`); sessions load the fleet's plugins from
+ * {@link fleetPluginsDir} now.
  */
 export const VENDOR_MARKETPLACES_DIR = "cawco-marketplaces";
 
-/** The fleet's skills for Claude Code, which OpenCode reads too (agent fleet-converger.ts `fleetHoldings`). */
-export const claudeSkillsDir = (): string => userLayerPath("skills");
+/**
+ * The root CawCo hands every Claude Code session it starts as an added
+ * directory (`additionalDirectories`, the CLI's `--add-dir`): its
+ * `.claude/skills` holds the fleet's skills and its `.claude/agents` the
+ * fleet's subagents. "When you add a directory with `--add-dir` or
+ * `/add-dir`, Claude Code loads the skills in that directory's
+ * `.claude/skills/`, along with its `.claude/commands/` and
+ * `.claude/agents/`" (code.claude.com/docs/en/skills). CawCo's own, under
+ * its data dir: the person's own `claude` never reads it.
+ */
+export const fleetClaudeRoot = (): string =>
+  join(cawcoDataDir(), "fleet-claude");
+
+/** The fleet's skills for Claude Code, which OpenCode loads too (its launch config's `skills`). */
+export const claudeSkillsDir = (): string =>
+  join(fleetClaudeRoot(), CLAUDE_DIR_NAME, "skills");
+
+/** The fleet's subagents for Claude Code, one `<name>.md` each. */
+export const fleetAgentsDir = (): string =>
+  join(fleetClaudeRoot(), CLAUDE_DIR_NAME, "agents");
+
+/**
+ * Where earlier versions wrote the fleet's skills: the person's own skills
+ * dir in the user layer. Read only by the cleanup (agent fleet.ts
+ * `dropUserLayerWrites`).
+ */
+export const userLayerSkillsDir = (): string => userLayerPath("skills");
+
+/**
+ * The fleet's plugins, one `<marketplace>/plugins/<plugin>` tree each, as
+ * the hub resolved them: each loaded into every Claude Code session as a
+ * local plugin (the SDK's `plugins: [{ type: "local", path }]`), installed
+ * nowhere.
+ */
+export const fleetPluginsDir = (): string =>
+  join(cawcoDataDir(), "fleet-plugins");
 
 /** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */
 export const placedSkillsDir = (cwd: string): string =>

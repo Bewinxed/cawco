@@ -608,7 +608,7 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
    * set and the places' files hold as they were last written
    * (fleet-harness-set.ts `hookStatesInSet`). A harness that runs the
    * fleet's hooks from that set has it; Claude Code, whose own converge
-   * writes the set and reports what it registered, does not. A converge of
+   * writes the set and reports what it handed out, does not. A converge of
    * the hooks reads it once every harness's converge has ended
    * (fleet-converger.ts `#syncFleet`), so it reads what Claude Code's wrote.
    */

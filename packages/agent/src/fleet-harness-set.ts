@@ -10,11 +10,7 @@
  * `sessionSettingsOptions`), OpenCode's through CawCo's plugin
  * (opencode-plugin.ts), pi's through CawCo's inline extension
  * (pi-runtime.ts). No config file the person's own `claude`, `opencode` or
- * `pi` reads holds a project's copy, and nothing is written into a checkout.
- *
- * The fleet's own hooks are here for OpenCode and pi; Claude Code reads them
- * from the user settings the sync registers them in, where the person's own
- * `claude` runs them too.
+ * `pi` reads holds one of them, and nothing is written into a checkout.
  */
 import type { FleetItemState } from "@cawco/core/fleet";
 import type { HarnessConfigKind } from "@cawco/core/harness-config";

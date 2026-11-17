@@ -63,7 +63,11 @@ import { isRecord } from "@cawco/core/is-record";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
-import { credentialAccountIds } from "@cawco/core/paths/claude";
+import {
+  claudeSkillsDir,
+  credentialAccountIds,
+} from "@cawco/core/paths/claude";
+import { fleetMemoryFile } from "@cawco/core/paths/fleet";
 import {
   opencodeAccountHome,
   opencodeDataDir,
@@ -176,7 +180,11 @@ import type { SessionQuery, StoredSession } from "../stores/opencode-reads";
 import { onToolsMoved, toolGate } from "../tools";
 import { workspaceRefs } from "../workspace-records";
 import { FULL_CAPABILITIES } from "./capabilities";
-import { type FleetSidecar, readSidecar } from "./fleet-common";
+import {
+  dropHarnessUserLayer,
+  type FleetSidecar,
+  readSidecar,
+} from "./fleet-common";
 import { neutralSubagentChange } from "./neutral-subagents";
 import { type ActivitySnapshot, OpencodeActivity } from "./opencode-activity";
 import {
@@ -265,14 +273,24 @@ const OPENCODE_SIDECAR = join(OPENCODE_DIR, "cawco-fleet.json");
 const OPENCODE_FLEET_MCP = join(OPENCODE_DIR, "cawco-fleet-mcp.json");
 
 /**
- * The fleet's memory document for OpenCode: its global instructions file,
- * which every session loads before the `AGENTS.md` files from its folder up
- * ("OpenCode loads the global file followed by every `AGENTS.md` from the
- * current workspace directory toward the home directory",
- * opencode.ai/v2/docs/instructions). A project's own `AGENTS.md` OpenCode
- * finds itself.
+ * The fleet's memory, in CawCo's own file (core `fleetMemoryFile`), which
+ * each session takes as an instruction entry (opencode-session.ts
+ * `instructionEntries`); no `opencode` the person starts reads it.
  */
-const OPENCODE_MEMORY = join(OPENCODE_DIR, "AGENTS.md");
+const OPENCODE_MEMORY = fleetMemoryFile();
+
+/**
+ * What earlier versions wrote the fleet's memory and skills into: OpenCode's
+ * own global instructions file, which every `opencode` loads ("OpenCode
+ * loads the global file followed by every `AGENTS.md` from the current
+ * workspace directory toward the home directory",
+ * opencode.ai/v2/docs/instructions), and its global skills dir. Taken back
+ * out once (fleet-common.ts `dropHarnessUserLayer`).
+ */
+const USER_LAYER_WRITES = {
+  memory: join(OPENCODE_DIR, "AGENTS.md"),
+  skills: join(OPENCODE_DIR, "skills"),
+};
 
 /**
  * The static policy every server is launched with
@@ -4781,6 +4799,11 @@ class OpencodeHarness implements Harness<"opencode"> {
         },
       },
       plugins: [{ package: `file://${plugin}` }],
+      // The fleet's skills, from CawCo's own dir, which no `opencode` the
+      // person starts reads: "Add more local directories or HTTP catalogs
+      // with the skills array in any opencode.json or opencode.jsonc"
+      // (opencode.ai/docs/skills), and `OPENCODE_CONFIG_CONTENT` is one.
+      skills: [claudeSkillsDir()],
     };
   }
 
@@ -6575,7 +6598,15 @@ class OpencodeHarness implements Harness<"opencode"> {
     config: PlacedFleetConfig,
     parts: ReadonlySet<FleetPart>
   ): Promise<FleetSyncReport> {
-    const sidecar = await readSidecar(OPENCODE_SIDECAR);
+    const read = await readSidecar(OPENCODE_SIDECAR);
+    // What an earlier version wrote into OpenCode's own config dir comes
+    // out first, until it has.
+    const sidecar: FleetSidecar = {
+      ...read,
+      userLayer: read.userLayer
+        ? await dropHarnessUserLayer(read.userLayer, USER_LAYER_WRITES)
+        : undefined,
+    };
     const report: FleetSyncReport = {
       mcp: {},
       marketplaces: {},
@@ -6632,6 +6663,8 @@ class OpencodeHarness implements Harness<"opencode"> {
       skills: sidecar.skills,
       mcp,
       ...(memory ? { memory } : {}),
+      ...(sidecar.userLayer ? { userLayer: sidecar.userLayer } : {}),
+      userLayerMoved: true,
     } satisfies FleetSidecar);
     if (!(await runsHere())) {
       // Its files are written, for the OpenCode put on later; with none

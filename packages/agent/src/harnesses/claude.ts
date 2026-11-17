@@ -132,9 +132,11 @@ import {
   accountIds,
   claudeConfigDirs,
   claudeHome,
+  fleetClaudeRoot,
   projectSlug,
   sessionConfigDir,
 } from "@cawco/core/paths/claude";
+import { fleetMemoriesDir } from "@cawco/core/paths/fleet";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { conversationGone } from "@cawco/core/relaunch";
@@ -245,6 +247,7 @@ import { sessionFleetDenials } from "../denied-tools";
 import { claudeSpillDir, takeFirstSession } from "../first-session";
 import {
   fleetHoldings,
+  fleetPluginsAt,
   fleetStatus,
   inspectConfig,
   readHookScript,
@@ -256,11 +259,13 @@ import {
 import {
   configAt,
   type FleetHarnessSet,
+  hooksAt,
   readFleetHarnessSet,
 } from "../fleet-harness-set";
 import { guardedHandler } from "../fleet-hook-guard";
 import { proxiedFleetMcpUrl, proxiedToolCount } from "../fleet-mcp-listing";
 import { fleetMcpAt } from "../fleet-mcp-set";
+import { readFleetMemory } from "../fleet-memory";
 import type { FleetPart } from "../fleet-parts";
 import { type FleetPlaceSet, placeSetAt } from "../fleet-place-set";
 import type { SetHook } from "../fleet-set-rows";
@@ -1819,16 +1824,32 @@ const subagentFrame = (message: SDKMessage): boolean =>
   "parent_tool_use_id" in message && !!message.parent_tool_use_id;
 
 /**
- * A workspace session's scratch as one of its working directories, so an MCP
- * server that writes only inside its roots (chrome-devtools-mcp's captures)
- * writes there as well as in the clone: "Claude Code answers `roots/list`
- * with the session's launch directory plus every additional working
- * directory you've granted with `--add-dir`, `/add-dir`, or the
+ * A session's added directories. The fleet's root (core `fleetClaudeRoot`),
+ * whose `.claude/skills` and `.claude/agents` are the fleet's skills and
+ * subagents: "When you add a directory with `--add-dir` or `/add-dir`,
+ * Claude Code loads the skills in that directory's `.claude/skills/`, along
+ * with its `.claude/commands/` and `.claude/agents/`. Directories the Agent
+ * SDK adds through `additionalDirectories` in TypeScript … load the same
+ * way" (code.claude.com/docs/en/skills), so they reach CawCo's sessions and
+ * no `claude` the person starts. A clean session reads none of the fleet's
+ * ({@link CLEAN_OPTIONS}; these load "through the `project` setting source",
+ * same page). And a workspace session's scratch, so an MCP server that
+ * writes only inside its roots (chrome-devtools-mcp's captures) writes there
+ * as well as in the clone: "Claude Code answers `roots/list` with the
+ * session's launch directory plus every additional working directory
+ * you've granted with `--add-dir`, `/add-dir`, or the
  * `additionalDirectories` setting" (code.claude.com/docs/en/mcp, v2.1.203
  * on).
  */
-const scratchDirectory = (boundary: HarnessContext["boundary"]) =>
-  boundary ? { additionalDirectories: [boundary.scratch] } : {};
+const sessionDirectories = (
+  boundary: HarnessContext["boundary"],
+  clean: boolean
+) => ({
+  additionalDirectories: [
+    ...(clean ? [] : [fleetClaudeRoot()]),
+    ...(boundary ? [boundary.scratch] : []),
+  ],
+});
 
 /**
  * Flag settings every session launches with, merged with a workspace's
@@ -2240,19 +2261,26 @@ const fleetMcpStep = (
 type SystemPrompt = NonNullable<SdkOptions["systemPrompt"]>;
 
 /**
- * The fleet's role-scoped memory documents as one block of a system prompt,
- * each under the path it has in the fleet, as Claude Code itself heads a
- * CLAUDE.md it loads ("Contents of <path> (…)").
+ * The fleet's memory as one block of a system prompt: its main document,
+ * which every session takes (core `fleetMemoryFile`), then its role-scoped
+ * documents, each under the path it has in the fleet, as Claude Code itself
+ * heads a CLAUDE.md it loads ("Contents of <path> (…)").
  */
 const instructionsBlock = (
+  memory: string | undefined,
   instructions: readonly SessionInstruction[]
 ): string =>
-  instructions
-    .map(
+  [
+    ...(memory?.trim()
+      ? [
+          `Contents of the fleet's memory (CawCo loads it for every session; the documents it links are under ${fleetMemoriesDir()}):\n\n${memory.trim()}`,
+        ]
+      : []),
+    ...instructions.map(
       ({ path, content }) =>
         `Contents of the fleet's memory document ${path} (CawCo loads it for sessions like this one):\n\n${content.trim()}`
-    )
-    .join("\n\n");
+    ),
+  ].join("\n\n");
 
 /**
  * The session's system prompt with its scoped memory documents after
@@ -2261,9 +2289,10 @@ const instructionsBlock = (
  */
 const withInstructions = (
   given: SystemPrompt | undefined,
+  memory: string | undefined,
   instructions: readonly SessionInstruction[]
 ): SystemPrompt => {
-  const block = instructionsBlock(instructions);
+  const block = instructionsBlock(memory, instructions);
   if (given === undefined) {
     return { type: "preset", preset: "claude_code", append: block };
   }
@@ -2286,6 +2315,31 @@ const withInstructions = (
       : `${given.prompt}\n\n${block}`,
   };
 };
+
+/** Plugin dirs as the SDK loads them: "Load plugins by providing their local file system paths in your options configuration" (code.claude.com/docs/en/agent-sdk/plugins). */
+const localPlugins = (paths: readonly string[]) =>
+  paths.length > 0
+    ? { plugins: paths.map((path) => ({ type: "local" as const, path })) }
+    : {};
+
+/**
+ * What a launch carries of the fleet into a session's `query()` options
+ * ({@link launchFleet}): its plugins, each loaded from where the sync wrote
+ * it and installed nowhere; and its memory and scoped documents
+ * (SpawnPayload.instructions), after Claude Code's own prompt: "`{ type:
+ * 'preset', preset: 'claude_code', append: '...' }` - Use default prompt
+ * with appended instructions" (sdk.d.ts 0.3.296).
+ */
+const fleetLaunchOptions = (
+  given: SystemPrompt | undefined,
+  launch: { memory?: string; plugins?: string[] },
+  instructions: readonly SessionInstruction[]
+) => ({
+  ...localPlugins(launch.plugins ?? []),
+  ...(instructions.length > 0 || launch.memory?.trim()
+    ? { systemPrompt: withInstructions(given, launch.memory, instructions) }
+    : {}),
+});
 
 /**
  * The fleet's MCP servers a session in `workdir` loads, from the set the
@@ -2410,13 +2464,27 @@ const sessionSpecOf = (
 };
 
 /**
- * The fleet's MCP servers a session takes as it launches ({@link
- * fleetMcpFor}), apart from the caller's: `ClaudeSession` sets them through
- * `setMcpServers`. A caller's server keeps a name it shares with one of the
- * fleet's. `denied`: the tools of a chrome-devtools it cannot take. `hooks`:
- * the project's hooks placed at its folder (fleet-harness-set.ts), which its
- * flag settings carry ({@link sessionSettingsOptions}). A fenced session
- * takes no fleet server and no placed hook.
+ * What a session takes of the fleet as it launches, every piece of it
+ * through its own launch, none through a file the person's own `claude`
+ * reads:
+ * - `fleet`: the fleet's MCP servers ({@link fleetMcpFor}), apart from the
+ *   caller's: `ClaudeSession` sets them through `setMcpServers`. A caller's
+ *   server keeps a name it shares with one of the fleet's. `denied`: the
+ *   tools of a chrome-devtools it cannot take.
+ * - `hooks`: the fleet's hooks and the project's placed at its folder
+ *   (fleet-harness-set.ts `hooksAt`), which its flag settings carry
+ *   ({@link sessionSettingsOptions}).
+ * - `settings`: the fleet's and the project's Claude Code settings.
+ * - `memory`: the fleet's main memory (core `fleetMemoryFile`), which its
+ *   system prompt carries ({@link withInstructions}).
+ * - `plugins`: the fleet's plugins, each a local plugin (fleet.ts
+ *   `fleetPluginsAt`).
+ *
+ * A fenced session takes no fleet server, no project's row and no fleet
+ * setting; it takes the fleet's own hooks, memory and plugins, as a session
+ * that reads the person's own settings does. A clean session takes no
+ * memory, hook or plugin of the fleet's, as it reads no settings file
+ * ({@link CLEAN_OPTIONS}).
  */
 const launchFleet = async (
   session: SessionSpec,
@@ -2425,13 +2493,16 @@ const launchFleet = async (
   denied: string[];
   fleet: Record<string, McpServerConfig>;
   hooks: SetHook[];
+  memory?: string;
+  plugins: string[];
   settings: Record<string, unknown>;
 }> => {
   const fleet = session.fence
     ? { servers: {}, denied: [] }
     : await fleetMcpFor(ctx, ctx.cwd, session.startingSet);
-  const set = session.fence ? undefined : await readFleetHarnessSet();
+  const set = await readFleetHarnessSet();
   const place = session.fence ? undefined : await placeSetAt(ctx.cwd);
+  const memory = session.clean ? undefined : await readFleetMemory();
   return {
     fleet: Object.fromEntries(
       Object.entries(fleet.servers).filter(
@@ -2439,8 +2510,12 @@ const launchFleet = async (
       )
     ),
     denied: fleet.denied,
-    hooks: Object.values(place?.hooks ?? {}),
-    settings: set ? launchedSettings(set, place) : {},
+    hooks: session.clean
+      ? Object.values(place?.hooks ?? {})
+      : hooksAt(set, place),
+    ...(memory ? { memory } : {}),
+    plugins: session.clean ? [] : await fleetPluginsAt(ctx.cwd),
+    settings: session.fence ? {} : launchedSettings(set, place),
   };
 };
 
@@ -2498,19 +2573,24 @@ const launchedSettings = (
  * over {@link SESSION_DEFAULTS} and under CawCo's own ({@link
  * SESSION_SETTINGS}), as {@link
  * sessionSettingsOptions} merges them; its CLI flags ({@link
- * sessionExtraArgs}); and its model, which says the efforts `/effort` takes.
- * Its boundary and its placed hooks are left out: they decide what a command
- * may do, not which commands it has.
+ * sessionExtraArgs}); the fleet's root and plugins, whose skills and
+ * commands join the menu ({@link sessionDirectories}, {@link launchFleet});
+ * and its model, which says the efforts `/effort` takes. Its boundary and
+ * its placed hooks are left out: they decide what a command may do, not
+ * which commands it has.
  */
 const folderLaunch = async (cwd: string, model: string | undefined) => {
   const set = await readFleetHarnessSet();
+  const plugins = await fleetPluginsAt(cwd);
   return {
     settings: {
       ...SESSION_DEFAULTS,
-      ...(set ? launchedSettings(set, await placeSetAt(cwd)) : {}),
+      ...launchedSettings(set, await placeSetAt(cwd)),
       ...SESSION_SETTINGS,
     },
     extraArgs: sessionExtraArgs(undefined, false, undefined),
+    ...sessionDirectories(undefined, false),
+    ...localPlugins(plugins),
     ...(model ? { model } : {}),
   };
 };
@@ -2786,9 +2866,10 @@ class ClaudeSession implements HarnessSession {
     /**
      * What only a launch has: `conversationKept` says, for a resumed
      * conversation, whether its transcript is still on disk; `fleetMcp` is
-     * the fleet's servers it takes as it starts, `placedHooks` its folder's
-     * project hooks, `fleetSettings` the fleet's and its project's Claude
-     * Code settings ({@link launchFleet}). An attach starts nothing and
+     * the fleet's servers it takes as it starts, `placedHooks` the fleet's
+     * hooks and its folder's project's, `fleetSettings` the fleet's and its
+     * project's Claude Code settings, `memory` the fleet's main memory and
+     * `plugins` the fleet's plugins it loads ({@link launchFleet}). An attach starts nothing and
      * passes none of them: its CLI keeps the settings it was launched with.
      */
     launch: {
@@ -2796,6 +2877,8 @@ class ClaudeSession implements HarnessSession {
       fleetMcp?: Record<string, McpServerConfig>;
       placedHooks?: SetHook[];
       fleetSettings?: Record<string, unknown>;
+      memory?: string;
+      plugins?: string[];
     },
     /**
      * The sessiond connection this session's CLI child lives under: `spawn()`
@@ -2944,18 +3027,7 @@ class ClaudeSession implements HarnessSession {
         ...(persistSession === false ? { persistSession: false } : {}),
         ...(cliMode ? { permissionMode: cliMode } : {}),
         ...(model && { model }),
-        // Its scoped memory documents (SpawnPayload.instructions), after
-        // Claude Code's own prompt: "`{ type: 'preset', preset: 'claude_code',
-        // append: '...' }` - Use default prompt with appended instructions"
-        // (sdk.d.ts 0.3.296).
-        ...(instructions.length > 0
-          ? {
-              systemPrompt: withInstructions(
-                options.systemPrompt,
-                instructions
-              ),
-            }
-          : {}),
+        ...fleetLaunchOptions(options.systemPrompt, launch, instructions),
         env,
         // Left out entirely when nobody chose: the SDK's own default is the
         // model's, and writing a level here would put cawco's guess in its
@@ -2980,7 +3052,7 @@ class ClaudeSession implements HarnessSession {
         // workspace's boundary, through its shell prefix (`sessionEnv`); the
         // hook the CLI itself runs judges every other call's paths.
         ...launchedOptions,
-        ...scratchDirectory(ctx.boundary),
+        ...sessionDirectories(ctx.boundary, clean),
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
         // hand back a `SpawnedProcess` over the socket. Nothing downstream —
@@ -4406,19 +4478,16 @@ class ClaudeSession implements HarnessSession {
    * there cleared ("Successive calls shallow-merge top-level keys … Pass
    * `null` for a key to clear it from the flag layer", sdk.d.ts 0.3.302).
    * `hooks` goes whole, the boundary's entry in it. A fenced session takes
-   * none of the fleet's.
+   * the fleet's own hooks alone ({@link launchFleet}).
    */
   async #takeFleetSettings(): Promise<{ applied: string[] }> {
-    if (this.#fence) {
-      return { applied: [] };
-    }
     const set = await readFleetHarnessSet();
-    const place = await placeSetAt(this.#workdir);
+    const place = this.#fence ? undefined : await placeSetAt(this.#workdir);
     const next = sessionSettingsOptions(
       this.#ctx.boundary,
-      false,
-      Object.values(place?.hooks ?? {}),
-      launchedSettings(set, place),
+      this.#fence,
+      hooksAt(set, place),
+      this.#fence ? {} : launchedSettings(set, place),
       this.#startingSet
     ).settings;
     const before = this.#flagSettings;
@@ -5378,6 +5447,8 @@ class ClaudeHarness implements Harness<"claude"> {
         fleetMcp: launch.fleet,
         placedHooks: launch.hooks,
         fleetSettings: launch.settings,
+        ...(launch.memory ? { memory: launch.memory } : {}),
+        plugins: launch.plugins,
       },
       { client, procId: procIdFor("claude", ctx.instanceId), executable }
     );
@@ -5809,7 +5880,7 @@ class ClaudeHarness implements Harness<"claude"> {
       changingSignins(joinAccountLogin(from, into, expected)),
   };
 
-  /** The user layer, `~/.claude`, which every account dir links; `~/.claude.json` and the account dirs hang from the same home. */
+  /** The user layer, where the fleet's sidecar is, and from whose home `~/.claude.json` and the account dirs hang, which the fleet's one cleanups read (its skills, memory, subagents and plugins are CawCo's own, core `fleetClaudeRoot`, `fleetMemoryDir`, `fleetPluginsDir`). */
   fleetHome() {
     return claudeHome();
   }

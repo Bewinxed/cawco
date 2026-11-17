@@ -785,8 +785,10 @@ export const folderCommands = async (
   cwd: string,
   account: string | undefined,
   launch: {
+    additionalDirectories: string[];
     extraArgs: Record<string, string | null>;
     model?: string;
+    plugins?: { path: string; type: "local" }[];
     settings: Record<string, unknown>;
   }
 ): Promise<SlashCommand[]> => {

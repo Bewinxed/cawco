@@ -119,6 +119,7 @@ import type {
 } from "@opencode/client";
 import { z } from "zod";
 import type { OpencodeRule } from "../denied-tools";
+import { readFleetMemory } from "../fleet-memory";
 import type {
   HarnessContext,
   HarnessSession,
@@ -526,21 +527,28 @@ const ENTRY_KEY_UNSAFE = /[^a-z0-9._-]+/gu;
 const memoryEntryKey = (kind: "role" | "project", path: string): string =>
   `cawco-${kind}.${path.toLowerCase().replace(ENTRY_KEY_UNSAFE, "-")}`;
 
+/** The entry key of the fleet's main memory ({@link instructionEntries}). */
+const FLEET_MEMORY_ENTRY = "cawco-fleet.memory";
+
 /**
- * Every instruction entry a session holds: its project's memory documents,
- * as CawCo placed them in its folder for every session there (agent fleet.ts
+ * Every instruction entry a session holds: the fleet's main memory, as the
+ * fleet sync last wrote it in CawCo's own file (fleet-memory.ts), which no
+ * `opencode` the person starts reads; its project's memory documents, as
+ * CawCo placed them in its folder for every session there (agent fleet.ts
  * `placedMemoryIn`), which OpenCode does not read itself; and its role's
  * memory documents, which it launched with ({@link SpawnPayload.instructions}).
- * The fleet's memory is OpenCode's own global `AGENTS.md` (opencode.ts
- * `OPENCODE_MEMORY`), and a project's `AGENTS.md` OpenCode reads itself, so
- * neither is an entry; another harness's instruction files are none of its.
+ * A project's `AGENTS.md` OpenCode reads itself, so it is no entry; another
+ * harness's instruction files are none of its. Each is an entry CawCo puts
+ * on the session (`session.instructions.entry.put`, settled #11).
  */
 const instructionEntries = async (
   directory: string,
   instructions: readonly SessionInstruction[]
 ): Promise<Record<string, string>> => {
   const placed = await placedMemoryIn(directory);
+  const memory = (await readFleetMemory())?.trim();
   return {
+    ...(memory ? { [FLEET_MEMORY_ENTRY]: memory } : {}),
     ...Object.fromEntries(
       placed.map(({ path, content }) => [
         memoryEntryKey("project", path),

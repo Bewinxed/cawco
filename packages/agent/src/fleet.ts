@@ -14,8 +14,6 @@ import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   installedPluginsOf,
-  type KnownMarketplace,
-  type KnownMarketplaces,
   knownMarketplacesOf,
   projectMcpOf,
 } from "@cawco/core/claude-plugin-files";
@@ -25,7 +23,6 @@ import type {
   ConfigInspection,
   DiscoveredMcp,
   DiscoveredSkill,
-  FleetConfig,
   FleetFaultCause,
   FleetHoldings,
   FleetItemState,
@@ -60,22 +57,24 @@ import {
   hookProblem,
   hookWorkspaceNote,
 } from "@cawco/core/hooks";
-import { isRecord } from "@cawco/core/is-record";
 import {
-  accountIds,
   claudeHomeJson,
   claudeSkillsDir,
+  fleetPluginsDir,
   placedMemoryDir,
   placedSkillsDir,
   projectClaudeDir,
   treeStoreOf,
   userLayerPath,
+  userLayerSkillsDir,
   VENDOR_MARKETPLACES_DIR,
 } from "@cawco/core/paths/claude";
 import {
   claudeFleetSidecarFile,
   fleetHarnessSetFile,
   fleetHooksDir,
+  fleetMemoriesDir,
+  fleetMemoryFile,
   fleetPlacedDir,
   fleetPlacesDir,
 } from "@cawco/core/paths/fleet";
@@ -87,9 +86,9 @@ import { lastLines } from "@cawco/core/words/helpers";
 import { hookDriftUnparsed, hookUpdateKept } from "@cawco/core/words/hooks";
 import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
-import { accountClaudeJsons, linkUserLayer } from "./accounts";
+import { accountClaudeJsons } from "./accounts";
 import { claudeExecutable } from "./auth";
-import { excludeFromCheckout, gitIn } from "./checkout-exclude";
+import { excludeFromCheckout } from "./checkout-exclude";
 import {
   readSettingsFile,
   settingsOf,
@@ -104,11 +103,7 @@ import {
   readFleetHarnessSet,
   writeFleetHarnessSet,
 } from "./fleet-harness-set";
-import {
-  guardedHandler,
-  HOOK_GUARD_SOURCE,
-  hookGuardFile,
-} from "./fleet-hook-guard";
+import { HOOK_GUARD_SOURCE, hookGuardFile } from "./fleet-hook-guard";
 import { apartSignedOut, readFleetMcpSet } from "./fleet-mcp-set";
 import { FLEET_PARTS, type FleetPart } from "./fleet-parts";
 import {
@@ -146,41 +141,67 @@ const CLAUDE_JSON = claudeHomeJson();
 /** What cawco manages here. Anything this does not name is never touched. */
 const SIDECAR = claudeFleetSidecarFile();
 
-/** Where a plain skill's files land — one directory per skill, all of it cawco's. */
+/**
+ * Where a plain skill's files land — one directory per skill, all of it
+ * cawco's: the `.claude/skills` of the root every CawCo session takes as an
+ * added directory (core `fleetClaudeRoot`).
+ */
 const SKILLS_DIR = claudeSkillsDir();
 
-/**
- * The fleet's OWN marketplaces, written from the bytes the hub resolved: one
- * per fleet marketplace, `<root>/<marketplace>/`, registered as
- * `cawco-<marketplace>`. All of it cawco's, like a skill's directory, and
- * never edited by anything else. One per source marketplace because a
- * plugin's identity is `plugin@marketplace`: its cache folder
- * (`cache/<marketplace>/<plugin>/<version>/`) and its data folder ("For a
- * plugin installed as `formatter@my-marketplace`, the directory is
- * `~/.claude/plugins/data/formatter-my-marketplace/`",
- * https://code.claude.com/docs/en/plugins-reference) both key on it, so two
- * plugins of one name from two marketplaces need two marketplaces here too.
- */
-const VENDOR_ROOT = userLayerPath(VENDOR_MARKETPLACES_DIR);
+/** Where earlier versions wrote them: the person's own skills dir, cleaned once ({@link dropUserLayerWrites}). */
+const USER_LAYER_SKILLS_DIR = userLayerSkillsDir();
 
-/** What the vendored copy of fleet marketplace `marketplace` is registered as. */
-const vendorName = (marketplace: string): string => `cawco-${marketplace}`;
+/**
+ * The fleet's plugins, written from the bytes the hub resolved: one dir per
+ * fleet marketplace, `<root>/<marketplace>/plugins/<plugin>/`, each plugin
+ * loaded into every CawCo session as a local plugin (claude.ts
+ * `launchFleet`), installed and registered nowhere. All of it cawco's, like
+ * a skill's directory, and never edited by anything else. One dir per
+ * source marketplace because two plugins of one name may come from two.
+ */
+const VENDOR_ROOT = fleetPluginsDir();
 
 /** Where it is written. */
 const vendorDir = (marketplace: string): string =>
   join(VENDOR_ROOT, marketplace);
 
-/** The user-scope memory every session on this machine reads (NEW.md §11). */
-const MEMORY_PATH = userLayerPath("CLAUDE.md");
+/**
+ * Where earlier versions wrote the fleet's marketplaces, in the person's
+ * user layer, each registered with Claude Code as `cawco-<marketplace>` and
+ * its plugins installed at user scope from there: taken back out once
+ * ({@link dropUserLayerWrites}).
+ */
+const USER_LAYER_VENDOR_ROOT = userLayerPath(VENDOR_MARKETPLACES_DIR);
+
+/** What an earlier version registered the vendored copy of fleet marketplace `marketplace` as. */
+const vendorName = (marketplace: string): string => `cawco-${marketplace}`;
+
+/**
+ * The fleet's main memory, which every CawCo session takes at its launch
+ * (claude.ts `withInstructions`, opencode-session.ts `instructionEntries`,
+ * pi-runtime.ts `loaderSources`): a file of CawCo's own (core
+ * `fleetMemoryFile`), read by no harness of its own accord.
+ */
+const MEMORY_PATH = fleetMemoryFile();
+
+/** Where earlier versions wrote it: the person's own `CLAUDE.md` in the user layer. */
+const USER_LAYER_MEMORY_PATH = userLayerPath("CLAUDE.md");
 
 /**
  * The documents the main memory links, one file per path the set names. All of
  * it cawco's, like a skill's directory — nothing under here was ever written
  * by anything else, so a file the set stops carrying is a file that goes.
  */
-const MEMORIES_DIR = userLayerPath("memories");
+const MEMORIES_DIR = fleetMemoriesDir();
 
-/** Where Claude Code reads a user's hooks; the same file the user's own are in. */
+/** Where earlier versions wrote them: the person's own `memories` dir in the user layer. */
+const USER_LAYER_MEMORIES_DIR = userLayerPath("memories");
+
+/**
+ * The person's own Claude Code settings, where earlier versions registered
+ * the fleet's hooks: read only to take those entries back out
+ * ({@link dropUserLayerWrites}).
+ */
 const SETTINGS_PATH = userLayerPath("settings.json");
 
 /**
@@ -201,7 +222,7 @@ const HOOKS_DIR = fleetHooksDir();
 const USER_LAYER_HOOKS_DIR = userLayerPath("cawco-hooks");
 
 const PLUGINS_DIR = userLayerPath("plugins");
-/** The CLI's own account of what is linked and what is installed. */
+/** The CLI's own account of what is linked and what is installed: the person's, read and never written. */
 const KNOWN_MARKETPLACES = join(PLUGINS_DIR, "known_marketplaces.json");
 const INSTALLED_PLUGINS = join(PLUGINS_DIR, "installed_plugins.json");
 
@@ -242,26 +263,11 @@ export interface ClaudeFleetSidecar {
    */
   harnessConfigFailed: Record<string, FleetItemState>;
   /**
-   * Hook id → what cawco last registered for it. `command` is the identity
-   * {@link withoutHooks} removes by — a command handler's `command` verbatim,
-   * or the exact entry cawco wrote otherwise — so a hook renamed or moved to
-   * a different event or settings file is still collectable by what it used to
-   * be, not by whatever this version of cawco would write today.
+   * Hook id → what cawco last handed sessions for it. `command` is the
+   * identity of its handler ({@link entryKey}), which a status compares
+   * with the harness set's or the place's entry.
    */
   hooks: Record<string, ManagedHook>;
-  /**
-   * The fleet marketplaces this machine was told live on the hub's machine
-   * only ({@link PlacedFleetConfig.hubOnlyMarketplaces}). Nothing is linked for
-   * them, so a status reads their rows off their plugins, as the sync did.
-   */
-  hubOnlyMarketplaces: string[];
-  /**
-   * The marketplaces cawco linked, by their one name: the `name` of their
-   * own `marketplace.json`, which is the fleet row's (the hub links under it)
-   * and the key Claude Code registers them under. Written only once the CLI
-   * lists that name.
-   */
-  marketplaces: string[];
   /**
    * The fleet's servers CawCo wrote into `.claude.json` files, from before
    * sessions took them through the SDK (fleet-mcp-set.ts): what the one
@@ -274,10 +280,10 @@ export interface ClaudeFleetSidecar {
    * last sync handed sessions: what a later sync reports removed.
    */
   mcpServers: string[];
-  /** The hash cawco last wrote to `~/.claude/CLAUDE.md`; absent = unmanaged. */
+  /** The hash cawco last wrote to the fleet's memory file ({@link MEMORY_PATH}); absent = unmanaged. */
   memory?: string;
   /**
-   * Set path → the hash cawco last wrote there, under `~/.claude/memories/`.
+   * Set path → the hash cawco last wrote there, under {@link MEMORIES_DIR}.
    * Per file, because drift is per file: one document edited on this machine
    * holds up itself and leaves the rest of the set converging.
    */
@@ -300,15 +306,47 @@ export interface ClaudeFleetSidecar {
    * hash written into `<cwd>/.claude/skills/<name>/`.
    */
   placedSkills: Record<string, PlacedRecord & { hash: string }>;
-  plugins: string[];
   /** Skill name → the hash of the files written, which is what makes a sync a no-op. */
   skills: Record<string, string>;
   /**
-   * Fleet plugin id (`plugin@marketplace`) → the hash of the vendored files
-   * written under {@link VENDOR_ROOT}. Same purpose as `skills`, and the
-   * reason a sync that changes nothing rewrites nothing.
+   * What earlier versions wrote into the person's own Claude Code config,
+   * still to come out ({@link dropUserLayerWrites}); each field gone once it
+   * has. Folded out of the records once ({@link foldUserLayer}).
+   */
+  userLayer?: UserLayerWritten;
+  /**
+   * Set once the records of what earlier versions wrote into the user layer
+   * were folded into {@link userLayer}: from then on every record names
+   * CawCo's own dirs.
+   */
+  userLayerMoved?: true;
+  /**
+   * Fleet plugin id (`plugin@marketplace`) → the hash of the files written
+   * under {@link VENDOR_ROOT}, which sessions load: what makes a sync that
+   * changes nothing rewrite nothing.
    */
   vendoredPlugins?: Record<string, string>;
+}
+
+/**
+ * What earlier versions wrote into the person's own Claude Code config (the
+ * user layer: its `CLAUDE.md`, `memories`, `skills`, `settings.json` and
+ * plugin registries), by CawCo's own records of the writes, so that only
+ * those are taken back out.
+ */
+interface UserLayerWritten {
+  /** Each hook entry registered in its `settings.json`, by its identity ({@link entryKey}). */
+  hooks?: string[];
+  /** Each vendored marketplace registered with Claude Code, as `cawco-<marketplace>`. */
+  marketplaces?: string[];
+  /** The hash written to its `CLAUDE.md`. */
+  memory?: string;
+  /** Each document's hash written under its `memories`, by path. */
+  memoryDocs?: Record<string, string>;
+  /** Each plugin installed at user scope out of a vendored marketplace, by its installed id (`<plugin>@cawco-<marketplace>`). */
+  plugins?: string[];
+  /** Each skill's hash written under its `skills`, by name. */
+  skills?: Record<string, string>;
 }
 
 /** Where one placed copy of a project's row went: its folder and its name. */
@@ -366,15 +404,12 @@ const readSidecar = async (): Promise<ClaudeFleetSidecar> => {
     SIDECAR,
     (value) => ClaudeFleetSidecarSchema.partial().safeParse(value).data
   );
-  return {
+  const read: ClaudeFleetSidecar = {
     ...(stored?.mcp ? { mcp: stored.mcp } : {}),
     mcpServers: stored?.mcpServers ?? [],
-    marketplaces: stored?.marketplaces ?? [],
-    hubOnlyMarketplaces: stored?.hubOnlyMarketplaces ?? [],
-    plugins: stored?.plugins ?? [],
     // Read back like every other record: without it each sync starts from an
-    // empty one, so it reinstalls every vendored plugin and never uninstalls a
-    // plugin the fleet dropped.
+    // empty one, so it rewrites every plugin and never removes one the fleet
+    // dropped.
     vendoredPlugins: stored?.vendoredPlugins ?? {},
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
@@ -389,6 +424,51 @@ const readSidecar = async (): Promise<ClaudeFleetSidecar> => {
     ...(stored?.placedMcp ? { placedMcp: stored.placedMcp } : {}),
     placedMemory: stored?.placedMemory ?? {},
     placedSkills: stored?.placedSkills ?? {},
+    ...(stored?.userLayer ? { userLayer: stored.userLayer } : {}),
+    ...(stored?.userLayerMoved ? { userLayerMoved: true as const } : {}),
+  };
+  return read.userLayerMoved ? read : foldUserLayer(read);
+};
+
+/**
+ * The sidecar as an earlier version left it, its records of what it wrote
+ * into the user layer moved into {@link ClaudeFleetSidecar.userLayer}, and
+ * every record after it naming CawCo's own dirs, empty: the converge of
+ * every part a new build runs as the hub welcomes it (fleet-converged.ts
+ * `basisMoved`) writes each item there afresh. A fleet-wide hook keeps its
+ * record, marked as handed through the harness set, so its script is not
+ * read as an edit; only its entry in the settings is to come out.
+ */
+const foldUserLayer = (earlier: ClaudeFleetSidecar): ClaudeFleetSidecar => {
+  const plugins = Object.keys(earlier.vendoredPlugins ?? {});
+  const registered = Object.entries(earlier.hooks).filter(
+    ([, record]) => !(record.cwd || record.placed)
+  );
+  const userLayer: UserLayerWritten = {
+    ...earlier.userLayer,
+    ...(earlier.memory ? { memory: earlier.memory } : {}),
+    memoryDocs: earlier.memoryDocs,
+    skills: earlier.skills,
+    hooks: registered.map(([, record]) => record.command),
+    plugins: plugins.map(vendoredIdOf),
+    marketplaces: [
+      ...new Set(plugins.map((id) => vendorName(marketplaceOf(id)))),
+    ],
+  };
+  return {
+    ...earlier,
+    memory: undefined,
+    memoryDocs: {},
+    skills: {},
+    vendoredPlugins: {},
+    hooks: {
+      ...earlier.hooks,
+      ...Object.fromEntries(
+        registered.map(([id, record]) => [id, { ...record, placed: true }])
+      ),
+    },
+    userLayer,
+    userLayerMoved: true,
   };
 };
 
@@ -712,13 +792,6 @@ interface Ran {
   timedOut?: true;
 }
 
-/** A row a `claude plugin …` run did not converge: its cause by how the run ended, and its words. */
-const ranFailed = (ran: Ran): FleetItemState => ({
-  state: "failed",
-  cause: ran.timedOut ? "timed-out" : "unknown",
-  detail: ran.output,
-});
-
 /**
  * One `claude plugin …`, with the daemon's environment and the PATH it can
  * install into. Killed rather than left running if it hangs: a marketplace
@@ -770,80 +843,6 @@ const runClaude = async (
 };
 
 /**
- * Whether the CLI has a marketplace registered under `name`, with the
- * directory its catalog is in: what a fleet row's per-machine state is.
- */
-const isLinked = async (name: string): Promise<boolean> =>
-  (await linkedEntry(name))?.installLocation !== undefined;
-
-/**
- * The CLI's own account of what is linked (core claude-plugin-files.ts):
- * where each came from, and the directory its catalog is in. Keyed by the
- * marketplace's name, the `name` of its `marketplace.json`, which is the
- * only name Claude Code addresses it by
- * (https://code.claude.com/docs/en/plugin-marketplaces: "This is the `name`
- * from `marketplace.json`, not the source you passed to `add`").
- */
-const linkedMarketplaces = async (): Promise<KnownMarketplaces> =>
-  (await readJson(KNOWN_MARKETPLACES, knownMarketplacesOf)) ?? {};
-
-/** The registry's entry under `name`, if the CLI has one. */
-const linkedEntry = async (
-  name: string
-): Promise<KnownMarketplace | undefined> => (await linkedMarketplaces())[name];
-
-/**
- * `owner/repo`, an ssh remote, an https clone URL and a `marketplace.json` URL
- * can all name the same link. Compared on the part that identifies it, so the
- * spelling cawco stores still matches whatever the CLI wrote down.
- */
-const GIT_PLUS_PREFIX = /^git\+/u;
-const GIT_SSH_HOST = /^git@github\.com:/u;
-const GIT_URL_HOST = /^(https?|ssh):\/\/([^@]*@)?(www\.)?github\.com\//u;
-const GIT_SUFFIX = /\.git$/u;
-const TRAILING_SLASHES = /\/+$/u;
-
-const sourceKey = (source: string): string =>
-  source
-    .trim()
-    .toLowerCase()
-    .replace(GIT_PLUS_PREFIX, "")
-    .replace(GIT_SSH_HOST, "")
-    .replace(GIT_URL_HOST, "")
-    .replace(GIT_SUFFIX, "")
-    .replace(TRAILING_SLASHES, "");
-
-const sourceKeysOf = (entry: KnownMarketplace): string[] =>
-  [entry.source?.repo, entry.source?.url, entry.source?.path]
-    .filter((one): one is string => typeof one === "string")
-    .map(sourceKey);
-
-/**
- * The name the CLI registered `source` under, when it is not `name`: the
- * marketplace's manifest calls itself something else than the fleet row does.
- * Only for saying so after an add; nothing is linked or reported under it.
- */
-const registeredAs = (
-  linked: KnownMarketplaces,
-  source: string
-): string | undefined =>
-  Object.keys(linked).find((key) =>
-    sourceKeysOf(linked[key]).includes(sourceKey(source))
-  );
-
-/** The CLI's record of the plugin at the scope this daemon installs at. */
-const installedEntry = async (
-  id: string
-): Promise<{ version?: string } | undefined> => {
-  const stored = await readJson(INSTALLED_PLUGINS, installedPluginsOf);
-  return (stored?.plugins?.[id] ?? []).find((entry) => entry.scope === "user");
-};
-
-/** Whether the CLI lists the plugin at the scope this daemon installs at. */
-const isInstalled = async (id: string): Promise<boolean> =>
-  (await installedEntry(id)) !== undefined;
-
-/**
  * One install as `claude plugin list --json` reports it
  * (https://code.claude.com/docs/en/plugins/cli-reference#json-output).
  * `version` is "the version Claude Code computed at install". For a plugin
@@ -893,26 +892,6 @@ const listPlugins = async (
   }
 };
 
-/**
- * The version a carried plugin's record should move to, when it lags what its
- * folder declares: what Claude Code read there (`folderVersion`), else the
- * entry's version the vendored catalog carries ({@link vendoredCatalog}),
- * the order Claude Code computes a version in
- * (https://code.claude.com/docs/en/plugins/loading#how-claude-code-computes-the-version).
- * `claude plugin update` re-records it ("`claude plugin update <id>`
- * re-records its version", as `claude plugin install` answers for an
- * installed in-place plugin, 2.1.311).
- */
-const recordLag = (
-  plugin: ListedPlugin,
-  entryVersion: string | undefined
-): string | undefined => {
-  const declared = plugin.folderVersion ?? entryVersion;
-  return declared !== undefined && declared !== plugin.version
-    ? declared
-    : undefined;
-};
-
 /** `plugin@marketplace` is the CLI's own form, and the half after the `@` is the link. */
 const marketplaceOf = (id: string): string => id.split("@").pop() ?? "";
 
@@ -927,21 +906,19 @@ const payloadId = (plugin: FleetPluginPayload): string =>
 const vendoredIdOf = (id: string): string =>
   `${pluginNameOf(id)}@${vendorName(marketplaceOf(id))}`;
 
-/**
- * Why a plugin of a hub-only marketplace is not on this machine. The bytes the
- * hub carries are its only way here: the marketplace is a directory on the
- * hub's machine, which no command run here can link. Its row's cause is
- * `hub-only`.
- */
-const hubOnlyMiss = (marketplace: string, hubError: string | undefined) =>
-  `${hubError ? `the hub could not carry it (${hubError})` : "the hub has not resolved it yet"}, and its marketplace ${marketplace} is a directory on the hub's machine`;
+/** Why a plugin row has no files on this machine: the hub carried none for it. */
+const uncarried = (hubError: string | undefined): string =>
+  hubError
+    ? `the hub could not carry it (${hubError})`
+    : "the hub has not carried it to this machine yet";
 
 /**
- * A hub-only marketplace's row on this machine. Nothing is linked for it, so
- * it is what its plugins came to: working when every one of them is
- * installed, failed naming each one that is not.
+ * Each fleet marketplace's row on this machine. Nothing is linked for one:
+ * the hub resolves its plugins and carries their files, so it is what its
+ * plugins came to: working when none of them failed, failed naming each one
+ * that did.
  */
-const hubOnlyStates = (
+const marketplaceStates = (
   names: readonly string[],
   plugins: Record<string, FleetItemState>,
   into: Record<string, FleetItemState>
@@ -955,258 +932,165 @@ const hubOnlyStates = (
         ? { state: "applied" }
         : {
             state: "failed",
-            cause: "hub-only",
+            cause: "missing-bytes",
             detail: missing
-              .map(([id, item]) => `${id}: ${item.detail ?? "not installed"}`)
+              .map(([id, item]) => `${id}: ${item.detail ?? "not carried"}`)
               .join("; "),
           };
   }
 };
 
+/** An install of a plugin the person made himself, as Claude Code's own registry records it: its scope, and the project a project or local one is for. */
+interface OwnInstall {
+  projectPath?: string;
+  scope: string;
+}
+
 /**
- * Which of the marketplaces cawco linked last time are cawco's to unlink now:
- * the ones config no longer asks this machine to link. A name config still
- * asks for is not a removal even when nothing is linked under it — the add
- * failed, which is its own report and not something to take away. Nor is a
- * name one of config's sources is `registered` under: a manifest renamed
- * upstream, still the link a row asks for until the hub takes the new name.
+ * The plugins the person installed himself, by plugin name, read from
+ * Claude Code's own registry (`installed_plugins.json`) and never written:
+ * a fleet plugin of one of these names is his to load, and a session
+ * takes no second copy of it ({@link fleetPluginsAt}). What an earlier
+ * version installed out of its vendored marketplaces (`legacy`, until its
+ * cleanup has taken them out) is none of his. A registry there and unread
+ * names none: sessions load the fleet's copy.
  */
-const toUnlink = (
-  managed: readonly string[],
-  config: Pick<FleetConfig, "marketplaces">,
-  registered: ReadonlySet<string>
-): string[] => {
-  const asked = new Set(config.marketplaces.map(({ name }) => name));
-  return managed.filter((name) => !(asked.has(name) || registered.has(name)));
-};
-
-/** What a plugin sync leaves in the sidecar. */
-type PluginRecords = Pick<
-  ClaudeFleetSidecar,
-  "marketplaces" | "hubOnlyMarketplaces" | "plugins" | "vendoredPlugins"
->;
-
-/** Every marketplace and plugin the fleet wants said as `state`, and the sidecar's records kept as they are: a sync that acted on none. */
-const keptPlugins = (
-  config: PlacedFleetConfig,
-  managed: ClaudeFleetSidecar,
-  report: FleetSyncReport,
-  state: FleetItemState
-): PluginRecords => {
-  for (const { name } of config.marketplaces) {
-    report.marketplaces[name] = state;
-  }
-  for (const { id, enabled } of config.plugins) {
-    if (enabled) {
-      report.plugins[id] = state;
+const ownPluginInstalls = async (
+  legacy: readonly string[]
+): Promise<Map<string, OwnInstall[]>> => {
+  const stored = await readJson(INSTALLED_PLUGINS, installedPluginsOf).catch(
+    (error: unknown) => {
+      if (!(error instanceof UnreadJson)) {
+        throw error;
+      }
+      console.warn(`[fleet] ${error.message}; no own plugin install is read`);
     }
-  }
-  return {
-    marketplaces: managed.marketplaces,
-    hubOnlyMarketplaces: managed.hubOnlyMarketplaces,
-    plugins: managed.plugins,
-    vendoredPlugins: managed.vendoredPlugins,
-  };
-};
-
-/** Why Claude Code's plugin registries can't be read (json-file.ts `UnreadJson`), when one is there and unread. */
-const pluginRegistriesUnread = async (): Promise<string | undefined> => {
-  try {
-    await Promise.all([
-      readJson(INSTALLED_PLUGINS, installedPluginsOf),
-      readJson(KNOWN_MARKETPLACES, knownMarketplacesOf),
+  );
+  const own = new Map<string, OwnInstall[]>();
+  for (const [id, entries] of Object.entries(stored?.plugins ?? {})) {
+    if (legacy.includes(id)) {
+      continue;
+    }
+    const name = pluginNameOf(id);
+    own.set(name, [
+      ...(own.get(name) ?? []),
+      ...entries.map((entry) => ({
+        scope: entry.scope ?? "user",
+        ...(entry.projectPath ? { projectPath: entry.projectPath } : {}),
+      })),
     ]);
-  } catch (error) {
-    if (error instanceof UnreadJson) {
-      return error.message;
-    }
-    throw error;
   }
+  return own;
+};
+
+/** Whether one of `installs` loads in a session in `cwd`: one at user scope, or one for a project `cwd` is in. */
+const loadsIn = (installs: readonly OwnInstall[], cwd?: string): boolean =>
+  installs.some(
+    (install) =>
+      install.scope === "user" ||
+      (cwd !== undefined &&
+        install.projectPath !== undefined &&
+        (cwd === install.projectPath ||
+          cwd.startsWith(`${install.projectPath}/`)))
+  );
+
+/**
+ * The fleet's plugins a CawCo session in `cwd` loads, each as a local
+ * plugin (claude.ts `launchFleet`): every one the last sync wrote and holds
+ * ({@link ClaudeFleetSidecar.vendoredPlugins}), but one the person installed
+ * himself under the same name where the session runs, which loads as his.
+ * "Load plugins by providing their local file system paths in your options
+ * configuration" (code.claude.com/docs/en/agent-sdk/plugins).
+ */
+export const fleetPluginsAt = async (cwd: string): Promise<string[]> => {
+  const managed = await readSidecar();
+  const own = await ownPluginInstalls(managed.userLayer?.plugins ?? []);
+  return Object.keys(managed.vendoredPlugins ?? {}).flatMap((id) =>
+    loadsIn(own.get(pluginNameOf(id)) ?? [], cwd)
+      ? []
+      : [join(vendorDir(marketplaceOf(id)), "plugins", pluginNameOf(id))]
+  );
 };
 
 /**
- * Links the marketplaces and installs the plugins, in that order — a plugin
- * whose marketplace is not linked has nowhere to come from. Both commands are
- * idempotent, but neither is free, so what the CLI already lists is left alone.
+ * The fleet's plugins on this machine: each enabled row the hub resolved,
+ * its files written under {@link VENDOR_ROOT} (one this disk already holds
+ * at its hash is not written again, so a converge for some other item
+ * rewrites no plugin tree under its running hooks), which every CawCo
+ * session loads as a local plugin ({@link fleetPluginsAt}); the tree of
+ * every other plugin taken away. Nothing is installed, linked or registered
+ * with Claude Code. A row the hub could not resolve to files has no way
+ * here, and says so. A plugin the person installed himself at user scope is
+ * his: sessions load his, and the row says so.
  */
 const syncPlugins = async (
   config: PlacedFleetConfig,
   managed: ClaudeFleetSidecar,
   report: FleetSyncReport
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: links every marketplace and installs every plugin the config wants, reporting each one's outcome
-): Promise<PluginRecords> => {
-  const wantedPlugins = config.plugins.filter((plugin) => plugin.enabled);
-  const hubOnly = config.hubOnlyMarketplaces;
-  // The Claude Code sessions run: its plugins are the ones they load, and its
-  // `claude plugin …` commands start it, so through the version gate.
-  let bin: string;
+): Promise<Pick<ClaudeFleetSidecar, "vendoredPlugins">> => {
+  const wanted = config.plugins.filter((plugin) => plugin.enabled);
+  const payloads = new Map(
+    config.pluginPayloads.map((plugin) => [payloadId(plugin), plugin])
+  );
+  const carried = wanted.flatMap(({ id }) => {
+    const plugin = payloads.get(id);
+    return plugin ? [plugin] : [];
+  });
+  const before = await readVendoredPlugins();
+  let unwritable: string | undefined;
   try {
-    bin = await claudeToStart();
+    await writeVendoredMarketplaces(
+      carried.map((plugin) =>
+        before[payloadId(plugin)] === plugin.hash
+          ? { ...plugin, files: undefined }
+          : plugin
+      )
+    );
   } catch (error) {
-    if (!(error instanceof ClaudeRefused)) {
-      throw error;
-    }
-    return keptPlugins(config, managed, report, error.itemState);
+    unwritable = tail(said(error));
   }
-  // Claude Code's own plugin and marketplace registries, read before any is
-  // acted on: one there and unread is no word that nothing is installed or
-  // linked, so nothing is installed, linked or uninstalled on it; each row
-  // says why, and the next sync reads them again.
-  const unread = await pluginRegistriesUnread();
-  if (unread) {
-    return keptPlugins(config, managed, report, {
-      state: "failed",
-      cause: "unparsable",
-      detail: unread,
-    });
-  }
-
-  // One name for a marketplace everywhere: the fleet row's is its manifest's
-  // (the hub links under it), and the CLI registers it under that same name.
-  // So "linked here" is the CLI's own registry holding that name.
-  const marketplaces: string[] = [];
-  const registered = new Set<string>();
-  // What this machine links: everything but a directory on the hub's machine,
-  // whose path names nothing here. Its plugins come as bytes, and its row is
-  // read off them once they are installed.
-  const linkable = config.marketplaces.filter(
-    ({ name }) => !hubOnly.includes(name)
-  );
-
-  for (const { name, source } of linkable) {
-    if (await isLinked(name)) {
-      marketplaces.push(name);
-      report.marketplaces[name] = { state: "applied" };
-      continue;
-    }
-    const ran = await runClaude(bin, ["plugin", "marketplace", "add", source]);
-    const linked = await linkedMarketplaces();
-    if (linked[name]) {
-      marketplaces.push(name);
-      report.marketplaces[name] = { state: "applied" };
-      continue;
-    }
-    // Not linked under the fleet's name, so nothing for a later sync to take
-    // away under it. A manifest renamed upstream since the hub read it links
-    // under its new name, which the hub takes on its next start.
-    const other = registeredAs(linked, source);
-    if (other) {
-      registered.add(other);
-    }
-    report.marketplaces[name] = other
-      ? {
-          state: "failed",
-          cause: "unknown",
-          detail: `${source} now calls itself ${other} in its marketplace.json, not ${name}`,
-        }
-      : ranFailed(ran);
-  }
-
-  // A hub-only marketplace cawco once linked here is unlinked like a removed
-  // one: the link pointed at whatever this machine had at that path, which is
-  // not the hub's directory, and its plugins now come from the hub's bytes.
-  for (const name of toUnlink(
-    managed.marketplaces,
-    { marketplaces: linkable },
-    registered
-  )) {
-    const ran = await runClaude(bin, ["plugin", "marketplace", "remove", name]);
-    report.marketplaces[name] = (await isLinked(name))
-      ? ranFailed(ran)
-      : { state: "removed" };
-  }
-
-  // Whatever the hub resolved for itself is installed from the bytes it sent;
-  // only what it could NOT resolve is left for the CLI to go and fetch, which
-  // is the path that needs this machine to reach github on its own account.
-  const payloads = config.pluginPayloads;
-  const turnedOff = config.plugins
-    .filter((plugin) => !plugin.enabled)
-    .map(({ id }) => id);
-  const vendored = await syncVendoredPlugins(
-    bin,
-    payloads,
-    { wanted: wantedPlugins, turnedOff },
-    managed.vendoredPlugins ?? {},
-    report.plugins
-  );
-  const carried = new Set(payloads.map(payloadId));
-
-  const linked = await linkedMarketplaces();
-  for (const { id, error } of wantedPlugins) {
-    if (carried.has(id)) {
-      continue;
-    }
-    const marketplace = marketplaceOf(id);
-    if (hubOnly.includes(marketplace)) {
+  const held = await readVendoredPlugins();
+  const own = await ownPluginInstalls(managed.userLayer?.plugins ?? []);
+  const written: Record<string, string> = {};
+  for (const { id, error } of wanted) {
+    const plugin = payloads.get(id);
+    if (!plugin) {
       report.plugins[id] = {
         state: "failed",
-        cause: "hub-only",
-        detail: hubOnlyMiss(marketplace, error),
+        cause: "missing-bytes",
+        detail: uncarried(error),
       };
-      continue;
+    } else if (held[id] === plugin.hash) {
+      written[id] = plugin.hash;
+      report.plugins[id] = loadsIn(own.get(plugin.name) ?? [])
+        ? {
+            state: "applied",
+            detail: `this machine's own install of ${plugin.name} is the one sessions load; CawCo loads no second copy`,
+          }
+        : { state: "applied" };
+    } else {
+      // Not on this disk after the write: its bytes did not land. The
+      // report says so, and the item's Retry sends it again.
+      report.plugins[id] = unwritable
+        ? { state: "failed", cause: "unwritable", detail: unwritable }
+        : {
+            state: "failed",
+            cause: "missing-bytes",
+            detail: "the hub sent no files for this hash",
+          };
     }
-    // The CLI's own account, not this run's report: a link made by hand
-    // installs as well as one this sync made.
-    if (!linked[marketplace]) {
-      report.plugins[id] = {
-        state: "failed",
-        cause: "marketplace-unlinked",
-        detail: `marketplace ${marketplace} is not linked`,
-      };
-      continue;
-    }
-    if (await isInstalled(id)) {
-      report.plugins[id] = { state: "applied" };
-      continue;
-    }
-    const ran = await runClaude(bin, [
-      "plugin",
-      "install",
-      id,
-      "--scope",
-      "user",
-    ]);
-    report.plugins[id] = (await isInstalled(id))
-      ? { state: "applied" }
-      : ranFailed(ran);
   }
-
-  const plugins = wantedPlugins.map(({ id }) => id);
-  for (const id of managed.plugins) {
-    if (plugins.includes(id)) {
-      continue;
+  for (const id of Object.keys(managed.vendoredPlugins ?? {})) {
+    if (!wanted.some((plugin) => plugin.id === id)) {
+      report.plugins[id] = { state: "removed" };
     }
-    // A vendored plugin is uninstalled under the name it was installed with,
-    // and a row turned off at every scope; `syncVendoredPlugins` has already
-    // done both.
-    if (!(carried.has(id) || turnedOff.includes(id))) {
-      await runClaude(bin, [
-        "plugin",
-        "uninstall",
-        id,
-        "--scope",
-        "user",
-        "-y",
-      ]);
-    }
-    report.plugins[id] = { state: "removed" };
   }
-
-  hubOnlyStates(hubOnly, report.plugins, report.marketplaces);
-
-  return {
-    // A link kept for a row's renamed manifest stays cawco's to take away.
-    marketplaces: [
-      ...marketplaces,
-      ...managed.marketplaces.filter(
-        (name) => registered.has(name) && !marketplaces.includes(name)
-      ),
-    ],
-    hubOnlyMarketplaces: hubOnly,
-    plugins,
-    vendoredPlugins: vendored,
-  };
+  marketplaceStates(
+    config.marketplaces.map(({ name }) => name),
+    report.plugins,
+    report.marketplaces
+  );
+  return { vendoredPlugins: written };
 };
 
 /**
@@ -1267,15 +1151,12 @@ const byMarketplace = (
  * fleet marketplace.
  *
  * Per plugin, not the whole directory at once. A plugin this disk already
- * holds at its hash comes without its bytes ({@link syncVendoredPlugins}), so
- * a rewrite of everything would erase it. Every plugin is
- * vendored as a relative `source`, which is a form the CLI already installs
- * from — the official marketplace vendors its own the same way — so the
- * install that follows reaches the network for nothing.
+ * holds at its hash comes without its bytes ({@link syncPlugins}), so a
+ * rewrite of everything would erase it.
  *
  * Each plugin's tree is swapped in with one rename ({@link placeTree}):
- * Claude Code runs its hooks from `plugins/<name>` while this writes, and
- * the list of the files the fleet carried goes with it.
+ * sessions run its hooks from `plugins/<name>` while this writes, and the
+ * list of the files the fleet carried goes with it.
  */
 const writeVendoredMarketplace = async (
   marketplace: string,
@@ -1312,58 +1193,6 @@ const writeVendoredMarketplace = async (
       .filter((name) => !wanted.has(name))
       .map((name) => removeTree(join(into, "plugins", name)))
   );
-
-  await writeStateFile(
-    catalogPath(marketplace),
-    vendoredCatalog(marketplace, plugins)
-  );
-};
-
-/** Where a vendored marketplace's catalog is. */
-const catalogPath = (marketplace: string): string =>
-  join(vendorDir(marketplace), ".claude-plugin", "marketplace.json");
-
-/**
- * The catalog of one vendored marketplace, as written. Each entry carries the
- * version the plugin declares ({@link FleetPluginPayload.version}): Claude
- * Code reads a plugin's version from its plugin.json first and its
- * marketplace entry second
- * (https://code.claude.com/docs/en/plugins/loading#how-claude-code-computes-the-version),
- * so a plugin that versions through its upstream entry keeps that version here.
- */
-const vendoredCatalog = (
-  marketplace: string,
-  plugins: readonly FleetPluginPayload[]
-): string =>
-  `${JSON.stringify(
-    {
-      name: vendorName(marketplace),
-      owner: { name: "cawco" },
-      plugins: plugins.map((plugin) => ({
-        name: plugin.name,
-        source: `./plugins/${plugin.name}`,
-        description: `Carried by the cawco fleet (${marketplace}).`,
-        ...(plugin.version ? { version: plugin.version } : {}),
-      })),
-    },
-    null,
-    2
-  )}\n`;
-
-/** The vendored marketplaces whose catalog on disk is not the one `groups` makes. */
-const staleCatalogs = async (
-  groups: ReadonlyMap<string, readonly FleetPluginPayload[]>
-): Promise<string[]> => {
-  const stale = await Promise.all(
-    [...groups].map(async ([marketplace, group]) => {
-      const file = Bun.file(catalogPath(marketplace));
-      const held = (await file.exists()) ? await file.text() : undefined;
-      return held === vendoredCatalog(marketplace, group)
-        ? undefined
-        : marketplace;
-    })
-  );
-  return stale.filter((marketplace) => marketplace !== undefined);
 };
 
 /**
@@ -1552,7 +1381,7 @@ const readVendoredPlugins = async (): Promise<Record<string, string>> => {
 
 /**
  * What claude's copy of the fleet holds on this disk now: the skills cawco
- * wrote under `~/.claude/skills`, and the plugins in the vendored marketplace.
+ * wrote under {@link SKILLS_DIR}, and the plugins under {@link VENDOR_ROOT}.
  * Read, never remembered, and reported with each converge (the report's
  * `have`), so the hub tells live sessions when their content moved.
  */
@@ -1563,421 +1392,6 @@ export const fleetHoldings = async (): Promise<FleetHoldings> => ({
   ),
   plugins: await readVendoredPlugins(),
 });
-
-/**
- * One carried plugin brought to what its folder holds, through the CLI: an
- * install when Claude Code has none, an update when its record lags the
- * folder, nothing otherwise. Sessions load a carried plugin in place from
- * its folder ({@link ListedPlugin}), so the update moves the record, its
- * cached copy and its `installPath` to the version sessions already load.
- * Answers why it did not land, or nothing when it did.
- */
-const installCarried = async (
-  bin: string,
-  plugin: FleetPluginPayload,
-  listed: ListedPlugin | undefined
-): Promise<FleetItemState | undefined> => {
-  const vendoredId = vendoredIdOf(payloadId(plugin));
-  if (!listed) {
-    const ran = await runClaude(bin, [
-      "plugin",
-      "install",
-      vendoredId,
-      "--scope",
-      "user",
-    ]);
-    return (await isInstalled(vendoredId)) ? undefined : ranFailed(ran);
-  }
-  const lag = recordLag(listed, plugin.version);
-  if (lag === undefined) {
-    return;
-  }
-  const ran = await runClaude(bin, [
-    "plugin",
-    "update",
-    vendoredId,
-    "--scope",
-    "user",
-  ]);
-  const recorded = (await installedEntry(vendoredId))?.version;
-  if (recorded === lag) {
-    console.info(
-      `[fleet] ${vendoredId}: updated from ${listed.version} to ${lag}`
-    );
-    return;
-  }
-  return {
-    ...ranFailed(ran),
-    detail: `still recorded at ${recorded ?? "nothing"}, its folder holds ${lag}: ${ran.output}`,
-  };
-};
-
-/** The ids Claude Code lists for plugins that come from no marketplace. */
-const NOT_FROM_A_MARKETPLACE = new Set(["skills-dir", "inline", "synced"]);
-
-/** The scopes `claude plugin uninstall --scope` takes. */
-const UNINSTALL_SCOPES = new Set(["user", "project", "local"]);
-
-/** Whether `one` is an install `claude plugin uninstall` can take back. */
-const uninstallable = (one: ListedPlugin): boolean =>
-  UNINSTALL_SCOPES.has(one.scope) &&
-  !NOT_FROM_A_MARKETPLACE.has(marketplaceOf(one.id));
-
-/**
- * Every install of plugin `name` from a marketplace that is not one of the
- * fleet's vendored ones (`vendored`), at every scope it is recorded under: a
- * second copy beside the carried one, whose skills sessions would list under
- * the same `<name>:` prefix. A managed install is the organization's and is
- * left as it is.
- */
-const upstreamCopies = (
-  name: string,
-  vendored: ReadonlySet<string>,
-  listed: readonly ListedPlugin[]
-): ListedPlugin[] =>
-  listed.filter(
-    (one) =>
-      uninstallable(one) &&
-      pluginNameOf(one.id) === name &&
-      !vendored.has(marketplaceOf(one.id))
-  );
-
-/**
- * A carried plugin's own records outside user scope. A carried plugin lives
- * at user scope only: a project or local record of it is one an earlier
- * install left, at the version it was installed at.
- */
-const outsideUserScope = (
-  vendoredId: string,
-  listed: readonly ListedPlugin[]
-): ListedPlugin[] =>
-  listed.filter(
-    (one) => one.id === vendoredId && one.scope !== "user" && uninstallable(one)
-  );
-
-/**
- * Whether the project `project`'s `.claude/settings.json` is a file its
- * repository tracks: the file a project-scope uninstall edits, and one the
- * sync never writes. The home folder's is the user's own settings file
- * (`~/.claude/settings.json`), whatever a dotfiles repository says of it.
- */
-const committedSettings = async (project: string): Promise<boolean> =>
-  project !== dirname(dirname(SETTINGS_PATH)) &&
-  (await gitIn(project, [
-    "ls-files",
-    "--error-unmatch",
-    "--",
-    projectClaudeDir(project, "settings.json"),
-  ])) !== undefined;
-
-/**
- * Uninstalls each record at its own scope: `claude plugin uninstall <id>
- * --scope <scope>`, run in the record's project for a project or local one,
- * because those scopes are the project the command runs in
- * (https://code.claude.com/docs/en/plugins/cli-reference#plugin-uninstall:
- * "Remove an installed plugin from one scope"). A record whose project folder
- * is gone is skipped: no session starts there. Answers what was uninstalled
- * and each record that stays, with what the CLI said.
- */
-const dropRecords = async (
-  bin: string,
-  records: readonly ListedPlugin[]
-): Promise<{ dropped: number; left: string[] }> => {
-  const left: string[] = [];
-  let dropped = 0;
-  // One record named twice (a turned-off plugin's vendored id is also an
-  // upstream copy once its marketplace is gone) is uninstalled once.
-  const once = new Map(
-    records.map((record) => [
-      `${record.id}\0${record.scope}\0${record.projectPath ?? ""}`,
-      record,
-    ])
-  );
-  for (const record of once.values()) {
-    const project = record.scope === "user" ? undefined : record.projectPath;
-    if (record.scope !== "user" && !(project && (await dirExists(project)))) {
-      continue;
-    }
-    if (
-      record.scope === "project" &&
-      project &&
-      (await committedSettings(project))
-    ) {
-      left.push(
-        `${record.id} is also installed in ${project}'s committed settings; remove it there`
-      );
-      continue;
-    }
-    const ran = await runClaude(
-      bin,
-      ["plugin", "uninstall", record.id, "--scope", record.scope],
-      project
-    );
-    const where = project
-      ? `${record.scope} scope in ${project}`
-      : "user scope";
-    if (ran.code === 0) {
-      dropped += 1;
-      console.info(`[fleet] ${record.id}: uninstalled at ${where}`);
-    } else {
-      left.push(`${record.id} stays installed at ${where}: ${ran.output}`);
-    }
-  }
-  return { dropped, left };
-};
-
-/**
- * Whether the user settings turn `id` on. A project's settings file is the
- * user's own when the project is the home folder (`~/.claude/settings.json`
- * both), so uninstalling a record at project scope there takes the user
- * scope's `enabledPlugins` entry with it (2.1.311).
- */
-const enabledForUser = async (
-  id: string
-): Promise<boolean | { unread: string }> => {
-  const read = await readSettingsJson(SETTINGS_PATH);
-  if (read.state === "unread") {
-    return { unread: read.why };
-  }
-  const { enabledPlugins } = read.settings;
-  return isRecord(enabledPlugins) && enabledPlugins[id] === true;
-};
-
-/**
- * Takes away a carried plugin's records outside user scope and its upstream
- * copies, then turns its user install back on when an uninstall in the home
- * folder turned it off: `claude plugin enable <id> --scope user`. Answers each
- * record that stays and why.
- */
-const keepUserScopeOnly = async (
-  bin: string,
-  vendoredId: string,
-  records: readonly ListedPlugin[]
-): Promise<string[]> => {
-  const { dropped, left } = await dropRecords(bin, records);
-  if (dropped === 0) {
-    return left;
-  }
-  // A settings file that couldn't be read is no word that the plugin is
-  // off: nothing is turned on through it, and the next sync looks again.
-  const before = await enabledForUser(vendoredId);
-  if (typeof before !== "boolean") {
-    left.push(
-      toolWords.settingsLeft(
-        toolWords.settingsSourceUnread(SETTINGS_PATH, before.unread)
-      )
-    );
-    return left;
-  }
-  if (!before) {
-    const ran = await runClaude(bin, [
-      "plugin",
-      "enable",
-      vendoredId,
-      "--scope",
-      "user",
-    ]);
-    if ((await enabledForUser(vendoredId)) === true) {
-      console.info(`[fleet] ${vendoredId}: turned back on at user scope`);
-    } else {
-      left.push(`${vendoredId} is off at user scope: ${ran.output}`);
-    }
-  }
-  return left;
-};
-
-/**
- * Installs the vendored plugins, and answers with what each one came to.
- *
- * Keyed by the FLEET's id — `name@marketplace`, the id the hub's config used —
- * while the CLI installs `name@cawco-<marketplace>`, because the marketplace
- * it comes from on this machine is the one written above. The dashboard's
- * rows are the fleet's, not this machine's private arrangement for satisfying
- * them.
- */
-const syncVendoredPlugins = async (
-  bin: string,
-  payloads: FleetPluginPayload[],
-  rows: { turnedOff: readonly string[]; wanted: readonly { id: string }[] },
-  managed: Record<string, string>,
-  report: Record<string, FleetItemState>
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes, links and installs every vendored plugin and reports each one's outcome, missing bytes included
-): Promise<Record<string, string>> => {
-  const written: Record<string, string> = {};
-  const byId = new Map(payloads.map((plugin) => [payloadId(plugin), plugin]));
-  const groups = byMarketplace(payloads);
-  const present = await readdir(VENDOR_ROOT).catch((): string[] => []);
-
-  // Every payload the agent holds carries its bytes (fleet-desired.ts); only
-  // a plugin this disk does not hold at that hash is written, so a converge
-  // for some other item rewrites no plugin tree under its running hooks.
-  const before = await readVendoredPlugins();
-  const lacking = payloads.map((plugin) =>
-    before[payloadId(plugin)] === plugin.hash
-      ? { ...plugin, files: undefined }
-      : plugin
-  );
-  const changed = new Set([
-    ...lacking
-      .filter((plugin) => plugin.files !== undefined)
-      .map(({ marketplace }) => marketplace),
-    ...Object.keys(managed)
-      .filter((id) => !byId.has(id))
-      .map(marketplaceOf),
-    ...[...groups.keys()].filter(
-      (marketplace) => !present.includes(marketplace)
-    ),
-    // A catalog whose entries moved with no plugin's bytes moving: a
-    // version the hub now carries for a plugin this disk already holds.
-    ...(await staleCatalogs(groups)),
-  ]);
-  const gone = present.filter((marketplace) => !groups.has(marketplace));
-
-  if (changed.size > 0 || gone.length > 0) {
-    await writeVendoredMarketplaces(lacking);
-  }
-  const held = await readVendoredPlugins();
-
-  // Each linked once, then refreshed in place: `add` on an already-linked path
-  // is an error, and `update` is what re-reads a directory whose contents
-  // moved. One registered at any other directory is not this one (a daemon
-  // run with another HOME wrote it), and adding this one replaces it: "adding
-  // a second marketplace with the same name replaces the first"
-  // (https://code.claude.com/docs/en/plugin-marketplaces).
-  for (const marketplace of groups.keys()) {
-    const name = vendorName(marketplace);
-    if ((await linkedEntry(name))?.installLocation !== vendorDir(marketplace)) {
-      await runClaude(bin, [
-        "plugin",
-        "marketplace",
-        "add",
-        vendorDir(marketplace),
-      ]);
-    } else if (changed.has(marketplace)) {
-      await runClaude(bin, ["plugin", "marketplace", "update", name]);
-    }
-  }
-
-  // What the fleet wants loaded here no more: a row turned off, and a
-  // vendored plugin it carries no more.
-  const unwanted = [
-    ...new Set([
-      ...rows.turnedOff,
-      ...Object.keys(managed).filter((id) => !byId.has(id)),
-    ]),
-  ];
-  // What Claude Code holds installed, read once: whether each plugin is
-  // installed at all, whether its record lags the folder it loads from, and
-  // which other records of it are installed beside it.
-  const carried = rows.wanted.filter(({ id }) => byId.has(id));
-  const listed =
-    carried.length > 0 || unwanted.length > 0
-      ? await listPlugins(bin)
-      : { ok: true as const, plugins: [] };
-  const installs = listed.ok
-    ? {
-        ok: true as const,
-        all: listed.plugins,
-        plugins: new Map(
-          listed.plugins
-            .filter((one) => one.scope === "user")
-            .map((one) => [one.id, one])
-        ),
-      }
-    : listed;
-
-  const vendored = new Set([...groups.keys()].map(vendorName));
-  for (const { id } of carried) {
-    const plugin = byId.get(id);
-    if (!plugin) {
-      continue;
-    }
-    const vendoredId = vendoredIdOf(id);
-    if (held[id] !== plugin.hash) {
-      // Not on this disk after the write: its bytes did not land. The
-      // report says so, and the item's Retry sends it again.
-      report[id] = {
-        state: "failed",
-        cause: "missing-bytes",
-        detail: "the hub sent no files for this hash",
-      };
-      continue;
-    }
-    if (!installs.ok) {
-      // Left unmanaged so the next sync reads and installs it again.
-      report[id] = {
-        ...ranFailed(installs.ran),
-        detail: `claude plugin list --json: ${installs.why}`,
-      };
-      continue;
-    }
-
-    const failed = await installCarried(
-      bin,
-      plugin,
-      installs.plugins.get(vendoredId)
-    );
-    if (failed) {
-      // Left unmanaged so the next sync writes and installs it again.
-      report[id] = failed;
-      continue;
-    }
-
-    // The records this one replaces: its own outside user scope, and the
-    // copies a machine that installed it the old way, from its upstream
-    // marketplace, still carries at any scope. A session there would load an
-    // older copy, or the same skills and subagents twice. Checked on every
-    // sync rather than only on the install, because the machine that most
-    // needs it is the one already holding both.
-    const left = await keepUserScopeOnly(bin, vendoredId, [
-      ...outsideUserScope(vendoredId, installs.all),
-      ...upstreamCopies(plugin.name, vendored, installs.all),
-    ]);
-    written[id] = plugin.hash;
-    report[id] =
-      left.length === 0
-        ? { state: "applied" }
-        : {
-            state: "applied",
-            detail: left.join("; "),
-          };
-  }
-
-  // Each one's vendored record goes at every scope, and a row turned off
-  // takes its upstream copies with it: off in the fleet is loaded nowhere on
-  // this machine.
-  const all = listed.ok ? listed.plugins : [];
-  if (!listed.ok && unwanted.length > 0) {
-    console.warn(
-      `[fleet] plugins the fleet turned off stay installed: claude plugin list --json: ${listed.why}`
-    );
-  }
-  for (const id of unwanted) {
-    const vendoredId = vendoredIdOf(id);
-    const { left } = await dropRecords(bin, [
-      ...all.filter((one) => one.id === vendoredId && uninstallable(one)),
-      ...(rows.turnedOff.includes(id)
-        ? upstreamCopies(pluginNameOf(id), vendored, all)
-        : []),
-    ]);
-    if (left.length > 0) {
-      console.warn(`[fleet] ${id} stays installed: ${left.join("; ")}`);
-    }
-  }
-  // A vendored marketplace the fleet carries nothing from any more: its
-  // plugins are uninstalled above and its folder is gone, so its link goes.
-  for (const marketplace of gone) {
-    if (await linkedEntry(vendorName(marketplace))) {
-      await runClaude(bin, [
-        "plugin",
-        "marketplace",
-        "remove",
-        vendorName(marketplace),
-      ]);
-    }
-  }
-  return written;
-};
 
 /**
  * Writes the skills whose files this machine does not have yet, and takes away
@@ -2398,8 +1812,9 @@ export const memoryState = async (
 };
 
 /**
- * Applies the plan to the harness's memory file at `path` (Claude Code's
- * `~/.claude/CLAUDE.md`, another harness's own) and answers with the hash
+ * Applies the plan to the memory file at `path` (the fleet's own,
+ * {@link MEMORY_PATH}, or one an earlier version wrote into a harness's own
+ * config, given back) and answers with the hash
  * cawco now manages, or nothing when it manages none. The file is only ever
  * deleted when it is still exactly what cawco wrote — an edited one outlives
  * the fleet's row, unmanaged.
@@ -2451,27 +1866,27 @@ export const syncMemory = async (
 };
 
 /**
- * The directories a removal emptied, taken away bottom-up. `rmdir` refuses a
- * directory with anything in it, which is exactly the check wanted: a folder
- * still holding a document of somebody's own stays where it is.
+ * The directories under `root` a removal emptied, taken away bottom-up, and
+ * `root` itself when it is CawCo's own (`root` is {@link MEMORIES_DIR}).
+ * `rmdir` refuses a directory with anything in it, which is exactly the
+ * check wanted: a folder still holding a document of somebody's own stays
+ * where it is.
  */
-const pruneEmptyDirs = async (): Promise<void> => {
+const pruneEmptyDirs = async (root: string): Promise<void> => {
   const dirs = new Set<string>();
-  const walk = async (root: string, prefix: string): Promise<void> => {
-    const entries = await readdir(root, { withFileTypes: true }).catch(
-      () => []
-    );
+  const walk = async (dir: string, prefix: string): Promise<void> => {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
     // Sibling directories are independent reads; `dirs` is an unordered set.
     await Promise.all(
       entries
         .filter((entry) => entry.isDirectory())
         .map(async (entry) => {
           dirs.add(`${prefix}${entry.name}`);
-          await walk(join(root, entry.name), `${prefix}${entry.name}/`);
+          await walk(join(dir, entry.name), `${prefix}${entry.name}/`);
         })
     );
   };
-  await walk(MEMORIES_DIR, "");
+  await walk(root, "");
 
   // Deepest first, so a parent is only tried once its children are gone —
   // sequential on purpose: rmdir-ing a child before its now-empty parent is
@@ -2480,10 +1895,12 @@ const pruneEmptyDirs = async (): Promise<void> => {
     (a, b) => b.split("/").length - a.split("/").length
   )) {
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — a directory that still holds something of the user's, or is already gone, is left alone
-    await rmdir(join(MEMORIES_DIR, relative)).catch(() => {});
+    await rmdir(join(root, relative)).catch(() => {});
   }
-  // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the root may still hold something of the user's, or be already gone
-  await rmdir(MEMORIES_DIR).catch(() => {});
+  if (root === MEMORIES_DIR) {
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the root may be already gone
+    await rmdir(root).catch(() => {});
+  }
 };
 
 /**
@@ -2529,7 +1946,8 @@ function memorySetPlan(
 const syncMemoryDocs = async (
   desired: FleetMemoryDoc[],
   managed: Record<string, string>,
-  report: Record<string, FleetItemState>
+  report: Record<string, FleetItemState>,
+  dir = MEMORIES_DIR
 ): Promise<Record<string, string>> => {
   const written: Record<string, string> = {};
 
@@ -2555,7 +1973,7 @@ const syncMemoryDocs = async (
   await Promise.all(
     [...new Set([...safe.map((doc) => doc.path), ...Object.keys(managed)])].map(
       async (path) => {
-        onDisk[path] = await fileHashAt(join(MEMORIES_DIR, path));
+        onDisk[path] = await fileHashAt(join(dir, path));
       }
     )
   );
@@ -2568,7 +1986,7 @@ const syncMemoryDocs = async (
     const doc = wanted.get(path);
     if (!doc) {
       if (plan === "remove") {
-        await rm(join(MEMORIES_DIR, path), { force: true });
+        await rm(join(dir, path), { force: true });
         report[path] = { state: "removed" };
         removed = true;
       } else {
@@ -2595,7 +2013,7 @@ const syncMemoryDocs = async (
     }
 
     try {
-      await writeStateFile(join(MEMORIES_DIR, path), doc.content);
+      await writeStateFile(join(dir, path), doc.content);
       written[path] = doc.hash;
       report[path] = { state: "applied" };
     } catch (error) {
@@ -2612,7 +2030,7 @@ const syncMemoryDocs = async (
     }
   }
   if (removed) {
-    await pruneEmptyDirs();
+    await pruneEmptyDirs(dir);
   }
 
   return written;
@@ -2866,8 +2284,8 @@ const hookScriptPath = (id: string): string => join(HOOKS_DIR, `${id}.sh`);
 /**
  * A project's copy of a hook, placed at one of its folders here: it goes to
  * the folder's sessions through its place's file (fleet-place-set.ts),
- * never into a file of the folder. The fleet's own are registered in
- * `~/.claude/settings.json`.
+ * never into a file of the folder. The fleet's own go to every session
+ * through the harness set.
  */
 const placedHook = (hook: Pick<FleetHook, "scope" | "cwd">): boolean =>
   !!hook.scope && hook.scope !== "user" && !!hook.cwd;
@@ -2875,42 +2293,192 @@ const placedHook = (hook: Pick<FleetHook, "scope" | "cwd">): boolean =>
 /**
  * What an earlier build registered in a project's folder, its
  * `<cwd>/.claude/settings.json`, taken back out: the records with a folder
- * and no `placed` mark. Each file is read and written once; one that cannot
- * be read or written is said on the log and left as it is.
+ * and no `placed` mark. One file that cannot be read or written is said on
+ * the log and left as it is.
  */
 const dropCheckoutHooks = async (
   managed: Record<string, ManagedHook>
 ): Promise<void> => {
-  const byFile = new Map<string, ManagedHook[]>();
+  const byFile = new Map<string, string[]>();
   for (const record of Object.values(managed)) {
     if (record.cwd && !record.placed) {
       const file = projectClaudeDir(record.cwd, "settings.json");
-      byFile.set(file, [...(byFile.get(file) ?? []), record]);
+      byFile.set(file, [...(byFile.get(file) ?? []), record.command]);
     }
   }
-  for (const [file, records] of byFile) {
-    const read = await readSettingsJson(file);
-    if (read.state === "unread") {
+  for (const [file, commands] of byFile) {
+    const left = await dropHookEntries(file, commands);
+    if (left) {
       console.warn(
-        `[fleet] the hooks an earlier build registered in ${file} were not taken out: ${toolWords.settingsLeft(toolWords.settingsSourceUnread(file, read.why))}`
+        `[fleet] the hooks an earlier build registered in ${file} were not taken out: ${left}`
       );
-      continue;
     }
-    const stored = read.settings;
-    const commands = records.map((record) => record.command);
-    const hooks = Object.fromEntries(
-      Object.entries(stored.hooks ?? {})
-        .map(([event, entries]) => [event, withoutHooks(entries, commands)])
-        .filter(([, entries]) => entries.length > 0)
+  }
+};
+
+/**
+ * The hook entries `commands` names ({@link entryKey}) taken out of the
+ * settings file `file`, every other key and entry as it stands: what cawco
+ * registered there, and only that. Answers why nothing was taken out (a
+ * file there that cannot be read, or written), or nothing when it was.
+ */
+const dropHookEntries = async (
+  file: string,
+  commands: readonly string[]
+): Promise<string | undefined> => {
+  const read = await readSettingsJson(file);
+  if (read.state === "unread") {
+    return toolWords.settingsLeft(
+      toolWords.settingsSourceUnread(file, read.why)
     );
-    const { hooks: _hooks, ...rest } = stored;
-    const next = Object.keys(hooks).length > 0 ? { ...rest, hooks } : rest;
-    await writeSettingsFile(file, read.file, next).catch((error: unknown) =>
+  }
+  const stored = read.settings;
+  const hooks = Object.fromEntries(
+    Object.entries(stored.hooks ?? {})
+      .map(([event, entries]) => [event, withoutHooks(entries, [...commands])])
+      .filter(([, entries]) => entries.length > 0)
+  );
+  const { hooks: _hooks, ...rest } = stored;
+  const next = Object.keys(hooks).length > 0 ? { ...rest, hooks } : rest;
+  try {
+    await writeSettingsFile(file, read.file, next);
+  } catch (error) {
+    return said(error);
+  }
+};
+
+/**
+ * What earlier versions wrote into the person's own Claude Code config,
+ * taken back out by CawCo's own records of the writes
+ * ({@link UserLayerWritten}), and nothing else: its `CLAUDE.md` and each
+ * memory document and skill while it is still exactly what was written (one
+ * he edited since is his, and stays), the hook entries registered in its
+ * `settings.json`, and each plugin installed and marketplace registered out
+ * of the vendored copies, through the CLI that installed them, with the
+ * folder they were vendored into. Answers what is still to come out, for
+ * the next converge to try again: a settings file that could not be read
+ * or written, a CLI that could not run or left a record. Nothing when all
+ * of it is out.
+ */
+const dropUserLayerWrites = async (
+  written: UserLayerWritten
+): Promise<UserLayerWritten | undefined> => {
+  const left: UserLayerWritten = {};
+  const unreported: Record<string, FleetItemState> = {};
+  if (written.memory) {
+    await syncMemory(USER_LAYER_MEMORY_PATH, null, written.memory, {}).catch(
+      (error: unknown) => {
+        console.warn(`[fleet] ${USER_LAYER_MEMORY_PATH}: ${said(error)}`);
+        left.memory = written.memory;
+      }
+    );
+  }
+  if (written.memoryDocs && Object.keys(written.memoryDocs).length > 0) {
+    await syncMemoryDocs(
+      [],
+      written.memoryDocs,
+      unreported,
+      USER_LAYER_MEMORIES_DIR
+    );
+  }
+  if (written.skills && Object.keys(written.skills).length > 0) {
+    const skills = await syncSkillFiles(
+      USER_LAYER_SKILLS_DIR,
+      [],
+      written.skills,
+      unreported
+    );
+    if (Object.keys(skills).length > 0) {
+      left.skills = skills;
+    }
+  }
+  if (written.hooks && written.hooks.length > 0) {
+    const why = await dropHookEntries(SETTINGS_PATH, written.hooks);
+    if (why) {
       console.warn(
-        `[fleet] the hooks an earlier build registered in ${file} were not taken out: ${said(error)}`
+        `[fleet] the fleet's hooks an earlier version registered in ${SETTINGS_PATH} stay for now: ${why}`
+      );
+      left.hooks = written.hooks;
+    }
+  }
+  Object.assign(left, await dropVendoredInstalls(written));
+  return Object.keys(left).length > 0 ? left : undefined;
+};
+
+/**
+ * The plugins an earlier version installed at user scope out of its
+ * vendored marketplaces, and those marketplaces' registrations, taken back
+ * out through the CLI that made them (`claude plugin uninstall <id> --scope
+ * user`, `claude plugin marketplace remove <name>`), then the folder they
+ * were vendored into, which was all CawCo's. Answers each one still there,
+ * the folder kept until none is.
+ */
+const dropVendoredInstalls = async (
+  written: Pick<UserLayerWritten, "marketplaces" | "plugins">
+): Promise<Pick<UserLayerWritten, "marketplaces" | "plugins">> => {
+  const plugins = written.plugins ?? [];
+  const marketplaces = written.marketplaces ?? [];
+  if (plugins.length === 0 && marketplaces.length === 0) {
+    await rm(USER_LAYER_VENDOR_ROOT, { recursive: true, force: true });
+    return {};
+  }
+  let bin: string;
+  try {
+    bin = await claudeToStart();
+  } catch (error) {
+    if (!(error instanceof ClaudeRefused)) {
+      throw error;
+    }
+    console.warn(
+      `[fleet] the plugins an earlier version installed stay for now: ${error.message}`
+    );
+    return { plugins, marketplaces };
+  }
+  const installed = async (): Promise<Set<string>> =>
+    new Set(
+      Object.keys(
+        (
+          await readJson(INSTALLED_PLUGINS, installedPluginsOf).catch(
+            () => undefined
+          )
+        )?.plugins ?? {}
       )
     );
+  for (const id of plugins) {
+    if ((await installed()).has(id)) {
+      await runClaude(bin, ["plugin", "uninstall", id, "--scope", "user"]);
+    }
   }
+  const pluginsLeft = [...(await installed())].filter((id) =>
+    plugins.includes(id)
+  );
+  const linked = async (): Promise<Set<string>> =>
+    new Set(
+      Object.keys(
+        (await readJson(KNOWN_MARKETPLACES, knownMarketplacesOf).catch(
+          () => undefined
+        )) ?? {}
+      )
+    );
+  for (const name of marketplaces) {
+    if ((await linked()).has(name)) {
+      await runClaude(bin, ["plugin", "marketplace", "remove", name]);
+    }
+  }
+  const marketplacesLeft = [...(await linked())].filter((name) =>
+    marketplaces.includes(name)
+  );
+  if (pluginsLeft.length === 0 && marketplacesLeft.length === 0) {
+    await rm(USER_LAYER_VENDOR_ROOT, { recursive: true, force: true });
+    return {};
+  }
+  console.warn(
+    `[fleet] what an earlier version installed stays for now: ${[...pluginsLeft, ...marketplacesLeft].join(", ")}`
+  );
+  return {
+    ...(pluginsLeft.length > 0 ? { plugins: pluginsLeft } : {}),
+    ...(marketplacesLeft.length > 0 ? { marketplaces: marketplacesLeft } : {}),
+  };
 };
 
 /**
@@ -2949,18 +2517,12 @@ interface SettledHooks {
   /**
    * The records of the hooks this pass could not settle that had a version
    * installed before, by id. That version keeps running: its record, its
-   * script on disk and its registration (its entry in the user settings,
-   * the harness set or its place's file) all stay as they were, and its
+   * script on disk and its entry in the harness set or its place's file
+   * all stay as they were, and its
    * report says the new version failed and why. A hook with no earlier
    * version is not here: nothing is installed for it.
    */
   kept: Record<string, ManagedHook>;
-  /**
-   * The script each hook's path held before this pass wrote the new one
-   * over it, by id: what {@link syncHooks} puts back when the user settings
-   * cannot take the new version, so the version before keeps running.
-   */
-  replaced: Map<string, string>;
   scriptPaths: Map<string, string>;
   settled: FleetHook[];
   /**
@@ -3001,19 +2563,14 @@ const refusedUpdate = (
  * step every hook takes before it is handed to sessions: one that fails a
  * check, or whose script does not parse, is reported and keeps the record
  * it had; one whose script was edited on this machine stays drifted, not
- * overwritten unless `force`. `fleetWideRefused`: why the user settings
- * cannot take a fleet-wide hook this pass (a file there that could not be
- * read); each fleet-wide hook is then refused before its script is written,
- * since its script's path is the one its registration there runs. The hooks
- * dir is made first: a workspace's boundary binds it read only as it starts
+ * overwritten unless `force`. The hooks dir is made first: a workspace's boundary binds it read only as it starts
  * (core `fleetSyncedPaths`), and a dir that comes later is not in a
  * boundary already running.
  */
 const settleHooks = async (
   desired: readonly FleetHook[],
   managed: Record<string, ManagedHook>,
-  report: Record<string, FleetItemState>,
-  fleetWideRefused?: string
+  report: Record<string, FleetItemState>
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: checks every enabled hook, then writes each one's script by its drift plan and parse check
 ): Promise<SettledHooks> => {
   await makeFolder(HOOKS_DIR);
@@ -3060,14 +2617,6 @@ const settleHooks = async (
       });
       continue;
     }
-    if (fleetWideRefused && !placedHook(hook)) {
-      refuse(hook.id, {
-        state: "failed",
-        cause: "unparsable",
-        detail: fleetWideRefused,
-      });
-      continue;
-    }
     wanted.push(hook);
   }
 
@@ -3076,7 +2625,6 @@ const settleHooks = async (
   // never overwritten out from under whoever edited it.
   const scriptPaths = new Map<string, string>();
   const hashes = new Map<string, string>();
-  const replaced = new Map<string, string>();
   const settled: FleetHook[] = [];
   for (const hook of wanted) {
     if (hook.handler.type !== "command" || !hook.script) {
@@ -3139,9 +2687,6 @@ const settleHooks = async (
     }
     hashes.set(hook.id, scriptHash);
     if (plan === "write") {
-      if (onDisk !== null) {
-        replaced.set(hook.id, await Bun.file(path).text());
-      }
       try {
         // Claude Code spawns it directly, so it has to carry its own execute
         // bit; set before the file takes the path, so a write that fails
@@ -3159,7 +2704,7 @@ const settleHooks = async (
     scriptPaths.set(hook.id, path);
     settled.push(hook);
   }
-  return { hashes, kept, replaced, scriptPaths, settled, unregistered };
+  return { hashes, kept, scriptPaths, settled, unregistered };
 };
 
 /** What a settled hook runs as a session takes it (fleet-harness-set.ts). */
@@ -3173,15 +2718,16 @@ const setHookOf = (hook: FleetHook, handler: HookHandler): SetHook => ({
 });
 
 /**
- * A project's settled copy of a hook at one of its folders: its entry in
- * that place's file, which its sessions take, and the record cawco
- * keeps of it. Applied once its script is written, with what a workspace
- * session makes of a hook that could rewrite input (core
- * `hookWorkspaceNote`).
+ * A settled hook as sessions take it, and the record cawco keeps of it: the
+ * fleet's own (no `cwd`), its entry in the harness set every session takes;
+ * a project's copy at its folder `cwd`, its entry in that place's file,
+ * which the folder's sessions take. Applied once its script is written,
+ * with what a workspace session makes of a hook that could rewrite input
+ * (core `hookWorkspaceNote`).
  */
-const placedHookOf = (
+const handedHookOf = (
   hook: FleetHook,
-  cwd: string,
+  cwd: string | undefined,
   settled: Pick<SettledHooks, "hashes" | "scriptPaths">,
   report: Record<string, FleetItemState>
 ): { entry: SetHook; record: ManagedHook } => {
@@ -3197,8 +2743,7 @@ const placedHookOf = (
       hash: settled.hashes.get(hook.id) ?? hook.hash,
       command: identityOf(handler),
       event: hook.event,
-      scope: hook.scope ?? "project",
-      cwd,
+      ...(cwd ? { scope: hook.scope ?? "project", cwd } : { scope: "user" }),
       placed: true,
       ...(script ? { script } : {}),
       ...(note ? { note } : {}),
@@ -3207,229 +2752,81 @@ const placedHookOf = (
 };
 
 /**
- * Writes every enabled hook's script ({@link settleHooks}), registers each
- * of the fleet's own in `~/.claude/settings.json`, and answers every one as
- * the harness set holds it (fleet-harness-set.ts): the fleet's for OpenCode
- * and pi, a project's copies for every harness. It takes back out whatever
- * a disabled or deleted hook used to have registered. A hook whose new
- * version fails a check keeps the version installed before it, registered
- * as it was ({@link SettledHooks.kept}). The one row here that is
- * executable: a hook that reaches this function runs on a shell,
- * unprompted, on every machine that gets it, which is why it is checked
- * again rather than trusted on the wire — the hub already refused an
- * invalid one at the door, but that is the hub's process, not this one's
+ * The entries of the hooks whose new version failed, each keeping the
+ * version handed out before it ({@link SettledHooks.kept}): its entry in the
+ * harness set or its place's file, carried over as the last sync wrote it,
+ * marked with the refusal.
+ */
+const keptEntries = async (
+  kept: SettledHooks["kept"]
+): Promise<Pick<SyncedHooks, "placed" | "set">> => {
+  const set: SyncedHooks["set"] = { hooks: {} };
+  const placed: SyncedHooks["placed"] = {};
+  const previousSet = await readFleetHarnessSet();
+  for (const [id, record] of Object.entries(kept)) {
+    const entry = record.cwd
+      ? (await readPlaceSet(record.cwd))?.hooks[id]
+      : previousSet.hooks[id];
+    if (!entry) {
+      continue;
+    }
+    if (record.cwd) {
+      placed[record.cwd] = {
+        ...placed[record.cwd],
+        [id]: { ...entry, refused: record.refused },
+      };
+    } else {
+      set.hooks[id] = { ...entry, refused: record.refused };
+    }
+  }
+  return { set, placed };
+};
+
+/**
+ * Writes every enabled hook's script ({@link settleHooks}) and answers every
+ * one as sessions take it: the fleet's own in the harness set
+ * (fleet-harness-set.ts), a project's copies in each place's file, which
+ * every harness's sessions read as they start (claude.ts `launchFleet`,
+ * opencode-plugin.ts, pi-runtime.ts). No settings file the person's own
+ * `claude` reads holds one. A hook whose new version fails a check keeps the
+ * version handed out before it ({@link SettledHooks.kept}). The one row
+ * here that is executable: a hook that reaches this function runs on a
+ * shell, unprompted, on every machine that gets it, which is why it is
+ * checked again rather than trusted on the wire — the hub already refused
+ * an invalid one at the door, but that is the hub's process, not this one's
  * guarantee.
  */
 const syncHooks = async (
   desired: FleetHook[],
   managed: Record<string, ManagedHook>,
   report: Record<string, FleetItemState>
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: registers the fleet's own in the user settings, then removes what a disabled/deleted hook used to have, keeping a failed update's version before
 ): Promise<SyncedHooks> => {
-  // Registration in the user settings, read before any script is written.
-  // Nothing is written over a file that is there and could not be read
-  // (claude-settings-file.ts): the rest of it is the user's own permissions
-  // and plugins, and a rewrite from an empty root would take them with it.
-  // Every fleet-wide hook is then refused before its script moves, its
-  // version before kept running.
-  const stored = await readSettingsJson(SETTINGS_PATH);
-  const settledHooks = await settleHooks(
-    desired,
-    managed,
-    report,
-    stored.state === "unread"
-      ? toolWords.settingsLeft(
-          toolWords.settingsSourceUnread(SETTINGS_PATH, stored.why)
-        )
-      : undefined
-  );
-  const { hashes, scriptPaths, settled } = settledHooks;
+  const settledHooks = await settleHooks(desired, managed, report);
+  const { settled } = settledHooks;
   const written: Record<string, ManagedHook> = {
     ...settledHooks.unregistered,
     ...settledHooks.kept,
   };
 
-  // The script cawco wrote for a hook, which a later sync's drift check and
-  // removal read; and the applied state, with what a workspace session makes
-  // of a hook that could rewrite input (core `hookWorkspaceNote`).
-  const scriptOf = (id: string): { script?: string } => {
-    const path = scriptPaths.get(id);
-    return path ? { script: path } : {};
-  };
-  const applied = (note: string | undefined): FleetItemState =>
-    note ? { state: "applied", detail: note } : { state: "applied" };
-
-  // Every settled hook as a session runs it: a project's copy goes to its
-  // folder's sessions through its place's file alone, and is applied once
-  // its script is written; the fleet's own is in the set for OpenCode and
-  // pi, and registered in the user settings below for Claude Code.
-  const set: SyncedHooks["set"] = { hooks: {} };
-  const placed: SyncedHooks["placed"] = {};
-  const fleetWide: FleetHook[] = [];
-  // A hook whose new version failed keeps the version installed before it
-  // ({@link SettledHooks.kept}): its entry in the harness set or its place's
-  // file is carried over as the last sync wrote it, and its settings entry
-  // is left where it is (it is not in `registeredHere` below).
-  const previousSet = await readFleetHarnessSet();
-  for (const [id, record] of Object.entries(settledHooks.kept)) {
-    if (!record.cwd) {
-      const entry = previousSet.hooks[id];
-      if (entry) {
-        set.hooks[id] = { ...entry, refused: record.refused };
-      }
-      continue;
-    }
-    const entry = record.placed
-      ? (await readPlaceSet(record.cwd))?.hooks[id]
-      : undefined;
-    if (entry) {
-      placed[record.cwd] = {
-        ...placed[record.cwd],
-        [id]: { ...entry, refused: record.refused },
-      };
-    }
-  }
-  // A fleet-wide hook the user settings could not take after its script
-  // was written: the script the path held before goes back, so the
-  // registration there runs the version before; that version's record and
-  // set entry are kept, marked with the refusal, or with none before, the
-  // new script is taken away and nothing is registered for it.
-  const refuseUnregistered = async (id: string, why: string): Promise<void> => {
-    const path = scriptPaths.get(id);
-    const before = settledHooks.replaced.get(id);
-    let detail = why;
-    try {
-      if (path && before !== undefined) {
-        await writeStateFile(path, before, { mode: 0o755 });
-      } else if (path && !managed[id]) {
-        await rm(path, { force: true });
-      }
-    } catch (error) {
-      detail = `${why}; ${tail(said(error))}`;
-    }
-    const refused = refusedUpdate(managed[id], {
-      state: "failed",
-      cause: "unwritable",
-      detail,
-    });
-    report[id] = refused.state;
-    const entry = previousSet.hooks[id];
-    if (refused.kept && entry) {
-      set.hooks[id] = { ...entry, refused: refused.state };
-    } else {
-      delete set.hooks[id];
-    }
-    if (refused.kept) {
-      written[id] = refused.kept;
-    } else {
-      delete written[id];
-    }
-  };
+  const { set, placed } = await keptEntries(settledHooks.kept);
   for (const hook of settled) {
     const { cwd } = hook;
-    if (!(placedHook(hook) && cwd)) {
-      set.hooks[hook.id] = setHookOf(
-        hook,
-        handlerFor(hook, scriptPaths.get(hook.id))
-      );
-      fleetWide.push(hook);
-      continue;
-    }
-    const { entry, record } = placedHookOf(hook, cwd, settledHooks, report);
-    placed[cwd] = {
-      ...placed[cwd],
-      [hook.id]: entry,
-    };
+    const at = placedHook(hook) ? cwd : undefined;
+    const { entry, record } = handedHookOf(hook, at, settledHooks, report);
     written[hook.id] = record;
-  }
-
-  // Registration in the user settings — a hook whose row was disabled or
-  // deleted still gets its old entry taken out of it. An unread file took
-  // no fleet-wide hook (settleHooks above), and is left as it is.
-  if (stored.state !== "unread") {
-    const root = stored.settings;
-    const settingsHooks = { ...root.hooks };
-
-    // Everything cawco registered out of this file last time, whatever event
-    // it ran on — a hook that moved to a different event still needs its old
-    // row gone, not just left orphaned under the event it used to fire on.
-    // A kept hook's entry stays: its version before keeps running.
-    const registeredHere = Object.entries(managed)
-      .filter(([id, record]) => !(record.cwd || settledHooks.kept[id]))
-      .map(([, record]) => record.command);
-
-    const byEvent = new Map<string, FleetHook[]>();
-    for (const hook of fleetWide) {
-      byEvent.set(hook.event, [...(byEvent.get(hook.event) ?? []), hook]);
-    }
-
-    const events = new Set<string>([
-      ...byEvent.keys(),
-      ...Object.keys(settingsHooks),
-    ]);
-    for (const event of events) {
-      const current = settingsHooks[event] ?? [];
-      const additions = (byEvent.get(event) ?? []).map((hook): HookMatcher => {
-        // Through the guard, which drops an input rewrite in a workspace
-        // session (fleet-hook-guard.ts).
-        const handler = guardedHandler(
-          handlerFor(hook, scriptPaths.get(hook.id)),
-          false
-        );
-        const note = hookWorkspaceNote(hook);
-        written[hook.id] = {
-          hash: hashes.get(hook.id) ?? hook.hash,
-          command: identityOf(handler),
-          event: hook.event,
-          scope: "user",
-          ...scriptOf(hook.id),
-          ...(note ? { note } : {}),
-        };
-        return hook.matcher
-          ? { matcher: hook.matcher, hooks: [{ ...handler }] }
-          : { hooks: [{ ...handler }] };
-      });
-      const next = [...withoutHooks(current, registeredHere), ...additions];
-      if (next.length > 0) {
-        settingsHooks[event] = next;
-      } else {
-        delete settingsHooks[event];
-      }
-    }
-
-    const settings = { ...root };
-    if (Object.keys(settingsHooks).length > 0) {
-      settings.hooks = settingsHooks;
+    if (at) {
+      placed[at] = { ...placed[at], [hook.id]: entry };
     } else {
-      settings.hooks = undefined;
-    }
-
-    let unwritable: string | undefined;
-    try {
-      await writeSettingsFile(SETTINGS_PATH, stored.file, settings);
-    } catch (error) {
-      unwritable = tail(said(error));
-    }
-    for (const hook of fleetWide) {
-      if (unwritable) {
-        // The settings still register the version before, at the same
-        // script path: its script goes back there, and it keeps running on
-        // every harness, the new version refused.
-        await refuseUnregistered(hook.id, unwritable);
-      } else {
-        // One reported failed or drifted above keeps that word.
-        report[hook.id] ??= applied(written[hook.id]?.note);
-      }
+      set.hooks[hook.id] = entry;
     }
   }
 
   await dropCheckoutHooks(managed);
 
   // A hook that is disabled or deleted, or failed this round with no version
-  // installed before it, has nothing kept alive for it above: its
-  // registration and script (if cawco wrote one) are cawco's to take away.
-  // A script still at the user layer's old path goes once the hook is
-  // registered at its new one.
+  // handed out before it, has nothing kept alive for it above: its script
+  // (if cawco wrote one) is cawco's to take away. A script still at the user
+  // layer's old path goes once the hook runs from its new one.
   const stillHere = new Set(settled.map((hook) => hook.id));
   const scripts = new Set(
     Object.values(written).flatMap((one) => (one.script ? [one.script] : []))
@@ -3566,7 +2963,7 @@ export const placeFolder = (
       }
     }
     for (const hook of settled.settled) {
-      const { entry, record } = placedHookOf(hook, cwd, settled, hookStates);
+      const { entry, record } = handedHookOf(hook, cwd, settled, hookStates);
       placedHooks[hook.id] = entry;
       records[hook.id] = record;
     }
@@ -3655,7 +3052,7 @@ const PARTS: Record<FleetPart, ConvergePart> = {
     },
   },
   plugins: {
-    writes: () => [PLUGINS_DIR, VENDOR_ROOT, SETTINGS_PATH],
+    writes: () => [VENDOR_ROOT],
     run: async (config, managed, report) => ({
       sidecar: await syncPlugins(config, managed, report),
     }),
@@ -3727,12 +3124,7 @@ const PARTS: Record<FleetPart, ConvergePart> = {
     }),
   },
   hooks: {
-    writes: () => [
-      HOOKS_DIR,
-      SETTINGS_PATH,
-      fleetHarnessSetFile(),
-      fleetPlacesDir(),
-    ],
+    writes: () => [HOOKS_DIR, fleetHarnessSetFile(), fleetPlacesDir()],
     run: async (config, managed, report) => {
       const hooks = await syncHooks(config.hooks, managed.hooks, report.hooks);
       return {
@@ -3792,15 +3184,6 @@ const failedItems = (report: FleetSyncReport): string[] => {
   );
 };
 
-/** The parts whose writes put a new entry in `~/.claude`, which each account's dir links to. */
-const USER_LAYER_PARTS: readonly FleetPart[] = [
-  "plugins",
-  "skills",
-  "memory",
-  "memoryDocs",
-  "hooks",
-];
-
 /**
  * The parts `parts` of the fleet's config converged onto Claude Code's
  * files, each by its own converge ({@link PARTS}), in the order
@@ -3826,6 +3209,11 @@ const converge = async (
     at: Date.now(),
   } satisfies FleetSyncReport;
   const sidecar: SidecarFields = {};
+  // What an earlier version wrote into the person's own config comes out
+  // first, until it has (and only then is the record of it gone).
+  if (managed.userLayer) {
+    sidecar.userLayer = await dropUserLayerWrites(managed.userLayer);
+  }
   const set: Partial<FleetHarnessSet> = {};
   const placeFields = new Map<string, Partial<Omit<FleetPlaceSet, "cwd">>>();
   const ran = FLEET_PARTS.filter((one) => parts.has(one));
@@ -3886,23 +3274,12 @@ const converge = async (
       } satisfies SidecarFields);
     });
   }
-  // Every account's Claude Code reads its user layer from its own dir: the
-  // entries `~/.claude` gained this sync are linked in there too.
-  if (USER_LAYER_PARTS.some((part) => parts.has(part))) {
-    await Promise.all(
-      accountIds().map((account) =>
-        linkUserLayer(account).catch((error: unknown) =>
-          console.warn(`[fleet] account ${account}: ${said(error)}`)
-        )
-      )
-    );
-  }
   return { ...report, at: Date.now() };
 };
 
 /**
- * One sync at a time on a machine: two of them would race over `~/.claude.json`
- * and run the same `claude plugin install` twice. A second call waits for the
+ * One sync at a time on a machine: two of them would race over the files
+ * they write and the cleanups' CLI runs. A second call waits for the
  * one in flight rather than being refused — the hub sends one on register and
  * one on every change, and those arrive together often enough.
  */
@@ -3945,7 +3322,7 @@ export const probeToolchain = (): Promise<FleetToolchain> =>
 const hookState = async (
   id: string,
   record: ManagedHook,
-  settings: () => Promise<FleetSettings>
+  set: FleetHarnessSet
 ): Promise<FleetItemState> => {
   const scriptPath = scriptPathOf(record);
   if (scriptPath?.startsWith(HOOKS_DIR)) {
@@ -3962,11 +3339,11 @@ const hookState = async (
       return { state: "failed", cause: "drifted", detail: DRIFTED };
     }
   }
-  // The last question for every hook: whether the entry cawco registered
+  // The last question for every hook: whether the entry cawco handed out
   // is still where sessions take it — a project's copy in its place's
-  // file, the fleet's own in the user settings. A script that was refused
-  // registration is kept on disk, so a matching file is not enough. A
-  // version kept running past a refused update reports that update failed
+  // file, the fleet's own in the harness set. A script that was refused
+  // is kept on disk, so a matching file is not enough. A version kept
+  // running past a refused update reports that update failed
   // ({@link ManagedHook.refused}).
   let applied: FleetItemState = record.note
     ? { state: "applied", detail: record.note }
@@ -3974,32 +3351,25 @@ const hookState = async (
   if (record.refused) {
     applied = record.refused;
   }
-  if (record.placed && record.cwd) {
-    const one = (await readPlaceSet(record.cwd))?.hooks[id];
-    return one && identityOf(one.handler) === record.command
-      ? applied
-      : {
-          state: "failed",
-          cause: "absent",
-          detail: `not in ${record.cwd}'s place file`,
-        };
-  }
-  const stored = await settings();
-  // A settings file that couldn't be read is no word that the entry is gone.
-  if (stored.state === "unread") {
+  if (!record.placed) {
     return {
       state: "failed",
-      cause: "unparsable",
-      detail: toolWords.settingsSourceUnread(SETTINGS_PATH, stored.why),
+      cause: "absent",
+      detail: "not handed to sessions yet; the next sync does",
     };
   }
-  const entries = stored.settings.hooks?.[record.event] ?? [];
-  const present = entries.some((entry) =>
-    (entry.hooks ?? []).some((one) => entryKey(one) === record.command)
-  );
-  return present
+  const one = record.cwd
+    ? (await readPlaceSet(record.cwd))?.hooks[id]
+    : set.hooks[id];
+  return one && identityOf(one.handler) === record.command
     ? applied
-    : { state: "failed", cause: "absent", detail: `not in ${SETTINGS_PATH}` };
+    : {
+        state: "failed",
+        cause: "absent",
+        detail: record.cwd
+          ? `not in ${record.cwd}'s place file`
+          : `not in ${fleetHarnessSetFile()}`,
+      };
 };
 
 /**
@@ -4030,30 +3400,24 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   for (const key of placedMcpKeys(places)) {
     report.mcp[key] = { state: "applied" };
   }
-  for (const name of managed.marketplaces) {
-    report.marketplaces[name] = (await isLinked(name))
-      ? { state: "applied" }
-      : {
-          state: "failed",
-          cause: "absent",
-          detail: `${name} is not in known_marketplaces.json`,
-        };
+  // Each plugin as sessions load it: from where the last sync wrote it.
+  const heldPlugins = await readVendoredPlugins();
+  for (const [id, hash] of Object.entries(managed.vendoredPlugins ?? {})) {
+    if (heldPlugins[id] === undefined) {
+      report.plugins[id] = {
+        state: "failed",
+        cause: "absent",
+        detail: "not on disk",
+      };
+    } else {
+      report.plugins[id] =
+        heldPlugins[id] === hash
+          ? { state: "applied" }
+          : { state: "failed", cause: "drifted", detail: DRIFTED };
+    }
   }
-  for (const id of managed.plugins) {
-    // A vendored plugin is installed out of cawco's own copy of its
-    // marketplace, under that copy's name, and the upstream id is uninstalled.
-    const installedAs =
-      managed.vendoredPlugins?.[id] === undefined ? id : vendoredIdOf(id);
-    report.plugins[id] = (await isInstalled(installedAs))
-      ? { state: "applied" }
-      : {
-          state: "failed",
-          cause: "absent",
-          detail: "not in installed_plugins.json",
-        };
-  }
-  hubOnlyStates(
-    managed.hubOnlyMarketplaces,
+  marketplaceStates(
+    [...new Set(Object.keys(report.plugins).map(marketplaceOf))],
     report.plugins,
     report.marketplaces
   );
@@ -4139,6 +3503,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   for (const [key, state] of docStates) {
     memoryDocs[key] = state;
   }
+  const harnessSet = await readFleetHarnessSet();
   // The fleet's settings, plugins and extensions: each row the last sync
   // made ready, which sessions load, applied while its file is on disk; each
   // it could not, failed in the sync's words.
@@ -4147,7 +3512,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     ...Object.fromEntries(
       await Promise.all(
         [
-          ...Object.entries((await readFleetHarnessSet()).config),
+          ...Object.entries(harnessSet.config),
           ...places.flatMap((place) => Object.entries(place.config)),
         ].map(
           async ([key, row]) => [key, await harnessConfigHeld(row)] as const
@@ -4155,16 +3520,10 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
       )
     ),
   };
-  // Read once, at the first fleet hook that asks.
-  let readSettings: Promise<FleetSettings> | undefined;
-  const settings = (): Promise<FleetSettings> => {
-    readSettings ??= readSettingsJson(SETTINGS_PATH);
-    return readSettings;
-  };
   const hookStates = await Promise.all(
     Object.entries(managed.hooks).map(
       async ([id, record]) =>
-        [id, await hookState(id, record, settings)] as const
+        [id, await hookState(id, record, harnessSet)] as const
     )
   );
   for (const [id, state] of hookStates) {
@@ -4181,17 +3540,28 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
 };
 
 /**
- * This machine's own memory set, whoever wrote it: the user CLAUDE.md and every
- * document beside it. What adoption reads — a memory a machine has been
- * collecting for a year is where the fleet's first document comes from, and a
- * machine somebody split into a set by hand is where the rest of it does.
+ * This machine's own memory set, whoever wrote it: the fleet's copy CawCo
+ * keeps here ({@link MEMORY_PATH} and every document beside it), what a
+ * compare and an adoption of an edit read; and on a machine that holds
+ * none yet, the person's own user-layer `CLAUDE.md` and its `memories`,
+ * read and never written. A memory a machine has been collecting for a year
+ * is where the fleet's first document comes from, and a machine somebody
+ * split into a set by hand is where the rest of it does.
  */
-export const readMemoryFile = async (): Promise<MachineMemorySet | null> => {
-  const file = Bun.file(MEMORY_PATH);
+export const readMemoryFile = async (): Promise<MachineMemorySet | null> =>
+  (await memorySetAt(MEMORY_PATH, MEMORIES_DIR)) ??
+  (await memorySetAt(USER_LAYER_MEMORY_PATH, USER_LAYER_MEMORIES_DIR));
+
+/** The memory set at `main` and the documents under `docsDir`, or null when there is neither. */
+const memorySetAt = async (
+  main: string,
+  docsDir: string
+): Promise<MachineMemorySet | null> => {
+  const file = Bun.file(main);
   // Each document is read on its own, all at once, kept in the listing's order.
   const docs: MachineMemoryDoc[] = await Promise.all(
-    (await markdownUnder(MEMORIES_DIR)).map(async (path) => {
-      const content = await Bun.file(join(MEMORIES_DIR, path)).text();
+    (await markdownUnder(docsDir)).map(async (path) => {
+      const content = await Bun.file(join(docsDir, path)).text();
       return { path, content, hash: hashText(content) };
     })
   );
@@ -4362,18 +3732,33 @@ const discoverSkills = async (
   cwd: string | undefined,
   managed: ClaudeFleetSidecar
 ): Promise<DiscoveredSkill[]> => {
-  const plugins = await Promise.all(
-    pluginSkillRoots(await installedPlugins()).map(({ plugin, root }) =>
+  const plugins = await Promise.all([
+    ...pluginSkillRoots(await installedPlugins()).map(({ plugin, root }) =>
       skillsIn(root, "plugin", `${plugin}:`)
-    )
-  );
+    ),
+    // The fleet's own, which sessions load from where the sync wrote them.
+    ...Object.keys(managed.vendoredPlugins ?? {}).map((id) =>
+      skillsIn(
+        join(
+          vendorDir(marketplaceOf(id)),
+          "plugins",
+          pluginNameOf(id),
+          "skills"
+        ),
+        "plugin",
+        `${pluginNameOf(id)}:`
+      )
+    ),
+  ]);
   const project = cwd
     ? await skillsIn(projectClaudeDir(cwd, "skills"), "project")
     : [];
-  const user = await skillsIn(SKILLS_DIR, "user");
+  const user = await skillsIn(USER_LAYER_SKILLS_DIR, "user");
+  const fleet = await skillsIn(SKILLS_DIR, "user");
   return [
     ...project,
-    ...user.map((skill) => ({
+    ...user,
+    ...fleet.map((skill) => ({
       ...skill,
       managed: managed.skills[skill.name] !== undefined,
     })),
@@ -4404,13 +3789,18 @@ export const inspectConfig = async (
   const linked =
     (await readJson(KNOWN_MARKETPLACES, knownMarketplacesOf)) ?? {};
 
-  const memoryHash = await fileHashAt(MEMORY_PATH);
-  const memoryFile = Bun.file(MEMORY_PATH);
+  // The fleet's copy a session takes, or on a machine that holds none yet
+  // the person's own in the user layer, as {@link readMemoryFile} reads.
+  const fleetCopy = (await fileHashAt(MEMORY_PATH)) !== null;
+  const memoryPath = fleetCopy ? MEMORY_PATH : USER_LAYER_MEMORY_PATH;
+  const docsDir = fleetCopy ? MEMORIES_DIR : USER_LAYER_MEMORIES_DIR;
+  const memoryHash = await fileHashAt(memoryPath);
+  const memoryFile = Bun.file(memoryPath);
   // Each document is read on its own, all at once, kept in the listing's order.
   const docs: NonNullable<ConfigInspection["memory"]>["docs"] =
     await Promise.all(
-      (await markdownUnder(MEMORIES_DIR)).map(async (path) => {
-        const doc = Bun.file(join(MEMORIES_DIR, path));
+      (await markdownUnder(docsDir)).map(async (path) => {
+        const doc = Bun.file(join(docsDir, path));
         const hash = hashText(await doc.text());
         return {
           path,
@@ -4432,9 +3822,14 @@ export const inspectConfig = async (
       managed.mcp ?? []
     ),
     skills: await discoverSkills(cwd, managed),
-    plugins: Object.entries(installed.plugins ?? {})
-      .filter(([, entries]) => entries.some((entry) => entry.scope === "user"))
-      .map(([id]) => id),
+    plugins: [
+      ...Object.entries(installed.plugins ?? {})
+        .filter(([, entries]) =>
+          entries.some((entry) => entry.scope === "user")
+        )
+        .map(([id]) => id),
+      ...Object.keys(managed.vendoredPlugins ?? {}),
+    ],
     marketplaces: Object.keys(linked),
     memory: memoryHash
       ? {

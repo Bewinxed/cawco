@@ -22,8 +22,10 @@ import {
   piLineOf,
   piShellEndOf,
 } from "@cawco/core/harness/pi-wire";
+import { fleetMemoryFile } from "@cawco/core/paths/fleet";
 import {
   piAgentDir,
+  piFleetSkillsDir,
   piMemoryFile,
   piSkillsDir,
 } from "@cawco/core/paths/harnesses";
@@ -83,7 +85,11 @@ import { readSettledOnce } from "../mcp-status";
 import { probeStarted } from "../probe-count";
 import { toolGate } from "../tools";
 import { FULL_CAPABILITIES } from "./capabilities";
-import { type FleetSidecar, readSidecar } from "./fleet-common";
+import {
+  dropHarnessUserLayer,
+  type FleetSidecar,
+  readSidecar,
+} from "./fleet-common";
 import { lastPromptAt, timeOf } from "./last-prompt";
 import { machineWithAccountsRuntime } from "./pi-accounts";
 import { checkPiCredential, type PiCredentialState } from "./pi-auth";
@@ -103,9 +109,17 @@ if (!PI_TOOL) {
 /** The pi CLI's catalog entry: its version gate (tools.ts `toolGate`) reads it. */
 export const PI_SPEC: ToolSpec = PI_TOOL;
 
-const PI_SKILLS = piSkillsDir();
-const PI_MEMORY = piMemoryFile();
+/** The fleet's skills for pi, in CawCo's own dir, which each session's loader takes (pi-runtime.ts `loaderSources`). */
+const PI_SKILLS = piFleetSkillsDir();
+/** The fleet's memory, in CawCo's own file, which each session takes as a context file (pi-runtime.ts `loaderSources`). */
+const PI_MEMORY = fleetMemoryFile();
 const PI_SIDECAR = join(piAgentDir(), "cawco-fleet.json");
+/**
+ * Where earlier versions wrote the fleet's memory and skills for pi: its own
+ * agent dir's `AGENTS.md` and `skills`, which every `pi` reads. Taken back
+ * out once (fleet-common.ts `dropHarnessUserLayer`).
+ */
+const USER_LAYER_WRITES = { memory: piMemoryFile(), skills: piSkillsDir() };
 
 /**
  * The id a compaction's boundary goes by, live and read back alike: pi stores
@@ -1286,7 +1300,7 @@ export class PiProfile {
     [CONTROL_MODEL_CATALOG]: () => modelCatalog(),
   };
 
-  /** pi's agent dir, where its skills, memory file and the fleet's sidecar are. */
+  /** pi's agent dir, where the fleet's sidecar is (its skills and memory are CawCo's own, core `piFleetSkillsDir` and `fleetMemoryFile`). */
   fleetHome() {
     return piAgentDir();
   }
@@ -1301,7 +1315,15 @@ export class PiProfile {
     config: PlacedFleetConfig,
     parts: ReadonlySet<FleetPart>
   ): Promise<FleetSyncReport> {
-    const sidecar = await readSidecar(PI_SIDECAR);
+    const read = await readSidecar(PI_SIDECAR);
+    // What an earlier version wrote into pi's own agent dir comes out
+    // first, until it has.
+    const sidecar: FleetSidecar = {
+      ...read,
+      userLayer: read.userLayer
+        ? await dropHarnessUserLayer(read.userLayer, USER_LAYER_WRITES)
+        : undefined,
+    };
     const skillStates: Record<string, FleetItemState> = {};
     const report: FleetSyncReport = {
       mcp: {},
@@ -1336,6 +1358,8 @@ export class PiProfile {
           ? enabled.map((row) => row.name)
           : (sidecar.mcp ?? []),
         ...(memory ? { memory } : {}),
+        ...(sidecar.userLayer ? { userLayer: sidecar.userLayer } : {}),
+        userLayerMoved: true,
       } satisfies FleetSidecar);
     }
     return report;

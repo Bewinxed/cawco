@@ -43696,8 +43696,11 @@
             "type": "string"
           },
           "root": {
-            "description": "`claude-home`: `path` is under the machine's user layer, Claude Code's\nown dir (`~/.claude`), as the machine itself places it (core paths/claude.ts\n`claudeHome`): no caller has to know a machine's home to reach it.",
-            "const": "claude-home",
+            "description": "Where `path` is, as the machine itself places it, so no caller has to\nknow a machine's home to reach it:\n- `claude-home`: under the machine's user layer, Claude Code's own dir\n  (`~/.claude`, core paths/claude.ts `claudeHome`), the person's own:\n  listed and read, never written;\n- `fleet-agents`: under the dir of the fleet's subagents, which every\n  CawCo session on Claude Code takes at its launch (core paths/claude.ts\n  `fleetAgentsDir`).",
+            "enum": [
+              "claude-home",
+              "fleet-agents"
+            ],
             "type": "string"
           }
         },

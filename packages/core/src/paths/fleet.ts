@@ -2,13 +2,12 @@
 
 import { join } from "node:path";
 import {
-  claudeSkillsDir,
-  treeStoreOf,
+  fleetClaudeRoot,
+  fleetPluginsDir,
   USER_LAYER_FILES,
   userLayerPath,
-  VENDOR_MARKETPLACES_DIR,
 } from "./claude";
-import { piMemoryFile, piSkillsDir } from "./harnesses";
+import { piFleetRoot } from "./harnesses";
 import { cawcoDataDir } from "./roots";
 
 /**
@@ -107,36 +106,59 @@ export const fleetHarnessSetFile = (): string =>
   join(cawcoDataDir(), "fleet-harness-set.json");
 
 /**
- * What the fleet sync writes on this machine that a harness loads: each
- * skills dir ({@link claudeSkillsDir}, {@link piSkillsDir}) with the tree
- * store its links land in ({@link treeStoreOf}), the vendored marketplaces
- * with their plugins' stores ({@link VENDOR_MARKETPLACES_DIR}), pi's
- * memory document, the user layer's files ({@link USER_LAYER_FILES}: Claude
- * Code's `CLAUDE.md` and `settings.json` among them), the fleet's installed
- * MCP servers ({@link fleetMcpInstallsDir}), which a session in a workspace
- * launches, and the fleet's hook scripts ({@link fleetHooksDir}), which a
- * workspace session's harness runs inside its boundary. A Linux boundary
- * binds a file as the file it was when the boundary started, and the sync
- * writes a file whole (a new inode), so a boundary in use keeps the old one
- * until it is handed over: each of these is in its form, named by the
- * hashes of the fleet items converged into it (agent fleet-converged.ts
- * `syncedHeld`), and a sync that changes one hands every boundary in use
- * over as its work ends. On 2026-10-25 running
- * boundaries read the CLAUDE.md of their start until each restarted. Its
- * dir is no bind instead: `~/.claude` holds a session's credential and
- * transcripts too. Every workspace reads each and writes none
- * (core workspace-policy.ts): a harness hands its model a skill's path, and
- * the model reads the skill's other files from there with its own tools,
- * through the boundary. pi's lie in its agent dir, a credential store, so
- * only these open there.
+ * The fleet's memory, one dir of CawCo's own: its main document
+ * ({@link fleetMemoryFile}) and the documents it links
+ * ({@link fleetMemoriesDir}). Every CawCo session takes the main document
+ * at its launch, through its harness's own channel (Claude Code's system
+ * prompt append, OpenCode's instruction entries, pi's context files); the
+ * person's own `claude`, `opencode` and `pi` read none of it.
+ */
+const fleetMemoryDir = (): string => join(cawcoDataDir(), "fleet-memory");
+
+/** The fleet's main memory document, which every harness's converge writes (agent fleet.ts `syncMemory`). */
+export const fleetMemoryFile = (): string =>
+  join(fleetMemoryDir(), "memory.md");
+
+/** The documents the fleet's main memory links, one file per path the set names, read on purpose. */
+export const fleetMemoriesDir = (): string =>
+  join(fleetMemoryDir(), "memories");
+
+/**
+ * The dirs of CawCo's own a harness loads the fleet from, each made before
+ * any workspace's boundary starts (agent boundary/plan.ts `planFor`), since a
+ * dir bind shows what the dir holds as it changes only when the dir stood as
+ * the boundary started.
+ */
+export const fleetLoadedDirs = (): string[] => [
+  fleetClaudeRoot(),
+  piFleetRoot(),
+  fleetPluginsDir(),
+  fleetMemoryDir(),
+];
+
+/**
+ * What the fleet sync writes on this machine that a harness in a workspace
+ * loads, read only there ({@link fleetLoadedDirs}): the fleet's skills and
+ * subagents for Claude Code and pi's skills, each with the tree store its
+ * links land in, the fleet's plugins, which Claude Code runs from where
+ * they lie (without them every hook of such a plugin failed, `python3:
+ * can't open file '…/plugins/axiom/hooks/…'`), the fleet's memory, the
+ * user layer's files ({@link USER_LAYER_FILES}: the person's own
+ * `CLAUDE.md` and `settings.json`, which the CLI reads), the fleet's
+ * installed MCP servers ({@link fleetMcpInstallsDir}), which a session in a
+ * workspace launches, and the fleet's hook scripts ({@link fleetHooksDir}),
+ * which a workspace session's harness runs inside its boundary. A Linux
+ * boundary binds a file as the file it was when the boundary started, and
+ * a write replaces a file whole (a new inode), so a boundary in use keeps
+ * the old one until it is handed over: the user layer's files are in its
+ * form, named by the hashes of the fleet items written into them (agent
+ * fleet-converged.ts `syncedHeld`). Every workspace reads each and writes
+ * none (core workspace-policy.ts): a harness hands its model a skill's path,
+ * and the model reads the skill's other files from there with its own
+ * tools, through the boundary.
  */
 export const fleetSyncedPaths = (): string[] => [
-  ...[claudeSkillsDir(), piSkillsDir()].flatMap((dir) => [
-    dir,
-    treeStoreOf(dir),
-  ]),
-  userLayerPath(VENDOR_MARKETPLACES_DIR),
-  piMemoryFile(),
+  ...fleetLoadedDirs(),
   ...USER_LAYER_FILES.map((name) => userLayerPath(name)),
   fleetMcpInstallsDir(),
   fleetHooksDir(),

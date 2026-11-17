@@ -1,23 +1,31 @@
 /**
- * Fleet file-sync primitives shared by every harness's machine profile.
+ * Fleet file-sync primitives shared by OpenCode's and pi's machine profiles.
  *
  * The hub owns the desired state (FleetConfig); each harness applies the parts
- * it understands to its own files — claude to `~/.claude/skills/`, opencode to
- * `~/.config/opencode/skills/`, pi to `~/.pi/agent/skills/`. A skill *is* its
- * files and the memory document *is* its text, so the hash is the whole
- * economy: an unchanged skill costs one comparison however many megabytes it
- * arrived with. What cawco wrote is named in a per-directory sidecar, and
- * only what the sidecar names is ever taken away. The sync itself is
- * fleet.ts's (`syncSkillFiles`, `syncMemory`), given each harness's paths.
+ * it understands to files of CawCo's own, which its sessions take at their
+ * launch: the fleet's memory (core `fleetMemoryFile`), and pi's skills (core
+ * `piFleetSkillsDir`). A skill *is* its files and the memory document *is*
+ * its text, so the hash is the whole economy: an unchanged skill costs one
+ * comparison however many megabytes it arrived with. What cawco wrote is
+ * named in a per-harness sidecar, and only what the sidecar names is ever
+ * taken away. The sync itself is fleet.ts's (`syncSkillFiles`, `syncMemory`),
+ * given each harness's paths.
+ *
+ * Earlier versions wrote the memory and the skills into the harness's own
+ * config dir (OpenCode's global `AGENTS.md`, pi's agent dir): their records
+ * are folded once into {@link FleetSidecar.userLayer} ({@link readSidecar}),
+ * and {@link dropHarnessUserLayer} takes those writes back out.
  */
 
+import { syncMemory, syncSkillFiles } from "../fleet";
 import { readOwnJson } from "../json-file";
 import { FleetSidecarSchema } from "../stored-shapes";
 
-/** What this harness's fleet directory was last synced to, by skill hash. */
+/** What this harness's fleet files were last synced to, by hash. */
 export interface FleetSidecar {
   /** MCP server names this harness wrote; only these are ever taken back. */
   mcp?: string[];
+  /** The hash cawco last wrote to the fleet's memory file; absent = unmanaged. */
   memory?: string;
   /**
    * OpenCode: CawCo once set `agents.plan.disabled` in the person's
@@ -25,18 +33,87 @@ export interface FleetSidecar {
    * held until its cleanup has.
    */
   planAgentDisabled?: true;
+  /** Skill name → the hash of the files cawco wrote into the harness's fleet skills dir. */
   skills: Record<string, string>;
+  /**
+   * What earlier versions wrote into the harness's own config dir, still to
+   * come out ({@link dropHarnessUserLayer}): the hash written to its memory
+   * file, and each skill's hash written into its skills dir. Gone once out.
+   */
+  userLayer?: { memory?: string; skills?: Record<string, string> };
+  /** Set once the records of those writes were folded into {@link userLayer}. */
+  userLayerMoved?: true;
 }
 
+/**
+ * The sidecar at `path`. One an earlier version left, whose records name the
+ * harness's own config dir, comes back with them folded into
+ * {@link FleetSidecar.userLayer} and its own records empty: the converge of
+ * every part a new build runs as the hub welcomes it writes each item into
+ * CawCo's own files afresh.
+ */
 export const readSidecar = async (path: string): Promise<FleetSidecar> => {
   const stored = await readOwnJson(
     path,
     (value) => FleetSidecarSchema.partial().safeParse(value).data
   );
+  const mcp = stored?.mcp ?? [];
+  const planAgentDisabled = stored?.planAgentDisabled
+    ? { planAgentDisabled: true as const }
+    : {};
+  if (!stored?.userLayerMoved) {
+    const earlier = {
+      ...(stored?.memory ? { memory: stored.memory } : {}),
+      ...(stored?.skills && Object.keys(stored.skills).length > 0
+        ? { skills: stored.skills }
+        : {}),
+    };
+    return {
+      skills: {},
+      mcp,
+      ...planAgentDisabled,
+      ...(Object.keys(earlier).length > 0 ? { userLayer: earlier } : {}),
+      userLayerMoved: true,
+    };
+  }
   return {
-    skills: stored?.skills ?? {},
-    ...(stored?.memory ? { memory: stored.memory } : {}),
-    ...(stored?.planAgentDisabled ? { planAgentDisabled: true as const } : {}),
-    mcp: stored?.mcp ?? [],
+    skills: stored.skills ?? {},
+    ...(stored.memory ? { memory: stored.memory } : {}),
+    ...planAgentDisabled,
+    mcp,
+    ...(stored.userLayer ? { userLayer: stored.userLayer } : {}),
+    userLayerMoved: true,
   };
+};
+
+/**
+ * What earlier versions wrote into a harness's own config dir, taken back out
+ * by the sidecar's records of it: its memory file (`memory`) and each skill
+ * in its skills dir (`skills`), each only while it is still exactly what was
+ * written; one the person edited since is his, and stays. Answers what is
+ * still to come out, for the next sync to try again; nothing when all is out.
+ */
+export const dropHarnessUserLayer = async (
+  written: NonNullable<FleetSidecar["userLayer"]>,
+  paths: { memory: string; skills: string }
+): Promise<FleetSidecar["userLayer"]> => {
+  const memory = written.memory
+    ? await syncMemory(paths.memory, null, written.memory, {}).then(
+        () => undefined,
+        (error: unknown) => {
+          console.warn(
+            `[fleet] ${paths.memory}: ${error instanceof Error ? error.message : String(error)}`
+          );
+          return written.memory;
+        }
+      )
+    : undefined;
+  const skills = written.skills
+    ? await syncSkillFiles(paths.skills, [], written.skills, {})
+    : {};
+  const left = {
+    ...(memory ? { memory } : {}),
+    ...(Object.keys(skills).length > 0 ? { skills } : {}),
+  };
+  return Object.keys(left).length > 0 ? left : undefined;
 };

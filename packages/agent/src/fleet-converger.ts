@@ -1246,7 +1246,7 @@ export class FleetConverger {
  * What this machine holds of the fleet's content on its disk now, read from
  * every harness that keeps a copy. One set per harness, INTERSECTED — never
  * unioned. Skills are written by more than one harness into more than one
- * directory (claude's `~/.claude/skills`, pi's own), so a hash one of them
+ * directory (claude's, pi's), so a hash one of them
  * holds is not a hash the machine holds: leaving those bytes out would
  * strand every harness that still needs them. A harness that converges none
  * reads no set and is not counted, which is why opencode — which reads

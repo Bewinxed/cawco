@@ -2483,7 +2483,7 @@ const FsPayloadShape = declared(
     op: z.enum(["list", "read", "write", "media"]),
     path: z.string(),
     requestId: z.string(),
-    root: z.literal("claude-home").optional(),
+    root: z.enum(["claude-home", "fleet-agents"]).optional(),
   }),
   "FsPayload",
   "packages/core/src/protocol.ts"
