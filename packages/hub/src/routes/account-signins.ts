@@ -27,6 +27,7 @@ export const accountSigninRoutes = ({
   db,
   finishJoined,
   joinOn,
+  keepCodex,
   keepPending,
   noteCodexSignin,
   pendingKey,
@@ -47,6 +48,7 @@ export const accountSigninRoutes = ({
   | "db"
   | "finishJoined"
   | "joinOn"
+  | "keepCodex"
   | "keepPending"
   | "noteCodexSignin"
   | "pendingKey"
@@ -421,6 +423,24 @@ export const accountSigninRoutes = ({
             ok: true as const,
             ...signOutCodex(account, named, params.machineId, false),
           };
+        }
+      )
+      // Takes back a Codex sign-out still waiting for the Codex sessions
+      // running there (limit-moves.ts `keepCodex`): the account stays
+      // signed in for Codex on the machine, and its sessions there go on.
+      .post(
+        "/api/accounts/:id/machines/:machineId/codex-signin/keep",
+        ({ params }) => {
+          const account = known(params.id);
+          if (account instanceof ElysiaStatus) {
+            return account;
+          }
+          return keepCodex(account, params.machineId)
+            ? { ok: true as const }
+            : problem(409, {
+                code: "no-codex-signout",
+                detail: `${accountNameAmong(account, db.accounts.list())} has no Codex sign-out waiting there: it was already signed out, or kept.`,
+              });
         }
       )
       // A key account's key, typed once in the dashboard: relayed to each

@@ -366,6 +366,20 @@ export const signOutCodexOn = (
     )
   );
 
+/**
+ * Takes back a Codex sign-out still waiting for the account's Codex
+ * sessions on one machine: it stays signed in for Codex there.
+ */
+export const keepCodexOn = (id: string, machineId: string): Promise<unknown> =>
+  accountsWrite(
+    hubData(
+      hub.api
+        .accounts({ id })
+        .machines({ machineId })
+        ["codex-signin"].keep.post()
+    )
+  );
+
 /** What sending a key came to on one machine: its result, or why it didn't arrive. */
 export type KeyDelivery =
   | { machineId: string; result: ProviderSigninResult }

@@ -178,6 +178,8 @@ export const accountsWords = {
      * on it there (hub limit-moves.ts `signOutCodex`): Codex signs out once
      * the last is at rest.
      */
+    /** Takes that waiting sign-out back: Codex stays signed in there. */
+    keepSignedIn: "Keep signed in",
     codexLeaving: (sessions: number) => {
       if (sessions === 0) {
         return "Signing out…";

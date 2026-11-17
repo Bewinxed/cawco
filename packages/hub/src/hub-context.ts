@@ -50,7 +50,6 @@ export interface HubContext
     >,
     Pick<
       ReturnType<typeof createAccountSignin>,
-      | "codexLeaving"
       | "codexSignins"
       | "forgetCodexEverywhere"
       | "homeStamps"

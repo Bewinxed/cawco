@@ -1756,6 +1756,7 @@ export const createServer = (
     removeWithSessions: () => removeWithSessions,
     signOutEverywhere: () => signOutEverywhere,
     signOutCodex: () => signOutCodex,
+    keepCodex: () => keepCodex,
     signOutMachine: () => signOutMachine,
     askedStart: () => askedStart,
     checkRefused: () => checkRefused,
@@ -1871,6 +1872,7 @@ export const createServer = (
     removalOf,
     removeWithSessions,
     replaceAtWake,
+    keepCodex,
     signOutCodex,
     signOutMachine,
     strandedStall,
@@ -11708,7 +11710,11 @@ export const createServer = (
     // A ChatGPT session stopped on its plan offers its way on.
     const offer =
       stall &&
-      stallOffer(db, { listing: modelListing, resolvedModel }, instanceId);
+      stallOffer(
+        db,
+        { listing: modelListing, resolvedModel, signinsFor },
+        instanceId
+      );
     return offer ? { ...stall, offer } : stall;
   });
   stalledNowPort.fill(() => [

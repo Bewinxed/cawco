@@ -1342,6 +1342,71 @@
         }
       }
     },
+    "/api/accounts/{id}/machines/{machineId}/codex-signin/keep": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiAccountsByIdMachinesByMachineIdCodexSigninKeep",
+        "responses": {
+          "200": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSigninKeep 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSigninKeep200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSigninKeep 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSigninKeep404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSigninKeep 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSigninKeep409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAccountsByIdMachinesByMachineIdCodexSigninKeep 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdCodexSigninKeep422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/accounts/{id}/machines/{machineId}/signin": {
       "post": {
         "parameters": [
@@ -123244,6 +123309,128 @@
             "type": "number",
             "enum": [
               504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSigninKeep200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSigninKeep404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "no-account"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSigninKeep409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "no-codex-signout"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdCodexSigninKeep422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
             ]
           },
           "title": {

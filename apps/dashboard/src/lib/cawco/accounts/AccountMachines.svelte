@@ -43,11 +43,12 @@
   import NsPopoverGroup from "#lib/cawco/spawn/NsPopoverGroup.svelte";
   import {
     accountsStore,
+    keepCodexOn,
     signOutCodexOn,
     signOutOn,
   } from "#lib/cawco/stores/accounts.svelte.js";
   import { TabDraft } from "#lib/cawco/tab-draft.svelte.js";
-  import { buttonVariants } from "#lib/components/ui/button/index.js";
+  import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
   import { IconLogout, IconWarningTriangle } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
@@ -293,6 +294,22 @@
     }
   }
 
+  /** Rows whose waiting Codex sign-out is being taken back. */
+  const keeping = new SvelteMap<string, boolean>();
+
+  /** Takes back a Codex sign-out that waits for its sessions on the row's machine. */
+  async function keepCodex(place: Place) {
+    refusals.delete(place.key);
+    keeping.set(place.key, true);
+    try {
+      await keepCodexOn(account.id, place.machine.machineId);
+    } catch (error) {
+      refusals.set(place.key, failureWords(error));
+    } finally {
+      keeping.delete(place.key);
+    }
+  }
+
   /** What a row says: nothing for a machine it is signed in on. */
   const WORDS = words.machines.state;
 </script>
@@ -367,7 +384,15 @@
             </span>
           {/if}
           <span class="flex min-w-0 justify-end">
-            {#if online && (state !== "signed-in" || open)}
+            {#if online && leaving !== null && !open}
+              <Button
+                label={words.machines.keepSignedIn}
+                onclick={() => keepCodex(place)}
+                pending={keeping.get(place.key) === true}
+                size="sm"
+                variant="outline"
+              />
+            {:else if online && (state !== "signed-in" || open)}
               <NsPopover
                 align="end"
                 id="signin-{account.id}-{place.key}"

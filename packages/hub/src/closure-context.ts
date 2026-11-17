@@ -467,6 +467,8 @@ export interface ClosureContext {
   ) => { accountId?: string } | { refusal: string };
   cloneForContinuation: SessionCallsDeps["cloneForContinuation"];
   closePreview: (instanceId: string) => { instanceId: string; state: "closed" };
+  /** Whether a Codex sign-out of the account on the machine waits for its sessions (account-signin.ts `codexLeaves`). */
+  codexLeaving: (accountId: string, machineId: string) => boolean;
   coldReading: SessionCallsDeps["coldReading"];
   coldWork: WorkItemCallsDeps["coldWork"];
   commandQueues: Map<string, (queue: CommandQueue | null) => void>;
@@ -705,6 +707,8 @@ export interface ClosureContext {
     identity: AccountIdentity
   ) => Promise<AccountJoined | { error: string }>;
   keepAliveScheduler: ReturnType<typeof createKeepAliveScheduler>;
+  /** Takes back a Codex sign-out still waiting for its sessions (limit-moves.ts `keepCodex`); false when none waits. */
+  keepCodex: (account: Account, machineId: string) => boolean;
   /**
    * A Codex sign-out of the account on the machine waits for its Codex
    * sessions there (`waits`), or is over (account-signin.ts `codexLeaves`).

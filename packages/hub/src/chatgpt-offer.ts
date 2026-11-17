@@ -1,4 +1,5 @@
 import {
+  type AccountSignin,
   isChatgptPlan,
   isOpenaiKey,
   modelOn,
@@ -28,7 +29,7 @@ const stoppedOnPlan = (db: DbShape, instanceId: string): boolean => {
 /**
  * What a session stopped on a ChatGPT plan offers the person (core
  * `StallOffer`), or undefined for any other stop: to continue on the
- * OpenAI API-key account signed in on its machine, first by order, and
+ * OpenAI API-key account signed in for its harness on its machine, first by order, and
  * always on another agent or model. The key's model is the session's own
  * as that key opens it, where its harness lists it there; else the first
  * model of the key's provider the harness lists. With none listed, the key
@@ -40,6 +41,8 @@ export const stallOffer = (
   db: DbShape,
   how: {
     listing: (machineId: string, harness: HarnessKind) => ModelListing;
+    /** The sign-ins a session in `harness` runs on (account-signin.ts `signinsFor`): a Codex session's are Codex's own. */
+    signinsFor: (harness: string) => AccountSignin[];
     resolvedModel: (
       machineId: string,
       harness: string,
@@ -52,7 +55,9 @@ export const stallOffer = (
   if (!(row && stoppedOnPlan(db, instanceId))) {
     return;
   }
-  const signins = db.accounts.signins();
+  // The key where the session's harness can start on it: a Codex session
+  // on the key's Codex home there, any other on the key's own sign-in.
+  const signins = how.signinsFor(row.harness);
   const [key] = db.accounts
     .list()
     .filter(

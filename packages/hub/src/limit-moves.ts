@@ -100,6 +100,7 @@ export type LimitMovesContext = Pick<
   | "forgetPendingOf"
   | "inFlightFor"
   | "inputRefusal"
+  | "codexLeaving"
   | "keepCodexLeave"
   | "keptNextWords"
   | "knownProviders"
@@ -133,6 +134,7 @@ export type LimitMovesContext = Pick<
   | "startCompaction"
   | "startContinuation"
   | "taskAccounts"
+  | "unstrand"
   | "tickLeaves"
   | "turnInFlight"
 >;
@@ -2230,7 +2232,46 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     return { moving, staying };
   };
 
+  /**
+   * Takes back a Codex sign-out of `account` on `machineId` that still waits
+   * for its sessions ({@link signOutCodex}), as a person asked: its Codex
+   * home there was never signed out, so the account counts as signed in for
+   * Codex there again, each of its Codex sessions there drops the move that
+   * sign-out owed it, and one it stopped is no longer stopped. False when
+   * no sign-out waits there.
+   */
+  const keepCodex = (account: Account, machineId: string): boolean => {
+    if (!ctx.codexLeaving(account.id, machineId)) {
+      return false;
+    }
+    ctx.noteCodexSignin(account.id, machineId, true);
+    const rows = ctx.db
+      .instancesOnAccount(account.id)
+      .filter((row) => row.machineId === machineId && row.harness === "codex");
+    for (const row of rows) {
+      const owed = ctx.owedMoves.get(row.id);
+      if (
+        owed &&
+        !owed.byHand &&
+        owed.move?.kind === "moved" &&
+        owed.move.signedOut
+      ) {
+        ctx.owedMoves.delete(row.id);
+      }
+      if (ctx.db.accounts.strandedOf(row.id)?.why === "codex-signed-out") {
+        ctx.unstrand(row.id);
+      }
+    }
+    console.log(
+      `[accounts] ${accountNameAmong(account, ctx.db.accounts.list())} stays signed in for Codex on ${ctx.machineName(machineId)}: its waiting sign-out was taken back.`
+    );
+    ctx.publishStalls();
+    ctx.publishUsage(machineId);
+    return true;
+  };
+
   return {
+    keepCodex,
     owedCarries,
     takeOwedMove,
     owedOn,
