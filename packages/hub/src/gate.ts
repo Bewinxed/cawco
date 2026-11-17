@@ -1,6 +1,7 @@
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { isMachinePath, type MachinePath } from "@cawco/core/machine-path";
-import type { DeclaredStep, RunsOnCapability } from "@cawco/core/project-gate";
+import type { DeclaredStep } from "@cawco/core/project-gate";
+import type { RunsOnCapability } from "./runs-on";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { workWords } from "@cawco/core/words/work";
 import {

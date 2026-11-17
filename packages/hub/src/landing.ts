@@ -68,7 +68,7 @@
 
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
-import type { RunsOnCapability } from "@cawco/core/project-gate";
+import type { RunsOnCapability } from "./runs-on";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { CommandStopped, WouldWait } from "./machine-pause";
 

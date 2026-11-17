@@ -14,9 +14,11 @@
 
 import { keysOf } from "@cawco/core/keys-of";
 import { machinesCalled } from "@cawco/core/machine-names";
-import type { RunsOnCapability } from "@cawco/core/project-gate";
 
-/** Each capability (core `RunsOnCapability`), and the OS prefix (`os`'s part before `-`) whose machines have it. */
+/** A machine capability a task's attempts may run on: `apple` a Mac, `linux` a Linux machine. */
+export type RunsOnCapability = "apple" | "linux";
+
+/** Each capability ({@link RunsOnCapability}), and the OS prefix (`os`'s part before `-`) whose machines have it. */
 const CAPABILITY_OS: Record<RunsOnCapability, string> = {
   apple: "darwin",
   linux: "linux",

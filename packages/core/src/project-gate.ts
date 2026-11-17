@@ -4,8 +4,6 @@
  * (`GET /api/projects/:id/gate`).
  */
 
-/** A machine capability a step may need: `apple` a Mac, `linux` a Linux machine (hub runs-on.ts). */
-export type RunsOnCapability = "apple" | "linux";
 
 /** A step as the project declares it. */
 export interface DeclaredStep {
@@ -15,7 +13,7 @@ export interface DeclaredStep {
   /** What the report calls it. */
   name: string;
   /** The capability of the machine it runs on; absent: the workspace's own. */
-  needs?: RunsOnCapability;
+  needs?: "apple" | "linux";
   /** A failure leaves the steps after it unrun. */
   stopsRest: boolean;
   /**

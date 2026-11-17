@@ -65,15 +65,16 @@
  */
 import { machineCalled } from "@cawco/core/machine-names";
 import { isOneOf } from "@cawco/core/one-of";
-import type {
-  DeclaredStep,
-  ProjectGate,
-  RunsOnCapability,
-} from "@cawco/core/project-gate";
+import type { DeclaredStep, ProjectGate } from "@cawco/core/project-gate";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { readFolderFile } from "./project-folder";
 
-import { capabilitiesOf, RUNS_ON_CAPABILITIES, runsOnWords } from "./runs-on";
+import {
+  capabilitiesOf,
+  RUNS_ON_CAPABILITIES,
+  type RunsOnCapability,
+  runsOnWords,
+} from "./runs-on";
 
 /** The file in the project's folder that declares its gate. */
 export const GATE_FILE = "gate.md";
