@@ -6,6 +6,14 @@ import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { SendPayload } from "@cawco/core/protocol";
 
+/**
+ * The system origin name of the hub's word to a session's process about its
+ * move: that it may go on at its account's limit (at-limit.ts
+ * `CARRY_ON_ORIGIN`), what the move ended, or that it answers its refused
+ * first turn on the hub's next model (start-model-moves.ts).
+ */
+export const LIMIT_ORIGIN = "limit";
+
 export const sessionWord = (
   row: { id: string; machineId: string },
   content: string,

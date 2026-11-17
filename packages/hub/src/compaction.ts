@@ -30,8 +30,7 @@ import {
   recordsOf,
 } from "./open-items";
 import type { createSends } from "./sends";
-import { LIMIT_ORIGIN } from "./sends";
-import { sessionWord } from "./session-word";
+import { LIMIT_ORIGIN, sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
 
 /** One of the hub's own lines in a session's transcript: a system frame under the line's own id. */

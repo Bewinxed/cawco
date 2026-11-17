@@ -1,0 +1,1 @@
+ALTER TABLE `instances` ADD `hub_model` integer DEFAULT false NOT NULL;

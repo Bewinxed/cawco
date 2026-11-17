@@ -23,6 +23,12 @@ import { unreachable } from "./unreachable";
  * placement over them.
  */
 
+/** A model, as its harness runs it, and the account it ran on, that a refused first turn already tried (start-model-moves.ts). */
+export interface TriedPick {
+  accountId: string;
+  model: string;
+}
+
 /** A model a start picked: none for no model, and for `default`, which every harness lists as its own pick. */
 export const pickedModel = (
   model: string | null | undefined
