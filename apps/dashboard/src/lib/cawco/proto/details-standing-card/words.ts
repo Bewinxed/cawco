@@ -7,9 +7,6 @@
  */
 import type { LandsMode } from "@cawco/core/injected";
 
-const plural = (count: number, one: string, many: string): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? one : many}`;
-
 export const standingWords = {
   card: "Project details",
 
@@ -45,11 +42,11 @@ export const standingWords = {
   tasks: {
     title: "Tasks kept",
     notes: {
-      cawco: "Files in the project.",
-      github: "Two-way with one repository.",
-      linear: "Two-way with one team.",
+      cawco: "Files only.",
+      github: "Two-way, one repo.",
+      linear: "Two-way, one team.",
     },
-    linked: (count: number) => plural(count, "task linked", "tasks linked"),
+    linked: (count: number) => `${count.toLocaleString("en")} linked`,
     syncing: "First sync under way",
     synced: (at: string) => `In step at ${at}`,
     refused: "Sync refused",
@@ -68,10 +65,10 @@ export const standingWords = {
       none: "None",
     } satisfies Record<LandsMode, string>,
     notes: {
-      main: "Onto the default branch.",
-      branch: "A branch of its own.",
-      pr: "A branch and a pull request.",
-      none: "No commits, outputs only.",
+      main: "Onto main.",
+      branch: "Own branch.",
+      pr: "Pull request.",
+      none: "No commits.",
     } satisfies Record<LandsMode, string>,
   },
 
@@ -83,14 +80,13 @@ export const standingWords = {
     wait: "Wait",
     waitNote: "Keeps its connectors.",
     move: "Move on",
-    moveNote: "Its connectors stay behind.",
+    moveNote: "Loses its connectors.",
   },
 
   lfs: {
     title: "Large files",
     each: "Each repository's own",
-    eachNote: "Each origin keeps them.",
     one: "One address",
-    oneNote: "Every repository uses it.",
+    oneNote: "Overrides theirs.",
   },
 };

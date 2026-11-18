@@ -45,6 +45,7 @@ export const HowItRuns = {
     const board = await import("#lib/cawco/stores/board.svelte.js");
     const projects = await import("#lib/cawco/stores/projects.svelte.js");
     board.holdMachines(MACHINES);
+    board.boardState.fleetRead = true;
     projects.keepProjects([ATLAS], projects.projectsLeave());
   },
 };

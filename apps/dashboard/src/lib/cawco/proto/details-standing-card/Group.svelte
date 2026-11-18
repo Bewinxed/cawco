@@ -23,10 +23,11 @@
 
 <section class="flex min-w-0 flex-col gap-space-3" aria-label={title}>
   <div class="flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2">
-    <h3 class="m-0 min-w-0 type-label text-ink-muted">
-      {title}{#if clause}<span class="type-meta text-ink-subtle">
-          {clause}</span
-        >{/if}
+    <h3
+      class="m-0 flex min-w-0 items-baseline gap-space-1 type-label text-ink-muted"
+    >
+      <span>{title}</span>
+      {#if clause}<span class="type-meta text-ink-subtle">{clause}</span>{/if}
     </h3>
     {#if act}
       <div class="ms-auto flex flex-none items-center">{@render act()}</div>

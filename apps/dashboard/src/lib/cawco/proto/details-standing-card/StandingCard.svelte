@@ -8,7 +8,7 @@
    * Tasks kept on the left, Who decides, Finished work goes, Account and
    * Large files on the right, so the two leading facts (where it lives and
    * who decides) stand side by side at the top. Reading and focus order run
-   * down the left column, then the right. Under the desk line it is one
+   * down the left column, then the right. As the phone's sheet it is one
    * column in that order.
    *
    * The control is the reading: a choice's options show with the one the hub
@@ -77,7 +77,10 @@
     onaccount,
     onatlimit,
     onlfs,
+    form = "card",
   }: {
+    /** `card`: the desk's, two columns side by side; `sheet`: the phone's, one column. */
+    form?: "card" | "sheet";
     project: ProjectRow;
     /** The fleet's machines, which name each place's. */
     machines: Machine[];
@@ -168,10 +171,14 @@
 </script>
 
 <div
-  class="grid min-w-0 grid-cols-1 gap-x-space-8 gap-y-space-7 p-space-5 desk:grid-cols-2"
+  class={[
+    "grid min-w-0 gap-x-space-8 gap-y-space-7 p-space-5",
+    form === "card" ? "grid-cols-2" : "grid-cols-1",
+  ]}
+  data-form={form}
   data-standing-card
 >
-  <div class="flex min-w-0 flex-col gap-space-7">
+  <div class="flex min-w-0 flex-col gap-space-5">
     <Group title={words.places.title}>
       <ul class="m-0 flex min-w-0 list-none flex-col gap-space-5 p-0">
         {#each places as place (place.id)}
@@ -222,7 +229,8 @@
       >
         {#each TRACKERS as one (one)}
           <OptionGroupItem value={one}>
-            <span class="mark-line flex items-center gap-space-2 type-label">
+            <!-- mark-line: a tile's mark stands over its name, the way a tile's picture does, so the three names start on one edge -->
+            <span class="flex flex-col items-start gap-space-1 type-label">
               {#if one === "cawco"}
                 <img
                   alt=""
@@ -245,17 +253,22 @@
         <div class="flex min-w-0 flex-col gap-space-2">
           <div class="flex min-w-0 items-baseline gap-space-3">
             <a
-              class="min-w-0 truncate type-label text-ink-strong underline-offset-4 hover:underline"
+              class="mark-line flex min-w-0 items-center gap-space-1 type-label text-ink-strong underline-offset-4 hover:underline"
               href={binding.targetUrl}
               rel="noreferrer"
-              target="_blank">{binding.targetName}</a
+              target="_blank"
+              ><span
+                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                >{binding.targetName}</span
+              >
+              <IconExternalLinear
+                aria-hidden="true"
+                class="size-icon-sm flex-none text-ink-muted"
+                data-box
+              /></a
             >
-            <span class="min-w-0 truncate type-meta text-ink-muted"
+            <span class="ms-auto min-w-0 truncate type-meta text-ink-muted"
               >{binding.connection}</span
-            >
-            <span
-              class="ms-auto flex-none type-meta text-ink-muted tabular-nums"
-              >{words.tasks.linked(binding.linked)}</span
             >
           </div>
           <div class="flex min-w-0 items-center gap-space-3">
@@ -286,6 +299,9 @@
                   >{words.tasks.refused}: {binding.reason}</span
                 >
               {/if}
+              <span class="flex-none text-ink-muted tabular-nums"
+                >{words.tasks.linked(binding.linked)}</span
+              >
             </span>
             <Button onclick={onsync} size="xs" variant="outline"
               >{words.tasks.syncNow}</Button
@@ -332,7 +348,7 @@
     </Group>
   </div>
 
-  <div class="flex min-w-0 flex-col gap-space-7">
+  <div class="flex min-w-0 flex-col gap-space-5">
     <Group title={words.decides.title}>
       {#snippet act()}
         <Button onclick={onopendecides} size="xs" tone="quiet" variant="ghost"
@@ -356,26 +372,24 @@
       {:else}
         <!-- Three fixed columns: the kind, who settles it (a sunk chip,
              each starting on one edge), and the project's own mark. -->
-        <dl class="m-0 flex min-w-0 flex-col gap-space-1">
+        <dl class="m-0 flex min-w-0 flex-col">
           {#each decides.kinds as one (one.kind)}
             <div class="flex min-w-0 items-center gap-space-3">
               <dt
-                class="w-40 min-w-0 flex-none truncate type-label text-ink-row"
+                class="w-36 min-w-0 flex-none truncate type-label text-ink-row"
               >
                 {decidesWords.kinds[one.kind].name}
               </dt>
-              <dd class="m-0 min-w-0 flex-auto">
+              <dd class="m-0 w-32 min-w-0 flex-none">
                 <span
-                  class={chipVariants({ variant: "setting" })}
+                  class={chipVariants({ variant: "setting", size: "compact" })}
                   data-variant="static"
                   ><span data-slot="chip-label"
                     >{decidesWords[one.by].name}</span
                   ></span
                 >
               </dd>
-              <dd
-                class="m-0 w-space-8 flex-none text-end type-meta text-ink-muted"
-              >
+              <dd class="m-0 min-w-0 flex-auto type-meta text-ink-muted">
                 {#if one.own}{words.decides.ownMark}{/if}
               </dd>
             </div>
@@ -415,7 +429,8 @@
           {#each LANDS_MODES as mode (mode)}
             {@const Glyph = LANDS_GLYPH[mode]}
             <OptionGroupItem value={mode}>
-              <span class="mark-line flex items-center gap-space-2 type-label">
+              <!-- mark-line: a tile's glyph stands over its word, so four words fit four narrow tiles -->
+              <span class="flex flex-col items-start gap-space-1 type-label">
                 <Glyph
                   aria-hidden="true"
                   class="size-icon-md flex-none text-ink-muted"
@@ -516,9 +531,6 @@
         >
           <OptionGroupItem value="each">
             <span class="type-label">{words.lfs.each}</span>
-            <span class="type-meta text-pretty text-ink-muted"
-              >{words.lfs.eachNote}</span
-            >
           </OptionGroupItem>
           <OptionGroupItem value="one">
             <span class="type-label">{words.lfs.one}</span>
