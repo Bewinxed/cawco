@@ -181,6 +181,7 @@ export { default as IconFolderGit } from "~icons/solar/folder-git-bold-duotone";
 export { default as IconFolderLinear } from "~icons/solar/folder-linear";
 export { default as IconFolderOpen } from "~icons/solar/folder-open-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";
+export { default as IconForbidden } from "~icons/solar/forbidden-circle-bold-duotone";
 export { default as IconImage } from "~icons/solar/gallery-bold-duotone";
 /** Files' artifacts as their thumbnails' masonry (FilesList's Thumbnails | List). */
 export { default as IconThumbnails } from "~icons/solar/gallery-wide-bold-duotone";
@@ -190,12 +191,15 @@ export {
 } from "~icons/solar/ghost-smile-bold-duotone";
 /** The agent driving a browser, in its address (BrowserAddress): the agent's ghost, a bar's linear cut. */
 export { default as IconAgentLinear } from "~icons/solar/ghost-smile-linear";
+export { default as IconGitBranch } from "~icons/solar/git-branch-bold-duotone";
+export { default as IconGitCommit } from "~icons/solar/git-commit-bold-duotone";
 /** What differs between two states: Compare (bare: the scale stands on a tile, The Solar Duotone Rule). */
 export { default as IconCompare } from "~icons/solar/git-diff-bold-duotone";
 export { default as IconCompareLinear } from "~icons/solar/git-diff-linear";
 /** Fork, Spin off: a session forked from another (the bare cut, no enclosure). */
 export { default as IconFork } from "~icons/solar/git-fork-bold-duotone";
 export { default as IconForkLinear } from "~icons/solar/git-fork-linear";
+export { default as IconGitPullRequest } from "~icons/solar/git-pull-request-bold-duotone";
 export {
   default as IconGlobe,
   default as IconToolWeb,

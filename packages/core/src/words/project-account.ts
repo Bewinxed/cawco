@@ -14,11 +14,9 @@ export const projectAccountWords = {
   select: "The account this project's sessions start on",
   /** The option for none: today's routing. */
   routing: "Fleet's routing",
-  /** Under the row with none set. */
-  routed: "Each session starts where the fleet's routing places it.",
   /** Under the row with one set. */
   set: (name: string) =>
-    `Caw, routines and delegates start on ${name}, with its connectors. A session that names its own account runs there.`,
+    `Caw, routines and delegates start on ${name}, with its connectors.`,
   /** Under the row when the one set is not signed in on any machine. */
   signedOut: (name: string) =>
     `${name} isn't signed in on any machine, so nothing in this project can start until it is.`,

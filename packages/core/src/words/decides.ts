@@ -477,6 +477,8 @@ export const decidesWords = {
     `Follows the fleet, except ${count} ${count === 1 ? "kind" : "kinds"}`,
   /** decides.md doesn't read: every kind is his. */
   detailsUnread: "decides.md doesn't read: every choice comes to you",
+  /** The way from the details to the project's Who decides. */
+  detailsOpen: "Change who decides",
 
   // ── Pictures ────────────────────────────────────────────────────────────
   /** The face's button. */

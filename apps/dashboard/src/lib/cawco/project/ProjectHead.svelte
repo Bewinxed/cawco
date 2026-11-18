@@ -53,10 +53,10 @@
   import { projectWords } from "@cawco/core/words/project";
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { viewsWords } from "@cawco/core/words/views";
-  import { type Snippet, untrack } from "svelte";
+  import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
-  import { editProject } from "#lib/cawco/client.svelte.js";
+  import { cawco, editProject } from "#lib/cawco/client.svelte.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
@@ -87,6 +87,7 @@
     IconMaximizeLinear,
     IconMinimizeLinear,
     IconMoreLinear,
+    IconNotices,
     IconPlus,
     IconSettings,
     IconSparkles,
@@ -108,7 +109,6 @@
     onask,
     onfilter,
     setup,
-    detailsAfterChecks,
   }: {
     /** Filter the tasks, from the menu on a phone, where the strip has no room for it. */
     onfilter: (anchor: HTMLElement) => void;
@@ -122,8 +122,6 @@
     onask: ((anchor: HTMLElement) => void) | null;
     /** Its setup, from the menu: finish it, or change how it runs; null while Caw can't start. */
     setup: { label: string; run: () => void } | null;
-    /** Rows the details show under Merge checks (ProjectDetails). */
-    detailsAfterChecks?: Snippet;
   } = $props();
 
   const narrow = new MediaQuery("(max-width: 639px)");
@@ -147,18 +145,6 @@
 
   /** Its primary checkout; none while its one place is its folder on the hub. */
   const primary = $derived(checkoutOf(project));
-  /**
-   * Where the project lives, its machine and folder (place), said
-   * in the details it opens; the head draws it as a place, never its path.
-   */
-  const place = $derived.by(() => {
-    if (!primary) {
-      return projectWords.hubFolder;
-    }
-    return machine
-      ? `${machineLabel(machine.hostname)} · ${primary.path}`
-      : primary.path;
-  });
   /** The place's tooltip: its machine's name, or the hub's folder. */
   const placeTip = $derived.by(() => {
     if (!primary) {
@@ -409,6 +395,20 @@
          recipe: bare symbols, each named for a screen reader and in its
          tooltip. Under 640px it holds More alone. -->
     <BarGlass form="group">
+      <!-- Whether the project's events reach Caw, said where the project is
+           read; a press opens his settings, where turning him off asks what
+           of his work keeps running (CawLeadSwitch). -->
+      <BarItem
+        aria-haspopup="dialog"
+        data-head-caw
+        icon={IconNotices}
+        label={lead.on ? projectWords.cawOn : projectWords.cawOff}
+        layout="wide"
+        onclick={() => {
+          cawOpen = true;
+        }}
+        pressed={lead.on === true}
+      />
       <!-- New work starts by telling Caw (PRD §5.6): his panel on a new
            conversation, the caret in his composer. -->
       <BarItem
@@ -586,11 +586,9 @@
 <!-- The project's details, under the head, from where its title starts. -->
 {#if details}
   <ProjectDetails
-    afterChecks={detailsAfterChecks}
-    {lead}
-    {machine}
+    accounts={cawco.accounts}
+    machines={cawco.machines}
     onclose={closeDetails}
-    {place}
     {project}
   />
 {/if}

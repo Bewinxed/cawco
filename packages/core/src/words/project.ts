@@ -39,12 +39,40 @@ export const projectWords = {
   cawSettings: "Caw settings…",
   /** A task card whose attempt the hub couldn't start. */
   cantStart: "Can't start",
-  /** Project details' row of the checks the hub runs before it merges work (gate.md). */
-  mergeChecks: "Merge checks",
-  /** That row for a project whose gate.md names no check. */
-  noMergeChecks:
-    "The hub merges work with no checks: this project declares none.",
-  /** That row under the problems of a gate.md the hub cannot read. */
-  mergeChecksUnread:
-    "Until gate.md is fixed, the hub merges no work in this project.",
+  /** The head's Caw: whether the project's events reach its conversation, and the way to its settings. */
+  cawOn: "Caw on",
+  cawOff: "Caw off",
+
+  // ── Project details ──
+  placesLabel: "Places",
+  /** The project's folder on the hub, in its place list. */
+  hubPlace: "The hub",
+  primaryPlace: "Primary",
+  addPlace: "Add a place",
+  /** A place's folder changed in place: CawCo looks there from now on. */
+  changePlace: "Change",
+  /** Said beside a place's new folder, before it is saved. */
+  placeMovesNothing: "No files move.",
+  /** A place re-pointed, refused by the hub (`hubRefusal`). */
+  placeNotMovedThen: "so it still points where it did.",
+  /** No route on the hub re-points a place yet. */
+  placeCantMove: "The hub can't re-point a place yet",
+  noRepository: "None. Add a git remote to a folder to link one.",
+  landsLabel: "Work lands",
+  tasksLabel: "Tasks",
+  /** Each tracker, and what picking it does. */
+  trackers: {
+    cawco: {
+      name: "CawCo",
+      note: "Tasks stay in this project's folder. Nothing syncs out.",
+    },
+    github: {
+      name: "GitHub Issues",
+      note: "Two-way with one repository: new issues become tasks, new tasks become issues.",
+    },
+    linear: {
+      name: "Linear",
+      note: "Two-way with one team: new issues become tasks, new tasks become issues.",
+    },
+  },
 };

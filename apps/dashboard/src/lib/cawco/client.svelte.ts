@@ -6828,6 +6828,19 @@ export async function removeProjectPlace(
   await readProjects();
 }
 
+/** Points a checkout at another folder on its machine; no file moves. The hub has no route for it yet. */
+export function moveProjectPlace(
+  _projectId: string,
+  _placeId: string,
+  _path: string
+): Promise<ProjectRow> {
+  return Promise.reject(
+    new Error(
+      `${projectWords.placeCantMove}, ${projectWords.placeNotMovedThen}`
+    )
+  );
+}
+
 /**
  * Promotes a spin-off to mainline work: the UI stops setting it apart, and
  * the tag that kept its transcript out of the machine's catalog comes off, so

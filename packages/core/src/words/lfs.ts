@@ -20,8 +20,6 @@ export const lfsWords = {
   label: "Large files",
   own: "Each repository's own LFS, at its origin.",
   declared: (connection: string) => `Signed in with ${connection}.`,
-  pinned:
-    "Every git-lfs run for this project goes here alone, whatever a repository's .lfsconfig says.",
   declare: "Declare where they live",
   change: "Change",
   clear: "Use each origin's own",

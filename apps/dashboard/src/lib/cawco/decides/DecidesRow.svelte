@@ -1,19 +1,32 @@
 <script lang="ts">
+  import { hubRequest } from "@cawco/core/hub-request";
   /**
    * The project's details tray: its Who decides row (build spec §3.1). It
    * says whether the project follows the fleet on every kind of choice, or
-   * how many it handed over itself, and is the link to its Who decides.
-   * Read from the hub as the tray opens; a failed read says so with Try
-   * again.
+   * how many it handed over itself, at the weight of a value, with the way
+   * to its Who decides; what else governs who finishes work stands under it
+   * (`children`). Read from the hub as the tray opens; a failed read says so
+   * with Try again.
    */
   import { decidesWords } from "@cawco/core/words/decides";
-  import { untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
+  import { hubSeam } from "#lib/cawco/hub-live.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { readProject } from "./decides-client";
+  import type { ProjectDecides } from "./decides-client";
 
-  let { projectId }: { projectId: string } = $props();
+  let {
+    projectId,
+    children,
+  }: {
+    projectId: string;
+    /** What stands under its line in the same row. */
+    children?: Snippet;
+  } = $props();
+
+  const hub = hubSeam();
 
   type Read =
     | { state: "reading" }
@@ -24,7 +37,9 @@
   async function load(id: string): Promise<void> {
     read = { state: "reading" };
     try {
-      const { decides } = await readProject(id);
+      const { decides } = await hub.read<ProjectDecides>(
+        hubRequest("GET /api/projects/:id/decides", { path: { id } })
+      );
       read = {
         state: "read",
         own: Object.values(decides.from).filter((from) => from === "project")
@@ -64,19 +79,31 @@
   >
     {decidesWords.detailsLabel}
   </p>
-  <div class="flex min-w-0 flex-col gap-space-1 pt-space-1" data-slot="value">
+  <div class="flex min-w-0 flex-col gap-space-2 pt-space-1" data-slot="value">
     {#if read.state === "reading"}
-      <Skeleton line="label" radius="text" width="name" />
+      <Skeleton line="body" radius="text" width="name" />
     {:else if read.state === "failed"}
       <RowFault again={() => load(projectId)} reason={read.reason} />
     {:else}
-      <a
-        class={[
-          "self-start rounded-xs type-label underline-offset-2 wrap-anywhere can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid",
-          read.problems ? "text-status-fail-ink" : "text-link-ink",
-        ]}
-        href="/project/{encodeURIComponent(projectId)}/decides">{line}</a
-      >
+      <div class="flex flex-wrap items-center justify-between gap-space-2">
+        <p
+          class={[
+            "m-0 min-w-0 type-row wrap-anywhere",
+            read.problems ? "text-status-fail-ink" : "text-ink-strong",
+          ]}
+          data-decides-line
+        >
+          {line}
+        </p>
+        <Button
+          data-decides-open
+          href="/project/{encodeURIComponent(projectId)}/decides"
+          label={decidesWords.detailsOpen}
+          size="xs"
+          variant="secondary"
+        />
+      </div>
     {/if}
+    {@render children?.()}
   </div>
 </div>
