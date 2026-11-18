@@ -6,7 +6,7 @@
   /**
    * Project details, live (ProjectDetails.stories.ts): HyucksField's tray as
    * it unfolds under its head, its reads and changes answered here as the
-   * hub would, each change after a short wait. What a press changed is held
+   * hub would, each change after a short wait and each read at once. What a press changed is held
    * here as the hub would hold it, laid over the project the args draw; Start
    * again (`again`) clears it.
    */
@@ -187,7 +187,7 @@
       githubProject: null,
       githubProjectReason: null,
       linked: 38,
-      polledAt: NOW - 4 * 60_000,
+      polledAt: Date.now() - 4 * 60_000,
       provider,
       reason: null,
       state: "synced",
@@ -298,10 +298,8 @@
 
   provideHub({
     state: "connected",
-    read: async <T,>({ path }: { path: string }) => {
-      await waits();
-      return answer(path) as T;
-    },
+    read: <T,>({ path }: { path: string }) =>
+      Promise.resolve().then(() => answer(path) as T),
   });
 
   const edits: ProjectEdits = {

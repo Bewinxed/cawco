@@ -277,8 +277,9 @@
   let pickTarget = $state("");
   let binding = $state(false);
   let bindFault = $state<string | null>(null);
-  const shownTracker = $derived<Tracker>(
-    picking ?? tracker?.tracker ?? "cawco"
+  /** The tracker chosen as drawn: none until the hub has said which. */
+  const shownTracker = $derived<Tracker | null>(
+    picking ?? tracker?.tracker ?? null
   );
 
   /** GitHub: the Projects the connection reaches for the repository picked; null while they are read. */
@@ -1006,12 +1007,11 @@
   <OptionGroup
     aria-labelledby="{uid}-tracker"
     data-pending={binding ? "" : undefined}
-    layout="tiles"
-    style="--tiles-cols: repeat(3, minmax(0, 1fr)); --tiles-cols-phone: minmax(0, 1fr)"
+    layout="list"
     bind:value={
-      () => [shownTracker],
+      () => (shownTracker ? [shownTracker] : []),
       (next) => {
-        const chosen = next[0] as Tracker | undefined;
+        const [chosen] = next as Tracker[];
         if (chosen && chosen !== shownTracker) {
           pick(chosen);
         }
