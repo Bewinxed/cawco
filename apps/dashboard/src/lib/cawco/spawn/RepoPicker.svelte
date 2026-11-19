@@ -46,10 +46,17 @@
    * rows in both lists stay and slide to their places, their `owner/`
    * folding in place; those only the old list held close where they stood;
    * those only the new one holds are uncovered; the list's height travels
-   * once (`morph`). The owner group's thumb travels to the owner picked
-   * (the kit's segmented group); the rows' hover ghost and picked wash
-   * travel between rows (`highlight`); the lock's tooltip is the list's one
-   * tooltip, portalled out of the scroller.
+   * once (`morph`). An owner picked whose list shares no row with the one
+   * shown (one owner for another) swaps the lists (motion/list-swap): the
+   * rows shown leave together, held where they were drawn, and the new ones
+   * come in after them; the list keeps the old rows' room while they leave
+   * and its height travels as the new ones arrive. Through `reflow` those
+   * rows left and arrived in the same slots in the same frames, each the
+   * other's crossfade, under an edge shrinking over the ones leaving. The
+   * owner group's thumb travels to the owner picked (the kit's segmented
+   * group); the rows' hover ghost and picked wash travel between rows
+   * (`highlight`); the lock's tooltip is the list's one tooltip, portalled
+   * out of the scroller.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { isGitUrl, repoIdentity, repoPath } from "@cawco/core/protocol";
@@ -68,9 +75,11 @@
     IconSearch as Search,
   } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
+  import { motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
-  import { reflow } from "#lib/platform/motion/rows.svelte.js";
+  import { handOver, reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { didntAnswer } from "../hub/control";
   import Marked from "../Marked.svelte";
@@ -119,6 +128,20 @@
   let activeKey = $state("");
   let listing = $state<Listing>({ kind: "reading" });
   let listbox = $state<HTMLElement>();
+  /** The rows' `reflow` container: handed over as one owner's list is swapped for another's. */
+  let rowsBox = $state<HTMLElement>();
+  /** One owner's list swapped for another's (motion/list-swap). */
+  const swap = new ListSwap<Row>();
+  /** The swap's incoming rows, each at its place in the list it brought: the order they come in. */
+  let incoming = $state<ReadonlyMap<string, number>>(new Map());
+  /**
+   * Where a row still coming in was drawn as the next swap took it away:
+   * its ink and its offset, which its leave starts from (the leave's
+   * keyframes name only where it ends).
+   */
+  let drawnAt = $state<ReadonlyMap<string, { ink: string; at: string }>>(
+    new Map()
+  );
 
   $effect(() => {
     const id = machineId;
@@ -224,20 +247,24 @@
     }
     return repo && listing.kind === "read" && !listed ? repo : "";
   });
-  const rows = $derived<Row[]>([
-    ...(urlRow ? [{ key: `${URL_KEY}${urlRow}`, url: urlRow }] : []),
-    ...(pasted
-      ? []
-      : repos
-          .filter(
-            (one) =>
-              (!owner || one.owner.login === owner) &&
-              (!q ||
-                one.nameWithOwner.toLowerCase().includes(q) ||
-                (one.description ?? "").toLowerCase().includes(q))
-          )
-          .map((one) => ({ key: one.nameWithOwner, repo: one }))),
-  ]);
+  /** The rows shown while `login`'s repositories alone are ("" for every owner's). */
+  function rowsFor(login: string): Row[] {
+    return [
+      ...(urlRow ? [{ key: `${URL_KEY}${urlRow}`, url: urlRow }] : []),
+      ...(pasted
+        ? []
+        : repos
+            .filter(
+              (one) =>
+                (!login || one.owner.login === login) &&
+                (!q ||
+                  one.nameWithOwner.toLowerCase().includes(q) ||
+                  (one.description ?? "").toLowerCase().includes(q))
+            )
+            .map((one) => ({ key: one.nameWithOwner, repo: one }))),
+    ];
+  }
+  const rows = $derived(rowsFor(owner));
   /** `owner/` and the name, as the row draws them apart. */
   function ownerAndName(one: GhRepo): [string, string] {
     const at = one.nameWithOwner.indexOf("/");
@@ -285,9 +312,63 @@
     }
   }
 
+  /** Where an owner stands in the owner group, All first: the side a swap moves toward. */
+  const ownerAt = (login: string) =>
+    login ? 1 + owners.findIndex((one) => one.owner.login === login) : 0;
+
   function chooseOwner(login: string): void {
+    const next = rowsFor(login);
+    const shown = new Set(rows.map((row) => row.key));
+    // Lists that share no row are swapped: in `reflow`, every row shown
+    // would close in the slot a new one is uncovered in. Lists that share
+    // one move as one list, their shared rows sliding (One Object). With
+    // reduced motion the new list is simply there.
+    if (
+      rowsBox &&
+      shown.size > 0 &&
+      next.length > 0 &&
+      !next.some((row) => shown.has(row.key))
+    ) {
+      handOver(rowsBox);
+      if (motionOk.current) {
+        const drawn = comingIn(rowsBox);
+        const { leaving } = swap;
+        swap.swap(rows, ownerAt(login) - ownerAt(owner), {
+          scroller: listbox,
+        });
+        if (swap.leaving !== leaving) {
+          drawnAt = drawn;
+        }
+        incoming = new Map(next.map((row, i) => [row.key, i]));
+      }
+    }
     ownerPick = login;
     activeKey = "";
+  }
+
+  /** Where each row the last swap brought is drawn while it still comes in, by its key. */
+  function comingIn(
+    box: HTMLElement
+  ): Map<string, { ink: string; at: string }> {
+    const drawn = new Map<string, { ink: string; at: string }>();
+    if (swap.phase !== "in" || incoming.size === 0) {
+      return drawn;
+    }
+    const shown = box.querySelectorAll<HTMLElement>(":scope > [data-flip]");
+    rows.forEach((row, i) => {
+      const element = shown[i];
+      if (element && incoming.has(row.key)) {
+        const { opacity, transform } = getComputedStyle(element);
+        drawn.set(row.key, { ink: opacity, at: transform });
+      }
+    });
+    return drawn;
+  }
+
+  /** A row's entrance: the swap's, for a row it brought, while it comes in. */
+  function entrance(row: Row): string {
+    const at = incoming.get(row.key);
+    return at === undefined ? "none" : swap.rowAnim(at);
   }
 
   function step(by: number): void {
@@ -436,13 +517,41 @@
     })}
     {@attach morph()}
   >
+    <!-- A swap's leaving rows, in the rows' own cell (their room held while
+         they leave, the list's height travelling once they have gone), where
+         they were drawn: the list is scrolled to its top for the new rows. -->
+    {#if swap.leaving.length}
+      <div
+        aria-hidden="true"
+        class="pointer-events-none col-span-full row-start-1 grid translate-y-(--left-at) auto-rows-max grid-cols-subgrid content-start"
+        data-leaving
+        inert
+        style:--left-at={`${-swap.leftAt}px`}
+      >
+        {#each swap.leaving as row (row.key)}
+          <div
+            class="col-span-full grid grid-cols-subgrid opacity-(--leave-ink) transform-(--leave-at) animate-(--leave)"
+            style:--leave={swap.leaveAnim()}
+            style:--leave-ink={drawnAt.get(row.key)?.ink}
+            style:--leave-at={drawnAt.get(row.key)?.at}
+          >
+            {@render face(row, false)}
+          </div>
+        {/each}
+      </div>
+    {/if}
     <div
-      class="col-span-full grid auto-rows-max grid-cols-subgrid"
+      bind:this={rowsBox}
+      class="col-span-full row-start-1 grid auto-rows-max grid-cols-subgrid"
       {@attach reflow()}
     >
       {#each rows as row (row.key)}
-        <div class="col-span-full grid grid-cols-subgrid" data-flip>
-          {@render face(row)}
+        <div
+          class="col-span-full grid grid-cols-subgrid animate-(--enter)"
+          data-flip
+          style:--enter={entrance(row)}
+        >
+          {@render face(row, true)}
         </div>
       {/each}
     </div>
@@ -467,17 +576,24 @@
 </div>
 <GlideTip tether={tips} />
 
-<!-- A row: the option the combobox walks. -->
-{#snippet face(row: Row)}
+<!-- A row: the option the combobox walks; `live` false, a picture of one
+     leaving in a swap, named nothing and answering nothing. -->
+{#snippet face(row: Row, live: boolean)}
   <button
-    data-repo-row
+    data-repo-row={live || undefined}
     aria-selected={identityOf(row) === pickedId}
     class={ROW}
-    data-active={active?.key === row.key || undefined}
-    id={optionId(row)}
-    onclick={() => take(row)}
+    data-active={(live && active?.key === row.key) || undefined}
+    id={live ? optionId(row) : undefined}
+    onclick={() => {
+      if (live) {
+        take(row);
+      }
+    }}
     onpointermove={() => {
-      activeKey = row.key;
+      if (live) {
+        activeKey = row.key;
+      }
     }}
     role="option"
     tabindex="-1"

@@ -17,6 +17,12 @@
  * has gone (`rowAnim`'s `notBefore`, which a caller that knows the places
  * passes), so a row and its replacement are never on screen in the same
  * place in the same frame.
+ * - Swapped again while the old rows are still leaving, the new rows of the
+ *   last swap have not begun to come in (the first waits for the leave's
+ *   end), so the rows on screen are the ones leaving: they go on leaving as
+ *   they were, the way they were going, and the next new rows wait for
+ *   them. Taken as the rows leaving instead, rows never drawn were drawn at
+ *   full ink to leave, and the rows leaving were cut at the ink they had.
  *
  * The keyframes are global (app.css): the rows name them from an inline
  * style, which a component's scoped <style> cannot rewrite.
@@ -44,10 +50,14 @@ export class ListSwap<T> {
   phase = $state<"in" | "idle">("idle");
   /** 1 when the choice moved forward (rows arrive from the right), else -1. */
   dir = $state(1);
+  /** The side the leaving rows go toward: the choice's, as they began to leave. */
+  #leaveDir = $state(1);
+  /** How far the list the swap took away was scrolled in its box, px: where its rows are held as they leave (`leaveView`). */
+  leftAt = $state(0);
   #clear: ReturnType<typeof setTimeout> | undefined;
   #idle: ReturnType<typeof setTimeout> | undefined;
-  /** How far the list the swap took away was scrolled in its box, px: where it is held (`leaveView`). */
-  #leftAt = 0;
+  /** When the leaving rows began to leave, on the page's clock. */
+  #leftSince = Number.NEGATIVE_INFINITY;
 
   /** `enter`: the first list staggers in too, rather than standing there. */
   constructor(enter = false) {
@@ -79,14 +89,24 @@ export class ListSwap<T> {
       scroller,
     }: { keep?: number; hold?: number; scroller?: HTMLElement | null } = {}
   ): void {
-    this.#leftAt = scroller?.scrollTop ?? 0;
+    this.dir = dir > 0 ? 1 : -1;
+    this.gen += 1;
+    this.#enter();
+    const now = performance.now();
+    if (
+      motionOk.current &&
+      this.leaving.length > 0 &&
+      now - this.#leftSince < outMs()
+    ) {
+      return;
+    }
+    this.#leftSince = now;
+    this.leftAt = scroller?.scrollTop ?? 0;
     if (scroller) {
       scroller.scrollTop = 0;
     }
-    this.dir = dir > 0 ? 1 : -1;
+    this.#leaveDir = this.dir;
     this.leaving = outgoing.slice(0, keep);
-    this.gen += 1;
-    this.#enter();
     clearTimeout(this.#clear);
     this.#clear = setTimeout(
       () => {
@@ -197,7 +217,7 @@ export class ListSwap<T> {
     if (!motionOk.current) {
       return "none";
     }
-    return `${this.dir > 0 ? "ns-out-l" : "ns-out-r"} var(--duration-exit) var(--ease-out) both`;
+    return `${this.#leaveDir > 0 ? "ns-out-l" : "ns-out-r"} var(--duration-exit) var(--ease-out) both`;
   }
 
   /**
@@ -208,7 +228,7 @@ export class ListSwap<T> {
    */
   leaveView = (node: HTMLElement): TransitionConfig => {
     node.style.position = "absolute";
-    node.style.inset = `${-this.#leftAt}px 0 auto`;
+    node.style.inset = `${-this.leftAt}px 0 auto`;
     node.style.pointerEvents = "none";
     node.inert = true;
     node.setAttribute("aria-hidden", "true");
