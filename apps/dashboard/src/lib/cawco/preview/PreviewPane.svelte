@@ -152,6 +152,8 @@
     sheet: () => sheet,
   });
   const previewReach = new PreviewReach({
+    // Read once the pane runs: the frame's state is made beside it.
+    arrived: () => previewFrame.heardKey === previewFrame.frameKey,
     instanceId: () => instanceId,
     onScreen: () => onScreen,
     paneSubject,
@@ -1088,7 +1090,7 @@
 <!-- The page's frame (and, while a new one loads, the one it replaces): in
      the well, or in a component artifact's design graph's stage. -->
 {#snippet frameTags()}
-  {#each previewReach.reached?.origin === previewReach.paneOrigin ? previewFrame.frames : [] as key (key)}
+  {#each previewReach.paneOrigin ? previewFrame.frames : [] as key (key)}
     {@const current = key === previewFrame.frameKey}
     <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
     <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
@@ -1101,9 +1103,8 @@
       style:--page-h="calc(100% - var(--page-top))"
       allow="clipboard-write"
       inert={!current}
-      onerror={() => previewFrame.arrived(key)}
+      onerror={() => previewFrame.loadedFrame(key)}
       onload={() => {
-        previewFrame.arrived(key);
         if (key === previewFrame.frameKey) {
           previewFrame.loadedFrame(key);
           previewFrame.announce();
@@ -1115,7 +1116,6 @@
       {@attach (node) => {
         if (key === previewFrame.frameKey) {
           previewFrame.iframe = node;
-          previewFrame.frameSince = performance.now();
         }
       }}
     ></iframe>

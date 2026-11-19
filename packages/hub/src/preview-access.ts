@@ -64,7 +64,7 @@
  * 18.5–26.1 doesn't support (caniuse.com/mdn-http_headers_set-cookie_partitioned).
  * Its token from a CSPRNG, "at least 128 bits of entropy; prefer 160 bits or
  * more", kept as "a one-way verifier"; its timeout absolute and enforced
- * here; a new pass at every entry, the one presented gone ("the old or
+ * here; a new pass at every entry that presents no live one, the one presented gone ("the old or
  * previous session ID must be destroyed") within {@link REPLACED_PASS_MS}, for
  * what the browser sent with it before the new cookie reached it.
  *
@@ -465,8 +465,9 @@ const passFor = (
 /**
  * `GET /__cawco/enter?ticket=…[&next=<path>]` on a held name or port (origin
  * `key`): a new pass, the one the browser presented under the same cookie
- * gone shortly ({@link REPLACED_PASS_MS}), and a redirect to `next`, or a bare 204 when it names none (the
- * dashboard's own entry, made beside its frames); else the locked page and
+ * gone shortly ({@link REPLACED_PASS_MS}), unless that one is the person's
+ * and still live, which stays; and a redirect to `next`, or a bare 204 when
+ * it names none (an entry made beside a frame); else the locked page and
  * the refusal's word for the journal. A session's ticket enters only on a
  * name of its scope, and only while its session runs.
  */
@@ -489,6 +490,17 @@ export const enter = (
   }
   const secure = secureFor(request, lock);
   const pass = passFor(request, spending, now, secure);
+  const next = url.searchParams.get("next");
+  // The person's live pass the browser presents stays: an entry made beside
+  // it (another tab, another origin of the same host) spends its ticket and
+  // sets nothing, so no tab's entry rotates the pass another tab holds.
+  if (
+    !("session" in spending) &&
+    pass.replacing &&
+    lock.passes.live(pass.replacing, new Date(now), key)
+  ) {
+    return { refused: null, response: entered(url, next, {}) };
+  }
   const token = randomBytes(32).toString("base64url");
   const given = lock.passes.open(
     {
@@ -509,20 +521,26 @@ export const enter = (
   if (!given) {
     return { response: lockedResponse(), refused: "unpaired" };
   }
-  const next = url.searchParams.get("next");
   const maxAge = Math.ceil((pass.expiresAt - now) / 1000);
-  const headers = {
-    "set-cookie": `${pass.cookie}=${token}; ${lock.domain === null ? "" : `Domain=${lock.domain}; `}Path=/; Max-Age=${maxAge}; ${secure ? "Secure; " : ""}HttpOnly; SameSite=Lax`,
-    "cache-control": "no-store",
-  };
   return {
     refused: null,
-    response:
-      next === null
-        ? new Response(null, { status: 204, headers })
-        : new Response(null, {
-            status: 302,
-            headers: { ...headers, location: placeOf(url, next) },
-          }),
+    response: entered(url, next, {
+      "set-cookie": `${pass.cookie}=${token}; ${lock.domain === null ? "" : `Domain=${lock.domain}; `}Path=/; Max-Age=${maxAge}; ${secure ? "Secure; " : ""}HttpOnly; SameSite=Lax`,
+    }),
   };
+};
+
+/** An entry's answer: on to `next` (a path on `url`'s origin) when it names one, else a bare 204, with `headers` (the pass's cookie, when one is set). */
+const entered = (
+  url: URL,
+  next: string | null,
+  headers: Record<string, string>
+): Response => {
+  const all = { ...headers, "cache-control": "no-store" };
+  return next === null
+    ? new Response(null, { status: 204, headers: all })
+    : new Response(null, {
+        status: 302,
+        headers: { ...all, location: placeOf(url, next) },
+      });
 };

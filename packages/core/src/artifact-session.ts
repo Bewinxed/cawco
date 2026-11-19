@@ -2,8 +2,9 @@
 
 /**
  * The socket an artifact's own tab (the dashboard's `/artifact/<id>`) follows
- * the session that made it on, `<path><instanceId>/<artifactId>`: nothing
- * else of the fleet reaches that tab. It also carries the tab's `fs`
+ * the session that made it on, `<path><artifactId>`: the hub finds that
+ * session itself and names it in each frame, so the tab opens it at once,
+ * with no read before it. Nothing else of the fleet reaches that tab. It also carries the tab's `fs`
  * envelopes (a page's place picker browsing a machine's folders), answered on
  * it as on the dashboard's socket.
  */

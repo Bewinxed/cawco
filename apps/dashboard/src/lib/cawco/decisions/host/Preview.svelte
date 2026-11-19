@@ -269,6 +269,8 @@
   };
 
   /** What a whole screen's overlay says of the document its frame holds, heard: true for its words, false for any other. */
+  /** Its frame's page has said anything at all: its origin answered, so no probe words a failure to reach it. */
+  let frameSpoke = $state(false);
   const heardScreen = (type: unknown): boolean => {
     // A new document in its frame (its overlay's first word, each load): a
     // dev server's reload after an edit or a restart shows nothing of its
@@ -302,6 +304,7 @@
       if (event.source !== frame?.contentWindow) {
         return;
       }
+      frameSpoke = true;
       const said = pageSaid(event.data);
       const why = failureIn(said);
       if (why !== null) {
@@ -379,23 +382,22 @@
     unscroll?.();
   });
 
-  /**
-   * How often an embed's origin is asked whether it serves yet, and for how
-   * long an answer that it doesn't (the hub's word that it is down, or a
-   * status: its server still starting) is waited out: once a second for 30 seconds. Our call: long enough for a
-   * dev server's cold start, short enough that a dead one is said. Any other
-   * failure is this browser's side or the hub's, said at once (core
-   * preview-reach.ts).
-   */
+  /** How often a screen's server is asked whether it still holds a request of the page, while its clock runs ({@link DRAW_MS}). Our call. */
   const PING_MS = 1000;
-  const START_MS = 30_000;
+  /**
+   * How long a frame has to say anything before its origin is probed, to
+   * word why it hasn't: the frame's own load is the probe, and nothing
+   * waits on this one. The brief's "about 2 s" (tsk-396).
+   */
+  const PROBE_AFTER_MS = 2000;
   /** `--duration-wait-grace` in ms, in the unit host.css writes it (motion `dur`: its minifier writes `1000ms` as `1s`): a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
   const grace = () => dur("--duration-wait-grace");
   /**
-   * An embed's address once its origin serves it: its ping (core
-   * `PREVIEW_PING_PATH`, open to any page) answers ok when the machine's
-   * listener for it does, starting it when it has none. Loaded before then,
-   * the frame would hold the browser's own error page for good.
+   * The address its frame loads: at once on its turn, with no ping before
+   * it. A machine's preview is waited on by the proxy, which answers with
+   * its own page naming the hop that failed (`cawco:down`); a frame whose
+   * page says nothing within {@link PROBE_AFTER_MS} has its origin probed,
+   * to say why this browser didn't reach it.
    */
   let ready = $state<string | null>(null);
   /** The ready frame finished loading: until then the wait stands over it, so no empty box shows. */
@@ -493,7 +495,6 @@
   let slow = $state(false);
   /** Each Try again asks the origin again from the start. */
   let attempt = $state(0);
-  let asking = $state(false);
   /** How this hub's previews are reached, as its reach answer says it (core `PreviewWays`); unknown until the hub was asked. */
   let ways: PreviewWays | null = null;
   /** What previews need from this browser: a host-mode name stands on another host than this page's; a port on this one. */
@@ -680,36 +681,7 @@
     }
     const address = canvas ? canvasEmbedUrl(embed, stories, namedWidth) : embed;
     let gone = false;
-    const at = new URL(embed);
-    /** The hub asked whether it reaches `origin`, and how its previews are reached heard with it. */
-    const hubReach = (origin: string) =>
-      askHubReach(
-        `${PREVIEW_REACH_PATH}?origin=${encodeURIComponent(origin)}`,
-        (heard) => {
-          ways = heard;
-        }
-      );
-    /** The origin asked once a second until it serves (null) or says why it won't, within {@link START_MS}. */
-    const reached = async () => {
-      const deadline = Date.now() + START_MS;
-      for (;;) {
-        // The preview's own server down is the origin reached (core
-        // `unreachedOf`): its frame loads the proxy's page, whose
-        // `cawco:down` says that hop's down state ({@link downWhy}).
-        const why = unreachedOf(await probePreview(at.origin, hubReach));
-        if (
-          gone ||
-          !why ||
-          !(why.cause === "down" || why.cause === "status") ||
-          Date.now() >= deadline
-        ) {
-          return why;
-        }
-        await new Promise((resolve) => setTimeout(resolve, PING_MS));
-      }
-    };
-    asking = true;
-    // Every embed of the page takes its place in its turns now, as it mounts, so every Preview of the page is in the queue before the first turn, the one in view first (embed-turns.ts). A canvas fetches its graph on its turn, its frame loading meanwhile, its skeleton standing; a whole screen loads on its turn, alone, once its origin answers, which it tells as an empty graph: seven dashboards asked at once held every frame of the page white for most of a minute.
+    // Every embed of the page takes its place in its turns now, as it mounts, so every Preview of the page is in the queue before the first turn, the one in view first (embed-turns.ts). A canvas fetches its graph on its turn, its frame loading meanwhile, its skeleton standing; a whole screen loads on its turn, alone, which it tells as an empty graph: seven dashboards asked at once held every frame of the page white for most of a minute.
     turnState = "waiting";
     if (canvas) {
       const { origin } = new URL(address);
@@ -746,37 +718,69 @@
         true
       );
     }
-    (async () => {
-      const why = await reached();
-      if (gone) {
+    if (canvas) {
+      ready = address;
+    } else {
+      turn?.graph([]);
+    }
+    return () => {
+      gone = true;
+      turn?.done();
+      turn = undefined;
+    };
+  });
+
+  // Its frame loading and silent past PROBE_AFTER_MS: its origin is probed,
+  // and one this browser doesn't reach says why in its place.
+  $effect(() => {
+    const address = ready;
+    const embed = held?.embed;
+    track(attempt);
+    frameSpoke = false;
+    if (!(address && embed)) {
+      return;
+    }
+    const at = new URL(embed);
+    let gone = false;
+    const late = setTimeout(async () => {
+      if (frameSpoke) {
         return;
       }
-      if (why && !ways) {
+      const hubReach = (origin: string) =>
+        askHubReach(
+          `${PREVIEW_REACH_PATH}?origin=${encodeURIComponent(origin)}`,
+          (heard) => {
+            ways = heard;
+          }
+        );
+      const why = unreachedOf(await probePreview(at.origin, hubReach));
+      // Its server down or still starting is the origin reached: the
+      // proxy's page in the frame says that hop (`cawco:down`).
+      if (
+        gone ||
+        frameSpoke ||
+        !why ||
+        why.cause === "down" ||
+        why.cause === "status"
+      ) {
+        return;
+      }
+      if (!ways) {
         // An answered probe never asked the hub, whose answer names how its
         // previews are reached: asked once, for the words' fix.
         await hubReach(at.origin);
       }
-      if (gone) {
-        return;
-      }
-      asking = false;
-      if (why) {
+      if (!gone) {
         failed = {
           kind: "unreached",
           cause: previewUnreachedWords(at.host, why, previewsNeed(at)),
         };
         turn?.done();
-      } else if (canvas) {
-        ready = address;
-      } else {
-        turn?.graph([]);
       }
-    })();
+    }, PROBE_AFTER_MS);
     return () => {
       gone = true;
-      asking = false;
-      turn?.done();
-      turn = undefined;
+      clearTimeout(late);
     };
   });
 
@@ -929,6 +933,7 @@
         data-more-above={more.above || undefined}
         data-more-below={more.below || undefined}
         data-slot="embed"
+        loading="lazy"
         onload={(event) => {
           pageLoaded = event.currentTarget.getAttribute("src");
           sized();
@@ -999,8 +1004,6 @@
             onclick={() => {
               attempt += 1;
             }}
-            pending={asking}
-            pendingLabel="Trying again…"
             size="sm"
             variant="outline"
           />
@@ -1023,6 +1026,7 @@
             data-shape={shape}
             data-slot="embed"
             data-turn={turnState}
+            loading="lazy"
             onload={() => {
               drawn = true;
               // A canvas's page that told no graph by its load has none to

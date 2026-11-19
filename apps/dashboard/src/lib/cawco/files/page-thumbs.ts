@@ -26,7 +26,7 @@ import type { ArtifactSummary } from "@cawco/core/protocol";
 import { theme } from "#lib/theme.svelte.js";
 import { keepThumbnail } from "../artifact-api";
 import { pageSource } from "../preview/page-source";
-import { enterPreviews } from "../preview/pass";
+import { entryTo } from "../preview/pass";
 import { previewThumbnail } from "../preview/wire";
 import { readArtifacts } from "./files.svelte";
 
@@ -72,8 +72,7 @@ async function drawPage(
   const shot = await new Promise<ReturnType<typeof previewThumbnail>>(
     (done) => {
       let settle: ReturnType<typeof setTimeout> | undefined;
-      /** When the frame's load began; turned away once, it enters and loads again (preview/pass.ts). */
-      let since = performance.now();
+      /** Turned away once, it goes through the entry, which lands it at its page (preview/pass.ts). */
       let entered = false;
       const post = (message: object) =>
         frame.contentWindow?.postMessage(message, found.origin);
@@ -97,13 +96,12 @@ async function drawPage(
             return;
           }
           entered = true;
-          enterPreviews(found.origin, since).then((refused) => {
-            if (refused) {
+          entryTo(found.origin, new URL(found.src).pathname).then((entry) => {
+            if ("refused" in entry) {
               finish(null);
               return;
             }
-            since = performance.now();
-            frame.src = found.src;
+            frame.src = entry.url;
           });
         } else if (data?.type === "cawco:ready") {
           clearTimeout(settle);

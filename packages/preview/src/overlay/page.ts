@@ -790,13 +790,38 @@ function tellPagePins() {
   });
 }
 
+/**
+ * The document stands drawn: parsed, its own sheets and deferred scripts
+ * run, and its next frame painted. The host's cover lifts on the page's
+ * ready (owner's pick on decision 2169e665 "cover": "As soon as the page
+ * itself is drawn"), never on the frame's `load`, which waits for every
+ * frame inside it, so ready waits for this. A document the browser paints
+ * no frame for (off screen, or held: hold.ts holds the page's frames) stands
+ * drawn at its load.
+ */
+const documentDrawn = new Promise<void>((done) => {
+  const painted = () => requestAnimationFrame(() => done());
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", painted, { once: true });
+  } else {
+    painted();
+  }
+  addEventListener("load", () => done(), { once: true });
+});
+
+/** Whether this document's host greeted it (`cawco:hello`): its ready then says the page stands in the host's theme and place. */
+let greeted = false;
+
 function ready() {
-  post("cawco:ready", {
-    url: location.href,
-    title: document.title,
+  documentDrawn.then(() => {
+    post("cawco:ready", {
+      url: location.href,
+      title: document.title,
+      greeted,
+    });
+    // A page that broke as it loaded is still broken, whatever it answers.
+    tellBroken();
   });
-  // A page that broke as it loaded is still broken, whatever it answers.
-  tellBroken();
 }
 
 /*
@@ -3644,6 +3669,7 @@ function stageAsks(): Record<string, (message: HostMessage) => void> {
 const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
   {
     "cawco:hello": (message) => {
+      greeted = true;
       ready();
       pageFootTold = -1;
       tellPageFoot();

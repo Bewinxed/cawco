@@ -6,8 +6,8 @@
   <id>/`, preview/page-source.ts, as the Decisions tab and Files load a
   page): another origin than the dashboard's, so its HTML runs in its own
   sandbox, as every page artifact does. Its frame is greeted as every host
-  greets a page (`cawco:hello`, the dashboard's theme), and a browser its
-  origin turns away enters its previews and loads it again, once.
+  greets a page (`cawco:hello`, the dashboard's theme), and a frame its
+  origin turns away goes through the entry once, which lands it at its page.
 
   It loads only once its block draws (TranscriptBlock draws a block as it
   nears the view). Sized by its agent it takes that room, unsized the
@@ -28,7 +28,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArtifactPageLinear } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
-  import { enterPreviews, turnedAwayWords } from "../../preview/pass";
+  import { entryTo, turnedAwayWords } from "../../preview/pass";
   import { blockMediaHere } from "./block-media";
   import { BLOCK_ROOM, blockSize } from "./block-size";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
@@ -121,13 +121,12 @@
     }
   });
 
-  // Turned away by its origin, the browser enters its previews and loads it again, once.
+  // Turned away by its origin, it goes through the entry once, which lands it at its page.
   $effect(() => {
     const at = served;
     if (!at) {
       return;
     }
-    let since = performance.now();
     let entered = false;
     const heard = (event: MessageEvent) => {
       if (
@@ -143,12 +142,11 @@
         return;
       }
       entered = true;
-      enterPreviews(at.origin, since).then((refused) => {
-        if (refused) {
-          problem = refused;
+      entryTo(at.origin, new URL(at.src).pathname).then((entry) => {
+        if ("refused" in entry) {
+          problem = entry.refused;
         } else if (frame) {
-          since = performance.now();
-          frame.src = at.src;
+          frame.src = entry.url;
         }
       });
     };

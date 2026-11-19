@@ -22,7 +22,6 @@ import { pageVisible } from "../page-visible.svelte";
 import { hubReach } from "./hub-reach";
 import { artifactAddress } from "./page-source";
 import type { PaneSubject } from "./pane-subject.svelte";
-import { enterPreviews } from "./pass";
 
 /**
  * The preview's own origin, never the dashboard's, picked by where this
@@ -36,7 +35,15 @@ const namesOrigin = (address: { origin?: string; port?: number }): boolean =>
 /** Our calls: the first probe again 2 s after a failure, doubling to every 30 s. */
 export const PROBE_FIRST_MS = 2000;
 export const PROBE_MOST_MS = 30_000;
+/**
+ * How long a frame has to say anything before its origin is probed, to word
+ * why it hasn't: the frame's own load is the probe, and nothing waits on
+ * this one. The brief's "about 2 s" (tsk-396).
+ */
+const PROBE_AFTER_MS = 2000;
 export interface PreviewReachDeps {
+  /** The current frame's page has said something (its overlay, the proxy's down page, the lock's turn-away): its origin answered. */
+  readonly arrived: () => boolean;
   readonly instanceId: () => string;
   readonly onScreen: () => boolean;
   readonly paneSubject: PaneSubject;
@@ -171,22 +178,24 @@ export class PreviewReach {
    * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
    * which answers any page with no credentials, and with the hub's words,
    * still a 200, when the session's machine listener doesn't answer the hub:
-   * core `PreviewPingDown`), before the frame loads. Unreached, the pane says
-   * what failed by its own cause (core preview-reach.ts: offline, refused at
-   * once, no answer in time, answered without its CORS header, the hub's
-   * word that it is down, another answerer's status, and whether the hub
-   * itself reaches the origin), the fix, and probes again by itself
-   * (`PROBE_FIRST_MS`, doubling to `PROBE_MOST_MS`, and at once when its tab
-   * is back in view) until one answers: never a fallback. Reached, the
-   * browser enters its previews (pass.ts), so the lock never sees this tab
-   * without a pass; an entry the hub won't give is unreached the same way,
-   * in the hub's words. Once reached and entered, the frame loads, once.
+   * core `PreviewPingDown`). Asked only of a frame whose page has said
+   * nothing {@link PROBE_AFTER_MS} after it began loading: the frame loads at
+   * once, and gates on nothing. Unreached, the pane says what failed by its
+   * own cause (core preview-reach.ts: offline, refused at once, no answer in
+   * time, answered without its CORS header, the hub's word that it is down,
+   * another answerer's status, and whether the hub itself reaches the
+   * origin), the fix, and probes again by itself (`PROBE_FIRST_MS`, doubling
+   * to `PROBE_MOST_MS`, and at once when its tab is back in view) until one
+   * answers, when the frame loads again ({@link recovered}).
    */
   reached = $state<
     | { origin: string; ok: true }
     | { origin: string; ok: false; said: string; tries: number }
     | null
   >(null);
+
+  /** Each one is an origin probed unreached that answers now: the frame holding the browser's own error page loads again. */
+  recovered = $state(0);
 
   /** Each one probes the origin again: Try again's press, the backoff's timer, the tab back in view. */
   probe = $state(0);
@@ -201,7 +210,9 @@ export class PreviewReach {
       : null
   );
 
-  readonly unreached = $derived(!!this.paneOrigin && !!this.unreachedBy);
+  readonly unreached = $derived.by(
+    () => !!this.paneOrigin && !!this.unreachedBy && !this.#deps.arrived()
+  );
 
   /** What previews need to be reached from this tab, by the route it took (core `previewsNeedWords`); the hub's port range read once. */
   portsRead: Promise<PreviewSettings | null> | null = null;
@@ -229,31 +240,41 @@ export class PreviewReach {
     $effect(() => {
       const origin = this.paneOrigin;
       track(this.probe);
-      if (
-        !origin ||
-        untrack(() => this.reached?.origin === origin && this.reached.ok)
-      ) {
+      if (!origin || this.#deps.arrived()) {
         return;
       }
       let live = true;
-      this.probing = true;
-      this.unreachedWords(origin).then((said) => {
-        if (!live) {
-          return;
-        }
-        this.probing = false;
-        const was = untrack(() => this.reached);
-        this.reached = said
-          ? {
-              origin,
-              ok: false,
-              said,
-              tries: was?.origin === origin && !was.ok ? was.tries + 1 : 1,
+      // A probe asked again (Try again, the backoff, the tab back in view)
+      // goes at once; a frame just loading has its while first.
+      const again = untrack(() => this.reached?.origin === origin);
+      const timer = setTimeout(
+        () => {
+          this.probing = true;
+          this.unreachedWords(origin).then((said) => {
+            if (!live) {
+              return;
             }
-          : { origin, ok: true };
-      });
+            this.probing = false;
+            const was = untrack(() => this.reached);
+            const failedBefore = was?.origin === origin && !was.ok;
+            this.reached = said
+              ? {
+                  origin,
+                  ok: false,
+                  said,
+                  tries: failedBefore ? was.tries + 1 : 1,
+                }
+              : { origin, ok: true };
+            if (!said && failedBefore) {
+              this.recovered += 1;
+            }
+          });
+        },
+        again ? 0 : PROBE_AFTER_MS
+      );
       return () => {
         live = false;
+        clearTimeout(timer);
         this.probing = false;
       };
     });
@@ -298,22 +319,20 @@ export class PreviewReach {
     });
   }
 
-  /** Why this tab can't load a frame of `origin` yet, or null once it reached it and entered its previews. */
+  /** Why this tab can't reach `origin`, or null once it does. */
   async unreachedWords(origin: string): Promise<string | null> {
     // The preview's own server down is the origin reached (core
     // `unreachedOf`): its load gets the proxy's page naming the hop
     // (`heardDown`), so the pane draws that hop's down state and tells the
     // hub (`artifactShown`).
     const failed = unreachedOf(await probePreview(origin, hubReach));
-    if (failed) {
-      return previewUnreachedWords(
-        new URL(origin).host,
-        failed,
-        await this.previewsNeed(origin)
-      );
-    }
-    const refused = await enterPreviews(origin);
-    return refused && `The hub didn't give this preview a pass: ${refused}`;
+    return failed
+      ? previewUnreachedWords(
+          new URL(origin).host,
+          failed,
+          await this.previewsNeed(origin)
+        )
+      : null;
   }
 
   async previewsNeed(origin: string): Promise<string> {

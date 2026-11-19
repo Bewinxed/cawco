@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { failureWords as message } from "#lib/platform/hub-read.js";
   /**
    * A presented artifact (`kind: "artifact"`: a page, a preview, a canvas)
    * drawn by the artifact panel's own renderer (PreviewPane, inset), as its
@@ -9,7 +9,6 @@
    * panel shows, which it never moves.
    */
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
-  import { findArtifact } from "../../artifact-api";
   import { ArtifactSession } from "../../preview/artifact-session.svelte";
   import PreviewPane from "../../preview/PreviewPane.svelte";
   import { setPaneFleet } from "../../preview/pane-fleet";
@@ -20,38 +19,18 @@
   /** The artifact's session, the pane's store: the pane reads it, never the fleet's. */
   const session = new ArtifactSession();
   setPaneFleet(session);
-  /** The artifact's session, once found. */
-  let staged = $state<string | null>(null);
-  let problem = $state<string | null>(null);
   $effect(() => {
     const id = artifactId;
-    staged = null;
-    problem = null;
-    let live = true;
-    findArtifact(id)
-      .then((found) => {
-        if (live) {
-          session.follow(found.instanceId, id);
-          staged = found.instanceId;
-        }
-      })
-      .catch((error: unknown) => {
-        if (live) {
-          problem = message(error);
-        }
-      });
-    return () => {
-      live = false;
-      session.end();
-    };
+    untrack(() => session.follow(id));
+    return () => session.end();
   });
+  /** The artifact's session, as the hub's first frame names it. */
+  const staged = $derived(session.instanceId);
   /** The hub has sent its artifact's first frame. */
   const drawn = $derived(!!staged && session.preview(staged)?.state === "open");
 </script>
 
-{#if problem}
-  <RowFault reason={problem} />
-{:else if session.refused}
+{#if session.refused}
   <RowFault reason={session.refused} />
 {:else if staged && drawn}
   <div class="flex min-h-0 min-w-0 flex-1 flex-col" in:reveal>

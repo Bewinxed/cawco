@@ -7,9 +7,9 @@
    * the page's document itself (the `cawco:hello` names it), so a pick here is
    * a pick in the panel and every other view, and a revision morphs in place.
    * It draws in the dashboard's theme and pads its foot for the docked
-   * composer (`inset.bottom`). It loads once the browser entered its
-   * previews (page-source.ts); turned away later, it enters once more and
-   * loads again (preview/pass.ts). Loaded and in view, it tells the hub
+   * composer (`inset.bottom`). It loads at once; turned away by its origin
+   * (no pass yet, or one that ran out), it goes through the entry once,
+   * which lands it where it was loading (preview/pass.ts `entryTo`). Loaded and in view, it tells the hub
    * that each session's panel showing this page has it on screen, as the
    * pane does (PreviewPane): the agent's artifact_create or artifact_show
    * answers from it.
@@ -29,7 +29,7 @@
   import { FrameLinks } from "#lib/cawco/preview/frame-links.svelte.js";
   import { frameHand, holdOpen } from "#lib/cawco/preview/open-pages.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
-  import { enterPreviews, turnedAwayWords } from "#lib/cawco/preview/pass.js";
+  import { entryTo, turnedAwayWords } from "#lib/cawco/preview/pass.js";
   import { previewError, previewErrorOf } from "#lib/cawco/preview/wire.js";
   import { heardInput } from "#lib/cawco/reload.svelte.js";
   import { sessionHere } from "#lib/cawco/session-here.js";
@@ -74,27 +74,20 @@
    */
   let notSent = $state<string | null>(null);
   let turnedAway = 0;
-  /**
-   * When the frame last stood without the pass it may hold now
-   * (`performance.now()`): its load, or its page's last word that it was
-   * let in. An entry that landed since stands for it (preview/pass.ts).
-   */
-  let since = 0;
   /** Asks again: Retry on the page's failure reads where it is served afresh. */
   let tries = $state(0);
 
   const place = $derived(`/__cawco/page/${artifactId}/`);
 
-  /** Turned away: the browser enters its previews, then the frame loads again. */
+  /** Turned away: the frame goes through the entry, which lands it at its page with the browser's pass. */
   async function enter(at: string) {
-    const refused = await enterPreviews(at, since);
-    if (refused) {
-      problem = refused;
+    const entry = await entryTo(at, place);
+    if ("refused" in entry) {
+      problem = entry.refused;
       return;
     }
-    if (frame && src) {
-      since = performance.now();
-      frame.src = src;
+    if (frame) {
+      frame.src = entry.url;
     }
   }
 
@@ -140,7 +133,6 @@
         ({ problem } = found);
         return;
       }
-      since = performance.now();
       ({ origin, src } = found);
     });
     return () => {
@@ -291,7 +283,6 @@
       } else if (type === "cawco:ready") {
         connected = true;
         turnedAway = 0;
-        since = performance.now();
       } else if (type === PREVIEW_LOCKED_MESSAGE && src) {
         turnedAway += 1;
         if (turnedAway > 1) {

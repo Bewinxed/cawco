@@ -25,7 +25,7 @@ import { SvelteMap } from "svelte/reactivity";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
 import { originAddress } from "../preview/page-source";
-import { enterPreviews, turnedAwayWords } from "../preview/pass";
+import { entryTo, turnedAwayWords } from "../preview/pass";
 
 export type Slot = "composer" | "panel";
 
@@ -256,12 +256,6 @@ export class Stage {
   entry = $state<string | null>(null);
   /** Entries in a row the page turned away (`cawco:locked`) without once saying it was ready. */
   #turnedAway = 0;
-  /**
-   * When the iframe last stood without the pass it may hold now
-   * (`performance.now()`): its load, or its page's last word that it was
-   * let in. An entry that landed since stands for it (preview/pass.ts).
-   */
-  #since = performance.now();
 
   /**
    * Its session's preview origin, never the dashboard's: the hub names it
@@ -296,24 +290,17 @@ export class Stage {
       route &&
       !(this.entry && canvasEntries.get(this.id)?.origin === route.origin)
     ) {
-      // The browser enters its previews before the page first loads, so
-      // the lock never sees it without a pass (preview/pass.ts).
-      const refused = await enterPreviews(route.origin);
-      if (refused) {
-        this.unreached = refused;
-        this.changed();
-        return;
-      }
+      // Loaded at once: a browser without a pass is turned away, and goes
+      // through the entry then (`turnedAway`, preview/pass.ts).
       const src = `${route.origin}/__cawco/canvas/${this.id}/`;
       canvasEntries.set(this.id, { origin: route.origin, src });
       this.unreached = null;
-      this.#since = performance.now();
       this.entry = src;
     }
     this.changed();
   }
 
-  /** The page turned the canvas away (`cawco:locked`): the browser enters its previews and the page loads again, once in a row. */
+  /** The page turned the canvas away (`cawco:locked`): it goes through the entry, which lands it at its page, once in a row. */
   async turnedAway(): Promise<void> {
     const { origin, entry } = this;
     if (!(origin && entry)) {
@@ -326,13 +313,12 @@ export class Stage {
       this.changed();
       return;
     }
-    const refused = await enterPreviews(origin, this.#since);
-    if (refused) {
-      this.unreached = refused;
+    const through = await entryTo(origin, new URL(entry).pathname);
+    if ("refused" in through) {
+      this.unreached = through.refused;
       this.entry = null;
     } else if (this.frame) {
-      this.#since = performance.now();
-      this.frame.src = entry;
+      this.frame.src = through.url;
     }
     this.changed();
   }
@@ -340,7 +326,6 @@ export class Stage {
   /** The page said it is ready: a later lapse may enter again. */
   admitted(): void {
     this.#turnedAway = 0;
-    this.#since = performance.now();
   }
 
   /** The host page's address, or "" until it is known. */

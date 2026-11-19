@@ -239,6 +239,7 @@ const ArtifactSessionFrameShape = z.object({
     .object({ browserAsk: BrowserAskFrameShape, requestId: z.string() })
     .nullable(),
   browser: ListedBrowserShape.nullable(),
+  instanceId: z.string(),
   machines: z.array(
     z.object({
       hostname: z.string(),

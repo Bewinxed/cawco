@@ -4,20 +4,22 @@ import { hub } from "#lib/platform/hub.js";
 import { hubAsk, hubRefusal } from "#lib/platform/hub-read.js";
 
 /**
+ * The browser's way into a preview origin (hub preview-access.ts). A frame
+ * loads its preview's address at once, with whatever pass the browser holds
+ * (it stands 30 days): nothing is asked of the hub before it. Only a frame
+ * the origin turns away (`cawco:locked`: no pass yet, or one that ran out or
+ * was revoked) asks the hub for a ticket, its one answer, and makes one
+ * navigation: the entry, which sets the pass and sends it on to the place it
+ * was loading ({@link entryTo}).
+ */
+
+/**
  * Whether `origin` is an origin's own port: the dashboard's own host (core
  * `previewRoute` puts a port on the host the dashboard was reached at),
  * where host mode's names stand on names of their own.
  */
 const byPort = (origin: string): boolean =>
   new URL(origin).hostname === location.hostname;
-
-/** What one pass covers for `origin`: its host by its scheme on a port, else host mode's domain. */
-const passScope = (origin: string): string => {
-  const at = new URL(origin);
-  return byPort(origin)
-    ? `${at.protocol}//${at.hostname}`
-    : hostModeDomain(origin);
-};
 
 /** Why a frame of `origin` was turned away twice, in the dashboard's words. */
 export const turnedAwayWords = (origin: string): string =>
@@ -28,32 +30,50 @@ export const turnedAwayWords = (origin: string): string =>
         location.protocol === "https:"
       );
 
-interface Entry {
-  done: Promise<string | null>;
-  /** When it landed (`performance.now()`); unset while in flight. */
-  landed?: number;
-  /** Why it opened nothing; null once the pass is set. */
-  refused?: string | null;
-}
-
-/** The newest entry by what its pass covers ({@link passScope}). */
-const entries = new Map<string, Entry>();
-
-/** A ticket from the hub, spent on `origin`: null once spent, else why not. */
-async function enter(origin: string): Promise<string | null> {
+/** A ticket from the hub, or why it gave none. */
+async function ticket(): Promise<{ ticket: string } | { refused: string }> {
   const answer = await hubAsk(hub.api["preview-ticket"].post()).catch(
     () => null
   );
-  if (!answer?.ok) {
-    return answer
-      ? hubRefusal(answer.refused).message
-      : "The hub didn't give this browser a pass to its previews.";
+  if (answer?.ok) {
+    return { ticket: answer.value.ticket };
   }
-  const { ticket } = answer.value;
-  // The entry's answer is the preview's origin's, opaque to this page: its
-  // pass is the browser's to keep, and the frame's next load says whether
-  // it stood.
-  return fetch(previewEnterUrl(origin, ticket), {
+  return {
+    refused: answer
+      ? hubRefusal(answer.refused).message
+      : "The hub didn't give this browser a pass to its previews.",
+  };
+}
+
+/**
+ * Where a frame `origin` turned away goes next, so it lands at `place` (a
+ * path on that origin) with the browser's pass: the entry, which spends a
+ * ticket the hub gives now and sends the frame on to `place`. One
+ * navigation of the frame; or the hub's words for why it gave no ticket.
+ */
+export async function entryTo(
+  origin: string,
+  place: string
+): Promise<{ url: string } | { refused: string }> {
+  const given = await ticket();
+  return "refused" in given
+    ? given
+    : { url: previewEnterUrl(origin, given.ticket, place) };
+}
+
+/**
+ * Enters `origin`'s previews beside any frame: what holds no frame to send
+ * through the entry (a page's own doc socket the lock refused since its
+ * pass ran out) has the browser fetch the entry, whose answer is opaque to
+ * this page and whose pass is the browser's to keep. Null once it landed,
+ * else why not.
+ */
+export async function enterBeside(origin: string): Promise<string | null> {
+  const given = await ticket();
+  if ("refused" in given) {
+    return given.refused;
+  }
+  return fetch(previewEnterUrl(origin, given.ticket), {
     mode: "no-cors",
     credentials: "include",
     cache: "no-store",
@@ -61,33 +81,4 @@ async function enter(origin: string): Promise<string | null> {
     () => null,
     () => `${new URL(origin).host} didn't answer the entry`
   );
-}
-
-/**
- * Enters the previews `origin`'s pass covers: null once a frame there may
- * load, else the hub's words for why it can't. Before a frame's first load
- * `since` is left out, and any entry of this page that let it in stands. For
- * a frame turned away, `since` is when it last stood without a pass
- * (`performance.now()`), and only an entry that landed after it stands.
- */
-export function enterPreviews(
-  origin: string,
-  since = Number.NEGATIVE_INFINITY
-): Promise<string | null> {
-  const scope = passScope(origin);
-  const held = entries.get(scope);
-  if (
-    held &&
-    (held.landed === undefined ||
-      (held.refused === null && held.landed > since))
-  ) {
-    return held.done;
-  }
-  const entry: Entry = { done: enter(origin) };
-  entry.done.then((refused) => {
-    entry.landed = performance.now();
-    entry.refused = refused;
-  });
-  entries.set(scope, entry);
-  return entry.done;
 }

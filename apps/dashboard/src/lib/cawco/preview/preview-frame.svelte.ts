@@ -27,7 +27,7 @@ import type { PaneCanvas } from "./pane-canvas.svelte";
 import type { PaneLayout } from "./pane-layout.svelte";
 import type { PaneNotice } from "./pane-notice.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
-import { enterPreviews, turnedAwayWords } from "./pass";
+import { entryTo, turnedAwayWords } from "./pass";
 import type { PreviewReach } from "./preview-reach.svelte";
 import { PROBE_FIRST_MS, PROBE_MOST_MS } from "./preview-reach.svelte";
 import {
@@ -80,6 +80,14 @@ export class PreviewFrame {
    */
   headRoomTaken = $state(false);
 
+  /**
+   * The current frame's page stands drawn: it said it is ready, greeted
+   * (overlay `cawco:ready`), or the proxy's own page named a hop that failed,
+   * or it said nothing within PAGE_SILENT_MS of its load. The cover lifts on
+   * it (owner's pick on decision 2169e665 "cover": "As soon as the page
+   * itself is drawn"), never on the frame's `load`, which waits for every
+   * frame inside the page.
+   */
   loaded = $state(false);
 
   reload = $state(0);
@@ -87,18 +95,11 @@ export class PreviewFrame {
   /** How many entries in a row the page turned away (`cawco:locked`) without once saying it was ready. */
   refusedEntries = 0;
 
-  /**
-   * When the current frame last stood without the pass it may hold now
-   * (`performance.now()`): its mount, or its page's last word that it was
-   * let in. An entry that landed since stands for it (preview/pass.ts).
-   */
-  frameSince = 0;
-
   readonly frameKey = $derived.by(
     () => `${this.#deps.paneSubject.preview?.revision}:${this.reload}`
   );
 
-  // The old paint bridges navigation only until the replacement finishes loading.
+  // The old paint bridges navigation only until the replacement stands drawn.
   standing = $state<string | null>(null);
 
   /** No page: mounted off screen, or let go past the bound; the cover waits for the next load. */
@@ -365,6 +366,15 @@ export class PreviewFrame {
         this.downTries = 0;
       }
     });
+    // The origin answers again after a probe found it unreached: the frame
+    // holds the browser's own error page, so it loads again.
+    $effect(() => {
+      if (this.#deps.previewReach.recovered > 0) {
+        untrack(() => {
+          this.reload += 1;
+        });
+      }
+    });
     $effect(() => {
       if (this.frameKey) {
         this.connected = false;
@@ -488,23 +498,23 @@ export class PreviewFrame {
       : null;
   };
 
-  arrived(key: string) {
-    if (key !== this.frameKey) {
-      return;
-    }
+  /** The current frame's page stands drawn ({@link loaded}): the cover lifts, and the frame it replaced goes. */
+  #shown() {
     this.loaded = true;
-    this.standing = key;
+    this.standing = this.frameKey;
   }
 
   /**
-   * The page turned the frame away (`cawco:locked`: the pass entered before
-   * its first load ran out or was revoked since): the browser enters its
-   * previews again and the frame loads again, once in a row. An entry the hub
-   * won't give is the failure band, with Try again.
+   * The page turned the frame away (`cawco:locked`: no pass yet, or the one
+   * it held ran out or was revoked): the frame goes through the entry, which
+   * spends a ticket the hub gives now and lands it where it was loading, one
+   * navigation, once in a row. An entry the hub won't give is the failure
+   * band, with Try again.
    */
   async turnedAway() {
     const origin = this.#deps.previewReach.paneOrigin;
-    if (!origin) {
+    const frame = this.iframe;
+    if (!(origin && frame)) {
       return;
     }
     this.refusedEntries += 1;
@@ -515,15 +525,17 @@ export class PreviewFrame {
       });
       return;
     }
-    const refused = await enterPreviews(origin, this.frameSince);
-    if (refused) {
+    const entry = await entryTo(origin, this.#deps.previewReach.framePlace);
+    if ("refused" in entry) {
       this.#deps.paneNotice.say({
-        message: `The hub didn't give this preview a pass: ${refused}`,
+        message: `The hub didn't give this preview a pass: ${entry.refused}`,
         again: "reload",
       });
       return;
     }
-    this.reload += 1;
+    if (frame === this.iframe) {
+      frame.src = entry.url;
+    }
   }
 
   /** The proxy's page says which hop failed (`cawco:down`): the pane cannot read a preview origin's document. */
@@ -535,6 +547,7 @@ export class PreviewFrame {
     this.down = said;
     this.downWhy = typeof message.why === "string" ? message.why : null;
     this.retrying = false;
+    this.#shown();
   }
 
   loadedFrame(key: string) {
@@ -550,6 +563,11 @@ export class PreviewFrame {
         this.silentKey = key;
         // A Try again that loaded nothing again is over: its state says so.
         this.retrying = false;
+        // Silent indeed (not a lock's turn-away going through the entry):
+        // the cover lifts on what the browser drew.
+        if (this.heardKey !== key) {
+          this.#shown();
+        }
       }
     }, PAGE_SILENT_MS);
   }
@@ -650,13 +668,13 @@ export class PreviewFrame {
   ready(origin: string) {
     this.readyFrom = origin;
     this.connected = true;
+    this.#shown();
   }
 
   /** The page was let in. */
   letIn() {
-    this.refusedEntries = 0;
     // It was let in: a later turn-away is a pass lost since, which a new entry answers.
-    this.frameSince = performance.now();
+    this.refusedEntries = 0;
     // The frame Try again reloaded answered: what it was tried for is over.
     this.retrying = false;
   }

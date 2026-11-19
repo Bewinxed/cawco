@@ -103,7 +103,7 @@ const RULES: readonly [string, RegExp, Access][] = [
   ["GET", /^\/ws$/u, "open"],
   // An artifact tab's socket reads its caller at its open and refuses it
   // there with a close the tab can read (server.ts, ARTIFACT_SESSION_REFUSED).
-  ["GET", /^\/ws\/artifact-session\/[^/]+\/[^/]+$/u, "open"],
+  ["GET", /^\/ws\/artifact-session\/[^/]+$/u, "open"],
   ["*", /^\/git\//u, "open"],
   ["POST", /^\/api\/delegation\/call\/[^/]+$/u, "open"],
   ["POST", /^\/api\/session-identities\/ack$/u, "open"],

@@ -6,8 +6,8 @@
      artifact's own origin, a page at its own place (hub server.ts
      `tabTarget`). -->
 <script lang="ts">
+  import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { findArtifact } from "#lib/cawco/artifact-api.js";
   import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
   import Overlays from "#lib/cawco/Overlays.svelte";
   import { ArtifactSession } from "#lib/cawco/preview/artifact-session.svelte.js";
@@ -18,53 +18,39 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
   import { IconAlert } from "#lib/icons.js";
-  import { failureWords } from "#lib/platform/hub-read.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { page } from "$app/state";
 
   const id = $derived(page.params.id ?? "");
-  let found = $state<{ instanceId: string; title: string } | null>(null);
-  let problem = $state<string | null>(null);
   /**
    * The one session the artifact's tab follows (artifact-session.svelte.ts),
-   * the pane's store: the pane reads it, never the fleet's.
+   * the pane's store: the pane reads it, never the fleet's. Its socket opens
+   * by the artifact alone as the tab starts, and its first frame names the
+   * session.
    */
   const session = new ArtifactSession();
   setPaneFleet(session);
 
   $effect(() => {
     const wanted = id;
-    let live = true;
-    found = null;
-    problem = null;
-    findArtifact(wanted)
-      .then((artifact) => {
-        if (live) {
-          session.follow(artifact.instanceId, wanted);
-          found = { instanceId: artifact.instanceId, title: artifact.title };
-        }
-      })
-      .catch((error: unknown) => {
-        if (live) {
-          problem = failureWords(error);
-        }
-      });
-    return () => {
-      live = false;
-      session.end();
-    };
+    untrack(() => session.follow(wanted));
+    return () => session.end();
   });
 
+  /** The session the hub's first frame named; null until then. */
+  const instanceId = $derived(session.instanceId);
   /** The tab's artifact as the hub last said: undefined until its first frame, which the opening block stands for. */
-  const shown = $derived(
-    found ? session.preview(found.instanceId)?.state : undefined
+  const preview = $derived(
+    instanceId ? session.preview(instanceId) : undefined
   );
 
   /** A phone's toasts drop from the top, as the app's do; a desk keeps the corner. */
   const narrowToasts = new MediaQuery("(max-width: 640px)");
 </script>
 
-<svelte:head><title>{found?.title ?? "Artifact"} · CawCo</title></svelte:head>
+<svelte:head
+  ><title>{preview?.artifact.title || "Artifact"} · CawCo</title></svelte:head
+>
 
 <!-- Outside the app's group: nothing of the app around it, only what the pane
      stands in (Overlays: the lightbox; the root layout holds the tooltip
@@ -94,25 +80,9 @@
           {/snippet}
         </EmptyState>
       </div>
-    {:else if problem}
+    {:else if instanceId && preview?.state === "open"}
       <div class="flex min-h-0 flex-1 flex-col" in:reveal>
-        <EmptyState icon={IconAlert} title="This artifact didn't open">
-          {#snippet line()}
-            {problem}
-            Open it again from its session's panel.
-          {/snippet}
-          {#snippet action()}
-            <Button
-              href="/session"
-              label="Back to the fleet"
-              variant="outline"
-            />
-          {/snippet}
-        </EmptyState>
-      </div>
-    {:else if found && shown === "open"}
-      <div class="flex min-h-0 flex-1 flex-col" in:reveal>
-        <PreviewPane instanceId={found.instanceId} ownTab />
+        <PreviewPane {instanceId} ownTab />
       </div>
     {:else}
       <div

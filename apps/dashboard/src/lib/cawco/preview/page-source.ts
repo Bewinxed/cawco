@@ -5,30 +5,24 @@
  * life and whether or not the session that wrote it stands; any other page
  * on its session's. The Decisions tab's live page (PageFrame) and Files'
  * unseen thumbnail drawer (files/page-thumbs) both load a page this way,
- * at its own address on either route, once the browser entered its previews
- * (preview/pass.ts): every preview origin turns a browser without a pass
- * away.
+ * at its own address on either route, at once: a frame the origin turns
+ * away (no pass yet) enters through the entry then (preview/pass.ts
+ * `entryTo`).
  */
 
-import {
-  PREVIEW_PING_PATH,
-  type PreviewAddress,
-  previewRoute,
-} from "@cawco/core/preview/routes";
+import { type PreviewAddress, previewRoute } from "@cawco/core/preview/routes";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { previewWords } from "@cawco/core/words/preview";
 import { hub } from "#lib/platform/hub.js";
 import { type HubAsked, hubAsk, hubRefusal } from "#lib/platform/hub-read.js";
-import { enterPreviews } from "./pass";
 
 /** The origin that serves a page: its project's, or (a page outside any project) its session's. */
 export type PageOrigin = { project: string } | { instance: string };
 
 /**
- * Where `origin`'s pages are served and the page at `wanted` there, with
- * the browser's pass to it: its origin (the only one its frame's messages
- * are heard from), whether it is entered by host name, and its address; or
- * why it can't be.
+ * Where `origin`'s pages are served and the page at `wanted` there: its
+ * origin (the only one its frame's messages are heard from), whether it is
+ * entered by host name, and its address; or why it can't be.
  */
 export async function pageSource(
   origin: PageOrigin,
@@ -43,20 +37,6 @@ export async function pageSource(
   const route = previewRoute(asked.address, location);
   if (!route) {
     return { problem: decisionsWords.noAddress };
-  }
-  const reached = await fetch(`${route.origin}${PREVIEW_PING_PATH}`, {
-    mode: "cors",
-    credentials: "omit",
-    cache: "no-store",
-  })
-    .then((ping) => ping.ok)
-    .catch(() => false);
-  if (!reached) {
-    return { problem: decisionsWords.unreached(new URL(route.origin).host) };
-  }
-  const refused = await enterPreviews(route.origin);
-  if (refused) {
-    return { problem: refused };
   }
   return {
     origin: route.origin,

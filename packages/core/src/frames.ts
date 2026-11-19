@@ -160,6 +160,8 @@ export interface ArtifactSessionFrame {
    * has reported none for that key.
    */
   browser: ListedBrowser | null;
+  /** The session that made the tab's artifact, which the tab follows: named by the hub, as the tab's socket names only the artifact. */
+  instanceId: string;
   /** Every machine of the fleet: the session's own is named in the pane's states, and a page's place picker offers the online ones. */
   machines: {
     hostname: string;

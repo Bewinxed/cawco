@@ -211,6 +211,13 @@ export class PageWire {
         if (paneSubject.preview) {
           paneSubject.preview.title = previewTitle(message.title) ?? "";
         }
+        // Drawn but not yet greeted: greeted now, so it stands in the
+        // dashboard's theme and place before the cover lifts; its answer
+        // (greeted) is the ready that shows it.
+        if (message.type === "cawco:ready" && message.greeted !== true) {
+          previewFrame.announce();
+          break;
+        }
         if (message.type === "cawco:ready") {
           previewFrame.ready(event.origin);
           // A new page holds no drawing: the design graph reaches its state again.

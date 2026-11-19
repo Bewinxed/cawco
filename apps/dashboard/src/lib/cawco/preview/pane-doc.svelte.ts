@@ -31,7 +31,7 @@ import {
 } from "./artifact-doc";
 import type { PaneNotice } from "./pane-notice.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
-import { enterPreviews } from "./pass";
+import { enterBeside } from "./pass";
 import type { PreviewFrame } from "./preview-frame.svelte";
 import type { PreviewReach } from "./preview-reach.svelte";
 
@@ -426,7 +426,7 @@ export class PaneDoc {
     if (!origin) {
       return;
     }
-    const refused = await enterPreviews(origin, performance.now());
+    const refused = await enterBeside(origin);
     if (refused && said) {
       this.#deps.paneNotice.say({
         message: `The hub didn't give this preview a pass: ${refused}`,

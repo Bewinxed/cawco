@@ -1,6 +1,8 @@
 /**
  * An artifact's own tab's store (pane-fleet.ts): the one session that made
- * the artifact, followed on the hub's `ARTIFACT_SESSION_PATH` socket. The
+ * the artifact, followed on the hub's `ARTIFACT_SESSION_PATH` socket, which
+ * the tab opens by the artifact alone as it starts: the hub names the
+ * session in each frame, so no read of the artifact waits before it. The
  * owner: "an artifact shouldn't load anything that is not needed for the
  * preview/artifact, no unnecessary connections etc". So the tab opens this
  * socket and its doc's sync socket, and nothing of the fleet store: no board,
@@ -74,8 +76,6 @@ export type ArtifactSessionHeard =
     };
 
 export class ArtifactSession implements PaneFleet {
-  /** The session followed; null until the tab has found its artifact's. */
-  #instanceId = $state<string | null>(null);
   #heard = $state<ArtifactSessionFrame | null>(null);
   /**
    * The panel as the pane holds it: the hub's frame, merged while its
@@ -93,18 +93,20 @@ export class ArtifactSession implements PaneFleet {
   #lastHeard = 0;
   readonly #asks = new Map<string, Waiter>();
 
-  /** Follows `instanceId`, the session that made the tab's artifact `artifactId`, from its first frame. */
-  follow(instanceId: string, artifactId: string): void {
+  /** Follows the session that made artifact `artifactId`, from its first frame. */
+  follow(artifactId: string): void {
     this.end();
     this.#ended = false;
     this.#tries = 0;
     this.#heard = null;
     this.#preview = undefined;
     this.#refused = null;
-    this.#instanceId = instanceId;
-    this.#open(
-      `${encodeURIComponent(instanceId)}/${encodeURIComponent(artifactId)}`
-    );
+    this.#open(encodeURIComponent(artifactId));
+  }
+
+  /** The session followed, as the hub's last frame names it; null until its first frame. */
+  get instanceId(): string | null {
+    return this.#heard?.instanceId ?? null;
   }
 
   /** Why the hub refused the tab's socket (a pairing removed, the artifact deleted); null until it does. */
@@ -128,22 +130,22 @@ export class ArtifactSession implements PaneFleet {
   }
 
   preview = (instanceId: string): PanePreview | undefined =>
-    instanceId === this.#instanceId ? this.#preview : undefined;
+    instanceId === this.instanceId ? this.#preview : undefined;
 
   session = (instanceId: string): PaneSession | undefined =>
-    instanceId === this.#instanceId
+    instanceId === this.instanceId
       ? (this.#heard?.session ?? undefined)
       : undefined;
 
   browser = (instanceId: string): ListedBrowser | null =>
-    instanceId === this.#instanceId ? (this.#heard?.browser ?? null) : null;
+    instanceId === this.instanceId ? (this.#heard?.browser ?? null) : null;
 
   get machines(): readonly PaneMachine[] {
     return this.#heard?.machines ?? [];
   }
 
   working = (instanceId: string): boolean =>
-    instanceId === this.#instanceId && (this.#heard?.working ?? false);
+    instanceId === this.instanceId && (this.#heard?.working ?? false);
 
   sessionHref = (instanceId: string): string => rowHref(instanceId);
 

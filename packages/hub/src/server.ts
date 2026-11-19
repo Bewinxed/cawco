@@ -7317,6 +7317,7 @@ export const createServer = (
       const browserAsk = asked?.payload.browserAsk;
       return {
         type: "artifact.session",
+        instanceId,
         ask:
           asked?.requestId && browserAsk
             ? { requestId: asked.requestId, browserAsk }
@@ -13465,7 +13466,7 @@ export const createServer = (
       })
       // An artifact's own tab follows its session here, and nothing else of
       // the fleet (artifact-session.ts): never the dashboard's socket.
-      .ws(`${ARTIFACT_SESSION_PATH}:instance/:artifact`, {
+      .ws(`${ARTIFACT_SESSION_PATH}:artifact`, {
         perMessageDeflate: true,
         maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
         drain(ws) {
@@ -13474,7 +13475,7 @@ export const createServer = (
         open(handed) {
           openLine(handed, "client");
           const ws = clientSocket(handed);
-          const { instance, artifact } = ws.params;
+          const { artifact } = ws.params;
           // The person's alone, read here rather than at the gate (hub-auth.ts
           // lets this upgrade through): a browser cannot read the answer to a
           // refused upgrade, only a close's code and reason, so the tab is
@@ -13482,14 +13483,17 @@ export const createServer = (
           const caller = hubAuth.classify(
             (name) => ws.headers[name],
             "GET",
-            `${ARTIFACT_SESSION_PATH}${instance}/${artifact}`,
+            `${ARTIFACT_SESSION_PATH}${artifact}`,
             ws.remoteAddress ?? null
           );
           if (caller.kind !== "owner") {
             ws.close(ARTIFACT_SESSION_REFUSED.unpaired, PAIRING_REQUIRED);
             return;
           }
-          if (artifactListener.ownerOf(artifact) !== instance) {
+          // The session that made it, found here and named in each frame:
+          // the tab opens this socket at once, with no read of its own first.
+          const instance = artifactListener.ownerOf(artifact);
+          if (instance === undefined) {
             ws.close(ARTIFACT_SESSION_REFUSED.gone, ARTIFACT_GONE);
             return;
           }
