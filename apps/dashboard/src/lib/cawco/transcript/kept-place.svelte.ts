@@ -487,15 +487,13 @@ export class KeptPlace {
    * Until when a landing's place is held (performance.now()): the rows
    * around a place read back to go on measuring after the list is drawn,
    * and each measurement above it moves it, frames apart. Held for a time
-   * alone, it could be let go while those rows were still coming in. A
-   * page handed over in front puts virtua's buffer at none, and the buffer
-   * steps back up a frame and a task at a time, eight steps. On WebKit at
-   * 390 under load, frames came 220–340ms apart (transcript-holds' reload
-   * legs, traced): the list was drawn with the buffer at 250 of its 400px,
-   * and the place was put back at +257ms and again at +971ms, as the buffer
-   * filled, after 130px of rows had come in above it. In another run a page
-   * in front landed 1227ms after the list was drawn, and its eight steps ran
-   * on past the 1.5s hold. virtua on an iPhone keeps a size change made
+   * alone, it could be let go while those rows were still coming in. The
+   * list is drawn with virtua's buffer at none, and the buffer steps up a
+   * frame and a task at a time, eight steps (MountedRows `buffer`). On
+   * WebKit at 390 under load, frames came 220–340ms apart (transcript-holds'
+   * reload legs, traced): the list was drawn with the buffer at 250 of its
+   * 400px, and the place was put back at +257ms and again at +971ms, as the
+   * buffer filled, after 130px of rows had come in above it. virtua on an iPhone keeps a size change made
    * while it scrolls aside rather than correcting for it at once (0.53.4
    * core: `p() && 0 !== I ? b += t : S += t`). So a landing's place is held
    * while the buffer is not whole, and `FILLED_HOLD_MS` past that.

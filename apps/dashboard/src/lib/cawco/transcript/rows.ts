@@ -1715,8 +1715,6 @@ function stillDrawn(
  * session said meanwhile in the task behind the switch's paint.
  */
 export interface StepFold {
-  /** A page put in front (true), or messages added at the end (false). */
-  front: boolean;
   /** The store's list it folds: a fold for another list is no longer wanted. */
   list: Message[];
   /** The fold, once every message is folded: the memo the next build folds onto. */
@@ -1777,7 +1775,6 @@ export function stepFold(
   const starts = memo.starts.slice(0, keep);
   let at = front ? 0 : cut;
   return {
-    front,
     list,
     step: (ms) => {
       const until = performance.now() + ms;

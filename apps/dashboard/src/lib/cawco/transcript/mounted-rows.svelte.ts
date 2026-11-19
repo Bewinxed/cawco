@@ -7,7 +7,6 @@
  */
 import { untrack } from "svelte";
 import type { VirtualizerHandle } from "virtua/svelte";
-import { track } from "#lib/platform/track.js";
 import type { SessionState } from "../stores/sessions.svelte";
 import { warm } from "../workspace/warm.svelte";
 import { drawnAt } from "./list-whole.svelte";
@@ -40,20 +39,23 @@ const TAIL_MOUNTED = 8;
  * frame after each step still styled 626 of them (a 36ms frame,
  * two-pane-perf's one pane point switch). None while the pane is away
  * (`unseen`), whose rows are kept by `away`; shown again, as much as they
- * span, at once (`keptBuffer`).
+ * span, at once (`keptBuffer`). A page handed over in front leaves it as
+ * it stands (RowBuild `handOver`).
  */
 const BUFFER_STEPS = 8;
 
 /**
  * How many screens either side virtua mounts when the pane is seen: half
- * of one. virtua's own word for it: "A smaller value gives better
- * performance, and a larger value avoids showing blank items in fast
- * scrolling" (its `bufferSize`, 0.53.4). A whole screen mounted a screen
- * of rows above the view each time a wheel came to rest (virtua lets go
- * of the buffer behind a scroll while it runs, and takes it back at rest:
- * 612 elements styled in one frame as a page landed under a still
- * reader), and as much again as a wheel began. Half a screen still
- * measures a row well before a wheel's notch (120px) brings it into view.
+ * of one, on both sides whatever way the reader scrolls (our virtua patch,
+ * as inokawa/virtua#925). virtua's own word for it: "A smaller value gives
+ * better performance, and a larger value avoids showing blank items in
+ * fast scrolling" (its `bufferSize`). A row comes into the buffer, is
+ * mounted and measured in that frame, and comes into the view a frame or
+ * more later, so half a screen covers a reader moving up to half a screen
+ * a frame: a wheel of 240px a frame (6,000px/s, scroll-lab at 1440x900) brought
+ * no row into the view unmeasured in 6 runs, Chromium and WebKit; at 480px
+ * a frame, 17 frames in a run showed one. A whole screen took that to 4,
+ * at 33 frames over 33ms in the run against 12.
  */
 export const BUFFER_SCREENS = 0.5;
 
@@ -101,9 +103,6 @@ export interface MountedRowsHost {
     readonly pinBottom: () => void;
     readonly viewHeight: number;
   };
-  readonly rowBuild: {
-    readonly fronted: number;
-  };
   readonly rowDraw: {
     readonly presentation: {
       readonly leaving: ReadonlySet<string>;
@@ -118,15 +117,6 @@ export interface MountedRowsHost {
 
 export class MountedRows {
   readonly #host: MountedRowsHost;
-
-  /**
-   * The rows mounted as a page in front is handed over, by key, kept
-   * mounted while the buffer steps back up (`keepMounted`). Handed over
-   * with virtua's buffer, the screen above the view filled at once with
-   * rows it had never measured, at `ROW_ESTIMATE` each: 40 rows mounted in
-   * the hand-over's task, 80ms of its 185 (transcript-holds' wheel).
-   */
-  frontHeld = $state<string[]>([]);
 
   /**
    * A row a warming pane holds is skipped while it stages (`skipping`, set
@@ -504,16 +494,6 @@ export class MountedRows {
         kept.push(index);
       }
     }
-    // The rows mounted as a page in front was handed over, held while the
-    // buffer steps back up (`frontHeld`).
-    if (this.frontHeld.length > 0) {
-      const mountedKeys = new Set(this.frontHeld);
-      this.#host.rowDraw.renderedRows.forEach((row, index) => {
-        if (mountedKeys.has(row.key)) {
-          kept.push(index);
-        }
-      });
-    }
     // The rows a pane held as it was laid out again, held while they stage (`heldRows`).
     if (this.heldRows.length > 0) {
       const warmKeys = new Set(this.heldRows);
@@ -731,7 +711,6 @@ export class MountedRows {
 
     $effect(() => {
       const full = this.#host.pin.viewHeight * BUFFER_SCREENS;
-      track(this.#host.rowBuild.fronted);
       if (this.narrow || this.unseen) {
         this.buffer = 0;
         return;
@@ -755,8 +734,6 @@ export class MountedRows {
             this.buffer = Math.min(full, this.buffer + by);
             if (this.buffer < full) {
               grow();
-            } else if (untrack(() => this.frontHeld.length) > 0) {
-              this.frontHeld = [];
             }
           });
         });

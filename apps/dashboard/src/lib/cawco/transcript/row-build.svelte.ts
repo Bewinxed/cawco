@@ -134,11 +134,6 @@ export interface RowBuildHost {
   };
   readonly isFocused: boolean;
   readonly landed: boolean;
-  readonly mounted: {
-    buffer: number;
-    frontHeld: string[];
-    readonly onList: () => Set<string>;
-  };
   readonly session: SessionState;
   readonly slides: {
     readonly beforeMove: Map<string, Box> | null;
@@ -475,16 +470,22 @@ export class RowBuild {
     step();
   }
 
-  /** The stepped fold's rows, handed to the build (`fronted`). */
+  /**
+   * The stepped fold's rows, handed to the build (`fronted`). virtua's
+   * buffer stands through it (MountedRows `buffer`): the rows above the
+   * view are mounted and measured half a screen before a wheel brings them
+   * in, landing or not. Put at none here and stepped back up over eight
+   * tasks (about half a second), a wheel in that window brought rows into
+   * the view that virtua mounted behind the scroll at `ROW_ESTIMATE`, drawn
+   * hidden until measured: scroll-lab, Chromium wheel at 1440, the overscan
+   * above the view down to 0-160px within 600ms of a landing and 3-26
+   * frames a run with a row in view at its estimate; standing, 400px at
+   * least and none. Handing over with it costs no longer frame: the longest
+   * frame within ten of a landing, median 26-29ms a run before, 24-26ms.
+   */
   handOver(steps: StepFold): void {
     this.memo = steps.memo();
     this.stepping = null;
-    if (steps.front) {
-      // Handed over with nothing mounted past what is (`frontHeld`): the
-      // screen above fills a step a task (`buffer`).
-      this.#host.mounted.frontHeld = [...this.#host.mounted.onList()];
-      this.#host.mounted.buffer = 0;
-    }
     // The page that ends the conversation's pages takes the strip before
     // the list with it (`Built.before`), in this same flush: the rows on
     // screen are put back where they stood behind both (ListWhole

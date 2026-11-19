@@ -1,3 +1,29 @@
+diff --git a/lib/core/index.cjs b/lib/core/index.cjs
+index 3022743e96dc7bca57232fe8b0400e39bd8e0732..62aa4b9a75305d6fe5b6d8eb306cdd90070d8d68 100644
+--- a/lib/core/index.cjs
++++ b/lib/core/index.cjs
+@@ -626,7 +626,7 @@ exports.UPDATE_VIRTUAL_STATE = 1, exports.createContainerDriver = (t, e, o) => {
+             let s, r;
+             if (!k || g || S) [s, r] = z; else {
+                 let l = L(), c = l + m;
+-                a() || (e = n(0, e), 1 !== v && (l -= e), 2 !== v && (c += e)), [s, r] = z = !I && (c <= 0 || l >= i()) ? [ 0, -1 ] : t(n(0, l), n(0, c)), 
++                a() || (e = n(0, e), /* cawco: either side of the view whatever the scroll direction (inokawa/virtua#925) */ l -= e, c += e), [s, r] = z = !I && (c <= 0 || l >= i()) ? [ 0, -1 ] : t(n(0, l), n(0, c)), 
+                 I && (s = o(s, I[0]), r = n(r, I[1]));
+             }
+             return [ s, o(r, f() - 1) ];
+diff --git a/lib/core/index.js b/lib/core/index.js
+index 2607344cd8ca29496c13c6f3330db108513e4944..393c513bd9b909cb89cfa21ed167871acc8a61f4 100644
+--- a/lib/core/index.js
++++ b/lib/core/index.js
+@@ -33,7 +33,7 @@ t), d = 5, p = 7, m = 1, h = 2, w = 4, b = 8, S = t => o(t.$getTotalSize(), t.$g
+             let s, r;
+             if (!k || d || v) [s, r] = z; else {
+                 let l = L(), c = l + m;
+-                a() || (e = o(0, e), 1 !== I && (l -= e), 2 !== I && (c += e)), [s, r] = z = !x && (c <= 0 || l >= i()) ? [ 0, -1 ] : t(o(0, l), o(0, c)), 
++                a() || (e = o(0, e), /* cawco: either side of the view whatever the scroll direction (inokawa/virtua#925) */ l -= e, c += e), [s, r] = z = !x && (c <= 0 || l >= i()) ? [ 0, -1 ] : t(o(0, l), o(0, c)), 
+                 x && (s = n(s, x[0]), r = o(r, x[1]));
+             }
+             return [ s, n(r, f() - 1) ];
 diff --git a/lib/svelte/Virtualizer.svelte b/lib/svelte/Virtualizer.svelte
 index 4e3e40dcc8e619e6e3dd81b96b151cd8e03908d0..1ab8ce7d6060f1d822854672c7365a5d23132535 100644
 --- a/lib/svelte/Virtualizer.svelte

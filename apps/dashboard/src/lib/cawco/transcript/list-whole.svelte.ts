@@ -79,7 +79,7 @@ export function drawnAt(
  * for the row at the top, it was what the view held: the reader's kept place
  * put it back and moved every row they saw by its growth (KeptPlace
  * `scrollToRow` 203px down, WebKit at 1440, a wheel up just after a page
- * landed with virtua's buffer at none). And looked for only eight rows past
+ * landed). And looked for only eight rows past
  * the top, under a wheel that brought the view a screen's worth of rows
  * virtua mounts in the flush behind it, nothing was seen and nothing held:
  * virtua's `scrollBy(381.5)` for the rows measured above, its fraction
