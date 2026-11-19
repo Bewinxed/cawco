@@ -13082,6 +13082,36 @@
                     "pattern": "^/",
                     "type": "string"
                   },
+                  "directions": {
+                    "maxItems": 24,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "file": {
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "pattern": "\\.stories\\.[cm]?[jt]sx?$",
+                          "type": "string"
+                        },
+                        "line": {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "file",
+                        "line",
+                        "name"
+                      ]
+                    }
+                  },
                   "does": {
                     "enum": [
                       "draw",
@@ -38780,6 +38810,9 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "unopened": {
+                    "type": "string"
                   },
                   "widthOnly": {
                     "type": "array",

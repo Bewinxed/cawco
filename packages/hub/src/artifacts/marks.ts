@@ -33,7 +33,7 @@ import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { pinLink } from "@cawco/core/references";
-import type { StageError } from "@cawco/core/stage";
+import type { CanvasDirection, StageError } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import {
   askedAgainLine,
@@ -50,6 +50,7 @@ import { storedFilePath } from "../media";
 import type { ArtifactServiceDeps } from "./deps";
 import { heldPictures } from "./held-pictures";
 import type { createPageStore } from "./page-store";
+import { sheetOf } from "./served";
 import type { MarksOutcome } from "./shapes";
 
 /**
@@ -381,7 +382,7 @@ export const createMarks = (ctx: MarksContext) => {
     const url = ctx.addressOf(row.id, doc);
     const sections = pins.map((pin) =>
       [
-        ...pinStandsOn(pin, url),
+        ...pinStandsOn(pin, url, sheetOf(row)?.spec.directions),
         ...pin.thread
           .filter((entry) => entry.by === "person" && entry.text.trim())
           .map((entry) => wroteLine(entry.text)),
@@ -522,11 +523,13 @@ export const createMarks = (ctx: MarksContext) => {
     owed: Pin[],
     groups: Record<string, InkGroup>,
     url: string,
-    carried: Map<string, Carried>
+    carried: Map<string, Carried>,
+    directions?: readonly CanvasDirection[]
   ) =>
     owed.map((pin) =>
       pinDelivery(pin, {
         url,
+        ...(directions ? { directions } : {}),
         link: linkOfPin(artifact, pin),
         carried: (one) => carried.get(one.ref) ?? { as: "file" },
         ...(pin.ink && groups[pin.ink] ? { ink: groups[pin.ink].page } : {}),
@@ -585,7 +588,14 @@ export const createMarks = (ctx: MarksContext) => {
             ),
           ]
         : []),
-      ...pinSections(row.id, owed, groups, url, carried),
+      ...pinSections(
+        row.id,
+        owed,
+        groups,
+        url,
+        carried,
+        sheetOf(row)?.spec.directions
+      ),
     ];
     // A sheet's saves and compile errors go on the person's marks' own channel.
     const text = marksText(row, marks, errors, saves);

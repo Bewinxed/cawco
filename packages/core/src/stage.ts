@@ -784,9 +784,25 @@ export function canvasOf(path: string): { files: string[]; spec: CanvasSpec } {
   return { files: query.getAll("file"), spec };
 }
 
-/** What a canvas page is told besides its files: the agent's edges and groups, its dials. */
+/**
+ * One direction of a design (the design graph's directions): one of the
+ * canvas's states files, its name as the person reads it, and the agent's
+ * one line on what it tries. A canvas with two or more opens them as one
+ * design, a switch between them in the panel's head.
+ */
+export interface CanvasDirection {
+  /** Its states file, from the toolchain root, as the canvas's files name it. */
+  file: string;
+  /** What it tries, in one line. */
+  line: string;
+  name: string;
+}
+
+/** What a canvas page is told besides its files: the agent's edges and groups, its dials, its directions. */
 export interface CanvasSpec {
   dials?: CanvasDial[];
+  /** The directions of one design, each one of its states files. */
+  directions?: CanvasDirection[];
   edges?: CanvasEdge[];
   /** Story → the parent story or section heading it groups under. */
   group?: Record<string, string>;
@@ -857,6 +873,17 @@ const edgeOf = (value: unknown): CanvasEdge | undefined => {
     : undefined;
 };
 
+const directionOf = (value: unknown): CanvasDirection | undefined => {
+  if (!isRecord(value)) {
+    return;
+  }
+  const file = textOf(value.file);
+  const name = textOf(value.name);
+  return file && name
+    ? { file, name, line: textOf(value.line) ?? "" }
+    : undefined;
+};
+
 /** `value`, the JSON a {@link CanvasSpec} was written as, read back: what of it is a spec's. */
 export const canvasSpecOf = (value: unknown): CanvasSpec => {
   if (!isRecord(value)) {
@@ -872,6 +899,9 @@ export const canvasSpecOf = (value: unknown): CanvasSpec => {
   return withoutUndefined({
     dials: Array.isArray(value.dials)
       ? value.dials.flatMap((one) => dialOf(one) ?? [])
+      : undefined,
+    directions: Array.isArray(value.directions)
+      ? value.directions.flatMap((one) => directionOf(one) ?? [])
       : undefined,
     edges: Array.isArray(value.edges)
       ? value.edges.flatMap((one) => edgeOf(one) ?? [])
@@ -910,6 +940,8 @@ export const sectionPlansOf = (value: unknown): Record<string, SectionPlan> =>
 /** The bounds a canvas spec keeps. Ours. */
 export const CANVAS_SPEC_LIMITS = {
   dials: 24,
+  /** A direction's line, characters: one line. */
+  directionLine: 200,
   edges: 100,
   files: 24,
   label: 80,

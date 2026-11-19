@@ -2,6 +2,7 @@
 
 import { humanSize } from "../attachments";
 import { fileSpotDetail, readFileSpot } from "../file-spot";
+import type { CanvasDirection } from "../stage";
 import { chainWords, wroteLine } from "../words/comment-lines";
 import { fileViewerWords } from "../words/file-viewer";
 import { type PageAnchor, wholePage } from "./anchor";
@@ -65,7 +66,11 @@ const inFileLine = (anchor: PageAnchor): string[] => {
  * text; on a canvas, the elements under its ink. `url`, when given, is the page's address
  * as its own line; `comment_read` says it once for the artifact instead.
  */
-export const pinStandsOn = (pin: Pin, url?: string): string[] => {
+export const pinStandsOn = (
+  pin: Pin,
+  url?: string,
+  directions?: readonly CanvasDirection[]
+): string[] => {
   const { anchor } = pin;
   if (!("selector" in anchor)) {
     const named = pin.elements
@@ -78,6 +83,10 @@ export const pinStandsOn = (pin: Pin, url?: string): string[] => {
   }
   const { source } = anchor;
   const chain = chainWords(anchor);
+  // On a design with directions, the one its states file is.
+  const direction = anchor.sheet
+    ? directions?.find((one) => one.file === anchor.sheet?.file)
+    : undefined;
   return [
     `## ${pin.number}. ${pin.kind} on ${spotHead(anchor)}`,
     ...inFileLine(anchor),
@@ -93,6 +102,7 @@ export const pinStandsOn = (pin: Pin, url?: string): string[] => {
         ]
       : []),
     ...(chain ? [`- Inside: ${chain}`] : []),
+    ...(direction ? [`- Direction: ${direction.name}`] : []),
     ...(anchor.sheet?.state
       ? [
           `- State: ${anchor.sheet.story} · ${anchor.sheet.state.interaction} · ${anchor.sheet.state.scheme} · ${anchor.sheet.state.width === null ? "fit" : `${anchor.sheet.state.width}px`}`,
@@ -164,9 +174,11 @@ export function pinSection(
     ink?: { h: number; w: number; x: number; y: number };
     /** The page's address. */
     url: string;
+    /** On a design graph with directions, its directions: a pin names the one it stands on. */
+    directions?: readonly CanvasDirection[];
   }
 ): string {
-  const lines = pinStandsOn(pin, context.url);
+  const lines = pinStandsOn(pin, context.url, context.directions);
   if (context.ink) {
     const { w, h, x, y } = context.ink;
     lines.push(`- Ink: ${w} × ${h} px at ${x}, ${y} in the page`);

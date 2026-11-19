@@ -211,6 +211,20 @@ export const artifactCreate = {
         "CSF 3 states files from your workspace's root: one per direction, or your reading's."
       ),
     ...canvasFields,
+    // Create alone: the same name again replaces a design's directions, his pick kept.
+    directions: z
+      .array(
+        z.object({
+          file: z.string().max(1000),
+          name: z.string().max(CANVAS_SPEC_LIMITS.label),
+          line: z.string().max(CANVAS_SPEC_LIMITS.directionLine),
+        })
+      )
+      .max(CANVAS_SPEC_LIMITS.files)
+      .optional()
+      .describe(
+        "Two or more directions of one design, a states file each: one graph switching between them; his pick is artifact_read's `picked`."
+      ),
     dir: z.string().startsWith("/").max(4096).optional().describe("Absolute."),
     port: z
       .number()

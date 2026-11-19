@@ -22,6 +22,7 @@ import type {
   STAGE_FAULT,
   STAGE_LAID,
   STAGE_LET_GO,
+  STAGE_LOAD,
   STAGE_PAUSE,
   STAGE_PLAY,
   STAGE_REACH,
@@ -40,6 +41,7 @@ type StageAsk =
   | typeof STAGE_COMPARE
   | typeof STAGE_DIALS
   | typeof STAGE_LET_GO
+  | typeof STAGE_LOAD
   | typeof STAGE_PAUSE
   | typeof STAGE_PLAY
   | typeof STAGE_REACH

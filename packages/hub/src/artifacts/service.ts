@@ -160,6 +160,7 @@ import {
   type CanvasInput,
   CREATE_SHAPE,
   canvasProblem,
+  directionsStaged,
   specOf,
 } from "./component";
 import type { ArtifactServiceDeps, HandedArtifactFile } from "./deps";
@@ -4815,7 +4816,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * `artifact_update` of a design graph's edges, groups or dials: its
+     * `artifact_update` of a design graph's edges, groups, dials or directions: its
      * page's address changes, so the panel draws it again at the next
      * revision. Answers what changed and the canvas's new spec.
      */
@@ -4836,10 +4837,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!(sheet && "port" in row.source)) {
         return problem(409, {
           code: "artifact-canvas-spec-not-sheet",
-          detail: `${row.name} is a ${row.kind}: edges, group and dials are a design graph's.`,
+          detail: `${row.name} is a ${row.kind}: edges, group, dials and directions are a design graph's.`,
         });
       }
-      const misfit = canvasProblem(input);
+      const { files } = canvasOf(row.source.path ?? "");
+      // Each direction names its file as the stage does, from the toolchain root.
+      const directions =
+        input.directions && directionsStaged(input.directions, [], files);
+      const misfit = canvasProblem({ ...input, directions }, files);
       if (misfit) {
         return problem(400, {
           code: "artifact-canvas-spec-unfit",
@@ -4850,8 +4855,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         edges: input.edges ?? sheet.spec.edges,
         group: input.group ?? sheet.spec.group,
         dials: input.dials ?? sheet.spec.dials,
+        directions: directions ?? sheet.spec.directions,
       });
-      const { files } = canvasOf(row.source.path ?? "");
       // Handed up as the version its files are now (its pin cut,
       // cutVersion); a maker's change to one its parent opened is its next
       // version (changedBy).

@@ -91,7 +91,10 @@
   };
 </script>
 
-<Tabs.Root class="contents" onValueChange={choose} {value}>
+<!-- The tabs read the choice through `value` alone: a press asks through
+     `choose`, so a parent that holds its value where it stands (a design's
+     directions while comparing) keeps its segment chosen. -->
+<Tabs.Root bind:value={() => value, choose} class="contents">
   <Tabs.List aria-label={label}>
     {#snippet child({ props })}
       <BarGlass

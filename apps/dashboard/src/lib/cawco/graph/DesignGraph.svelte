@@ -19,7 +19,14 @@
    * instead: the page draws it hidden under the kept one, reads what
    * differs and rings it; a glass over the stage lists each difference, a press
    * on a line bringing its ring into view. Several components under one
-   * ask: one in front, the others behind its name's menu.
+   * ask: one in front, the others behind its name's menu. Several
+   * directions of one design (the spec's `directions`): one in front, a
+   * switch between them in the panel's head, which keeps the state, the
+   * width, the scheme and the dials; Compare compares the kept state with
+   * the same state in the direction he came from, and Pick, the head's one
+   * prominent action, picks the one in front (the artifact's `picked`).
+   * The page loads no states file up front: the one in front is asked for
+   * (`link.load`) while its sheet has not come.
    *
    * No bar of its own (DESIGN.md, The Title Bars Follow Liquid Glass
    * Rule): the artifact panel's head floats over the graph, which runs to
@@ -58,6 +65,7 @@
     BarMenu,
     BarSegments,
   } from "#lib/components/ui/bar-glass/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import {
@@ -77,6 +85,7 @@
     IconPlayLinear,
     IconSunLinear,
     IconTabletLinear,
+    IconTick,
     IconTuning,
     IconTuningLinear,
     IconWideLinear,
@@ -127,6 +136,8 @@
     keptTuned = [],
     ontuned,
     head = $bindable(null),
+    picked = null,
+    onpick,
     modeTools,
     changesTools,
     modeCompact,
@@ -163,8 +174,12 @@
     keptTuned?: readonly TunedRecord[];
     /** His tuning changed: the artifact keeps it (its doc's `tuned`, which `artifact_read` answers), every move's at once. */
     ontuned?: (records: TunedRecord[]) => void;
-    /** What the graph hands the panel's head (graph-head.ts): its title, its steps, its components. */
+    /** What the graph hands the panel's head (graph-head.ts): its title, its steps, its components, a design's directions and Pick. */
     head?: GraphHead | null;
+    /** The direction he picked, by its states file, as the artifact keeps it (its doc's `picked`); null while none is. */
+    picked?: string | null;
+    /** He picked the direction in front (its states file), or took his pick back (null): the artifact keeps it as its doc's `picked`, which `artifact_read` answers. */
+    onpick?: (file: string | null) => void;
     /** The page's mode (Interact, Comment, Draw), standing with the view over the stage's foot. */
     /** What changed since he looked, a glass beside the view (PreviewPane's ChangesTag); none while nothing did. */
     changesTools?: Snippet;
@@ -198,8 +213,31 @@
   /** Whether the ask names `words` (a component's or a state's name), as a person writes it. */
   const asks = (named: string) =>
     named.length > 0 && ask.toLowerCase().includes(named.toLowerCase());
-  /** The states file of the component the ask names (its longest name it holds), else the first: the one in front until he picks another. */
+  /**
+   * The directions of one design (the spec's `directions`), each one of
+   * the canvas's states files, listed from the spec before any of them has
+   * loaded (the page loads the one in front alone); a design with two or
+   * more opens as one, the switch between them in the head.
+   */
+  const directions = $derived(
+    (spec.directions ?? []).filter((one) => files.includes(one.file))
+  );
+  const directed = $derived(directions.length > 1);
+  const directionOf = (file: string | null) =>
+    directions.find((one) => one.file === file);
+  /** The states file of the component the ask names (its longest name it holds; a design's direction by its name), else the first: the one in front until he picks another. */
   const askedFile = $derived.by(() => {
+    if (directed) {
+      let named = directions[0]?.file ?? null;
+      let longest = 0;
+      for (const one of directions) {
+        if (asks(one.name) && one.name.length > longest) {
+          named = one.file;
+          longest = one.name.length;
+        }
+      }
+      return named;
+    }
     let best = files[0] ?? null;
     let longest = 0;
     for (const one of reviews) {
@@ -425,34 +463,136 @@
   });
   /** Compare is on: a switch that stays on until he turns it off. */
   let comparing = $state(false);
-  /** The state the kept one is compared with, by its id, while comparing. */
-  let against = $state<string | null>(null);
+  /** The state the kept one is compared with, while comparing: its states file (the one in front, or another direction of the design) and its id. */
+  let against = $state<{ file: string; state: string } | null>(null);
   /** The compared state shown in the kept one's place (Compare's flip). */
   let flipped = $state(false);
-  /** The state compared with while Compare is on and the component in front has it. */
-  const againstState = $derived(
-    comparing && review && against ? review.states[against] : undefined
+  /** The direction he came from to the one in front: Compare compares with it. */
+  let cameFrom = $state<string | null>(null);
+  /** The compared state's states file, once the page has said its sheet. */
+  const againstReview = $derived(
+    against
+      ? (entries.find((one) => one.file === against?.file)?.review ?? undefined)
+      : undefined
   );
-  /** Compare turned on compares with the state before the kept one (`previousOf`); it leaves the room as it stands. */
+  /** The compared state's id: the one asked, else its file's first where that file lacks it; the one asked while its sheet is on its way. */
+  const againstId = $derived.by(() => {
+    if (!against) {
+      return null;
+    }
+    return againstReview && !againstReview.states[against.state]
+      ? (againstReview.order[0] ?? against.state)
+      : against.state;
+  });
+  /** The state compared with while Compare is on and its states file has said it. */
+  const againstState = $derived(
+    comparing && againstReview && againstId
+      ? againstReview.states[againstId]
+      : undefined
+  );
+  /** Compare compares the direction in front with another direction of the design. */
+  const across = $derived(!!against && against.file !== frontFile);
+  /** The direction Compare turns on with: the one he came from, else the one after the direction in front. */
+  const otherDirection = $derived.by(() => {
+    if (!directed) {
+      return null;
+    }
+    if (cameFrom && cameFrom !== frontFile && directionOf(cameFrom)) {
+      return cameFrom;
+    }
+    const at = directions.findIndex((one) => one.file === frontFile);
+    return directions[(at + 1) % directions.length]?.file ?? null;
+  });
+  /**
+   * Compare turned on compares with the state before the kept one
+   * (`previousOf`); on a design with directions, with the same state in the
+   * direction he came from (else the next). It leaves the room as it stands.
+   */
   const setComparing = (on: boolean) => {
     comparing = on;
-    against = on && review && kept ? previousOf(review, kept.state) : null;
+    against = null;
+    if (on && review && kept) {
+      const state = directed ? kept.state : previousOf(review, kept.state);
+      const file = directed ? otherDirection : review.file;
+      against = state && file ? { file, state } : null;
+    }
     flipped = false;
   };
-  /** The state Compare compares with: the one on, else the one it would turn on with. */
+  /** What Compare compares with: the direction or state on, else the one it would turn on with. */
   const compareName = $derived.by(() => {
     if (!(review && kept)) {
       return "";
     }
+    if (directed && !(comparing && !across)) {
+      return (
+        directionOf(comparing && against ? against.file : otherDirection)
+          ?.name ?? ""
+      );
+    }
     const id =
-      againstState && against ? against : previousOf(review, kept.state);
+      againstState && againstId ? againstId : previousOf(review, kept.state);
     return (id && review.states[id]?.name) ?? "";
   });
-  /** Compared with another state: the kept one shows in its place again. */
+  /** What the glass over the stage names as compared: the state; another direction by its name, with the state where it differs from the kept one. */
+  const comparedName = $derived.by(() => {
+    if (!(againstState && against)) {
+      return "";
+    }
+    const direction = across ? directionOf(against.file) : undefined;
+    if (!direction) {
+      return againstState.name;
+    }
+    return againstId === kept?.state
+      ? direction.name
+      : words.directionAt(direction.name, againstState.name);
+  });
+  /** Compared with another state of the one in front: the kept one shows in its place again. */
   const compareWith = (state: string | null) => {
-    against = state;
+    against = state && review ? { file: review.file, state } : null;
     flipped = false;
   };
+  /** Compared with the kept state in another direction of the design. */
+  const compareAcross = (file: string) => {
+    against = kept ? { file, state: kept.state } : null;
+    flipped = false;
+  };
+  /**
+   * Another direction brought in front at the state he looks at (by its
+   * story's name; that direction's first where it has none), the width,
+   * scheme and dials as they stand. While comparing, a direction pressed is
+   * compared with instead, the one in front staying.
+   */
+  const flip = (file: string) => {
+    if (file === frontFile || !directionOf(file)) {
+      return;
+    }
+    if (comparing) {
+      compareAcross(file);
+      return;
+    }
+    if (kept) {
+      keptOf = { ...keptOf, [file]: kept };
+    }
+    cameFrom = frontFile;
+    chosenFile = file;
+    // A direction never in front loads cold (a whole screen, seconds): the stage says it is arriving.
+    arriving = true;
+  };
+  /** The direction he picked, while it is one of the design's. */
+  const pickedFile = $derived(picked && directionOf(picked) ? picked : null);
+  /** Pick on the direction in front; on the one picked, the pick taken back. */
+  const pickFront = () => {
+    if (frontFile && directed) {
+      onpick?.(pickedFile === frontFile ? null : frontFile);
+    }
+  };
+  /** Pick's words: Pick this; Pick this instead, another being picked; Picked, on the one picked. */
+  const pickWords = $derived.by(() => {
+    if (pickedFile === null) {
+      return words.pickThis;
+    }
+    return pickedFile === frontFile ? words.picked : words.pickInstead;
+  });
   // A new ask (the agent showed the canvas again, or changed its ask)
   // opens on the state it names: what he kept under the last ask goes.
   // Under the ask they were kept for, his picks stand again after a reload.
@@ -547,7 +687,10 @@
   const keep = (state: string, variant: string | null) => {
     if (review) {
       keptOf = { ...keptOf, [review.file]: { state, variant } };
-      if (comparing && against === state) {
+      if (comparing && across && against) {
+        // Compared with another direction: the same state there.
+        against = { file: against.file, state };
+      } else if (comparing && against?.state === state) {
         compareWith(previousOf(review, state));
       }
     }
@@ -636,6 +779,28 @@
     untrack(() => {
       if (loads > 0) {
         link.view(view);
+      }
+    });
+  });
+  /**
+   * The page loads no states file up front (the stage's `sweepsOf`): the one
+   * in front is asked for while its sheet has not come, once a page. Its
+   * sheet names its states; the reach to the kept one follows.
+   */
+  let loadsAsked = new Set<string>();
+  let loadsPage = 0;
+  $effect(() => {
+    const file = frontFile;
+    const said = file !== null && file in link.sheets;
+    const { loads } = link;
+    untrack(() => {
+      if (loads !== loadsPage) {
+        loadsPage = loads;
+        loadsAsked = new Set();
+      }
+      if (file && loads > 0 && !said && !loadsAsked.has(file)) {
+        loadsAsked.add(file);
+        link.load(file);
       }
     });
   });
@@ -971,9 +1136,14 @@
   // Compare said on the line after the reach, so the page compares with the
   // state at the kept one's width (its story there, as the reach names it);
   // again on a new page, which compares with nothing until asked.
+  // Another direction's states file the page has not loaded yet is named
+  // by the state asked, which loads it (stage.ts `targetOf`); once its sheet
+  // comes, by its state at the kept one's width.
   $effect(() => {
     const on = review;
-    const id = againstState ? against : null;
+    const asked = comparing ? against : null;
+    const id = againstId;
+    const other = againstReview;
     const atWidth = width;
     const show = flipped ? "compared" : "kept";
     const { loads } = link;
@@ -981,10 +1151,13 @@
       if (loads === 0 || !on) {
         return;
       }
-      link.compare(
-        id ? refOf(on, { state: id, variant: null }, atWidth) : null,
-        show
-      );
+      let ref: StateRef | null = null;
+      if (asked && id) {
+        ref = other
+          ? refOf(other, { state: id, variant: null }, atWidth)
+          : { file: asked.file, story: id };
+      }
+      link.compare(ref, show);
     });
   });
   /** Compare is reading what differs: asked for, and not yet answered. */
@@ -1036,6 +1209,15 @@
   const path = $derived(review ? pathOf(review) : []);
   const at = $derived(kept ? path.indexOf(kept.state) : -1);
   const single = $derived((review?.order.length ?? 0) <= 1);
+  /** Compare has something to compare with: another state, or another direction of the design. */
+  const canCompare = $derived(directed || !single);
+  /** The states the stepper's menu lists: the direction in front's alone on a design with directions (the switch brings another in front); else every component's whose sheet has come. */
+  const menuReviews = $derived.by(() => {
+    if (!directed) {
+      return reviews;
+    }
+    return review ? [review] : [];
+  });
   const keptState = $derived(
     review && kept ? review.states[kept.state] : undefined
   );
@@ -1087,7 +1269,16 @@
       title: review?.name ?? "",
       line: keptState?.note ?? "",
       more: moreItems,
-      components: files.length > 1 ? componentsGroup : null,
+      // A design's directions take the components' place.
+      components: files.length > 1 && !directed ? componentsGroup : null,
+      directions: directed
+        ? {
+            bar: directionsBar,
+            compact: directionsCompact,
+            menu: directionsMenu,
+          }
+        : null,
+      pick: directed ? { bar: pickBar, menu: pickMenu } : null,
     };
   });
   $effect(() => () => {
@@ -1154,7 +1345,7 @@
     {#if rising === "map"}
       {#if !single}
         <WholeSet
-          against={againstState ? against : null}
+          against={againstState && !across ? againstId : null}
           kept={kept.state}
           {narrow}
           onmove={chooseMove}
@@ -1285,6 +1476,127 @@
   </DropdownMenu.Group>
 {/snippet}
 
+<!-- A design's directions, in the panel head's centre (graph-head.ts): a
+     segmented control of their names (HIG, Segmented controls: text,
+     never mixed with symbols), each one's tooltip what it tries and
+     whether it is picked; listed from the spec, before any has loaded. A
+     press brings that direction in front, the state, width, scheme and
+     dials as they stand; while comparing, it compares with it, the one in
+     front staying chosen. -->
+{#snippet directionsBar()}
+  <BarSegments
+    label={words.directions}
+    bind:value={() => frontFile ?? "", flip}
+    segments={directions.map((one) => ({
+      value: one.file,
+      label: one.name,
+      tip: words.directionTip(one.line, one.file === pickedFile),
+    }))}
+  />
+{/snippet}
+
+<!-- Each direction, its name over what it tries, the picked one marked:
+     the folded switch's menu and More's entries. -->
+{#snippet directionsList()}
+  <DropdownMenu.Group>
+    <DropdownMenu.GroupHeading>{words.directions}</DropdownMenu.GroupHeading>
+    <DropdownMenu.RadioGroup onValueChange={flip} value={frontFile ?? ""}>
+      {#each directions as one (one.file)}
+        <DropdownMenu.RadioItem row="described" value={one.file}>
+          <span class="flex min-w-0 flex-1 flex-col gap-space-row" data-box>
+            <span class="truncate type-label font-medium text-ink-strong"
+              >{one.name}</span
+            >
+            {#if one.line}
+              <span class="line-clamp-2 type-meta text-ink-muted"
+                >{one.line}</span
+              >
+            {/if}
+          </span>
+          {#if one.file === pickedFile}
+            <IconTick
+              aria-label={words.pickedMark}
+              class="size-icon-sm flex-none text-ink-muted"
+              data-slot="direction-picked"
+            />
+          {/if}
+        </DropdownMenu.RadioItem>
+      {/each}
+    </DropdownMenu.RadioGroup>
+  </DropdownMenu.Group>
+{/snippet}
+
+<!-- Pick as a menu's entry: on the picked direction, the pick taken back. -->
+{#snippet pickEntry()}
+  {@const name = directionOf(frontFile)?.name ?? ""}
+  <DropdownMenu.Item onSelect={pickFront}>
+    <IconTick /><span
+      >{pickedFile === frontFile
+        ? words.unpick(name)
+        : words.pickNamed(name)}</span
+    >
+  </DropdownMenu.Item>
+{/snippet}
+
+<!-- Where the head has no room for the names (a phone, a narrow panel):
+     one button named for the direction in front, opening the directions,
+     Pick at the menu's foot. -->
+{#snippet directionsCompact()}
+  {@const name = directionOf(frontFile)?.name ?? ""}
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger>
+      {#snippet child({ props })}
+        <BarItem
+          data-slot="directions"
+          form="title"
+          label={words.directionsIn(name)}
+          {props}
+          tip={false}
+        >
+          <span
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-row"
+            >{name}</span
+          >
+          <IconChevronDown
+            aria-hidden="true"
+            class="size-icon-sm flex-none text-ink-muted"
+          />
+        </BarItem>
+      {/snippet}
+    </DropdownMenu.Trigger>
+    <BarMenu label={words.directions} width="titles">
+      {@render directionsList()}
+      <DropdownMenu.Separator />
+      {@render pickEntry()}
+    </BarMenu>
+  </DropdownMenu.Root>
+{/snippet}
+
+{#snippet directionsMenu()}
+  {@render directionsList()}
+{/snippet}
+
+<!-- Pick, the head's one prominent action (HIG, Toolbars: one prominent
+     action trailing), on the direction in front: Pick this, Pick this
+     instead, or Picked, whose press takes the pick back. -->
+{#snippet pickBar()}
+  {@const name = directionOf(frontFile)?.name ?? ""}
+  <Button
+    aria-pressed={pickedFile === frontFile}
+    data-slot="pick"
+    label={pickWords}
+    onclick={pickFront}
+    shape="capsule"
+    title={pickedFile === frontFile
+      ? words.unpick(name)
+      : words.pickNamed(name)}
+    variant={pickedFile === frontFile ? "outline" : "default"}
+  />
+{/snippet}
+{#snippet pickMenu()}
+  {@render pickEntry()}
+{/snippet}
+
 <!-- Leading the panel's head (graph-head.ts): the state stepper, one
      glass. Previous and Next along the component's path; between them the
      kept state's name, a menu of every state with what its agent wrote of
@@ -1361,7 +1673,7 @@
              "the nested list is unreadable, no visual hierarchy"). A state
              of another file brings that file in front. -->
         <BarMenu label={words.statesFace} rises width="titles">
-          {#each reviews as one, at (one.file)}
+          {#each menuReviews as one, at (one.file)}
             {#if at > 0}
               <DropdownMenu.Separator />
             {/if}
@@ -1481,7 +1793,7 @@
             scheme = on ? "dark" : "light";
           }}><IconMoon /><span>{words.dark}</span></DropdownMenu.CheckboxItem
         >
-        {#if !single}
+        {#if canCompare}
           <DropdownMenu.CheckboxItem
             bind:checked={() => comparing, setComparing}
             ><IconCompareLinear /><span>{words.compare(compareName)}</span
@@ -1563,7 +1875,7 @@
           pressed={rising === "dials"}
         />
       {/if}
-      {#if !single}
+      {#if canCompare}
         <BarItem
           icon={IconCompareLinear}
           label={words.compare(compareName)}
@@ -1607,7 +1919,7 @@
         bind:need={stageNeed}
         compare={againstState
           ? {
-              name: againstState.name,
+              name: comparedName,
               flipped,
               read: link.differences,
             }

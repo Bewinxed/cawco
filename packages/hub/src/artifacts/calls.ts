@@ -103,7 +103,7 @@ const changeOf = (body: {
     : problem(400, {
         code: "artifact-update-change-one",
         detail:
-          "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements, an ask, and a component's args, story, edges, group or dials go through their own routes.",
+          "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements, an ask, and a component's args, story, edges, group, dials or directions go through their own routes.",
       });
 };
 
@@ -203,13 +203,15 @@ export const updateComponent = async (
   artifact: string,
   body: Static<typeof componentBody>
 ) => {
-  const { edges, group, dials, args, story } = body;
-  const canvas = [edges, group, dials].some((one) => one !== undefined);
+  const { edges, group, dials, directions, args, story } = body;
+  const canvas = [edges, group, dials, directions].some(
+    (one) => one !== undefined
+  );
   if (canvas && (args !== undefined || story !== undefined)) {
     return problem(400, {
       code: "artifact-component-change-mixed",
       detail:
-        "edges, group and dials change the canvas itself: send them apart from a states file's args or story.",
+        "edges, group, dials and directions change the canvas itself: send them apart from a states file's args or story.",
     });
   }
   if (canvas) {
@@ -217,6 +219,7 @@ export const updateComponent = async (
       edges,
       group,
       dials,
+      directions,
     });
   }
   const change = sheetChangeOf({ args, story });

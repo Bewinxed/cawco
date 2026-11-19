@@ -14,6 +14,7 @@ import {
   STAGE_COMPARE,
   STAGE_DIALS,
   STAGE_LET_GO,
+  STAGE_LOAD,
   STAGE_PAUSE,
   STAGE_PLAY,
   STAGE_REACH,
@@ -135,6 +136,11 @@ export class StageLink {
     if (this.comparing && said.ask === this.comparing.ask) {
       this.differences = said;
     }
+  }
+
+  /** States file `file` brought in on the page before any of its states is reached: its sheet comes, naming them (the direction in front). */
+  load(file: string): void {
+    this.#post({ type: STAGE_LOAD, file });
   }
 
   /** The room the stage's floating head takes over the page's top, px. */

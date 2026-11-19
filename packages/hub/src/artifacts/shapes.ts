@@ -13,6 +13,7 @@ import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type {
   CanvasDial,
+  CanvasDirection,
   CanvasEdge,
   CanvasShapes,
   SheetRead,
@@ -77,6 +78,8 @@ export interface ArtifactInput {
   /** A design graph's dials: a CSS variable on every frame, or an arg. */
   dials?: CanvasDial[] | undefined;
   dir?: string | undefined;
+  /** A design graph's directions of one design: each one of its states files, its name and its line. */
+  directions?: CanvasDirection[] | undefined;
   /** What the person does on it (core `ARTIFACT_DOES`); named with `ask`. */
   does?: ArtifactDoes | undefined;
   /**
@@ -323,6 +326,8 @@ export interface ComponentRead extends ArtifactRead {
   frame?: ReturnType<typeof stateSaid>;
   hint: string;
   moves?: ReturnType<typeof movesSaid>;
+  /** The direction the person picked, on a design with directions; null while none is. */
+  picked?: { file: string; name: string } | null;
   render?: ReturnType<typeof renderSaid>;
   stories?: ReturnType<typeof storiesSaid>;
   story?: {

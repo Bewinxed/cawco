@@ -277,6 +277,7 @@ const undrawnLines = (render: ReturnType<typeof renderSaid>): string[] => {
   const others = render.undrawn?.filter((one) => !one.asked) ?? [];
   return [
     ...(render.drawing ? [render.drawing] : []),
+    ...(render.unopened ? [render.unopened] : []),
     ...(asked.length > 0
       ? [
           stageRenderWords.undrawnHead(STAGE_RENDER_MS / 1000),
@@ -299,7 +300,19 @@ const findingLines = (render: ReturnType<typeof renderSaid>): string[] => [
   ...(render.alike ?? []).map(stageRenderWords.alike),
 ];
 
-/** A design graph's read: its frames, stories, moves and the person's dials, each a line. */
+/** The direction the person picked, on a design with directions. */
+const pickedLines = (picked: ComponentRead["picked"]): string[] => {
+  if (picked === undefined) {
+    return [];
+  }
+  return [
+    picked
+      ? `The person picked the direction ${picked.name} (${picked.file}).`
+      : "The person has picked no direction yet.",
+  ];
+};
+
+/** A design graph's read: its frames, stories, moves, the person's dials and pick, each a line. */
 const componentLines = (read: ComponentRead): string[] => {
   const { render } = read;
   return [
@@ -360,6 +373,7 @@ const componentLines = (read: ComponentRead): string[] => {
     ...(read.tuned === undefined
       ? []
       : [`What they tuned: ${valueWords(read.tuned, 600)}`]),
+    ...pickedLines(read.picked),
     ...(read.frame ? [`The frame asked: ${valueWords(read.frame, 2000)}`] : []),
     ...(read.story
       ? [
@@ -618,7 +632,7 @@ const revisedWords = (revised: Revised): string => {
 /** A design graph's change: its new spec, or a states file's write and its frames. */
 const componentChangedWords = (changed: ComponentChanged): string => {
   if ("spec" in changed) {
-    return `The design graph is at revision ${changed.revision}: ${count(changed.spec.edges?.length ?? 0, "edge")}, ${count(Object.keys(changed.spec.group ?? {}).length, "group")}, ${count(changed.spec.dials?.length ?? 0, "dial")}.`;
+    return `The design graph is at revision ${changed.revision}: ${count(changed.spec.edges?.length ?? 0, "edge")}, ${count(Object.keys(changed.spec.group ?? {}).length, "group")}, ${count(changed.spec.dials?.length ?? 0, "dial")}, ${count(changed.spec.directions?.length ?? 0, "direction")}.`;
   }
   return lines(
     `Wrote ${changed.file}:${changed.lines.from}-${changed.lines.to}${changed.formatted ? `, formatted by ${changed.formatted}` : ""}.`,

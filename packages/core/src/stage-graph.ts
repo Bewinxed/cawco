@@ -211,6 +211,19 @@ export const STAGE_ROOM = "cawco:stage-room";
 export interface StageRoom {
   px: number;
 }
+/**
+ * Pane → page: one states file brought in, its stories loaded, read for
+ * the report and its sheet said, before any state of it is reached: the
+ * design graph's direction in front, whose states it can't name until its
+ * sheet comes. The panel's page loads no states file until one is asked
+ * for, by this or by a reach or a Compare naming it.
+ */
+export const STAGE_LOAD = "cawco:stage-load";
+export interface StageLoad {
+  /** The states file, from the toolchain root. */
+  file: string;
+}
+
 /** The most room a stage's head may take, px: a head's, never the page's. */
 const STAGE_ROOM_MOST = 480;
 
@@ -1065,6 +1078,12 @@ export function stageRoomOf(value: unknown): StageRoom | null {
   return typeof px === "number" && Number.isFinite(px) && px >= 0
     ? { px: Math.min(px, STAGE_ROOM_MOST) }
     : null;
+}
+
+/** A {@link StageLoad} as it crossed the frame; null when it is none. */
+export function stageLoadOf(value: unknown): StageLoad | null {
+  const file = isRecord(value) ? value.file : null;
+  return typeof file === "string" && file.length > 0 ? { file } : null;
 }
 
 /** A {@link StageDialsWritten} as it crossed the frame; null when it is none. */
