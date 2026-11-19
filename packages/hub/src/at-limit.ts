@@ -11,10 +11,7 @@ import {
   namedAccount,
   type WaitReason,
 } from "@cawco/core/accounts";
-import {
-  RESTART_WAIT_CAP_MS,
-  WORK_IN_FLIGHT,
-} from "@cawco/core/binary-updates";
+import { WORK_IN_FLIGHT } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
@@ -446,11 +443,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   const landing = new Map<string, Arrival>();
   /**
    * Held sessions no person waits on whose move waits for work their process
-   * holds for later: where it goes, that work in its machine's words, and
-   * since when it is held (its hold's start), which the cap counts from
-   * ({@link RESTART_WAIT_CAP_MS}), across a hub restart too.
+   * holds for later: where it goes, and that work in its machine's words.
    */
-  const later = new Map<string, { since: number; to: string; why: string }>();
+  const later = new Map<string, { to: string; why: string }>();
 
   /**
    * `instanceId`'s move no longer waits for work in flight, and nothing is
@@ -795,8 +790,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * still on `current`. Its transcript says so in the words of what failed
    * (once for the same failure, however often a retry meets it again).
    * `held`: it is held until its reset, each look deciding again whether to
-   * wait or try once more; `since`, its hold's start, is kept, as the cap on
-   * a move waiting for work held for later counts from it (`waits`). One
+   * wait or try once more; `since`, its hold's start, is kept. One
    * whose credential was refused (`refused`) has no reset: it is held until
    * a look finds it an account.
    */
@@ -1287,7 +1281,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const { laterSince } = how;
     const waits = kept.later !== undefined && laterSince !== undefined;
     if (kept.later !== undefined && laterSince !== undefined) {
-      later.set(row.id, { to: target.id, why: kept.later, since: laterSince });
+      later.set(row.id, { to: target.id, why: kept.later });
     }
     unmoved(row, current, target, kept.why, {
       held: !kept.target || how.last,
@@ -1794,8 +1788,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
 
   /**
    * Arms the next look: the earliest moment a held session's account frees
-   * (its own reset, or another's that comes first), or a move waiting for
-   * work held for later reaches its cap, else the recheck, while anything is
+   * (its own reset, or another's that comes first), else the recheck, while anything is
    * held or two accounts could balance. A stale hold waits on no moment
    * ({@link goneStale}).
    */
@@ -1810,15 +1803,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (holds.length === 0 && rebalancer.pairs().length === 0) {
       return;
     }
-    const capped = holds.flatMap((one) =>
-      later.has(one.instanceId) && one.since !== undefined
-        ? [one.since + RESTART_WAIT_CAP_MS]
-        : []
-    );
     const at = Math.min(
       now + RECHECK_MS,
-      ...holds.map((one) => one.until ?? Number.POSITIVE_INFINITY),
-      ...capped
+      ...holds.map((one) => one.until ?? Number.POSITIVE_INFINITY)
     );
     timer = lifetime.after("at-limit look", Math.max(1000, at - now), () => {
       detach(tick().finally(plan), "at-limit look");
@@ -1833,7 +1820,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    */
   const carryStall = (
     from: string,
-    carry: { since: number; to: string; why: string },
+    carry: { to: string; why: string },
     resets: number | null
   ): Stall => {
     const to = db.accounts.get(carry.to);

@@ -11,7 +11,6 @@ import type {
   RebalanceNotice,
   WaitReason,
 } from "../accounts";
-import { RESTART_WAIT_CAP_MS } from "../binary-updates";
 import { harnessName } from "../harness/kinds";
 import { compactorOf } from "../harness/traits";
 import { MINUTE_MS } from "../time";
@@ -641,7 +640,7 @@ const unmovedNext = (
   }
   const from = move.from.name;
   if (move.waits) {
-    return `It moves${move.to ? ` to ${move.to.name}` : ""} when that work ends, or once it has been held ${RESTART_WAIT_CAP_MS / 60_000} minutes: then the move ends it, and the session is told there what ended`;
+    return `It moves${move.to ? ` to ${move.to.name}` : ""} when that work ends`;
   }
   return move.signedOut
     ? `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} once ${from} is signed in again in ${configurePage("accounts")}`
