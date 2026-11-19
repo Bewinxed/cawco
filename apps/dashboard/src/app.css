@@ -158,6 +158,17 @@
   [data-slot="md"] [data-markdown][data-animated="true"] {
     animation: kit-fade-in var(--duration-menu) var(--ease-out) backwards;
   }
+  /* A Mermaid diagram in the markdown (ui/markdown/mermaid.svelte.ts):
+     Words sets it in its code block frame, whose header names the language
+     (its Copy and Download are off, `controls: false`). The diagram stands
+     alone, as on a decision page, a block's gap from the prose around it. */
+  [data-slot="md"] [data-markdown="code-block"][data-language="mermaid"] {
+    margin-block: var(--spacing-space-3);
+
+    & > [data-markdown="code-header"] {
+      display: none;
+    }
+  }
   /* The transcript's list (virtua): it hides an item for the moment it
      takes to measure it, inline, and a row already drawn (Row's
      `data-drawn`) keeps its visibility; and it writes `pointer-events` on

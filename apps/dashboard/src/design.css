@@ -2975,8 +2975,11 @@
      label role in strong ink; an edge and its arrowhead 1px in muted ink,
      its words in meta; a subgraph the recess with a hairline, its title in
      the label role, muted; a highlight strong ink, never coral (The Coral Is
-     Where You Act Rule); weights never above 500 (The 500 Ceiling Rule). */
-  [data-slot="diagram"] {
+     Where You Act Rule); weights never above 500 (The 500 Ceiling Rule).
+     The same in a reply's markdown, where Words writes the diagram
+     (ui/markdown/mermaid.svelte.ts). */
+  [data-slot="diagram"],
+  [data-markdown="mermaid"] {
     --pele-bg: var(--color-surface-raised);
     --pele-fg: var(--color-ink-strong);
     --pele-muted: var(--color-ink-muted);

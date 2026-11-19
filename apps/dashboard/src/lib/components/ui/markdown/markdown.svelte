@@ -33,6 +33,7 @@
   import { cn } from "#lib/utils.js";
   import { draw, stepping } from "../collapsible/draw";
   import { BREAK, literalHtml } from "./literal-html";
+  import { mermaidFor } from "./mermaid.svelte";
 
   let {
     source,
@@ -214,7 +215,13 @@
     {code}
     {inlineCode}
     {link}
-    options={{ components, controls: false, lineNumbers: false, urlTransform }}
+    options={{
+      components,
+      controls: false,
+      lineNumbers: false,
+      plugins: { mermaid: mermaidFor(content) },
+      urlTransform,
+    }}
     source={content}
     {streaming}
     {when}
