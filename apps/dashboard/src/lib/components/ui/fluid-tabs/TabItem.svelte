@@ -425,10 +425,14 @@
       preserveAspectRatio="none"
       viewBox="0 0 {shape.box.width + 2 * shape.box.flare} {shape.box.height}"
     >
+      <!-- The outline is written on each path that draws it, never cloned
+           from one in the defs: a `<use>` rebuilds its copy whenever the
+           path it names changes, and a come-forward changes every tab's
+           outline on every frame of a switch (three clones a tab, 2-4ms of
+           style a frame on a strip of 29). -->
       <defs>
-        <path d={outline} id="{uid}-outline" />
         <clipPath id="{uid}-inside">
-          <use href="#{uid}-outline" />
+          <path d={outline} />
         </clipPath>
         <linearGradient
           gradientUnits="userSpaceOnUse"
@@ -458,10 +462,10 @@
            (`data-ff-sheet`, `data-hit`): Chrome keys an attribute selector's
            invalidation to the attribute's name alone, so a `data-slot` there
            restyled every `data-slot` in the tab under each state change. -->
-      <use
+      <path
+        d={outline}
         data-ff-sheet
         class="pick-inherit paint-tab-sheet hover-hover:group-data-ghosted/ff-tab:not-group-data-tab-item-selected/ff-tab:paint-tab-hover"
-        href="#{uid}-outline"
       />
       {#if !hung}
         <!-- The rim (PaneTabs: `--rim-ink`, its strength unchosen
@@ -474,11 +478,11 @@
           data-slot="rim"
           class="pick-inherit rim-strength rim-glow contrast-more:filter-none reduced-transparency:filter-none"
         >
-          <use
+          <path
+            d={outline}
             data-slot="stroke"
             class="fill-none rim-stroke-w vector-non-scaling"
             clip-path="url(#{uid}-inside)"
-            href="#{uid}-outline"
             stroke="url(#{uid}-taper)"
           />
         </g>

@@ -71,6 +71,9 @@ export class TabRects {
   /** What the last measure in a delivery read, written in the next frame. */
   #pending: (() => void) | null = null;
   #moves: MutationObserver | null = null;
+  /** Measures asked for (`#schedule`), and how many of them a read has answered. */
+  #asks = 0;
+  #answered = 0;
 
   /**
    * `onOrder` hears the tabs' values in the order they stand. `onResize`
@@ -109,7 +112,7 @@ export class TabRects {
       read?.();
     };
     this.#sizes = frameObserver(write, {
-      read: () => this.#measureLaidOut(),
+      read: (entries) => this.#measureLaidOut(entries),
       first: () => write,
     });
     this.#watch(node);
@@ -257,6 +260,7 @@ export class TabRects {
    * ResizeObserver, and is read all the same.
    */
   #schedule(): void {
+    this.#asks += 1;
     this.#sizes?.readNext();
   }
 
@@ -269,43 +273,85 @@ export class TabRects {
    * 83–135ms of `offsetParent`). What it read is written in the next frame
    * (`#pending`).
    */
-  #measureLaidOut(): void {
-    this.#pending = this.#read();
+  #measureLaidOut(entries: readonly ResizeObserverEntry[]): void {
+    const trackOnly =
+      this.#asks === this.#answered &&
+      entries.length > 0 &&
+      entries.every((entry) => entry.target === this.#container);
+    this.#answered = this.#asks;
+    this.#pending = this.#read(trackOnly);
+  }
+
+  /** A tab's box, its offsets summed up to the track. */
+  #rectOf(element: HTMLElement, container: HTMLElement): ItemRect {
+    let top = element.offsetTop;
+    let left = element.offsetLeft;
+    let ancestor: Element | null = element.offsetParent;
+    while (
+      ancestor instanceof HTMLElement &&
+      ancestor !== container &&
+      container.contains(ancestor)
+    ) {
+      top += ancestor.offsetTop + ancestor.clientTop;
+      left += ancestor.offsetLeft + ancestor.clientLeft;
+      ancestor = ancestor.offsetParent;
+    }
+    return {
+      top,
+      left,
+      width: element.offsetWidth,
+      height: element.offsetHeight,
+    };
+  }
+
+  /**
+   * Whether the tabs stand where they were last measured, after a delivery
+   * in which only the track resized (a rail dragged beside it): no tab
+   * reported a size of its own, so each is as wide as it was, and with the
+   * first and the last where they were, every one between is too. Read at
+   * those two alone; reading every tab's offsets on each step of a drag was
+   * 2.5ms of script a step on a strip of 29.
+   */
+  #standStill(container: HTMLElement): boolean {
+    const { items, rects } = this;
+    const ends = [items[0], items.at(-1)].filter(
+      (element): element is HTMLElement =>
+        element !== undefined && element.offsetParent !== null
+    );
+    return (
+      ends.length > 0 &&
+      ends.every((element) => {
+        const was = rects.get(element);
+        const now = this.#rectOf(element, container);
+        return (
+          was !== undefined &&
+          was.top === now.top &&
+          was.left === now.left &&
+          was.width === now.width &&
+          was.height === now.height
+        );
+      })
+    );
   }
 
   /** Reads the tabs' boxes; answers the write that keeps them, or null with no track. */
-  #read(): (() => void) | null {
+  #read(trackOnly = false): (() => void) | null {
     const container = this.#container;
     if (!container) {
       return null;
     }
-    const rects = new Map<HTMLElement, ItemRect>();
-    for (const element of this.items) {
+    const prev = this.rects;
+    const still = trackOnly && this.#standStill(container);
+    const read = new Map<HTMLElement, ItemRect>();
+    for (const element of still ? [] : this.items) {
       if (element.offsetParent === null) {
         continue;
       }
-      let top = element.offsetTop;
-      let left = element.offsetLeft;
-      let ancestor: Element | null = element.offsetParent;
-      while (
-        ancestor instanceof HTMLElement &&
-        ancestor !== container &&
-        container.contains(ancestor)
-      ) {
-        top += ancestor.offsetTop + ancestor.clientTop;
-        left += ancestor.offsetLeft + ancestor.clientLeft;
-        ancestor = ancestor.offsetParent;
-      }
-      rects.set(element, {
-        top,
-        left,
-        width: element.offsetWidth,
-        height: element.offsetHeight,
-      });
+      read.set(element, this.#rectOf(element, container));
     }
-    const prev = this.rects;
-    let changed = prev.size !== rects.size;
-    for (const [element, r] of rects) {
+    const rects: ReadonlyMap<HTMLElement, ItemRect> = still ? prev : read;
+    let changed = !still && prev.size !== rects.size;
+    for (const [element, r] of still ? [] : rects) {
       if (changed) {
         break;
       }

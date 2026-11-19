@@ -500,36 +500,104 @@
    */
   const floors = new SvelteMap<string, number>();
   const floorOf = (id: string): number => floors.get(id) ?? CHIP;
-  function measureFloor(id: string) {
-    return (node: HTMLElement) => {
+  /**
+   * Each chip's floor attachment, one per delegate and what its chip says
+   * (`words`: its title and its state's words): a chip is a new object on
+   * each change of its item, and a new attachment for it tore the old one
+   * down and mounted another, measuring the chip again with a forced style
+   * and layout pass, in every tray a group keeps built, the hidden ones
+   * too, though nothing it draws had changed. What it says changing mounts
+   * it again, as before: its parts are found again with it.
+   */
+  const floorAttachments = new Map<
+    string,
+    { words: string; attachment: Attachment<HTMLElement> }
+  >();
+  function floorAttachment(id: string, words: string): Attachment<HTMLElement> {
+    const kept = floorAttachments.get(id);
+    if (kept?.words === words) {
+      return kept.attachment;
+    }
+    const attachment = measureFloor(id);
+    floorAttachments.set(id, { words, attachment });
+    return attachment;
+  }
+  function measureFloor(id: string): Attachment<HTMLElement> {
+    return (node) => {
       const title = node.querySelector<HTMLElement>('[data-slot="title"]');
-      const take = () => {
+      /** Its texts' floors as drawn (`textFloor`): no layout read. */
+      const leastOf = () => {
         const note = node.querySelector<HTMLElement>('[data-slot="note"]');
-        const titleLeast = title ? textFloor(title, TITLE_FLOOR) : 0;
-        const noteLeast = note ? textFloor(note, NOTE_FLOOR) : 0;
-        for (const [part, least] of [
-          [title, titleLeast],
-          [note, noteLeast],
+        return {
+          note,
+          title: title ? textFloor(title, TITLE_FLOOR) : 0,
+          noted: note ? textFloor(note, NOTE_FLOOR) : 0,
+        };
+      };
+      type Least = ReturnType<typeof leastOf>;
+      /** Each text held to its floor. */
+      const hold = (least: Least) => {
+        for (const [part, px] of [
+          [title, least.title],
+          [least.note, least.noted],
         ] as const) {
-          if (part && part.style.minInlineSize !== `${least}px`) {
-            part.style.minInlineSize = `${least}px`;
+          if (part && part.style.minInlineSize !== `${px}px`) {
+            part.style.minInlineSize = `${px}px`;
           }
         }
-        const fixed =
-          node.scrollWidth -
-          (title?.clientWidth ?? 0) -
-          (note?.clientWidth ?? 0);
-        const floor = Math.max(CHIP, Math.ceil(fixed + titleLeast + noteLeast));
+      };
+      /** The chip's floor: what does not give way in it, read off its box, and its texts' floors. */
+      const floorWith = (least: Least) =>
+        Math.max(
+          CHIP,
+          Math.ceil(
+            node.scrollWidth -
+              (title?.clientWidth ?? 0) -
+              (least.note?.clientWidth ?? 0) +
+              least.title +
+              least.noted
+          )
+        );
+      const keep = (floor: number) => {
         if (floors.get(id) !== floor) {
           floors.set(id, floor);
         }
       };
       // Its parts change size with its state (a note arrives, a glyph
       // swaps); the chip's own box may not, held as it is by the row. Taken
-      // now, and a change in the next frame (frameObserver): its floors are
-      // written on its parts and the row lays out on them.
-      take();
-      const watch = frameObserver(take);
+      // now, as it mounts; a change is read inside the size observer's
+      // delivery, on the layout that frame has just done, and written in the
+      // next frame (frameObserver `read`): its floors are written on its
+      // parts and the row lays out on them. Read in the next frame's
+      // callbacks instead, each change laid the page out and restyled it
+      // there, in every tray a group keeps built, the hidden ones too: a
+      // delegate's line moving forced a pass a tray (8% of the script of a
+      // 29-tab layout with six sessions at work).
+      // Untracked: the attachment's effect reads none of the state it
+      // writes (`floors`), or each floor it kept would mount it again.
+      untrack(() => {
+        const mounted = leastOf();
+        hold(mounted);
+        keep(floorWith(mounted));
+      });
+      let write: (() => void) | null = null;
+      const watch = frameObserver(
+        () => {
+          const now = write;
+          write = null;
+          now?.();
+        },
+        {
+          read: () => {
+            const least = leastOf();
+            const floor = floorWith(least);
+            write = () => {
+              hold(least);
+              keep(floor);
+            };
+          },
+        }
+      );
       for (const part of node.querySelectorAll(
         '[data-slot="mark"], [data-chip-words], [data-slot="note"], [data-chip-slot]'
       )) {
@@ -1333,7 +1401,7 @@
     tabindex={current === at ? 0 : -1}
     type="button"
     style:min-inline-size="{floorOf(item.id)}px"
-    {@attach measureFloor(item.id)}
+    {@attach floorAttachment(item.id, `${item.title}, ${stateWords(chip)}`)}
   >
     {@render mark(item, flies)}
     <span

@@ -501,11 +501,15 @@
            them still. Set and lifted with `.pane-hidden`, in the one update
            that already restyles the pane whole; the skip holds back that
            restyle under it, so the pane asks its loops' style once it has
-           painted (`holdSkipped`). -->
+           painted (`holdSkipped`). Laid out off screen (`.pane-settling`:
+           its transcript still on its way, or not yet drawn) it is
+           `data-offscreen` too: invisible, its veil's skeletons pulsed on,
+           each one restyled every frame, in up to a dozen panes for the
+           first half minute of a 29-tab layout (3-5ms of style a frame). -->
       <div
         data-pane-settling={(!shown && laidOut) || undefined}
         data-pane-hidden={!(shown || laidOut) || undefined}
-        data-offscreen={!(shown || laidOut) || undefined}
+        data-offscreen={!shown || undefined}
         data-slot="pane"
         class="absolute inset-0 flex group-data-swipe/stack:not-data-pane-hidden:not-data-pane-settling:will-change-transform group-data-swipe/stack:delta-minus-1:transform-(--park-left) group-data-swipe/stack:delta-0:transform-(--park-here) group-data-swipe/stack:delta-1:transform-(--park-right) data-pane-hidden:pointer-events-none data-pane-hidden:content-visibility-hidden data-pane-settling:invisible"
         data-delta={delta}
