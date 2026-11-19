@@ -266,15 +266,15 @@ export const bridge = (): Bridge | undefined => window.cawco;
  * And the canvas at rest while nobody can see it: its root marked
  * `data-offscreen` while its pane is away or none of its frame stands in
  * the top page's view (the implicit root of an observer in a frame), which
- * holds a dashboard canvas's loops as the dashboard holds its own scrolled
- * out of view (its design.css: `:where([data-offscreen]) .loops` paused;
- * motion/rest.ts). WebKit renders every frame of the page it shares a
- * process with, whatever stands in view: a decision page of 33 Previews,
- * untouched, held its web process at 23% of a core, its frames' loops (9
- * spinners and skeleton pulses, all in frames scrolled away) the only
- * thing running (canvas-cost `page`, its census), and at 2% held here
- * (56,310 ms of CPU over 240 s, then 5,130); Chromium draws no
- * cross-origin frame out of view.
+ * stops a dashboard canvas's loops as the dashboard stops its own
+ * scrolled out of view (its design.css: `:where([data-offscreen]) .loops`
+ * carries no animation; motion/rest.ts). WebKit renders every frame of the
+ * page it shares a process with, whatever stands in view: a decision page
+ * of 33 Previews, untouched, held its web process at 23% of a core, its
+ * frames' loops (9 spinners and skeleton pulses, all in frames scrolled
+ * away) the only thing running (canvas-cost `page`, its census), and at
+ * 2% held here (56,310 ms of CPU over 240 s, then 5,130); Chromium draws
+ * no cross-origin frame out of view.
  */
 function holdWhileAway(): void {
   const ask = window.requestAnimationFrame.bind(window);

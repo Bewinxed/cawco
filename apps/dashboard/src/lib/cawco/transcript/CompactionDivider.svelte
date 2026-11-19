@@ -190,7 +190,9 @@
        much of the path the arm shows, along the curve: the wave is 1.087px
        long for each pixel it crosses, so the dash is 1.08 of the column's
        width less the cap's room, and the line ends on a round cap just
-       inside the column (`wave-dash`). -->
+       inside the column (`wave-dash`). The wave carries the loop's mark
+       (`loops`) only while it breathes: its draw runs once, and a pane put
+       away drops a marked run, which would draw again on the way back. -->
 
   <!-- Mirrored, so both arms run outward from the word. -->
   <span
@@ -204,7 +206,10 @@
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
-        class="loops wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--duration-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
+        class={[
+          "wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--duration-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe",
+          live && "loops",
+        ]}
       /></svg
     >
   </span>
@@ -289,7 +294,10 @@
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
-        class="loops wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--duration-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
+        class={[
+          "wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--duration-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe",
+          live && "loops",
+        ]}
       /></svg
     >
   </span>

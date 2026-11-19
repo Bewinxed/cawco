@@ -839,14 +839,36 @@
   :where(:root[data-at-rest]) .loops,
   :where(:root[data-at-rest]) .loops::before,
   :where(:root[data-at-rest]) .loops::after,
-  :where([data-offscreen]) .loops,
-  :where([data-offscreen]) .loops::before,
-  :where([data-offscreen]) .loops::after,
   :where([inert]:not([data-leaving])) .loops,
   :where([inert]:not([data-leaving])) .loops::before,
   :where([inert]:not([data-leaving])) .loops::after,
   :where([data-offscreen]) {
     animation-play-state: paused;
+  }
+
+  /* A loop in a pane put away, or scrolled out of view (`data-offscreen`),
+     carries no animation at all, over the loop's own utility: paused, it
+     stayed on Blink's animation path, and every restyle that reached it
+     cost it 27–48 µs, a plain element's 7. It starts again as its pane
+     comes back, out of step with the loops already showing, as a pane
+     mounted while away always has. Only a loop goes: `loops` marks an
+     element only while what it runs is infinite (CompactionDivider's wave
+     carries it only while it breathes), so a finished entrance under the
+     mark never plays again on the way back. A hidden tab's loops and an
+     inert surface's (above) are held, not dropped: the tab restyles nothing
+     while hidden, and the inert surface is in view, where a loop dropped
+     would jump to its rest.
+     The scroll-driven fades (edge-fade.css, a transcript's head fade) go
+     the same way: given back, each reads its scroller's place again, so a
+     pane comes back drawn as it went (measured: its fades scrolled part-way
+     and whole, shown again, matched pixel for pixel). */
+  :where([data-offscreen]) .loops,
+  :where([data-offscreen]) .loops::before,
+  :where([data-offscreen]) .loops::after,
+  :where([data-offscreen]) .kit-edge-fade,
+  :where([data-offscreen]) .kit-edge-fade-block,
+  :where([data-offscreen]) .head-fade-scrub {
+    animation: none;
   }
 
   /* A swap slot that is not the one showing (a button's spinner waits there
@@ -2560,8 +2582,9 @@
 
 /* The mark every loop carries (a spin, a pulse, a breath, a sweep, a
    shimmer), on the element the loop runs on or whose ::before or ::after it
-   runs on: the rest rule (overrides, above) holds what carries it still
-   wherever nobody can see it. It draws nothing. */
+   runs on, while what it runs has no end: the rest rules (overrides,
+   above) hold what carries it still, or take its animation away, wherever
+   nobody can see it. It draws nothing. */
 @utility loops {
   --loops: on;
 }

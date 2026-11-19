@@ -497,9 +497,10 @@
            set and lifted it on two panes, restyling each of their elements. -->
       <!-- Put away, it is also `data-offscreen` (motion/rest.ts): a skipped
            subtree still runs its loops, and a skeleton's sweep went on in a
-           pane put away (tab-return, leg 3), so app.css's rest rule holds
-           them still. Set and lifted with `.pane-hidden`, in the one update
-           that already restyles the pane whole; the skip holds back that
+           pane put away (tab-return, leg 3), so design.css's rest rule takes
+           them, and its scroll-driven fades, off the animation path. Set
+           and lifted with `.pane-hidden`, in the one update that already
+           restyles the pane whole; the skip holds back that
            restyle under it, so the pane asks its loops' style once it has
            painted (`holdSkipped`). Laid out off screen (`.pane-settling`:
            its transcript still on its way, or not yet drawn) it is
