@@ -13,13 +13,14 @@
    *    scrolls under it.
    * 2. The two things agents need before they start: Files and locations,
    *    and AI account, side by side.
-   * 3. The two rules for what agents produce: Code handoff and Task list.
-   * 4. One closed row for the code details almost nobody changes.
+   * 3. The two rules for what agents produce: Finished code and Task list.
+   * 4. The code details almost nobody changes, closed on the top line; open,
+   *    they stand at the top of the body.
    *
    * Two equal columns from 680 of card room, read across then down, so the
    * top line's two possible causes sit together in the first row; under
    * that, one column in the same order. A project with no code has no Code
-   * handoff and no More code details.
+   * finished and no More code details.
    *
    * A change that needs a destination or a sign-in takes the card's body
    * as a step (FolderStep, TaskListStep), its bar "‹ Project details", the
@@ -32,6 +33,7 @@
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconChevronLeft } from "#lib/icons.js";
   import { crossIn } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { cn } from "#lib/utils.js";
   import AccountSection from "./AccountSection.svelte";
   import type {
@@ -45,9 +47,10 @@
     TaskStepFacts,
   } from "./details";
   import FilesSection from "./FilesSection.svelte";
+  import FinishedCodeSection from "./FinishedCodeSection.svelte";
   import FolderStep from "./FolderStep.svelte";
-  import HandoffSection from "./HandoffSection.svelte";
   import MoreCodeDetails from "./MoreCodeDetails.svelte";
+  import MoreCodeTrigger from "./MoreCodeTrigger.svelte";
   import TaskListSection from "./TaskListSection.svelte";
   import TaskListStep from "./TaskListStep.svelte";
   import Verdict from "./Verdict.svelte";
@@ -96,6 +99,9 @@
   });
 
   let body = $state<HTMLElement | null>(null);
+  const moreId = $props.id();
+  /** More code details stands open while the person keeps it so, and whenever a change inside it was refused. */
+  const moreShown = $derived(opened.more || Boolean(pending.bigFiles?.refused));
 
   /** The top line's press: focus moves to the troubled row's fix. */
   function jump(section: Trouble): void {
@@ -124,11 +130,24 @@
   {#if step === null}
     <header
       class={cn(
-        "flex flex-none items-center justify-between gap-space-3",
+        "flex flex-none flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1",
         phone ? "px-space-1 pb-space-3" : "px-space-5 pt-space-4 pb-space-3"
       )}
     >
       <Verdict onjump={jump} ontry={acts.tryAgain} {verdict} />
+      {#if details.hasCode}
+        <span class={cn("flex min-w-0", phone ? "basis-full" : "ms-auto")}>
+          <MoreCodeTrigger
+            bigFiles={details.bigFiles}
+            codebases={details.codebases}
+            controls={moreId}
+            ontoggle={() => {
+              opened.more = !moreShown;
+            }}
+            open={moreShown}
+          />
+        </span>
+      {/if}
       {#if !phone}
         <Button onclick={acts.close} size="sm" variant="outline"
           >{cardWords.done}</Button
@@ -186,6 +205,24 @@
             <div
               class="grid grid-cols-1 gap-x-space-7 gap-y-space-7 @min-details-card/card:grid-cols-2"
             >
+              {#if details.hasCode && moreShown}
+                <!-- Opened from the top line, it stands under that line. -->
+                <div class="col-span-full" transition:unfold>
+                  <MoreCodeDetails
+                    bigFiles={details.bigFiles}
+                    codebases={details.codebases}
+                    bind:draft={opened.bigDraft}
+                    id={moreId}
+                    ondefaults={() =>
+                      acts.pick({ section: "bigFiles", value: "defaults" })}
+                    onsave={acts.saveBigFiles}
+                    ontry={acts.tryAgain}
+                    pending={pending.bigFiles}
+                    signIns={details.bigFileSignIns}
+                    {sunk}
+                  />
+                </div>
+              {/if}
               <FilesSection
                 bind:confirming={opened.disconnect}
                 bind:openFolder={opened.folder}
@@ -207,11 +244,11 @@
                 {sunk}
               />
               {#if details.hasCode}
-                <HandoffSection
-                  handoff={details.handoff}
+                <FinishedCodeSection
+                  finished={details.finished}
                   onpick={acts.pick}
                   ontry={acts.tryAgain}
-                  pending={pending.handoff}
+                  pending={pending.finished}
                   {sunk}
                 />
               {/if}
@@ -235,23 +272,6 @@
                 {sunk}
                 tasks={details.tasks}
               />
-              {#if details.hasCode}
-                <div class="col-span-full">
-                  <MoreCodeDetails
-                    bigFiles={details.bigFiles}
-                    codebases={details.codebases}
-                    bind:draft={opened.bigDraft}
-                    ondefaults={() =>
-                      acts.pick({ section: "bigFiles", value: "defaults" })}
-                    onsave={acts.saveBigFiles}
-                    ontry={acts.tryAgain}
-                    bind:open={opened.more}
-                    pending={pending.bigFiles}
-                    signIns={details.bigFileSignIns}
-                    {sunk}
-                  />
-                </div>
-              {/if}
             </div>
           {:else if step.kind === "folder"}
             <FolderStep
