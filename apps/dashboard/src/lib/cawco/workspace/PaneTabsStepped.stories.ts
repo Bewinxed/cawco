@@ -11,6 +11,7 @@ import { JUMP, NEXT, switchMeta } from "./tab-switch-seed";
 export default {
   title: "Tab switch/Whole pixels",
   component: PaneTabsLive,
+  parameters: { viewport: "desk" },
   ...switchMeta("stepped"),
 };
 

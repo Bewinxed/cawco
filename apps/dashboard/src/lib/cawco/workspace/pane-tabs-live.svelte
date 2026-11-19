@@ -13,6 +13,7 @@
     type ForwardStyle,
     provideForwardStyle,
   } from "#lib/components/ui/fluid-tabs/forward-style.js";
+  import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
   import PaneTabs from "./PaneTabs.svelte";
   import { switchIds } from "./tab-switch-seed";
   import type { LeafNode } from "./workspace.svelte";
@@ -33,6 +34,8 @@
     again?: number;
   } = $props();
 
+  const layerId = $props.id();
+  const layer = provideHangLayer(layerId);
   // Read as the strip mounts: the track reads it once.
   provideForwardStyle(untrack(() => forward));
 
@@ -68,13 +71,20 @@
   }
 </script>
 
-{#key again}
-  <div
-    class="@container/leaf flex flex-col bg-surface-shelf pt-space-7"
-    data-slot="group"
-    onclickcapture={choose}
-  >
-    <PaneTabs {leaf} />
-    <div class="h-32 bg-surface-recess"></div>
-  </div>
-{/key}
+<!-- The screen the group stands in, the room the chosen tab's card hangs
+     in (hang-layer.ts): the Shell's, in the app. -->
+<div
+  class="@container/shell relative flex h-96 w-full flex-col bg-surface-recess contain-layout"
+  data-hang-layer={layer.id}
+  style:--shell-h="calc(var(--spacing) * 96)"
+>
+  {#key again}
+    <div
+      class="@container/leaf flex flex-col bg-surface-shelf pt-space-7"
+      data-slot="group"
+      onclickcapture={choose}
+    >
+      <PaneTabs {leaf} />
+    </div>
+  {/key}
+</div>
