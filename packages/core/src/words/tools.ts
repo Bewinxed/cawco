@@ -194,6 +194,35 @@ export const toolWords = {
   /** No install method runs here: why each method's need can't serve, in catalog order. */
   noInstaller: (why: string[]) => `no installer runs here: ${why.join("; ")}`,
   /**
+   * An install method that ran out its bound (agent tools.ts `INSTALL_MS`):
+   * the tool, the method and its command, and that it was ended with
+   * everything it started.
+   */
+  installTimedOut: (
+    name: string,
+    method: string,
+    command: string,
+    minutes: number
+  ) =>
+    `${name}: ${method} (${command}) did not finish within ${minutes} min, so CawCo ended it and everything it started. Retry runs it again.`,
+  /** A copy's `--version` that ran out its bound (agent tools.ts `PROBE_MS`): it was ended, and no version is known. */
+  versionUnanswered: (path: string, seconds: number) =>
+    `${path} --version did not answer within ${seconds} s`,
+  /**
+   * A copy whose launcher's first line names an interpreter that is not
+   * on CawCo's PATH here (`#!/usr/bin/env node`, and no `node`): it says no
+   * version and no session starts on it, and an install by the method it
+   * came from puts the same launcher back, so none is run (agent tools.ts
+   * `launcherUnrunnable`).
+   */
+  launcherUnrunnable: (
+    name: string,
+    path: string,
+    interpreter: string,
+    method: string | undefined
+  ) =>
+    `${name} at ${path} starts with ${interpreter}, which isn't on CawCo's PATH on this machine, so it says no version and no ${name} session can start on it. ${method ? `Installing it again with ${method} puts the same launcher back, so CawCo doesn't` : "CawCo doesn't install it again over that"}: put ${interpreter} on this machine's PATH, then Retry.`,
+  /**
    * A machine's harness block while CawCo itself puts the CLI on (core
    * `ToolStatus.startedBy` `cawco`: its update of its own copy, or adding a
    * machine): who does it, what, where and to what, and that nothing waits

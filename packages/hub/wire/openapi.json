@@ -48048,6 +48048,21 @@
               }
             ]
           },
+          "lastBinaryUpdate": {
+            "description": "An offline machine's binary update state as its agent last said it,\nand when the hub last heard from it (epoch ms; null when never): kept\nby the hub through the machine's absence and the hub's own restarts\n(hub db `agents.binaryUpdate`). Absent while it is online, where\n{@link binaryUpdate} says it, and for one that never said one.",
+            "type": "object",
+            "properties": {
+              "seenAt": {
+                "type": "number"
+              },
+              "state": {
+                "$ref": "#/components/schemas/BinaryUpdateState"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
           "lastSeenAt": {
             "description": "When the hub last heard from the machine (epoch ms), as it stood when\nthis status was laid: it moves with a status, never with a beat alone.",
             "type": "number"

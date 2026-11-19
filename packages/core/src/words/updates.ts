@@ -30,6 +30,13 @@ export const updatesWords = {
     `CawCo ${version} was not installed on ${machine}`,
   notConnected: (machine: string) =>
     `${machine} is not connected, so nothing was installed. Retry once it is back.`,
+  /**
+   * An offline machine's Update cell, under what its update last said (hub
+   * db `agents.binaryUpdate`): when the hub last heard from it, `ago` a
+   * span ("3h"), after the machines' own word for offline.
+   */
+  lastSeen: (ago: string) => `last seen ${ago} ago`,
+  lastSeenNow: "last seen just now",
   /** A Check for updates refused, under it. */
   noNewBuilds: (why: string) =>
     `No new builds could be looked for: ${why}. Machines keep the build they run; Try again to check.`,

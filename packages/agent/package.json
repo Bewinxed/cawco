@@ -15,6 +15,7 @@
     "./discovery": "./src/discovery.ts",
     "./machine-fetch": "./src/machine-fetch.ts",
     "./awake-hold": "./src/awake-hold.ts",
+    "./group-run": "./src/group-run.ts",
     "./pi-host": "./src/harnesses/pi-host.ts",
     "./pi-mcp-list": "./src/harnesses/pi-mcp-list.ts",
     "./pin-record": "./src/pin-record.ts",

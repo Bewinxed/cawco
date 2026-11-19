@@ -67,6 +67,7 @@ import {
   AskStateSchema,
   AtPlanLimitSchema,
   AttemptResultSchema,
+  BinaryUpdateStateSchema,
   BrowserHostKindSchema,
   BrowserStateSchema,
   BuildInfoSchema,
@@ -413,6 +414,14 @@ export const agents = sqliteTable("agents", {
    * pause.
    */
   pauseStoppedUnread: text("pause_stopped_unread"),
+  /**
+   * The machine's binary update state as its agent last said it (core
+   * `BinaryUpdateState`), written each time it moves: what the update list
+   * and the machine's row say of it once it is offline (asleep, gone), and
+   * through the hub's restart, beside {@link lastSeenAt}. Null until an
+   * agent has said one to a hub that keeps it.
+   */
+  binaryUpdate: storedJson(BinaryUpdateStateSchema)("binary_update"),
   lastSeenAt: timestamp("last_seen_at"),
   createdAt: stampedNow("created_at"),
 });

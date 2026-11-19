@@ -522,6 +522,14 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     const away = ctx.machinePresence(machineId);
     const linked = ctx.registry.agent(machineId);
     const update = ctx.binaryUpdateStates.get(machineId);
+    // Online while its agent holds a link and, when it speaks this hub's
+    // contract, once it has answered its welcome (fleet-sync.ts).
+    const online =
+      linked &&
+      (ctx.fleetSyncs.isReady(machineId) ||
+        !ctx.speaksContract(ctx.agentProtocols.get(machineId)));
+    // Offline, its update as it last said it, kept (db `keptBinaryUpdates`).
+    const [kept] = update || online ? [] : ctx.db.keptBinaryUpdates(machineId);
     return {
       machineId,
       lastSeenAt,
@@ -530,16 +538,12 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
       // so a reader that does not ask it says the same.
       reconnectingUntil:
         away.kind === "reconnecting" && !linked ? away.until : null,
-      // Online while its agent holds a link and, when it speaks this hub's
-      // contract, once it has answered its welcome (fleet-sync.ts).
-      status:
-        linked &&
-        (ctx.fleetSyncs.isReady(machineId) ||
-          !ctx.speaksContract(ctx.agentProtocols.get(machineId)))
-          ? "online"
-          : "offline",
+      status: online ? "online" : "offline",
       lostAt: ctx.contact.lostAt(machineId),
       ...(update ? { binaryUpdate: update } : {}),
+      ...(kept
+        ? { lastBinaryUpdate: { seenAt: kept.lastSeenAt, state: kept.state } }
+        : {}),
     };
   };
 

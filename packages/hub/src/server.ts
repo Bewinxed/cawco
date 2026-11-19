@@ -7373,6 +7373,15 @@ export const createServer = (
   heldSessions.hear((id) => board.sessionsMoved([id]));
   machineCustody.hear(board.machineStatusMoved);
   binaryUpdateStates.hear(board.machineStatusMoved);
+  // Each machine's update state, kept as it moves (db `keepBinaryUpdate`):
+  // what the update list and its row say once it is offline, and through
+  // this hub's restart. Its socket's close forgets the live one alone.
+  binaryUpdateStates.hear((machineId) => {
+    const state = binaryUpdateStates.get(machineId);
+    if (state) {
+      db.keepBinaryUpdate(machineId, state);
+    }
+  });
   agentProtocols.hear(board.machineStatusMoved);
   handoffs.hear(() => board.listMoved("handoffs"));
   previewTargets.hear(() => board.listMoved("previews"));
@@ -12121,6 +12130,7 @@ export const createServer = (
   const binaryUpdates = createBinaryUpdates({
     dbPath: DB_PATH,
     states: () => binaryUpdateStates,
+    kept: () => db.keptBinaryUpdates(),
     online: () =>
       db
         .machineFacts()

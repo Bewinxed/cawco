@@ -111,6 +111,7 @@ import {
   withKeepers,
 } from "./keepers";
 import { pinsBackFor, runBinaryPins } from "./pin-record";
+import { type Power, type PowerEvent, watchPower } from "./power";
 import {
   lowerFence,
   raiseFence,
@@ -531,6 +532,39 @@ const readUpdateSettings = (
  */
 class AttemptFailed extends Error {}
 
+/**
+ * THE MACHINE SLEPT UNDER AN ATTEMPT: an interruption, never a failure. A
+ * sleep announced, or found once it ended (power.ts), between the drain and
+ * the helper's launch ends the attempt: what went on for the build goes
+ * back, no failure is recorded and no retry delay begins
+ * (`update-failures.json`), the command that asked for it stands, and the
+ * build is tried again once the machine has been awake
+ * {@link MIN_AWAKE_MS} since it woke ({@link BinaryUpdater}'s `#awakeLongEnough`).
+ */
+class UpdateInterrupted extends Error {}
+
+/**
+ * How long a machine is awake since it last woke before an install starts
+ * on it (power.ts `awakeMs`): a Mac that woke for a moment (a lid opened
+ * for a glance, a wake for the network) sleeps again within it, and an
+ * install it started was frozen there for minutes at a time (the MacBook,
+ * 2026-11-19: answers 293–360 s late, "binary-pins did not answer within
+ * 5 minutes"). 5 min, our call.
+ */
+const MIN_AWAKE_MS = 5 * MINUTE_MS;
+
+/**
+ * How often the install's fence is raised again while the pins go on
+ * (`#replace`): an install may take longer than the fence's lease
+ * ({@link INSTALL_FENCE_MS}), and nothing may start on a harness between
+ * its install and the swap.
+ */
+const FENCE_RENEW_MS = 60_000;
+
+/** What an interrupted attempt says: what slept, and what comes of it. */
+const interruptedWords = (version: string, event: PowerEvent): string =>
+  `the update to ${version} was interrupted: this machine ${event === "sleep" ? "went to sleep" : "slept"} during it. Nothing failed, and it is tried again once the machine has been awake ${MIN_AWAKE_MS / MINUTE_MS} min since it woke`;
+
 const Failure = z.object({
   count: z.number(),
   error: z.string(),
@@ -686,6 +720,10 @@ export class BinaryUpdater {
    */
   readonly #outlasted = new Set<string>();
   readonly #report: (state: BinaryUpdateState) => void;
+  /** This machine's sleep and wake (power.ts), heard from {@link start}: an install waits for the machine to be awake, and a sleep under one interrupts it. */
+  #power: Power | undefined;
+  /** The build an install last waited on the machine's wake for, said once. */
+  #heldForWake: string | undefined;
   /** What the agent's supervisor holds a restart for (restart.ts). */
   readonly #supervisorHolds: SupervisorHolds;
 
@@ -723,6 +761,7 @@ export class BinaryUpdater {
       return;
     }
     this.#hostsHub = installation.role === "hub";
+    this.#power = watchPower();
     console.info(`[update] updating the binary install at ${binaryRoot()}`);
     startedUpdater = this;
     this.#timer = setInterval(() => this.tick(), POLL_MS);
@@ -1465,11 +1504,22 @@ export class BinaryUpdater {
       // not speak the build's wire protocol yet is no error: the pass ends
       // waiting for it (#takeUp), the command standing.
       if (!(
-        error instanceof AttemptFailed || error instanceof HubUnreachable
+        error instanceof AttemptFailed ||
+        error instanceof HubUnreachable ||
+        error instanceof UpdateInterrupted
       )) {
         this.#flags.commanded = false;
       }
       await this.#lowerFence();
+      if (error instanceof UpdateInterrupted) {
+        // No failure: the file still says what it said before the drain
+        // (`ready`), and the hub, told `installing` by the drain, hears it
+        // now, so it sends this machine's starts again.
+        console.info(`[update] ${error.message}`);
+        await this.#load().catch(logFailure);
+        await this.#tellHub().catch(() => undefined);
+        return;
+      }
       if (error instanceof HubUnreachable) {
         // Nothing was tried, and the state reaches a person only through the
         // hub that did not answer: what the file says (a rollback and its
@@ -1676,6 +1726,21 @@ export class BinaryUpdater {
       return;
     }
     this.#flags.fresh = false;
+    await this.#attempt(release, installation);
+  }
+
+  /**
+   * One attempt at the offered build: staged, then applied. A hub that went
+   * away under it waits for the hub, and a sleep under it is interrupted
+   * ({@link UpdateInterrupted}): neither is a failure, so nothing is
+   * recorded and no retry delay begins. Anything else is recorded with its
+   * retry time ({@link AttemptFailed}).
+   */
+  async #attempt(
+    release: SignedRelease,
+    installation: BinaryInstallation
+  ): Promise<void> {
+    const { version } = release.manifest;
     try {
       await whileUpdating(version, async () => {
         await this.#stage(release, installation);
@@ -1684,6 +1749,9 @@ export class BinaryUpdater {
     } catch (error) {
       if (error instanceof HubUnreachable) {
         await this.#waitForHubCut();
+        throw error;
+      }
+      if (error instanceof UpdateInterrupted) {
         throw error;
       }
       const said = error instanceof Error ? error.message : String(error);
@@ -1997,9 +2065,12 @@ export class BinaryUpdater {
       });
       return;
     }
+    const { version } = release.manifest;
+    if (!this.#awakeLongEnough(version)) {
+      return;
+    }
     // On the hub's machine the update restarts the hub as well.
     const installation = await readInstallation();
-    const { version } = release.manifest;
     await this.#replace(
       installation?.role === "hub" ? installation.hubUrl : undefined,
       version,
@@ -2008,17 +2079,91 @@ export class BinaryUpdater {
   }
 
   /**
+   * Whether this machine has been awake {@link MIN_AWAKE_MS} since it last
+   * woke, no sleep announced since (power.ts): only then does an install
+   * of `version` begin. The wait is said once and recorded nowhere: the
+   * build stays `ready`, and the next tick looks again.
+   */
+  #awakeLongEnough(version: string): boolean {
+    const power = this.#power;
+    if (!power) {
+      return true;
+    }
+    const asleep = power.asleep();
+    const awakeMs = power.awakeMs();
+    if (!asleep && awakeMs >= MIN_AWAKE_MS) {
+      this.#heldForWake = undefined;
+      return true;
+    }
+    if (this.#heldForWake !== version) {
+      this.#heldForWake = version;
+      console.info(
+        `[update] ${version} installs once this machine has been awake ${MIN_AWAKE_MS / MINUTE_MS} min since it last woke (${asleep ? "a sleep was announced and no wake since" : `awake ${Math.round(awakeMs / 1000)} s`}); nothing failed`
+      );
+    }
+    return false;
+  }
+
+  /**
    * Replaces this machine's services once {@link #drain} allows. The fence
    * stays up until the helper restarts them, and comes down if the helper
    * cannot be started, or gives up before restarting anything ({@link #watch});
    * its lease ends it in any case. Under it the build's pinned harnesses go on
    * first ({@link putOnPins}); every way out before the helper takes over
-   * puts them back ({@link putBackPins}).
+   * puts them back ({@link putBackPins}). A sleep heard from the drain to
+   * the launch (power.ts) is one such way out, and no failure
+   * ({@link UpdateInterrupted}).
    */
   async #replace(
     hub: string | undefined,
     version: string,
     launch: () => Promise<HelperJob>
+  ): Promise<void> {
+    // A sleep from the drain until the helper is launched interrupts the
+    // attempt ({@link UpdateInterrupted}): the pins step is let go at once,
+    // its installs with it (pin-record.ts `runBinaryPins`).
+    const interrupt = new AbortController();
+    const unhear = this.#power?.onChange((event) => {
+      if (event !== "wake") {
+        interrupt.abort(
+          new UpdateInterrupted(interruptedWords(version, event))
+        );
+      }
+    });
+    try {
+      await this.#replaceAwake(hub, version, launch, interrupt.signal);
+    } finally {
+      unhear?.();
+    }
+  }
+
+  /**
+   * `work` with the install's fence raised again every
+   * {@link FENCE_RENEW_MS} while it runs, so its lease outlasts an install
+   * however long that takes.
+   */
+  async #underFence<T>(
+    hub: string | undefined,
+    work: () => Promise<T>
+  ): Promise<T> {
+    const renew = setInterval(() => {
+      if (this.#fence) {
+        this.#raiseFence(hub, INSTALL_FENCE_MS).catch(logFailure);
+      }
+    }, FENCE_RENEW_MS);
+    try {
+      return await work();
+    } finally {
+      clearInterval(renew);
+    }
+  }
+
+  /** {@link #replace} under its watch for a sleep (`interrupted`). */
+  async #replaceAwake(
+    hub: string | undefined,
+    version: string,
+    launch: () => Promise<HelperJob>,
+    interrupted: AbortSignal
   ): Promise<void> {
     const cut = await this.#drain(hub);
     if (!cut) {
@@ -2026,7 +2171,11 @@ export class BinaryUpdater {
     }
     try {
       await this.#raiseFence(hub, INSTALL_FENCE_MS);
-      await putOnPins(version);
+      interrupted.throwIfAborted();
+      await this.#underFence(hub, () => putOnPins(version, interrupted));
+      // The pins went on and the machine slept since: the swap waits for it to be awake.
+      interrupted.throwIfAborted();
+      await this.#raiseFence(hub, INSTALL_FENCE_MS);
       const installing: Partial<BinaryUpdateState> = {
         phase: "installing",
         heldChildren: undefined,
@@ -2062,6 +2211,16 @@ export class BinaryUpdater {
       // Nothing was swapped: what went on for the build goes back first.
       const back = await putBackPins(version);
       await this.#lowerFence();
+      if (interrupted.aborted) {
+        const reason: unknown = interrupted.reason;
+        const said =
+          reason instanceof UpdateInterrupted
+            ? reason.message
+            : interruptedWords(version, "slept");
+        throw new UpdateInterrupted(back ? `${said}; ${back}` : said, {
+          cause: error,
+        });
+      }
       if (back) {
         throw new Error(
           `${error instanceof Error ? error.message : String(error)}; ${back}`,
@@ -2283,8 +2442,12 @@ function putBackPins(version: string): Promise<string | undefined> {
  * already went on goes back, and the build is tried again on the retry
  * schedule.
  */
-async function putOnPins(version: string): Promise<void> {
-  const said = await runBinaryPins(version);
+async function putOnPins(
+  version: string,
+  /** Aborts at a sleep: `binary-pins` is ended with its installs, and the attempt is interrupted. */
+  interrupted: AbortSignal
+): Promise<void> {
+  const said = await runBinaryPins(version, undefined, interrupted);
   if (said) {
     console.info(`[update] before ${version}: ${said}`);
   }

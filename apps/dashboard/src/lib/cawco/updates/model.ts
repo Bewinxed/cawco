@@ -17,14 +17,19 @@ import {
   unmanagedWords,
 } from "@cawco/core/binary-updates";
 import type { CawStatus } from "@cawco/core/project-conversation";
+import { MINUTE_MS } from "@cawco/core/time";
 import { downloadWords } from "@cawco/core/words/downloads";
+import { spawnWords } from "@cawco/core/words/spawn";
 import { updatesWords } from "@cawco/core/words/updates";
+import { span } from "../span";
 
 /** The part of a machine row these functions read. */
 export interface UpdateMachine {
   binaryUpdate?: BinaryUpdateState;
   build?: { commit?: string };
   hostname: string;
+  /** Offline: its update as it last said it, and when the hub last heard from it (core `MachineStatus.lastBinaryUpdate`). */
+  lastBinaryUpdate?: { seenAt: number | null; state: BinaryUpdateState };
   machineId: string;
   status: string;
 }
@@ -235,7 +240,9 @@ export function cellFor(
   policy: BinaryUpdatePolicy
 ): Cell {
   if (!isOnline(machine)) {
-    return EMPTY(1);
+    return machine.lastBinaryUpdate
+      ? offlineCell(machine.lastBinaryUpdate, policy)
+      : EMPTY(1);
   }
   const u = machine.binaryUpdate;
   // An online machine whose agent reported no state takes no update here,
@@ -245,6 +252,39 @@ export function cellFor(
   }
   return u.sessiondKept ? keptCell(u.sessiondKept) : phaseCell(u, policy);
 }
+
+/**
+ * Row 16: an offline machine, with what its update last said, in plain
+ * words with nothing to press (nothing reaches it now), and under it that
+ * it is offline and when it was last heard from.
+ */
+const offlineCell = (
+  last: NonNullable<UpdateMachine["lastBinaryUpdate"]>,
+  policy: BinaryUpdatePolicy
+): Cell => {
+  const said = last.state.sessiondKept
+    ? keptCell(last.state.sessiondKept)
+    : phaseCell(last.state, policy);
+  return {
+    ...EMPTY(16),
+    plain: true,
+    text: said.text,
+    meta: [spawnWords.machines.offline, seenWords(last.seenAt)]
+      .filter((part) => part !== undefined)
+      .join(" · "),
+  };
+};
+
+/** When the hub last heard from a machine, in words; none when it never did. */
+const seenWords = (seenAt: number | null): string | undefined => {
+  if (seenAt === null) {
+    return undefined;
+  }
+  const ago = Date.now() - seenAt;
+  return ago < MINUTE_MS
+    ? updatesWords.lastSeenNow
+    : updatesWords.lastSeen(span(ago));
+};
 
 /** Row 2: a machine that takes no update by this route, and why. */
 const unmanagedCell = (
@@ -387,7 +427,11 @@ export function isCurrent(machine: UpdateMachine): boolean {
 /** What the Running cell says: the version, or the commit of a source checkout, or a dash. */
 export function runningOf(machine: UpdateMachine): string {
   if (!isOnline(machine)) {
-    return "—";
+    // What it ran when it was last heard from.
+    const last = machine.lastBinaryUpdate?.state;
+    return last?.installedVersion && last.unmanaged !== "source"
+      ? displayVersion(last.installedVersion)
+      : "—";
   }
   if (machine.binaryUpdate && machine.binaryUpdate.unmanaged !== "source") {
     return displayVersion(machine.binaryUpdate.installedVersion);

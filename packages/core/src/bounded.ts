@@ -86,7 +86,50 @@ export const readWhileMoving = <T>(
 };
 
 /**
- * The one deadline both reads share: `left()` says how long the read has
+ * Runs `read` for as long as it is heard from: it is let go once `quietMs`
+ * of this machine's awake time pass with no `heard()`, counted from the
+ * read's start or its last `heard()`. A read made of steps, each bounded
+ * on its own and each said as it begins (a child's output lines), answers
+ * however many steps it takes; one that went still answers `unanswered` a
+ * quiet spell after. Measured on the clock {@link readWithin} reads, so a
+ * machine's sleep is no quiet. Otherwise as {@link readWithin}.
+ */
+export const readWhileHeard = <T>(
+  quietMs: number,
+  read: (signal: AbortSignal, heard: () => void) => Promise<T>,
+  options: { signal?: AbortSignal } = {}
+): Promise<Bounded<T>> => {
+  let lastHeard = performance.now();
+  return readUntil(
+    quietMs,
+    () => quietMs - (performance.now() - lastHeard),
+    (signal) =>
+      read(signal, () => {
+        lastHeard = performance.now();
+      }),
+    options
+  );
+};
+
+/**
+ * WHICH CLOCK A DEADLINE COUNTS. `left()` reads `performance.now()`, which
+ * in Bun is Rust's `std::time::Instant` (bun-v1.4.4
+ * src/jsc/virtual_machine_exports.rs `read_origin_timer`:
+ * `vm.origin_timer.elapsed()`), and `Instant` reads `CLOCK_UPTIME_RAW` on
+ * Darwin and `CLOCK_MONOTONIC` on Linux (doc.rust-lang.org/std/time/struct.Instant.html,
+ * "Underlying System calls"): neither counts a sleep. "CLOCK_UPTIME_RAW
+ * clock that increments monotonically … but that does not increment while
+ * the system is asleep" (Apple Libc gen/clock_gettime.3). The timer under
+ * it is Bun's own, on `clock_gettime(CLOCK_MONOTONIC)` (bun-v1.4.4
+ * src/bun_core/util.rs `Timespec::now_real`), which on Darwin "will
+ * continue to increment while the system is asleep" (the same page): a
+ * Mac's timer comes due early after a wake, and `left()` sets it again for
+ * the awake time still owed. So {@link readWithin}'s and
+ * {@link readWhileHeard}'s deadlines are awake time on both: a sleep never
+ * runs one out. {@link readWhileMoving} counts from the side's own
+ * `Date.now()` times, so a sleep counts there.
+ *
+ * The one deadline every read shares: `left()` says how long the read has
  * still, and the timer is set again for that while it is more than none.
  * `bound` names the time in the abort's words.
  */

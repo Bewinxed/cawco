@@ -72,12 +72,28 @@ interface Options {
     policy: BinaryUpdatePolicy
   ) => Promise<unknown>;
   dbPath: string;
+  /** Each machine's update state as it last said it, and when it was last heard from (db `keptBinaryUpdates`). */
+  kept: () => {
+    lastSeenAt: number | null;
+    machineId: string;
+    state: BinaryUpdateState;
+  }[];
   /** Every machine whose agent holds a link to the hub now. */
   online: () => OnlineMachine[];
   /** Records what a machine says its update state is, ahead of its next heartbeat. */
   setState: (machineId: string, state: BinaryUpdateState) => void;
   states: () => ReadonlyMap<string, BinaryUpdateState>;
 }
+
+/**
+ * A machine's entry on the update list: its state, and for a machine that
+ * is offline, the last state its agent said, `offline`, and when the hub
+ * last heard from it (null when never).
+ */
+type ListedUpdate = BinaryUpdateState & {
+  lastSeenAt?: number | null;
+  offline?: true;
+};
 
 /** A machine whose agent holds a link to the hub, as its update list reads it. */
 interface OnlineMachine {
@@ -400,16 +416,28 @@ export function createBinaryUpdates(options: Options) {
     // Every online machine, each with its state: one whose agent reported
     // none (a build from before agents reported it, or an updater that
     // stopped before it did) is listed as `unreported`, never left out.
-    .get("/api/binary-updates/machines", () => ({
-      machines: Object.fromEntries(
-        options
-          .online()
-          .map((machine): [string, BinaryUpdateState] => [
+    // Every machine offline (asleep, gone, its agent restarting) whose agent
+    // said one is listed too, with the last it said, `offline` and when the
+    // hub last heard from it: a hub's restart keeps it (db `binaryUpdate`).
+    .get("/api/binary-updates/machines", () => {
+      const online = options.online();
+      const live = new Set(online.map((machine) => machine.machineId));
+      return {
+        machines: Object.fromEntries([
+          ...online.map((machine): [string, ListedUpdate] => [
             machine.machineId,
             options.states().get(machine.machineId) ?? unreported(machine),
-          ])
-      ),
-    }))
+          ]),
+          ...options
+            .kept()
+            .filter((kept) => !live.has(kept.machineId))
+            .map((kept): [string, ListedUpdate] => [
+              kept.machineId,
+              { ...kept.state, offline: true, lastSeenAt: kept.lastSeenAt },
+            ]),
+        ]),
+      };
+    })
     .post("/api/binary-updates/check", () => check())
     .get("/api/binary-updates/channels", () => channels(false))
     .post("/api/binary-updates/channels", () => channels(true))

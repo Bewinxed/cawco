@@ -1,6 +1,7 @@
 /** Machines: each one's row, what its daemon reports, and re-keying and removing one. */
 
 import type { AccountReport } from "@cawco/core/accounts";
+import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import type {
   KeptMachineCapabilities,
   MachineCapabilities,
@@ -47,7 +48,7 @@ import {
   stoppedWords,
 } from "@cawco/core/words/machine-pause";
 import { toolWords } from "@cawco/core/words/tools";
-import { and, asc, eq, getTableName, ne, sql } from "drizzle-orm";
+import { and, asc, eq, getTableName, isNotNull, ne, sql } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { DbCore } from "./core";
 import { GO_WITH_MACHINE, walkOwned } from "./owned-rows";
@@ -210,6 +211,21 @@ export interface MachinesDb {
   readonly harnessesOn: (
     machineIds?: readonly string[]
   ) => Map<string, HarnessReport[]>;
+  /** Keeps `state` as the machine's binary update state as it last said it ({@link keptBinaryUpdates}). */
+  readonly keepBinaryUpdate: (
+    machineId: string,
+    state: BinaryUpdateState
+  ) => void;
+  /**
+   * Each machine's binary update state as its agent last said it, and when
+   * the hub last heard from it (schema `agents.binaryUpdate`): every
+   * machine that ever said one, or `machineId`'s alone.
+   */
+  readonly keptBinaryUpdates: (machineId?: string) => {
+    lastSeenAt: number | null;
+    machineId: string;
+    state: BinaryUpdateState;
+  }[];
   /**
    * Every machine's facts (core `MachineFacts`, `hostsHub` aside), in the
    * order they joined: core `machineCalled` numbers machines that share a
@@ -887,6 +903,41 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         .where(eq(agents.machineId, machineId))
         .get();
       return row ? (row.lastSeenAt?.getTime() ?? null) : undefined;
+    },
+    keptBinaryUpdates: (machineId) =>
+      db
+        .select({
+          machineId: agents.machineId,
+          binaryUpdate: agents.binaryUpdate,
+          lastSeenAt: agents.lastSeenAt,
+        })
+        .from(agents)
+        .where(
+          and(
+            isNotNull(agents.binaryUpdate),
+            machineId === undefined
+              ? undefined
+              : eq(agents.machineId, machineId)
+          )
+        )
+        .orderBy(asc(agents.createdAt))
+        .all()
+        .flatMap((row) =>
+          row.binaryUpdate
+            ? [
+                {
+                  machineId: row.machineId,
+                  state: row.binaryUpdate,
+                  lastSeenAt: row.lastSeenAt?.getTime() ?? null,
+                },
+              ]
+            : []
+        ),
+    keepBinaryUpdate: (machineId, state) => {
+      db.update(agents)
+        .set({ binaryUpdate: state })
+        .where(eq(agents.machineId, machineId))
+        .run();
     },
     machineInventory: (machineId) => {
       const row = db

@@ -11,6 +11,7 @@ import { toHttpBase } from "@cawco/agent/discovery";
 import { isServiceId } from "@cawco/agent/service-manager/units";
 import { readUpdateState, SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
+import { detach } from "@cawco/core/detach";
 import {
   hubCredentialSocket,
   hubDbPath,
@@ -675,6 +676,9 @@ const writeBinaryUnits = async (services: boolean): Promise<void> => {
  * records the error and not a report's last line (core cli-failure.ts reads
  * what dies before this runs).
  */
+/** The exit a process ended by SIGTERM gives: 128 and the signal's number, 15. */
+const SIGTERM_EXIT = 143;
+
 const runBinaryPins = async (args: Args): Promise<number> => {
   const back = args.action === "back" ? args.rest[0] : undefined;
   try {
@@ -683,6 +687,16 @@ const runBinaryPins = async (args: Args): Promise<number> => {
         "binary-pins takes nothing, or back <the build that will not run>"
       );
     }
+    const { endEveryGroup } = await import("@cawco/agent/group-run");
+    // Asked to end (its update let it go at a sleep or its quiet bound,
+    // agent pin-record.ts): each install it runs ends first, and it exits
+    // once they have gone, so none runs on beside the put-back after it.
+    process.once("SIGTERM", () => {
+      detach(
+        endEveryGroup().finally(() => process.exit(SIGTERM_EXIT)),
+        "binary-pins"
+      );
+    });
     const { putOnFleetPins } = await import("@cawco/agent/tools");
     const { fleetToolUpdates, putBackPins, recordPinMove } =
       await import("@cawco/agent/pin-record");

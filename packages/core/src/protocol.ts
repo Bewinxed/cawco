@@ -870,6 +870,17 @@ export interface MachineStatus {
   /** Last register's sessiond read, distinct from an available empty list. */
   custody?: SessionCustody;
   /**
+   * An offline machine's binary update state as its agent last said it,
+   * and when the hub last heard from it (epoch ms; null when never): kept
+   * by the hub through the machine's absence and the hub's own restarts
+   * (hub db `agents.binaryUpdate`). Absent while it is online, where
+   * {@link binaryUpdate} says it, and for one that never said one.
+   */
+  lastBinaryUpdate?: {
+    seenAt: number | null;
+    state: import("./binary-updates").BinaryUpdateState;
+  };
+  /**
    * When the hub last heard from the machine (epoch ms), as it stood when
    * this status was laid: it moves with a status, never with a beat alone.
    */

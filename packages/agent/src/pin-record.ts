@@ -18,9 +18,11 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { failureSentence } from "@cawco/core/cli-failure";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { MINUTE_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { hubClient } from "@cawco/hub/client";
 import { z } from "zod";
+import { runGroupWithin } from "./group-run";
 import { provenFetch } from "./hub-proof";
 import {
   type FleetUpdates,
@@ -124,11 +126,25 @@ export async function forgetPins(): Promise<void> {
 }
 
 /**
- * How long one `binary-pins` gets: an npm or bun install of a harness takes
- * seconds to a minute, and the install's fence (10 min) must outlast it with
- * room for the swap. 5 min, our call.
+ * How long a `binary-pins` may go without a line before it is ended: each
+ * step it takes is bounded on its own and says a line as it begins (an
+ * install's method, tools.ts `runMethod`, bounded by `INSTALL_MS`, 30
+ * min), and between two lines it runs at most one install and the reads
+ * around it (each copy's `--version`, `PROBE_MS`, 30 s, four times; a
+ * method's need, 15 s; the tool's settings, 30 s; the hub's word on the
+ * fleet's updates, 10 s). 35 min holds the longest of those with room, so
+ * a slow install is waited out however many pins move, and one that went
+ * still is ended a quiet spell after. Awake time (core bounded.ts): a
+ * sleep is no quiet.
  */
-const PINS_MS = 5 * 60_000;
+const PINS_QUIET_MS = 35 * MINUTE_MS;
+
+/**
+ * Between `binary-pins`'s SIGTERM and its group's SIGKILL: it ends each
+ * install it runs first and waits on each through their own grace (cli.ts
+ * `runBinaryPins`, group-run.ts `endEveryGroup`), so its own is longer.
+ */
+const PINS_GRACE_MS = 15_000;
 
 /**
  * `cawco binary-pins`, run from `from`'s own executable. With no `back`:
@@ -139,37 +155,44 @@ const PINS_MS = 5 * 60_000;
  * may not start at all. Answers what it did, in words; throws its one
  * sentence when it did not, and the error's own line when it died of one
  * (core cli-failure.ts).
+ *
+ * It runs as the leader of a process group of its own, tethered to this
+ * process (group-run.ts): one gone still {@link PINS_QUIET_MS}, or let go
+ * through `signal` (a sleep, binary-update.ts), is ended with each install
+ * it started, and this answers only once all of it has gone, so the
+ * put-back that follows never runs beside an install of its.
  */
 export async function runBinaryPins(
   from: string,
-  back?: string
+  back?: string,
+  signal?: AbortSignal
 ): Promise<string> {
-  const ran = await readWithin(PINS_MS, async (signal) => {
-    const child = Bun.spawn(
-      [versionExecutable(from), "binary-pins", ...(back ? ["back", back] : [])],
-      { env: hostEnvironment(), stdout: "pipe", stderr: "pipe", signal }
-    );
-    const [out, err, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) {
-      const said = failureSentence(err);
-      throw new Error(
-        said ||
-          `${from}'s binary-pins ${child.signalCode ? `was ended by ${child.signalCode}` : `exited ${code}`}`
-      );
+  const ran = await runGroupWithin(
+    [versionExecutable(from), "binary-pins", ...(back ? ["back", back] : [])],
+    {
+      env: hostEnvironment(),
+      graceMs: PINS_GRACE_MS,
+      ms: PINS_QUIET_MS,
+      quiet: true,
+      ...(signal ? { signal } : {}),
     }
-    // Its last line is what it did; the lines before are the installers' own.
-    return out.trim().split("\n").at(-1) ?? "";
-  });
+  );
   switch (ran.kind) {
-    case "answered":
-      return ran.value;
+    case "answered": {
+      const { code, signalCode, stderr, stdout } = ran.value;
+      if (code !== 0) {
+        const said = failureSentence(stderr);
+        throw new Error(
+          said ||
+            `${from}'s binary-pins ${signalCode ? `was ended by ${signalCode}` : `exited ${code}`}`
+        );
+      }
+      // Its last line is what it did; the lines before are the installers' own.
+      return stdout.trim().split("\n").at(-1) ?? "";
+    }
     case "unanswered":
       throw new Error(
-        `${from}'s binary-pins did not answer within ${PINS_MS / 60_000} minutes`
+        `${from}'s binary-pins said nothing for ${PINS_QUIET_MS / MINUTE_MS} minutes, so it was ended with every install it started`
       );
     default:
       unhandled("read", ran);

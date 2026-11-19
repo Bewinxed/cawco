@@ -551,6 +551,326 @@
       }
     ]
   },
+  "agents.binary_update": {
+    "type": "object",
+    "properties": {
+      "availableVersion": {
+        "type": "string"
+      },
+      "channel": {
+        "type": "string",
+        "enum": [
+          "stable",
+          "nightly"
+        ]
+      },
+      "commands": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "cut": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "custody",
+                "starting",
+                "image",
+                "workspace",
+                "command",
+                "tool-call",
+                "hub-tool-call",
+                "write",
+                "opencode",
+                "opencode-send",
+                "wake-up",
+                "wake-ups-unknown"
+              ]
+            }
+          },
+          "required": [
+            "ids",
+            "reason"
+          ]
+        }
+      },
+      "download": {
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "received",
+          "total"
+        ]
+      },
+      "error": {
+        "type": "string"
+      },
+      "failedSequence": {
+        "type": "number"
+      },
+      "failedVersion": {
+        "type": "string"
+      },
+      "heldChildren": {
+        "type": "number"
+      },
+      "hostsHub": {
+        "type": "boolean"
+      },
+      "hubFetch": {
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "received",
+          "total"
+        ]
+      },
+      "hubSilentTrials": {
+        "type": "number"
+      },
+      "hubWait": {
+        "type": "string",
+        "enum": [
+          "behind",
+          "unanswered",
+          "trial"
+        ]
+      },
+      "installedVersion": {
+        "type": "string"
+      },
+      "keeperFailedVersion": {
+        "type": "string"
+      },
+      "keeperRestart": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "children": {
+            "type": "number"
+          },
+          "diagnostics": {
+            "type": "string"
+          },
+          "dials": {
+            "type": "number"
+          },
+          "pid": {
+            "type": "number"
+          },
+          "retiring": {
+            "type": "boolean",
+            "const": true
+          },
+          "silentForMs": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "at",
+          "children",
+          "diagnostics",
+          "dials",
+          "pid",
+          "silentForMs"
+        ]
+      },
+      "landed": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "installed",
+              "rolled-back"
+            ]
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "outcome",
+          "version"
+        ]
+      },
+      "notes": {
+        "type": "string"
+      },
+      "phase": {
+        "type": "string",
+        "enum": [
+          "none",
+          "unmanaged",
+          "available",
+          "downloading",
+          "ready",
+          "waiting-sessions",
+          "waiting-for-channel",
+          "waiting-for-hub",
+          "installing",
+          "installed",
+          "failed-rolled-back",
+          "failed"
+        ]
+      },
+      "retiringKeepers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "kept": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "pid": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "command",
+                  "pid"
+                ]
+              }
+            },
+            "notAnswering": {
+              "type": "boolean",
+              "const": true
+            },
+            "sessions": {
+              "type": "number"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessions",
+            "version"
+          ]
+        }
+      },
+      "sessiondKept": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "pid": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "command",
+            "pid"
+          ]
+        }
+      },
+      "sessiondVersion": {
+        "type": "string"
+      },
+      "unconfirmedVersion": {
+        "type": "string"
+      },
+      "unmanaged": {
+        "type": "string",
+        "enum": [
+          "source",
+          "elsewhere",
+          "unreadable",
+          "unreported"
+        ]
+      },
+      "updatedAt": {
+        "type": "number"
+      },
+      "waitingOn": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "custody",
+                "starting",
+                "image",
+                "workspace",
+                "command",
+                "tool-call",
+                "hub-tool-call",
+                "write",
+                "opencode",
+                "opencode-send",
+                "wake-up",
+                "wake-ups-unknown"
+              ]
+            }
+          },
+          "required": [
+            "ids",
+            "reason"
+          ]
+        }
+      },
+      "waitingSince": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "channel",
+      "hostsHub",
+      "installedVersion",
+      "phase",
+      "updatedAt"
+    ]
+  },
   "agents.build": {
     "type": "object",
     "properties": {

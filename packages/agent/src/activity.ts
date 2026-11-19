@@ -28,19 +28,16 @@
  *   applications to easily track session's Lock status" (systemd 42d35e1);
  *   KDE's lock screen sets it on lock and unlock (kscreenlocker ksldapp.cpp
  *   `m_logind->setLocked(true)`).
- * - **Sleep, Linux**: logind's `PrepareForSleep(true)`, heard on the system
- *   bus through `gdbus monitor`: asleep is said the moment it is announced.
  * - **Idle, macOS**: CoreGraphics' `CGEventSourceSecondsSinceLastEventType`
  *   for any input in the combined session state, through Bun's FFI.
  * - **Lock, macOS**: `CGSSessionScreenIsLocked` in the console user's
  *   session, as `ioreg -n Root -d1` lists IOConsoleUsers.
- * - **Sleep, macOS**: NSWorkspace's `NSWorkspaceWillSleepNotification` and
- *   `NSWorkspaceDidWakeNotification`, heard by a small script on macOS's own
- *   JavaScript bridge (`osascript -l JavaScript`, its ObjC bridge passing a
- *   function where a block is expected), which runs in the logged-in
- *   session the agent runs in. Asleep is said once the script says it
- *   listens; before that, and wherever it cannot, a Mac that stops beating
- *   is unknown to the hub, its last input still counting.
+ * - **Sleep**: the agent's own watch of the machine's sleep and wake
+ *   (power.ts: NSWorkspace's notifications on macOS, logind's
+ *   `PrepareForSleep` on Linux), heard from the agent's start: asleep is
+ *   said the moment a sleep is announced. Where no listener answers, a
+ *   machine that stops beating is unknown to the hub, its last input still
+ *   counting.
  *
  * A machine with none of these (no graphical session, a desktop that answers
  * none) has no activity, said once in the log, and its beats carry none.
@@ -48,15 +45,13 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
-import { Readable } from "node:stream";
 import type { MachineActivity, MachineState } from "@cawco/core/notifications";
-import { spawnTethered, untether } from "@cawco/core/tether";
 import { presenceLogWords } from "@cawco/core/words/presence-log";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Display, type Wl_interface } from "wayland-client";
 import coreProtocol from "wayland-client/protocol/wayland.json" with { type: "json" };
 import { z } from "zod";
+import { watchPower } from "./power";
 import { resolveBin, toolEnv } from "./tools";
 
 /** How often the polled sources are read. Our call: a lock or a return shows within 5 s. */
@@ -436,59 +431,6 @@ const lockedHint = async (session: string): Promise<boolean | undefined> => {
   return typeof locked === "boolean" ? locked : undefined;
 };
 
-/**
- * logind's `PrepareForSleep` as it is announced, through `gdbus monitor` on
- * the system bus: `going` true as the machine goes to sleep, false as it
- * wakes. `listening` once gdbus says it monitors logind; never when gdbus
- * is not there or the bus refuses it. gdbus runs under core tether.ts, so it
- * ends with the agent; when it ends first, the agent closes the tether's
- * stdin and the tether's reader ends too.
- */
-const hearSleep = (
-  onSleep: (going: boolean) => void,
-  listening: () => void
-): (() => void) => {
-  const gdbus = resolveBin("gdbus");
-  if (!gdbus) {
-    return () => undefined;
-  }
-  let child: Bun.Subprocess<"pipe", "pipe", "ignore">;
-  try {
-    // stdin is the agent's end of the pipe whose close ends the listener.
-    child = spawnTethered(
-      [
-        gdbus,
-        "monitor",
-        "--system",
-        "--dest",
-        "org.freedesktop.login1",
-        "--object-path",
-        "/org/freedesktop/login1",
-      ],
-      { env: toolEnv(), stdout: "pipe", stderr: "ignore" }
-    );
-  } catch {
-    return () => undefined;
-  }
-  child.unref();
-  const lines = createInterface({ input: Readable.fromWeb(child.stdout) });
-  lines.on("line", (line) => {
-    if (line.startsWith("Monitoring signals")) {
-      listening();
-    }
-    const said = PREPARE_FOR_SLEEP.exec(line);
-    if (said) {
-      onSleep(said[1] === "true");
-    }
-  });
-  // gdbus gone first: its stdout's end lets the tether's reader go.
-  lines.on("close", () => untether(child.stdin));
-  // Closing the tether's stdin ends it and the listener with it.
-  return () => untether(child.stdin);
-};
-
-const PREPARE_FOR_SLEEP = /PrepareForSleep \((true|false),\)/u;
-
 /** macOS: CoreGraphics' seconds since any input in the combined session state. */
 const macIdle = async (): Promise<IdleSource | undefined> => {
   try {
@@ -515,56 +457,6 @@ const macIdle = async (): Promise<IdleSource | undefined> => {
   } catch {
     // No CoreGraphics to open: this Mac has no idle source.
   }
-};
-
-/**
- * macOS's sleep and wake, from NSWorkspace's notification centre, through
- * `osascript -l JavaScript`: the script prints `listening` once both
- * observers stand, then `sleep` or `wake` as each is posted. It exits when
- * its stdin reads end of file, which is when the agent that holds the pipe's
- * other end is gone however it ended (a SIGKILL included): a listener with
- * no agent to tell is never left running. (JXA hands NSData's `length` back
- * as a string, hence the `Number`.)
- */
-const MAC_SLEEP = `ObjC.import("AppKit");
-ObjC.import("stdlib");
-const out = $.NSFileHandle.fileHandleWithStandardOutput;
-const say = (word) => out.writeData($(word + "\\n").dataUsingEncoding($.NSUTF8StringEncoding));
-const center = $.NSWorkspace.sharedWorkspace.notificationCenter;
-center.addObserverForNameObjectQueueUsingBlock("NSWorkspaceWillSleepNotification", $(), $.NSOperationQueue.mainQueue, () => say("sleep"));
-center.addObserverForNameObjectQueueUsingBlock("NSWorkspaceDidWakeNotification", $(), $.NSOperationQueue.mainQueue, () => say("wake"));
-const input = $.NSFileHandle.fileHandleWithStandardInput;
-$.NSNotificationCenter.defaultCenter.addObserverForNameObjectQueueUsingBlock("NSFileHandleReadCompletionNotification", input, $.NSOperationQueue.mainQueue, (note) => {
-  if (Number(note.userInfo.objectForKey("NSFileHandleNotificationDataItem").length) === 0) $.exit(0);
-  input.readInBackgroundAndNotify;
-});
-input.readInBackgroundAndNotify;
-say("listening");
-$.NSRunLoop.currentRunLoop.run;`;
-
-const hearMacSleep = (
-  onSleep: (going: boolean) => void,
-  listening: () => void
-): (() => void) => {
-  const child = spawn(
-    systemProgram("osascript"),
-    ["-l", "JavaScript", "-e", MAC_SLEEP],
-    {
-      // stdin is the agent's end of the pipe whose close ends the listener.
-      stdio: ["pipe", "pipe", "ignore"],
-    }
-  );
-  child.unref();
-  createInterface({ input: child.stdout }).on("line", (line) => {
-    if (line === "listening") {
-      listening();
-    } else if (line === "sleep" || line === "wake") {
-      onSleep(line === "sleep");
-    }
-  });
-  child.on("error", () => undefined);
-  // Its stdin closing ends the script.
-  return () => child.stdin.end();
 };
 
 /** macOS: whether the console user's screen is locked, as `ioreg` lists IOConsoleUsers. */
@@ -642,24 +534,14 @@ export const watchActivity = async (): Promise<Activity> => {
     Promise.resolve(undefined);
   let lock: (() => Promise<boolean | undefined>) | undefined;
   let lockName = "";
-  let asleep = false;
-  let sleepName: string | undefined;
+  // The machine's sleep and wake (power.ts), heard by the agent from its
+  // start: said here as `asleep` once the person said yes to the report.
+  const power = watchPower();
 
   if (process.platform === "darwin") {
     find = macIdle;
     lock = macLocked;
     lockName = "ioreg IOConsoleUsers";
-    held.push(
-      hearMacSleep(
-        (going) => {
-          asleep = going;
-          look().catch(() => undefined);
-        },
-        () => {
-          sleepName = "NSWorkspace sleep";
-        }
-      )
-    );
   } else if (process.platform === "linux") {
     const wayland =
       process.env.XDG_SESSION_TYPE === "wayland" ||
@@ -672,17 +554,6 @@ export const watchActivity = async (): Promise<Activity> => {
       lock = () => lockedHint(session);
       lockName = `logind LockedHint (${session})`;
     }
-    held.push(
-      hearSleep(
-        (going) => {
-          asleep = going;
-          look().catch(() => undefined);
-        },
-        () => {
-          sleepName = "logind PrepareForSleep";
-        }
-      )
-    );
   }
 
   let idle = await find();
@@ -696,7 +567,7 @@ export const watchActivity = async (): Promise<Activity> => {
     return none;
   }
   const sourceOf = (reading: IdleSource): string =>
-    [reading.name, lock ? lockName : undefined, sleepName]
+    [reading.name, lock ? lockName : undefined, ...power.sources()]
       .filter(Boolean)
       .join(" + ");
   console.info(presenceLogWords.reading(sourceOf(idle)));
@@ -721,7 +592,7 @@ export const watchActivity = async (): Promise<Activity> => {
       idle = await find();
       return;
     }
-    const state = stateOf(idleMs, locked ?? false, asleep);
+    const state = stateOf(idleMs, locked ?? false, power.asleep());
     const changed = state !== last?.state;
     const source = idle ? sourceOf(idle) : "";
     last = { state, idleMs, source };
@@ -735,6 +606,13 @@ export const watchActivity = async (): Promise<Activity> => {
     }
   };
 
+  held.push(
+    power.onChange((event) => {
+      if (event !== "slept") {
+        look().catch(() => undefined);
+      }
+    })
+  );
   const looking = setInterval(() => {
     look().catch(() => undefined);
   }, LOOK_MS);

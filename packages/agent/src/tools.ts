@@ -18,6 +18,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { identifiedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { spawnRead, spawnTethered, untether } from "@cawco/core/tether";
+import { MINUTE_MS } from "@cawco/core/time";
 import type {
   ToolCopy,
   ToolFootprint,
@@ -40,9 +41,11 @@ import {
 import { versionSaid } from "@cawco/core/version-said";
 import { lastLines } from "@cawco/core/words/helpers";
 import { toolWords } from "@cawco/core/words/tools";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
 import { expandHome } from "./fs";
+import { runGroupWithin } from "./group-run";
 import { probeStarted } from "./probe-count";
 import { ToolInstallsSchema } from "./stored-shapes";
 
@@ -1681,14 +1684,69 @@ const probeVersion = async (
   spec: ToolSpec,
   path: string
 ): Promise<string | undefined> => {
-  const args = spec.versionCommand.slice(spec.bin.length).trim();
-  const ran = await Bun.$`${path} ${{ raw: args }}`
-    .quiet()
-    .nothrow()
-    .env(toolEnv());
-  const said = `${ran.stdout.toString()}${ran.stderr.toString()}`;
-  return versionSaid(said);
+  const args = spec.versionCommand
+    .slice(spec.bin.length)
+    .trim()
+    .split(WORDS)
+    .filter(Boolean);
+  // Its own group: a launcher's `--version` runs the binary it fronts
+  // (Codex's codex.js, a native child), which ends with it at the bound.
+  const ran = await runGroupWithin([path, ...args], {
+    env: toolEnv(),
+    ms: PROBE_MS,
+  }).catch(() => undefined);
+  if (ran?.kind === "unanswered") {
+    console.warn(
+      `[tools] ${toolWords.versionUnanswered(shownPath(path), PROBE_MS / 1000)}`
+    );
+  }
+  return ran?.kind === "answered"
+    ? versionSaid(`${ran.value.stdout}${ran.value.stderr}`)
+    : undefined;
 };
+
+/** The spaces between a version command's words. */
+const WORDS = /\s+/u;
+
+/**
+ * How long a copy's `--version` is given ({@link probeVersion}) before it
+ * is ended and no version is known: a CLI answers in about a second
+ * (OpenCode's, capabilities.ts), and a cold disk or a loaded host answers
+ * late, not never (a method's need is given 15 s, `NEED_WAIT_MS`). 30 s,
+ * our call.
+ */
+const PROBE_MS = 30_000;
+
+/**
+ * Why the copy at `at` can't run here, when its launcher is a script whose
+ * first line names an interpreter CawCo's PATH lacks: `#!/usr/bin/env
+ * node` on a machine whose only JavaScript runtime is Bun (Codex's
+ * `bin/codex.js` under `bun install -g`, @openai/codex 0.169.0), or an
+ * absolute interpreter that is not there. The interpreter, as the line
+ * names it; undefined for a copy that is no such script, or whose
+ * interpreter is there.
+ */
+const launcherUnrunnable = async (at: Found): Promise<string | undefined> => {
+  const head = await Bun.file(at.file)
+    .slice(0, SHEBANG_READ)
+    .text()
+    .catch(() => "");
+  const line = head.startsWith("#!") ? head.slice(2).split("\n")[0] : "";
+  const [program = "", ...rest] = (line ?? "").trim().split(WORDS);
+  if (!program) {
+    return undefined;
+  }
+  if (basename(program) === "env") {
+    const named = rest.find(
+      (word) => !(word.startsWith("-") || word.includes("="))
+    );
+    return named && !resolveBin(named) ? named : undefined;
+  }
+  return existsSync(program) ? undefined : program;
+};
+
+/** How much of a copy's file is read for its first line: a `#!` line is far shorter. */
+const SHEBANG_READ = 256;
 
 /**
  * Whether a harness CLI the catalog holds may start here: the version gate
@@ -1786,6 +1844,33 @@ const probedCopy = async (
 };
 
 /**
+ * A copy that said no version because its launcher's interpreter is not
+ * here ({@link launcherUnrunnable}), as a failed status that says so, with
+ * whose it is (`copy`) and what CawCo runs (`want`); none for a copy that
+ * is not that.
+ */
+const unrunnableStatus = async (
+  spec: ToolSpec,
+  at: Found,
+  copy: ToolCopy,
+  want: string | undefined
+): Promise<ToolStatus | undefined> => {
+  const interpreter = await launcherUnrunnable(at);
+  if (!interpreter) {
+    return undefined;
+  }
+  return {
+    id: spec.id,
+    state: "failed",
+    detail: `${toolWords.launcherUnrunnable(spec.name, shownPath(at.path), interpreter, at.method?.label)}${copyWords(spec, at.path).others}`,
+    ...(at.method ? { method: at.method.label } : {}),
+    copy,
+    ...(want ? { wants: { version: want, orNewer: false } } : {}),
+    at: Date.now(),
+  };
+};
+
+/**
  * What this machine has of one tool. A binary that will not say its version is
  * still installed — presence is the question, and the version is what we can
  * add about it.
@@ -1803,9 +1888,29 @@ const probeTool = async (
   }
   const version = await probeVersion(spec, at.path);
   sawTool(spec.id, version ?? "unsaid");
+  const copy = await copyOf(spec, at, version);
+  // A copy that says no version because it can't run here says why.
+  const cantRun = version
+    ? undefined
+    : await unrunnableStatus(spec, at, copy, want);
+  return cantRun ?? (await copyStatus(spec, at, version, copy, want));
+};
+
+/**
+ * {@link probeTool}'s answer for a copy found at `at` saying `version`
+ * (none when it said none), whose it is (`copy`): installed when CawCo runs
+ * it (its floor or newer, or `want`, the one version that counts), else
+ * failed, and why.
+ */
+const copyStatus = async (
+  spec: ToolSpec,
+  at: Found,
+  version: string | undefined,
+  copy: ToolCopy,
+  want: string | undefined
+): Promise<ToolStatus> => {
   const method = at.method ? { method: at.method.label } : {};
   const where = copyWords(spec, at.path);
-  const copy = await copyOf(spec, at, version);
   // A tool CawCo updates with its own updater runs at its floor or newer.
   if (spec.minVersion && !(version && !olderThan(version, spec.minVersion))) {
     return {
@@ -2319,6 +2424,18 @@ const noMethod = (spec: ToolSpec, { unmet, pin }: Unmet): ToolStatus => {
 };
 
 /**
+ * How long one install method is given before it is ended with everything
+ * it started ({@link runMethod}). The largest download a method makes is
+ * Codex's native package: codex-0.169.0-darwin-arm64.tgz is 153.8 MB
+ * (registry.npmjs.org, its Content-Range, read 2026-11-19), and unpacks to
+ * 376.5 MB (its `dist.unpackedSize`). 30 min takes it whole on a link of
+ * 0.7 Mbit/s (85 KB/s), with its unpacking; a slower link, or an installer
+ * that hung, is ended and said ({@link toolWords.installTimedOut}). Awake
+ * time (core bounded.ts): a sleep runs none of it out. Our call.
+ */
+const INSTALL_MS = 30 * MINUTE_MS;
+
+/**
  * Runs a method: whether it exited 0, and the tail of what it said (its
  * errors first when it failed). An updater can exit 0 and change nothing
  * (Claude Code's `claude update` on a Homebrew install says "Claude is up to
@@ -2334,15 +2451,37 @@ const runMethod = async (
   // A folder of its own, for the installer script a method downloads before
   // it runs it (core ToolInstallMethod `command`), gone with the run.
   const dir = await mkdtemp(join(tmpdir(), "cawco-install-"));
-  const ran = await Bun.$`${{ raw: command }}`
-    .cwd(dir)
-    .quiet()
-    .nothrow()
-    .env(toolEnv())
+  // The command is a POSIX shell line (`curl … -o x.sh && bash x.sh`), run
+  // by `sh` as the leader of its own group: the download and the script it
+  // starts end with it at the bound (group-run.ts).
+  const ran = await runGroupWithin([systemProgram("sh"), "-c", command], {
+    cwd: dir,
+    env: toolEnv(),
+    ms: INSTALL_MS,
+  })
+    .catch((error: unknown): Bounded<Ran> => ({
+      kind: "answered",
+      value: {
+        code: 127,
+        signalCode: null,
+        stdout: "",
+        stderr: error instanceof Error ? error.message : String(error),
+      },
+    }))
     .finally(() => rm(dir, { recursive: true, force: true }));
-  const out = Bun.stripANSI(ran.stdout.toString()).trim();
-  const err = Bun.stripANSI(ran.stderr.toString()).trim();
-  if (ran.exitCode === 0) {
+  if (ran.kind === "unanswered") {
+    const said = toolWords.installTimedOut(
+      spec.name,
+      method.label,
+      command,
+      INSTALL_MS / MINUTE_MS
+    );
+    console.warn(`[tools] ${said}`);
+    return { ok: false, said };
+  }
+  const out = Bun.stripANSI(ran.value.stdout).trim();
+  const err = Bun.stripANSI(ran.value.stderr).trim();
+  if (ran.value.code === 0) {
     return { ok: true, said: tail(out || err) };
   }
   // A failure keeps what the installer said, its errors first, whole up to
@@ -2351,7 +2490,7 @@ const runMethod = async (
     ok: false,
     said:
       failedOutput([err, out].filter(Boolean).join("\n")) ||
-      `exited ${ran.exitCode}`,
+      `exited ${ran.value.code}`,
   };
 };
 
@@ -2378,6 +2517,11 @@ const failedWords = (
       ? `${spec.minVersion} or newer`
       : (version ?? spec.exactVersion);
     return `${method.label} finished, and ${spec.bin} still says ${probed.version}; CawCo runs ${spec.name} ${wants}.${said ? ` ${method.label} said: ${said}.` : ""} Update it on the machine the way it was installed, then Retry.`;
+  }
+  // A copy is there and says no version: the probe's words say why, where
+  // "without leaving it anywhere" would say there is none.
+  if (probed.state === "failed" && probed.detail) {
+    return `${method.label} finished: ${probed.detail}`;
   }
   return `${method.label} finished without leaving ${spec.bin} anywhere${said ? `. It said: ${said}` : ""}`;
 };
@@ -2441,6 +2585,29 @@ const install = async (
   const now = await copyNow(spec, ask);
   if ("left" in now) {
     return now.left;
+  }
+  // A copy that says no version because its launcher's interpreter isn't
+  // here comes back the same from the method it came from: running it
+  // again would download it again and leave it as it is, at every update
+  // (Codex's `bin/codex.js` under `bun install -g` on a machine with no
+  // `node`, @openai/codex 0.169.0). Nothing runs; the row says why.
+  const interpreter =
+    now.at && !now.from && method === now.at.method
+      ? await launcherUnrunnable(now.at)
+      : undefined;
+  if (now.at && interpreter) {
+    return await settle(spec, {
+      id: spec.id,
+      state: "failed",
+      detail: toolWords.launcherUnrunnable(
+        spec.name,
+        shownPath(now.at.path),
+        interpreter,
+        method.label
+      ),
+      method: method.label,
+      at: Date.now(),
+    });
   }
   const began = await markUnderway(spec, method, now, version, ask);
   try {
