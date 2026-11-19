@@ -12,7 +12,7 @@
  * workspace.svelte.ts `project`).
  */
 
-import { getContext, setContext } from "svelte";
+import { getContext, setContext, untrack } from "svelte";
 import { z } from "zod";
 import { BesideSchema } from "#lib/cawco/stored-shapes.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
@@ -46,16 +46,21 @@ export const besideAsked = (instanceId: string): number =>
 
 /** Stands task `taskId` beside session `instanceId`, in place of any that stood there, and brings it to the front. */
 export function standBeside(instanceId: string, beside: Beside): void {
-  held = { ...held, [instanceId]: beside };
-  asks = { ...asks, [instanceId]: besideAsked(instanceId) + 1 };
-  keep();
+  // A write, never a read: an effect that stands a task beside does not run again for it.
+  untrack(() => {
+    held = { ...held, [instanceId]: beside };
+    asks = { ...asks, [instanceId]: besideAsked(instanceId) + 1 };
+    keep();
+  });
 }
 
 /** Puts the task beside session `instanceId` away. */
 export function putAway(instanceId: string): void {
-  const { [instanceId]: _, ...rest } = held;
-  held = rest;
-  keep();
+  untrack(() => {
+    const { [instanceId]: _, ...rest } = held;
+    held = rest;
+    keep();
+  });
 }
 
 /** Opens session `instanceId` with task `taskId` beside it. */

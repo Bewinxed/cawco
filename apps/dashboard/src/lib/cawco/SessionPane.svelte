@@ -1867,21 +1867,23 @@
     />
   {:else if beside && besideProblem}
     <FailedSurface onclose={() => putAway(viewId)} {switcher} what="task">
-      <Alert class="m-space-3" variant="destructive">
-        <AlertDescription>
-          {besideProblem}
-          <Button
-            class="mt-space-2"
-            onclick={() =>
-              detach(
-                readBeside(beside?.projectId ?? ""),
-                "read the task beside"
-              )}
-            size="sm"
-            variant="outline">{commonWords.tryAgain}</Button
-          >
-        </AlertDescription>
-      </Alert>
+      <div class="p-space-3">
+        <Alert variant="destructive">
+          <AlertDescription>
+            {besideProblem}
+            <Button
+              class="mt-space-2"
+              onclick={() =>
+                detach(
+                  readBeside(beside?.projectId ?? ""),
+                  "read the task beside"
+                )}
+              size="sm"
+              variant="outline">{commonWords.tryAgain}</Button
+            >
+          </AlertDescription>
+        </Alert>
+      </div>
     </FailedSurface>
   {/if}
 {/snippet}

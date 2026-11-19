@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { StagesView, TaskSummary } from "@cawco/core/task-views";
   import { DAY_MS, MINUTE_MS } from "@cawco/core/time";
-  import type { Snippet } from "svelte";
+  import { onMount, type Snippet, untrack } from "svelte";
   /**
    * Fixture for TaskBeside.stories.ts: a conversation and what stands
    * beside it (SideSplit), as SessionPane composes them. The transcript is
@@ -18,6 +18,7 @@
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import { hub } from "#lib/platform/hub.js";
+  import { trackVisibleViewport } from "#lib/platform/visible-viewport.svelte.js";
   import MessageBody from "../MessageBody.svelte";
   import { provideMarkdownFleet } from "../markdown-fleet";
   import { liveMarkdown } from "../markdown-live";
@@ -238,7 +239,8 @@
     },
   };
   $effect(() => {
-    takePreview({ ...previewFrame, state: preview ? "open" : "closed" });
+    const state = preview ? "open" : "closed";
+    untrack(() => takePreview({ ...previewFrame, state }));
   });
 
   // What stands beside as the frame opens; a press on a chip stands the rest.
@@ -254,6 +256,9 @@
     }
   });
 
+  // The visible area the sheet takes its stops from, as the app's root
+  // layout publishes it.
+  onMount(trackVisibleViewport);
   provideMarkdownFleet(() => liveMarkdown);
   provideBeside(() => VIEW);
 
@@ -287,11 +292,13 @@
     />
   {:else if beside}
     <FailedSurface onclose={() => putAway(VIEW)} {switcher} what="task">
-      <Alert class="m-space-3" variant="destructive">
-        <AlertDescription>
-          The project's folder is not on this machine.
-        </AlertDescription>
-      </Alert>
+      <div class="p-space-3">
+        <Alert variant="destructive">
+          <AlertDescription>
+            The project's folder is not on this machine.
+          </AlertDescription>
+        </Alert>
+      </div>
     </FailedSurface>
   {/if}
 {/snippet}
