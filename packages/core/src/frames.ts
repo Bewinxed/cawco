@@ -48,7 +48,12 @@ import type {
   WorkItemSummary,
 } from "./protocol";
 import type { LastErrorKind } from "./relaunch";
-import type { ModeAsk, NeutralMessage, SendRecord } from "./session-messages";
+import type {
+  ModeAsk,
+  NeutralMessage,
+  NeutralSessionInfo,
+  SendRecord,
+} from "./session-messages";
 import type { StageCloneFrame, StageFrame, StageState } from "./stage";
 import type { StartersChangedFrame } from "./starters";
 import type { RelayFrame, RelayJourneyFrame } from "./stream-relay";
@@ -563,15 +568,18 @@ interface RecoveryUnavailableFrame {
 }
 
 /**
- * A machine's stored transcripts moved (agent catalog-index.ts): the
- * sessions whose files were written, added or removed since the last such
- * frame. The hub reads the machine's catalog again only when one of them may
- * stand in Recent (hub stored-recent.ts).
+ * A machine's stored transcripts moved (agent catalog-index.ts): each one
+ * written or added since the last such frame, as the machine's listing reads
+ * it now, and each one removed or no longer a session. The hub keeps them in
+ * its copy of the machine's catalog (hub views/catalogs.ts): a move never
+ * costs a listing of the whole machine.
  */
 export interface CatalogMovedFrame {
   instanceId?: undefined;
   kind: "catalog_moved";
-  sessions: string[];
+  moved: NeutralSessionInfo[];
+  /** Harness session ids. */
+  removed: string[];
 }
 
 /** A harness whose `listSessions` did not answer within its bound: left out of the listing, not read as having none. */

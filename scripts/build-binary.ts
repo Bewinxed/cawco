@@ -415,6 +415,7 @@ export async function compileBinary(options: {
         "process-table-worker.ts",
         "loop-watch-worker.ts",
         "stores-worker.ts",
+        "views-worker.ts",
       ].map((name): [string, string] => [
         `scripts/binary/${name}`,
         join(ROOT, "scripts/binary", name),

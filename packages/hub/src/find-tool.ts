@@ -65,13 +65,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { searchWords } from "@cawco/core/words/search";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
-import {
-  cursorAt,
-  decodeCursor,
-  type Find,
-  type FindPage,
-  type HeldMoment,
-} from "./find";
+import { decodeCursor, type Find } from "./find";
 import { byId, handleId, isHandle } from "./handles";
 import { boardTitle } from "./labels";
 import { defineTool } from "./mcp-tool";
@@ -84,6 +78,7 @@ import {
   redactSecrets,
   secretRanges,
 } from "./secret-filter";
+import { cursorAt, type FindPage, type HeldMoment } from "./views/find-engine";
 
 export const FIND_TOOL = "find";
 

@@ -15,7 +15,28 @@ export type BoardChangeKind =
   | "machine_status"
   | "inventory"
   | "former"
-  | "continuation";
+  | "continuation"
+  | ViewChangeKind;
+
+/**
+ * What a write moved in a view the hub's views thread keeps (views/
+ * worker.ts: find's names, Recent's stored list), beside what the board
+ * lays: a session's find columns, its conversations and its step under way
+ * (its id), a work item and its texts (its id), a workspace's branch (its
+ * id), an artifact or a change to one (its id), a project's tasks (the
+ * project's id), a routine or its runs (its id), a project or its places
+ * (its id), a machine's purged sessions (the machine's id). A session's
+ * board row and a machine's facts are told the views too.
+ */
+export type ViewChangeKind =
+  | "view_session"
+  | "view_work_item"
+  | "view_workspace"
+  | "view_artifact"
+  | "view_tasks"
+  | "view_routine"
+  | "view_project"
+  | "view_purged";
 
 /** One logged change: what moved and its key. */
 export interface BoardChange {
@@ -178,6 +199,93 @@ const LOGGED: readonly Logged[] = [
     kind: "machine",
   },
   { name: "aliases", table: "instance_aliases", key: "id", kind: "former" },
+  // What the views read beside the board's own (views/worker.ts).
+  {
+    name: "view_turn",
+    table: "instances",
+    key: "id",
+    kind: "view_session",
+    columns: ["turn_open_at"],
+    rows: false,
+  },
+  {
+    name: "view_conversations",
+    table: "instance_conversations",
+    key: "instance_id",
+    kind: "view_session",
+  },
+  {
+    name: "view_steps",
+    table: "session_plan_steps",
+    key: "instance_id",
+    kind: "view_session",
+  },
+  {
+    name: "view_work_items",
+    table: "work_items",
+    key: "id",
+    kind: "view_work_item",
+  },
+  {
+    name: "view_work_item_texts",
+    table: "work_item_texts",
+    key: "work_item_id",
+    kind: "view_work_item",
+    columns: ["brief", "result"],
+  },
+  {
+    name: "view_workspaces",
+    table: "workspaces",
+    key: "id",
+    kind: "view_workspace",
+    columns: ["branch"],
+  },
+  {
+    name: "view_artifacts",
+    table: "artifacts",
+    key: "id",
+    kind: "view_artifact",
+  },
+  {
+    name: "view_artifact_changes",
+    table: "artifact_changes",
+    key: "artifact_id",
+    kind: "view_artifact",
+    columns: ["by"],
+  },
+  {
+    name: "view_tasks",
+    table: "project_tasks",
+    key: "project_id",
+    kind: "view_tasks",
+  },
+  {
+    name: "view_task_labels",
+    table: "project_task_labels",
+    key: "project_id",
+    kind: "view_tasks",
+  },
+  { name: "view_routines", table: "routines", key: "id", kind: "view_routine" },
+  {
+    name: "view_routine_runs",
+    table: "routine_runs",
+    key: "routine_id",
+    kind: "view_routine",
+    columns: ["outcome", "ended_at"],
+  },
+  { name: "view_projects", table: "projects", key: "id", kind: "view_project" },
+  {
+    name: "view_places",
+    table: "project_places",
+    key: "project_id",
+    kind: "view_project",
+  },
+  {
+    name: "view_purged",
+    table: "purged_sessions",
+    key: "machine_id",
+    kind: "view_purged",
+  },
   {
     name: "continuations",
     table: "continuations",

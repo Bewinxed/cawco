@@ -15,7 +15,7 @@
  */
 import { type FSWatcher, watch } from "node:fs";
 import { stat } from "node:fs/promises";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { catalogIndexPath } from "@cawco/core/paths/cawco";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -166,14 +166,30 @@ export async function indexedListing<T extends { file: string }>(
 /** A transcript's file name: its session id, then `.jsonl`, one folder down. */
 const TRANSCRIPT_NAME = /^[^/\\]+[/\\]([^/\\]+)\.jsonl$/u;
 
+/** How a watched folder's transcripts are read: the harness whose they are, and the listing's own read of one. */
+interface FolderReader {
+  harness: string;
+  read: (
+    file: string,
+    sessionId: string
+  ) => Promise<NeutralSessionInfo | undefined>;
+}
+
+/** A transcript that moved in a watched folder: its file, its session, and how its folder is read. */
+export interface MovedTranscript {
+  file: string;
+  reader: FolderReader;
+  sessionId: string;
+}
+
 /** The folders watched for transcripts moving, by path. */
 const watched = new Map<string, FSWatcher>();
 /** Who hears of a transcript moving: the session supervisor's report to the hub. */
-const listeners = new Set<(sessions: string[]) => void>();
+const listeners = new Set<(moved: MovedTranscript) => void>();
 
-/** `listener` hears the session ids of the transcripts that moved in a watched folder. */
+/** `listener` hears each transcript that moved in a watched folder. */
 export function onCatalogMoved(
-  listener: (sessions: string[]) => void
+  listener: (moved: MovedTranscript) => void
 ): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -184,9 +200,10 @@ export function onCatalogMoved(
  * a transcript written, added or removed, once per folder for the agent's
  * life: so a session run outside CawCo is told to the hub as it moves,
  * never found only by the next full ask. A folder not there yet is watched
- * by a later listing that finds it.
+ * by a later listing that finds it. `reader` reads a moved transcript as
+ * the listing does ({@link readMoved}).
  */
-export function watchCatalogDir(dir: string): void {
+export function watchCatalogDir(dir: string, reader: FolderReader): void {
   if (watched.has(dir)) {
     return;
   }
@@ -194,11 +211,12 @@ export function watchCatalogDir(dir: string): void {
   try {
     watcher = watch(dir, { recursive: true }, (_event, name) => {
       const sessionId = name ? TRANSCRIPT_NAME.exec(name)?.[1] : undefined;
-      if (!sessionId) {
+      if (!(name && sessionId)) {
         return;
       }
+      const moved = { file: join(dir, name), reader, sessionId };
       for (const listener of listeners) {
-        listener([sessionId]);
+        listener(moved);
       }
     });
   } catch {
@@ -212,4 +230,49 @@ export function watchCatalogDir(dir: string): void {
   });
   watcher.unref();
   watched.set(dir, watcher);
+}
+
+/** What moved transcripts read as: the sessions to list as they stand now, and the ones to list no more. */
+export interface MovedRead {
+  infos: NeutralSessionInfo[];
+  removed: string[];
+}
+
+/**
+ * The moved transcripts read now, each as the listing reads it, and kept in
+ * the index at its new mtime and size, so the next listing reads none of
+ * them again: one gone, or that no longer reads as a session, is to be
+ * listed no more. What the hub is told of a move (core `CatalogMovedFrame`),
+ * in place of a listing of the whole machine.
+ */
+export async function readMoved(
+  moved: readonly MovedTranscript[]
+): Promise<MovedRead> {
+  const index = await loadIndex();
+  const read = await listingRead(moved, async (one) => {
+    const now = await stat(one.file).then(
+      (got) => ({ mtimeMs: got.mtimeMs, size: got.size }),
+      () => null
+    );
+    if (!now) {
+      index.delete(one.file);
+      return { one, info: null };
+    }
+    const info = (await one.reader.read(one.file, one.sessionId)) ?? null;
+    index.set(one.file, { harness: one.reader.harness, info, ...now });
+    return { one, info };
+  });
+  if (read.length > 0) {
+    saveIndex(index);
+  }
+  const infos: NeutralSessionInfo[] = [];
+  const removed: string[] = [];
+  for (const { one, info } of read) {
+    if (info) {
+      infos.push(info);
+    } else {
+      removed.push(one.sessionId);
+    }
+  }
+  return { infos, removed };
 }

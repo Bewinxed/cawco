@@ -431,12 +431,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    `lastSeenAt` but on its status, and a session's keep-alive no `state`,
  *    only its facts and `nextAt`. A page built for 84 reads none of it, so
  *    it reloads first.
+ * 86: a machine's `catalog_moved` carries each moved transcript's facts
+ *    (`moved`) and the ones removed (`removed`), no longer their ids alone
+ *    (`sessions`). A page drops it either way; the wire's own record names
+ *    it, so a page built for 85 reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 85;
+export const WIRE_PROTOCOL = 86;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

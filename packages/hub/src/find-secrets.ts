@@ -31,8 +31,8 @@ import type {
   SecretSpan,
 } from "@cawco/core/find";
 import { unmarked } from "@cawco/core/find-match";
-import type { HeldMoment } from "./find";
 import { secretRangesOf } from "./secret-filter";
+import type { HeldMoment } from "./views/find-engine";
 
 /**
  * One text of a result that may hold a secret, and where its spans go:

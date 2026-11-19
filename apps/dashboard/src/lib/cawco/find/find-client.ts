@@ -145,3 +145,12 @@ export const findPlaces = (session: string, q: string, signal?: AbortSignal) =>
     ),
     signal
   );
+
+/**
+ * The sessions these names name, as the hub's find answers each (its full
+ * id, handle or short id), or null when it names none: asked together, one
+ * request for every name a redraw found the board without
+ * (session-names.svelte.ts).
+ */
+export const findSessions = (names: readonly string[]) =>
+  read(hubAsk(hub.api.find.sessions.post({ names: [...names] })));

@@ -13,7 +13,6 @@ import type {
 } from "@cawco/core/find";
 import { field, KIND_WORDS, type MatchEntry } from "@cawco/core/find-match";
 import { machineLabel } from "@cawco/core/machine-names";
-import type { MachineFacts } from "@cawco/core/protocol";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -25,7 +24,6 @@ import type {
   FindRoutineRow,
   FindWorkItemRow,
 } from "./db/find";
-import type { ProjectRow } from "./db/projects";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 
 /** One thing the names part can answer with, before a query scores it. */
@@ -170,8 +168,8 @@ const purposeOf = (
 const lastActivityOf = (row: FindInstanceRow): number =>
   row.updatedAt.getTime();
 
-/** Points for parentage: his own sessions, and today's delegates of them. */
-const kinOf = (
+/** Points for parentage: his own sessions, and today's delegates of them; `today` is a day before now. */
+export const kinOf = (
   row: FindInstanceRow,
   parent: FindInstanceRow | undefined,
   today: number
@@ -187,27 +185,32 @@ const kinOf = (
 /** A project as a result carries it. */
 type ProjectOf = (id: string | null) => { id: string; name: string } | null;
 
-/** What the conversations' entries are built from. */
+/** A keyed read: one value by its key. */
+interface ByKey<Value> {
+  get: (key: string) => Value | undefined;
+}
+
+/** What the conversations' entries are built from, each read by key. */
 export interface ConversationSources {
   /** Each session's latest work item, and each work item by id. */
   items: {
-    byId: Map<string, FindWorkItemRow>;
-    latest: Map<string, FindWorkItemRow>;
+    byId: ByKey<FindWorkItemRow>;
+    latest: ByKey<FindWorkItemRow>;
   };
   machineName: (id: string) => string;
   now: number;
   projectOf: ProjectOf;
   /** Each delegating session's newest report from one of its delegates. */
-  reportedTo: Map<string, FindWorkItemRow>;
-  rows: Map<string, FindInstanceRow>;
-  steps: Map<string, string>;
-  taskTitles: Map<string, string>;
+  reportedTo: ByKey<FindWorkItemRow>;
+  rows: ByKey<FindInstanceRow>;
+  steps: ByKey<string>;
+  taskTitles: ByKey<string>;
 }
 
 /** The task an attempt is at, as its result carries it. */
 const taskOf = (
   item: FindWorkItemRow | undefined,
-  taskTitles: Map<string, string>
+  taskTitles: ByKey<string>
 ): FindConversation["task"] => {
   if (!(item?.taskId && item.projectId)) {
     return null;
@@ -416,7 +419,7 @@ export const routineEntry = (
   },
 });
 
-export const projectEntry = (project: ProjectRow): Entry => ({
+export const projectEntry = (project: { id: string; name: string }): Entry => ({
   asked: new Set(KIND_WORDS.project),
   kin: 0,
   fields: [...field("title", project.name)],
@@ -433,7 +436,7 @@ export const projectEntry = (project: ProjectRow): Entry => ({
 });
 
 export const machineEntry = (
-  machine: MachineFacts & { lastSeenAt: number | null },
+  machine: { hostname: string; lastSeenAt: number | null; machineId: string },
   online: boolean
 ): Entry => {
   const name = machineLabel(machine.hostname);

@@ -57,6 +57,8 @@ const findColumns = {
   turnOpenAt: instances.turnOpenAt,
   updatedAt: instances.updatedAt,
   workItemId: instances.workItemId,
+  /** When the person last looked at it (`instances.seen_at`): Jump's unread reports read it. */
+  seenAt: instances.seenAt,
 };
 
 export type FindInstanceRow = {
@@ -98,47 +100,47 @@ export interface FindRoutineRow {
   prompt: string;
 }
 
+/**
+ * What the views thread reads for find (views/find-index.ts): each reader
+ * reads every row, or with keys only those keys' rows, so a change is read
+ * again by key and never as the whole table.
+ */
 export interface FindDb {
-  /** Every artifact: what it is, whose, and whether the person changed any of its keys. */
-  readonly artifacts: () => FindArtifactRow[];
+  /** Every artifact, or these ids': what it is, whose, and whether the person changed any of its keys. */
+  readonly artifacts: (ids?: string[]) => FindArtifactRow[];
   /**
-   * Every conversation the hub made for its own use that holds no one's own
-   * words, as `machineId:sessionId` (find.ts `purgedKey`): a continuation's
-   * summariser (kind `summariser`), its prompt the hub's and its answer a
-   * model's summary of a session found by its own words. By each harness
-   * session id it went by.
+   * The conversations the hub made for its own use that hold no one's own
+   * words, by the session that made them, each as `machineId:sessionId`
+   * (find.ts `purgedKey`): a continuation's summariser (kind `summariser`),
+   * its prompt the hub's and its answer a model's summary of a session found
+   * by its own words. By each harness session id it went by. Every one, or
+   * those among these ids.
    */
-  readonly hubMade: () => Set<string>;
+  readonly hubMade: (ids?: string[]) => Map<string, string[]>;
   /** The ids of the sessions find holds whose id starts with `prefix` (hex and dashes only). */
   readonly idsByPrefix: (prefix: string) => string[];
   /** The conversations find reads ({@link findColumns}): every one, or these ids'. */
   readonly instances: (ids?: string[]) => FindInstanceRow[];
-  /**
-   * When the person last looked at each session they have looked at (its
-   * tab in front after it ended, or archived off Finished, on any device:
-   * `instances.seen_at`, the one record of it), by session id.
-   */
-  readonly lookedAt: () => Map<string, number>;
-  /** Each session's plan step under way, by session: the first in its list in progress, found by its rows. */
-  readonly planSteps: () => Map<string, string>;
+  /** Each session's plan step under way, by session: the first in its list in progress, found by its rows. Every session's, or these ids'. */
+  readonly planSteps: (ids?: string[]) => Map<string, string>;
   /** The person purged these sessions of `machineId` (their harness session ids) now. */
   readonly purge: (machineId: string, sessionIds: string[]) => void;
-  /** Every purged session, as `machineId:sessionId` (find.ts `purgedKey`). */
-  readonly purged: () => Set<string>;
-  /** Every work item's result, for those ended after `after` (ms epoch): the commits and diffstat its report names. */
-  readonly results: (
-    after: number
-  ) => { endedAt: Date; id: string; result: string | null }[];
-  /** Every routine, with its newest ended run's outcome. */
-  readonly routines: () => FindRoutineRow[];
-  /** Every project's indexed tasks, each with its labels. */
-  readonly tasks: () => (typeof projectTasks.$inferSelect & {
+  /** Every purged session, or those of these machines, as `machineId:sessionId` (find.ts `purgedKey`). */
+  readonly purged: (machineIds?: string[]) => Set<string>;
+  /** Each ended work item's result, or these ids': the commits and diffstat its report names. */
+  readonly results: (ids?: string[]) => { id: string; result: string | null }[];
+  /** Every routine, or these ids', with its newest ended run's outcome. */
+  readonly routines: (ids?: string[]) => FindRoutineRow[];
+  /** Every project's indexed tasks, or these projects', each with its labels. */
+  readonly tasks: (
+    projectIds?: string[]
+  ) => (typeof projectTasks.$inferSelect & {
     labels: string[];
   })[];
-  /** Every work item: what it was for and how it ended ({@link BRIEF_OPENING}). */
-  readonly workItems: () => FindWorkItemRow[];
-  /** Each workspace's branch, by its id. */
-  readonly workspaceBranches: () => Map<string, string>;
+  /** Every work item, or these ids': what it was for and how it ended ({@link BRIEF_OPENING}). */
+  readonly workItems: (ids?: string[]) => FindWorkItemRow[];
+  /** Each workspace's branch, by its id: every one, or these ids'. */
+  readonly workspaceBranches: (ids?: string[]) => Map<string, string>;
 }
 
 /** What a session id's prefix may hold: hex and dashes. */
@@ -157,15 +159,18 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
       .onConflictDoNothing()
       .run();
   },
-  purged: () =>
+  purged: (machineIds) =>
     new Set(
       db
         .select()
         .from(purgedSessions)
+        .where(
+          machineIds ? inArray(purgedSessions.machineId, machineIds) : undefined
+        )
         .all()
         .map((row) => `${row.machineId}:${row.sessionId}`)
     ),
-  hubMade: () => {
+  hubMade: (ids) => {
     const made = db
       .select({
         id: instances.id,
@@ -173,14 +178,20 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         sessionId: instances.sessionId,
       })
       .from(instances)
-      .where(eq(instances.kind, "summariser"))
-      .all();
-    const machineOf = new Map(made.map((row) => [row.id, row.machineId]));
-    const keys = new Set(
-      made.flatMap((row) =>
-        row.sessionId ? [`${row.machineId}:${row.sessionId}`] : []
+      .where(
+        and(
+          eq(instances.kind, "summariser"),
+          ids ? inArray(instances.id, ids) : undefined
+        )
       )
+      .all();
+    const keys = new Map(
+      made.map((row) => [
+        row.id,
+        row.sessionId ? [`${row.machineId}:${row.sessionId}`] : [],
+      ])
     );
+    const machineOf = new Map(made.map((row) => [row.id, row.machineId]));
     if (made.length > 0) {
       for (const { instanceId, sessionId } of db
         .select({
@@ -190,12 +201,12 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         .from(instanceConversations)
         .where(inArray(instanceConversations.instanceId, [...machineOf.keys()]))
         .all()) {
-        keys.add(`${machineOf.get(instanceId)}:${sessionId}`);
+        keys.get(instanceId)?.push(`${machineOf.get(instanceId)}:${sessionId}`);
       }
     }
     return keys;
   },
-  artifacts: () =>
+  artifacts: (ids) =>
     db
       .select({
         ...getTableColumns(artifacts),
@@ -206,7 +217,12 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
       })
       .from(artifacts)
       // A held next version is its artifact's, unseen until its parent opens it.
-      .where(isNull(artifacts.heldFor))
+      .where(
+        and(
+          isNull(artifacts.heldFor),
+          ids ? inArray(artifacts.id, ids) : undefined
+        )
+      )
       .all(),
   idsByPrefix: (prefix) =>
     ID_PREFIX.test(prefix)
@@ -237,19 +253,7 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
       .all()
       .map((row) => ({ ...row, priorSessionIds: prior.get(row.id) ?? [] }));
   },
-  lookedAt: () =>
-    new Map(
-      db
-        .select({
-          id: instances.id,
-          at: sql<number>`${instances.seenAt}`,
-        })
-        .from(instances)
-        .where(isNotNull(instances.seenAt))
-        .all()
-        .map((row) => [row.id, row.at])
-    ),
-  planSteps: () => {
+  planSteps: (ids) => {
     const steps = new Map<string, string>();
     for (const row of db
       .select({
@@ -257,7 +261,12 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         content: sessionPlanSteps.content,
       })
       .from(sessionPlanSteps)
-      .where(eq(sessionPlanSteps.status, "in_progress"))
+      .where(
+        and(
+          eq(sessionPlanSteps.status, "in_progress"),
+          ids ? inArray(sessionPlanSteps.instanceId, ids) : undefined
+        )
+      )
       .orderBy(asc(sessionPlanSteps.instanceId), asc(sessionPlanSteps.position))
       .all()) {
       if (!steps.has(row.id)) {
@@ -266,19 +275,19 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
     }
     return steps;
   },
-  results: (after) =>
+  results: (ids) =>
     db
-      .select({
-        id: workItems.id,
-        endedAt: sql<number>`${workItems.endedAt}`,
-        result: workItemTexts.result,
-      })
+      .select({ id: workItems.id, result: workItemTexts.result })
       .from(workItems)
       .leftJoin(workItemTexts, eq(workItemTexts.workItemId, workItems.id))
-      .where(sql`${workItems.endedAt} > ${after}`)
-      .all()
-      .map((row) => ({ ...row, endedAt: new Date(row.endedAt) })),
-  routines: () => {
+      .where(
+        and(
+          isNotNull(workItems.endedAt),
+          ids ? inArray(workItems.id, ids) : undefined
+        )
+      )
+      .all(),
+  routines: (ids) => {
     const last = db
       .select({
         routineId: routineRuns.routineId,
@@ -286,13 +295,19 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         endedAt: sql<number | null>`max(${routineRuns.endedAt})`,
       })
       .from(routineRuns)
-      .where(sql`${routineRuns.endedAt} IS NOT NULL`)
+      .where(
+        and(
+          sql`${routineRuns.endedAt} IS NOT NULL`,
+          ids ? inArray(routineRuns.routineId, ids) : undefined
+        )
+      )
       .groupBy(routineRuns.routineId)
       .all();
     const byRoutine = new Map(last.map((row) => [row.routineId, row]));
     return db
       .select()
       .from(routines)
+      .where(ids ? inArray(routines.id, ids) : undefined)
       .all()
       .map((row) => {
         const run = byRoutine.get(row.id);
@@ -308,11 +323,16 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         };
       });
   },
-  tasks: () => {
+  tasks: (projectIds) => {
     const labels = new Map<string, string[]>();
     for (const { projectId, path, label } of db
       .select()
       .from(projectTaskLabels)
+      .where(
+        projectIds
+          ? inArray(projectTaskLabels.projectId, projectIds)
+          : undefined
+      )
       .orderBy(sql`rowid`)
       .all()) {
       const key = `${projectId}\0${path}`;
@@ -321,13 +341,16 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
     return db
       .select()
       .from(projectTasks)
+      .where(
+        projectIds ? inArray(projectTasks.projectId, projectIds) : undefined
+      )
       .all()
       .map((row) => ({
         ...row,
         labels: labels.get(`${row.projectId}\0${row.path}`) ?? [],
       }));
   },
-  workItems: () =>
+  workItems: (ids) =>
     db
       .select({
         id: workItems.id,
@@ -347,12 +370,14 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
       })
       .from(workItems)
       .leftJoin(workItemTexts, eq(workItemTexts.workItemId, workItems.id))
+      .where(ids ? inArray(workItems.id, ids) : undefined)
       .all(),
-  workspaceBranches: () =>
+  workspaceBranches: (ids) =>
     new Map(
       db
         .select({ id: workspaces.id, branch: workspaces.branch })
         .from(workspaces)
+        .where(ids ? inArray(workspaces.id, ids) : undefined)
         .all()
         .map((row) => [row.id, row.branch])
     ),

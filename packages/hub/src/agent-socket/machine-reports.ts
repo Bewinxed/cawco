@@ -1,6 +1,8 @@
 /** A machine's own reports on its socket, none naming a session: each is taken in whole. */
 
 import { detach } from "@cawco/core/detach";
+import { NeutralSessionInfoSchema } from "@cawco/core/stored-shapes";
+import { z } from "zod";
 import { stagePlaceRef } from "../caw";
 import type { HubContext } from "../hub-context";
 import type { FrameAnswer, FrameRun } from "./frame-run";
@@ -22,11 +24,17 @@ export type MachineReportsContext = Pick<
   | "registry"
   | "ridingReported"
   | "stageHeard"
-  | "storedRecent"
+  | "find"
   | "streamRelay"
   | "welcomeConverge"
   | "workItems"
 >;
+
+/** A machine's word that its stored transcripts moved (core `CatalogMovedFrame`), as the hub reads it. */
+const MovedShape = z.object({
+  moved: z.array(NeutralSessionInfoSchema),
+  removed: z.array(z.string()),
+});
 
 export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   // What a machine says on its socket, read in this order (agent-socket/frame-run.ts).
@@ -121,14 +129,24 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   const catalogMoved = (run: FrameRun): FrameAnswer => {
     const { message } = run;
     const body = message.payload;
-    // Its stored transcripts moved (agent catalog-index.ts): Recent's
-    // stored list reads its catalog again when they may move it.
+    // Its stored transcripts moved (agent catalog-index.ts), each as it
+    // reads now: kept in the views thread's copy of its catalog, which
+    // find and Recent's stored list read (views/catalogs.ts). Nothing else
+    // of the machine is read.
     if (body.kind === "catalog_moved") {
-      const { sessions } = body;
-      if (Array.isArray(sessions)) {
+      const moved = MovedShape.safeParse(body);
+      if (moved.success) {
         detach(
-          ctx.storedRecent.heard(message.machineId, sessions),
-          "read the machine's catalog"
+          ctx.find.catalogMoved(
+            message.machineId,
+            moved.data.moved,
+            moved.data.removed
+          ),
+          "keep the machine's moved transcripts"
+        );
+      } else {
+        console.warn(
+          `[hub] ${message.machineId}'s catalog_moved did not read: ${z.prettifyError(moved.error)}`
         );
       }
       return "stop";

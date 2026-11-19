@@ -90,6 +90,7 @@ import {
   changesAnyTask,
   memoryRoleOf,
   refusal,
+  roleOf,
   TRIAGE_TOOLS,
 } from "./roles";
 import { ROUTINE_DEFINITIONS, ROUTINE_TOOLS, type Routines } from "./routines";
@@ -116,6 +117,31 @@ type AskTool = ReturnType<Asks["tools"]>[number];
 /** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
 type ProjectTool =
   RoutineTool | IngressTool | ActionTool | RelayTool | MemoryTool;
+
+/** What `tools/list` answers one listing, and its hash (db `toolListing`). */
+interface Listing {
+  hash: string;
+  tools: ReturnType<ReturnType<typeof listedFor>>[];
+}
+
+/** What a session's parent is, as its listing reads it: none, a design check's, or a session's. */
+const parentKind = (
+  parentInstanceId: string | null | undefined
+): "none" | "session" | "verifier" => {
+  if (!parentInstanceId) {
+    return "none";
+  }
+  return isVerifierParent(parentInstanceId) ? "verifier" : "session";
+};
+
+/** What a view's tools are built by: every field of {@link ToolView}. */
+const viewKey = (view: ToolView): string =>
+  JSON.stringify([
+    view.harness,
+    view.mayStart,
+    view.lands ?? null,
+    view.workItem ?? false,
+  ]);
 
 /** The listing every unbound connection shares: OpenCode's discovery, the superset. */
 const SHARED_DISCOVERY = "shared-discovery";
@@ -520,7 +546,10 @@ export function createDelegationMcp(options: {
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
    */
-  connections?: Pick<Connections, "callAs" | "sessionTools">;
+  connections?: Pick<
+    Connections,
+    "callAs" | "sessionTools" | "sessionToolsKey"
+  >;
   /**
    * Records an admin write as the person's ask and answers at once with what
    * the session reads; the hub runs it once they approve (asks.ts).
@@ -560,6 +589,21 @@ export function createDelegationMcp(options: {
   let tools = options.tools ?? handoffTools;
   let admin = adminTools();
   let adminNames: ReadonlySet<string> = new Set(admin.map((t) => t.name));
+  /**
+   * THE TOOLS ARE BUILT ONCE. Each view's hand-off tools and every module's
+   * definitions, their JSON schemas made (mcp-tool.ts `z.toJSONSchema`),
+   * by {@link viewKey}: a session's listing filters them and never builds
+   * one again. Built anew on every list, call and sweep, 34 tools' schemas
+   * per open stream held the hub's thread after every board publish
+   * (2026-11-19, tsk-391's cause B). Emptied only when a source reload
+   * replaces the definitions.
+   */
+  const builtFor = new Map<
+    string,
+    { defined: ToolDefinition[]; handoff: ReturnType<ToolFactory> }
+  >();
+  /** Each listing as answered, with its hash, by {@link listingKey}: what decides a session's list, never the session itself. */
+  const listings = new Map<string, Listing>();
   const moduleUrl = new URL("./delegation-tools.ts", import.meta.url);
   const adminModuleUrl = new URL("./admin-tools.ts", import.meta.url);
   if (typeof __CAWCO_RELEASE__ !== "boolean") {
@@ -574,6 +618,8 @@ export function createDelegationMcp(options: {
             throw new Error("Duplicate delegation tool names");
           }
           tools = module.handoffTools;
+          builtFor.clear();
+          listings.clear();
         }),
         "delegation-mcp tool reload"
       );
@@ -584,6 +630,8 @@ export function createDelegationMcp(options: {
           (module) => {
             admin = module.adminTools();
             adminNames = new Set(admin.map((tool) => tool.name));
+            builtFor.clear();
+            listings.clear();
           }
         ),
         "delegation-mcp admin reload"
@@ -607,8 +655,34 @@ export function createDelegationMcp(options: {
   const viewOf = (actor: InstanceRow | undefined): ToolView =>
     toolViewOf(actor, landsOf(actor));
 
-  /** Whether `triage_decide` can be called: the fleet watch that answers it is running. */
-  const triageCallable = () => !!options.triageTools?.(undefined).length;
+  /** `view`'s tools as built once ({@link builtFor}). */
+  const builtOf = (view: ToolView) => {
+    const key = viewKey(view);
+    let built = builtFor.get(key);
+    if (!built) {
+      const handoff = tools(view);
+      built = {
+        handoff,
+        defined: [
+          ...definedTools(view, () => handoff, admin),
+          ...(options.askTools?.(undefined) ?? []),
+        ],
+      };
+      builtFor.set(key, built);
+    }
+    return built;
+  };
+
+  /**
+   * Whether `triage_decide` can be called: the fleet watch that answers it
+   * is running. Read once per {@link listings}: a listing kept carries the
+   * answer it was made with, and the sweep makes them again.
+   */
+  let triageNow: boolean | undefined;
+  const triageCallable = (): boolean => {
+    triageNow ??= !!options.triageTools?.(undefined).length;
+    return triageNow;
+  };
 
   /**
    * The tools a session is listed: its role's and its scope's (roles.ts),
@@ -617,21 +691,61 @@ export function createDelegationMcp(options: {
    * only one that may be made a project `project_from_session`, only a
    * design check's verifier `design_verdict`), in its harness's words
    * ({@link toolViewOf}). Without a session — OpenCode's shared discovery —
-   * every role's, the superset; the call enforces.
+   * every role's, the superset; the call enforces. A filter over the tools
+   * built once ({@link builtOf}).
    */
   const toolsFor = (actor: InstanceRow | undefined) =>
     listedTools<ToolDefinition>(
       actor,
-      [
-        ...definedTools(viewOf(actor), tools, admin).filter(
-          (tool) => triageCallable() || !TRIAGE_NAMES.has(tool.name)
-        ),
-        ...(options.askTools?.(undefined) ?? []),
-      ],
+      builtOf(viewOf(actor)).defined.filter(
+        (tool) => triageCallable() || !TRIAGE_NAMES.has(tool.name)
+      ),
       // Granted by a delegate type or a project, not a role's list: the
       // connections module answers which, the role's say included.
       options.connections?.sessionTools(actor) ?? []
     );
+
+  /**
+   * What decides `actor`'s listing, and nothing else of it: its view (its
+   * harness, the types it may start, how its item lands, whether it runs
+   * one), its role, whether it is in a project, whether it has a parent and
+   * whether that is a design check, and the connections it is granted
+   * (connections.ts `sessionToolsKey`). Two sessions with one key are
+   * listed the same tools in the same words.
+   */
+  const listingKey = (actor: InstanceRow | undefined): string =>
+    actor
+      ? JSON.stringify([
+          viewKey(viewOf(actor)),
+          roleOf(actor),
+          !!actor.projectId,
+          !!actor.workItemId,
+          parentKind(actor.parentInstanceId),
+          options.connections?.sessionToolsKey(actor) ?? "",
+        ])
+      : "";
+
+  /** What `actor` is listed now, kept by its {@link listingKey}. */
+  const listingOfActor = (actor: InstanceRow | undefined): Listing => {
+    const key = listingKey(actor);
+    let listing = listings.get(key);
+    if (!listing) {
+      const listed = toolsFor(actor).map(listedFor(actor));
+      listing = { tools: listed, hash: hashOf(listed) };
+      listings.set(key, listing);
+    }
+    return listing;
+  };
+
+  /**
+   * Something a listing reads beside its session moved (a connection's
+   * tools, a delegate type, the fleet watch starting): every listing is
+   * made again as it is next asked, each once.
+   */
+  const listingsStale = (): void => {
+    listings.clear();
+    triageNow = undefined;
+  };
 
   /**
    * The credential OpenCode's plugin stamps into a call: OpenCode sends one
@@ -1142,7 +1256,9 @@ export function createDelegationMcp(options: {
   ): Promise<CallToolResult> => {
     const emitted: HubEnvelope[] = [];
     const deps = actionDeps(actor, name, emitted, callId, cut);
-    const entry = tools(viewOf(actor)).find((tool) => tool.name === name);
+    const entry = builtOf(viewOf(actor)).handoff.find(
+      (tool) => tool.name === name
+    );
     if (!entry) {
       throw new Error(`Tool ${name} is unavailable to this session`);
     }
@@ -1179,7 +1295,7 @@ export function createDelegationMcp(options: {
 
   /** The hash of what a connection bound to `row` is listed now. */
   const toolsHash = (row: InstanceRow | undefined): string =>
-    hashOf(toolsFor(row).map(listedFor(row)));
+    listingOfActor(row).hash;
 
   /**
    * Each connection's open GET stream, where the client hears what the server
@@ -1259,7 +1375,11 @@ export function createDelegationMcp(options: {
   const hostTold = new Map<string, string>();
 
   let reconcileTimer: HubTimer | undefined;
-  /** Something a tool list depends on may have moved: one look, debounced. */
+  /**
+   * A session's row moved (a board publish): one look, debounced. Each
+   * stream's listing is found by its key ({@link listingKey}), so a look
+   * costs a key per stream and builds only a listing no stream had.
+   */
   const toolsMayHaveChanged = () => {
     options.lifetime.cancel(reconcileTimer);
     reconcileTimer = options.lifetime.after(
@@ -1268,9 +1388,17 @@ export function createDelegationMcp(options: {
       reconcileLists
     );
   };
-  // What no event names (a role toolset read on its own schedule) is found
-  // by the next sweep.
-  options.lifetime.every("tool lists swept", LIST_SWEEP_MS, reconcileLists);
+  /** Something a listing reads beside its session moved (a connection, the fleet): the listings made again, then one look. */
+  const toolInputsChanged = () => {
+    listingsStale();
+    toolsMayHaveChanged();
+  };
+  // What no event names (the fleet watch starting or stopping) is found by
+  // the next sweep, which makes each listing again once.
+  options.lifetime.every("tool lists swept", LIST_SWEEP_MS, () => {
+    listingsStale();
+    reconcileLists();
+  });
 
   /**
    * What `bound` can be listed over its life (delegation-tools.ts
@@ -1280,7 +1408,7 @@ export function createDelegationMcp(options: {
    */
   const listableOf = (bound: InstanceRow | undefined): Listable => {
     const namesOf = (row: InstanceRow | undefined) =>
-      toolsFor(row).map((tool) => tool.name);
+      listingOfActor(row).tools.map((tool) => tool.name);
     const upfrontOf = (listed: string[]) =>
       new Set(listed.filter((name) => loadsUpfront(name, upfrontFor(bound))));
     if (!bound) {
@@ -1362,9 +1490,9 @@ export function createDelegationMcp(options: {
     server.setRequestHandler(ListToolsRequestSchema, () => {
       // Read fresh, so a re-list after list_changed answers the new role.
       const row = boundRow(binding);
-      const answered = toolsFor(row).map(listedFor(row));
-      options.putToolListing(listingOf(binding), hashOf(answered));
-      return Promise.resolve({ tools: answered });
+      const answered = listingOfActor(row);
+      options.putToolListing(listingOf(binding), answered.hash);
+      return Promise.resolve({ tools: answered.tools });
     });
     server.setRequestHandler(CallToolRequestSchema, async (message, extra) => {
       const token = message.params._meta?.progressToken;
@@ -1545,11 +1673,11 @@ export function createDelegationMcp(options: {
     if (instanceId !== undefined && !actor) {
       return;
     }
-    const answered = toolsFor(actor).map(listedFor(actor));
+    const answered = listingOfActor(actor);
     if (own && actor) {
-      options.putToolListing(actor.id, hashOf(answered));
+      options.putToolListing(actor.id, answered.hash);
     }
-    return { tools: answered };
+    return { tools: answered.tools };
   };
   /**
    * The hub's own hand-off as session `actor` (Who decides, settling.ts):
@@ -1559,5 +1687,12 @@ export function createDelegationMcp(options: {
   const handoffAs = (actor: InstanceRow, target: string, message: string) =>
     handoffActions(actionDeps(actor, "handoff", [])).handoff(target, message);
 
-  return { handle, call, list, toolsMayHaveChanged, handoffAs };
+  return {
+    handle,
+    call,
+    list,
+    toolsMayHaveChanged,
+    toolInputsChanged,
+    handoffAs,
+  };
 }

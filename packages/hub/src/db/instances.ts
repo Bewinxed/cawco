@@ -336,7 +336,8 @@ const boardColumns = {
 const ownedColumns = wholeColumns;
 
 /** A row its machine still holds: not removed, not discarded, not being ended (a stop keeps it). */
-const keptInstances = () =>
+/** A row the hub keeps: not discarded, not ended for good, not on a removed machine. */
+export const keptInstances = () =>
   and(
     eq(instances.machineRemoved, false),
     ne(instances.status, "discarded"),
@@ -493,9 +494,6 @@ export const conversationsOf = (
       next: row.nextEventId,
     }));
 
-/** How many keys one read names ({@link InstancesDb.boardSessionsWrapping}): under SQLite's bound on a statement's values. */
-const KEYS_PER_READ = 500;
-
 /**
  * A session's prior conversations replaced by `list`, oldest first. An
  * account the hub no longer keeps is named as none: a session's own
@@ -566,13 +564,6 @@ export interface InstancesDb {
    * listings never show (discarded, being deleted, a removed machine's).
    */
   readonly boardAncestors: (ids: string[]) => BoardInstanceRow[];
-  /**
-   * The sessions that wrap these transcripts (each a harness's session
-   * key), as the board reads a row, listed or not: what stands behind a
-   * machine's stored transcripts ({@link boardAncestors}'s rule for which
-   * rows are ever shown).
-   */
-  readonly boardSessionsWrapping: (sessionIds: string[]) => BoardInstanceRow[];
   /**
    * The effort the operator chose for the session: what its every launch asks
    * for. Written by a spawn that names one and by a `set-effort` its session
@@ -2803,29 +2794,6 @@ export const instancesDb = (core: DbCore): InstancesDb => {
             .where(and(listedInstances(), inArray(instances.id, ids)))
             .all()
             .map(asListed),
-    boardSessionsWrapping: (sessionIds) => {
-      const rows: BoardInstanceRow[] = [];
-      // In bounded lists: a machine's catalog is a thousand keys and more.
-      for (let at = 0; at < sessionIds.length; at += KEYS_PER_READ) {
-        rows.push(
-          ...db
-            .select(boardColumns)
-            .from(instances)
-            .where(
-              and(
-                inArray(
-                  instances.sessionId,
-                  sessionIds.slice(at, at + KEYS_PER_READ)
-                ),
-                keptInstances()
-              )
-            )
-            .all()
-            .map(asListed)
-        );
-      }
-      return rows;
-    },
     boardAncestors: (ids) =>
       ids.length === 0
         ? []

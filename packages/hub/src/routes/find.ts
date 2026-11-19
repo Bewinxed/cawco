@@ -5,13 +5,19 @@
 import type {
   FindPlace,
   FindPlacesAnswer,
+  FindSessionsAnswer,
   FindSettings,
   PlacesHeard,
   TranscriptPlacesQuery,
 } from "@cawco/core/find";
 import { CONTROL_TRANSCRIPT_PLACES } from "@cawco/core/session/controls";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
-import { answerFind, FIND_PLACES_QUERY, FIND_QUERY } from "../find";
+import {
+  answerFind,
+  FIND_PLACES_QUERY,
+  FIND_QUERY,
+  FIND_SESSIONS_BODY,
+} from "../find";
 import { PLACES_LIMIT, placesForScreens, placesHeard } from "../find-places";
 import { forScreens } from "../find-secrets";
 import type { HubContext } from "../hub-context";
@@ -59,6 +65,13 @@ export const findRoutes = ({
       return answer instanceof ElysiaStatus ? answer : forScreens(answer, hide);
     })
     .get("/api/find/waiting", () => find.waiting())
+    // The sessions a screen names by id and holds no row of, asked
+    // together and answered by key (session-names.svelte.ts).
+    .post(
+      "/api/find/sessions",
+      { body: FIND_SESSIONS_BODY },
+      ({ body }): Promise<FindSessionsAnswer> => find.named(body.names)
+    )
     // The person's find in one conversation (find-places.ts): every place
     // its machine's transcript index holds the words in, oldest first,
     // what tools answered included. A machine that does not answer is

@@ -5064,6 +5064,22 @@ const toInfo = (
   ...(info.createdAt === undefined ? {} : { createdAt: info.createdAt }),
 });
 
+/**
+ * How a stored Claude transcript is listed: as the SDK reads its session,
+ * and when the person last wrote in it. The machine's listing and a moved
+ * transcript's word to the hub read it the one way (catalog-index.ts).
+ */
+const STORED_READER = {
+  harness: "claude",
+  read: async (
+    file: string,
+    sessionId: string
+  ): Promise<NeutralSessionInfo | undefined> => {
+    const info = await sessionInfoAt(file, sessionId);
+    return info && { ...toInfo(info), ...(await wroteIn(file)) };
+  },
+};
+
 const toEntry = (entry: SDKSessionMessage): SessionMessage => ({
   type: entry.type,
   uuid: entry.uuid,
@@ -5738,8 +5754,9 @@ class ClaudeHarness implements Harness<"claude"> {
     const files: { file: string; sessionId: string }[] = [];
     for (const configDir of configDirs) {
       const projects = join(configDir, "projects");
-      // A transcript moving there is told to the hub (catalog-index.ts).
-      watchCatalogDir(projects);
+      // A transcript moving there is told to the hub, read as below
+      // (catalog-index.ts).
+      watchCatalogDir(projects, STORED_READER);
       const projectDirs = slug ? [slug] : await subdirectories(projects);
       for (const project of projectDirs) {
         for (const name of await jsonlNames(join(projects, project))) {
@@ -5752,12 +5769,9 @@ class ClaudeHarness implements Harness<"claude"> {
     }
     // Each transcript read again only when it moved (catalog-index.ts).
     const { infos } = await indexedListing(
-      "claude",
+      STORED_READER.harness,
       files,
-      async ({ file, sessionId }) => {
-        const info = await sessionInfoAt(file, sessionId);
-        return info && { ...toInfo(info), ...(await wroteIn(file)) };
-      }
+      ({ file, sessionId }) => STORED_READER.read(file, sessionId)
     );
     const ownDated = await listingRead(own, async (info) => {
       const file = await claudeSessionFile(info.sessionId, dir);

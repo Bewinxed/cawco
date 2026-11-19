@@ -8492,6 +8492,57 @@
         }
       }
     },
+    "/api/find/sessions": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "names": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "names"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiFindSessions",
+        "responses": {
+          "200": {
+            "description": "postApiFindSessions 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindSessionsAnswer"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFindSessions 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFindSessions422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/find/settings": {
       "get": {
         "operationId": "getApiFindSettings",
@@ -37033,7 +37084,7 @@
         ]
       },
       "CatalogMovedFrame": {
-        "description": "A machine's stored transcripts moved (agent catalog-index.ts): the\nsessions whose files were written, added or removed since the last such\nframe. The hub reads the machine's catalog again only when one of them may\nstand in Recent (hub stored-recent.ts).",
+        "description": "A machine's stored transcripts moved (agent catalog-index.ts): each one\nwritten or added since the last such frame, as the machine's listing reads\nit now, and each one removed or no longer a session. The hub keeps them in\nits copy of the machine's catalog (hub views/catalogs.ts): a move never\ncosts a listing of the whole machine.",
         "type": "object",
         "properties": {
           "kind": {
@@ -37042,7 +37093,14 @@
               "catalog_moved"
             ]
           },
-          "sessions": {
+          "moved": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NeutralSessionInfo"
+            }
+          },
+          "removed": {
+            "description": "Harness session ids.",
             "type": "array",
             "items": {
               "type": "string"
@@ -37051,7 +37109,8 @@
         },
         "required": [
           "kind",
-          "sessions"
+          "moved",
+          "removed"
         ]
       },
       "CatalogType": {
@@ -41873,6 +41932,10 @@
             }
           }
         }
+      },
+      "FindSessionsAnswer": {
+        "description": "`POST /api/find/sessions`' answer: each name asked (a session's full id,\nhandle, or a short id of six or more characters), the session it names as\nfind answers it, or null when it names none or more than one.",
+        "type": "object"
       },
       "FindSettings": {
         "description": "`GET /api/find/settings`: the person's Find settings, the same on every screen.",
@@ -130088,6 +130151,106 @@
         ]
       },
       "postApiFiles422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiFindSessions422": {
         "anyOf": [
           {
             "type": "object",

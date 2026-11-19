@@ -248,6 +248,7 @@ import type { createTreeStops } from "./tree-stops";
 import type { turnState } from "./turn-state";
 import type { turnUsageOf } from "./turn-usage";
 import type { UsageCounter } from "./usage-count";
+import type { ViewChanges } from "./views/changes";
 import type { WelcomeConverge } from "./welcome-converge";
 import type {
   ClientPayload,
@@ -542,7 +543,6 @@ export interface ClosureContext {
     source: string
   ) => Promise<("changed" | "failed" | "same") | undefined>;
   find: ReturnType<typeof createFind>;
-  findHears: (ids: string[]) => void;
   finishJoined: (
     signinId: string,
     into: Account,
@@ -896,7 +896,7 @@ export interface ClosureContext {
   movingLogins: () => LoginMove[];
   nameFromFirstTurn: (instanceId: string, raw: string) => string;
   nameFromLiveTurn: (instanceId: string, message: unknown) => void;
-  nameStoredSessions: (machineId: string) => void;
+  nameStoredSessions: (machineId: string) => Promise<void>;
   noteActivity: (instanceId: string) => void;
   noteAtLimit: (
     row: {
@@ -1441,7 +1441,10 @@ export interface ClosureContext {
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
   /** Whether each machine's tool cells are its connection's now (tool-facts.ts). */
   toolFacts: ToolFactsShape;
+  /** Something a tool listing reads beside its session moved (a delegate type, the fleet): every listing made again. */
+  toolInputsChanged: () => void;
   toolReleases: ToolReleases;
+  /** A session's row moved: the open MCP streams' listings looked at again (delegation-mcp.ts). */
   toolsMayHaveChanged: () => void;
   touched: Map<string, number>;
   transcripts: ReturnType<typeof createTranscripts>;
@@ -1473,6 +1476,8 @@ export interface ClosureContext {
     sent: string[];
   };
   usageCounter: UsageCounter;
+  /** What the change log says moved, told to the views thread (views/client.ts). */
+  viewsHear: (changes: ViewChanges) => void;
   waitingForProcess: Set<string>;
   wakeForSend: (
     agent: MachineSocket,

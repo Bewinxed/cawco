@@ -305,6 +305,13 @@ export interface FindPlace {
  */
 export type PlacesHeard = "answered" | "silent" | "outdated";
 
+/**
+ * `POST /api/find/sessions`' answer: each name asked (a session's full id,
+ * handle, or a short id of six or more characters), the session it names as
+ * find answers it, or null when it names none or more than one.
+ */
+export type FindSessionsAnswer = Record<string, FindConversation | null>;
+
 /** `GET /api/find/places`' answer: every place, oldest first, and how the machine holding them took the read. */
 export interface FindPlacesAnswer {
   /** The machine holding the conversation's transcript: unless it answered, `places` is empty. */

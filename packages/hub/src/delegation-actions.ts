@@ -63,7 +63,6 @@ import type {
   DelegateListQuery,
   DelegatePeek,
 } from "./delegation-tree";
-import { cursorAt } from "./find";
 import { byId, handleId, isHandle, mentioned } from "./handles";
 import { type KeepAliveRow, provenCold } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
@@ -82,6 +81,7 @@ import {
   sessionRole,
   stopOf,
 } from "./session-list";
+import { cursorAt } from "./views/find-engine";
 import type { WorkItemCalls } from "./work-item-calls";
 import { type HandoffInputs, resolveSpawnType } from "./work-items";
 import type { Unlanded } from "./workspaces";

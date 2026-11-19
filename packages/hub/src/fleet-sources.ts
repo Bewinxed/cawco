@@ -92,7 +92,7 @@ export type FleetSourcesContext = Pick<
   | "registry"
   | "sendAnswerable"
   | "sendToMachine"
-  | "toolsMayHaveChanged"
+  | "toolInputsChanged"
 >;
 
 /** What moved on a machine at a fleet sync, for its live sessions ({@link refreshesOf}). */
@@ -592,7 +592,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * whose items did not move is sent nothing (fleet-sync.ts).
    */
   const fleetChanged = (why = "the fleet changed"): void => {
-    ctx.toolsMayHaveChanged();
+    ctx.toolInputsChanged();
     ctx.fleetSyncs.changed(why);
   };
 

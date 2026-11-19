@@ -9,8 +9,10 @@
  * and runs moved within a day, hub db `listedAt`) and the ids the
  * hub folded into a continuation. A session the index does not hold (ended
  * days ago, on another machine, in another project) is asked of the hub's
- * names (`GET /api/find`), which hold every session it ever started, and
- * the answer is kept for this tab. Every reader that names or describes a
+ * names, which hold every session it ever started: every name a redraw
+ * found missing is asked in one request (`POST /api/find/sessions`), read
+ * by key, and the answer is kept for this tab. A request the hub did not
+ * answer is asked again on a capped backoff, never on a redraw. Every reader that names or describes a
  * session by its id (a chip, a tab, the bar, a card, a tail, a delegate's
  * row, a hand-off's sender, a run's supervisor) reads it through here, so a
  * session aged off the board is drawn as itself, never as "Fleet", a bare
@@ -19,7 +21,7 @@
 import type { FindConversation } from "@cawco/core/find";
 import { SvelteMap } from "svelte/reactivity";
 import { browser } from "$app/env";
-import { findNames } from "./find/find-client";
+import { findSessions } from "./find/find-client";
 import { age, rowOf } from "./find/find-rows";
 import { resolveSessionTitle } from "./links";
 import { boardStore } from "./stores/board.svelte";
@@ -35,8 +37,20 @@ export type NamedSession = FindConversation;
 const answered = new SvelteMap<string, NamedSession>();
 /** What each written name was answered as: the id it names, or null when the hub names nothing by it. */
 const resolved = new SvelteMap<string, string | null>();
-/** Names asked of the hub and not answered yet: never asked twice at once. */
+/** Names asked of the hub and not answered yet, or waiting to be: never asked twice at once, nor on a redraw. */
 const asking = new Set<string>();
+/** Names owed asking in the next request. */
+const owed = new Set<string>();
+/** The next request's timer: the names owed are asked together once it fires. */
+let askTimer: ReturnType<typeof setTimeout> | undefined;
+/** Requests in a row the hub did not answer: how long the next one waits ({@link againAfter}). */
+let failures = 0;
+
+/** The most names one request carries (the hub's own bound, find.ts `FIND_SESSIONS_BODY`). */
+const NAMES_PER_ASK = 200;
+/** The first wait after a request the hub did not answer, and the longest, ms. Our call. */
+const FIRST_WAIT_MS = 1000;
+const LONGEST_WAIT_MS = 60_000;
 
 /** The id part of a name: what follows a handle's `#`, else the name. */
 const idPartOf = (name: string): string => {
@@ -85,32 +99,76 @@ function heldId(name: string): string | null {
   return now && rows.has(now) ? now : null;
 }
 
-/** The id a result is drawn under: its session's instance id. */
-const drawnId = (result: NamedSession): string => result.id;
+/**
+ * How long the request after `failures` unanswered ones in a row waits:
+ * doubling from {@link FIRST_WAIT_MS} up to {@link LONGEST_WAIT_MS}, each
+ * a random share of it from half to whole, so tabs that lost the hub
+ * together do not ask again together.
+ */
+const againAfter = (failed: number): number => {
+  const cap = Math.min(LONGEST_WAIT_MS, FIRST_WAIT_MS * 2 ** (failed - 1));
+  return cap / 2 + Math.random() * (cap / 2);
+};
 
-/** The one result of the hub's answer that `name` names, or undefined. */
-function namedBy(
-  results: readonly NamedSession[],
-  name: string
-): NamedSession | undefined {
-  const exact = results.find(
-    (r) => r.handle === name || r.id === name || drawnId(r) === name
-  );
-  if (exact) {
-    return exact;
+/** The names owed asked in one request now, and what it answered kept. */
+function askOwed(): void {
+  askTimer = undefined;
+  const names = [...owed].slice(0, NAMES_PER_ASK);
+  for (const name of names) {
+    owed.delete(name);
   }
-  const part = idPartOf(name);
-  if (part.length < SHORT_ID) {
+  if (names.length === 0) {
     return;
   }
-  const short = results.filter((r) => r.id.startsWith(part));
-  return short.length === 1 ? short[0] : undefined;
+  findSessions(names)
+    .then((answer) => {
+      const read = answer.kind === "answered" ? answer.read : null;
+      if (!read || (!read.ok && read.unreached)) {
+        unanswered(names);
+        return;
+      }
+      failures = 0;
+      for (const name of names) {
+        asking.delete(name);
+        const hit = read.ok ? read.value[name] : null;
+        if (hit) {
+          answered.set(hit.id, hit);
+        }
+        resolved.set(name, hit ? hit.id : null);
+      }
+    })
+    .catch((error: unknown) => {
+      const why = error instanceof Error ? error.message : String(error);
+      console.error(`[cawco] naming ${names.join(", ")} failed: ${why}`);
+      unanswered(names);
+    })
+    .finally(() => {
+      if (owed.size > 0) {
+        schedule(0);
+      }
+    });
+}
+
+/** The hub did not answer: these names are asked again after the backoff's wait. */
+function unanswered(names: string[]): void {
+  failures += 1;
+  for (const name of names) {
+    owed.add(name);
+  }
+  schedule(againAfter(failures));
+}
+
+/** The next request armed `wait` from now, unless one is armed already. */
+function schedule(wait: number): void {
+  if (askTimer === undefined) {
+    askTimer = setTimeout(askOwed, wait);
+  }
 }
 
 /**
- * Asks the hub's names what `name` names, once. An answer is kept, naming
- * a session or nothing; an unreached hub is asked again the next time the
- * name is drawn. The browser asks: its `/api/find` is its own origin's,
+ * Asks the hub's names what `name` names, once: owed into the next request,
+ * which carries every name owed. An answer is kept, naming a session or
+ * nothing. The browser asks: its `/api/find/sessions` is its own origin's,
  * however the dashboard is served. The server's render holds no fleet and
  * no origin to ask from, and these answers are this tab's, never shared
  * across requests; it draws the words, and hydration asks.
@@ -120,31 +178,8 @@ function ask(name: string): void {
     return;
   }
   asking.add(name);
-  findNames(name, { limit: 12, kinds: ["conversation"] })
-    .then((answer) => {
-      const read = answer.kind === "answered" ? answer.read : null;
-      if (!read || (!read.ok && read.unreached)) {
-        return;
-      }
-      const results = read.ok
-        ? read.value.results.filter(
-            (r): r is NamedSession =>
-              r.kind === "conversation" && r.instanceId !== null
-          )
-        : [];
-      const hit = namedBy(results, name);
-      if (hit) {
-        answered.set(drawnId(hit), hit);
-      }
-      resolved.set(name, hit ? drawnId(hit) : null);
-    })
-    .catch((error: unknown) => {
-      const why = error instanceof Error ? error.message : String(error);
-      console.error(`[cawco] naming ${name} failed: ${why}`);
-    })
-    .finally(() => {
-      asking.delete(name);
-    });
+  owed.add(name);
+  schedule(failures > 0 ? againAfter(failures) : 0);
 }
 
 /**

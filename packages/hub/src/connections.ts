@@ -1730,6 +1730,22 @@ export const createConnections = (deps: ConnectionsDeps) => {
       );
   };
 
+  /**
+   * What decides `actor`'s connection tools ({@link sessionTools}), as a
+   * key: the granted connections that list now, and whether it takes their
+   * reads alone. A connection's own listing moving tells `changed`, which
+   * makes every session's listing again (delegation-mcp.ts `listingsStale`).
+   */
+  const sessionToolsKey = (actor: InstanceRow): string => {
+    const names = new Set(granted(actor));
+    const listing = db
+      .list()
+      .filter((r) => r.state !== "needs-sign-in" && names.has(r.name))
+      .map((r) => r.name)
+      .sort();
+    return `${connectionToolsFor(roleOf(actor))}:${listing.join(",")}`;
+  };
+
   /** A session's `conn__<name>__<tool>` call: run as the hub when its type or project grants it. */
   const callAs = async (
     actor: InstanceRow,
@@ -2932,6 +2948,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     lfsBasic,
     lfsProblem,
     sessionTools,
+    sessionToolsKey,
     callAs,
     list: () => db.list().map(view),
     get: (name: string) => view(row(name)),

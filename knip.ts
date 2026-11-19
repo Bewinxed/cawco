@@ -192,7 +192,7 @@ export default {
         // scripts/release.ts
         "scripts/binary/info-plist.ts",
         // The standalone binary's entry and its worker threads, each a Bun.build entrypoint: scripts/build-binary.ts.
-        "scripts/binary/{entry,test-entry,transcript-worker,process-table-worker,loop-watch-worker,stores-worker}.ts",
+        "scripts/binary/{entry,test-entry,transcript-worker,process-table-worker,loop-watch-worker,stores-worker,views-worker}.ts",
         // Put in place of the `socket-activation` package by the binary build: scripts/build-binary.ts.
         "scripts/binary/socket-activation.ts",
         // Loaded in place of core clock.ts by the end-to-end test builds: scripts/build-binary.ts.
@@ -369,6 +369,8 @@ export default {
         "skills/decision-page/scripts/preview.mjs",
         // The decision-page skill tells the agent it records a mockup as a webm clip: skills/decision-page/SKILL.md.
         "skills/decision-page/scripts/record.mjs",
+        // A Worker started from its path: src/views/client.ts.
+        "src/views/worker.ts",
       ],
       project: [
         // Knip's default.

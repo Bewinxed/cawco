@@ -250,6 +250,7 @@ import {
   type UsageBucket,
   type UsageSpend,
 } from "@cawco/core/usage/types";
+import type { StageKind } from "@cawco/core/views";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import {
   accountMoveSentence,
@@ -422,7 +423,6 @@ import {
 } from "./db/previews";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
-import { checkoutOf } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
 import { componentStoredSend } from "./db/sheet-notices";
 import type {
@@ -779,6 +779,8 @@ import { TOOL_RELEASES } from "./upstreams";
 import { UsageCounter } from "./usage-count";
 import { renameViewTaskTables } from "./view-task-tables";
 import { createViews, viewRoutes } from "./views";
+import type { Listed } from "./views/catalogs";
+import { createViewsThread } from "./views/client";
 import { createWaits } from "./waits";
 import { WelcomeConverge } from "./welcome-converge";
 import {
@@ -1711,6 +1713,7 @@ export const createServer = (
     mcpChanges: () => mcpChanges,
     readSkillFolder: () => readSkillFolder,
     toolsMayHaveChanged: () => toolsMayHaveChangedPort.now(),
+    toolInputsChanged: () => toolInputsChangedPort.now(),
     launchRefusal: () => launchRefusal,
     modelRefusal: () => modelRefusal,
     modelListing: () => modelListing,
@@ -1742,7 +1745,7 @@ export const createServer = (
     passkeyRelay: () => passkeyRelay,
     continuationTable: () => continuationTable,
     damagedRecords: () => damagedRecords,
-    findHears: () => findHearsPort.now(),
+    viewsHear: () => viewsThread.hear,
     hubRun: () => hubRun,
     machineCustody: () => machineCustody,
     noticesSeen: () => noticesSeen,
@@ -2179,34 +2182,22 @@ export const createServer = (
     syncAccounts,
   } = createAccountProbes(ctx);
   const board = createBoard(ctx);
-  const { greetDashboard, storedSessions, withSessionPresence } = board;
+  const { greetDashboard, withSessionPresence } = board;
 
   /**
-   * Recent's stored transcripts, kept here off each machine's catalog as
-   * find keeps it (stored-recent.ts): read as a machine registers and when
-   * it says a transcript moved, worked out again as a catalog, the board or
-   * the projects move, and told to every dashboard whole when it changed.
+   * Recent's stored transcripts (stored-recent.ts): the views thread keeps
+   * the list off each machine's catalog (views/stored.ts) and says here
+   * when it changed; the sessions wrapping them the board no longer lists
+   * are laid as the board's, and every dashboard is told it whole.
    */
   const storedRecent = createStoredRecent({
-    after: (name, ms, run) => {
-      lifetime.after(name, ms, run);
-    },
-    behind: storedSessions,
-    catalogOf: (machineId) => find.catalogOf(machineId),
-    machines: () => db.machineFacts().map((agent) => agent.machineId),
-    relist: (machineId) => find.relist(machineId),
-    projects: () =>
-      db.listProjects().map((project) => ({
-        ...project,
-        primaryPlaceId: checkoutOf(project)?.id ?? null,
-      })),
+    rows: (candidates) => board.storedRows(candidates),
     publish: (stored) =>
       registry.broadcast({
         verb: "frames",
         machineId: "hub",
         payload: { kind: "stored", stored } satisfies StoredFrame,
       }),
-    wrapped: (sessionId) => db.instanceBySessionId(sessionId) !== undefined,
   });
   const {
     askRefusal,
@@ -6743,14 +6734,6 @@ export const createServer = (
    */
   const machineRow = (machineId: string): AgentRow | undefined =>
     board.machine(machineId);
-  /**
-   * The find engine's sessions follow the same change log as the board
-   * (find.ts `instancesChanged`): told here, once the engine is made below.
-   */
-  const findHearsPort = portOf<(ids: string[]) => void>(
-    "findHears",
-    () => undefined
-  );
 
   /** The notices a person acknowledged; each change goes out on the board. */
   const noticesSeen = createNoticesSeen({
@@ -7366,6 +7349,11 @@ export const createServer = (
     "toolsMayHaveChanged",
     (): void => undefined
   );
+  /** A connection's tools, a delegate type or the fleet moved: every listing made again, once the MCP server exists below. */
+  const toolInputsChangedPort = portOf<() => void>(
+    "toolInputsChanged",
+    (): void => undefined
+  );
 
   /**
    * Names an unnamed row after what its session was first asked to do, using
@@ -7414,7 +7402,7 @@ export const createServer = (
    * harness summary is a different string, and a row named with one would
    * disagree with the strip it is meant to agree with.
    */
-  const nameStoredSessions = (machineId: string): void => {
+  const nameStoredSessions = async (machineId: string): Promise<void> => {
     const unnamed = db.unnamedSessions(machineId);
     if (unnamed.length === 0) {
       return;
@@ -7427,8 +7415,14 @@ export const createServer = (
     // so reading only `firstPrompt` left every opencode/pi row unnamed at rest.
     // The row's stored title wins in `resolveSessionTitle` either way, so naming
     // from the given title is not a mismatch with what the client would show.
+    // Only these sessions' entries of the catalog, asked of the views thread
+    // that keeps it (views/catalogs.ts).
+    const listed = await find.catalogSessions(
+      machineId,
+      unnamed.flatMap((row) => (row.sessionId ? [row.sessionId] : []))
+    );
     const names = new Map(
-      find.catalogOf(machineId).map((info) => {
+      listed.map((info) => {
         const source =
           (info.customTitle || info.summary)?.trim() || info.firstPrompt;
         return [
@@ -7724,8 +7718,6 @@ export const createServer = (
       machineId: "hub",
       payload: { kind: "projects.changed" },
     });
-    // A place come or gone moves which stored transcripts are a project's.
-    storedRecent.moved();
   };
 
   // A checkout added or removed: every dashboard reads the projects again,
@@ -9107,116 +9099,149 @@ export const createServer = (
     views,
   });
   leadPort.fill(caw);
-  // The fleet's one finding engine (find.ts): the names the hub holds, and
-  // every machine's transcripts, under one ranking.
-  const find = createFind({
-    db,
-    blockPage: (id) => isBlockProgram(artifacts.program(id)),
-    purged: () => db.find.purged(),
-    refreshInstances: board.settle,
-    online: (machineId) => registry.agent(machineId) !== undefined,
-    needsYou: waitingNow,
-    artifactNeeds: () => artifactLane.now(),
-    stageKinds: async (projectId) => {
-      const view = await tasks.stages(projectId);
-      if (view instanceof ElysiaStatus) {
-        return view;
-      }
-      return new Map(view.stages.map((stage) => [stage.name, stage.kind]));
-    },
-    tasksWaiting: async () => {
-      const read = await Promise.all(
-        db.listProjects().map(async (project) => {
-          const unread = (why: string) => ({
-            missing: [`${project.name}'s tasks could not be read: ${why}`],
-            tasks: [],
-          });
-          try {
-            const list = await tasks.list(project.id);
-            if (list instanceof ElysiaStatus) {
-              return unread(list.response.detail);
-            }
-            return {
-              missing: [],
-              tasks: list.tasks
-                .filter((task) => task.kind === "you")
-                .map((task) => ({
-                  id: task.id,
-                  projectId: project.id,
-                  title: task.title,
-                  stage: task.stage,
-                  since: task.updatedAt,
-                })),
-            };
-          } catch (error) {
-            return unread(
-              error instanceof Error ? error.message : String(error)
-            );
+  /** The tasks waiting in a stage of yours, read as the board reads them, and a sentence for each project whose tasks could not be read: Jump's waiting list (find.ts). */
+  const tasksWaiting = async () => {
+    const read = await Promise.all(
+      db.listProjects().map(async (project) => {
+        const unread = (why: string) => ({
+          missing: [`${project.name}'s tasks could not be read: ${why}`],
+          tasks: [],
+        });
+        try {
+          const list = await tasks.list(project.id);
+          if (list instanceof ElysiaStatus) {
+            return unread(list.response.detail);
           }
-        })
-      );
-      return {
-        missing: read.flatMap((each) => each.missing),
-        tasks: read.flatMap((each) => each.tasks),
-      };
-    },
-    // A catalog read moves Recent's stored list (stored-recent.ts).
-    catalogRead: () => storedRecent.moved(),
-    listStored: async (machineId) => {
-      const answer = await readAgent(
-        machineId,
-        CONTROL_LIST_SESSIONS,
-        [{}],
-        STORED_LISTING_MS
-      );
-      switch (answer.kind) {
-        case "unanswered":
-          return { error: searchMiss(answer) };
-        case "answered":
-          return answer.value.ok
-            ? {
-                sessions: answer.value.result,
-                unanswered: answer.value.unanswered ?? [],
-                failed: answer.value.failed ?? [],
-              }
-            : { error: searchMiss(answer) };
-        default:
-          throw unreachable(answer);
-      }
-    },
-    askMachine: async (machineId, query, options, timeoutMs, ask) => {
-      const answer = await readStoppable(
-        machineId,
-        CONTROL_SEARCH_TRANSCRIPTS,
-        [query, options],
-        timeoutMs,
-        ask
-      );
-      if (answer === null) {
-        return { error: "its asker asked something newer first" };
-      }
-      switch (answer.kind) {
-        case "unanswered":
-          return { error: searchMiss(answer) };
-        case "answered":
-          if (!answer.value.ok) {
+          return {
+            missing: [],
+            tasks: list.tasks
+              .filter((task) => task.kind === "you")
+              .map((task) => ({
+                id: task.id,
+                projectId: project.id,
+                title: task.title,
+                stage: task.stage,
+                since: task.updatedAt,
+              })),
+          };
+        } catch (error) {
+          return unread(error instanceof Error ? error.message : String(error));
+        }
+      })
+    );
+    return {
+      missing: read.flatMap((each) => each.missing),
+      tasks: read.flatMap((each) => each.tasks),
+    };
+  };
+
+  /**
+   * The views thread (views/worker.ts): find's names and engine, the
+   * machines' catalogs and Recent's stored list, kept by the change log off
+   * this thread. What it asks back is what only this thread can do: a
+   * machine's answer, a project's stages, which pages are kept blocks.
+   */
+  const viewsThread = createViewsThread({
+    path: DB_PATH,
+    hub: {
+      askMachine: async (
+        { machineId, query, options, timeoutMs, caller },
+        signal
+      ) => {
+        const answer = await readStoppable(
+          machineId,
+          CONTROL_SEARCH_TRANSCRIPTS,
+          [query, options],
+          timeoutMs,
+          { caller, ...(signal ? { signal } : {}) }
+        );
+        if (answer === null) {
+          return { error: "its asker asked something newer first" };
+        }
+        switch (answer.kind) {
+          case "unanswered":
             return { error: searchMiss(answer) };
-          }
-          break;
-        default:
-          throw unreachable(answer);
+          case "answered":
+            if (!answer.value.ok) {
+              return { error: searchMiss(answer) };
+            }
+            break;
+          default:
+            throw unreachable(answer);
+        }
+        // An answer with no conversations list (one that is not its type
+        // fails above) is named as one that did not answer, never read as
+        // one that found nothing.
+        const { result } = answer.value;
+        if (!result) {
+          return { error: "its answer to this search had no conversations" };
+        }
+        return result;
+      },
+      listStored: async (machineId): Promise<Listed> => {
+        const answer = await readAgent(
+          machineId,
+          CONTROL_LIST_SESSIONS,
+          [{}],
+          STORED_LISTING_MS
+        );
+        switch (answer.kind) {
+          case "unanswered":
+            return { error: searchMiss(answer) };
+          case "answered":
+            return answer.value.ok
+              ? {
+                  sessions: answer.value.result,
+                  unanswered: answer.value.unanswered ?? [],
+                  failed: answer.value.failed ?? [],
+                }
+              : { error: searchMiss(answer) };
+          default:
+            throw unreachable(answer);
+        }
+      },
+      stageKinds: async (projectId) => {
+        const view = await tasks.stages(projectId);
+        if (view instanceof ElysiaStatus) {
+          console.warn(
+            `[find: ${projectId}'s stages] failed: ${view.response.detail}`
+          );
+          return null;
+        }
+        return view.stages.map((stage): [string, StageKind] => [
+          stage.name,
+          stage.kind,
+        ]);
+      },
+      blockPages: (ids) =>
+        ids.filter((id) => isBlockProgram(artifacts.program(id))),
+    },
+    stored: (held) => storedRecent.told(held),
+    // A thread started again reads the database whole; what it held of
+    // the machines is listed again.
+    restarted: () => {
+      for (const machineId of registry.machineIds()) {
+        detach(find.relist(machineId), `find: ${machineId}'s stored sessions`);
       }
-      // An answer with no conversations list (one that is not its type
-      // fails above) is named as one that did not answer, never read as
-      // one that found nothing.
-      const { result } = answer.value;
-      if (!result) {
-        return { error: "its answer to this search had no conversations" };
-      }
-      return result;
     },
   });
-  findHearsPort.fill((ids) => find.instancesChanged(ids));
+  // The fleet's one finding engine (find.ts), on the views thread: the
+  // names the hub holds, and every machine's transcripts, under one ranking.
+  const find = createFind({
+    views: viewsThread,
+    settle: board.settle,
+    live: () => ({
+      online: registry.machineIds(),
+      needsYou: [...waitingNow()],
+    }),
+    waitingFrom: async () => ({
+      lane: artifactLane.now(),
+      tasks: await tasksWaiting(),
+    }),
+  });
+  // Read whole once on its own thread; from here on it hears what moved.
+  viewsThread.start();
+  lifetime.onClose(() => viewsThread.close());
   // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one
   // triage run per episode whose word goes to the session's steward.
   watchPort.fill(
@@ -10312,7 +10337,7 @@ export const createServer = (
             row.delegateType
           )?.connections ?? [])
         : [],
-    changed: () => toolsMayHaveChangedPort.now()(),
+    changed: () => toolInputsChangedPort.now()(),
     // The machines' gh (agent host-gh.ts): each connected machine's
     // accounts, asked together, and one account's token on its machine.
     gh: {
@@ -11159,6 +11184,7 @@ export const createServer = (
     forward: delegationSends.forward,
   });
   toolsMayHaveChangedPort.fill(delegationMcp.toolsMayHaveChanged);
+  toolInputsChangedPort.fill(delegationMcp.toolInputsChanged);
 
   /**
    * What the hub keeps in memory of a session's conversation, ended as it is

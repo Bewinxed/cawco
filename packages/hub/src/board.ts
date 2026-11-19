@@ -31,7 +31,6 @@ import type {
   MachineStatus,
   SessionCustody,
 } from "@cawco/core/protocol";
-import { personsOwn } from "@cawco/core/protocol";
 import { WIRE_PROTOCOL } from "@cawco/core/stream";
 import { withAncestors } from "./board-ancestors";
 import {
@@ -48,6 +47,7 @@ import type { OwedMove } from "./db/owed-moves";
 import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
 import { previewTargets } from "./preview";
+import { createViewChanges, VIEW_OF } from "./views/changes";
 import { isHubParent } from "./work-item-state";
 
 export type BoardContext = Pick<
@@ -61,7 +61,7 @@ export type BoardContext = Pick<
   | "continuationTable"
   | "damagedRecords"
   | "db"
-  | "findHears"
+  | "viewsHear"
   | "fleetSyncs"
   | "handoffs"
   | "heldSessions"
@@ -199,6 +199,8 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
   const listsOwed = new Set<BoardList>();
   let delegatesOwed = false;
   let stallsOwed = false;
+  /** What the views thread is owed hearing (views/changes.ts): told once the log is taken. */
+  const viewsOwed = createViewChanges();
   /** Which rows the board lists may have moved: worked out again. */
   let membersOwed = false;
   let flushScheduled = false;
@@ -435,7 +437,6 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
 
   /** The stored rows the change log named, read again by key. */
   const readWritten = (ids: string[]): void => {
-    ctx.findHears(ids);
     const fresh = new Map(
       ctx.db.listedBoardInstancesByIds(ids).map((row) => [row.id, row] as const)
     );
@@ -605,6 +606,9 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
 
   /* ---- taking what moved ---- */
 
+  /** Nothing the board lays: the views alone hear it. */
+  const viewsOnly = (): void => undefined;
+
   /** What each kind of logged change owes, by its key. */
   const owedBy: { [Kind in BoardChangeKind]: (id: string) => void } = {
     session: (id) => sessionsWritten.add(id),
@@ -619,12 +623,24 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     inventory: (id) => inventoryOwed.add(id),
     former: () => listsOwed.add("formerIds"),
     continuation: () => listsOwed.add("continuations"),
+    view_session: viewsOnly,
+    view_work_item: viewsOnly,
+    view_workspace: viewsOnly,
+    view_artifact: viewsOnly,
+    view_tasks: viewsOnly,
+    view_routine: viewsOnly,
+    view_project: viewsOnly,
+    view_purged: viewsOnly,
   };
 
-  /** The change log, sorted into what each collection owes. */
+  /** The change log, sorted into what each collection owes, and what the views hear. */
   const takeLog = (): void => {
     for (const change of ctx.db.takeBoardChanges()) {
       owedBy[change.kind](change.id);
+      const view = VIEW_OF[change.kind];
+      if (view) {
+        viewsOwed.add(view, change.id);
+      }
     }
   };
 
@@ -735,6 +751,12 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
    */
   const flushOnce = (announce: boolean): void => {
     const written = syncSection("publish: change log taken", readOwed);
+    // The views thread hears what moved of its own, before any reader below
+    // asks it anything (views/client.ts: one ordered line of messages).
+    const heard = viewsOwed.take();
+    if (heard && announce) {
+      ctx.viewsHear(heard);
+    }
     const at = version + 1;
     const changes = layOwed(at);
     // A work item follows its session's life: of every row the database
@@ -1031,42 +1053,12 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     }
   };
 
-  const storedSessions: BoardShape["storedSessions"] = (keys) => {
+  /** Recent's stored list's sessions the board does not list, laid as the board's (board-shape.ts `storedRows`). */
+  const storedRows: BoardShape["storedRows"] = (candidates) => {
     settle();
-    const wrapping = ctx.db
-      .boardSessionsWrapping(keys)
-      .filter((row) => row.kind !== "summariser");
-    const wrapped = new Set(wrapping.map((row) => row.sessionId));
-    const nested = new Map(
-      withAncestors(
-        wrapping.filter((row) => !members.has(row.id)),
-        boardRowsByIds,
-        isHubParent
-      ).map((row) => [row.id, row] as const)
-    );
-    /** The session at the top of a row's chain, among the rows held here. */
-    const topOf = (row: BoardInstanceRow): BoardInstanceRow => {
-      const seen = new Set<string>();
-      let at = row;
-      while (at.parentInstanceId && !seen.has(at.id)) {
-        seen.add(at.id);
-        const parent =
-          nested.get(at.parentInstanceId) ?? members.get(at.parentInstanceId);
-        if (!parent) {
-          break;
-        }
-        at = parent;
-      }
-      return at;
-    };
-    return {
-      unwrapped: keys.filter((key) => !wrapped.has(key)),
-      rows: asBoard(
-        [...nested.values()].filter(
-          (row) => !members.has(row.id) && personsOwn(topOf(row))
-        )
-      ),
-    };
+    const off = candidates.filter((id) => !members.has(id));
+    const read = boardRowsByIds(off);
+    return asBoard(off.flatMap((id) => read.get(id) ?? []));
   };
 
   return {
@@ -1117,7 +1109,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
       stallsOwed = true;
       schedule();
     },
-    storedSessions,
+    storedRows,
     withSessionPresence,
   };
 };

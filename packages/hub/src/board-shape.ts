@@ -62,17 +62,12 @@ export interface BoardShape {
    */
   start: () => void;
   /**
-   * What the hub holds behind stored transcripts, asked by their harness
-   * keys (stored-recent.ts): the keys no session wraps, and the sessions
-   * wrapping the rest that the board does not list, where the session at
-   * the top of their chain is the person's own (core `personsOwn`), each with
-   * the sessions it nests under. One whose chain names a session the hub no
-   * longer has stands nowhere (board-ancestors.ts).
+   * The sessions among `candidates` (views/stored.ts: the ones wrapping a
+   * stored transcript in Recent, and the sessions they nest under, whose
+   * chain tops at a person's own) that the board does not list, laid as the
+   * board lays its rows: Recent's stored list draws them.
    */
-  storedSessions: (keys: string[]) => {
-    rows: BoardRow[];
-    unwrapped: string[];
-  };
+  storedRows: (candidates: string[]) => BoardRow[];
   /** `rows` with the presence overlay ({@link withSessionPresence}). */
   withSessionPresence: <
     Row extends { id: string; machineId: string; status: string },

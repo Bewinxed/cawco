@@ -189,7 +189,11 @@ import {
   closeCanvasScreens,
   openCanvasScreen,
 } from "./canvas-screen";
-import { onCatalogMoved } from "./catalog-index";
+import {
+  type MovedTranscript,
+  onCatalogMoved,
+  readMoved,
+} from "./catalog-index";
 import {
   type ControlAnswer,
   type ControlLane,
@@ -750,7 +754,7 @@ export class SessionSupervisor {
       );
     }
     onFleetMcpMoved(() => this.#fleet.reportFleet());
-    onCatalogMoved((sessions) => this.#catalogMoved(sessions));
+    onCatalogMoved((moved) => this.#catalogMoved(moved));
     keeperLimits.on("limit", (message) => this.#limitReached(message));
     watchLeaks({
       targetOf: (procId, pid) => this.#touched(procId, pid),
@@ -927,25 +931,26 @@ export class SessionSupervisor {
     emit: (envelope) => this.emit(envelope),
   });
 
-  /** The sessions whose transcripts moved since the last report ({@link #catalogMoved}). */
-  readonly #movedSessions = new Set<string>();
+  /** The transcripts that moved since the last report ({@link #catalogMoved}), by session. */
+  readonly #movedSessions = new Map<string, MovedTranscript>();
   #movedTimer: ReturnType<typeof setTimeout> | undefined;
   /** When the first move not yet told was heard. */
   #movedSince = 0;
 
   /**
-   * Tells the hub which stored transcripts moved (core `CatalogMovedFrame`),
-   * once they have been still for {@link CATALOG_QUIET_MS}, and at least every
-   * {@link CATALOG_TOLD_MS} while they keep moving: a turn writes its
-   * transcript line by line, and the hub needs one word for the lot.
+   * Tells the hub the stored transcripts that moved, each as it reads now
+   * (core `CatalogMovedFrame`): once they have been still for {@link
+   * CATALOG_QUIET_MS}, and at least every {@link CATALOG_TOLD_MS} while they
+   * keep moving: a turn writes its transcript line by line, and the hub
+   * needs one word for the lot. The hub keeps them in its copy of this
+   * machine's catalog, so a move never costs it a listing of the whole
+   * machine.
    */
-  #catalogMoved(sessions: string[]): void {
+  #catalogMoved(moved: MovedTranscript): void {
     if (this.#movedSessions.size === 0) {
       this.#movedSince = Date.now();
     }
-    for (const session of sessions) {
-      this.#movedSessions.add(session);
-    }
+    this.#movedSessions.set(moved.sessionId, moved);
     clearTimeout(this.#movedTimer);
     const wait = Math.min(
       CATALOG_QUIET_MS,
@@ -953,16 +958,22 @@ export class SessionSupervisor {
     );
     this.#movedTimer = setTimeout(
       () => {
-        const moved = [...this.#movedSessions];
+        const told = [...this.#movedSessions.values()];
         this.#movedSessions.clear();
-        this.emit({
-          verb: "frames",
-          machineId: "",
-          payload: {
-            kind: "catalog_moved",
-            sessions: moved,
-          } satisfies CatalogMovedFrame,
-        });
+        detach(
+          readMoved(told).then(({ infos, removed }) => {
+            this.emit({
+              verb: "frames",
+              machineId: "",
+              payload: {
+                kind: "catalog_moved",
+                moved: infos.map(titled),
+                removed,
+              } satisfies CatalogMovedFrame,
+            });
+          }),
+          "read the moved transcripts"
+        );
       },
       Math.max(0, wait)
     );
