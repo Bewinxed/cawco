@@ -234,7 +234,10 @@ export const requireLinger = async (
  * Puts a service's listening socket in front of systemd, and says whether that
  * socket has to be (re)bound: it is not listening yet, or it is listening on an
  * address the unit no longer names. Called before the daemon-reload, so the
- * text on disk is still the one systemd is running.
+ * text on disk is still the one systemd is running. A file whose text is
+ * already this is left as it is: rewritten, systemd would hold it as changed
+ * (`NeedDaemonReload`) and the update's unit refresh would reload for it
+ * (cli service.ts `reloadHeldAsBefore`).
  */
 const writeSocketUnit = async (
   spec: ServiceSpec,
@@ -246,8 +249,10 @@ const writeSocketUnit = async (
   const before = await Bun.file(path)
     .text()
     .catch(() => "");
-  await writeUnit(path, text);
-  note(`wrote ${path}`);
+  if (before !== text) {
+    await writeUnit(path, text);
+    note(`wrote ${path}`);
+  }
   const active = await run([
     "systemctl",
     "--user",

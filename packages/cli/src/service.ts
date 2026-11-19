@@ -1623,17 +1623,36 @@ export const refreshUnits = async (
       note(`rewrote ${path}`);
     }
   }
-  if (!mac && (await heldAsBefore(units))) {
-    const reloaded = await run(["systemctl", "--user", "daemon-reload"]);
-    if (reloaded.exitCode !== 0) {
-      throw failed("systemctl --user daemon-reload", reloaded);
-    }
-    note("systemd reloaded its unit files");
+  if (!mac) {
+    await reloadHeldAsBefore(units, note);
   }
   return changed;
 };
 
-/** Whether systemd holds any of `units` as it read it before its file changed (`NeedDaemonReload`); a unit it never read is read as it is named. */
+/**
+ * THE UNIT REFRESH'S ONE RELOAD RULE ({@link refreshUnits},
+ * {@link refreshServices}): systemd reads its unit files again
+ * (`daemon-reload`, about 700 units, 0.4–0.5 s on obelisk) only when it
+ * holds one of `units` as it read it before its file changed or went
+ * (`NeedDaemonReload`). A unit file it never read is read as it is first
+ * named, and one a reload already read since (a preview unit's install)
+ * needs none.
+ */
+const reloadHeldAsBefore = async (
+  units: readonly string[],
+  note: (line: string) => void
+): Promise<void> => {
+  if (!(await heldAsBefore(units))) {
+    return;
+  }
+  const reloaded = await run(["systemctl", "--user", "daemon-reload"]);
+  if (reloaded.exitCode !== 0) {
+    throw failed("systemctl --user daemon-reload", reloaded);
+  }
+  note("systemd reloaded its unit files");
+};
+
+/** Whether systemd holds any of `units` as it read it before its file changed (`NeedDaemonReload`). */
 const heldAsBefore = async (units: readonly string[]): Promise<boolean> => {
   for (const name of units) {
     const shown = await run([
@@ -1786,7 +1805,10 @@ const dashboardUrlOf = (
  * has the dashboard, for the install's record (cli.ts `writeBinaryUnits`),
  * which the update's verification probes.
  *
- * systemd: one daemon-reload for the set; a socket that changed (or is not
+ * systemd: one daemon-reload for the set, and only when one of its units or
+ * sockets changed on disk under systemd ({@link reloadHeldAsBefore}); a hub
+ * that gets its preview unit here installs it after the writes, so that
+ * install's reload is the set's. A socket that changed (or is not
  * listening) is rebound through `bindSockets`, which stops the dashboard and
  * restarts the socket on its new addresses, and the update's restart that
  * follows starts the dashboard on them. A loopback socket that does not open
@@ -1829,6 +1851,29 @@ const installPreviewBeside = async (
   return [at.mac ? launchAgentPath("preview") : systemdPath("preview")];
 };
 
+/**
+ * A service's sockets, where its own socket is installed (systemd): one an
+ * earlier build did not write (the loopback's) is written now, and one it no
+ * longer names is removed. The socket units it touched, and those that have
+ * to be (re)bound (`writeSocketUnits`).
+ */
+const refreshSockets = async (
+  spec: ServiceSpec,
+  note: (line: string) => void
+): Promise<{ moving: SocketSpec[]; units: string[] }> => {
+  if (!(spec.sockets && existsSync(socketPath(spec.id)))) {
+    return { moving: [], units: [] };
+  }
+  const moving = await writeSocketUnits(spec, note);
+  return {
+    moving,
+    units: [
+      ...spec.sockets.map((socket) => socketName(socket.unit)),
+      socketName(`${spec.id}-local`),
+    ],
+  };
+};
+
 export const refreshServices = async (
   ids: readonly ServiceId[],
   binaryLayout: NonNullable<ServiceOptions["binaryLayout"]>,
@@ -1854,14 +1899,9 @@ export const refreshServices = async (
   const local = hub
     ? recordedEnvironment(hub, mac)[CAWCO_ENV.localDashboardPort]
     : undefined;
-  rewrote.push(
-    ...(await installPreviewBeside(
-      { hub, ids, installed },
-      { mac, local, binaryLayout },
-      note
-    ))
-  );
-  let reload = false;
+  // Every unit systemd may hold as it read it before this refresh, for the
+  // one reload ({@link reloadHeldAsBefore}).
+  const units: string[] = [];
   let rebind: { moving: SocketSpec[]; spec: ServiceSpec } | undefined;
   for (const [id, before] of installed) {
     const { spec, text } = renderInstalled(id, before, {
@@ -1877,27 +1917,28 @@ export const refreshServices = async (
       note(`rewrote ${path}`);
       if (mac) {
         await loadLaunchAgent(spec, note);
-      } else {
-        reload = true;
       }
     }
-    // The service's sockets, where its own socket is installed: one an
-    // earlier build did not write (the loopback's) is written now.
-    const moving =
-      !mac && spec.sockets && existsSync(socketPath(id))
-        ? await writeSocketUnits(spec, note)
-        : [];
-    if (moving.length > 0) {
-      reload = true;
-      rebind = { spec, moving };
+    if (mac) {
+      continue;
+    }
+    const sockets = await refreshSockets(spec, note);
+    units.push(unitName(spec.name), ...sockets.units);
+    if (sockets.moving.length > 0) {
+      rebind = { spec, moving: sockets.moving };
     }
   }
-  if (reload) {
-    const reloaded = await run(["systemctl", "--user", "daemon-reload"]);
-    if (reloaded.exitCode !== 0) {
-      throw failed("systemctl --user daemon-reload", reloaded);
-    }
-    note("systemd reloaded its unit files");
+  // After the writes above: the preview unit's install reloads systemd once,
+  // which reads them too, so the reload below finds nothing left to read.
+  rewrote.push(
+    ...(await installPreviewBeside(
+      { hub, ids, installed },
+      { mac, local, binaryLayout },
+      note
+    ))
+  );
+  if (!mac) {
+    await reloadHeldAsBefore(units, note);
   }
   if (rebind) {
     await bindSockets(rebind.spec, rebind.moving, note);
