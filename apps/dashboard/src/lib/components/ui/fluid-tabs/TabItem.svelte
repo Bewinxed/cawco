@@ -172,11 +172,21 @@
   const uid = $props.id();
 
   let node = $state<HTMLElement | undefined>();
+  /**
+   * The value the item registers under, held apart from the prop: a host
+   * hands it from a row it rebuilds whenever anything about the tab changes
+   * (PaneTabs' `tabs`: a pulse, a status, a title), and an effect reading
+   * the prop itself ran again on every rebuild, with the same value. Every
+   * tab then left the order and joined it again, each one sorting the whole
+   * track twice: 70,000 `compareDocumentPosition` a second on a 29-tab
+   * strip at rest. Derived, it changes only when the value does.
+   */
+  const registeredAs = $derived(value);
   // The root learns the order from the items themselves, in the order they
   // stand in the track — kept as tabs arrive, leave and are moved.
   $effect(() => {
     if (node) {
-      return list.rects.register(node, value);
+      return list.rects.register(node, registeredAs);
     }
   });
   /** Where this item stands now, not where it stood when it mounted. */
