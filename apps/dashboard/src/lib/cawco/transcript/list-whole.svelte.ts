@@ -28,9 +28,6 @@ export interface ListWholeHost {
   readonly visible: boolean;
 }
 
-/** How many rows past the one at the view's top `see` looks for one drawn. */
-const SEEN_REACH = 8;
-
 /**
  * The index of the row drawn at `at` (px from the list's first row) among
  * `length`: the last whose drawn top (`getItemOffset`, the `top` virtua
@@ -64,6 +61,57 @@ export function drawnAt(
     }
   }
   return low;
+}
+
+/**
+ * The row the reader sees at the top of a view whose top is `at` (px from
+ * the list's first row): the first at or below the row drawn there
+ * (`drawnAt`) that virtua draws measured, looked for down to the view's foot
+ * (virtua's viewport); its index among `rows` and its element. Null when the
+ * view shows none.
+ *
+ * A row virtua has not measured is mounted at its estimate and drawn hidden
+ * (its item's `visibility: hidden`, virtua's `hide`) until its size comes,
+ * which is a frame later when its ResizeObserver delivery is put off (rows
+ * mounted inside a delivery, "ResizeObserver loop completed with
+ * undelivered notifications"). No reader sees it, and measured it grows
+ * from its top while virtua keeps the rows below it where they stand. Taken
+ * for the row at the top, it was what the view held: the reader's kept place
+ * put it back and moved every row they saw by its growth (KeptPlace
+ * `scrollToRow` 203px down, WebKit at 1440, a wheel up just after a page
+ * landed with virtua's buffer at none). And looked for only eight rows past
+ * the top, under a wheel that brought the view a screen's worth of rows
+ * virtua mounts in the flush behind it, nothing was seen and nothing held:
+ * virtua's `scrollBy(381.5)` for the rows measured above, its fraction
+ * dropped by WebKit, moved every row on screen half a pixel (2 runs in 12).
+ */
+export function seenAt(
+  list: VirtualizerHandle,
+  listing: HTMLElement,
+  rows: readonly Row[],
+  at: number
+): { index: number; row: HTMLElement } | null {
+  const shown = new Map<string, HTMLElement>();
+  for (const item of listing.firstElementChild?.children ?? []) {
+    if (item instanceof HTMLElement && item.style.visibility !== "hidden") {
+      const row = item.querySelector<HTMLElement>(":scope > [data-row]");
+      if (row?.dataset.row !== undefined) {
+        shown.set(row.dataset.row, row);
+      }
+    }
+  }
+  const foot = at + list.getViewportSize();
+  for (
+    let index = drawnAt(list, at, rows.length);
+    index < rows.length && list.getItemOffset(index) < foot;
+    index += 1
+  ) {
+    const row = shown.get(rows[index].key);
+    if (row) {
+      return { index, row };
+    }
+  }
+  return null;
 }
 
 export class ListWhole {
@@ -294,32 +342,21 @@ export class ListWhole {
     writes: number;
   } | null = null;
 
-  /** Takes the row at the view's top at `offset` as seen (`seen`), or nothing at none. Read in the scroll event, on the layout virtua's read of it has just laid out. */
+  /** Takes the row the reader sees at the view's top at `offset` (`seenAt`) as seen (`seen`), or nothing at none. Read in the scroll event, on the layout virtua's read of it has just laid out. */
   see(offset: number | null): void {
     const { list, listing, scroller } = this.#host.pin;
-    const rows = this.#host.rowDraw.renderedRows;
-    let row: HTMLElement | null | undefined = null;
-    let key: string | undefined;
-    // The row at the view's top, or the first under it that is drawn: a
-    // scroll can bring the view to rows virtua mounts only in the flush
-    // behind it.
-    if (list && listing && offset !== null) {
-      const first = drawnAt(
-        list,
-        offset - this.#host.older.olderRoom - this.spare,
-        rows.length
-      );
-      for (
-        let index = first;
-        !row && index < Math.min(rows.length, first + SEEN_REACH);
-        index += 1
-      ) {
-        key = rows[index]?.key;
-        row = listing.querySelector<HTMLElement>(
-          `[data-row="${CSS.escape(key)}"]`
-        );
-      }
-    }
+    // A scroll can bring the view to rows virtua mounts only in the flush
+    // behind it, or draws hidden until they are measured: the first row
+    // under them that the reader sees.
+    const row =
+      list && listing && offset !== null
+        ? seenAt(
+            list,
+            listing,
+            this.#host.rowDraw.renderedRows,
+            offset - this.#host.older.olderRoom - this.spare
+          )?.row
+        : null;
     this.seen =
       row && scroller && offset !== null
         ? {

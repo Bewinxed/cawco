@@ -10,6 +10,7 @@ import type { VirtualizerHandle } from "virtua/svelte";
 import { track } from "#lib/platform/track.js";
 import type { SessionState } from "../stores/sessions.svelte";
 import { warm } from "../workspace/warm.svelte";
+import { drawnAt } from "./list-whole.svelte";
 import type { Row } from "./rows";
 
 /** What every list item carries: the name its drawn rule finds it by (the style's `[data-item]`). */
@@ -95,6 +96,7 @@ export interface MountedRowsHost {
     readonly atBottom: boolean;
     readonly landingAway: ReturnType<typeof setTimeout> | undefined;
     readonly list: VirtualizerHandle | undefined;
+    readonly listStart: number;
     readonly listing: HTMLElement | undefined;
     readonly pinBottom: () => void;
     readonly viewHeight: number;
@@ -202,6 +204,18 @@ export class MountedRows {
   buffer = $state(0);
 
   /**
+   * The index of the row virtua draws at scroll offset `top` (`drawnAt`):
+   * what the view shows, where virtua's iOS hold draws rows above their
+   * laid-out place until the scroll rests.
+   */
+  #drawnAt(top: number): number {
+    const { list, listStart } = this.#host.pin;
+    return list
+      ? drawnAt(list, top - listStart, this.#host.rowDraw.renderedRows.length)
+      : 0;
+  }
+
+  /**
    * The mounted rows the view does not show, each at virtua's size for it,
    * nearest the view first: skipped while the pane is away (`aside`). A row
    * virtua never measured (its `hide`) is left to be measured as the pane
@@ -214,10 +228,8 @@ export class MountedRows {
       return new Map();
     }
     const top = this.#host.pin.list.getScrollOffset();
-    const first = this.#host.pin.list.findItemIndex(top);
-    const last = this.#host.pin.list.findItemIndex(
-      top + this.#host.pin.list.getViewportSize()
-    );
+    const first = this.#drawnAt(top);
+    const last = this.#drawnAt(top + this.#host.pin.list.getViewportSize());
     const at = new Map(
       this.#host.rowDraw.renderedRows.map((row, index) => [row.key, index])
     );
@@ -249,15 +261,9 @@ export class MountedRows {
     if (!this.#host.pin.list) {
       return;
     }
-    const last = this.#host.pin.list.findItemIndex(
-      top + this.#host.pin.list.getViewportSize()
-    );
+    const last = this.#drawnAt(top + this.#host.pin.list.getViewportSize());
     const inView: string[] = [];
-    for (
-      let index = this.#host.pin.list.findItemIndex(top);
-      index <= last;
-      index += 1
-    ) {
+    for (let index = this.#drawnAt(top); index <= last; index += 1) {
       const key = this.#host.rowDraw.renderedRows[index]?.key;
       if (key !== undefined && this.aside.has(key)) {
         inView.push(key);
@@ -561,17 +567,14 @@ export class MountedRows {
     )) {
       return;
     }
-    // virtua's own range as it stands, read off its sizes: the view and its
-    // buffer either side (virtua's `$getRange`), what is mounted now, and
-    // the rows a pane put away kept (`away`), let go with them. Read wider,
-    // the rows virtua never mounted were mounted here, three screens of them
-    // in the landing's frame (65ms, tab-return's 3 min).
-    const from = this.#host.pin.list.findItemIndex(
-      Math.max(0, was - this.buffer)
-    );
-    const to = this.#host.pin.list.findItemIndex(
-      was + this.#host.pin.viewHeight + this.buffer
-    );
+    // virtua's own range as it stands, read off its sizes where it draws
+    // them (`#drawnAt`, as its `$getRange` reads its held jump): the view
+    // and its buffer either side, what is mounted now, and the rows a pane
+    // put away kept (`away`), let go with them. Read wider, the rows virtua
+    // never mounted were mounted here, three screens of them in the
+    // landing's frame (65ms, tab-return's 3 min).
+    const from = this.#drawnAt(Math.max(0, was - this.buffer));
+    const to = this.#drawnAt(was + this.#host.pin.viewHeight + this.buffer);
     const behind = new Set(
       Array.from({ length: to - from + 1 }, (_, i) => from + i)
     );

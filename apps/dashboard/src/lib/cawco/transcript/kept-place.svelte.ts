@@ -14,7 +14,7 @@ import type { ConversationFind } from "../find/conversation-find.svelte";
 import type { SessionState } from "../stores/sessions.svelte";
 import type { Message } from "../types";
 import { disclosure } from "./disclosure.svelte";
-import { drawnAt } from "./list-whole.svelte";
+import { drawnAt, seenAt } from "./list-whole.svelte";
 import { BUFFER_SCREENS } from "./mounted-rows.svelte";
 import {
   blockOf,
@@ -175,8 +175,9 @@ export class KeptPlace {
   /**
    * Keep where the reader is for the pane's next mount. Called where a pane
    * hides — inside a swipe's release, among others — so it reads nothing off
-   * the page: the row at the top of the view comes from virtua's own sizes,
-   * at the offset the scroll handler last saw.
+   * the layout: the row at the top of the view comes from virtua's own sizes
+   * and its items' style (`topRow`), at the offset the scroll handler last
+   * saw.
    */
   saveLanding = (): void => {
     if (
@@ -220,25 +221,35 @@ export class KeptPlace {
   };
 
   /**
+   * The row at the view's top `top`: the one the reader sees there
+   * (`seenAt`), as ListWhole holds the view by, or with none seen (no row
+   * mounted and measured in view), the one drawn there (`drawnAt`), whatever
+   * virtua holds back. -1 with no list. Read off virtua's sizes and the
+   * items' own style, never the layout.
+   */
+  topRow(top: number): number {
+    const { list, listing, listStart } = this.#host.pin;
+    const rows = this.#host.rowDraw.renderedRows;
+    if (!list) {
+      return -1;
+    }
+    return (
+      (listing ? seenAt(list, listing, rows, top - listStart)?.index : null) ??
+      drawnAt(list, top - listStart, rows.length)
+    );
+  }
+
+  /**
    * The reader's place at the view's top `top`: the first block of the row
-   * there, or of the nearest row above it that has one (the live tail's rows
-   * have none), and how far past that row's top the view stands. Read off
-   * virtua's sizes, never the page.
+   * there (`topRow`), or of the nearest row above it that has one (the live
+   * tail's rows have none), and how far past that row's top the view stands
+   * (less than nothing when the row seen begins under the top).
    */
   placeAt(top: number): { block: string; into: number } | null {
     if (!this.#host.pin.list || this.#host.rowDraw.renderedRows.length === 0) {
       return null;
     }
-    // The row drawn there (`drawnAt`), whatever virtua holds back.
-    for (
-      let index = drawnAt(
-        this.#host.pin.list,
-        top - this.#host.pin.listStart,
-        this.#host.rowDraw.renderedRows.length
-      );
-      index >= 0;
-      index -= 1
-    ) {
+    for (let index = this.topRow(top); index >= 0; index -= 1) {
       const block = blockOf(this.#host.rowDraw.renderedRows[index]);
       if (block) {
         return {
@@ -526,13 +537,7 @@ export class KeptPlace {
         }
         // The row at the view's top first: it is the place's unless the list
         // moved under it, and the whole list is read for it only then.
-        const top = this.#host.pin.list
-          ? drawnAt(
-              this.#host.pin.list,
-              this.#host.pin.lastTop - this.#host.pin.listStart,
-              this.#host.rowDraw.renderedRows.length
-            )
-          : -1;
+        const top = this.topRow(this.#host.pin.lastTop);
         const index =
           top >= 0 &&
           blockOf(this.#host.rowDraw.renderedRows[top]) === place.block

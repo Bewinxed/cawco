@@ -40,6 +40,7 @@
   import { frameSize } from "#lib/platform/frame-observer.js";
   import { track } from "#lib/platform/track.js";
   import { barGlass } from "../bar-glass.svelte";
+  import { drawnAt } from "../transcript/list-whole.svelte";
   import { TURN_CLOCK } from "../turn/clock";
   import {
     type Place,
@@ -144,9 +145,10 @@
     if (!rows) {
       return;
     }
+    // The rows drawn there (`drawnAt`), whatever virtua's iOS hold keeps back.
     const top = rows.getScrollOffset();
-    const first = rows.findItemIndex(top);
-    const last = rows.findItemIndex(top + rows.getViewportSize());
+    const first = drawnAt(rows, top, positions.length);
+    const last = drawnAt(rows, top + rows.getViewportSize(), positions.length);
     find.need(first - PLACES_WINDOW / 2, last + PLACES_WINDOW / 2);
   }
 
