@@ -180,13 +180,17 @@ import {
  * 2026-11-19: memory_apply takes `check`, a rule a tool can test, which the
  * hub files as a task that builds its check (the memory build's step 9)
  * (curator 1,493 measured).
+ * 2026-11-19: memory_apply's add takes a `probe`, a situation and what a
+ * right answer does, with which the hub re-tests a rule when the project's
+ * sessions move to a new model (the memory build's step 10) (curator 1,528
+ * measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 31_300,
   delegate: 11_830,
   overseer: 770,
   "web-facing": 3400,
-  curator: 1500,
+  curator: 1550,
   trimmer: 1400,
 };
 

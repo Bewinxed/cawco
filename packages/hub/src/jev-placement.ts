@@ -50,13 +50,15 @@ const ROWS = {
   order: "Dispatch order",
   // Asked in memory-run.ts: what the person's messages are, what each note
   // is, whether a message states a lesson, whether two notes say the same,
-  // whether a message states a lesson kept again or the opposite; and in
+  // whether a message states a lesson kept again or the opposite, whether a
+  // model's answer passes a lesson's probe; and in
   // memory.ts, what an attempt's brief carries.
   said: "What the person said",
   inbox: "Memory inbox",
   support: "Lesson source",
   same: "Same lesson",
   corrects: "Corrected again",
+  probe: "Lesson probe",
   context: "Brief context",
   // Asked in project-starters.ts: what a project's board and Caw's panel offer.
   starters: "Starters",

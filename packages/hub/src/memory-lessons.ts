@@ -536,6 +536,7 @@ export type Change =
       home: LessonHome;
       id: string;
       kind: "add";
+      probe?: Lesson["probe"];
       sources: Lesson["sources"];
       staged?: { waits?: "jev" };
       text: string;
@@ -586,6 +587,14 @@ export type Change =
   | { id: string; kind: "stale" }
   /** A lesson a check holds now (its task done): its line taken out; the ledger keeps it, enforced. */
   | { id: string; kind: "enforce" }
+  /**
+   * An index or skill lesson a model does unprompted, moved to the
+   * knowledge its eviction would take it to, its `Why:` saying which model
+   * and when; the ledger keeps the model it was tested on.
+   */
+  | { id: string; kind: "demote"; model: string; why: string }
+  /** A lesson re-tested on `model` that stays where it is. */
+  | { id: string; kind: "tested"; model: string }
   /**
    * The person stated a live lesson again: one more repeat, his message one
    * of its sources, his rule from now on; `held` from his second, and moved
@@ -917,6 +926,7 @@ const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done => {
   const base: Lesson = {
     by: op.by,
     home: op.home,
+    ...(op.probe ? { probe: op.probe } : {}),
     repeats: 0,
     seen: today,
     since: today,
@@ -1087,8 +1097,8 @@ const repeated = (
     : { tree: counted };
 };
 
-/** `tree` with retired lesson `id`'s entry patched by `patch`. */
-const retiredAs = (
+/** `tree` with lesson `id`'s entry patched by `patch`: a ledger edit, no line changes. */
+const entryPatched = (
   tree: MemoryTree,
   id: string,
   patch: Partial<Lesson>
@@ -1097,6 +1107,49 @@ const retiredAs = (
   return lesson
     ? { ...tree, ledger: withEntry(tree.ledger, id, { ...lesson, ...patch }) }
     : tree;
+};
+
+/** An index or skill lesson moved to the knowledge its eviction would take it to, its `Why:` saying why, tested on the model. */
+const demoted = (now: MemoryTree, op: ChangeOf<"demote">): Done => {
+  const lesson = now.ledger.lessons[op.id];
+  const from = lesson ? pathOf(lesson.home) : undefined;
+  const to = from ? evictedTo(from) : undefined;
+  const line = lineOf(now, op.id);
+  if (!(lesson && from && to && line) || "archive" in to) {
+    return { tree: now };
+  }
+  const into = pathOf(to) ?? "";
+  const files = {
+    ...now.files,
+    [from]: withoutLine(now.files[from] ?? "", op.id),
+  };
+  files[into] = withLine(into, files[into] ?? "", { ...line, why: op.why });
+  return {
+    tree: {
+      files,
+      ledger: withEntry(now.ledger, op.id, {
+        ...lesson,
+        home: to,
+        tested: op.model,
+      }),
+    },
+    grew: into,
+  };
+};
+
+/** `now` with lesson `id`'s line taken out and the lesson enforced: a check holds it. */
+const enforced = (now: MemoryTree, id: string): MemoryTree => {
+  const lesson = now.ledger.lessons[id];
+  const from = lesson ? pathOf(lesson.home) : undefined;
+  return lesson && from
+    ? {
+        files: {
+          ...now.files,
+          [from]: withoutLine(now.files[from] ?? "", id),
+        },
+        ledger: withEntry(now.ledger, id, { ...lesson, state: "enforced" }),
+      }
+    : now;
 };
 
 /** One change, by its kind. */
@@ -1123,32 +1176,21 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
       return repeated(now, op, today);
     case "revert":
       return {
-        tree: retiredAs(retireLine(now, op.id, "reverted", today), op.id, {
+        tree: entryPatched(retireLine(now, op.id, "reverted", today), op.id, {
           held: true,
         }),
       };
-    case "enforce": {
-      const lesson = now.ledger.lessons[op.id];
-      const from = lesson ? pathOf(lesson.home) : undefined;
+    case "demote":
+      return demoted(now, op);
+    case "tested":
       return {
-        tree:
-          lesson && from
-            ? {
-                files: {
-                  ...now.files,
-                  [from]: withoutLine(now.files[from] ?? "", op.id),
-                },
-                ledger: withEntry(now.ledger, op.id, {
-                  ...lesson,
-                  state: "enforced",
-                }),
-              }
-            : now,
+        tree: entryPatched(now, op.id, { tested: op.model }),
       };
-    }
+    case "enforce":
+      return { tree: enforced(now, op.id) };
     case "stale":
       return {
-        tree: retiredAs(retireLine(now, op.id, "stale", today), op.id, {
+        tree: entryPatched(retireLine(now, op.id, "stale", today), op.id, {
           state: "stale",
         }),
       };

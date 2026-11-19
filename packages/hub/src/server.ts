@@ -8921,6 +8921,8 @@ export const createServer = (
         return answer.value.refusal?.kind === "missing" ? false : undefined;
       },
     },
+    // The routines are made further down; a probe runs only once the hub is up.
+    probe: (projectId, ask) => routines.probe(projectId, ask),
     skillsFor: (projectId) => skillsListedFor(projectId),
     tasks: {
       file: async (projectId, draft) => {
@@ -13622,6 +13624,8 @@ export const createServer = (
         memoryRoutes(projectMemory, {
           withdraw: (projectId, note) => memoryRun.withdraw(projectId, note),
           recover: (projectId) => routines.recover(projectId),
+          probeCheck: (projectId, lessons) =>
+            memoryRun.probeCheck(projectId, lessons),
         }),
         routineRoutes(routines),
         connectionRoutes(connections),

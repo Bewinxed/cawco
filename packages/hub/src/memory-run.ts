@@ -46,6 +46,16 @@
  *   a line until the task is done, when upkeep enforces it and takes the
  *   line out ({@link checksClosed}). A lesson of the index or a skill the
  *   person states again twice is filed as one by the hub.
+ * - **Re-test on a model change** ({@link retest}, §6.3): when the
+ *   project's sessions ran in the last week on a model the run's state
+ *   does not hold, each index and skill lesson with a probe (a situation,
+ *   and what a right answer does, written by the curator) is asked of that
+ *   model three times in clean one-turn sessions (routines.ts `probe`),
+ *   the lesson left out; Jev judges each answer. One the model passed
+ *   every time moves to knowledge, its `Why:` naming the model and the
+ *   day; the rest stay, tested. Off the night's path, one commit. The
+ *   check of whether probes tell anything at all ({@link probeCheck}, the
+ *   spec's proof run 7) runs each probe with and without its lesson.
  * - **Close** ({@link close}): where the run read up to is kept
  *   (`memory/state.json`), messages it was given and named in no operation
  *   carried to the next night once, and the run's one line said.
@@ -59,6 +69,8 @@
  *   ({@link recoveryLeft}). Asked again with nothing left, it reads the
  *   notes earlier recovery runs archived unread ({@link recoveryStart}).
  */
+
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { RoutineOutcome } from "@cawco/core/routine-kinds";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { memoryJevWords, memoryRunWords } from "@cawco/core/words/memory-run";
@@ -74,8 +86,9 @@ import type {
   LessonHome,
   LessonSource,
   MemoryRunState,
+  WorkBudget,
 } from "./db/stored-types";
-import { jevAccess } from "./jev";
+import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
 import {
   ARCHIVE_DIR,
@@ -136,6 +149,7 @@ import {
   folderHistory,
   folderPath,
   readFolderFileAt,
+  turnTaker,
   YOU,
 } from "./project-folder";
 import { redactSecrets } from "./secret-filter";
@@ -237,6 +251,35 @@ const takenOut = (lesson: Lesson): boolean =>
   lesson.retired.text !== "" &&
   TAKEN_OUT.has(lesson.retired.why);
 
+const LESSON_ID_TAIL = /\s*\(L-[0-9a-f]{6}\)\s*$/u;
+
+/** Whether one line of `content` says `text` word for word and no more, its lesson id aside: a duplicate, where a longer line saying it too is not. */
+const saysAsLine = (content: string, text: string): boolean =>
+  content.split("\n").some((line) => {
+    const bare = line.replace(LESSON_ID_TAIL, "");
+    return saysAlready(bare, text) && saysAlready(text, bare);
+  });
+
+/** What a probe's clean session came to: its answer, or why it gave none (routines.ts `probe`). */
+export type ProbeAnswer =
+  { kind: "answered"; text: string } | { kind: "failed"; why: string };
+
+/** The runs of a probe on one model, each a clean session: three of three passed is the model doing it unprompted. */
+const PROBE_RUNS = 3;
+/** A re-test's dollars in all, its probes' sessions sharing them. */
+const RETEST_USD = 10;
+/** A probe's session: one answer and its finish_item, with room for a read. */
+const PROBE_TURNS = 4;
+const PROBE_MINUTES = 10;
+/** An answer passes its probe at or over this: the likelier of two. */
+const PROBE_PASS = 0.5;
+/** How far back a session's model counts as one the project runs on. */
+const MODEL_DAYS = 7;
+/** The lessons a probe check runs, at most: the five the build spec's proof run names. */
+const PROBE_CHECK_LESSONS = 5;
+/** Where a probe check writes what it found. */
+const PROBE_CHECK_FILE = "memory/probe-check.json";
+
 /** The memory files a lesson's line lives in, as git's pickaxe reads them for its commits (the archive among them). */
 const LESSON_PATHS = [INDEX_FILE, LESSONS_DIR, KNOWLEDGE_DIR] as const;
 
@@ -279,6 +322,7 @@ export interface MemoryRunDeps {
     | "getInstancesByIds"
     | "getJevSettings"
     | "getOpenRouterConnection"
+    | "listInstances"
     | "markDataMigrated"
     | "memoryFacts"
     | "personSaidIn"
@@ -298,6 +342,16 @@ export interface MemoryRunDeps {
     listed: (machineId: string, path: string) => Promise<boolean | undefined>;
     read: (machineId: string, path: string) => Promise<MachineRead>;
   };
+  /** One clean, one-turn answer of a model to a probe (routines.ts `probe`), bound late: the routines are made after this module. */
+  readonly probe: (
+    projectId: string,
+    ask: {
+      budget: WorkBudget;
+      harness: HarnessKind;
+      model: string;
+      prompt: string;
+    }
+  ) => Promise<ProbeAnswer>;
   /** The project's next recovery run started (routines.ts `recover`), when the one that ended judged something and left something. */
   readonly recoverNext: (projectId: string) => void;
   /** The skills the fleet lists for the project's sessions, each with its one-line description. */
@@ -350,6 +404,7 @@ const RunStateSchema = z.object({
       staged: z.number(),
     })
     .nullable(),
+  models: z.array(z.string()).optional(),
   recovered: z.string().optional(),
   through: z.string(),
 }) satisfies z.ZodType<MemoryRunState>;
@@ -860,6 +915,7 @@ export const createMemoryRun = ({
   fleetHosts,
   folderChanged,
   machine,
+  probe,
   recoverNext,
   skillsFor,
   tasks,
@@ -1815,6 +1871,7 @@ export const createMemoryRun = ({
     if (state instanceof ElysiaStatus) {
       return state;
     }
+    retestIfNew(project, state);
     const said = saidSince(project.id, state, new Date());
     const inbox = await notesIn(project.id, INBOX_DIR);
     if (inbox instanceof ElysiaStatus) {
@@ -2110,6 +2167,10 @@ export const createMemoryRun = ({
     if (typeof file === "string") {
       return file;
     }
+    const probed = op.probe ? await probeOf(run, op.probe) : undefined;
+    if (typeof probed === "string") {
+      return probed;
+    }
     const staged = stagingOf(run, kept, by, file, () =>
       twoSessions(index, kept.notes, answers)
     );
@@ -2119,6 +2180,7 @@ export const createMemoryRun = ({
     return addPlanned(tree, head, op.sources, kept, {
       by,
       file,
+      probe: probed,
       home,
       text,
       why,
@@ -2205,6 +2267,8 @@ export const createMemoryRun = ({
       by: Lesson["by"];
       /** The file it names, read or to be read. */
       file: LessonSource | undefined;
+      /** How it is re-tested on a new model. */
+      probe: Lesson["probe"];
       home: LessonHome;
       staged: { waits: boolean } | undefined;
       text: string;
@@ -2212,7 +2276,7 @@ export const createMemoryRun = ({
     }
   ): Planned => {
     const id = newLessonId((taken) => taken in tree.ledger.lessons);
-    const { by, file, home, staged, text, why } = lesson;
+    const { by, file, home, probe: probed, staged, text, why } = lesson;
     return {
       change: {
         kind: "add",
@@ -2225,6 +2289,7 @@ export const createMemoryRun = ({
         ],
         text,
         why: why || null,
+        ...(probed ? { probe: probed } : {}),
         ...(staged
           ? { staged: staged.waits ? { waits: "jev" as const } : {} }
           : {}),
@@ -2807,6 +2872,26 @@ export const createMemoryRun = ({
     };
   };
 
+  /** A probe's words checked (each one line within a fact's cap, quoting no one, holding no secret); why not otherwise. */
+  const probeOf = async (
+    run: Run,
+    asked: { pass: string; prompt: string }
+  ): Promise<{ pass: string; prompt: string } | string> => {
+    const probed = { prompt: asked.prompt.trim(), pass: asked.pass.trim() };
+    for (const words of [probed.prompt, probed.pass]) {
+      if (
+        words === "" ||
+        words.includes("\n") ||
+        words.length > CAPS.fact ||
+        wordsProblem(words, run.said) ||
+        (await redactSecrets(words)) !== words
+      ) {
+        return memoryRunWords.probeUnfit(CAPS.fact);
+      }
+    }
+    return probed;
+  };
+
   /** Why a check's method may not stand, or nothing: one line within a fact's cap, quoting no one, holding no secret. */
   const methodProblem = async (
     run: Run,
@@ -2909,7 +2994,15 @@ export const createMemoryRun = ({
    * next run, which starts at once when this one judged something, at most
    * {@link RECOVERY_CHAIN} in a row.
    */
-  const closed = async (projectId: string, run: Run, outcome: RunOutcome) => {
+  const closed = (projectId: string, run: Run, outcome: RunOutcome) =>
+    stateTurn(projectId, () => closedInTurn(projectId, run, outcome));
+
+  /** {@link closed}, inside the project's turn on its run state. */
+  const closedInTurn = async (
+    projectId: string,
+    run: Run,
+    outcome: RunOutcome
+  ) => {
     const state = await stateOf(projectId);
     if (state instanceof ElysiaStatus) {
       return state;
@@ -3016,6 +3109,409 @@ export const createMemoryRun = ({
         );
       }
     );
+  };
+
+  // --- re-test on a model change (§6.3) ------------------------------------------------
+
+  /** Each project's read-modify-write of `memory/state.json`, one at a time: a run's close, a re-test's end. */
+  const stateTurn = turnTaker();
+  /** Projects with a re-test under way. */
+  const retesting = new Set<string>();
+
+  /** The models the project's sessions ran on in the last {@link MODEL_DAYS} days, each with its harness, the newest use first. */
+  const modelsNow = (projectId: string): [string, HarnessKind][] => {
+    const since = Date.now() - MODEL_DAYS * DAY_MS;
+    const used = new Map<string, { at: number; harness: HarnessKind }>();
+    for (const row of db.listInstances()) {
+      const at = new Date(row.updatedAt ?? 0).getTime();
+      const had = row.model ? used.get(row.model) : undefined;
+      if (
+        row.projectId === projectId &&
+        row.model &&
+        at >= since &&
+        (!had || had.at < at)
+      ) {
+        used.set(row.model, { at, harness: row.harness });
+      }
+    }
+    return [...used]
+      .sort(([, a], [, b]) => b.at - a.at)
+      .map(([model, { harness }]) => [model, harness]);
+  };
+
+  /**
+   * A re-test started, off the night's path, for each model the project's
+   * sessions ran on that `state.models` does not hold (§2 A.6); none while
+   * one is under way. A model is held once its re-test ends, so one cut
+   * short (a restart, Jev off) runs again the next night.
+   */
+  const retestIfNew = (project: ProjectRow, state: MemoryRunState): void => {
+    const known = new Set(state.models ?? []);
+    const fresh = modelsNow(project.id).filter(([model]) => !known.has(model));
+    if (fresh.length === 0 || retesting.has(project.id)) {
+      return;
+    }
+    retesting.add(project.id);
+    const all = async () => {
+      for (const [model, harness] of fresh) {
+        const refused = await retest(project, model, harness);
+        if (refused instanceof ElysiaStatus) {
+          console.warn(
+            `[memory] ${project.name}: the re-test on ${model} did not end: ${refused.response.detail}`
+          );
+          return;
+        }
+      }
+    };
+    all()
+      .catch((error: unknown) =>
+        console.warn(
+          `[memory] ${project.name}: the re-test did not end: ${error instanceof Error ? error.message : String(error)}`
+        )
+      )
+      .finally(() => retesting.delete(project.id));
+  };
+
+  /** The index and skill lessons a re-test runs a probe of: live, not held, with a probe, not tested on `model`. */
+  const probedOn = (tree: MemoryTree, model: string) =>
+    Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) =>
+      lesson.state === "live" &&
+      !lesson.held &&
+      lesson.probe &&
+      lesson.tested !== model &&
+      (lesson.home.at === "index" || lesson.home.at === "skill")
+        ? [{ id, probe: lesson.probe }]
+        : []
+    );
+
+  /**
+   * A re-test on `model` (§6.3): each index and skill lesson with a probe,
+   * not held, run {@link PROBE_RUNS} times on the model in a clean session,
+   * the lesson left out, Jev judging each answer against the probe's
+   * `pass`. One the model passed every time goes to knowledge, its `Why:`
+   * naming the model and the day; any other stays, tested on the model.
+   * Then the hub's own check again: a lesson another memory file says word
+   * for word is taken out. One commit, the model held in the run's state.
+   * Jev off with lessons to judge: nothing is decided, and the model is
+   * tried again the next night.
+   */
+  const retest = async (
+    project: ProjectRow,
+    model: string,
+    harness: HarnessKind
+  ) => {
+    const first = await treeOf(project.id);
+    if (first instanceof ElysiaStatus) {
+      return first;
+    }
+    const probed = probedOn(first.tree, model);
+    const key = jevAccess(db);
+    if (probed.length > 0 && !key) {
+      offLine(
+        "probe",
+        project.id,
+        `the re-test on ${model} waits for Jev, which judges each probe's answer`
+      );
+      return;
+    }
+    const usd = RETEST_USD / Math.max(1, probed.length * PROBE_RUNS);
+    const passes = new Map<string, number>();
+    for (const one of probed) {
+      const answers = await probeRuns(project.id, {
+        harness,
+        model,
+        prompt: one.probe.prompt,
+        usd,
+      });
+      passes.set(
+        one.id,
+        key ? await probePasses(project.id, key, one.probe.pass, answers) : 0
+      );
+    }
+    return await stateTurn(project.id, () =>
+      retestCommitted(project, model, passes)
+    );
+  };
+
+  /** {@link PROBE_RUNS} answers of `ask.model` to one prompt, each in a clean session of its own, on a share of the re-test's dollars. */
+  const probeRuns = (
+    projectId: string,
+    ask: { harness: HarnessKind; model: string; prompt: string; usd: number }
+  ): Promise<ProbeAnswer[]> =>
+    Promise.all(
+      Array.from({ length: PROBE_RUNS }, () =>
+        probe(projectId, {
+          harness: ask.harness,
+          model: ask.model,
+          prompt: ask.prompt,
+          budget: { turns: PROBE_TURNS, minutes: PROBE_MINUTES, usd: ask.usd },
+        })
+      )
+    );
+
+  /** How many of a probe's answers pass it, by Jev at {@link PROBE_PASS}: one with no answer does not. */
+  const probePasses = async (
+    projectId: string,
+    key: JevAccess,
+    pass: string,
+    answers: ProbeAnswer[]
+  ): Promise<number> => {
+    const questions = Object.fromEntries(
+      answers.flatMap(
+        (answer, at): [string, Experimental_DecisionQuestion][] =>
+          answer.kind === "answered"
+            ? [
+                [
+                  `probe:${at}`,
+                  {
+                    type: "boolean",
+                    instructions: {
+                      reply: cut(answer.text),
+                      pass,
+                      question: memoryJevWords.probeQuestion,
+                    },
+                    criteria: memoryJevWords.probeCriteria,
+                  },
+                ],
+              ]
+            : []
+      )
+    );
+    if (Object.keys(questions).length === 0) {
+      return 0;
+    }
+    const result = await askRow("probe", projectId, key, {}, questions);
+    return Object.values(result.answers).filter(
+      (answer) => "probability" in answer && answer.probability >= PROBE_PASS
+    ).length;
+  };
+
+  /**
+   * A re-test's decisions committed over the tree as it stands now (a run
+   * may have changed it while the probes ran): each lesson still live and
+   * not held moved to knowledge when it passed every probe, else marked
+   * tested; word-for-word duplicates taken out; `model` held in the run's
+   * state. One commit.
+   */
+  const retestCommitted = async (
+    project: ProjectRow,
+    model: string,
+    passes: ReadonlyMap<string, number>
+  ) => {
+    const read = await treeOf(project.id);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const state = await stateOf(project.id);
+    if (state instanceof ElysiaStatus) {
+      return state;
+    }
+    const today = dayOf(new Date());
+    const uses = usesOf(project.id);
+    const still = new Set(probedOn(read.tree, model).map((one) => one.id));
+    let tree = withoutDuplicates(read.tree, today, uses);
+    let moved = 0;
+    for (const [id, passed] of passes) {
+      if (!still.has(id)) {
+        continue;
+      }
+      const change: Change =
+        passed >= PROBE_RUNS
+          ? {
+              kind: "demote",
+              id,
+              model,
+              why: memoryRunWords.retestWhy(model, today),
+            }
+          : { kind: "tested", id, model };
+      moved += change.kind === "demote" ? 1 : 0;
+      ({ tree } = applyOp(tree, checked(change), today, uses));
+    }
+    const unprobed = Object.values(tree.ledger.lessons).filter(
+      (lesson) =>
+        lesson.state === "live" &&
+        !lesson.probe &&
+        (lesson.home.at === "index" || lesson.home.at === "skill")
+    ).length;
+    const next: MemoryRunState = {
+      ...state,
+      models: [...new Set([...(state.models ?? []), model])],
+    };
+    const said = memoryRunWords.retested(
+      model,
+      moved,
+      passes.size - moved,
+      unprobed
+    );
+    console.log(`[memory] ${project.name}: ${said}`);
+    return await commit(project.id, read.tree, tree, {
+      author: HUB,
+      message: `memory: ${said}`,
+      extra: [{ path: RUN_STATE_FILE, content: jsonText(next) }],
+    });
+  };
+
+  /** `tree` without each live lesson a line of another memory file says word for word (§6.3 step 1), retired as no longer needed. */
+  const withoutDuplicates = (
+    tree: MemoryTree,
+    today: string,
+    uses: ReadonlyMap<string, Date>
+  ): MemoryTree => {
+    let now = tree;
+    for (const [id, lesson] of Object.entries(tree.ledger.lessons)) {
+      const own = pathOf(lesson.home);
+      const line = lessonText(now, id);
+      const elsewhere =
+        lesson.state === "live" &&
+        !lesson.held &&
+        line !== undefined &&
+        Object.entries(now.files).some(
+          ([path, content]) =>
+            path !== own &&
+            homeOf(path) !== undefined &&
+            content !== undefined &&
+            saysAsLine(content, line)
+        );
+      if (elsewhere) {
+        now = applyOp(
+          now,
+          checked({ kind: "retire", id, why: "unneeded" }),
+          today,
+          uses
+        ).tree;
+      }
+    }
+    return now;
+  };
+
+  /**
+   * Whether a lesson's probe tells anything (§13 proof run 7): for each
+   * lesson asked (an id and a probe), or else the index's lessons that have
+   * a probe, at most {@link PROBE_CHECK_LESSONS}, its probe run
+   * {@link PROBE_RUNS} times without the lesson and as many with it, on the
+   * model the project's sessions ran on last; Jev judges each answer. Runs
+   * off the caller's path; what it found is written to
+   * `memory/probe-check.json` in one commit. Refused with Jev off, with no
+   * model seen, or with no lesson to check.
+   */
+  const probeCheck = async (
+    projectId: string,
+    asked: readonly { id: string; pass: string; prompt: string }[] | undefined
+  ) => {
+    if (checking.has(projectId)) {
+      return problem(409, {
+        code: "memory-probe-check-going",
+        detail: memoryRunWords.probeCheckGoing(PROBE_CHECK_FILE),
+      });
+    }
+    const read = await treeOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const key = jevAccess(db);
+    const [latest] = modelsNow(projectId);
+    const lessons = (
+      asked ??
+      Object.entries(read.tree.ledger.lessons).flatMap(([id, lesson]) =>
+        lesson.state === "live" && lesson.home.at === "index" && lesson.probe
+          ? [{ id, ...lesson.probe }]
+          : []
+      )
+    )
+      .flatMap((one) => {
+        const text = lessonText(read.tree, one.id);
+        return text ? [{ ...one, text }] : [];
+      })
+      .slice(0, PROBE_CHECK_LESSONS);
+    if (!(key && latest && lessons.length > 0)) {
+      return problem(409, {
+        code: "memory-probe-check-unfit",
+        detail: memoryRunWords.probeCheckUnfit(
+          !key,
+          latest === undefined,
+          lessons.length === 0
+        ),
+      });
+    }
+    const [model, harness] = latest;
+    checking.add(projectId);
+    probeChecked(projectId, key, { model, harness }, lessons)
+      .then(
+        (refused) => {
+          if (refused instanceof ElysiaStatus) {
+            console.warn(
+              `[memory] ${projectId}: the probe check's file was not written: ${refused.response.detail}`
+            );
+          }
+        },
+        (error: unknown) =>
+          console.warn(
+            `[memory] ${projectId}: the probe check did not end: ${error instanceof Error ? error.message : String(error)}`
+          )
+      )
+      .finally(() => checking.delete(projectId));
+    return {
+      started: true as const,
+      model,
+      lessons: lessons.map((one) => one.id),
+      file: PROBE_CHECK_FILE,
+    };
+  };
+
+  /** Projects with a probe check under way. */
+  const checking = new Set<string>();
+
+  /** {@link probeCheck}'s runs and its file. */
+  const probeChecked = async (
+    projectId: string,
+    key: JevAccess,
+    on: { harness: HarnessKind; model: string },
+    lessons: readonly {
+      id: string;
+      pass: string;
+      prompt: string;
+      text: string;
+    }[]
+  ) => {
+    const usd = RETEST_USD / (lessons.length * PROBE_RUNS * 2);
+    const found: { id: string; of: number; with: number; without: number }[] =
+      [];
+    for (const one of lessons) {
+      const without = await probeRuns(projectId, {
+        ...on,
+        prompt: one.prompt,
+        usd,
+      });
+      const withRule = await probeRuns(projectId, {
+        ...on,
+        prompt: memoryRunWords.probeWithRule(one.text, one.prompt),
+        usd,
+      });
+      found.push({
+        id: one.id,
+        of: PROBE_RUNS,
+        without: await probePasses(projectId, key, one.pass, without),
+        with: await probePasses(projectId, key, one.pass, withRule),
+      });
+    }
+    const read = await treeOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    return await commit(projectId, read.tree, read.tree, {
+      author: HUB,
+      message: `memory: ${memoryRunWords.probeChecked(found.length)}`,
+      extra: [
+        {
+          path: PROBE_CHECK_FILE,
+          content: jsonText({
+            model: on.model,
+            at: new Date().toISOString(),
+            lessons: found,
+          }),
+        },
+      ],
+    });
   };
 
   // --- recovery ------------------------------------------------------------------------
@@ -3679,6 +4175,7 @@ export const createMemoryRun = ({
     close,
     upkeep,
     recoveryStart,
+    probeCheck,
   };
 };
 

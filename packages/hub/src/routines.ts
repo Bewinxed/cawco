@@ -87,6 +87,7 @@
 
 import type { DelegateType, SessionRole } from "@cawco/core/delegate-types";
 import { ANY_TYPE } from "@cawco/core/delegate-types";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
   type OfferedMode,
   SESSION_CHOSEN_MODES,
@@ -114,7 +115,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { DAY_MS } from "@cawco/core/time";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
-import { curatorPrompt } from "@cawco/core/words/memory-run";
+import { curatorPrompt, memoryRunWords } from "@cawco/core/words/memory-run";
 import { routineToolWords } from "@cawco/core/words/routines";
 import { workWords } from "@cawco/core/words/work";
 import cronstrue from "cronstrue";
@@ -138,7 +139,7 @@ import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { defineTool } from "./mcp-tool";
 import { ROUTINE_ORIGIN } from "./memory";
-import type { MemoryRun } from "./memory-run";
+import type { MemoryRun, ProbeAnswer } from "./memory-run";
 import {
   routineListWords,
   routineRunWords,
@@ -201,6 +202,10 @@ const CURATOR_CRON = "0 6 * * *";
 const CURATOR_BUDGET = { turns: 40, minutes: 20, usd: 2 } as const;
 /** A day's cap on the nightly memory run: one run and its retry. */
 const CURATOR_DAILY_USD = 4;
+/** A memory probe's work item, as the board names it. */
+const PROBE_TITLE = "Memory probe";
+/** How long a probe's answer is waited for: its budget's minutes and the start around them. */
+const PROBE_WAIT_MS = 20 * 60 * 1000;
 /** Each recovery run's budget, reading up to 60 notes; the recovery chains at most six (memory-run.ts `RECOVERY_CHAIN`). */
 const RECOVERY_BUDGET = { turns: 60, minutes: 30, usd: 3 } as const;
 
@@ -1127,13 +1132,7 @@ export const createRoutines = ({
         cwd: place.cwd,
         machineId: place.machineId,
       },
-      routineParent({
-        id: routine.id,
-        name: routine.name,
-        projectId: routine.projectId,
-        cwd: place.cwd,
-        machineId: place.machineId,
-      })
+      parentAt(routine, place)
     );
     if (begun instanceof ElysiaStatus) {
       return begun;
@@ -1894,6 +1893,24 @@ export const createRoutines = ({
     if (!isRoutineParent(item.parentInstanceId)) {
       return;
     }
+    const probed = probes.get(item.id);
+    if (probed) {
+      probes.delete(item.id);
+      probed(
+        item.state === "done"
+          ? {
+              kind: "answered",
+              text: db.workItemTexts(item.id).summary ?? item.headline ?? "",
+            }
+          : {
+              kind: "failed",
+              why:
+                (item.error ?? "").split("\n").find((line) => line.trim()) ??
+                item.state,
+            }
+      );
+      return;
+    }
     const run = store.runOfItem(item.id);
     if (!run || run.state === "ended") {
       return;
@@ -2613,6 +2630,84 @@ export const createRoutines = ({
         });
   };
 
+  /** A routine's run's work item's parent: the routine, at the place it runs. */
+  const parentAt = (
+    routine: RoutineRow,
+    place: { cwd: string; machineId: string }
+  ) =>
+    routineParent({
+      id: routine.id,
+      name: routine.name,
+      projectId: routine.projectId,
+      cwd: place.cwd,
+      machineId: place.machineId,
+    });
+
+  /** Probes waiting for their work item to end, by its id ({@link probe}). */
+  const probes = new Map<string, (answer: ProbeAnswer) => void>();
+
+  /**
+   * One clean, one-turn answer of a model to a lesson's probe (memory-run.ts
+   * `retest`, §6.3): a work item under the project's memory curator, on the
+   * host in a checkout of the project, started clean (no memory, no skills,
+   * CawCo's server only) on `ask.model`, landing nothing, briefed with the
+   * probe's prompt alone and its answer's contract; its answer is its
+   * finish_item summary. A hub that restarts drops the wait: the re-test
+   * runs again the next night.
+   */
+  const probe = async (
+    projectId: string,
+    ask: {
+      budget: WorkBudget;
+      harness: HarnessKind;
+      model: string;
+      prompt: string;
+    }
+  ): Promise<ProbeAnswer> => {
+    const routine = curatorOf(projectId);
+    if (!routine) {
+      return { kind: "failed", why: "the project has no memory curator" };
+    }
+    const place = await placeWithin(routine);
+    if (place instanceof ElysiaStatus) {
+      return { kind: "failed", why: place.response.detail };
+    }
+    if (typeof place === "string") {
+      return { kind: "failed", why: place };
+    }
+    const begun = await workItems.startForHub(
+      {
+        title: PROBE_TITLE,
+        prompt: memoryRunWords.probeBrief(ask.prompt),
+        clean: true,
+        host: true,
+        lands: "none",
+        mayStart: [],
+        harness: ask.harness,
+        model: ask.model,
+        budget: ask.budget,
+        cwd: place.cwd,
+        machineId: place.machineId,
+      },
+      parentAt(routine, place)
+    );
+    if (begun instanceof ElysiaStatus) {
+      return { kind: "failed", why: begun.response.detail };
+    }
+    const { id } = begun.item;
+    return await new Promise<ProbeAnswer>((answer) => {
+      const late = lifetime.after("memory probe waited", PROBE_WAIT_MS, () => {
+        if (probes.delete(id)) {
+          answer({ kind: "failed", why: "it did not end within its time" });
+        }
+      });
+      probes.set(id, (ended) => {
+        lifetime.cancel(late);
+        answer(ended);
+      });
+    });
+  };
+
   /** The trim routine of `projectId` (null: the fleet-level one), when there is one. */
   const trimOf = (projectId: string | null): RoutineRow | undefined =>
     store.list(projectId).find((row) => row.target === "trim");
@@ -2930,6 +3025,7 @@ export const createRoutines = ({
     get,
     runsPage,
     recover,
+    probe,
     itemEnded,
     sendLeft,
     turnEnded,

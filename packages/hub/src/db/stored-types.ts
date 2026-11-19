@@ -161,6 +161,12 @@ export interface Lesson {
   /** He stated it again after the run changed or removed it: never evicted, demoted or retired by the run. */
   held?: true;
   home: LessonHome;
+  /**
+   * A short situation (`prompt`) and what a right answer does (`pass`):
+   * how a rule about behaviour is re-tested when the project's sessions
+   * run on a model it was not tested on.
+   */
+  probe?: { pass: string; prompt: string };
   /** Times he stated it again while it was live. */
   repeats: number;
   /** Removed, why and when, with its words kept for 30 days. */
@@ -192,6 +198,8 @@ export interface Lesson {
    */
   staged?: { home: LessonHome; text: string; waits?: "jev" };
   state: "staged" | "live" | "enforced" | "stale" | "retired";
+  /** The model it was last re-tested on, and stayed. */
+  tested?: string;
 }
 
 /** `memory/lessons.json`: what the hub knows of each lesson of a project's memory, by its id (`L-` and six hex characters). */
@@ -220,6 +228,8 @@ export interface MemoryRunState {
     reverted?: number;
     staged: number;
   } | null;
+  /** The model ids the project's lessons were re-tested on (or the project's sessions ran on when it first had none): one not here is a re-test. */
+  models?: string[];
   /** The day the one-time recovery run of the archived notes ran, once it has. */
   recovered?: string;
   /** The newest of the person's messages a run has read (an ISO time). */

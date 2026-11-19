@@ -518,6 +518,7 @@ const LessonShape = declared(
     check: z.object({ task: z.string() }).optional(),
     held: z.literal(true).optional(),
     home: LessonHomeShape,
+    probe: z.object({ pass: z.string(), prompt: z.string() }).optional(),
     repeats: z.number(),
     retired: z
       .object({
@@ -546,6 +547,7 @@ const LessonShape = declared(
       })
       .optional(),
     state: z.enum(["staged", "live", "enforced", "stale", "retired"]),
+    tested: z.string().optional(),
   }),
   "Lesson",
   "packages/hub/src/db/stored-types.ts"
