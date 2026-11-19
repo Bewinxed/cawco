@@ -88,15 +88,6 @@ export const toolInstallsPath = (): string =>
   join(cawcoDataDir(), "tool-installs.json");
 
 /**
- * The stages that answered as the agent last ended (agent stage.ts
- * `carryStages`), which the next agent starts again at their ports
- * (`resumeStages`): an agent's restart, which every update is, leaves each
- * stage serving as it was.
- */
-export const stagesCarriedPath = (): string =>
-  join(cawcoDataDir(), "stages-carried.json");
-
-/**
  * The env file `scripts/release.ts` loads the release signing key from
  * (`CAWCO_RELEASE_SIGNING_KEY`), with Bun's `--env-file`: inside the config
  * dir, so no workspace reads it.

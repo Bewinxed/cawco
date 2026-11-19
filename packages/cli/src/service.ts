@@ -1589,8 +1589,12 @@ const specsOf = (
 
 /**
  * Rewrites the units of `ids` this build writes differently from what is on
- * disk, and has systemd reload its unit files once; restarts, starts and
- * enables nothing. A service picks its new definition up at its next start.
+ * disk; restarts, starts and enables nothing. A service picks its new
+ * definition up at its next start. systemd reloads its unit files once only
+ * when it holds one of them as it read it before this rewrite (its
+ * `NeedDaemonReload`): a unit file new to it (a new build's keeper's own) is
+ * read as it is first named, and the handover reloads once after it enables
+ * that keeper (agent keeper-job.ts `reloadKeeperJobs`).
  * What a keeper handover runs from the build it hands the keeper to (`cawco
  * binary-units`, binary-apply.ts `handOverKeeper`): that build's keeper's own
  * unit, so a change to it reaches machines installed before it. On macOS the
@@ -1604,6 +1608,7 @@ export const refreshUnits = async (
 ): Promise<string[]> => {
   const mac = platform() === "darwin";
   const changed: string[] = [];
+  const units: string[] = [];
   for (const spec of specsOf(ids, "prod", binaryLayout)) {
     const [path, text] = mac
       ? [launchAgentPath(spec.name), plist(spec)]
@@ -1614,10 +1619,11 @@ export const refreshUnits = async (
     if (before !== text) {
       await writeUnit(path, text);
       changed.push(path);
+      units.push(unitName(spec.name));
       note(`rewrote ${path}`);
     }
   }
-  if (changed.length > 0 && !mac) {
+  if (!mac && (await heldAsBefore(units))) {
     const reloaded = await run(["systemctl", "--user", "daemon-reload"]);
     if (reloaded.exitCode !== 0) {
       throw failed("systemctl --user daemon-reload", reloaded);
@@ -1625,6 +1631,25 @@ export const refreshUnits = async (
     note("systemd reloaded its unit files");
   }
   return changed;
+};
+
+/** Whether systemd holds any of `units` as it read it before its file changed (`NeedDaemonReload`); a unit it never read is read as it is named. */
+const heldAsBefore = async (units: readonly string[]): Promise<boolean> => {
+  for (const name of units) {
+    const shown = await run([
+      "systemctl",
+      "--user",
+      "show",
+      "-p",
+      "NeedDaemonReload",
+      "--value",
+      name,
+    ]);
+    if (shown.stdout.toString().trim() === "yes") {
+      return true;
+    }
+  }
+  return false;
 };
 
 const UNIT_ENVIRONMENT = /^Environment=([^=\n]+)=(.*)$/gmu;

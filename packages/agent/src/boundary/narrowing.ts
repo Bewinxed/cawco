@@ -23,6 +23,7 @@ import {
   workProcesses,
 } from "./processes";
 import { listeners, type RunningSandbox } from "./sandboxes";
+import { serversIn } from "./servers";
 import {
   grantedPolicy,
   type Held,
@@ -78,11 +79,18 @@ export const supersededPorts = async (
  * listening sockets of its network ({@link listeners}) that a process of its
  * work has open, one that descends from its init and was not there when its
  * runner was ready ({@link inTree}), by the socket inodes in its
- * `/proc/<pid>/fd`. srt's own relays inside are its runner's, never its work's.
+ * `/proc/<pid>/fd`; with `only`, a process among those alone. srt's own
+ * relays inside are its runner's, never its work's.
  */
-const workPorts = async (seen: Seen[], place: Place): Promise<number[]> => {
+const workPorts = async (
+  seen: Seen[],
+  place: Place,
+  only?: readonly number[]
+): Promise<number[]> => {
   const idle = new Set(place.idle);
-  const work = inTree(seen, place.inner).filter((one) => !idle.has(one.pid));
+  const work = inTree(seen, place.inner).filter(
+    (one) => !idle.has(one.pid) && (only?.includes(one.pid) ?? true)
+  );
   const open = new Set(
     (await Promise.all(work.map((one) => socketsOf(one.pid)))).flat()
   );
@@ -96,26 +104,35 @@ const workPorts = async (seen: Seen[], place: Place): Promise<number[]> => {
 };
 
 /**
- * What the work of workspace `id`'s running boundary `held` still runs;
- * nothing once nothing does (processes.ts `busyOld`). Its work is every process in
- * it its runner did not start with ({@link workProcesses}), what a command
- * left behind with `&`, `nohup`, `setsid` or a double fork among them,
- * whatever its session or process group: on Linux each descends from the
- * sandbox's init, on macOS each answers to its generation's name.
+ * What the work of workspace `id`'s running boundary `held` still runs,
+ * read off `seen` (the process table now, unless a look read it already);
+ * nothing once nothing does (processes.ts `busyOld`). Its work is every
+ * process in it its runner did not start with ({@link workProcesses}), what
+ * a command left behind with `&`, `nohup`, `setsid` or a double fork among
+ * them, whatever its session or process group: on Linux each descends from
+ * the sandbox's init, on macOS each answers to its generation's name. The
+ * agent's own servers there (servers.ts `serversIn`) are said apart from it
+ * (processes.ts `Work.servers`): they keep nothing as it is, and move with a
+ * handover (processes.ts `ownWork`).
  */
 export const workLeft = async (
   id: string,
-  held: Held
+  held: Held,
+  seen?: Seen[]
 ): Promise<Work | undefined> => {
-  const seen = await snapshot();
-  const commands = await commandsIn(seen, id, held.gen);
-  const processes = await workProcesses(seen, id, held);
-  if (commands.length === 0 && processes.length === 0) {
+  const looked = seen ?? (await snapshot());
+  const marked = await commandsIn(looked, id, held.gen);
+  const running = await workProcesses(looked, id, held);
+  if (marked.length === 0 && running.length === 0) {
     return;
   }
+  const servers = await serversIn(id, looked, marked, running);
+  const commands = marked.filter((pid) => !servers.has(pid));
+  const processes = running.filter((pid) => !servers.has(pid));
+  const serving = marked.filter((pid) => servers.has(pid));
   const place =
     process.platform === "linux" ? await readPlace(id, held.gen) : undefined;
-  const ports = place ? await workPorts(seen, place) : [];
+  const ports = place ? await workPorts(looked, place, processes) : [];
   const words = [
     ...(commands.length > 0
       ? [
@@ -123,11 +140,17 @@ export const workLeft = async (
         ]
       : []),
     ...(ports.length > 0 ? [`listens on ${ports.join(", ")}`] : []),
+    ...(serving.length > 0
+      ? [
+          `serves ${serving.length === 1 ? "a stage" : `${serving.length} stages`} (executor ${serving.join(", ")})`,
+        ]
+      : []),
   ];
   return {
     commands,
     ports,
     processes,
+    servers: [...servers],
     words: words.length > 0 ? words.join(" and ") : "runs",
   };
 };

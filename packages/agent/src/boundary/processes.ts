@@ -19,6 +19,7 @@ import { MEMBERSHIP_PREFIX, membershipName } from "../boundary-policy";
 import { workspaceRecords } from "../workspace-records";
 import { commandsOf } from "./exec";
 import { type Seen, snapshot } from "./place-guard";
+import { agentServersIn } from "./servers";
 import {
   type Retiring,
   readHeld,
@@ -398,7 +399,9 @@ const COMMAND_DRAIN_LOOK_MS = 100;
  * Waits, with workspace `id`'s gate up (its caller's, decisions.ts `behindGate`),
  * for the commands past it in generation `gen` to end: each command arriving
  * meanwhile waits at the gate with no mark (exec.ts `execScript`), so only
- * those marked are waited on, for {@link COMMAND_DRAIN_MS} at most. It stops
+ * those marked are waited on, for {@link COMMAND_DRAIN_MS} at most, but the
+ * agent's own servers' (servers.ts `agentServers`), which never end on their
+ * own and move with the handover instead (servers.ts `moveServers`). It stops
  * waiting at once when an executor this agent started waits at the gate (a
  * preview's server the stage starts): a command past the
  * gate may be waiting on it (the tool call that serves the preview), and
@@ -412,18 +415,20 @@ export const commandsEnded = async (
   const { past } = await until(
     async () => {
       const seen = await snapshot();
+      const marked = await commandsIn(seen, id, gen);
+      const servers = new Set(agentServersIn(id));
       return {
-        past: await commandsIn(seen, id, gen),
-        ours: executors(
+        past: marked.filter((pid) => !servers.has(pid)),
+        // The agent's executors not past the gate: those waiting at it.
+        waiting: executors(
           seen.filter((one) => one.ppid === process.pid),
           id
-        ),
+        ).filter((pid) => !marked.includes(pid)),
       };
     },
     {
       deadline: Date.now() + COMMAND_DRAIN_MS,
-      done: ({ past: ran, ours }) =>
-        ran.length === 0 || ours.some((pid) => !ran.includes(pid)),
+      done: ({ past: ran, waiting }) => ran.length === 0 || waiting.length > 0,
       every: COMMAND_DRAIN_LOOK_MS,
     }
   );
@@ -442,17 +447,32 @@ export const drainable = (work: Work, before: readonly number[]): boolean =>
   work.commands.length > 0 &&
   !work.commands.some((pid) => before.includes(pid));
 
-/** What narrowing.ts `workLeft` found running in a boundary. */
+/**
+ * What narrowing.ts `workLeft` found running in a boundary: its work's own
+ * (its commands, processes and ports), and apart from them the agent's own
+ * servers there (servers.ts `serversIn`).
+ */
 export interface Work {
-  /** Its commands, by executor pid ({@link commandsIn}). */
+  /** Its commands, by executor pid ({@link commandsIn}), the agent's servers' left out. */
   readonly commands: readonly number[];
-  /** The ports its work listens on (narrowing.ts `workPorts`). */
+  /** The ports its own work listens on (narrowing.ts `workPorts`). */
   readonly ports: readonly number[];
-  /** Every process of its work, by pid ({@link workProcesses}). */
+  /** Every process of its work, by pid ({@link workProcesses}), the agent's servers' left out. */
   readonly processes: readonly number[];
-  /** Its commands and ports in words ("runs a command (executor 6824)", "listens on 5222", "runs"). */
+  /** The agent's own servers there, their executors and processes, by pid: they move with a handover (servers.ts `moveServers`), and keep nothing as it is. */
+  readonly servers: readonly number[];
+  /** What runs, in words ("runs a command (executor 6824)", "listens on 5222", "serves a stage (executor 6901)"). */
   readonly words: string;
 }
+
+/**
+ * Whether `work` is the work's own and keeps its boundary as it is until it
+ * ends: a command or a process that is not the agent's own server's. A
+ * boundary whose work is only the agent's servers is handed over, and they
+ * start again in the new one (servers.ts `moveServers`).
+ */
+export const ownWork = (work: Work): boolean =>
+  work.commands.length > 0 || work.processes.length > 0;
 
 /**
  * How long what a session left running in a workspace is given to end on

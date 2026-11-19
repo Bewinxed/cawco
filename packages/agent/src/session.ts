@@ -280,7 +280,7 @@ import {
   procEpoch,
 } from "./sessiond-client";
 import { SpinOffs } from "./spin-offs";
-import { carryStages } from "./stage";
+import { endStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
 import { forgetTaken, hasTaken, noteTaken } from "./taken-sends";
 import { beginToolSignin, completeToolSignin } from "./tool-signin";
@@ -2248,9 +2248,9 @@ export class SessionSupervisor {
   detach(): void {
     stopPreviews();
     closeCanvasScreens();
-    // A stage speaks to this daemon alone (its stdout): each that answers is
-    // written down and ended, and the next daemon starts it again at its port.
-    carryStages();
+    // A stage speaks to this daemon alone (its stdout): each is ended, and
+    // the next daemon starts it on its first use.
+    endStages();
     for (const instanceId of [...this.#live.sessions.keys()]) {
       this.#live.drop(instanceId, { why: "detached" });
     }

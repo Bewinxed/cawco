@@ -1056,9 +1056,6 @@ export const STAGE_UNPIN = "stageUnpin";
 /** How long a pin may take to cut: a clone's fetch and mirror ({@link STAGE_CLONE_GIT_MS}), or a folder's copy. Ours. */
 export const STAGE_PIN_MS = 120_000;
 
-/** The agent's log line, after a stage's name, once a stage it carried across its restart answers again (agent stage.ts `resumeStages`). */
-export const STAGE_RESUMED_SAID = "started again after the agent's restart";
-
 /** How long a stage has to answer once started. The spec's number. */
 export const STAGE_READY_MS = 60_000;
 

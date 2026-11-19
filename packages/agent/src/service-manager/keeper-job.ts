@@ -30,6 +30,23 @@
  * (session-containers.ts `endSessionContainers`), and only then. `force` is
  * the one override: the person asked for the stop outright.
  *
+ * ONE RELOAD PER UPDATE. systemd's `daemon-reload` reads every unit again
+ * (about 700 on obelisk, 330–470 ms each), and `enable` and `disable` run
+ * one each unless told not to: an update ran seven. A keeper's own unit is
+ * new to systemd when it starts, a file it has never loaded, and is loaded
+ * as the start names it; enabling the new keeper and retiring the ones
+ * before change only the links on disk ({@link KeeperJob.enable},
+ * {@link KeeperJob.retire}), and the handover reloads once after both
+ * ({@link reloadKeeperJobs}, cli binary-apply.ts `handOverKeeper`), so the
+ * agent's unit requires the new keeper from then on, and no keeper before.
+ * A keeper removed after that is required by nothing, and its stop reaches
+ * nothing else: its files go with no reload, and systemd lets the dead unit
+ * go by itself. One that is still required (its retire was never reloaded)
+ * is reloaded for first: stopped while the agent's unit requires it, systemd
+ * would stop the agent with it (systemd.unit(5) `Requires=`: "this unit will
+ * be stopped (or restarted) if one of the other units is explicitly stopped
+ * (or restarted)").
+ *
  * macOS has no cgroups. launchd ends a job's process group as the job stops
  * (launchd.plist(5) `AbandonProcessGroup`: "When a job dies, launchd kills any
  * remaining processes with the same process group ID as the job"), and every
@@ -186,7 +203,7 @@ export async function foreignIn(
 
 /** One keeper's job, as the service manager runs it. */
 export interface KeeperJob {
-  /** Enabled: it starts with the machine (systemd), or loads at login (its plist is there). */
+  /** Enabled: it starts with the machine (systemd: once the service manager reloads, {@link reloadKeeperJobs}), or loads at login (its plist is there). */
   readonly enable: () => Promise<void>;
   /**
    * How its keeper ended, when it is not running since it was last started:
@@ -216,7 +233,7 @@ export interface KeeperJob {
   readonly remove: (stop: UnitStop) => Promise<void>;
   /** Restarts it in place, with everything it holds. Refused as {@link remove} is. */
   readonly restart: (stop: UnitStop) => Promise<void>;
-  /** Not started with the machine any more; left running. */
+  /** Not started with the machine any more, once the service manager reloads ({@link reloadKeeperJobs}); left running. */
   readonly retire: () => Promise<void>;
   /** Its keeper's service name, as {@link keeperService} gives it. */
   readonly service: string;
@@ -224,10 +241,45 @@ export interface KeeperJob {
   readonly start: () => Promise<void>;
 }
 
+/** systemd reads every unit file again: the one reload ({@link reloadKeeperJobs}). */
+const reloadSystemd = async (): Promise<void> => {
+  await must(["systemctl", "--user", "daemon-reload"]);
+};
+
+/**
+ * Whether a unit systemd has loaded names `unit` among what it requires
+ * (`RequiredBy=`, the agent's unit while it is the current keeper's): its
+ * stop would stop that unit too.
+ */
+const stillRequired = async (unit: string): Promise<boolean> => {
+  const shown = await run([
+    "systemctl",
+    "--user",
+    "show",
+    "-p",
+    "RequiredBy",
+    "--value",
+    unit,
+  ]);
+  return shown.code === 0 && shown.stdout.trim() !== "";
+};
+
+/**
+ * The service manager takes what the keepers' jobs changed on disk: on Linux
+ * one `daemon-reload`, after a handover has enabled the new keeper and
+ * retired every other ({@link KeeperJob.enable}, {@link KeeperJob.retire}),
+ * so the agent's unit requires the new keeper and none before it. Nothing on
+ * macOS, where a plist is read as its job loads.
+ */
+export const reloadKeeperJobs = async (): Promise<void> => {
+  if (process.platform === "linux") {
+    await reloadSystemd();
+  }
+};
+
 const systemdJob = (service: string): KeeperJob => {
   const unit = unitName(service);
   const file = join(systemdDir(), unit);
-  const reload = () => must(["systemctl", "--user", "daemon-reload"]);
   const foreign = (children: readonly number[]) => foreignIn(unit, children);
   /** Throws {@link KeeperKept} when the unit holds what its keeper does not. */
   const mayStop = async (stop: UnitStop): Promise<void> => {
@@ -297,10 +349,10 @@ const systemdJob = (service: string): KeeperJob => {
       await must(["systemctl", "--user", "start", unit]);
     },
     async enable() {
-      await must(["systemctl", "--user", "enable", unit]);
+      await must(["systemctl", "--user", "enable", "--no-reload", unit]);
     },
     async retire() {
-      await must(["systemctl", "--user", "disable", unit]);
+      await must(["systemctl", "--user", "disable", "--no-reload", unit]);
     },
     async restart(stop) {
       await mayStop(stop);
@@ -310,11 +362,13 @@ const systemdJob = (service: string): KeeperJob => {
     },
     async remove(stop) {
       await mayStop(stop);
-      await run(["systemctl", "--user", "disable", unit]);
+      await run(["systemctl", "--user", "disable", "--no-reload", unit]);
+      if (await stillRequired(unit)) {
+        await reloadSystemd();
+      }
       await must(["systemctl", "--user", "stop", unit]);
       await rm(file, { force: true });
       await rm(`${file}.d`, { recursive: true, force: true });
-      await reload();
     },
   };
 };

@@ -23,7 +23,7 @@
  *   answering `live` within {@link STAGE_READY_MS} or `error`;
  * - installs its project first when its lockfile or package.json moved past
  *   its last install (stage-install.ts), and, live, is installed and started
- *   again once they move ({@link reinstall}); a failed install is its
+ *   again once they move ({@link startAgain}); a failed install is its
  *   `error`, in the installer's words;
  * - is asked {@link HEALTH_PATH} every {@link STAGE_HEALTH_MS}; a stage that
  *   ends or stops answering is started again, {@link STAGE_RESTARTS} times
@@ -34,9 +34,12 @@
  *   through a preview of it) and no use (a request, an agent's read, a
  *   decision page's warm-up); the next use wakes it;
  * - stops when its workspace is archived ({@link stopStages}), and with the
- *   daemon, which writes down each stage that answers for the next daemon
- *   to start again at its port ({@link carryStages}, {@link resumeStages}):
- *   an agent's restart, an update's included, leaves it serving.
+ *   daemon ({@link endStages}); the next daemon starts it on its first use,
+ *   so an agent's restart, an update's included, starts no stage nobody
+ *   uses;
+ * - moves when its boundary is handed over (a keeper's retirement, a new
+ *   form): it starts again in the boundary that runs now
+ *   ({@link moveStages}), so no older boundary or keeper is kept for it.
  *
  * Each change goes to the hub as a {@link StageFrame} ({@link AgentPorts.stage}),
  * which the hub keeps in the doc of each sheet the stage serves.
@@ -54,15 +57,15 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { PictureCut } from "@cawco/core/artifact-picture";
 import { backoffWait } from "@cawco/core/backoff";
 import { type Bounded, readWhileMoving, readWithin } from "@cawco/core/bounded";
 import { BROWSER_PORTS } from "@cawco/core/browser";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { browserGatePort } from "@cawco/core/env-ports";
 import { makeFolder } from "@cawco/core/folders";
-import { stagesCarriedPath } from "@cawco/core/paths/cawco";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -88,7 +91,6 @@ import {
   STAGE_IDLE_MS,
   STAGE_READY_MS,
   STAGE_RESTARTS,
-  STAGE_RESUMED_SAID,
   STORIES_PATH,
   STORY_FILE,
   type StageError,
@@ -101,7 +103,6 @@ import {
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
-import { readRecord, writeStateFileSync } from "@cawco/core/state-file";
 import {
   DesignMapSchema,
   ReportAnswerSchema,
@@ -130,7 +131,7 @@ import type { AgentPorts } from "./agent-ports";
 import { drawPage } from "./artifact-picture";
 import { ensureBoundary } from "./boundary/ensure";
 import { listeners, workspaceNetworks } from "./boundary/sandboxes";
-import { agentServerStarted } from "./boundary/work";
+import { agentServerStarted } from "./boundary/servers";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
 import {
@@ -1177,7 +1178,7 @@ function watch(stage: Stage): void {
     }
     if (await depsMoved(stage)) {
       if (stage.status === "live") {
-        reinstall(stage);
+        startAgain(stage, REINSTALLING);
       }
       return;
     }
@@ -1186,19 +1187,55 @@ function watch(stage: Stage): void {
 }
 
 /**
- * A live stage whose project moved past its install (a fast-forward or a
- * rebase brought a new lockfile): ended, then started again, which installs
- * first ({@link start}), so it never serves on the dependencies it had.
+ * A live stage ended, then started again ({@link start}), `why` its status's
+ * message meanwhile: its project moved past its install (a fast-forward or a
+ * rebase brought a new lockfile), and the start installs first, so it never
+ * serves on the dependencies it had; or its boundary was handed over
+ * ({@link moveStages}), and the start runs it in the boundary that runs now.
  */
-function reinstall(stage: Stage): void {
+function startAgain(stage: Stage, why: string): void {
   stage.stopping = true;
   kill(stage);
   stage.status = "starting";
   stage.restarts = 0;
-  stage.message = "its lockfile changed: installing, then starting it again";
+  stage.message = why;
   tell(stage);
   stage.ready = start(stage);
   stage.ready.catch(() => undefined);
+}
+
+/** {@link startAgain}'s message for a stage whose lockfile moved. */
+const REINSTALLING = "its lockfile changed: installing, then starting it again";
+
+/**
+ * The stages whose executor is among `executors`, each a server of a
+ * boundary generation that is no longer current (boundary/servers.ts
+ * `moveServers`): each live one started again ({@link startAgain}), at its
+ * port, in the generation its boundary runs now (its executor enters the
+ * current one), and ended in the older one, which then closes once nothing
+ * else runs in it. One still starting finishes first, and is moved at a
+ * later look. Answers how many stages they are.
+ */
+export function moveStages(executors: readonly number[]): number {
+  const leaving = new Set(executors);
+  let found = 0;
+  for (const stage of stages.values()) {
+    const executor = stage.child ? spawnedPid(stage.child) : undefined;
+    if (executor === undefined || !leaving.has(executor)) {
+      continue;
+    }
+    found += 1;
+    if (stage.status === "live") {
+      console.info(
+        `[stage] ${stage.key}: its boundary was handed over, so it starts again there`
+      );
+      startAgain(
+        stage,
+        "its boundary was handed over: starting it again there"
+      );
+    }
+  }
+  return found;
 }
 
 /** Asleep: stopped for want of a viewer, started again on the next use. */
@@ -1415,8 +1452,16 @@ async function start(stage: Stage): Promise<void> {
   const child = spawn(boundary.exec, [command], {
     cwd: stage.root,
     detached: true,
-    // The executor enters the boundary in `$PWD`.
-    env: { ...hostEnvironment(), PWD: stage.root, ...env },
+    // The executor enters the boundary in `$PWD`. Its mark goes with it to
+    // everything the server starts in there: what of the boundary's work is
+    // this server's, which moves with a handover (boundary/servers.ts
+    // `serversIn`).
+    env: {
+      ...hostEnvironment(),
+      PWD: stage.root,
+      ...env,
+      [CAWCO_ENV.stageServer]: stage.key,
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   stage.child = child;
@@ -1427,7 +1472,7 @@ async function start(stage: Stage): Promise<void> {
   // only this mark spares it.
   const executor = spawnedPid(child);
   if (executor !== undefined) {
-    const release = agentServerStarted(stage.workspace.id, executor);
+    const release = agentServerStarted(stage.boundary.id, executor);
     child.once("exit", release);
     child.once("error", release);
   }
@@ -1981,7 +2026,7 @@ async function wake(stage: Stage, by: string, restart = true): Promise<void> {
     if (!(restart && (await depsMoved(stage)) && stage.status === "live")) {
       return;
     }
-    reinstall(stage);
+    startAgain(stage, REINSTALLING);
   }
   if (stage.status === "error" && !restart) {
     throw new StageRefusal(
@@ -2274,171 +2319,16 @@ async function unpinFrom(id: string): Promise<void> {
 }
 
 /**
- * What a stage that answered as the daemon ended carries to the next daemon
- * ({@link carryStages}, {@link resumeStages}): its workspace, what it runs
- * (a sheet's toolchain root; a server's command, folder and port) and its
- * last use, so its idle time goes on counting from there.
+ * The daemon's end: every stage is ended. A stage speaks to this daemon alone
+ * (its stdout), so none is left running. The next daemon starts none of them
+ * as it starts: each starts on its first use, a preview's request, a viewer,
+ * an agent's read or the hub's serve call (`wakeSource`, `ensureStage`,
+ * `ensureServed`), as a stage asleep does. Starting each that answered at the
+ * restart started every pin's server and stage host again at every agent
+ * start, 13 times on obelisk on 19 Nov, each a load spike of its own.
  */
-const CarriedStageSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("sheet"),
-    workspace: z.string(),
-    dir: z.string(),
-    lastUse: z.number(),
-  }),
-  z.object({
-    kind: z.literal("serve"),
-    workspace: z.string(),
-    command: z.string(),
-    cwd: z.string(),
-    port: z.number(),
-    lastUse: z.number(),
-  }),
-]);
-const CarriedStagesSchema = z.array(CarriedStageSchema);
-type CarriedStage = z.infer<typeof CarriedStageSchema>;
-
-/** Whether a stage answers or is on its way to: what an agent's restart carries. One asleep or in `error` waits for its next use, as before. */
-const answering = (stage: Stage): boolean =>
-  stage.status === "live" ||
-  stage.status === "starting" ||
-  stage.status === "waking";
-
-const carriedOf = (stage: Stage): CarriedStage => {
-  // A viewer's socket ends with this daemon; it was a use until now.
-  const lastUse = stage.viewers > 0 ? Date.now() : stage.lastUse;
-  return stage.runs.kind === "sheet"
-    ? { kind: "sheet", workspace: stage.workspace.id, dir: stage.dir, lastUse }
-    : {
-        kind: "serve",
-        workspace: stage.workspace.id,
-        command: stage.runs.command,
-        cwd: stage.dir,
-        port: stage.port,
-        lastUse,
-      };
-};
-
-/**
- * The daemon's end: each stage that answers is written down for the next
- * daemon to start again ({@link resumeStages}), then every stage is ended.
- * A stage speaks to this daemon alone (its stdout), so none is left running;
- * without the record, one with no viewer stayed down after every restart,
- * an update's included, until a new artifact or a preview's request woke it.
- */
-export function carryStages(): void {
-  const carried = [...stages.values()].filter(answering).map(carriedOf);
-  try {
-    writeStateFileSync(stagesCarriedPath(), `${JSON.stringify(carried)}\n`);
-  } catch (error) {
-    console.warn(
-      `[stage] the ${carried.length} stage(s) that answer were not written down for the next agent: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
+export function endStages(): void {
   for (const stage of [...stages.values()]) {
     stopOne(stage);
   }
-}
-
-/** The stages the last daemon carried ({@link carryStages}), the record taken as read; none when it left none or the record is damaged. */
-async function carriedStages(): Promise<CarriedStage[]> {
-  const file = stagesCarriedPath();
-  try {
-    return (await readRecord(file, CarriedStagesSchema)) ?? [];
-  } catch (error) {
-    console.warn(
-      `[stage] what the last agent carried was not read: ${error instanceof Error ? error.message : String(error)}`
-    );
-    return [];
-  } finally {
-    await rm(file, { force: true });
-  }
-}
-
-/** What started a carried stage again, as its use says it. */
-const RESUMED_BY = "the agent's restart";
-
-/** The tree a carried stage ran in: its pin's clone, or its workspace's or place's; nothing when that is gone. */
-async function carriedTree(
-  ports: StagePorts,
-  workspace: string,
-  refs: WorkspaceRef[]
-): Promise<Tree | undefined> {
-  if (isPin(workspace)) {
-    const clone = await pinnedTree(workspace);
-    return clone && pinTree(workspace, clone, ports);
-  }
-  const ref = refs.find((one) => one.id === workspace);
-  return ref && (await treeOf(ref, ports));
-}
-
-/** One carried stage started again at its port, its last use kept; nothing when its workspace is gone, or it started since. */
-async function resumeOne(
-  ports: StagePorts,
-  carried: CarriedStage,
-  refs: WorkspaceRef[]
-): Promise<void> {
-  const tree = await carriedTree(ports, carried.workspace, refs);
-  if (!tree) {
-    console.info(
-      `[stage] ${carried.workspace.slice(0, 8)} ${carried.kind === "sheet" ? carried.dir : `port ${carried.port}`}: not started again, its workspace is no longer on this machine`
-    );
-    return;
-  }
-  const { ref } = tree;
-  let stage: Stage;
-  if (carried.kind === "sheet") {
-    if (stages.has(sheetKey(ref.id, carried.dir))) {
-      return;
-    }
-    stage = await rootStage(tree, join(tree.folder, carried.dir), RESUMED_BY);
-  } else {
-    if (stages.has(serveKey(ref.id, carried.port))) {
-      return;
-    }
-    await servedOn(
-      tree,
-      { command: carried.command, cwd: carried.cwd, port: carried.port },
-      RESUMED_BY
-    );
-    const served = stages.get(serveKey(ref.id, carried.port));
-    if (!served) {
-      return;
-    }
-    stage = served;
-  }
-  // Its idle time goes on from its last use before the restart, never anew.
-  if (stage.viewers === 0) {
-    stage.lastUse = Math.min(stage.lastUse, carried.lastUse);
-  }
-  console.info(
-    `[stage] ${ref.id.slice(0, 8)} ${carried.kind === "sheet" ? carried.dir : `port ${carried.port}`}: ${STAGE_RESUMED_SAID}`
-  );
-}
-
-/**
- * The daemon's start: each stage the last daemon carried ({@link
- * carryStages}) started again at the same port (a sheet's is its key's, a
- * server's its own), as it would be on its next use, with no viewer or
- * artifact asked of it. One whose idle time ran out while no daemon ran
- * stays asleep: its next use wakes it. One that cannot start is in `error`
- * as any start's failure is, and said.
- */
-export async function resumeStages(ports: StagePorts): Promise<void> {
-  const carried = (await carriedStages()).filter(
-    (one) => Date.now() - one.lastUse <= IDLE_MS
-  );
-  if (carried.length === 0) {
-    return;
-  }
-  const refs = await workspaceRefs();
-  await Promise.all(
-    carried.map((one) =>
-      resumeOne(ports, one, refs).catch((error: unknown) =>
-        console.warn(
-          `[stage] ${one.workspace.slice(0, 8)} ${one.kind === "sheet" ? one.dir : `port ${one.port}`}: not started again after the agent's restart: ${error instanceof Error ? error.message : String(error)}`
-        )
-      )
-    )
-  );
 }

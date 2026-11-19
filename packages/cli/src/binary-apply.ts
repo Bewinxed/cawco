@@ -45,6 +45,7 @@ import { stopService } from "@cawco/agent/service-manager/install";
 import {
   type KeeperJob,
   keeperJob,
+  reloadKeeperJobs,
 } from "@cawco/agent/service-manager/keeper-job";
 import { SessiondClient } from "@cawco/agent/sessiond-client";
 import { humanSize } from "@cawco/core/attachments";
@@ -561,7 +562,9 @@ async function runsPreviewServer(version: string): Promise<boolean> {
  * `#tendKeepers`). A keeper of `to` that does not answer is removed before
  * anything else changes, so the current keeper stays the machine's with
  * everything it holds; one that was already running (a retiring keeper of
- * `to`, made current again) is never removed here.
+ * `to`, made current again) is never removed here. The service manager is
+ * reloaded once, after the new keeper is enabled and every other retired:
+ * the update's one reload (keeper-job.ts `reloadKeeperJobs`).
  */
 async function handOverKeeper(to: string): Promise<KeeperMove> {
   const machine = machineEndpoint();
@@ -650,6 +653,14 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
         )
       );
   }
+  // The update's one reload of the service manager (keeper-job.ts
+  // `reloadKeeperJobs`): the agent's unit requires this keeper from here on
+  // and none before it, so a retiring keeper's removal stops it alone.
+  await reloadKeeperJobs().catch((error: unknown) =>
+    say(
+      `keeper ${to}: the service manager did not reload (${message(error)}); a retiring keeper is reloaded for as it is removed`
+    )
+  );
   return { outcome: "moved" };
 }
 

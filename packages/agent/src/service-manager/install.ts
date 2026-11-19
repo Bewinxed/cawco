@@ -279,7 +279,15 @@ export const writeSocketUnits = async (
     !sockets.some((socket) => socket.unit === stale) &&
     existsSync(socketPath(stale))
   ) {
-    await run(["systemctl", "--user", "disable", "--now", socketName(stale)]);
+    // The reload that follows the writes takes the link away too.
+    await run([
+      "systemctl",
+      "--user",
+      "disable",
+      "--no-reload",
+      "--now",
+      socketName(stale),
+    ]);
     await Bun.file(socketPath(stale)).delete();
     note(`removed ${socketPath(stale)}`);
   }
@@ -314,7 +322,14 @@ export const bindSockets = async (
   for (const socket of sockets) {
     const name = socketName(socket.unit);
     const bound = await run(["systemctl", "--user", "restart", name]);
-    const enabled = await run(["systemctl", "--user", "enable", name]);
+    // Only ever after the reload that read its socket unit.
+    const enabled = await run([
+      "systemctl",
+      "--user",
+      "enable",
+      "--no-reload",
+      name,
+    ]);
     if (socket.required && bound.exitCode !== 0) {
       throw failed("systemctl --user restart", bound);
     }
@@ -355,10 +370,12 @@ export const installSystemdUnits = async (
     if (moving) {
       await bindSockets(spec, moving, note);
     }
+    // Read by the reload above: enabling it reloads nothing again.
     const enabled = await run([
       "systemctl",
       "--user",
       "enable",
+      "--no-reload",
       "--now",
       unitName(spec.name),
     ]);
@@ -443,7 +460,14 @@ export const uninstallSystemdUnits = async (
 ): Promise<void> => {
   for (const spec of specs) {
     await mayStopKeeper(spec, force);
-    await run(["systemctl", "--user", "disable", "--now", unitName(spec.name)]);
+    await run([
+      "systemctl",
+      "--user",
+      "disable",
+      "--no-reload",
+      "--now",
+      unitName(spec.name),
+    ]);
     await Bun.file(systemdPath(spec.name))
       .delete()
       .catch(() => {
@@ -455,6 +479,7 @@ export const uninstallSystemdUnits = async (
         "systemctl",
         "--user",
         "disable",
+        "--no-reload",
         "--now",
         socketName(socket.unit),
       ]);
@@ -466,6 +491,7 @@ export const uninstallSystemdUnits = async (
       note(`removed ${socketPath(socket.unit)}`);
     }
   }
+  // Once for the set, every link and file above taken away.
   await run(["systemctl", "--user", "daemon-reload"]);
 };
 

@@ -165,16 +165,11 @@ import {
 import { makeDirs, ownInodes } from "./package-managers";
 import { type Seen, snapshot } from "./place-guard";
 import { formMoveWords, formOf, planOf, REASONS_SAID } from "./plan";
-import {
-  busyOld,
-  commandsEnded,
-  commandsIn,
-  drainable,
-  type Work,
-} from "./processes";
+import { commandsEnded, drainable, ownWork, type Work } from "./processes";
 import { HOST_FILES, HOST_GONE_STATUS } from "./protocol";
 import { srtTmpOf } from "./runner";
 import { endMembers, sandboxes } from "./sandboxes";
+import { moveServers } from "./servers";
 import {
   writeChromiumShim,
   writeGitShim,
@@ -462,9 +457,10 @@ const replaceOlder = async (
   // handover (nightly f4b526231, 2026-10-21: twice an idle look, then "kept
   // as it is while its work runs a command (executor 6824)").
   const found = await workLeft(ref.id, held);
-  const tried = found
-    ? { kept: found }
-    : await handOverWhenIdle(client, ref, held, grant);
+  const tried =
+    found && ownWork(found)
+      ? { kept: found }
+      : await handOverWhenIdle(client, ref, held, grant);
   if ("fresh" in tried) {
     forgetStale(ref.id);
     return tried.fresh;
@@ -545,7 +541,10 @@ const stopUnvouched = async (
  * reading and the handover; each command that arrived meanwhile waits at the
  * gate and runs through the new one. Answers the new boundary, or the work
  * that keeps this one: a command running, a listener, a process a command
- * left. `grant` is why its grant is not comparable, if that is why.
+ * left. The agent's own servers keep nothing: they start again in the new
+ * one (servers.ts `moveServers`), and the older one closes once they have
+ * left it ({@link closeIdle}). `grant` is why its grant is not comparable, if
+ * that is why.
  */
 const handOverWhenIdle = (
   client: SessiondClient,
@@ -553,11 +552,30 @@ const handOverWhenIdle = (
   held: Held,
   grant: string | undefined
 ): Promise<{ readonly fresh: Boundary } | { readonly kept: Work }> =>
+  replacedWhenIdle(ref, held, async (servers) => {
+    const fresh = await handOver(client, ref, held, grant);
+    moveServers(servers);
+    return fresh;
+  });
+
+/**
+ * Behind workspace `ref`'s gate ({@link behindGate}), boundary `held`'s work
+ * read once ({@link workLeft}), and with none of its own left the boundary
+ * replaced (`replace`), handed the agent's servers that run in it to move
+ * (servers.ts `moveServers`): they keep nothing as it is. Answers the new
+ * boundary, or the work that keeps this one.
+ */
+const replacedWhenIdle = (
+  ref: WorkspaceRef,
+  held: Held,
+  replace: (servers: readonly number[]) => Promise<Boundary>
+): Promise<{ readonly fresh: Boundary } | { readonly kept: Work }> =>
   behindGate(ref.id, async () => {
     const work = await workLeft(ref.id, held);
-    return work
-      ? { kept: work }
-      : { fresh: await handOver(client, ref, held, grant) };
+    if (work && ownWork(work)) {
+      return { kept: work };
+    }
+    return { fresh: await replace(work?.servers ?? []) };
   });
 
 /**
@@ -1188,54 +1206,98 @@ export const closeWhenIdle = (id: string): void => {
  * Closes every older boundary of workspace `id` that nothing runs in any
  * more, that is no longer running, or whose work a newer generation took
  * over ({@link supersededPorts}), with every process in it, and cleans its
- * files; one that still runs something of its own is left as it is. Answers
- * whether any is left.
+ * files; one that still runs something of its own is left as it is. The
+ * agent's own servers in one start again in the current generation
+ * (servers.ts `moveServers`), and it waits for them; one whose servers no
+ * stage of this agent runs closes with them. Answers whether any is left.
  */
 const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
   const now = process.platform === "linux" ? await sandboxes(id) : [];
   let left = false;
   for (const old of await readRetiring(id)) {
-    const alive = Boolean(await running(id, old));
-    let closed = alive
-      ? "has nothing left running in it and is closed"
-      : "is gone";
-    let why: "gone" | "idle" | "superseded" = alive ? "idle" : "gone";
-    let taken: readonly number[] = [];
-    if (alive && (await busyOld(seen, id, old))) {
-      // A command still running there keeps it, whatever its work listens
-      // on and whoever listens there since ({@link commandsIn}).
-      const ports =
-        (await commandsIn(seen, id, old.gen)).length > 0
-          ? undefined
-          : await supersededPorts(seen, old, now);
-      if (!ports) {
-        left = true;
-        continue;
-      }
-      // What still runs there is the delegate's: it is said to it.
-      const line = await tellStopped(
-        id,
-        `a newer boundary of this workspace listens on every port its older one's work listened on (${ports.join(", ")}), so the older one was closed`,
-        await workIn(id, old)
-      );
-      closed = `is closed with what runs in it: a newer generation listens on every port its work listened on (${ports.join(", ")})${line ? `; said to the delegate: ${line}` : ""}`;
-      why = "superseded";
-      taken = ports;
+    const fate = await olderFate(seen, id, old, now);
+    if ("left" in fate) {
+      left = true;
+      continue;
     }
     await stopBoundary(id, old);
     await cleanGeneration(id, old);
     await rm(retiringFileOf(id, old), { force: true });
     console.info(
-      `[workspace] ${id}: its older boundary ${old.pid} (form ${old.form ?? "none"}) ${closed}`
+      `[workspace] ${id}: its older boundary ${old.pid} (form ${old.form ?? "none"}) ${fate.closed}`
     );
     await recordDecision(id, {
       ...decided(old),
       decision: "older-closed",
-      ports: taken,
-      why,
+      ports: fate.taken,
+      why: fate.why,
     });
   }
   return left;
+};
+
+/** What {@link closeIdle} makes of one older boundary: left as it is, or closed, said and recorded as why. */
+type OlderFate =
+  | { readonly left: true }
+  | {
+      readonly closed: string;
+      readonly taken: readonly number[];
+      readonly why: "gone" | "idle" | "superseded";
+    };
+
+/**
+ * {@link closeIdle}'s reading of workspace `id`'s older boundary `old`, off
+ * `seen` and the sandboxes that run now (`now`). The agent's servers in it
+ * start again in the current generation first (servers.ts `moveServers`).
+ */
+const olderFate = async (
+  seen: Seen[],
+  id: string,
+  old: Held,
+  now: Awaited<ReturnType<typeof sandboxes>>
+): Promise<OlderFate> => {
+  if (!(await running(id, old))) {
+    return { closed: "is gone", taken: [], why: "gone" };
+  }
+  const work = await workLeft(id, old, seen);
+  if (!work) {
+    return {
+      closed: "has nothing left running in it and is closed",
+      taken: [],
+      why: "idle",
+    };
+  }
+  // The older one waits for the servers a stage still runs to move.
+  const moving = moveServers(work.servers);
+  if (!ownWork(work)) {
+    return moving > 0
+      ? { left: true }
+      : {
+          closed: `runs only servers no stage of this agent runs (${work.words}), and is closed with them`,
+          taken: [],
+          why: "idle",
+        };
+  }
+  // A command still running there keeps it, whatever its work listens on and
+  // whoever listens there since (processes.ts `commandsIn`).
+  const ports =
+    work.commands.length > 0
+      ? undefined
+      : await supersededPorts(seen, old, now);
+  if (!ports) {
+    return { left: true };
+  }
+  // What still runs there is the delegate's: it is said to it.
+  const line = await tellStopped(
+    id,
+    `a newer boundary of this workspace listens on every port its older one's work listened on (${ports.join(", ")}), so the older one was closed`,
+    await workIn(id, old)
+  );
+  return {
+    closed: `is closed with what runs in it: a newer generation listens on every port its work listened on (${ports.join(", ")})${line ? `; said to the delegate: ${line}` : ""}`,
+    taken: ports,
+    why: "superseded",
+  };
 };
 
 /**
@@ -1297,7 +1359,7 @@ const restartStubbed = async (): Promise<void> => {
         continue;
       }
       const work = await workLeft(ref.id, held);
-      if (work && !drainable(work, entry.commands)) {
+      if (work && ownWork(work) && !drainable(work, entry.commands)) {
         noteStubbedCommands(entry, work.commands);
         continue;
       }
@@ -1338,18 +1400,17 @@ const restartStubbed = async (): Promise<void> => {
  * {@link restartStubbed}'s one workspace, behind the gate: its work read once
  * ({@link workLeft}: the commands past the gate, never one waiting at it, and
  * what its sandbox runs), and with none left a new boundary on the current
- * keeper, the one before stopped on whichever keeper runs it. Answers the new
+ * keeper, the one before stopped on whichever keeper runs it. The agent's own
+ * servers keep nothing: each is ended first and started again in the new one
+ * (servers.ts `moveServers`), whose start it waits for. Answers the new
  * boundary, or the work that keeps this one.
  */
 const restartIfIdle = (
   ref: WorkspaceRef,
   held: Held
 ): Promise<{ readonly fresh: Boundary } | { readonly kept: Work }> =>
-  behindGate(ref.id, async () => {
-    const work = await workLeft(ref.id, held);
-    if (work) {
-      return { kept: work };
-    }
+  replacedWhenIdle(ref, held, async (servers) => {
+    moveServers(servers);
     const stuck = await stopGeneration(ref.id, held);
     if (stuck) {
       throw new Error(stuck);
@@ -1365,7 +1426,7 @@ const restartIfIdle = (
       reasons: reasonsOf({ leftDirs: true }),
       to: decided(fresh),
     });
-    return { fresh };
+    return fresh;
   });
 
 /**
@@ -1396,7 +1457,7 @@ const handOverStale = async (): Promise<void> => {
         continue;
       }
       const work = await workLeft(ref.id, held);
-      if (work && !drainable(work, kept.commands)) {
+      if (work && ownWork(work) && !drainable(work, kept.commands)) {
         markKeptRunning(ref.id, { ...kept, commands: work.commands });
         continue;
       }

@@ -93,6 +93,15 @@ export const CAWCO_ENV = {
    * session's shell, so `cawco tool` there acts as that session and no other.
    */
   instanceId: "CAWCO_INSTANCE_ID",
+  /**
+   * Set by the agent on each stage's host and preview server it starts in a
+   * workspace's boundary (agent stage.ts `start`), its value the stage's key,
+   * and inherited by everything that server starts: what in a boundary is
+   * CawCo's own server and moves with a handover (agent boundary/servers.ts
+   * `serversIn`). Read by the agent alone, from other processes'
+   * environments.
+   */
+  stageServer: "CAWCO_STAGE_SERVER",
   sessionCredential: "CAWCO_SESSION_CREDENTIAL",
   /**
    * Inside a workspace's boundary, which reaches none of the owner's

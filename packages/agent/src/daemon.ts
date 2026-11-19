@@ -219,6 +219,7 @@ import { rearmHooks, settleGonePlaces } from "./boundary/control";
 import { checkBoundaryHost } from "./boundary/decisions";
 import { liveWorkItems } from "./boundary/holding";
 import { accountsChangedHere, watchQuietBoundaries } from "./boundary/looks";
+import { moveServersWith } from "./boundary/servers";
 import {
   browserFrame,
   removeBrowser,
@@ -368,10 +369,10 @@ import {
   ensureServed,
   ensureStage,
   keepPins,
+  moveStages,
   pinFolderOf,
   pinTreeOf,
   renderStage,
-  resumeStages,
   StageRefusal,
   stageComponents,
   tellStages,
@@ -3790,12 +3791,9 @@ const startDaemon = (rediscover = false) =>
       )
     );
     // Live components: a workspace's stage, started or woken, and a sheet's stories (stage.ts).
-    // Each stage that answered as the last agent ended, started again at its port (stage.ts `carryStages`).
-    resumeStages(ports).catch((error: unknown) =>
-      console.warn(
-        `[stage] the stages the last agent carried were not started again: ${error instanceof Error ? error.message : String(error)}`
-      )
-    );
+    // A stage starts on its first use, never at this start (stage.ts `endStages`);
+    // one in a boundary that is handed over starts again in the new one (stage.ts `moveStages`).
+    moveServersWith(moveStages);
     // A canvas's first states file, and (`{ file, files }`) every states file whose report it reads; `opening` as the canvas is made.
     supervisor.declareControl(STAGE_ENSURE, (ref, named) => {
       if (fenced()) {
