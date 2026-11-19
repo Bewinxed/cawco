@@ -79,14 +79,9 @@ export function holdSkipped(away: boolean) {
 /**
  * The hold's pass over `node`, in a pane away, once the frame that changed
  * it has painted: its loops' style asked for, and its runs that end
- * finished ({@link holdSkipped}). Run as the pane goes away, and again by
- * what changes it while it is away: a preview letting its page go past the
- * bound (PreviewPane `unload`) stands its cover waiting again, and the
- * wait-grace fade its page's readiness had paused mid-wait ran on in the
- * pane put away (WebKit restyles under the skip; tab-return 3: one
- * `kit-fade-in` running in 3 panes off screen). Returns the cancel.
+ * finished ({@link holdSkipped}), as the pane goes away. Returns the cancel.
  */
-export function settleAway(node: Element): () => void {
+function settleAway(node: Element): () => void {
   let task: ReturnType<typeof setTimeout> | undefined;
   const frame = requestAnimationFrame(() => {
     task = setTimeout(() => {

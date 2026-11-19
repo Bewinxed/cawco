@@ -23,13 +23,32 @@ import { frameObserver } from "#lib/platform/frame-observer.js";
 export const slots = new SvelteMap<string, HTMLElement>();
 
 /**
- * Whether each group is showing its tab's pane — on screen or mid-swipe. Kept
- * apart from `slots` and written only when a value changes, so a switch
- * wakes the two panes whose answer changed and nothing else. Stored with
- * the element, every switch handed every slot a new record: each pane's
- * props were evaluated again, and so was everything that read the slots.
+ * How each group holds its tab's pane: showing it, on screen or mid-swipe
+ * (`shown`); its chosen tab (`active`); and that, in the group the keyboard
+ * is in (`focused`).
  */
-export const shownPanes = new SvelteMap<string, boolean>();
+export interface PaneFront {
+  active: boolean;
+  focused: boolean;
+  shown: boolean;
+}
+
+const sameFront = (a: PaneFront | undefined, b: PaneFront): boolean =>
+  a?.shown === b.shown && a.active === b.active && a.focused === b.focused;
+
+/**
+ * Each pane's {@link PaneFront}, by conversation id. Kept apart from `slots`
+ * and written only when an answer changes, so a switch wakes the two panes
+ * whose answer changed and nothing else: Svelte marks everything under a
+ * changed signal before it asks whether anything's value changed. Stored
+ * with the element, every switch handed every slot a new record: each
+ * pane's props were evaluated again, and so was everything that read the
+ * slots. Read off the tree in each pane's props (PaneHost, `leaf.active`),
+ * every switch marked every row of every pane under its `active` (29 tabs:
+ * 28,000 marks and 32,000 effects scheduled a switch, two panes' worth
+ * changed).
+ */
+export const paneFronts = new SvelteMap<string, PaneFront>();
 
 /**
  * The conversations whose pane has not drawn its first picture yet: its
@@ -57,19 +76,22 @@ export function settleWhile(id: () => string, veiled: () => boolean): void {
   });
 }
 
-/** A group's slot for one tab. Registered while the group keeps it mounted. */
-export function slot(node: HTMLElement, param: { id: string; shown: boolean }) {
+/** A group's slot for one tab, and how the group holds it. Registered while the group keeps it mounted. */
+export function slot(
+  node: HTMLElement,
+  param: { front: PaneFront; id: string }
+) {
   let { id } = param;
   slots.set(id, node);
-  shownPanes.set(id, param.shown);
+  paneFronts.set(id, param.front);
   const release = () => {
     if (slots.get(id) === node) {
       slots.delete(id);
-      shownPanes.delete(id);
+      paneFronts.delete(id);
     }
   };
   return {
-    update(next: { id: string; shown: boolean }) {
+    update(next: { front: PaneFront; id: string }) {
       if (next.id !== id) {
         release();
         ({ id } = next);
@@ -77,8 +99,8 @@ export function slot(node: HTMLElement, param: { id: string; shown: boolean }) {
       if (slots.get(id) !== node) {
         slots.set(id, node);
       }
-      if (shownPanes.get(id) !== next.shown) {
-        shownPanes.set(id, next.shown);
+      if (!sameFront(paneFronts.get(id), next.front)) {
+        paneFronts.set(id, next.front);
       }
     },
     destroy: release,

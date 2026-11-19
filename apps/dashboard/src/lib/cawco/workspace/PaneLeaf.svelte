@@ -515,7 +515,14 @@
         data-delta={delta}
         data-pane={paneId}
         inert={shown && !isActive}
-        use:slot={{ id: paneId, shown }}
+        use:slot={{
+          id: paneId,
+          front: {
+            shown,
+            active: isActive,
+            focused: isActive && isFocusedLeaf,
+          },
+        }}
         {@attach holdSkipped(!(shown || laidOut))}
         {@attach land(() => (isActive ? `pane:${paneId}` : undefined), {
           mode: "clip",

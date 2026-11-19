@@ -13,7 +13,7 @@
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
   import type { ServerTail } from "../stores/transcript-reads.svelte";
-  import { dock, shownPanes, slots } from "./dock.svelte";
+  import { dock, paneFronts, slots } from "./dock.svelte";
   import { contextOf, workspace } from "./workspace.svelte";
 
   let {
@@ -85,21 +85,20 @@
 <div class="pointer-events-none invisible absolute inset-0 overflow-hidden">
   {#each hosted as id (id)}
     {@const ctx = contextOf(id)}
-    {@const leaf = workspace.leafOf(id)}
-    {@const isActive = leaf?.active === id}
+    {@const front = paneFronts.get(id)}
     <!-- The wrapper is a flex item of whichever slot it lands in, and the slot
          is the pane's whole box. -->
     <div class="flex min-h-0 min-w-0 flex-auto" use:dock={id}>
       <RegionBoundary face="page" part="conversation">
         <SessionPane
-          active={isActive}
+          active={front?.active ?? false}
           browsing={ctx?.machine ?? null}
           browsingCwd={ctx?.cwd ?? ""}
           browsingHarness={ctx?.harness}
-          focused={isActive && leaf?.id === workspace.focusedLeafId}
+          focused={front?.focused ?? false}
           serverTail={id === entryId ? entryTail : null}
           viewId={id}
-          visible={shownPanes.get(id) ?? false}
+          visible={front?.shown ?? false}
         />
       </RegionBoundary>
     </div>

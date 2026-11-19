@@ -106,8 +106,8 @@
     instanceId: string;
     /**
      * Its conversation's tab is in view (SideSplit's `visible`). A tab kept
-     * mounted off screen keeps its page loaded and held, up to the bound of
-     * loaded.svelte.ts, and loads it again once its tab is back past it.
+     * mounted off screen keeps its page loaded and held, however many are
+     * off screen, and shows it as it was once its tab is back.
      */
     onScreen?: boolean;
     /**
@@ -133,10 +133,10 @@
   } = $props();
   /*
    * Off screen, the page is held (the overlay's hold.ts: no frames, timers
-   * or animations run) and kept, up to the owner's bound of panes off
-   * screen (loaded.svelte.ts); past it, the one hidden longest unloads. A
-   * pane that mounts off screen loads nothing until its tab is shown, and
-   * then only once the switch has painted (`afterPaint`).
+   * or animations run) and kept with its state, every preview off screen
+   * alike (owner's pick: "Keep all previews loaded", 2026-11-19). A pane
+   * that mounts off screen loads nothing until its tab is shown, and then
+   * only once the switch has painted (`afterPaint`).
    */
   const paneId = $props.id();
   const paneSubject = new PaneSubject({
@@ -176,7 +176,6 @@
     instanceId: () => instanceId,
     onScreen: () => onScreen,
     ownTab: () => ownTab,
-    paneId: () => paneId,
     paneSubject,
     paneNotice,
     paneLayout,

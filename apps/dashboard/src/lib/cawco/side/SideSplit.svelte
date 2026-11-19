@@ -137,7 +137,7 @@
   /**
    * The sheet stays mounted while its conversation's tab is off screen,
    * closed (SideSheet), so its preview keeps its page as a desk's split
-   * does (preview/loaded.svelte.ts holds or unloads it); only the sheet of
+   * does (held while off screen, PreviewPane `onScreen`); only the sheet of
    * the tab in front is open. Put away while it stands in front (its
    * Close, Escape, an agent closing the preview), it slides down and goes
    * once it has: it stood open in front (`standing`) until SideSheet's

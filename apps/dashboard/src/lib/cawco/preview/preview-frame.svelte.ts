@@ -13,7 +13,6 @@ import { PAGE_SILENT_MS, probePreview } from "@cawco/core/preview/reach";
 import { sheetWords } from "@cawco/core/words/sheet";
 import { untrack } from "svelte";
 import { frameObserver } from "#lib/platform/frame-observer.js";
-import { settleAway } from "#lib/platform/motion/rest.js";
 import { track } from "#lib/platform/track.js";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactShown, keepThumbnail } from "../artifact-api";
@@ -22,7 +21,6 @@ import { pageVisible } from "../page-visible.svelte";
 import { afterPaint, warm } from "../workspace/warm.svelte";
 import { artifactSyncPath } from "./artifact-doc";
 import { hubReach } from "./hub-reach";
-import { loadedPanes } from "./loaded.svelte";
 import { frameHand, holdOpen } from "./open-pages";
 import type { PaneCanvas } from "./pane-canvas.svelte";
 import type { PaneLayout } from "./pane-layout.svelte";
@@ -59,7 +57,6 @@ export interface PreviewFrameDeps {
   readonly onScreen: () => boolean;
   readonly ownTab: () => boolean;
   readonly paneCanvas: PaneCanvas;
-  readonly paneId: () => string;
   readonly paneLayout: PaneLayout;
   readonly paneNotice: PaneNotice;
   readonly paneSubject: PaneSubject;
@@ -103,14 +100,11 @@ export class PreviewFrame {
   // The old paint bridges navigation only until the replacement stands drawn.
   standing = $state<string | null>(null);
 
-  /** No page: mounted off screen, or let go past the bound; the cover waits for the next load. */
+  /** No page yet: mounted off screen, it loads once its tab is first shown; the cover waits for that load. */
   unloaded = $state(false);
 
   /** The page said it is held (`cawco:held`). */
   pageHeld = $state(false);
-
-  /** The hold's pass over the pane its page was let go from, while it is still away (motion/rest.ts `settleAway`). */
-  settling: (() => void) | null = null;
 
   /**
    * Its conversation's tab reached for (warm.svelte.ts `reached`: the
@@ -285,30 +279,10 @@ export class PreviewFrame {
       if (this.#deps.paneSubject.isCanvas) {
         return;
       }
-      const id = this.#deps.paneId();
-      // Entered once per pane, never again as its tab comes and goes: the
-      // registry reads `onScreen` as the bound is applied, not as it was here.
-      untrack(() =>
-        loadedPanes.enter({
-          id,
-          onScreen: () => this.#deps.onScreen(),
-          unload: this.unload,
-        })
-      );
-      return () => loadedPanes.leave(id);
-    });
-    $effect(() => {
-      if (this.#deps.paneSubject.isCanvas) {
-        return;
-      }
       if (!this.#deps.onScreen()) {
         untrack(() => this.post({ type: "cawco:hold" }));
-        loadedPanes.hidden(this.#deps.paneId());
         return;
       }
-      loadedPanes.shown(this.#deps.paneId());
-      this.settling?.();
-      this.settling = null;
       untrack(() => this.post({ type: "cawco:release" }));
       if (untrack(() => this.unloaded)) {
         return afterPaint(() => {
@@ -485,20 +459,6 @@ export class PreviewFrame {
       return () => watch.disconnect();
     });
   }
-
-  unload = () => {
-    this.unloaded = true;
-    this.standing = null;
-    this.loaded = false;
-    this.connected = false;
-    this.pageHeld = false;
-    // Let go off screen, the cover stands waiting again in a pane put away:
-    // what that starts is finished there, as the put-away's own pass does.
-    this.settling?.();
-    this.settling = this.#deps.paneLayout.section
-      ? settleAway(this.#deps.paneLayout.section)
-      : null;
-  };
 
   /** The current frame's page stands drawn ({@link loaded}): the cover lifts, and the frame it replaced goes. */
   #shown() {
