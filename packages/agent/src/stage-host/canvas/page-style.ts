@@ -85,6 +85,10 @@ html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; ali
 .cawco-stage-frame { position: relative; inline-size: var(--frame-w); min-block-size: max(var(--held-h, 0px), var(--against-h, 0px));
   overflow-x: clip; overflow-clip-margin: calc(2 * var(--spacing-space-8)); }
 .cawco-stage-frame[hidden] { display: none; }
+/* Another states file in the drawing's place (stage.ts \`crossFade\`, a design's directions): a picture of the old drawing laid
+   over the new one at its box, fading out; never pressed, never read. */
+.cawco-stage-frame > .cawco-stage-leaving { position: absolute; inset-inline-start: var(--leave-x); inset-block-start: var(--leave-y);
+  inline-size: var(--leave-w); margin: 0; pointer-events: none; z-index: 1; }
 /* The state just set in place, drawn afresh and hidden, read against the live instance (stage.ts landed) and gone. */
 .cawco-stage-fresh { position: absolute; inset-block-start: 0; inset-inline-start: 0; visibility: hidden; pointer-events: none; }
 /* Compare (stage.ts compare): the state compared with, drawn hidden under the drawing at its width; side by side it stands

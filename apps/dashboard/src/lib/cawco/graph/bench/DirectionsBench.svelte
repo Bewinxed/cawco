@@ -9,7 +9,11 @@
    * direction's tray at the kept state, the width and scheme picked, the
    * network dial set. As the stage page does, it loads no direction until
    * the graph asks for it (`cawco:stage-load`, a reach or a Compare naming
-   * it), each after a cold load's wait, and says its sheet then. Compare
+   * it), each after a cold load's wait, and says its sheet then; once the
+   * first direction stands drawn, it loads the others as the page goes
+   * idle, so a flip finds them ready. A flip to another direction
+   * cross-fades, as the stage page's does, at once where motion is
+   * reduced. Compare
    * mounts the compared tray hidden beside the kept one and reads what
    * differs by the names of their headings and buttons. His pick is kept
    * in this browser, as the artifact's doc keeps it in the panel.
@@ -25,10 +29,11 @@
     type StateRef,
   } from "@cawco/core/stage-graph";
   import { graphWords } from "@cawco/core/words/graph";
-  import { onMount, untrack } from "svelte";
+  import { flushSync, onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { store, stored, unstore } from "#lib/platform/storage.js";
   import TrayView from "../../address/preview/TrayView.svelte";
   import { AddressTray, type Network } from "../../address/tray.svelte";
@@ -88,6 +93,8 @@
   /** The width the view picked (none: the stage's own), its scheme, and the network dial as set. */
   let widthPicked = $state<number | null>(null);
   let dark = $state(false);
+  /** The panel's Reduce motion is off. */
+  let moving = true;
   let network = $state<Network>("tailscale");
 
   /**
@@ -119,6 +126,54 @@
       waiting.delete(file);
     }, COLD_MS);
   };
+  /**
+   * The drawing swapped under a picture of the one it replaces, which
+   * fades out over it (one --duration-fade on --ease-crossfade), as the
+   * stage page swaps a direction (stage.ts `crossFade`).
+   */
+  const crossFade = (swap: () => void) => {
+    const from = drawing;
+    const leaving = from?.cloneNode(true);
+    if (!(from?.parentElement && leaving instanceof HTMLElement)) {
+      swap();
+      return;
+    }
+    leaving.inert = true;
+    leaving.setAttribute("aria-hidden", "true");
+    leaving.className =
+      "pointer-events-none absolute start-(--leave-x) top-(--leave-y) z-1 w-(--leave-w)";
+    leaving.style.setProperty("--leave-x", `${from.offsetLeft}px`);
+    leaving.style.setProperty("--leave-y", `${from.offsetTop}px`);
+    leaving.style.setProperty("--leave-w", `${from.offsetWidth}px`);
+    from.parentElement.append(leaving);
+    swap();
+    flushSync();
+    const fade = leaving.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: dur("--duration-fade"),
+      easing: ease("--ease-crossfade"),
+      fill: "forwards",
+    });
+    const gone = () => leaving.remove();
+    fade.addEventListener("finish", gone);
+    fade.addEventListener("cancel", gone);
+  };
+
+  /** The other directions, loaded one at a time as the page goes idle once the first stands drawn, as the stage page does. */
+  let restLoaded = false;
+  const loadRest = () => {
+    if (restLoaded) {
+      return;
+    }
+    restLoaded = true;
+    const next = (at: number) => {
+      const file = files[at];
+      if (file !== undefined) {
+        requestIdleCallback(() => load(file, () => next(at + 1)));
+      }
+    };
+    next(0);
+  };
+
   /** The tray a ref draws: its direction and the view its story jumps to. */
   const trayOf = (ref: StateRef | null) => {
     const direction = TRAY_DIRECTIONS.find((one) => one.file === ref?.file);
@@ -218,7 +273,19 @@
       const asked = message;
       // A reach waits on its states file's load alone, as the page's does.
       load(asked.to.file, () => {
-        standing = asked.to;
+        const crossing =
+          !!standing &&
+          standing.file !== asked.to.file &&
+          moving &&
+          motionOk.current;
+        if (crossing) {
+          crossFade(() => {
+            standing = asked.to;
+          });
+        } else {
+          standing = asked.to;
+        }
+        loadRest();
         requestAnimationFrame(() => {
           link.reached = { ask: asked.ask, move: null, on: asked.to };
           if (!link.dialsWritten) {
@@ -234,6 +301,7 @@
       }
     } else if (message.type === "cawco:canvas-view") {
       widthPicked = message.view.widths?.[0] ?? null;
+      moving = message.view.motion !== "reduce";
       dark = message.view.scheme === "dark";
     } else if (message.type === STAGE_DIALS) {
       const set = message.values.network;
@@ -258,7 +326,7 @@
        hidden beside it, as the page draws it, read for what differs. -->
   <div
     class={[
-      "h-full min-h-0 overflow-auto bg-surface-page p-space-5",
+      "relative h-full min-h-0 overflow-auto bg-surface-page p-space-5",
       dark ? "scheme-dark dark" : "scheme-light",
     ]}
     {@attach frameSize(
