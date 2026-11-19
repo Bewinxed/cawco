@@ -46,8 +46,8 @@ const VIEWS = [
   "more-open",
   "big-draft",
   "big-refused",
-  "handoff-waiting",
-  "handoff-refused",
+  "finished-waiting",
+  "finished-refused",
   "tasks-updating",
   "move-empty",
   "move-checking",
@@ -86,7 +86,7 @@ const REFUSALS: Record<Section, string> = {
     "The hub couldn't save the change: the project file is locked by another write (409).",
   bigFiles:
     "files.acme.dev answered 403 for acme files key: the key may not write to this address.",
-  handoff: "acme-bot may not open branches on acme/hyucksfield (403).",
+  finished: "acme-bot may not open branches on acme/hyucksfield (403).",
   tasks: "GitHub refused to let the links go: Bad credentials (401).",
 };
 
@@ -270,12 +270,12 @@ export class MockHub {
           bigFiles: { value: "custom", refused: REFUSALS.bigFiles },
         };
         break;
-      case "handoff-waiting":
-        this.pending = { handoff: { value: "pr", refused: null } };
+      case "finished-waiting":
+        this.pending = { finished: { value: "pr", refused: null } };
         break;
-      case "handoff-refused":
+      case "finished-refused":
         this.pending = {
-          handoff: { value: "branch", refused: REFUSALS.handoff },
+          finished: { value: "branch", refused: REFUSALS.finished },
         };
         break;
       case "tasks-updating":
@@ -537,10 +537,10 @@ export class MockHub {
   #apply(section: Section, value: string): void {
     const d = this.details;
     switch (section) {
-      case "handoff":
+      case "finished":
         this.details = {
           ...d,
-          handoff: {
+          finished: {
             state: "read",
             value: LANDS_MODES.find((mode) => mode === value) ?? "main",
           },

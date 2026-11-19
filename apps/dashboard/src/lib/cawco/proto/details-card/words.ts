@@ -32,8 +32,8 @@ export const sectionWords = {
     name: "AI account",
     line: "Which AI account and apps agents use, and whether work pauses if it runs out.",
   },
-  handoff: {
-    name: "Code handoff",
+  finished: {
+    name: "Finished code",
     line: "What happens to finished code, unless a task says otherwise.",
   },
   tasks: {
@@ -116,7 +116,7 @@ export const aiWords = {
 } as const;
 
 /** Each way finished code goes: its name and its line. */
-export const handoffWords = {
+export const finishedWords = {
   main: { name: "Apply directly", line: "Updates your main code right away." },
   branch: {
     name: "Keep separate",

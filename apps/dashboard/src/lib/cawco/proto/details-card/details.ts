@@ -1,7 +1,7 @@
 /**
  * The project details card's model (the structure "Project details card
  * structure", option 1): what the hub says of a project's folders, AI
- * account, code handoff, task list and code details, as the card takes it.
+ * account, finished code, task list and code details, as the card takes it.
  * Every fact is read, still reading, or failed with the hub's own words, so
  * a value being read never shows as a settled one. What a press asked and
  * the hub has not yet answered stands beside it (`Pending`), so the old pick
@@ -112,7 +112,7 @@ export interface PendingChanges {
   account?: Pending;
   atLimit?: Pending;
   bigFiles?: Pending;
-  handoff?: Pending;
+  finished?: Pending;
   tasks?: Pending;
 }
 
@@ -130,9 +130,9 @@ export interface Details {
   bigFileSignIns: SignIn[];
   bigFiles: Read<BigFiles>;
   codebases: Codebase[];
+  finished: Read<LandsMode>;
   folders: Read<Folder[]>;
-  handoff: Read<LandsMode>;
-  /** The project holds code: Code handoff and More code details apply. */
+  /** The project holds code: Finished code and More code details apply. */
   hasCode: boolean;
   /** The hub answers; else which computer stopped answering and when the details were read. */
   hub: { reachable: true } | { reachable: false; host: string; readAt: string };
