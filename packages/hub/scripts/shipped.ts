@@ -185,6 +185,54 @@ const installableTestFlight = (cwd: string, now = Date.now()): Baseline[] =>
       : [];
   });
 
+/** git in the checkout `cwd` names, whose HEAD is the branch being checked. */
+const inCheckout = (cwd: string, args: string[]) =>
+  Bun.spawnSync(["git", ...args], { env: process.env, cwd, stderr: "pipe" });
+
+/**
+ * Which nightlies this branch does not descend from: each was cut from a main
+ * newer than the branch, so its wire holds what the branch has not met yet,
+ * and a compare against it reports that as fields "the hub no longer sends".
+ * Such a branch is behind, not breaking: it is rebased, then checked.
+ * `unknown` says why ancestry could not be read (a shallow clone, a nightly's
+ * commit missing here); those nightlies are left in `ahead` and compared as
+ * before.
+ */
+export const nightliesAhead = (
+  cwd: string,
+  nightlies: Baseline[]
+): { ahead: Baseline[]; unknown?: string } => {
+  const shallow = inCheckout(cwd, ["rev-parse", "--is-shallow-repository"]);
+  if (shallow.exitCode !== 0 || shallow.stdout.toString().trim() === "true") {
+    return {
+      ahead: [],
+      unknown:
+        "This clone is shallow, so whether the branch descends from each nightly is unknown: every nightly is compared as before.",
+    };
+  }
+  const ahead: Baseline[] = [];
+  const unread: string[] = [];
+  for (const nightly of nightlies) {
+    const run = inCheckout(cwd, [
+      "merge-base",
+      "--is-ancestor",
+      nightly.commit,
+      "HEAD",
+    ]);
+    if (run.exitCode === 1) {
+      ahead.push(nightly);
+    } else if (run.exitCode !== 0) {
+      unread.push(`${nightly.label} (${nightly.commit.slice(0, 10)})`);
+    }
+  }
+  return unread.length
+    ? {
+        ahead,
+        unknown: `Whether the branch descends from ${unread.join(", ")} could not be read here, so ${unread.length === 1 ? "it is" : "they are"} compared as before.`,
+      }
+    : { ahead };
+};
+
 /** Everything a hub built now must still be read by. */
 export const shippedBaselines = (cwd: string): Baseline[] => [
   newestNightly(cwd),

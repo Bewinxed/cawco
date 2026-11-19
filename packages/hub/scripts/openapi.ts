@@ -51,7 +51,12 @@ import {
 import { hubInProcess } from "./hub-in-process";
 import { baseRefOf, checkGate, outsideInputs } from "./openapi-inputs";
 import { inOneOrder, unionsOrderDecides } from "./openapi-order";
-import { type Baseline, publishedNightlies, shippedBaselines } from "./shipped";
+import {
+  type Baseline,
+  nightliesAhead,
+  publishedNightlies,
+  shippedBaselines,
+} from "./shipped";
 import {
   appWireAt,
   asSent,
@@ -1546,12 +1551,26 @@ if (leftNulls.length) {
  * ships first and the old build's record ends once the hub moves past it.
  */
 const baseRef = baseRefOf(process.argv);
+/**
+ * A nightly this branch does not descend from is not compared: it was cut
+ * from a newer main, and every field main added since would read as one the
+ * hub "no longer sends". The branch is refused as behind instead, by the
+ * newest such nightly; the ones it descends from are compared as ever.
+ */
+const agents = publishedNightlies(HUB);
+const ancestry = nightliesAhead(HUB, agents);
+if (ancestry.unknown) {
+  console.log(ancestry.unknown);
+}
+const ahead = new Set(ancestry.ahead.map((nightly) => nightly.commit));
 // One compare per commit: a shipped build can be the base itself. An app
 // built there is the reader that counts: it has no protocol way through.
 const byCommit = new Map<string, Baseline>();
 for (const base of [
   { label: `the base ${baseRef.slice(0, 12)}`, commit: baseRef } as Baseline,
-  ...shippedBaselines(HUB),
+  ...shippedBaselines(HUB).filter(
+    (shipped) => shipped.app || !ahead.has(shipped.commit)
+  ),
 ]) {
   const commit = git("rev-parse", `${base.commit}^{commit}`).trim();
   const seen = byCommit.get(commit);
@@ -1572,6 +1591,12 @@ const readers = bases.map((base) => {
   };
 });
 const refused: string[] = [];
+const [newestAhead] = ancestry.ahead;
+if (newestAhead) {
+  refused.push(
+    `This branch is older than ${newestAhead.label} (${newestAhead.commit.slice(0, 10)}): rebase onto origin/main, then run the check again.`
+  );
+}
 /**
  * What the hub sends, with every bridge that holds a kind back holding it
  * (wire-compat.ts `asSent`): what a shipped reader meets. `except` leaves
@@ -1602,8 +1627,9 @@ for (const bridge of BRIDGES.filter(
 // built without it too: one built since reads `beside` and loses nothing,
 // one built before reads only the bridge and breaks without it. A bridge
 // that holds a kind back is needed while sending that kind in `beside`
-// breaks a shipped reader.
-for (const bridge of sentBridges) {
+// breaks a shipped reader. A branch behind a nightly leaves that reader out,
+// so whether a bridge is still needed waits for the rebase.
+for (const bridge of newestAhead ? [] : sentBridges) {
   const without = withoutBridge(sentWithout(bridge), bridge);
   const needed = readers.some((reader) => {
     const built = withoutBridge(reader.schema, bridge);
@@ -1680,10 +1706,9 @@ const asRoute = (path: string): HubRoute => ({
   method: "",
   path: path.replace(/\{([^}]+)\}/gu, ":$1"),
 });
-const agents = publishedNightlies(HUB);
 /** Each call no route answers now: the agents that make it, and where the newest builds it. */
 const unanswered = new Map<string, { builds: string[]; site: string }>();
-for (const nightly of agents) {
+for (const nightly of agents.filter(({ commit }) => !ahead.has(commit))) {
   const show = (path: string): string =>
     git("show", `${nightly.commit}:${path}`);
   const range = rangeOf(show(RUNTIME), nightly.label);
