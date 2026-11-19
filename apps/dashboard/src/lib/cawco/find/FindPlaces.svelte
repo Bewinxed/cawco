@@ -250,8 +250,11 @@
         {/each}
       </div>
     {:else}
+      <!-- Each place is drawn only near the view (`row-skip-unseen`): every
+           place drawn, a keystroke over a word the conversation says often
+           styled and laid out the hub's 500 rows, with a dozen in view. -->
       <div
-        class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto overscroll-contain p-space-1 pt-0"
+        class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto overscroll-contain p-space-1 pt-0 *:row-skip-unseen"
         aria-label={findInWords.places}
         onmousedown={keepField}
         role="listbox"

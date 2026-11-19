@@ -1153,6 +1153,14 @@
 @utility content-visibility-hidden {
   content-visibility: hidden;
 }
+/* A row of a long list that is laid out, styled and painted only near the
+   view (find's places: up to the hub's 500, a dozen in view). Off screen it
+   stands at the height it last had, a fresh row at a desk row's floor
+   (FindRow's `min-h-13`) until it is first drawn. */
+@utility row-skip-unseen {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto calc(var(--spacing) * 13);
+}
 @utility scheme-inherit {
   color-scheme: inherit;
 }
