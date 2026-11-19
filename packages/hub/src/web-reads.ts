@@ -257,6 +257,17 @@ const localTarget = (target: string, fleet: ReadonlySet<string>): boolean => {
   return host !== undefined && localHost(host, fleet);
 };
 
+/**
+ * The URLs `text` names whose host is outside the fleet: what an agent's
+ * lesson may not carry (memory-run.ts), a page's link being the way a page's
+ * words travel.
+ */
+export const outsideUrls = (
+  text: string,
+  fleet: ReadonlySet<string>
+): string[] =>
+  (text.match(URL_IN_TEXT) ?? []).filter((url) => !localTarget(url, fleet));
+
 const unquoted = (token: string): string => QUOTES.exec(token)?.[2] ?? token;
 
 /** The command a segment runs, after its variable assignments and wrappers, with the words after it. */

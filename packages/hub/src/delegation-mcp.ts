@@ -511,15 +511,10 @@ export function createDelegationMcp(options: {
   /** The relay tools (relay.ts): a project's public webhook paths, opening one asks you. */
   relayTools?: (actor: InstanceRow | undefined) => RelayTool[];
   /**
-   * The memory tools (memory.ts): notes into a project's inbox, Caw's
-   * memory writes, the curator's sorting and proposals. `toolUseId` is the
-   * call's own (Claude Code's `_meta`): a proposal parked for the person is
-   * drawn at it.
+   * The memory tools (memory.ts): notes into a project's inbox, and the
+   * nightly memory run's reads and writes.
    */
-  memoryTools?: (
-    actor: InstanceRow | undefined,
-    toolUseId?: string
-  ) => MemoryTool[];
+  memoryTools?: (actor: InstanceRow | undefined) => MemoryTool[];
   /** Caw's `project_settings` (project-settings.ts): his own project's settings, applied or asked about. */
   projectSettings?: Pick<ProjectSettings, "tool" | "definition">;
   /** Fleet watch's `triage_decide` (fleet-watch.ts), for a triage run. */

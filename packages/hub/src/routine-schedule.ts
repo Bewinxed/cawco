@@ -16,11 +16,11 @@ import type { ProblemsOf } from "./refusal";
  */
 export const EVENT_SLOT = "event:";
 
-/** A run the inbox's mark started (memory.ts): slot `inbox:<time>`. */
-export const INBOX_SLOT = "inbox:";
+/** A run a full inbox started before the nightly memory run (slot `inbox:<time>`): no run takes it now, and the runs kept with it read so. */
+const INBOX_SLOT = "inbox:";
 
 /**
- * Makes a project's memory curator routine when it has none (routines.ts
+ * Makes a project's nightly memory run when it has none (routines.ts
  * `ensureCurator`, declared with this): nothing, or the problem of its
  * schedule ({@link cronOf}). Said here, below both, so memory.ts types its
  * dep from it without importing routines.ts, which imports memory.ts.

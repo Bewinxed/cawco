@@ -4,10 +4,12 @@
  * and relays. Each by its name and the handle its tools take back
  * (handles.ts), each time as how long ago or how far ahead.
  */
+
 import type { ApprovedActionView } from "@cawco/core/actions";
 import { routineLink, taskLink } from "@cawco/core/references";
 import type { RelayView } from "@cawco/core/relays";
 import type { RoutineRunView } from "@cawco/core/routine-kinds";
+import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { routineToolWords } from "@cawco/core/words/routines";
 import type {
   ConnectorPollView,
@@ -77,76 +79,49 @@ export const viewDraftedWords = (drafted: {
 /** `view_query`: the data a view's Query reads, as the view would. */
 export const viewQueryWords = (data: unknown): string => JSON.stringify(data);
 
-/** `memory_note`: kept in the inbox. */
-export const memoryNotedWords = (noted: {
-  id: string;
-  path: string;
-  verdict?: unknown;
-}): string =>
-  `Noted in the inbox as ${noted.id}${noted.verdict ? `; ${valueWords(noted.verdict, 300)}` : ""}. The person decides what is kept.`;
+/**
+ * `memory_note`'s answer, by where the note goes: to the nightly run, or
+ * nowhere, and why. A union, so no path is answered with another's words.
+ */
+export type Noted = { id: string } & (
+  { reaches: "run" } | { reaches: "nowhere"; verdict: "duplicate" | "secret" }
+);
 
-/** `memory_propose`: committed, or waiting for the person. */
-export const memoryProposedWords = (proposed: {
-  card?: string;
-  closed?: string[];
-  committed?: boolean;
-  paths?: string[];
-  path?: string;
-  sha?: string;
-  waiting?: string;
-  withdrawn?: string[];
-}): string =>
-  proposed.committed
-    ? `Committed ${listed(proposed.paths ?? [])} (commit ${proposed.sha?.slice(0, 8)}).${proposed.card ? ` Carried out ${proposed.card}: withdrew ${listed(proposed.withdrawn ?? []) || "none"}; closed ${listed(proposed.closed ?? []) || "none"}.` : ""}`
-    : `Proposed ${listed(proposed.paths ?? (proposed.path ? [proposed.path] : []))}: ${proposed.waiting ?? "waiting for the person"}.`;
+/** `memory_note`. */
+export const memoryNotedWords = (noted: Noted): string => {
+  if (noted.reaches === "run") {
+    return memoryRunWords.notedForRun(noted.id);
+  }
+  return noted.verdict === "secret"
+    ? memoryRunWords.notedSecret(noted.id)
+    : memoryRunWords.notedDuplicate(noted.id);
+};
 
-/** `memory_classify`. */
-export const memoryClassifiedWords = (classified: {
-  archived: string[];
-}): string => `Archived ${listed(classified.archived)}.`;
+/** `memory_apply`: one line per operation, what it committed or why it was refused. */
+export const memoryAppliedWords = (applied: { lines: string[] }): string =>
+  applied.lines.join("\n");
 
-/** `memory_read`: the inbox and knowledge/, or one file. */
+/** `memory_read`: the inbox and the memory files, or one file. */
 export const memoryReadWords = (
   read:
     | {
-        inbox: {
-          from: string;
-          id: string;
-          since?: string;
-          text: string;
-          verdict?: unknown;
-        }[];
-        knowledge: string[];
-        prose: string[];
-        unreadable: string[];
+        files: string[];
+        inbox: { from: string; id: string; since?: string; text: string }[];
       }
-    | { fleet: { loadedInto: string; path: string }[] }
     | FolderFile
 ): string => {
-  if ("fleet" in read) {
-    return lines(
-      read.fleet.length === 0
-        ? "The fleet keeps no memory document."
-        : "The fleet's memory documents:",
-      read.fleet.map((doc) => `- ${doc.path}: ${doc.loadedInto}`)
-    );
-  }
   if ("inbox" in read) {
-    const shelf = read;
     return lines(
-      shelf.inbox.length === 0
+      read.inbox.length === 0
         ? "The inbox is empty."
-        : `${count(shelf.inbox.length, "note")} waiting:`,
-      shelf.inbox.map(
+        : `${count(read.inbox.length, "note")} waiting:`,
+      read.inbox.map(
         (note) =>
           `- ${note.id} from ${note.from}${note.since ? ` (since ${note.since})` : ""}: ${quote(note.text, 600)}`
       ),
-      shelf.knowledge.length > 0
-        ? `knowledge/: ${listed(shelf.knowledge)}.`
-        : "knowledge/ holds no file.",
-      shelf.prose.length > 0 && `Prose, not facts: ${listed(shelf.prose)}.`,
-      shelf.unreadable.length > 0 &&
-        `Lines that read as no fact: ${shelf.unreadable.join("; ")}`
+      read.files.length > 0
+        ? `Memory files: ${listed(read.files)}.`
+        : "The project keeps no memory file yet."
     );
   }
   return folderReadWords(read);

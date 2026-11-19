@@ -48,10 +48,13 @@ const ROWS = {
   judged: "Judged checks",
   phone: "Phone requests",
   order: "Dispatch order",
-  // Asked in memory.ts: the curator's inbox, how its lasting notes bear on
-  // the fact lines, and an attempt's brief.
+  // Asked in memory-run.ts: what the person's messages are, what each note
+  // is, whether a message states a lesson, whether two notes say the same;
+  // and in memory.ts, what an attempt's brief carries.
+  said: "What the person said",
   inbox: "Memory inbox",
-  sorting: "Fact sorting",
+  support: "Lesson source",
+  same: "Same lesson",
   context: "Brief context",
   // Asked in project-starters.ts: what a project's board and Caw's panel offer.
   starters: "Starters",

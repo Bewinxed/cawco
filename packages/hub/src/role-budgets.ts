@@ -28,7 +28,7 @@ import {
  * on it), from slice 9's first measure on.
  * 2026-10-30: one kind of session. The project's own tools (view_draft,
  * view_query, folder_read, folder_write, project_setup, project_settings,
- * routine_result, memory_propose) are a worker's wherever its folder is in a
+ * routine_result, the memory write tool since removed) are a worker's wherever its folder is in a
  * project, and the conversation tools of a separate role are gone (worker
  * 27,907 measured). The worker's budget is lowered to it.
  * 2026-10-31: a canvas's elements say that text wraps at its width and a
@@ -128,11 +128,10 @@ import {
  * ship notes tell the person updating what changed, delegate_list shows
  * which session is warm, find reaches unlanded work (worker 30,692, delegate
  * 11,331, curator 1,209 measured).
- * 2026-11-14: memory_propose takes `card` and `drop`, so a session carries
- * out the person's own pick on a card about memory notes without a second
- * ask (tsk-369, the owner's "A card's pick settles notes" on card
- * `note-settle`); its description says what they do and when they are
- * accepted (worker 30,799, curator 1,316 measured).
+ * 2026-11-14: the memory write tool takes `card` and `drop`, so a session
+ * carries out the person's own pick on a card about memory notes without a
+ * second ask (tsk-369, card `note-settle`); its description says what they
+ * do and when they are accepted (worker 30,799, curator 1,316 measured).
  * 2026-11-14: action_list and event_route_list take `skip`, so an agent reads
  * the older actions and events a page leaves out (their answers say how many
  * and which skip reads on) (worker 30,828 measured).
@@ -146,11 +145,10 @@ import {
  * test), as the route and rfc6902 take it, so an op missing either is
  * refused at the call (worker 30,917, delegate 11,402 measured).
  * 2026-11-17: a note marked fleet-wide becomes the person's approval card
- * for a fleet memory document (the owner's pick that day: "one marked
- * fleet-wide becomes an approval card for you to change a fleet memory
- * document"): memory_note takes `fleet`, memory_propose takes `fleet` for a
- * fleet document, and the curator's memory_read reads the fleet's documents
- * with `fleet` (worker 30,973, delegate 11,430, curator 1,372 measured).
+ * for a fleet memory document (the person's pick that day): memory_note
+ * takes `fleet`, the memory write tool takes `fleet` for a fleet document,
+ * and the curator's memory_read reads the fleet's documents with `fleet`
+ * (worker 30,973, delegate 11,430, curator 1,372 measured).
  * 2026-11-17: finish_item and delegate say the hub lands by rebase and push
  * and the delegate runs its project's checks itself, and finish_item takes
  * no `ship` (the owner that day: "this whole gate thing is made up")
@@ -165,13 +163,18 @@ import {
  * to an account the person named, through the router's decision; a session
  * that may start delegates lists them (worker 31,274, delegate 11,683
  * measured).
+ * 2026-11-19: the nightly memory run (memory-run.ts): the curator lists
+ * memory_read and memory_apply, whose operations name a source by handle,
+ * and no session lists a memory write tool; memory_note takes no `fleet`
+ * (worker 30,865, curator 1,295 measured). The curator's budget is lowered
+ * to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 31_300,
   delegate: 11_700,
   overseer: 770,
   "web-facing": 3400,
-  curator: 1385,
+  curator: 1300,
   trimmer: 1400,
 };
 

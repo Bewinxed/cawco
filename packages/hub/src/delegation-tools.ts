@@ -23,6 +23,7 @@ import { LANDS_MODES } from "@cawco/core/injected";
 import { NO_REPLY_OWED, NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import { REFERENCE_GUIDANCE } from "@cawco/core/references";
 import { kindsLine } from "@cawco/core/words/decides-lines";
+import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import {
@@ -1466,8 +1467,7 @@ const BLOCKS =
  * keeps what should outlast it: said once at its start, beside the tool
  * loaded upfront, so the project's memory is its first reach.
  */
-const NOTES =
-  "A lasting fact for this project's later sessions, or a correction the person gives about how to work, goes through memory_note as you learn it.";
+const NOTES = memoryRunWords.noteLine;
 
 /** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(

@@ -23,11 +23,11 @@
  *   the session it judges.
  * - **web-facing**: a session that reads the outside world: it finishes its
  *   work and tells you, with no posting, spawning or admin tools.
- * - **curator**: a project's memory curator run (memory.ts): it reads the
- *   inbox, proposes changes to AGENTS.md and `knowledge/`, and a fleet-wide
- *   note's to a fleet memory document, for you to approve,
- *   archives the notes that are not lasting facts, and finishes. No edit,
- *   shell or web tools in its harness either (caw.ts `fencedSpawn`).
+ * - **curator**: a project's nightly memory run (memory-run.ts): it reads
+ *   its brief and the memory files, writes lessons with `memory_apply`
+ *   (each operation checked by the hub, nothing waiting for you), and
+ *   finishes. No edit, shell or web tools in its harness either (caw.ts
+ *   `fencedSpawn`).
  * - **trimmer**: a run of the unused skills and servers routine
  *   (unused-trim.ts): it reads the count (`calls_by_role`), puts the hub's
  *   trimmed sets to you once with `trim_propose`, and finishes. Fenced as
@@ -50,9 +50,8 @@
  * on its decision.
  *
  * Memory (§5.4): the worker and the delegate write notes into their
- * project's inbox (`memory_note`); a worker in a project and the curator
- * call `memory_propose` (the session's commits, the curator's waits for
- * you), and only the curator sorts the inbox.
+ * project's inbox (`memory_note`); only the nightly run's curator reads
+ * and writes the memory files (`memory_read`, `memory_apply`).
  */
 import {
   type SessionRole,
@@ -132,22 +131,21 @@ export const CAW_TOOLS = CAW_PROJECT_TOOLS;
 export type CawToolName = (typeof CAW_TOOLS)[number];
 
 /**
- * A project's own tools: caw.ts's, its settings (project-settings.ts), how
- * a routine's run that woke the session went (routines.ts) and its memory
- * writes (memory.ts). Listed by scope ({@link allows}).
+ * A project's own tools: caw.ts's, its settings (project-settings.ts) and
+ * how a routine's run that woke the session went (routines.ts). Listed by
+ * scope ({@link allows}).
  */
 const PROJECT_TOOLS: ReadonlySet<string> = new Set([
   ...CAW_PROJECT_TOOLS,
   "project_settings",
   "routine_result",
-  "memory_propose",
 ]);
 
 /** Fleet watch's triage decision (fleet-watch.ts), the overseer's alone. */
 export const TRIAGE_TOOLS = ["triage_decide"] as const;
 
-/** A memory curator run's own (memory.ts): never a worker's. */
-const CURATOR_OWN = ["memory_read", "memory_classify"] as const;
+/** A nightly memory run's own (memory.ts, memory-run.ts): never a worker's. */
+const CURATOR_OWN = ["memory_read", "memory_apply"] as const;
 
 /** A trim run's own (unused-trim.ts): never a worker's. */
 const TRIMMER_OWN = ["trim_propose"] as const;
@@ -220,12 +218,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     "generate_image",
     "show_image",
   ]),
-  curator: new Set([
-    "set_title",
-    "finish_item",
-    "memory_propose",
-    ...CURATOR_OWN,
-  ]),
+  curator: new Set(["set_title", "finish_item", ...CURATOR_OWN]),
   trimmer: new Set([
     "set_title",
     "finish_item",
@@ -352,7 +345,7 @@ export const refusal = (row: InstanceRow, name: string): string => {
         ? `${name} isn't available here: only a delegate that may start any type changes tasks or starts attempts, and this one is a leaf. Hand the change to the session that started it.`
         : `${name} isn't available here: a delegate or work item files no tasks and changes no fleet settings. Hand the change to the session that started it.`;
     case "curator":
-      return `${name} isn't available to the memory curator: it reads the inbox, proposes with memory_propose, archives with memory_classify, and finishes.`;
+      return `${name} isn't available to the nightly memory run: it reads with memory_read, writes with memory_apply, and finishes.`;
     case "trimmer":
       return `${name} isn't available to the unused skills and servers routine: it proposes with trim_propose, and finishes.`;
     case "worker":
@@ -365,6 +358,6 @@ export const refusal = (row: InstanceRow, name: string): string => {
     return `${name} belongs to a run of the unused skills and servers routine.`;
   }
   return CURATOR_OWN.some((tool) => tool === name)
-    ? `${name} belongs to a project's memory curator.`
+    ? `${name} belongs to a project's nightly memory run.`
     : `${name} belongs to a design check's verifier.`;
 };
