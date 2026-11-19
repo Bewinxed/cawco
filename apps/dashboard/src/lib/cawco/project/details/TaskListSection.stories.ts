@@ -34,7 +34,7 @@ export const StopFromPress = {
   play: presses({ role: "radio", name: ONLY_HERE, after: 600 }),
 };
 
-/** I pressed Linear: nothing changes yet, its step opens. */
+/** I pressed Connect Linear: nothing changes yet, its step opens. */
 export const LinearPressed = {
   args: { view: "tasks-linear" },
   from: "StopAsked",
