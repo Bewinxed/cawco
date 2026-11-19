@@ -238,7 +238,7 @@
           class="flex min-w-0 flex-1 items-start gap-space-2 type-meta text-ink-muted"
         >
           <IconClock aria-hidden="true" class="mt-px size-icon-sm flex-none" />
-          <span class="text-pretty"
+          <span class="min-w-0 text-pretty wrap-anywhere"
             >{folderWords.locateWaits(
               folder.locateTo,
               folder.machine.name
