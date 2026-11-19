@@ -94,6 +94,7 @@
     TabsListState,
     useTabs,
   } from "./context.svelte";
+  import { forwardStyle } from "./forward-style";
   import { lastInput } from "./last-input";
   import { TabRects } from "./rects.svelte";
 
@@ -214,6 +215,8 @@
   }
   /** The come-forward's clock: one run on the track. */
   const FORWARD = "tab-come-forward";
+  /** How a come-forward is drawn (forward-style.ts), as the strip's host gives it. */
+  const drawStyle = forwardStyle();
   /** The item a drag has lifted, laid out (`data-lifted`), if one is. */
   let lifted = $state<HTMLElement | null>(null);
   /** The item a hang stands drawn out of (`data-hung`), if one does. */
@@ -375,6 +378,8 @@
     leaving: HTMLElement;
     /** The tab being chosen, and the tab it leaves. */
     mover: HTMLElement;
+    /** The tabs it moves: every tab, or those beside the two (`near`). */
+    moves: ReadonlySet<HTMLElement>;
     /** Every tab's pose at the clock's progress `p`. */
     poseAt: (p: number) => Map<HTMLElement, FoldPose>;
     /**
@@ -491,12 +496,48 @@
   }
   /** Every tab's pose as drawn now: the come-forward's where one runs, else its rest. */
   function drawnPoses(items: HTMLElement[]) {
-    const running = forward?.poseAt(progressOf(forward.clock));
+    const was = forward;
+    const running = was?.poseAt(progressOf(was.clock));
     return new Map(
       items.map((item) => [
         item,
-        running?.get(item) ?? restPose(list.folds.get(item) ?? [false, false]),
+        (was?.moves.has(item) ? running?.get(item) : undefined) ??
+          restPose(list.folds.get(item) ?? [false, false]),
       ])
+    );
+  }
+  /**
+   * A pose with each side's reach (its spread of the flare) and its step in
+   * (its tuck) on whole pixels (`stepped`): a fold that moves a flare's
+   * width over the switch is drawn at most once per pixel it moves.
+   */
+  const toWholePixels = (pose: FoldPose, flare: number): FoldPose => {
+    const reach = (spread: number) =>
+      flare > 0 ? Math.round(spread * flare) / flare : spread;
+    return {
+      spread: [reach(pose.spread[0]), reach(pose.spread[1])],
+      tuck: [Math.round(pose.tuck[0]), Math.round(pose.tuck[1])],
+    };
+  };
+  /**
+   * The tabs a come-forward moves (`near`): the tab chosen, the tab it
+   * leaves and the tab beside each; every tab otherwise.
+   */
+  function movedBy(
+    items: HTMLElement[],
+    from: number,
+    to: number
+  ): ReadonlySet<HTMLElement> {
+    if (drawStyle === "still") {
+      return new Set();
+    }
+    if (drawStyle !== "near") {
+      return new Set(items);
+    }
+    return new Set(
+      [from - 1, from, from + 1, to - 1, to, to + 1].flatMap(
+        (i) => items[i] ?? []
+      )
     );
   }
   /**
@@ -549,6 +590,7 @@
       laidOut
     );
     const poseAt = sweep(items, start, after, m.overlap);
+    const moves = movedBy(items, from, to);
     stack(track, items, from);
     const clock = track.animate([{ "--forward": 0 }, { "--forward": 1 }], {
       id: FORWARD,
@@ -563,6 +605,7 @@
       flipped: false,
       mover,
       leaving,
+      moves,
       poseAt,
       frame: 0,
       held: paused,
@@ -609,10 +652,34 @@
         endForward(track, fresh, at);
         return;
       }
-      setPoses(poseAt(p));
+      pose(p);
       now.frame = requestAnimationFrame(step);
     };
-    setPoses(poseAt(0));
+    /**
+     * The moving tabs' poses at `p`, each written only where it moves the
+     * tab (`setPoses`); `stepped`, each side's reach and step in on whole
+     * pixels first.
+     */
+    const pose = (p: number) => {
+      const moving = new Map<HTMLElement, FoldPose>();
+      for (const [item, at] of poseAt(p)) {
+        if (moves.has(item)) {
+          moving.set(
+            item,
+            drawStyle === "stepped" ? toWholePixels(at, m.flare) : at
+          );
+        }
+      }
+      setPoses(moving);
+    };
+    // A tab a come-forward caught mid-way moved, and this one does not,
+    // stands at rest on its folds.
+    for (const item of [...list.poses.keys()]) {
+      if (!moves.has(item)) {
+        list.poses.delete(item);
+      }
+    }
+    pose(0);
     now.frame = requestAnimationFrame(step);
   }
   /** The tab the stack was last ranked for, and the tabs the strip held then. */
