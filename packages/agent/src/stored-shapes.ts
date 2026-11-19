@@ -375,6 +375,74 @@ const ToolInstallsShape = declared(
 export const ToolInstallsSchema = ToolInstallsShape;
 export type ToolInstallsOutput = z.output<typeof ToolInstallsShape>;
 
+const GitFactsShape = declared(
+  z.object({
+    head: z.string().nullable(),
+    refs: z.string(),
+    stashes: z.number(),
+    status: z.string(),
+  }),
+  "GitFacts",
+  "packages/agent/src/folder-tree.ts"
+);
+export type GitFactsOutput = z.output<typeof GitFactsShape>;
+
+const TreeEndShape = declared(
+  z.object({
+    bytes: z.number(),
+    changed: z.array(z.string()),
+    dirs: z.number(),
+    files: z.number(),
+    git: GitFactsShape.nullable(),
+    links: z.number(),
+  }),
+  "TreeEnd",
+  "packages/agent/src/folder-tree.ts"
+);
+export const TreeEndSchema = TreeEndShape;
+export type TreeEndOutput = z.output<typeof TreeEndShape>;
+
+const TreeEntryShape = declared(
+  z.object({
+    kind: z.enum(["dir", "file", "link", "other"]),
+    linkOf: z.string().optional(),
+    mode: z.number(),
+    mtimeMs: z.number(),
+    path: z.string(),
+    sha256: z.string().optional(),
+    size: z.number(),
+    target: z.string().optional(),
+  }),
+  "TreeEntry",
+  "packages/agent/src/folder-tree.ts"
+);
+export const TreeEntrySchema = TreeEntryShape;
+export type TreeEntryOutput = z.output<typeof TreeEntryShape>;
+
+const TreeFailShape = declared(
+  z.object({ words: z.string() }),
+  "TreeFail",
+  "packages/agent/src/folder-tree.ts"
+);
+export const TreeFailSchema = TreeFailShape;
+export type TreeFailOutput = z.output<typeof TreeFailShape>;
+
+const TreeHeadShape = declared(
+  z.object({ bytes: z.number(), entries: z.number(), files: z.number() }),
+  "TreeHead",
+  "packages/agent/src/folder-tree.ts"
+);
+export const TreeHeadSchema = TreeHeadShape;
+export type TreeHeadOutput = z.output<typeof TreeHeadShape>;
+
+const TreeSumShape = declared(
+  z.object({ sha256: z.string() }),
+  "TreeSum",
+  "packages/agent/src/folder-tree.ts"
+);
+export const TreeSumSchema = TreeSumShape;
+export type TreeSumOutput = z.output<typeof TreeSumShape>;
+
 const WorktreeShape = declared(
   z.object({
     announce: z

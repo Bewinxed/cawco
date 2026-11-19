@@ -18,6 +18,14 @@ import type {
   SetHook as SetHookType,
 } from "./fleet-set-rows";
 import type { LegacyFleetSidecar as LegacyFleetSidecarType } from "./fleet-sidecar-move";
+import type {
+  GitFacts as GitFactsType,
+  TreeEnd as TreeEndType,
+  TreeEntry as TreeEntryType,
+  TreeFail as TreeFailType,
+  TreeHead as TreeHeadType,
+  TreeSum as TreeSumType,
+} from "./folder-tree";
 import type { FleetSidecar as FleetSidecarType } from "./harnesses/fleet-common";
 import type { OpencodeServerFacts as OpencodeServerFactsType } from "./harnesses/opencode";
 import type {
@@ -36,6 +44,7 @@ import type {
   FleetMcpSetOutput,
   FleetPlaceSetOutput,
   FleetSidecarOutput,
+  GitFactsOutput,
   LegacyFleetSidecarOutput,
   MachineNetworkOutput,
   MadeFolderOutput,
@@ -49,6 +58,11 @@ import type {
   ToolInstallRecordOutput,
   ToolInstallsOutput,
   ToolInstallUnderwayOutput,
+  TreeEndOutput,
+  TreeEntryOutput,
+  TreeFailOutput,
+  TreeHeadOutput,
+  TreeSumOutput,
   WorktreeOutput,
 } from "./stored-shapes";
 import type {
@@ -98,6 +112,12 @@ prove<
     Same<ToolInstallRecordOutput, ToolInstallRecordType>,
     Same<ToolInstallUnderwayOutput, ToolInstallUnderwayType>,
     Same<ToolInstallsOutput, ToolInstallsType>,
+    Same<GitFactsOutput, GitFactsType>,
+    Same<TreeEndOutput, TreeEndType>,
+    Same<TreeEntryOutput, TreeEntryType>,
+    Same<TreeFailOutput, TreeFailType>,
+    Same<TreeHeadOutput, TreeHeadType>,
+    Same<TreeSumOutput, TreeSumType>,
     Same<WorktreeOutput, WorktreeType>,
   ]
 >();

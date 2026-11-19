@@ -13,6 +13,13 @@ import type {
 import type { SendAttachment } from "@cawco/core/attachments";
 import type { Extracted } from "@cawco/core/continuation-read";
 import type { MayStart } from "@cawco/core/delegate-types";
+import type {
+  FolderMoveCopied,
+  FolderMoveLeft,
+  FolderMoveProgressFrame,
+  FolderMoveStep,
+  FolderWalk,
+} from "@cawco/core/folder-move";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import type { PermissionMode } from "@cawco/core/harness/modes";
 import type { LandsMode } from "@cawco/core/injected";
@@ -29,6 +36,7 @@ import type {
 } from "@cawco/core/move";
 import type { PresenceClient } from "@cawco/core/notifications";
 import type { SendPayload } from "@cawco/core/protocol";
+import type { MoveEnded } from "@cawco/core/session/controls";
 import type {
   AuthState,
   ModeAsk,
@@ -228,6 +236,81 @@ export interface Proposal {
   /** The `folder_write` call that made it (Claude Code's `_meta`): where it is drawn. */
   toolUseId?: string;
   why: string;
+}
+
+/**
+ * One session whose folder a folder move moves (folder-moves.ts): what it
+ * was before the move, how its conversation follows, and how it came out.
+ */
+export interface FolderMoveSession {
+  /** The account its Claude data lives under; null: the machine's own login. */
+  accountId: string | null;
+  /** Its process was carried, its conversation filed for the new folder. */
+  carried?: boolean;
+  /** What the pause ended with its process (background commands, wake-ups). */
+  ended?: MoveEnded;
+  /** The folder it ran in, and the one it runs in after. */
+  from: string;
+  harness: HarnessKind;
+  instanceId: string;
+  /** Its name as the board shows it. */
+  name: string;
+  /** Its process has ended between turns for the move. */
+  paused?: boolean;
+  /** In the middle of a reply: the move waits for it, and the person may interrupt. */
+  replying?: boolean;
+  /** It runs again in the new folder, or continues from a summary there. */
+  resumed?: boolean;
+  /** Why it did not start again, in words. */
+  resumeWhy?: string;
+  /** Its harness's own id for its conversation; null: none begun yet. */
+  sessionId: string | null;
+  to: MachinePath;
+  /** For a summary: the harness it continues on. */
+  tool: HarnessKind;
+  /** Its process ran as the move began: it is started again after. */
+  wasRunning: boolean;
+  /** Its conversation moves as it is (`same`), or continues from a summary. */
+  way: "same" | "summary";
+  /** Why it continues from a summary, in words; null for `same`. */
+  why: string | null;
+}
+
+/** A place a folder move re-points: the one moved, and any project's place inside it. */
+export interface FolderMovePlace {
+  from: string;
+  placeId: string;
+  projectId: string;
+  to: MachinePath;
+}
+
+/** Everything a folder move has learned and decided, as its record keeps it (folder-moves.ts). */
+export interface FolderMoveState {
+  /** The stage it was called off at. */
+  calledOffAt?: FolderMoveStep;
+  /** What its copy proved. */
+  copied?: FolderMoveCopied;
+  /** A step that failed: which, and the tool's words. */
+  error?: { step: FolderMoveStep; words: string };
+  /** The commit the folder stood at as it was read. */
+  head: string | null;
+  /** What the removal left in the old folder. */
+  left?: FolderMoveLeft[];
+  /** CawCo made the folder: the copy, in its place, is recorded as made too. */
+  made: boolean;
+  places: FolderMovePlace[];
+  /** How far the step in flight is on its machine. */
+  progress?: Omit<FolderMoveProgressFrame, "jobId" | "kind">;
+  sessions: FolderMoveSession[];
+  sourceHome: string;
+  sourcePath: string;
+  steps: FolderMoveStep[];
+  targetHome: string;
+  targetPath: MachinePath;
+  /** The folder's walk as read before it started: what a copy carries. */
+  walk?: FolderWalk;
+  /** One rename on one disk, a copy on one machine, or a copy the hub relays between two. */
+  way: "rename" | "copy" | "relay";
 }
 
 /** Everything a job has learned and decided, as its record keeps it. */
@@ -560,7 +643,14 @@ export type ContinuationAsker =
   | { kind: "person" }
   | { kind: "session"; id: string }
   | { kind: "task"; id: string }
-  | ({ kind: "move" } & MoveAsker);
+  | ({ kind: "move" } & MoveAsker)
+  /**
+   * A move of its project's folder to another machine, whose harness or
+   * account there can't take the conversation as it is (folder-moves.ts):
+   * it goes on there, from a summary, as the same session. `id`: the
+   * folder move's.
+   */
+  | { id: string; kind: "folder" };
 
 /**
  * A move that goes on from a summary, as its continuation keeps it

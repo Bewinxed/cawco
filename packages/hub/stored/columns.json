@@ -3043,7 +3043,8 @@
       "person",
       "session",
       "task",
-      "move"
+      "move",
+      "folder"
     ]
   },
   "continuations.asked_by_move": {
@@ -6116,6 +6117,418 @@
       "leaf"
     ]
   },
+  "folder_moves.stage": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "quiet",
+          "rename",
+          "copy",
+          "place",
+          "record",
+          "carry",
+          "remove",
+          "resume"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "done"
+      },
+      {
+        "type": "string",
+        "const": "failed"
+      },
+      {
+        "type": "string",
+        "const": "calledOff"
+      }
+    ]
+  },
+  "folder_moves.state": {
+    "type": "object",
+    "properties": {
+      "calledOffAt": {
+        "type": "string",
+        "enum": [
+          "quiet",
+          "rename",
+          "copy",
+          "place",
+          "record",
+          "carry",
+          "remove",
+          "resume"
+        ]
+      },
+      "copied": {
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "dirs": {
+            "type": "number"
+          },
+          "files": {
+            "type": "number"
+          },
+          "head": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "links": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "bytes",
+          "dirs",
+          "files",
+          "head",
+          "links"
+        ]
+      },
+      "error": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "quiet",
+              "rename",
+              "copy",
+              "place",
+              "record",
+              "carry",
+              "remove",
+              "resume"
+            ]
+          },
+          "words": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "words"
+        ]
+      },
+      "head": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "left": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "why": {
+              "type": "string",
+              "enum": [
+                "changed",
+                "busy",
+                "uncopied"
+              ]
+            },
+            "words": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "why"
+          ]
+        }
+      },
+      "made": {
+        "type": "boolean"
+      },
+      "places": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "placeId": {
+              "type": "string"
+            },
+            "projectId": {
+              "type": "string"
+            },
+            "to": {
+              "x-code": "custom"
+            }
+          },
+          "required": [
+            "from",
+            "placeId",
+            "projectId",
+            "to"
+          ]
+        }
+      },
+      "progress": {
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "bytesTotal": {
+            "type": "number"
+          },
+          "files": {
+            "type": "number"
+          },
+          "filesTotal": {
+            "type": "number"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "copy",
+              "check",
+              "remove"
+            ]
+          }
+        },
+        "required": [
+          "bytes",
+          "bytesTotal",
+          "files",
+          "filesTotal",
+          "phase"
+        ]
+      },
+      "sessions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "accountId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "carried": {
+              "type": "boolean"
+            },
+            "ended": {
+              "type": "object",
+              "properties": {
+                "tasks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "description": {
+                        "type": "string"
+                      },
+                      "output": {
+                        "type": "string"
+                      },
+                      "outputUnread": {
+                        "type": "object",
+                        "properties": {
+                          "after": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "after"
+                        ]
+                      },
+                      "taskId": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "description",
+                      "taskId",
+                      "type"
+                    ]
+                  }
+                },
+                "wakeups": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "tasks",
+                "wakeups"
+              ]
+            },
+            "from": {
+              "type": "string"
+            },
+            "harness": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "opencode",
+                "pi",
+                "codex"
+              ]
+            },
+            "instanceId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "paused": {
+              "type": "boolean"
+            },
+            "replying": {
+              "type": "boolean"
+            },
+            "resumed": {
+              "type": "boolean"
+            },
+            "resumeWhy": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "to": {
+              "x-code": "custom"
+            },
+            "tool": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "opencode",
+                "pi",
+                "codex"
+              ]
+            },
+            "wasRunning": {
+              "type": "boolean"
+            },
+            "way": {
+              "type": "string",
+              "enum": [
+                "same",
+                "summary"
+              ]
+            },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "accountId",
+            "from",
+            "harness",
+            "instanceId",
+            "name",
+            "sessionId",
+            "to",
+            "tool",
+            "wasRunning",
+            "way",
+            "why"
+          ]
+        }
+      },
+      "sourceHome": {
+        "type": "string"
+      },
+      "sourcePath": {
+        "type": "string"
+      },
+      "steps": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "quiet",
+            "rename",
+            "copy",
+            "place",
+            "record",
+            "carry",
+            "remove",
+            "resume"
+          ]
+        }
+      },
+      "targetHome": {
+        "type": "string"
+      },
+      "targetPath": {
+        "x-code": "custom"
+      },
+      "walk": {
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "dirs": {
+            "type": "number"
+          },
+          "files": {
+            "type": "number"
+          },
+          "links": {
+            "type": "number"
+          },
+          "whole": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "bytes",
+          "dirs",
+          "files",
+          "links",
+          "whole"
+        ]
+      },
+      "way": {
+        "type": "string",
+        "enum": [
+          "rename",
+          "copy",
+          "relay"
+        ]
+      }
+    },
+    "required": [
+      "head",
+      "made",
+      "places",
+      "sessions",
+      "sourceHome",
+      "sourcePath",
+      "steps",
+      "targetHome",
+      "targetPath",
+      "way"
+    ]
+  },
   "github_poll_cursors.resource": {
     "type": "string",
     "enum": [
@@ -8991,10 +9404,7 @@
           "title": {
             "type": "string"
           }
-        },
-        "required": [
-          "harness"
-        ]
+        }
       }
     },
     "required": [

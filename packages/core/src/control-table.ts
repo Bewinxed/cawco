@@ -71,6 +71,21 @@ import type {
   MachineMemorySet,
   SkillFile,
 } from "./fleet";
+import type {
+  FolderCarried,
+  FolderCarryAsk,
+  FolderMoveCopied,
+  FolderMoveCopyAsk,
+  FolderMoveDropAsk,
+  FolderMovePlaceAsk,
+  FolderMoveReadAsk,
+  FolderMoveReading,
+  FolderMoveRemoveAsk,
+  FolderMoveRemoved,
+  FolderMoveRenameAsk,
+  FolderMoveRenamed,
+  PausedForMove,
+} from "./folder-move";
 import type { ForgeAsk, ForgeVerdict } from "./forge-post";
 import type { AgentBusyReport, SessionCredentialInstall } from "./harness";
 import type { EffortLevel, ModelInfo } from "./harness/kinds";
@@ -305,6 +320,13 @@ interface ControlTable {
     [cwd: string, account?: string | null, model?: string | null],
     SupportedCommands
   >;
+  folderMoveCopy: Entry<[ask: FolderMoveCopyAsk], FolderMoveCopied>;
+  folderMoveDrop: Entry<[ask: FolderMoveDropAsk], { dropped: boolean }>;
+  folderMovePlace: Entry<[ask: FolderMovePlaceAsk], { placed: true }>;
+  folderMoveRead: Entry<[ask: FolderMoveReadAsk], FolderMoveReading>;
+  folderMoveRemove: Entry<[ask: FolderMoveRemoveAsk], FolderMoveRemoved>;
+  folderMoveRename: Entry<[ask: FolderMoveRenameAsk], FolderMoveRenamed>;
+  folderSessionsCarry: Entry<[ask: FolderCarryAsk], FolderCarried>;
   foldersStand: Entry<[paths: string[]], boolean[]>;
   forgePost: Entry<[ask: ForgeAsk], ForgeVerdict>;
   forgetAccount: Unread<[account: string, into?: string | null]>;
@@ -409,6 +431,7 @@ interface ControlTable {
   moveSnapshot: Entry<[request: MoveSnapshotRequest], MoveSnapshotResult>;
   "passkey.scanStart": Unread<[ask: PasskeyScanArgs]>;
   "passkey.scanStop": Unread<[ask: PasskeyScanArgs]>;
+  pauseForMove: Entry<[], PausedForMove>;
   piDefaultModel: Entry<[cwd: string], string | null>;
   placeLfs: Entry<[path: string, rows: PlaceLfsRow[]], PlaceLfsMade>;
   placePush: Entry<

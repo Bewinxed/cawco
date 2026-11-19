@@ -281,6 +281,16 @@ export interface ProjectsDb {
     taskIds: ReadonlyMap<string, string>
   ) => { places: number; sessions: number; workItems: number };
   readonly listProjects: () => ProjectRow[];
+  /**
+   * Checkout place `id`'s folder moved, files and all (folder-moves.ts): the
+   * place keeps its id, its root and whether CawCo made its folder, and is
+   * now at `path` on `machineId`, its folder found there.
+   */
+  readonly movePlace: (
+    id: string,
+    machineId: string,
+    path: MachinePath
+  ) => void;
   /** Notes a comment written under the id its device chose, once committed. */
   readonly noteTaskComment: (said: {
     id: string;
@@ -637,6 +647,17 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
         .onConflictDoNothing()
         .returning({ remote: projectLinks.remote })
         .all().length > 0,
+    movePlace: (id, machineId, path) => {
+      db.update(projectPlaces)
+        .set({
+          machineId,
+          path,
+          found: true,
+          missing: false,
+        })
+        .where(eq(projectPlaces.id, id))
+        .run();
+    },
     setPlaceRoot: (id, commit) => {
       db.update(projectPlaces)
         .set({ root: commit })

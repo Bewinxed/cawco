@@ -26,6 +26,7 @@ import type {
 } from "./fleet";
 import type { FleetMcpServerView } from "./fleet-secrets";
 import type { FleetWatchNoticesFrame } from "./fleet-watch";
+import type { FolderMoveProgressFrame } from "./folder-move";
 import type { HarnessKind } from "./harness/kinds";
 import type { HubAuthFrame } from "./hub-auth";
 import type { InstallsFrame } from "./install";
@@ -932,6 +933,8 @@ export type FramePayload =
   | MovesFrame
   /** Daemon-originated: how far a move's clone or large files are. */
   | MoveProgressFrame
+  /** Daemon-originated: how far a move of a project's folder is on the machine. */
+  | FolderMoveProgressFrame
   /** Daemon-originated: a running command's wait for a shared machine slot. */
   | CommandQueueFrame
   /** Daemon-originated: a workspace's stage changed (live components). */

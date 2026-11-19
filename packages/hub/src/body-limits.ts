@@ -6,6 +6,9 @@
  * (git-remote.ts) and may be many gigabytes. Every other route gets its own,
  * smaller cap here, checked before anything reads the body:
  *
+ * - `/api/folder-moves/relay/<token>`, a folder move's stream between two
+ *   machines: the git remote's cap, and never read before the route, which
+ *   passes it on as it comes (folder-move-relay.ts).
  * - `/api/files`, an attachment's raw bytes: {@link FILE_LIMIT_BYTES}, the
  *   most one attached file may weigh (media.ts).
  * - everything else, JSON and MCP bodies: {@link JSON_BODY_LIMIT_BYTES}. The
@@ -28,11 +31,13 @@ import { FILE_LIMIT_BYTES } from "./media";
 const JSON_BODY_LIMIT_BYTES = 32 * 1024 * 1024;
 
 const GIT_PATH = "/git/";
+/** A folder move's stream between two machines: a whole folder, streamed through (folder-move-relay.ts). */
+const RELAY_PATH = "/api/folder-moves/relay/";
 const FILES_PATH = "/api/files";
 
 /** The cap a route's body is held to. */
 const bodyLimitOf = (path: string): number => {
-  if (path.startsWith(GIT_PATH)) {
+  if (path.startsWith(GIT_PATH) || path.startsWith(RELAY_PATH)) {
     return MAX_REQUEST_BYTES;
   }
   return path === FILES_PATH ? FILE_LIMIT_BYTES : JSON_BODY_LIMIT_BYTES;
@@ -76,7 +81,7 @@ const endsWithin = async (
  */
 export const bodyLimitRefusal = async (request: Request) => {
   const path = new URL(request.url).pathname;
-  if (path.startsWith(GIT_PATH)) {
+  if (path.startsWith(GIT_PATH) || path.startsWith(RELAY_PATH)) {
     return;
   }
   const limit = bodyLimitOf(path);

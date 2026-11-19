@@ -605,6 +605,7 @@ export function startClient(): () => void {
     onFrame("moves", takeMoves),
     // A move's progress travels machine → hub only, never as its own frame.
     ...hubOnly("move_progress"),
+    ...hubOnly("folder_move_progress"),
     // A command's slot wait travels machine → hub only; its item's status carries it.
     ...hubOnly("command_queue"),
     // A borrower's ask for a fresh sign-in travels machine → hub only.

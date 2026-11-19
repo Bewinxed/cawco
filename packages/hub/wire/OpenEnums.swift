@@ -287,6 +287,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/AgentHereWay`.
+    public enum AgentHereWay: OpenEnum {
+        case same
+        case summary
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "same": self = .same
+            case "summary": self = .summary
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .same: "same"
+            case .summary: "summary"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.same, .summary]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/AgentMemberHear`.
     public enum AgentMemberHear: OpenEnum {
         case each
@@ -3751,6 +3789,47 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.file, .folder, .link]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/FolderMoveProgressFramePhase`.
+    public enum FolderMoveProgressFramePhase: OpenEnum {
+        case check
+        case copy
+        case remove
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "check": self = .check
+            case "copy": self = .copy
+            case "remove": self = .remove
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .check: "check"
+            case .copy: "copy"
+            case .remove: "remove"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.check, .copy, .remove]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -5,6 +5,7 @@
  * (codex-history.ts). The Codex audit of 2026-11-17 (the project's
  * `assets/f1ed8995/codex-harness-parity.md`) is what each member rests on.
  */
+
 import { join } from "node:path";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import type {
@@ -49,6 +50,7 @@ import { probeStarted } from "../probe-count";
 import { procEpoch } from "../sessiond-client";
 import { resolveBin, runnable, toolGate } from "../tools";
 import { FULL_CAPABILITIES } from "./capabilities";
+import { codexFolderCarry } from "./codex-folder";
 import {
   codexEntries,
   codexThreadRan,
@@ -198,6 +200,8 @@ class CodexHarness implements Harness<"codex"> {
   accountsChanged(): Promise<void> {
     return Promise.resolve();
   }
+
+  readonly folderCarry = codexFolderCarry;
 
   /** Every account's home reads one thread store, so a session that changes account carries nothing (descriptor `accountDir`). */
   carrier(): SessionCarry {

@@ -8,6 +8,11 @@ import {
   AuthStateShape,
   EffortLevelShape,
   ExtractedShape,
+  FolderMoveCopiedShape,
+  FolderMoveLeftShape,
+  FolderMoveProgressFrameShape,
+  FolderMoveStepShape,
+  FolderWalkShape,
   HarnessKindShape,
   InstallDraftShape,
   InstallShape,
@@ -16,6 +21,7 @@ import {
   MayStartShape,
   ModeAskShape,
   MoveAskShape,
+  MoveEndedShape,
   MoveErrorShape,
   MoveJobShape,
   MoveLargeFileShape,
@@ -61,6 +67,7 @@ import type {
   DesignFinding as DesignFindingType,
   DesignOfferAnswer as DesignOfferAnswerType,
   DesignProposalFile as DesignProposalFileType,
+  FolderMoveState as FolderMoveStateType,
   GitHubResource as GitHubResourceType,
   InboundVia as InboundViaType,
   InstallsRecord as InstallsRecordType,
@@ -369,6 +376,74 @@ const DesignProposalFileShape = declared(
 export const DesignProposalFileSchema: z.ZodType<DesignProposalFileType> =
   DesignProposalFileShape;
 export type DesignProposalFileOutput = z.output<typeof DesignProposalFileShape>;
+
+const FolderMovePlaceShape = declared(
+  z.object({
+    from: z.string(),
+    placeId: z.string(),
+    projectId: z.string(),
+    to: MachinePathShape,
+  }),
+  "FolderMovePlace",
+  "packages/hub/src/db/stored-types.ts"
+);
+export type FolderMovePlaceOutput = z.output<typeof FolderMovePlaceShape>;
+
+const FolderMoveSessionShape = declared(
+  z.object({
+    accountId: z.string().nullable(),
+    carried: z.boolean().optional(),
+    ended: MoveEndedShape.optional(),
+    from: z.string(),
+    harness: HarnessKindShape,
+    instanceId: z.string(),
+    name: z.string(),
+    paused: z.boolean().optional(),
+    replying: z.boolean().optional(),
+    resumed: z.boolean().optional(),
+    resumeWhy: z.string().optional(),
+    sessionId: z.string().nullable(),
+    to: MachinePathShape,
+    tool: HarnessKindShape,
+    wasRunning: z.boolean(),
+    way: z.enum(["same", "summary"]),
+    why: z.string().nullable(),
+  }),
+  "FolderMoveSession",
+  "packages/hub/src/db/stored-types.ts"
+);
+export type FolderMoveSessionOutput = z.output<typeof FolderMoveSessionShape>;
+
+const FolderMoveStateShape = declared(
+  z.object({
+    calledOffAt: FolderMoveStepShape.optional(),
+    copied: FolderMoveCopiedShape.optional(),
+    error: z
+      .object({ step: FolderMoveStepShape, words: z.string() })
+      .optional(),
+    head: z.string().nullable(),
+    left: z.array(FolderMoveLeftShape).optional(),
+    made: z.boolean(),
+    places: z.array(FolderMovePlaceShape),
+    progress: FolderMoveProgressFrameShape.omit({
+      jobId: true,
+      kind: true,
+    }).optional(),
+    sessions: z.array(FolderMoveSessionShape),
+    sourceHome: z.string(),
+    sourcePath: z.string(),
+    steps: z.array(FolderMoveStepShape),
+    targetHome: z.string(),
+    targetPath: MachinePathShape,
+    walk: FolderWalkShape.optional(),
+    way: z.enum(["rename", "copy", "relay"]),
+  }),
+  "FolderMoveState",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const FolderMoveStateSchema: z.ZodType<FolderMoveStateType> =
+  FolderMoveStateShape;
+export type FolderMoveStateOutput = z.output<typeof FolderMoveStateShape>;
 
 const GitHubResourceShape = declared(
   z.enum(["pulls", "issues", "comments", "issueEvents", "discussions"]),

@@ -332,6 +332,7 @@ import {
 } from "../wakeups";
 import { FULL_CAPABILITIES } from "./capabilities";
 import { ClaudeCarry } from "./claude-carry";
+import { claudeFolderCarry } from "./claude-folder";
 import { claudeStoredRun, homeLoginAccount } from "./claude-stored-run";
 import {
   CLAUDE_PROMPT_TYPES,
@@ -5216,6 +5217,7 @@ class ClaudeHarness implements Harness<"claude"> {
   carrier(host: CarryHost): SessionCarry {
     return new ClaudeCarry(this, host);
   }
+  readonly folderCarry = claudeFolderCarry;
   readonly detectStartsNothing = true;
   readonly healsFleetMcp = true;
   readonly relaunchesOnManualCompact = true;

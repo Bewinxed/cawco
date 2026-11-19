@@ -95,6 +95,8 @@ const HUB_PATH_USERS: Record<string, string> = {
     "the stand-in recognises the requests it answers by their path",
   "packages/agent/src/binary-update.ts":
     "a build's download, written to disk as it comes and said how far it has gone",
+  "packages/agent/src/folder-relay.ts":
+    "a folder move's bytes between two machines, sent and read as they stream, which Eden's client reads whole",
   "packages/cli/src/binary-health.ts":
     "the address a probe names in what it says, beside its read through Eden",
   "packages/cli/src/service.ts":

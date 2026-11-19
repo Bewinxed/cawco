@@ -45,6 +45,7 @@ import {
 import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db/index";
 import type { InstanceKind } from "./db/stored-types";
+import { folderMoveHold } from "./folder-move-holds";
 import { handleId, isHandle } from "./handles";
 import type { Located, SessionLocation, SettledSpawn } from "./hub-shapes";
 import type { LabelledRow } from "./labels";
@@ -1557,6 +1558,10 @@ export const createSpawns = (ctx: SpawnsContext) => {
   };
   /** {@link atLaunchDir}'s refusal for a row, if it would refuse one. */
   const launchRefusal = (instanceId: string): string | undefined => {
+    const moving = folderMoveHold(instanceId);
+    if (moving) {
+      return moving;
+    }
     const launched = atLaunchDir(instanceId, { cwd: "" });
     return "refusal" in launched ? launched.refusal : undefined;
   };

@@ -244,7 +244,7 @@ export const stepWords = {
     snapshot: "Saving your unsaved work",
     clone: "Copying the saved code",
     lfs: "Copying big files",
-    start: (machine: string) => `Starting on ${machine}`,
+    start: (machine: string) => `Finishing on ${machine}`,
   },
   copyProgress: (done: string, total: string) => `${done} of ${total}`,
   copyDone: (machine: string) => `Copied to ${machine}.`,

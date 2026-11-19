@@ -392,6 +392,12 @@ for (const kind of HARNESSES) {
     },
     accountsChanged: () => Promise.resolve(),
     carrier: () => noCarry("A test session is never carried between accounts."),
+    folderCarry: {
+      here: () => Promise.resolve(),
+      tops: () => Promise.resolve([]),
+      take: () => Promise.resolve(),
+      drop: () => Promise.resolve(),
+    },
     dispose: () => Promise.resolve(),
     fleetHooks: () => Promise.resolve({}),
     hubRestarted: () => Promise.resolve(),

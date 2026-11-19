@@ -125,6 +125,22 @@ import {
   READ_SKILL_FILES,
   READ_SKILL_FOLDER,
 } from "./fleet";
+import {
+  CONTROL_FOLDER_MOVE_COPY,
+  CONTROL_FOLDER_MOVE_DROP,
+  CONTROL_FOLDER_MOVE_PLACE,
+  CONTROL_FOLDER_MOVE_READ,
+  CONTROL_FOLDER_MOVE_REMOVE,
+  CONTROL_FOLDER_MOVE_RENAME,
+  CONTROL_FOLDER_SESSIONS_CARRY,
+  CONTROL_PAUSE_FOR_MOVE,
+  type FolderCarried,
+  type FolderMoveCopied,
+  type FolderMoveReading,
+  type FolderMoveRemoved,
+  type FolderMoveRenamed,
+  type PausedForMove,
+} from "./folder-move";
 import type { ForgeVerdict } from "./forge-post";
 import { CONTROL_FORGE_POST } from "./forge-post";
 import type { AgentBusyReport, SessionCredentialInstall } from "./harness";
@@ -274,6 +290,11 @@ import {
   DesignMapSchema,
   FleetAckSchema,
   FleetMcpTakeAnswerSchema,
+  FolderCarriedSchema,
+  FolderMoveCopiedShape,
+  FolderMoveReadingSchema,
+  FolderMoveRemovedSchema,
+  FolderMoveRenamedSchema,
   FolderRemovedSchema,
   FolderWeightSchema,
   ForgeVerdictSchema,
@@ -301,6 +322,7 @@ import {
   MoveRemoteAuthSchema,
   MoveSnapshotResultShape,
   NeutralSessionInfoSchema,
+  PausedForMoveSchema,
   PermissionModeSetSchema,
   PictureTakenSchema,
   PlaceLfsMadeSchema,
@@ -498,6 +520,7 @@ const CONTROLS = {
   ),
   [CONTROL_MCP_FLEET_HEAL]: reply<FleetMcpTakeAnswer>(FleetMcpTakeAnswerSchema),
   [CONTROL_SLEEP]: UNREAD,
+  [CONTROL_PAUSE_FOR_MOVE]: reply<PausedForMove>(PausedForMoveSchema),
   [CONTROL_RESTLESS]: z.record(z.string(), z.string()),
   [CONTROL_WORK_IN_FLIGHT]: reply<WorkInFlight | null>(
     WorkInFlightSchema.nullable()
@@ -594,6 +617,18 @@ const CONTROLS = {
   [CONTROL_MOVE_LFS]: reply<MoveLfsResult>(MoveLfsResultShape),
   [CONTROL_MOVE_CANCEL]: UNREAD,
   [CONTROL_MOVE_REMOTE_CREDENTIAL]: reply<MoveRemoteAuth>(MoveRemoteAuthSchema),
+  // A project's folder moved, files and all (folder-move.ts).
+  [CONTROL_FOLDER_MOVE_READ]: reply<FolderMoveReading>(FolderMoveReadingSchema),
+  [CONTROL_FOLDER_MOVE_RENAME]: reply<FolderMoveRenamed>(
+    FolderMoveRenamedSchema
+  ),
+  [CONTROL_FOLDER_MOVE_COPY]: reply<FolderMoveCopied>(FolderMoveCopiedShape),
+  [CONTROL_FOLDER_MOVE_PLACE]: z.object({ placed: z.literal(true) }),
+  [CONTROL_FOLDER_MOVE_REMOVE]: reply<FolderMoveRemoved>(
+    FolderMoveRemovedSchema
+  ),
+  [CONTROL_FOLDER_MOVE_DROP]: z.object({ dropped: z.boolean() }),
+  [CONTROL_FOLDER_SESSIONS_CARRY]: reply<FolderCarried>(FolderCarriedSchema),
   // GitHub's sign-ins on a machine, and its forge writes.
   [CONTROL_GH_ACCOUNTS]: reply<GhAccount[]>(z.array(GhAccountSchema)),
   [CONTROL_GH_TOKEN]: reply<GhToken>(GhTokenSchema),

@@ -62,6 +62,15 @@ import type {
   RegisterPayload,
 } from "@cawco/core/envelopes";
 import { sayFetchCap } from "@cawco/core/fetch-cap";
+import {
+  CONTROL_FOLDER_MOVE_COPY,
+  CONTROL_FOLDER_MOVE_DROP,
+  CONTROL_FOLDER_MOVE_PLACE,
+  CONTROL_FOLDER_MOVE_READ,
+  CONTROL_FOLDER_MOVE_REMOVE,
+  CONTROL_FOLDER_MOVE_RENAME,
+  CONTROL_FOLDER_SESSIONS_CARRY,
+} from "@cawco/core/folder-move";
 import { keepFoldersPrivate } from "@cawco/core/folders";
 import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
 import {
@@ -256,6 +265,9 @@ import { onVersionAnswered } from "./claude-version";
 import { readConfig, writeConfig } from "./config";
 import {
   commandLane,
+  folderMoveDropLane,
+  folderMoveLane,
+  folderMoveReadLane,
   moveLane,
   workspaceCreateLane,
   workspaceLane,
@@ -264,6 +276,15 @@ import { damagedRecords, sweepRecords } from "./damaged-records";
 import { dropWrittenDenials } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
 import { moveLegacyFleetSidecar } from "./fleet-sidecar-move";
+import { carryConversations } from "./folder-carry";
+import {
+  folderMoveCopy,
+  folderMoveDrop,
+  folderMovePlace,
+  folderMoveRead,
+  folderMoveRemove,
+  folderMoveRename,
+} from "./folder-move";
 import { forgePost } from "./forges/forge";
 import { setHubCredential } from "./git/hub-credential";
 import { setHubGitOrigins } from "./git-credential";
@@ -2360,6 +2381,7 @@ const attach = (
         frame.kind === "moves" ||
         frame.kind === "installs" ||
         frame.kind === "move_progress" ||
+        frame.kind === "folder_move_progress" ||
         frame.kind === "command_queue" ||
         frame.kind === "stage" ||
         frame.kind === "browsers" ||
@@ -3313,6 +3335,7 @@ const startDaemon = (rediscover = false) =>
       emit: (envelope) => hubLine.send(envelope),
       machineId: machineIdValue,
       moveProgress: framed,
+      folderMoveProgress: framed,
       opencodeAccounts,
       passkeyQr: framed,
       relay: framed,
@@ -3946,6 +3969,42 @@ const startDaemon = (rediscover = false) =>
       moveLane
     );
     supervisor.declareControl(CONTROL_MOVE_CANCEL, moveCancel);
+    // A project's folder moved, files and all (folder-move.ts, folder-carry.ts).
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_READ,
+      folderMoveRead,
+      folderMoveReadLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_RENAME,
+      unfenced(folderMoveRename),
+      folderMoveLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_COPY,
+      unfenced((ask) => folderMoveCopy(ask, ports.folderMoveProgress)),
+      folderMoveLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_PLACE,
+      unfenced(folderMovePlace),
+      folderMoveLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_REMOVE,
+      unfenced((ask) => folderMoveRemove(ask, ports.folderMoveProgress)),
+      folderMoveLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_DROP,
+      folderMoveDrop,
+      folderMoveDropLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_SESSIONS_CARRY,
+      unfenced(carryConversations),
+      folderMoveLane
+    );
     // Stopped where they run once the hub lets them go (CONTROL_ABANDON).
     supervisor.declareRead(
       CONTROL_SEARCH_TRANSCRIPTS,

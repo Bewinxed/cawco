@@ -62,6 +62,7 @@ export type MachineReturnContext = Pick<
   | "machineFor"
   | "machineName"
   | "moves"
+  | "folderMoves"
   | "find"
   | "nameStoredSessions"
   | "pending"
@@ -755,6 +756,8 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     const { message } = ret;
     // And project moves waiting on it, likewise (moves.ts).
     ctx.moves.machineBack(message.machineId);
+    // And moves of a project's folder, likewise (folder-moves.ts).
+    ctx.folderMoves.machineBack(message.machineId);
   };
 
   return [

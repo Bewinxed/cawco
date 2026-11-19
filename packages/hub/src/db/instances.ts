@@ -754,6 +754,16 @@ export interface InstancesDb {
     at: Date | null
   ) => (typeof instances.$inferSelect)[];
   /**
+   * A session's folder moved with its project's (folder-moves.ts): it runs
+   * in `cwd` on `machineId` from its next launch, its launch directory known
+   * there. Bookkeeping, as {@link patchInstance} is: its activity stays.
+   */
+  readonly moveInstanceFolder: (
+    id: string,
+    machineId: string,
+    cwd: MachinePath
+  ) => void;
+  /**
    * Gives the session its name. The owner's always lands; the session's own
    * (`set_title`) is refused once the owner has named it, and the answer
    * carries the owner's name. Undefined when there is no such session.
@@ -1076,6 +1086,11 @@ export interface InstancesDb {
    * Called off the daemon's pulse and throttled by the caller.
    */
   readonly touchInstanceActivity: (id: string) => void;
+  /**
+   * Whether `id`'s turn is under way, as the hub last heard: opened in the
+   * launch it runs now (a turn opened before its last start is a cut one).
+   */
+  readonly turnOpen: (id: string) => boolean;
   /** Forgets where a line taken back stood. */
   readonly unanchorLine: (instanceId: string, lineId: string) => void;
   /**
@@ -2093,6 +2108,27 @@ export const instancesDb = (core: DbCore): InstancesDb => {
     // activity, `touchInstanceActivity`, or a status change). Stamped here, a
     // sign-in that carried every session to an account read sessions asleep
     // for weeks as "active 1m ago", and kept stopped ones listed a day more.
+    turnOpen: (id) => {
+      const row = db
+        .select({
+          turnOpenAt: instances.turnOpenAt,
+          spawnedAt: instances.spawnedAt,
+        })
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get();
+      return (
+        !!row &&
+        row.turnOpenAt !== null &&
+        row.turnOpenAt >= Number(row.spawnedAt ?? 0)
+      );
+    },
+    moveInstanceFolder: (id, machineId, cwd) => {
+      db.update(instances)
+        .set({ machineId, cwd, launchDir: "known" })
+        .where(eq(instances.id, id))
+        .run();
+    },
     patchInstance: (id, patch) =>
       db
         .update(instances)

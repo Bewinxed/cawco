@@ -18,9 +18,7 @@ const moveBody = t.Object({
   machineId: t.String({ minLength: 1 }),
   path: t.Optional(t.String({ pattern: "^(/|~/)" })),
   spawn: t.Object({
-    // Refused when absent (moves.ts `refusal`); optional on the wire only
-    // until TestFlight 20261015, 20261015.3, 20261017 and 20261018 are
-    // expired, then required (core move.ts MoveRequest).
+    // Absent: a copy that starts no session (core move.ts MoveRequest).
     harness: t.Optional(harnessSchema),
     model: t.Optional(t.String({ minLength: 1 })),
     effort: t.Optional(t.UnionEnum(EFFORT_LEVELS)),

@@ -73,6 +73,8 @@ const askerWords = (by: ContinuationAsker): string => {
       return `its move to ${by.to}, as its provider's compaction policy says`;
     case "person":
       return "a person (the dashboard or the API)";
+    case "folder":
+      return `its project's folder moving (folder move ${by.id})`;
   }
 };
 
@@ -353,7 +355,8 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     if (itemId) {
       return `${prepared.source.title} holds work item ${itemId}: its new session takes the item on, so it starts where the item's workspace is, ${where}.`;
     }
-    return askedBy.kind === "person"
+    // The person's own Continue, and a move of its folder, start where they name.
+    return askedBy.kind === "person" || askedBy.kind === "folder"
       ? undefined
       : `${prepared.source.title} goes on as the same session, its conversation before read where it ran, so its continuation starts there, ${where}.`;
   };
@@ -1037,6 +1040,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         break;
       case "task":
       case "move":
+      case "folder":
         cause = row.sourceInstanceId;
         break;
       default:
@@ -1261,6 +1265,9 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     }
     if (by.kind === "person") {
       return "you";
+    }
+    if (by.kind === "folder") {
+      return "its project's folder moving";
     }
     const [asker] = ctx.db.getInstancesByIds([by.id]);
     return asker ? ctx.sessionName(asker) : `session ${by.id.slice(0, 8)}`;

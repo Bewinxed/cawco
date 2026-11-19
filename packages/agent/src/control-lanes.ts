@@ -64,6 +64,24 @@ export const moveLane: ControlLane<
   "movePrepare" | "moveSnapshot" | "moveClone" | "moveLfs"
 > = (control) => `move:${control.args[0].jobId}`;
 
+/**
+ * A move of a project's folder (folder-move.ts): its steps one after another
+ * in its job's own lane, never behind another job's hours-long copy; a read
+ * in a lane of its own; a Drop beside its job's lane, so it stops a copy in
+ * flight rather than waiting for its end.
+ */
+export const folderMoveLane: ControlLane<
+  | "folderMoveRename"
+  | "folderMoveCopy"
+  | "folderMovePlace"
+  | "folderMoveRemove"
+  | "folderSessionsCarry"
+> = (control) => `folder-move:${control.args[0].jobId}`;
+export const folderMoveDropLane: ControlLane<"folderMoveDrop"> = (control) =>
+  `folder-move-drop:${control.args[0].jobId}`;
+export const folderMoveReadLane: ControlLane<"folderMoveRead"> = (control) =>
+  `folder-move-read:${control.requestId}`;
+
 /** A late create must finish before its discard; different workspace ids do not queue together. */
 export const workspaceCreateLane: ControlLane<"workspaceCreate"> = (control) =>
   `workspace:${control.args[1]}`;
