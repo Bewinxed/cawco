@@ -35,6 +35,7 @@ import {
   VENDOR_IMPORTED_SHEETS,
 } from "./vendor-sheets.ts";
 import { leaveOutShiki } from "./vite/leave-out-shiki.ts";
+import { namedInSources, tokensInlined } from "./vite/tokens-inlined.ts";
 
 /**
  * The hub a vite server (`vite dev`, `vite preview`) talks to: the one named in
@@ -460,6 +461,30 @@ export const groupsByCombinator = (): Plugin => ({
   },
 });
 
+/**
+ * Each token nothing changes after the theme sets it, written in place of its
+ * `var()` where app.css enters the build with Tailwind's rules in it
+ * (vite/tokens-inlined.ts says why and which). A sheet in which no token
+ * qualifies fails the build: the theme is no longer written where it looks.
+ */
+const SOURCES = join(import.meta.dirname, "src");
+const tokensInPlace = (): Plugin => ({
+  name: "cawco-tokens-in-place",
+  transform(code, id) {
+    if (!APP_CSS.test(id)) {
+      return null;
+    }
+    const named = namedInSources(SOURCES, join(SOURCES, "app.css"));
+    const { css, tokens } = tokensInlined(code, named);
+    if (tokens === 0) {
+      throw new Error(
+        `no token on the theme's :root was found in ${id}: re-read how Tailwind writes @theme and update vite/tokens-inlined.ts`
+      );
+    }
+    return { code: css, map: null };
+  },
+});
+
 export default defineConfig(({ command }) => {
   // A build talks to no hub; only a vite server does, and only to the dev
   // hub: the session shell's CAWCO_HUB_URL (the live hub) never survives
@@ -483,6 +508,7 @@ export default defineConfig(({ command }) => {
       tailwindcss(),
       proseNotByClass(),
       groupsByCombinator(),
+      tokensInPlace(),
       sveltekit({
         preprocess: vitePreprocess(),
         compilerOptions: { experimental: { async: true } },
