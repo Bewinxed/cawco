@@ -682,14 +682,15 @@ const nulStrings = (text: string): string[] =>
   text === "" ? [] : text.replace(TRAILING_NUL, "").split("\0");
 const TRAILING_NUL = /\0$/u;
 
+/** Linux: a process's arguments, from `/proc/<pid>/cmdline`. */
+const linuxArgv = (pid: number): Promise<string[] | undefined> =>
+  readFile(`/proc/${pid}/cmdline`, "utf8").then(nulStrings, () => undefined);
+
 /** Linux: a process's arguments and environment, from `/proc/<pid>/cmdline` and `environ`. */
 const linuxArgs = async (
   pid: number
 ): Promise<{ argv: string[]; env: string[] } | undefined> => {
-  const argv = await readFile(`/proc/${pid}/cmdline`, "utf8").then(
-    nulStrings,
-    () => undefined
-  );
+  const argv = await linuxArgv(pid);
   if (!argv) {
     return;
   }
@@ -762,15 +763,12 @@ const linuxVis = (text: string): string => text.replace(CONTROL, "?");
  * arguments cannot be read shows its name: in parentheses on macOS, in
  * brackets on Linux (a kernel thread).
  */
-const shownCommand = (
-  args: { argv: string[]; env: string[] } | undefined,
-  comm: string
-): string => {
-  if (!args || args.argv.length === 0) {
+const shownCommand = (argv: string[] | undefined, comm: string): string => {
+  if (!argv || argv.length === 0) {
     return process.platform === "linux" ? `[${comm}]` : `(${comm})`;
   }
   const vis = process.platform === "linux" ? linuxVis : darwinVis;
-  return args.argv.map(vis).join(" ");
+  return argv.map(vis).join(" ");
 };
 
 /**
@@ -778,7 +776,9 @@ const shownCommand = (
  * `getproclline`): a zombie's is a single blank.
  */
 const darwinCommand = (info: Kinfo): string =>
-  info.stat === SZOMB ? " " : shownCommand(darwinArgs(info.pid), info.comm);
+  info.stat === SZOMB
+    ? " "
+    : shownCommand(darwinArgs(info.pid)?.argv, info.comm);
 
 /** procps's `VmLck` line in `/proc/<pid>/status`: locked memory, in kB. */
 const VM_LOCKED = /^VmLck:\s+(\d+)/mu;
@@ -1050,7 +1050,11 @@ export async function commandLine(pid: number): Promise<string | undefined> {
     if (!stat) {
       return;
     }
-    const shown = shownCommand(await linuxArgs(pid), stat.comm);
+    // The arguments alone, as `ps -o command=` prints them: every command
+    // line of the machine is read on each look at the boundaries in use
+    // (agent boundary/holding.ts `commandsNow`, every 5 s), and a process's
+    // `environ`, kilobytes each, was read with them and never shown.
+    const shown = shownCommand(await linuxArgv(pid), stat.comm);
     // procps marks a zombie's name: `[name] <defunct>`.
     return stat.fields[0] === "Z" ? `${shown} <defunct>` : shown;
   }

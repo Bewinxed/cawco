@@ -51,23 +51,25 @@ export const loopWords = {
     `the longest named work since the tick before: ${name}, ${Math.round(ms)} ms`,
   /**
    * The loop's minute: its delay's median and 99th percentile, the CPU the
-   * main thread and the whole process took as a share of one core, its
-   * memory, the names that held it longest (inclusive: a section inside
-   * a request counts under both), and what its admission merged and paused
-   * (hub scheduler.ts).
+   * main thread and the whole process took as a share of one core, its reads
+   * a second (system calls and megabytes, every thread's), its memory, the
+   * names that held it longest (inclusive: a section inside a request counts
+   * under both), and, for the hub, what its admission merged and paused (hub
+   * scheduler.ts).
    */
   minute: (vitals: {
-    admission: { merged: number; pausedMs: number; waiting: number };
+    admission?: { merged: number; pausedMs: number; waiting: number };
     heapMb: number;
     mainCpu: number | undefined;
     p50Ms: number;
     p99Ms: number;
     processCpu: number;
+    reads?: { mbPerSecond: number; perSecond: number };
     rssMb: number;
     top: string;
     who: string;
   }) =>
-    `[loop] the ${vitals.who}'s minute: delay p50 ${vitals.p50Ms} ms, p99 ${vitals.p99Ms} ms; CPU ${vitals.mainCpu === undefined ? "" : `main thread ${vitals.mainCpu}%, `}process ${vitals.processCpu}% of a core; heap ${vitals.heapMb} MB, resident ${vitals.rssMb} MB; held longest by ${vitals.top || "no named work"}; jobs merged ${vitals.admission.merged}, background ${vitals.admission.pausedMs > 0 ? `paused ${Math.round(vitals.admission.pausedMs / 1000)} s, ${vitals.admission.waiting} waiting` : "never paused"}`,
+    `[loop] the ${vitals.who}'s minute: delay p50 ${vitals.p50Ms} ms, p99 ${vitals.p99Ms} ms; CPU ${vitals.mainCpu === undefined ? "" : `main thread ${vitals.mainCpu}%, `}process ${vitals.processCpu}% of a core; ${vitals.reads ? `reads ${vitals.reads.perSecond}/s, ${vitals.reads.mbPerSecond} MB/s; ` : ""}heap ${vitals.heapMb} MB, resident ${vitals.rssMb} MB; held longest by ${vitals.top || "no named work"}${vitals.admission ? `; jobs merged ${vitals.admission.merged}, background ${vitals.admission.pausedMs > 0 ? `paused ${Math.round(vitals.admission.pausedMs / 1000)} s, ${vitals.admission.waiting} waiting` : "never paused"}` : ""}`,
   /** A CPU profile of the main thread begun, and why. */
   profiling: (who: string, seconds: number, why: string) =>
     `[loop] profiling the ${who}'s main thread for ${seconds} s (${why})`,
@@ -77,6 +79,9 @@ export const loopWords = {
   /** Why a process profiled itself: its main thread was busy most of the last minute. */
   busyMinute: (percent: number) =>
     `its main thread took ${percent}% of a core over the last minute`,
+  /** Why a process profiled itself: every thread of it together was busy over the last minute. */
+  busyProcess: (percent: number) =>
+    `it took ${percent}% of a core over the last minute, every thread together`,
   /** Why a process profiled itself: the holds its tick said within the last minute passed their budget. */
   holdsPastBudget: (ms: number) =>
     `its loop was held ${ms} ms within the last minute, in holds its tick said`,

@@ -38,6 +38,7 @@
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
 import {
   type BrowserAskedPage,
@@ -51,10 +52,15 @@ import {
   TAKEOVER_UNWATCHED_MS,
 } from "@cawco/core/browser";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { browserAskWords } from "@cawco/core/words/browser";
+import { browserAskWords, browserFaultWords } from "@cawco/core/words/browser";
 import { z } from "zod";
 import type { AgentPorts } from "../agent-ports";
-import { browserRows, browsersChanged, startBrowser } from "./browsers";
+import {
+  browserRows,
+  browsersChanged,
+  startBrowser,
+  stopBrowser,
+} from "./browsers";
 import {
   CdpLink,
   CdpTakeover,
@@ -79,6 +85,25 @@ import {
 
 /** How often a take-over's views are counted against {@link TAKEOVER_UNWATCHED_MS}. */
 const WATCH_MS = 5000;
+
+/**
+ * How a hand-back the daemon starts itself (no view for
+ * {@link TAKEOVER_UNWATCHED_MS}) is tried again when a step of it fails:
+ * from 5 s, doubling to a minute, six times in a row (about three minutes);
+ * then it gives up, and the browser is stopped ({@link giveUpHandBack}). It
+ * used to try again at every count, every 5 s, for ever: on 2026-11-19
+ * obelisk's agent logged a failed hand-back of one project's browser 120
+ * times in 10 minutes, its Chromium down inside its running container. Our
+ * call.
+ */
+const HAND_BACK: BackoffPolicy = {
+  firstMs: 5000,
+  mostMs: 60_000,
+  giveUp: { afterTries: 6 },
+};
+
+/** Each take-over whose own hand-back failed: its failures in a row ({@link HAND_BACK}), and when the next try is due. */
+const handBacks = new Map<BrowserKey, { backoff: Backoff; nextAt: number }>();
 
 /** How long neko has to answer a control or clipboard call. */
 const NEKO_MS = 5000;
@@ -719,6 +744,7 @@ const release = async (
   const take = held.get(key);
   tellHub(ports, answer, said);
   held.delete(key);
+  handBacks.delete(key);
   if (take) {
     await endView(take);
   }
@@ -840,14 +866,87 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
       continue;
     }
     take.unwatchedSince ??= now;
-    if (now - take.unwatchedSince >= TAKEOVER_UNWATCHED_MS) {
-      console.info(
-        `[browser] ${key}: no view of its take-over for ${TAKEOVER_UNWATCHED_MS / 60_000} minutes: handed back`
-      );
-      // A step that fails leaves the gate closed (handBackBrowser says
-      // which); the next count tries the hand-back again.
-      await handBackBrowser(ports, key, "unwatched").catch(() => undefined);
+    if (now - take.unwatchedSince < TAKEOVER_UNWATCHED_MS) {
+      continue;
     }
+    const failing = handBacks.get(key);
+    if (failing && now < failing.nextAt) {
+      continue;
+    }
+    console.info(
+      `[browser] ${key}: no view of its take-over for ${TAKEOVER_UNWATCHED_MS / 60_000} minutes: handed back`
+    );
+    // A step that fails leaves the gate closed (handBackBrowser says which),
+    // and the hand-back is tried again on its backoff, until it gives up.
+    await handBackBrowser(ports, key, "unwatched").catch((error: unknown) =>
+      handBackFailed(ports, key, error)
+    );
+  }
+};
+
+/**
+ * The daemon's own hand-back of `key` failed: tried again after its wait
+ * ({@link HAND_BACK}), or, past its tries, given up ({@link giveUpHandBack}).
+ */
+const handBackFailed = async (
+  ports: ShieldPorts,
+  key: BrowserKey,
+  error: unknown
+): Promise<void> => {
+  const failing = handBacks.get(key) ?? {
+    backoff: new Backoff(HAND_BACK),
+    nextAt: 0,
+  };
+  handBacks.set(key, failing);
+  const step = failing.backoff.failed();
+  if (step.kind === "wait") {
+    failing.nextAt = Date.now() + step.ms;
+    console.info(
+      `[browser] ${key}: its hand-back is tried again in ${Math.round(step.ms / 1000)} s`
+    );
+    return;
+  }
+  await giveUpHandBack(ports, key, step.tries, step.failingMs, error);
+};
+
+/**
+ * A hand-back given up: the browser does not answer the steps that end the
+ * private period (its page loaded again, its clipboard emptied), so it is
+ * stopped, which ends the take-over the one other way it ends (the record's
+ * take-over cleared, the watch's next count releases it and opens the gate)
+ * and leaves nothing the person typed in a running browser. Its record says
+ * why, in the person's words, on the browser's view; the view and the next
+ * agent connection start it again, as they start any browser at rest.
+ */
+const giveUpHandBack = async (
+  ports: ShieldPorts,
+  key: BrowserKey,
+  tries: number,
+  failingMs: number,
+  error: unknown
+): Promise<void> => {
+  handBacks.delete(key);
+  const seconds = Math.round(failingMs / 1000);
+  console.warn(
+    `[browser] ${key}: its hand-back failed ${tries} times over ${seconds} s (${why(error)}); given up, and the browser is stopped`
+  );
+  try {
+    await stopBrowser(ports, key);
+    await withBrowser(key, async () => {
+      const record = await readBrowser(key);
+      if (record?.state === "asleep") {
+        await writeBrowser({
+          ...record,
+          state: "failed",
+          why: browserFaultWords.handBackGaveUp,
+        });
+      }
+    });
+    browsersChanged(ports);
+  } catch (stopped) {
+    console.warn(
+      `[browser] ${key} did not stop after its hand-back gave up: ${why(stopped)}`
+    );
   }
 };
 

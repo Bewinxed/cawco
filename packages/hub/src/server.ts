@@ -124,6 +124,7 @@ import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
 import { parseDelegateWaitNotice } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
+import { createLoopProfiler } from "@cawco/core/loop-profile";
 import { doing, syncSection } from "@cawco/core/loop-watch";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
@@ -481,7 +482,6 @@ import { createHistory, custodyLine, userTurnText } from "./history";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { type HubContext, hubContextOf } from "./hub-context";
 import { hubId } from "./hub-id";
-import { createHubProfiler } from "./hub-profile";
 import { createHubRecord } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
@@ -1299,9 +1299,13 @@ export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { serves = true }: ServerOptions = {}
 ) => {
-  // The hub's own CPU profiles (hub-profile.ts), written beside its database
-  // and the loop watch's record (hub-loop.ts `loopRecord`).
-  const profiler = createHubProfiler({ dir: dirname(DB_PATH), lifetime });
+  // The hub's own CPU profiles (core loop-profile.ts), written beside its
+  // database and the loop watch's record (hub-loop.ts `loopRecord`).
+  const profiler = createLoopProfiler({
+    who: "hub",
+    dir: dirname(DB_PATH),
+    sleep: lifetime.sleep,
+  });
   // What the route families read of this closure (hub-context.ts).
   const ctx: HubContext = hubContextOf({
     readSessionProcess: () => readSessionProcess,

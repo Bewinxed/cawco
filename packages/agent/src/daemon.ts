@@ -86,6 +86,7 @@ import { crashOnBrokenLaw, invariant } from "@cawco/core/invariant";
 import { machineEndpoint } from "@cawco/core/keepers";
 import { capLaunchdLogs, sweepLaunchdLogs } from "@cawco/core/launchd";
 import { endProcess } from "@cawco/core/listeners";
+import { createLoopProfiler, loopMinute } from "@cawco/core/loop-profile";
 import {
   phase,
   syncSection,
@@ -117,6 +118,7 @@ import {
 import type { MachineActivity } from "@cawco/core/notifications";
 import { isOneOf } from "@cawco/core/one-of";
 import { userLayerPath } from "@cawco/core/paths/claude";
+import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { CAWCO_HUB_PORT } from "@cawco/core/ports";
 import type {
   AdmissionPayload,
@@ -496,6 +498,14 @@ const activityNow = (): { activity?: MachineActivity } => {
 const HUB_SILENT_MS = 15_000;
 const USAGE_INTERVAL = Duration.seconds(60);
 const MEMORY_LOG_INTERVAL = Duration.millis(MEMORY_LOG_INTERVAL_MS);
+/**
+ * A minute's CPU of every thread of the agent, as a share of one core, from
+ * which it profiles itself (core loop-profile.ts). The agent's invariant is a
+ * small fraction of a core on a machine with ordinary work; on 2026-11-19
+ * obelisk's ran at 90 to 150% all day, 71% of it kernel time on Bun's pool
+ * threads. Ours: half a core is past any ordinary minute.
+ */
+const AGENT_BUSY_PERCENT = 50;
 /**
  * How often every CawCo account dir's `auth status` is read again: a minute,
  * read through the clock the update's timed steps read (core clock.ts), so
@@ -4033,8 +4043,29 @@ export const runDaemon = (rediscover = false): void => {
   // looser umask included (core folders.ts).
   keepFoldersPrivate((line) => console.info(line));
   // A stall of its loop names what held it (loop-watch.ts), the transcript
-  // index's steps among what it can name.
-  watchLoop((line) => console.warn(line));
+  // index's steps among what it can name. A run of holds, or a busy minute
+  // (every thread's: its file reads run on Bun's pool threads), profiles its
+  // main thread into its data dir, as SIGUSR2 does on the owner's ask, and a
+  // line a minute says its CPU and reads (core loop-profile.ts).
+  const profiler = createLoopProfiler({
+    who: "agent",
+    dir: cawcoDataDir(),
+    sleep: (ms) => Bun.sleep(ms),
+    busyProcessPercent: AGENT_BUSY_PERCENT,
+  });
+  watchLoop((line) => console.warn(line), { held: profiler.held });
+  loopMinute({
+    who: "agent",
+    profiler,
+    every: (_name, ms, run) => {
+      const timer = setInterval(run, ms);
+      timer.unref();
+      return () => clearInterval(timer);
+    },
+  });
+  process.on("SIGUSR2", () => {
+    detach(profiler.take("the owner asked (SIGUSR2)"), "agent CPU profile");
+  });
   // Started without the fetch cap (by hand): the streams it relays can hold
   // its own reads of the hub back, and it says so (core fetch-cap.ts).
   sayFetchCap("agent");

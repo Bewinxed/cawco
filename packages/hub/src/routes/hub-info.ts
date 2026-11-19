@@ -4,13 +4,13 @@
 
 import { hostname as osHostname } from "node:os";
 import { readTrial } from "@cawco/core/binary-installation";
+import type { LoopProfiler } from "@cawco/core/loop-profile";
 import { Elysia } from "elysia";
 import { DASHBOARD_PORT, HUB_VERSION } from "../config";
 import { dashboardUrl, secureDashboardUrl } from "../dashboard-url";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 import { hubId } from "../hub-id";
-import type { HubProfiler } from "../hub-profile";
 import { localNameOf } from "../local-name";
 import { localHubName } from "../mdns";
 
@@ -20,7 +20,7 @@ export const hubInfoRoutes = (
     registry,
     tailnetHttps,
   }: Pick<HubContext, "hubBuild" | "registry" | "tailnetHttps">,
-  profiler: HubProfiler
+  profiler: LoopProfiler
 ) =>
   new Elysia()
     // The hub's own build rides along (NEW.md §12), so a machine's can be read
@@ -56,7 +56,7 @@ export const hubInfoRoutes = (
       localNameOf(osHostname(), DASHBOARD_PORT, localHubName())
     )
     // The owner's ask for a CPU profile of the hub's main thread
-    // (hub-profile.ts): answered once its 20 s are sampled and written, with
+    // (core loop-profile.ts): answered once its 20 s are sampled and written, with
     // the file's path on the hub's machine; an ask while one runs joins it.
     // The owner's alone, as every route not listed in hub-auth.ts.
     .post("/api/hub/profile", hidden, async () => ({

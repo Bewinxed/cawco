@@ -83,6 +83,16 @@ export const browserWords = {
 };
 
 /**
+ * Why a browser is at rest, as its machine writes it on its record and the
+ * browser's view shows it under Show details.
+ */
+export const browserFaultWords = {
+  /** The machine's own hand-back failed until it gave up (agent shield.ts `giveUpHandBack`). */
+  handBackGaveUp:
+    "The browser stopped answering while you had control, so it couldn't be handed back to the agent. Its machine stopped it, and nothing you typed reached the agent. Try again starts it again.",
+};
+
+/**
  * The passkey QR overlay in the take-over view: a FIDO URI from the
  * browser's page, rendered as a QR for the person's phone to scan.
  */

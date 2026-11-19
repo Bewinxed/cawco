@@ -46,6 +46,12 @@ import {
 import type { MediaPath } from "@cawco/core/capabilities";
 import { stunServer } from "@cawco/core/env-ports";
 import { machineId } from "@cawco/core/machine-id";
+import {
+  bootId,
+  markerIsLive,
+  type ProcessMarker,
+  processStart,
+} from "@cawco/core/process-identity";
 import { DAY_MS } from "@cawco/core/time";
 import type Docker from "dockerode";
 import { z } from "zod";
@@ -372,6 +378,31 @@ const answers = async (url: string, what: string): Promise<void> => {
 /** The runtime's not-found answer. */
 const notFound = (error: unknown): boolean => statusOf(error) === 404;
 
+/**
+ * Each running container's main process, by container id, as its engine
+ * named it (`State.Pid`) at the last inspect that found it running: while
+ * that process lives (its pid, start and boot, core process-identity.ts
+ * `markerIsLive`), the container runs, and the engine is not asked. Read
+ * where the engine shares this machine's kernel alone ({@link Runtime}'s
+ * `ownNetwork`): a VM's engine names a pid inside the VM.
+ *
+ * Every minute's tick asks whether each live browser runs (browsers.ts
+ * `readBack`), and a rootless Podman's API is socket-activated: each ask
+ * started `podman.service` again, once a minute on obelisk (2026-11-19, 122
+ * starts an hour, each about 80 ms of CPU and a "left-over process" warning
+ * for the containers' pasta and rootlessport), for a container whose process
+ * had run all along. A process that is gone sends the next ask to the engine.
+ */
+const mainProcesses = new Map<string, ProcessMarker>();
+
+/** `id`'s main process `pid` kept as the marker {@link mainProcesses} reads; none when it is already gone. */
+const keepMainProcess = async (id: string, pid: number): Promise<void> => {
+  const [procStart, boot] = await Promise.all([processStart(pid), bootId()]);
+  if (procStart && boot) {
+    mainProcesses.set(id, { pid, procStart, bootId: boot });
+  }
+};
+
 export class ContainerHost implements BrowserHost {
   readonly kind = "container";
   readonly viewer = "neko";
@@ -456,8 +487,14 @@ export class ContainerHost implements BrowserHost {
     if (!record.container) {
       return false;
     }
+    const { id } = record.container;
+    const main = mainProcesses.get(id);
+    if (main && (await markerIsLive(main))) {
+      return true;
+    }
+    mainProcesses.delete(id);
     const inspected = await this.#docker
-      .getContainer(record.container.id)
+      .getContainer(id)
       .inspect()
       .catch((error: unknown) => {
         if (notFound(error)) {
@@ -465,7 +502,12 @@ export class ContainerHost implements BrowserHost {
         }
         throw error;
       });
-    return inspected?.State.Running === true;
+    const running = inspected?.State.Running === true;
+    const pid = inspected?.State.Pid ?? 0;
+    if (running && this.#runtime.ownNetwork && pid > 0) {
+      await keepMainProcess(id, pid);
+    }
+    return running;
   }
 
   async start(

@@ -204,9 +204,32 @@ const MISSING = new Set(["ENOENT", "ENOTDIR"]);
 /** For a deny entry, also a component this process may not look up. */
 const UNREADABLE = new Set([...MISSING, "EPERM", "EACCES"]);
 
+/**
+ * `path` as one lookup of the kernel's, which follows each link in order and
+ * climbs a `..` from where the link points, as {@link resolve}'s walk does a
+ * component at a time; undefined when a component does not resolve, for the
+ * walk to find which and why. A policy resolves a hundred-odd paths for each
+ * workspace each look (agent boundary/looks.ts), and walking every one took
+ * three system calls a component.
+ */
+const resolvedWhole = (path: string): string | undefined => {
+  try {
+    return realpathSync(path);
+  } catch (error) {
+    // Anything but a lookup that failed is no answer of the file system's.
+    if (!errnoCode(error)) {
+      throw error;
+    }
+  }
+};
+
 const resolve = (path: string, asWritten: ReadonlySet<string>): string => {
   if (!isAbsolute(path)) {
     throw new Error(`${path} is not an absolute path`);
+  }
+  const whole = resolvedWhole(path);
+  if (whole !== undefined) {
+    return whole;
   }
   const parts = path.split("/").filter(Boolean);
   let current = "/";

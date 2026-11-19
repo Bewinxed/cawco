@@ -18,8 +18,8 @@
  * what the watch kept, once ({@link sayEndedBefore}).
  *
  * Each hold the tick says counts toward a CPU profile the hub takes of
- * itself (hub-profile.ts), and once a minute one line says how the loop
- * fared ({@link minuteLine}).
+ * itself, and once a minute one line says how the loop fared (core
+ * loop-profile.ts, as the agent's).
  *
  * Why a thread of the hub's own and not systemd's `WatchdogSec=`: that
  * needs `sd_notify` over a unix datagram socket, which Bun's `node:dgram`
@@ -28,25 +28,13 @@
  * says it.
  */
 
-import { heapSize } from "bun:jsc";
-import { readFileSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { monitorEventLoopDelay } from "node:perf_hooks";
-import {
-  type NamedTime,
-  tallyNamedWork,
-  watchFromItsOwnThread,
-  watchLoop,
-} from "@cawco/core/loop-watch";
-import {
-  CLOCK_TICKS,
-  LoopEndedSchema,
-  threadStat,
-} from "@cawco/core/loop-watch-shared";
+import { type LoopProfiler, loopMinute } from "@cawco/core/loop-profile";
+import { watchFromItsOwnThread, watchLoop } from "@cawco/core/loop-watch";
+import { LoopEndedSchema } from "@cawco/core/loop-watch-shared";
 import { readRecordSync } from "@cawco/core/state-file";
-import { MINUTE_MS } from "@cawco/core/time";
 import { loopWords } from "@cawco/core/words/loop";
-import type { HubProfiler } from "./hub-profile";
 import type { HubLifetimeShape } from "./lifetime";
 
 /**
@@ -56,11 +44,6 @@ import type { HubLifetimeShape } from "./lifetime";
  * 6.6 s a turn.
  */
 const HUB_LATE_MS = 250;
-
-/** The names the minute line says, longest first. */
-const TOP_NAMED = 5;
-/** The loop delay histogram's resolution, in ms (node:perf_hooks `monitorEventLoopDelay`). */
-const DELAY_RESOLUTION_MS = 20;
 
 /**
  * A hold that ends the hub. Twelve of the hub's 10 s read deadlines, so
@@ -110,95 +93,19 @@ const sayEndedBefore = (record: string): void => {
   rmSync(record, { force: true });
 };
 
-/** The main thread's CPU time in clock ticks, from Linux's `/proc`; none elsewhere. */
-const mainThreadTicks = (): number | undefined => {
-  if (process.platform !== "linux") {
-    return;
-  }
-  let stat: string;
-  try {
-    stat = readFileSync(`/proc/self/task/${process.pid}/stat`, "utf8");
-  } catch {
-    return;
-  }
-  return threadStat(stat).ticks;
-};
-
-/** Each name of the minute's top, as its line says it: its time, and how many runs. */
-const topWords = (top: NamedTime[]): string =>
-  top
-    .map(
-      (named) => `${named.name} ${Math.round(named.ms)} ms (${named.count}×)`
-    )
-    .join(", ");
-
-/**
- * Says, once a minute, how the hub's loop fared: its delay's p50 and p99
- * (node:perf_hooks `monitorEventLoopDelay`), the CPU its main thread
- * (Linux's `/proc`) and the whole process (`process.cpuUsage()`, every
- * thread's) took as a share of one core (`eventLoopUtilization()` answers
- * zeros in Bun, oven-sh/bun#38441), its heap and resident memory, and the
- * {@link TOP_NAMED} names that held it longest (core loop-watch.ts
- * `tallyNamedWork`), and what its admission merged and how long background
- * work was paused (scheduler.ts). Answers its stop.
- */
-const minuteLine = (
-  lifetime: HubLifetimeShape,
-  profiler: HubProfiler
-): (() => void) => {
-  const delay = monitorEventLoopDelay({ resolution: DELAY_RESOLUTION_MS });
-  delay.enable();
-  const takeTop = tallyNamedWork();
-  let at = performance.now();
-  let cpu = process.cpuUsage();
-  let ticks = mainThreadTicks();
-  const timer = lifetime.every("loop minute line", MINUTE_MS, () => {
-    const now = performance.now();
-    const seconds = (now - at) / 1000;
-    const used = process.cpuUsage(cpu);
-    const nowTicks = mainThreadTicks();
-    const share = (cpuSeconds: number) =>
-      Math.round((cpuSeconds / seconds) * 100);
-    const mainCpu =
-      ticks === undefined || nowTicks === undefined
-        ? undefined
-        : share((nowTicks - ticks) / CLOCK_TICKS);
-    console.info(
-      loopWords.minute({
-        who: "hub",
-        p50Ms: Math.round(delay.percentile(50) / 1e6),
-        p99Ms: Math.round(delay.percentile(99) / 1e6),
-        mainCpu,
-        processCpu: share((used.user + used.system) / 1e6),
-        heapMb: Math.round(heapSize() / 1024 / 1024),
-        rssMb: Math.round(process.memoryUsage.rss() / 1024 / 1024),
-        top: topWords(takeTop(TOP_NAMED)),
-        admission: lifetime.jobs.minute(),
-      })
-    );
-    // A busy minute is profiled as a long hold is (hub-profile.ts).
-    profiler.minute(mainCpu);
-    delay.reset();
-    at = now;
-    cpu = process.cpuUsage();
-    ticks = nowTicks;
-  });
-  return () => {
-    lifetime.cancel(timer);
-    delay.disable();
-  };
-};
-
 /**
  * Watches the service hub's loop ({@link HUB_LATE_MS},
  * {@link HUB_HELD_END_MS}), keeping what an end read at `record`: each hold
  * its tick says goes to `profiler`, and a line a minute says how it fared
- * ({@link minuteLine}). Answers its stop: both watches and the minute line
+ * (core loop-profile.ts `loopMinute`, with its admission's minute). Answers its stop: both watches and the minute line
  * end, and nothing ends the process after.
  */
 export const watchHubLoop = (
   record: string,
-  { lifetime, profiler }: { lifetime: HubLifetimeShape; profiler: HubProfiler },
+  {
+    lifetime,
+    profiler,
+  }: { lifetime: HubLifetimeShape; profiler: LoopProfiler },
   endAfterMs = HUB_HELD_END_MS
 ): (() => void) => {
   sayEndedBefore(record);
@@ -211,7 +118,15 @@ export const watchHubLoop = (
     who: "hub",
     end: { afterMs: endAfterMs, record },
   });
-  const stopMinute = minuteLine(lifetime, profiler);
+  const stopMinute = loopMinute({
+    who: "hub",
+    profiler,
+    every: (name, ms, run) => {
+      const timer = lifetime.every(name, ms, run);
+      return () => lifetime.cancel(timer);
+    },
+    admission: () => lifetime.jobs.minute(),
+  });
   return () => {
     stopTick();
     stopThread();

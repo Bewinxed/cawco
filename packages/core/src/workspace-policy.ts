@@ -665,6 +665,56 @@ export const homeToolchains = async (home: string): Promise<string[]> => {
   const dirs = startedPath()
     .split(delimiter)
     .filter((entry) => entry.startsWith(`${home}/`));
+  const stamp = await pathDirsStamp(home, dirs);
+  if (toolchainsRead?.stamp === stamp) {
+    return toolchainsRead.trees;
+  }
+  const trees = await readHomeToolchains(home, dirs);
+  toolchainsRead = { stamp, trees };
+  return trees;
+};
+
+/**
+ * The last reading of {@link homeToolchains}, kept under the stamp of the
+ * PATH dirs it walked ({@link pathDirsStamp}). Every boundary in use reads
+ * its policy each look for a narrowing (agent boundary/looks.ts
+ * `lookForNarrowing`, every 5 s), and the walk opened every command in every
+ * PATH dir under home and read its `#!` line: about 6,600 system calls a
+ * workspace a look on obelisk, the most of the agent's 87,000 reads a second
+ * across its boundaries in use on 2026-11-19. The trees change only as those
+ * dirs do, so the walk runs again only then.
+ */
+let toolchainsRead: { stamp: string; trees: string[] } | undefined;
+
+/**
+ * What the PATH dirs under home stand as: each one's inode and modification
+ * time, which a command installed, removed, renamed or linked again there
+ * moves (POSIX `stat`: a directory's `st_mtime` is marked for update as an
+ * entry is made, removed or renamed in it), and the dirs themselves. A
+ * landing that moves while its link stays (a file rewritten in place) is
+ * read at the next change of its PATH dir, or the agent's next start.
+ */
+const pathDirsStamp = async (
+  home: string,
+  dirs: readonly string[]
+): Promise<string> =>
+  [
+    home,
+    ...(await Promise.all(
+      dirs.map((dir) =>
+        stat(dir).then(
+          (found) => `${dir} ${found.ino} ${found.mtimeMs}`,
+          () => `${dir} none`
+        )
+      )
+    )),
+  ].join("\n");
+
+/** {@link homeToolchains}' walk of `dirs`, the PATH dirs under `home`. */
+const readHomeToolchains = async (
+  home: string,
+  dirs: readonly string[]
+): Promise<string[]> => {
   const commands = await Promise.all(
     dirs.map(async (dir) => {
       const names = await readdir(dir).catch(() => []);
