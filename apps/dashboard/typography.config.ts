@@ -18,9 +18,10 @@
  * rule whose subject a bare div matches had Chrome restyle every block of
  * every mounted row whenever a row was put in between two (245–261
  * elements). In this markdown a heading or rule is only ever followed by a
- * div that is one of Streamdown's own blocks — a table's or an alert's
- * wrapper, which take no top margin here, or a fence's `.not-prose` well,
- * which the plugin leaves alone — and it renders no raw HTML, so no
+ * div that is a table's scroll wrapper (ui/markdown), which takes no top
+ * margin here, or the placeholder a fence's snippet stands in (a
+ * `display: contents` box around its `.not-prose` well, which the plugin
+ * leaves alone) — and it renders no raw HTML, so no
  * `details`, `section` or `aside` ever follows one. A fixture with each of
  * them after h2, h3, h4 and hr kept every top margin, in the transcript and
  * in plain prose.

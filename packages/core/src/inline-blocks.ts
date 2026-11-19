@@ -24,7 +24,7 @@ const NAME = /(?:^|\s)name\s*=\s*"([^"\n]*)"/u;
 
 /**
  * The name a fence gives its block, from its language and the rest of its
- * info string (marked's `lang` and streamdown's `meta`); null when the fence
+ * info string (its first word, and what follows it); null when the fence
  * is no block: another language, no name, or an empty one.
  */
 export const inlineBlockName = (

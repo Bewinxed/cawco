@@ -149,8 +149,8 @@ const ESCAPED = /\\([\\[\]])/gu;
 /**
  * `text`'s runs, in order: its text as written, and each `cawco:`
  * reference in it (`[label](cawco:<kind>/<id>)`) with its destination and
- * its written label, read by marked's inline lexer, the CommonMark reader
- * the transcript's markdown reads links by (svelte-streamdown). Only a
+ * its written label, read by marked's inline lexer, a CommonMark reader as
+ * the transcript's markdown is (@pierre/words). Only a
  * reference is taken out of the words: every other token, a link to any
  * other address among them, stays the characters it was written as, so
  * words with no reference are one run of exactly what was written.

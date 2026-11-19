@@ -291,9 +291,8 @@ const runningVersion = (): Plugin => ({
  * - a Svelte component's `<style>`, which the compiler emits unlayered:
  *   svelte-sonner 1.2.3 (Toaster.svelte), vaul-svelte 1.0.0-next.7
  *   (components/drawer/drawer.svelte), bits-ui 2.19.5
- *   (select/components/select-viewport.svelte), @xyflow/svelte 1.7.0 (its
- *   A11yDescriptions, selection and edge-label components) and
- *   svelte-streamdown 4.2.1 (its table, code and overlay elements);
+ *   (select/components/select-viewport.svelte) and @xyflow/svelte 1.7.0 (its
+ *   A11yDescriptions, selection and edge-label components);
  * - a stylesheet a component imports from its script: Event Calendar 5.16.0
  *   (src/Calendar.svelte: `import './styles/index.css'`) and PhotoSwipe 5.4.4
  *   (lightbox/Lightbox.svelte: `import("photoswipe/style.css")`, which is
@@ -327,7 +326,6 @@ const VENDOR_COMPONENT_SHEETS = [
   "vaul-svelte",
   "bits-ui",
   "@xyflow/svelte",
-  "svelte-streamdown",
 ];
 /**
  * The libraries with component sheets that dev compiles like the app's own
@@ -342,8 +340,8 @@ const COMPILED_LIBRARIES = VENDOR_COMPONENT_SHEETS.filter(
  * cjs-dep']", vite.dev/config/dep-optimization-options). Vite pre-bundles
  * no dependency imported from a file it serves raw out of `node_modules`
  * (Vite 8.3.4 `tryNodeResolve`: `skipOptimization` where `importer &&
- * isInNodeModules(importer)`), so runed, svelte-toolbelt, @tanstack/highlight
- * and the rest went out a module a file, compiled again on every server
+ * isInNodeModules(importer)`), so runed, svelte-toolbelt and the rest went
+ * out a module a file, compiled again on every server
  * start: a component canvas of the Needs you card loaded 698 modules with
  * them raw, 525 pre-bundled. The pre-bundle is kept on disk between starts.
  */
@@ -401,51 +399,6 @@ export const vendorComponentSheets = (): Plugin => ({
     }
     console.log(
       `css layers: ${sheets.length} assets, 0 unlayered rules, every layer in app.html's order`
-    );
-  },
-});
-
-/**
- * svelte-streamdown's fullscreen overlay is one global rule in its root
- * component (Streamdown.svelte): `[data-expanded='true'] { position: fixed;
- * top: 16px; left: 16px; width: calc(100vw - 32px); height: calc(100vh -
- * 32px); z-index: 2147483647; margin: 0 }`. Its targets are its own two:
- * the table wrapper (`data-streamdown-table`, flagged by useExpand) and a
- * Mermaid diagram's container (the div inside `data-streamdown-mermaid`,
- * flagged by panzoom). But the selector names any element in the page, and
- * others carry the same flag: sonner marks every toast of an expanded stack
- * with it, and Milkdown's code-block language button while its list is
- * open. Each was fixed to the viewport, and whatever it does not set itself
- * (an unstyled toast's width, the button's offsets) took the overlay's: the
- * update notice spanned the viewport from the bottom-left, over the rail.
- *
- * The selector is confined to streamdown's own two targets here, where the
- * rule enters the build, so it matches nothing else and every other element
- * keeps its own cascade untouched. A counter-rule cannot do that: to win it
- * must set a value, and `revert`/`revert-layer` from unlayered CSS drop the
- * element's own author styles along with streamdown's; a cascade layer only
- * outranks it where the element sets the same property. `:where()` holds the
- * weight at the library's own (0,1,0). A release that changes the rule fails
- * the build here instead of leaking again.
- */
-const STREAMDOWN_ROOT =
-  /svelte-streamdown[\\/]dist[\\/]Streamdown\.svelte\?.*type=style/u;
-const STREAMDOWN_OVERLAY = /\[data-expanded=(['"]?)true\1\](?=\s*\{)/gu;
-export const streamdownOverlayOwn = (): Plugin => ({
-  name: "cawco-streamdown-overlay-own",
-  transform(code, id) {
-    if (!STREAMDOWN_ROOT.test(id)) {
-      return null;
-    }
-    const found = code.match(STREAMDOWN_OVERLAY)?.length ?? 0;
-    if (found !== 1) {
-      throw new Error(
-        `svelte-streamdown's [data-expanded='true'] overlay rule was found ${found} times in ${id}, expected once: re-read Streamdown.svelte and update streamdownOverlayOwn`
-      );
-    }
-    return code.replace(
-      STREAMDOWN_OVERLAY,
-      ":where([data-streamdown-table], [data-streamdown-mermaid] > div)$&"
     );
   },
 });
@@ -529,7 +482,6 @@ export default defineConfig(({ command }) => {
       linkedRebundle(),
       houseFaces(),
       vendorComponentSheets(),
-      streamdownOverlayOwn(),
       hubProxy(),
       runningVersion(),
       tailwindcss(),
@@ -626,8 +578,8 @@ export default defineConfig(({ command }) => {
       include: ["@cawco/icons", "@cawco/icons/marks", ...COMPILED_LIBRARY_DEPS],
       rolldownOptions: { plugins: [IconsBundled({ compiler: "svelte" })] },
       // The libraries with component sheets are compiled like the app's own
-      // components, so their stylesheets pass through streamdownOverlayOwn
-      // and vendorComponentSheets in dev as in the build: prebundled, their
+      // components, so their stylesheets pass through vendorComponentSheets
+      // in dev as in the build: prebundled, their
       // styles are injected from the bundle's JS instead. bits-ui stays
       // prebundled, for its couple of hundred components: its two viewport
       // sheets (select, scroll-area) go unlayered in dev only.

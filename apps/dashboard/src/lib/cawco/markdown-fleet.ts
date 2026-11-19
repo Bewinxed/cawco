@@ -57,10 +57,3 @@ export const markdownFleetHere = (): (() => MarkdownFleet | undefined) =>
 /** A link drawn with no fleet: a `cawco:` reference as its written label, any other a link. */
 export const plainReferenceOf = (href: string): Drawn =>
   href.startsWith("cawco:") ? { draw: "label" } : { draw: "link" };
-
-/** A backslash escape in a link's label (core `referenceLink` writes them). */
-const ESCAPED = /\\([\\[\]])/gu;
-
-/** A link's label as written, its escapes read: what an element falls back to. */
-export const writtenLabel = (text: string | undefined): string =>
-  (text ?? "").replace(ESCAPED, "$1");

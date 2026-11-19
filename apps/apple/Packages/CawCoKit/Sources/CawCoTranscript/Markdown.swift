@@ -653,10 +653,9 @@ nonisolated enum MarkdownRender {
                 case is LineBreak: out.append(NSAttributedString(string: "\u{2028}", attributes: attributes))
                 case let image as Markdown.Image: out.append(NSAttributedString(string: image.plainText, attributes: attributes))
                 case let html as InlineHTML:
-                    // The web's markdown (svelte-streamdown) renders no raw HTML: a tag or
-                    // an unknown element is its source as text, and a comment is nothing.
-                    // The one tag its lexer reads is `<br>` (marked-br: `/^<br\s*\/?>/i`),
-                    // a line break.
+                    // The web's markdown renders no raw HTML: a tag or an unknown element
+                    // is its source as text, and a comment is nothing. The one tag it
+                    // reads is `<br>`, a line break (ui/markdown literal-html.ts).
                     let isBreak = html.rawHTML.wholeMatch(of: /<br\s*\/?>/.ignoresCase()) != nil
                     out.append(NSAttributedString(string: isBreak ? "\u{2028}" : shown(html.rawHTML), attributes: attributes))
                 default: walk(child, attributes)

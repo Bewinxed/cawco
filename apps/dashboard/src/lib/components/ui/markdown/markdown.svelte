@@ -22,18 +22,17 @@
 </script>
 
 <script lang="ts">
-  import type { ComponentProps } from "svelte";
-  import { untrack } from "svelte";
   import {
-    Streamdown,
-    theme as streamdownTheme,
-    type Theme,
-  } from "svelte-streamdown";
-  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
-  import { track } from "#lib/platform/track.js";
+    Markdown,
+    type MarkdownSnippets,
+    type MarkdownWhen,
+  } from "@cawco/words-svelte";
+  import { untrack } from "svelte";
+  import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { PROSE } from "#lib/prose.js";
   import { cn } from "#lib/utils.js";
   import { draw, stepping } from "../collapsible/draw";
+  import { BREAK, literalHtml } from "./literal-html";
 
   let {
     source,
@@ -43,11 +42,12 @@
     look,
     class: className,
     marks = (words: string) => words,
-    code,
-    codespan,
     link,
+    inlineCode,
+    code,
+    when,
   }: MarkdownLooks &
-    Pick<ComponentProps<typeof Streamdown>, "code" | "codespan" | "link"> & {
+    MarkdownSnippets & {
       source: string;
       invert?: boolean;
       streaming?: boolean;
@@ -57,8 +57,8 @@
       /**
        * Fade in what each streamed chunk adds, and the last words a message
        * draws as it settles. Only ever the words a chunk ADDS: the text already
-       * on screen when this mounts — a conversation opened mid-answer, a row
-       * the virtualiser remounted — is never replayed.
+       * on screen when this mounts (a conversation opened mid-answer, a row
+       * the virtualiser remounted) is never replayed.
        */
       fades?: boolean;
       /**
@@ -67,77 +67,44 @@
        * as it is when none is given.
        */
       marks?: (words: string) => string;
+      /** Which links, code spans and fences the host's snippets take; the rest are drawn as markdown draws them. */
+      when?: MarkdownWhen;
     } = $props();
 
-  // Streamdown's stock themes hardcode a Tailwind palette (bg-gray-100,
-  // text-blue-600, marker:hidden) that would out-shout PROSE. Blank every
-  // group PROSE already owns and keep only what has no prose equivalent: the
-  // table wrapper needs its own scroll container. Groups left at their
-  // defaults — alerts, footnotes, citations, popovers — are streamdown chrome
-  // that prose says nothing about, and the `code` group is not here because a
-  // fence never reaches streamdown's renderer (the host's `code` snippet,
-  // cawco/Markdown).
-  const PLAIN: Theme = {
-    ...streamdownTheme,
-    link: { base: "", blocked: "" },
-    h1: { base: "" },
-    h2: { base: "" },
-    h3: { base: "" },
-    h4: { base: "" },
-    h5: { base: "" },
-    h6: { base: "" },
-    paragraph: { base: "" },
-    ul: { base: "" },
-    ol: { base: "" },
-    li: { base: "", checkbox: "mr-2" },
-    codespan: { base: "" },
-    image: { base: "", image: "" },
-    blockquote: { base: "" },
-    // `expanded` dresses the table toolbar's fullscreen, and the toolbar is off.
-    table: { base: "overflow-x-auto max-w-full", table: "", expanded: "" },
-    thead: { base: "" },
-    tbody: { base: "" },
-    tfoot: { base: "" },
-    tr: { base: "" },
-    td: { base: "" },
-    th: { base: "" },
-    sup: { base: "" },
-    sub: { base: "" },
-    hr: { base: "" },
-    strong: { base: "" },
-    em: { base: "" },
-    del: { base: "" },
-    math: { block: "", inline: "" },
-    descriptionList: { base: "" },
-    descriptionTerm: { base: "" },
-    descriptionDetail: { base: "" },
+  /**
+   * The link destinations drawn: the web's, mail, phone, a path in the app,
+   * and CawCo's rich references (`cawco:`, core references.ts), which the
+   * host's `link` snippet draws (cawco/Markdown). Any other scheme is
+   * dropped, and its link reads as its text.
+   */
+  const SCHEMES = new Set(["http", "https", "mailto", "tel", "cawco"]);
+  const SCHEME = /^([a-z][a-z0-9+.-]*):/iu;
+  const urlTransform = (url: string): string | null => {
+    const scheme = SCHEME.exec(url)?.[1]?.toLowerCase();
+    return scheme === undefined || SCHEMES.has(scheme) ? url : null;
+  };
+
+  /** A link with a destination outside the app opens beside it. */
+  const ELSEWHERE = /^<a (?=[^>]*\shref="(?!\/))/u;
+  /** Each `<br>` the words wrote, a line break (literal-html.ts). */
+  const broken = (html: string): string => html.replaceAll(BREAK, "<br>");
+  /** A table scrolls sideways inside the prose's width. */
+  const components = {
+    a: (html: string) =>
+      html.replace(ELSEWHERE, '<a target="_blank" rel="noopener noreferrer" '),
+    table: (html: string) =>
+      `<div class="max-w-full overflow-x-auto">${html}</div>`,
+    p: broken,
+    li: broken,
+    td: broken,
+    th: broken,
   };
 
   /**
-   * The link destinations drawn: streamdown's own (`*`: http, https, mailto
-   * and tel) and CawCo's rich references (`cawco:`, core references.ts),
-   * which the host's `link` snippet draws (cawco/Markdown). Any other
-   * scheme stays blocked.
+   * The words as drawn: the host's marks, and raw HTML as the text it is
+   * (literal-html.ts).
    */
-  const LINKS = ["*", "cawco:"];
-
-  const COMMENT = /<!--[\s\S]*?-->/gu;
-  const ESCAPES: Record<string, string> = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-  };
-
-  /**
-   * What an HTML run in the source draws. A comment is a note to whoever
-   * edits the file and draws nothing, as markdown has it; any other markup
-   * is shown as the text it is, never run.
-   */
-  function literal(token: { raw: string }): string {
-    return token.raw
-      .replace(COMMENT, "")
-      .replace(/[&<>]/gu, (character) => ESCAPES[character]);
-  }
+  const written = (words: string): string => literalHtml(marks(words));
 
   /**
    * What is drawn of a streaming message: everything up to its last whole
@@ -149,7 +116,7 @@
    * message settles is drawn then, faded in like one more chunk.
    */
   const drawn = $derived(
-    marks(streaming ? source.slice(0, source.search(/\S*$/u)) : source)
+    written(streaming ? source.slice(0, source.search(/\S*$/u)) : source)
   );
 
   /** A fence's opening or closing line: three or more backticks or tildes. */
@@ -182,8 +149,10 @@
   /**
    * How much of a settled message is drawn. Mounted by a step of something
    * drawn in steps (`draw`), a message draws its first block and then one
-   * more per step — a page of markdown was 10ms to build and 15ms to lay out
-   * in WebKit, too much for one frame. Anywhere else it is drawn whole.
+   * more per step: Words renders a long reply's HTML in a fraction of a
+   * millisecond, but the browser still styles and lays out every block it
+   * adds (a page of markdown was 15ms of layout in WebKit), too much for one
+   * frame. Anywhere else it is drawn whole.
    */
   const ends = $derived(blockEnds(source));
   let upto = $state(
@@ -194,7 +163,7 @@
     )
   );
   const content = $derived(
-    upto >= source.length ? drawn : marks(source.slice(0, upto))
+    upto >= source.length ? drawn : written(source.slice(0, upto))
   );
   $effect(() => {
     if (untrack(() => upto >= source.length)) {
@@ -210,126 +179,44 @@
   });
 
   /**
-   * How Streamdown draws this message for as long as it is drawn: block by
-   * block with a span per word when it mounted streaming, whole and plain
-   * when it mounted settled. Fixed at mount, because switching is a rebuild:
-   * Streamdown swaps the two renders in an `{#if}`, so a streamed answer
-   * turning static as it settled threw every block away and drew the whole
-   * reply again — 2,600 elements styled and laid out inside the frame the
-   * answer finished in. A message that streamed keeps the render it
-   * streamed in, and settling is its last chunk; the two lay out the same
-   * (the theme's `markdown-tokens` rule lays the token spans out inline).
+   * Whether this message fades what it adds: one that mounted streaming,
+   * from then on, its settle included. One that mounted settled draws in
+   * steps, and its steps never fade.
    */
-  const tokens = untrack(() => streaming);
-
-  /** A word Streamdown renders as a span of its own in the streamed render. */
-  const TOKEN = 'span[style*="sd-"]';
-  let host = $state<HTMLElement>();
-  /**
-   * How much text was on screen after the last update. A chunk's words are
-   * exactly the text past this mark, so they are found from the data, not
-   * from when their spans happened to mount — Streamdown re-creates every
-   * token span once, right after it mounts, and marking by mount would
-   * replay the whole paragraph.
-   */
-  let shown = -1;
+  const streamed = untrack(() => streaming);
 
   /**
-   * Each chunk's words fade in together — one short opacity fade per chunk
-   * (--duration-menu, --ease-out), no stagger inside it, no blur, nothing that
-   * moves. A word the chunk only EXTENDS ("wor" → "world") is not new, and
-   * keeps its place.
-   *
-   * The chunk's words are the text past `mark`, so they are walked back
-   * from the end (`length` is the text's whole length) and the walk stops
-   * at the mark: a chunk costs its own words. Walked from the start, every
-   * chunk of a long reply visited all its 2,400 words (1.3ms each time).
+   * Each chunk's words fade in together: one short opacity fade per chunk
+   * (--duration-menu, --ease-out: app.css), no stagger inside it, nothing
+   * that moves.
    */
-  function fadeFrom(root: HTMLElement, mark: number, length: number): void {
-    const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const fresh = new Set<Element>();
-    let offset = length;
-    for (let node = walk.lastChild(); node; node = walk.previousNode()) {
-      offset -= node.nodeValue?.length ?? 0;
-      if (offset < mark) {
-        break;
-      }
-      // Only a word's own span fades. Text Streamdown writes straight into a
-      // block has no span of its own, and fading its block would fade every
-      // word already in it.
-      const token = node.parentElement;
-      if (token?.matches(TOKEN)) {
-        fresh.add(token);
-      }
-    }
-    const duration = dur("--duration-menu");
-    const easing = ease("--ease-out");
-    for (const element of fresh) {
-      element.animate([{ opacity: 0 }, { opacity: 1 }], { duration, easing });
-    }
-  }
-
-  // Every chunk, and the settle: the words a message held back while it
-  // streamed are drawn as it settles, and fade in like one more chunk. A
-  // fade already running when it settles plays on: its spans are the same
-  // elements.
-  $effect(() => {
-    track(drawn);
-    const root = host;
-    if (!(root && tokens)) {
-      return;
-    }
-    const length = root.textContent?.length ?? 0;
-    if (shown >= 0 && length > shown && fades && motionOk.current) {
-      fadeFrom(root, shown, length);
-    }
-    shown = length;
-  });
+  const animated = $derived(
+    streamed && fades && motionOk.current
+      ? {
+          // Read as the fade runs: the token is the page's.
+          get duration() {
+            return dur("--duration-menu");
+          },
+        }
+      : false
+  );
 </script>
 
-<!-- A message that streams has Streamdown render each word as a span of its
-     own — from the first render (`animateOnMount`), because the flag that
-     would switch spans on after mount is not reactive and a paragraph that
-     mounted as plain text stayed plain for good. That is what lets a chunk's
-     words be told from the ones already on screen. Streamdown's own per-word
-     animation is switched off by the theme's `markdown-tokens` rule (it is
-     written inline, so only an important declaration outranks it), so
-     mounting with spans replays nothing;
-     the chunk fade above is the only motion text has. A message that mounts
-     settled renders static: plain text nodes, the same layout. -->
-<div data-slot="md" class="contents" bind:this={host}>
-  <Streamdown
-    animation={{
-      enabled: tokens,
-      animateOnMount: true,
-      tokenize: "word",
-    }}
+<div data-slot="md" class="contents">
+  <Markdown
     class={cn(
       PROSE,
       invert && "prose-invert",
       markdownVariants({ look }),
       className
     )}
-    allowedLinkPrefixes={LINKS}
-    {content}
-    controls={{ mermaid: false, table: false }}
-    mergeTheme={false}
-    renderHtml={literal}
-    static={!tokens}
-    theme={PLAIN}
+    {animated}
     {code}
-    {codespan}
+    {inlineCode}
     {link}
-  >
-    <!-- Agents write prices and shell variables, not formulas: `$…$` and
-         `\(…\)` read as the characters they are. Streamdown lexes them as math,
-         and its fallback would draw the formula without its delimiters. -->
-    {#snippet math({ token })}
-      {#if token.isInline}
-        {token.raw}
-      {:else}
-        <p>{token.raw}</p>
-      {/if}
-    {/snippet}
-  </Streamdown>
+    options={{ components, controls: false, lineNumbers: false, urlTransform }}
+    source={content}
+    {streaming}
+    {when}
+  />
 </div>

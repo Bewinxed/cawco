@@ -6,7 +6,7 @@
    * mock's inline-code and measure.
    *
    * The type and rhythm rules (the `msg-prose` component in the theme) reach
-   * into the Markdown's own DOM on purpose. Streamdown puts
+   * into the Markdown's own DOM on purpose. The markdown puts
    * the `prose prose-sm …` class (see `#lib/prose.js`) on its own root div, and
    * `prose-sm` declares its own font-size, line-height and per-element em
    * margins there — so anything set on `.msg` alone is inherited into that root

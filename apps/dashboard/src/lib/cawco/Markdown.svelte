@@ -6,15 +6,20 @@
    * `cawco:` link its kind's element.
    */
   import { inlineBlockName } from "@cawco/core/inline-blocks";
-  import type { ComponentProps, Snippet } from "svelte";
+  import type {
+    CodeOptions,
+    MarkdownInlineCode,
+    MarkdownLink,
+  } from "@cawco/words-svelte";
+  import type { ComponentProps } from "svelte";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { markMentions } from "./find/mention.svelte";
   import { markdownBlocksHere } from "./markdown-blocks";
   import {
+    markdownFleetAbove,
     markdownFleetHere,
     plainReferenceOf,
-    writtenLabel,
   } from "./markdown-fleet";
   import { outsideCode } from "./outside-code";
   import {
@@ -30,7 +35,7 @@
     ...rest
   }: Omit<
     ComponentProps<typeof Markdown>,
-    "marks" | "code" | "codespan" | "link"
+    "marks" | "code" | "inlineCode" | "link" | "when"
   > & {
     /**
      * The person's own words: each `/name` of a skill the session has is
@@ -62,6 +67,12 @@
    * card's thread, which draw each reference as its label and load no store.
    */
   const fleet = markdownFleetHere();
+  /**
+   * Whether a host provides the fleet: then every code span is drawn here,
+   * a chip as soon as the skill it names and the fleet are read, whenever
+   * that is. Where none does, a code span is code.
+   */
+  const chips = markdownFleetAbove() !== undefined;
 
   /**
    * Words as drawn, outside their code: each mention a session's reference
@@ -69,104 +80,125 @@
    * marked.
    */
   function marked(words: string): string {
+    const blocks = Block && blocksAt !== undefined ? named(words) : words;
     // An agent's reply with no "@" holds no mention: drawn as written, with
     // no walk of its lines on every chunk.
-    if (!(said || words.includes("@"))) {
-      return words;
+    if (!(said || blocks.includes("@"))) {
+      return blocks;
     }
-    const named = said ? skillWords(skills().keys()) : null;
-    return outsideCode(words, (run) =>
-      markMentions(run, said, (between) => markSkills(between, named))
+    const names = said ? skillWords(skills().keys()) : null;
+    return outsideCode(blocks, (run) =>
+      markMentions(run, said, (between) => markSkills(between, names))
     );
   }
+
+  /** A fence's opening line: up to three spaces, its marker, and its info string. */
+  const FENCE = /^( {0,3})(`{3,}|~{3,})(.*)$/u;
+  /**
+   * The language a named block's fence is drawn under: `openui:` and its
+   * name. Markdown hands a fence's code only the first word of its info
+   * string, and a block's name is in the rest (`name="…"`).
+   */
+  const BLOCK = "openui:";
+  const SPACES = /\s+/u;
+
+  /** `words` with each fence naming a block written under its block's language ({@link BLOCK}). */
+  function named(words: string): string {
+    if (!words.includes("openui")) {
+      return words;
+    }
+    let open: string | null = null;
+    return words
+      .split("\n")
+      .map((line) => {
+        const fence = FENCE.exec(line);
+        if (!fence) {
+          return line;
+        }
+        const [, indent = "", marker = "", info = ""] = fence;
+        if (open !== null) {
+          if (marker.startsWith(open) && info.trim() === "") {
+            open = null;
+          }
+          return line;
+        }
+        open = marker;
+        const [lang = "", ...meta] = info.trim().split(SPACES);
+        const name = inlineBlockName(lang, meta.join(" "));
+        return name
+          ? `${indent}${marker}${BLOCK}${encodeURIComponent(name)}`
+          : line;
+      })
+      .join("\n");
+  }
+
+  /** The block a fence's language names, or null when it is code. */
+  const blockNamed = (language: string): string | null =>
+    language.startsWith(BLOCK)
+      ? decodeURIComponent(language.slice(BLOCK.length))
+      : null;
 </script>
 
-<Markdown {...rest} marks={marked}>
-  <!-- A fence is code, and the console has one surface for code: the same well a
-	     tool result opens into, painted by the same highlighter. Streamdown can
-	     highlight fences itself, but it resolves one theme at a time and
-	     writes it as inline colours — registering a custom pair through its
-	     `shikiThemes` pins every fence to whichever theme is listed first, and
-	     following the appearance instead means re-tokenizing every block on every
-	     switch, through a second highlighter with a second cache. Ours paints each token
-	     with a house code token that carries both appearances. The well is
-	     `not-prose`, so prose's `pre` and `code` dressing leaves it alone;
-	     inline code (`codespan`) keeps it, because it is prose, not a
-	     listing. -->
-  {#snippet code({
-    token,
-    incomplete,
-  }: {
-    token: { lang?: string; meta?: string; text: string };
-    incomplete?: boolean;
-  })}
-    {@const name =
-      Block && blocksAt !== undefined
-        ? inlineBlockName(token.lang, token.meta)
-        : null}
-    {#if Block && blocksAt !== undefined && name}
-      <!-- A named openui fence in a reply is the agent's block
-           (tsk-330), drawn in place of its code; one still open is
-           being written. -->
-      <Block
-        at={blocksAt}
-        {name}
-        source={token.text}
-        streaming={!!rest.streaming && !!incomplete}
+<!-- A fence is code, and the console has one surface for code: the same
+     well a tool result opens into, painted by the same highlighter, whose
+     house code tokens carry both appearances. The well is `not-prose`, so
+     prose's `pre` and `code` dressing leaves it alone; inline code keeps
+     it, because it is prose, not a listing. A fence's lines each end in a
+     line feed, and the well's text ends at its last line. -->
+{#snippet code({ code: lines, language, isIncomplete }: CodeOptions)}
+  {@const text = lines.endsWith("\n") ? lines.slice(0, -1) : lines}
+  {@const name = Block && blocksAt !== undefined ? blockNamed(language) : null}
+  {#if Block && blocksAt !== undefined && name}
+    <!-- A named openui fence in a reply is the agent's block (tsk-330),
+         drawn in place of its code; one still open is being written. -->
+    <Block
+      at={blocksAt}
+      {name}
+      source={text}
+      streaming={!!rest.streaming && isIncomplete}
+    />
+  {:else}
+    <div class="not-prose my-3">
+      <OutputBlock
+        language={language === "text" ? undefined : language}
+        {text}
       />
-    {:else}
-      <div class="not-prose my-3">
-        <OutputBlock language={token.lang} text={token.text} />
-      </div>
-    {/if}
-  {/snippet}
-  <!-- A code span naming a skill of this session, exactly, is that
-         skill's chip (SkillChip); any other is code. -->
-  {#snippet codespan({
-    token,
-    children,
-  }: {
-    token: { text: string };
-    children: Snippet;
-  })}
-    {@const skill = skillNamed(skills(), token.text)}
-    {@const Chip = fleet()?.SkillChip}
-    {#if skill && Chip}
-      <Chip {skill} />
-    {:else}
-      <code>{@render children()}</code>
-    {/if}
-  {/snippet}
-  <!-- A link: a `cawco:` reference is drawn as its kind's element (a
-         session as its chip), or as its label alone when the dashboard
-         knows no such kind or id (references.ts). Any other link is the
-         anchor streamdown draws (its Link element), `href` being the
-         destination streamdown allowed. -->
-  {#snippet link({
-    children,
-    href,
-    token,
-  }: {
-    children: Snippet;
-    href?: string | null;
-    /** The fields of marked's link token read here. */
-    token: { href: string; text?: string; title?: string | null };
-  })}
-    {@const drawn = (fleet()?.referenceOf ?? plainReferenceOf)(token.href)}
-    {#if drawn.draw === "element"}
-      <drawn.element
-        id={drawn.id}
-        kind={drawn.kind}
-        label={writtenLabel(token.text)}
-      />
-    {:else if drawn.draw === "label"}
-      {@render children()}
-    {:else if token.href.startsWith("/")}
-      <a href={token.href} title={token.title}>{@render children()}</a>
-    {:else}
-      <a {href} rel="noopener noreferrer" target="_blank" title={token.title}
-        >{@render children()}</a
-      >
-    {/if}
-  {/snippet}
-</Markdown>
+    </div>
+  {/if}
+{/snippet}
+
+<!-- A code span naming a skill of this session, exactly, is that skill's
+     chip (SkillChip); any other is code. -->
+{#snippet inlineCode({ code: text }: MarkdownInlineCode)}
+  {@const skill = skillNamed(skills(), text)}
+  {@const Chip = fleet()?.SkillChip}
+  {#if skill && Chip}
+    <Chip {skill} />
+  {:else}
+    <code>{text}</code>
+  {/if}
+{/snippet}
+
+<!-- A `cawco:` reference is drawn as its kind's element (a session as its
+     chip), or as its label alone when the dashboard knows no such kind or
+     id (references.ts). Every other link is markdown's own anchor. -->
+{#snippet link({ href, html, text }: MarkdownLink)}
+  {@const drawn = (fleet()?.referenceOf ?? plainReferenceOf)(href ?? "")}
+  {#if drawn.draw === "element"}
+    <drawn.element id={drawn.id} kind={drawn.kind} label={text} />
+  {:else}
+    {@html html}
+  {/if}
+{/snippet}
+
+<Markdown
+  {...rest}
+  {code}
+  {inlineCode}
+  {link}
+  marks={marked}
+  when={{
+    inlineCode: () => chips,
+    link: (found) => !!found.href?.startsWith("cawco:"),
+  }}
+/>

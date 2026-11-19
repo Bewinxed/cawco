@@ -1,0 +1,55 @@
+{
+  "name": "@cawco/words-svelte",
+  "version": "0.1.0",
+  "description": "Streaming markdown for Svelte 5 on @pierre/words: a component and an attachment that patch the DOM as text arrives, with snippets drawn in place of links, images, code spans and code blocks.",
+  "keywords": [
+    "svelte",
+    "markdown",
+    "streaming",
+    "llm",
+    "words"
+  ],
+  "license": "SEE LICENSE IN LICENSE",
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "svelte": "./src/index.ts",
+  "types": "./src/index.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "svelte-package --input src --output dist",
+    "fmt": "bun ../../scripts/fmt.ts .",
+    "publint": "bun run build && publint --pack bun"
+  },
+  "devDependencies": {
+    "@pierre/words": "0.2.2",
+    "@sveltejs/package": "^3.0.3",
+    "publint": "^0.3.25",
+    "svelte": "5.57.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  },
+  "peerDependencies": {
+    "@pierre/words": "^0.2.2",
+    "svelte": "^5.40.0"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "svelte": "./dist/index.js",
+        "default": "./dist/index.js"
+      }
+    },
+    "svelte": "./dist/index.js",
+    "types": "./dist/index.d.ts"
+  }
+}

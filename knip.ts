@@ -104,7 +104,7 @@ export default {
   treatConfigHintsAsErrors: true,
   // The `.svelte` compiler above, in place of Knip's own.
   compilers: { svelte },
-  // includeEntryExports stays off for ".", apps/dashboard (*.stories.ts export what packages/agent/src/stage-host/host.ts loads by path) and packages/jsonl-parser (a published library); every other packages/* workspace turns it on.
+  // includeEntryExports stays off for ".", apps/dashboard (*.stories.ts export what packages/agent/src/stage-host/host.ts loads by path), packages/jsonl-parser and packages/words-svelte (published libraries); every other packages/* workspace turns it on.
   workspaces: {
     ".": {
       entry: [
@@ -393,6 +393,10 @@ export default {
     },
     "packages/jsonl-parser": {
       // knip.dev/reference/configuration: "By default, Knip does not report unused exports in entry files." This package is a library published as @cawco/jsonl-parser (its package.json `publishConfig`, `files` and tsdown build), and its README's Usage documents what ".", "./fts5" and "./opencode" export as its API: public, used or not inside the repo.
+      includeEntryExports: false,
+    },
+    "packages/words-svelte": {
+      // knip.dev/reference/configuration: "By default, Knip does not report unused exports in entry files." This package is a library published as @cawco/words-svelte (its package.json `publishConfig`, `files` and svelte-package build), and its README documents what "." exports as its API: public, used or not inside the repo.
       includeEntryExports: false,
     },
     "packages/icons": {

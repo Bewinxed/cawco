@@ -138,9 +138,9 @@
   }
 }
 
-/* ---- Rules into DOM a component does not render: a library's (Svelte Flow,
-   Streamdown; PhotoSwipe's in lightbox/photoswipe.css), a script's (torph's morph, the editors'
-   chips) or a kit part's internals, which take no
+/* ---- Rules into DOM a component does not render: a library's (Svelte Flow;
+   PhotoSwipe's in lightbox/photoswipe.css), a script's (torph's morph, the
+   editors' chips) or a kit part's internals, which take no
    class from the markup that hosts them. Each is anchored on the host's own
    hook. */
 @layer components {
@@ -151,19 +151,12 @@
     text-box: inherit;
   }
 
-  /* Streamdown (svelte-streamdown 4.2.1, the latest) writes its token and
-     block animation, and its token spans' inline-block and pre-wrap, into
-     each element's style attribute (dist/context.svelte.js
-     animationTextStyle / animationBlockStyle), and an inline declaration
-     yields only to an important one. The chunk fade in ui/markdown is the
-     only motion streamed text has, and inline, with the prose's own
-     white-space, a streamed paragraph lays out as the settled one does. */
-  [data-slot="md"] [style*="sd-"] {
-    animation: none !important;
-  }
-  [data-slot="md"] span[style*="sd-"] {
-    display: inline !important;
-    white-space: inherit !important;
+  /* A streamed chunk's words, faded in by the markdown (@pierre/words marks
+     them `data-animated` while they fade): one opacity fade at the menu's
+     duration on the house ease-out, no stagger, nothing that moves
+     (ui/markdown `animated`, which hands Words the same duration). */
+  [data-slot="md"] [data-markdown][data-animated="true"] {
+    animation: kit-fade-in var(--duration-menu) var(--ease-out) backwards;
   }
   /* The transcript's list (virtua): it hides an item for the moment it
      takes to measure it, inline, and a row already drawn (Row's
@@ -289,8 +282,10 @@
        subject: every ancestor of a reply's words was an anchor to test, and
        each node added under one (a row, find's places, the composer's dock)
        restyled every element under it, 24k elements a frame while find
-       stepped. */
-    & .prose > :not([data-block-key]) {
+       stepped. A fence or a block drawn by a snippet of the markdown's
+       stands one level down, in its `display: contents` placeholder. */
+    & .prose > :not([data-block-key], [data-words-snippet]),
+    & .prose > [data-words-snippet] > :not([data-block-key]) {
       max-inline-size: var(--words-measure, none);
     }
   }
