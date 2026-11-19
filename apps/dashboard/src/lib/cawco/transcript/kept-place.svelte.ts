@@ -14,6 +14,7 @@ import type { ConversationFind } from "../find/conversation-find.svelte";
 import type { SessionState } from "../stores/sessions.svelte";
 import type { Message } from "../types";
 import { disclosure } from "./disclosure.svelte";
+import { drawnAt } from "./list-whole.svelte";
 import { BUFFER_SCREENS } from "./mounted-rows.svelte";
 import {
   blockOf,
@@ -228,8 +229,13 @@ export class KeptPlace {
     if (!this.#host.pin.list || this.#host.rowDraw.renderedRows.length === 0) {
       return null;
     }
+    // The row drawn there (`drawnAt`), whatever virtua holds back.
     for (
-      let index = this.#host.pin.list.findItemIndex(top);
+      let index = drawnAt(
+        this.#host.pin.list,
+        top - this.#host.pin.listStart,
+        this.#host.rowDraw.renderedRows.length
+      );
       index >= 0;
       index -= 1
     ) {
@@ -521,7 +527,11 @@ export class KeptPlace {
         // The row at the view's top first: it is the place's unless the list
         // moved under it, and the whole list is read for it only then.
         const top = this.#host.pin.list
-          ? this.#host.pin.list.findItemIndex(this.#host.pin.lastTop)
+          ? drawnAt(
+              this.#host.pin.list,
+              this.#host.pin.lastTop - this.#host.pin.listStart,
+              this.#host.rowDraw.renderedRows.length
+            )
           : -1;
         const index =
           top >= 0 &&

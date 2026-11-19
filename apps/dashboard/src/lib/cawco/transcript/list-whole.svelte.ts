@@ -31,6 +31,41 @@ export interface ListWholeHost {
 /** How many rows past the one at the view's top `see` looks for one drawn. */
 const SEEN_REACH = 8;
 
+/**
+ * The index of the row drawn at `at` (px from the list's first row) among
+ * `length`: the last whose drawn top (`getItemOffset`, the `top` virtua
+ * writes on it) is at or above `at`.
+ *
+ * Not `findItemIndex`, which reads the rows' laid-out sizes alone. On iOS
+ * WebKit (virtua's `isIOSWebKit`, by the user agent) virtua does not scroll
+ * for rows changed above the view while the view is scrolling: it holds the
+ * change and draws every row that much higher (its store's pending jump,
+ * which `getItemOffset` takes off), then writes it as one scroll when the
+ * scroll comes to rest. Under a page landed in front that is thousands of
+ * pixels, and `findItemIndex` named a row that far above the view, never
+ * drawn: nothing was seen, and the write at rest, its fraction dropped by
+ * WebKit, moved every row on screen half a pixel (WebKit at iPhone size,
+ * 7 landings in 10). The reader's kept place (KeptPlace `placeAt`) read the
+ * same wrong row, and put back past its end moved the view 30–396px.
+ */
+export function drawnAt(
+  list: VirtualizerHandle,
+  at: number,
+  length: number
+): number {
+  let low = 0;
+  let high = length - 1;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (list.getItemOffset(middle) <= at) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return low;
+}
+
 export class ListWhole {
   readonly #host: ListWholeHost;
 
@@ -187,7 +222,11 @@ export class ListWhole {
    * laid out. Heard where the list's height is written (`wholeHeight`), as
    * the strip before the list resizes (OlderPages `keepPlace`), never at the
    * tail, which is the pin's, nor under a jump to the latest, which is its
-   * own.
+   * own. On iOS WebKit virtua's write for rows changed above the view comes
+   * when the scroll comes to rest (`drawnAt`), and changes no height; it is
+   * heard on the same style all the same, which loses its
+   * `pointer-events: none` in that write (virtua's `isScrolling` ends with
+   * the held change).
    */
   holdView(): void {
     const { seen } = this;
@@ -214,8 +253,14 @@ export class ListWhole {
     if (stands !== seen.top) {
       // Where the view would stand with no spare, on the layout's own
       // 1/64px steps; the whole pixel at or past it, and the spare the rest.
+      // Above the scroller's top the spare takes all of it: on iOS WebKit
+      // the view can stand at 0 with a page's worth of rows drawn above it,
+      // virtua's scroll for them held until rest (`drawnAt`), and the strip
+      // before the list leaving with the last page moved every row 54px up,
+      // then down again at rest. virtua's write at rest gives the room back,
+      // and the spare is a part of a pixel again.
       const bare = Math.round((now - this.spare + stands - seen.top) * 64) / 64;
-      const offset = Math.ceil(bare);
+      const offset = Math.max(0, Math.ceil(bare));
       if (offset - bare !== this.spare) {
         this.spare = offset - bare;
         flushSync();
@@ -259,7 +304,11 @@ export class ListWhole {
     // scroll can bring the view to rows virtua mounts only in the flush
     // behind it.
     if (list && listing && offset !== null) {
-      const first = list.findItemIndex(offset);
+      const first = drawnAt(
+        list,
+        offset - this.#host.older.olderRoom - this.spare,
+        rows.length
+      );
       for (
         let index = first;
         !row && index < Math.min(rows.length, first + SEEN_REACH);
