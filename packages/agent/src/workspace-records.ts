@@ -10,6 +10,7 @@ import { join, relative, sep } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
 import {
   workspaceBorrowedObjectsFile,
+  workspacePlaceFoldersFile,
   workspacesDir,
 } from "@cawco/core/paths/workspace";
 import {
@@ -68,6 +69,38 @@ export const keepBorrowedObjects = async (ref: WorkspaceRef): Promise<void> => {
   ).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "EEXIST") {
       throw error;
+    }
+  });
+};
+
+/** Each place's {@link keepPlaceFolder} in turn, so two holds at once each add theirs. */
+const keepingFolders = new Map<string, Promise<void>>();
+
+/**
+ * Records the real path place `ref`'s folder stands at, added to the folders
+ * its sandbox has written (core paths/workspace.ts
+ * `workspacePlaceFoldersFile`) as the agent holds it, before its sandbox
+ * runs: no workspace's policy takes evidence for a grant from a file there
+ * from then on (core workspace-policy.ts `workspaceWritten`). Kept for good,
+ * as what a sandbox wrote stays in the folder after it closes.
+ */
+export const keepPlaceFolder = (ref: WorkspaceRef): Promise<void> => {
+  const keep = async (): Promise<void> => {
+    const file = workspacePlaceFoldersFile(ref.id);
+    const folder = await realpath(ref.path);
+    const kept = (await readRecord(file, z.array(z.string()))) ?? [];
+    if (kept.includes(folder)) {
+      return;
+    }
+    await writeStateFile(file, `${JSON.stringify([...kept, folder])}\n`);
+  };
+  const next = (keepingFolders.get(ref.id) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(keep);
+  keepingFolders.set(ref.id, next);
+  return next.finally(() => {
+    if (keepingFolders.get(ref.id) === next) {
+      keepingFolders.delete(ref.id);
     }
   });
 };

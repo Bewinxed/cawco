@@ -13,7 +13,8 @@
  *   the `package.json` of each folder
  *   above the clone up to the home dir (`ancestorManifests`), the
  *   toolchains on PATH and the tool
- *   trees their commands link into (`homeToolchains`), the user's git
+ *   trees their commands link into, as read outside every folder a
+ *   workspace writes (`homeToolchains`), the user's git
  *   config, the host tool caches skills run binaries from
  *   (`hostToolCaches`: Playwright's browsers), the
  *   cawco binary, on macOS the selected
@@ -37,7 +38,15 @@
  */
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
+import {
+  lstat,
+  open,
+  readdir,
+  readFile,
+  readlink,
+  realpath,
+  stat,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import {
   basename,
@@ -76,11 +85,12 @@ import {
   workspaceCaches,
 } from "./paths/host-policy";
 import { hubProjectsDir } from "./paths/hub";
-import { xdgDataHome } from "./paths/roots";
+import { workspaceScratchRoot, xdgDataHome } from "./paths/roots";
 import {
   workspaceAccountsFile,
   workspaceBorrowedObjectsFile,
   workspaceDoorDir,
+  workspacePlaceFoldersFile,
   workspaceProjectFile,
   workspaceReadOnlyDir,
   workspaceScratchDir,
@@ -617,7 +627,7 @@ const SHEBANG = /^#![ \t]*(\/[^\s]+)/u;
 /** How much of a command {@link interpreterOf} reads for its `#!` line. */
 const SHEBANG_BYTES = 512;
 
-/** The interpreter `path` names on its `#!` line by an absolute path, as a real path; none for a binary or `#!/usr/bin/env`. */
+/** The interpreter `path` names on its `#!` line by an absolute path, as named; none for a binary or `#!/usr/bin/env`. */
 const interpreterOf = async (path: string): Promise<string | undefined> => {
   const file = await open(path, "r").catch(() => undefined);
   if (!file) {
@@ -626,15 +636,111 @@ const interpreterOf = async (path: string): Promise<string | undefined> => {
   try {
     const head = Buffer.alloc(SHEBANG_BYTES);
     const { bytesRead } = await file.read(head, 0, SHEBANG_BYTES, 0);
-    const named = SHEBANG.exec(head.subarray(0, bytesRead).toString("latin1"));
-    return named?.[1]
-      ? await realpath(named[1]).catch(() => undefined)
-      : undefined;
+    return SHEBANG.exec(head.subarray(0, bytesRead).toString("latin1"))?.[1];
   } catch {
     // A directory, or a file this process may not read: no interpreter.
   } finally {
     await file.close();
   }
+};
+
+/**
+ * Where every clone and macOS copy is cut (agent workspace.ts
+ * `createWorkspace`, layer.ts `makeLayer`): `~/.worktrees/<repo>-<id8>`.
+ */
+const clonesDir = (home: string): string => join(home, ".worktrees");
+
+/**
+ * Every folder a workspace on this machine writes, each at its real path:
+ * every place's folder, as the agent recorded it at each hold
+ * ({@link workspacePlaceFoldersFile}) and, for a place held before that
+ * record was kept, as its `place.json` names it; the dir every clone and
+ * copy is cut in ({@link clonesDir}); the scratch root; the workspaces'
+ * caches. Kept for good, not only while a boundary runs: what a sandbox wrote
+ * there stays after it closes. Nothing a file in one says is evidence for a
+ * grant to any workspace ({@link homeToolchains}).
+ */
+const workspaceWritten = async (home: string): Promise<string[]> => {
+  const places = (
+    await readdir(workspacesDir()).catch(unlessGone<string[]>([]))
+  ).filter(isPlace);
+  const folders = await Promise.all(
+    places.map(async (id) => {
+      const [kept, held] = await Promise.all([
+        readRecord(workspacePlaceFoldersFile(id), z.array(z.string())),
+        readRecord(
+          join(workspacesDir(), id, "place.json"),
+          z.object({ path: z.unknown().optional() })
+        ),
+      ]);
+      return [
+        ...(kept ?? []),
+        ...(typeof held?.path === "string" ? [resolveReal(held.path)] : []),
+      ].filter((folder) => isAbsolute(folder));
+    })
+  );
+  return unique([
+    ...folders.flat(),
+    ...[clonesDir(home), workspaceScratchRoot(home), ...workspaceCaches()].map(
+      resolveReal
+    ),
+  ]);
+};
+
+/** The most links one {@link resolverOutside} resolution follows: Linux's own limit ("a maximum of 40 symbolic links", path_resolution(7)). */
+const MAX_LINKS = 40;
+
+/**
+ * Resolves an absolute path as realpath(3) does, one name at a time, each
+ * link followed from the real dir it lies in, so `..` after a link climbs
+ * from where it points; to none when the path is not there, or when a link
+ * on the way lies in a folder of `written` ({@link workspaceWritten}), which
+ * a sandbox may have made to lead anywhere. Each name is looked up once per
+ * resolver, so the paths of one walk share their dirs' lookups.
+ */
+const resolverOutside = (
+  written: readonly string[]
+): ((path: string) => Promise<string | undefined>) => {
+  // What is at a path: absent (undefined), no link (null), or a link's target.
+  const looks = new Map<string, Promise<string | null | undefined>>();
+  const look = (path: string): Promise<string | null | undefined> => {
+    let found = looks.get(path);
+    if (!found) {
+      found = lstat(path)
+        .then((info) => (info.isSymbolicLink() ? readlink(path) : null))
+        .catch(() => undefined);
+      looks.set(path, found);
+    }
+    return found;
+  };
+  return async (path) => {
+    let real = "/";
+    let pending = path.split("/");
+    let links = 0;
+    for (
+      let name = pending.shift();
+      name !== undefined;
+      name = pending.shift()
+    ) {
+      // `join` takes "", "." and ".." here as they read from a real dir.
+      const next = join(real, name);
+      const target = await look(next);
+      if (target === undefined) {
+        return;
+      }
+      if (target === null) {
+        real = next;
+        continue;
+      }
+      links += 1;
+      if (links > MAX_LINKS || written.some((root) => within(next, root))) {
+        return;
+      }
+      real = isAbsolute(target) ? "/" : real;
+      pending = [...target.split("/"), ...pending];
+    }
+    return real;
+  };
 };
 
 /**
@@ -657,14 +763,15 @@ const toolRoots = (home: string): string[] =>
  * it); else the dir right below the deepest {@link toolRoots} entry that
  * holds it, never a root itself or `~/.local/state`, where shells keep their
  * histories; else, for a landing elsewhere under home, the dir right below
- * home when that dir is a Python virtual environment (`pyvenv.cfg`). Anything
- * else under home is the owner's own files or a harness's state, never a
- * tool's.
+ * home when that dir is a Python virtual environment (a `pyvenv.cfg` that
+ * `trusted` resolves). Anything else under home is the owner's own files or
+ * a harness's state, never a tool's.
  */
 const toolTreeOf = async (
   landing: string,
   home: string,
-  roots: readonly string[]
+  roots: readonly string[],
+  trusted: (path: string) => Promise<string | undefined>
 ): Promise<string | undefined> => {
   const at = landing.indexOf(`${NODE_MODULES}/`);
   if (at >= 0) {
@@ -678,11 +785,7 @@ const toolTreeOf = async (
       : tree;
   }
   const top = join(home, landing.slice(home.length + 1).split("/")[0] ?? "");
-  return top !== landing &&
-    (await stat(join(top, "pyvenv.cfg")).then(
-      () => true,
-      () => false
-    ))
+  return top !== landing && (await trusted(join(top, "pyvenv.cfg")))
     ? top
     : undefined;
 };
@@ -708,29 +811,44 @@ const toolTreeOf = async (
  * parent, the tree or any dir down to the landing), and never one that is or
  * lies in a credential store; a store inside a tree stays denied, the deeper
  * entry deciding.
+ *
+ * Every dir, link, `#!` line and `pyvenv.cfg` this reads lies outside every
+ * folder a workspace writes ({@link workspaceWritten}), and so does every
+ * dir it grants: a file a sandbox wrote never widens any workspace's grant,
+ * its own or another's, and this reading is every workspace's. A PATH dir
+ * that is or leads into such a folder grants nothing, nor does a command
+ * whose way passes a link there or that lands there, nor its interpreter, its
+ * venv's or its tree. A place's own boundary reads its folder already; no
+ * other workspace is given a person's own folder by this reading, as
+ * {@link toolTreeOf} gives none outside the tool roots, nor a work tree: so
+ * a landing in a place grants nothing beyond the place itself, which only
+ * that place reads.
  */
 export const homeToolchains = async (home: string): Promise<string[]> => {
   const dirs = startedPath()
     .split(delimiter)
     .filter((entry) => entry.startsWith(`${home}/`));
-  const stamp = await pathDirsStamp(home, dirs);
+  const written = await workspaceWritten(home);
+  const stamp = `${await pathDirsStamp(home, dirs)}\n${written.join("\n")}`;
   if (toolchainsRead?.stamp === stamp) {
     return toolchainsRead.trees;
   }
-  const trees = await readHomeToolchains(home, dirs);
+  const trees = await readHomeToolchains(home, dirs, written);
   toolchainsRead = { stamp, trees };
   return trees;
 };
 
 /**
  * The last reading of {@link homeToolchains}, kept under the stamp of the
- * PATH dirs it walked ({@link pathDirsStamp}). Every boundary in use reads
+ * PATH dirs it walked ({@link pathDirsStamp}) and the folders it took
+ * nothing from ({@link workspaceWritten}). Every boundary in use reads
  * its policy each look for a narrowing (agent boundary/looks.ts
  * `lookForNarrowing`, every 5 s), and the walk opened every command in every
  * PATH dir under home and read its `#!` line: about 6,600 system calls a
  * workspace a look on obelisk, the most of the agent's 87,000 reads a second
  * across its boundaries in use on 2026-11-19. The trees change only as those
- * dirs do, so the walk runs again only then.
+ * dirs do, or a folder joins those a workspace writes, so the walk runs
+ * again only then.
  */
 let toolchainsRead: { stamp: string; trees: string[] } | undefined;
 
@@ -758,13 +876,30 @@ const pathDirsStamp = async (
     )),
   ].join("\n");
 
-/** {@link homeToolchains}' walk of `dirs`, the PATH dirs under `home`. */
+/**
+ * {@link homeToolchains}' walk of `dirs`, the PATH dirs under `home`, taking
+ * nothing from `written` ({@link workspaceWritten}).
+ */
 const readHomeToolchains = async (
   home: string,
-  dirs: readonly string[]
+  dirs: readonly string[],
+  written: readonly string[]
 ): Promise<string[]> => {
+  const resolveOutside = resolverOutside(written);
+  /** `path` at its real path, when neither its way nor its landing lies in `written`. */
+  const trusted = async (path: string): Promise<string | undefined> => {
+    const real = await resolveOutside(path);
+    return real && !written.some((root) => within(real, root))
+      ? real
+      : undefined;
+  };
+  const pathDirs = unique(
+    (await Promise.all(dirs.map(trusted))).filter(
+      (dir): dir is string => dir !== undefined
+    )
+  );
   const commands = await Promise.all(
-    dirs.map(async (dir) => {
+    pathDirs.map(async (dir) => {
       const names = await readdir(dir).catch(() => []);
       return names.map((name) => join(dir, name));
     })
@@ -773,11 +908,12 @@ const readHomeToolchains = async (
     (
       await Promise.all(
         commands.flat().map(async (command) => {
-          const landing = await realpath(command).catch(() => undefined);
+          const landing = await trusted(command);
           if (!landing) {
             return [];
           }
-          const interpreter = await interpreterOf(landing);
+          const named = await interpreterOf(landing);
+          const interpreter = named ? await trusted(named) : undefined;
           return interpreter ? [landing, interpreter] : [landing];
         })
       )
@@ -786,7 +922,7 @@ const readHomeToolchains = async (
       .filter(
         (landing) =>
           landing.startsWith(`${home}/`) &&
-          !dirs.some((dir) => within(landing, dir))
+          !pathDirs.some((dir) => within(landing, dir))
       )
   );
   const roots = toolRoots(home);
@@ -795,10 +931,12 @@ const readHomeToolchains = async (
     resolveDenied(store),
   ]);
   const gits = new Map<string, Promise<boolean>>();
+  // `lstat`: a `.git` that is a link counts wherever it leads, or if it
+  // leads nowhere.
   const hasGit = (dir: string): Promise<boolean> => {
     let found = gits.get(dir);
     if (!found) {
-      found = stat(join(dir, ".git")).then(
+      found = lstat(join(dir, ".git")).then(
         () => true,
         () => false
       );
@@ -818,6 +956,7 @@ const readHomeToolchains = async (
   };
   const allowed = async (tree: string, landing: string): Promise<string[]> =>
     tree.startsWith(`${home}/`) &&
+    !written.some((root) => within(tree, root)) &&
     !stores.some((store) => within(tree, store)) &&
     !(await inWorkTree(tree, landing))
       ? [tree]
@@ -825,8 +964,8 @@ const readHomeToolchains = async (
   const trees = await Promise.all(
     landings.map(async (landing) => {
       const [tree, base] = await Promise.all([
-        toolTreeOf(landing, home, roots),
-        venvBaseOf(landing),
+        toolTreeOf(landing, home, roots, trusted),
+        venvBaseOf(landing, trusted),
       ]);
       return [
         ...(tree ? await allowed(tree, landing) : []),
@@ -834,7 +973,7 @@ const readHomeToolchains = async (
       ];
     })
   );
-  return unique([...dirs, ...trees.flat()]);
+  return unique([...pathDirs, ...trees.flat()]);
 };
 
 /** `pyvenv.cfg`'s `home = …` line: the dir of the interpreter a venv was made from. */
@@ -847,18 +986,23 @@ const VENV_HOME = /^home\s*=\s*(.+?)\s*$/mu;
  * home key pointing to the Python installation from which the command was
  * run"), and the interpreter loads its standard library and, from a shared
  * build, `libpython` from the prefix above it (a pipx venv made from pyenv's
- * `~/.pyenv/versions/3.12.0`). None for a landing outside a venv.
+ * `~/.pyenv/versions/3.12.0`). The `pyvenv.cfg` and the dir it names each
+ * as `trusted` resolves them ({@link homeToolchains}). None for a landing
+ * outside a venv.
  */
-const venvBaseOf = async (landing: string): Promise<string | undefined> => {
-  const cfg = await readFile(
-    join(dirname(dirname(landing)), "pyvenv.cfg"),
-    "utf8"
-  ).catch(() => undefined);
+const venvBaseOf = async (
+  landing: string,
+  trusted: (path: string) => Promise<string | undefined>
+): Promise<string | undefined> => {
+  const at = await trusted(join(dirname(dirname(landing)), "pyvenv.cfg"));
+  const cfg = at
+    ? await readFile(at, "utf8").catch(() => undefined)
+    : undefined;
   const named = cfg ? VENV_HOME.exec(cfg)?.[1] : undefined;
   if (!(named && isAbsolute(named))) {
     return;
   }
-  const real = await realpath(named).catch(() => undefined);
+  const real = await trusted(named);
   if (!real) {
     return;
   }
@@ -1057,22 +1201,31 @@ const isSpillDir = (id: string, dir: string): boolean => {
  * write there is refused, as everywhere outside the copy. Nothing for a
  * Linux view, whose folder is its own path, nor for a copy of a folder
  * with none.
+ *
+ * As the copy's `layer.json` records it, never as the folder stands now: the
+ * folder is the person's own, which a place's sandbox over it writes, and
+ * one that put a link there would have it lead anywhere. The record names
+ * the folder at its real path and says the copy was cut with its
+ * `node_modules` linked (`modules`), which the agent does only when that
+ * was a dir of its own (layer.ts `cloneFolder`), so the path is a real path
+ * as recorded. Were it swapped for a link since, Seatbelt and the judge
+ * resolve it and find what it leads to outside the grant.
  */
 const linkedModules = async (id: string): Promise<string[]> => {
   const layer = await readRecord(
     join(workspacesDir(), id, "layer.json"),
-    z.object({ folder: z.unknown().optional(), form: z.unknown().optional() })
+    z.object({
+      folder: z.unknown().optional(),
+      form: z.unknown().optional(),
+      modules: z.unknown().optional(),
+    })
   ).catch(() => undefined);
-  if (!(
-    layer?.form === "copy" &&
+  return layer?.form === "copy" &&
+    (layer.modules === "linked" || layer.modules === "own") &&
     typeof layer.folder === "string" &&
-    layer.folder
-  )) {
-    return [];
-  }
-  const modules = join(layer.folder, "node_modules");
-  const found = await stat(modules).catch(() => undefined);
-  return found?.isDirectory() ? [resolveReal(modules)] : [];
+    isAbsolute(layer.folder)
+    ? [join(layer.folder, "node_modules")]
+    : [];
 };
 
 const spillDirs = async (id: string): Promise<string[]> =>

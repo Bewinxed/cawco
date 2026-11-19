@@ -250,3 +250,14 @@ export const workspaceProjectFile = (id: string): string =>
  */
 export const workspaceBorrowedObjectsFile = (id: string): string =>
   join(workspaceStateDir(id), "borrowed-objects.json");
+
+/**
+ * The folders a place's sandbox has written: a JSON list of the real paths
+ * its folder stood at each time the agent held it (agent workspace-records.ts
+ * `keepPlaceFolder`), kept for good, since what a sandbox wrote there stays
+ * after it closes. Every workspace's policy takes nothing a file there says as
+ * evidence for a grant (`workspacePolicy`'s `workspaceWritten`). In the state
+ * dir, which nothing inside the boundary writes.
+ */
+export const workspacePlaceFoldersFile = (id: string): string =>
+  join(workspaceStateDir(id), "place-folders.json");
