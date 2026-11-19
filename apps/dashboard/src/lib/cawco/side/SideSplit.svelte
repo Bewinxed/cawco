@@ -92,9 +92,16 @@
     ...(taskShown ? (["task"] as const) : []),
   ]);
   let tab = $state<Shown>("preview");
-  /** The one on show: the one chosen while it is open, else the newest there is. */
+  /**
+   * The one on show: the one chosen while it is open, else the newest there
+   * is. With nothing open it stays the one chosen, which the surface draws
+   * while it closes: put away, it goes with what it held still in it. A
+   * task's card stays drawn as the split slides shut and the sheet slides
+   * down (SessionPane hands `task` the task just put away until then); a
+   * preview stays in the sheet, as it did before the sheet held a task.
+   */
   const shown = $derived<Shown>(
-    opened.includes(tab) ? tab : (opened.at(-1) ?? "preview")
+    opened.includes(tab) ? tab : (opened.at(-1) ?? tab)
   );
   // An agent showing a preview brings it to the front; so does a task card.
   let previewWas = untrack(() => previewOpen);
@@ -153,20 +160,6 @@
     }
   });
   const sheetMounted = $derived(open || (standing && visible && active));
-  /**
-   * What the surface showed last, and what it draws while it closes: put
-   * away, it goes with what it held still in it. A task's card stays drawn
-   * as the split slides shut and as the sheet slides down (SessionPane
-   * hands the task just put away to `task` until then); a preview stays in
-   * the sheet, as it did before the sheet held a task.
-   */
-  let last = $state<Shown>("preview");
-  $effect(() => {
-    if (open) {
-      last = shown;
-    }
-  });
-  const drawn = $derived<Shown>(open ? shown : last);
 
   const LABEL: Record<Shown, string> = {
     preview: sideWords.preview,
@@ -208,9 +201,9 @@
 
 {#snippet surface(sheet: boolean)}
   {@const switched = opened.length > 1 ? switcher : undefined}
-  {#if drawn === "task" && task && (taskShown || !open)}
+  {#if shown === "task" && task && (taskShown || !open)}
     {@render task(switched, sheet)}
-  {:else if previewOpen || (sheet && !open && last === "preview")}
+  {:else if previewOpen || (sheet && !open && shown === "preview")}
     <PreviewPane
       instanceId={viewId}
       onScreen={sheet ? visible && active : visible}
@@ -227,15 +220,15 @@
      switch builds the other one afresh. -->
 {#snippet bounded(sheet: boolean)}
   {@const switched = opened.length > 1 ? switcher : undefined}
-  {#key drawn}
-    <RegionBoundary part={drawn}>
+  {#key shown}
+    <RegionBoundary part={shown}>
       {@render surface(sheet)}
       {#snippet chrome(face)}
         <FailedSurface
-          onclose={() => closeFailed(drawn)}
+          onclose={() => closeFailed(shown)}
           switcher={switched}
-          title={failedTitle(drawn)}
-          what={drawn}
+          title={failedTitle(shown)}
+          what={shown}
         >
           {@render face()}
         </FailedSurface>

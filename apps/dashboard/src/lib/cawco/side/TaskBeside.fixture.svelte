@@ -22,6 +22,8 @@
   import MessageBody from "../MessageBody.svelte";
   import { provideMarkdownFleet } from "../markdown-fleet";
   import { liveMarkdown } from "../markdown-live";
+  import { fleetPane } from "../preview/fleet-pane.svelte";
+  import { setPaneFleet } from "../preview/pane-fleet";
   import type { TaskView } from "../project-tasks";
   import { takePreview } from "../stores/previews.svelte";
   import { besideOf, putAway, standBeside } from "../tasks/beside.svelte";
@@ -255,6 +257,8 @@
   // The visible area the sheet takes its stops from, as the app's root
   // layout publishes it.
   onMount(trackVisibleViewport);
+  // The fleet the preview's pane reads, as the app's layout sets it.
+  setPaneFleet(fleetPane);
   provideMarkdownFleet(() => liveMarkdown);
   provideBeside(() => VIEW);
 
