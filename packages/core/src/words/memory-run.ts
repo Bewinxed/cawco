@@ -58,6 +58,9 @@ export const memoryRunWords = {
   /** An operation committed. */
   applied: (what: string) =>
     `Committed: ${what.endsWith(".") ? what : `${what}.`}`,
+  /** The handles of a run's brief no operation has named yet, after a call's answers. */
+  unnamed: (handles: readonly string[]) =>
+    `Not named by any operation yet: ${handles.join(", ")}. Name each before finish_item: in the sources of the operation it went into, or in a drop.`,
   /** An operation refused. */
   refused: (why: string) => `Refused: ${why}`,
   /** What a committed operation did, said in its answer and its commit. */
@@ -194,7 +197,7 @@ export const memoryRunWords = {
     `### ${handle}, from ${path}\n\n${text}`,
   /** The recovery run's notes. */
   briefRecovery:
-    "This is the one-time recovery run: the notes below were archived unread before, because their session had read outside pages. Each comes with the person's messages from its session in the two days before it, as handles of their own.",
+    "This is a recovery run: the notes below were archived unread before, because their session had read outside pages or no operation of an earlier run named them. Each comes with the person's messages from its session in the two days before it, as handles of their own.",
 
   /** The run's one line in the Routines list. */
   runLine: (
@@ -317,6 +320,8 @@ For each message and each note, pick one:
 3. A fact about the project (a command, a place, what fails): home {knowledge}. Name the file and a literal string in it that bears the fact out, as anchor: the hub reads that file in the project's checkout, and reads it again each night. An agent's note lands once the file bears it out, or a note from a second session says the same; until then it waits, staged.
 4. Already kept: "corroborate" the lesson. Changed by the person: "replace" it, and say in why what the rule was until today. Under a message, the hub says what it already did to a lesson the message states again or changes: one it put back or counted needs nothing more from you; one it took back needs what the message asks now, written as a lesson.
 5. About one task or one moment, or already said by the repository's CLAUDE.md, a skill or a memory file: "drop", with the reason.
+
+Name every message and note of your brief in some operation's sources, a drop included: a note that says what a message says goes in the sources of that message's operation. memory_apply's answer lists what is not named yet.
 
 Write each lesson as one plain sentence that says what to do. Never quote the person or reuse the person's phrasing: the lesson is the rule, and its source is the handle you cite. A message's rule goes as far as the message does and no further.
 

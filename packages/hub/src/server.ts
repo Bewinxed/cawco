@@ -8869,6 +8869,22 @@ export const createServer = (
         ].map((host) => host.toLowerCase())
       ),
     folderChanged: (projectId) => tasks.touched(projectId),
+    // The routines are made further down; a recovery run ends only once the hub is up.
+    recoverNext: (projectId) => {
+      routines.recover(projectId, "chain").then(
+        (started) => {
+          if (started instanceof ElysiaStatus) {
+            console.warn(
+              `[memory] ${projectId}: the next recovery run did not start: ${started.response.detail}`
+            );
+          }
+        },
+        (error: unknown) =>
+          console.warn(
+            `[memory] ${projectId}: the next recovery run did not start: ${error instanceof Error ? error.message : String(error)}`
+          )
+      );
+    },
     machine: {
       read: async (machineId, path) => {
         const agent = registry.agent(machineId);

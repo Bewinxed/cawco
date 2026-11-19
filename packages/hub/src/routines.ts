@@ -59,7 +59,9 @@
  *   the hub starts: target `curator`, daily at 06:00 in the hub's zone,
  *   kept, with no test run, its budget 40 turns, 20 minutes and $2 a run and
  *   $4 a day (one run and its retry). It runs on no other trigger but its
- *   one-time recovery (slot `recovery:<n>`, `recover`). Its run reads the
+ *   recovery (slot `recovery:<time>`, `recover`), whose runs spend their
+ *   own budget each, outside the day's, and start one another until the
+ *   recovery's notes are all read. Its run reads the
  *   person's messages and the inbox first; with nothing to read it ends
  *   silent, else it is a delegate run in the `curator` role, its prompt the
  *   hub's own (core words `curatorPrompt`: an edit of the routine's prompt
@@ -136,7 +138,7 @@ import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { defineTool } from "./mcp-tool";
 import { ROUTINE_ORIGIN } from "./memory";
-import { type MemoryRun, RECOVERY_RUNS } from "./memory-run";
+import type { MemoryRun } from "./memory-run";
 import {
   routineListWords,
   routineRunWords,
@@ -199,7 +201,7 @@ const CURATOR_CRON = "0 6 * * *";
 const CURATOR_BUDGET = { turns: 40, minutes: 20, usd: 2 } as const;
 /** A day's cap on the nightly memory run: one run and its retry. */
 const CURATOR_DAILY_USD = 4;
-/** Each of the two recovery runs' budget: 120 turns and $6 for the two, each reading up to 60 notes. */
+/** Each recovery run's budget, reading up to 60 notes; the recovery chains at most six (memory-run.ts `RECOVERY_CHAIN`). */
 const RECOVERY_BUDGET = { turns: 60, minutes: 30, usd: 3 } as const;
 
 /** Why a change of target is refused: the memory curator's and the trim routine's stay the hub's. */
@@ -337,7 +339,7 @@ export interface RoutineDeps {
    */
   readonly memoryRun: Pick<
     MemoryRun,
-    "brief" | "close" | "recoveryBrief" | "recoveryRuns" | "recoveryWaits"
+    "brief" | "close" | "recoveryBrief" | "recoveryStart"
   >;
   /** Why the project's spend cap holds its work back now, or nothing (project-caps.ts). */
   readonly pauses: (projectId: string) => string | undefined;
@@ -916,7 +918,10 @@ export const createRoutines = ({
   const decide =
     (now: number, slot: string, attempt = 1): Decide =>
     (routine, live, waiting) => {
-      const gate = projectGate(routine) ?? capGate(routine, now);
+      // A recovery run spends its own budget, not the nightly run's day.
+      const gate =
+        projectGate(routine) ??
+        (slot.startsWith(RECOVERY_SLOT) ? undefined : capGate(routine, now));
       if (gate) {
         return { state: "skipped", reason: gate };
       }
@@ -2570,11 +2575,14 @@ export const createRoutines = ({
   };
 
   /**
-   * The project's one-time memory recovery (memory-run.ts
-   * `recoveryBrief`): its next run, on slot `recovery:<n>`, each once, at
-   * most {@link RECOVERY_RUNS}; refused when it has nothing left to read.
+   * The project's memory recovery (memory-run.ts `recoveryBrief`), its next
+   * run, on a slot of its own (`recovery:<time>`): what it has left to read,
+   * or, with nothing left, what earlier recovery runs archived unread
+   * (memory-run.ts `recoveryStart`); refused when there is neither. A run
+   * that judged something and left something starts the next itself
+   * (`by: "chain"`).
    */
-  const recover = async (projectId: string) => {
+  const recover = async (projectId: string, by: "ask" | "chain" = "ask") => {
     const routine = curatorOf(projectId);
     if (!routine) {
       return problem(404, {
@@ -2582,21 +2590,21 @@ export const createRoutines = ({
         detail: `Project ${projectId} has no nightly memory run to recover with.`,
       });
     }
-    const waits = await memoryRun.recoveryWaits(projectId);
-    const runs = await memoryRun.recoveryRuns(projectId);
+    const waits = await memoryRun.recoveryStart(projectId, by);
     if (waits instanceof ElysiaStatus) {
       return waits;
     }
-    if (runs instanceof ElysiaStatus) {
-      return runs;
-    }
-    if (!waits || runs >= RECOVERY_RUNS) {
+    if (!waits) {
       return problem(409, {
         code: "memory-recovery-done",
         detail: "The memory recovery has nothing left to read.",
       });
     }
-    const run = fireExtra(routine, `${RECOVERY_SLOT}${runs + 1}`, 1);
+    const run = fireExtra(
+      routine,
+      `${RECOVERY_SLOT}${new Date().toISOString()}`,
+      1
+    );
     return run
       ? runView(run)
       : problem(409, {

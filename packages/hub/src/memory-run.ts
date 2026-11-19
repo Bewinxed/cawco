@@ -47,7 +47,11 @@
  *   this: AGENTS.md and `knowledge/` converted to lessons, every line that
  *   breaks a text rule or a cap handed to the **recovery** run
  *   (`memory/recovery.json`), with the notes archived unread before because
- *   their session had read the web ({@link recoveryBrief}).
+ *   their session had read the web ({@link recoveryBrief}). The recovery
+ *   archives nothing unread: a note its run names in no operation is the
+ *   next run's first, and each run that judged something starts the next
+ *   ({@link recoveryLeft}). Asked again with nothing left, it reads the
+ *   notes earlier recovery runs archived unread ({@link recoveryStart}).
  */
 import type { RoutineOutcome } from "@cawco/core/routine-kinds";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -121,6 +125,7 @@ import {
 import {
   changeFolderFiles,
   type FolderAuthor,
+  folderCommitsCarrying,
   folderCommitsChanging,
   folderHistory,
   folderPath,
@@ -275,13 +280,15 @@ export interface MemoryRunDeps {
     listed: (machineId: string, path: string) => Promise<boolean | undefined>;
     read: (machineId: string, path: string) => Promise<MachineRead>;
   };
+  /** The project's next recovery run started (routines.ts `recover`), when the one that ended judged something and left something. */
+  readonly recoverNext: (projectId: string) => void;
   /** The skills the fleet lists for the project's sessions, each with its one-line description. */
   readonly skillsFor: (
     projectId: string
   ) => { description: string; name: string }[];
 }
 
-/** A send kept as `memory/recovery.json`'s inputs: what the one-time recovery run reads, until each is read. */
+/** `memory/recovery.json`: what the recovery's runs read, until an operation names each. */
 const RecoverySchema = z.object({
   legacy: z.array(z.object({ path: z.string(), text: z.string() })),
   notes: z.array(z.string()),
@@ -555,6 +562,33 @@ const roomFor = (tree: MemoryTree, path: string): boolean => {
 };
 
 /**
+ * A run's closing commit (§2 D): its state's next mark, and the recovery's
+ * inputs left, the file gone once none is.
+ */
+const markOfRun = (
+  state: MemoryRunState,
+  run: Run,
+  outcome: RunOutcome,
+  recovery:
+    { done: boolean; file?: { content: string; path: string } } | undefined
+) => {
+  const at = new Date().toISOString();
+  const next = nextState(state, run, outcome, at);
+  const kept = recovery?.done ? { ...next, recovered: dayOf(at) } : next;
+  return {
+    author: HUB,
+    message: `${markOf(run.kind)}, ${dayOf(at)}`,
+    extra: [
+      ...(Bun.deepEquals(kept, state)
+        ? []
+        : [{ path: RUN_STATE_FILE, content: jsonText(kept) }]),
+      ...(recovery?.file ? [recovery.file] : []),
+    ],
+    gone: recovery?.done ? [RECOVERY_FILE] : [],
+  };
+};
+
+/**
  * The lessons a message of the person's may state again or change (§2 B):
  * every live line, and each the run took out (replaced, or archived
  * unused) whose words the ledger keeps, which it does for
@@ -608,6 +642,10 @@ const nextState = (
 ): MemoryRunState => {
   if (outcome === "failed") {
     return state;
+  }
+  // A recovery run reads old messages: the nightly's mark and carry are not its.
+  if (run.kind === "recovery") {
+    return { ...state, lastRun: { at, ...run.counts } };
   }
   const unnamed = [...run.messages].flatMap(([handle, given]) =>
     given.said &&
@@ -782,6 +820,7 @@ export const createMemoryRun = ({
   fleetHosts,
   folderChanged,
   machine,
+  recoverNext,
   skillsFor,
 }: MemoryRunDeps) => {
   /** Each project's run under way. */
@@ -2443,7 +2482,18 @@ export const createMemoryRun = ({
     if (answers instanceof ElysiaStatus) {
       return answers;
     }
-    return { lines: await appliedAll(projectId, run, read, ops, answers) };
+    const lines = await appliedAll(projectId, run, read, ops, answers);
+    // Every message and note of the brief is named by some operation, a drop included (§2 C).
+    const unnamed = [
+      ...[...run.messages.keys()].filter((handle) => !run.consumed.has(handle)),
+      ...run.notes.keys(),
+    ];
+    return {
+      lines:
+        unnamed.length > 0
+          ? [...lines, memoryRunWords.unnamed(unnamed)]
+          : lines,
+    };
   };
 
   /** Jev's answers to one call's questions ({@link questionsOf}), the archive's notes read for them; Jev failing, its words as the call's refusal. */
@@ -2572,16 +2622,16 @@ export const createMemoryRun = ({
   /**
    * Where a run ended (§2 D): what it read is marked read (a failed run's
    * is read again the next night), messages it was given and named in no
-   * operation carried once, the recovery's notes it left archived unread,
-   * the run's counts kept; its one line, or nothing when it changed nothing.
+   * operation carried once, the run's counts kept; its one line, or nothing
+   * when it changed nothing. A recovery run's inputs left are kept for its
+   * next run, which starts at once when this one judged something, at most
+   * {@link RECOVERY_CHAIN} in a row.
    */
   const closed = async (projectId: string, run: Run, outcome: RunOutcome) => {
     const state = await stateOf(projectId);
     if (state instanceof ElysiaStatus) {
       return state;
     }
-    const at = new Date().toISOString();
-    const next = nextState(state, run, outcome, at);
     const recovery =
       run.kind === "recovery" && outcome !== "failed"
         ? await recoveryLeft(projectId, run)
@@ -2593,21 +2643,38 @@ export const createMemoryRun = ({
     if (read instanceof ElysiaStatus) {
       return read;
     }
-    const kept = recovery?.done ? { ...next, recovered: dayOf(at) } : next;
-    const files = [
-      ...(Bun.deepEquals(kept, state)
-        ? []
-        : [{ path: RUN_STATE_FILE, content: jsonText(kept) }]),
-      ...(recovery?.file ? [recovery.file] : []),
-    ];
-    const done = await commit(projectId, read.tree, read.tree, {
-      author: HUB,
-      message: `memory: the ${run.kind} run's mark, ${dayOf(at)}`,
-      extra: files,
-      gone: recovery?.done ? [RECOVERY_FILE] : [],
-      notes: recovery?.unread ?? [],
-    });
-    return done instanceof ElysiaStatus ? done : undefined;
+    const done = await commit(
+      projectId,
+      read.tree,
+      read.tree,
+      markOfRun(state, run, outcome, recovery)
+    );
+    if (done instanceof ElysiaStatus) {
+      return done;
+    }
+    if (run.kind === "recovery") {
+      chainOn(projectId, recovery);
+    }
+  };
+
+  /**
+   * A recovery run's end: the next one started when it judged something
+   * and left something, at most {@link RECOVERY_CHAIN} in a row; why not
+   * said in the log when inputs are left.
+   */
+  const chainOn = (
+    projectId: string,
+    left: { file?: unknown; next: boolean } | undefined
+  ): void => {
+    const chain = (chained.get(projectId) ?? 0) + 1;
+    chained.set(projectId, chain);
+    if (left?.next && chain < RECOVERY_CHAIN) {
+      recoverNext(projectId);
+    } else if (left?.file) {
+      console.log(
+        `[memory] ${projectId}: the recovery stops after ${chain} run${chain === 1 ? "" : "s"} in a row with inputs left: ${left.next ? "its chain is at its most" : "its last run judged none of them"}; asking for it again reads on`
+      );
+    }
   };
 
   /**
@@ -2731,29 +2798,44 @@ export const createMemoryRun = ({
     return await ready(project, run);
   };
 
-  /** The recovery's notes for its next run, after upkeep: the archived ones it was handed, then the inbox's, at most {@link RECOVERY_NOTES}. */
+  /** The recovery's notes for its next run, after upkeep: those it holds that no run has judged, in its order, at most {@link RECOVERY_NOTES}. */
   const recoveryNotes = async (project: ProjectRow, recovery: Recovery) => {
     const kept = await upkeep(project);
     if (kept instanceof ElysiaStatus) {
       return kept;
     }
-    const archive = await notesIn(project.id, ARCHIVE_DIR);
-    if (archive instanceof ElysiaStatus) {
-      return archive;
+    const waiting = await unjudged(project.id, recovery.notes);
+    return waiting instanceof ElysiaStatus
+      ? waiting
+      : waiting.slice(0, RECOVERY_NOTES);
+  };
+
+  /**
+   * The notes of `ids` no run has judged yet, in the order of `ids`: in the
+   * inbox, archived unread before because their session had read the web
+   * (`tainted`), or archived unread with no operation naming them
+   * (`dropped: unread`). A note a run judged since is no longer the
+   * recovery's.
+   */
+  const unjudged = async (projectId: string, ids: readonly string[]) => {
+    const named = await notesNamed(projectId, new Set(ids));
+    if (named instanceof ElysiaStatus) {
+      return named;
     }
-    const inbox = await notesIn(project.id, INBOX_DIR);
-    if (inbox instanceof ElysiaStatus) {
-      return inbox;
-    }
-    const wanted = new Set(recovery.notes);
-    // A note a nightly run read since is no longer the recovery's.
-    return [...archive, ...inbox]
-      .filter(
-        (note) =>
-          wanted.has(note.id) &&
-          (note.outcome === null || note.outcome.startsWith("tainted"))
-      )
-      .slice(0, RECOVERY_NOTES);
+    const byId = new Map(
+      named
+        .filter(
+          (note) =>
+            note.outcome === null ||
+            note.outcome.startsWith("tainted") ||
+            note.outcome === UNREAD
+        )
+        .map((note) => [note.id, note])
+    );
+    return ids.flatMap((id) => {
+      const note = byId.get(id);
+      return note ? [note] : [];
+    });
   };
 
   /** What the person typed in a note's session in the {@link RECOVERY_HOURS} before it, long enough to be a rule, none `seen` already. */
@@ -2779,10 +2861,13 @@ export const createMemoryRun = ({
   };
 
   /**
-   * The recovery's inputs once a recovery run ends: its notes no operation
-   * named archived unread, the legacy lines it read gone, the notes left
-   * for a second run kept; the file gone when nothing is left, and the run
-   * marked done.
+   * The recovery's inputs once a recovery run ends: the notes and legacy
+   * lines an operation named are gone from it; a note it was given and
+   * named in no operation stays, first, for the next run, so none is
+   * archived unread. `next` when something is left and this run judged
+   * something (a run that judged nothing ends the chain: what is left waits
+   * for the recovery to be asked again); `done`, with the file gone, when
+   * nothing is left.
    */
   const recoveryLeft = async (projectId: string, run: Run) => {
     const recovery = await recoveryOf(projectId);
@@ -2790,36 +2875,123 @@ export const createMemoryRun = ({
       return recovery;
     }
     if (!recovery) {
-      return { done: false, unread: [], file: undefined };
+      return { done: false, next: false, file: undefined };
     }
-    const given = new Set([...run.notes.keys(), ...run.consumed]);
+    const unnamed = [...run.notes.keys()];
+    const waiting = await unjudged(projectId, [
+      ...unnamed,
+      ...recovery.notes.filter((id) => !run.notes.has(id)),
+    ]);
+    if (waiting instanceof ElysiaStatus) {
+      return waiting;
+    }
     const left: Recovery = {
       legacy: recovery.legacy.filter(
         (_, at) => !run.consumed.has(`l${at + 1}`)
       ),
-      notes: recovery.notes.filter((id) => !given.has(id)),
+      notes: waiting.map((note) => note.id),
       runs: recovery.runs + 1,
     };
-    const last = left.runs >= RECOVERY_RUNS;
-    const unreadIds = new Set([
-      ...[...run.notes.keys()].filter((id) => recovery.notes.includes(id)),
-      ...(last ? left.notes : []),
-    ]);
-    const unread = await notesNamed(projectId, unreadIds);
-    if (unread instanceof ElysiaStatus) {
-      return unread;
-    }
-    const done = last || left.notes.length + left.legacy.length === 0;
+    const judged =
+      left.notes.length < recovery.notes.length ||
+      left.legacy.length < recovery.legacy.length;
+    const done = left.notes.length + left.legacy.length === 0;
     return {
       done,
-      unread: unread
-        .filter(
-          (note) => note.outcome === null || note.outcome.startsWith("tainted")
-        )
-        .map((note) => ({ note, outcome: "dropped: unread" })),
+      next: !done && judged,
       file: done ? undefined : { path: RECOVERY_FILE, content: jsonText(left) },
     };
   };
+
+  /**
+   * The recovery's inputs made again when it has none (§11, asked again):
+   * the notes a recovery run archived `dropped: unread` (each written by
+   * one of its marks' commits) that no run has judged since, and the legacy
+   * lines the last `memory/recovery.json` held before it went. Undefined
+   * when there are none.
+   */
+  const recoveryAgain = async (projectId: string) => {
+    const marks = await folderCommitsCarrying(projectId, RECOVERY_MARK);
+    if (marks instanceof ElysiaStatus) {
+      return marks;
+    }
+    const written = new Set(marks.flatMap((mark) => mark.paths));
+    const archive = await notesIn(projectId, ARCHIVE_DIR);
+    if (archive instanceof ElysiaStatus) {
+      return archive;
+    }
+    const notes = archive
+      .filter((note) => note.outcome === UNREAD && written.has(note.path))
+      .map((note) => note.id);
+    const legacy = await lastLegacy(projectId);
+    if (legacy instanceof ElysiaStatus) {
+      return legacy;
+    }
+    const again: Recovery = { legacy, notes, runs: 0 };
+    return notes.length + legacy.length > 0 ? again : undefined;
+  };
+
+  /** The legacy lines `memory/recovery.json` held when it was last written, before it went; none when it never was. */
+  const lastLegacy = async (projectId: string) => {
+    const history = await folderHistory(projectId, RECOVERY_FILE, 2);
+    if (history instanceof ElysiaStatus) {
+      return history;
+    }
+    // Newest first: the commit that took it out, then the last that wrote it.
+    const [, written] = history.commits;
+    if (!written) {
+      return [];
+    }
+    const text = await readFolderFileAt(projectId, written.sha, RECOVERY_FILE);
+    if (text instanceof ElysiaStatus || text === undefined) {
+      return [];
+    }
+    try {
+      return RecoverySchema.parse(JSON.parse(text)).legacy;
+    } catch {
+      return [];
+    }
+  };
+
+  /**
+   * The recovery asked for (routines.ts `recover`): whether it has inputs
+   * for a run. With none left, they are made again from what earlier
+   * recovery runs archived unread ({@link recoveryAgain}), in one commit.
+   * Asked by a person (`by: "ask"`), its chain of runs counts again from
+   * here; by the run before (`by: "chain"`), it counts on.
+   */
+  const recoveryStart = async (projectId: string, by: "ask" | "chain") => {
+    const recovery = await recoveryOf(projectId);
+    if (recovery instanceof ElysiaStatus) {
+      return recovery;
+    }
+    if (by === "ask") {
+      chained.delete(projectId);
+    }
+    if (recovery) {
+      return true;
+    }
+    const again = await recoveryAgain(projectId);
+    if (again instanceof ElysiaStatus) {
+      return again;
+    }
+    if (!again) {
+      return false;
+    }
+    const read = await treeOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const sha = await commit(projectId, read.tree, read.tree, {
+      author: HUB,
+      message: `memory: the recovery asked again, ${again.notes.length} notes it archived unread and ${again.legacy.length} lines to read`,
+      extra: [{ path: RECOVERY_FILE, content: jsonText(again) }],
+    });
+    return sha instanceof ElysiaStatus ? sha : true;
+  };
+
+  /** Each project's recovery runs chained since it was last asked for. */
+  const chained = new Map<string, number>();
 
   /** The notes of `ids`, wherever each is now (the inbox or the archive). */
   const notesNamed = async (projectId: string, ids: ReadonlySet<string>) => {
@@ -3224,24 +3396,24 @@ export const createMemoryRun = ({
     apply,
     close,
     upkeep,
-    /** Whether project `projectId` has recovery inputs left to run. */
-    recoveryWaits: async (projectId: string) => {
-      const recovery = await recoveryOf(projectId);
-      return recovery instanceof ElysiaStatus ? recovery : recovery !== null;
-    },
-    /** How many recovery runs project `projectId` has had. */
-    recoveryRuns: async (projectId: string) => {
-      const recovery = await recoveryOf(projectId);
-      return recovery instanceof ElysiaStatus
-        ? recovery
-        : (recovery?.runs ?? 0);
-    },
+    recoveryStart,
   };
 };
 
 /** The recovery run's limit on added lessons, for each of its two runs. */
 const RECOVERY_ADDS = 30;
-/** The recovery's runs: two of 60 notes each read every note it was handed. */
-export const RECOVERY_RUNS = 2;
+/**
+ * The recovery runs that start one after another before it waits to be
+ * asked again: each judges up to {@link RECOVERY_NOTES} notes on its own
+ * budget (routines.ts `RECOVERY_BUDGET`), so six read 360, past the most
+ * any project has needed (92), and cap one ask at six runs' budget.
+ */
+const RECOVERY_CHAIN = 6;
+/** A note archived with no operation naming it. */
+const UNREAD = "dropped: unread";
+/** The subject a run's closing commit starts with ({@link closed}). */
+const markOf = (kind: Run["kind"]): string => `memory: the ${kind} run's mark`;
+/** A recovery run's closing commit, as its notes archived unread are found again. */
+const RECOVERY_MARK = markOf("recovery");
 
 export type MemoryRun = ReturnType<typeof createMemoryRun>;
