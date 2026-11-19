@@ -1371,8 +1371,7 @@ export const createDispatcher = ({
       ? {
           workItemId: previous.id,
           state: previous.state,
-          failure:
-            previous.error ?? db.workItemTexts(previous.id).result ?? "",
+          failure: previous.error ?? db.workItemTexts(previous.id).result ?? "",
         }
       : undefined;
     // The comments left since the task's newest attempt started.

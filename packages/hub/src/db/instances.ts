@@ -1495,8 +1495,11 @@ export const instancesDb = (core: DbCore): InstancesDb => {
             .from(instances)
             .where(
               and(
-                eq(instances.machineId, machineId),
-                inArray(instances.id, [...ids])
+                inArray(instances.id, [...ids]),
+                // By key: the machine tested on each row found, its index
+                // left out (SQLite's unary `+`), which with no statistics
+                // the planner took and read every row of the machine.
+                sql`+${instances.machineId} = ${machineId}`
               )
             )
             .all();

@@ -46,24 +46,21 @@ const sendColumns = {
   body: sentMessageBodies.body,
 };
 
-/** A field of an origin when it is text; null otherwise. */
-const originText = (origin: object | undefined, field: string): string | null => {
-  const value =
-    origin && field in origin
-      ? (origin as Record<string, unknown>)[field]
-      : undefined;
-  return typeof value === "string" ? value : null;
-};
-
 /**
  * The columns of a send's row its body decides, written with the body
  * wherever it is written: who sent it, by the origin's `kind`, `name` and
  * `from`, so a session's sends are found by them with no body read.
  */
-export const bodyColumns = (body: NeutralUserMessage) => ({
-  originKind: originText(body.origin, "kind"),
-  originName: originText(body.origin, "name"),
-  originFrom: originText(body.origin, "from"),
+const bodyColumns = ({ origin }: NeutralUserMessage) => ({
+  originKind: origin?.kind ?? null,
+  originName:
+    origin && "name" in origin && typeof origin.name === "string"
+      ? origin.name
+      : null,
+  originFrom:
+    origin && "from" in origin && typeof origin.from === "string"
+      ? origin.from
+      : null,
 });
 
 /** `body` kept as the send's body, and its row's origin columns written from it. */
@@ -255,7 +252,10 @@ export const sendsDb = (core: DbCore): SendsDb => {
     db
       .select(sendColumns)
       .from(sentMessages)
-      .innerJoin(sentMessageBodies, eq(sentMessageBodies.uuid, sentMessages.uuid));
+      .innerJoin(
+        sentMessageBodies,
+        eq(sentMessageBodies.uuid, sentMessages.uuid)
+      );
 
   /** One send whole, by its uuid. */
   const sendOf = (uuid: string): SentMessageRow | undefined =>
@@ -339,20 +339,20 @@ export const sendsDb = (core: DbCore): SendsDb => {
     owedSessionsHeld: (holds) => [
       ...new Set(
         db
-        .select({ instanceId: sentMessages.instanceId })
-        .from(sentMessages)
-        .where(
-          and(
-            eq(sentMessages.state, "pending"),
-            eq(sentMessages.owedHeld, true),
-            or(
-              isNull(sentMessages.hold),
-              inArray(sentMessages.hold, [...holds])
+          .select({ instanceId: sentMessages.instanceId })
+          .from(sentMessages)
+          .where(
+            and(
+              eq(sentMessages.state, "pending"),
+              eq(sentMessages.owedHeld, true),
+              or(
+                isNull(sentMessages.hold),
+                inArray(sentMessages.hold, [...holds])
+              )
             )
           )
-        )
-        .all()
-        .map((row) => row.instanceId)
+          .all()
+          .map((row) => row.instanceId)
       ),
     ],
     owedSends: (of) =>

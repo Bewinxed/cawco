@@ -1194,8 +1194,7 @@ const resultOf = (
   attemptSummary: TaskStore["attemptSummary"]
 ): TaskResult | null => {
   for (const item of attempts) {
-    const report =
-      item.state === "done" ? attemptSummary(item.id)?.trim() : "";
+    const report = item.state === "done" ? attemptSummary(item.id)?.trim() : "";
     if (report) {
       return {
         workItemId: item.id,
