@@ -16,9 +16,15 @@
  *
  * A scroller is read when it or one of its parts changes size (one
  * ResizeObserver, frameObserver), and when anything is put in or taken out
- * inside it (one MutationObserver over the document, each change read on
- * its nearest scroller), inside the next delivery, and written in the frame
- * after.
+ * inside it (a MutationObserver over its own subtree), inside the next
+ * delivery, and written in the frame after. The watch over the document
+ * only finds scrollers: each element put in is looked through for them, and
+ * an element whose class changed is one or not by its own class. What
+ * changes outside every scroller (a transcript's rows, a streamed record)
+ * is looked at no further: read on its nearest scroller from one
+ * MutationObserver over the whole document, every change on the page walked
+ * up its ancestors (`closest`), a fling through find's 2,009 places spent
+ * 86ms there at 4x.
  */
 import { frameObserver } from "../frame-observer";
 
@@ -78,6 +84,40 @@ export function watchEdgeFades(root: ParentNode = document): () => void {
     due.add(node);
     sizes.readNext();
   };
+  /**
+   * The scroller a change inside one is read on: the nearest watched one
+   * round it (a scroller inside another is read for its own).
+   */
+  const scrollerOf = (record: MutationRecord): Element | null => {
+    for (let at: Node | null = record.target; at; at = at.parentNode) {
+      if (at instanceof Element && watched.has(at)) {
+        return at;
+      }
+    }
+    return null;
+  };
+  /**
+   * Parts put into a scroller, at any depth: the scroller read again, and
+   * those put in as its own children watched for their size from now on.
+   */
+  const inside = new MutationObserver((records) => {
+    const grown = new Set<Element>();
+    for (const record of records) {
+      const scroller = scrollerOf(record);
+      if (!scroller) {
+        continue;
+      }
+      grown.add(scroller);
+      for (const added of record.addedNodes) {
+        if (added instanceof Element && added.parentElement === scroller) {
+          sizes.observe(added);
+        }
+      }
+    }
+    for (const scroller of grown) {
+      soon(scroller);
+    }
+  });
   const watch = (node: Element) => {
     if (watched.has(node)) {
       return;
@@ -87,6 +127,7 @@ export function watchEdgeFades(root: ParentNode = document): () => void {
     for (const part of node.children) {
       sizes.observe(part);
     }
+    inside.observe(node, { childList: true, subtree: true });
     soon(node);
   };
   /**
@@ -110,30 +151,24 @@ export function watchEdgeFades(root: ParentNode = document): () => void {
       }
     }
   };
-  /** Parts put into a watched scroller: watched for their size from now on, and the scroller read again. */
-  const grew = (record: MutationRecord) => {
-    const target = record.target instanceof Element ? record.target : null;
-    const scroller = target?.closest(FADES);
-    if (!(scroller && watched.has(scroller))) {
+  /** The scrollers a change in the document made: what it put in, or the element whose class it set. */
+  const discover = (record: MutationRecord) => {
+    if (record.type === "attributes") {
+      // A class makes only its own element a scroller.
+      if (record.target instanceof Element && record.target.matches(FADES)) {
+        watch(record.target);
+      }
       return;
     }
     for (const added of record.addedNodes) {
-      if (added instanceof Element && added.parentElement === scroller) {
-        sizes.observe(added);
+      if (added instanceof Element) {
+        found(added);
       }
     }
-    soon(scroller);
   };
   const changes = new MutationObserver((records) => {
     for (const record of records) {
-      if (record.type === "attributes") {
-        found(record.target);
-        continue;
-      }
-      for (const added of record.addedNodes) {
-        found(added);
-      }
-      grew(record);
+      discover(record);
     }
     for (const node of watched) {
       if (!node.isConnected) {
@@ -150,6 +185,7 @@ export function watchEdgeFades(root: ParentNode = document): () => void {
   found(root);
   return () => {
     changes.disconnect();
+    inside.disconnect();
     sizes.disconnect();
   };
 }

@@ -820,8 +820,44 @@ export function highlight(options: HighlightOptions) {
         dur(glide.duration);
         ease(glide.easing);
       }
-      return { ...at, r: cornersOf(getComputedStyle(row), at.w, at.h) };
+      const box = { ...at, r: cornersOf(getComputedStyle(row), at.w, at.h) };
+      if (!laidOut) {
+        stands.set(box, standOf(row));
+      }
+      return box;
     };
+    /**
+     * Where a row stands in the list by its rect and the list's alone, the
+     * scroll taken out, and where it falls on the device-pixel grid: while
+     * this is what it was when a box was measured from it, the box is the
+     * row's still (`placeOf` would answer it again), and `realign` reads
+     * nothing more. A scroll leaves it as it is; a slide, a resize, a move
+     * within the list or of the list's own size change it. Two rects, where
+     * a box reads every ancestor's style up to the list (`slideOf`), the
+     * list's and the row's own: realigned on every frame a virtual list
+     * puts rows in or writes their `top`, that was the highlight's whole
+     * cost of a scroll.
+     */
+    const standOf = (row: HTMLElement): string => {
+      const rect = row.getBoundingClientRect();
+      const frame = container.getBoundingClientRect();
+      const ratio = window.devicePixelRatio;
+      return [
+        rect.left - frame.left + container.scrollLeft,
+        rect.top - frame.top + container.scrollTop,
+        rect.width,
+        rect.height,
+        frame.width,
+        frame.height,
+        (rect.left * ratio) % 1,
+        (rect.top * ratio) % 1,
+      ].join(" ");
+    };
+    /** Where each box's row stood as it was measured (`standOf`). */
+    const stands = new WeakMap<Box, string>();
+    /** Whether `row` stands where it did when `box` was measured from it. */
+    const standsStill = (row: HTMLElement, box: Box | null) =>
+      box !== null && stands.get(box) === standOf(row);
     /** A row's box, if it is shown at all. */
     const shownBoxOf = (row: HTMLElement) =>
       row.offsetParent === null ? undefined : boxOf(row);
@@ -1459,6 +1495,44 @@ export function highlight(options: HighlightOptions) {
     container.addEventListener("keydown", onInput, passive);
     container.addEventListener("scroll", onScroll, passive);
 
+    /**
+     * The ghost to the row carrying `hovered` (a menu's `data-highlighted`),
+     * after a change in the list.
+     */
+    const aimHovered = (selector: string) => {
+      const row = container.querySelector<HTMLElement>(selector);
+      cancelAnimationFrame(pendingHide);
+      if (row && row === ghostRow) {
+        // Still the ghost's row: the change moved the ghost to no other
+        // row, and the ghost follows its own only where the row moved
+        // (`realign`, without a glide). Aimed again in full on every
+        // change, a virtual list's scroll (rows put in and taken out
+        // every frame) measured the row, drew the ghost, followed it
+        // three frames and walked the list's ancestors' animations, every
+        // frame: with `realign`'s full measure, about 400ms of script over
+        // a fling through find's 2,009 places at 4x CPU (`standOf`).
+        toRealign();
+      } else if (row) {
+        // Measured in the next delivery, as a pointer's aim is.
+        readSoon("pointer", () => {
+          const box = boxOf(row);
+          return () => {
+            if (row.matches(selector)) {
+              placeGhost(row, box);
+            }
+          };
+        });
+      } else {
+        // A highlight moving from one row to the next can clear the old
+        // row a task before it marks the new one: wait a frame before
+        // taking the ghost away, so it glides instead of blinking.
+        pendingHide = requestAnimationFrame(() => {
+          if (!container.querySelector(selector)) {
+            placeGhost(null, undefined);
+          }
+        });
+      }
+    };
     const watch = new MutationObserver((records) => {
       // A row moved without a size of its own changing: a list's padding, or
       // a virtual list's rows placed by their inline style (virtua's `top`).
@@ -1472,28 +1546,7 @@ export function highlight(options: HighlightOptions) {
         showOrCover();
       }
       if (hovered) {
-        const row = container.querySelector<HTMLElement>(hovered);
-        cancelAnimationFrame(pendingHide);
-        if (row) {
-          // Measured in the next delivery, as a pointer's aim is.
-          readSoon("pointer", () => {
-            const box = boxOf(row);
-            return () => {
-              if (row.matches(hovered)) {
-                placeGhost(row, box);
-              }
-            };
-          });
-        } else {
-          // A highlight moving from one row to the next can clear the old
-          // row a task before it marks the new one: wait a frame before
-          // taking the ghost away, so it glides instead of blinking.
-          pendingHide = requestAnimationFrame(() => {
-            if (!container.querySelector(hovered)) {
-              placeGhost(null, undefined);
-            }
-          });
-        }
+        aimHovered(hovered);
       }
       // The pill follows in the next frame's delivery, on the layout that
       // frame has just done. Placed from here, in the microtask after the
@@ -1501,8 +1554,11 @@ export function highlight(options: HighlightOptions) {
       // conversation), measuring the row laid the whole page out a second
       // time before the change could paint; measured in the frame's
       // callbacks, it laid out whatever the updates since the last frame
-      // had changed, which on a page at rest is every hub message's.
-      pillAim.readNext();
+      // had changed, which on a page at rest is every hub message's. A list
+      // with no selection has no pill to aim.
+      if (selected) {
+        pillAim.readNext();
+      }
     });
     /** The pill to the selected row, read in a delivery (`readNext`). */
     const pillAim = frameObserver(null, {
@@ -1587,8 +1643,15 @@ export function highlight(options: HighlightOptions) {
       }
       const pillOn = pillRow;
       const ghostOn = ghostRow;
-      const pillAt = pillOn?.isConnected ? shownBoxOf(pillOn) : undefined;
-      const ghostAt = ghostOn?.isConnected ? boxOf(ghostOn) : undefined;
+      // A layer whose row stands where it did is on it still.
+      const pillAt =
+        pillOn?.isConnected && !standsStill(pillOn, pillBox)
+          ? shownBoxOf(pillOn)
+          : undefined;
+      const ghostAt =
+        ghostOn?.isConnected && !standsStill(ghostOn, ghostBox)
+          ? boxOf(ghostOn)
+          : undefined;
       return () => {
         if (skipped) {
           return;
