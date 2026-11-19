@@ -181,33 +181,35 @@
                   {linked.kind === "github" ? "Codebase" : "Team"}
                 </dt>
                 <dd class="m-0">
-                  <Button
+                  <a
+                    class="mark-line inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
                     href={linked.target.url}
                     rel="noreferrer"
-                    size="xs"
                     target="_blank"
-                    variant="link"
                     ><span>{linked.target.name}</span><IconArrowUpRight
-                      data-icon="inline-end"
-                    /></Button
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none"
+                    /></a
                   >
                 </dd>
                 <dd class="m-0 type-meta tabular-nums text-ink-muted">
                   · {taskWords.linked(linked.linked)}
                 </dd>
                 {#if linked.kind === "github"}
-                  <dt class="type-meta text-ink-muted">· {taskWords.board}</dt>
+                  <dt class="type-meta whitespace-nowrap text-ink-muted">
+                    · {taskWords.board}
+                  </dt>
                   <dd class="m-0 min-w-0 type-meta">
                     {#if linked.board && "url" in linked.board}
-                      <Button
+                      <a
+                        class="mark-line inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
                         href={linked.board.url}
                         rel="noreferrer"
-                        size="xs"
                         target="_blank"
-                        variant="link"
                         ><span>{linked.board.name}</span><IconArrowUpRight
-                          data-icon="inline-end"
-                        /></Button
+                          aria-hidden="true"
+                          class="size-icon-sm flex-none"
+                        /></a
                       >
                     {:else if linked.board}
                       <span class="text-pretty text-ink-muted"
