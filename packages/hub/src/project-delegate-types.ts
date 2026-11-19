@@ -333,6 +333,15 @@ const ignoredWords = (ignored: string[]): string =>
   `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, may_start, account, starting_set and description`;
 
 /**
+ * Whether `path` in a project's or an area's folder is a type file
+ * (`delegates/<name>.md`): a commit that writes or takes one moves the
+ * types its folder's sessions resolve (server.ts tells the tool lists).
+ */
+export const isTypeFile = (path: string): boolean =>
+  path.startsWith(`${DELEGATES}/`) &&
+  TYPE_FILE.test(path.slice(DELEGATES.length + 1));
+
+/**
  * Why `content` written at `path` (`delegates/<name>.md`) would not make a
  * type whole, or nothing when it would: what Caw's proposed type is checked
  * against before the person sees it (memory.ts `proposeType`).

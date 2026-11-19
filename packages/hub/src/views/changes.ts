@@ -61,6 +61,8 @@ export const VIEW_OF: Record<BoardChangeKind, ViewKind | null> = {
   view_routine: "routines",
   view_project: "projects",
   view_purged: "purged",
+  tools: null,
+  tool_inputs: null,
 };
 
 /** Changes gathered between two sends, each kind's keys once. */

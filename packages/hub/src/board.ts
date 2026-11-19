@@ -87,7 +87,8 @@ export type BoardContext = Pick<
   | "speaksContract"
   | "stallOf"
   | "stalledNow"
-  | "toolsMayHaveChanged"
+  | "toolInputsChanged"
+  | "toolsMoved"
   | "workItems"
 >;
 
@@ -210,6 +211,10 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
   const listsOwed = new Set<BoardList>();
   let delegatesOwed = false;
   let stallsOwed = false;
+  /** Sessions an input of whose own tool list moved (db board-log.ts `tools`): told delegation-mcp.ts, which looks at theirs alone. */
+  const toolsOwed = new Set<string>();
+  /** Whether an input every tool list may read moved (db board-log.ts `tool_inputs`). */
+  let toolInputsOwed = false;
   /** What the views thread is owed hearing (views/changes.ts): told once the log is taken. */
   const viewsOwed = createViewChanges();
   /** Which rows the board lists may have moved: worked out again. */
@@ -643,6 +648,10 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     view_routine: viewsOnly,
     view_project: viewsOnly,
     view_purged: viewsOnly,
+    tools: (id) => toolsOwed.add(id),
+    tool_inputs: () => {
+      toolInputsOwed = true;
+    },
   };
 
   /** The change log, sorted into what each collection owes, and what the views hear. */
@@ -781,8 +790,19 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     if (movedNow) {
       version = at;
     }
+    const toolsMoved = [...toolsOwed];
+    const toolInputsMoved = toolInputsOwed;
+    toolsOwed.clear();
+    toolInputsOwed = false;
     if (!announce) {
       return;
+    }
+    // A tool list follows its inputs alone (delegation-mcp.ts `look`): a
+    // fleet one moved looks at every list, a session's own at its list.
+    if (toolInputsMoved) {
+      syncSection("publish: tool inputs moved", () => ctx.toolInputsChanged());
+    } else if (toolsMoved.length > 0) {
+      syncSection("publish: tool lists owed", () => ctx.toolsMoved(toolsMoved));
     }
     if (movedNow) {
       syncSection("publish: broadcast", () =>
@@ -882,9 +902,6 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
           ...(changes.sessions?.removed ?? []),
         ])
       );
-    }
-    if (sessionsMovedNow || machinesMovedNow) {
-      syncSection("publish: tool lists armed", () => ctx.toolsMayHaveChanged());
     }
     // An artifact's tab hears what moved of its own session, every one the
     // machines when one moved (its frame lists them), and what it shows

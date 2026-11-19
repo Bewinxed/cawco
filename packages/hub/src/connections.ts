@@ -1734,7 +1734,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
    * What decides `actor`'s connection tools ({@link sessionTools}), as a
    * key: the granted connections that list now, and whether it takes their
    * reads alone. A connection's own listing moving tells `changed`, which
-   * makes every session's listing again (delegation-mcp.ts `listingsStale`).
+   * makes every session's listing again (delegation-mcp.ts `toolInputsChanged`).
    */
   const sessionToolsKey = (actor: InstanceRow): string => {
     const names = new Set(granted(actor));

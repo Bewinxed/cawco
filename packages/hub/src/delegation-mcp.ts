@@ -74,7 +74,7 @@ import {
   HUB_TOOLS,
 } from "./hub-tools";
 import { INGRESS_DEFINITIONS, INGRESS_TOOLS, type Ingress } from "./ingress";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { HubLifetimeShape } from "./lifetime";
 import { bindTool, type ToolDefinition } from "./mcp-tool";
 import { MEMORY_DEFINITIONS, MEMORY_TOOLS, type Memory } from "./memory";
 import {
@@ -151,12 +151,6 @@ const viewKey = (view: ToolView): string =>
 
 /** The listing every unbound connection shares: OpenCode's discovery, the superset. */
 const SHARED_DISCOVERY = "shared-discovery";
-
-/** How long a burst of changes waits before the lists are looked at. Our choice. */
-const LIST_DEBOUNCE_MS = 500;
-
-/** How often the lists are looked at anyway, for a change no event names. Our choice. */
-const LIST_SWEEP_MS = 30_000;
 
 /** What a session credential a call names reads as once it is replaced. */
 const REDACTED_CREDENTIAL = "[cawco credential]";
@@ -397,13 +391,12 @@ export const listedTools = <T extends { name: string }>(
 };
 
 export function createDelegationMcp(options: {
-  /** Runs the tool-list sweeps and each long call's heartbeat, and stops the source watchers, with the hub. */
+  /** Runs the tool-list looks and each long call's heartbeat, and stops the source watchers, with the hub. */
   lifetime: HubLifetimeShape;
   /**
-   * What the tool-list sweep reads, and no more: the rows its open streams
-   * are bound to, by key, and the running sessions of one harness. The
-   * sweep runs after every board publish; it read every row (2,600 of them,
-   * JSON parsed) each time, through a burst of twenty sessions (2026-10-09).
+   * What a tool-list look reads, and no more: the rows of the sessions it
+   * owes, by key, and, when every list is owed, the running sessions of one
+   * harness.
    */
   instancesByIds: (ids: string[]) => InstanceRow[];
   runningOf: (harness: "pi") => InstanceRow[];
@@ -617,7 +610,7 @@ export function createDelegationMcp(options: {
   const moduleUrl = new URL("./delegation-tools.ts", import.meta.url);
   const adminModuleUrl = new URL("./admin-tools.ts", import.meta.url);
   if (typeof __CAWCO_RELEASE__ !== "boolean") {
-    // Reload source definitions for the next request, without client notifications.
+    // Reload source definitions for the next request; every open list is looked at.
     watchFile(moduleUrl, { interval: 1000, persistent: false }, () => {
       // A failed reload is logged and the registry keeps what it had.
       detach(
@@ -629,7 +622,7 @@ export function createDelegationMcp(options: {
           }
           tools = module.handoffTools;
           builtFor.clear();
-          listings.clear();
+          toolInputsChanged();
         }),
         "delegation-mcp tool reload"
       );
@@ -641,7 +634,7 @@ export function createDelegationMcp(options: {
             admin = module.adminTools();
             adminNames = new Set(admin.map((tool) => tool.name));
             builtFor.clear();
-            listings.clear();
+            toolInputsChanged();
           }
         ),
         "delegation-mcp admin reload"
@@ -685,8 +678,9 @@ export function createDelegationMcp(options: {
 
   /**
    * Whether `triage_decide` can be called: the fleet watch that answers it
-   * is running. Read once per {@link listings}: a listing kept carries the
-   * answer it was made with, and the sweep makes them again.
+   * is made (server.ts fills it at boot, before the hub serves, and it
+   * stays; its switch turns its signals off, never its tool). Read once per
+   * {@link listings}: a listing kept carries the answer it was made with.
    */
   let triageNow: boolean | undefined;
   const triageCallable = (): boolean => {
@@ -745,16 +739,6 @@ export function createDelegationMcp(options: {
       listings.set(key, listing);
     }
     return listing;
-  };
-
-  /**
-   * Something a listing reads beside its session moved (a connection's
-   * tools, a delegate type, the fleet watch starting): every listing is
-   * made again as it is next asked, each once.
-   */
-  const listingsStale = (): void => {
-    listings.clear();
-    triageNow = undefined;
   };
 
   /**
@@ -1305,63 +1289,120 @@ export function createDelegationMcp(options: {
   const hashOf = (listing: unknown): string =>
     createHash("sha256").update(JSON.stringify(listing)).digest("hex");
 
-  /** The hash of what a connection bound to `row` is listed now. */
-  const toolsHash = (row: InstanceRow | undefined): string =>
-    listingOfActor(row).hash;
-
   /**
-   * Each connection's open GET stream, where the client hears what the server
-   * says unasked; `told` is the tool list it was last told had changed, so a
-   * stream is told once per change.
+   * One connection's open GET stream, where the client hears what the server
+   * says unasked. `lastListed` is the hash its list last answered
+   * `tools/list` with (db `toolListing`, read as the stream opens and kept as
+   * its list answers); `told`, the hash it was last told its tools changed
+   * to, so a stream is told once per change.
    */
-  const streams = new Set<{
-    binding: string | null;
+  interface Stream {
+    lastListed: string | undefined;
     server: Server;
     told?: string;
-  }>();
+  }
+  /** Every open stream, by whose list it is ({@link listingOf}). */
+  const streams = new Map<string, Set<Stream>>();
+
+  /** `listing` answered `tools/list` with `hash` (pi's host listed, for a pi session): kept, and its open streams know it. */
+  const listedNow = (listing: string, hash: string): void => {
+    for (const stream of streams.get(listing) ?? []) {
+      stream.lastListed = hash;
+    }
+    options.putToolListing(listing, hash);
+  };
 
   /**
    * THE NO-STALE-LIST RULE. Every open stream whose connection's tools differ
    * from what it last listed is told `notifications/tools/list_changed`
    * (MCP: servers that declare `listChanged` "SHOULD send a notification" when
-   * the list changes), once: after a hub start on a new build, a role change,
-   * a delegate type or toolset change. What each listing last listed outlives
-   * the hub, so a restart onto a new build still finds the difference.
-   * Each step a section of its own (core loop-watch.ts `syncSection`): a
-   * hold in a pass names its step.
+   * the list changes), once. A list is looked at only when an input of it
+   * moved, and only that list:
+   * - a session's own inputs (its harness, role, project, work item, parent
+   *   and delegate type, the types it may start, how its work item lands):
+   *   the board's change log names the session (db board-log.ts `tools`),
+   *   {@link toolsMoved};
+   * - what lists read beside their session (a connection, its tools, its
+   *   grants; an area; a project put in one; a fleet delegate type's
+   *   connections; a project's or an area's `delegates/` files; any fleet
+   *   change): {@link toolInputsChanged}, every listing made again and every
+   *   list looked at;
+   * - a stream opening: its own list, so a client back after a hub restart
+   *   onto a new build hears at once that its list moved (what each listing
+   *   last listed outlives the hub);
+   * - the hub starting: every running pi session's.
+   * Nothing else moves a list, so nothing else looks: a session's status,
+   * turn or title is no input, and a fleet at work costs no look. Each step
+   * a section of its own (core loop-watch.ts `syncSection`): a hold in a
+   * look names its step.
    */
-  const reconcileLists = () => {
-    // The rows read once for the whole pass: every stream's, by key.
-    const byId = syncSection("tool lists: rows read", () => {
-      const bound = [...streams].flatMap((stream) =>
-        stream.binding ? [stream.binding] : []
+  let owedAll = true;
+  /** The lists a look owes, by {@link listingOf}: sessions whose inputs moved, streams that opened. */
+  const owed = new Set<string>();
+
+  const look = (): void => {
+    const all = owedAll;
+    const named = all ? [...streams.keys()] : [...owed];
+    owedAll = false;
+    owed.clear();
+    const listening = named.filter((name) => streams.has(name));
+    const rows = syncSection(
+      "tool lists: rows read",
+      () =>
+        new Map(
+          options
+            .instancesByIds(
+              listening.filter((name) => name !== SHARED_DISCOVERY)
+            )
+            .map((row) => [row.id, row])
+        )
+    );
+    syncSection("tool lists: MCP streams compared", () =>
+      streamsTold(listening, rows)
+    );
+    // A pi session lists over REST, with no stream: one owed with none may
+    // be one.
+    const streamless = new Set(named.filter((name) => !streams.has(name)));
+    if (all || streamless.size > 0) {
+      syncSection("tool lists: pi hosts compared", () =>
+        hostsTold(
+          options.runningOf("pi").filter((row) => all || streamless.has(row.id))
+        )
       );
-      return new Map(options.instancesByIds(bound).map((row) => [row.id, row]));
-    });
-    syncSection("tool lists: MCP streams compared", () => streamsTold(byId));
-    syncSection("tool lists: pi hosts compared", hostsTold);
+    }
   };
 
-  /** Each open MCP stream whose tools differ from what its listing last listed, told so, once per change. */
-  const streamsTold = (byId: ReadonlyMap<string, InstanceRow>): void => {
-    for (const stream of streams) {
-      const listing = listingOf(stream.binding);
-      const last = options.toolListing(listing);
-      const now = toolsHash(
-        stream.binding ? byId.get(stream.binding) : undefined
-      );
-      if (last === undefined || last === now || stream.told === now) {
+  /** Each open MCP stream of `lists` whose tools differ from what its listing last listed, told so, once per change. */
+  const streamsTold = (
+    lists: readonly string[],
+    rows: ReadonlyMap<string, InstanceRow>
+  ): void => {
+    for (const listing of lists) {
+      const listening = streams.get(listing);
+      const row = rows.get(listing);
+      // A session no longer listed has nothing to be told.
+      if (!listening || (listing !== SHARED_DISCOVERY && !row)) {
         continue;
       }
-      stream.told = now;
-      console.info(
-        `[delegation-mcp] tools/list_changed -> ${listing}: its tools changed since it last listed them`
-      );
-      stream.server.sendToolListChanged().catch((error: unknown) => {
-        console.warn(
-          `[delegation-mcp] tools/list_changed to ${listing} failed: ${String(error)}`
+      const now = listingOfActor(row).hash;
+      for (const stream of listening) {
+        if (
+          stream.lastListed === undefined ||
+          stream.lastListed === now ||
+          stream.told === now
+        ) {
+          continue;
+        }
+        stream.told = now;
+        console.info(
+          `[delegation-mcp] tools/list_changed -> ${listing}: its tools changed since it last listed them`
         );
-      });
+        stream.server.sendToolListChanged().catch((error: unknown) => {
+          console.warn(
+            `[delegation-mcp] tools/list_changed to ${listing} failed: ${String(error)}`
+          );
+        });
+      }
     }
   };
 
@@ -1369,10 +1410,10 @@ export function createDelegationMcp(options: {
    * A pi session lists over REST, from its own host, and hears through its
    * machine: the same check, the same once per change.
    */
-  const hostsTold = (): void => {
-    for (const row of options.runningOf("pi")) {
+  const hostsTold = (rows: readonly InstanceRow[]): void => {
+    for (const row of rows) {
       const last = options.toolListing(row.id);
-      const now = toolsHash(row);
+      const now = listingOfActor(row).hash;
       if (last === undefined || last === now || hostTold.get(row.id) === now) {
         continue;
       }
@@ -1386,40 +1427,36 @@ export function createDelegationMcp(options: {
   /** The list each pi session's host was last told to fetch again. */
   const hostTold = new Map<string, string>();
 
-  let reconcileTimer: HubTimer | undefined;
   /** One look, on the hub's admission (scheduler.ts): background, merged with any look still waiting. */
-  const wantReconcile = () => {
+  const wantLook = () => {
     options.lifetime.jobs.want({
-      key: "tool lists reconciled",
-      name: "tool lists reconciled",
+      key: "tool lists looked at",
+      name: "tool lists looked at",
       priority: "background",
-      run: reconcileLists,
+      run: look,
     });
   };
+  /** Sessions whose own inputs to their list moved (db board-log.ts `tools`), or whose stream opened: their lists looked at. */
+  const toolsMoved = (ids: Iterable<string>): void => {
+    for (const id of ids) {
+      owed.add(id);
+    }
+    wantLook();
+  };
   /**
-   * A session's row moved (a board publish): one look, debounced. Each
-   * stream's listing is found by its key ({@link listingKey}), so a look
-   * costs a key per stream and builds only a listing no stream had.
+   * Something lists read beside their session moved (a connection, a
+   * delegate type, an area, the fleet): every listing made again as it is
+   * next asked, each once, and every list looked at.
    */
-  const toolsMayHaveChanged = () => {
-    options.lifetime.cancel(reconcileTimer);
-    reconcileTimer = options.lifetime.after(
-      "tool lists quiet",
-      LIST_DEBOUNCE_MS,
-      wantReconcile
-    );
+  const toolInputsChanged = (): void => {
+    listings.clear();
+    triageNow = undefined;
+    owedAll = true;
+    wantLook();
   };
-  /** Something a listing reads beside its session moved (a connection, the fleet): the listings made again, then one look. */
-  const toolInputsChanged = () => {
-    listingsStale();
-    toolsMayHaveChanged();
-  };
-  // What no event names (the fleet watch starting or stopping) is found by
-  // the next sweep, which makes each listing again once.
-  options.lifetime.every("tool lists swept", LIST_SWEEP_MS, () => {
-    listingsStale();
-    wantReconcile();
-  });
+  // The hub's first look: a pi host that listed before a restart onto a new
+  // build hears its list moved.
+  wantLook();
 
   /**
    * What `bound` can be listed over its life (delegation-tools.ts
@@ -1512,7 +1549,7 @@ export function createDelegationMcp(options: {
       // Read fresh, so a re-list after list_changed answers the new role.
       const row = boundRow(binding);
       const answered = listingOfActor(row);
-      options.putToolListing(listingOf(binding), answered.hash);
+      listedNow(listingOf(binding), answered.hash);
       return Promise.resolve({ tools: answered.tools });
     });
     server.setRequestHandler(CallToolRequestSchema, async (message, extra) => {
@@ -1638,13 +1675,22 @@ export function createDelegationMcp(options: {
       await server.close();
       return response;
     }
-    const stream = { binding, server };
-    streams.add(stream);
-    console.info(`[delegation-mcp] stream open -> ${listingOf(binding)}`);
-    toolsMayHaveChanged();
+    const listing = listingOf(binding);
+    const stream: Stream = {
+      server,
+      lastListed: options.toolListing(listing),
+    };
+    const listed = streams.get(listing) ?? new Set<Stream>();
+    listed.add(stream);
+    streams.set(listing, listed);
+    console.info(`[delegation-mcp] stream open -> ${listing}`);
+    toolsMoved([listing]);
     const ended = async () => {
-      if (streams.delete(stream)) {
-        console.info(`[delegation-mcp] stream closed -> ${listingOf(binding)}`);
+      if (listed.delete(stream)) {
+        if (listed.size === 0) {
+          streams.delete(listing);
+        }
+        console.info(`[delegation-mcp] stream closed -> ${listing}`);
         await server.close();
       }
     };
@@ -1696,7 +1742,7 @@ export function createDelegationMcp(options: {
     }
     const answered = listingOfActor(actor);
     if (own && actor) {
-      options.putToolListing(actor.id, answered.hash);
+      listedNow(actor.id, answered.hash);
     }
     return { tools: answered.tools };
   };
@@ -1712,7 +1758,7 @@ export function createDelegationMcp(options: {
     handle,
     call,
     list,
-    toolsMayHaveChanged,
+    toolsMoved,
     toolInputsChanged,
     handoffAs,
   };

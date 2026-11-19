@@ -602,6 +602,7 @@ import { previewRoutes } from "./preview-routes";
 import { createPreviewService } from "./preview-service";
 import { createCaps } from "./project-caps";
 import {
+  isTypeFile,
   makeProjectDelegateTypes,
   projectDelegateTypesRoutes,
 } from "./project-delegate-types";
@@ -1714,7 +1715,7 @@ export const createServer = (
     sendLines: () => sendLines,
     mcpChanges: () => mcpChanges,
     readSkillFolder: () => readSkillFolder,
-    toolsMayHaveChanged: () => toolsMayHaveChangedPort.now(),
+    toolsMoved: () => toolsMovedPort.now(),
     toolInputsChanged: () => toolInputsChangedPort.now(),
     launchRefusal: () => launchRefusal,
     modelRefusal: () => modelRefusal,
@@ -7372,14 +7373,14 @@ export const createServer = (
   handoffs.hear(() => board.listMoved("handoffs"));
   previewTargets.hear(() => board.listMoved("previews"));
   /**
-   * A session's role, or a delegate type or toolset, may have moved what a
-   * live cawco connection lists: bound once the MCP server exists below.
+   * Sessions an input of whose own tool list moved (db board-log.ts
+   * `tools`): their open lists looked at, once the MCP server exists below.
    */
-  const toolsMayHaveChangedPort = portOf<() => void>(
-    "toolsMayHaveChanged",
+  const toolsMovedPort = portOf<(ids: readonly string[]) => void>(
+    "toolsMoved",
     (): void => undefined
   );
-  /** A connection's tools, a delegate type or the fleet moved: every listing made again, once the MCP server exists below. */
+  /** A connection's tools, a delegate type, an area or the fleet moved: every listing made again, once the MCP server exists below. */
   const toolInputsChangedPort = portOf<() => void>(
     "toolInputsChanged",
     (): void => undefined
@@ -10687,6 +10688,11 @@ export const createServer = (
   // that no longer applies closes then.
   onFolderCommits((projectId, { written, deleted }) => {
     const paths = new Set([...written, ...deleted]);
+    // A type file moved the connections its type grants (connections.ts
+    // `granted`): every tool list looked at again.
+    if ([...paths].some(isTypeFile)) {
+      toolInputsChangedPort.now()();
+    }
     /** `work` detached, a refusal it answers logged as a failure is. */
     const reread = (work: Promise<AnyProblem | undefined>, what: string) =>
       detach(
@@ -11225,7 +11231,7 @@ export const createServer = (
     // (delegation-sends.ts `forward`).
     forward: delegationSends.forward,
   });
-  toolsMayHaveChangedPort.fill(delegationMcp.toolsMayHaveChanged);
+  toolsMovedPort.fill(delegationMcp.toolsMoved);
   toolInputsChangedPort.fill(delegationMcp.toolInputsChanged);
 
   /**

@@ -1439,11 +1439,11 @@ export interface ClosureContext {
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
   /** Whether each machine's tool cells are its connection's now (tool-facts.ts). */
   toolFacts: ToolFactsShape;
-  /** Something a tool listing reads beside its session moved (a delegate type, the fleet): every listing made again. */
+  /** Something a tool listing reads beside its session moved (a connection, a delegate type, an area, the fleet): every listing made again, every open list looked at (delegation-mcp.ts). */
   toolInputsChanged: () => void;
   toolReleases: ToolReleases;
-  /** A session's row moved: the open MCP streams' listings looked at again (delegation-mcp.ts). */
-  toolsMayHaveChanged: () => void;
+  /** Sessions an input of whose own tool list moved (db board-log.ts `tools`): their lists alone looked at again (delegation-mcp.ts). */
+  toolsMoved: (ids: readonly string[]) => void;
   touched: Map<string, number>;
   transcripts: ReturnType<typeof createTranscripts>;
   treeStops: ReturnType<typeof createTreeStops>;

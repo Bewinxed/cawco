@@ -16,7 +16,16 @@ export type BoardChangeKind =
   | "inventory"
   | "former"
   | "continuation"
-  | ViewChangeKind;
+  | ViewChangeKind
+  | ToolChangeKind;
+
+/**
+ * What a write moved in a session's MCP tool list (delegation-mcp.ts
+ * `listingKey`): `tools`, an input of one session's own (its id); `tool_inputs`,
+ * one every list may read (a fleet delegate type's connections, by the
+ * type's name).
+ */
+export type ToolChangeKind = "tools" | "tool_inputs";
 
 /**
  * What a write moved in a view the hub's views thread keeps (views/
@@ -294,6 +303,49 @@ const LOGGED: readonly Logged[] = [
     table: "purged_sessions",
     key: "machine_id",
     kind: "view_purged",
+  },
+  // What a session's tool list reads of its own row (delegation-mcp.ts
+  // `listingKey`): its harness, role, project, work item, parent and
+  // delegate type; the types it may start (any, or those named); how its
+  // work item lands (its `lands`, and its workspace, a host one landing
+  // nowhere). A status, a turn or a title moves none of them, so logs
+  // nothing here.
+  {
+    name: "tools_instances",
+    table: "instances",
+    key: "id",
+    kind: "tools",
+    columns: [
+      "harness",
+      "role",
+      "project_id",
+      "work_item_id",
+      "parent_instance_id",
+      "delegate_type",
+      "delegate_type_project",
+      "may_start_any",
+    ],
+  },
+  {
+    name: "tools_may_start",
+    table: "instance_may_start",
+    key: "instance_id",
+    kind: "tools",
+  },
+  {
+    name: "tools_work_items",
+    table: "work_items",
+    key: "instance_id",
+    kind: "tools",
+    columns: ["lands", "workspace_id", "instance_id"],
+  },
+  // A fleet delegate type's connections, which a session of the type is
+  // granted (connections.ts `granted`).
+  {
+    name: "tools_type_connections",
+    table: "delegate_type_connections",
+    key: "type_name",
+    kind: "tool_inputs",
   },
   {
     name: "continuations",
