@@ -36,7 +36,12 @@
   const folderId = $props.id();
 </script>
 
-<div class="flex min-w-0 flex-col gap-space-3" data-add-place in:reveal>
+<div
+  class="flex min-w-0 flex-col gap-space-3 pt-space-2"
+  data-add-place
+  in:reveal
+>
+  <h4 class="m-0 type-label text-ink-strong">{words.add}</h4>
   <div class="flex min-w-0 flex-col gap-space-2">
     <span class="type-meta text-ink-muted">{words.machine}</span>
     <MachineChips

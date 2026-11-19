@@ -18,6 +18,7 @@
     form,
     lead,
     trail,
+    wide,
     acts,
     go,
     backLabel,
@@ -29,6 +30,8 @@
     lead: Snippet;
     /** What it says next: the second column on a desk. */
     trail?: Snippet;
+    /** What needs the face's whole width, under both columns. */
+    wide?: Snippet;
     acts?: Snippet;
     /** The act the face is for, at its end after Back. */
     go?: { label: string; disabled?: boolean; onclick: () => void };
@@ -38,7 +41,13 @@
 </script>
 
 <div class="flex min-w-0 flex-col" data-face={title}>
-  <div class="flex min-w-0 items-center gap-space-2 px-space-3 pt-space-3">
+  <!-- On a phone the sheet's own head names the face: Back stands alone. -->
+  <div
+    class={[
+      "flex min-w-0 items-center gap-space-2",
+      form === "card" && "px-space-3 pt-space-3",
+    ]}
+  >
     <Button
       aria-label={standingWords.back}
       onclick={onback}
@@ -48,11 +57,14 @@
     >
       <IconChevronLeft aria-hidden="true" />
     </Button>
-    <h2 class="m-0 min-w-0 truncate type-label text-ink-strong">{title}</h2>
+    {#if form === "card"}
+      <h2 class="m-0 min-w-0 truncate type-label text-ink-strong">{title}</h2>
+    {/if}
   </div>
   <div
     class={[
-      "grid min-w-0 gap-x-space-8 gap-y-space-5 px-space-5 pt-space-3 pb-space-5",
+      "grid min-w-0 gap-x-space-8 gap-y-space-5 pt-space-3 pb-space-5",
+      form === "card" && "px-space-5",
       form === "card" && trail ? "grid-cols-2" : "grid-cols-1",
     ]}
   >
@@ -60,11 +72,22 @@
     {#if trail}
       <div class="flex min-w-0 flex-col gap-space-5">{@render trail()}</div>
     {/if}
+    {#if wide}
+      <div
+        class={[
+          "flex min-w-0 flex-col gap-space-5",
+          form === "card" && trail && "col-span-2",
+        ]}
+      >
+        {@render wide()}
+      </div>
+    {/if}
   </div>
   {#if acts || go}
     <div
       class={[
-        "flex min-w-0 items-center justify-end gap-space-2 px-space-5 pb-space-5",
+        "flex min-w-0 items-center justify-end gap-space-2 pb-space-5",
+        form === "card" && "px-space-5",
         form === "sheet" &&
           "sticky bottom-0 border-t border-t-border-hairline bg-surface-raised pt-space-3",
       ]}

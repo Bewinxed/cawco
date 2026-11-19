@@ -16,7 +16,6 @@
   import { LANDS_MODES } from "@cawco/core/injected";
   import type { StagesView, TaskSummary } from "@cawco/core/task-views";
   import type { TrackerView } from "@cawco/core/trackers";
-  import { MediaQuery } from "svelte/reactivity";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
@@ -25,6 +24,7 @@
   import Sidebar from "#lib/cawco/Sidebar.svelte";
   import type { Machine } from "#lib/cawco/stores/board.svelte.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import DetailsSurface from "./DetailsSurface.svelte";
   import type {
     AccountChoice,
@@ -113,6 +113,8 @@
     tie: TiePlan;
   } = $props();
 
+  /** Under the phone line (`--breakpoint-phone`), the sheet. */
+  const PHONE_WIDTH = 640;
   /** How long the stand-in hub takes to answer. */
   const ANSWER_MS = 700;
   /** How long each of a running move's steps takes here. */
@@ -139,11 +141,13 @@
 
   const later = (answer: () => void, ms = ANSWER_MS) => setTimeout(answer, ms);
 
-  /** A phone or a touch screen: the details rise as the bottom sheet. */
-  const touch = new MediaQuery(
-    "(hover: none), (pointer: coarse), (max-width: 640px)"
+  /** The frame's shell, which stands for the screen: its width says a phone. */
+  let shell = $state<HTMLElement | null>(null);
+  let shellWidth = $state(0);
+  /** A phone: the details rise as the bottom sheet. */
+  const form = $derived<"card" | "sheet">(
+    shellWidth > 0 && shellWidth < PHONE_WIDTH ? "sheet" : "card"
   );
-  const form = $derived<"card" | "sheet">(touch.current ? "sheet" : "card");
 
   const lead = new CawLead({
     id: () => row.id,
@@ -467,6 +471,13 @@
     frame === "desk" && "h-211 phone:h-225",
     frame === "short" && "h-192",
   ]}
+  {@attach frameSize(
+    (node) => node.clientWidth,
+    (width) => {
+      shellWidth = width;
+    }
+  )}
+  bind:this={shell}
 >
   <aside
     class="hidden w-c-sidebar-w min-w-0 shrink-0 border-e border-e-border-hairline bg-(--sidebar) desk:flex"
@@ -504,126 +515,126 @@
       {#snippet dock()}{/snippet}
     </ProjectDock>
   </div>
+  <DetailsSurface
+    anchor={mark}
+    stage={shell}
+    face={atFace}
+    {form}
+    onclose={() => {
+      shown = false;
+    }}
+    open={shown}
+    title={titles[atFace]}
+  >
+    {#if atFace === "details"}
+      <StandingCard
+        {accounts}
+        cantStart={nowCant}
+        change={nowChange}
+        {connections}
+        folders={nowFolders}
+        {form}
+        learned={nowLearned}
+        {machines}
+        moving={nowMoving}
+        onact={act}
+        opened={nowOpened}
+        project={row}
+        {reading}
+        tracker={nowTracker}
+      />
+    {:else if atFace === "move-before" && place}
+      <MoveBefore
+        {form}
+        {machines}
+        onback={back}
+        oncarry={carry}
+        onfolder={(folder) => {
+          nowTo = { ...nowTo, folder };
+        }}
+        onharness={onHarness}
+        onmove={startMove}
+        onto={(machineId) => {
+          nowTo = { ...nowTo, machineId };
+        }}
+        {place}
+        plan={nowPlan}
+        to={nowTo}
+      />
+    {:else if atFace === "move-running"}
+      <MoveRunning
+        {form}
+        onagain={() => {
+          nowRun = { ...nowRun, failed: null };
+        }}
+        onback={back}
+        oncalloff={() => {
+          atFace = "move-after";
+        }}
+        oninterrupt={(id) => {
+          nowRun = {
+            ...nowRun,
+            waiting: nowRun.waiting.filter((one) => one.id !== id),
+          };
+        }}
+        run={nowRun}
+      />
+    {:else if atFace === "move-after"}
+      <MoveAfter
+        {form}
+        ondone={moved}
+        onremove={none}
+        {result}
+        to={nowTo.folder}
+      />
+    {:else if atFace === "find" && place}
+      <FindFolder
+        {form}
+        machine={machineOf(place.machineId)}
+        onback={back}
+        onkeep={(name) => {
+          nowFind = nowFind.merge
+            ? { ...nowFind, merge: { ...nowFind.merge, keep: name } }
+            : nowFind;
+        }}
+        onpoint={pointed}
+        ontype={(folder) => {
+          nowTyped = folder;
+          nowFind = { ...nowFind, tell: folder.trim() ? "reading" : null };
+          later(() => {
+            nowFind = { ...nowFind, tell: folder.trim() ? find.tell : null };
+          });
+        }}
+        {place}
+        plan={nowFind}
+        projectName={row.name}
+        typed={nowTyped}
+      />
+    {:else if atFace === "tie"}
+      <TieTracker
+        {form}
+        onaddconnection={none}
+        onback={back}
+        onconnection={(connection) => {
+          nowTie = { ...nowTie, connection };
+        }}
+        onproject={(id) => {
+          nowTie = { ...nowTie, project: id };
+        }}
+        onstage={(stage, option) => {
+          nowTie = {
+            ...nowTie,
+            stages: nowTie.stages.map((one) =>
+              one.stage === stage ? { ...one, pick: option } : one
+            ),
+          };
+        }}
+        ontarget={(target) => {
+          nowTie = { ...nowTie, target };
+        }}
+        ontie={tied}
+        plan={nowTie}
+      />
+    {/if}
+  </DetailsSurface>
 </div>
-
-<DetailsSurface
-  anchor={mark}
-  face={atFace}
-  {form}
-  onclose={() => {
-    shown = false;
-  }}
-  open={shown}
-  title={titles[atFace]}
->
-  {#if atFace === "details"}
-    <StandingCard
-      {accounts}
-      cantStart={nowCant}
-      change={nowChange}
-      {connections}
-      folders={nowFolders}
-      {form}
-      learned={nowLearned}
-      {machines}
-      moving={nowMoving}
-      onact={act}
-      opened={nowOpened}
-      project={row}
-      {reading}
-      tracker={nowTracker}
-    />
-  {:else if atFace === "move-before" && place}
-    <MoveBefore
-      {form}
-      {machines}
-      onback={back}
-      oncarry={carry}
-      onfolder={(folder) => {
-        nowTo = { ...nowTo, folder };
-      }}
-      onharness={onHarness}
-      onmove={startMove}
-      onto={(machineId) => {
-        nowTo = { ...nowTo, machineId };
-      }}
-      {place}
-      plan={nowPlan}
-      to={nowTo}
-    />
-  {:else if atFace === "move-running"}
-    <MoveRunning
-      {form}
-      onagain={() => {
-        nowRun = { ...nowRun, failed: null };
-      }}
-      onback={back}
-      oncalloff={() => {
-        atFace = "move-after";
-      }}
-      oninterrupt={(id) => {
-        nowRun = {
-          ...nowRun,
-          waiting: nowRun.waiting.filter((one) => one.id !== id),
-        };
-      }}
-      run={nowRun}
-    />
-  {:else if atFace === "move-after"}
-    <MoveAfter
-      {form}
-      ondone={moved}
-      onremove={none}
-      {result}
-      to={nowTo.folder}
-    />
-  {:else if atFace === "find" && place}
-    <FindFolder
-      {form}
-      machine={machineOf(place.machineId)}
-      onback={back}
-      onkeep={(name) => {
-        nowFind = nowFind.merge
-          ? { ...nowFind, merge: { ...nowFind.merge, keep: name } }
-          : nowFind;
-      }}
-      onpoint={pointed}
-      ontype={(folder) => {
-        nowTyped = folder;
-        nowFind = { ...nowFind, tell: folder.trim() ? "reading" : null };
-        later(() => {
-          nowFind = { ...nowFind, tell: folder.trim() ? find.tell : null };
-        });
-      }}
-      {place}
-      plan={nowFind}
-      projectName={row.name}
-      typed={nowTyped}
-    />
-  {:else if atFace === "tie"}
-    <TieTracker
-      {form}
-      onaddconnection={none}
-      onback={back}
-      onconnection={(connection) => {
-        nowTie = { ...nowTie, connection };
-      }}
-      onproject={(id) => {
-        nowTie = { ...nowTie, project: id };
-      }}
-      onstage={(stage, option) => {
-        nowTie = {
-          ...nowTie,
-          stages: nowTie.stages.map((one) =>
-            one.stage === stage ? { ...one, pick: option } : one
-          ),
-        };
-      }}
-      ontarget={(target) => {
-        nowTie = { ...nowTie, target };
-      }}
-      ontie={tied}
-      plan={nowTie}
-    />
-  {/if}
-</DetailsSurface>

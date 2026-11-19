@@ -225,8 +225,8 @@
 <div
   aria-busy={reading || undefined}
   class={[
-    "grid min-w-0 gap-x-space-8 gap-y-space-5 p-space-5",
-    form === "card" ? "grid-cols-2" : "grid-cols-1",
+    "grid min-w-0 gap-x-space-8 gap-y-space-5",
+    form === "card" ? "grid-cols-2 p-space-5" : "grid-cols-1 pb-space-5",
   ]}
   data-form={form}
   data-standing-card

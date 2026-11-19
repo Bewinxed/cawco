@@ -184,31 +184,6 @@
           {/if}
         {/if}
       </Group>
-      {#if plan.project && plan.project !== "none" && plan.stages.length > 0}
-        <Group title={words.stages}>
-          <dl class="m-0 flex min-w-0 flex-col gap-space-2">
-            {#each plan.stages as row (row.stage)}
-              <div class="flex min-w-0 flex-col gap-space-1">
-                <dt class="type-meta text-ink-muted">{row.stage}</dt>
-                <dd class="m-0 min-w-0">
-                  {@render chooser(
-                    row.stage,
-                    row.pick ?? LEAVE,
-                    [
-                      ...row.options.map((option) => ({
-                        id: option,
-                        name: option,
-                      })),
-                      { id: LEAVE, name: words.leave },
-                    ],
-                    (id) => onstage(row.stage, id === LEAVE ? null : id)
-                  )}
-                </dd>
-              </div>
-            {/each}
-          </dl>
-        </Group>
-      {/if}
     {/if}
     <Group title={words.does}>
       <ul class="m-0 flex min-w-0 list-none flex-col gap-space-1 p-0">
@@ -217,5 +192,34 @@
         {/each}
       </ul>
     </Group>
+  {/snippet}
+  {#snippet wide()}
+    {#if github && serving.length > 0 && plan.project && plan.project !== "none" && plan.stages.length > 0}
+      <Group title={words.stages}>
+        <dl class="m-0 flex min-w-0 flex-col gap-space-2">
+          {#each plan.stages as row (row.stage)}
+            <div class="flex min-w-0 items-center gap-space-3">
+              <dt class="w-24 flex-none truncate type-label text-ink-row">
+                {row.stage}
+              </dt>
+              <dd class="m-0 min-w-0 flex-auto">
+                {@render chooser(
+                  row.stage,
+                  row.pick ?? LEAVE,
+                  [
+                    ...row.options.map((option) => ({
+                      id: option,
+                      name: option,
+                    })),
+                    { id: LEAVE, name: words.leave },
+                  ],
+                  (id) => onstage(row.stage, id === LEAVE ? null : id)
+                )}
+              </dd>
+            </div>
+          {/each}
+        </dl>
+      </Group>
+    {/if}
   {/snippet}
 </Face>
