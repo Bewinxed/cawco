@@ -227,6 +227,18 @@ export const createAdmission = (db: DbShape) => {
       : turns.reduce((sum, turn) => sum + (turn.costUsd ?? 0), 0);
   };
 
+  /** The charges standing on `accountId` now, other than `instanceId`'s. */
+  const standingOn = (
+    accountId: string,
+    instanceId: string,
+    now: number
+  ): Charge[] => {
+    prune(now);
+    return [...charges.values()].filter(
+      (one) => one.accountId === accountId && one.instanceId !== instanceId
+    );
+  };
+
   /**
    * What the ledger holds of `accountId` now for a move of `instanceId`, a
    * session of model `model` ({@link Ledger}): the charges of every other
@@ -241,10 +253,7 @@ export const createAdmission = (db: DbShape) => {
     model: string | null,
     now: number
   ): Ledger => {
-    prune(now);
-    const standing = [...charges.values()].filter(
-      (one) => one.accountId === accountId && one.instanceId !== instanceId
-    );
+    const standing = standingOn(accountId, instanceId, now);
     const pendingUsd = standing.some((one) => one.usd === null)
       ? null
       : standing.reduce((sum, one) => sum + (one.usd ?? 0), 0);
@@ -287,6 +296,10 @@ export const createAdmission = (db: DbShape) => {
 
   return {
     ledger,
+    /** How many moves stand admitted onto `accountId` and not landed, other than `instanceId`'s ({@link Ledger} `pendingMoves`). */
+    pendingMoves(accountId: string, instanceId: string): number {
+      return standingOn(accountId, instanceId, Date.now()).length;
+    },
     /**
      * Each standing charge with a measured burn, as it arrives on its
      * target (placement.ts `Arrival`): the run-out test counts it there

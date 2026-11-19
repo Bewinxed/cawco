@@ -478,6 +478,9 @@ export const accountsWords = {
     /** No account has room: held until its own account resets at `clock` ("15:40"). */
     waiting: (from: string, clock: string) =>
       `Stopped at ${from}’s limit; continues at ${clock}`,
+    /** No account has room, and its own account named no reset to wait for. */
+    unknownReset: (from: string) =>
+      `Stopped at ${from}’s limit, reset time not known; continues once an account can take it`,
     /** No account has room now: `on` frees first, at `clock`, and takes it. */
     waitingOn: (from: string, on: string, clock: string) =>
       `Stopped at ${from}’s limit; continues on ${on} at ${clock}`,

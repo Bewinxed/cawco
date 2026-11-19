@@ -304,12 +304,15 @@ export type MoveChoice =
       /** What waiting re-reads, dollars; null when unpriced. */
       stayUsd: number | null;
       until: number;
+      /** Its own account named no reset: `until` is when it is looked at again ({@link decideStopped}). */
+      unknownReset?: true;
       why: WaitWhy;
-      /** The cheapest move, dollars, when one was priced. */
+      /** What the first move that holds costs, dollars ({@link MoveOption} `usd`); null when unpriced or none holds. */
       moveUsd: number | null;
     })
   | (Common & {
       kind: "stay";
+      /** As a wait's. */
       moveUsd: number | null;
       stayUsd: number | null;
       why: StayWhy;
@@ -326,13 +329,19 @@ export interface TurnChoice {
 interface MoveOption {
   account: FactAccount;
   carries: boolean;
-  /** Its cost less the next turn's saving from a smaller context: what options are compared by. */
+  /**
+   * Its cost less the next turn's saving from a smaller context: what
+   * options are ordered by, below zero where that saving is the larger. A
+   * price said is {@link usd}.
+   */
   effective: number | null;
   /** Whether it holds, and why not. */
   held: Held;
   onSource: number | null;
   onTarget: number | null;
   shape: Shape;
+  /** What it costs, dollars: its reads and writes on both accounts; null when unpriced. */
+  usd: number | null;
 }
 
 type Held =
@@ -640,6 +649,7 @@ const optionsOn = (
       shape,
       onSource: priced?.onSource ?? null,
       onTarget: priced?.onTarget ?? null,
+      usd: priced ? priced.onSource + priced.onTarget : null,
       effective: priced
         ? priced.onSource + priced.onTarget - priced.saving
         : null,
@@ -783,13 +793,7 @@ const decided = (
       tokens !== null &&
       tokens >= facts.policy.moveWholeUnderK * 1000 &&
       facts.policy.moveWholeUnderK > 0,
-    price: {
-      usd:
-        option.onTarget === null || option.onSource === null
-          ? null
-          : option.onTarget + option.onSource,
-      next,
-    },
+    price: { usd: option.usd, next },
   };
 };
 
@@ -812,7 +816,7 @@ const movesOf = (
         ? [
             {
               what: optionWord(after.shape),
-              usd: after.effective,
+              usd: after.usd,
               to: after.account.id,
             },
           ]
@@ -948,11 +952,17 @@ const decideStopped = (
   const { now, policy, session, current } = facts;
   const refused = trigger.kind === "refused-credential";
   const waitMs = policy.waitMinutes * MINUTE_MS;
-  const resetAt = current.resetAt ?? now + waitMs;
+  // Only a reset its bench or a reading names is near, or outlasted by a
+  // cache: one nothing named is unknown, and a hold on it is looked at
+  // again after the policy's wait.
+  const named = current.resetAt;
+  const resetAt = named ?? now + waitMs;
   const tokens = tokensOf(session.context);
   const { rates } = session.costs;
   const outlasts =
-    session.cache.kind === "warm" && resetAt <= session.cache.until;
+    named !== null &&
+    session.cache.kind === "warm" &&
+    named <= session.cache.until;
   const waitUsd =
     tokens === null || !rates
       ? null
@@ -962,6 +972,7 @@ const decideStopped = (
     why,
     until,
     ...(frees ? { frees } : {}),
+    ...(named === null && !frees ? { unknownReset: true as const } : {}),
     stayUsd: waitUsd,
     moveUsd,
     ...common,
@@ -972,7 +983,7 @@ const decideStopped = (
   if (!(refused || policy.move)) {
     return wait("off");
   }
-  if (!refused && resetAt - now <= waitMs) {
+  if (!refused && named !== null && named - now <= waitMs) {
     return wait("soon");
   }
   // Waiting re-reads nothing more than a warm read: it waits, unless a
@@ -1141,7 +1152,7 @@ export function decide(
     return decideHand(facts, trigger, options, accounts, tokens);
   }
   const holding = ordered(options);
-  const moveUsd = holding[0]?.effective ?? null;
+  const moveUsd = holding[0]?.usd ?? null;
   const common = { accounts, tokens };
   return runnable(trigger)
     ? decideAhead(facts, trigger, holding, common, moveUsd)

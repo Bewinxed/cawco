@@ -781,6 +781,11 @@ public enum Words {
                 "Stopped at \(from)’s limit; continues at \(clock)"
             }
 
+            /// No account has room, and its own account named no reset to wait for.
+            public static func unknownReset(from: String) -> String {
+                "Stopped at \(from)’s limit, reset time not known; continues once an account can take it"
+            }
+
             /// No account has room now: `on` frees first, at `clock`, and takes it.
             public static func waitingOn(from: String, on: String, clock: String) -> String {
                 "Stopped at \(from)’s limit; continues on \(on) at \(clock)"

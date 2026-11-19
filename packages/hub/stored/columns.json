@@ -3770,6 +3770,10 @@
               "until": {
                 "type": "number"
               },
+              "unknownReset": {
+                "type": "boolean",
+                "const": true
+              },
               "why": {
                 "type": "string",
                 "enum": [
@@ -8132,6 +8136,10 @@
           "until": {
             "type": "number"
           },
+          "unknownReset": {
+            "type": "boolean",
+            "const": true
+          },
           "why": {
             "type": "string",
             "enum": [
@@ -9751,6 +9759,10 @@
           },
           "until": {
             "type": "number"
+          },
+          "unknownReset": {
+            "type": "boolean",
+            "const": true
           },
           "why": {
             "type": "string",

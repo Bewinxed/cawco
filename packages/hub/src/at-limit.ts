@@ -418,68 +418,71 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   const waitsToMove = (instanceId: string, move: HeldMove | null): void => {
     db.atLimit.putHeldMove(instanceId, move);
     if (!move) {
-      workWaits.delete(instanceId);
       moveSaid.delete(instanceId);
     }
   };
 
   /**
-   * Holds whose move waits for their work in flight, by session: what their
-   * target account read as when that wait began ({@link targetRead}). Until
-   * the work changes (`workChanged`), that account reads otherwise, or the
-   * hold's moment comes, a change of the accounts decides nothing new for
-   * them ({@link lookAtHolds}). Empty after a restart: each such hold is
-   * decided once more at the next change, then waits again.
+   * What each session's last decision read of its provider's accounts
+   * ({@link accountsSeen}). While a hold's moment has not come and its
+   * accounts read the same, a change of the accounts decides nothing new for
+   * it ({@link unchanged}). Empty after a restart: each hold is decided once
+   * more at the next change.
    */
-  const workWaits = new Map<string, string>();
+  const decidedOn = new Map<string, string>();
 
   /** The journal line of each session's last move decision, said once while it says the same ({@link moveTo}). */
   const moveSaid = new Map<string, string>();
 
   /**
-   * What `row`'s decision reads of account `accountId`: its windows' use and
-   * resets, its bench, and its sign-in on `row`'s machine, as one
-   * comparable text.
+   * What a decision for `row` reads of each account of `provider` that can
+   * change its outcome, as one comparable text: its windows' use (whole
+   * percents) and resets, its bench, its sign-in on `row`'s machine, and
+   * the moves admitted onto it. The account it is on is among them, its
+   * reset with it.
    */
-  const targetRead = (accountId: string, row: LimitRow): string => {
-    const reading = readingOf(accountId);
-    return JSON.stringify({
-      windows: (reading?.windows ?? []).map((one) => [
-        windowKey(one),
-        Math.round(one.percent),
-        one.resetsAt,
-      ]),
-      bench: db.accounts
-        .bench()
-        .filter((one) => one.accountId === accountId)
-        .map((one) => [one.scope, one.until]),
-      signedIn: db.accounts
-        .signins()
-        .some(
-          (one) =>
-            one.accountId === accountId &&
-            one.machineId === row.machineId &&
-            one.state === "signed-in"
-        ),
-    });
+  const accountsSeen = (row: LimitRow, provider: string): string => {
+    const bench = db.accounts.bench();
+    const signins = db.accounts.signins();
+    return JSON.stringify(
+      db.accounts
+        .list()
+        .filter((account) => account.provider === provider)
+        .map((account) => [
+          account.id,
+          (readingOf(account.id)?.windows ?? []).map((one) => [
+            windowKey(one),
+            Math.round(one.percent),
+            one.resetsAt,
+          ]),
+          bench
+            .filter((one) => one.accountId === account.id)
+            .map((one) => [one.scope, one.until]),
+          signins.some(
+            (one) =>
+              one.accountId === account.id &&
+              one.machineId === row.machineId &&
+              one.state === "signed-in"
+          ),
+          ports.admission.pendingMoves(account.id, row.id),
+        ])
+    );
   };
 
   /**
-   * Whether a change of the accounts leaves `held`'s outcome as it was: its
-   * move waits for its work in flight, its moment has not come, and its
-   * target reads as it did when that wait began.
+   * Whether a change of the accounts leaves `held`'s outcome as it was:
+   * its moment has not come (or it has none, as a refused sign-in's), and
+   * its provider's accounts read as its last decision read them. Every
+   * hold, whatever it waits for, its move's work in flight included.
    */
-  const stillWaitsOnWork = (held: LimitHold, now: number): boolean => {
-    const move = db.atLimit.heldMove(held.instanceId);
-    const seen = workWaits.get(held.instanceId);
+  const unchanged = (held: LimitHold, now: number): boolean => {
     const row = rowOf(held.instanceId);
+    const seen = decidedOn.get(held.instanceId);
     return (
-      move !== undefined &&
-      seen !== undefined &&
       row !== undefined &&
-      held.until !== null &&
-      held.until > now &&
-      seen === targetRead(move.to, row)
+      seen !== undefined &&
+      (held.until === null || held.until > now) &&
+      seen === accountsSeen(row, providerOf(held.accountId))
     );
   };
 
@@ -514,6 +517,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (!facts) {
       return;
     }
+    decidedOn.set(row.id, accountsSeen(row, current.provider));
     const byHand = ports.handMove(row);
     const trigger: MoveTrigger = byHand
       ? { kind: "hand", to: byHand, stopped: cause !== "extra-usage" }
@@ -563,15 +567,28 @@ export const createAtLimit = (ports: AtLimitPorts) => {
           ]
         : [];
     });
-    ports.note(row, {
+    const line: Extract<AccountMove, { kind: "waiting" }> = {
       kind: "waiting",
       account: namedAccount(current, accounts),
       ...(frees ? { frees: namedAccount(frees, accounts) } : {}),
       accounts: named,
       until: decision.until,
+      ...(decision.unknownReset ? { unknownReset: true as const } : {}),
       why: lineWhy(decision.why),
       tokens: decision.tokens,
-    });
+    };
+    // A look again at a reset still unnamed moves only its own moment,
+    // which the line does not say: the line it wrote stands.
+    const last = db.atLimit.latestEvent(row.id)?.move;
+    if (
+      held &&
+      line.unknownReset &&
+      last?.kind === "waiting" &&
+      Bun.deepEquals({ ...last, until: 0 }, { ...line, until: 0 })
+    ) {
+      return;
+    }
+    ports.note(row, line);
   };
 
   /**
@@ -627,7 +644,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       off: "moving to another account at the limit is switched off",
       full: "no other account it may run on holds it now",
       credits: `${named} says to keep going on its extra usage`,
-      dearer: `its next turn there costs ${usdWords(decision.stayUsd)} on credits, and the cheapest move that holds costs ${usdWords(decision.moveUsd)}`,
+      dearer: `its next turn there costs ${usdWords(decision.stayUsd)} on credits, and the first move that holds costs ${usdWords(decision.moveUsd)}`,
       unknown: "its next turn's price there is unknown",
       waiting: "a person waits on it",
       ended: "its work item ended",
@@ -1329,9 +1346,6 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         ? { to: target.id, why: kept.later }
         : null
     );
-    if (waits) {
-      workWaits.set(row.id, targetRead(target.id, row));
-    }
     return kept.target ? kept.why : undefined;
   };
 
@@ -1466,7 +1480,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   ): void => {
     const from = accountNameAmong(current, db.accounts.list());
     const { cache } = facts.session;
-    const moving = `the cheapest move that holds would cost ${usdWords(decision.moveUsd)}`;
+    const moving = `the first move that holds would cost ${usdWords(decision.moveUsd)}`;
     console.info(
       `[at-limit] ${ports.named(row)} waits on ${from} for its reset at ${clockWords(decision.until)}, which costs ${usdWords(decision.stayUsd)}: ${decision.why === "free" && cache.kind === "warm" ? `its prompt cache lasts until ${clockWords(cache.until)}, past the reset` : `the reset is within ${facts.policy.waitMinutes} minutes`}, where ${moving} (${kWords(decision.tokens)}).`
     );
@@ -1828,20 +1842,26 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * order ({@link admissionOrder}): each charges its move to the ledger,
    * its burn arriving on its target, before the next is decided. A look a
    * change of the accounts asked for (`accountsMoved`) passes over each
-   * hold whose outcome that change leaves as it was ({@link stillWaitsOnWork}).
+   * hold whose outcome that change leaves as it was ({@link unchanged}).
    */
   const lookAtHolds = async (
     provider: string,
     accountsMoved: boolean
   ): Promise<void> => {
     const now = Date.now();
-    const holds = db.atLimit
-      .holds()
-      .filter(
-        (one) =>
-          providerOf(one.accountId) === provider &&
-          !(accountsMoved && stillWaitsOnWork(one, now))
-      );
+    const all = db.atLimit.holds();
+    // What a session no longer held last read is let go.
+    const heldIds = new Set(all.map((one) => one.instanceId));
+    for (const id of decidedOn.keys()) {
+      if (!heldIds.has(id)) {
+        decidedOn.delete(id);
+      }
+    }
+    const holds = all.filter(
+      (one) =>
+        providerOf(one.accountId) === provider &&
+        !(accountsMoved && unchanged(one, now))
+    );
     for (const held of admissionOrder(holds)) {
       await lookAt(held.instanceId, now, undefined);
     }
@@ -2046,23 +2066,36 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (carry) {
       return carryStall(name, carry, held.until);
     }
-    const last = db.atLimit.latestEvent(held.instanceId)?.move;
-    const clock = clockWords(held.until);
-    if (last?.kind === "moving" && last.at === held.until) {
-      return {
-        words: words.movingAt(name, last.to.name, clock),
-        until: held.until,
-      };
+    return waitStall(held.instanceId, name, held.until);
+  };
+
+  /**
+   * A hold until `until` as its stalled words say it, from the line its
+   * last decision wrote: on its way at `until`, held with no reset its
+   * account named (counting down to nothing), or until the earliest reset,
+   * its own account's or another's that frees first.
+   */
+  const waitStall = (
+    instanceId: string,
+    name: string,
+    until: number
+  ): Stall => {
+    const words = accountsWords.stalled;
+    const last = db.atLimit.latestEvent(instanceId)?.move;
+    const clock = clockWords(until);
+    if (last?.kind === "moving" && last.at === until) {
+      return { words: words.movingAt(name, last.to.name, clock), until };
+    }
+    if (last?.kind === "waiting" && last.unknownReset) {
+      return { words: words.unknownReset(name) };
     }
     const frees =
-      last?.kind === "waiting" && last.until === held.until
-        ? last.frees
-        : undefined;
+      last?.kind === "waiting" && last.until === until ? last.frees : undefined;
     return {
       words: frees
         ? words.waitingOn(name, frees.name, clock)
         : words.waiting(name, clock),
-      until: held.until,
+      until,
     };
   };
 
@@ -2213,7 +2246,6 @@ export const createAtLimit = (ports: AtLimitPorts) => {
      */
     workChanged(instanceId: string): void {
       if (db.atLimit.heldMove(instanceId)) {
-        workWaits.delete(instanceId);
         detach(
           lookNow(instanceId, "the work its move waits for changed"),
           "at-limit look"

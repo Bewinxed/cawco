@@ -35597,6 +35597,11 @@
                   "tokens": {
                     "type": "number"
                   },
+                  "unknownReset": {
+                    "description": "`account` named no reset (no bench, no window read at its limit):\n`until` is when the hub looks at it again, not a reset, and the line\ncounts down to nothing.",
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "until": {
                     "description": "The earliest moment an account takes it again, epoch ms: the line counts down to it.",
                     "type": "number"
@@ -50868,6 +50873,11 @@
                   },
                   "tokens": {
                     "type": "number"
+                  },
+                  "unknownReset": {
+                    "description": "`account` named no reset (no bench, no window read at its limit):\n`until` is when the hub looks at it again, not a reset, and the line\ncounts down to nothing.",
+                    "const": true,
+                    "type": "boolean"
                   },
                   "until": {
                     "description": "The earliest moment an account takes it again, epoch ms: the line counts down to it.",

@@ -506,11 +506,15 @@ export const accountMoveWords = (
     case "waiting": {
       const left = move.until - now;
       const next = move.frees ?? move.account;
+      let line =
+        left > 0
+          ? `Waiting for ${next.name} to reset · ${spanWords(left)}`
+          : `Continued on ${next.name}`;
+      if (move.unknownReset) {
+        line = `Waiting at ${move.account.name}'s limit · reset time not known`;
+      }
       return {
-        line:
-          left > 0
-            ? `Waiting for ${next.name} to reset · ${spanWords(left)}`
-            : `Continued on ${next.name}`,
+        line,
         detail: waitingDetail(move, now),
       };
     }

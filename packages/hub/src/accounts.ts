@@ -886,6 +886,9 @@ export const confirmReading = (
   return signedIn && db.accounts.confirmReading(accountId, at) !== undefined;
 };
 
+/** Why each account's read last failed on a machine, by "<account> <machine>", until a read there succeeds. */
+const readsFailing = new Map<string, string>();
+
 /**
  * An account's windows as one of its machines just read them from the
  * provider's own usage endpoint. Kept only while the account is signed in
@@ -925,12 +928,18 @@ export const noteProviderReading = (
   if (!signedIn) {
     return false;
   }
+  const failing = `${reading.accountId} ${machineId}`;
   if (reading.error) {
-    console.warn(
-      `[accounts] ${reading.accountId}'s windows could not be read on ${machineId}: ${reading.error}; the last reading stays, from ${reading.readAt > 0 ? new Date(reading.readAt).toISOString() : "no read yet"}`
-    );
+    // Said once while the same read fails the same way, not at every read.
+    if (readsFailing.get(failing) !== reading.error) {
+      readsFailing.set(failing, reading.error);
+      console.warn(
+        `[accounts] ${reading.accountId}'s windows could not be read on ${machineId}: ${reading.error}; the last reading stays, from ${reading.readAt > 0 ? new Date(reading.readAt).toISOString() : "no read yet"}. Said again only when its read fails otherwise, or reads again and then fails.`
+      );
+    }
     return false;
   }
+  readsFailing.delete(failing);
   // The endpoint answers every window the account has: its set is those.
   db.accounts.putReading(
     reading.accountId,

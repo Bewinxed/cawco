@@ -1641,6 +1641,12 @@ export type AccountMove =
       accounts?: HeldAccount[];
       /** The earliest moment an account takes it again, epoch ms: the line counts down to it. */
       until: number;
+      /**
+       * `account` named no reset (no bench, no window read at its limit):
+       * `until` is when the hub looks at it again, not a reset, and the line
+       * counts down to nothing.
+       */
+      unknownReset?: true;
       why: WaitReason;
       tokens: number | null;
     }

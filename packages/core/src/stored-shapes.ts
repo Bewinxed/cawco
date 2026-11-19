@@ -310,6 +310,7 @@ const AccountMoveShape = declared(
       frees: NamedAccountShape.optional(),
       accounts: z.array(HeldAccountShape).optional(),
       until: z.number(),
+      unknownReset: z.literal(true).optional(),
       why: WaitReasonShape,
       tokens: z.number().nullable(),
     }),
