@@ -2,8 +2,8 @@
   /**
    * Whether the project's events reach a conversation, the project's own
    * switch (fable-lead-switch.md §1): one component wherever it stands,
-   * CawPanel (⋯ › Caw settings…) and the head's details tray
-   * (ProjectDetails), so its ways off come with it. Off, no event starts or
+   * CawPanel (⋯ › Caw settings…) and a member's setup (MemberSetup), so its
+   * ways off come with it. Off, no event starts or
    * reaches a conversation.
    *
    * Turning it off (The Stay In Context Rule): nothing the project's

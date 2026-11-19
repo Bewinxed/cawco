@@ -1,15 +1,3 @@
-<script lang="ts" module>
-  import { MediaQuery, SvelteSet } from "svelte/reactivity";
-  import type { ProjectRow } from "#lib/cawco/projects.js";
-
-  /**
-   * The projects whose details tray stands. Kept past the head: on a phone a
-   * task opens as its own page, and Back finds the tray where it was (The
-   * Open Page Rule: the surface waits).
-   */
-  const standing = new SvelteSet<string>();
-</script>
-
 <script lang="ts">
   import { machineLabel } from "@cawco/core/machine-names";
   /**
@@ -23,8 +11,8 @@
    * cards"): the primary checkout's machine as its OS mark, or the folder
    * while the project's one place is its folder on the hub, named in its
    * tooltip (DESIGN.md, "A place shown as a place. … a path is never
-   * printed in a bar"). A press unfolds the project's details under the head
-   * (ProjectDetails), and again folds them. Caw's words are not in the head:
+   * printed in a bar"). A press hangs the project's details card from it
+   * (details/ProjectDetailsCard), and again puts it away. Caw's words are not in the head:
    * his seat's face, his panel and Needs you carry them.
    *
    * Trailing, Caw at 48px, at the head's end so the name's start edge stays
@@ -38,8 +26,8 @@
    * bottom sheet on touch), Spend, then Forget and Delete
    * (and, under 640px, Spin off, New task, Filter tasks… and Ask Caw for a
    * view), each with its glyph. Nothing in the head is on the coral: no view
-   * of a project is for asking Caw (One prominent action, trailing). One tray
-   * stands under the head at a time: the details or an end.
+   * of a project is for asking Caw (One prominent action, trailing). The
+   * details card and an end's tray give way to each other.
    *
    * Under 640px the capsule holds More alone: Ask Caw is the "+" of the
    * page's views bar (ViewBar), which opens Caw's panel as this one does,
@@ -54,10 +42,12 @@
   import { projectWords } from "@cawco/core/words/project";
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { viewsWords } from "@cawco/core/words/views";
-  import { type Snippet, untrack } from "svelte";
+  import { untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import ProjectEndTray from "#lib/cawco/ProjectEndTray.svelte";
   import { askEnd, endHost } from "#lib/cawco/project-end.svelte.js";
+  import type { ProjectRow } from "#lib/cawco/projects.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
@@ -102,7 +92,8 @@
   import CawPanel from "./CawPanel.svelte";
   import CawSeat from "./CawSeat.svelte";
   import type { CawLead } from "./caw-lead.svelte";
-  import ProjectDetails from "./ProjectDetails.svelte";
+  import { detailsOpen } from "./details/details-open.svelte";
+  import ProjectDetailsCard from "./details/ProjectDetailsCard.svelte";
 
   let {
     project,
@@ -113,7 +104,6 @@
     onask,
     onfilter,
     setup,
-    detailsAfterLands,
   }: {
     /** Filter the tasks, from the menu on a phone, where the strip has no room for it. */
     onfilter: (anchor: HTMLElement) => void;
@@ -128,8 +118,6 @@
     onask: ((anchor: HTMLElement) => void) | null;
     /** Its setup, from the menu: finish it, or change how it runs; null while Caw can't start. */
     setup: { label: string; run: () => void } | null;
-    /** Rows the details show under Work lands (ProjectDetails). */
-    detailsAfterLands?: Snippet;
   } = $props();
 
   const narrow = new MediaQuery(PHONE_QUERY);
@@ -153,18 +141,6 @@
 
   /** Its primary checkout; none while its one place is its folder on the hub. */
   const primary = $derived(checkoutOf(project));
-  /**
-   * Where the project lives, its machine and folder (place), said
-   * in the details it opens; the head draws it as a place, never its path.
-   */
-  const place = $derived.by(() => {
-    if (!primary) {
-      return projectWords.hubFolder;
-    }
-    return machine
-      ? `${machineLabel(machine.hostname)} · ${primary.path}`
-      : primary.path;
-  });
   /** The place's tooltip: its machine's name, or the hub's folder. */
   const placeTip = $derived.by(() => {
     if (!primary) {
@@ -174,11 +150,11 @@
   });
 
   /**
-   * The project's details stand under the head (ProjectDetails). One tray
-   * stands under the head at a time, so an end asked here gives way to
-   * them and they give way to an end.
+   * The project's details card hangs from the place mark
+   * (details/ProjectDetailsCard). An end asked here gives way to it, and
+   * it gives way to an end.
    */
-  const details = $derived(standing.has(project.id));
+  const details = $derived(detailsOpen.of(project.id));
   /** The place that opens them: Escape and Done hand the focus back to it. */
   let placeLine = $state<HTMLButtonElement | null>(null);
 
@@ -193,12 +169,12 @@
         stopWork.dismiss(ending);
       }
     }
-    standing.add(project.id);
+    detailsOpen.open(project.id);
   }
 
   function closeDetails(): void {
     const hadFocus = document.activeElement?.closest("[data-project-details]");
-    standing.delete(project.id);
+    detailsOpen.close(project.id);
     if (hadFocus) {
       placeLine?.focus();
     }
@@ -207,7 +183,7 @@
   // An end asked here: the details give way to it.
   $effect.pre(() => {
     if (endHost.at === endAt) {
-      untrack(() => standing.delete(project.id));
+      untrack(() => detailsOpen.close(project.id));
     }
   });
 
@@ -590,17 +566,21 @@
     </Popover.Content>
   </Popover.Root>
 {/if}
-<!-- The project's details, under the head, from where its title starts. -->
-{#if details}
-  <ProjectDetails
-    afterLands={detailsAfterLands}
-    {lead}
-    {machine}
-    onclose={closeDetails}
-    {place}
-    {project}
-  />
-{/if}
+<!-- The project's details, hung from the place mark. -->
+<ProjectDetailsCard
+  anchor={placeLine}
+  bind:open={
+    () => details,
+    (next) => {
+      if (next) {
+        openDetails();
+      } else {
+        closeDetails();
+      }
+    }
+  }
+  {project}
+/>
 <!-- An end asked from More, under the head, from where its title starts. -->
 <!-- The tray on the page's gutters: 25px in at the start (18 under the desk
      line, DESIGN.md, Layout) and 18 at the end, so it never meets the screen. -->
