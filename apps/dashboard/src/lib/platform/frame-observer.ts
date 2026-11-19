@@ -292,7 +292,25 @@ const readInNextDelivery = (site: Site) => {
   });
 };
 
+/**
+ * Whether a delivery has come in this frame's rendering, whose later rounds
+ * reach only boxes deeper than it reached: from the delivery until the task
+ * after the frame (a message posted from the delivery is that task).
+ */
+let rendering = false;
+let frameDone: MessageChannel | null = null;
+
 const deliver = (entries: ResizeObserverEntry[]) => {
+  if (!rendering) {
+    rendering = true;
+    if (!frameDone) {
+      frameDone = new MessageChannel();
+      frameDone.port1.onmessage = () => {
+        rendering = false;
+      };
+    }
+    frameDone.port2.postMessage(null);
+  }
   const sites = [...sitesOf(entries)];
   const asked: Site[] = [];
   if (entries.some((entry) => entry.target === document.documentElement)) {
@@ -459,6 +477,58 @@ export function deliverWithRoot(): void {
   rootHold.observe(document.documentElement);
 }
 
+/** The scrollers that take their rows' height (`sizesToContent`). */
+const growing = new WeakSet<Element>();
+
+/**
+ * Attachment for a virtual list's scroller that is as tall as its rows, up
+ * to its cap (find's places, the composer's layer: the layer and the
+ * composer grow with it). Every box it stands in that an observer watches
+ * is shallower than its rows, and a row's report resizes them: virtua writes
+ * a row's measured height inside the delivery, the list grows in the flush
+ * after it, and so do they. A ResizeObserver delivers only boxes deeper than
+ * the shallowest one its last round delivered, so they were held back as
+ * "ResizeObserver loop completed with undelivered notifications": at every
+ * load of find, the rows mounting in the flush after the delivery that
+ * measured the list's viewport, their first report a round later.
+ *
+ * So each row a library's observer (`ForeignResizeObserver`) starts
+ * observing inside it is observed with the page's root, whose report comes
+ * in the same round (`deliverWithRoot`): every box is deeper than the root,
+ * so what the row's report resizes is delivered in that frame. A row
+ * observed after a delivery, while the frame's rounds go on, waits for the
+ * next frame's callbacks: the root asked for there reports in the frame's
+ * first round (`readInNextDelivery`), where asked now it would come in a
+ * round already past its depth. That row is measured, and drawn, a frame
+ * later. It is virtua's own rule for a row observed inside its callback
+ * (driver.ts `createResizeObserver`: one the delivery's targets do not hold
+ * waits for the next frame, after the spec's depth rule, w3.org/TR/
+ * resize-observer/#deliver-resize-error), taken to the flush after the
+ * delivery, where Svelte mounts the rows, and to what the rows resize.
+ *
+ * A list whose scroller is as tall as its box (the transcript's) is not one
+ * of these: its rows resize nothing shallower, and are measured in the
+ * frame they mount. Deferred for every list, the transcript's rows landed
+ * elsewhere at load, and a touch scroll painted a 3px strip with no rows
+ * for two frames.
+ */
+export const sizesToContent: Attachment<HTMLElement> = (node) => {
+  growing.add(node);
+  return () => {
+    growing.delete(node);
+  };
+};
+
+/** Whether `target` stands inside a scroller that takes its rows' height (`sizesToContent`). */
+const insideGrowing = (target: Element): boolean => {
+  for (let box = target.parentElement; box; box = box.parentElement) {
+    if (growing.has(box)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 /**
  * Every other ResizeObserver on the page (a library's: virtua's lists),
  * delivered by the shared one: its callback runs once every site has read
@@ -466,9 +536,15 @@ export function deliverWithRoot(): void {
  * each row it hears) is the layout the frame has just done. Its own
  * observer, a callback of its own after the shared one's, read it after the
  * sites' writes, and laid the page out again for it.
+ *
+ * A target inside a scroller that takes its rows' height is observed with
+ * the root (`sizesToContent`).
  */
 class ForeignResizeObserver {
   readonly #holds: ReturnType<typeof holdsOf>;
+  /** Rows observed after a delivery in this frame, observed in the next frame's callbacks. */
+  readonly #later = new Map<Element, ResizeObserverOptions | undefined>();
+  #frame = 0;
 
   constructor(callback: ResizeObserverCallback) {
     const site: Site = {
@@ -482,14 +558,37 @@ class ForeignResizeObserver {
   }
 
   observe(target: Element, options?: ResizeObserverOptions): void {
-    this.#holds.observe(target, options);
+    if (!insideGrowing(target)) {
+      this.#holds.observe(target, options);
+      return;
+    }
+    if (!rendering) {
+      this.#holds.observe(target, options);
+      deliverWithRoot();
+      return;
+    }
+    this.#later.set(target, options);
+    this.#frame ||= requestAnimationFrame(() => {
+      this.#frame = 0;
+      for (const [row, how] of this.#later) {
+        if (row.isConnected) {
+          this.#holds.observe(row, how);
+        }
+      }
+      this.#later.clear();
+      deliverWithRoot();
+    });
   }
 
   unobserve(target: Element): void {
+    this.#later.delete(target);
     this.#holds.release(target);
   }
 
   disconnect(): void {
+    cancelAnimationFrame(this.#frame);
+    this.#frame = 0;
+    this.#later.clear();
     this.#holds.releaseAll();
   }
 }

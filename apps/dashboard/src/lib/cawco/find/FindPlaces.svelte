@@ -37,7 +37,7 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconSearch } from "#lib/icons.js";
-  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { frameSize, sizesToContent } from "#lib/platform/frame-observer.js";
   import { track } from "#lib/platform/track.js";
   import { barGlass } from "../bar-glass.svelte";
   import { drawnAt } from "../transcript/list-whole.svelte";
@@ -291,7 +291,8 @@
     {:else}
       <!-- Only the rows near the view are drawn (Virtualizer, scrolling
            this listbox); the one stepped to stays drawn wherever the list
-           scrolls, as the find field names it. -->
+           scrolls, as the find field names it. The listbox is as tall as
+           its rows, up to the layer's cap (sizesToContent). -->
       <div
         class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto overscroll-contain p-space-1 pt-0"
         aria-label={findInWords.places}
@@ -299,6 +300,7 @@
         onmousedown={keepField}
         role="listbox"
         bind:this={list}
+        {@attach sizesToContent}
         {@attach highlight({
           rows: "[data-find-row]",
           hovered: "[data-active]",

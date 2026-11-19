@@ -483,20 +483,50 @@ export function trackVisibleViewport(): () => void {
     frame ||= requestAnimationFrame(measure);
   };
 
+  /**
+   * The focused field's way to the document, each box on it heard for the
+   * children it loses: the field leaving the page (a sheet closing while
+   * its composer has focus) is heard in the mutation that takes it out.
+   */
+  const ancestry = new MutationObserver(() => {
+    if (watched && !watched.isConnected) {
+      watch(null);
+    }
+  });
+
+  /**
+   * Watches `next`'s scrollers for size changes, and lets go of the last
+   * field's. A field taken out of the page sends no focusout (WebKit), so
+   * its scrollers are let go of in the mutation that took it out (`ancestry`,
+   * a microtask in that checkpoint, before the next delivery is gathered).
+   * Held, a scroller taken out in the flush after a delivery reported its
+   * new size, nothing, at the depth of a box with no parent, after the
+   * delivery had passed every depth, and WebKit held it back as
+   * "ResizeObserver loop completed with undelivered notifications" (frame-
+   * observer's FrameObserver doc).
+   */
+  const watch = (next: HTMLElement | null) => {
+    resized.disconnect();
+    ancestry.disconnect();
+    watched = next;
+    if (!next) {
+      return;
+    }
+    for (const box of scrollers(next)) {
+      resized.observe(box);
+    }
+    for (let parent = next.parentNode; parent; parent = parent.parentNode) {
+      ancestry.observe(parent, { childList: true });
+    }
+    request();
+  };
+
   /** Focus moved: watch the new field's scrollers for size changes. */
   const follow = () => {
     const field = document.activeElement;
     const next = isField(field) ? field : null;
-    if (next === watched) {
-      return;
-    }
-    resized.disconnect();
-    watched = next;
-    if (next) {
-      for (const box of scrollers(next)) {
-        resized.observe(box);
-      }
-      request();
+    if (next !== watched) {
+      watch(next);
     }
   };
 
@@ -604,6 +634,7 @@ export function trackVisibleViewport(): () => void {
     stopSwallowing();
     root.removeAttribute("data-keyboard");
     resized.disconnect();
+    ancestry.disconnect();
     viewport.removeEventListener("resize", request);
     viewport.removeEventListener("scroll", request);
     window.removeEventListener("resize", request);
