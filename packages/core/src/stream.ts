@@ -441,12 +441,15 @@ import type { TailnetServing } from "./tailnet-https";
  *    far the machine's index reaches (`through`), no longer every place
  *    with `more`. A page built for 86 reads `more` and the places whole, so
  *    it reloads first.
+ * 88: a states file's weight (`SheetWeight`) is a measurement alone: it no
+ *    longer carries `budget`, `over` or `cut`. A page built for 87 reads
+ *    `budget` and `over` as required, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 87;
+export const WIRE_PROTOCOL = 88;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

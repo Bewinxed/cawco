@@ -77,4 +77,3 @@ A choice the person must make reaches them on a decision page (the `decision-pag
 | Tuning landed | `dials` or `tuned` holds a value the code does not carry |
 | A choice asked on a decision page | The person must pick and the canvas alone is in front of them |
 | A surface as a preview | A whole surface was handed up as a canvas's grid of frames |
-| Weight | A component's states file is `over` budget (250 modules, 1 MB): its `cut` names the heaviest imports and whose each is. The states file's own imports are yours to cut; the component's own are its weight on any stage, and the story cannot cut them. A screen carries its weight |

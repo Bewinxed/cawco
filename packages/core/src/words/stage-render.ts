@@ -15,6 +15,9 @@ const readAlone = (first: string | null): string =>
     : "it has no stories to draw";
 
 export const stageRenderWords = {
+  /** A states file's weight, as a measurement: what its page loaded. */
+  weight: (modules: number, bytes: number) =>
+    `It loads ${modules} ${modules === 1 ? "module" : "modules"}, ${bytes} bytes.`,
   /**
    * A story's frame refused because its `beforeEach` seeds a module no
    * import chain from the states file carries to its component (a helper

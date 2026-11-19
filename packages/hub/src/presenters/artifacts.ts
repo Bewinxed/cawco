@@ -367,9 +367,7 @@ const componentLines = (read: ComponentRead): string[] => {
         ]
       : []),
     ...(read.weight
-      ? [
-          `It loads ${count(read.weight.modules, "module")}, ${read.weight.bytes} bytes${read.weight.over ? `, over its budget: ${valueWords(read.weight.cut, 400)}` : ""}.`,
-        ]
+      ? [stageRenderWords.weight(read.weight.modules, read.weight.bytes)]
       : []),
     ...(read.verify ? [read.verify] : []),
     ...(read.hint ? [read.hint] : []),

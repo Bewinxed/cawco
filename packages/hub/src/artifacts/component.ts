@@ -326,14 +326,12 @@ export function stateSaid(report: RenderReport, ask: StateAsk) {
   };
 }
 
-/** The weight as an answer says it: its totals, whether a component's budget is past, and where to cut. */
+/** The weight as an answer says it: its totals. */
 export const weightSaid = (weight: SheetWeight | null | undefined) =>
   weight
     ? {
         modules: weight.modules,
         bytes: weight.bytes,
-        over: weight.over,
-        cut: weight.cut,
       }
     : null;
 

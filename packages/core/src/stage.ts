@@ -922,22 +922,13 @@ export const WEIGHT_PATH = "/__cawco/weight";
  * so a sheet has a weight once a view has loaded it.
  */
 export interface SheetWeight {
-  /** The budget a component's states file keeps (the component-canvas skill's); a screen is judged against the page's ceiling instead. */
-  budget: { bytes: number; modules: number };
   /** Project code: its modules and their transformed bytes. */
   bytes: number;
-  /** Where the weight is: each heaviest import as the component's own or the states file's, then the states file's imports to cut, or that the weight is the component's and no story cuts it; null under budget. */
-  cut: string | null;
   deps: { bytes: number; modules: number };
   heaviest: SheetImport[];
   measuredAt: string;
   modules: number;
-  /** Past the component budget. */
-  over: boolean;
 }
-
-/** A component's states file's budget. The component-canvas skill's numbers. */
-export const COMPONENT_BUDGET = { modules: 250, bytes: 1_000_000 } as const;
 
 /** One of a story file's imports, as its sheet's weight names it. */
 export interface SheetImport {

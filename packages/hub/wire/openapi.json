@@ -38808,20 +38808,13 @@
                       "bytes": {
                         "type": "number"
                       },
-                      "cut": {
-                        "type": "string"
-                      },
                       "modules": {
                         "type": "number"
-                      },
-                      "over": {
-                        "type": "boolean"
                       }
                     },
                     "required": [
                       "bytes",
-                      "modules",
-                      "over"
+                      "modules"
                     ]
                   }
                 }
@@ -58224,29 +58217,9 @@
         "description": "What a sheet loads, read from the stage's Vite module graph from its story\nfile: the project's modules (its source and any package Vite serves file\nby file) and Vite's prebundled deps apart, which the browser keeps by\ntheir `?v=` address. `heaviest` is the story file's imports that bring\nthe most project code, each with all it brings that no earlier import\ndid: the import to cut. Vite transforms a module when a page asks for it,\nso a sheet has a weight once a view has loaded it.",
         "type": "object",
         "properties": {
-          "budget": {
-            "description": "The budget a component's states file keeps (the component-canvas skill's); a screen is judged against the page's ceiling instead.",
-            "type": "object",
-            "properties": {
-              "bytes": {
-                "type": "number"
-              },
-              "modules": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "bytes",
-              "modules"
-            ]
-          },
           "bytes": {
             "description": "Project code: its modules and their transformed bytes.",
             "type": "number"
-          },
-          "cut": {
-            "description": "Where the weight is: each heaviest import as the component's own or the states file's, then the states file's imports to cut, or that the weight is the component's and no story cuts it; null under budget.",
-            "type": "string"
           },
           "deps": {
             "type": "object",
@@ -58274,20 +58247,14 @@
           },
           "modules": {
             "type": "number"
-          },
-          "over": {
-            "description": "Past the component budget.",
-            "type": "boolean"
           }
         },
         "required": [
-          "budget",
           "bytes",
           "deps",
           "heaviest",
           "measuredAt",
-          "modules",
-          "over"
+          "modules"
         ]
       },
       "Shown": {

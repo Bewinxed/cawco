@@ -5162,14 +5162,11 @@ export type SheetImportOutput = z.output<typeof SheetImportShape>;
 
 const SheetWeightShape = declared(
   z.object({
-    budget: z.object({ bytes: z.number(), modules: z.number() }),
     bytes: z.number(),
-    cut: z.string().nullable(),
     deps: z.object({ bytes: z.number(), modules: z.number() }),
     heaviest: z.array(SheetImportShape),
     measuredAt: z.string(),
     modules: z.number(),
-    over: z.boolean(),
   }),
   "SheetWeight",
   "packages/core/src/stage.ts"
