@@ -378,7 +378,8 @@ const SCRIPT = /<script[^>]*>([\s\S]*?)<\/script>/gu;
 const STYLE = /<style[^>]*>[\s\S]*?<\/style>/gu;
 const COMMENT = /<!--[\s\S]*?-->/gu;
 const BRACES = /\{([^{}]*)\}/gu;
-const TAG = /<[^>]*>/gu;
+/** A tag, its quoted attribute values read whole: a class may hold `>` (`[&>*]:x`). */
+const TAG = /<(?:"[^"]*"|'[^']*'|[^"'>])*>/gu;
 const TEXT_RUN = /[^\s][^\n]*/gu;
 const NOT_NEWLINE = /[^\n]/gu;
 /** Markup attributes whose values a person reads. */

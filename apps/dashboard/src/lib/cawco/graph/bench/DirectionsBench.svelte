@@ -371,7 +371,7 @@
 <div
   data-loaded={loaded.join(" ")}
   data-slot="directions-bench"
-  class="flex h-dvh min-h-0 bg-surface-page p-space-2 *:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
+  class="flex h-dvh min-h-0 bg-surface-page p-space-2 [&>*]:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
 >
   <SideSurface
     items={directionItems(head)}
