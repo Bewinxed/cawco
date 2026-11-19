@@ -118,6 +118,22 @@ export const memoryRunWords = {
   /** The recovery's commit taking lessons about CawCo itself out of memory. */
   productTaken: (moved: readonly { id: string; task?: string }[]) =>
     `take ${moved.length} lesson${moved.length === 1 ? "" : "s"} about how CawCo itself works out of memory: ${moved.map(({ id, task }) => (task ? `${id} to ${task}` : `${id}, which CawCo holds`)).join(", ")}`,
+  /** The recovery's commit putting back lessons it had taken out as CawCo's, judged again as this project's, and its tasks dropped. */
+  productReturned: (back: readonly string[], kept: readonly string[]) => {
+    const all = back.length + kept.length;
+    const home =
+      back.length > 0
+        ? `${back.join(", ")} back in memory, about this project or its people`
+        : "none back in memory";
+    const stays =
+      kept.length > 0 ? `; ${kept.join(", ")} with CawCo still` : "";
+    return `judge again the ${all} lesson${all === 1 ? "" : "s"} taken out as CawCo's: ${home}${stays}`;
+  },
+  /** The recovery's commit marking the lessons taken out as CawCo's judged again, when there were none. */
+  productNoneJudged: "no lesson taken out as CawCo's to judge again",
+  /** Why a task filed for a lesson about CawCo is dropped once the lesson is judged the project's again. */
+  productTaskDropped: (id: string) =>
+    `${id} is back in the project's memory: it is about this project or its people, so CawCo builds nothing for it`,
   /** A check filed, as its commit and answer say it. */
   checkFiled: (id: string, task: string) =>
     `${id} is a check: task ${task} builds it, and the rule stays as a line until it is done`,
@@ -404,13 +420,13 @@ export const memoryJevWords = {
     false:
       "They are about different things, or one asks for something the other does not.",
   },
-  /** Whether a lesson says how CawCo itself works. */
+  /** Whether a lesson says how CawCo behaves for every user of the app. */
   productQuestion:
-    "Does `lesson`, kept or about to be kept in one project's memory, say how CawCo itself works, rather than something of that project?",
+    "Does `lesson`, kept or about to be kept in one project's memory, say how CawCo behaves, or should behave, for every user of the app?",
   productCriteria: {
-    true: "Its subject is CawCo: how CawCo behaves, or how an agent uses CawCo's tools, artifacts, memory, sessions or delegation. It would hold the same in any person's project.",
+    true: "It says what CawCo's tools, artifacts, memory or sessions do or should do, and every user's agents need it, in any project.",
     false:
-      "Its subject is this project or its people: their code and files (CawCo's own source code too, where the project develops CawCo), commands, decisions, and taste in the work itself.",
+      "It is about this repository's code, build, tests or tools (CawCo's own source too, where the project develops CawCo), or about how one person likes work done.",
   },
   /** Whether an open task builds a lesson about CawCo itself into CawCo already. */
   coversQuestion:

@@ -236,6 +236,8 @@ export interface MemoryRunState {
   } | null;
   /** The model ids the project's lessons were re-tested on (or the project's sessions ran on when it first had none): one not here is a re-test. */
   models?: string[];
+  /** The day the lessons retired `product` were judged again by whether every user of CawCo needs them, once they have. */
+  productJudged?: string;
   /** The day the one-time recovery run of the archived notes ran, once it has. */
   recovered?: string;
   /** The newest of the person's messages a run has read (an ISO time). */

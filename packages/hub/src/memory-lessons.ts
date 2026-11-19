@@ -574,6 +574,12 @@ export type Change =
   /** A lesson about how CawCo itself works, taken out of the project's memory: retired `product`, with the task that builds it into CawCo when one does. */
   | { id: string; kind: "product"; task?: string }
   /**
+   * A lesson retired `product`, judged again as the project's: its ledger
+   * entry put back as `entry` (as it stood before it was taken out, its
+   * sources with it), and `line` in its home when it was live.
+   */
+  | { entry: Lesson; id: string; kind: "return"; line?: LessonLine }
+  /**
    * A lesson the run took out, put back in its home as `line` (its words as
    * the folder held them before), live again; `held` when the person stated
    * it again, his message (`source`) one of its sources.
@@ -1107,6 +1113,19 @@ const restored = (
   });
 };
 
+/** A lesson retired `product` put back as it stood before ({@link Change} `return`); nothing when it is not retired `product` now. */
+const returned = (now: MemoryTree, op: ChangeOf<"return">): Done => {
+  if (
+    now.ledger.lessons[op.id]?.retired?.why !== "product" ||
+    lineOf(now, op.id)
+  ) {
+    return { tree: now };
+  }
+  return op.line
+    ? placed(now, op.entry.home, op.line, op.entry)
+    : { tree: { ...now, ledger: withEntry(now.ledger, op.id, op.entry) } };
+};
+
 /** A lesson stated again: counted, its source kept, his from now on; moved up a home when asked. */
 const repeated = (
   now: MemoryTree,
@@ -1215,6 +1234,8 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
       };
     case "restore":
       return restored(now, op, today);
+    case "return":
+      return returned(now, op);
     case "repeat":
       return repeated(now, op, today);
     case "revert":

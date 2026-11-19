@@ -51,15 +51,17 @@
  *   line out ({@link checksClosed}). A lesson of the index or a skill the
  *   person states again twice is filed as one by the hub.
  * - **CawCo's own workings** ({@link toProduct}): a project's memory holds
- *   what is true of that project and its people; how CawCo itself works
- *   (its tools, artifacts, memory, sessions, delegation) reaches every user
- *   from CawCo. Jev reads each new lesson for it (row `product`, in the
+ *   what is true of that project and its people (its code, build, tests and
+ *   tools, CawCo's own source among them, and how they like work done); how
+ *   CawCo behaves for every user (its tools, artifacts, memory, sessions)
+ *   reaches every user from CawCo. Jev reads each new lesson for it (row `product`, in the
  *   request that reads it as kept already, {@link jevOnNew}), and a
  *   replace's new words. Such a lesson is never written: in a project that
  *   develops CawCo it is filed as a task to build it into CawCo, unless an
  *   open task does already; anywhere else it is dropped, CawCo holding it.
  *   The recovery, asked for, takes the live ones out the same way
- *   ({@link cawcoOut}).
+ *   ({@link cawcoOut}), and once judges again those taken out before,
+ *   putting back each Jev now reads as the project's.
  * - **Re-test on a model change** ({@link retest}, §6.3): when the
  *   project's sessions ran in the last week on a model the run's state
  *   does not hold, each index and skill lesson with a probe (a situation,
@@ -104,6 +106,7 @@ import type {
   Lesson,
   LessonHome,
   LessonSource,
+  MemoryLedger,
   MemoryRunState,
   WorkBudget,
 } from "./db/stored-types";
@@ -415,6 +418,15 @@ export interface MemoryRunDeps {
       projectId: string,
       id: string
     ) => Promise<"open" | "done" | "dropped" | undefined>;
+    /**
+     * Task `id` moved to the project's dropped stage with `reason`, when its
+     * field `field` holds `value` and it is open; `kept` otherwise.
+     */
+    drop: (
+      projectId: string,
+      id: string,
+      only: { field: string; reason: string; value: string }
+    ) => Promise<"dropped" | "kept" | { refused: string }>;
   };
 }
 
@@ -444,6 +456,7 @@ const RunStateSchema = z.object({
     })
     .nullable(),
   models: z.array(z.string()).optional(),
+  productJudged: z.string().optional(),
   recovered: z.string().optional(),
   through: z.string(),
 }) satisfies z.ZodType<MemoryRunState>;
@@ -729,6 +742,72 @@ const roomFor = (tree: MemoryTree, path: string): boolean => {
     (each) => homeOf(each)?.at === "knowledge"
   );
   return topics.includes(path) || topics.length < CAPS.knowledgeFiles;
+};
+
+/** Each live lesson of `tree` with its line's words, and each staged one with its staged words. */
+const keptOrStaged = (tree: MemoryTree) =>
+  Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) => {
+    const live = lesson.state === "live";
+    const text = live ? lineOf(tree, id)?.text : lesson.staged?.text;
+    return text && (live || lesson.state === "staged") ? [{ id, text }] : [];
+  });
+
+/** Each lesson `tree` holds retired `product`, with the words and the task the ledger keeps. */
+const productRetired = (tree: MemoryTree) =>
+  Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) =>
+    lesson.retired?.why === "product" && lesson.retired.text
+      ? [
+          {
+            id,
+            text: lesson.retired.text,
+            ...(lesson.retired.task ? { task: lesson.retired.task } : {}),
+          },
+        ]
+      : []
+  );
+
+/** What the recovery's commit on CawCo's lessons says: those judged again, which of them `returned`, and those `moved` out; empty for none. */
+const productSaid = (
+  judged: readonly string[],
+  returned: ReadonlySet<string>,
+  moved: readonly { id: string; task?: string }[]
+): string =>
+  [
+    ...(judged.length > 0
+      ? [
+          memoryRunWords.productReturned(
+            [...returned],
+            judged.filter((id) => !returned.has(id))
+          ),
+        ]
+      : []),
+    ...(moved.length > 0 ? [memoryRunWords.productTaken(moved)] : []),
+  ].join("; ");
+
+/**
+ * Where lesson `id` was retired `product`: of `commits` (newest first), the
+ * first whose ledger holds it retired `product` and whose parent's holds it
+ * live or staged; that entry, and the parent it stood in.
+ */
+const retiredAt = async (
+  commits: readonly { parent: string | null; sha: string }[],
+  id: string,
+  ledgerAt: (sha: string) => Promise<MemoryLedger | undefined>
+): Promise<{ entry: Lesson; parent: string } | undefined> => {
+  for (const { sha, parent } of commits) {
+    if (!parent) {
+      continue;
+    }
+    const after = (await ledgerAt(sha))?.lessons[id];
+    const entry = (await ledgerAt(parent))?.lessons[id];
+    if (
+      after?.retired?.why === "product" &&
+      (entry?.state === "live" || entry?.state === "staged")
+    ) {
+      return { entry, parent };
+    }
+  }
+  return undefined;
 };
 
 /**
@@ -4407,15 +4486,20 @@ export const createMemoryRun = ({
   };
 
   /**
-   * The lessons that say how CawCo itself works taken out of memory (what
-   * {@link jevOnNew} keeps out of an `add`, made true of what came before
-   * it): each live lesson, and each staged one, which a second session
-   * would land, asked of Jev (row `product`), and each at
-   * or over {@link SAME} sent to CawCo ({@link toProduct}) and retired
-   * `product`, its task kept on it. One commit by the hub; nothing with Jev
-   * off (said in the log) or no such lesson. One whose task was not filed
-   * stays, said in the log, and the next ask tries it again; a task filed
-   * before a commit that did not land is the open task the next ask finds.
+   * The lessons that say how CawCo behaves for every user taken out of
+   * memory (what {@link jevOnNew} keeps out of an `add`, made true of what
+   * came before it): each live lesson, and each staged one, which a second
+   * session would land, asked of Jev (row `product`), and each at or over
+   * {@link SAME} sent to CawCo ({@link toProduct}) and retired `product`,
+   * its task kept on it. Once per project (the run state's
+   * `productJudged`), each lesson retired `product` before is asked again
+   * in the same request, and one Jev reads under {@link SAME} goes back as
+   * it stood ({@link productReturns}). One commit by the hub, then each
+   * returned lesson's task dropped ({@link returnedTasksDropped}); nothing
+   * with Jev off (said in the log) or nothing to do. One whose task was not
+   * filed stays, said in the log, and the next ask tries it again; a task
+   * filed before a commit that did not land is the open task the next ask
+   * finds.
    */
   const cawcoOut = async (projectId: string) => {
     const read = await treeOf(projectId);
@@ -4426,51 +4510,192 @@ export const createMemoryRun = ({
       offLine(
         "product",
         projectId,
-        "lessons about how CawCo itself works wait for Jev to leave memory"
+        "lessons about how CawCo behaves for every user wait for Jev to leave memory"
       );
       return;
     }
-    const kept = Object.entries(read.tree.ledger.lessons).flatMap(
-      ([id, lesson]) => {
-        const live = lesson.state === "live";
-        const text = live ? lineOf(read.tree, id)?.text : lesson.staged?.text;
-        return text && (live || lesson.state === "staged")
-          ? [{ id, text }]
-          : [];
-      }
-    );
+    const state = await stateOf(projectId);
+    if (state instanceof ElysiaStatus) {
+      return state;
+    }
+    const kept = keptOrStaged(read.tree);
+    const judged = state.productJudged ? [] : productRetired(read.tree);
     const answers = await answersOrRefusal(
       projectId,
-      Object.fromEntries(kept.map((one) => productQuestion(one.id, one.text)))
+      Object.fromEntries(
+        [...kept, ...judged].map((one) => productQuestion(one.id, one.text))
+      )
     );
     if (answers instanceof ElysiaStatus) {
       return answers;
     }
+    const back = judged.filter(
+      ({ id }) => answers?.has(`product:${id}`) && !aboutCawco(id, answers)
+    );
+    const returns = await productReturns(projectId, back);
+    if (returns instanceof ElysiaStatus) {
+      return returns;
+    }
     const today = dayOf(new Date());
+    const uses = usesOf(projectId);
     let { tree } = read;
+    for (const change of returns) {
+      ({ tree } = applyOp(tree, checked(change), today, uses));
+    }
     for (const one of kept.filter(({ id }) => aboutCawco(id, answers))) {
       tree = await cawcoLeaves(projectId, tree, one, today);
     }
-    const moved = Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) =>
-      lesson.retired?.why === "product" &&
-      read.tree.ledger.lessons[id]?.retired === undefined
-        ? [
-            {
-              id,
-              ...(lesson.retired.task ? { task: lesson.retired.task } : {}),
-            },
-          ]
-        : []
-    );
-    if (moved.length === 0) {
+    const returned = new Set(returns.map(({ id }) => id));
+    const sha = await productOutCommitted(projectId, read.tree, tree, {
+      said: productSaid(
+        judged.map(({ id }) => id),
+        returned,
+        productRetired(tree).filter(
+          ({ id }) => read.tree.ledger.lessons[id]?.retired === undefined
+        )
+      ),
+      state: state.productJudged
+        ? undefined
+        : { ...state, productJudged: today },
+    });
+    if (typeof sha === "string") {
+      await returnedTasksDropped(
+        projectId,
+        judged.filter(({ id }) => returned.has(id)),
+        new Set(productRetired(tree).flatMap(({ task }) => task ?? []))
+      );
+    }
+    return sha;
+  };
+
+  /**
+   * {@link cawcoOut}'s one commit by the hub, saying `said`, with the run
+   * state marked judged again when `state` is given; nothing when it says
+   * nothing and marks nothing.
+   */
+  const productOutCommitted = async (
+    projectId: string,
+    before: MemoryTree,
+    after: MemoryTree,
+    { said, state }: { said: string; state: MemoryRunState | undefined }
+  ) => {
+    if (said === "" && !state) {
       return;
     }
-    const said = memoryRunWords.productTaken(moved);
-    console.log(`[memory] ${projectId}: ${said}`);
-    return await commit(projectId, read.tree, tree, {
+    if (said !== "") {
+      console.log(`[memory] ${projectId}: ${said}`);
+    }
+    return await commit(projectId, before, after, {
       author: HUB,
-      message: `memory: ${said}`,
+      message: `memory: ${said || memoryRunWords.productNoneJudged}`,
+      extra: state ? [{ path: RUN_STATE_FILE, content: jsonText(state) }] : [],
     });
+  };
+
+  /**
+   * Each of `ids`, retired `product`, put back as it stood before the
+   * commit that retired it: its ledger entry from that commit's parent,
+   * and, when it was live, its line from its home there. The commits are
+   * those git's pickaxe finds changing the ledger's count of `product`
+   * retirements, newest first; a lesson none of them retired is left out,
+   * said in the log.
+   */
+  const productReturns = async (
+    projectId: string,
+    back: readonly { id: string; text: string }[]
+  ) => {
+    if (back.length === 0) {
+      return [];
+    }
+    const commits = await folderCommitsChanging(projectId, '"why": "product"', [
+      LEDGER_FILE,
+    ]);
+    if (commits instanceof ElysiaStatus) {
+      return commits;
+    }
+    const ledgers = new Map<string, MemoryLedger | undefined>();
+    const ledgerAt = async (sha: string) => {
+      if (!ledgers.has(sha)) {
+        const text = await readFolderFileAt(projectId, sha, LEDGER_FILE);
+        const ledger =
+          text instanceof ElysiaStatus || text === undefined
+            ? undefined
+            : parseLedger(text);
+        ledgers.set(sha, typeof ledger === "string" ? undefined : ledger);
+      }
+      return ledgers.get(sha);
+    };
+    const returns: Extract<Change, { kind: "return" }>[] = [];
+    for (const { id, text } of back) {
+      const found = await retiredAt(commits, id, ledgerAt);
+      if (found) {
+        returns.push(await returnOf(projectId, id, text, found));
+      } else {
+        console.warn(
+          `[memory] ${projectId}: ${id} stays with CawCo: no commit of the ledger shows it before it was taken out`
+        );
+      }
+    }
+    return returns;
+  };
+
+  /** Lesson `id` put back as `found` holds it, its line read from its home at that parent when it was live (`text`, the words the ledger kept, when git has none). */
+  const returnOf = async (
+    projectId: string,
+    id: string,
+    text: string,
+    { entry, parent }: { entry: Lesson; parent: string }
+  ): Promise<Extract<Change, { kind: "return" }>> => {
+    const path = entry.state === "live" ? pathOf(entry.home) : undefined;
+    if (!path) {
+      return { kind: "return", id, entry };
+    }
+    const content = await readFolderFileAt(projectId, parent, path);
+    const line =
+      typeof content === "string"
+        ? parseLessons(path, content).lessons.find((one) => one.id === id)
+        : undefined;
+    return {
+      kind: "return",
+      id,
+      entry,
+      line: line ?? { id, text, why: null },
+    };
+  };
+
+  /**
+   * Each returned lesson's task moved to dropped, its reason naming the
+   * lesson, when the task was filed for that lesson (its field `lesson`
+   * holds the id) and no lesson still with CawCo names it (`still`): a task
+   * that was open before the lesson was routed to it stays. Said in the
+   * log; a refusal leaves the task where it is.
+   */
+  const returnedTasksDropped = async (
+    projectId: string,
+    returned: readonly { id: string; task?: string }[],
+    still: ReadonlySet<string>
+  ) => {
+    for (const { id, task } of returned) {
+      if (!task) {
+        continue;
+      }
+      if (still.has(task)) {
+        console.log(
+          `[memory] ${projectId}: ${id} back in memory, ${task} stays: a lesson with CawCo still rests on it`
+        );
+        continue;
+      }
+      const dropped = await tasks.drop(projectId, task, {
+        field: LESSON_FIELD,
+        value: id,
+        reason: memoryRunWords.productTaskDropped(id),
+      });
+      const said =
+        typeof dropped === "string"
+          ? `${task} ${dropped === "dropped" ? "dropped" : "stays: it was not filed for it"}`
+          : `${task} not dropped: ${dropped.refused}`;
+      console.log(`[memory] ${projectId}: ${id} back in memory, ${said}`);
+    }
   };
 
   /**
