@@ -23,7 +23,7 @@ import { STAGE_KINDS, TASK_MOVERS } from "@cawco/core/views";
 import { WORK_ITEM_STATES } from "@cawco/core/work-items";
 import { z } from "zod";
 
-const AtPlanLimitShape = z.enum(["move", "extra-usage"]);
+const AtPlanLimitShape = z.enum(["price", "move", "extra-usage"]);
 export type AtPlanLimitOutput = z.output<typeof AtPlanLimitShape>;
 
 const AccountHueShape = z.enum(ACCOUNT_HUES);
@@ -63,6 +63,7 @@ const AccountShape = z.object({
   order: z.number(),
   provider: AccountProviderShape,
   reservePct: z.number().nullable(),
+  sessionReservePct: z.number().nullable(),
   setupStep: AccountSetupStepShape.optional(),
 });
 export type AccountOutput = z.output<typeof AccountShape>;
@@ -72,6 +73,7 @@ const AccountFieldsShape = z.object({
   neverBackup: z.boolean(),
   nickname: z.string(),
   reserve: z.string(),
+  sessionReserve: z.string(),
 });
 export const AccountFieldsSchema = AccountFieldsShape;
 export type AccountFieldsOutput = z.output<typeof AccountFieldsShape>;
@@ -290,13 +292,16 @@ export type ArtifactSessionHeardOutput = z.output<
 const CompactMethodShape = z.enum(["native", "summary", "whole"]);
 export type CompactMethodOutput = z.output<typeof CompactMethodShape>;
 
+const ColdMoveShape = z.enum(["whole", "cheapest"]);
+export type ColdMoveOutput = z.output<typeof ColdMoveShape>;
+
 const HarnessKindShape = z.enum(HARNESSES);
 export const HarnessKindSchema = HarnessKindShape;
 export type HarnessKindOutput = z.output<typeof HarnessKindShape>;
 
 const CompactionShape = z.object({
   atLimit: CompactMethodShape,
-  beforeMove: CompactMethodShape,
+  coldMove: ColdMoveShape,
   fileRoom: z.number(),
   summarizer: z.object({ harness: HarnessKindShape, model: z.string() }),
 });

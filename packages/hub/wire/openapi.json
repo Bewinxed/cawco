@@ -594,10 +594,9 @@
                             ],
                             "type": "string"
                           },
-                          "beforeMove": {
+                          "coldMove": {
                             "enum": [
-                              "native",
-                              "summary",
+                              "cheapest",
                               "whole"
                             ],
                             "type": "string"
@@ -631,7 +630,6 @@
                         },
                         "required": [
                           "atLimit",
-                          "beforeMove",
                           "summarizer"
                         ]
                       },
@@ -765,7 +763,8 @@
                     "type": "string",
                     "enum": [
                       "extra-usage",
-                      "move"
+                      "move",
+                      "price"
                     ]
                   },
                   "hue": {
@@ -794,6 +793,14 @@
                     "type": "integer"
                   },
                   "reservePct": {
+                    "minimum": 0,
+                    "maximum": 100,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "sessionReservePct": {
                     "minimum": 0,
                     "maximum": 100,
                     "type": [
@@ -32713,7 +32720,11 @@
             "type": "string"
           },
           "reservePct": {
-            "description": "New sessions stop being placed on it once its weekly window passes this\npercentage; null: no reserve.",
+            "description": "Its week's floor: past this percent of its weekly window used, no new\nsession is placed on it and no hub move lands on it (hub decide.ts, the\nfloor test); null: no floor. {@link ACCOUNT_RESERVE} by default: 10% of\nthe week kept (decided 2026-11-19, move-redesign \"room\").",
+            "type": "number"
+          },
+          "sessionReservePct": {
+            "description": "Its 5-hour window's floor, as {@link reservePct} is its week's: past\nthis percent of its 5-hour window used, nothing new is placed or moved\nonto it; null: no floor. {@link ACCOUNT_RESERVE} by default: 20% kept.",
             "type": "number"
           },
           "setupStep": {
@@ -34811,41 +34822,13 @@
           "kind"
         ]
       },
-      "AtLimit": {
-        "description": "What a running session does when its account hits its limit: wait for the\nreset, or move to another account that can take it (the hub's\n`decideStop`). `waitMinutes`: a reset this close is waited for.\n`moveWholeUnderK`: a context under this many thousand tokens moves whole\nand goes on; one of this many or more, moved to another organization\n(whose cache it can't read), is compacted as `compaction` says for the\nmoment it moves at. A live work item's session is answered so whoever\nstarted its refused turn, the hub's own word to it included; every other\nword of the hub's a limit refused is left until a person or the session's\nparent writes.",
-        "type": "object",
-        "properties": {
-          "compaction": {
-            "$ref": "#/components/schemas/Compaction"
-          },
-          "move": {
-            "type": "boolean"
-          },
-          "moveWholeUnderK": {
-            "type": "number"
-          },
-          "staleAfterHours": {
-            "description": "How long past its reset a held session is still carried on by itself\n(a sign-in hold, which has no reset, counts from when it was held).\nOlder, its hold goes stale: nothing sends to it or wakes it until a\nperson or its parent writes to it, and it waits in Needs you and in its\nparent's `delegate_list` (hub at-limit.ts `goneStale`).",
-            "type": "number"
-          },
-          "waitMinutes": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "compaction",
-          "move",
-          "moveWholeUnderK",
-          "staleAfterHours",
-          "waitMinutes"
-        ]
-      },
       "AtPlanLimit": {
-        "description": "What a session on an account does once the account reaches a plan limit\nwhile its extra usage is on (Claude Code's `overageStatus` allowed): moves\nto an account with plan room (`move`, the default), or keeps going on this\naccount's extra usage (`extra-usage`). With extra usage off or refused, the\naccount is at its limit as any other is, whichever it says. It governs a\nsession that has reached the limit: a new session goes to plan room first,\nand to a keep-going account's extra usage only when no account it may run\non has plan room, or when Pinned pins that account.",
+        "description": "What a session on an account does once the account reaches a plan limit\nwhile its extra usage is on (Claude Code's `overageStatus` allowed): the\nhub prices it (`price`, the default, decided 2026-11-19 move-redesign\n\"extra\"): the session's measured next-turn dollars on credits against the\ncheapest move to an account with plan room that holds (hub decide.ts),\nthe lower taken; or the person forces it, to move to an account with plan\nroom (`move`) or to keep going on this account's extra usage\n(`extra-usage`). With extra usage off or refused, the account is at its\nlimit as any other is, whichever it says. It governs a session that has\nreached the limit: a new session goes to plan room first, and to a\nkeep-going account's extra usage only when no account it may run on has\nplan room, or when Pinned pins that account.",
         "type": "string",
         "enum": [
           "extra-usage",
-          "move"
+          "move",
+          "price"
         ]
       },
       "AttemptResult": {
@@ -35500,14 +35483,14 @@
                   },
                   "compact": {
                     "$ref": "#/components/schemas/BlockMetadataCompact",
-                    "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively ({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
+                    "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively as the decision chose\n({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
                   },
                   "compactBy": {
                     "$ref": "#/components/schemas/BlockMetadataCompactBy",
                     "description": "The harness whose own `/compact` runs, when its descriptor names it on a moved line (core harness/traits.ts `compactorOf`): what its compaction keeps is less."
                   },
                   "compactFirst": {
-                    "description": "The compaction runs on `from`, warm, and the move follows it: the\npolicy's `beforeMove`. Absent: it runs on `to` after the move.",
+                    "description": "The compaction runs on `from`, warm, and the move follows it: the\ndecision priced it cheapest. Absent: it runs on `to` after the move.",
                     "const": true,
                     "type": "boolean"
                   },
@@ -35551,6 +35534,10 @@
                     "enum": [
                       "moved"
                     ]
+                  },
+                  "price": {
+                    "$ref": "#/components/schemas/MovePrice",
+                    "description": "The price the hub's decision chose, and the next best ({@link MovePrice}); absent on a person's move and on lines stored before it was said."
                   },
                   "relaunched": {
                     "description": "Its process ended on `to` before it took a step of the compaction,\nand the hub started it again there to take it.",
@@ -37424,6 +37411,14 @@
           "path"
         ]
       },
+      "ColdMove": {
+        "description": "What a move does with a session whose prompt cache is cold (decided\n2026-11-19, move-compaction-mode): it moves as it is (`whole`, the\ndefault: one cold read on the new account, nothing billed on the one it\nleaves), or the hub prices moving whole against its harness's own\ncompaction after the move, over the session's next turn, and takes the\ncheaper (`cheapest`). Never a summary: that stays at a limit, where\n{@link CompactMethod} names it.",
+        "type": "string",
+        "enum": [
+          "cheapest",
+          "whole"
+        ]
+      },
       "CommandAck": {
         "description": "Hub → client, the command's lifecycle:\n- `accepted` — validated, the target daemon reachable, dispatched;\n- `applied`  — the daemon confirmed, where its protocol carries a\n  confirmation today; where it does not, the hub stops at `accepted` and\n  the stream event reflecting the change is the proof of application;\n- `failed`   — terminal, with the reason a human can read.",
         "type": "object",
@@ -37695,46 +37690,6 @@
           "native",
           "summary",
           "whole"
-        ]
-      },
-      "Compaction": {
-        "description": "How a session is compacted when it moves, by the moment the hub moves it\n(hub at-limit.ts `compactionPlan`, the one rule every mover reads). A\ncontext under {@link AtLimit.moveWholeUnderK} thousand tokens, or one whose\ncache carries to the account it moves to, moves whole whatever this says.\nA session that stays on its organization is compacted by its harness on\nits own; before that, once a turn ends with its context within\n{@link Compaction.fileRoom} tokens of where that harness compacts it, the\nhub gives it one turn to file its open items (hub at-limit.ts `fileDue`).",
-        "type": "object",
-        "properties": {
-          "atLimit": {
-            "$ref": "#/components/schemas/CompactMethod",
-            "description": "Nothing can run on its account (its limit refused a turn, its sign-in\nwas refused): `summary` goes on from a summary on the target; `native`\nmoves it whole and compacts it there, cold; `whole` moves it as it is.\nA summary that can't be written for a move (its summariser can't fit\nthe conversation, can't be placed, or the conversation can't be read)\ntakes `native` for that move, its line saying why."
-          },
-          "beforeMove": {
-            "$ref": "#/components/schemas/CompactMethod",
-            "description": "Its account can run it still (forecast to run out, on extra usage past\nits plan, a person's move): `native` files its open items and compacts\nit there, warm, then moves it; `summary` files them, then goes on from a\nsummary on the target; `whole` moves it as it is."
-          },
-          "fileRoom": {
-            "description": "The room, in tokens, short of the point where its harness compacts it\non its own (core harness.ts `NeutralResultMessage.compactsAt`), at which\na session files its open items into its records: once per rise, at the\nend of the first turn whose reading is within it, the next compaction\nre-arming it (hub at-limit.ts `fileDue`). 0 files none.",
-            "type": "number"
-          },
-          "summarizer": {
-            "description": "Who writes a summary: its harness and model, placed as any start is.",
-            "type": "object",
-            "properties": {
-              "harness": {
-                "$ref": "#/components/schemas/HarnessKind"
-              },
-              "model": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "harness",
-              "model"
-            ]
-          }
-        },
-        "required": [
-          "atLimit",
-          "beforeMove",
-          "fileRoom",
-          "summarizer"
         ]
       },
       "CompactionFailure": {
@@ -48498,6 +48453,45 @@
           "path"
         ]
       },
+      "MovePrice": {
+        "description": "What the hub's one decision (hub decide.ts) priced for a move it made:\nthe dollars of the option it took (`usd`; null when its model or context\ncould not be priced), and the next-best option it passed over with its\ndollars (`next`; null when there was none): staying (`stay`), waiting for\nthe account's reset (`wait`), keeping on extra usage (`credits`), or\nanother way of moving, named by how it moves and, when it goes elsewhere,\nwhere (`to`).",
+        "type": "object",
+        "properties": {
+          "next": {
+            "type": "object",
+            "properties": {
+              "to": {
+                "type": "string"
+              },
+              "usd": {
+                "type": "number"
+              },
+              "what": {
+                "$ref": "#/components/schemas/MovePriceOption"
+              }
+            },
+            "required": [
+              "what"
+            ]
+          },
+          "usd": {
+            "type": "number"
+          }
+        }
+      },
+      "MovePriceOption": {
+        "description": "An option of the decision, as a move's line names the next best ({@link MovePrice}).",
+        "type": "string",
+        "enum": [
+          "compact-after",
+          "compact-before",
+          "credits",
+          "stay",
+          "summary",
+          "wait",
+          "whole"
+        ]
+      },
       "MoveProgressFrame": {
         "description": "Daemon → hub: how far the step in flight is. `file` only while a file of\nat least {@link LARGE_FILE_BYTES} is in flight (the largest).",
         "type": "object",
@@ -50145,14 +50139,14 @@
                   },
                   "compact": {
                     "$ref": "#/components/schemas/BlockMetadataCompact",
-                    "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively ({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
+                    "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively as the decision chose\n({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
                   },
                   "compactBy": {
                     "$ref": "#/components/schemas/BlockMetadataCompactBy",
                     "description": "The harness whose own `/compact` runs, when its descriptor names it on a moved line (core harness/traits.ts `compactorOf`): what its compaction keeps is less."
                   },
                   "compactFirst": {
-                    "description": "The compaction runs on `from`, warm, and the move follows it: the\npolicy's `beforeMove`. Absent: it runs on `to` after the move.",
+                    "description": "The compaction runs on `from`, warm, and the move follows it: the\ndecision priced it cheapest. Absent: it runs on `to` after the move.",
                     "const": true,
                     "type": "boolean"
                   },
@@ -50196,6 +50190,10 @@
                     "enum": [
                       "moved"
                     ]
+                  },
+                  "price": {
+                    "$ref": "#/components/schemas/MovePrice",
+                    "description": "The price the hub's decision chose, and the next best ({@link MovePrice}); absent on a person's move and on lines stored before it was said."
                   },
                   "relaunched": {
                     "description": "Its process ended on `to` before it took a step of the compaction,\nand the hub started it again there to take it.",
@@ -54197,35 +54195,6 @@
         },
         "required": [
           "accounts",
-          "delegates",
-          "provider",
-          "yours"
-        ]
-      },
-      "ProviderRouting": {
-        "description": "One provider's routing. `yours` places the sessions a person starts;\n`delegates` the ones a session starts.",
-        "type": "object",
-        "properties": {
-          "atLimit": {
-            "$ref": "#/components/schemas/AtLimit"
-          },
-          "atLimitUnread": {
-            "description": "Set while the provider's saved at-limit policy can't be read (hub\nmigration 0399): the policy's fields that don't read, as a short\nreason (\"staleAfterHours, compaction.fileRoom\"), never the stored text.\n`atLimit` is then core `RESTRICTIVE_AT_LIMIT`. A save clears it.",
-            "type": "string"
-          },
-          "delegates": {
-            "$ref": "#/components/schemas/StrategyChoice"
-          },
-          "provider": {
-            "description": "Who bills the account: a provider id. `anthropic` is a Claude subscription\nor Console organization, for Claude Code alone: Anthropic's terms keep its\nOAuth tokens out of every other product. Any other is a provider pi or\nOpenCode speaks, by pi-ai's id for it (`openai-codex` for a ChatGPT\nsubscription, `github-copilot`, `opencode-go`, `zai`…), or OpenCode's own\nid for one pi-ai has no provider for (`zai-coding-plan`, a configured\n`litellm`) — see {@link ProviderInfo}.",
-            "type": "string"
-          },
-          "yours": {
-            "$ref": "#/components/schemas/StrategyChoice"
-          }
-        },
-        "required": [
-          "atLimit",
           "delegates",
           "provider",
           "yours"
@@ -77092,7 +77061,100 @@
           "routing": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProviderRouting"
+              "type": "object",
+              "properties": {
+                "atLimit": {
+                  "type": "object",
+                  "properties": {
+                    "compaction": {
+                      "type": "object",
+                      "properties": {
+                        "atLimit": {
+                          "$ref": "#/components/schemas/CompactMethod",
+                          "description": "Nothing can run on its account (its limit refused a turn, its sign-in\nwas refused) and its cache is warm: `summary` goes on from a summary on\nthe target; `native` moves it whole and compacts it there; `whole`\nmoves it as it is. A summary that can't be written for a move (its\nsummariser can't fit the conversation, can't be placed, or the\nconversation can't be read) takes `native` for that move, its line\nsaying why."
+                        },
+                        "beforeMove": {
+                          "type": "string",
+                          "enum": [
+                            "whole"
+                          ]
+                        },
+                        "coldMove": {
+                          "$ref": "#/components/schemas/ColdMove",
+                          "description": "A cold cache moves whole, or by the cheapest path ({@link ColdMove})."
+                        },
+                        "fileRoom": {
+                          "description": "The room, in tokens, short of the point where its harness compacts it\non its own (core harness.ts `NeutralResultMessage.compactsAt`), at which\na session files its open items into its records: once per rise, at the\nend of the first turn whose reading is within it, the next compaction\nre-arming it (hub at-limit.ts `fileDue`). 0 files none.",
+                          "type": "number"
+                        },
+                        "summarizer": {
+                          "description": "Who writes a summary: its harness and model, placed as any start is.",
+                          "type": "object",
+                          "properties": {
+                            "harness": {
+                              "$ref": "#/components/schemas/HarnessKind"
+                            },
+                            "model": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "harness",
+                            "model"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "atLimit",
+                        "beforeMove",
+                        "coldMove",
+                        "fileRoom",
+                        "summarizer"
+                      ]
+                    },
+                    "move": {
+                      "type": "boolean"
+                    },
+                    "moveWholeUnderK": {
+                      "type": "number"
+                    },
+                    "staleAfterHours": {
+                      "description": "How long past its reset a held session is still carried on by itself\n(a sign-in hold, which has no reset, counts from when it was held).\nOlder, its hold goes stale: nothing sends to it or wakes it until a\nperson or its parent writes to it, and it waits in Needs you and in its\nparent's `delegate_list` (hub at-limit.ts `goneStale`).",
+                      "type": "number"
+                    },
+                    "waitMinutes": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "compaction",
+                    "move",
+                    "moveWholeUnderK",
+                    "staleAfterHours",
+                    "waitMinutes"
+                  ]
+                },
+                "atLimitUnread": {
+                  "description": "Set while the provider's saved at-limit policy can't be read (hub\nmigration 0399): the policy's fields that don't read, as a short\nreason (\"staleAfterHours, compaction.fileRoom\"), never the stored text.\n`atLimit` is then core `RESTRICTIVE_AT_LIMIT`. A save clears it.",
+                  "type": "string"
+                },
+                "delegates": {
+                  "$ref": "#/components/schemas/StrategyChoice"
+                },
+                "provider": {
+                  "description": "Who bills the account: a provider id. `anthropic` is a Claude subscription\nor Console organization, for Claude Code alone: Anthropic's terms keep its\nOAuth tokens out of every other product. Any other is a provider pi or\nOpenCode speaks, by pi-ai's id for it (`openai-codex` for a ChatGPT\nsubscription, `github-copilot`, `opencode-go`, `zai`…), or OpenCode's own\nid for one pi-ai has no provider for (`zai-coding-plan`, a configured\n`litellm`) — see {@link ProviderInfo}.",
+                  "type": "string"
+                },
+                "yours": {
+                  "$ref": "#/components/schemas/StrategyChoice"
+                }
+              },
+              "required": [
+                "atLimit",
+                "delegates",
+                "provider",
+                "yours"
+              ]
             }
           },
           "signins": {
@@ -207769,7 +207831,50 @@
             "type": "object",
             "properties": {
               "compaction": {
-                "$ref": "#/components/schemas/Compaction"
+                "type": "object",
+                "properties": {
+                  "atLimit": {
+                    "$ref": "#/components/schemas/CompactMethod",
+                    "description": "Nothing can run on its account (its limit refused a turn, its sign-in\nwas refused) and its cache is warm: `summary` goes on from a summary on\nthe target; `native` moves it whole and compacts it there; `whole`\nmoves it as it is. A summary that can't be written for a move (its\nsummariser can't fit the conversation, can't be placed, or the\nconversation can't be read) takes `native` for that move, its line\nsaying why."
+                  },
+                  "beforeMove": {
+                    "type": "string",
+                    "enum": [
+                      "whole"
+                    ]
+                  },
+                  "coldMove": {
+                    "$ref": "#/components/schemas/ColdMove",
+                    "description": "A cold cache moves whole, or by the cheapest path ({@link ColdMove})."
+                  },
+                  "fileRoom": {
+                    "description": "The room, in tokens, short of the point where its harness compacts it\non its own (core harness.ts `NeutralResultMessage.compactsAt`), at which\na session files its open items into its records: once per rise, at the\nend of the first turn whose reading is within it, the next compaction\nre-arming it (hub at-limit.ts `fileDue`). 0 files none.",
+                    "type": "number"
+                  },
+                  "summarizer": {
+                    "description": "Who writes a summary: its harness and model, placed as any start is.",
+                    "type": "object",
+                    "properties": {
+                      "harness": {
+                        "$ref": "#/components/schemas/HarnessKind"
+                      },
+                      "model": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "harness",
+                      "model"
+                    ]
+                  }
+                },
+                "required": [
+                  "atLimit",
+                  "beforeMove",
+                  "coldMove",
+                  "fileRoom",
+                  "summarizer"
+                ]
               },
               "move": {
                 "type": "boolean"
@@ -207778,6 +207883,7 @@
                 "type": "number"
               },
               "staleAfterHours": {
+                "description": "How long past its reset a held session is still carried on by itself\n(a sign-in hold, which has no reset, counts from when it was held).\nOlder, its hold goes stale: nothing sends to it or wakes it until a\nperson or its parent writes to it, and it waits in Needs you and in its\nparent's `delegate_list` (hub at-limit.ts `goneStale`).",
                 "type": "number"
               },
               "waitMinutes": {
@@ -207792,36 +207898,19 @@
               "waitMinutes"
             ]
           },
+          "atLimitUnread": {
+            "description": "Set while the provider's saved at-limit policy can't be read (hub\nmigration 0399): the policy's fields that don't read, as a short\nreason (\"staleAfterHours, compaction.fileRoom\"), never the stored text.\n`atLimit` is then core `RESTRICTIVE_AT_LIMIT`. A save clears it.",
+            "type": "string"
+          },
           "delegates": {
-            "type": "object",
-            "properties": {
-              "pinnedAccountId": {
-                "type": "string"
-              },
-              "strategy": {
-                "$ref": "#/components/schemas/PlacementStrategy"
-              }
-            },
-            "required": [
-              "strategy"
-            ]
+            "$ref": "#/components/schemas/StrategyChoice"
           },
           "provider": {
+            "description": "Who bills the account: a provider id. `anthropic` is a Claude subscription\nor Console organization, for Claude Code alone: Anthropic's terms keep its\nOAuth tokens out of every other product. Any other is a provider pi or\nOpenCode speaks, by pi-ai's id for it (`openai-codex` for a ChatGPT\nsubscription, `github-copilot`, `opencode-go`, `zai`…), or OpenCode's own\nid for one pi-ai has no provider for (`zai-coding-plan`, a configured\n`litellm`) — see {@link ProviderInfo}.",
             "type": "string"
           },
           "yours": {
-            "type": "object",
-            "properties": {
-              "pinnedAccountId": {
-                "type": "string"
-              },
-              "strategy": {
-                "$ref": "#/components/schemas/PlacementStrategy"
-              }
-            },
-            "required": [
-              "strategy"
-            ]
+            "$ref": "#/components/schemas/StrategyChoice"
           }
         },
         "required": [

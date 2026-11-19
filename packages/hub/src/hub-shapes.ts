@@ -10,6 +10,7 @@ import type { MachinePath } from "@cawco/core/machine-path";
 import type { InstanceRow, NamedSpawn, Verb } from "@cawco/core/protocol";
 import type { problem } from "elysia";
 import type { DbShape } from "./db";
+import type { MOVE_OFF_WHYS } from "./db/schema";
 import type { LabelledRow } from "./labels";
 import { awayProblem, MachineProblem } from "./machine-answers";
 import type { HubSocket } from "./wire-socket";
@@ -142,7 +143,7 @@ export type LoginMoveResults = Map<
 export type StoredRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
 /** Why a session leaves its account ({@link oweMoveOff}). */
-export type MoveOffWhy = "refused" | "removed" | "signed-out";
+export type MoveOffWhy = (typeof MOVE_OFF_WHYS)[number];
 
 /**
  * What becomes of a pending send its harness has not taken up, once a

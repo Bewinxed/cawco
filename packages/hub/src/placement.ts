@@ -17,7 +17,6 @@ import {
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { SettingsInEffect } from "@cawco/core/areas";
 import { harnessLabel } from "@cawco/core/harness/kinds";
-import { HOUR_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {
   aheadOfWeek,
@@ -44,6 +43,7 @@ import { projectAccountWords } from "@cawco/core/words/project-account";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { markOn } from "./account-marks";
 import type { DbShape } from "./db";
+import { runsShort } from "./decide";
 import type { AccountPaces } from "./window-paces";
 
 /**
@@ -201,7 +201,7 @@ export interface CarryWindow extends Pick<
  * was not there for (all of it in a window not open yet, or of no known
  * length; none for one there since the window opened).
  */
-const arrivingBurn = (
+export const arrivingBurn = (
   arrivals: readonly Arrival[],
   accountId: string,
   window: Pick<CarryWindow, "group" | "resetsAt">,
@@ -222,33 +222,37 @@ const arrivingBurn = (
 /**
  * When an account runs out before a window of it resets, at its pace with
  * `added` percent an hour on top, soonest first; null when it lasts to every
- * reset. Only the account's own windows are walked, each open one to its
+ * reset. The one test of running short (decide.ts `runsShort`), read here
+ * with no look-ahead and no wait: placement's carry test, the strategies'
+ * order. Only the account's own windows are walked, each open one to its
  * own reset: a window not open has no reset to run out before, and a window
- * the account does not have (a verified Ultra account's session window) is never made
- * up. The one test placement's carry test and rebalance's moves both run.
+ * the account does not have (a verified Ultra account's session window) is
+ * never made up.
  */
 const runsOutWith = (
   windows: readonly CarryWindow[],
   added: (window: CarryWindow) => number,
   now: number
-): number | null => {
-  let soonest: number | null = null;
-  for (const window of windows) {
-    const reset = windowResetAt(window);
-    if (reset === null || reset <= now) {
-      continue;
-    }
-    const rate = (window.pace ?? 0) + added(window);
-    if (rate <= 0) {
-      continue;
-    }
-    const out = now + (Math.max(100 - window.percent, 0) / rate) * HOUR_MS;
-    if (out < reset && (soonest === null || out < soonest)) {
-      soonest = out;
-    }
-  }
-  return soonest;
-};
+): number | null =>
+  runsShort(
+    windows.map((window) => ({
+      arriving: 0,
+      floorPct: 0,
+      openedAt: null,
+      pace: (window.pace ?? 0) + added(window),
+      pendingPct: null,
+      resetAt: windowResetAt(window),
+      spentPct: null,
+      tokensPerPct: null,
+      usdPerPct: null,
+      usedPct: window.percent,
+      window,
+    })),
+    0,
+    Number.POSITIVE_INFINITY,
+    0,
+    now
+  );
 
 /** A window as the run-out test reads it, and what one percent of it costs in weighted tokens (null when unmeasured). */
 export interface PacedWindow extends CarryWindow {
@@ -332,7 +336,7 @@ const byReset = (a: Ranked, b: Ranked): number => {
 
 /**
  * The kind's strategy as an ordering, best first: the one each strategy below
- * picks from, and the order at-limit's decision (at-limit.ts `decideStop`)
+ * picks from, and the order at-limit's decision (decide.ts `decide`)
  * weighs the accounts that fit in. Pinned puts the pin first, then fill-first
  * over the rest; fill-first goes by order; spread by how long it lasts with
  * the session on it (to every reset first, then the latest run-out), then
@@ -443,7 +447,7 @@ class Usage {
    * Whether its plan limits stop nothing for this session: extra usage
    * counts here ({@link choose} says when), and it keeps going on extra usage
    * at its plan limit (core `keepsGoingOnExtraUsage`). A session carried off
-   * its account at a limit goes only to plan room (at-limit.ts `decideStop`).
+   * its account at a limit goes only to plan room (decide.ts `decide`).
    */
   onExtraUsage = (account: Account): boolean =>
     this.#credits !== undefined &&
@@ -561,10 +565,28 @@ class Usage {
     );
   }
 
+  /** The most used of its 5-hour windows, percent: what its session floor is read against. */
+  session(id: string): number {
+    const { now } = this.#input;
+    return Math.max(
+      0,
+      ...this.#bearing(id)
+        .filter((window) => window.group === "session")
+        .map((window) => windowUsed(window, now))
+    );
+  }
+
+  /**
+   * Whether it is past a floor (core `Account.reservePct`,
+   * `sessionReservePct`): its week, or its 5-hour window, used past the
+   * percent it keeps free of new sessions and of the hub's moves.
+   */
   pastReserve(account: Account): boolean {
     return (
-      account.reservePct !== null &&
-      this.weekly(account.id) >= account.reservePct
+      (account.reservePct !== null &&
+        this.weekly(account.id) >= account.reservePct) ||
+      (account.sessionReservePct !== null &&
+        this.session(account.id) >= account.sessionReservePct)
     );
   }
 
@@ -616,7 +638,13 @@ class Usage {
     const reserve = account.reservePct ?? Number.POSITIVE_INFINITY;
     const resets = this.#bearing(account.id).flatMap((window) => {
       const at = windowResetAt(window);
-      const stops = window.group === "weekly" ? Math.min(100, reserve) : 100;
+      const session = account.sessionReservePct ?? Number.POSITIVE_INFINITY;
+      let stops = 100;
+      if (window.group === "weekly") {
+        stops = Math.min(100, reserve);
+      } else if (window.group === "session") {
+        stops = Math.min(100, session);
+      }
       return at !== null && at > now && windowUsed(window, now) >= stops
         ? [at]
         : [];
@@ -1295,7 +1323,7 @@ const noRoomRefusal = (
 
 /**
  * One other account of a session's provider as a carry off its limit reads
- * it (at-limit.ts `decideStop`): what placement knows of it for the
+ * it (decide.ts `decide`): what placement knows of it for the
  * session's model on its machine, by the rules {@link place} applies.
  */
 export interface AccountRow {
@@ -1387,7 +1415,9 @@ export const accountRows = (
         notAllowedBy: allowed.includes(account) ? null : notAllowedBy,
         read: usage.read(account),
         benchedUntil: benched.length > 0 ? Math.max(...benched) : null,
-        pastReserve: usage.pastReserve(account) ? account.reservePct : null,
+        pastReserve: usage.pastReserve(account)
+          ? (account.reservePct ?? account.sessionReservePct)
+          : null,
         backAt: usage.backAt(account) ?? null,
         windows: usage.carryWindows(account.id),
         arrivals: (input.arrivals ?? []).filter(

@@ -133,7 +133,7 @@ export interface ArtifactServiceDeps {
   /**
    * Whether a session is cold now: no turn under way and its prompt cache
    * expired, the test by which `handoff` refuses to hand it work without
-   * asking (keep-alive.ts `cacheWarmNow`). What it left in its project is
+   * asking (keep-alive.ts `provenCold`). What it left in its project is
    * then its project's to take up (`leftFor` below).
    */
   cold: (instance: InstanceRow) => boolean;

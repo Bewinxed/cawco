@@ -178,6 +178,7 @@ export const patchAccount = (
     neverBackup?: boolean;
     order?: number;
     reservePct?: number | null;
+    sessionReservePct?: number | null;
     /** Where its setup stands; null once the setup is done. */
     setupStep?: AccountSetupStep | null;
   }

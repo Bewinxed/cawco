@@ -9,6 +9,7 @@ import {
   strategiesFor,
 } from "@cawco/core/accounts";
 import {
+  COLD_MOVES,
   COMPACT_METHODS,
   PLACEMENT_STRATEGIES,
   type PlacementStrategy,
@@ -22,7 +23,7 @@ import { accountForecasts, carrySequence, historyPoints } from "../forecast";
 import type { HubContext } from "../hub-context";
 import { place as placeAccount } from "../placement";
 
-import { accountProvider } from "../routes/accounts";
+import { accountProvider, wireRouting } from "../routes/accounts";
 import { harnessSchema } from "../routes/harness-schema";
 
 const strategyChoice = t.Object({
@@ -33,15 +34,27 @@ const strategyChoice = t.Object({
 const compactMethod = t.UnionEnum(COMPACT_METHODS);
 
 /**
- * The compaction policy a routing save asks for: what it sent, the room
- * saved before when it sent none (a tab from before `fileRoom`), or the
- * policy saved before when it sent none at all (the shipped apps).
+ * The compaction policy a routing save asks for: what it sent, the room and
+ * the cold move saved before when it sent none (a tab from before either),
+ * or the policy saved before when it sent none at all (the shipped apps).
  */
 const compactionAsked = (
-  sent: (Omit<Compaction, "fileRoom"> & { fileRoom?: number }) | undefined,
+  sent:
+    | (Omit<Compaction, "coldMove" | "fileRoom"> & {
+        coldMove?: Compaction["coldMove"];
+        fileRoom?: number;
+      })
+    | undefined,
   saved: Compaction
 ): Compaction =>
-  sent ? { ...sent, fileRoom: sent.fileRoom ?? saved.fileRoom } : saved;
+  sent
+    ? {
+        atLimit: sent.atLimit,
+        summarizer: sent.summarizer,
+        coldMove: sent.coldMove ?? saved.coldMove,
+        fileRoom: sent.fileRoom ?? saved.fileRoom,
+      }
+    : saved;
 
 export const accountPlacementRoutes = ({
   askedStart,
@@ -144,7 +157,8 @@ export const accountPlacementRoutes = ({
               // Shipped apps send none: they keep the one saved.
               compaction: t.Optional(
                 t.Object({
-                  beforeMove: compactMethod,
+                  // A tab from before it sends none: it keeps the one saved.
+                  coldMove: t.Optional(t.UnionEnum(COLD_MOVES)),
                   atLimit: compactMethod,
                   // A tab from before it sends none: it keeps the one saved.
                   fileRoom: t.Optional(t.Integer({ minimum: 0 })),
@@ -179,7 +193,7 @@ export const accountPlacementRoutes = ({
             },
           };
           db.accounts.setRouting(routing);
-          return routing;
+          return wireRouting(routing);
         }
       )
       // Each account's windows with their pace and run-out, and which account

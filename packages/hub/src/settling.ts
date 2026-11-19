@@ -128,7 +128,7 @@ export interface SettlingDeps {
     projectId: string,
     event: { text: string; trigger: string }
   ) => ReturnType<Caw["tell"]>;
-  /** Whether session `id` is live and its prompt cache warm (keep-alive.ts `cacheWarmNow`). */
+  /** Whether session `id` is live and its prompt cache warm (keep-alive.ts `provenCold`). */
   readonly warm: (id: string) => boolean;
 }
 

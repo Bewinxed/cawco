@@ -6,6 +6,7 @@ import {
 } from "@cawco/core/accounts";
 import {
   ACCOUNT_HUES,
+  COLD_MOVES,
   COMPACT_METHODS,
   PLACEMENT_STRATEGIES,
 } from "@cawco/core/accounts/kinds";
@@ -3020,11 +3021,14 @@ export const accounts = sqliteTable(
     neverBackup: integer("never_backup", { mode: "boolean" })
       .notNull()
       .default(false),
+    /** Its week's floor (core `Account.reservePct`); null: none. */
     reservePct: integer("reserve_pct"),
+    /** Its 5-hour window's floor (core `Account.sessionReservePct`); null: none. */
+    sessionReservePct: integer("session_reserve_pct"),
     /** What its sessions do at a plan limit while its extra usage is on (core `AtPlanLimit`). */
     atPlanLimit: storedEnum(AtPlanLimitSchema)("at_plan_limit")
       .notNull()
-      .default("move"),
+      .default("price"),
     /**
      * The identity (core `AccountIdentity`) its first sign-in reported: the
      * email, any case, the organization's name, and its id. Null until then;
@@ -3208,9 +3212,10 @@ export const accountRouting = sqliteTable("account_routing", {
   atLimitMoveWholeUnderK: integer("at_limit_move_whole_under_k"),
   atLimitStaleAfterHours: integer("at_limit_stale_after_hours"),
   compactionAtLimit: storedEnum(z.enum(COMPACT_METHODS))("compaction_at_limit"),
-  compactionBeforeMove: storedEnum(z.enum(COMPACT_METHODS))(
-    "compaction_before_move"
-  ),
+  /** What a move does with a cold cache (core `ColdMove`): whole by default. */
+  compactionColdMove: storedEnum(z.enum(COLD_MOVES))("compaction_cold_move")
+    .notNull()
+    .default("whole"),
   compactionFileRoom: integer("compaction_file_room"),
   compactionSummarizerHarness: storedEnum(z.enum(HARNESSES))(
     "compaction_summarizer_harness"
@@ -3470,6 +3475,8 @@ export const sessionTasks = sqliteTable(
  */
 /** Every kind of carry-on an owed move keeps (db/owed-moves.ts `OwedCarry`), as its column does. */
 export const OWED_CARRY_KINDS = ["limit", "signin", "model"] as const;
+/** Why a session must leave its account (hub-shapes.ts `MoveOffWhy`): its sign-in refused, the account removed, or signed out on its machine. */
+export const MOVE_OFF_WHYS = ["refused", "removed", "signed-out"] as const;
 
 export const owedMoves = sqliteTable("owed_moves", {
   instanceId: sessionColumn("instance_id")
@@ -3497,6 +3504,13 @@ export const owedMoves = sqliteTable("owed_moves", {
   carryOn: text("carry_on", { enum: OWED_CARRY_KINDS }),
   /** With `carryOn` `model`: the session's transcript line for the move. */
   carryLine: text("carry_line"),
+  /**
+   * A marker, not a move (hub decide.ts): the session must leave its
+   * account (hub-shapes.ts `MoveOffWhy`: its sign-in refused, the account
+   * removed or signed out on its machine), and where it goes is decided as
+   * the move is carried out. Null for any other row.
+   */
+  leave: text("leave", { enum: MOVE_OFF_WHYS }),
   createdAt: stampedNow("created_at"),
 });
 
@@ -3787,6 +3801,13 @@ export const turnUsage = sqliteTable(
      */
     costUsd: real("cost_usd"),
     keepAlive: integer("keep_alive", { mode: "boolean" }).notNull(),
+    /**
+     * What started the turn, as the send it read names its origin: `human`,
+     * `peer`, `keepalive`, `system:<name>` for the hub's own word (a recap,
+     * a filing turn, a carry-on), or another harness kind. Null on rows
+     * written before it was kept, and for a turn no send started.
+     */
+    origin: text("origin"),
     at: timestamp("at").notNull(),
   },
   (table) => [

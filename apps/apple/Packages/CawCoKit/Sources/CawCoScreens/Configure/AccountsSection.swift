@@ -224,6 +224,9 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         }
     }
 
+    /// What the switch off saves: a forced move stays one, anything else the hub's priced choice (core `AtPlanLimit` `price`).
+    private static func offCredits(_ saved: String) -> String { saved == "move" ? "move" : "price" }
+
     /// Claude's provider (core `CLAUDE_PROVIDER`): extra usage is Claude's, so only its accounts have the choice.
     private static let claudeProvider = "anthropic"
 
@@ -403,7 +406,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         do {
             try await hub.patchAccount(account.id, label: .some(label.isEmpty ? nil : label), hue: fields.hue,
                                        neverBackup: limits ? fields.neverBackup : nil, reservePct: limits ? .some(reserve) : .none,
-                                       atPlanLimit: claude ? (fields.extraUsage ? "extra-usage" : "move") : nil)
+                                       atPlanLimit: claude ? (fields.extraUsage ? "extra-usage" : Self.offCredits(account.atPlanLimit)) : nil)
             if let draftPath { ConfigDrafts.shared.drop(draftPath) }
             self.fields = nil
             requestRefresh()

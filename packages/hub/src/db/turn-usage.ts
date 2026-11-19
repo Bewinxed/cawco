@@ -1,6 +1,6 @@
 import type { ClaudeModelUsage } from "@cawco/core/session-messages";
 import { DAY_MS } from "@cawco/core/time";
-import { and, asc, eq, gte, isNotNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lte } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { instances, turnUsage } from "./schema";
 
@@ -21,6 +21,12 @@ export interface TurnUsageDb {
     since?: number;
     until?: number;
   }) => TurnUsageRow[];
+  /** One session's turns since `since`, newest first, at most `limit`. */
+  readonly listOf: (
+    instanceId: string,
+    since: number,
+    limit: number
+  ) => TurnUsageRow[];
   /** Drops turns older than the retention; how many went. */
   readonly prune: (now?: number) => number;
   /**
@@ -76,6 +82,19 @@ export const turnUsageDb = (db: BunSQLiteDatabase): TurnUsageDb => ({
         )
       )
       .orderBy(asc(turnUsage.at))
+      .all(),
+  listOf: (instanceId, since, limit) =>
+    db
+      .select()
+      .from(turnUsage)
+      .where(
+        and(
+          eq(turnUsage.instanceId, instanceId),
+          gte(turnUsage.at, new Date(since))
+        )
+      )
+      .orderBy(desc(turnUsage.at))
+      .limit(limit)
       .all(),
   prune: (now = Date.now()) =>
     db

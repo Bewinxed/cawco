@@ -271,6 +271,7 @@ export function stagedData(
     order: i,
     provider: "anthropic",
     reservePct: null,
+    sessionReservePct: null,
     atPlanLimit: "move",
   }));
   // Each window as the hub forecasts it (forecast.ts windowForecast): a

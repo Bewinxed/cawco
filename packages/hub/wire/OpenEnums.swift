@@ -752,6 +752,7 @@ public enum OpenEnums {
     public enum AtPlanLimit: OpenEnum {
         case extraUsage
         case move
+        case price
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -759,6 +760,7 @@ public enum OpenEnums {
             switch rawValue {
             case "extra-usage": self = .extraUsage
             case "move": self = .move
+            case "price": self = .price
             default: self = .unrecognized(rawValue)
             }
         }
@@ -767,6 +769,7 @@ public enum OpenEnums {
             switch self {
             case .extraUsage: "extra-usage"
             case .move: "move"
+            case .price: "price"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -775,7 +778,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.extraUsage, .move]
+        public static let allCases: [Self] = [.extraUsage, .move, .price]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -1854,6 +1857,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.noReading, .notSignedIn]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/ColdMove`.
+    public enum ColdMove: OpenEnum {
+        case cheapest
+        case whole
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "cheapest": self = .cheapest
+            case "whole": self = .whole
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .cheapest: "cheapest"
+            case .whole: "whole"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.cheapest, .whole]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -5751,6 +5792,59 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.agent, .injected, .owner, .report]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/MovePriceOption`.
+    public enum MovePriceOption: OpenEnum {
+        case compactAfter
+        case compactBefore
+        case credits
+        case stay
+        case summary
+        case wait
+        case whole
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "compact-after": self = .compactAfter
+            case "compact-before": self = .compactBefore
+            case "credits": self = .credits
+            case "stay": self = .stay
+            case "summary": self = .summary
+            case "wait": self = .wait
+            case "whole": self = .whole
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .compactAfter: "compact-after"
+            case .compactBefore: "compact-before"
+            case .credits: "credits"
+            case .stay: "stay"
+            case .summary: "summary"
+            case .wait: "wait"
+            case .whole: "whole"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.compactAfter, .compactBefore, .credits, .stay, .summary, .wait, .whole]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

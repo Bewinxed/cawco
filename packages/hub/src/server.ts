@@ -234,7 +234,7 @@ import {
 import type { CommandAck } from "@cawco/core/stream";
 import { type StreamHeartbeat, WIRE_PROTOCOL } from "@cawco/core/stream";
 import type { AttemptStart } from "@cawco/core/task-views";
-import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type { ReportedToolStatus } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
@@ -430,6 +430,7 @@ import type {
 import { tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
+import { decide, type HubTurn, type TurnChoice } from "./decide";
 import { decidesRoutes, type HarnessOffer } from "./decides";
 import { DECIDES_FILE, decidesTable } from "./decides-file";
 import { refiledStatements } from "./decision-program";
@@ -488,11 +489,12 @@ import { createJevTasks, phoneRequestRoutes } from "./jev-tasks";
 import { joinRoutes } from "./join";
 import { streamLargeJson } from "./json-response";
 import {
-  cacheWarmNow,
+  cacheState,
   createKeepAliveScheduler,
   isKeepAlive,
   type KeepAliveRow,
   keepAliveState,
+  provenCold,
 } from "./keep-alive";
 import { isBlockProgram, moveKeptBlocks, pageSourcePaths } from "./kept-blocks";
 import { boardTitle, sessionLabel } from "./labels";
@@ -504,7 +506,12 @@ import { createLawTasks } from "./law-tasks";
 import { createLaws } from "./laws";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
-import type { Stall, TakenUpBy } from "./limit-decision";
+import {
+  contextSize,
+  type Stall,
+  sessionCostsOf,
+  type TakenUpBy,
+} from "./limit-decision";
 import { createLimitMoves } from "./limit-moves";
 import { createLoginMoves } from "./login-moves";
 import {
@@ -759,7 +766,7 @@ import { createTrackers, trackerRoutes } from "./tracker";
 import { createTranscripts } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
 import { turnState } from "./turn-state";
-import { turnUsageOf } from "./turn-usage";
+import { turnOrigin, turnUsageOf } from "./turn-usage";
 import { unknownFieldsOf } from "./unknown-fields";
 import { unreachable } from "./unreachable";
 import { createTrim } from "./unused-trim";
@@ -1397,6 +1404,7 @@ export const createServer = (
     artifactLane: () => artifactLane,
     awayWords: () => awayWords,
     boundProblem: () => boundProblem,
+    cacheLapsesAt: () => cacheLapsesAt,
     callAgent: () => callAgent,
     caw: () => caw,
     checkSources: () => checkSources,
@@ -1509,8 +1517,10 @@ export const createServer = (
     forgetPending: () => forgetPending,
     forkNoticeFor: () => forkNoticeFor,
     hubStep: () => hubStep,
+    hubTurn: () => hubTurn,
     inputRefusal: () => inputRefusal,
     keptAsleep: () => keptAsleep,
+    lastTurnAt: () => lastTurnAt,
     laws: () => laws,
     leadRuns: () => leadRunsPort.now(),
     limitRefused: () => limitRefused,
@@ -1841,6 +1851,7 @@ export const createServer = (
     takeSendSignal,
     takeTaken,
     tellBack,
+    notesBeforeCold,
     turnOver,
     turnUnderWay,
     turnsWritten,
@@ -1868,7 +1879,6 @@ export const createServer = (
     unreadAskersFail,
   } = createContinuations(ctx);
   const {
-    cacheExpiry,
     carryTo,
     continuingAsMove,
     handMoveRefusal,
@@ -4708,7 +4718,7 @@ export const createServer = (
         return false;
       }
       const state = followupState(row);
-      return cacheWarmNow(row, state.midTurn, state.lastTurnAt);
+      return !provenCold(row, state.midTurn, state.lastTurnAt);
     },
     pageCards: (artifactId, cards) => artifacts.pageCards(artifactId, cards),
     project: (id) => db.project(id),
@@ -4940,7 +4950,7 @@ export const createServer = (
         return false;
       }
       const state = followupState(row);
-      return !cacheWarmNow(row, state.midTurn, state.lastTurnAt);
+      return provenCold(row, state.midTurn, state.lastTurnAt);
     },
     // Caw answers the pins of his project's sessions whose writer ended, and
     // reads every page of his project (decisions.ts).
@@ -9883,7 +9893,7 @@ export const createServer = (
     warmth: (row) => {
       const state = followupState(row);
       return {
-        warm: cacheWarmNow(row, state.midTurn, state.lastTurnAt),
+        warm: !provenCold(row, state.midTurn, state.lastTurnAt),
         idle: !state.midTurn,
       };
     },
@@ -9919,6 +9929,51 @@ export const createServer = (
     };
   };
   /**
+   * The one decision (decide.ts) on a turn the hub would start in
+   * `instanceId` by itself (`turn`; `waitedOn`: someone waits on its
+   * answer), priced at what its first request re-reads: its cache now, its
+   * context, its own measured prices.
+   */
+  const hubTurn = (
+    instanceId: string,
+    turn: HubTurn,
+    waitedOn: boolean
+  ): TurnChoice | undefined => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return;
+    }
+    const now = Date.now();
+    const context = contextSize(
+      row.contextTokens ?? lastRequestContext.get(row.id) ?? null
+    );
+    return decide(
+      {
+        now,
+        session: {
+          cache: cacheState(row, followupState(row), now),
+          context,
+          costs: sessionCostsOf(db, row, context, now),
+        },
+      },
+      { kind: "hub-turn", turn, waitedOn }
+    );
+  };
+  /** When `instanceId`'s warm cache lapses between turns; null when it is cold, unknown or mid-turn. */
+  const cacheLapsesAt = (instanceId: string): number | null => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return null;
+    }
+    const cache = cacheState(row, followupState(row), Date.now());
+    return cache.kind === "warm" && !cache.inTurn ? cache.until : null;
+  };
+  /** When `instanceId`'s last recorded turn ended, ISO; null when none is. */
+  const lastTurnAt = (instanceId: string): string | null => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    return row ? followupState(row).recordedTurnAt : null;
+  };
+  /**
    * What a cold session's workspace holds on no remote, for its cold check
    * (`/api/followup-state`): the read, or why it could not be made.
    */
@@ -9944,7 +9999,7 @@ export const createServer = (
     jev?: { attach: boolean; noul: number } | { error: string };
     unlanded?: Unlanded | { error: string };
   }> => {
-    if (cacheWarmNow(row, state.midTurn, state.lastTurnAt)) {
+    if (!provenCold(row, state.midTurn, state.lastTurnAt)) {
       return {};
     }
     const unlanded = await coldWork(row.id);
@@ -10197,7 +10252,7 @@ export const createServer = (
     activity: (row) => {
       const state = followupState(row);
       return {
-        cacheWarm: cacheWarmNow(row, state.midTurn, state.lastTurnAt),
+        cacheWarm: !provenCold(row, state.midTurn, state.lastTurnAt),
         lastActivityAt: new Date(
           Math.max(
             row.updatedAt.getTime(),
@@ -11536,11 +11591,20 @@ export const createServer = (
       return;
     }
     const at = result.timestamp ? Date.parse(result.timestamp) : Date.now();
+    // What started it: the send it read last, as the at-limit controller
+    // reads it (its `startedBy`), so the hub's own turns can be summed.
+    const started = keepAlive
+      ? undefined
+      : db
+          .sendsIn(session.id, ["read"])
+          .filter((send) => !(send.owedHeld || isKeepAlive(send.body)))
+          .at(-1)?.body.origin;
     const turn = turnUsageOf(
       session,
       { ...result, uuid: result.uuid },
       keepAlive,
-      at
+      at,
+      turnOrigin(started)
     );
     db.turnUsage.put(session.id, turn.rows, turn.seen);
     // Its spend is recorded: a charge whose move it was goes.
@@ -11571,6 +11635,9 @@ export const createServer = (
   };
   pruneTurnUsage();
   lifetime.every("turn usage pruned", DAY_MS, pruneTurnUsage);
+  // While the person is away, a session with news writes its notes before
+  // its cache goes cold (sends.ts `notesBeforeCold`).
+  lifetime.every("notes before cold", MINUTE_MS, notesBeforeCold);
   // What is owed to a session nothing will wake ends (owed-ends.ts): the
   // notices this hub kept before it started, then each hour's.
   endOwedNotices("every");
@@ -11641,16 +11708,13 @@ export const createServer = (
     accountRows: limitRows,
     idle: sessionIdle,
     admission,
-    cacheExpiresAt: cacheExpiry,
-    // Something of it waiting on the person (an ask, a card), or a
-    // top-level session a person wrote to last.
+    cacheState: (row) => cacheState(row, followupState(row), Date.now()),
+    context: (row) =>
+      row.contextTokens ?? lastRequestContext.get(row.id) ?? null,
+    // A person waits on it (decided 2026-11-19): their last message to it
+    // is unanswered, or something of it waits on them (an ask, a card).
     waitedOn: (row) =>
-      waitingNow().has(row.id) ||
-      (!row.parentInstanceId &&
-        db
-          .sendsIn(row.id, ["read", "pending", "failed"])
-          .filter((send) => !(send.owedHeld || isKeepAlive(send.body)))
-          .at(-1)?.body.origin?.kind === "human"),
+      waitingNow().has(row.id) || db.personUnanswered(row.id) !== null,
     machineName,
     noticed: (notice) => {
       rebalanceNotices.unshift(notice);
@@ -11682,14 +11746,6 @@ export const createServer = (
     // A stale hold's notice in Needs you, kept and gone as a held item's is.
     stale: (row, title, body) => watchPort.now()?.tellYou(row, title, body),
     unstale: (row) => watchPort.now()?.untell(row.id),
-    // Rebalance's move of a session mid-turn waits for its turn's end, as a
-    // person's does; its line is written once it lands.
-    owe: (row, accountId, move, why) => {
-      owedMoves.set(row.id, { to: accountId, move, waits: "turn" });
-      console.info(
-        `[rebalance] ${sessionName(row)} can't move from ${accountWords(row.accountId)} to ${accountWords(accountId)} yet: ${why}. It moves when its turn ends.`
-      );
-    },
     owed: owedTargets,
     named: (row) => sessionName(row),
     // The compaction's steps are the hub's word to the session: one whose

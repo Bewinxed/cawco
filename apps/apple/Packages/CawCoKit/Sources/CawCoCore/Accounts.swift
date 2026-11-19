@@ -44,8 +44,9 @@ public enum FleetAccounts {
         public let order: Double
         public let neverBackup: Bool
         public let reservePct: Double?
-        /// At a plan limit with extra usage on (core `AtPlanLimit`): `move` to an
-        /// account with plan room, or keep going on its `extra-usage`.
+        /// At a plan limit with extra usage on (core `AtPlanLimit`): the hub's
+        /// `price`, a forced `move` to an account with plan room, or keep going
+        /// on its `extra-usage`.
         public let atPlanLimit: String
         /// Who it is signed in as; nil until its first sign-in.
         public let identity: Identity?

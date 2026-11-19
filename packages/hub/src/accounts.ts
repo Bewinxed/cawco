@@ -30,7 +30,7 @@ import {
   type ClaudeLimits,
   type UsageLimitsResponse,
 } from "@cawco/core/usage/types";
-import { freshWindows, windowKey } from "@cawco/core/usage/windows";
+import { freshWindows, sameReset, windowKey } from "@cawco/core/usage/windows";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { z } from "zod";
 import type { DbShape } from "./db";
@@ -991,7 +991,7 @@ export const noteRateLimit = (
         (prior) =>
           prior.kind === window.kind &&
           prior.scopeLabel === window.scopeLabel &&
-          prior.resetsAt === window.resetsAt &&
+          sameReset(prior.resetsAt, window.resetsAt) &&
           prior.percent > window.percent
       )
   );

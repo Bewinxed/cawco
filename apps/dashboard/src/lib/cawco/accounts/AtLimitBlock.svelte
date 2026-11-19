@@ -3,8 +3,9 @@
    * What a running session does when its account runs out and another is
    * free: wait for a reset that is close, or move. A conversation of the
    * floor or more that moves to another organization is made small as the
-   * policy says, by the moment it moves at (core `Compaction`): ahead of its
-   * limit, or at it; its own /compact, a summary, or whole. Who writes
+   * policy says (core `Compaction`): at its limit with a warm cache, its own
+   * /compact, a summary, or whole; with a cold cache, whole or the cheapest
+   * path the hub prices (core `ColdMove`). Who writes
    * summaries is the New session form's model picker. The figure under the
    * numbers plays that policy, rebuilt as they change. Off, the numbers fold
    * away with the figure and the terms. Under them, on or off, the room, in
@@ -20,7 +21,9 @@
    */
   import type { Account, AtLimit } from "@cawco/core/accounts";
   import {
+    COLD_MOVES,
     COMPACT_METHODS,
+    type ColdMove,
     type CompactMethod,
   } from "@cawco/core/accounts/kinds";
   import { HARNESSES } from "@cawco/core/harness/kinds";
@@ -68,15 +71,7 @@
     over: atLimit.moveWholeUnderK,
     method: atLimit.compaction.atLimit,
   });
-  /** The two moments a move is made small at, each its own choice. */
-  const moments = [
-    { key: "beforeMove", label: words.beforeMove },
-    { key: "atLimit", label: words.atLimit },
-  ] as const;
-  const summarises = $derived(
-    atLimit.compaction.beforeMove === "summary" ||
-      atLimit.compaction.atLimit === "summary"
-  );
+  const summarises = $derived(atLimit.compaction.atLimit === "summary");
   /** The machines a summariser may run on: every connected one. */
   const online = $derived(
     boardStore.machines.filter((machine) => machine.status === "online")
@@ -99,6 +94,8 @@
 
   const isMethod = (value: string): value is CompactMethod =>
     COMPACT_METHODS.some((one) => one === value);
+  const isColdMove = (value: string): value is ColdMove =>
+    COLD_MOVES.some((one) => one === value);
 </script>
 
 <div class="@container flex flex-col">
@@ -171,29 +168,48 @@
         />
         <span>{words.kTokens}</span>
       </p>
-      {#each moments as moment (moment.key)}
-        <div
-          class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-row"
+      <div
+        class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-row"
+      >
+        <span id="{id}-at-limit">{words.atLimit}</span>
+        <Tabs.Root
+          onValueChange={(value) => {
+            if (isMethod(value)) {
+              atLimit.compaction.atLimit = value;
+            }
+          }}
+          value={atLimit.compaction.atLimit}
         >
-          <span id="{id}-{moment.key}">{moment.label}</span>
-          <Tabs.Root
-            onValueChange={(value) => {
-              if (isMethod(value)) {
-                atLimit.compaction[moment.key] = value;
-              }
-            }}
-            value={atLimit.compaction[moment.key]}
-          >
-            <Tabs.List aria-labelledby="{id}-{moment.key}">
-              {#each COMPACT_METHODS as method (method)}
-                <Tabs.Trigger value={method}>
-                  {words.methods[method]}
-                </Tabs.Trigger>
-              {/each}
-            </Tabs.List>
-          </Tabs.Root>
-        </div>
-      {/each}
+          <Tabs.List aria-labelledby="{id}-at-limit">
+            {#each COMPACT_METHODS as method (method)}
+              <Tabs.Trigger value={method}>
+                {words.methods[method]}
+              </Tabs.Trigger>
+            {/each}
+          </Tabs.List>
+        </Tabs.Root>
+      </div>
+      <div
+        class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-row"
+      >
+        <span id="{id}-cold-move">{words.coldMove}</span>
+        <Tabs.Root
+          onValueChange={(value) => {
+            if (isColdMove(value)) {
+              atLimit.compaction.coldMove = value;
+            }
+          }}
+          value={atLimit.compaction.coldMove}
+        >
+          <Tabs.List aria-labelledby="{id}-cold-move">
+            {#each COLD_MOVES as move (move)}
+              <Tabs.Trigger value={move}>
+                {words.coldMoves[move]}
+              </Tabs.Trigger>
+            {/each}
+          </Tabs.List>
+        </Tabs.Root>
+      </div>
       {#if summarises}
         <div class="flex flex-col gap-space-3 py-space-2" in:unfold out:unfold>
           <p class="type-meta m-0 text-pretty text-ink-muted">

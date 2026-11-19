@@ -3,7 +3,7 @@ import type { OwedMoveWait } from "@cawco/core/protocol";
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { unreachable } from "../unreachable";
-import { owedMoves } from "./schema";
+import { type MOVE_OFF_WHYS, owedMoves } from "./schema";
 
 /**
  * What a session is told once the move it owes lands (compaction.ts
@@ -19,13 +19,20 @@ export type OwedCarry =
 /**
  * A move a session owes to its next launch (schema `owedMoves`), read the
  * way server.ts takes it: `to` absent is a relaunch alone, its row already
- * naming the account.
+ * naming the account, or, with {@link leave}, a marker that it must leave
+ * its account, where it goes decided as the move is carried out (hub
+ * decide.ts). A hub move is never kept with a target past the moment it is
+ * carried: only a person's own move (`byHand`) waits with one.
  */
 export interface OwedMove {
+  /** When it was kept, epoch ms: a hub move carried later than the decision allows is decided again (decide.ts `CHOICE_FRESH_MS`). */
+  at?: number;
   /** A person asked for it ({@link OwedMovesDb}): the at-limit controller only carries it out. */
   byHand?: true;
   /** What the session is told once it lands ({@link OwedCarry}); told once, by whoever lands it (limit-moves.ts). */
   carry?: OwedCarry;
+  /** It must leave its account, for this (hub-shapes.ts `MoveOffWhy`): where to is decided as it is carried. */
+  leave?: (typeof MOVE_OFF_WHYS)[number];
   /**
    * A model a person picked while the move waited, checked against the
    * account it lands on (limit-moves.ts `pickWithMove`): the launch that
@@ -87,6 +94,8 @@ const toOwed = (row: Row): OwedMove => {
     ...(row.byHand ? { byHand: true as const } : {}),
     ...(row.pickedModel === null ? {} : { model: row.pickedModel }),
     ...(carry ? { carry } : {}),
+    ...(row.leave === null ? {} : { leave: row.leave }),
+    at: row.createdAt.getTime(),
   };
 };
 
@@ -117,6 +126,7 @@ export const owedMovesDb = (db: BunSQLiteDatabase): OwedMovesDb => {
         pickedModel: owed.model ?? null,
         carryOn: owed.carry?.kind ?? null,
         carryLine: owed.carry?.kind === "model" ? owed.carry.line : null,
+        leave: owed.leave ?? null,
         createdAt: new Date(),
       };
       db.insert(owedMoves)

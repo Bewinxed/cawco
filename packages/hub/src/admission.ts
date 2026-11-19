@@ -1,12 +1,11 @@
 import { accountNameAmong, modelScope } from "@cawco/core/accounts";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
-import { costForUsage } from "@cawco/core/usage/pricing";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {
   bearing,
-  headroom,
   openedAt,
+  resetMinute,
   windowKey,
   windowOpen,
   windowUsed,
@@ -24,11 +23,9 @@ import { historyPoints, usdPerPercent } from "./forecast";
  * when its warm cache carries) plus an allowance for its next real turn, in
  * dollars, against every window of the target that bears on the session
  * (core `bearing`), each measured in dollars per percent from that
- * account's own history of it (forecast.ts `usdPerPercent`). What the
- * target has left after a move in the window with the least left then
- * ({@link figuresOf}) is the one figure a decision reads of it here:
- * at-limit.ts `decideStop` weighs it with everything else it knows, and
- * nothing here refuses a move.
+ * account's own history of it (forecast.ts `usdPerPercent`). The ledger of
+ * each window is what the one decision reads of an account here (decide.ts,
+ * its floor test): nothing here refuses a move.
  *
  * The target's measured state is its reading plus the spend `turn_usage`
  * recorded there since that reading (a Claude turn that reached the model
@@ -37,36 +34,16 @@ import { historyPoints, usdPerPercent } from "./forecast";
  * session's first turn on the target is recorded, once it sleeps on the
  * target with no turn there (nothing more of the move's cost is coming; a
  * wake is admitted again like any move), once it is over, or at the reset
- * of any window it was charged against. One that sleeps still owing its
- * move (taken up at its wake) keeps its charge: it is not on the target
- * yet.
- *
- * Affinity ({@link admittedHere}): a session moved onto its account inside
- * the current window of the window that binds there stays (on a verified
- * Ultra account, its week). Another account freeing is never a reason to
- * move it again; only its own limit is.
+ * of any window it was charged against: a real reset, its reset a new
+ * minute (core `resetMinute`), never the same reset reported a second
+ * apart. One that sleeps still owing its move (taken up at its wake) keeps
+ * its charge: it is not on the target yet.
  */
-
-/**
- * The next real turn an admitted session is charged on top of its re-read:
- * $0.42, the top of what each session's second turn cost on e8b553ef after
- * the 2026-10-20 06:10Z herd move ($0.06–0.42, `turn_usage`), the first
- * turn after a re-read being the one that does work.
- */
-export const NEXT_TURN_ALLOWANCE_USD = 0.42;
 
 /** How far back an account's dollars per percent is measured: a weekly window and a day, as the forecast reads. */
 const LOOKBACK_MS = 8 * DAY_MS;
 /** How long one account's measured dollars per percent is kept between reads. */
 const PER_PCT_FOR_MS = 60_000;
-
-/** What moving a session onto an account costs, in dollars: its re-read and its next turn. */
-export interface Projected {
-  allowanceUsd: number;
-  /** Null when its model has no listed price. */
-  reReadUsd: number | null;
-  tokens: number;
-}
 
 /**
  * What the ledger holds of one window of a target account now, each a
@@ -93,157 +70,18 @@ export interface Ledger {
   windows: WindowLedger[];
 }
 
-/**
- * One move's figures on its target: the window with the least room once it
- * has landed (`window`; null when the target has no window read), what the
- * move takes of that window and what it leaves. A window not measured in
- * dollars counts its use as read alone.
- */
-export interface Figure {
-  /** What it has left now, before the move, percent: the least of every window's room. */
-  left: number;
-  /** What this move takes of {@link window}, percent; null when unmeasured or unpriced. */
-  movePct: number | null;
-  /** What {@link window} has left after it ({@link roomAfterPct}). */
-  roomAfter: number;
-  /** No window that bears is measured in dollars, or the one measured has an unpriced spend or charge: the target takes one move at a time. */
-  unmeasured: boolean;
-  /** Dollars per percent of {@link window}; null when unmeasured. */
-  usdPerPct: number | null;
-  window: WindowLedger["window"] | null;
-}
-
-/** One move's figures on its target, for a journal line and the wake path: the ledger, and what the move takes and leaves. */
-export interface Figures extends Figure {
-  pendingMoves: number;
-  projected: Projected;
-}
-
 interface Charge {
   accountId: string;
   at: number;
   instanceId: string;
-  /** The reset of every window it was charged against, by window (null for a fresh one, which nothing opened yet): a new window of any of them drops it. */
-  resets: ReadonlyMap<string, string | null>;
+  /** The reset minute of every window it was charged against, by window (null for a fresh one, which nothing opened yet): a new window of any of them drops it. */
+  resets: ReadonlyMap<string, number | null>;
   usd: number | null;
 }
 
 /** "$8.03"; an unpriced cost is "an unpriced amount". */
 export const usdWords = (usd: number | null): string =>
   usd === null ? "an unpriced amount" : `$${usd.toFixed(2)}`;
-
-/**
- * The context a move re-reads: the last request's prompt (uncached input,
- * cache reads and writes of one request), capped at the model's window, as
- * no request sends more. One never reported, or reported past the window (a
- * turn's sum of requests), is priced at the window. With no window known it
- * is the context as reported, none when never reported.
- */
-export const pricedTokens = (
-  context: number | null,
-  window: number | null
-): number => {
-  if (window === null) {
-    return context ?? 0;
-  }
-  return Math.min(context ?? window, window);
-};
-
-/**
- * A session's re-read of `tokens` on another account: read from a cache
- * that carries (one organization, its cache still warm: at-limit.ts
- * `cacheCarries`), else written into a cold cache at its lifetime's write
- * price; plus {@link NEXT_TURN_ALLOWANCE_USD}. Pure: the listed rates of `now`.
- */
-export const projectedMove = (
-  session: { cacheTtl: string | null; model: string | null },
-  tokens: number,
-  carries: boolean,
-  now: number
-): Projected => {
-  const read = { input: 0, output: 0, reasoning: 0 };
-  const usage = carries
-    ? { ...read, cacheCreation: 0, cacheRead: tokens }
-    : {
-        ...read,
-        cacheCreation: tokens,
-        cacheCreation1h: session.cacheTtl === "1h" ? tokens : 0,
-        cacheRead: 0,
-      };
-  let reReadUsd: number | null = 0;
-  if (tokens > 0) {
-    reReadUsd = session.model ? costForUsage(session.model, usage, now) : null;
-  }
-  return { tokens, reReadUsd, allowanceUsd: NEXT_TURN_ALLOWANCE_USD };
-};
-
-/** What a move takes of a window measured at `usdPerPct`, percent; null when unmeasured or unpriced. */
-const movePctOf = (
-  projected: Projected,
-  usdPerPct: number | null
-): number | null =>
-  projected.reReadUsd === null || usdPerPct === null || usdPerPct <= 0
-    ? null
-    : (projected.reReadUsd + projected.allowanceUsd) / usdPerPct;
-
-/**
- * What a window read at `usedPct` has left once the spend recorded since its
- * reading, the moves admitted there and this one have landed, percent: what
- * goes unmeasured counts nothing.
- */
-const roomAfterPct = (
-  usedPct: number,
-  ledger: Pick<WindowLedger, "pendingPct" | "spentPct">,
-  movePct: number | null
-): number =>
-  100 -
-  (usedPct +
-    (ledger.spentPct ?? 0) +
-    (ledger.pendingPct ?? 0) +
-    (movePct ?? 0));
-
-/**
- * A move's figures from a target's ledger and its projected cost
- * ({@link Figure}): every window's room after the move, the least of them
- * the one read. A move is measured when some window is measured in dollars
- * with its spend and charges priced.
- */
-export const figuresOf = (
-  ledger: Pick<Ledger, "windows">,
-  projected: Projected
-): Figure => {
-  let least: Figure | null = null;
-  let left = 100;
-  for (const one of ledger.windows) {
-    const movePct = movePctOf(projected, one.usdPerPct);
-    const roomAfter = roomAfterPct(one.usedPct, one, movePct);
-    left = Math.min(left, roomAfterPct(one.usedPct, one, null));
-    if (!least || roomAfter < least.roomAfter) {
-      least = {
-        window: one.window,
-        movePct,
-        roomAfter,
-        usdPerPct: one.usdPerPct,
-        left: 0,
-        unmeasured: true,
-      };
-    }
-  }
-  const measured = ledger.windows.some(
-    (one) =>
-      one.usdPerPct !== null && one.spentPct !== null && one.pendingPct !== null
-  );
-  return least
-    ? { ...least, left, unmeasured: !measured }
-    : {
-        window: null,
-        movePct: null,
-        roomAfter: 100,
-        usdPerPct: null,
-        left,
-        unmeasured: true,
-      };
-};
 
 /**
  * The windows of `accountId`'s reading that bear on a session of model
@@ -265,7 +103,7 @@ const bearingWindows = (
   const reported = new Map(
     held
       .filter((one) => windowOpen(one, now))
-      .map((one) => [windowKey(one), one.resetsAt])
+      .map((one) => [windowKey(one), resetMinute(one)])
   );
   return { reading, reported, windows };
 };
@@ -336,9 +174,12 @@ export const createAdmission = (db: DbShape) => {
         now
       );
       const open = new Map(windows.map((one) => [windowKey(one), one]));
-      const reset = [...charge.resets].some(
-        ([key, at]) => at !== null && open.get(key)?.resetsAt !== at
-      );
+      // A window period is its reset minute (core `resetMinute`): a reset
+      // reported a second apart is the same window, not a new one.
+      const reset = [...charge.resets].some(([key, at]) => {
+        const window = open.get(key);
+        return at !== null && (!window || resetMinute(window) !== at);
+      });
       if (reset) {
         release(id, "as a window it was charged against reset");
         continue;
@@ -435,29 +276,7 @@ export const createAdmission = (db: DbShape) => {
     };
   };
 
-  /**
-   * A move of `session` onto `targetId` priced as `projected`: the ledger
-   * there, and the figures of the window with the least room after it
-   * ({@link figuresOf}). Read by the wake path (limit-moves.ts `replaceAtWake`);
-   * a limit's and a rebalance's moves read the same figures through their
-   * decision (at-limit.ts `decideStop`).
-   */
-  const check = (
-    session: Pick<PublicInstanceRow, "id" | "model">,
-    targetId: string,
-    projected: Projected,
-    now: number
-  ): Figures => {
-    const held = ledger(targetId, session.id, session.model, now);
-    return {
-      ...figuresOf(held, projected),
-      pendingMoves: held.pendingMoves,
-      projected,
-    };
-  };
-
   return {
-    check,
     ledger,
     /**
      * Charges `instanceId`'s move onto `accountId` at `usd` (its re-read and
@@ -511,39 +330,6 @@ export const createAdmission = (db: DbShape) => {
       if (charge && row?.accountId === charge.accountId) {
         release(instanceId, "as it went to sleep there with no turn");
       }
-    },
-    /**
-     * Whether `row` was moved onto the account it is on inside the current
-     * window of the window that binds there now (core `headroom`; its last
-     * `moved` line lands there): it stays, and no other account freeing
-     * moves it again. On a verified Ultra account that is its week.
-     */
-    admittedHere(row: PublicInstanceRow, now = Date.now()): boolean {
-      if (!row.accountId) {
-        return false;
-      }
-      if (charges.get(row.id)?.accountId === row.accountId) {
-        return true;
-      }
-      // A line that does not read could be its move here: it stays, as
-      // one that lands here would, inside the window alone.
-      const last = db.atLimit.latestEvent(row.id, "moved");
-      if (!(
-        last &&
-        (last.move === null ||
-          (last.move.kind === "moved" && last.move.to.id === row.accountId))
-      )) {
-        return false;
-      }
-      const { windows } = bearingWindows(
-        db,
-        row.accountId,
-        modelScope(row.model),
-        now
-      );
-      const binds = headroom(windows, now)?.window;
-      const opened = binds ? openedAt(binds) : null;
-      return opened !== null && last.at >= opened;
     },
   };
 };

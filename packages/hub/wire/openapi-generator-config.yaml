@@ -52,6 +52,7 @@ typeOverrides:
     CapPeriod: OpenEnums.CapPeriod
     CawRunningKind: OpenEnums.CawRunningKind
     ClaudeLimitsErrorKind: OpenEnums.ClaudeLimitsErrorKind
+    ColdMove: OpenEnums.ColdMove
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage
     CommentAttachmentKind: OpenEnums.CommentAttachmentKind
@@ -139,6 +140,7 @@ typeOverrides:
     MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
     MemoryScopeRole: OpenEnums.MemoryScopeRole
     MomentAuthor: OpenEnums.MomentAuthor
+    MovePriceOption: OpenEnums.MovePriceOption
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage
     MoveStage: OpenEnums.MoveStage
     MoveStep: OpenEnums.MoveStep

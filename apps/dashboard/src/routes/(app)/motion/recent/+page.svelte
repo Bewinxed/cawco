@@ -702,6 +702,7 @@
           order,
           provider: CLAUDE_PROVIDER,
           reservePct: null,
+          sessionReservePct: null,
         })),
         bench: [],
         catalogFaults: [],

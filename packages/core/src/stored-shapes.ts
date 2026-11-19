@@ -147,6 +147,37 @@ const MoveBecauseShape = declared(
 );
 export type MoveBecauseOutput = z.output<typeof MoveBecauseShape>;
 
+const MovePriceOptionShape = declared(
+  z.enum([
+    "stay",
+    "wait",
+    "credits",
+    "whole",
+    "compact-before",
+    "compact-after",
+    "summary",
+  ]),
+  "MovePriceOption",
+  "packages/core/src/accounts.ts"
+);
+export type MovePriceOptionOutput = z.output<typeof MovePriceOptionShape>;
+
+const MovePriceShape = declared(
+  z.object({
+    next: z
+      .object({
+        to: z.string().optional(),
+        usd: z.number().nullable(),
+        what: MovePriceOptionShape,
+      })
+      .nullable(),
+    usd: z.number().nullable(),
+  }),
+  "MovePrice",
+  "packages/core/src/accounts.ts"
+);
+export type MovePriceOutput = z.output<typeof MovePriceShape>;
+
 const AccountMarkShape = declared(
   z.union([
     z.object({
@@ -261,6 +292,7 @@ const AccountMoveShape = declared(
       resetsAt: z.number().nullable(),
       because: MoveBecauseShape.optional(),
       cost: z.object({ pct: z.number(), window: z.string() }).optional(),
+      price: MovePriceShape.optional(),
       ended: z.object({ tasks: z.number(), wakeups: z.number() }).optional(),
     }),
     z.object({
@@ -483,7 +515,7 @@ export const AskStateSchema: z.ZodType<AskStateType> = AskStateShape;
 export type AskStateOutput = z.output<typeof AskStateShape>;
 
 const AtPlanLimitShape = declared(
-  z.enum(["move", "extra-usage"]),
+  z.enum(["price", "move", "extra-usage"]),
   "AtPlanLimit",
   "packages/core/src/accounts.ts"
 );

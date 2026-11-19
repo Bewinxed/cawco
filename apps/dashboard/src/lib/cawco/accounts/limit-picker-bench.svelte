@@ -173,6 +173,7 @@
     neverBackup: false,
     provider: CLAUDE_PROVIDER,
     reservePct: null,
+    sessionReservePct: null,
   });
   const ACCOUNTS: Account[] = [
     account("jude", "jude@petralab.ai", "amber", null, 0),

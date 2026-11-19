@@ -17,6 +17,7 @@ import type {
 } from "@cawco/core/accounts";
 import type {
   AccountHue as AccountHueType,
+  ColdMove as ColdMoveType,
   CompactMethod as CompactMethodType,
   PlacementStrategy as PlacementStrategyType,
 } from "@cawco/core/accounts/kinds";
@@ -238,6 +239,7 @@ import type {
   BuiltOnOutput,
   CalledArtifactOutput,
   CanvasShapesOutput,
+  ColdMoveOutput,
   CommandRefusalOutput,
   CommentAttachmentOutput,
   CompactionOutput,
@@ -445,6 +447,7 @@ prove<
     Same<ArtifactSessionFrameOutput, ArtifactSessionFrameType>,
     Same<ArtifactSessionHeardOutput, ArtifactSessionHeardType>,
     Same<CompactMethodOutput, CompactMethodType>,
+    Same<ColdMoveOutput, ColdMoveType>,
     Same<HarnessKindOutput, HarnessKindType>,
     Same<CompactionOutput, CompactionType>,
     Same<AtLimitOutput, AtLimitType>,

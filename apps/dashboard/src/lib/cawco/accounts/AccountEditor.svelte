@@ -55,6 +55,10 @@
     hue: account.hue,
     neverBackup: account.neverBackup,
     reserve: account.reservePct === null ? "" : String(account.reservePct),
+    sessionReserve:
+      account.sessionReservePct === null
+        ? ""
+        : String(account.sessionReservePct),
   });
   let fields = $state<AccountFields>(untrack(saved));
   const dirty = $derived(JSON.stringify(fields) !== JSON.stringify(saved()));
@@ -68,22 +72,29 @@
   );
   const limits = $derived(providerLimits(account.provider));
 
-  /** The reserve as the hub takes it: a whole percentage, or null. */
-  const reservePct = $derived.by(() => {
-    const text = fields.reserve.trim();
+  /** A floor as the hub takes it: a whole percentage, null for none, undefined when it doesn't read. */
+  const floorOf = (field: string): number | null | undefined => {
+    const text = field.trim();
     if (text === "") {
       return null;
     }
     const n = Number(text);
     return Number.isInteger(n) && n >= 0 && n <= 100 ? n : undefined;
-  });
+  };
+  /** The week's floor (core `Account.reservePct`). */
+  const reservePct = $derived(floorOf(fields.reserve));
+  /** The 5-hour window's floor (core `Account.sessionReservePct`). */
+  const sessionReservePct = $derived(floorOf(fields.sessionReserve));
+  const floorsRead = $derived(
+    reservePct !== undefined && sessionReservePct !== undefined
+  );
 
   let saving = $state(false);
   let deleting = $state(false);
   let refused = $state<string | undefined>(undefined);
 
   async function save() {
-    if (saving || reservePct === undefined) {
+    if (saving || reservePct === undefined || sessionReservePct === undefined) {
       return;
     }
     saving = true;
@@ -92,7 +103,9 @@
       await patchAccount(account.id, {
         label: fields.nickname.trim() || null,
         hue: fields.hue,
-        ...(limits ? { neverBackup: fields.neverBackup, reservePct } : {}),
+        ...(limits
+          ? { neverBackup: fields.neverBackup, reservePct, sessionReservePct }
+          : {}),
       });
       kept.drop();
     } catch (error) {
@@ -149,7 +162,7 @@
 </script>
 
 <EditorFrame
-  canSave={dirty && reservePct !== undefined}
+  canSave={dirty && floorsRead}
   deleteLabel={words.editor.remove}
   {deleting}
   failed={refused !== undefined}
@@ -226,8 +239,26 @@
           />
           <span>{words.editor.reserveUnit}</span>
         </span>
+        <label for="session-reserve">{words.editor.sessionReserve}</label>
+        <span
+          class="inline-flex flex-none items-center gap-space-3 whitespace-nowrap"
+        >
+          <Input
+            data-field
+            aria-describedby={sessionReservePct === undefined
+              ? "reserve-line"
+              : undefined}
+            aria-invalid={sessionReservePct === undefined ? "true" : undefined}
+            class="flex-none"
+            field="number"
+            id="session-reserve"
+            inputmode="numeric"
+            bind:value={fields.sessionReserve}
+          />
+          <span>{words.editor.sessionReserveUnit}</span>
+        </span>
       </div>
-      {#if reservePct === undefined}
+      {#if !floorsRead}
         <p class="type-meta text-status-fail-ink" id="reserve-line" in:appear>
           {words.editor.reserveInvalid}
         </p>

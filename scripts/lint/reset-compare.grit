@@ -1,0 +1,30 @@
+language js
+
+// A window's reset is compared as a time, rounded to the minute (core
+// usage/windows.ts `sameReset`, `resetMinute`, `windowIdentity`), never as
+// the provider's text: a provider reports one reset a second apart from one
+// reading to the next (2026-11-19: design@'s week alternated between
+// `…05:59:59.000Z` and `…06:00:00.000Z`), and a text compare read every
+// such pair as a reset, dropping 25 of the day's 28 admitted moves
+// (move-audit.md F9). A context never priced as a model's window when it is
+// unknown (`context ?? window`, F2): an unknown context stays unknown
+// (hub limit-decision.ts `contextSize`).
+
+pattern reset_read() {
+  or { `$_.resetsAt`, `$_?.resetsAt` }
+}
+
+or {
+  or { `$l === $r`, `$l !== $r`, `$l == $r`, `$l != $r` } as $hit where {
+    $filename <: includes "packages/hub/src/",
+    $l <: reset_read(),
+    $r <: reset_read(),
+    register_diagnostic(span=$hit, message="Two resets compared as text: compare them as times, rounded to the minute (core usage/windows.ts `sameReset`), so one reset reported a second apart is one window.")
+  },
+  `$c ?? $w` as $hit where {
+    $filename <: includes "packages/hub/src/",
+    $c <: r".*[cC]ontext.*",
+    $w <: r".*[wW]indow.*",
+    register_diagnostic(span=$hit, message="An unknown context priced as its model's window: an unknown context stays unknown (hub limit-decision.ts `contextSize`), and a decision waits until it is known.")
+  }
+}

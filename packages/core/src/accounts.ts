@@ -18,6 +18,7 @@
 import { nullable, object, optional, safeParse, string } from "valibot";
 import {
   type AccountHue,
+  type ColdMove,
   type CompactMethod,
   PLACEMENT_STRATEGIES,
   type PlacementStrategy,
@@ -252,15 +253,19 @@ export interface AccountIdentity {
 
 /**
  * What a session on an account does once the account reaches a plan limit
- * while its extra usage is on (Claude Code's `overageStatus` allowed): moves
- * to an account with plan room (`move`, the default), or keeps going on this
- * account's extra usage (`extra-usage`). With extra usage off or refused, the
- * account is at its limit as any other is, whichever it says. It governs a
- * session that has reached the limit: a new session goes to plan room first,
- * and to a keep-going account's extra usage only when no account it may run
- * on has plan room, or when Pinned pins that account.
+ * while its extra usage is on (Claude Code's `overageStatus` allowed): the
+ * hub prices it (`price`, the default, decided 2026-11-19 move-redesign
+ * "extra"): the session's measured next-turn dollars on credits against the
+ * cheapest move to an account with plan room that holds (hub decide.ts),
+ * the lower taken; or the person forces it, to move to an account with plan
+ * room (`move`) or to keep going on this account's extra usage
+ * (`extra-usage`). With extra usage off or refused, the account is at its
+ * limit as any other is, whichever it says. It governs a session that has
+ * reached the limit: a new session goes to plan room first, and to a
+ * keep-going account's extra usage only when no account it may run on has
+ * plan room, or when Pinned pins that account.
  */
-export type AtPlanLimit = "move" | "extra-usage";
+export type AtPlanLimit = "price" | "move" | "extra-usage";
 
 export interface Account {
   /** What its sessions do at a plan limit while its extra usage is on ({@link AtPlanLimit}). */
@@ -281,10 +286,18 @@ export interface Account {
   order: number;
   provider: AccountProvider;
   /**
-   * New sessions stop being placed on it once its weekly window passes this
-   * percentage; null: no reserve.
+   * Its week's floor: past this percent of its weekly window used, no new
+   * session is placed on it and no hub move lands on it (hub decide.ts, the
+   * floor test); null: no floor. {@link ACCOUNT_RESERVE} by default: 10% of
+   * the week kept (decided 2026-11-19, move-redesign "room").
    */
   reservePct: number | null;
+  /**
+   * Its 5-hour window's floor, as {@link reservePct} is its week's: past
+   * this percent of its 5-hour window used, nothing new is placed or moved
+   * onto it; null: no floor. {@link ACCOUNT_RESERVE} by default: 20% kept.
+   */
+  sessionReservePct: number | null;
   /**
    * The step its setup (Configure → Accounts → Add) stands at, while that
    * setup is unfinished; absent once it is done. A reload, or a press on the
@@ -292,6 +305,13 @@ export interface Account {
    */
   setupStep?: AccountSetupStep;
 }
+
+/**
+ * An account's floors as it starts (decided 2026-11-19, move-redesign
+ * "room"): 10% of its week and 20% of its 5-hour window stay free of new
+ * sessions and of the hub's moves. A person changes them per account.
+ */
+export const ACCOUNT_RESERVE = { weeklyPct: 90, sessionPct: 80 } as const;
 
 /** A step of an account's setup after it was made (the dashboard's `words.setup.steps`). */
 export const ACCOUNT_SETUP_STEPS = [
@@ -356,32 +376,32 @@ export interface StrategyChoice {
 }
 
 /**
- * How a session is compacted when it moves, by the moment the hub moves it
- * (hub at-limit.ts `compactionPlan`, the one rule every mover reads). A
- * context under {@link AtLimit.moveWholeUnderK} thousand tokens, or one whose
- * cache carries to the account it moves to, moves whole whatever this says.
- * A session that stays on its organization is compacted by its harness on
- * its own; before that, once a turn ends with its context within
- * {@link Compaction.fileRoom} tokens of where that harness compacts it, the
- * hub gives it one turn to file its open items (hub at-limit.ts `fileDue`).
+ * How a session is made small when it moves, as the one decision (hub
+ * decide.ts) offers it. A context under {@link AtLimit.moveWholeUnderK}
+ * thousand tokens, or one whose cache carries to the account it moves to,
+ * moves whole whatever this says. A cold cache moves as {@link coldMove}
+ * says. A warm cache moving to another organization is priced: whole, its
+ * harness's own compaction before the move (only while its account can run
+ * it) or after it, the cheaper over its next turn; at a limit, as
+ * {@link atLimit} names it. A session that stays on its organization is
+ * compacted by its harness on its own; before that, once a turn ends with
+ * its context within {@link Compaction.fileRoom} tokens of where that
+ * harness compacts it, the hub gives it one turn to file its open items
+ * (hub limit-decision.ts `fileDue`).
  */
 export interface Compaction {
   /**
    * Nothing can run on its account (its limit refused a turn, its sign-in
-   * was refused): `summary` goes on from a summary on the target; `native`
-   * moves it whole and compacts it there, cold; `whole` moves it as it is.
-   * A summary that can't be written for a move (its summariser can't fit
-   * the conversation, can't be placed, or the conversation can't be read)
-   * takes `native` for that move, its line saying why.
+   * was refused) and its cache is warm: `summary` goes on from a summary on
+   * the target; `native` moves it whole and compacts it there; `whole`
+   * moves it as it is. A summary that can't be written for a move (its
+   * summariser can't fit the conversation, can't be placed, or the
+   * conversation can't be read) takes `native` for that move, its line
+   * saying why.
    */
   atLimit: CompactMethod;
-  /**
-   * Its account can run it still (forecast to run out, on extra usage past
-   * its plan, a person's move): `native` files its open items and compacts
-   * it there, warm, then moves it; `summary` files them, then goes on from a
-   * summary on the target; `whole` moves it as it is.
-   */
-  beforeMove: CompactMethod;
+  /** A cold cache moves whole, or by the cheapest path ({@link ColdMove}). */
+  coldMove: ColdMove;
   /**
    * The room, in tokens, short of the point where its harness compacts it
    * on its own (core harness.ts `NeutralResultMessage.compactsAt`), at which
@@ -395,7 +415,7 @@ export interface Compaction {
 }
 
 export const DEFAULT_COMPACTION: Compaction = {
-  beforeMove: "native",
+  coldMove: "whole",
   atLimit: "summary",
   fileRoom: 30_000,
   summarizer: { harness: "claude", model: "claude-sonnet-5-5" },
@@ -404,7 +424,7 @@ export const DEFAULT_COMPACTION: Compaction = {
 /**
  * What a running session does when its account hits its limit: wait for the
  * reset, or move to another account that can take it (the hub's
- * `decideStop`). `waitMinutes`: a reset this close is waited for.
+ * `decide`). `waitMinutes`: a reset this close is waited for.
  * `moveWholeUnderK`: a context under this many thousand tokens moves whole
  * and goes on; one of this many or more, moved to another organization
  * (whose cache it can't read), is compacted as `compaction` says for the
@@ -458,7 +478,7 @@ export const RESTRICTIVE_AT_LIMIT: AtLimit = {
   staleAfterHours: 1,
   moveWholeUnderK: 0,
   compaction: {
-    beforeMove: "whole",
+    coldMove: "whole",
     atLimit: "whole",
     fileRoom: 0,
     summarizer: DEFAULT_COMPACTION.summarizer,
@@ -1495,6 +1515,34 @@ export type MoveBecause =
   | { kind: "extra-usage" };
 
 /**
+ * What the hub's one decision (hub decide.ts) priced for a move it made:
+ * the dollars of the option it took (`usd`; null when its model or context
+ * could not be priced), and the next-best option it passed over with its
+ * dollars (`next`; null when there was none): staying (`stay`), waiting for
+ * the account's reset (`wait`), keeping on extra usage (`credits`), or
+ * another way of moving, named by how it moves and, when it goes elsewhere,
+ * where (`to`).
+ */
+export interface MovePrice {
+  next: {
+    to?: string;
+    usd: number | null;
+    what: MovePriceOption;
+  } | null;
+  usd: number | null;
+}
+
+/** An option of the decision, as a move's line names the next best ({@link MovePrice}). */
+export type MovePriceOption =
+  | "stay"
+  | "wait"
+  | "credits"
+  | "whole"
+  | "compact-before"
+  | "compact-after"
+  | "summary";
+
+/**
  * What the hub did when a running session's account reached its limit: the
  * one line its transcript says it in (core `ACCOUNT_MOVE`). `tokens` is the
  * session's context as its harness last reported it; null when it never has.
@@ -1512,7 +1560,8 @@ export type AccountMove =
       signedOutOn?: string;
       /**
        * Moved to another organization with a context of the policy's
-       * `moveWholeUnderK` or more, compacted natively ({@link Compaction}):
+       * `moveWholeUnderK` or more, compacted natively as the decision chose
+       * ({@link Compaction}):
        * it files its open items, then its harness's `/compact` runs, as its
        * first steps on `to`, or on `from` before the move
        * ({@link compactFirst}). The line is said again under its id as that
@@ -1521,7 +1570,7 @@ export type AccountMove =
       compact?: CompactStage;
       /**
        * The compaction runs on `from`, warm, and the move follows it: the
-       * policy's `beforeMove`. Absent: it runs on `to` after the move.
+       * decision priced it cheapest. Absent: it runs on `to` after the move.
        */
       compactFirst?: true;
       /** The harness whose own `/compact` runs, when its descriptor names it on a moved line (core harness/traits.ts `compactorOf`): what its compaction keeps is less. */
@@ -1550,6 +1599,8 @@ export type AccountMove =
       because?: MoveBecause;
       /** What the re-read cost on `to`: a percent of the window it is counted against, named as `windowWords` names it; absent when unpriced. */
       cost?: { pct: number; window: string };
+      /** The price the hub's decision chose, and the next best ({@link MovePrice}); absent on a person's move and on lines stored before it was said. */
+      price?: MovePrice;
       /**
        * What the move ended with its old process: work it held for later (its
        * background tasks, its one-time wake-ups), which no resume on another

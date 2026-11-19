@@ -140,6 +140,7 @@ import type {
   StoredSendRefusal,
 } from "./db/stored-types";
 import type { Undoable } from "./db/trash";
+import type { HubTurn, TurnChoice } from "./decide";
 import type { createDecisions } from "./decisions";
 import type { createDelegateWaits } from "./delegate-waits";
 import type { createDesignSystem } from "./design-system";
@@ -425,6 +426,8 @@ export interface ClosureContext {
   browserStream: ReturnType<typeof createBrowserStream>;
   browsers: ReturnType<typeof createBrowsers>;
   byIdNow: <E extends HubEnvelope<"control" | "send">>(envelope: E) => E;
+  /** When `instanceId`'s warm prompt cache lapses, between turns; null when it is cold, unknown or inside a turn (keep-alive.ts `cacheState`). */
+  cacheLapsesAt: (instanceId: string) => number | null;
   callAgent: AgentCall;
   callFs: <O extends FsOp>(
     machineId: string,
@@ -647,6 +650,12 @@ export interface ClosureContext {
   hubPreviewOrigins: () => HubPreviewOrigins;
   hubRun: `${string}-${string}-${string}-${string}-${string}`;
   hubStep: (event: HandoverEvent) => HandoverCommand[];
+  /** The one decision (decide.ts) on a turn the hub would start in `instanceId` by itself; undefined for a session the hub has no row of. */
+  hubTurn: (
+    instanceId: string,
+    turn: HubTurn,
+    waitedOn: boolean
+  ) => TurnChoice | undefined;
   identities: ReturnType<typeof createSessionIdentities>;
   inCustody: Map<string, { machineId: string; since: number; told: boolean }>;
   inFlightFor: SessionCallsDeps["inFlightFor"];
@@ -757,6 +766,8 @@ export interface ClosureContext {
   keptWarm: (machineId: string, ids: string[]) => string[];
   knownProviders: () => ProviderInfo[];
   lastRequestContext: Map<string, number>;
+  /** When `instanceId`'s last recorded turn ended, ISO; null when none is. */
+  lastTurnAt: (instanceId: string) => string | null;
   launchAccount: (
     machineId: string,
     row: Parameters<ClosureContext["accountLaunch"]>[1],

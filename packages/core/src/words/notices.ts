@@ -94,6 +94,8 @@ export const noticeWords = {
     `Containers stopped as ${by ?? "this session"} ended`,
   /** A session holding news from while you were away, told you're back so it recaps them (hub server.ts `tellBack`). */
   back: "Told you're back, to recap what happened while you were away",
+  /** A session you are away from, told to write its notes while its cache is still warm (hub sends.ts `notesBeforeCold`). */
+  notesBeforeCold: "Told to note what happened before its cache went cold",
   /** A session at its account's limit, or stopped by a failed sign-in, told to go on once that is over. */
   carryOn: {
     limit: "Told to carry on: the usage limit no longer applies",

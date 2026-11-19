@@ -40,7 +40,7 @@ const keepAliveCap = (row: KeepAliveRow): number => {
  * since the last real turn (`cacheColdAt`), or such a reading is kept as not
  * read (`cacheColdUnread`, migration 0425), which only a miss wrote.
  */
-export const measuredCold = (
+const measuredCold = (
   row: Pick<KeepAliveRow, "cacheColdAt" | "cacheColdUnread">
 ): boolean => row.cacheColdAt !== null || row.cacheColdUnread !== null;
 
@@ -52,49 +52,79 @@ const coldReading = (
     ? { reason: row.cacheColdReason, at: row.cacheColdAt }
     : null;
 
-export const promptCacheExpiresAt = (
-  row: KeepAliveRow,
-  lastTurnAt?: string | null
-): number | null => {
-  if (measuredCold(row)) {
-    return null;
+/**
+ * A session's prompt cache as every reader of it decides (hub decide.ts,
+ * the cold check, keep-alive): warm until a moment, cold, or unknown. Being
+ * inside a turn is warm: its requests write the cache every few seconds.
+ * Cold is proven only by a measurement: a keep-alive ping that missed
+ * (`measuredCold`), or a measured lifetime (its TTL from its last request)
+ * that has run out, or its harness's longest lifetime past since its last
+ * turn. Anything else is unknown, and unknown is never priced as warm or as
+ * free (decide.ts).
+ */
+export type CacheState =
+  | { kind: "warm"; inTurn: boolean; until: number }
+  | { kind: "cold" }
+  | { kind: "unknown" };
+
+/** A measured TTL's lifetime, ms. */
+const ttlMs = (ttl: string | null): number | null => {
+  if (ttl === "1h") {
+    return HOUR_MS;
   }
-  if (row.cacheTtl && row.lastRequestAt) {
-    return (
-      row.lastRequestAt.getTime() + (row.cacheTtl === "1h" ? HOUR_MS : 300_000)
-    );
-  }
-  // Without a measurement, only the harness's longest lifetime proves expiry.
-  const longest = traitsOf(row.harness).promptCacheMaxMs;
-  return longest !== null && lastTurnAt
-    ? new Date(lastTurnAt).getTime() + longest
-    : null;
+  return ttl === "5m" ? 300_000 : null;
 };
 
 /**
- * The cold check's one test (`handoff`'s, delegation-actions.ts
- * `checkCold`): a session's prompt cache is warm mid-turn, never measured,
- * or unexpired; one the hub measured cold ({@link measuredCold}: a keep-alive that
- * read under 90% from its cache, 3ab2fcf2a) is cold until a turn warms it.
- * Never measured stays warm (c262ee706): only a measured lifetime proves an
- * expiry, so a session nothing timed is never refused for it. A session it
- * calls cold is one the hub hands no work to without asking, and one whose
- * artifacts its project takes up (artifacts/service.ts `leftFor`).
+ * THE ONE CACHE TEST ({@link CacheState}): `row`'s prompt cache at `now`,
+ * `midTurn` read off its process (a turn under way), `lastTurnAt` its last
+ * turn's end when the caller knows it.
  */
-export const cacheWarmNow = (
+export const cacheState = (
+  row: Pick<
+    KeepAliveRow,
+    "cacheColdAt" | "cacheColdUnread" | "cacheTtl" | "harness" | "lastRequestAt"
+  >,
+  how: { lastTurnAt?: string | null; midTurn: boolean },
+  now: number
+): CacheState => {
+  const life = ttlMs(row.cacheTtl);
+  if (how.midTurn) {
+    return { kind: "warm", inTurn: true, until: now + (life ?? 300_000) };
+  }
+  if (measuredCold(row)) {
+    return { kind: "cold" };
+  }
+  if (life !== null && row.lastRequestAt) {
+    const until = row.lastRequestAt.getTime() + life;
+    return until > now
+      ? { kind: "warm", inTurn: false, until }
+      : { kind: "cold" };
+  }
+  // Without a measured lifetime only its harness's longest proves expiry.
+  const longest = traitsOf(row.harness).promptCacheMaxMs;
+  if (longest !== null && how.lastTurnAt) {
+    return new Date(how.lastTurnAt).getTime() + longest <= now
+      ? { kind: "cold" }
+      : { kind: "unknown" };
+  }
+  return { kind: "unknown" };
+};
+
+/**
+ * The cold check (`handoff`'s, delegation-actions.ts `checkCold`) by
+ * {@link cacheState}: a session is refused for cold only when cold is
+ * proven. Never measured is not cold here (c262ee706): a session nothing
+ * timed is never refused for it. A session it calls cold is one the hub
+ * hands no work to without asking, and one whose artifacts its project
+ * takes up (artifacts/service.ts `leftFor`).
+ */
+export const provenCold = (
   row: KeepAliveRow,
   midTurn: boolean,
   lastTurnAt: string | null
-): boolean => {
-  if (midTurn) {
-    return true;
-  }
-  if (measuredCold(row)) {
-    return false;
-  }
-  const expires = promptCacheExpiresAt(row, lastTurnAt);
-  return expires === null || expires > Date.now();
-};
+): boolean =>
+  cacheState(row, { midTurn, lastTurnAt }, Date.now()).kind === "cold";
 
 /** Clock and account reading are explicit: this function sends and writes nothing. */
 export const keepAliveState = (
@@ -130,17 +160,14 @@ export const keepAliveState = (
   if (binds?.severity === "critical") {
     return { ...base, state: "paused-usage" };
   }
-  const expires = promptCacheExpiresAt(row);
-  if (expires === null) {
-    return { ...base, state: "cold" };
-  }
-  return expires <= now
-    ? { ...base, state: "cold" }
-    : {
+  const cache = cacheState(row, { midTurn: false }, now);
+  return cache.kind === "warm"
+    ? {
         ...base,
         state: "waiting",
-        nextAt: expires - (row.cacheTtl === "1h" ? 600_000 : 60_000),
-      };
+        nextAt: cache.until - (row.cacheTtl === "1h" ? 600_000 : 60_000),
+      }
+    : { ...base, state: "cold" };
 };
 
 /** Usage counts include uncached input plus cache reads and writes, as Claude reports them. */

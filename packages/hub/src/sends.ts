@@ -18,6 +18,7 @@ import { byPerson } from "@cawco/core/harness";
 import {
   ACT_ORIGIN,
   COMPACTION_ORIGIN,
+  DELEGATE_WAIT_ORIGIN,
   PLAN_ORIGIN,
 } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
@@ -25,6 +26,7 @@ import type { PresenceSaid } from "@cawco/core/injected";
 import {
   awayNotesOf,
   BACK_MESSAGE,
+  NOTES_BEFORE_COLD_MESSAGE,
   presenceLine,
   undeliveredNotice,
   withMovedLine,
@@ -56,9 +58,11 @@ import type { PublicInstanceRow } from "./db/instances";
 import type { WorkItemRow } from "./db/project-work";
 import { keptSend, type SentMessageRow } from "./db/sends";
 import type { SendHold, StoredSendRefusal } from "./db/stored-types";
+import type { HubTurn } from "./decide";
 import type { Unstored } from "./hub-shapes";
 import { isKeepAlive } from "./keep-alive";
 import { sessionLabel } from "./labels";
+import { liveWorkOf } from "./limit-decision";
 import type { CallAnswer, ControlAnswer, Unanswered } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages, mediaNameOf } from "./media";
@@ -93,6 +97,36 @@ export const BACK_ORIGIN = "back";
 /** Whether `origin` is the hub's word that the person is back: its wake goes in its turn among the hub's own launches. */
 const isBack = (origin: NeutralOrigin): boolean =>
   origin.kind === "system" && origin.name === BACK_ORIGIN;
+/** The system origin name of the hub's word to a session the person is away from, to write its notes before its cache goes cold (`notesBeforeCold`). */
+const NOTES_ORIGIN = "away-notes";
+/** The hub's word to a session's project conversation (caw.ts `PROJECT_ORIGIN`). */
+const PROJECT_WORD = "project";
+/** A routine's run told to its project's conversation (memory.ts `ROUTINE_ORIGIN`). */
+const ROUTINE_WORD = "routine:";
+
+/**
+ * A turn the hub's own word would start, by what it is, as the one decision
+ * prices it (decide.ts `HubTurn`): a notice (a delegate's wait told to its
+ * parent, a project's event or routine to its conversation, the fleet
+ * watch's word, a task's waits) is priced; the return's recap and the notes
+ * before cold are decided by their sender; every other word of the hub's
+ * runs, as its session waits on it or it is warm by construction (a
+ * carry-on, a compaction's step, a cut turn handed back, a work item's
+ * "still open").
+ */
+const hubTurnOf = (name: string): HubTurn => {
+  if (
+    name === DELEGATE_WAIT_ORIGIN ||
+    name === PROJECT_WORD ||
+    name === "fleet-watch" ||
+    name === "task-waits" ||
+    name.startsWith(ROUTINE_WORD)
+  ) {
+    return "notice";
+  }
+  return "always";
+};
+
 /** The origin of the hub's word to a sender that its message did not arrive. */
 const UNDELIVERED_ORIGIN = "undelivered";
 
@@ -391,14 +425,17 @@ export type SendsContext = Pick<
   | "advanceCompaction"
   | "artifactLane"
   | "atLimit"
+  | "cacheLapsesAt"
   | "callAgent"
   | "credentialTurns"
   | "db"
   | "forgetPending"
   | "forkNoticeFor"
   | "hubStep"
+  | "hubTurn"
   | "inputRefusal"
   | "keptAsleep"
+  | "lastTurnAt"
   | "laws"
   | "leadRuns"
   | "lifetime"
@@ -2406,24 +2443,36 @@ export const createSends = (ctx: SendsContext) => {
 
   /**
    * THE RETURN'S RECAP: the person came back from being away (notifications.ts
-   * `turned`: the rollup of every device's facts went from away to here), so
-   * each session holding news for them ({@link holdsNews}) is sent the hub's
-   * word that they are back (core `BACK_MESSAGE`). It starts a turn whose
-   * presence line carries the notes ({@link recapFor}), and its reply is the
-   * recap: nothing waits on the person to ask. A session with no news gets
-   * nothing, nor does one this word already waits in. One send each: a
-   * session whose process is up takes its turn now; one asleep is woken in
-   * its turn among the hub's own launches on its machine (`paceSpawn`,
-   * SPAWN_PACE_MS apart), so a return to many never starts their processes
-   * at once; one held (at its limit, its machine away or paused) gets it
-   * when it next runs, as any send does.
+   * `turned`: the rollup of every device's facts went from away to here).
+   * Each session holding news for them ({@link holdsNews}) shows its notes
+   * at once in its plan, with no turn; the one decision (decide.ts, a
+   * `recap` turn, decided 2026-11-19) then lets only a session whose cache
+   * is warm recap: it is sent the hub's word that they are back (core
+   * `BACK_MESSAGE`), whose presence line carries the notes
+   * ({@link recapFor}), and its reply is the recap. A cold session starts
+   * no turn: its notes stand, written before it went cold
+   * ({@link notesBeforeCold}), and the person wakes it by writing to it. A
+   * session with no news gets nothing, nor does one this word already waits
+   * in. One send each: a session whose process is up takes its turn now;
+   * one held (at its limit, its machine away or paused) gets it when it next
+   * runs, as any send does.
    */
   const tellBack = (): void => {
     recapsGiven.clear();
-    const told = ctx.db
+    const holding = ctx.db
       .listedInstancesByIds(ctx.db.plansWithAwayNotes())
       .filter(holdsNews);
-    for (const row of told) {
+    const told: PublicInstanceRow[] = [];
+    const shown: string[] = [];
+    for (const row of holding) {
+      const choice = ctx.hubTurn(row.id, "recap", false);
+      if (choice?.kind !== "run") {
+        shown.push(
+          `${ctx.sessionName(row)} (its cache ${choice?.why === "cold" ? "is cold" : "isn't measured"}: no turn, its notes shown)`
+        );
+        continue;
+      }
+      told.push(row);
       const sent = deliverSend(
         sessionWord(row, BACK_MESSAGE, {
           kind: "system",
@@ -2438,8 +2487,90 @@ export const createSends = (ctx: SendsContext) => {
       }
     }
     console.log(
-      `[presence] the person is back: ${told.length} session(s) holding news from while they were away told so, each to recap it${told.length > 0 ? `: ${told.map((row) => ctx.sessionName(row)).join(", ")}` : ""}`
+      `[presence] the person is back: ${told.length} warm session(s) holding news told so, each to recap it${told.length > 0 ? `: ${told.map((row) => ctx.sessionName(row)).join(", ")}` : ""}${shown.length > 0 ? `; ${shown.join(", ")}` : ""}`
     );
+  };
+
+  /** Each session told to write its notes before cold, by the end of the turn it was told after: once per turn of news. */
+  const notesAsked = new Map<string, string>();
+
+  /**
+   * Whether `row` writes its notes now ({@link notesBeforeCold}): it runs,
+   * talks with the person, is not kept warm by its keep-alive, took a turn
+   * since they left (`since`) it was not asked after, and its cache lapses
+   * within its lead. Its last turn's end and that lapse; undefined when not.
+   */
+  const notesDue = (
+    row: PublicInstanceRow,
+    since: number
+  ): { lapses: number; turnAt: string } | undefined => {
+    const turnAt = ctx.lastTurnAt(row.id);
+    if (
+      row.status !== "running" ||
+      row.keepAliveEnabled ||
+      !talksWithPerson(row) ||
+      turnAt === null ||
+      Date.parse(turnAt) <= since ||
+      notesAsked.get(row.id) === turnAt
+    ) {
+      return;
+    }
+    const lapses = ctx.cacheLapsesAt(row.id);
+    const lead = row.cacheTtl === "1h" ? 600_000 : 60_000;
+    return lapses === null || lapses - Date.now() > lead
+      ? undefined
+      : { lapses, turnAt };
+  };
+
+  /**
+   * THE NOTES BEFORE COLD (decided 2026-11-19, move-redesign "recap"):
+   * while the person is away, each session that talks with them, did work
+   * since they left that its notes don't hold yet, and whose prompt cache
+   * goes cold within its lead (keep-alive's: ten minutes before a one-hour
+   * cache lapses, one before a five-minute one), is told to write what
+   * happened so far into its plan while the cache is still warm, so the
+   * person reads it on return without waking it. Each such turn goes
+   * through the one decision (decide.ts, a `notes` turn): it runs warm
+   * only. Once per turn of news; a session kept warm by its keep-alive is
+   * never asked, its cache not lapsing.
+   */
+  const notesBeforeCold = (): void => {
+    const person = ctx.notifications.person();
+    if (person.state !== "away" || person.since === null) {
+      return;
+    }
+    const { since } = person;
+    const live = ctx.registry
+      .machineIds()
+      .flatMap((machineId) => ctx.db.liveInstancesOn(machineId));
+    for (const row of live) {
+      const due = notesDue(row, since);
+      if (!due) {
+        continue;
+      }
+      const { lapses } = due;
+      notesAsked.set(row.id, due.turnAt);
+      const choice = ctx.hubTurn(row.id, "notes", false);
+      if (choice?.kind !== "run") {
+        continue;
+      }
+      const sent = deliverSend(
+        sessionWord(row, NOTES_BEFORE_COLD_MESSAGE(clockOf(since)), {
+          kind: "system",
+          name: NOTES_ORIGIN,
+          line: noticeWords.notesBeforeCold,
+        })
+      );
+      if (sent instanceof ElysiaStatus) {
+        console.warn(
+          `[presence] a session's notes before its cache goes cold were not asked: ${sent.response.detail}`
+        );
+      } else {
+        console.log(
+          `[presence] ${ctx.sessionName(row)} writes its notes now: the person is away and its cache goes cold at ${clockOf(lapses)}`
+        );
+      }
+    }
   };
 
   /**
@@ -2564,12 +2695,50 @@ export const createSends = (ctx: SendsContext) => {
     };
   };
 
+  /**
+   * THE DOOR FOR THE HUB'S OWN TURNS (audit 3.7): a send of the hub's own
+   * word that would start a turn goes through the one decision (decide.ts,
+   * by {@link hubTurnOf}'s kind). A notice it prices over its threshold in
+   * a session nobody waits on (no person's message unanswered, no live work
+   * item) is kept as a note its next turn reads (`shouldQuery: false`),
+   * not a turn of its own. Every other runs.
+   */
+  const pricedHubTurn = (envelope: HubEnvelope<"send">): void => {
+    const { instanceId, message } = envelope.payload;
+    if (
+      isKeepAlive(message) ||
+      message.origin.kind !== "system" ||
+      message.shouldQuery === false
+    ) {
+      return;
+    }
+    const name = message.origin.name ?? "";
+    const turn = hubTurnOf(name);
+    const [row] = ctx.db.getInstancesByIds([instanceId]);
+    const waitedOn =
+      ctx.db.personUnanswered(instanceId) !== null ||
+      (row !== undefined && liveWorkOf(ctx.db, row));
+    const choice = ctx.hubTurn(instanceId, turn, waitedOn);
+    if (choice?.kind !== "note") {
+      return;
+    }
+    envelope.payload = {
+      ...envelope.payload,
+      message: { ...message, shouldQuery: false },
+    };
+    console.info(
+      `[sends] the hub's ${name} word to ${instanceId.slice(0, 8)} waits as a note its next turn reads: a turn now would cost ${choice.usd === null ? "an unknown amount, its cache unmeasured" : `$${choice.usd.toFixed(2)}`}, and nobody waits on it.`
+    );
+  };
+
   /** {@link deliverSend}'s session path: the message into the session itself. */
   const deliverToSession = (
     envelope: HubEnvelope<"send">,
     ahead: boolean
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
   ) => {
+    // The hub's own word is priced before anything reads the message.
+    pricedHubTurn(envelope);
     const { instanceId, message } = envelope.payload;
     const { machineId } = envelope;
     const keepAlive = isKeepAlive(message);
@@ -3375,6 +3544,7 @@ export const createSends = (ctx: SendsContext) => {
     deliverSend,
     continuationNow,
     tellBack,
+    notesBeforeCold,
     personsMessage,
     presenced,
     deliverToSession,

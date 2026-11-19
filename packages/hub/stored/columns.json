@@ -64,12 +64,11 @@
       "whole"
     ]
   },
-  "account_routing.compaction_before_move": {
+  "account_routing.compaction_cold_move": {
     "type": "string",
     "enum": [
-      "native",
-      "summary",
-      "whole"
+      "whole",
+      "cheapest"
     ]
   },
   "account_routing.compaction_summarizer_harness": {
@@ -126,6 +125,7 @@
   "accounts.at_plan_limit": {
     "type": "string",
     "enum": [
+      "price",
       "move",
       "extra-usage"
     ]
@@ -2934,6 +2934,58 @@
                 "required": [
                   "pct",
                   "window"
+                ]
+              },
+              "price": {
+                "type": "object",
+                "properties": {
+                  "next": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "to": {
+                            "type": "string"
+                          },
+                          "usd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "what": {
+                            "type": "string",
+                            "enum": [
+                              "stay",
+                              "wait",
+                              "credits",
+                              "whole",
+                              "compact-before",
+                              "compact-after",
+                              "summary"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "usd",
+                          "what"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "usd": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "next",
+                  "usd"
                 ]
               },
               "ended": {
@@ -6506,6 +6558,58 @@
           "window"
         ]
       },
+      "price": {
+        "type": "object",
+        "properties": {
+          "next": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "to": {
+                    "type": "string"
+                  },
+                  "usd": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "what": {
+                    "type": "string",
+                    "enum": [
+                      "stay",
+                      "wait",
+                      "credits",
+                      "whole",
+                      "compact-before",
+                      "compact-after",
+                      "summary"
+                    ]
+                  }
+                },
+                "required": [
+                  "usd",
+                  "what"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "next",
+          "usd"
+        ]
+      },
       "ended": {
         "type": "object",
         "properties": {
@@ -6851,6 +6955,58 @@
             "required": [
               "pct",
               "window"
+            ]
+          },
+          "price": {
+            "type": "object",
+            "properties": {
+              "next": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "to": {
+                        "type": "string"
+                      },
+                      "usd": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "what": {
+                        "type": "string",
+                        "enum": [
+                          "stay",
+                          "wait",
+                          "credits",
+                          "whole",
+                          "compact-before",
+                          "compact-after",
+                          "summary"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "usd",
+                      "what"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "usd": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "next",
+              "usd"
             ]
           },
           "ended": {
@@ -8747,6 +8903,58 @@
             "required": [
               "pct",
               "window"
+            ]
+          },
+          "price": {
+            "type": "object",
+            "properties": {
+              "next": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "to": {
+                        "type": "string"
+                      },
+                      "usd": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "what": {
+                        "type": "string",
+                        "enum": [
+                          "stay",
+                          "wait",
+                          "credits",
+                          "whole",
+                          "compact-before",
+                          "compact-after",
+                          "summary"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "usd",
+                      "what"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "usd": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "next",
+              "usd"
             ]
           },
           "ended": {

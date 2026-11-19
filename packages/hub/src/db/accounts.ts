@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_RESERVE,
   type Account,
   type AccountAccess,
   type AccountBench,
@@ -22,7 +23,10 @@ import { ACCOUNT_HUES, type AccountHue } from "@cawco/core/accounts/kinds";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { DAY_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
-import { windowKey as windowSetKey } from "@cawco/core/usage/windows";
+import {
+  sameReset,
+  windowKey as windowSetKey,
+} from "@cawco/core/usage/windows";
 import { and, asc, eq, gt, gte, inArray, lte, max, ne, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DbCore } from "./core";
@@ -56,7 +60,13 @@ const LIMIT_HISTORY_RETENTION_MS = 30 * DAY_MS;
 type AccountPatch = Partial<
   Pick<
     Account,
-    "atPlanLimit" | "hue" | "label" | "neverBackup" | "order" | "reservePct"
+    | "atPlanLimit"
+    | "hue"
+    | "label"
+    | "neverBackup"
+    | "order"
+    | "reservePct"
+    | "sessionReservePct"
   > & { setupStep: AccountSetupStep | null }
 >;
 
@@ -306,7 +316,7 @@ const savedPolicy = (row: RoutingRow): AtLimit | undefined => {
     atLimitMoveWholeUnderK: moveWholeUnderK,
     atLimitStaleAfterHours: staleAfterHours,
     compactionAtLimit: atLimit,
-    compactionBeforeMove: beforeMove,
+    compactionColdMove: coldMove,
     compactionFileRoom: fileRoom,
     compactionSummarizerHarness: harness,
     compactionSummarizerModel: model,
@@ -317,7 +327,6 @@ const savedPolicy = (row: RoutingRow): AtLimit | undefined => {
     moveWholeUnderK !== null &&
     staleAfterHours !== null &&
     atLimit !== null &&
-    beforeMove !== null &&
     fileRoom !== null &&
     harness !== null &&
     model !== null
@@ -328,7 +337,7 @@ const savedPolicy = (row: RoutingRow): AtLimit | undefined => {
         staleAfterHours,
         compaction: {
           atLimit,
-          beforeMove,
+          coldMove,
           fileRoom,
           summarizer: { harness, model },
         },
@@ -343,7 +352,6 @@ const POLICY_COLUMNS = [
   ["moveWholeUnderK", "atLimitMoveWholeUnderK"],
   ["staleAfterHours", "atLimitStaleAfterHours"],
   ["compaction.atLimit", "compactionAtLimit"],
-  ["compaction.beforeMove", "compactionBeforeMove"],
   ["compaction.fileRoom", "compactionFileRoom"],
   ["compaction.summarizer.harness", "compactionSummarizerHarness"],
   ["compaction.summarizer.model", "compactionSummarizerModel"],
@@ -374,6 +382,7 @@ const toAccount = (row: AccountRow): Account => ({
   order: row.order,
   neverBackup: row.neverBackup,
   reservePct: row.reservePct,
+  sessionReservePct: row.sessionReservePct,
   atPlanLimit: row.atPlanLimit,
   identity:
     row.email === null
@@ -631,6 +640,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
             ACCOUNT_HUES[order % ACCOUNT_HUES.length] ??
             "blue",
           order,
+          // Its floors as every account starts (core `ACCOUNT_RESERVE`).
+          reservePct: ACCOUNT_RESERVE.weeklyPct,
+          sessionReservePct: ACCOUNT_RESERVE.sessionPct,
           email: identity?.email ?? null,
           organization: identity?.organization ?? null,
           orgId: identity?.orgId || null,
@@ -984,7 +996,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         atLimitMoveWholeUnderK: routing.atLimit.moveWholeUnderK,
         atLimitStaleAfterHours: routing.atLimit.staleAfterHours,
         compactionAtLimit: routing.atLimit.compaction.atLimit,
-        compactionBeforeMove: routing.atLimit.compaction.beforeMove,
+        compactionColdMove: routing.atLimit.compaction.coldMove,
         compactionFileRoom: routing.atLimit.compaction.fileRoom,
         compactionSummarizerHarness:
           routing.atLimit.compaction.summarizer.harness,
@@ -1138,7 +1150,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
             prior === undefined ||
             prior.percent !== w.percent ||
             prior.severity !== w.severity ||
-            prior.resetsAt !== w.resetsAt
+            !sameReset(prior.resetsAt, w.resetsAt)
           );
         });
         if (moved.length === 0) {

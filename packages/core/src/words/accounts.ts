@@ -13,6 +13,7 @@
  */
 import type {
   AccountHue,
+  ColdMove,
   CompactMethod,
   PlacementStrategy,
 } from "../accounts/kinds";
@@ -137,9 +138,13 @@ export const accountsWords = {
     /** At a plan limit with extra usage on (core `AtPlanLimit`): on, its sessions keep going there. */
     extraUsage: "Keep going on extra usage at a plan limit",
     extraUsageOn: "Its sessions carry on here, paid from its extra usage.",
-    extraUsageOff: "Its sessions move to an account with plan room.",
-    reserve: "Stop placing new work past",
+    extraUsageOff:
+      "Its sessions move to an account with plan room when that costs less than their next turn here.",
+    /** Its floors (core `Account.reservePct`, `sessionReservePct`): nothing new is placed or moved onto it past them. */
+    reserve: "Stop placing or moving new work past",
     reserveUnit: "% of the week",
+    sessionReserve: "and past",
+    sessionReserveUnit: "% of the 5-hour window",
     reserveInvalid:
       "A reserve is a whole number from 0 to 100. Empty it for none.",
     /** The app's alone: a field and its unit as VoiceOver reads them, one label. */
@@ -413,9 +418,14 @@ export const accountsWords = {
     /** The floor under which a session moves whole, never compacted (core `AtLimit.moveWholeUnderK`). */
     over: "Move it whole if it’s under",
     kTokens: "k tokens",
-    /** How a session moving to another organization is made small, by the moment it moves at (core `Compaction`). */
-    beforeMove: "Moved ahead of its limit",
+    /** How a session moving to another organization at its limit is made small, while its cache is warm (core `Compaction.atLimit`). */
     atLimit: "Moved at its limit",
+    /** What a move does with a cold cache (core `Compaction.coldMove`). */
+    coldMove: "When its cache is cold",
+    coldMoves: {
+      whole: "Move it whole",
+      cheapest: "Take the cheapest path",
+    } satisfies Record<ColdMove, string>,
     methods: {
       native: "Its own /compact",
       summary: "A summary",
@@ -456,8 +466,8 @@ export const accountsWords = {
      * which no resume brings back: it moves when that ends, or at `clock`
      * ("20:17") at the latest, ending it.
      */
-    carrying: (from: string, to: string, work: string, clock: string) =>
-      `Stopped at ${from}’s limit; moves to ${to} when its work in flight ends (${work}), by ${clock} at the latest`,
+    carrying: (from: string, to: string, work: string) =>
+      `Stopped at ${from}’s limit; moves to ${to} when its work in flight ends (${work}), which no move ends while nobody waits on it`,
     /**
      * Its move to `to` waits for work in flight, and `from` resets first, at
      * `clock`: it moves when that work ends, else carries on where it is then.

@@ -176,7 +176,7 @@ export const createCompaction = (ctx: CompactionContext) => {
   };
 
   /**
-   * A session compacted natively as it moves (at-limit.ts `compactionPlan`:
+   * A session compacted natively as it moves (decide.ts, limit-decision.ts `planOf`:
    * another organization, `moveWholeUnderK` or more; db
    * `limit_compactions`): its first steps on the new account after the move,
    * or on its own before it (core `AccountMove` `compactFirst`), the move

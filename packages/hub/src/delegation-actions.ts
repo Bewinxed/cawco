@@ -65,7 +65,7 @@ import type {
 } from "./delegation-tree";
 import { cursorAt } from "./find";
 import { byId, handleId, isHandle, mentioned } from "./handles";
-import { cacheWarmNow, type KeepAliveRow } from "./keep-alive";
+import { type KeepAliveRow, provenCold } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
 import type { ProblemsOf } from "./refusal";
@@ -1159,7 +1159,7 @@ function warmNow(
   midTurn: boolean,
   lastTurnAt: string | null
 ): boolean {
-  if (!cacheWarmNow(row, midTurn, lastTurnAt)) {
+  if (provenCold(row, midTurn, lastTurnAt)) {
     return false;
   }
   const prefix = `${row.id}:`;

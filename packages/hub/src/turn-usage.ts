@@ -1,5 +1,6 @@
 import type {
   ClaudeModelUsage,
+  NeutralOrigin,
   NeutralResultMessage,
 } from "@cawco/core/session-messages";
 import type { TurnUsageRow } from "./db/turn-usage";
@@ -70,17 +71,40 @@ interface Session {
  * never priced here: it cannot be tiered, so a sum that arrives with no cost
  * (an agent from before requests were priced) is stored unpriced.
  */
+/**
+ * What started a turn, as `turn_usage.origin` keeps it: `human`, `peer`, the
+ * hub's own word as `system:<name>` (a recap, a filing turn, a carry-on, a
+ * note before the cache goes cold), or another kind as it is named. So the
+ * measured cost of the turns the hub started by itself is a query.
+ */
+export const turnOrigin = (
+  origin: NeutralOrigin | undefined
+): string | null => {
+  if (!origin) {
+    return null;
+  }
+  return origin.kind === "system" ? `system:${origin.name}` : origin.kind;
+};
+
 export const turnUsageOf = (
   session: Session,
   result: NeutralResultMessage & { uuid: string },
   keepAlive: boolean,
-  at: number
+  at: number,
+  /** What started the turn ({@link turnOrigin}); null when no send did. */
+  origin: string | null
 ): TurnUsage => {
   const row = (
     model: string,
     tokens: Omit<
       TurnUsageRow,
-      "accountId" | "at" | "instanceId" | "keepAlive" | "model" | "resultId"
+      | "accountId"
+      | "at"
+      | "instanceId"
+      | "keepAlive"
+      | "model"
+      | "origin"
+      | "resultId"
     >
   ): TurnUsageRow => ({
     instanceId: session.id,
@@ -88,6 +112,7 @@ export const turnUsageOf = (
     model,
     accountId: session.accountId,
     keepAlive,
+    origin: keepAlive ? "keepalive" : origin,
     at: new Date(at),
     ...tokens,
   });

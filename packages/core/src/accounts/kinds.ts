@@ -47,3 +47,19 @@ export const COMPACT_METHODS = [
   "summary",
   "whole",
 ] as const satisfies readonly CompactMethod[];
+
+/**
+ * What a move does with a session whose prompt cache is cold (decided
+ * 2026-11-19, move-compaction-mode): it moves as it is (`whole`, the
+ * default: one cold read on the new account, nothing billed on the one it
+ * leaves), or the hub prices moving whole against its harness's own
+ * compaction after the move, over the session's next turn, and takes the
+ * cheaper (`cheapest`). Never a summary: that stays at a limit, where
+ * {@link CompactMethod} names it.
+ */
+export type ColdMove = "whole" | "cheapest";
+
+export const COLD_MOVES = [
+  "whole",
+  "cheapest",
+] as const satisfies readonly ColdMove[];

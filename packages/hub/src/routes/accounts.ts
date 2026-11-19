@@ -1,4 +1,8 @@
-import type { AccountCatalogFault, ProviderChoice } from "@cawco/core/accounts";
+import type {
+  AccountCatalogFault,
+  ProviderChoice,
+  ProviderRouting,
+} from "@cawco/core/accounts";
 import {
   ACCOUNT_SETUP_STEPS,
   accountNameAmong,
@@ -86,7 +90,7 @@ export const accountsListed = (
             ...accounts.map((account) => account.provider),
           ]),
         ]
-    ).map((one) => db.accounts.routing(one)),
+    ).map((one) => wireRouting(db.accounts.routing(one))),
     readings: mine(db.accounts.readings()),
     bench: mine(db.accounts.bench()),
     // Accounts a provider refused for want of credit, by the model
@@ -106,6 +110,24 @@ export const accountsListed = (
     ),
   };
 };
+
+/**
+ * A routing as the wire sends it: its compaction with `beforeMove`, which
+ * nothing reads any more (a warm cache moving ahead of a limit is priced,
+ * hub decide.ts), sent only because the shipped apps require it, which the
+ * hub's wire check holds to (packages/hub/scripts/openapi.ts). It goes in
+ * the change that expires those apps.
+ */
+export const wireRouting = (routing: ProviderRouting) => ({
+  ...routing,
+  atLimit: {
+    ...routing.atLimit,
+    compaction: {
+      ...routing.atLimit.compaction,
+      beforeMove: "whole" as const,
+    },
+  },
+});
 
 export const accountRoutes = ({
   accountKindRefusal,
@@ -216,13 +238,23 @@ export const accountRoutes = ({
           hue: t.Optional(accountHue),
           order: t.Optional(t.Integer()),
           neverBackup: t.Optional(t.Boolean()),
+          // Its week's floor, percent used; null: none.
           reservePct: t.Optional(
             t.Union([t.Integer({ minimum: 0, maximum: 100 }), t.Null()])
           ),
-          // At a plan limit with extra usage on: move its sessions to an
-          // account with plan room, or keep going on its extra usage.
+          // Its 5-hour window's floor, percent used; null: none.
+          sessionReservePct: t.Optional(
+            t.Union([t.Integer({ minimum: 0, maximum: 100 }), t.Null()])
+          ),
+          // At a plan limit with extra usage on: priced against moving, or
+          // forced to move its sessions to an account with plan room, or to
+          // keep going on its extra usage.
           atPlanLimit: t.Optional(
-            t.Union([t.Literal("move"), t.Literal("extra-usage")])
+            t.Union([
+              t.Literal("price"),
+              t.Literal("move"),
+              t.Literal("extra-usage"),
+            ])
           ),
           // Where its setup stands; null: the setup is done.
           setupStep: t.Optional(t.Union([accountSetupStep, t.Null()])),

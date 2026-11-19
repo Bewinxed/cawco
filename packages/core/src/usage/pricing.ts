@@ -390,6 +390,34 @@ export function costForUsage(
 }
 
 /**
+ * What one token of each kind costs a request of `prompt` tokens on
+ * `modelId` at `at`, dollars, with a cache write at the lifetime `ttl` (a
+ * `1h` write at its own rate, anything else at the 5-minute one): the
+ * listed rates a move's price starts from (hub decide.ts), before the
+ * session's own turns scale them. Null when the provider lists no price.
+ */
+export function promptRates(
+  modelId: string,
+  ttl: string | null,
+  prompt: number,
+  at: number
+): { input: number; output: number; read: number; write: number } | null {
+  const listedRates = resolveRates(modelId, at);
+  if (!listedRates) {
+    return null;
+  }
+  const rates =
+    listedRates.tiers.findLast((tier) => prompt > tier.above)?.rates ??
+    listedRates;
+  return {
+    input: rates.input,
+    output: rates.output,
+    read: rates.cacheRead,
+    write: ttl === "1h" ? rates.cacheWrite1h : rates.cacheWrite,
+  };
+}
+
+/**
  * One request's usage on `model` (`provider/model`) at `at` (epoch ms), priced
  * on its own by {@link costForUsage}: the unit a turn's usage is summed from.
  * `reasoning` is what OpenCode counts apart from `output` and bills as

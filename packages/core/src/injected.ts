@@ -532,6 +532,15 @@ export const BACK_MESSAGE =
   "[CawCo] The person is back. Tell them what happened while they were away.";
 
 /**
+ * The hub's word to a session the person is away from, whose prompt cache
+ * goes cold soon (hub sends.ts `notesBeforeCold`, decided 2026-11-19): it
+ * writes what happened so far into its plan while its cache is still warm,
+ * so the person reads it on return without waking it.
+ */
+export const NOTES_BEFORE_COLD_MESSAGE = (since: string): string =>
+  `[CawCo] The person is still away and this session's prompt cache goes cold within minutes. Before it does, bring your plan's spec up to date with todo_write under "${awayNotesHeading(since)}" at its top: one line for each thing done, decided, or waiting on them since they left. They read it there when they come back, without waking you. Do nothing else, and end on ${NO_REPLY_TOOL}.`;
+
+/**
  * Where the person is, as a session is told at the start of each turn (hub
  * sends.ts `presenced`, from notifications.ts `person`):
  * - `on`: on this chat now, or this is their own message: talk normally.

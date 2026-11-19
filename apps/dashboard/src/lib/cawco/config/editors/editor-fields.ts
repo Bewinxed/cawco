@@ -71,8 +71,10 @@ export interface AccountFields {
   hue: Account["hue"];
   neverBackup: boolean;
   nickname: string;
-  /** The field's text: empty is no reserve. */
+  /** The week's floor as its field reads: empty is none. */
   reserve: string;
+  /** The 5-hour window's floor as its field reads: empty is none. */
+  sessionReserve: string;
 }
 
 /** Each editor's fields as a draft of them is read back (`keepDraft`'s `shape`). */

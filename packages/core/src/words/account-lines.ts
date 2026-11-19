@@ -6,6 +6,8 @@ import type {
   EndedBy,
   HeldAccount,
   MoveBecause,
+  MovePrice,
+  MovePriceOption,
   RebalanceNotice,
   WaitReason,
 } from "../accounts";
@@ -183,15 +185,17 @@ const movedWords = (
   move: Extract<AccountMove, { kind: "moved" }>,
   now: number
 ): { line: string; detail: string } => {
+  const priced = priceWords(move.price);
   if (move.because?.kind === "cold") {
     return {
-      line: `Moved to ${move.to.name}${move.because.wake ? " at wake" : " between turns"} · cache was cold, so nothing extra was re-read`,
-      detail: `Moved here from ${move.from.name}`,
+      line: `Moved to ${move.to.name}${move.because.wake ? " at wake" : " between turns"} · its cache was cold, so it re-reads ${tokenWords(move.tokens)}${costWords(move.cost, move.to.name)} on either account`,
+      detail: `Moved here from ${move.from.name}${priced}`,
     };
   }
   const cost = costWords(move.cost, move.to.name);
   if (move.compact) {
-    return compactedMoveWords(move, cost, now);
+    const words = compactedMoveWords(move, cost, now);
+    return { ...words, detail: `${words.detail}${priced}` };
   }
   const reread = move.sameOrganization
     ? "Same organization, cache kept"
@@ -224,17 +228,52 @@ const movedWords = (
   if (move.because?.kind === "forecast") {
     return {
       line,
-      detail: `${move.from.name} was forecast to run out at ${clockWords(move.because.runsOutAt)}`,
+      detail: `${move.from.name} was forecast to run out at ${clockWords(move.because.runsOutAt)}${priced}`,
     };
   }
   const ended = move.ended ? endedWorkWords(move.ended) : "";
   if (move.asked) {
     return {
       line: `${line}${ended}`,
-      detail: `Moved here from ${move.from.name}, as asked`,
+      detail: `Moved here from ${move.from.name}, as asked${priced}`,
     };
   }
-  return { line: `${line}${ended}`, detail: limitHitWords(move, now) };
+  return {
+    line: `${line}${ended}`,
+    detail: `${move.because?.kind === "extra-usage" ? `${move.from.name} was on extra usage` : limitHitWords(move, now)}${priced}`,
+  };
+};
+
+/** An option of the decision as a move's detail names it ({@link MovePriceOption}). */
+const OPTION_WORDS: Record<MovePriceOption, string> = {
+  stay: "staying",
+  wait: "waiting for the reset",
+  credits: "staying on extra usage",
+  whole: "moving whole",
+  "compact-before": "compacting here, then moving",
+  "compact-after": "moving, then compacting",
+  summary: "going on from a summary",
+};
+
+/** Dollars as a move's detail says them: "$4.17", or "an unpriced amount". */
+const dollarWords = (usd: number | null): string =>
+  usd === null ? "an unpriced amount" : `$${usd.toFixed(2)}`;
+
+/**
+ * What the hub's decision chose and passed over, as a move's detail ends:
+ * " · chose $4.17 over moving, then compacting on B at $6.33", or " · chose
+ * $0.03, the only option that held". Nothing when the line has no price.
+ */
+const priceWords = (price: MovePrice | undefined): string => {
+  if (!price) {
+    return "";
+  }
+  const chose = `chose ${dollarWords(price.usd)}`;
+  if (!price.next) {
+    return ` · ${chose}, the only option that held`;
+  }
+  const where = price.next.to ? ` to ${price.next.to}` : "";
+  return ` · ${chose} over ${OPTION_WORDS[price.next.what]}${where} at ${dollarWords(price.next.usd)}`;
 };
 
 /**
@@ -275,13 +314,17 @@ const limitHitWords = (move: MoveSent, now: number): string => {
   ].join(" · ");
 };
 
-/** A move's cost as its line says it: " (≈3% of B’s 5-hour window)", or nothing when unpriced. */
+/** A share of a window as a line says it: "≈3%", or "under 1%". */
+const pctWords = (pct: number): string =>
+  pct < 1 ? "under 1%" : `≈${Math.round(pct)}%`;
+
+/** A move's cost as its line says it: " (≈3% of B’s 5-hour window)", "(under 1% of …)", or nothing when unpriced. */
 const costWords = (
   cost: { pct: number; window: string } | undefined,
   to: string
 ): string =>
   cost
-    ? ` (≈${Math.max(1, Math.round(cost.pct))}% of ${to}'s ${cost.window ? `${cost.window} ` : ""}window)`
+    ? ` (${pctWords(cost.pct)} of ${to}'s ${cost.window ? `${cost.window} ` : ""}window)`
     : "";
 
 /**
@@ -700,7 +743,7 @@ const heldMoveWords = (
     return `${thousands(one.tokens)} to ${one.to.name}, cache kept`;
   }
   return one.cost
-    ? `${thousands(one.tokens)} re-read ≈ ${Math.max(1, Math.round(one.cost.pct))}% of ${one.to.name}'s ${one.cost.window ? `${one.cost.window} ` : ""}window`
+    ? `${thousands(one.tokens)} re-read ${pctWords(one.cost.pct)} of ${one.to.name}'s ${one.cost.window ? `${one.cost.window} ` : ""}window`
     : `${thousands(one.tokens)} re-read on ${one.to.name}`;
 };
 

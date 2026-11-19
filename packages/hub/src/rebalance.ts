@@ -15,17 +15,21 @@ import {
 } from "@cawco/core/accounts";
 import { detach } from "@cawco/core/detach";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
-import { openedAt, windowWords } from "@cawco/core/usage/windows";
-import {
-  clockWords,
-  heldAccountWords,
-  tokenWords,
-} from "@cawco/core/words/account-lines";
-import { NEXT_TURN_ALLOWANCE_USD, usdWords } from "./admission";
+import { windowWords } from "@cawco/core/usage/windows";
+import { clockWords, heldAccountWords } from "@cawco/core/words/account-lines";
+import { usdWords } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
 import type { TurnUsageRow } from "./db/turn-usage";
+import {
+  type DecidedMove,
+  type DecideFacts,
+  decide,
+  LOOK_AHEAD_MS,
+  type MoveChoice,
+  runsShort,
+} from "./decide";
 import {
   accountForecasts,
   accountPaces,
@@ -38,14 +42,12 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   type AtLimitPorts,
   compactedLine,
-  costOf,
-  decideStop,
+  factsOf,
   type LimitRow,
+  lineCost,
+  linePrice,
   moveSideWords,
-  type StopDecision,
-  type StopTarget,
-  stopInputOf,
-  WHOLE_MOVE_NOTICE_MS,
+  planOf,
 } from "./limit-decision";
 import type { Arrival } from "./placement";
 import type { AccountPaces } from "./window-paces";
@@ -234,122 +236,6 @@ export const kindBurn = (
   return total / mine.length / (BURN_SPAN_MS / HOUR_MS);
 };
 
-/** An account forecast to run out before its window resets. */
-export interface Stress {
-  /** When the window resets; null when nothing named it. */
-  resetAt: number | null;
-  /** When it runs out at its pace: now for one already at its limit. */
-  runsOutAt: number;
-  /** The window that runs out first. */
-  window: WindowForecast;
-}
-
-/**
- * How far ahead a forecast run-out moves running sessions: five hours, for
- * every window, fleet-wide. A run-out further off moves nobody: the forecast
- * steers new placement and the screens until it comes this close.
- */
-const LOOK_AHEAD_MS = 5 * HOUR_MS;
-
-/**
- * Whether an account is stressed: a window of it runs out (or is out) within
- * {@link LOOK_AHEAD_MS} and before it resets, less `waitMs` (a reset that
- * near is waited for, as at the limit). The window that runs out first; null
- * when none does.
- */
-const stressOf = (
-  forecast: AccountForecast | undefined,
-  waitMs: number,
-  now: number
-): Stress | null => {
-  let worst: Stress | null = null;
-  for (const window of forecast?.windows ?? []) {
-    const resetAt = window.resetsAt ? Date.parse(window.resetsAt) : null;
-    if (resetAt !== null && resetAt <= now) {
-      continue;
-    }
-    const runsOutAt = window.utilization >= 100 ? now : window.runsOutAt;
-    if (
-      runsOutAt === undefined ||
-      runsOutAt - now > LOOK_AHEAD_MS ||
-      (resetAt !== null && runsOutAt >= resetAt - waitMs)
-    ) {
-      continue;
-    }
-    if (!worst || runsOutAt < worst.runsOutAt) {
-      worst = { window, runsOutAt, resetAt };
-    }
-  }
-  return worst;
-};
-
-/** One running session's part of its account's burn. */
-export interface SessionShare {
-  /** Its own burn, weighted tokens an hour; null when no turns of it are recorded. */
-  burn: number | null;
-  /** Its part of the account's pace, 0–1. */
-  share: number;
-  /** How the part was had, in words for its `why`. */
-  why: string;
-}
-
-/**
- * Each running session's share of its account's weighted tokens in the
- * stressed window since it opened (`turn_usage`). A session with no turns
- * recorded there gets no share; when the account has none recorded at all
- * (`turn_usage` not written yet), nothing tells its sessions apart, and each
- * counts an even part, which its `why` says.
- */
-const sessionShares = (
-  sessions: readonly { id: string }[],
-  turns: readonly TurnUsageRow[],
-  stress: Stress,
-  named: string,
-  now: number
-): Map<string, SessionShare> => {
-  // A window of no known opening holds no turns: each session counts an even part.
-  const opened = openedAt(stress.window) ?? now;
-  const spent = new Map<string, number>();
-  let total = 0;
-  for (const turn of turns) {
-    if (turn.at.getTime() >= opened) {
-      const w = weightedTokens(turn);
-      spent.set(turn.instanceId, (spent.get(turn.instanceId) ?? 0) + w);
-      total += w;
-    }
-  }
-  return new Map(
-    sessions.map((session) => {
-      const mine = spent.get(session.id) ?? 0;
-      const burn = sessionBurn(turns, session.id, now);
-      if (total <= 0) {
-        return [
-          session.id,
-          {
-            burn,
-            share: 1 / sessions.length,
-            why: `no turns are recorded on ${named} in this window, so it counts an even part (1/${sessions.length}) of its pace`,
-          },
-        ];
-      }
-      return [
-        session.id,
-        mine > 0
-          ? {
-              burn,
-              share: mine / total,
-              why: `it spent ${Math.round((mine / total) * 100)}% of ${named}'s weighted tokens in this window`,
-            }
-          : {
-              burn,
-              share: 0,
-              why: `no turns of it are recorded on ${named} in this window, so it is given no share of its pace`,
-            },
-      ];
-    })
-  );
-};
-
 /** An account's binding window in a forecast (core `AccountForecast.bindingWindow`), as its forecast reads it. */
 const bindingOf = (
   forecast: Pick<ForecastRead, "forecasts">,
@@ -433,9 +319,10 @@ export interface RebalancerDeps {
     AtLimitPorts,
     | "accountRows"
     | "admission"
-    | "cacheExpiresAt"
+    | "cacheState"
     | "changed"
     | "compactable"
+    | "context"
     | "handMove"
     | "idle"
     | "machineName"
@@ -444,82 +331,29 @@ export interface RebalancerDeps {
     | "named"
     | "note"
     | "noticed"
-    | "owe"
     | "owed"
-    | "startedBy"
     | "waitedOn"
   >;
   /** At-limit arms its next look again: what can be balanced changed. */
   replan: () => void;
 }
 
-/** The sessions a pass already moved, or owes a move, as they arrive on their targets: the next decision in the pass counts their burn there. */
+/** The sessions a pass already moved, as they arrive on their targets: the next decision in the pass counts their burn there. */
 type Added = Map<string, Arrival>;
 
-/** What a pass moved off one stressed account. */
+/** What a pass moved off one account that runs short. */
 interface MovedOff {
   cacheKept: boolean;
   from: Account;
-  /** Moves owed to their sessions' turn's end ({@link AtLimitPorts.owe}). */
+  /** Sessions inside a turn, decided again at its end ({@link createRebalancer} `atTurnEnd`). */
   left: number;
   moved: number;
   runsOutAt: number;
   to: Account | null;
 }
 
-/** One stressed account as its pass works through it. */
-interface Source {
-  forecast: ForecastRead;
-  from: Account;
-  fromForecast: AccountForecast | undefined;
-  out: MovedOff;
-  /** Its pace's share moved off it so far, 0–1. */
-  relieved: number;
-  stress: Stress;
-  waitMs: number;
-}
-
-/**
- * Whether `source` no longer runs out: below its limit, with the pace left
- * lasting to its reset, or running out past {@link LOOK_AHEAD_MS}, where a
- * forecast moves nobody.
- */
-const lasts = (source: Source, now: number): boolean => {
-  const { stress, relieved, waitMs } = source;
-  if (stress.window.utilization >= 100) {
-    return false;
-  }
-  const pace = (stress.window.pace ?? 0) * (1 - relieved);
-  if (pace <= 0) {
-    return true;
-  }
-  const out = now + ((100 - stress.window.utilization) / pace) * HOUR_MS;
-  return (
-    out - now > LOOK_AHEAD_MS ||
-    (stress.resetAt !== null && out >= stress.resetAt - waitMs)
-  );
-};
-
-/**
- * The burn a session takes to its target, weighted tokens an hour: its own,
- * where its turns are recorded, else its share of its account's pace in its
- * binding window, in that window's weighted tokens, where a percent of it
- * is measured.
- */
-const burnOf = (source: Source, share: SessionShare): number => {
-  if (share.burn !== null) {
-    return share.burn;
-  }
-  const window = bindingOf(source.forecast, source.from.id);
-  if (!window) {
-    return 0;
-  }
-  const perPct = tokensPerPctOf(source.forecast, source.from.id, window) ?? 0;
-  return share.share * (window.pace ?? 0) * perPct;
-};
-
-/** What one planned move came to: stop the account's moves, skip this one, owed to its turn's end, or moved. */
-type Step = "stop" | "skip" | "owed" | "moved";
+/** What one planned move came to: stop the account's moves, skip this one, decided at its turn's end, or moved. */
+type Step = "stop" | "skip" | "later" | "moved";
 
 export const createRebalancer = (deps: RebalancerDeps) => {
   const { db, lifetime, ports, acting } = deps;
@@ -535,11 +369,22 @@ export const createRebalancer = (deps: RebalancerDeps) => {
   const refused = new Set<string>();
 
   /**
+   * Sessions a pass found inside a turn, by session, with the provider and
+   * machine of that pass: the marker to decide at that turn's end, and
+   * nothing more (no move is kept with a target). Their turn's end runs
+   * the pass again ({@link turnEnded}); a session that ends never takes it.
+   */
+  const atTurnEnd = new Map<
+    string,
+    { machineId: string; provider: AccountProvider }
+  >();
+
+  /**
    * `row` as it stands now, when it is still on `from`, running, not Caw's
-   * own with Caw off (at-limit `stays`), owing no move, not refused
-   * unchanged, not admitted onto `from` in its current window (admission.ts
-   * `admittedHere`: another account freeing never moves it again), and
-   * nothing else is acting on it.
+   * own with Caw off (at-limit `stays`), owing no person's move, not refused
+   * unchanged, and nothing else is acting on it. Whether the hub moved it
+   * lately is the decision's to weigh (decide.ts, its guard against
+   * bouncing).
    */
   const candidate = (row: LimitRow, from: Account): LimitRow | undefined => {
     const fresh = rowOf(row.id);
@@ -551,8 +396,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       ports.owed().has(row.id) ||
       acting.has(row.id) ||
       db.atLimit.hold(row.id) ||
-      ports.moving(fresh) ||
-      ports.admission.admittedHere(fresh)
+      ports.moving(fresh)
     ) {
       return undefined;
     }
@@ -560,164 +404,106 @@ export const createRebalancer = (deps: RebalancerDeps) => {
   };
 
   /**
-   * Moves `row` to `target` between turns and writes its line, as the
-   * decision weighed it (`weighed`, `tokens` its context priced). One
-   * mid-turn, or whose process still runs, owes the move to its turn's end
-   * (or its next start), the line written as it lands, as a person's move
-   * mid-turn does; one whose move failed otherwise stays, and says why.
+   * Moves `row` as `move` says, between turns, and writes its line, priced
+   * beside the next best. One whose process still runs, or holds work for
+   * later, is decided again at its turn's end: a move ahead of a limit
+   * never ends a command (decided 2026-11-19). One whose move failed
+   * otherwise stays, and says why.
    */
   const carry = async (
-    source: Source,
+    from: Account,
     row: LimitRow,
     target: Account,
-    weighed: StopTarget,
-    tokens: number,
-    warm: boolean
-  ): Promise<"owed" | "skip" | "moved"> => {
-    const { from, stress } = source;
-    const { plan } = weighed;
-    // Owed to its turn's end, it is weighed again then (server.ts
-    // `takeUpOwedMove`): its line says how it was compacted once it is.
+    move: DecidedMove,
+    tokens: number | null,
+    runsOutAt: number,
+    window: string | null,
+    resetsAt: number | null
+  ): Promise<"later" | "skip" | "moved"> => {
+    const accounts = db.accounts.list();
+    const plan = planOf(move);
     const whole: Extract<AccountMove, { kind: "moved" }> = {
       kind: "moved",
-      from: namedAccount(from, source.forecast.accounts),
-      to: namedAccount(target, source.forecast.accounts),
-      sameOrganization: weighed.carries,
+      from: namedAccount(from, accounts),
+      to: namedAccount(target, accounts),
+      sameOrganization: move.carries,
       tokens,
-      window: windowWords(stress.window),
-      resetsAt: stress.resetAt,
-      because: warm
-        ? { kind: "forecast", runsOutAt: stress.runsOutAt }
-        : { kind: "cold", wake: false },
-      ...costOf(weighed),
+      window,
+      resetsAt,
+      because: { kind: "forecast", runsOutAt },
+      ...lineCost(move),
+      price: linePrice(move.price, accounts),
     };
-    const move = compactedLine(whole, plan, row.harness);
-    const going = (): void => {
-      source.out.to = target;
-      source.out.cacheKept = weighed.carries;
-    };
-    if (!(await ports.idle(row))) {
-      ports.owe(
-        row,
-        target.id,
-        whole,
-        "it is inside a turn, and a session moves only between turns"
-      );
-      going();
-      return "owed";
-    }
+    const line = compactedLine(whole, plan, row.harness);
+    const id = crypto.randomUUID();
     acting.add(row.id);
     let done: Awaited<ReturnType<AtLimitPorts["move"]>>;
-    const line = crypto.randomUUID();
     try {
       done = await ports.move(
         row,
-        target.id,
+        move,
         false,
-        plan.method === "whole"
-          ? undefined
-          : { cause: "forecast", line, move, plan }
+        plan.method === "whole" ? undefined : { line: id, move: line, plan }
       );
     } finally {
       acting.delete(row.id);
     }
     if ("later" in done) {
-      going();
       return "moved";
     }
     const why = "kept" in done ? done.kept : undefined;
-    if (why?.running) {
-      ports.owe(row, target.id, whole, why.why);
-      going();
-      return "owed";
-    }
     if (why) {
       // It did not move: its charge goes with it.
       ports.admission.refund(row.id);
+      if (why.running) {
+        return "later";
+      }
       refused.add(row.id);
       console.warn(
-        `[rebalance] ${ports.named(row)} stays on ${accountNameAmong(from, source.forecast.accounts)}, not moved to ${accountNameAmong(target, source.forecast.accounts)} ahead of its forecast run-out: ${why.why}. It isn't tried again until its next turn ends or an account signs in, leaves, or comes back from its bench.`
+        `[rebalance] ${ports.named(row)} stays on ${accountNameAmong(from, accounts)}, not moved to ${accountNameAmong(target, accounts)} ahead of its forecast run-out: ${why.why}. It isn't tried again until its next turn ends or an account signs in, leaves, or comes back from its bench.`
       );
       return "skip";
     }
-    ports.note(row, move, line);
-    going();
+    ports.note(row, line, id);
     return "moved";
   };
 
   /** Why a session moves ahead of its account's run-out, as the journal says it. */
-  const goWords = (
-    weighed: StopTarget,
-    warm: boolean,
-    tokens: number,
-    policy: { moveWholeUnderK: number }
-  ): string => {
-    if (weighed.carries) {
-      return "one organization and its cache warm, so its cache carries";
-    }
-    if (weighed.plan.method !== "whole") {
-      return `its provider's policy makes it small first (${weighed.plan.method === "native" ? "its own /compact, here, while its cache is warm" : "a summary it goes on from there"}), so the move re-reads little`;
-    }
-    return warm
-      ? `a person waits on it, and re-reading ${tokenWords(tokens)} cold is under the ${policy.moveWholeUnderK}k floor`
-      : "its cache is cold, so moving re-reads nothing waiting wouldn't";
-  };
+  const goWords = (move: DecidedMove): string =>
+    move.carries
+      ? "one organization and its cache warm, so its cache carries"
+      : "its cache is cold, so moving costs what its next turn there would";
 
-  /**
-   * Whether `row`'s move whole to `target` is still announced, not gone: its
-   * line announcing it is written now when none stands (core `AccountMove`
-   * `moving`), and true until its moment has passed ({@link
-   * WHOLE_MOVE_NOTICE_MS}); false then, when it goes.
-   */
-  const announced = (
-    row: LimitRow,
-    from: Account,
-    target: Account,
-    tokens: number,
-    now: number
-  ): boolean => {
-    const last = db.atLimit.latestEvent(row.id)?.move;
-    if (last?.kind === "moving" && last.to.id === target.id) {
-      return last.at > now;
-    }
-    const accounts = db.accounts.list();
-    ports.note(row, {
-      kind: "moving",
-      from: namedAccount(from, accounts),
-      to: namedAccount(target, accounts),
-      at: now + WHOLE_MOVE_NOTICE_MS,
-      tokens,
-    });
-    return true;
-  };
-
-  /** Why a session stays where it is ahead of its account's run-out, as the decision says it (`why`), for the journal. */
+  /** Why a session stays where it is ahead of its account's run-out, as the decision says it, for the journal. */
   const stayWords = (
-    decision: Extract<StopDecision, { action: "wait" }>,
-    from: string,
-    waitMinutes: number
+    decision: Exclude<MoveChoice, { kind: "move" }>
   ): string => {
+    if (decision.kind === "wait") {
+      return "a person moved it, and the account they chose can't take it yet";
+    }
     switch (decision.why) {
-      case "soon":
-        return `${from} runs out within the ${waitMinutes} minutes the policy waits for, so it moves at its limit instead`;
-      case "free":
-        return `its cache outlasts ${from}'s run-out, so staying costs nothing; its limit decides again`;
-      case "warm":
-        return `its cache is warm, and moving it whole to another organization now would re-read ${tokenWords(decision.tokens)} cold for ${usdWords(decision.coldUsd)}; it moves at its limit instead, compacted there as its provider's policy says`;
-      case "full":
-        return `no other account can take it now: ${heldList(decision)}`;
       case "fork":
         return "a fork stays on the account its origin's cache is on";
       case "off":
         return "moving to another account at the limit is switched off";
-      case "hand":
-        return "a person moved it, and the account they chose can't take it yet";
+      case "waiting":
+        return "a person waits on it, and a forecast moves no session a person waits on; its limit decides";
+      case "bounce":
+        return "the hub moved it lately, and it is not moved again before both accounts' 5-hour windows reset";
+      case "unknown":
+        return "its cache isn't measured, and a move is made ahead of a limit only when it is free";
+      case "full":
+        return `no move of it is free and holds: ${heldList(decision)}`;
+      case "dearer":
+      case "holds":
+      case "credits":
+        return `moving costs ${usdWords(decision.moveUsd)} against ${usdWords(decision.stayUsd)} for staying`;
     }
   };
 
   /** Every other account and why it didn't take the session, as a line names them. */
   const heldList = (
-    decision: Extract<StopDecision, { action: "wait" }>
+    decision: Exclude<MoveChoice, { kind: "move" }>
   ): string => {
     const accounts = db.accounts.list();
     return (
@@ -741,88 +527,140 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     );
   };
 
+  /** One account that runs short, as its pass works through it. */
+  interface Source {
+    from: Account;
+    machineId: string;
+    out: MovedOff;
+    provider: AccountProvider;
+    /** The burn moved off it so far, weighted tokens an hour. */
+    relieved: number;
+    /** When it runs out, at its pace less what was moved off. */
+    runsOutAt: number;
+    waitMs: number;
+    /** The window it runs out on, as a line names it, and that window's reset. */
+    window: { name: string | null; resetsAt: number | null };
+  }
+
+  /** `row` is decided again at its turn's end, its pass run again then: the marker, said once. */
+  const markTurnEnd = (row: LimitRow, source: Source, head: string): void => {
+    if (!atTurnEnd.has(row.id)) {
+      console.info(
+        `${head}. It is inside a turn, or its process holds work for later, and a session is decided only between turns: it is decided again at that turn's end.`
+      );
+    }
+    atTurnEnd.set(row.id, {
+      machineId: source.machineId,
+      provider: source.provider,
+    });
+  };
+
   /**
-   * One planned move, as the decision at a forecast says it
-   * (at-limit.ts `decideStop`, `forecast`): moved, or owed to its turn's
-   * end, to the first account it weighed; staying, this one skipped; or
-   * staying with no account that can take it, the pass stopped.
+   * One session on an account that runs short, decided now (decide.ts,
+   * trigger `forecast`): moved only when the move is free; one inside a
+   * turn decided again at its end; staying, this one skipped; staying with
+   * no account that holds it, the pass stopped.
    */
   const step = async (
     source: Source,
     row: LimitRow,
-    share: SessionShare,
     added: Added
   ): Promise<Step> => {
     const fresh = candidate(row, source.from);
     if (!fresh) {
       return "skip";
     }
-    const { from, forecast } = source;
-    const fromName = accountNameAmong(from, forecast.accounts);
+    const { from } = source;
+    const accounts = db.accounts.list();
+    const fromName = accountNameAmong(from, accounts);
+    const head = `[rebalance] ${ports.named(fresh)} is on ${fromName}, which is forecast to run out at ${clockWords(source.runsOutAt)}`;
+    if (!(await ports.idle(fresh))) {
+      markTurnEnd(fresh, source, head);
+      return "later";
+    }
+    atTurnEnd.delete(fresh.id);
     const now = Date.now();
-    const input = stopInputOf(
-      db,
-      ports,
-      fresh,
-      from,
-      "forecast",
-      now,
-      [...added.values()],
-      source.stress.runsOutAt
-    );
-    const decision = decideStop(input);
-    const head = `[rebalance] ${ports.named(fresh)} is on ${fromName}, which is forecast to run out at ${clockWords(source.stress.runsOutAt)}, and ${share.why}`;
-    if (decision.action === "wait") {
-      console.info(
-        `${head}. It stays: ${stayWords(decision, fromName, input.policy.waitMinutes)}. The next look at the accounts, within 5 minutes, decides again.`
-      );
-      return decision.why === "full" ? "stop" : "skip";
-    }
-    const [weighed] = decision.targets;
-    const target = weighed ? db.accounts.get(weighed.accountId) : undefined;
-    if (!(weighed && target)) {
+    const facts = factsOf(db, ports, fresh, from, now, {
+      landing: [...added.values()],
+      resetAt: source.runsOutAt,
+    });
+    if (!facts) {
       return "skip";
     }
-    const targetName = accountNameAmong(target, forecast.accounts);
-    if (
-      weighed.plan.method === "whole" &&
-      weighed.plan.chosen &&
-      announced(fresh, from, target, decision.tokens, now)
-    ) {
+    const decision = decide(facts, {
+      kind: "forecast",
+      runsOutAt: source.runsOutAt,
+    });
+    if (decision.kind !== "move") {
       console.info(
-        `${head}. It moves whole to ${targetName}, as its provider's policy says for a conversation this large, once its announcement's ${WHOLE_MOVE_NOTICE_MS / 60_000} minutes have passed; stopping it before then keeps it on ${fromName}.`
+        `${head}. It stays: ${stayWords(decision)}. The next look at the accounts, within 5 minutes, decides again.`
       );
+      return decision.kind === "stay" && decision.why === "full"
+        ? "stop"
+        : "skip";
+    }
+    const [move] = decision.moves;
+    return move
+      ? await go(source, fresh, move, {
+          added,
+          head,
+          facts,
+          tokens: decision.tokens,
+        })
+      : "skip";
+  };
+
+  /** One decided move of `row` off `source` carried out, charged first and counted as it lands ({@link step}). */
+  const go = async (
+    source: Source,
+    row: LimitRow,
+    move: DecidedMove,
+    how: {
+      added: Added;
+      facts: DecideFacts;
+      head: string;
+      tokens: number | null;
+    }
+  ): Promise<Step> => {
+    const target = db.accounts.get(move.to);
+    if (!target) {
       return "skip";
     }
-    const warm = input.session.cacheExpiresAt !== null;
-    const why = goWords(weighed, warm, decision.tokens, input.policy);
+    const { facts, head } = how;
+    const targetName = accountNameAmong(target, db.accounts.list());
     // Charged now, before any await, so the next decision counts it.
+    const next = facts.session.costs.nextTurnUsd;
     ports.admission.charge(
-      fresh,
+      row,
       target.id,
-      weighed.moveUsd === null
-        ? null
-        : weighed.moveUsd + NEXT_TURN_ALLOWANCE_USD
+      move.usd === null || next === null ? null : move.usd + next
     );
     console.info(
-      `${head}. It moves to ${targetName} between turns: ${why}; moving ${moveSideWords(weighed, decision.tokens, targetName)}.`
+      `${head}. It moves to ${targetName} between turns: ${goWords(move)}; ${moveSideWords(move, how.tokens, targetName)}.`
     );
     const done = await carry(
-      source,
-      fresh,
+      source.from,
+      row,
       target,
-      weighed,
-      decision.tokens,
-      warm
+      move,
+      how.tokens,
+      source.runsOutAt,
+      source.window.name,
+      source.window.resetsAt
     );
-    // Owed or moved, its burn leaves `from` for `target`.
-    if (done !== "skip") {
-      source.relieved += share.share;
-      added.set(fresh.id, {
+    if (done === "later") {
+      markTurnEnd(row, source, head);
+    }
+    if (done === "moved") {
+      const burn = facts.session.burn ?? 0;
+      source.relieved += burn;
+      source.out.to = target;
+      source.out.cacheKept = move.carries;
+      how.added.set(row.id, {
         accountId: target.id,
-        burn: burnOf(source, share),
-        instanceId: fresh.id,
-        since: now,
+        burn,
+        instanceId: row.id,
+        since: facts.now,
       });
     }
     return done;
@@ -831,13 +669,9 @@ export const createRebalancer = (deps: RebalancerDeps) => {
   /**
    * Whether `from`'s plan limit stops nothing: past it, its sessions keep
    * going on its extra usage (core `keepsGoingOnExtraUsage`), so none is
-   * moved ahead of `stress`. Says so when it does.
+   * moved ahead of its run-out. Says so when it does.
    */
-  const keepsGoing = (
-    forecast: ForecastRead,
-    from: Account,
-    stress: Stress
-  ): boolean => {
+  const keepsGoing = (from: Account, runsOutAt: number): boolean => {
     const reading = db.accounts
       .readings()
       .find((one) => one.accountId === from.id);
@@ -845,80 +679,119 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       return false;
     }
     console.info(
-      `[rebalance] The sessions on ${accountNameAmong(from, forecast.accounts)} stay there, though its ${windowWords(stress.window) ? `${windowWords(stress.window)} ` : ""}window is forecast to run out at ${clockWords(stress.runsOutAt)}: past its plan they keep going on its extra usage, as its setting says.`
+      `[rebalance] The sessions on ${accountNameAmong(from, db.accounts.list())} stay there, though it is forecast to run out at ${clockWords(runsOutAt)}: past its plan they keep going on its extra usage, as its setting says.`
     );
     return true;
   };
 
   /**
-   * Moves running sessions off `from` while it is forecast to run out,
-   * highest share of its burn first, one at a time; stops once it no
-   * longer runs out, or a target would. Null when it is not stressed.
+   * When `from` runs short (decide.ts `runsShort`: a window runs out within
+   * the look-ahead and more than the policy's wait before its reset), less
+   * `relieved` burn moved off it; null when it doesn't. The same test a
+   * target is held to, over twice the look-ahead (decide.ts): no account is
+   * both.
+   */
+  const shortOf = (
+    row: LimitRow,
+    from: Account,
+    relieved: number,
+    waitMs: number
+  ): { at: number; name: string | null; resetsAt: number | null } | null => {
+    const read = ports.accountRows(row, from.id, []);
+    const windows = read.current?.windows ?? [];
+    const now = Date.now();
+    const at = runsShort(windows, -relieved, LOOK_AHEAD_MS, waitMs, now);
+    if (at === null) {
+      return null;
+    }
+    const window = windows.find(
+      (one) => runsShort([one], -relieved, LOOK_AHEAD_MS, waitMs, now) === at
+    );
+    return {
+      at,
+      name: window ? windowWords(window.window) || null : null,
+      resetsAt: window?.resetAt ?? null,
+    };
+  };
+
+  /** `rows`, the one with the largest measured burn first; one unmeasured last. */
+  const byBurn = (forecast: ForecastRead, rows: LimitRow[]): LimitRow[] => {
+    const now = Date.now();
+    const all = [...forecast.turns.values()].flat();
+    return rows
+      .map((row) => ({ row, burn: sessionBurn(all, row.id, now) ?? -1 }))
+      .sort((a, b) => b.burn - a.burn)
+      .map((one) => one.row);
+  };
+
+  /**
+   * Decides each running session on `from` while it runs short, the one
+   * with the largest measured burn first, one at a time; stops once it no
+   * longer runs short, or no account holds a session. Null when it does not
+   * run short.
    */
   const moveOff = async (
+    provider: AccountProvider,
+    machineId: string,
     forecast: ForecastRead,
     from: Account,
     rows: LimitRow[],
     added: Added
   ): Promise<MovedOff | null> => {
-    const now = Date.now();
-    const waitMs =
-      db.accounts.routing(from.provider).atLimit.waitMinutes * 60_000;
-    const fromForecast = forecast.forecasts.find(
-      (one) => one.accountId === from.id
-    );
-    const stress = stressOf(fromForecast, waitMs, now);
-    if (!stress || keepsGoing(forecast, from, stress)) {
+    const [first] = rows;
+    if (!first) {
       return null;
     }
-    const shares = sessionShares(
-      rows,
-      forecast.turns.get(from.id) ?? [],
-      stress,
-      accountNameAmong(from, forecast.accounts),
-      now
-    );
-    const planned = rows
-      .flatMap((row) => {
-        const share = shares.get(row.id);
-        return share ? [{ row, share }] : [];
-      })
-      .sort(
-        (a, b) =>
-          b.share.share - a.share.share ||
-          (a.row.contextTokens ?? 0) - (b.row.contextTokens ?? 0)
-      );
+    const waitMs =
+      db.accounts.routing(from.provider).atLimit.waitMinutes * 60_000;
+    const short = shortOf(first, from, 0, waitMs);
+    if (!short || keepsGoing(from, short.at)) {
+      return null;
+    }
+    const planned = byBurn(forecast, rows);
     const source: Source = {
-      forecast,
       from,
-      fromForecast,
-      stress,
+      machineId,
+      provider,
       waitMs,
       relieved: 0,
+      runsOutAt: short.at,
+      window: { name: short.name, resetsAt: short.resetsAt },
       out: {
         from,
         left: 0,
         moved: 0,
-        runsOutAt: stress.runsOutAt,
+        runsOutAt: short.at,
         to: null,
         cacheKept: false,
       },
     };
-    for (const { row, share } of planned) {
-      if (lasts(source, Date.now())) {
-        break;
+    await stepsOff(source, planned, added);
+    return source.out.moved + source.out.left > 0 ? source.out : null;
+  };
+
+  /** Each of `planned` decided in turn while `source` still runs short, its outcome counted; the pass stops where a step says so. */
+  const stepsOff = async (
+    source: Source,
+    planned: readonly LimitRow[],
+    added: Added
+  ): Promise<void> => {
+    for (const row of planned) {
+      const still = shortOf(row, source.from, source.relieved, source.waitMs);
+      if (!still) {
+        return;
       }
-      const done = await step(source, row, share, added);
+      source.runsOutAt = still.at;
+      const done = await step(source, row, added);
       if (done === "stop") {
-        break;
+        return;
       }
-      if (done === "owed") {
+      if (done === "later") {
         source.out.left += 1;
       } else if (done === "moved") {
         source.out.moved += 1;
       }
     }
-    return source.out.moved + source.out.left > 0 ? source.out : null;
   };
 
   /** The provider's accounts signed in on `machineId`. */
@@ -1110,7 +983,9 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       const added: Added = new Map();
       for (const [accountId, rows] of runningOn(machineId, signed)) {
         const from = db.accounts.get(accountId);
-        const moved = from ? await moveOff(forecast, from, rows, added) : null;
+        const moved = from
+          ? await moveOff(provider, machineId, forecast, from, rows, added)
+          : null;
         if (moved) {
           running.push(moved);
         }
@@ -1334,9 +1209,24 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     pairs,
     rebalance: (provider: AccountProvider, machineId: string) =>
       rebalance(provider, machineId),
-    /** A turn of `instanceId` ended: a carry refused before may go now. */
+    /**
+     * A turn of `instanceId` ended: a carry refused before may go now, and
+     * one a pass found inside that turn is decided now, its pass run again.
+     */
     turnEnded: (instanceId: string): void => {
       refused.delete(instanceId);
+      const marked = atTurnEnd.get(instanceId);
+      if (marked) {
+        atTurnEnd.delete(instanceId);
+        detach(
+          rebalance(marked.provider, marked.machineId),
+          "rebalance at a turn's end"
+        );
+      }
+    },
+    /** `instanceId` never runs again: its marker to decide at its turn's end goes with it. */
+    forget: (instanceId: string): void => {
+      atTurnEnd.delete(instanceId);
     },
   };
 };

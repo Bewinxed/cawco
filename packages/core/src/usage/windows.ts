@@ -36,6 +36,29 @@ export const windowResetAt = (
 };
 
 /**
+ * A window's reset as its identity reads it: the reset rounded to the
+ * minute, epoch ms; null when nothing named one. A provider reports the same
+ * reset a second apart from one reading to the next (design@'s week
+ * alternated between `…05:59:59.000Z` and `…06:00:00.000Z` on 2026-11-19),
+ * so two readings name one window when their resets round to one minute.
+ * Every compare of two resets goes through {@link sameReset}; the text is
+ * never compared (lint: scripts/style-greps.ts).
+ */
+export const resetMinute = (
+  window: Pick<LimitWindow, "resetsAt">
+): number | null => {
+  const at = windowResetAt(window);
+  return at === null ? null : Math.round(at / 60_000) * 60_000;
+};
+
+/** Whether two resets are one: both unnamed, or the same minute ({@link resetMinute}). */
+export const sameReset = (
+  a: string | null | undefined,
+  b: string | null | undefined
+): boolean =>
+  resetMinute({ resetsAt: a ?? null }) === resetMinute({ resetsAt: b ?? null });
+
+/**
  * How long `window` runs: its group's span ({@link WINDOW_SPAN_MS}), or for a
  * monthly one the calendar month that ends at its reset. Null when its
  * length is unknown: a group no span is known for, or a month with no reset.

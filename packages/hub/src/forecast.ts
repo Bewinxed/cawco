@@ -14,6 +14,8 @@ import type { LimitWindow } from "@cawco/core/usage/types";
 import {
   bearing,
   freshWindows,
+  resetMinute,
+  sameReset,
   windowKey,
   windowResetAt,
   windowSpan,
@@ -63,7 +65,8 @@ const resetMs = (window: Pick<LimitWindow, "resetsAt">): number | null =>
 
 /**
  * Percent per hour across the window's successive readings since it opened
- * (the points that share its reset). Null with fewer than two readings.
+ * (the points that share its reset minute, core `sameReset`). Null with
+ * fewer than two readings.
  */
 const paceOf = (
   window: LimitWindow,
@@ -76,7 +79,7 @@ const paceOf = (
         point.accountId === accountId &&
         point.kind === window.kind &&
         point.scopeLabel === window.scopeLabel &&
-        point.resetsAt === window.resetsAt
+        sameReset(point.resetsAt, window.resetsAt)
     )
     .sort((a, b) => a.fetchedAt - b.fetchedAt);
   const [first] = points;
@@ -109,7 +112,8 @@ const windowForecast = (
   if (reset !== null && reset <= now) {
     return { ...base, utilization: 0, pace: null };
   }
-  const pace = running ? paceOf(window, history, accountId) : null;
+  // Nothing runs there: it is heading nowhere, a pace of zero, never unknown.
+  const pace = running ? paceOf(window, history, accountId) : 0;
   const left = 100 - window.percent;
   const runsOutAt =
     pace && pace > 0 ? now + (Math.max(left, 0) / pace) * HOUR_MS : undefined;
@@ -225,7 +229,9 @@ const perPercent = <T extends { at: Date }>(
       point.kind === window.kind &&
       point.scopeLabel === window.scopeLabel
     ) {
-      const key = point.resetsAt ?? "";
+      // One window period per reset minute: a reset reported a second
+      // apart is the same window (core `resetMinute`).
+      const key = String(resetMinute(point) ?? "");
       series.set(key, [...(series.get(key) ?? []), point]);
     }
   }

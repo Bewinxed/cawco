@@ -17,12 +17,10 @@ import { modelAdmitted, modelListingOn } from "@cawco/core/model-names";
 import type { InstanceStatus } from "@cawco/core/protocol";
 import type { MoveEnded } from "@cawco/core/session/controls";
 import { HOUR_MS } from "@cawco/core/time";
-import { windowWords } from "@cawco/core/usage/windows";
 import {
   accountMoveSentence,
   clockWords,
   markWords,
-  tokenWords,
 } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
@@ -32,7 +30,6 @@ import { relaunchWords } from "@cawco/core/words/relaunch";
 import { ElysiaStatus } from "elysia";
 import { type KeptOff, keptOffIn, markOn } from "./account-marks";
 import { machineAccount } from "./accounts";
-import { pricedTokens, projectedMove, usdWords } from "./admission";
 import { accountsRead } from "./at-limit";
 import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
@@ -45,27 +42,31 @@ import type {
   ContinueRequest,
   StrandedWhy,
 } from "./db/stored-types";
+import {
+  CHOICE_FRESH_MS,
+  type DecidedMove,
+  type DecideFacts,
+  decide,
+  staleChoice,
+} from "./decide";
 import type { MoveOffWhy, StoredRow } from "./hub-shapes";
-import { cacheWarmNow, measuredCold, promptCacheExpiresAt } from "./keep-alive";
+import { type CacheState, cacheState } from "./keep-alive";
 import {
   type AccountsRead,
   type CompactionPlan,
-  cacheCarries,
   compactedLine,
-  compactionPlan,
+  factsOf,
   type Kept,
+  lineCost,
+  linePrice,
   type MoveHow,
+  moveSideWords,
+  planOf,
   refusedUntil,
   type Stall,
 } from "./limit-decision";
-import type { PlacementInput, TaskAccounts } from "./placement";
-import {
-  accountFacts,
-  place as placeAccount,
-  runningAccounts,
-  signedInForWords,
-} from "./placement";
-import { sessionBurn } from "./rebalance";
+import type { Arrival, PlacementInput, TaskAccounts } from "./placement";
+import { runningAccounts, signedInForWords } from "./placement";
 import { unreachable } from "./unreachable";
 
 /** Statuses a session is not running in: asleep, stopping, stopped or failed. */
@@ -90,7 +91,6 @@ export type LimitMovesContext = Pick<
   | "admission"
   | "atLimit"
   | "carryOn"
-  | "carryTestFor"
   | "catalogFaults"
   | "cloneForContinuation"
   | "continuationRefusal"
@@ -106,6 +106,7 @@ export type LimitMovesContext = Pick<
   | "knownProviders"
   | "launchClaims"
   | "launchInFlight"
+  | "lastRequestContext"
   | "machineName"
   | "modelRefusal"
   | "moveRowsToAccount"
@@ -193,7 +194,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * waited ({@link pickWithMove}). As it is when it owes none.
    */
   const owedOn = (row: StoredRow): StoredRow => {
-    const owed = ctx.owedMoves.get(row.id);
+    const owed = owedNow(row);
     return owed
       ? {
           ...row,
@@ -429,11 +430,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
           asked: true,
           from: namedAccount(from, accounts),
           to: namedAccount(account, accounts),
-          sameOrganization: cacheCarries(
-            from,
-            account,
-            cacheExpiry(row) !== null
-          ),
+          sameOrganization: carriesTo(row, from, account),
           tokens: row.contextTokens,
           window: null,
           resetsAt: null,
@@ -482,55 +479,47 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   };
 
   /**
-   * How `row`'s move to `to` makes it small, by the one rule (at-limit.ts
-   * `compactionPlan`): what stopped it (its limit, its refused sign-in), or
-   * `cause` when nothing did. Whole for a session on no account.
+   * `row`'s move to `to` as the one decision takes a person's move
+   * (decide.ts, trigger `hand`): their target, made small the cheapest way
+   * its cache and the policy allow, `stopped` by its limit or sign-in or
+   * not. Undefined for a session on no account, or one the decision can't
+   * read.
    */
-  const planFor = (
+  const handMoveOf = (
     row: StoredRow,
     to: Account,
-    stopped: "limit" | "signin" | undefined,
-    cause: "hand" | "forecast"
-  ): CompactionPlan => {
+    stopped: "limit" | "signin" | undefined
+  ): DecidedMove | undefined => {
     const from = row.accountId ? ctx.db.accounts.get(row.accountId) : undefined;
-    if (!from) {
-      return { method: "whole", chosen: false };
+    const facts = from ? factsFor(row, from, Date.now()) : undefined;
+    if (!facts) {
+      return;
     }
-    const window = contextWindowNow(row);
-    const stoppedBy = {
-      limit: "limit",
-      signin: "refused-credential",
-    } as const;
-    return compactionPlan({
-      carries: cacheCarries(from, to, cacheExpiry(row) !== null),
-      cause: stopped ? stoppedBy[stopped] : cause,
-      compactable: !ctx.inputRefusal(row.id, {
-        kind: "system",
-        name: COMPACTION_ORIGIN,
-      }),
-      policy: ctx.db.accounts.routing(from.provider).atLimit,
-      reported:
-        row.contextTokens === null
-          ? null
-          : Math.min(row.contextTokens, window ?? row.contextTokens),
+    const choice = decide(facts, {
+      kind: "hand",
+      to: to.id,
+      stopped: stopped !== undefined,
     });
+    return choice.kind === "move" ? choice.moves[0] : undefined;
   };
 
   /**
-   * `move`, the line a move whole would write, as a move `plan` compacts
-   * ({@link moveAs}); undefined when it moves whole.
+   * `move`, the line a move whole would write, as `decided` makes it small
+   * ({@link moveAs}), priced as the decision priced it; undefined when it
+   * moves whole.
    */
   const howFor = (
     row: StoredRow,
     move: AccountMove | null,
-    plan: CompactionPlan,
-    cause: "hand" | "forecast"
+    decided: DecidedMove | undefined
   ): MoveHow | undefined => {
+    const plan: CompactionPlan = decided
+      ? planOf(decided)
+      : { method: "whole", chosen: false };
     if (plan.method === "whole" || move?.kind !== "moved") {
       return;
     }
     return {
-      cause,
       line: crypto.randomUUID(),
       plan,
       move: compactedLine(move, plan, row.harness),
@@ -562,7 +551,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       }
     | { refusal: string }
   > => {
-    const move = askedMove(row, account);
+    const asked = askedMove(row, account);
     const running = !AT_REST.has(row.status);
     // Read before the carry, which ends its process at rest.
     const live = processWorks(row);
@@ -574,7 +563,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       ctx.owedMoves.set(row.id, {
         byHand: true,
         to: account.id,
-        move,
+        move: asked,
         waits: waitsOn,
       });
       return { state: "pending" as const, accountId: account.id, why: words };
@@ -590,14 +579,11 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     }
     // A move it still owed (asked mid-turn, to another account) is over.
     ctx.owedMoves.delete(row.id);
-    const how = howFor(
-      row,
-      move,
-      planFor(row, account, stopped, "hand"),
-      "hand"
-    );
-    if (how) {
-      return await moveByHandCompacted(row, account, how, stopped);
+    const decided = handMoveOf(row, account, stopped);
+    const move = pricedLine(asked, decided);
+    const how = howFor(row, move, decided);
+    if (decided && how) {
+      return await moveByHandCompacted(row, decided, account, how, stopped);
     }
     const { kept } = await ctx.moveRowsToAccount(
       row.machineId,
@@ -636,6 +622,15 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     };
   };
 
+  /** A person's move's line, saying what the decision priced beside the next best; as it was with no decision. */
+  const pricedLine = (
+    asked: AccountMove | null,
+    decided: DecidedMove | undefined
+  ): AccountMove | null =>
+    asked?.kind === "moved" && decided
+      ? { ...asked, price: linePrice(decided.price, ctx.db.accounts.list()) }
+      : asked;
+
   /** A person's move of `row` went: a hold at its old account's limit ends, and every screen hears it. */
   const movedByHand = (row: StoredRow): void => {
     ctx.db.atLimit.dropHold(row.id);
@@ -652,6 +647,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    */
   const moveByHandCompacted = async (
     row: StoredRow,
+    decided: DecidedMove,
     account: Account,
     how: MoveHow,
     stopped: "limit" | "signin" | undefined
@@ -662,7 +658,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     const title = ctx.sessionName(row);
     const fromName = ctx.accountWords(row.accountId);
     const toName = accountNameAmong(account, ctx.db.accounts.list());
-    const done = await moveAs(row, account.id, stopped ?? false, how);
+    const done = await moveAs(row, decided, stopped ?? false, how);
     if ("kept" in done) {
       const why = done.kept;
       if (why.running) {
@@ -920,12 +916,11 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       return inFlight;
     }
     const [stored] = ctx.db.getInstancesByIds([instanceId]);
-    const owed = stored ? ctx.owedMoves.get(stored.id) : undefined;
-    if (!(
-      stored &&
-      owed?.to !== undefined &&
-      ctx.registry.agent(stored.machineId)
-    )) {
+    if (!(stored && ctx.registry.agent(stored.machineId))) {
+      return undefined;
+    }
+    const owed = owedNow(stored);
+    if (owed?.to === undefined) {
       return undefined;
     }
     const { to } = owed;
@@ -956,26 +951,13 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       return undefined;
     }
     const stopped = stoppedNow(stored.id, stopOf(told));
-    // Weighed now it goes: a move owed before it was compacted (a person's,
-    // a rebalance's) compacts as the policy says; one whose line already
-    // says how it was compacted goes as it is.
-    const toAccount = ctx.db.accounts.get(to);
-    const cause = owed.byHand ? "hand" : "forecast";
-    const how =
-      toAccount && owed.move?.kind === "moved" && !owed.move.compact
-        ? howFor(
-            stored,
-            owed.move,
-            planFor(stored, toAccount, stopped, cause),
-            cause
-          )
-        : undefined;
-    if (how) {
+    const hand = handHowOf(stored, owed, to, stopped);
+    if (hand) {
       const compacted = moveOwedCompacted(
         stored,
         owed,
-        to,
-        how,
+        hand.decided,
+        hand.how,
         stopped
       ).finally(() => owedCarries.delete(instanceId));
       owedCarries.set(instanceId, compacted);
@@ -983,25 +965,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     }
     // Read before the carry, which ends its process at rest.
     const live = processWorks(stored);
-    const carried = ctx
-      .moveRowsToAccount(stored.machineId, [stored], to, true, stopped)
-      .then(({ kept }) => {
-        const why = kept.get(stored.id);
-        if (why) {
-          keepUncarried(stored, owed, to, why, still());
-          return false;
-        }
-        if (still()) {
-          landOwed(stored.id);
-        }
-        ctx.db.atLimit.dropHold(stored.id);
-        ctx.publishInstances(stored.machineId);
-        ctx.publishStalls();
-        if (owed.move) {
-          ctx.noteAtLimit(stored, owed.move);
-        }
-        return true;
-      })
+    const carried = carryOwedWhole(stored, { ...owed, to }, stopped)
       .finally(() => owedCarries.delete(instanceId))
       .then((landed) => {
         // Behind the carry's own end, so its relaunch (and a newer move
@@ -1016,6 +980,149 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   };
 
   /**
+   * An owed move carried whole ({@link takeUpOwedMove}): its process ended
+   * at rest and its data carried into the account's dir, its record landed
+   * and its line written. True once it landed; one the carry left where it
+   * was is kept as {@link keepUncarried} says.
+   */
+  const carryOwedWhole = async (
+    stored: StoredRow,
+    owed: OwedMove & { to: string },
+    stopped: "limit" | "signin" | undefined
+  ): Promise<boolean> => {
+    const { to } = owed;
+    const still = () => ctx.owedMoves.get(stored.id)?.to === to;
+    const { kept } = await ctx.moveRowsToAccount(
+      stored.machineId,
+      [stored],
+      to,
+      true,
+      stopped
+    );
+    const why = kept.get(stored.id);
+    if (why) {
+      keepUncarried(stored, owed, to, why, still());
+      return false;
+    }
+    if (still()) {
+      landOwed(stored.id);
+    }
+    ctx.db.atLimit.dropHold(stored.id);
+    ctx.publishInstances(stored.machineId);
+    ctx.publishStalls();
+    if (owed.move) {
+      ctx.noteAtLimit(stored, owed.move);
+    }
+    return true;
+  };
+
+  /**
+   * A person's owed move to `to` as it goes (decide.ts, `hand`), when it is
+   * made small: decided now, unless its line already says how it was
+   * compacted. Undefined when it moves whole: the hub's own moves are
+   * decided as they are carried, whole.
+   */
+  const handHowOf = (
+    stored: StoredRow,
+    owed: OwedMove,
+    to: string,
+    stopped: "limit" | "signin" | undefined
+  ): { decided: DecidedMove; how: MoveHow } | undefined => {
+    const toAccount = ctx.db.accounts.get(to);
+    const decided =
+      owed.byHand && toAccount
+        ? handMoveOf(stored, toAccount, stopped)
+        : undefined;
+    const how =
+      decided && owed.move?.kind === "moved" && !owed.move.compact
+        ? howFor(stored, owed.move, decided)
+        : undefined;
+    return decided && how ? { decided, how } : undefined;
+  };
+
+  /**
+   * The move `row` owes as it is carried now: a person's as they asked; a
+   * marker that it must leave its account ({@link oweMoveOff}) decided now
+   * (decide.ts, as at a refused sign-in: it can't run there), its record
+   * then naming where it goes for the carry that follows; the hub's own,
+   * kept only for the launch that carries it (a wake's), dropped once older
+   * than the decision allows (decide.ts `CHOICE_FRESH_MS`). Undefined when
+   * it owes none, or nothing can take it now.
+   */
+  const owedNow = (row: StoredRow): OwedMove | undefined => {
+    const owed = ctx.owedMoves.get(row.id);
+    if (!owed) {
+      return;
+    }
+    const now = Date.now();
+    const stale =
+      owed.to !== undefined &&
+      !owed.byHand &&
+      owed.carry === undefined &&
+      owed.at !== undefined &&
+      now - owed.at > CHOICE_FRESH_MS;
+    // A marker to leave is decided as it is carried, and again once the
+    // target it was carried towards is older than the decision allows.
+    if (owed.leave !== undefined && (owed.to === undefined || stale)) {
+      return leaveNow(row, owed, owed.leave, now);
+    }
+    if (stale) {
+      ctx.owedMoves.delete(row.id);
+      console.info(
+        `[accounts] ${ctx.sessionName(row)}'s move to ${ctx.accountWords(owed.to)} was decided more than ${CHOICE_FRESH_MS / 60_000} minutes ago and not carried out, so it is dropped: the hub decides again when it next looks.`
+      );
+      return;
+    }
+    return owed;
+  };
+
+  /**
+   * Where `row`, which must leave its account (`why`), goes now: the one
+   * decision's first move (decide.ts, as at a refused sign-in), its record
+   * naming it and the line it writes, priced. Undefined when no account
+   * takes it now: the marker stays.
+   */
+  const leaveNow = (
+    row: StoredRow,
+    owed: OwedMove,
+    why: MoveOffWhy,
+    now: number
+  ): OwedMove | undefined => {
+    const from = row.accountId ? ctx.db.accounts.get(row.accountId) : undefined;
+    const facts = from ? factsFor(row, from, now) : undefined;
+    const choice = facts
+      ? decide(facts, { kind: "refused-credential" })
+      : undefined;
+    const move = choice?.kind === "move" ? choice.moves[0] : undefined;
+    const to = move ? ctx.db.accounts.get(move.to) : undefined;
+    if (!(from && move && to)) {
+      return;
+    }
+    const accounts = ctx.db.accounts.list();
+    const taken: OwedMove = {
+      ...owed,
+      to: to.id,
+      move: {
+        kind: "moved",
+        from: namedAccount(from, accounts),
+        to: namedAccount(to, accounts),
+        sameOrganization: move.carries,
+        tokens: row.contextTokens,
+        window: null,
+        resetsAt: null,
+        ...lineCost(move),
+        price: linePrice(move.price, accounts),
+        ...moveOffMark(why, row.machineId),
+      },
+    };
+    ctx.owedMoves.set(row.id, taken);
+    console.info(
+      `[accounts] ${ctx.sessionName(row)} leaves ${accountNameAmong(from, accounts)} now and goes to ${accountNameAmong(to, accounts)}, decided as it is carried: ${moveSideWords(move, row.contextTokens, accountNameAmong(to, accounts))}.`
+    );
+    return ctx.owedMoves.get(row.id) ?? taken;
+  };
+
+  /**
    * A move `stored` owed ({@link takeUpOwedMove}) that compacts it as its
    * provider's policy says (`how`, {@link moveAs}): its record goes as it is
    * taken up, its line written as the move goes; one whose carry can't
@@ -1024,10 +1131,11 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   const moveOwedCompacted = async (
     stored: StoredRow,
     owed: OwedMove,
-    to: string,
+    decided: DecidedMove,
     how: MoveHow,
     stopped: "limit" | "signin" | undefined
   ): Promise<void> => {
+    const { to } = decided;
     const mine = () => ctx.owedMoves.get(stored.id)?.to === to;
     // Its record goes as it is taken up. A model picked while it waited goes
     // with the move, and the row takes it only as the move lands (a carry,
@@ -1040,7 +1148,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     const picked = owing?.model;
     const done = await moveAs(
       picked === undefined ? stored : { ...stored, model: picked },
-      to,
+      decided,
       stopped ?? false,
       picked === undefined ? how : { ...how, picked }
     );
@@ -1156,48 +1264,6 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   };
 
   /**
-   * Where placement puts a session that runs on `accountId` now, for the
-   * kind of session it is, on its machine, within its project's and task's
-   * lists and its type's preference, its own burn in the carry test: it
-   * moves only to an account that lasts to its reset with it, and stays when
-   * none does (placement.ts `current`).
-   */
-  const replaceRow = (
-    row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
-    accountId: string
-  ): string | null => {
-    // The provider of the account it is on: it moves only among that
-    // provider's accounts signed in for its harness on its machine.
-    const provider = ctx.db.accounts.get(accountId)?.provider;
-    if (!provider) {
-      return null;
-    }
-    const routing = ctx.db.accounts.routing(provider);
-    const asks = rowAsks(row);
-    const now = Date.now();
-    const placed = placeAccount({
-      ...accountFacts(ctx.db, provider, ctx.signinsFor(row.harness)),
-      harness: row.harness,
-      routing,
-      machineId: row.machineId,
-      machineName: ctx.machineName(row.machineId),
-      ...(row.model ? { model: row.model } : {}),
-      ...asks,
-      ...rowKeptOff(row),
-      ...ctx.carryTestFor(
-        provider,
-        routing[asks.kind].strategy,
-        (forecast) =>
-          sessionBurn(forecast.turns.get(accountId) ?? [], row.id, now),
-        row.id
-      ),
-      current: accountId,
-      now,
-    });
-    return placed.ok ? placed.accountId : null;
-  };
-
-  /**
    * The provider's refusals the hub keeps for `row`'s model, as its harness
    * runs it (`model`: the one a move picked with it, else its own): no move
    * lands it on an account out of credit for that model's provider or not
@@ -1271,61 +1337,51 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     return here ? [here] : null;
   };
 
-  /** Whether a session's prompt cache is still warm, as the cold check reads it (keep-alive.ts `cacheWarmNow`). */
-  const cacheWarm = (
-    row: ReturnType<typeof ctx.db.getInstancesByIds>[number]
-  ): boolean => {
-    const state = ctx.followupState(row);
-    return cacheWarmNow(row, state.midTurn, state.lastTurnAt);
-  };
+  /** `row`'s prompt cache now (keep-alive.ts `cacheState`): inside a turn is warm. */
+  const cacheOf = (row: MoverRow): CacheState =>
+    cacheState(row, ctx.followupState(row), Date.now());
+
+  /** `row`'s context: its row's last reading, else the one its turn's requests sent; null when neither. */
+  const contextOf = (row: MoverRow): number | null =>
+    row.contextTokens ?? ctx.lastRequestContext.get(row.id) ?? null;
 
   /**
-   * When `row`'s prompt cache lapses on its account, as measured (its last
-   * request and the TTL its cache was written with); null when it is cold
-   * already, or no lifetime was measured. Only a measured lifetime says a
-   * cache outlives a reset or carries a move: a session that never wrote a
-   * cache would wait up to an hour with nothing to keep.
+   * Whether moving `row` from `from` to `to` keeps its prompt cache: one
+   * organization, by id, while its cache is warm (a move line's
+   * `sameOrganization`).
    */
-  const cacheExpiry = (
-    row: ReturnType<typeof ctx.db.getInstancesByIds>[number]
-  ): number | null => {
-    if (measuredCold(row)) {
-      return null;
-    }
-    const expires = promptCacheExpiresAt(row);
-    return expires !== null && expires > Date.now() ? expires : null;
-  };
-
-  /** What a cold wake's move re-reads on `toName`, as its line says it. */
-  const wakeReReadWords = (
-    figures: ReturnType<typeof ctx.admission.check>,
-    tokens: number,
-    toName: string
-  ): string => {
-    const name = figures.window ? windowWords(figures.window) : "";
-    const window = `${toName}'s ${name ? `${name} ` : ""}window`;
-    return `re-reading ${tokenWords(tokens)} cold costs ${usdWords(figures.projected.reReadUsd)}, ${figures.movePct === null ? `and ${window} isn't measured in dollars yet` : `≈${figures.movePct.toFixed(1)}% of ${window}, leaving it ${Math.round(figures.roomAfter)}%`}`;
-  };
+  const carriesTo = (row: MoverRow, from: Account, to: Account): boolean =>
+    cacheOf(row).kind === "warm" &&
+    !!from.identity?.orgId &&
+    from.identity.orgId === to.identity?.orgId;
 
   /**
-   * Why a cold wake's move to `toName` doesn't go, in words; undefined when
-   * it does. Unmeasured, the target takes one move at a time; measured, only
-   * one that leaves it room.
+   * What the one decision reads for `row` on `from` at `now` (decide.ts
+   * `DecideFacts`): a person's move, a wake, a marker to leave taken up.
+   * Who waits on it is no part of those choices.
    */
-  const wakeKept = (
-    figures: ReturnType<typeof ctx.admission.check>,
-    toName: string,
-    reRead: string
-  ): string | undefined => {
-    if (figures.unmeasured) {
-      return figures.pendingMoves > 0
-        ? `another move is still landing on ${toName}`
-        : undefined;
-    }
-    return figures.roomAfter <= 0
-      ? `${reRead}, more than it has left`
-      : undefined;
-  };
+  const factsFor = (
+    row: MoverRow,
+    from: Account,
+    now: number
+  ): DecideFacts | undefined =>
+    factsOf(
+      ctx.db,
+      {
+        accountRows: limitRows,
+        cacheState: cacheOf,
+        compactable: (one) =>
+          !ctx.inputRefusal(one.id, {
+            kind: "system",
+            name: COMPACTION_ORIGIN,
+          }),
+        context: contextOf,
+        waitedOn: () => false,
+      },
+      row,
+      from,
+      now
+    );
 
   /**
    * Whether a cold wake leaves `row` on `accountId`: a person moved it there,
@@ -1351,73 +1407,72 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   };
 
   /**
-   * A Claude session woken for a send with its cache cold is re-placed
-   * first, by its kind's strategy: its first request re-reads its whole
-   * context wherever it runs, so moving it costs nothing extra (fleet
-   * history, at-limit check 3: own-account cold re-writes median 1.0 of the
-   * prompt, cross-organization 0.94). It is charged against the target's
-   * room like every move (admission.ts), so a reset never takes a herd of
-   * waking sessions at once; one that does not fit wakes where it is, and
-   * one admitted onto its account in this window stays. The move is owed to its launch
-   * ({@link owedMoves}), which carries its conversation into the
-   * new account's dir; its line is written once that has. A fork stays with
-   * its origin, and one a person moved, whose start named its account or on
-   * its project's account stays ({@link keptAtWake}); only Claude's
+   * The account a waking `row` may be moved off: a Claude conversation the
+   * hub carries, on a limited provider's account, not a fork, owing no move,
+   * held by no limit, and not one {@link keptAtWake} keeps. Undefined when
+   * it stays.
+   */
+  const wakesOff = (row: MoverRow): Account | undefined => {
+    const from = row.accountId ? ctx.db.accounts.get(row.accountId) : undefined;
+    return from &&
+      traitsOf(row.harness).accountDir &&
+      LIMITED_PROVIDERS.includes(from.provider) &&
+      row.forkedFrom === null &&
+      !ctx.owedMoves.has(row.id) &&
+      !ctx.db.atLimit.hold(row.id) &&
+      !keptAtWake(row, from.id)
+      ? from
+      : undefined;
+  };
+
+  /**
+   * A Claude session woken for a send is decided first (decide.ts, trigger
+   * `wake`): one whose cache is cold re-reads its whole context wherever it
+   * runs, so it moves only where the move is free, and only when its own
+   * account no longer holds it (under its floor, or running short); an
+   * unknown cache is not free, and stays. It is charged against the
+   * target's room like every move (admission.ts), so a reset never takes a
+   * herd of waking sessions at once. The move rides its launch alone
+   * ({@link owedMoves}), which carries its conversation into the new
+   * account's dir; its line is written once that has. A fork stays with its
+   * origin, and one a person moved, whose start named its account or on its
+   * project's account stays ({@link keptAtWake}); only Claude's
    * conversations are carried this way.
    */
   const replaceAtWake = (
     row: ReturnType<typeof ctx.db.getInstancesByIds>[number]
   ): void => {
-    const from = row.accountId ? ctx.db.accounts.get(row.accountId) : undefined;
-    if (
-      !(
-        from &&
-        traitsOf(row.harness).accountDir &&
-        LIMITED_PROVIDERS.includes(from.provider)
-      ) ||
-      row.forkedFrom !== null ||
-      ctx.owedMoves.has(row.id) ||
-      ctx.db.atLimit.hold(row.id) ||
-      cacheWarm(row) ||
-      !ctx.db.accounts.routing(from.provider).atLimit.move ||
-      ctx.admission.admittedHere(row)
-    ) {
+    const from = wakesOff(row);
+    if (!from) {
       return;
     }
-    if (keptAtWake(row, from.id)) {
-      return;
-    }
-    const toId = replaceRow(row, from.id);
-    const to = toId ? ctx.db.accounts.get(toId) : undefined;
-    if (!to || to.id === from.id) {
-      return;
-    }
-    const accounts = ctx.db.accounts.list();
-    const toName = accountNameAmong(to, accounts);
     const now = Date.now();
-    const tokens = pricedTokens(row.contextTokens, contextWindowNow(row));
-    const figures = ctx.admission.check(
-      row,
-      to.id,
-      projectedMove(row, tokens, false, now),
-      now
-    );
-    const reRead = wakeReReadWords(figures, tokens, toName);
-    const kept = wakeKept(figures, toName, reRead);
-    if (kept) {
-      console.info(
-        `[rebalance] ${ctx.sessionName(row)} wakes on ${accountNameAmong(from, accounts)}, not moved to ${toName}: its prompt cache is cold, so it re-reads its context wherever it wakes, but ${kept}.`
-      );
+    const facts = factsFor(row, from, now);
+    const choice = facts ? decide(facts, { kind: "wake" }) : undefined;
+    const accounts = ctx.db.accounts.list();
+    const fromName = accountNameAmong(from, accounts);
+    if (choice?.kind !== "move") {
+      if (choice?.kind === "stay" && choice.why === "full") {
+        console.info(
+          `[rebalance] ${ctx.sessionName(row)} wakes on ${fromName}, which no longer holds it, but no move of it holds elsewhere either.`
+        );
+      }
       return;
     }
-    const { reReadUsd, allowanceUsd } = figures.projected;
+    const [move] = choice.moves;
+    const to = move ? ctx.db.accounts.get(move.to) : undefined;
+    if (!(move && to && facts)) {
+      return;
+    }
+    const toName = accountNameAmong(to, accounts);
+    const next = facts.session.costs.nextTurnUsd;
     ctx.admission.charge(
       row,
       to.id,
-      reReadUsd === null ? null : reReadUsd + allowanceUsd
+      move.usd === null || next === null ? null : move.usd + next
     );
     console.info(
-      `[rebalance] ${ctx.sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now; ${reRead}. Its conversation is copied there before it starts.`
+      `[rebalance] ${ctx.sessionName(row)} moves from ${fromName} to ${toName} as it wakes: its prompt cache is cold, so it re-reads its context on either account, and ${fromName} no longer holds it; ${moveSideWords(move, choice.tokens, toName)}. Its conversation is copied there before it starts.`
     );
     ctx.owedMoves.set(row.id, {
       to: to.id,
@@ -1426,10 +1481,12 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         from: namedAccount(from, accounts),
         to: namedAccount(to, accounts),
         sameOrganization: false,
-        tokens,
+        tokens: choice.tokens,
         window: null,
         resetsAt: null,
         because: { kind: "cold", wake: true },
+        ...lineCost(move),
+        price: linePrice(move.price, accounts),
       },
       waits: "turn",
     });
@@ -1471,16 +1528,17 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
 
   /**
    * Every other account of `leaving`'s provider as a decision for `row`
-   * reads it (at-limit.ts `decideStop`): placement's rows (placement.ts
+   * reads it (decide.ts, through limit-decision.ts `factsOf`): placement's rows (placement.ts
    * `accountRows`) with the burn already arriving on each, the ledger's
    * figures (admission.ts), and whether a turn on `row`'s machine proved its
    * sign-in lately; `row`'s own burn, its kind's strategy, its model's window.
    */
   const limitRows = (
     row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
-    leaving: string
+    leaving: string,
+    landing: readonly Arrival[] = []
   ): AccountsRead =>
-    accountsRead(ctx.db, ctx.admission, row, leaving, {
+    accountsRead(ctx.db, ctx.admission, row, leaving, landing, {
       asks: rowAsks(row),
       keptOff: rowKeptOff(row),
       machineName: ctx.machineName(row.machineId),
@@ -1663,7 +1721,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
 
   /**
    * THE ONE MOVER: `row` to `accountId`, made small as `how`'s plan says
-   * (at-limit.ts `compactionPlan`; absent, whole). Whole, or natively after
+   * (decide.ts, limit-decision.ts `planOf`; absent, whole). Whole, or natively after
    * the move: carried now ({@link carryTo}). Natively before it: its filing
    * turn and its harness's `/compact` run where it is, and the move follows
    * once they end ({@link compactFirst}). From a summary: the same session
@@ -1676,11 +1734,21 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    */
   const moveAs = async (
     row: MoverRow,
-    accountId: string,
+    decided: DecidedMove,
     stopped: false | "limit" | "signin",
     asked: MoveHow | undefined,
     laterSince?: number
   ): Promise<{ kept: Kept } | { ended?: MoveEnded } | { later: true }> => {
+    const accountId = decided.to;
+    // A choice is carried out within moments of being made, or made again.
+    if (staleChoice(decided, Date.now())) {
+      return {
+        kept: {
+          running: false,
+          why: `its move to ${ctx.accountWords(accountId)} was decided more than ${CHOICE_FRESH_MS / 60_000} minutes ago, so it is decided again`,
+        },
+      };
+    }
     doing(
       `the move of ${ctx.sessionName(row)} to ${ctx.accountWords(accountId)}`
     );
@@ -1917,9 +1985,12 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     }
     // A move owed to its next launch off this refusal is the controller's
     // to make now ({@link oweMoveOff}).
-    const owed = ctx.owedMoves.get(instanceId)?.move;
+    const owed = ctx.owedMoves.get(instanceId);
     const take = (): void => {
-      if (owed?.kind === "moved" && owed.because?.kind === "refused") {
+      if (
+        owed?.leave === "refused" ||
+        (owed?.move?.kind === "moved" && owed.move.because?.kind === "refused")
+      ) {
         ctx.owedMoves.delete(instanceId);
       }
       ctx.credentialTurns.add(instanceId);
@@ -1968,26 +2039,15 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   ): boolean => {
     const [row] = ctx.db.getInstancesByIds([instanceId]);
     const from = ctx.db.accounts.get(accountId);
-    const toId = row && from ? ctx.atLimit.credentialMoveTo(row.id) : undefined;
-    const to = toId ? ctx.db.accounts.get(toId) : undefined;
-    if (!(row && from && to) || row.accountId !== from.id) {
+    if (
+      !(row && from) ||
+      row.accountId !== from.id ||
+      ctx.atLimit.credentialMoveTo(row.id) === undefined
+    ) {
       return false;
     }
-    const accounts = ctx.db.accounts.list();
-    ctx.owedMoves.set(row.id, {
-      to: to.id,
-      move: {
-        kind: "moved",
-        from: namedAccount(from, accounts),
-        to: namedAccount(to, accounts),
-        sameOrganization: cacheCarries(from, to, cacheExpiry(row) !== null),
-        tokens: row.contextTokens,
-        window: null,
-        resetsAt: null,
-        ...moveOffMark(why, row.machineId),
-      },
-      waits: "turn",
-    });
+    // A marker, not a target: where it goes is decided as it is carried.
+    ctx.owedMoves.set(row.id, { move: null, waits: "turn", leave: why });
     return true;
   };
   /** What a move off an account on `machineId` says of why it went ({@link oweMoveOff}). */
@@ -2286,7 +2346,6 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     takeUpOwedMove,
     takeUpMovesOn,
     moveOwedAtRefusal,
-    cacheExpiry,
     replaceAtWake,
     limitRows,
     carryTo,
