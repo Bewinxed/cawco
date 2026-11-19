@@ -37,3 +37,28 @@ export const presses =
       await userEvent.wait(after);
     }
   };
+
+/** No press: the hub's answer to what the card read as it opened, waited for. */
+export const settles =
+  (ms: number) =>
+  async ({ userEvent }: Pick<Play, "userEvent">): Promise<void> => {
+    await userEvent.wait(ms);
+  };
+
+/** The hub set to refuse every change (the `answer` dial), then each press in order. */
+export const refused =
+  (...steps: Press[]) =>
+  async (
+    play: Play & { update: (args: Record<string, unknown>) => unknown }
+  ): Promise<void> => {
+    await play.update({ answer: "refuse" });
+    await presses(...steps)(play);
+  };
+
+/** The card's first reads answered (the stand-in's wait), then each press in order. */
+export const afterReads =
+  (...steps: Press[]) =>
+  async (play: Play): Promise<void> => {
+    await play.userEvent.wait(1300);
+    await presses(...steps)(play);
+  };
