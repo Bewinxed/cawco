@@ -1145,8 +1145,8 @@ export function createPreviewListeners(
   }: {
     /** False for a hub built only to be read (server.ts `serves`): it opens no listener, and every ask for an origin's port is refused. */
     listens: boolean;
-    /** Runs `run` once after `ms`, on the hub's lifetime (lifetime.ts `after`): host mode's next try at a port held at start. */
-    after: (ms: number, run: () => void) => void;
+    /** Runs `run` once after `ms`, on the hub's lifetime, named `name` (lifetime.ts `after`): host mode's next try at a port held at start. */
+    after: (name: string, ms: number, run: () => void) => void;
   }
 ) {
   /** Every listener of the hub's, and what is known of each. */
@@ -1597,7 +1597,7 @@ export function createPreviewListeners(
       return;
     }
     const { pattern } = settings;
-    after(HOST_RETRY_MS, () => {
+    after("preview host port tried again", HOST_RETRY_MS, () => {
       if (
         settings.mode === "host" &&
         settings.pattern === pattern &&

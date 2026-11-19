@@ -120,8 +120,10 @@ export const createProviderRetries = ({
         stretch = {
           deadline,
           last: retry,
-          timer: lifetime.after(Math.max(0, deadline - Date.now()), () =>
-            end(instanceId)
+          timer: lifetime.after(
+            "provider retries ended",
+            Math.max(0, deadline - Date.now()),
+            () => end(instanceId)
           ),
         };
         stretches.set(instanceId, stretch);

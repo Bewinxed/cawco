@@ -236,7 +236,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     if (!(machineId && pin)) {
       return;
     }
-    deps.lifetime.after(PIN_KEPT_MS, () => {
+    deps.lifetime.after("preview pin let go", PIN_KEPT_MS, () => {
       if (db.pinnedBy(pin).length === 0) {
         deps.unpin(machineId, pin);
       }

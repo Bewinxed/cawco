@@ -677,7 +677,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
    * that starts with either in its database starts them at once.
    */
   const tickMoves = (): void => {
-    moveTicker ??= ctx.lifetime.every(MOVE_TICK_MS, () => {
+    moveTicker ??= ctx.lifetime.every("login moves tick", MOVE_TICK_MS, () => {
       const moves = ctx.movingLogins();
       if (moves.length === 0 && ctx.movedFrom().size === 0) {
         ctx.lifetime.cancel(moveTicker);

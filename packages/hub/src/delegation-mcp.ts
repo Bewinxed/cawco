@@ -6,6 +6,7 @@ import { ANY_TYPE, parseConnectionTool } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { LONG_CALLS } from "@cawco/core/long-calls";
+import { syncSection } from "@cawco/core/loop-watch";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -1198,15 +1199,23 @@ export function createDelegationMcp(options: {
    * the list changes), once: after a hub start on a new build, a role change,
    * a delegate type or toolset change. What each listing last listed outlives
    * the hub, so a restart onto a new build still finds the difference.
+   * Each step a section of its own (core loop-watch.ts `syncSection`): a
+   * hold in a pass names its step.
    */
   const reconcileLists = () => {
     // The rows read once for the whole pass: every stream's, by key.
-    const bound = [...streams].flatMap((stream) =>
-      stream.binding ? [stream.binding] : []
-    );
-    const byId = new Map(
-      options.instancesByIds(bound).map((row) => [row.id, row])
-    );
+    const byId = syncSection("tool lists: rows read", () => {
+      const bound = [...streams].flatMap((stream) =>
+        stream.binding ? [stream.binding] : []
+      );
+      return new Map(options.instancesByIds(bound).map((row) => [row.id, row]));
+    });
+    syncSection("tool lists: MCP streams compared", () => streamsTold(byId));
+    syncSection("tool lists: pi hosts compared", hostsTold);
+  };
+
+  /** Each open MCP stream whose tools differ from what its listing last listed, told so, once per change. */
+  const streamsTold = (byId: ReadonlyMap<string, InstanceRow>): void => {
     for (const stream of streams) {
       const listing = listingOf(stream.binding);
       const last = options.toolListing(listing);
@@ -1226,8 +1235,13 @@ export function createDelegationMcp(options: {
         );
       });
     }
-    // A pi session lists over REST, from its own host, and hears through its
-    // machine: the same check, the same once per change.
+  };
+
+  /**
+   * A pi session lists over REST, from its own host, and hears through its
+   * machine: the same check, the same once per change.
+   */
+  const hostsTold = (): void => {
     for (const row of options.runningOf("pi")) {
       const last = options.toolListing(row.id);
       const now = toolsHash(row);
@@ -1248,11 +1262,15 @@ export function createDelegationMcp(options: {
   /** Something a tool list depends on may have moved: one look, debounced. */
   const toolsMayHaveChanged = () => {
     options.lifetime.cancel(reconcileTimer);
-    reconcileTimer = options.lifetime.after(LIST_DEBOUNCE_MS, reconcileLists);
+    reconcileTimer = options.lifetime.after(
+      "tool lists reconciled (debounced)",
+      LIST_DEBOUNCE_MS,
+      reconcileLists
+    );
   };
   // What no event names (a role toolset read on its own schedule) is found
   // by the next sweep.
-  options.lifetime.every(LIST_SWEEP_MS, reconcileLists);
+  options.lifetime.every("tool lists swept", LIST_SWEEP_MS, reconcileLists);
 
   /**
    * What `bound` can be listed over its life (delegation-tools.ts
@@ -1354,7 +1372,7 @@ export function createDelegationMcp(options: {
       const doing = LONG_CALLS[message.params.name];
       const heartbeat =
         doing && token !== undefined
-          ? options.lifetime.every(15_000, () => {
+          ? options.lifetime.every("long tool call progress", 15_000, () => {
               elapsed += 15;
               // A disconnected client cannot receive progress; that is no failure.
               detach(

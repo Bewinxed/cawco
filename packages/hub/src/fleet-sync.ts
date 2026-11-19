@@ -284,8 +284,10 @@ export class FleetSync {
       { why, ...rest },
     ]);
     this.#deps.lifetime.cancel(this.#debounce);
-    this.#debounce = this.#deps.lifetime.after(DEBOUNCE_MS, () =>
-      this.#flush()
+    this.#debounce = this.#deps.lifetime.after(
+      "fleet sync flush",
+      DEBOUNCE_MS,
+      () => this.#flush()
     );
   }
 
@@ -584,8 +586,10 @@ export class FleetSync {
       items: new Map(
         items.map((item) => [item.id, item.value === null ? null : item.hash])
       ),
-      timer: this.#deps.lifetime.after(FLEET_ACK_MS, () =>
-        this.#unacked(machineId, requestId)
+      timer: this.#deps.lifetime.after(
+        "fleet delta unacknowledged",
+        FLEET_ACK_MS,
+        () => this.#unacked(machineId, requestId)
       ),
     });
     console.info(
@@ -616,8 +620,10 @@ export class FleetSync {
     console.warn(
       `[fleet] gen ${delta.generation} sent again → ${name}: not acknowledged within ${(FLEET_ACK_MS / 1000) * sent.silences} s`
     );
-    sent.timer = this.#deps.lifetime.after(FLEET_ACK_MS, () =>
-      this.#unacked(machineId, requestId)
+    sent.timer = this.#deps.lifetime.after(
+      "fleet delta unacknowledged",
+      FLEET_ACK_MS,
+      () => this.#unacked(machineId, requestId)
     );
     if (sent.silences === 1) {
       this.#deps.keep(machineId, {

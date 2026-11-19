@@ -62,7 +62,7 @@ export const createMachineContact = (deps: MachineContactDeps) => {
   const lost = new Map<string, number>();
 
   let looked = Date.now();
-  deps.lifetime.every(LOOK_MS, () => {
+  deps.lifetime.every("machine contact look", LOOK_MS, () => {
     const now = Date.now();
     const held = now - looked > LOOK_MS * 2;
     looked = now;

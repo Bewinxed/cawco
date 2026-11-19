@@ -990,7 +990,7 @@ export const createNotifications = ({
     );
   };
 
-  lifetime.every(SWEEP_MS, () => {
+  lifetime.every("notifications swept", SWEEP_MS, () => {
     const now = Date.now();
     markReading(now);
     for (const [clientId, client] of clients) {
@@ -1024,7 +1024,7 @@ export const createNotifications = ({
   });
   const prune = () => db.notifications.prune(new Date(Date.now() - KEPT_MS));
   prune();
-  lifetime.every(PRUNE_MS, prune);
+  lifetime.every("notifications pruned", PRUNE_MS, prune);
 
   /** Clears ids and tells everyone that has them; answers the ids newly cleared. */
   const clear = (

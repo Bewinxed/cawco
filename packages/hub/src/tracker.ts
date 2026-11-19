@@ -1836,7 +1836,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
     soon.set(
       projectId,
-      lifetime.after(SOON_MS, () => {
+      lifetime.after("tracker sync soon", SOON_MS, () => {
         soon.delete(projectId);
         detach(syncProject(projectId), `tracker sync of ${projectId}`);
       })
@@ -2135,7 +2135,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       : { targets: teams, more: false };
   };
 
-  const poller = lifetime.every(POLL_MS, () => {
+  const poller = lifetime.every("tracker poll", POLL_MS, () => {
     for (const binding of db.trackers.bindings()) {
       detach(
         syncProject(binding.projectId),

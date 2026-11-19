@@ -373,7 +373,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
         if (failed && ctx.registry.agent(machineId)) {
           const delay = probeRetryDelay(sync.attempt);
           sync.attempt += 1;
-          sync.timer = ctx.lifetime.after(delay, () =>
+          sync.timer = ctx.lifetime.after("account probe retried", delay, () =>
             syncAccounts(machineId, harness)
           );
         }

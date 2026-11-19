@@ -679,7 +679,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       }
     });
   };
-  ports.lifetime.every(SWEEP_MS, sweep);
+  ports.lifetime.every("transcripts swept", SWEEP_MS, sweep);
 
   return {
     forget: (instanceId) => {

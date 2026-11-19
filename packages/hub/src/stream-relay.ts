@@ -632,20 +632,28 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         console.warn(
           `[stream-relay] ${what}: ${error instanceof Error ? error.message : String(error)}`
         );
-      const health = deps.lifetime.every(HEALTH_MS, () => {
-        check().catch(said("health not checked"));
-      });
-      const renewal = deps.lifetime.every(RENEW_MS, () => {
-        renew()
-          .then((renewed) => {
-            if (renewed instanceof ElysiaStatus) {
-              said("stream-relay-renew failed")(
-                new Error(renewed.response.detail)
-              );
-            }
-          })
-          .catch(said("stream-relay-renew failed"));
-      });
+      const health = deps.lifetime.every(
+        "stream relay health",
+        HEALTH_MS,
+        () => {
+          check().catch(said("health not checked"));
+        }
+      );
+      const renewal = deps.lifetime.every(
+        "stream relay renewal",
+        RENEW_MS,
+        () => {
+          renew()
+            .then((renewed) => {
+              if (renewed instanceof ElysiaStatus) {
+                said("stream-relay-renew failed")(
+                  new Error(renewed.response.detail)
+                );
+              }
+            })
+            .catch(said("stream-relay-renew failed"));
+        }
+      );
       return () => {
         deps.lifetime.cancel(health);
         deps.lifetime.cancel(renewal);

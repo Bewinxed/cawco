@@ -84,7 +84,11 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
     /** Something the lane is read from moved: read again once it is quiet. */
     moved(): void {
       held = false;
-      timer ??= deps.lifetime.after(MOVED_QUIET_MS, settle);
+      timer ??= deps.lifetime.after(
+        "artifact lane settled",
+        MOVED_QUIET_MS,
+        settle
+      );
     },
     /** The lane as it stands now: the read it holds, or read at once when something moved since. */
     now(): ArtifactNeedsRead {

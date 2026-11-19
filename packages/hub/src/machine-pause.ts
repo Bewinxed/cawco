@@ -198,7 +198,9 @@ export const createMachinePause = (deps: MachinePauseDeps): MachinePause => {
     }
     timers.set(
       machineId,
-      lifetime.after(Math.min(left, TIMER_MAX_MS), () => arm(machineId))
+      lifetime.after("machine pause armed", Math.min(left, TIMER_MAX_MS), () =>
+        arm(machineId)
+      )
     );
   };
 

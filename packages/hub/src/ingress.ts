@@ -1111,7 +1111,7 @@ export const createIngress = ({
     if (lifetime.closed()) {
       return;
     }
-    timer = lifetime.after(LOOK_MS, () => {
+    timer = lifetime.after("ingress look", LOOK_MS, () => {
       try {
         look();
       } catch (error) {

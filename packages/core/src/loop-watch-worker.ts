@@ -34,7 +34,9 @@
  * contains -1"), the file its first argument names when that is a
  * descriptor, and so "outside any system call" for a page fault. A hold
  * shorter than {@link SAY_MS} is said once it ends with what the looks
- * during it read.
+ * during it read, the work the loop started last (`doing`) among it: the
+ * holds of 2026-11-18/19 on obelisk's hub were all under 10 s, and said no
+ * name while the name was in this thread's memory.
  *
  * A loop that never comes back ends its process, when the loop asked for
  * that (`LoopEnd`, the hub does): on 2026-11-04 obelisk's hub sat 18
@@ -54,11 +56,13 @@ import { dirname } from "node:path";
 import { makeFolderSync } from "./folders";
 import {
   BEAT,
+  CLOCK_TICKS,
   LEFT,
   type LoopEnd,
   type LoopEnded,
   readDoing,
   SECTION,
+  threadStat,
   type WatchdogMessage,
 } from "./loop-watch-shared";
 import { ownPid, signal } from "./signal-wall";
@@ -77,8 +81,6 @@ const SAY_MS = 10_000;
 const SAY_LAST_S = 60;
 /** When, in seconds of a stall, it is said; then every minute. */
 const SAY_AT_S = [10, 30, SAY_LAST_S];
-/** Linux's clock ticks per second, in which `/proc` counts CPU time (`getconf CLK_TCK`). */
-const CLOCK_TICKS = 100;
 /** A beat this old at a look is a hold this thread reads the main thread through; one that ends before {@link SAY_MS} is said with what it read. The loop's own watch's `LATE_MS`. */
 const NOTE_MS = 1000;
 
@@ -265,10 +267,7 @@ const mainThread = async (): Promise<string> => {
       readFile(`${task}/wchan`, "utf8").catch(() => ""),
       systemCall(task),
     ]);
-    // After the command's closing paren: state, then 10 fields to utime and stime.
-    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    const state = fields[0] ?? "?";
-    const ticks = Number(fields[11]) + Number(fields[12]);
+    const { state, ticks } = threadStat(stat);
     const at = Date.now();
     const share =
       lastCpu && at > lastCpu.at
@@ -347,25 +346,51 @@ const say = async (kind: "held" | "deaf", ms: number): Promise<void> => {
 
 /** The main thread as the last look read it: read each look, so its CPU share spans one second. */
 let thread = "";
-/** A hold under way that has not been said: when it began, and what each look during it read of the main thread. */
-let noted: { seen: Map<string, number>; since: number } | undefined;
+/**
+ * A hold under way that has not been said: when it began, and what each
+ * look during it read of the main thread and of the work the loop started
+ * last (`doing`).
+ */
+let noted:
+  | { doing: Map<string, number>; seen: Map<string, number>; since: number }
+  | undefined;
+
+/** Each reading, with how many of the looks found it, most found first. */
+const counts = (read: Map<string, number>): string => {
+  const looks = [...read.values()].reduce((sum, n) => sum + n, 0);
+  return [...read]
+    .sort((a, b) => b[1] - a[1])
+    .map(([what, n]) => `${what} (${n} of ${looks})`)
+    .join("; ");
+};
+
+/** A look during a hold begun at `since`: what it read of the main thread and the loop's work, counted. */
+const note = (since: number): void => {
+  noted ??= { doing: new Map(), seen: new Map(), since };
+  if (thread) {
+    noted.seen.set(thread, (noted.seen.get(thread) ?? 0) + 1);
+  }
+  const named = doingMemory ? readDoing(doingMemory) : "";
+  if (named) {
+    noted.doing.set(named, (noted.doing.get(named) ?? 0) + 1);
+  }
+};
 
 /** A hold that ended before it was said, said once with what the looks during it read. */
 const sayNoted = (now: number): void => {
   if (!noted) {
     return;
   }
-  if (noted.seen.size === 0) {
+  if (noted.seen.size === 0 && noted.doing.size === 0) {
     noted = undefined;
     return;
   }
-  const looks = [...noted.seen.values()].reduce((sum, n) => sum + n, 0);
-  const seen = [...noted.seen]
-    .sort((a, b) => b[1] - a[1])
-    .map(([what, n]) => `${what} (${n} of ${looks})`)
-    .join("; ");
+  const parts = [
+    counts(noted.seen),
+    noted.doing.size > 0 ? loopWords.doingSeen(counts(noted.doing)) : "",
+  ].filter(Boolean);
   console.warn(
-    `${loopWords.heldSeen(who, Math.round((now - noted.since) / 1000))}: ${seen}`
+    `${loopWords.heldSeen(who, Math.round((now - noted.since) / 1000))}: ${parts.join("; ")}`
   );
   noted = undefined;
 };
@@ -385,10 +410,7 @@ const look = async (): Promise<void> => {
     kind = "deaf";
   }
   if (held >= NOTE_MS && !kind) {
-    noted ??= { seen: new Map(), since: now - held };
-    if (thread) {
-      noted.seen.set(thread, (noted.seen.get(thread) ?? 0) + 1);
-    }
+    note(now - held);
   } else if (held < NOTE_MS) {
     sayNoted(now);
   }

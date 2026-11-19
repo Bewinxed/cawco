@@ -34,8 +34,8 @@ const VACANT_HOLD_MS = SESSION_PASS_MS;
 
 /** What the ports need of the hub around them. */
 export interface PreviewPortsEnv {
-  /** Runs `run` once after `ms`, on the hub's lifetime (lifetime.ts `after`). */
-  after: (ms: number, run: () => void) => void;
+  /** Runs `run` once after `ms`, on the hub's lifetime, named `name` (lifetime.ts `after`). */
+  after: (name: string, ms: number, run: () => void) => void;
   db: Pick<
     PreviewsDb,
     "dropPort" | "keepPort" | "ownerHeld" | "ports" | "portsByUse"
@@ -170,7 +170,7 @@ export function createPreviewPorts({
       }
       const held = listen(port, () => undefined);
       listeners.hold(port, held);
-      after(VACANT_HOLD_MS, () => {
+      after("vacant preview port let go", VACANT_HOLD_MS, () => {
         if (listeners.vacantAt(port) === held) {
           takeVacant(port);
         }

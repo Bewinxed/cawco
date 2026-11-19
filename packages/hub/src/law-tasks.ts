@@ -140,7 +140,7 @@ const noteWords = (owed: Owed): string =>
 
 export interface LawTasksDeps {
   /** A timer the hub's lifetime ends (lifetime.ts `after`). */
-  after: (ms: number, run: () => void) => unknown;
+  after: (name: string, ms: number, run: () => void) => unknown;
   /** The hub's bare repositories' folder (config.ts `GIT_ROOT`). */
   gitRoot: string;
   /** Every project the hub has. */
@@ -266,7 +266,7 @@ export const createLawTasks = (deps: LawTasksDeps) => {
         );
       }
       await new Promise<void>((resolve) => {
-        deps.after(LAW_NOTE_GAP_MS, resolve);
+        deps.after("law note gap", LAW_NOTE_GAP_MS, resolve);
       });
     }
   };

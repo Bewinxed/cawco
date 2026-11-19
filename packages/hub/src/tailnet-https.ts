@@ -521,6 +521,7 @@ export const createTailnetHttps = ({
         detach(
           checkOnce().finally(() => {
             lifetime.after(
+              "tailnet https check",
               state.state === "needs" ? NEEDS_CHECK_MS : CHECK_MS,
               tick
             );

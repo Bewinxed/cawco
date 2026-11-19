@@ -55,6 +55,7 @@ import {
 } from "@cawco/core/find-match";
 import type { HarnessFailed, HarnessUnanswered } from "@cawco/core/frames";
 import { harnessLabel } from "@cawco/core/harness/kinds";
+import { syncSection } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { AgentRow } from "@cawco/core/protocol";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
@@ -761,21 +762,29 @@ export const createFind = (deps: FindDeps) => {
     });
   };
 
+  /**
+   * The index built whole, each step a section of its own (core
+   * loop-watch.ts `syncSection`): a hold in a build names its step.
+   */
   const build = (now: number): Names => {
-    const held = readRows();
-    const projects = new Map(
-      db.listProjects().map((project) => [project.id, project])
+    const held = syncSection("find index: sessions read", readRows);
+    const projects = syncSection(
+      "find index: projects read",
+      () => new Map(db.listProjects().map((project) => [project.id, project]))
     );
-    const machines = new Map(
-      db.listAgents().map((agent) => [agent.machineId, agent])
+    const machines = syncSection(
+      "find index: machines read",
+      () => new Map(db.listAgents().map((agent) => [agent.machineId, agent]))
     );
     const projectOf = (id: string | null) => {
       const project = id ? projects.get(id) : undefined;
       return project ? { id: project.id, name: project.name } : null;
     };
-    const items = itemsOf(db.find.workItems());
+    const items = syncSection("find index: work items read", () =>
+      itemsOf(db.find.workItems())
+    );
     const children = childrenOf(held);
-    const tasks = db.find.tasks();
+    const tasks = syncSection("find index: tasks read", () => db.find.tasks());
     const sources = {
       items,
       machineName: (id: string) =>
@@ -784,39 +793,70 @@ export const createFind = (deps: FindDeps) => {
       projectOf,
       reportedTo: items.reportedTo,
       rows: held,
-      steps: db.find.planSteps(),
+      steps: syncSection("find index: plan steps read", () =>
+        db.find.planSteps()
+      ),
       taskTitles: new Map(
         tasks.map((task) => [`${task.projectId}:${task.id}`, task.title])
       ),
     };
-    const conversations = new Map<string, Held>();
-    for (const row of held.values()) {
-      const mine = children.get(row.id) ?? [];
-      conversations.set(row.id, {
-        row,
-        children: mine,
-        entry: conversationEntry(row, sources, mine.length),
-      });
-    }
-    const artifacts = db.find.artifacts().flatMap((artifact) => {
-      const maker =
-        artifact.instanceId === null
-          ? undefined
-          : held.get(artifact.instanceId);
-      return maker
-        ? [
-            artifactEntry(
-              artifact,
-              maker,
-              projectOf(artifact.projectId ?? maker.projectId),
-              artifact.kind === "page" && deps.blockPage(artifact.id)
-            ),
-          ]
-        : [];
+    const conversations = syncSection("find index: conversations laid", () => {
+      const laid = new Map<string, Held>();
+      for (const row of held.values()) {
+        const mine = children.get(row.id) ?? [];
+        laid.set(row.id, {
+          row,
+          children: mine,
+          entry: conversationEntry(row, sources, mine.length),
+        });
+      }
+      return laid;
     });
+    const artifacts = syncSection("find index: artifacts read", () =>
+      db.find.artifacts().flatMap((artifact) => {
+        const maker =
+          artifact.instanceId === null
+            ? undefined
+            : held.get(artifact.instanceId);
+        return maker
+          ? [
+              artifactEntry(
+                artifact,
+                maker,
+                projectOf(artifact.projectId ?? maker.projectId),
+                artifact.kind === "page" && deps.blockPage(artifact.id)
+              ),
+            ]
+          : [];
+      })
+    );
     const bySessionId = sessionIdsOf(held);
-    const hubMade = db.find.hubMade();
-    const stored = storedOf(machines, bySessionId, hubMade);
+    const hubMade = syncSection("find index: hub-made sessions read", () =>
+      db.find.hubMade()
+    );
+    const stored = syncSection("find index: stored sessions laid", () =>
+      storedOf(machines, bySessionId, hubMade)
+    );
+    const entries = syncSection("find index: entries laid", () => [
+      ...[...conversations.values()].map((each) => each.entry),
+      ...stored.values(),
+      ...tasks.map((task) =>
+        taskEntry(
+          task,
+          projectOf(task.projectId),
+          kindsOf(task.projectId, now)?.get(task.stage) ?? null
+        )
+      ),
+      ...db.find
+        .routines()
+        .map((routine) => routineEntry(routine, projectOf(routine.projectId))),
+      ...[...projects.values()].map(projectEntry),
+      ...[...machines.values()].map((machine) =>
+        machineEntry(machine, deps.online(machine.machineId))
+      ),
+      ...artifacts,
+      ...changeEntriesOf(held, items.byId, projectOf),
+    ]);
     names = {
       at: now,
       bySessionId,
@@ -824,28 +864,7 @@ export const createFind = (deps: FindDeps) => {
       stored,
       conversations,
       machines,
-      entries: [
-        ...[...conversations.values()].map((each) => each.entry),
-        ...stored.values(),
-        ...tasks.map((task) =>
-          taskEntry(
-            task,
-            projectOf(task.projectId),
-            kindsOf(task.projectId, now)?.get(task.stage) ?? null
-          )
-        ),
-        ...db.find
-          .routines()
-          .map((routine) =>
-            routineEntry(routine, projectOf(routine.projectId))
-          ),
-        ...[...projects.values()].map(projectEntry),
-        ...[...machines.values()].map((machine) =>
-          machineEntry(machine, deps.online(machine.machineId))
-        ),
-        ...artifacts,
-        ...changeEntriesOf(held, items.byId, projectOf),
-      ],
+      entries,
     };
     stale = false;
     return names;

@@ -172,7 +172,7 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
    */
   let lastSecureDashboardOrigin: string | undefined;
 
-  lifetime.every(SWEEP_INTERVAL_MS, () => {
+  lifetime.every("registry requesters swept", SWEEP_INTERVAL_MS, () => {
     const cutoff = Date.now() - REQUESTER_TTL_MS;
     for (const [requestId, entry] of requesters) {
       if (entry.at < cutoff) {

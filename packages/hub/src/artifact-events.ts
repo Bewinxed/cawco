@@ -582,7 +582,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     }
     decisionsTelling.set(
       projectId,
-      ctx.lifetime.after(DECISIONS_TOLD_MS, () => {
+      ctx.lifetime.after("decisions told", DECISIONS_TOLD_MS, () => {
         decisionsTelling.delete(projectId);
         ctx.registry.broadcast({
           verb: "frames",
@@ -642,7 +642,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     }
     waitPagesTelling.set(
       artifactId,
-      ctx.lifetime.after(WAIT_PAGE_MS, () => {
+      ctx.lifetime.after("wait page told", WAIT_PAGE_MS, () => {
         waitPagesTelling.delete(artifactId);
         ctx.plans.pageMoved(artifactId);
         for (const project of ctx.db.listProjects()) {
@@ -683,7 +683,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     ctx.lifetime.cancel(recordsFollowing.get(key));
     recordsFollowing.set(
       key,
-      ctx.lifetime.after(RECORD_QUIET_MS, () => {
+      ctx.lifetime.after("record followed", RECORD_QUIET_MS, () => {
         recordsFollowing.delete(key);
         ctx.decisions.picksMoved(projectId, name);
       })

@@ -227,6 +227,7 @@ export const createStartHolds = (
       return;
     }
     pacing.timer = ctx.lifetime.after(
+      "spawn pacing",
       Math.max(0, pacing.last + SPAWN_PACE_MS - Date.now()),
       () => {
         pacing.timer = undefined;

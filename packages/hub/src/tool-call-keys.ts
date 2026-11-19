@@ -141,7 +141,7 @@ export const createToolCallKeys = ({
   }
   const prune = () => db.prune(Date.now() - TOOL_CALL_KEY_KEPT_MS);
   prune();
-  lifetime.every(PRUNE_EVERY_MS, prune);
+  lifetime.every("tool call keys pruned", PRUNE_EVERY_MS, prune);
 
   const live = new Map<string, Running>();
 

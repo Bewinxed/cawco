@@ -5332,7 +5332,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       } else if (!heard.has(key)) {
         heard.set(key, ack);
         // Kept as long as a show could still come to wait for it.
-        deps.lifetime.after(SHOWN_WAIT_MS, () => heard.delete(key));
+        deps.lifetime.after("artifact shown ack forgotten", SHOWN_WAIT_MS, () =>
+          heard.delete(key)
+        );
       }
       const said: { heard: true } = { heard: true };
       return said;

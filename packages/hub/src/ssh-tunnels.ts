@@ -823,7 +823,7 @@ export const createSshTunnels = ({
         `[ssh] ${row.target}: the connection that carries ${row.machineId} to this hub ended (${why}); it is opened again, from ${wait / 1000} s, until it holds`
       );
     }
-    tunnel.retry = lifetime.after(wait, () => {
+    tunnel.retry = lifetime.after("ssh tunnel opened again", wait, () => {
       tunnel.retry = undefined;
       detach(connect(tunnel), "ssh connection");
     });

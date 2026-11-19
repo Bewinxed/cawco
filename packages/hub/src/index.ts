@@ -61,8 +61,13 @@ const main = Effect.gen(function* () {
   server.tailnet.start();
   yield* Effect.log(`cawco hub ${HUB_VERSION} listening on :${HUB_PORT}`);
   // Its loop watched from here on: a hold that never ends ends the hub, and
-  // its service starts it again (hub-loop.ts).
-  lifetime.onClose(watchHubLoop(loopRecord(DB_PATH)));
+  // its service starts it again; a run of holds profiles it (hub-loop.ts).
+  lifetime.onClose(
+    watchHubLoop(loopRecord(DB_PATH), {
+      lifetime,
+      profiler: server.profiler,
+    })
+  );
   advertise(HUB_PORT);
   // Off the boot path: a month of transcripts is read once, then never again.
   detach(backfillUsage(db), "usage backfill");

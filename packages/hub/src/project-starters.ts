@@ -387,7 +387,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       0;
     const at = Math.max(now + QUIET_MS, last + GAP_MS);
     // A timer per project, dropped at the next ask.
-    const timer = deps.lifetime.after(at - now, () => {
+    const timer = deps.lifetime.after("project starter", at - now, () => {
       waiting.delete(projectId);
       if (writing.has(projectId)) {
         touched(projectId, trigger);

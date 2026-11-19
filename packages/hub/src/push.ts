@@ -1263,7 +1263,7 @@ export const createPush = ({
     lifetime.cancel(unanswered.get(id)?.timer);
     unanswered.set(id, {
       tab,
-      timer: lifetime.after(DESK_ACK_MS, () => {
+      timer: lifetime.after("push desk ack missed", DESK_ACK_MS, () => {
         unanswered.delete(id);
         console.log(
           `[notify] push ${id}: tab ${tab.slice(0, 8)} did not answer its desk alert in ${DESK_ACK_MS / 1000} s; it is no longer an alert target`
@@ -1446,6 +1446,7 @@ export const createPush = ({
     }
     lifetime.cancel(burst.timer);
     burst.timer = lifetime.after(
+      "push burst sent",
       Math.min(QUIET_MS, burst.firstAt + BURST_MS - now),
       () => {
         if (open === burst) {
@@ -1585,7 +1586,7 @@ export const createPush = ({
       );
       queued.set(
         pairingId,
-        lifetime.after(wait, () => {
+        lifetime.after("push pairing queue", wait, () => {
           queued.delete(pairingId);
           detach(background(pairingId), "background push");
         })
@@ -1907,7 +1908,7 @@ export const createPush = ({
         return;
       }
       const own = ownWork(instanceId, wakes);
-      lifetime.after(LOOK_GRACE_MS, () => {
+      lifetime.after("push look grace", LOOK_GRACE_MS, () => {
         const [row] = db.getInstancesByIds([instanceId]);
         if (
           !row ||

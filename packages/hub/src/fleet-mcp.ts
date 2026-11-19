@@ -409,27 +409,31 @@ export class FleetMcp {
     const previous = this.#reprobes.get(name);
     const attempt = previous?.config === config ? previous.attempt + 1 : 0;
     const delay = Math.min(REPROBE_FIRST_MS * 2 ** attempt, REPROBE_MAX_MS);
-    const timer = this.#lifetime.after(delay, () => {
-      if (!this.#db.getMcpServer(name)) {
-        this.forget(name);
-        return;
-      }
-      const before = this.#auth(name);
-      this.probe(name).then(
-        () => {
-          if (this.#auth(name) !== before) {
-            this.#changed();
-          }
-        },
-        (error: unknown) => {
-          // Its words only: a fetch error carries the address, which may hold a key.
-          console.warn(
-            `[fleet-mcp] ${name} re-probe failed:`,
-            error instanceof Error ? error.message : "not an Error"
-          );
+    const timer = this.#lifetime.after(
+      "fleet MCP server probed again",
+      delay,
+      () => {
+        if (!this.#db.getMcpServer(name)) {
+          this.forget(name);
+          return;
         }
-      );
-    });
+        const before = this.#auth(name);
+        this.probe(name).then(
+          () => {
+            if (this.#auth(name) !== before) {
+              this.#changed();
+            }
+          },
+          (error: unknown) => {
+            // Its words only: a fetch error carries the address, which may hold a key.
+            console.warn(
+              `[fleet-mcp] ${name} re-probe failed:`,
+              error instanceof Error ? error.message : "not an Error"
+            );
+          }
+        );
+      }
+    );
     this.#reprobes.set(name, { config, attempt, timer });
     console.info(
       `[fleet-mcp] ${name} did not answer; probing again in ${delay / 1000} s`

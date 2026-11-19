@@ -332,7 +332,7 @@ export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
         at = Math.min(at, state.nextAt);
       }
     }
-    timer = lifetime.after(Math.max(0, at - now), () => {
+    timer = lifetime.after("keep-alive wake", Math.max(0, at - now), () => {
       detach(wake(), "keepalive wake");
     });
   };

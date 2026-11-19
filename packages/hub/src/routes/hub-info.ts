@@ -10,14 +10,18 @@ import { dashboardUrl, secureDashboardUrl } from "../dashboard-url";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 import { hubId } from "../hub-id";
+import type { HubProfiler } from "../hub-profile";
 import { localNameOf } from "../local-name";
 import { localHubName } from "../mdns";
 
-export const hubInfoRoutes = ({
-  hubBuild,
-  registry,
-  tailnetHttps,
-}: Pick<HubContext, "hubBuild" | "registry" | "tailnetHttps">) =>
+export const hubInfoRoutes = (
+  {
+    hubBuild,
+    registry,
+    tailnetHttps,
+  }: Pick<HubContext, "hubBuild" | "registry" | "tailnetHttps">,
+  profiler: HubProfiler
+) =>
   new Elysia()
     // The hub's own build rides along (NEW.md §12), so a machine's can be read
     // against something rather than taken on faith. `dashboard` is where the
@@ -50,4 +54,11 @@ export const hubInfoRoutes = ({
     // it, with its port; none while the hub holds no name.
     .get("/api/local-name", () =>
       localNameOf(osHostname(), DASHBOARD_PORT, localHubName())
-    );
+    )
+    // The owner's ask for a CPU profile of the hub's main thread
+    // (hub-profile.ts): answered once its 20 s are sampled and written, with
+    // the file's path on the hub's machine; an ask while one runs joins it.
+    // The owner's alone, as every route not listed in hub-auth.ts.
+    .post("/api/hub/profile", hidden, async () => ({
+      path: await profiler.take("the owner asked"),
+    }));

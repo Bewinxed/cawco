@@ -11,10 +11,13 @@
  * A tick every {@link TICK_MS} measures how late it ran. One {@link LATE_MS}
  * or more late is one line, once per stall: how long the loop was held, the
  * agent's phase ({@link phase}), the work in flight by kind
- * ({@link inFlight}), the longest marked synchronous section that ran since
- * the last tick ({@link syncSection}) and the one entered last, and the
- * heap. A stall whose longest section is short was held by something no
- * marker names (a collection, an unmarked parse): that is said too.
+ * ({@link inFlight}), the longest named work ({@link doing}) and the
+ * longest marked synchronous section ({@link syncSection}) that ran since
+ * the last tick, the section entered last, and the heap. A stall whose
+ * longest named run is short was held by something no name covers (a
+ * collection, an unmarked parse, a chain of awaits): that is said too. Both
+ * kinds of name are tallied for a process that asks
+ * ({@link tallyNamedWork}): the hub's minute line says its top five.
  *
  * Markers cost a clock read and a map write: cheap enough to wrap every
  * known heavy synchronous spot (SQLite reads, transcript parses, child
@@ -99,6 +102,50 @@ const markSection = (name: string, left: boolean): void => {
   watchdog.shared[LEFT] = left ? 1 : 0;
 };
 
+/** How long one name held the loop over a stretch, and how many times it ran. */
+export interface NamedTime {
+  count: number;
+  ms: number;
+  name: string;
+}
+
+/**
+ * The time each name held the loop since it was last taken
+ * ({@link tallyNamedWork}): sections and named work alike, each inclusive,
+ * so a section run inside a request counts under both names. None until a
+ * process asks for it.
+ */
+let tally: Map<string, NamedTime> | undefined;
+
+const counted = (name: string, ms: number): void => {
+  if (!tally) {
+    return;
+  }
+  const entry = tally.get(name);
+  if (entry) {
+    entry.ms += ms;
+    entry.count += 1;
+  } else {
+    tally.set(name, { count: 1, ms, name });
+  }
+};
+
+/**
+ * Starts the tally of named time, and answers its taker: the `top` names
+ * that held the loop longest since it was last taken, longest first, the
+ * tally then started again.
+ */
+export const tallyNamedWork = (): ((top: number) => NamedTime[]) => {
+  tally ??= new Map();
+  return (top) => {
+    const taken = [...(tally?.values() ?? [])]
+      .sort((a, b) => b.ms - a.ms)
+      .slice(0, top);
+    tally = new Map();
+    return taken;
+  };
+};
+
 /** Runs `run`, a synchronous section, marked as `name`: a stall it causes names it. */
 export const syncSection = <T>(name: string, run: () => T): T => {
   const at = performance.now();
@@ -115,18 +162,44 @@ export const syncSection = <T>(name: string, run: () => T): T => {
     if (!longest || ms > longest.ms) {
       longest = { ms, name };
     }
+    counted(name, ms);
   }
 };
 
 const encoder = new TextEncoder();
 
+/** Whether the loop's own tick runs ({@link watchLoop}): named work is timed only then. */
+let watching = false;
+/** The longest named work ({@link doing}) since the last tick. */
+let longestWork: Section | undefined;
+
+/** Named work's synchronous run ended: `name`, started at `at`. */
+const workEnded = (name: string, at: number): void => {
+  const ms = performance.now() - at;
+  if (!longestWork || ms > longestWork.ms) {
+    longestWork = { ms, name };
+  }
+  counted(name, ms);
+};
+
 /**
  * Names the work the loop starts now (a continuation's step, a request, a
- * frame), for the watch from its own thread to say if the loop never comes
- * back from it: the last name written stands until the next. Cheap enough
- * for every request: one encode into memory both threads share.
+ * frame, a timer's run), for the watch from its own thread to say if the
+ * loop never comes back from it: the last name written stands until the
+ * next. While the loop's own tick runs, it is timed too, until the call
+ * stack that named it empties: a microtask queued here runs once the
+ * synchronous run that called it returns (and after the microtasks queued
+ * before it), so a hold the tick finds names the work that held it, and the
+ * minute's tally counts it. A hold made of a chain of awaits is not timed
+ * here: each step after an await is a microtask of its own; the watch from
+ * its own thread still says the name. Cheap enough for every request: a
+ * clock read, one microtask and one encode into memory both threads share.
  */
 export const doing = (name: string): void => {
+  if (watching) {
+    const at = performance.now();
+    queueMicrotask(() => workEnded(name, at));
+  }
   if (!watchdog) {
     return;
   }
@@ -141,17 +214,21 @@ const flyingWords = (): string =>
 /** What the loop's last stall is said with. */
 const stallLine = (heldMs: number): string => {
   const work = flyingWords();
+  const named = longestWork
+    ? `${loopWords.longestWork(longestWork.name, longestWork.ms)}; `
+    : "";
   const section = longest
     ? `the longest marked section since the tick before: ${longest.name}, ${Math.round(longest.ms)} ms`
     : "no marked section ran since the tick before";
+  const longestNamed = Math.max(longest?.ms ?? 0, longestWork?.ms ?? 0);
   const unnamed =
-    !longest || longest.ms < heldMs / 2
-      ? "; most of the stall is in no marked section"
+    longestNamed < heldMs / 2
+      ? "; most of the stall is in no marked section or named work"
       : "";
   const lastWords = last
     ? `; the last entered: ${last.name}${last.left ? "" : " (not left)"}`
     : "";
-  return `${loopWords.heldEnded(who, heldMs)}; phase: ${currentPhase}; in flight: ${work || "nothing counted"}; ${section}${lastWords}${unnamed}; heap ${Math.round(heapSize() / 1024 / 1024)} MB`;
+  return `${loopWords.heldEnded(who, heldMs)}; ${named}${section}${lastWords}${unnamed}; phase: ${currentPhase}; in flight: ${work || "nothing counted"}; heap ${Math.round(heapSize() / 1024 / 1024)} MB`;
 };
 
 /** Where the watch from its own thread is: the binary's own entry when compiled, the source beside this file otherwise. */
@@ -214,19 +291,25 @@ export const watchFromItsOwnThread = (
 };
 
 /**
- * Starts the watch: each stall of `lateMs` ({@link LATE_MS} unless a
- * probe asks finer) or more is one line through `say` once it ends, and one
- * that lasts, or a loop that runs its timers but takes in nothing, is said
- * while it lasts, from a thread of its own once that is started
- * ({@link watchFromItsOwnThread}).
+ * Starts the watch: each stall of `lateMs` ({@link LATE_MS} unless the
+ * process asks finer) or more is one line through `say` once it ends, and
+ * handed to `held` with its length; one that lasts, or a loop that runs its
+ * timers but takes in nothing, is said while it lasts, from a thread of its
+ * own once that is started ({@link watchFromItsOwnThread}).
  */
 export const watchLoop = (
   say: (line: string) => void,
-  lateMs = LATE_MS,
-  /** Whose loop, as its lines say it. */
-  name = who
+  options: {
+    /** Each stall said, by its length in ms, after its line. */
+    held?: (ms: number) => void;
+    lateMs?: number;
+    /** Whose loop, as its lines say it. */
+    name?: string;
+  } = {}
 ): (() => void) => {
-  who = name;
+  const { held, lateMs = LATE_MS } = options;
+  who = options.name ?? who;
+  watching = true;
   let expected = performance.now() + TICK_MS;
   let posted = "";
   const timer = setInterval(() => {
@@ -235,8 +318,10 @@ export const watchLoop = (
     expected = now + TICK_MS;
     if (late >= lateMs) {
       say(stallLine(late));
+      held?.(late);
     }
     longest = undefined;
+    longestWork = undefined;
     if (watchdog) {
       watchdog.shared[BEAT] = Date.now();
       const state = {
@@ -252,5 +337,8 @@ export const watchLoop = (
     }
   }, TICK_MS);
   timer.unref();
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    watching = false;
+  };
 };

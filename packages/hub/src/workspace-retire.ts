@@ -118,7 +118,7 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
     return running;
   };
 
-  deps.lifetime.every(RETIRE_SWEEP_MS, () => {
+  deps.lifetime.every("workspaces retired", RETIRE_SWEEP_MS, () => {
     sweep(false).catch((error: unknown) =>
       console.warn(
         `[workspace-retire] the sweep failed: ${error instanceof Error ? error.message : String(error)}`

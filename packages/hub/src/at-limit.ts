@@ -555,7 +555,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       );
       return;
     }
-    const next = lifetime.after(SETTLE_MS, () => {
+    const next = lifetime.after("at-limit settle", SETTLE_MS, () => {
       const fresh = rowOf(row.id);
       if (over(fresh) || !fresh) {
         settling.delete(row.id);
@@ -825,7 +825,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
     notices.set(
       row.id,
-      lifetime.after(Math.max(0, at - now), () => {
+      lifetime.after("at-limit notice", Math.max(0, at - now), () => {
         notices.delete(row.id);
         const fresh = rowOf(row.id);
         if (!fresh || over(fresh)) {
@@ -1635,7 +1635,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       ...holds.map((one) => one.until ?? Number.POSITIVE_INFINITY),
       ...capped
     );
-    timer = lifetime.after(Math.max(1000, at - now), () => {
+    timer = lifetime.after("at-limit look", Math.max(1000, at - now), () => {
       detach(tick().finally(plan), "at-limit look");
     });
   };

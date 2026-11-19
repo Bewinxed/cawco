@@ -228,6 +228,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     laterWaits.set(instanceId, {
       since,
       timer: ctx.lifetime.after(
+        "account carry restart wait",
         Math.max(0, since + RESTART_WAIT_CAP_MS - Date.now()),
         () => {
           laterWaits.delete(instanceId);
@@ -816,25 +817,29 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
    * starts with one in its database starts it at once.
    */
   const tickLeaves = (): void => {
-    leaveTicker ??= ctx.lifetime.every(ctx.MOVE_TICK_MS, () => {
-      if (
-        ctx.db.accounts.leaves().length === 0 &&
-        ctx.pendingCodexLeaves().length === 0
-      ) {
-        ctx.lifetime.cancel(leaveTicker);
-        leaveTicker = undefined;
-        return;
+    leaveTicker ??= ctx.lifetime.every(
+      "account carry leaves tick",
+      ctx.MOVE_TICK_MS,
+      () => {
+        if (
+          ctx.db.accounts.leaves().length === 0 &&
+          ctx.pendingCodexLeaves().length === 0
+        ) {
+          ctx.lifetime.cancel(leaveTicker);
+          leaveTicker = undefined;
+          return;
+        }
+        if (leavingNow) {
+          return;
+        }
+        leavingNow = true;
+        leaveAccounts()
+          .catch(console.error)
+          .finally(() => {
+            leavingNow = false;
+          });
       }
-      if (leavingNow) {
-        return;
-      }
-      leavingNow = true;
-      leaveAccounts()
-        .catch(console.error)
-        .finally(() => {
-          leavingNow = false;
-        });
-    });
+    );
   };
 
   return {

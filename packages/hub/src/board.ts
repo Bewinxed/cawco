@@ -1,5 +1,6 @@
 import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
 import type { FramePayload } from "@cawco/core/frames";
+import { syncSection } from "@cawco/core/loop-watch";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import { personsOwn } from "@cawco/core/protocol";
 import { WIRE_PROTOCOL } from "@cawco/core/stream";
@@ -475,35 +476,43 @@ export const createBoard = (ctx: BoardContext) => {
    * time, which the take-over view draws over its stream.
    */
   const greetDashboard = (ws: ClientSocket, older: boolean): void => {
-    ctx.sendToClient(ws, instancesFrame(""));
-    for (const payload of ctx.owedAfterBoard()) {
-      ctx.sendToClient(ws, {
-        verb: "frames",
-        machineId: "hub",
-        payload,
-      } satisfies HubEnvelope<"frames">);
-    }
-    // Then Recent's stored transcripts, whole (stored-recent.ts).
-    ctx.sendToClient(ws, {
-      verb: "frames",
-      machineId: "hub",
-      payload: { kind: "stored", stored: ctx.storedRecent.now() },
-    } satisfies HubEnvelope<"frames">);
-    if (!older) {
-      ctx.sendToClient(ws, {
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "browser_list", browsers: ctx.browsers.list() },
-      } satisfies HubEnvelope<"frames">);
-      // Then each passkey QR still in time, so a page opened or reloaded
-      // after the prompt appeared still shows it over the take-over.
-      for (const payload of ctx.browsers.passkeyQrs()) {
+    syncSection("dashboard greeted: board", () =>
+      ctx.sendToClient(ws, instancesFrame(""))
+    );
+    syncSection("dashboard greeted: owed frames", () => {
+      for (const payload of ctx.owedAfterBoard()) {
         ctx.sendToClient(ws, {
           verb: "frames",
           machineId: "hub",
           payload,
         } satisfies HubEnvelope<"frames">);
       }
+    });
+    // Then Recent's stored transcripts, whole (stored-recent.ts).
+    syncSection("dashboard greeted: stored transcripts", () =>
+      ctx.sendToClient(ws, {
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "stored", stored: ctx.storedRecent.now() },
+      } satisfies HubEnvelope<"frames">)
+    );
+    if (!older) {
+      syncSection("dashboard greeted: browsers", () => {
+        ctx.sendToClient(ws, {
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "browser_list", browsers: ctx.browsers.list() },
+        } satisfies HubEnvelope<"frames">);
+        // Then each passkey QR still in time, so a page opened or reloaded
+        // after the prompt appeared still shows it over the take-over.
+        for (const payload of ctx.browsers.passkeyQrs()) {
+          ctx.sendToClient(ws, {
+            verb: "frames",
+            machineId: "hub",
+            payload,
+          } satisfies HubEnvelope<"frames">);
+        }
+      });
     }
   };
   const overlayOf = (row: ReturnType<typeof boardRows>[number]): string =>
@@ -524,10 +533,12 @@ export const createBoard = (ctx: BoardContext) => {
   const publishInstances = (machineId: string): void => {
     // A session's model, project or harness can move under a live rule; every
     // move republishes, so this is the one place that has to drop the cache.
-    ctx.ruleEngine.forgetFacts();
-    ctx.toolsMayHaveChanged();
+    syncSection("publish: rule facts forgotten", () =>
+      ctx.ruleEngine.forgetFacts()
+    );
+    syncSection("publish: tool lists armed", () => ctx.toolsMayHaveChanged());
     // A session ending ends its artifacts' asks (Needs you's rule 4).
-    ctx.artifactLane.moved();
+    syncSection("publish: artifact lane moved", () => ctx.artifactLane.moved());
     pendingInstancePublishes.add(machineId);
     if (instancePublishScheduled) {
       return;
@@ -535,7 +546,7 @@ export const createBoard = (ctx: BoardContext) => {
     instancePublishScheduled = true;
     // On the hub's lifetime, as all its own schedule is: a hub closed first
     // (scripts/openapi.ts closes its scratch hub) publishes nothing after.
-    ctx.lifetime.after(0, () => {
+    ctx.lifetime.after("board publish", 0, () => {
       instancePublishScheduled = false;
       const machines = [...pendingInstancePublishes];
       pendingInstancePublishes.clear();
@@ -543,11 +554,14 @@ export const createBoard = (ctx: BoardContext) => {
     });
   };
 
+  /** A publish, each step a section of its own (core loop-watch.ts `syncSection`): a hold in a publish names its step. */
   const publishInstanceDelta = (machineId: string): void => {
-    const rows = boardRows();
+    const rows = syncSection("publish: board rows laid", boardRows);
     // A row, a machine or a preview may have moved: an artifact's tab hears
     // what moved of its own session, before the board's own early return.
-    ctx.artifactSessions.refresh();
+    syncSection("publish: artifact tabs refreshed", () =>
+      ctx.artifactSessions.refresh()
+    );
     publishBoardDelta(machineId, rows);
   };
 
@@ -563,8 +577,44 @@ export const createBoard = (ctx: BoardContext) => {
     // it — a failed process, a register's settle, a refused restore), one in
     // `error` or gone fails its live item (work-items `followSessions`).
     if (moved.size > 0) {
-      ctx.workItems.followSessions(moved);
+      syncSection("publish: work items followed", () =>
+        ctx.workItems.followSessions(moved)
+      );
     }
+    const { upserts, removed } = syncSection("publish: rows compared", () =>
+      movedRows(rows, moved)
+    );
+    const delta: Extract<FramePayload, { kind: "instances_delta" }> = {
+      kind: "instances_delta",
+      upserts,
+      removed,
+      ...syncSection("publish: machines and extras compared", () =>
+        boardMetadataDelta()
+      ),
+    };
+    if (
+      upserts.length === 0 &&
+      removed.length === 0 &&
+      Object.keys(delta).length === 3
+    ) {
+      return;
+    }
+    syncSection("publish: broadcast", () =>
+      ctx.registry.broadcastBoard(
+        { verb: "frames", machineId, payload: delta },
+        () => instancesFrame(machineId, rows)
+      )
+    );
+  };
+
+  /**
+   * Of the board's `rows`, those that differ from what was last published
+   * (or `moved` says moved), and the ids published before that are gone.
+   */
+  const movedRows = (
+    rows: ReturnType<typeof boardRows>,
+    moved: ReadonlySet<string>
+  ): { removed: string[]; upserts: ReturnType<typeof boardRows> } => {
     const upserts: ReturnType<typeof boardRows> = [];
     const present = new Set<string>();
     for (const row of rows) {
@@ -592,23 +642,7 @@ export const createBoard = (ctx: BoardContext) => {
         removed.push(id);
       }
     }
-    const delta: Extract<FramePayload, { kind: "instances_delta" }> = {
-      kind: "instances_delta",
-      upserts,
-      removed,
-      ...boardMetadataDelta(),
-    };
-    if (
-      upserts.length === 0 &&
-      removed.length === 0 &&
-      Object.keys(delta).length === 3
-    ) {
-      return;
-    }
-    ctx.registry.broadcastBoard(
-      { verb: "frames", machineId, payload: delta },
-      () => instancesFrame(machineId, rows)
-    );
+    return { removed, upserts };
   };
 
   /** No pulse snapshots on publishes: each session already has its own stream. */

@@ -43,6 +43,38 @@ export const loopWords = {
     `the last marked section entered: ${name}${left ? "" : " (not left)"}`,
   /** The work the loop started last, as it named it. */
   doing: (name: string) => `the work it started last: ${name}`,
+  /** The named work the looks during a hold read, each with how many of the looks found it. */
+  doingSeen: (seen: string) =>
+    `the work it started last, as the looks found it: ${seen}`,
+  /** The named work (`doing`) whose synchronous run was longest since the tick before a stall. */
+  longestWork: (name: string, ms: number) =>
+    `the longest named work since the tick before: ${name}, ${Math.round(ms)} ms`,
+  /**
+   * The loop's minute: its delay's median and 99th percentile, the CPU the
+   * main thread and the whole process took as a share of one core, its
+   * memory, and the names that held it longest (inclusive: a section inside
+   * a request counts under both).
+   */
+  minute: (vitals: {
+    heapMb: number;
+    mainCpu: number | undefined;
+    p50Ms: number;
+    p99Ms: number;
+    processCpu: number;
+    rssMb: number;
+    top: string;
+    who: string;
+  }) =>
+    `[loop] the ${vitals.who}'s minute: delay p50 ${vitals.p50Ms} ms, p99 ${vitals.p99Ms} ms; CPU ${vitals.mainCpu === undefined ? "" : `main thread ${vitals.mainCpu}%, `}process ${vitals.processCpu}% of a core; heap ${vitals.heapMb} MB, resident ${vitals.rssMb} MB; held longest by ${vitals.top || "no named work"}`,
+  /** A CPU profile of the main thread begun, and why. */
+  profiling: (who: string, seconds: number, why: string) =>
+    `[loop] profiling the ${who}'s main thread for ${seconds} s (${why})`,
+  /** A CPU profile written, and where. */
+  profiled: (who: string, path: string) =>
+    `[loop] the ${who}'s CPU profile is at ${path}: open it in Chrome DevTools' Performance panel, or speedscope.app`,
+  /** Why a process profiled itself: the holds its tick said within the last minute passed their budget. */
+  holdsPastBudget: (ms: number) =>
+    `its loop was held ${ms} ms within the last minute, in holds its tick said`,
   /**
    * A loop held past its bound, its process ended from the watch's own
    * thread so its supervisor starts it again (systemd's `Restart=`,

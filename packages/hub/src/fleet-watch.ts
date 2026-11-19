@@ -1063,7 +1063,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       }
     }
   };
-  deps.lifetime.every(STALL_SWEEP_MS, sweep);
+  deps.lifetime.every("stall sweep", STALL_SWEEP_MS, sweep);
 
   /** Runs one of the frame-path entries, throwing nothing into it. */
   const guarded = (id: string, run: () => void): void => {

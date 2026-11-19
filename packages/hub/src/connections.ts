@@ -2286,10 +2286,14 @@ export const createConnections = (deps: ConnectionsDeps) => {
     deps.lifetime.cancel(devicePolls.get(id));
     devicePolls.set(
       id,
-      deps.lifetime.after(seconds * 1000, () => {
-        devicePolls.delete(id);
-        detach(devicePoll(id), "connection code sign-in poll");
-      })
+      deps.lifetime.after(
+        "connection device sign-in poll",
+        seconds * 1000,
+        () => {
+          devicePolls.delete(id);
+          detach(devicePoll(id), "connection code sign-in poll");
+        }
+      )
     );
   };
 

@@ -68,3 +68,20 @@ export const readDoing = (buffer: SharedArrayBuffer): string => {
   // A copy: TextDecoder refuses a view of shared memory.
   return new TextDecoder().decode(new Uint8Array(buffer, 4, length).slice());
 };
+
+/** Linux's clock ticks per second, in which `/proc` counts CPU time (`getconf CLK_TCK`). */
+export const CLOCK_TICKS = 100;
+
+/**
+ * A thread's state and the CPU time it has taken (user and system, in
+ * {@link CLOCK_TICKS}), from its `/proc/<pid>/task/<tid>/stat`: after the
+ * command's closing paren, its state, then ten fields to `utime` and
+ * `stime` (proc(5)).
+ */
+export const threadStat = (stat: string): { state: string; ticks: number } => {
+  const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+  return {
+    state: fields[0] ?? "?",
+    ticks: Number(fields[11]) + Number(fields[12]),
+  };
+};

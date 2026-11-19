@@ -464,7 +464,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       dirty = true;
     }
   };
-  deps.lifetime.every(WRITE_MS, () => {
+  deps.lifetime.every("installs written", WRITE_MS, () => {
     if (dirty) {
       write();
     }
@@ -494,7 +494,9 @@ export const createInstalls = (deps: InstallsDeps) => {
           `[installs] ${install.id} (${install.target || "by a command"}) was running when the hub stopped: lost`
         );
         // Told wherever the person is, once the hub is up to tell it.
-        deps.lifetime.after(0, () => deps.outcome(install));
+        deps.lifetime.after("lost install told", 0, () =>
+          deps.outcome(install)
+        );
       }
       kept.set(install.id, {
         install,
@@ -1266,7 +1268,7 @@ export const createInstalls = (deps: InstallsDeps) => {
   };
 
   /** Looks at the fleet for each install that waits on it. */
-  deps.lifetime.every(LOOK_MS, () => {
+  deps.lifetime.every("installs look", LOOK_MS, () => {
     for (const entry of kept.values()) {
       const { install } = entry;
       if (install.state === "lost") {
@@ -1594,7 +1596,7 @@ export const createInstalls = (deps: InstallsDeps) => {
         }
       }
       mark(entry, "listed");
-      deps.lifetime.after(INSTALL_GRACE_MS, () => {
+      deps.lifetime.after("install grace", INSTALL_GRACE_MS, () => {
         // Online by now, it is on its sync and harnesses steps, which end it.
         if (install.state === "running" && !readying.has(install.id)) {
           end(

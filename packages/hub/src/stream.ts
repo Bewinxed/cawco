@@ -248,7 +248,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     return emptied;
   };
 
-  ports.lifetime.every(SWEEP_INTERVAL_MS, () => sweepStale());
+  ports.lifetime.every("stale streams swept", SWEEP_INTERVAL_MS, () =>
+    sweepStale()
+  );
 
   const ringOf = (sessionId: string): SessionRing => {
     const existing = rings.get(sessionId);

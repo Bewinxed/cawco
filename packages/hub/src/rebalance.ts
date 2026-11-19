@@ -1247,6 +1247,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     const nextEnd = Math.min(...benched.values());
     if (Number.isFinite(nextEnd) && !lifetime.closed()) {
       benchTimer = lifetime.after(
+        "rebalance bench ended",
         Math.max(1000, nextEnd - now + 1000),
         accountsChanged
       );

@@ -4,6 +4,7 @@ no-raw-deadline/planted.ts:8:23 no-raw-deadline
 no-raw-deadline/planted.ts:10:3 no-raw-deadline
 no-raw-deadline/planted.ts:12:22 no-raw-deadline
 no-raw-deadline/planted.ts:13:24 no-raw-deadline
+no-raw-deadline/planted.ts:18:3 no-raw-deadline
 no-time-constants/planted.ts:3:8 no-time-constants
 no-time-constants/planted.ts:3:24 no-time-constants
 no-time-constants/planted.ts:4:20 no-time-constants

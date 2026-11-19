@@ -29,8 +29,8 @@ import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 
 export interface StoredRecentDeps {
-  /** Runs `run` once after `ms`, on the hub's lifetime. */
-  after: (ms: number, run: () => void) => void;
+  /** Runs `run` once after `ms`, on the hub's lifetime, named `name` (lifetime.ts `after`). */
+  after: (name: string, ms: number, run: () => void) => void;
   /** The sessions the hub holds behind these harness keys (server.ts `storedSessions`). */
   behind: (keys: string[]) => { rows: InstanceRow[]; unwrapped: string[] };
   /** One machine's catalog as last read (find.ts). */
@@ -94,7 +94,7 @@ export function createStoredRecent(deps: StoredRecentDeps) {
         return;
       }
       settling = true;
-      deps.after(SETTLE_MS, () => {
+      deps.after("stored recent worked out", SETTLE_MS, () => {
         settling = false;
         const stored = now();
         const text = JSON.stringify(stored);

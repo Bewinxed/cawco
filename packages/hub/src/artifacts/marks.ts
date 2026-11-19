@@ -259,7 +259,7 @@ export const createMarks = (ctx: MarksContext) => {
     const wait = Math.max(0, Math.min(quiet, first + MARKS_LONGEST_MS - now));
     bursts.set(id, {
       first,
-      timer: deps.lifetime.after(wait, () => {
+      timer: deps.lifetime.after("artifact marks burst", wait, () => {
         bursts.delete(id);
         // One delivery at a time: what is still owed when it ends goes next.
         if (delivering.has(id)) {

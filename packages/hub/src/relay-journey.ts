@@ -1282,7 +1282,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     },
     watch: () => {
       tick();
-      const timer = deps.lifetime.every(TICK_MS, tick);
+      const timer = deps.lifetime.every("relay journey tick", TICK_MS, tick);
       return () => deps.lifetime.cancel(timer);
     },
   };

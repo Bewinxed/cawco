@@ -2203,16 +2203,20 @@ export const createRoutines = ({
     }
     // Never sooner than MIN_GAP_MS: a routine that stays due (one whose slot
     // cannot be claimed) is looked at again, not spun on.
-    timer = lifetime.after(Math.max(MIN_GAP_MS, wake - now), () => {
-      try {
-        tick();
-      } catch (error) {
-        console.error(
-          `[routines] a look failed: ${error instanceof Error ? error.message : String(error)}`
-        );
+    timer = lifetime.after(
+      "routines due",
+      Math.max(MIN_GAP_MS, wake - now),
+      () => {
+        try {
+          tick();
+        } catch (error) {
+          console.error(
+            `[routines] a look failed: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+        schedule();
       }
-      schedule();
-    });
+    );
   };
 
   /**

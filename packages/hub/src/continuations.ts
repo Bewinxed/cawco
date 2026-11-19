@@ -566,6 +566,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
   /** Deletes a settled job once it has been kept {@link CONTINUATION_KEPT_MS}. */
   const forgetContinuationLater = (row: ContinuationRow): void => {
     ctx.lifetime.after(
+      "continuation forgotten",
       Math.max(0, row.updatedAt.getTime() + CONTINUATION_KEPT_MS - Date.now()),
       () => {
         ctx.db.deleteContinuation(row.id);

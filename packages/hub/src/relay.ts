@@ -833,7 +833,7 @@ export const createRelay = ({
     if (lifetime.closed()) {
       return;
     }
-    timer = lifetime.after(AGAIN_MS, () => {
+    timer = lifetime.after("relay look again", AGAIN_MS, () => {
       if (store.active().some((row) => row.state !== "live")) {
         detach(apply(), "relay apply");
       }

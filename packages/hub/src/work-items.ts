@@ -2386,7 +2386,7 @@ export const createWorkItems = ({
         (reportee.status === "sleeping" && reportee.sessionId !== null)
     );
 
-  lifetime.every(BUDGET_SWEEP_MS, () => {
+  lifetime.every("budget sweep", BUDGET_SWEEP_MS, () => {
     for (const item of db.liveWorkItems()) {
       if (budgetHeld(item) && !item.stoppingAt) {
         enforceBudget(item);
@@ -4896,7 +4896,9 @@ export const createWorkItems = ({
       lifetime.cancel(waitTimers.get(id));
       waitTimers.set(
         id,
-        lifetime.after(WAIT_RESUME_GRACE_MS, () => endWait(id, false, words))
+        lifetime.after("wait resume grace", WAIT_RESUME_GRACE_MS, () =>
+          endWait(id, false, words)
+        )
       );
       return;
     }
@@ -4939,6 +4941,7 @@ export const createWorkItems = ({
       waitTimers.set(
         item.id,
         lifetime.after(
+          "wait resume deadline",
           Math.max(0, item.waitResumeBy.getTime() - Date.now()),
           missed
         )
@@ -4955,7 +4958,7 @@ export const createWorkItems = ({
     }
     waitTimers.set(
       item.id,
-      lifetime.after(remaining, () => endWait(item.id))
+      lifetime.after("wait ended", remaining, () => endWait(item.id))
     );
   };
   /**
@@ -5663,7 +5666,9 @@ export const createWorkItems = ({
             `[workspaces] ${instanceId}: its workspace ${handle(workspace.id)} is not cut again yet, its machine's agent answering "${message}"; what was sent to it is kept at the hub, and the cut is asked again ${wait === "fenced" ? `once the agent is back (at the latest in ${RESTART_RECUT_MS / 1000} s)` : "now"}`
           );
           if (wait === "fenced") {
-            lifetime.after(RESTART_RECUT_MS, () => recutKept?.(instanceId));
+            lifetime.after("kept workspace recut", RESTART_RECUT_MS, () =>
+              recutKept?.(instanceId)
+            );
           } else {
             recutKept?.(instanceId);
           }

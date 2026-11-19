@@ -1203,7 +1203,7 @@ export const createSends = (ctx: SendsContext) => {
       return;
     }
     handedBack.set(instanceId, [send]);
-    ctx.lifetime.after(0, () => {
+    ctx.lifetime.after("sends handed back", 0, () => {
       const back = handedBack.get(instanceId) ?? [];
       handedBack.delete(instanceId);
       detach(

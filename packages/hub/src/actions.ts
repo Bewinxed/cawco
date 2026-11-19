@@ -778,14 +778,18 @@ export const createActions = ({
     } else if (next) {
       wake = Math.min(wake, next.getTime());
     }
-    timer = lifetime.after(Math.max(MIN_GAP_MS, wake - now), () => {
-      try {
-        tick();
-      } catch (error) {
-        console.error(`[actions] a look failed: ${wordsOf(error)}`);
+    timer = lifetime.after(
+      "actions due",
+      Math.max(MIN_GAP_MS, wake - now),
+      () => {
+        try {
+          tick();
+        } catch (error) {
+          console.error(`[actions] a look failed: ${wordsOf(error)}`);
+        }
+        schedule();
       }
-      schedule();
-    });
+    );
   };
 
   /**

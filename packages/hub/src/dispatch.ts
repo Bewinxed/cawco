@@ -2976,7 +2976,7 @@ export const createDispatcher = ({
         return;
       }
       watching = true;
-      lifetime.every(SAFETY_MS, () => {
+      lifetime.every("dispatch safety look", SAFETY_MS, () => {
         for (const project of db.listProjects()) {
           if (
             (project.dispatch && project.eventsOn) ||

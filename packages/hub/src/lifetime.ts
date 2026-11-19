@@ -1,3 +1,4 @@
+import { doing } from "@cawco/core/loop-watch";
 import { Context, Effect, Layer } from "effect";
 
 /** A timer a hub's lifetime holds; stop it with {@link HubLifetimeShape.cancel}. */
@@ -30,6 +31,11 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  * Every timer is unref'd: a hub is kept alive by its listening socket, never
  * by something it scheduled.
  *
+ * Every timer is named where it is made, and each run names itself as the
+ * loop's work (core loop-watch.ts `doing`, as `timer: <name>`), so a hold
+ * inside a timer's run names that timer, never the request that came
+ * before it, and the hub's minute line counts its time under that name.
+ *
  * A run that throws fails that run alone: its error goes to the log with its
  * stack ({@link timerFailed}), and the hub, and every other timer, go on (an
  * `every` keeps its schedule). A timer has no caller to hand the error to,
@@ -37,16 +43,22 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  * that met a bad row took the whole fleet's hub down that way.
  */
 export interface HubLifetimeShape {
-  /** Runs `run` once after `ms`, unless it is cancelled or the lifetime closes first. */
-  readonly after: (ms: number, run: () => void) => HubTimer;
+  /**
+   * Runs `run` once after `ms`, unless it is cancelled or the lifetime
+   * closes first; `name` is what its run is known by when it holds the loop.
+   */
+  readonly after: (name: string, ms: number, run: () => void) => HubTimer;
   /** Stops one of this lifetime's timers; none, or one that already ran, is nothing. */
   readonly cancel: (timer: HubTimer | undefined) => void;
   /** Stops every timer, runs every release, and says so; once. */
   readonly close: () => void;
   /** Whether {@link close} has run. */
   readonly closed: () => boolean;
-  /** Runs `run` every `ms` until it is cancelled or the lifetime closes. */
-  readonly every: (ms: number, run: () => void) => HubTimer;
+  /**
+   * Runs `run` every `ms` until it is cancelled or the lifetime closes;
+   * `name` is what each run is known by when it holds the loop.
+   */
+  readonly every: (name: string, ms: number, run: () => void) => HubTimer;
   /** A release for {@link close}: run after every timer has stopped, newest first. */
   readonly onClose: (release: () => void) => void;
   /**
@@ -78,6 +90,15 @@ const guarded = (run: () => void) => (): void => {
   }
 };
 
+/** `run`, named as the loop's work as it starts (core loop-watch.ts `doing`). */
+const named = (name: string, run: () => void) => {
+  const work = `timer: ${name}`;
+  return (): void => {
+    doing(work);
+    run();
+  };
+};
+
 /**
  * Runs `run` once the current step ends (a microtask), its throw said as a
  * timer's is: the hub's one way to defer work to the end of a step.
@@ -101,7 +122,7 @@ const makeLifetime = (): HubLifetimeShape => {
     }
     return timer;
   };
-  const after = (ms: number, run: () => void): HubTimer => {
+  const once = (ms: number, run: () => void): HubTimer => {
     const guardedRun = guarded(run);
     const timer = setTimeout(() => {
       timers.delete(timer);
@@ -110,17 +131,18 @@ const makeLifetime = (): HubLifetimeShape => {
     return hold(timer);
   };
   return {
-    after,
-    every: (ms, run) => hold(setInterval(guarded(run), ms)),
+    after: (name, ms, run) => once(ms, named(name, run)),
+    every: (name, ms, run) => hold(setInterval(guarded(named(name, run)), ms)),
     cancel: (timer) => {
       if (timer) {
         clearTimeout(timer);
         timers.delete(timer);
       }
     },
+    // Unnamed: its run only resolves, and what awaits it runs after.
     sleep: (ms) =>
       new Promise((resolve) => {
-        after(ms, resolve);
+        once(ms, resolve);
       }),
     onClose: (release) => {
       releases.push(release);

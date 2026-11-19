@@ -330,6 +330,7 @@ export const createMoves = (deps: MovesDeps) => {
       return;
     }
     publishTimer = deps.lifetime.after(
+      "moves published",
       Math.max(0, PUBLISH_EVERY_MS - (Date.now() - publishedAt)),
       () => publish(false)
     );
@@ -403,6 +404,7 @@ export const createMoves = (deps: MovesDeps) => {
    */
   const forgetLater = (move: SettledMove): void => {
     deps.lifetime.after(
+      "settled move forgotten",
       Math.max(0, move.updatedAt.getTime() + SETTLED_KEPT_MS - Date.now()),
       () => {
         if (db.deleteSettledMove(move.id)) {

@@ -222,7 +222,7 @@ export const createArtifactDocs = (deps: {
    * option (y-websocket 3.1.0 `messageReconnectTimeout`), and the socket's
    * pings never reach the page's script; a message does.
    */
-  deps.lifetime.every(RESYNC_MS, () => {
+  deps.lifetime.every("doc resync", RESYNC_MS, () => {
     for (const entry of loaded.values()) {
       for (const client of entry.clients) {
         client.beat();
@@ -235,7 +235,7 @@ export const createArtifactDocs = (deps: {
     if (entry.clients.size > 0) {
       return;
     }
-    entry.idle = deps.lifetime.after(IDLE_MS, () => {
+    entry.idle = deps.lifetime.after("doc unloaded when idle", IDLE_MS, () => {
       if (entry.clients.size === 0) {
         loaded.delete(id);
         entry.doc.destroy();

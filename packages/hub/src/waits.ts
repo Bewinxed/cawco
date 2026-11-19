@@ -238,7 +238,7 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
         }
       };
       all();
-      lifetime.every(TICK_MS, all);
+      lifetime.every("waits tick", TICK_MS, all);
     },
 
     /** A project's tasks changed (tasks.ts `listen`): it is looked at again shortly. */
@@ -246,7 +246,7 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
       lifetime.cancel(soon.get(event.projectId));
       soon.set(
         event.projectId,
-        lifetime.after(SETTLE_MS, () => {
+        lifetime.after("waits settle", SETTLE_MS, () => {
           soon.delete(event.projectId);
           look(event.projectId);
         })

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { networkInterfaces, hostname as osHostname } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { EndedBy } from "@cawco/core/accounts";
 import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
 import {
@@ -124,7 +124,7 @@ import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
 import { parseDelegateWaitNotice } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
-import { doing } from "@cawco/core/loop-watch";
+import { doing, syncSection } from "@cawco/core/loop-watch";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import {
@@ -473,6 +473,7 @@ import { createHistory, custodyLine, userTurnText } from "./history";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { type HubContext, hubContextOf } from "./hub-context";
 import { hubId } from "./hub-id";
+import { createHubProfiler } from "./hub-profile";
 import { recordHubEvent } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
@@ -1270,6 +1271,9 @@ export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { serves = true }: ServerOptions = {}
 ) => {
+  // The hub's own CPU profiles (hub-profile.ts), written beside its database
+  // and the loop watch's record (hub-loop.ts `loopRecord`).
+  const profiler = createHubProfiler({ dir: dirname(DB_PATH), lifetime });
   // What the route families read of this closure (hub-context.ts).
   const ctx: HubContext = hubContextOf({
     readSessionProcess: () => readSessionProcess,
@@ -2180,8 +2184,8 @@ export const createServer = (
    * the projects move, and told to every dashboard whole when it changed.
    */
   const storedRecent = createStoredRecent({
-    after: (ms, run) => {
-      lifetime.after(ms, run);
+    after: (name, ms, run) => {
+      lifetime.after(name, ms, run);
     },
     behind: storedSessions,
     catalogOf: (machineId) => find.catalogOf(machineId),
@@ -2483,7 +2487,7 @@ export const createServer = (
     for (const command of stepped.commands) {
       if (command.kind === "wake") {
         const { at } = command;
-        lifetime.after(Math.max(0, at - Date.now()), () =>
+        lifetime.after("hub step wake", Math.max(0, at - Date.now()), () =>
           hubStep({ kind: "tick", now: Math.max(Date.now(), at) })
         );
       } else if (command.kind === "fail-owed") {
@@ -6095,8 +6099,10 @@ export const createServer = (
         machineId,
         requestId: payload.requestId,
         at,
-        timer: lifetime.after(payload.discard ? 30_000 : READ_TIMEOUT_MS, () =>
-          finishStopDispatch(key, "timed-out")
+        timer: lifetime.after(
+          "stop dispatch timed out",
+          payload.discard ? 30_000 : READ_TIMEOUT_MS,
+          () => finishStopDispatch(key, "timed-out")
         ),
       });
       return true;
@@ -6303,7 +6309,7 @@ export const createServer = (
             )
           );
         } else {
-          lifetime.after(100, observe);
+          lifetime.after("stop observed", 100, observe);
         }
       };
       observe();
@@ -7616,7 +7622,7 @@ export const createServer = (
       `[hub] versions read off the stored files: ${versioned.skills.versioned} of ${versioned.skills.of} skill(s), ${versioned.plugins.versioned} of ${versioned.plugins.of} plugin(s)`
     );
   }
-  lifetime.every(UPDATE_CHECK_MS, () => {
+  lifetime.every("update check", UPDATE_CHECK_MS, () => {
     detach(checkSources(), "update check");
   });
 
@@ -11471,7 +11477,7 @@ export const createServer = (
     if (why === "boundary") {
       const hold: { askedAgain?: string; second: boolean } = { second };
       relaunching.set(instanceId, hold);
-      lifetime.after(RELAUNCH_SETTLE_MS, () => {
+      lifetime.after("relaunch settled", RELAUNCH_SETTLE_MS, () => {
         relaunching.delete(instanceId);
         const from = hold.askedAgain;
         if (from === undefined) {
@@ -11545,11 +11551,11 @@ export const createServer = (
     }
   };
   pruneTurnUsage();
-  lifetime.every(DAY_MS, pruneTurnUsage);
+  lifetime.every("turn usage pruned", DAY_MS, pruneTurnUsage);
   // What is owed to a session nothing will wake ends (owed-ends.ts): the
   // notices this hub kept before it started, then each hour's.
   endOwedNotices("every");
-  lifetime.every(HOUR_MS, () => endOwedNotices("every"));
+  lifetime.every("owed notices ended", HOUR_MS, () => endOwedNotices("every"));
 
   const keepAliveScheduler = createKeepAliveScheduler({
     lifetime,
@@ -12107,7 +12113,7 @@ export const createServer = (
         name: "due refusals",
         run: () => {
           checkDueRefusals();
-          lifetime.every(REFUSAL_LOOK_MS, checkDueRefusals);
+          lifetime.every("due refusals", REFUSAL_LOOK_MS, checkDueRefusals);
         },
       },
       // `cawco pairing off` while this hub runs: its request, taken and answered
@@ -12292,7 +12298,7 @@ export const createServer = (
     delegationRoutes(ctx, delegationMcp),
     sessionIdentityRoutes(ctx),
     lfsRoutes(ctx),
-    hubInfoRoutes(ctx),
+    hubInfoRoutes(ctx, profiler),
     agentListRoutes(ctx),
     instanceMediaRoutes(ctx),
     modelWindowRoutes(ctx),
@@ -12431,19 +12437,25 @@ export const createServer = (
     machineId: string,
     agentFrame: HeartbeatReads
   ): void => {
-    for (const claim of agentFrame.sessionAddresses) {
-      recordSessionAddress(ws, machineId, claim);
-    }
-    db.touchAgent(machineId);
-    fleetSyncs.heartbeat(machineId);
-    const { activity, activityReadable } = agentFrame;
-    if (activityReadable !== undefined) {
-      notifications.readable(machineId, activityReadable);
-    }
-    if (activity) {
-      notifications.machine(machineId, activity);
-    }
-    detach(keepAliveScheduler.wake(), "keepalive wake");
+    syncSection("beat: session addresses recorded", () => {
+      for (const claim of agentFrame.sessionAddresses) {
+        recordSessionAddress(ws, machineId, claim);
+      }
+    });
+    syncSection("beat: machine touched", () => db.touchAgent(machineId));
+    syncSection("beat: fleet sync", () => fleetSyncs.heartbeat(machineId));
+    syncSection("beat: desktop activity", () => {
+      const { activity, activityReadable } = agentFrame;
+      if (activityReadable !== undefined) {
+        notifications.readable(machineId, activityReadable);
+      }
+      if (activity) {
+        notifications.machine(machineId, activity);
+      }
+    });
+    syncSection("beat: keep-alive woken", () =>
+      detach(keepAliveScheduler.wake(), "keepalive wake")
+    );
   };
 
   /**
@@ -12724,21 +12736,37 @@ export const createServer = (
    * those probes, and the register is what puts a machine back in the
    * registry. So everything that reads a machine's harnesses or tools runs
    * here, off the part it reads. Then its stored sessions dated, one
-   * publish when anything moved, and its acknowledgement.
+   * publish when anything moved, and its acknowledgement. Each step a
+   * section of its own (core loop-watch.ts `syncSection`): a hold in a beat
+   * names its step.
    */
   const heartbeatFromMachine: AgentVerbs["heartbeat"] = (ws, message) => {
     const { machineId, payload: agentFrame } = message;
     beatHeard(ws, machineId, agentFrame);
-    const beat = beatReconciled(machineId, agentFrame);
-    beatTakenUp(machineId, agentFrame, beat);
-    const moved = beatStates(machineId, agentFrame);
+    const beat = syncSection("beat: reconciled", () =>
+      beatReconciled(machineId, agentFrame)
+    );
+    syncSection("beat: taken up", () =>
+      beatTakenUp(machineId, agentFrame, beat)
+    );
+    const moved = syncSection("beat: states kept", () =>
+      beatStates(machineId, agentFrame)
+    );
     const { harnesses: reported } = agentFrame;
     if (reported) {
-      harnessesReported(machineId, reported);
+      syncSection("beat: harnesses reported", () =>
+        harnessesReported(machineId, reported)
+      );
     }
-    toolsReported(machineId, agentFrame);
-    accountsReported(machineId, agentFrame);
-    const dated = beatDated(machineId, agentFrame);
+    syncSection("beat: tools reported", () =>
+      toolsReported(machineId, agentFrame)
+    );
+    syncSection("beat: accounts reported", () =>
+      accountsReported(machineId, agentFrame)
+    );
+    const dated = syncSection("beat: stored sessions dated", () =>
+      beatDated(machineId, agentFrame)
+    );
     if (
       dated > 0 ||
       reported ||
@@ -12746,27 +12774,29 @@ export const createServer = (
       beat.promoted.length > 0 ||
       beat.settled.length > 0
     ) {
-      publishInstances(machineId);
+      syncSection("beat: publish asked", () => publishInstances(machineId));
     }
-    const beatIds = agentFrame.instances;
-    const tailnetServing = tailnetHttps.serving();
-    sendToMachine(ws, {
-      verb: "heartbeat",
-      machineId,
-      payload: {
-        ok: true,
-        // What this hub took of each session: the agent lets go
-        // of what it kept to send again.
-        delivered: streams.deliveredFor(beatIds),
-        keepAwake: keptWarm(machineId, beatIds),
-        // Each keeps its boundary up there, whatever else holds it.
-        liveWorkspaces: db.liveWorkspacesOn(machineId),
-        sessionLimits: db.sessionLimits(),
-        // Its loopback carries over https while this hub serves it.
-        ...(tailnetServing ? { tailnetHttps: tailnetServing } : {}),
-        // Its desktop is read only once the person said yes to it.
-        reportActivity: notifications.reports(machineId),
-      },
+    syncSection("beat: acknowledged", () => {
+      const beatIds = agentFrame.instances;
+      const tailnetServing = tailnetHttps.serving();
+      sendToMachine(ws, {
+        verb: "heartbeat",
+        machineId,
+        payload: {
+          ok: true,
+          // What this hub took of each session: the agent lets go
+          // of what it kept to send again.
+          delivered: streams.deliveredFor(beatIds),
+          keepAwake: keptWarm(machineId, beatIds),
+          // Each keeps its boundary up there, whatever else holds it.
+          liveWorkspaces: db.liveWorkspacesOn(machineId),
+          sessionLimits: db.sessionLimits(),
+          // Its loopback carries over https while this hub serves it.
+          ...(tailnetServing ? { tailnetHttps: tailnetServing } : {}),
+          // Its desktop is read only once the person said yes to it.
+          reportActivity: notifications.reports(machineId),
+        },
+      });
     });
   };
 
@@ -13607,6 +13637,6 @@ export const createServer = (
         },
       })
       .use([hubRoutes]),
-    { previews: previewListeners, tailnet: tailnetHttps }
+    { previews: previewListeners, profiler, tailnet: tailnetHttps }
   );
 };

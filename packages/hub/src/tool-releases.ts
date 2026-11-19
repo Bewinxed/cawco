@@ -172,7 +172,7 @@ export class ToolReleases {
       return;
     }
     detach(this.readAll(), "tool releases");
-    this.#deps.lifetime.every(RELEASE_READ_MS, () =>
+    this.#deps.lifetime.every("tool releases read", RELEASE_READ_MS, () =>
       detach(this.readAll(), "tool releases")
     );
   }

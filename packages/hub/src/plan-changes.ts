@@ -386,7 +386,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     deps.lifetime.cancel(quiet.get(key));
     quiet.set(
       key,
-      deps.lifetime.after(PLAN_WAKE_QUIET_MS, () => {
+      deps.lifetime.after("plan wake quiet", PLAN_WAKE_QUIET_MS, () => {
         quiet.delete(key);
         detach(deliver(key), "plan changes delivery");
       })

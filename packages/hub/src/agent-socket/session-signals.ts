@@ -77,7 +77,7 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
           const cutId = instanceId;
           const stoppedAt = new Date();
           const cutWords = cutCommandsWords(neutral.cut);
-          ctx.lifetime.after(0, () =>
+          ctx.lifetime.after("cut turn resumed", 0, () =>
             ctx.resumeCutTurn(cutId, stoppedAt, cutWords)
           );
         } else {
