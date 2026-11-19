@@ -3,6 +3,7 @@ import {
   type FrameObserver,
   frameObserver,
 } from "#lib/platform/frame-observer.js";
+import { whenIdle } from "#lib/platform/idle-build.svelte.js";
 import { watchRendered } from "#lib/platform/rendered.js";
 import {
   dur,
@@ -16,6 +17,21 @@ import { sizingChanges } from "./sizing";
 
 /** The `data-*` names the page's styles select on, and the sheets they were read from. */
 let styled: { sheets: number; names: Set<string> } | undefined;
+
+/**
+ * The page's sheets are read for `styledData` while it is idle, once a
+ * container is there to need them. Read by the first row to leave, every
+ * rule of every sheet was walked in that change's task: 40ms at 4x CPU in
+ * Chromium, in the tap that first opened the phone's sidebar, and in no
+ * open after it (sidebar-lab cprof, one tab).
+ */
+let stylesAsked = false;
+function readStylesAhead(): void {
+  if (!stylesAsked) {
+    stylesAsked = true;
+    whenIdle(styledData);
+  }
+}
 
 /** Each `data-*` name a selector reads (`[data-state=open]`, `[data-slot]`). */
 const SELECTED = /\[\s*(data-[\w-]+)/gu;
@@ -1884,11 +1900,11 @@ export function reflowOn(container: HTMLElement, clock: ReflowClock): void {
 
 /**
  * Whether the `reflow` container around `node` is not being rendered (an
- * ancestor skips its content: the home board put away under a conversation).
- * Nothing in it can be seen moving, and measuring it lays it out. Asked by
- * whatever moves rows of its own inside a container (motion/branch), and
- * answered from what the container already knows, with nothing read off the
- * page.
+ * ancestor skips its content: the home board put away under a conversation,
+ * a kept sheet at rest). Nothing in it can be seen moving, and measuring it
+ * lays it out. Asked by whatever moves rows of its own inside a container
+ * (motion/branch) and by a word that would morph (MorphText), and answered
+ * from what the container already knows, with nothing read off the page.
  */
 export function skippedAt(node: Element): boolean {
   const container = node.closest<HTMLElement>("[data-reflow]");
@@ -1932,6 +1948,7 @@ export function reflow({ on = [] }: { on?: readonly string[] } = {}) {
     // the sheet's own default for `[data-reflow]` (design.css); read here as
     // it mounted, its computed position restyled the page mid-flush.
     node.setAttribute("data-reflow", "");
+    readStylesAhead();
     // It anchors its own scroll (`#anchor`): the browser's would move every
     // row a second time.
     node.style.overflowAnchor = "none";

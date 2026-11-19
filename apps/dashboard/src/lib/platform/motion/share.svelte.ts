@@ -126,6 +126,29 @@ export function departBox(
 const FLIGHT = "share-flight";
 
 /**
+ * Every flight under way, from its start until it has finished or been
+ * cancelled: what `carry` looks through. Asked of the page instead
+ * (`getAnimations()`), each pin of a streaming tail brought the page's style
+ * up to date first, in the size observer's delivery the pin runs in: 4-17ms
+ * a pin at 4x CPU, ten pins a second while a turn streamed
+ * (sidebar-lab settle).
+ */
+const flying = new Set<Animation>();
+
+/** `node` flies `frames`: a flight, which `carry` keeps on its way. */
+function launch(
+  node: Element,
+  frames: Keyframe[],
+  options: KeyframeAnimationOptions
+): Animation {
+  const run = node.animate(frames, { ...options, id: FLIGHT });
+  flying.add(run);
+  const landed = () => flying.delete(run);
+  run.finished.then(landed, landed);
+  return run;
+}
+
+/**
  * A flight is a path on the screen: from where the source was drawn to where
  * the destination is. Scrolling the destination's container mid-flight moves
  * the destination, and the flight — a transform off the destination's own
@@ -139,19 +162,16 @@ const FLIGHT = "share-flight";
 export function carry(within: Element, by: number): void {
   // A flight is one or two effects (its move and its cut): each target carried once.
   const carried = new Set<Element>();
-  for (const flight of within.getAnimations({ subtree: true })) {
+  for (const flight of flying) {
     const effect =
       flight.effect instanceof KeyframeEffect ? flight.effect : null;
     const target = effect?.target;
+    if (!(target && within.contains(target))) {
+      continue;
+    }
     const total = Number(effect?.getComputedTiming().duration);
     const at = Number(flight.currentTime);
-    if (
-      flight.id !== FLIGHT ||
-      flight.playState !== "running" ||
-      !target ||
-      carried.has(target) ||
-      at >= total
-    ) {
+    if (flight.playState !== "running" || carried.has(target) || at >= total) {
       continue;
     }
     carried.add(target);
@@ -380,7 +400,7 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
     }
   }
   const runs = effects.map((frames) =>
-    node.animate(frames, { id: FLIGHT, duration: ms, easing })
+    launch(node, frames, { duration: ms, easing })
   );
   Promise.allSettled(runs.map((run) => run.finished)).then(reveal);
 }
@@ -540,8 +560,7 @@ function flyMoves(): void {
     ) {
       continue;
     }
-    const run = node.animate(moveFrames(rtl, from.rect, to), {
-      id: FLIGHT,
+    const run = launch(node, moveFrames(rtl, from.rect, to), {
       duration: options.ms ?? timing.duration,
       easing: options.easing ?? timing.easing,
     });

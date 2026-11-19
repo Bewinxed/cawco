@@ -13,7 +13,7 @@
    * never a number.
    */
   const skeletonVariants = tv({
-    base: "loops block rounded-sm bg-surface-fill motion-safe:animate-skeleton-pulse",
+    base: "loops block rounded-sm bg-surface-fill motion-safe:animate-skeleton-pulse motion-safe:[animation-delay:var(--loop-at)]",
     variants: {
       /** The block it holds the place of, at that block's height. */
       height: {
@@ -106,8 +106,8 @@
 </script>
 
 <script lang="ts">
-  import type { Attachment } from "svelte/attachments";
   import type { HTMLAttributes } from "svelte/elements";
+  import { inStep } from "#lib/platform/motion/in-step.svelte.js";
   import { cn, type WithElementRef, type WithoutChildren } from "#lib/utils.js";
 
   let {
@@ -125,28 +125,13 @@
   }: WithoutChildren<WithElementRef<HTMLAttributes<HTMLSpanElement>>> &
     SkeletonLooks = $props();
 
-  /**
-   * Every pulse on one clock (The One Loop Rule): its start is the document
-   * timeline's origin, so placeholders mounted at different moments pulse in
-   * step. Only a running pulse is moved; one already held keeps its hold
-   * (setting the start of a running CSS animation leaves it observing
-   * `animation-play-state`: drafts.csswg.org/css-animations-2).
-   */
-  const oneClock: Attachment<HTMLElement> = (node) => {
-    for (const animation of node.getAnimations({ subtree: true })) {
-      if (
-        animation instanceof CSSAnimation &&
-        animation.animationName === "kit-skeleton-pulse" &&
-        animation.playState === "running"
-      ) {
-        animation.startTime = 0;
-      }
-    }
-  };
+  const step = inStep();
 </script>
 
 <!-- A span drawn as a block, so it may stand wherever its words would:
-     inside a button, a label or a line of text. -->
+     inside a button, a label or a line of text. Every pulse on one clock
+     (The One Loop Rule, motion/in-step), so placeholders mounted at
+     different moments pulse in step. -->
 <span
   class={cn(
     skeletonVariants({
@@ -163,6 +148,7 @@
   )}
   data-slot="skeleton"
   bind:this={ref}
-  {@attach oneClock}
   {...restProps}
+  style:--loop-at={step.delay}
+  {@attach step.keep}
 ></span>

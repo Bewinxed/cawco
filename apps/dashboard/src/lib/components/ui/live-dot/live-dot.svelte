@@ -1,6 +1,4 @@
 <script lang="ts" module>
-  import { breathPhase } from "@cawco/core/breath";
-  import type { Attachment } from "svelte/attachments";
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
@@ -13,7 +11,7 @@
    * in words, on screen or to a screen reader.
    */
   const liveDotVariants = tv({
-    base: "breathe loops inline-block flex-none rounded-pill",
+    base: "breathe loops inline-block flex-none rounded-pill [animation-delay:var(--loop-at)]",
     variants: {
       /**
        * Its ink: the live glyph's (the default); the live ink, on a raised
@@ -38,47 +36,11 @@
   });
 
   type LiveDotLooks = VariantProps<typeof liveDotVariants>;
-
-  /**
-   * Its breath on the one clock (core breath.ts): every live dot, here and
-   * on a previewed page's pills, breathes in step, its loop begun on the
-   * wall clock's multiples of `--duration-breath`. Set as the effect's delay, which
-   * leaves `animation-play-state` to CSS (CSS Animations 2, §2: only
-   * `play()`, `pause()`, `reverse()` and setting `startTime` take it over),
-   * so the rest rule still holds a dot nobody sees still: first from the
-   * timeline's time, then exactly from the start time it was given. Under
-   * reduced motion there is no breath to set. Any mark that takes the
-   * breath (`breathe`) takes it in step by this attachment.
-   */
-  const inStep: Attachment<Element> = (dot) => {
-    const breath = dot
-      .getAnimations()
-      .find(
-        (run): run is CSSAnimation =>
-          run instanceof CSSAnimation && run.animationName === "breath"
-      );
-    const effect = breath?.effect;
-    if (!(breath && effect)) {
-      return;
-    }
-    const period = Number(effect.getComputedTiming().duration);
-    const align = (at: number) =>
-      effect.updateTiming({
-        delay: -breathPhase(performance.timeOrigin, at, period),
-      });
-    align(Number(document.timeline.currentTime ?? performance.now()));
-    breath.ready
-      .then(() => {
-        if (breath.startTime !== null) {
-          align(Number(breath.startTime));
-        }
-      })
-      .catch(() => undefined);
-  };
 </script>
 
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
+  import { inStep } from "#lib/platform/motion/in-step.svelte.js";
   import { cn } from "#lib/utils.js";
 
   let {
@@ -92,13 +54,19 @@
     size?: LiveDotLooks["size"];
     tone?: LiveDotLooks["tone"];
   } = $props();
+
+  const step = inStep();
 </script>
 
+<!-- Its breath on the one clock (motion/in-step): every live dot, here and
+     on a previewed page's pills, breathes in step. Any mark that takes the
+     breath (`breathe`) takes it in step so. -->
 <span
   aria-hidden="true"
   class={cn(liveDotVariants({ cut, size, tone }), className)}
   data-box
   data-slot="live-dot"
   {...rest}
-  {@attach inStep}
+  style:--loop-at={step.delay}
+  {@attach step.keep}
 ></span>

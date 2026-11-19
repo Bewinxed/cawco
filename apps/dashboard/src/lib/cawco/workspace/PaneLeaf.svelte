@@ -503,10 +503,11 @@
            restyles the pane whole; the skip holds back that
            restyle under it, so the pane asks its loops' style once it has
            painted (`holdSkipped`). Laid out off screen (`.pane-settling`:
-           its transcript still on its way, or not yet drawn) it is
-           `data-offscreen` too: invisible, its veil's skeletons pulsed on,
-           each one restyled every frame, in up to a dozen panes for the
-           first half minute of a 29-tab layout (3-5ms of style a frame). -->
+           its transcript built and not yet drawn) it is `data-offscreen`
+           too: invisible, its veil's skeletons pulsed on, each one restyled
+           every frame (3-5ms of style a frame, when every pane still to
+           draw was laid out, a dozen at once for the first half minute of
+           a 29-tab layout). -->
       <div
         data-pane-settling={(!shown && laidOut) || undefined}
         data-pane-hidden={!(shown || laidOut) || undefined}

@@ -6,9 +6,10 @@
  * beside the log, never through the virtualized container itself.
  */
 import { untrack } from "svelte";
+import { SvelteSet } from "svelte/reactivity";
 import type { VirtualizerHandle } from "virtua/svelte";
 import type { SessionState } from "../stores/sessions.svelte";
-import { warm } from "../workspace/warm.svelte";
+import { afterPaint, warm } from "../workspace/warm.svelte";
 import { drawnAt } from "./list-whole.svelte";
 import type { Row } from "./rows";
 
@@ -94,6 +95,7 @@ const STAGE_ROWS = 6;
 /** How many views of rows from the end a far landing stages: its view, and the screen above it the buffer mounts. */
 const ABOVE_LANDING = 2;
 export interface MountedRowsHost {
+  readonly landed: boolean;
   readonly pin: {
     readonly atBottom: boolean;
     readonly landingAway: ReturnType<typeof setTimeout> | undefined;
@@ -674,6 +676,60 @@ export class MountedRows {
   /** Steps a warming pane's staging waits for the away landing's scroll (`stageStep`); 0 once it has come. */
   awayScroll = 0;
 
+  /**
+   * A PANE BUILT HIDDEN MOUNTS ITS ROWS ONE A TASK.
+   *
+   * A pane nobody can see builds its transcript on its turn at the
+   * scheduler's slow tier (SessionPane `turned`), laid out unseen so it is
+   * drawn before its tab is chosen (dock.svelte.ts `settling`). virtua cut
+   * its first range at `ROW_ESTIMATE` a row, 21px, so the view at the tail
+   * held 25-27 rows, and every one of them was built, styled and laid out in
+   * that task; measured a frame later, 16-18 of them were let go (sidebar-lab
+   * items, 29 tabs: 25-27 mounted, 5-6 kept, a pane a second for the first
+   * half minute). At 4x CPU each build was a 121-151ms task and a 71-74ms one
+   * behind it.
+   *
+   * So a pane built hidden stands a row nobody has looked at as an empty box
+   * at that estimate (`admits`, in the list's snippet), which virtua measures
+   * at the size it already has for it, and builds the rows the view holds
+   * one a task, each once the frame has measured the last (web.dev,
+   * "Optimize long tasks"; `afterPaint`), from the newest up: each row built
+   * pushes the boxes above it out of the view, and virtua lets them go. Once
+   * the view holds built rows alone, every row is built as it comes
+   * (`admitAll`), and the list is drawn (ListLanding's reveal waits for it).
+   * Shown before then, the pane builds what its view holds at once.
+   */
+  admitAll: boolean;
+
+  /** The rows a pane built hidden has built so far, by key (`admitAll`). */
+  readonly admitted = new SvelteSet<string>();
+
+  /** Whether the list builds `key`'s row, or stands an empty box in its place (`admitAll`). */
+  readonly admits = (key: string): boolean =>
+    this.admitAll || this.admitted.has(key);
+
+  /** One step of a hidden build: the newest row in view not built yet, built; answers whether another is due. */
+  admitStep(): boolean {
+    const { list } = this.#host.pin;
+    const rows = this.#host.rowDraw.renderedRows;
+    if (!list || rows.length === 0) {
+      this.admitAll = true;
+      return false;
+    }
+    const top = list.getScrollOffset();
+    const first = this.#drawnAt(top);
+    const last = this.#drawnAt(top + list.getViewportSize());
+    for (let index = last; index >= first; index -= 1) {
+      const key = rows[index]?.key;
+      if (key !== undefined && !this.admitted.has(key)) {
+        this.admitted.add(key);
+        return true;
+      }
+    }
+    this.admitAll = true;
+    return false;
+  }
+
   constructor(host: MountedRowsHost) {
     this.#host = host;
     this.unseen = $state(untrack(() => !this.#host.visible));
@@ -682,6 +738,32 @@ export class MountedRows {
     this.unwinding = false;
     this.stagedReady = false;
     this.staging = false;
+    this.admitAll = $state(untrack(() => this.#host.visible));
+
+    // A pane built hidden, once it has landed: a row a task (`admitAll`).
+    // Shown, at once.
+    $effect(() => {
+      if (this.admitAll) {
+        return;
+      }
+      if (this.#host.visible) {
+        this.admitAll = true;
+        return;
+      }
+      if (!(this.#host.landed && this.#host.pin.list)) {
+        return;
+      }
+      let cancel = (): void => undefined;
+      const step = () => {
+        cancel = afterPaint(() => {
+          if (untrack(() => this.admitStep())) {
+            step();
+          }
+        });
+      };
+      step();
+      return () => cancel();
+    });
 
     $effect(() => {
       const now = this.#host.visible;

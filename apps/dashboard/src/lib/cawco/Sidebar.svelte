@@ -16,6 +16,7 @@
    */
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { sidebarWords } from "@cawco/core/words/sidebar";
+  import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -36,6 +37,8 @@
     IconSearch,
     IconSettings,
   } from "#lib/icons.js";
+  import { type IdleBuild, whenIdle } from "#lib/platform/idle-build.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
   import { type BranchOptions, branch } from "../platform/motion/branch.svelte";
@@ -97,6 +100,7 @@
   import { folderOf } from "./projects";
   import RailProjectEnd from "./RailProjectEnd.svelte";
   import { rail } from "./rail.svelte";
+  import { RAIL_STAGE, railHeld, setKeptRail } from "./rail-build.svelte";
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
@@ -110,6 +114,8 @@
   import { workspace } from "./workspace/workspace.svelte";
 
   let {
+    build,
+    held = false,
     onsearch,
     onfiles,
     toggleRoom = false,
@@ -117,6 +123,14 @@
     sheet = false,
     scroller,
   }: {
+    /**
+     * The phone's sheet, built before its first open (Shell `railBuild`):
+     * each part stands once its stage is built, and Recent's and the
+     * projects' rows come a few a slice (rail-build `RAIL_STAGE`).
+     */
+    build?: IdleBuild;
+    /** The phone's sheet is closed: what the rail reads stands as it was (rail-build `railHeld`). */
+    held?: boolean;
     /** Opens Jump, from the phone's Search field (Shell owns the palette). */
     onsearch?: () => void;
     /** Opens Files for the conversation on screen, from the phone's Files row (Shell owns its drawer). */
@@ -184,6 +198,70 @@
   // Rows drawn in this rail (Projects', Recent's project groups) follow
   // their link in the phone's sheet (project-press.ts).
   setRailSheet(() => sheet);
+  if (build) {
+    setKeptRail({
+      build,
+      get held() {
+        return held;
+      },
+      get fresh() {
+        return fresh;
+      },
+    });
+  }
+
+  /** How many times the closed rail has read what it holds again (rail-build `railHeld`). */
+  let fresh = $state(0);
+  /** When it last did, on the page's clock. */
+  let freshAt = 0;
+  /** The refresh asked for and not yet run: how to call it off. */
+  let refreshing: (() => void) | null = null;
+  /** The least time between two refreshes of the closed rail, ms. */
+  const REFRESH_MS = 1000;
+
+  /**
+   * The closed rail reads what it holds again once something it is read
+   * from has changed (the board's rows, the projects, what waits on you,
+   * the minute), in idle time and a second apart at most, so the open
+   * takes in what changed since alone (rail-build `railHeld`).
+   */
+  function refreshHeld(): void {
+    if (refreshing) {
+      return;
+    }
+    let idle: (() => void) | null = null;
+    const wait = setTimeout(
+      () => {
+        idle = whenIdle(() => {
+          refreshing = null;
+          freshAt = performance.now();
+          fresh += 1;
+        });
+      },
+      Math.max(0, freshAt + REFRESH_MS - performance.now())
+    );
+    refreshing = () => {
+      clearTimeout(wait);
+      idle?.();
+      refreshing = null;
+    };
+  }
+  $effect(() => {
+    if (!(build && held)) {
+      untrack(() => refreshing?.());
+      return;
+    }
+    track(
+      boardStore.listedInstances,
+      boardStore.olderInstances,
+      projectsStore.projects,
+      asksStore.waitingCount,
+      clock.now
+    );
+    untrack(refreshHeld);
+  });
+  /** Whether the part at `stage` stands: always, but in a sheet still being built. */
+  const stands = (stage: number): boolean => !build || build.has(stage);
 
   /** The rail itself: its session rows open the session card (SessionHover). */
   let railEl = $state<HTMLElement>();
@@ -214,7 +292,7 @@
   /* ---- projects ------------------------------------------------------- */
 
   /** Pinned first, then by name. */
-  const orderedProjects = $derived.by(() =>
+  const heldProjects = railHeld(() =>
     [...projectsStore.projects].sort((a, b) => {
       const pa = rail.isPinned(a.id) ? 0 : 1;
       const pb = rail.isPinned(b.id) ? 0 : 1;
@@ -224,19 +302,20 @@
       return a.name.localeCompare(b.name);
     })
   );
+  const orderedProjects = $derived(heldProjects());
 
   /**
    * A project's running sessions that are their own top, never a delegate
    * (owner: "the working count shouldn't count delegates"), newest started
    * first: its count, on its mark, and the rows that mark unfolds under it.
    */
-  const runningIn = $derived.by(() => {
+  const heldRunning = railHeld(() => {
     const running = new Map<string, BoardRow[]>();
     for (const row of boardStore.runningInstances) {
       if (row.projectId && !isDelegate(row)) {
-        const held = running.get(row.projectId);
-        if (held) {
-          held.push(row);
+        const rows = running.get(row.projectId);
+        if (rows) {
+          rows.push(row);
         } else {
           running.set(row.projectId, [row]);
         }
@@ -247,20 +326,23 @@
     }
     return running;
   });
+  const runningIn = $derived(heldRunning());
 
   /** Each listed top's delegates, at any depth: read only while a project's sessions are out. */
-  const delegatesOf = $derived(
+  const heldDelegates = railHeld(() =>
     delegatesByTop(boardStore.listedInstances, boardStore.listedById)
   );
+  const delegatesOf = $derived(heldDelegates());
 
   /** Projects' unfolded sessions keep their own open delegates (open-trees). */
   const PROJECTS_LIST: TreeList = "rail-projects";
   /** What the older rule reads of the fleet (older.ts). */
-  const reading = $derived<Reading>({
+  const heldReading = railHeld<Reading>(() => ({
     lastAt,
     now: clock.now,
     running: runningIds(),
-  });
+  }));
+  const reading = $derived(heldReading());
   /** A session row's age, as Recent says it. */
   const ageOf = (row: BoardRow): string => {
     const at = lastAt(row);
@@ -481,10 +563,12 @@
    * The sessions waiting on you (core `waitingOnYou`), in the attention
    * tone; else the ones running, never their delegates.
    */
-  const fleetCount = $derived(
-    asksStore.waitingCount ||
+  const heldFleetCount = railHeld(
+    () =>
+      asksStore.waitingCount ||
       boardStore.runningInstances.filter((row) => !isDelegate(row)).length
   );
+  const fleetCount = $derived(heldFleetCount());
   /** A project row's link in the rail: its end's tray hands the focus back to it. */
   const railLinkId = (projectId: string) => `rail-project-${projectId}`;
 </script>
@@ -741,109 +825,115 @@
     {@attach reflow()}
     {@attach scroller}
   >
-    {#if sheet && onsearch}
-      <!-- The phone's search: the Jump palette's field, which opens Jump
-           hanging from the bar's glass, standing where the sheet starts; a
-           press closes the sheet and opens the palette. -->
-      <div class="px-space-2 pb-space-1">
-        <button
-          data-slot="search"
-          aria-haspopup="dialog"
-          class="select-none mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-c-btn-h-lg px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
-          data-share="jump"
-          onclick={() => onsearch()}
-          type="button"
-        >
-          <IconSearch class="flex-none size-icon-md" />
-          <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-            >Search sessions, projects, machines</span
+    {#if stands(RAIL_STAGE.places)}
+      {#if sheet && onsearch}
+        <!-- The phone's search: the Jump palette's field, which opens Jump
+             hanging from the bar's glass, standing where the sheet starts; a
+             press closes the sheet and opens the palette. -->
+        <div class="px-space-2 pb-space-1">
+          <button
+            data-slot="search"
+            aria-haspopup="dialog"
+            class="select-none mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-c-btn-h-lg px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
+            data-share="jump"
+            onclick={() => onsearch()}
+            type="button"
           >
-        </button>
-      </div>
-    {/if}
-    {#if sheet && onfiles && files.session}
-      {@const count = filesCount(files.session)}
-      <!-- The conversation on screen's Files, where the phone keeps the
-           bar's other items: one row under the search, its count on the
-           row's badge as Fleet's stands. Its drawer is Shell's. -->
+            <IconSearch class="flex-none size-icon-md" />
+            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+              >Search sessions, projects, machines</span
+            >
+          </button>
+        </div>
+      {/if}
+      {#if sheet && onfiles && files.session}
+        {@const count = filesCount(files.session)}
+        <!-- The conversation on screen's Files, where the phone keeps the
+             bar's other items: one row under the search, its count on the
+             row's badge as Fleet's stands. Its drawer is Shell's. -->
+        <Sidebar.Group pad="rail">
+          <Sidebar.Menu aria-label="This conversation" gap="tight">
+            <Sidebar.MenuItem>
+              <Sidebar.MenuButton isActive={false} row="nav">
+                {#snippet child({ props })}
+                  <button
+                    {...props}
+                    class="select-none {props.class} mark-line"
+                    aria-label={count ? `Files, ${count}` : "Files"}
+                    data-sidebar-files
+                    onclick={() => onfiles()}
+                    type="button"
+                  >
+                    <span class={SLOT} data-box
+                      ><IconFiles class={SLOT_GLYPH} /></span
+                    ><span>Files</span>
+                  </button>
+                {/snippet}
+              </Sidebar.MenuButton>
+              {#if count}
+                <!-- Centred on its nav row, as Fleet's count stands. -->
+                <Sidebar.MenuBadge>{count}</Sidebar.MenuBadge>
+              {/if}
+            </Sidebar.MenuItem>
+          </Sidebar.Menu>
+        </Sidebar.Group>
+      {/if}
+      <!-- On a wide screen the home is the sidebar: what needs you, what is
+           working, what finished, and the rest, while the transcripts take the
+           screen. On the narrow line the same home leads the sheet, above the
+           projects; with no session open the session surface draws its own
+           page of it too. -->
+      <!-- The app's places, first: one compact block, no heading over it. -->
       <Sidebar.Group pad="rail">
-        <Sidebar.Menu aria-label="This conversation" gap="tight">
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={false} row="nav">
-              {#snippet child({ props })}
-                <button
-                  {...props}
-                  class="select-none {props.class} mark-line"
-                  aria-label={count ? `Files, ${count}` : "Files"}
-                  data-sidebar-files
-                  onclick={() => onfiles()}
-                  type="button"
+        <!-- The pill's host: a list is a `ul`, which holds no layers of its own. -->
+        <div {@attach highlight(PILL)}>
+          <Sidebar.Menu aria-label="Places" gap="tight">
+            <Sidebar.MenuItem>
+              <!-- The board is the place while it is on screen; with a
+                   conversation or a project open, its row is the one
+                   selection. -->
+              <Sidebar.MenuButton
+                isActive={onWorkspace && workspace.activeTab === null}
+                row="nav"
+              >
+                {#snippet child({ props })}
+                  <a href="/session" {...props} class="{props.class} mark-line">
+                    <span class={SLOT} data-box
+                      ><IconBox class={SLOT_GLYPH} /></span
+                    >
+                    <span>Fleet</span>
+                  </a>
+                {/snippet}
+              </Sidebar.MenuButton>
+              {#if fleetCount}
+                <!-- A status count keeps its status pair whatever the row does:
+                     the kit's active and hover inks are for a plain count, and
+                     on the live fill the active one reads 3.3:1. -->
+                <Sidebar.MenuBadge
+                  data-blocked={asksStore.waitingCount > 0 || undefined}
+                  data-flip="pop box"
+                  tone="live"
                 >
-                  <span class={SLOT} data-box
-                    ><IconFiles class={SLOT_GLYPH} /></span
-                  ><span>Files</span>
-                </button>
-              {/snippet}
-            </Sidebar.MenuButton>
-            {#if count}
-              <!-- Centred on its nav row, as Fleet's count stands. -->
-              <Sidebar.MenuBadge>{count}</Sidebar.MenuBadge>
-            {/if}
-          </Sidebar.MenuItem>
-        </Sidebar.Menu>
+                  <MorphText text={String(fleetCount)} />
+                </Sidebar.MenuBadge>
+              {/if}
+            </Sidebar.MenuItem>
+          </Sidebar.Menu>
+        </div>
       </Sidebar.Group>
     {/if}
-    <!-- On a wide screen the home is the sidebar: what needs you, what is
-         working, what finished, and the rest, while the transcripts take the
-         screen. On the narrow line the same home leads the sheet, above the
-         projects; with no session open the session surface draws its own
-         page of it too. -->
-    <!-- The app's places, first: one compact block, no heading over it. -->
-    <Sidebar.Group pad="rail">
-      <!-- The pill's host: a list is a `ul`, which holds no layers of its own. -->
-      <div {@attach highlight(PILL)}>
-        <Sidebar.Menu aria-label="Places" gap="tight">
-          <Sidebar.MenuItem>
-            <!-- The board is the place while it is on screen; with a
-                 conversation or a project open, its row is the one
-                 selection. -->
-            <Sidebar.MenuButton
-              isActive={onWorkspace && workspace.activeTab === null}
-              row="nav"
-            >
-              {#snippet child({ props })}
-                <a href="/session" {...props} class="{props.class} mark-line">
-                  <span class={SLOT} data-box
-                    ><IconBox class={SLOT_GLYPH} /></span
-                  >
-                  <span>Fleet</span>
-                </a>
-              {/snippet}
-            </Sidebar.MenuButton>
-            {#if fleetCount}
-              <!-- A status count keeps its status pair whatever the row does:
-                   the kit's active and hover inks are for a plain count, and
-                   on the live fill the active one reads 3.3:1. -->
-              <Sidebar.MenuBadge
-                data-blocked={asksStore.waitingCount > 0 || undefined}
-                data-flip="pop box"
-                tone="live"
-              >
-                <MorphText text={String(fleetCount)} />
-              </Sidebar.MenuBadge>
-            {/if}
-          </Sidebar.MenuItem>
-        </Sidebar.Menu>
-      </div>
-    </Sidebar.Group>
     <!-- Recent, the sessions: what the home holds in the rail (its status
          line, the starts under way, the one Recent list). -->
-    <Home active={activeSession} variant="rail" />
+    {#if stands(RAIL_STAGE.recent)}
+      <Home active={activeSession} variant="rail" />
+    {/if}
 
     <!-- Projects stand from the first paint, as the board was read for
          this page (home `ready`). Until it is in hand, rows standing where
          they will be. -->
-    {#if home.ready}
+    {#if !stands(RAIL_STAGE.projects)}
+      <!-- Built in a later slice (`build`). -->
+    {:else if home.ready}
       <!-- Projects, the index of every project: one row each, its running
            count on its mark, which unfolds those sessions under it, grouped
            by the same kind of menu as Recent (area first). A seam and room
@@ -923,7 +1013,7 @@
                 ? "var(--spacing-space-3)"
                 : "var(--spacing-space-row)"}
             >
-              {#each projectRows as item (item.key)}
+              {#each build ? build.rows(projectRows, RAIL_STAGE.projects) : projectRows as item (item.key)}
                 {@render projectTreeRow(item)}
               {/each}
             </ul>
@@ -933,7 +1023,7 @@
     {:else}
       {@render pending(6)}
     {/if}
-    {#if sheet}
+    {#if sheet && stands(RAIL_STAGE.machines)}
       <!-- The machines, where a phone keeps them: each with its status and
            its menu (a long press), then Add machine. -->
       <Sidebar.Group data-flip pad="rail">
@@ -949,48 +1039,50 @@
   <!-- ────────────────────── footer ──────────────────────── -->
 
   <Sidebar.Footer {@attach reflow()}>
-    <!-- Limits are read on machines: with none online the strip would only
+    {#if stands(RAIL_STAGE.footer)}
+      <!-- Limits are read on machines: with none online the strip would only
          repeat the empty fleet (home `limitsShown`). -->
-    {#if home.limitsShown}
-      <UsageMeter />
-    {/if}
-    <!-- One row at every rail width: the product holds no name for the
+      {#if home.limitsShown}
+        <UsageMeter />
+      {/if}
+      <!-- One row at every rail width: the product holds no name for the
          reader (a single operator, called "you"), so the user chip is its
          avatar alone and says "You" in its tooltip. -->
-    <div class="flex items-center gap-space-1" data-flip>
-      <Sidebar.Menu aria-label="User" class="w-auto">
-        <Sidebar.MenuItem>
-          <!-- The reader's avatar, with their presence on its corner and its
+      <div class="flex items-center gap-space-1" data-flip>
+        <Sidebar.Menu aria-label="User" class="w-auto">
+          <Sidebar.MenuItem>
+            <!-- The reader's avatar, with their presence on its corner and its
                menu: Appear away, and the machines that count. -->
-          <PresenceMenu />
-        </Sidebar.MenuItem>
-      </Sidebar.Menu>
-      <!-- Configure, the theme and sound: the settings in the corner. -->
-      <div
-        data-slot="sidebar-settings"
-        class="ms-auto flex items-center gap-space-1"
-      >
-        <Tip label="Configure">
-          {#snippet children(tip)}
-            <Button
-              {...tip}
-              aria-current={configuring ? "page" : undefined}
-              aria-label="Configure"
-              current="selected"
-              data-rail-configure
-              href={configureHref}
-              size="icon-sm"
-              variant="ghost"
-            >
-              <IconSettings class="size-icon-md" />
-            </Button>
-          {/snippet}
-        </Tip>
-        <ThemeSwitcher />
-        <SoundSwitcher />
-        <CawLoopSwitcher />
+            <PresenceMenu />
+          </Sidebar.MenuItem>
+        </Sidebar.Menu>
+        <!-- Configure, the theme and sound: the settings in the corner. -->
+        <div
+          data-slot="sidebar-settings"
+          class="ms-auto flex items-center gap-space-1"
+        >
+          <Tip label="Configure">
+            {#snippet children(tip)}
+              <Button
+                {...tip}
+                aria-current={configuring ? "page" : undefined}
+                aria-label="Configure"
+                current="selected"
+                data-rail-configure
+                href={configureHref}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <IconSettings class="size-icon-md" />
+              </Button>
+            {/snippet}
+          </Tip>
+          <ThemeSwitcher />
+          <SoundSwitcher />
+          <CawLoopSwitcher />
+        </div>
       </div>
-    </div>
+    {/if}
   </Sidebar.Footer>
   <SessionHover within={railEl} />
 </div>

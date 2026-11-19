@@ -865,9 +865,13 @@
                makes each of its changes restyle the whole row. The offer of
                a conversation not being written to: built and laid out where
                it would stand, unseen and out of reach (`visibility` takes it
-               out of the tab order and the accessibility tree). -->
+               out of the tab order and the accessibility tree), and
+               offscreen: measured from the next frame's delivery, never as
+               it mounts (frameSize), when a conversation built in the
+               background brings its offer. -->
           <div
             data-composer-away={row.id !== showing || undefined}
+            data-offscreen={row.id !== showing || undefined}
             class="absolute inset-x-0 bottom-0 pointer-events-auto has-[>*]:pb-space-3 data-composer-away:invisible"
             {@attach offerStack.measureOffer(row.id)}
           >

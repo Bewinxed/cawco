@@ -878,11 +878,18 @@
    * is the cross-fade, and nothing under it moves.
    */
   const veiled = $derived(!(prestart || namedState) && (waiting || !shown));
-  // Hidden while veiled, the pane is still laid out, so its transcript can
-  // measure and draw before its tab is chosen (dock.svelte.ts `settling`).
+  // Hidden while its transcript is built and not yet drawn, the pane is still
+  // laid out, so the transcript can measure and draw before its tab is
+  // chosen (dock.svelte.ts `settling`). Not before: a pane waiting for its
+  // history, or for its turn to build (`turned`), holds only its skeleton,
+  // which nobody sees, and laid out it was laid out again in every layout
+  // of the page while it waited. At 29 tabs a dozen and more panes waited
+  // so for the first half minute, and each style or layout the page asked
+  // for meanwhile took them all in (sidebar-lab settle: 28-45ms layouts at
+  // 4x CPU in a size observer's delivery).
   settleWhile(
     () => viewId,
-    () => veiled
+    () => veiled && mounted
   );
 
   /**

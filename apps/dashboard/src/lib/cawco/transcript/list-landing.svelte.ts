@@ -10,6 +10,7 @@ import { tick, untrack } from "svelte";
 import { track } from "#lib/platform/track.js";
 import { type SessionState, sessionsStore } from "../stores/sessions.svelte";
 import { readOlderPage } from "../stores/transcript-reads.svelte";
+import { afterPaint } from "../workspace/warm.svelte";
 import { compactionMarkComing } from "./compaction-mark";
 import { LANDING_HOLD_MS, type Landing } from "./kept-place.svelte";
 import type { Row } from "./rows";
@@ -25,6 +26,9 @@ export interface ListLandingHost {
     resume: Landing | null;
   };
   landed: boolean;
+  readonly mounted: {
+    readonly admitAll: boolean;
+  };
   readonly older: {
     readonly paged: () => SessionState | null;
   };
@@ -248,10 +252,12 @@ export class ListLanding {
         (store !== null && store !== this.#host.session && store.loading);
       track(this.#host.seek.asked);
 
+      // A pane built hidden is drawn once the view holds built rows alone
+      // (MountedRows `admitAll`).
       if (
         this.#host.shown ||
         reading ||
-        !(this.#host.landed && node && container)
+        !(this.#host.landed && this.#host.mounted.admitAll && node && container)
       ) {
         return;
       }
@@ -394,16 +400,28 @@ export class ListLanding {
         }
         return;
       }
-      if (this.#host.rowBuild.rows.length > 0) {
-        detach(
-          tick().then(() => {
-            if (!this.#host.landed) {
-              this.land();
-            }
-          }),
-          "tick"
-        );
+      if (this.#host.rowBuild.rows.length === 0) {
+        return;
       }
+      // A pane built hidden lands once the frame that laid its list out has
+      // painted (MountedRows `admitAll`): landed in the task that built it,
+      // the pin read the list's place there (`tailTop`), laying the page
+      // out under the list just written, the task's longest part.
+      if (!this.#host.mounted.admitAll) {
+        return afterPaint(() => {
+          if (!this.#host.landed) {
+            this.land();
+          }
+        });
+      }
+      detach(
+        tick().then(() => {
+          if (!this.#host.landed) {
+            this.land();
+          }
+        }),
+        "tick"
+      );
     });
   }
 }

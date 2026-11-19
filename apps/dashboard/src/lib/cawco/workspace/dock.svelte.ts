@@ -51,9 +51,10 @@ const sameFront = (a: PaneFront | undefined, b: PaneFront): boolean =>
 export const paneFronts = new SvelteMap<string, PaneFront>();
 
 /**
- * The conversations whose pane has not drawn its first picture yet: its
- * placeholder still stands over history on its way or a transcript not yet
- * measured. Written by the pane (`SessionPane`).
+ * The conversations whose transcript is built and has not drawn its first
+ * picture yet: its placeholder still stands over a transcript not yet
+ * measured. Written by the pane (`SessionPane`); a pane still waiting for
+ * its history, or for its turn to build, is not one of them.
  *
  * A group lays such a pane out while it is hidden, and skips only those that
  * have drawn (PaneLeaf `.pane-settling`). A transcript draws once every row

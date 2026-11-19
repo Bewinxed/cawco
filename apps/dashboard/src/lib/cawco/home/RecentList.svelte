@@ -43,6 +43,7 @@
   import { olderOut } from "../OlderRows.svelte";
   import { type Reading, runningIds } from "../older";
   import { openTrees, type TreeList } from "../open-trees.svelte";
+  import { RAIL_STAGE, railHeld, railKept } from "../rail-build.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
   import { isFailed } from "../stores/board.svelte";
   import TreeLine from "../TreeLine.svelte";
@@ -80,11 +81,16 @@
     active: string | null;
   } = $props();
 
+  /** The phone's sheet built before its first open: its rows come a few a slice (rail-build). */
+  const build = railKept()?.build;
+
   const list: TreeList = $derived(
     variant === "rail" ? "rail-recent" : "home-recent"
   );
   const levels = $derived(inForce(grouping.recent));
-  const entries = $derived(recentEntries());
+  /** Held while the phone's sheet is closed (rail-build `railHeld`). */
+  const heldEntries = railHeld(recentEntries);
+  const entries = $derived(heldEntries());
   const groups = $derived(groupEntries(entries, levels));
   /** No project above the rows: each row names its own under its title. */
   const tall = $derived(!levels.includes("project"));
@@ -131,11 +137,12 @@
   /* ── A session's delegates, as every tree in the app hangs them ────── */
 
   /** What the older rule reads of the fleet. */
-  const reading = $derived<Reading>({
+  const heldReading = railHeld<Reading>(() => ({
     lastAt,
     now: clock.now,
     running: runningIds(),
-  });
+  }));
+  const reading = $derived(heldReading());
 
   /* ── The list as one flat tree ─────────────────────────────────────── */
 
@@ -394,7 +401,7 @@
           ? "var(--spacing-space-3)"
           : undefined}
       >
-        {#each rows as item (item.key)}
+        {#each build ? build.rows(rows, RAIL_STAGE.recent) : rows as item (item.key)}
           {@render treeRow(item)}
         {/each}
       </ul>

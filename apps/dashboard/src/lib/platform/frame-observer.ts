@@ -131,13 +131,23 @@ export interface FrameObserver {
  * `measure` only reads the element; `take` only writes state. Both are
  * untracked as the element mounts, so nothing they read re-runs the
  * attachment.
+ *
+ * An element mounted where nobody sees it (under `data-offscreen`: a pane
+ * not shown, a kept sheet at rest) is not measured
+ * as it mounts: no frame of it is painted, and the read laid the page out in
+ * the task that mounted it, 15-31ms at 4x CPU for each conversation the
+ * background built in its first seconds (Split's width, the transcript's
+ * dock room: sidebar-lab settle). Its first size comes with the next
+ * delivery, as every later one does.
  */
 export function frameSize<T extends Element, V>(
   measure: (node: T) => V,
   take: (value: V) => void
 ): Attachment<T> {
   return (node) => {
-    untrack(() => take(measure(node)));
+    if (!node.closest("[data-offscreen]")) {
+      untrack(() => take(measure(node)));
+    }
     let measured: { value: V } | null = null;
     const sized = frameObserver(
       () => {

@@ -88,7 +88,14 @@
     {@const front = paneFronts.get(id)}
     <!-- The wrapper is a flex item of whichever slot it lands in, and the slot
          is the pane's whole box. -->
-    <div class="flex min-h-0 min-w-0 flex-auto" use:dock={id}>
+    <!-- A pane not shown is built where nobody sees it (`data-offscreen`):
+         what it measures as it mounts waits for the next frame's delivery
+         (frameSize). -->
+    <div
+      class="flex min-h-0 min-w-0 flex-auto"
+      data-offscreen={!front?.shown || undefined}
+      use:dock={id}
+    >
       <RegionBoundary face="page" part="conversation">
         <SessionPane
           active={front?.active ?? false}

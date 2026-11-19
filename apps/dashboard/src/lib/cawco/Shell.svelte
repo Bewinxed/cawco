@@ -34,6 +34,7 @@
     IconSidebarToggleLinear,
   } from "#lib/icons.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { IdleBuild } from "#lib/platform/idle-build.svelte.js";
   import { navSheet } from "#lib/platform/motion/clock.svelte.js";
   import {
     crossOut,
@@ -85,6 +86,7 @@
   import NeedsCaw from "./NeedsCaw.svelte";
   import Overlays from "./Overlays.svelte";
   import RegionBoundary from "./RegionBoundary.svelte";
+  import { RAIL_STAGES } from "./rail-build.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
   import { runShellShortcut, shellShortcutsAre } from "./shell-shortcut";
@@ -910,20 +912,66 @@
   const railed = $derived(browser ? !drawerQuery.current : true);
 
   /**
-   * The drawer's rail is built at its sheet's first open and kept from then
-   * on, under the drawer's line: closed, it stands skipped and held still
-   * in its kept sheet (Sheet.Content `keep`), so each later open only shows
-   * it. Built again at every open, every project, session and tree mark in
-   * it was made in the tap's own frame, and the sheet began to move only
-   * once that was done (on 29 open tabs at 4x CPU in Chromium, an 871ms
-   * task, 208ms kept). Over the line it goes, as the wide rail comes.
+   * The drawer's rail is kept, under the drawer's line: closed, it stands
+   * skipped and held still in its kept sheet (Sheet.Content `keep`), so an
+   * open only shows it. Built again at every open, every project, session
+   * and tree mark in it was made in the tap's own frame, and the sheet began
+   * to move only once that was done (on 29 open tabs at 4x CPU in Chromium,
+   * an 871ms task, 208ms kept). Over the line it goes, as the wide rail
+   * comes, and is built again under it.
+   *
+   * It is built before its first open, once the page is idle, a part and a
+   * few rows a slice (IdleBuild; rail-build's stages), so the first tap
+   * only shows it as every later one does. Built in the first tap, the tap
+   * waited on it: on 29 open tabs at 4x CPU in Chromium the sheet began to
+   * move 1,076ms after the first tap and 457ms after a later one; built
+   * ahead, 577ms and 486ms (sidebar-lab sheet, median of 5 loads). Opened
+   * before it is whole, what is left is built in the tap. Closed, its lists
+   * stand as they were (Sidebar `held`, rail-build `railHeld`) and are read
+   * again as it opens.
    */
-  let railKept = $state(false);
+  const railBuild = new IdleBuild(RAIL_STAGES);
+  /** The phone's sheet, kept: its own element. */
+  let railSheet = $state<HTMLElement | null>(null);
+
+  /**
+   * The sheet's first control takes the focus as it opens, the one the
+   * kit's focus scope gives it (bits-ui FocusScope: tabbable's first, the
+   * brand link), found by walking its controls in document order to the
+   * first one drawn. tabbable read every element of the rail first, its
+   * style and its boxes, about 1,800 at 29 tabs, in the frame that draws
+   * the sheet's first step: 31ms at 4x CPU in Chromium at the first open
+   * (sidebar-lab cprof, one tab).
+   */
+  function focusRailFirst(event: Event): void {
+    event.preventDefault();
+    requestAnimationFrame(() => {
+      const sheet = railSheet;
+      if (!sheet || sheet.contains(document.activeElement)) {
+        return;
+      }
+      for (const control of sheet.querySelectorAll<HTMLElement>(
+        "a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex], [contenteditable]"
+      )) {
+        if (
+          control.tabIndex >= 0 &&
+          !control.closest("[inert]") &&
+          control.checkVisibility({ visibilityProperty: true })
+        ) {
+          control.focus({ preventScroll: true });
+          return;
+        }
+      }
+      sheet.focus({ preventScroll: true });
+    });
+  }
   $effect(() => {
     if (railed) {
-      railKept = false;
+      railBuild.reset();
     } else if (railOpen) {
-      railKept = true;
+      railBuild.finish();
+    } else {
+      railBuild.start();
     }
   });
 
@@ -1495,6 +1543,8 @@
         keep
         narrow
         pad="none"
+        bind:ref={railSheet}
+        onOpenAutoFocus={focusRailFirst}
         onCloseAutoFocus={(event) => {
           if (barGlass.open === "jump") {
             event.preventDefault();
@@ -1504,9 +1554,11 @@
         title="Navigation"
         titleHidden
       >
-        {#if !railed && (railKept || railOpen)}
+        {#if !railed && railBuild.has(0)}
           <RegionBoundary face="line" part="sidebar">
             <Sidebar
+              build={railBuild}
+              held={!railOpen}
               {narrow}
               onfiles={openFilesSheet}
               onsearch={() => fromSheet("jump")}

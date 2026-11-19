@@ -694,22 +694,33 @@
       bind:this={pin.list}
     >
       {#snippet children(row)}
-        <TranscriptRow
-          continues={rails.continued.has(row.key)}
-          handoff={rowDraw.presentation.handed.get(row.key)}
-          heightOf={rowDraw.heightOfRow}
-          id={row.kind === "tools" ? undefined : row.key}
-          leaving={rowDraw.presentation.leaving.has(row.key)}
-          marked={seek.marked?.key === row.key ? seek.marked.state : undefined}
-          measured={rowDraw.measureRow}
-          motion={arrivals.motionOf(row)}
-          onleft={rowDraw.leaver(row.key)}
-          rowKey={row.key}
-        >
-          {#snippet children(ticket)}
-            {@render rowBody(row, ticket, active)}
-          {/snippet}
-        </TranscriptRow>
+        {#if mounted.admits(row.key)}
+          <TranscriptRow
+            continues={rails.continued.has(row.key)}
+            handoff={rowDraw.presentation.handed.get(row.key)}
+            heightOf={rowDraw.heightOfRow}
+            id={row.kind === "tools" ? undefined : row.key}
+            leaving={rowDraw.presentation.leaving.has(row.key)}
+            marked={seek.marked?.key === row.key
+              ? seek.marked.state
+              : undefined}
+            measured={rowDraw.measureRow}
+            motion={arrivals.motionOf(row)}
+            onleft={rowDraw.leaver(row.key)}
+            rowKey={row.key}
+          >
+            {#snippet children(ticket)}
+              {@render rowBody(row, ticket, active)}
+            {/snippet}
+          </TranscriptRow>
+        {:else}
+          <!-- A row a pane built hidden has not built yet: a box at the size
+               virtua has for it (MountedRows `admitAll`). -->
+          <div
+            class="h-(--row-estimate)"
+            style:--row-estimate="{ROW_ESTIMATE}px"
+          ></div>
+        {/if}
       {/snippet}
     </Virtualizer>
   </div>
