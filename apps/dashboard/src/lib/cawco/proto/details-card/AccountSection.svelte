@@ -14,7 +14,6 @@
   import {
     OptionGroup,
     OptionGroupItem,
-    OptionTiles,
   } from "#lib/components/ui/option-group/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -50,6 +49,11 @@
   const chosen = $derived(
     ai.state === "read" ? (ai.value.chosen ?? AUTO) : null
   );
+  const limitId = $props.id();
+  const limit = pickOne(
+    () => (ai.state === "read" ? ai.value.atLimit : null),
+    (value) => onpick({ section: "atLimit", value })
+  );
   const pick = pickOne(
     () => chosen,
     (value) => onpick({ section: "account", value })
@@ -82,10 +86,10 @@
         disabled={sunk}
         layout="list"
       >
-        <OptionGroupItem value={AUTO}>
+        <OptionGroupItem title={aiWords.automaticLine} value={AUTO}>
           <OptionLine
             glyph={IconLayers}
-            line={aiWords.automaticLine}
+            line={chosen === AUTO ? aiWords.automaticLine : undefined}
             name={aiWords.automatic}
             waiting={pending?.value === AUTO && !pending.refused}
           />
@@ -162,28 +166,27 @@
       {/if}
 
       {#if named}
-        <div class="flex flex-col gap-space-2" transition:unfold>
-          <h4 class="m-0 type-meta font-medium text-ink-muted">
-            {aiWords.atLimit}
-          </h4>
-          <OptionTiles
-            bind:value={
-              () => ai.value.atLimit,
-              (next) => {
-                if (next && next !== ai.value.atLimit) {
-                  onpick({ section: "atLimit", value: next });
-                }
-              }
-            }
-            cols={2}
-            colsPhone={2}
+        <!-- At account limit, on one line: its name, then the two answers
+             as option chips, what each does in its tooltip. -->
+        <div
+          class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2"
+          transition:unfold
+        >
+          <span class="type-meta font-medium text-ink-muted" id="{limitId}-name"
+            >{aiWords.atLimit}</span
+          >
+          <OptionGroup
+            aria-labelledby="{limitId}-name"
+            bind:value={limit.get, limit.set}
             disabled={sunk}
-            label={aiWords.atLimit}
-            options={[
-              { id: "wait", name: aiWords.wait.name, note: aiWords.wait.note },
-              { id: "move", name: aiWords.move.name, note: aiWords.move.note },
-            ]}
-          />
+          >
+            <OptionGroupItem title={aiWords.wait.note} value="wait"
+              >{aiWords.wait.name}</OptionGroupItem
+            >
+            <OptionGroupItem title={aiWords.move.note} value="move"
+              >{aiWords.move.name}</OptionGroupItem
+            >
+          </OptionGroup>
           {#if pendingLimit && !pendingLimit.refused}
             <span
               class="mark-line flex items-center gap-space-2 type-meta text-ink-muted"
@@ -192,6 +195,7 @@
             >
           {:else if pendingLimit?.refused}
             <RowFault
+              class="basis-full"
               again={() =>
                 onpick({ section: "atLimit", value: pendingLimit.value })}
               reason={pendingLimit.refused}

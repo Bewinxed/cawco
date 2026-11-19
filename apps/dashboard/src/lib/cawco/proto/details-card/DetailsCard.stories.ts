@@ -60,10 +60,10 @@ export const Unreachable = { args: { situation: "unreachable" } };
 export const NoCode = { args: { situation: "no-code" } };
 
 /** I asked for review on finished code and the hub hasn't taken it yet. */
-export const ReviewWaiting = { args: { view: "handoff-waiting" } };
+export const ReviewWaiting = { args: { view: "finished-waiting" } };
 
 /** The hub said no to keeping code separate, and says why under it. */
-export const ReviewRefused = { args: { view: "handoff-refused" } };
+export const ReviewRefused = { args: { view: "finished-refused" } };
 
 /** Done pressed: the card folds back into the place mark. */
 export const Closed = {
