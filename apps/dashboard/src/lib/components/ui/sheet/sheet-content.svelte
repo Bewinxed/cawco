@@ -50,7 +50,16 @@
        <body> at every pointerdown, restyling the whole page in the frame
        the finger lands (17ms in Chromium at 390px). */
     preventOverflowTextSelection = false,
-    restoreScrollDelay = 0,
+    /* Off: the root never scrolls (the shell's panes do; design.css `html`),
+       so there is no page scroll to lock under a sheet, and the scrim
+       already takes every press below it. The lock bits-ui takes reads the
+       root's and the body's computed style as the sheet mounts (forcing the
+       whole page's style mid-mount), sets `overflow` on <body> (the whole
+       page laid out again) and `pointer-events: none`, an inherited
+       property, so every element on the page restyled as the sheet opened
+       and again as it closed. Without it the phone's sidebar, on 29 open
+       tabs in WebKit, began to move about 200ms sooner. */
+    preventScroll = false,
     portalProps,
     pad,
     narrow,
@@ -147,7 +156,7 @@
     data-side={side}
     data-slot="sheet-content"
     {preventOverflowTextSelection}
-    {restoreScrollDelay}
+    {preventScroll}
     bind:ref
     {...restProps}
   >
