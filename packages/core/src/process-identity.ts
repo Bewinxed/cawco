@@ -1191,6 +1191,30 @@ export async function residentBytes(pid: number): Promise<number | undefined> {
   return kb === undefined ? undefined : Number(kb) * 1024;
 }
 
+/** `/proc/<pid>/smaps_rollup`'s proportional set, in kB. */
+const PSS = /^Pss:\s+(\d+) kB$/mu;
+
+/**
+ * The memory `pid` holds as its share of the machine's, in bytes: Linux's
+ * proportional set size (`Pss` in `/proc/<pid>/smaps_rollup`, "the
+ * process's proportional share of this mapping": a page shared by n
+ * processes counts 1/n in each, so a tree's figures add up to what it takes,
+ * https://docs.kernel.org/filesystems/proc.html), the Mac's
+ * `ri_phys_footprint` ({@link residentBytes}). Undefined as there.
+ */
+export async function proportionalBytes(
+  pid: number
+): Promise<number | undefined> {
+  if (process.platform !== "linux") {
+    return residentBytes(pid);
+  }
+  const rollup = await readFile(`/proc/${pid}/smaps_rollup`, "utf8").catch(
+    () => ""
+  );
+  const kb = PSS.exec(rollup)?.[1];
+  return kb === undefined ? undefined : Number(kb) * 1024;
+}
+
 /**
  * The CPU time `pid` has used, user and system, in microseconds: Linux's
  * `utime` + `stime` in `/proc/<pid>/stat`, the Mac's task info, as

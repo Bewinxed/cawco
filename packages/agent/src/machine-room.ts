@@ -141,7 +141,7 @@ const meminfoBytes = (meminfo: string, line: RegExp, name: string): number => {
 };
 
 /** The least room a start needs, in bytes. */
-const leastRoom = (): number =>
+export const leastRoom = (): number =>
   threshold(ROOM_ENV.memoryAvailableMin, MEMORY_AVAILABLE_MIN_MIB) * 1024 ** 2;
 
 /** A cgroup file's one value, or a flat-keyed file's `key`, read as bytes. */
@@ -280,11 +280,10 @@ const openSystem = () =>
   });
 let system: ReturnType<typeof openSystem> | undefined;
 
-/** A 32-bit integer sysctl, by name. */
-const sysctlInt = (name: string): number => {
+/** An integer sysctl, by name, read into `value` (its width the sysctl's). */
+const sysctlInto = (name: string, value: Int32Array | BigUint64Array): void => {
   system ??= openSystem();
-  const value = new Int32Array(1);
-  const size = new BigUint64Array([4n]);
+  const size = new BigUint64Array([BigInt(value.byteLength)]);
   const code = system.symbols.sysctlbyname(
     new TextEncoder().encode(`${name}\0`),
     ptr(value),
@@ -295,7 +294,20 @@ const sysctlInt = (name: string): number => {
   if (code !== 0) {
     throw new Error(`sysctlbyname ${name} answered ${code}`);
   }
+};
+
+/** A 32-bit integer sysctl, by name. */
+const sysctlInt = (name: string): number => {
+  const value = new Int32Array(1);
+  sysctlInto(name, value);
   return value[0] ?? 0;
+};
+
+/** A 64-bit integer sysctl, by name. */
+const sysctlU64 = (name: string): number => {
+  const value = new BigUint64Array(1);
+  sysctlInto(name, value);
+  return Number(value[0] ?? 0n);
 };
 
 const LEVEL_NAMES: Record<number, string> = {
@@ -341,4 +353,52 @@ export const measureMemoryRoom = (keeperCgroup?: string): Room => {
       words: `this machine's room could not be measured: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
+};
+
+/** The machine's memory now, in bytes: what a new program could be given, and all there is. */
+export interface MemoryNow {
+  free: number;
+  /** Where `free` was read, in words. */
+  source: string;
+  total: number;
+}
+
+/**
+ * The memory a new program could be given now, as the kernel itself
+ * estimates it, and the machine's total: what a preview's start is weighed
+ * against (agent preview-room.ts). Linux: `/proc/meminfo` MemAvailable
+ * (above). macOS: `kern.memorystatus_level`, the percentage of memory the
+ * kernel's memorystatus counts as available, of `hw.memsize`: the figure
+ * `memory_pressure` prints as "System-wide memory free percentage" and
+ * Activity Monitor reads through `memorystatus_get_level`. It counts what the
+ * kernel can give back (file cache, purgeable memory), as MemAvailable does;
+ * `Pages free` stays near nothing on a Mac with room, and free + inactive
+ * (psutil's `available`) fell by under half of a 4 GiB allocation where this
+ * fell by 3.84 GiB (picklog.cc, "free Command on Mac", 2026-10-04). It holds
+ * high until the compressor and swap run out, then falls fast (zenn.dev
+ * acs_developer, 2026-10-13), so at the kernel's critical pressure level
+ * ({@link MAC_PRESSURE_CRITICAL}) nothing is free. Throws where neither reads.
+ */
+export const memoryNow = (): MemoryNow => {
+  if (process.platform === "linux") {
+    const meminfo = readFileSync("/proc/meminfo", "utf8");
+    return {
+      free: meminfoBytes(meminfo, MEM_AVAILABLE, "MemAvailable"),
+      source: "MemAvailable",
+      total: meminfoBytes(meminfo, MEM_TOTAL, "MemTotal"),
+    };
+  }
+  if (process.platform === "darwin") {
+    const total = sysctlU64("hw.memsize");
+    const critical =
+      sysctlInt("kern.memorystatus_vm_pressure_level") >= MAC_PRESSURE_CRITICAL;
+    return {
+      free: critical ? 0 : (total * sysctlInt("kern.memorystatus_level")) / 100,
+      source: critical ? "memory pressure critical" : "kern.memorystatus_level",
+      total,
+    };
+  }
+  throw new Error(
+    `this machine's memory cannot be read on ${process.platform}: it reads Linux's /proc/meminfo or macOS's sysctl`
+  );
 };

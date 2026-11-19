@@ -33,6 +33,9 @@
  * - sleeps once {@link STAGE_IDLE_MS} pass with no viewer (an open socket
  *   through a preview of it) and no use (a request, an agent's read, a
  *   decision page's warm-up); the next use wakes it;
+ * - sleeps, the least recently used with no viewer first, when another
+ *   starts and the machine would otherwise be left short of memory or run
+ *   more than {@link MAX_LIVE} ({@link roomFor}, preview-room.ts);
  * - stops when its workspace is archived ({@link stopStages}), and with the
  *   daemon ({@link endStages}); the next daemon starts it on its first use,
  *   so an agent's restart, an update's included, starts no stage nobody
@@ -133,7 +136,16 @@ import { ensureBoundary } from "./boundary/ensure";
 import { listeners, workspaceNetworks } from "./boundary/sandboxes";
 import { agentServerStarted } from "./boundary/servers";
 import { excludeFromCheckout } from "./checkout-exclude";
+import { type MemoryNow, memoryNow } from "./machine-room";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
+import {
+  bytesWords,
+  expectedBytes,
+  lastBytes,
+  MAX_LIVE,
+  marginOf,
+  measure,
+} from "./preview-room";
 import {
   copyBack,
   cutPin,
@@ -1415,6 +1427,122 @@ const servesBy = async (
  * so, or a server's port listens), rejects with why it did not. A server
  * whose port already listens is never started: something else serves it.
  */
+/** Whether a stage holds, or is about to hold, its memory: live, or on its way there. */
+const holdsMemory = (stage: Stage): boolean =>
+  stage.status === "live" ||
+  stage.status === "starting" ||
+  stage.status === "waking";
+
+/** One start's room is weighed at a time, each on what the one before left ({@link roomFor}). */
+let weighing: Promise<void> = Promise.resolve();
+
+/**
+ * Memory of stages put to sleep a moment ago that the free figure may not
+ * count yet: each until its kill's grace ({@link KILL_GRACE_MS}) and as long
+ * again have passed.
+ */
+let freeing: { bytes: number; until: number }[] = [];
+
+/** How often the live previews are measured ({@link measure}) while any is live. Ours: a minute keeps a figure fresh at one read of the process table. */
+const MEASURE_MS = 60_000;
+
+let measuring: ReturnType<typeof setInterval> | undefined;
+
+/** Measures every live stage each {@link MEASURE_MS}, from now until none is live. */
+function keepMeasuring(): void {
+  measuring ??= setInterval(() => {
+    const live = [...stages.values()].filter(
+      (stage) => stage.status === "live"
+    );
+    if (live.length === 0) {
+      clearInterval(measuring);
+      measuring = undefined;
+      return;
+    }
+    measure(
+      live.map((stage) => ({
+        boundary: stage.boundary.id,
+        key: stage.key,
+        kind: stage.runs.kind,
+      }))
+    ).catch((error) => {
+      console.warn(
+        `[stage] the live previews' memory was not measured: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  }, MEASURE_MS);
+  measuring.unref();
+}
+
+/**
+ * Room for `stage` to start: while the machine's free memory, less what
+ * `stage` is expected to take (preview-room.ts `expectedBytes`), would fall
+ * under its margin (`marginOf`), or {@link MAX_LIVE} others are live, the
+ * least recently used live stage with no viewer is put to sleep
+ * ({@link sleep}), one line each. One with a viewer is in use: a page open
+ * on it reconnects, and would wake it again at once. A start is never
+ * refused: when nothing is left to put to sleep it starts anyway, said.
+ */
+async function roomFor(stage: Stage): Promise<void> {
+  const turn = weighing.then(() => weigh(stage));
+  weighing = turn.catch(() => undefined);
+  await turn;
+  keepMeasuring();
+}
+
+/** A preview in a log line: its kind and key, the mark its processes carry (`CAWCO_STAGE_SERVER`). */
+const previewName = (stage: Stage): string =>
+  `${stage.runs.kind === "sheet" ? "stage" : "server"} ${stage.key}`;
+
+/** {@link roomFor}'s one weighing. */
+function weigh(stage: Stage): void {
+  let memory: MemoryNow | undefined;
+  try {
+    memory = memoryNow();
+  } catch (error) {
+    console.warn(
+      `[stage] ${stage.key}: free memory was not read, so only the count of live previews is kept: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  const now = Date.now();
+  freeing = freeing.filter((one) => one.until > now);
+  const others = [...stages.values()].filter(
+    (one) => one !== stage && holdsMemory(one)
+  );
+  const cost = expectedBytes(stage.key, stage.runs.kind);
+  // A stage on its way up has not grown into what it will take yet.
+  const coming = others
+    .filter((one) => one.status !== "live")
+    .reduce((sum, one) => sum + expectedBytes(one.key, one.runs.kind), 0);
+  let free = memory
+    ? memory.free + freeing.reduce((sum, one) => sum + one.bytes, 0) - coming
+    : Number.POSITIVE_INFINITY;
+  const margin = memory ? marginOf(memory.total) : 0;
+  let live = others.length;
+  const short = () => free - cost < margin || live >= MAX_LIVE;
+  const sleepers = others
+    .filter((one) => one.status === "live" && one.viewers === 0)
+    .sort((a, b) => a.lastUse - b.lastUse);
+  for (const one of sleepers) {
+    if (!short()) {
+      return;
+    }
+    const bytes = lastBytes(one.key) ?? expectedBytes(one.key, one.runs.kind);
+    console.info(
+      `[stage] ${previewName(one)} put to sleep for ${previewName(stage)}: it took ${bytesWords(bytes)}, ${memory ? `${bytesWords(free)} free (${memory.source}) of ${bytesWords(memory.total)}, ${bytesWords(margin)} kept free` : "free memory unread"}, ${live} live`
+    );
+    sleep(one);
+    freeing.push({ bytes, until: now + 2 * KILL_GRACE_MS });
+    free += bytes;
+    live -= 1;
+  }
+  if (short()) {
+    console.warn(
+      `[stage] ${previewName(stage)} starts with no live preview left to put to sleep: ${bytesWords(cost)} expected, ${memory ? `${bytesWords(free)} free (${memory.source}), ${bytesWords(margin)} kept free` : "free memory unread"}, ${live} live, ${others.filter((one) => one.viewers > 0).length} of them with a viewer`
+    );
+  }
+}
+
 async function start(stage: Stage): Promise<void> {
   stage.stopping = false;
   // Every stage starts on its project as its lockfile names it: one whose
@@ -1447,6 +1575,7 @@ async function start(stage: Stage): Promise<void> {
       `port ${stage.port} in this workspace is already in use, so something else serves it and \`${stage.runs.command}\` wasn't started. Stop that server, or serve on another port.`
     );
   }
+  await roomFor(stage);
   const boundary = await ensureBoundary(stage.boundary);
   const [command, env] = commandOf(stage);
   const child = spawn(boundary.exec, [command], {
