@@ -23,6 +23,7 @@ import type {
   ToolCopy,
   ToolFootprint,
   ToolInstallMethod,
+  ToolLauncher,
   ToolPlatform,
   ToolSignin,
   ToolSpec,
@@ -44,6 +45,7 @@ import { toolWords } from "@cawco/core/words/tools";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
+import { codexNative, type NativeBinary, nativeEnv } from "./codex-native";
 import { expandHome } from "./fs";
 import { runGroupWithin } from "./group-run";
 import { probeStarted } from "./probe-count";
@@ -1684,15 +1686,18 @@ const probeVersion = async (
   spec: ToolSpec,
   path: string
 ): Promise<string | undefined> => {
+  const run = runnable(spec, path);
+  if (run.kind !== "native") {
+    return undefined;
+  }
   const args = spec.versionCommand
     .slice(spec.bin.length)
     .trim()
     .split(WORDS)
     .filter(Boolean);
-  // Its own group: a launcher's `--version` runs the binary it fronts
-  // (Codex's codex.js, a native child), which ends with it at the bound.
-  const ran = await runGroupWithin([path, ...args], {
-    env: toolEnv(),
+  // Its own group: whatever its `--version` starts ends with it at the bound.
+  const ran = await runGroupWithin([run.bin, ...args], {
+    env: nativeEnv(toolEnv(), run.env),
     ms: PROBE_MS,
   }).catch(() => undefined);
   if (ran?.kind === "unanswered") {
@@ -1717,47 +1722,44 @@ const WORDS = /\s+/u;
  */
 const PROBE_MS = 30_000;
 
-/**
- * Why the copy at `at` can't run here, when its launcher is a script whose
- * first line names an interpreter CawCo's PATH lacks: `#!/usr/bin/env
- * node` on a machine whose only JavaScript runtime is Bun (Codex's
- * `bin/codex.js` under `bun install -g`, @openai/codex 0.169.0), or an
- * absolute interpreter that is not there. The interpreter, as the line
- * names it; undefined for a copy that is no such script, or whose
- * interpreter is there.
- */
-const launcherUnrunnable = async (at: Found): Promise<string | undefined> => {
-  const head = await Bun.file(at.file)
-    .slice(0, SHEBANG_READ)
-    .text()
-    .catch(() => "");
-  const line = head.startsWith("#!") ? head.slice(2).split("\n")[0] : "";
-  const [program = "", ...rest] = (line ?? "").trim().split(WORDS);
-  if (!program) {
-    return undefined;
-  }
-  if (basename(program) === "env") {
-    const named = rest.find(
-      (word) => !(word.startsWith("-") || word.includes("="))
-    );
-    return named && !resolveBin(named) ? named : undefined;
-  }
-  return existsSync(program) ? undefined : program;
+/** Each launcher CawCo runs past ({@link ToolSpec.launcher}), and how it finds the binary that launcher fronts. */
+const LAUNCHERS: Record<ToolLauncher, (found: string) => NativeBinary> = {
+  "openai-codex": codexNative,
 };
 
-/** How much of a copy's file is read for its first line: a `#!` line is far shorter. */
-const SHEBANG_READ = 256;
+/**
+ * What running `spec`'s copy at `path` runs: the copy itself, or for a
+ * package whose bin is a launcher CawCo runs past ({@link
+ * ToolSpec.launcher}), the binary that launcher would start and the
+ * environment it would give it; or why there is none. Every probe of the
+ * copy and every session on it runs this, never the launcher.
+ */
+export const runnable = (spec: ToolSpec, path: string): NativeBinary =>
+  spec.launcher
+    ? LAUNCHERS[spec.launcher](path)
+    : { kind: "native", bin: path, env: {} };
+
+/** Why `spec`'s copy at `path` has nothing to run ({@link runnable}), and how it gets one: with `method`, the one it came from, when known. */
+const nothingToRun = (
+  spec: ToolSpec,
+  path: string,
+  run: Exclude<NativeBinary, { kind: "native" }>,
+  method: string | undefined
+): string =>
+  run.kind === "missing"
+    ? toolWords.nativeMissing(spec.name, shownPath(path), run.package, method)
+    : toolWords.nativeUnsupported(spec.name, shownPath(path), run.target);
 
 /**
  * Whether a harness CLI the catalog holds may start here: the version gate
- * OpenCode's and pi's sessions go through (Claude Code's is its own,
- * claude-version.ts). Its binary as {@link toolBinary} finds it, and the
- * version that binary says, read once per file (its real path, mtime and
- * size: an update moves or rewrites it) so a start does not wait on a
- * `--version` each time. `refused` and its sentence when it is missing or
- * not a version the catalog runs (its floor, or its one version), in the
- * error formula with its fix: the press that installs it (dashboard
- * HarnessBlock).
+ * OpenCode's, pi's and Codex's sessions go through (Claude Code's is its
+ * own, claude-version.ts). Its binary as {@link toolBinary} finds it, and
+ * the version the binary that runs ({@link runnable}) says, read once per
+ * file (its real path, mtime and size: an update moves or rewrites it) so a
+ * start does not wait on a `--version` each time. `refused` and its
+ * sentence when it is missing, has nothing to run, or is not a version the
+ * catalog runs (its floor, or its one version), in the error formula with
+ * its fix: the press that installs it (dashboard HarnessBlock).
  */
 export interface ToolGate {
   path?: string;
@@ -1768,11 +1770,10 @@ export interface ToolGate {
 }
 
 /**
- * The version each binary said, by `<real path>:<mtime>:<size>`, until the
- * tools move ({@link toolsMoved}): the file's identity need not move with
- * the version it runs (a package's launcher, rewritten the same size with
- * its tarball's mtime, in front of a native binary that did move), so an
- * install that ended is no stale read's to answer.
+ * The version each binary that runs said ({@link runnable}), by `<real
+ * path>:<mtime>:<size>`, until the tools move ({@link toolsMoved}): a
+ * package can put the same file back with its tarball's mtime and size and
+ * another version, so an install that ended is no stale read's to answer.
  */
 const gateReads = new Map<string, Promise<string | undefined>>();
 
@@ -1792,7 +1793,16 @@ export const toolGate = async (spec: ToolSpec): Promise<ToolGate> => {
       words: `${spec.name} isn't installed on this machine, so CawCo can't start ${spec.name} sessions there. Install ${spec.name}, and CawCo runs it as soon as it's on.`,
     };
   }
-  const file = await realpath(path).catch(() => path);
+  const run = runnable(spec, path);
+  if (run.kind !== "native") {
+    sawTool(spec.id, "unsaid");
+    return {
+      path,
+      refused: "version",
+      words: `${nothingToRun(spec, path, run, undefined)}${copyWords(spec, path).others}`,
+    };
+  }
+  const file = await realpath(run.bin).catch(() => run.bin);
   const { mtimeMs, size } = await stat(file).catch(() => ({
     mtimeMs: 0,
     size: 0,
@@ -1836,7 +1846,7 @@ const probedCopy = async (
   at: Found | undefined
 ): Promise<void> => {
   const before = probedCopies.get(spec.id);
-  const stamp = await copyStamp(at);
+  const stamp = await copyStamp(spec, at);
   probedCopies.set(spec.id, stamp);
   if (before !== undefined && before !== stamp) {
     settleCopies(before === "missing" ? [] : [spec.id]);
@@ -1844,25 +1854,26 @@ const probedCopy = async (
 };
 
 /**
- * A copy that said no version because its launcher's interpreter is not
- * here ({@link launcherUnrunnable}), as a failed status that says so, with
- * whose it is (`copy`) and what CawCo runs (`want`); none for a copy that
- * is not that.
+ * A copy that has nothing to run ({@link runnable}: a launcher's native
+ * package not installed), as a failed status that says so and how it gets
+ * one, with whose it is (`copy`) and what CawCo runs (`want`), which the
+ * hub's update answers with an install by the method it came from; none
+ * for a copy that runs.
  */
-const unrunnableStatus = async (
+const nothingToRunStatus = (
   spec: ToolSpec,
   at: Found,
   copy: ToolCopy,
   want: string | undefined
-): Promise<ToolStatus | undefined> => {
-  const interpreter = await launcherUnrunnable(at);
-  if (!interpreter) {
+): ToolStatus | undefined => {
+  const run = runnable(spec, at.path);
+  if (run.kind === "native") {
     return undefined;
   }
   return {
     id: spec.id,
     state: "failed",
-    detail: `${toolWords.launcherUnrunnable(spec.name, shownPath(at.path), interpreter, at.method?.label)}${copyWords(spec, at.path).others}`,
+    detail: `${nothingToRun(spec, at.path, run, at.method?.label)}${copyWords(spec, at.path).others}`,
     ...(at.method ? { method: at.method.label } : {}),
     copy,
     ...(want ? { wants: { version: want, orNewer: false } } : {}),
@@ -1889,10 +1900,10 @@ const probeTool = async (
   const version = await probeVersion(spec, at.path);
   sawTool(spec.id, version ?? "unsaid");
   const copy = await copyOf(spec, at, version);
-  // A copy that says no version because it can't run here says why.
+  // A copy that says no version because it has nothing to run says why.
   const cantRun = version
     ? undefined
-    : await unrunnableStatus(spec, at, copy, want);
+    : nothingToRunStatus(spec, at, copy, want);
   return cantRun ?? (await copyStatus(spec, at, version, copy, want));
 };
 
@@ -1969,16 +1980,33 @@ const probedCopies = new Map<string, string>();
 
 /**
  * A copy as it stands, without running it: the path the PATH finds, the
- * file it resolves to, and that file's mtime and size; `missing` for none.
- * Another path, another file, or the same file rewritten is a copy that
- * moved.
+ * file it resolves to, and the binary that runs ({@link runnable}: a
+ * launcher's native binary, or what the launcher lacks), each file's mtime
+ * and size with it; `missing` for none. Another path, another file, or the
+ * same file rewritten is a copy that moved: a launcher's native package put
+ * on by hand moves its copy, its launcher unchanged.
  */
-const copyStamp = async (at: Found | undefined): Promise<string> => {
+const copyStamp = async (
+  spec: ToolSpec,
+  at: Found | undefined
+): Promise<string> => {
   if (!at) {
     return "missing";
   }
-  const info = await stat(at.file).catch(() => undefined);
-  return `${at.path}\0${at.file}\0${info?.mtimeMs ?? 0}\0${info?.size ?? 0}`;
+  const run = runnable(spec, at.path);
+  const [info, ran] = await Promise.all([
+    stat(at.file).catch(() => undefined),
+    run.kind === "native" ? stat(run.bin).catch(() => undefined) : undefined,
+  ]);
+  return [
+    at.path,
+    at.file,
+    info?.mtimeMs ?? 0,
+    info?.size ?? 0,
+    run.kind === "native" ? run.bin : run.kind,
+    ran?.mtimeMs ?? 0,
+    ran?.size ?? 0,
+  ].join("\0");
 };
 
 /**
@@ -2009,6 +2037,7 @@ const copiesNow = async (): Promise<Map<string, string>> => {
     now.set(
       spec.id,
       await copyStamp(
+        spec,
         path
           ? { path, file: await realpath(path).catch(() => path) }
           : undefined
@@ -2585,29 +2614,6 @@ const install = async (
   const now = await copyNow(spec, ask);
   if ("left" in now) {
     return now.left;
-  }
-  // A copy that says no version because its launcher's interpreter isn't
-  // here comes back the same from the method it came from: running it
-  // again would download it again and leave it as it is, at every update
-  // (Codex's `bin/codex.js` under `bun install -g` on a machine with no
-  // `node`, @openai/codex 0.169.0). Nothing runs; the row says why.
-  const interpreter =
-    now.at && !now.from && method === now.at.method
-      ? await launcherUnrunnable(now.at)
-      : undefined;
-  if (now.at && interpreter) {
-    return await settle(spec, {
-      id: spec.id,
-      state: "failed",
-      detail: toolWords.launcherUnrunnable(
-        spec.name,
-        shownPath(now.at.path),
-        interpreter,
-        method.label
-      ),
-      method: method.label,
-      at: Date.now(),
-    });
   }
   const began = await markUnderway(spec, method, now, version, ask);
   try {

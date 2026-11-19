@@ -28,6 +28,17 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 
+/**
+ * What `--check` reads beside its imports, for `bun run check` to key it on
+ * (scripts/lib/check-inputs.ts): every core module it loads by a computed
+ * path, the Swift it writes and scans, and the dashboard files it scans.
+ */
+export const checkReads = [
+  "packages/core/src/",
+  "apps/apple/Packages/CawCoKit/Sources/",
+  "apps/dashboard/src/",
+];
+
 const ROOT = join(import.meta.dir, "..");
 const CORE = join(ROOT, "packages/core/src");
 const APPLE = join(ROOT, "apps/apple/Packages/CawCoKit/Sources");
@@ -57,6 +68,7 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     swift: "Accounts",
     members: [
       { file: "words/accounts.ts", export: "accountsWords", as: "" },
+      { file: "harness/kinds.ts", export: "HARNESS_NAMES", as: "harnesses" },
       {
         file: "accounts.ts",
         export: "ACCOUNT_RULES",

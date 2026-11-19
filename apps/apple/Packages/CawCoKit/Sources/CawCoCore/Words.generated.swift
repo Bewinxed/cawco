@@ -126,6 +126,7 @@ public enum Words {
             Section(slug: "hooks", group: "Automation", label: "Hooks", purpose: "Scripts each machine runs at a session's lifecycle events", counted: true, badge: "fleet-faults", icon: "routing-2-bold-duotone", hue: "mark-6"),
             Section(slug: "delegate-types", group: "Agents", label: "Delegate types", purpose: "Presets a session's delegate call picks from", counted: true, badge: "fleet-faults", icon: "users-group-rounded-bold-duotone", hue: "mark-6"),
             Section(slug: "decides", group: "Agents", label: "Who decides", purpose: "Who settles each kind of choice an agent can't make alone", counted: false, badge: "fleet-faults", icon: "scale-bold-duotone", hue: "mark-4"),
+            Section(slug: "helpers", group: "Agents", label: "Helpers & step lists", purpose: "Who a session gives work to, and where it keeps its steps", counted: false, badge: "fleet-faults", icon: "tuning-2-bold-duotone", hue: "mark-2"),
             Section(slug: "subagents", group: "Agents", label: "Subagents", purpose: "Agent files written to ~/.local/share/cawco/fleet-claude/.claude/agents on every machine", counted: true, badge: "fleet-faults", icon: "branching-paths-down-bold-duotone", hue: "mark-2"),
             Section(slug: "cli-tools", group: "Tools", label: "Command-line tools", purpose: "CLIs each machine must have", counted: true, badge: "fleet-faults", icon: "code-square-bold-duotone", hue: "mark-4"),
             Section(slug: "mcp", group: "Tools", label: "MCP servers", purpose: "Servers written to every machine", counted: true, badge: "fleet-faults", icon: "plug-circle-bold-duotone", hue: "mark-6"),
@@ -249,18 +250,6 @@ public enum Words {
 
         public static let anthropicConsole = "Anthropic Console"
 
-        /// The harnesses that use an account, as a sentence names them.
-        public enum Harnesses {
-            public static let claude = "Claude Code"
-
-            public static let opencode = "OpenCode"
-
-            public static let pi = "pi"
-
-            /// Each word by the key it stands under, for a lookup by data value.
-            public static let byKey: [String: String] = ["claude": claude, "opencode": opencode, "pi": pi]
-        }
-
         /// "Claude Code and OpenCode".
         public static func harnessList(names: [String]) -> String {
             Words.andList(names)
@@ -305,11 +294,16 @@ public enum Words {
 
             public static let extraUsageOn = "Its sessions carry on here, paid from its extra usage."
 
-            public static let extraUsageOff = "Its sessions move to an account with plan room."
+            public static let extraUsageOff = "Its sessions move to an account with plan room when that costs less than their next turn here."
 
-            public static let reserve = "Stop placing new work past"
+            /// Its floors (core `Account.reservePct`, `sessionReservePct`): nothing new is placed or moved onto it past them.
+            public static let reserve = "Stop placing or moving new work past"
 
             public static let reserveUnit = "% of the week"
+
+            public static let sessionReserve = "and past"
+
+            public static let sessionReserveUnit = "% of the 5-hour window"
 
             public static let reserveInvalid = "A reserve is a whole number from 0 to 100. Empty it for none."
 
@@ -357,6 +351,24 @@ public enum Words {
             }
 
             public static let signOut = "Sign out on this machine"
+
+            /// A ChatGPT account signed in for pi and OpenCode on a machine, and not yet for Codex.
+            public static let codexOut = "Codex not signed in"
+
+            /// Codex's own sign-in on a machine, signed out alone.
+            public static let signOutCodex = "Sign Codex out on this machine"
+
+            /// Takes that waiting sign-out back: Codex stays signed in there.
+            public static let keepSignedIn = "Keep signed in"
+
+            public static func codexLeaving(sessions: Int) -> String {
+                sessions == 0 ? "Signing out…" : "Signs out once its \(sessions == 1 ? "session rests" : "\(sessions) sessions rest")"
+            }
+
+            /// What a row's sign-in is for, beside the machine: "pi and OpenCode", "Codex".
+            public static func signsInFor(harnesses: [String]) -> String {
+                Words.andList(harnesses)
+            }
 
             /// A row's ⋯ menu's subject: "you@x.com on obelisk".
             public static func accountOn(account: String, machine: String) -> String {
@@ -694,10 +706,20 @@ public enum Words {
 
             public static let kTokens = "k tokens"
 
-            /// How a session moving to another organization is made small, by the moment it moves at (core `Compaction`).
-            public static let beforeMove = "Moved ahead of its limit"
-
+            /// How a session moving to another organization at its limit is made small, while its cache is warm (core `Compaction.atLimit`).
             public static let atLimit = "Moved at its limit"
+
+            /// What a move does with a cold cache (core `Compaction.coldMove`).
+            public static let coldMove = "When its cache is cold"
+
+            public enum ColdMoves {
+                public static let whole = "Move it whole"
+
+                public static let cheapest = "Take the cheapest path"
+
+                /// Each word by the key it stands under, for a lookup by data value.
+                public static let byKey: [String: String] = ["whole": whole, "cheapest": cheapest]
+            }
 
             public enum Methods {
                 public static let native = "Its own /compact"
@@ -745,8 +767,8 @@ public enum Words {
             }
 
             /// Its move to `to` waits for work in flight (`work`: "1 command running"), which no resume brings back: it moves when that ends, or at `clock` ("20:17") at the latest, ending it.
-            public static func carrying(from: String, to: String, work: String, clock: String) -> String {
-                "Stopped at \(from)’s limit; moves to \(to) when its work in flight ends (\(work)), by \(clock) at the latest"
+            public static func carrying(from: String, to: String, work: String) -> String {
+                "Stopped at \(from)’s limit; moves to \(to) when its work in flight ends (\(work)), which no move ends while nobody waits on it"
             }
 
             /// Its move to `to` waits for work in flight, and `from` resets first, at `clock`: it moves when that work ends, else carries on where it is then.
@@ -774,9 +796,9 @@ public enum Words {
                 "Stopped: \(from) was removed; continues once an account can take it"
             }
 
-            /// A person signed its account out on its machine, `machine`, and no other account there could take it (hub `strandedStall`).
-            public static func signedOut(from: String, machine: String) -> String {
-                "Stopped: \(from) was signed out on \(machine); continues once an account can take it"
+            /// A person signed its account out on its machine, `machine` (`forWhat`: " for Codex" when Codex alone was), and no other account there could take it (hub `strandedStall`).
+            public static func signedOut(from: String, machine: String, forWhat: String) -> String {
+                "Stopped: \(from) was signed out\(forWhat) on \(machine); continues once an account can take it"
             }
 
             /// Held past the cutoff (core `AtLimit.staleAfterHours`) since `day` ("2 Oct"): nothing carries it on until a person or its parent writes.
@@ -931,6 +953,21 @@ public enum Words {
             Swatch(hue: "violet", name: "Violet"),
         ]
 
+        // packages/core/src/harness/kinds.ts `HARNESS_NAMES`
+        /// What each harness is called, by its kind, as a sentence names it: each descriptor's `words.name`.
+        public enum Harnesses {
+            public static let claude = "Claude Code"
+
+            public static let opencode = "OpenCode"
+
+            public static let pi = "pi"
+
+            public static let codex = "Codex"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["claude": claude, "opencode": opencode, "pi": pi, "codex": codex]
+        }
+
         // packages/core/src/accounts.ts `ACCOUNT_RULES`
         public enum Rules {
             /// A provider's routing is a choice among its accounts: it is offered from this many.
@@ -981,7 +1018,7 @@ public enum Words {
                 public static let moveWholeUnderK = 200
 
                 public enum Compaction {
-                    public static let beforeMove = "native"
+                    public static let coldMove = "whole"
 
                     public static let atLimit = "summary"
 
@@ -1793,6 +1830,16 @@ public enum Words {
         public static func harnessCouldntList(harness: String, machine: String, error: String) -> String {
             "\(harness) on \(machine) couldn't list its stored sessions (\(error)), so they are the ones it listed last."
         }
+
+        /// One harness on `machine` didn't list in time and never has since the hub started: nothing of it is shown.
+        public static func harnessDidntAnswerYet(harness: String, machine: String, seconds: Int) -> String {
+            "\(harness) on \(machine) didn't answer within \(seconds) s and hasn't listed its stored sessions yet, so none of them are shown."
+        }
+
+        /// One harness on `machine` couldn't list, and never has since the hub started, in harnessDidntAnswerYet's voice.
+        public static func harnessCouldntListYet(harness: String, machine: String, error: String) -> String {
+            "\(harness) on \(machine) couldn't list its stored sessions (\(error)) and hasn't listed them yet, so none of them are shown."
+        }
     }
 
     public enum Preview {
@@ -2445,6 +2492,13 @@ public enum Words {
         public static func notConnected(machine: String) -> String {
             "\(machine) is not connected, so nothing was installed. Retry once it is back."
         }
+
+        /// An offline machine's Update cell, under what its update last said (hub db `agents.binaryUpdate`): when the hub last heard from it, `ago` a span ("3h"), after the machines' own word for offline.
+        public static func lastSeen(ago: String) -> String {
+            "last seen \(ago) ago"
+        }
+
+        public static let lastSeenNow = "last seen just now"
 
         /// A Check for updates refused, under it.
         public static func noNewBuilds(why: String) -> String {

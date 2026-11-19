@@ -19,6 +19,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
+import { nativeEnv } from "../codex-native";
 import { toolPath } from "../tools";
 import { codexToStart } from "./codex-home";
 import { toolResultOf, toolUseOf } from "./codex-items";
@@ -32,7 +33,7 @@ const readerHome = (): string => join(codexStoreDir(), "reader");
 export const inStore = async <T>(
   work: (peer: CodexPeer) => Promise<T>
 ): Promise<T> => {
-  const bin = await codexToStart();
+  const codex = await codexToStart();
   const home = readerHome();
   const store = codexStoreDir();
   await makeFolder(join(store, "db"));
@@ -56,8 +57,8 @@ export const inStore = async <T>(
     delete env[name];
   }
   return await withAppServer(
-    bin,
-    { ...env, PATH: toolPath(), CODEX_HOME: home },
+    codex.bin,
+    nativeEnv({ ...env, PATH: toolPath() }, { ...codex.env, CODEX_HOME: home }),
     work
   );
 };

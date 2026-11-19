@@ -1230,11 +1230,11 @@ export const spawnCodex = async (
       `Codex can't deny ${unheld.map((tool) => `“${tool}”`).join(", ")} yet: CawCo holds back its subagents, its goals, its web search and CawCo's own tools alone. Start it on another harness, or without that denial. Nothing was started.`
     );
   }
-  const bin = await codexToStart();
+  const codex = await codexToStart();
   const instructions = await instructionsOf(spec, ctx.cwd);
   const launch: CodexLaunch = {
     accountId,
-    bin,
+    bin: codex.bin,
     mode: codexModeOf(spec),
     model: spec.model,
     ...(instructions ? { instructions } : {}),
@@ -1247,7 +1247,7 @@ export const spawnCodex = async (
       ? {
           untrust: [ctx.cwd],
           environments: [
-            workspaceEnvironment(ctx.workspace, ctx.boundary.exec, bin),
+            workspaceEnvironment(ctx.workspace, ctx.boundary.exec, codex.bin),
           ],
         }
       : {}),
@@ -1260,10 +1260,10 @@ export const spawnCodex = async (
     // On the host, where its account's sign-in is: a workspace's tools run
     // in the workspace's environment, inside its boundary (C-a2).
     {
-      command: bin,
+      command: codex.bin,
       args: ["app-server"],
       cwd: ctx.cwd,
-      env: codexEnv(accountId, sessionExtras(ctx)),
+      env: codexEnv(codex, accountId, sessionExtras(ctx)),
     }
   );
   const held = await codexKeepers.holding(procId);

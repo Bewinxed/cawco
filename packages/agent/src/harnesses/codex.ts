@@ -47,7 +47,7 @@ import type { HarnessCli } from "../harness-cli";
 import { writeJson } from "../json-file";
 import { probeStarted } from "../probe-count";
 import { procEpoch } from "../sessiond-client";
-import { resolveBin, toolGate } from "../tools";
+import { resolveBin, runnable, toolGate } from "../tools";
 import { FULL_CAPABILITIES } from "./capabilities";
 import {
   codexEntries,
@@ -138,7 +138,13 @@ class CodexHarness implements Harness<"codex"> {
   readonly cli: HarnessCli = {
     find: () => Promise.resolve(resolveBin("codex")),
     missing: undefined,
-    version: toolVersion,
+    // The native binary the launcher fronts, as the gate reads it.
+    version: (path) => {
+      const run = runnable(CODEX_SPEC, path);
+      return run.kind === "native"
+        ? toolVersion(run.bin, run.env)
+        : Promise.resolve({ kind: "answered", value: undefined });
+    },
   };
   auth: AuthState = "authenticated";
   authReason: string | undefined;

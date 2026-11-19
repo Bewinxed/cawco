@@ -185,14 +185,10 @@ export const accountsWords = {
      */
     /** Takes that waiting sign-out back: Codex stays signed in there. */
     keepSignedIn: "Keep signed in",
-    codexLeaving: (sessions: number) => {
-      if (sessions === 0) {
-        return "Signing out…";
-      }
-      return sessions === 1
-        ? "Signs out once its session rests"
-        : `Signs out once its ${sessions} sessions rest`;
-    },
+    codexLeaving: (sessions: number) =>
+      sessions === 0
+        ? "Signing out…"
+        : `Signs out once its ${sessions === 1 ? "session rests" : `${sessions} sessions rest`}`,
     /** What a row's sign-in is for, beside the machine: "pi and OpenCode", "Codex". */
     signsInFor: (harnesses: readonly string[]) => andList(harnesses),
     /** A row's ⋯ menu's subject: "you@x.com on obelisk". */
@@ -492,7 +488,7 @@ export const accountsWords = {
     removed: (from: string) =>
       `Stopped: ${from} was removed; continues once an account can take it`,
     /** A person signed its account out on its machine, `machine` (`forWhat`: " for Codex" when Codex alone was), and no other account there could take it (hub `strandedStall`). */
-    signedOut: (from: string, machine: string, forWhat = "") =>
+    signedOut: (from: string, machine: string, forWhat: string) =>
       `Stopped: ${from} was signed out${forWhat} on ${machine}; continues once an account can take it`,
     /**
      * Held past the cutoff (core `AtLimit.staleAfterHours`) since `day`

@@ -254,6 +254,13 @@ await Bun.sleep(1500);
 // The adapter's code, loaded once the scratch HOME stands.
 const home = await import("../packages/agent/src/harnesses/codex-home");
 const rpc = await import("../packages/agent/src/harnesses/codex-rpc");
+const { codexNative } = await import("../packages/agent/src/codex-native");
+
+/** The native binary the `codex` installed above fronts, as a session starts it (codex-native.ts). */
+const codex = codexNative(codexBin);
+if (codex.kind !== "native") {
+  throw new Error(`${codexBin} has no native binary to run: ${codex.kind}`);
+}
 
 /** The scripted model as the account home's provider. */
 const pointAtMock = (homeDir: string): void => {
@@ -302,7 +309,7 @@ process.on("exit", () => {
 
 /** A held app-server, as the keeper holds a session's: its stdio kept while clients come and go. */
 const holdAppServer = (env: Record<string, string>) => {
-  const child = spawn(codexBin, ["app-server"], {
+  const child = spawn(codex.bin, ["app-server"], {
     cwd: clone,
     detached: true,
     // The scripted model is on loopback, past any proxy the machine names.
@@ -376,7 +383,7 @@ const turnEnds = () => {
 await scenario("config", async () => {
   const dir = await home.prepareHome(ACCOUNT, { untrust: [clone] });
   pointAtMock(dir);
-  const held = holdAppServer(home.codexEnv(ACCOUNT));
+  const held = holdAppServer(home.codexEnv(codex, ACCOUNT));
   const turn = turnEnds();
   const peer = held.client({
     notification: (m) => m.method === "turn/completed" && turn.ended(),
@@ -407,7 +414,7 @@ await scenario("config", async () => {
 
 let parked: { id: number | string; method: string } | undefined;
 await scenario("ask and restart", async () => {
-  const held = holdAppServer(home.codexEnv(ACCOUNT));
+  const held = holdAppServer(home.codexEnv(codex, ACCOUNT));
   const asked = turnEnds();
   const first = held.client({
     notification: () => undefined,
@@ -475,7 +482,7 @@ await scenario("boundary", async () => {
     `#!${systemProgram("sh")}\n[ "$1" = --claude ] && shift\nexec bwrap --ro-bind / / --bind ${clone} ${clone} --tmpfs ${accountHome} --dev /dev --proc /proc --unshare-pid --die-with-parent -- sh -c "$1"\n`
   );
   chmodSync(exec, 0o755);
-  const environment = home.workspaceEnvironment("check", exec, codexBin);
+  const environment = home.workspaceEnvironment("check", exec, codex.bin);
   await home.prepareHome(ACCOUNT, {
     untrust: [clone],
     environments: [environment],
@@ -485,7 +492,7 @@ await scenario("boundary", async () => {
   writeFileSync(join(accountHome, "decoy.txt"), `${HOME_DECOY}\n`);
   writeFileSync(join(accountHome, "decoy.png"), PICTURE);
   writeFileSync(join(clone, "picture.png"), PICTURE);
-  const held = holdAppServer(home.codexEnv(ACCOUNT));
+  const held = holdAppServer(home.codexEnv(codex, ACCOUNT));
   const turn = turnEnds();
   let threadId = "";
   const peer = held.client({

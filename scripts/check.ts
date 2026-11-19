@@ -630,6 +630,9 @@ const gated: Gated[] = [
   bun("scripts/apple-ops-check.ts"),
   bun("scripts/protocol-sweep.ts"),
   bun("scripts/git-door-words-check.ts"),
+  // The words the app shares with the dashboard: each one the generator
+  // can read, and Words.generated.swift as it writes it (`bun run words`).
+  bun("scripts/words-swift.ts", "--check"),
   // Every body a shell script sends the hub, against the hub's own routes.
   bun("scripts/shell-bodies-check.ts"),
   {

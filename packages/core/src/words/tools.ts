@@ -209,19 +209,23 @@ export const toolWords = {
   versionUnanswered: (path: string, seconds: number) =>
     `${path} --version did not answer within ${seconds} s`,
   /**
-   * A copy whose launcher's first line names an interpreter that is not
-   * on CawCo's PATH here (`#!/usr/bin/env node`, and no `node`): it says no
-   * version and no session starts on it, and an install by the method it
-   * came from puts the same launcher back, so none is run (agent tools.ts
-   * `launcherUnrunnable`).
+   * A copy whose package's bin is a launcher CawCo runs past (core
+   * `ToolSpec.launcher`), missing the optional package that holds the
+   * native binary it fronts: an install that left out optional
+   * dependencies. It says no version and no session starts on it; an
+   * install by `method` (the one it came from, when known) puts it on
+   * (agent tools.ts `runnable`).
    */
-  launcherUnrunnable: (
+  nativeMissing: (
     name: string,
     path: string,
-    interpreter: string,
+    pkg: string,
     method: string | undefined
   ) =>
-    `${name} at ${path} starts with ${interpreter}, which isn't on CawCo's PATH on this machine, so it says no version and no ${name} session can start on it. ${method ? `Installing it again with ${method} puts the same launcher back, so CawCo doesn't` : "CawCo doesn't install it again over that"}: put ${interpreter} on this machine's PATH, then Retry.`,
+    `${name} at ${path} is missing ${pkg}, the package that holds its native binary, so it says no version and no ${name} session can start on it. Install ${name} again${method ? ` with ${method}` : ""} to put that package on.`,
+  /** The same launcher on a platform its package ships no native binary for (`target`: "freebsd (x64)"). */
+  nativeUnsupported: (name: string, path: string, target: string) =>
+    `${name} at ${path} has no native binary for ${target}, so no ${name} session can start on this machine.`,
   /**
    * A machine's harness block while CawCo itself puts the CLI on (core
    * `ToolStatus.startedBy` `cawco`: its update of its own copy, or adding a

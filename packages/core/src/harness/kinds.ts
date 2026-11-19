@@ -65,11 +65,20 @@ export const descriptorOf = (kind: HarnessKind): HarnessPlugin => {
 export const harnessName = (kind: HarnessKind): string =>
   descriptorOf(kind).words.name;
 
+/**
+ * What each harness is called, by its kind, as a sentence names it: each
+ * descriptor's `words.name`.
+ *
+ * @public Read by name by scripts/words-swift.ts, as the app's `Words.Accounts.Harnesses`.
+ */
+export const HARNESS_NAMES: Readonly<Partial<Record<string, string>>> =
+  Object.fromEntries(
+    HARNESS_PLUGINS.map((plugin) => [plugin.kind, plugin.words.name])
+  );
+
 /** What a harness a row or a frame names is called: its name, or the value as it is when it names none this build runs. */
-export const harnessLabel = (value: string): string => {
-  const kind = harnessNamed(value);
-  return kind ? harnessName(kind) : value;
-};
+export const harnessLabel = (value: string): string =>
+  HARNESS_NAMES[value] ?? value;
 
 /**
  * How hard the model thinks, and how much it spends doing it: Claude Code's

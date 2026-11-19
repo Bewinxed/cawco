@@ -38,7 +38,8 @@ import { shellQuote } from "@cawco/core/shell-quote";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { ToolSpec } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
-import { resolveBin, toolGate, toolPath } from "../tools";
+import { type NativeBinary, nativeEnv } from "../codex-native";
+import { resolveBin, runnable, toolGate, toolPath } from "../tools";
 import type * as V2 from "./codex-protocol/v2.gen";
 import { type CodexPeer, withAppServer } from "./codex-rpc";
 
@@ -52,20 +53,26 @@ export const CODEX_SPEC: ToolSpec = CODEX_TOOL;
 /** The `codex` on the machine's PATH. */
 const codexOnPath = (): string | undefined => resolveBin("codex");
 
+/** The native Codex binary a start runs, and the environment its launcher would have given it. */
+export type CodexStart = Extract<NativeBinary, { kind: "native" }>;
+
 /**
- * The `codex` a session starts on: the machine's, refused unless it is the
- * one release CawCo runs (core `CODEX_VERSION`), in the gate's own words.
+ * The Codex a session starts on: the native binary the machine's `codex`
+ * fronts, as `@openai/codex`'s launcher finds it (tools.ts `runnable`,
+ * codex-native.ts `codexNative`), so no `node` is needed; refused unless it
+ * is the one release CawCo runs (core `CODEX_VERSION`), in the gate's own
+ * words. The launcher itself is never run.
  */
-export const codexToStart = async (): Promise<string> => {
+export const codexToStart = async (): Promise<CodexStart> => {
   const gate = await toolGate(CODEX_SPEC);
   if (gate.refused) {
     throw new Error(gate.words);
   }
-  const bin = codexOnPath();
-  if (!bin) {
+  const run = gate.path ? runnable(CODEX_SPEC, gate.path) : undefined;
+  if (run?.kind !== "native") {
     throw new Error("Codex isn't installed on this machine.");
   }
-  return bin;
+  return run;
 };
 
 /** Why a Codex session needs an account, in the words its start is refused with. */
@@ -84,8 +91,13 @@ const CODEX_OWN_ENV = [
   "CODEX_HOME",
 ] as const;
 
-/** The environment a Codex of account `accountId` runs with: the host's, its home named, its own sign-in variables gone. */
+/**
+ * The environment `codex` runs with for account `accountId`: the host's,
+ * its own sign-in variables gone, with what its launcher would have set
+ * (`codex.env`) and its home named.
+ */
 export const codexEnv = (
+  codex: CodexStart,
   accountId: string,
   extra: Readonly<Record<string, string>> = {}
 ): Record<string, string> => {
@@ -93,12 +105,10 @@ export const codexEnv = (
   for (const name of CODEX_OWN_ENV) {
     delete env[name];
   }
-  return {
-    ...env,
-    PATH: toolPath(),
-    ...extra,
-    CODEX_HOME: codexAccountHome(accountId),
-  };
+  return nativeEnv(
+    { ...env, PATH: toolPath(), ...extra },
+    { ...codex.env, CODEX_HOME: codexAccountHome(accountId) }
+  );
 };
 
 /** One execution environment a home's `environments.toml` names: a workspace's boundary running `codex exec-server`. */
@@ -301,9 +311,14 @@ const inHome = async <T>(
   work: (peer: CodexPeer) => Promise<T>,
   options: { cwd?: string; timeoutMs?: number } = {}
 ): Promise<T> => {
-  const bin = await codexToStart();
+  const codex = await codexToStart();
   await prepareHome(accountId);
-  return await withAppServer(bin, codexEnv(accountId), work, options);
+  return await withAppServer(
+    codex.bin,
+    codexEnv(codex, accountId),
+    work,
+    options
+  );
 };
 
 /** Who account `accountId`'s Codex home is signed in as, in Codex's own words; null when signed out. */
@@ -341,7 +356,7 @@ export const beginCodexLogin = async (
 }> => {
   signIns.get(accountId)?.end();
   signIns.delete(accountId);
-  const bin = await codexToStart();
+  const codex = await codexToStart();
   await prepareHome(accountId);
   let shown: (value: {
     userCode: string;
@@ -364,8 +379,8 @@ export const beginCodexLogin = async (
   });
   const expiresAt = Date.now() + DEVICE_CODE_MS;
   withAppServer(
-    bin,
-    codexEnv(accountId),
+    codex.bin,
+    codexEnv(codex, accountId),
     async (peer) => {
       const started = await peer.request("account/login/start", {
         type: "chatgptDeviceCode",

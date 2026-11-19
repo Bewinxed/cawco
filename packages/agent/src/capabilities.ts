@@ -26,6 +26,7 @@ import {
   runtimeInstallCommand,
   runtimeMissing,
 } from "./browser/runtime";
+import { nativeEnv } from "./codex-native";
 import type { HarnessCliRead } from "./harness-cli";
 import { probeStarted } from "./probe-count";
 import { installAdvice, resolveBin } from "./tools";
@@ -166,14 +167,16 @@ const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/u;
  * {@link TOOL_VERSION_MS}: its version is then not known, never "none".
  */
 export function toolVersion(
-  path: string
+  path: string,
+  /** Set over the host's environment for it (a launcher's, codex-native.ts `nativeEnv`). */
+  over: Readonly<Record<string, string | undefined>> = {}
 ): Promise<Bounded<string | undefined>> {
   return readWithin(TOOL_VERSION_MS, async (signal) => {
     // Tethered (core tether.ts `spawnRead`): ended at the wait's end, and
     // with the agent however it ends, never left running past it.
     const child = spawnRead([path, "--version"], {
       // Never the embedded pi's package dir: `pi --version` would read CawCo's pi as its own.
-      env: hostEnvironment(),
+      env: nativeEnv(hostEnvironment(), over),
       stderr: "pipe",
       signal,
     });

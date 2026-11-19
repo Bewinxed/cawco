@@ -141,6 +141,15 @@ export const switchOn = (value: unknown): boolean =>
       .trim()
   );
 
+/**
+ * A package bin CawCo runs past ({@link ToolSpec.launcher}). `openai-codex`:
+ * `@openai/codex`'s `bin/codex.js`, a `#!/usr/bin/env node` script fronting
+ * the native binary an optional package per platform carries (agent
+ * codex-native.ts `codexNative`), which a machine whose only JavaScript
+ * runtime is Bun could never run.
+ */
+export type ToolLauncher = "openai-codex";
+
 /** The shape of {@link ToolSpec.requires}, which no tool sets. */
 interface ToolRequirement {
   id: string;
@@ -170,6 +179,13 @@ export interface ToolSpec {
   id: string;
   /** Ordered by preference. Empty for a platform = unsupported there. */
   install: ToolInstallMethod[];
+  /**
+   * For a tool whose package's bin is a launcher CawCo never runs: which
+   * launcher it is, whose binary the agent resolves as the launcher would
+   * and runs itself, for its probe and its sessions alike (agent tools.ts
+   * `runnable`).
+   */
+  launcher?: ToolLauncher;
   /**
    * The oldest version CawCo runs, for a tool CawCo updates with the tool's
    * own updater (`claude update`, `pi update`): a copy older than it is
@@ -758,16 +774,26 @@ export const TOOL_CATALOG: ToolSpec[] = [
     // harnesses/codex-home.ts), never the machine's `~/.codex`, so the
     // catalog asks no machine-wide sign-in of it.
     //
-    // `@openai/codex` installs a `codex` bin whose native binary is an
-    // optional dependency per platform (npm view @openai/codex@0.169.0).
+    // `@openai/codex` installs a `codex` bin, `bin/codex.js` under `node`,
+    // whose native binary is an optional dependency per platform (npm view
+    // @openai/codex@0.169.0): CawCo runs that binary itself, no `node`.
+    launcher: "openai-codex",
+    // npm's `--include=optional` puts that package on even where npm's
+    // config omits optional dependencies ("Dependency types specified in
+    // --include will not be omitted, regardless of the order in which
+    // omit/include are specified on the command-line", `npm help install`,
+    // npm 11.19.1);
+    // bun installs them unless its bunfig says `optional = false`, and its
+    // CLI has no flag over that.
     install: [
       {
         label: "npm",
         platforms: ["linux", "darwin", "win32"],
         needs: "npm",
         footprint: { kind: "npm-global" },
-        command: "npm install -g @openai/codex@{version}",
-        pinnedCommand: "npm install -g @openai/codex@{version}",
+        command: "npm install -g --include=optional @openai/codex@{version}",
+        pinnedCommand:
+          "npm install -g --include=optional @openai/codex@{version}",
       },
       {
         label: "bun",

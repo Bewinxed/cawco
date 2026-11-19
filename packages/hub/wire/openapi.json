@@ -61869,6 +61869,11 @@
               "$ref": "#/components/schemas/ToolInstallMethod"
             }
           },
+          "launcher": {
+            "description": "For a tool whose package's bin is a launcher CawCo never runs: which\nlauncher it is, whose binary the agent resolves as the launcher would\nand runs itself, for its probe and its sessions alike (agent tools.ts\n`runnable`).",
+            "const": "openai-codex",
+            "type": "string"
+          },
           "minVersion": {
             "description": "The oldest version CawCo runs, for a tool CawCo updates with the tool's\nown updater (`claude update`, `pi update`): a copy older than it is\nreported `failed` with why, and an install brings it to this version or\nnewer.",
             "type": "string"
