@@ -123,10 +123,10 @@
         layout="list"
       >
         {#each KINDS as kind (kind)}
-          <OptionGroupItem value={kind}>
+          <OptionGroupItem title={taskWords[kind].line} value={kind}>
             <OptionLine
               glyph={IconFolder}
-              line={taskWords[kind].line}
+              line={chosen === kind ? taskWords[kind].line : undefined}
               mark={kind === "here" ? undefined : SERVICE_MARK[kind]}
               name={taskWords[kind].name}
               waiting={pending?.value === kind && !pending.refused}
@@ -166,9 +166,12 @@
 
           {#if linked && kind === linked.kind}
             {@const service = SERVICE[linked.kind]}
-            <!-- The chosen row's facts, on its name's edge. -->
+            <!-- The chosen row's facts, on its name's edge, in two lines:
+                 where it updates (the codebase or team, how many tasks are
+                 linked, the status board) with Change…; then how it
+                 stands, with Refresh now. -->
             <dl
-              class="m-0 flex flex-col gap-space-2 ps-c-details-option-text pe-space-3 pt-space-1 pb-space-2"
+              class="m-0 flex flex-col gap-space-1 ps-c-details-option-text pe-space-3 pt-space-1 pb-space-2"
               data-facts={linked.kind}
             >
               <div
@@ -191,6 +194,37 @@
                 </dd>
                 <dd class="m-0 type-meta tabular-nums text-ink-muted">
                   · {taskWords.linked(linked.linked)}
+                </dd>
+                {#if linked.kind === "github"}
+                  <dt class="type-meta text-ink-muted">· {taskWords.board}</dt>
+                  <dd class="m-0 min-w-0 type-meta">
+                    {#if linked.board && "url" in linked.board}
+                      <Button
+                        href={linked.board.url}
+                        rel="noreferrer"
+                        size="xs"
+                        target="_blank"
+                        variant="link"
+                        ><span>{linked.board.name}</span><IconArrowUpRight
+                          data-icon="inline-end"
+                        /></Button
+                      >
+                    {:else if linked.board}
+                      <span class="text-pretty text-ink-muted"
+                        >{linked.board.reason}</span
+                      >
+                    {:else}
+                      <span class="text-ink-muted">{taskWords.noBoard}</span>
+                    {/if}
+                  </dd>
+                {/if}
+                <dd class="m-0 ms-auto">
+                  <Button
+                    disabled={sunk}
+                    onclick={onchange}
+                    size="xs"
+                    variant="ghost">{taskWords.change}</Button
+                  >
                 </dd>
               </div>
               <div
@@ -247,41 +281,6 @@
                     variant="outline"
                   />
                 </dd>
-              </div>
-              {#if linked.kind === "github"}
-                <div
-                  class="flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
-                >
-                  <dt class="type-meta text-ink-muted">{taskWords.board}</dt>
-                  <dd class="m-0 min-w-0 type-meta">
-                    {#if linked.board && "url" in linked.board}
-                      <Button
-                        href={linked.board.url}
-                        rel="noreferrer"
-                        size="xs"
-                        target="_blank"
-                        variant="link"
-                        ><span>{linked.board.name}</span><IconArrowUpRight
-                          data-icon="inline-end"
-                        /></Button
-                      >
-                    {:else if linked.board}
-                      <span class="text-pretty text-ink-muted"
-                        >{linked.board.reason}</span
-                      >
-                    {:else}
-                      <span class="text-ink-muted">{taskWords.noBoard}</span>
-                    {/if}
-                  </dd>
-                </div>
-              {/if}
-              <div>
-                <Button
-                  disabled={sunk}
-                  onclick={onchange}
-                  size="xs"
-                  variant="ghost">{taskWords.change}</Button
-                >
               </div>
             </dl>
           {/if}
