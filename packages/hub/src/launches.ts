@@ -1,4 +1,5 @@
 import { posix } from "node:path";
+import type { SessionInstruction } from "@cawco/core/fleet";
 import { cleanStartRefusal } from "@cawco/core/harness";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import {
@@ -20,6 +21,7 @@ import { resumedKey } from "@cawco/core/protocol";
 import type { Relaunch } from "@cawco/core/relaunch";
 import { relaunchOf } from "@cawco/core/relaunch";
 import type { ModeAsk } from "@cawco/core/session-messages";
+import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { spawnWords } from "@cawco/core/words/spawn";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { ElysiaStatus, problem } from "elysia";
@@ -30,7 +32,11 @@ import type { DbShape } from "./db";
 import type { PublicInstanceRow } from "./db/instances";
 import type { StoredSendRefusal } from "./db/stored-types";
 import type { AccountUse, SettledSpawn } from "./hub-shapes";
-import { documentFacts, sessionInstructions } from "./memory-scopes";
+import {
+  documentFacts,
+  sessionInstructions,
+  sessionProject,
+} from "./memory-scopes";
 import { makesRoutines } from "./roles";
 import { pickedModel } from "./start-models";
 
@@ -101,6 +107,7 @@ export type LaunchesContext = Pick<
   | "owedOn"
   | "processEvent"
   | "processGeneration"
+  | "projectMemory"
   | "releaseOwed"
   | "sessionName"
   | "takeOwedMove"
@@ -229,6 +236,40 @@ export const createLaunches = (ctx: LaunchesContext) => {
     });
   };
   /**
+   * What a launching session puts in its own instructions: the fleet's
+   * documents for its role, delegate type, model and project, as the fleet
+   * says them now (memory-scopes.ts), then its project's memory index, the
+   * rules every session of the project keeps (memory.ts `indexOf`), as the
+   * folder says them now. A running session keeps what it launched with,
+   * and a compaction keeps it as it keeps the rest. Its project's documents
+   * for its folder are placed there already: in a checkout as its rows
+   * reached the machine, in a clone as the clone was cut. A clean session
+   * loads none of them (core `SpawnPayload.clean`).
+   */
+  const launchInstructions = (stored: InstanceRow): SessionInstruction[] => {
+    if (stored.clean) {
+      return [];
+    }
+    const projects = ctx.db.listProjects();
+    const places = projects.flatMap((project) => project.places);
+    const projectId = sessionProject(stored, places);
+    const index = projectId ? ctx.projectMemory.indexOf(projectId) : "";
+    return [
+      ...sessionInstructions(
+        ctx.db.listFleetMemoryDocs(),
+        documentFacts(
+          stored,
+          places,
+          (id) => projects.find((project) => project.id === id)?.areaId ?? null
+        )
+      ),
+      ...(index
+        ? [{ path: memoryRunWords.indexInstructionPath, content: index }]
+        : []),
+    ];
+  };
+
+  /**
    * MINTED AT DISPATCH. A machine starting a launch asks for what it runs
    * on: the session's credential, minted now, and its account as its row
    * says now. However long the launch was held on its way (custody on the
@@ -270,24 +311,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
     } else if (where.accountId) {
       account = { accountDir: { accountId: where.accountId } };
     }
-    // The fleet's documents for this session's role, delegate type, model
-    // and project, as the fleet says them now (memory-scopes.ts). Its
-    // project's for its folder are placed there already: in a checkout as
-    // its rows reached the machine, in a clone as the clone was cut.
-    // A clean session loads none of them (core `SpawnPayload.clean`).
-    const projects = ctx.db.listProjects();
-    const instructions = stored.clean
-      ? []
-      : sessionInstructions(
-          ctx.db.listFleetMemoryDocs(),
-          documentFacts(
-            stored,
-            projects.flatMap((project) => project.places),
-            (projectId) =>
-              projects.find((project) => project.id === projectId)?.areaId ??
-              null
-          )
-        );
+    const instructions = launchInstructions(stored);
     return {
       sessionCredential: ctx.identities.mint(read.id),
       ...account,

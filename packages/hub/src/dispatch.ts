@@ -216,8 +216,9 @@ export interface DispatchDeps {
   ) => ReturnType<WorkItems["briefing"]>;
   /**
    * The brief's project context for an attempt at `task` (memory.ts
-   * `contextFor`): AGENTS.md and the knowledge files it needs, or "". The
-   * folder's problem is passed up.
+   * `contextFor`): the knowledge it needs, or "" (AGENTS.md the attempt's
+   * session launches with, launches.ts `grantLaunch`). The folder's
+   * problem is passed up.
    */
   readonly context: Memory["contextFor"];
   /**

@@ -57,9 +57,10 @@ const placesHolding = (
 
 /**
  * The project a session works in: the one it was started from, else the one
- * whose checkout holds its folder.
+ * whose checkout holds its folder. Its index (memory.ts `indexOf`) is among
+ * what the session launches with (launches.ts `grantLaunch`).
  */
-const sessionProject = (
+export const sessionProject = (
   session: Launching,
   places: readonly PlacementPlace[]
 ): string | undefined =>

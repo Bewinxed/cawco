@@ -129,6 +129,7 @@ import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
 import { memoryWords } from "@cawco/core/words/memory";
 import { memoryCardWords } from "@cawco/core/words/memory-card";
+import { memoryRunWords } from "@cawco/core/words/memory-run";
 import type { Experimental_DecisionQuestion } from "ai";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
@@ -176,6 +177,7 @@ import {
   withUses,
   wordsOf,
 } from "./memory-facts";
+import { indexSays } from "./memory-lessons";
 import {
   memoryClassifiedWords,
   memoryNotedWords,
@@ -1915,6 +1917,24 @@ export const createMemory = ({
   const answering = new Set<string>();
   /** Proposals being closed ({@link closeStale}): each closes once. */
   const closing = new Set<string>();
+  /**
+   * Each project's index as a session launches with it ({@link indexOf}):
+   * read at the hub's start and again at every commit that changes
+   * AGENTS.md ({@link folderCommitted}).
+   */
+  const indexes = new Map<string, string>();
+
+  /** Project `projectId`'s index read again into {@link indexes}; a read the folder refuses leaves the copy it had. */
+  const readIndex = async (projectId: string) => {
+    const agents = await fileOr(projectId, AGENTS_FILE);
+    if (agents instanceof ElysiaStatus) {
+      return agents;
+    }
+    indexes.set(
+      projectId,
+      indexSays(agents) ? memoryRunWords.indexInstruction(agents) : ""
+    );
+  };
 
   const projectOf = (projectId: string) => {
     const project = db.project(projectId);
@@ -3578,6 +3598,12 @@ export const createMemory = ({
     if (proposals instanceof ElysiaStatus) {
       return proposals;
     }
+    if (paths.has(AGENTS_FILE)) {
+      const read = await readIndex(projectId);
+      if (read) {
+        return read;
+      }
+    }
     const touched = proposals.filter(
       (proposal) =>
         open.get(proposal.id) === projectId &&
@@ -4749,10 +4775,6 @@ export const createMemory = ({
     if (knowledge instanceof ElysiaStatus) {
       return knowledge;
     }
-    const agents = await fileOr(projectId, AGENTS_FILE);
-    if (agents instanceof ElysiaStatus) {
-      return agents;
-    }
     const named = new Set(
       task.context.map((path) => path.replace(LEADING_SLASHES, ""))
     );
@@ -4766,16 +4788,12 @@ export const createMemory = ({
       briefShortlist(factFiles, task, named),
       proseShortlist(factFiles, task, named)
     );
+    // AGENTS.md is the session's own: it launches with it (`indexOf`).
     const whole = wholeFiles(
-      [
-        {
-          path: AGENTS_FILE,
-          content: agents.trim(),
-        },
-        ...knowledge.filter(
-          (file) => BRAND.test(file.path) && named.has(file.path)
-        ),
-      ].filter((file) => file.content !== "")
+      knowledge.filter(
+        (file) =>
+          BRAND.test(file.path) && named.has(file.path) && file.content !== ""
+      )
     );
     const { admitted, left } = admitLines(
       [
@@ -4810,7 +4828,7 @@ export const createMemory = ({
     if (parts.length === 0) {
       return "";
     }
-    return `## Project context\n\nWhat the project keeps for its sessions: AGENTS.md is the person's; each fact is a line of knowledge/ the person approved, with \`since\` (when it became true), \`from\` (the inbox notes it rests on) and, on a line that no longer holds, \`until\`; a line marked \`ruling\` is the person's own word, and a \`Why:\` line under a fact grounds it. ${admitted.size > 0 ? how : ""}\n\n${parts.join("\n\n")}`;
+    return `## Project context\n\nWhat the project keeps for its sessions, beside the rules you launched with: each fact is a line of knowledge/ the person approved, with \`since\` (when it became true), \`from\` (the inbox notes it rests on) and, on a line that no longer holds, \`until\`; a line marked \`ruling\` is the person's own word, and a \`Why:\` line under a fact grounds it. ${admitted.size > 0 ? how : ""}\n\n${parts.join("\n\n")}`;
   };
 
   // --- the hub starting, and the person answering --------------------------------------
@@ -4916,6 +4934,12 @@ export const createMemory = ({
             `[memory] ${project.name}: its proposals were not read: ${why}`
           );
         try {
+          const indexed = await readIndex(project.id);
+          if (indexed) {
+            console.warn(
+              `[memory] ${project.name}: its index was not read: ${indexed.response.detail}`
+            );
+          }
           const parked = await parkAgain(project);
           if (parked instanceof ElysiaStatus) {
             notRead(parked.response.detail);
@@ -5011,6 +5035,14 @@ export const createMemory = ({
     withdraw,
     purged,
     start,
+
+    /**
+     * Project `projectId`'s index (AGENTS.md) as every session of the
+     * project launches with it (launches.ts `grantLaunch`), under the words
+     * saying what it is; empty when it says nothing yet. A copy, read at the
+     * hub's start and at each commit that changes it.
+     */
+    indexOf: (projectId: string): string => indexes.get(projectId) ?? "",
 
     /** Whether `requestId` is a memory proposal waiting on the person. */
     owns: (requestId: string): boolean => open.has(requestId),
