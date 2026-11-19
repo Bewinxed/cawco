@@ -11,7 +11,8 @@
  * So the agent records each session's tree while its commands run: from its
  * model's shell call until no shell call of its is running, the harness
  * process's descendants and the process groups they lead, each by its
- * start, read every {@link RECORD_EVERY_MS} (a harness may spawn the command
+ * start, read every {@link RECORD_EVERY_MS}, one reading of the table for
+ * every session (a harness may spawn the command
  * well after the call: OpenCode's waits on its own permission step). Each
  * reading keeps what still runs of the last, so a background command the
  * turn left is still held after its call returned. When its harness
@@ -110,12 +111,25 @@ export const createLeftRunning = () => {
    * record of the one before until that one is found dead.
    */
   const recorded = new Map<string, Recorded[]>();
-  /** Each session's readings while a shell call of its runs. */
-  const reading = new Map<string, ReturnType<typeof setTimeout>>();
+  /**
+   * The sessions a shell call of which runs, each with the harness process
+   * it runs under: every one of them is recorded off one reading of the
+   * process table a beat ({@link beatAt}), however many there are. Each read
+   * its own every {@link RECORD_EVERY_MS} before, so a machine with ten
+   * sessions in a command read its whole table five times a second.
+   */
+  const reading = new Map<string, number>();
+  /** The next beat's timer, and when it fires (ms epoch); none while nothing is read. */
+  let beat: { at: number; timer: ReturnType<typeof setTimeout> } | undefined;
+  /** The beat's reading under way. */
+  let looking: Promise<void> | undefined;
 
-  /** One reading of `instanceId`'s tree under harness process `pid`: what still runs of the last, and what runs now. */
-  const read = async (instanceId: string, pid: number): Promise<void> => {
-    const rows = await processLineage();
+  /** One reading of `instanceId`'s tree under harness process `pid`, off the process table `rows`: what still runs of the last, and what runs now. */
+  const record = async (
+    instanceId: string,
+    pid: number,
+    rows: readonly ProcessLineage[]
+  ): Promise<void> => {
     const root = rows.find((row) => row.pid === pid);
     if (!root) {
       return;
@@ -145,29 +159,55 @@ export const createLeftRunning = () => {
     }
   };
 
-  /** Reads `instanceId`'s tree after `after`, and again every {@link RECORD_EVERY_MS} until {@link stop}. */
-  const schedule = (instanceId: string, pid: number, after: number): void => {
-    reading.set(
-      instanceId,
-      setTimeout(() => {
-        read(instanceId, pid)
+  /** A beat: the process table read once, and every session in {@link reading} recorded off it. */
+  const look = async (): Promise<void> => {
+    const rows = await processLineage();
+    for (const [instanceId, pid] of reading) {
+      await record(instanceId, pid, rows);
+    }
+  };
+
+  /**
+   * The next beat within `after` ms: a beat already due sooner stands. One
+   * that comes while the last still reads waits for it, and the beat after
+   * a reading is {@link RECORD_EVERY_MS} on while any session is read.
+   */
+  const beatAt = (after: number): void => {
+    const at = Date.now() + after;
+    if (beat && beat.at <= at) {
+      return;
+    }
+    clearTimeout(beat?.timer);
+    beat = {
+      at,
+      timer: setTimeout(() => {
+        beat = undefined;
+        if (looking) {
+          beatAt(RECORD_FIRST_MS);
+          return;
+        }
+        looking = look()
           .catch((error: unknown) =>
             console.warn(
-              `[agent] ${instanceId}: its command's processes could not be read: ${error instanceof Error ? error.message : String(error)}`
+              `[agent] the processes of the sessions' commands could not be read: ${error instanceof Error ? error.message : String(error)}`
             )
           )
           .finally(() => {
-            if (reading.has(instanceId)) {
-              schedule(instanceId, pid, RECORD_EVERY_MS);
+            looking = undefined;
+            if (reading.size > 0) {
+              beatAt(RECORD_EVERY_MS);
             }
           });
-      }, after)
-    );
+      }, after),
+    };
   };
 
   const stop = (instanceId: string): void => {
-    clearTimeout(reading.get(instanceId));
     reading.delete(instanceId);
+    if (reading.size === 0 && beat) {
+      clearTimeout(beat.timer);
+      beat = undefined;
+    }
   };
 
   /** What runs now of `records`' trees: each recorded process still the same one, what it started since, the groups it leads. */
@@ -232,8 +272,8 @@ export const createLeftRunning = () => {
      * `pid`: its tree is read from now while its shell calls run.
      */
     commandStarted(instanceId: string, pid: number): void {
-      stop(instanceId);
-      schedule(instanceId, pid, RECORD_FIRST_MS);
+      reading.set(instanceId, pid);
+      beatAt(RECORD_FIRST_MS);
     },
 
     /** No shell call of session `instanceId` runs any more: its readings stop, and what they hold stays. */

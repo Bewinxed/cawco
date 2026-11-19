@@ -5,8 +5,9 @@
  * started it, its title's sources, its dates). A listing stats every file
  * and reads again only a file whose mtime or size moved since the index
  * took it; every other one answers from the index. The index is kept in
- * the agent's data dir (core `catalogIndexPath`), so a restart reads
- * nothing it has read before.
+ * the agent's data dir (core `catalogIndexPath`), written a minute after a
+ * change ({@link SAVE_AFTER_MS}), so a restart reads again only what moved
+ * in the minute before it.
  *
  * Owner (2026-11-11): "don't u think that the machine's list that is
  * outside of cawco rarely changes? esp old ones?" Before this, every ask of
@@ -94,16 +95,36 @@ const loadIndex = (): Promise<Map<string, Indexed>> => {
   return held;
 };
 
-/** The writes of the index, one after another: the last listing's stands. */
-let saving: Promise<void> = Promise.resolve();
+/**
+ * How long a change to the index waits before the index is written, with
+ * every change made meanwhile. Ours: the index only spares reads, and a
+ * change lost with the process is a file read again by the next listing, by
+ * its mtime and size. Written at each change, the whole index (every
+ * transcript of the machine: 4,083 on obelisk) was serialised and flushed
+ * every few seconds while any session wrote its transcript
+ * ({@link readMoved}).
+ */
+const SAVE_AFTER_MS = 60_000;
 
+/** The index's next write, while one waits. */
+let saving: ReturnType<typeof setTimeout> | undefined;
+
+/** Writes `index` as it stands {@link SAVE_AFTER_MS} on, once for every change until then. */
 const saveIndex = (index: Map<string, Indexed>): void => {
-  const text = JSON.stringify(Object.fromEntries(index));
-  saving = saving
-    .then(() => writeStateFile(catalogIndexPath(), text))
-    .catch((error: unknown) => {
-      console.warn(`[catalog] the index could not be kept: ${error}`);
-    });
+  if (saving) {
+    return;
+  }
+  saving = setTimeout(() => {
+    const text = JSON.stringify(Object.fromEntries(index));
+    writeStateFile(catalogIndexPath(), text)
+      .catch((error: unknown) => {
+        console.warn(`[catalog] the index could not be kept: ${error}`);
+      })
+      .finally(() => {
+        saving = undefined;
+      });
+  }, SAVE_AFTER_MS);
+  saving.unref();
 };
 
 /** What one listing found: the sessions, and how many files it read again. */

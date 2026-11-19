@@ -100,20 +100,30 @@ export const liveWorkItems = (ids: readonly string[]): void => {
 };
 
 /** Every process's command line, as one list and by pid: read once for every workspace a look covers. */
-interface Commands {
+export interface Commands {
   readonly byPid: ReadonlyMap<number, string>;
   readonly lines: readonly { command: string; pid: number }[];
 }
 
 /** What {@link liveWhy} reads, once for every workspace a look covers. */
 export interface LiveFacts {
-  readonly commands: Commands;
+  /**
+   * Every process's command line, read once for the look and only once a
+   * workspace's use turns on it: a command on its way in, or a session in a
+   * place (a person's own folder), known by its hook in its command line. A
+   * look whose every workspace has a session attached, a live work item or
+   * a preview reads no process.
+   */
+  readonly commands: () => Promise<Commands>;
   readonly hub: ReadonlySet<string>;
   readonly previews: ReadonlySet<string>;
   /** Every live process a keeper holds. */
   readonly procs: readonly HeldProc[];
   readonly sessions: ReadonlySet<string>;
 }
+
+/** What {@link attachedIn} reads of the command lines for a workspace that is no place: nothing. */
+const NO_COMMANDS: Commands = { byPid: new Map(), lines: [] };
 
 /** {@link Commands} as they stand now. */
 export const commandsNow = async (): Promise<Commands> => {
@@ -193,17 +203,22 @@ export const inUse = (
  *  - a preview this agent serves names a port in it;
  *  - a command is on its way in or running ({@link executors}).
  */
-export const liveWhy = (
+export const liveWhy = async (
   id: string,
   path: string,
   facts: LiveFacts
-): string | undefined => {
+): Promise<string | undefined> => {
   if (isStarting(id)) {
     return "its boundary is starting";
   }
   if (
     facts.sessions.has(id) ||
-    attachedIn(id, path, facts.procs, facts.commands)
+    attachedIn(
+      id,
+      path,
+      facts.procs,
+      isPlace(id) ? await facts.commands() : NO_COMMANDS
+    )
   ) {
     return "a session there is attached";
   }
@@ -213,7 +228,7 @@ export const liveWhy = (
   if (facts.previews.has(id)) {
     return "a preview shows a server in it";
   }
-  if (executors(facts.commands.lines, id).length > 0) {
+  if (executors((await facts.commands()).lines, id).length > 0) {
     return "a command runs in it";
   }
 };

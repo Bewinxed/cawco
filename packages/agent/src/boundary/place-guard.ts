@@ -199,9 +199,18 @@ export interface Seen {
   readonly ppid: number;
 }
 
-/** Every process on the machine, read once for every workspace processes.ts `busyOld` looks at. */
-export const snapshot = async (): Promise<Seen[]> => {
-  const [rows, lines] = await Promise.all([processLineage(), commandLines()]);
+/**
+ * Every process on the machine, read once for every workspace processes.ts
+ * `busyOld` looks at; `read`, the command lines a look read a moment before
+ * (looks.ts `inUseNow`), where they are not read again.
+ */
+export const snapshot = async (
+  read?: readonly { command: string; pid: number }[]
+): Promise<Seen[]> => {
+  const [rows, lines] = await Promise.all([
+    processLineage(),
+    read ?? commandLines(),
+  ]);
   const commands = new Map(lines.map((line) => [line.pid, line.command]));
   return rows.map((row) => ({
     pid: row.pid,

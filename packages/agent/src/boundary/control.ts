@@ -236,7 +236,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
   if (elsewhere.length === 0) {
     return;
   }
-  const facts = await liveFacts(procs);
+  const facts = liveFacts(procs);
   if (!facts) {
     return;
   }
@@ -252,7 +252,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
     const onRetiring = elsewhere.some(
       (proc) => isBoundaryOf(proc.procId, id) || isJudgeOf(proc.procId, id)
     );
-    if (onRetiring && !liveWhy(id, held.path, facts)) {
+    if (onRetiring && !(await liveWhy(id, held.path, facts))) {
       // One ensured a moment ago may have its session on the way: it is
       // closed at a later look, once quiet.
       if (!recentlyHeld(id)) {

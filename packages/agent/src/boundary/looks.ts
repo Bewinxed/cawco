@@ -38,6 +38,7 @@ import {
 } from "./ensure";
 import {
   type BoundaryHolders,
+  type Commands,
   commandsNow,
   forgetHeld,
   heldSince,
@@ -247,7 +248,7 @@ const inUseNow = async (): Promise<string[]> => {
   const ids = (await readdir(workspacesDir()).catch(() => []))
     .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
     .filter((id) => !(isStarting(id) || isClosing(id)));
-  const facts = await liveFacts(procs);
+  const facts = liveFacts(procs);
   if (!facts) {
     return ids;
   }
@@ -259,11 +260,11 @@ const inUseNow = async (): Promise<string[]> => {
     if (!held) {
       continue;
     }
-    if (liveWhy(id, held.path, facts)) {
+    if (await liveWhy(id, held.path, facts)) {
       used.push(id);
       continue;
     }
-    seen ??= await snapshot();
+    seen ??= await snapshot((await facts.commands()).lines);
     if (await busyOld(seen, id, held)) {
       used.push(id);
     }
@@ -346,27 +347,28 @@ const lookForNarrowing = (): void => {
 let holders: BoundaryHolders | undefined;
 
 /**
- * {@link LiveFacts} as they stand now; none while the hub has not said which
- * work items are live or the daemon has not handed in its holders.
+ * {@link LiveFacts} as they stand now, the command lines read once the look
+ * first asks for them ({@link LiveFacts.commands}); none while the hub has not
+ * said which work items are live or the daemon has not handed in its holders.
  */
-export const liveFacts = async (
+export const liveFacts = (
   procs: readonly HeldProc[]
-): Promise<LiveFacts | undefined> => {
-  if (!(hubLiveNow() && holders)) {
+): LiveFacts | undefined => {
+  const hub = hubLiveNow();
+  if (!(hub && holders)) {
     return;
   }
-  const commands = await commandsNow();
-  // The hub's newest word, read after the wait. Said once, it is never unsaid.
-  const hub = hubLiveNow();
-  return (
-    hub && {
-      commands,
-      hub,
-      previews: new Set(holders.previews()),
-      procs,
-      sessions: new Set(holders.sessions()),
-    }
-  );
+  let commands: Promise<Commands> | undefined;
+  return {
+    commands: () => {
+      commands ??= commandsNow();
+      return commands;
+    },
+    hub,
+    previews: new Set(holders.previews()),
+    procs,
+    sessions: new Set(holders.sessions()),
+  };
 };
 
 /**
@@ -457,14 +459,14 @@ const sweepQuiet = async (): Promise<void> => {
   if (ids.length === 0) {
     return;
   }
-  const facts = await liveFacts(procs);
+  const facts = liveFacts(procs);
   if (!facts) {
     return;
   }
   const now = Date.now();
   for (const id of ids) {
     const held = await readHeld(id).catch(() => undefined);
-    if (!held || liveWhy(id, held.path, facts)) {
+    if (!held || (await liveWhy(id, held.path, facts))) {
       sawHeld(id, now);
       continue;
     }

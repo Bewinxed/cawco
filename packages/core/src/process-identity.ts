@@ -1046,15 +1046,22 @@ export async function executablePath(pid: number): Promise<string | undefined> {
  */
 export async function commandLine(pid: number): Promise<string | undefined> {
   if (process.platform === "linux") {
+    // The arguments alone, as `ps -o command=` prints them: every command
+    // line of the machine is read by a look at the boundaries in use (agent
+    // boundary/holding.ts `commandsNow`), and a process's `environ`,
+    // kilobytes each, was read with them and never shown. Its `stat` is read
+    // only for a process with no arguments, whose name is shown instead: a
+    // kernel thread, or a zombie, whose memory (and so its arguments) went
+    // as it exited. One file a process where it was two.
+    const argv = await linuxArgv(pid);
+    if (argv && argv.length > 0) {
+      return shownCommand(argv, "");
+    }
     const stat = await linuxStat(pid);
     if (!stat) {
       return;
     }
-    // The arguments alone, as `ps -o command=` prints them: every command
-    // line of the machine is read on each look at the boundaries in use
-    // (agent boundary/holding.ts `commandsNow`, every 5 s), and a process's
-    // `environ`, kilobytes each, was read with them and never shown.
-    const shown = shownCommand(await linuxArgv(pid), stat.comm);
+    const shown = shownCommand(argv, stat.comm);
     // procps marks a zombie's name: `[name] <defunct>`.
     return stat.fields[0] === "Z" ? `${shown} <defunct>` : shown;
   }
