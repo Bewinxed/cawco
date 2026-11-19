@@ -168,8 +168,8 @@
             {@const service = SERVICE[linked.kind]}
             <!-- The chosen row's facts, on its name's edge, in two lines:
                  where it updates (the codebase or team, how many tasks are
-                 linked, the status board) with Change…; then how it
-                 stands, with Refresh now. -->
+                 linked, the status board); then how it stands, with Refresh
+                 now and Change…. -->
             <dl
               class="m-0 flex flex-col gap-space-1 ps-c-details-option-text pe-space-3 pt-space-1 pb-space-2"
               data-facts={linked.kind}
@@ -218,14 +218,6 @@
                     {/if}
                   </dd>
                 {/if}
-                <dd class="m-0 ms-auto">
-                  <Button
-                    disabled={sunk}
-                    onclick={onchange}
-                    size="xs"
-                    variant="ghost">{taskWords.change}</Button
-                  >
-                </dd>
               </div>
               <div
                 class="flex flex-wrap items-center gap-x-space-3 gap-y-space-1"
@@ -280,6 +272,14 @@
                     size="xs"
                     variant="outline"
                   />
+                </dd>
+                <dd class="m-0">
+                  <Button
+                    disabled={sunk}
+                    onclick={onchange}
+                    size="xs"
+                    variant="ghost">{taskWords.change}</Button
+                  >
                 </dd>
               </div>
             </dl>
