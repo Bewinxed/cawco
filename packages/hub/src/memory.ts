@@ -26,9 +26,9 @@
  *   the web. A label decides only whether a note counts toward the run's
  *   two-session rule (memory-sources.ts `countsTogether`).
  * - **Rules first**: a note holding what reads as a credential is written
- *   with it redacted (secret-filter.ts) and archived at once; one the
- *   memory files already say word for word is archived at once as a
- *   duplicate. The rest wait for the nightly run.
+ *   with it redacted (secret-filter.ts) and archived at once; one a live
+ *   lesson's line already says word for word is archived at once as a
+ *   duplicate of that lesson. The rest wait for the nightly run.
  * - **Brief context** (dispatch.ts): the knowledge lessons a task needs,
  *   within the brief's budget. Code greps the task's words over the lines
  *   (and takes every line of the files its `context:` names); Jev on, one
@@ -48,6 +48,7 @@ import type {
   NeutralMessage,
   NeutralOrigin,
 } from "@cawco/core/session-messages";
+import { unhandled } from "@cawco/core/unhandled";
 import { memoryWords } from "@cawco/core/words/memory";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -124,6 +125,13 @@ export type Taint = "routine" | "heartbeat" | "subagent" | "web";
 type Verdict = "secret" | "duplicate";
 /** What kind of session wrote a note. */
 type Source = "session" | "delegate" | "attempt" | "routine";
+
+/** The rules' word on a note as it is written: its words, and what they found it to be (a duplicate names the live lesson it says again). */
+type Ruled = { text: string } & (
+  | { verdict: null }
+  | { verdict: "secret" }
+  | { verdict: "duplicate"; lesson: string }
+);
 
 const isVerdict = (word: string | null): word is Verdict =>
   word === "secret" || word === "duplicate";
@@ -601,13 +609,13 @@ const knowledgeOf = async (projectId: string) => {
   return knowledge;
 };
 
-/** What the memory files say, together: what a duplicate note repeats. */
-const knownOf = async (projectId: string) => {
+/** The lesson lines of the memory files' homes, each live: what a duplicate note repeats. */
+const keptLines = async (projectId: string) => {
   const paths = await memoryFiles(projectId);
   if (paths instanceof ElysiaStatus) {
     return paths;
   }
-  const texts: string[] = [];
+  const lines: LessonLine[] = [];
   for (const path of paths.filter((each) => homeOf(each))) {
     const text = await fileOr(projectId, path);
     if (text instanceof ElysiaStatus) {
@@ -616,9 +624,32 @@ const knownOf = async (projectId: string) => {
       }
       return text;
     }
-    texts.push(text);
+    lines.push(...parseLessons(path, text).lessons);
   }
-  return texts.join("\n\n");
+  return lines;
+};
+
+const DUPLICATE = "dropped: duplicate";
+const DUPLICATE_OF = /^dropped: duplicate of (L-[0-9a-f]{6})$/u;
+
+/** An archived note's outcome when it says what live lesson `id` says. */
+export const duplicateOutcome = (id: string): string => `${DUPLICATE} of ${id}`;
+
+/**
+ * Whether `note` was archived as a duplicate without a live lesson it
+ * duplicates: one that names none (written before a duplicate named its
+ * lesson), or names one that is no longer live. Such a note was never
+ * judged, and the recovery reads it.
+ */
+export const duplicateUnjudged = (
+  note: Note,
+  live: (id: string) => boolean
+): boolean => {
+  if (!note.outcome?.startsWith(DUPLICATE)) {
+    return false;
+  }
+  const named = DUPLICATE_OF.exec(note.outcome)?.[1];
+  return !(named && live(named));
 };
 
 /** The notes in one of memory/'s folders, oldest first. */
@@ -799,6 +830,7 @@ const OpInput = z.discriminatedUnion("op", [
       "already-said",
       "unsourced",
     ]),
+    of: z.string().optional(),
   }),
 ]);
 
@@ -930,25 +962,23 @@ export const createMemory = ({
   /**
    * The rules' word on a note's words, as they will be written to the
    * project's git: every secret redacted (secret-filter.ts), the note a
-   * `secret`; one the memory files say word for word a `duplicate`.
+   * `secret`; one a live lesson's line says word for word a `duplicate` of
+   * that lesson.
    */
   const byRules = async (projectId: string, words: string) => {
     const redacted = await redactSecrets(words);
     if (redacted !== words) {
-      const secret: { text: string; verdict: Verdict | null } = {
-        text: redacted,
-        verdict: "secret",
-      };
+      const secret: Ruled = { text: redacted, verdict: "secret" };
       return secret;
     }
-    const known = await knownOf(projectId);
-    if (known instanceof ElysiaStatus) {
-      return known;
+    const lines = await keptLines(projectId);
+    if (lines instanceof ElysiaStatus) {
+      return lines;
     }
-    const ruled: { text: string; verdict: Verdict | null } = {
-      text: words,
-      verdict: saysAlready(known, words) ? "duplicate" : null,
-    };
+    const line = lines.find((each) => saysAlready(each.text, words));
+    const ruled: Ruled = line
+      ? { text: words, verdict: "duplicate", lesson: line.id }
+      : { text: words, verdict: null };
     return ruled;
   };
 
@@ -1003,9 +1033,21 @@ export const createMemory = ({
     if (unensured) {
       return unensured;
     }
-    return made.verdict
-      ? { id: made.id, reaches: "nowhere", verdict: made.verdict }
-      : { id: made.id, reaches: "run" };
+    switch (ruled.verdict) {
+      case "secret":
+        return { id: made.id, reaches: "nowhere", verdict: "secret" };
+      case "duplicate":
+        return {
+          id: made.id,
+          reaches: "nowhere",
+          verdict: "duplicate",
+          lesson: ruled.lesson,
+        };
+      case null:
+        return { id: made.id, reaches: "run" };
+      default:
+        return unhandled("note verdict", ruled);
+    }
   };
 
   /** `actor`'s note made `at`, true since `since`, in the words and with the verdict the rules gave it: in the inbox, or archived at once when the rules sorted it out. */
@@ -1013,8 +1055,13 @@ export const createMemory = ({
     actor: InstanceRow,
     at: Date,
     since: string | null,
-    { text, verdict }: { text: string; verdict: Verdict | null }
+    ruled: Ruled
   ): Note => {
+    const { text, verdict } = ruled;
+    const outcome =
+      ruled.verdict === "duplicate"
+        ? duplicateOutcome(ruled.lesson)
+        : verdict && `dropped: ${verdict}`;
     const item = actor.workItemId ? db.workItem(actor.workItemId) : undefined;
     const id = noteIdAt(at);
     return {
@@ -1030,7 +1077,7 @@ export const createMemory = ({
       taint: taintOf(actor),
       verdict,
       by: verdict ? "rules" : null,
-      outcome: verdict ? `dropped: ${verdict}` : null,
+      outcome: outcome || null,
       text,
     };
   };

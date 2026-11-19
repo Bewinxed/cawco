@@ -561,6 +561,8 @@ export type Change =
     }
   /** A live lesson to another home. */
   | { home: LessonHome; id: string; kind: "move" }
+  /** Lesson `id` says what live lesson `into` says: `into` keeps both's sources and repeats, `id` is retired as merged into it. */
+  | { id: string; into: string; kind: "merge" }
   /** A lesson removed, with why. */
   | {
       id: string;
@@ -1049,6 +1051,38 @@ const withSourcesAdded = (
   ),
 ];
 
+/** Two lessons that say the same made one: `op.into` keeps the sources, repeats and hold of both, `op.id` leaves its home, retired as merged into it. */
+const merged = (
+  now: MemoryTree,
+  op: ChangeOf<"merge">,
+  today: string
+): Done => {
+  const gone = now.ledger.lessons[op.id];
+  const into = now.ledger.lessons[op.into];
+  if (!(gone && into?.state === "live") || op.id === op.into) {
+    return { tree: now };
+  }
+  const kept: Lesson = {
+    ...into,
+    by: into.by === "owner" || gone.by === "owner" ? "owner" : "agent",
+    repeats: into.repeats + gone.repeats,
+    seen: into.seen > gone.seen ? into.seen : gone.seen,
+    since: into.since < gone.since ? into.since : gone.since,
+    sources: withSourcesAdded(into.sources, gone.sources),
+    ...(into.held || gone.held ? { held: true as const } : {}),
+    ...(into.probe || gone.probe ? { probe: into.probe ?? gone.probe } : {}),
+  };
+  return {
+    tree: retireLine(
+      { ...now, ledger: withEntry(now.ledger, op.into, kept) },
+      op.id,
+      "merged",
+      today,
+      op.into
+    ),
+  };
+};
+
 /** A lesson put back in its home as `op.line`, live again, its retirement gone. */
 const restored = (
   now: MemoryTree,
@@ -1168,6 +1202,8 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
         ...(grew ? { grew } : {}),
       };
     }
+    case "merge":
+      return merged(now, op, today);
     case "retire":
       return { tree: retireLine(now, op.id, op.why, today) };
     case "restore":

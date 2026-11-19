@@ -33,7 +33,11 @@
  *   ({@link apply}). It cites each source by a handle the hub gave it, and
  *   the hub checks each operation ({@link checked}): the handle is this
  *   run's; a message states the lesson (Jev, at {@link SUPPORTS}); the
- *   lesson quotes no one (memory-sources.ts `quoteProblem`); an agent's
+ *   lesson quotes no one (memory-sources.ts `quoteProblem`); a new lesson
+ *   says what no lesson kept in its home or the index says (Jev, at
+ *   {@link SAME}, this run's earlier adds among them: {@link keptAlready}),
+ *   and a note dropped as a duplicate names the live lesson it says again;
+ *   an agent's
  *   lesson goes to knowledge, and lands only when notes of two sessions say
  *   it (memory-sources.ts `countsTogether`, and Jev on the pair) or a file
  *   it names holds its match ({@link anchored}), staged in the ledger until
@@ -66,8 +70,11 @@
  *   their session had read the web ({@link recoveryBrief}). The recovery
  *   archives nothing unread: a note its run names in no operation is the
  *   next run's first, and each run that judged something starts the next
- *   ({@link recoveryLeft}). Asked again with nothing left, it reads the
- *   notes earlier recovery runs archived unread ({@link recoveryStart}).
+ *   ({@link recoveryLeft}). Each time it is asked for, the live lessons
+ *   that say the same are made one first ({@link mergedSame}), and it reads
+ *   on, after what it holds, every note no run judged: those earlier
+ *   recovery runs archived unread, and those archived as a duplicate of no
+ *   live lesson ({@link recoveryStart}).
  */
 
 import type { HarnessKind } from "@cawco/core/harness/kinds";
@@ -90,9 +97,12 @@ import type {
 } from "./db/stored-types";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
+import type { JevResult } from "./jev-types";
 import {
   ARCHIVE_DIR,
   archivedNote,
+  duplicateOutcome,
+  duplicateUnjudged,
   fileOr,
   INBOX_DIR,
   type MemoryOp,
@@ -259,6 +269,16 @@ const saysAsLine = (content: string, text: string): boolean =>
     const bare = line.replace(LESSON_ID_TAIL, "");
     return saysAlready(bare, text) && saysAlready(text, bare);
   });
+
+/** The lesson of `path`'s file whose line says `text` word for word and no more. */
+const lineSaying = (
+  path: string,
+  content: string,
+  text: string
+): string | undefined =>
+  parseLessons(path, content).lessons.find(
+    (line) => saysAlready(line.text, text) && saysAlready(text, line.text)
+  )?.id;
 
 /** What a probe's clean session came to: its answer, or why it gave none (routines.ts `probe`). */
 export type ProbeAnswer =
@@ -540,12 +560,15 @@ const readQuestions = (
 ];
 
 /** The Jev rows a batch of questions asks, by their names' prefixes. */
-const rowsOf = (names: string[]): ("said" | "inbox" | "support" | "same")[] => {
+const rowsOf = (
+  names: string[]
+): ("said" | "inbox" | "support" | "same" | "kept")[] => {
   const rows = {
     "said:": "said",
     "note:": "inbox",
     "support:": "support",
     "same:": "same",
+    "kept:": "kept",
   } as const;
   return Object.entries(rows).flatMap(([prefix, row]) =>
     names.some((name) => name.startsWith(prefix)) ? [row] : []
@@ -568,6 +591,27 @@ const readAnswers = (
     } else if (name.startsWith("note:")) {
       read.verdicts.set(name.slice("note:".length), answer.choice);
     }
+  }
+};
+
+/** `asked` put to Jev {@link JEV_QUESTIONS} a request, each request's rows by its questions' names, each request's answers handed to `take`. */
+const inBatches = async <Question extends Experimental_DecisionQuestion>(
+  projectId: string,
+  key: JevAccess,
+  state: Record<string, string>,
+  asked: readonly [string, Question][],
+  take: (answers: JevResult<Record<string, Question>>["answers"]) => void
+): Promise<void> => {
+  for (let at = 0; at < asked.length; at += JEV_QUESTIONS) {
+    const batch = Object.fromEntries(asked.slice(at, at + JEV_QUESTIONS));
+    const result = await askRow(
+      rowsOf(Object.keys(batch)),
+      projectId,
+      key,
+      state,
+      batch
+    );
+    take(result.answers);
   }
 };
 
@@ -786,6 +830,192 @@ const pairQuestions = (
       },
     ])
   );
+
+/** A lesson of the memory beside which a new one is read: its id and words. */
+interface Beside {
+  id: string;
+  text: string;
+}
+
+/**
+ * The lessons a lesson bound for `home` may say again: each live one in that
+ * home or the index, by its line, and with `staged`, each staged one bound
+ * there, by its words; `except` left out.
+ */
+const besideOf = (
+  tree: MemoryTree,
+  home: LessonHome,
+  { except, staged }: { except?: string; staged: boolean }
+): Beside[] => {
+  const into = pathOf(home);
+  return Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) => {
+    const live = lesson.state === "live";
+    const bound = staged ? lesson.staged?.home : undefined;
+    const at = live ? lesson.home : bound;
+    const text = live ? lineOf(tree, id)?.text : lesson.staged?.text;
+    const path = at ? pathOf(at) : undefined;
+    return id !== except &&
+      text &&
+      path &&
+      (path === INDEX_FILE || path === into)
+      ? [{ id, text }]
+      : [];
+  });
+};
+
+/** Jev's question on each lesson of `beside`, whether `text` says what it says, named under `key`. */
+const keptQuestions = (
+  key: string,
+  text: string,
+  beside: readonly Beside[]
+): [string, Experimental_DecisionQuestion][] =>
+  beside.map((kept): [string, Experimental_DecisionQuestion] => [
+    `kept:${key}:${kept.id}`,
+    {
+      type: "boolean",
+      instructions: {
+        lesson: text,
+        kept: kept.text,
+        question: memoryJevWords.keptQuestion,
+      },
+      criteria: memoryJevWords.keptCriteria,
+    },
+  ]);
+
+/** The lesson of `beside` Jev read as saying the same as the one asked under `key`: the likeliest at or over {@link SAME}. */
+const keptAs = (
+  key: string,
+  beside: readonly Beside[],
+  answers: Map<string, number> | undefined
+): string | undefined => {
+  let best: { id: string; score: number } | undefined;
+  for (const kept of beside) {
+    const score = answers?.get(`kept:${key}:${kept.id}`) ?? 0;
+    if (score >= SAME && score > (best?.score ?? 0)) {
+      best = { id: kept.id, score };
+    }
+  }
+  return best?.id;
+};
+
+/**
+ * What a live lesson whose line `line` another memory file says word for
+ * word becomes: merged into that line's lesson, or retired as no longer
+ * needed when the line is the person's own (the index's Notes); nothing
+ * when no other file says it.
+ */
+const duplicateChange = (
+  tree: MemoryTree,
+  id: string,
+  line: string,
+  own: string | undefined
+): Change | undefined => {
+  const others = Object.entries(tree.files).flatMap(([path, content]) =>
+    path !== own && homeOf(path) !== undefined && content !== undefined
+      ? [{ path, content }]
+      : []
+  );
+  const into = others
+    .map(({ path, content }) => lineSaying(path, content, line))
+    .find((found) => tree.ledger.lessons[found ?? ""]?.state === "live");
+  if (into) {
+    return { kind: "merge", id, into };
+  }
+  return others.some(({ content }) => saysAsLine(content, line))
+    ? { kind: "retire", id, why: "unneeded" }
+    : undefined;
+};
+
+/** For each staged lesson of `waiting`, the live lessons it may say again ({@link besideOf}), by its id. */
+const stagedBeside = (
+  tree: MemoryTree,
+  waiting: readonly [string, Lesson][]
+): Map<string, Beside[]> =>
+  new Map(
+    waiting.map(([id, lesson]) => [
+      id,
+      lesson.staged
+        ? besideOf(tree, lesson.staged.home, { except: id, staged: false })
+        : [],
+    ])
+  );
+
+/** Whether a lesson id names a live lesson of `tree`. */
+const liveIn =
+  (tree: MemoryTree) =>
+  (id: string): boolean =>
+    tree.ledger.lessons[id]?.state === "live";
+
+/**
+ * Each pair of live lessons that may say the same: in one home, or one of
+ * them in the index, sharing two words or more (memory-lessons.ts
+ * `grepScore`). Each pair once, the smaller id first.
+ */
+const samePairs = (tree: MemoryTree): [Beside, Beside][] => {
+  const live = Object.entries(tree.ledger.lessons)
+    .flatMap(([id, lesson]) => {
+      const line = lesson.state === "live" ? lineOf(tree, id) : undefined;
+      const path = pathOf(lesson.home);
+      return line && path ? [{ id, text: line.text, path }] : [];
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return live.flatMap((a, at) =>
+    live
+      .slice(at + 1)
+      .filter(
+        (b) =>
+          (a.path === b.path ||
+            a.path === INDEX_FILE ||
+            b.path === INDEX_FILE) &&
+          grepScore(wordsOf(a.text), b.text) >= 2
+      )
+      .map((b): [Beside, Beside] => [
+        { id: a.id, text: a.text },
+        { id: b.id, text: b.text },
+      ])
+  );
+};
+
+/** How early a session reads a lesson's home: the index at its start, a skill's lessons before the skill, knowledge in a brief. */
+const HOME_RANK: Record<LessonHome["at"], number> = {
+  index: 3,
+  skill: 2,
+  knowledge: 1,
+  none: 0,
+};
+
+/**
+ * Of two lessons that say the same, the one kept first and the one merged
+ * into it second: the one the person holds, then his, then the one in the
+ * home sessions read first (the index, a skill, knowledge), then the one
+ * stated again the most, then the older, then the smaller id.
+ */
+const keptFirst = (
+  tree: MemoryTree,
+  a: string,
+  b: string
+): [string, string] => {
+  const rank = (id: string) => {
+    const lesson = tree.ledger.lessons[id];
+    return [
+      lesson?.held ? 1 : 0,
+      lesson?.by === "owner" ? 1 : 0,
+      HOME_RANK[lesson?.home.at ?? "none"],
+      lesson?.repeats ?? 0,
+    ] as const;
+  };
+  const [ra, rb] = [rank(a), rank(b)];
+  for (const at of [0, 1, 2, 3] as const) {
+    if (ra[at] !== rb[at]) {
+      return ra[at] > rb[at] ? [a, b] : [b, a];
+    }
+  }
+  const since = (id: string) => tree.ledger.lessons[id]?.since ?? "";
+  if (since(a) !== since(b)) {
+    return since(a) < since(b) ? [a, b] : [b, a];
+  }
+  return a < b ? [a, b] : [b, a];
+};
 
 /** `tree` with lesson `id`'s entry as `lesson`: a ledger edit, no line changes. */
 const withLesson = (
@@ -1286,17 +1516,13 @@ export const createMemoryRun = ({
       verdicts: new Map(),
       instruction: new Map(),
     };
-    for (let at = 0; at < asked.length; at += JEV_QUESTIONS) {
-      const batch = Object.fromEntries(asked.slice(at, at + JEV_QUESTIONS));
-      const result = await askRow(
-        rowsOf(Object.keys(batch)),
-        project.id,
-        key,
-        { project: project.name },
-        batch
-      );
-      readAnswers(result.answers, read);
-    }
+    await inBatches(
+      project.id,
+      key,
+      { project: project.name },
+      asked,
+      (answers) => readAnswers(answers, read)
+    );
     const { kinds, verdicts, instruction } = read;
     return { kinds, verdicts, instruction };
   };
@@ -2171,7 +2397,7 @@ export const createMemoryRun = ({
     if (typeof probed === "string") {
       return probed;
     }
-    const staged = stagingOf(run, kept, by, file, () =>
+    const staged = stagingOf(run, by, file, () =>
       twoSessions(index, kept.notes, answers)
     );
     if (staged && stagedCount(tree) >= CAPS.staged) {
@@ -2189,20 +2415,52 @@ export const createMemoryRun = ({
   };
 
   /**
-   * Whether a new lesson is staged, and on what (§4.3): one whose sources
-   * Jev must read while it is off waits for it; an agent's lesson waits for
-   * a second session unless a file the hub read bears it out (one no
-   * machine answered for is read again each night). Undefined: it lands.
+   * Why a new lesson may not be added, Jev reading it as saying what a kept
+   * one says ({@link keptAs}): of every live lesson in its home and the
+   * index, and every staged one bound there, this run's earlier adds among
+   * them (each is in `tree`), the one to corroborate. Nothing when none
+   * does, or with Jev off: the lesson is staged then, and Jev reads it the
+   * first night it is on ({@link recheckStaged}). Jev failing, its words.
+   */
+  const keptAlready = async (
+    projectId: string,
+    run: Run,
+    tree: MemoryTree,
+    text: string,
+    home: LessonHome
+  ): Promise<string | undefined> => {
+    if (!run.jev) {
+      return;
+    }
+    const beside = besideOf(tree, home, { staged: true });
+    try {
+      const answers = await answersOf(
+        projectId,
+        Object.fromEntries(keptQuestions("add", text, beside))
+      );
+      const id = keptAs("add", beside, answers);
+      return id ? memoryRunWords.keptAlready(id) : undefined;
+    } catch (error) {
+      return memoryRunWords.jevFailed(
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  };
+
+  /**
+   * Whether a new lesson is staged, and on what (§4.3): with Jev off, every
+   * new lesson waits for it, which reads whether a kept lesson says it
+   * already and what its sources state; an agent's lesson waits for a
+   * second session unless a file the hub read bears it out (one no machine
+   * answered for is read again each night). Undefined: it lands.
    */
   const stagingOf = (
     run: Run,
-    kept: { messages: Given[]; notes: Note[] },
     by: Lesson["by"],
     file: LessonSource | undefined,
     twoOf: () => boolean
   ): { waits: boolean } | undefined => {
-    const waits =
-      !run.jev && (kept.messages.length > 0 || kept.notes.length > 1);
+    const waits = !run.jev;
     const borne = file?.kind === "file" && file.read !== "";
     return waits || !(by === "owner" || borne || twoOf())
       ? { waits }
@@ -2319,7 +2577,7 @@ export const createMemoryRun = ({
       : supported(run, index, resolved, answers);
   };
 
-  /** A lesson's home as asked, and its words, checked: an agent's goes to knowledge; the home, or why not. */
+  /** A new lesson's home as asked, and its words, checked: an agent's goes to knowledge, and no kept lesson says it already ({@link keptAlready}); the home, or why not. */
   const checkedLesson = async (
     projectId: string,
     run: Run,
@@ -2342,7 +2600,11 @@ export const createMemoryRun = ({
       home,
       lesson.by
     );
-    return bad ?? home;
+    return (
+      bad ??
+      (await keptAlready(projectId, run, tree, lesson.text, home)) ??
+      home
+    );
   };
 
   /** How many lessons wait staged. */
@@ -2543,23 +2805,43 @@ export const createMemoryRun = ({
     };
   };
 
-  /** A `drop`, checked: its sources are this run's; its notes leave for the archive with the reason. */
+  /**
+   * A `drop`, checked: its sources are this run's, and a duplicate names
+   * the live lesson it says again (`of`); its notes leave for the archive
+   * with the reason, a duplicate's naming that lesson.
+   */
   const plannedDrop = (
     run: Run,
+    tree: MemoryTree,
     op: Extract<MemoryOp, { op: "drop" }>
   ): Planned => {
     const resolved = resolvedSources(run, op.sources);
     if (typeof resolved === "string") {
       return resolved;
     }
+    let outcome = `dropped: ${op.reason}`;
+    if (op.reason === "duplicate") {
+      const of = op.of?.trim();
+      if (!of) {
+        return memoryRunWords.duplicateOf;
+      }
+      const lesson = tree.ledger.lessons[of];
+      if (lesson?.state !== "live") {
+        return lesson
+          ? memoryRunWords.notLive(of)
+          : memoryRunWords.noLesson(of);
+      }
+      outcome = duplicateOutcome(of);
+    }
     return {
       consumed: op.sources,
       notes: resolved.flatMap((found) =>
-        found.kind === "note"
-          ? [{ note: found.note, outcome: `dropped: ${op.reason}` }]
-          : []
+        found.kind === "note" ? [{ note: found.note, outcome }] : []
       ),
-      said: memoryRunWords.dropped(op.sources.length, op.reason),
+      said: memoryRunWords.dropped(
+        op.sources.length,
+        outcome.slice("dropped: ".length)
+      ),
     };
   };
 
@@ -2585,13 +2867,13 @@ export const createMemoryRun = ({
       case "check":
         return plannedCheck(projectId, run, tree, head, op, index, answers);
       case "drop":
-        return plannedDrop(run, op);
+        return plannedDrop(run, tree, op);
       default:
         return memoryRunWords.noSources;
     }
   };
 
-  /** Jev's answers for one call's questions, by name: each yes's probability. Jev off, none; failing, its words. */
+  /** Jev's answers for one call's questions, by name, {@link JEV_QUESTIONS} a request: each yes's probability. Jev off, none; failing, its words. */
   const answersOf = async (
     projectId: string,
     questions: Record<string, Experimental_DecisionQuestion>
@@ -2600,21 +2882,13 @@ export const createMemoryRun = ({
     if (!key || Object.keys(questions).length === 0) {
       return;
     }
-    const rows = [
-      ...(Object.keys(questions).some((name) => name.startsWith("support:"))
-        ? (["support"] as const)
-        : []),
-      ...(Object.keys(questions).some((name) => name.startsWith("same:"))
-        ? (["same"] as const)
-        : []),
-    ];
-    const result = await askRow(rows, projectId, key, {}, questions);
-    return new Map(
-      Object.entries(result.answers).map(([name, answer]) => [
-        name,
-        "probability" in answer ? answer.probability : 0,
-      ])
-    );
+    const answers = new Map<string, number>();
+    await inBatches(projectId, key, {}, Object.entries(questions), (each) => {
+      for (const [name, answer] of Object.entries(each)) {
+        answers.set(name, "probability" in answer ? answer.probability : 0);
+      }
+    });
+    return answers;
   };
 
   /** The run a session's call belongs to: the curator's of its project, while one is under way. */
@@ -3351,7 +3625,7 @@ export const createMemoryRun = ({
     });
   };
 
-  /** `tree` without each live lesson a line of another memory file says word for word (§6.3 step 1), retired as no longer needed. */
+  /** `tree` with each live lesson a line of another memory file says word for word (§6.3 step 1) merged into that line's lesson, or retired as no longer needed when the line is the person's own (the index's Notes). */
   const withoutDuplicates = (
     tree: MemoryTree,
     today: string,
@@ -3361,24 +3635,12 @@ export const createMemoryRun = ({
     for (const [id, lesson] of Object.entries(tree.ledger.lessons)) {
       const own = pathOf(lesson.home);
       const line = lessonText(now, id);
-      const elsewhere =
-        lesson.state === "live" &&
-        !lesson.held &&
-        line !== undefined &&
-        Object.entries(now.files).some(
-          ([path, content]) =>
-            path !== own &&
-            homeOf(path) !== undefined &&
-            content !== undefined &&
-            saysAsLine(content, line)
-        );
-      if (elsewhere) {
-        now = applyOp(
-          now,
-          checked({ kind: "retire", id, why: "unneeded" }),
-          today,
-          uses
-        ).tree;
+      if (!(lesson.state === "live" && !lesson.held && line !== undefined)) {
+        continue;
+      }
+      const change = duplicateChange(now, id, line, own);
+      if (change) {
+        now = applyOp(now, checked(change), today, uses).tree;
       }
     }
     return now;
@@ -3591,22 +3853,29 @@ export const createMemoryRun = ({
   /**
    * The notes of `ids` no run has judged yet, in the order of `ids`: in the
    * inbox, archived unread before because their session had read the web
-   * (`tainted`), or archived unread with no operation naming them
-   * (`dropped: unread`). A note a run judged since is no longer the
-   * recovery's.
+   * (`tainted`), archived unread with no operation naming them
+   * (`dropped: unread`), or archived as a duplicate of no live lesson
+   * (memory.ts `duplicateUnjudged`). A note a run judged since is no longer
+   * the recovery's.
    */
   const unjudged = async (projectId: string, ids: readonly string[]) => {
     const named = await notesNamed(projectId, new Set(ids));
     if (named instanceof ElysiaStatus) {
       return named;
     }
+    const read = await treeOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const live = liveIn(read.tree);
     const byId = new Map(
       named
         .filter(
           (note) =>
             note.outcome === null ||
             note.outcome.startsWith("tainted") ||
-            note.outcome === UNREAD
+            note.outcome === UNREAD ||
+            duplicateUnjudged(note, live)
         )
         .map((note) => [note.id, note])
     );
@@ -3682,13 +3951,15 @@ export const createMemoryRun = ({
   };
 
   /**
-   * The recovery's inputs made again when it has none (§11, asked again):
-   * the notes a recovery run archived `dropped: unread` (each written by
-   * one of its marks' commits) that no run has judged since, and the legacy
-   * lines the last `memory/recovery.json` held before it went. Undefined
-   * when there are none.
+   * The recovery's inputs as it is asked for (§11): those it holds, and
+   * after them the notes no run judged that it does not hold: each a
+   * recovery run archived `dropped: unread` (written by one of its marks'
+   * commits), and each archived as a duplicate of no live lesson (memory.ts
+   * `duplicateUnjudged`). The legacy lines are those it holds, or with none
+   * held, those the last `memory/recovery.json` held before it went.
+   * Undefined when there is nothing to read.
    */
-  const recoveryAgain = async (projectId: string) => {
+  const recoveryAgain = async (projectId: string, held: Recovery | null) => {
     const marks = await folderCommitsCarrying(projectId, RECOVERY_MARK);
     if (marks instanceof ElysiaStatus) {
       return marks;
@@ -3698,14 +3969,28 @@ export const createMemoryRun = ({
     if (archive instanceof ElysiaStatus) {
       return archive;
     }
-    const notes = archive
-      .filter((note) => note.outcome === UNREAD && written.has(note.path))
-      .map((note) => note.id);
-    const legacy = await lastLegacy(projectId);
+    const read = await treeOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const live = liveIn(read.tree);
+    const notes = [
+      ...new Set([
+        ...(held?.notes ?? []),
+        ...archive
+          .filter(
+            (note) =>
+              (note.outcome === UNREAD && written.has(note.path)) ||
+              duplicateUnjudged(note, live)
+          )
+          .map((note) => note.id),
+      ]),
+    ];
+    const legacy = held ? held.legacy : await lastLegacy(projectId);
     if (legacy instanceof ElysiaStatus) {
       return legacy;
     }
-    const again: Recovery = { legacy, notes, runs: 0 };
+    const again: Recovery = { legacy, notes, runs: held?.runs ?? 0 };
     return notes.length + legacy.length > 0 ? again : undefined;
   };
 
@@ -3733,28 +4018,42 @@ export const createMemoryRun = ({
 
   /**
    * The recovery asked for (routines.ts `recover`): whether it has inputs
-   * for a run. With none left, they are made again from what earlier
-   * recovery runs archived unread ({@link recoveryAgain}), in one commit.
-   * Asked by a person (`by: "ask"`), its chain of runs counts again from
-   * here; by the run before (`by: "chain"`), it counts on.
+   * for a run. Asked by a person (`by: "ask"`), the lessons that say the
+   * same are made one first ({@link mergedSame}), its inputs are topped up
+   * with every note no run judged ({@link recoveryAgain}) in one commit, and
+   * its chain of runs counts again from here; by the run before
+   * (`by: "chain"`), it reads on what it holds.
    */
   const recoveryStart = async (projectId: string, by: "ask" | "chain") => {
     const recovery = await recoveryOf(projectId);
     if (recovery instanceof ElysiaStatus) {
       return recovery;
     }
-    if (by === "ask") {
-      chained.delete(projectId);
-    }
-    if (recovery) {
+    if (by === "chain" && recovery) {
       return true;
     }
-    const again = await recoveryAgain(projectId);
+    if (by === "ask") {
+      chained.delete(projectId);
+      const merged = await mergedSame(projectId);
+      if (merged instanceof ElysiaStatus) {
+        return merged;
+      }
+    }
+    return await toppedUp(projectId, recovery);
+  };
+
+  /** The recovery's inputs topped up ({@link recoveryAgain}) and written in one commit when it gained any; whether it has any. */
+  const toppedUp = async (projectId: string, recovery: Recovery | null) => {
+    const again = await recoveryAgain(projectId, recovery);
     if (again instanceof ElysiaStatus) {
       return again;
     }
     if (!again) {
       return false;
+    }
+    const added = again.notes.length - (recovery?.notes.length ?? 0);
+    if (recovery && added === 0) {
+      return true;
     }
     const read = await treeOf(projectId);
     if (read instanceof ElysiaStatus) {
@@ -3762,10 +4061,88 @@ export const createMemoryRun = ({
     }
     const sha = await commit(projectId, read.tree, read.tree, {
       author: HUB,
-      message: `memory: the recovery asked again, ${again.notes.length} notes it archived unread and ${again.legacy.length} lines to read`,
+      message: `memory: the recovery asked again, ${added} notes no run judged and ${again.legacy.length} lines to read`,
       extra: [{ path: RECOVERY_FILE, content: jsonText(again) }],
     });
     return sha instanceof ElysiaStatus ? sha : true;
+  };
+
+  /**
+   * The live lessons that say the same made one (the invariant an `add`
+   * keeps, {@link keptAlready}, made true of what came before it): each pair
+   * of live lessons in one home, or one of them in the index, sharing two
+   * words or more, asked of Jev ({@link keptQuestions}); each pair at or
+   * over {@link SAME}, the likeliest first, merged, the lesson kept the one
+   * the person stated again or holds, then his, then the most repeated,
+   * then the oldest. One commit by the hub; nothing with Jev off (said in
+   * the log) or no pair.
+   */
+  const mergedSame = async (projectId: string) => {
+    const read = await treeOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    if (!jevAccess(db)) {
+      offLine(
+        "kept",
+        projectId,
+        "lessons that say the same wait for Jev to be merged"
+      );
+      return;
+    }
+    const pairs = samePairs(read.tree);
+    let answers: Map<string, number> | undefined;
+    try {
+      answers = await answersOf(
+        projectId,
+        Object.fromEntries(
+          pairs.flatMap(([a, b]) => keptQuestions(a.id, a.text, [b]))
+        )
+      );
+    } catch (error) {
+      return problem(502, {
+        code: "memory-jev-failed",
+        detail: memoryRunWords.jevFailed(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
+    }
+    const today = dayOf(new Date());
+    const uses = usesOf(projectId);
+    const done: { id: string; into: string }[] = [];
+    const gone = new Set<string>();
+    const same = pairs
+      .map(([a, b]) => ({
+        a,
+        b,
+        score: answers?.get(`kept:${a.id}:${b.id}`) ?? 0,
+      }))
+      .filter(({ score }) => score >= SAME)
+      .sort((x, y) => y.score - x.score);
+    let { tree } = read;
+    for (const { a, b } of same) {
+      if (gone.has(a.id) || gone.has(b.id)) {
+        continue;
+      }
+      const [into, id] = keptFirst(tree, a.id, b.id);
+      ({ tree } = applyOp(
+        tree,
+        checked({ kind: "merge", id, into }),
+        today,
+        uses
+      ));
+      gone.add(id);
+      done.push({ id, into });
+    }
+    if (done.length === 0) {
+      return;
+    }
+    const said = memoryRunWords.merged(done);
+    console.log(`[memory] ${projectId}: ${said}`);
+    return await commit(projectId, read.tree, tree, {
+      author: HUB,
+      message: `memory: ${said}`,
+    });
   };
 
   /** Each project's recovery runs chained since it was last asked for. */
@@ -3904,7 +4281,9 @@ export const createMemoryRun = ({
 
   /**
    * The staged lessons written while Jev was off (`staged.waits`), checked
-   * on the first night it is on (§7): one resting on the person's message
+   * on the first night it is on (§7): one that says what a live lesson in
+   * its home or the index says is merged into it; else one resting on the
+   * person's message
    * lands when Jev finds the message states it and is retired when not;
    * one resting on agents' notes lands when two of them count as two
    * sessions saying the same, and otherwise waits on as staged. One commit.
@@ -3934,16 +4313,24 @@ export const createMemoryRun = ({
         const note = source.kind === "note" ? named.get(source.id) : undefined;
         return note ? [note] : [];
       });
+    const beside = stagedBeside(read.tree, waiting);
     const answers = await answersOf(
       project.id,
       Object.fromEntries(
-        waiting.flatMap(([id, lesson]) => stagedQuestions(id, lesson, notesOf))
+        waiting.flatMap(([id, lesson]) =>
+          stagedQuestions(id, lesson, notesOf, beside.get(id) ?? [])
+        )
       )
     );
     const today = dayOf(new Date());
     let { tree } = read;
     for (const [id, lesson] of waiting) {
-      const change = recheckedChange(id, lesson, notesOf(lesson), answers);
+      const change = recheckedChange(
+        id,
+        lesson,
+        { notes: notesOf(lesson), beside: beside.get(id) ?? [] },
+        answers
+      );
       if (change) {
         ({ tree } = applyOp(tree, checked(change), today, usesOf(project.id)));
       } else if (lesson.staged) {
@@ -3957,11 +4344,12 @@ export const createMemoryRun = ({
     });
   };
 
-  /** Jev's questions on one lesson staged while it was off: each message's support, each pair of notes' sameness. */
+  /** Jev's questions on one lesson staged while it was off: each message's support, each pair of notes' sameness, and whether it says what a lesson of `beside` says. */
   const stagedQuestions = (
     id: string,
     lesson: Lesson,
-    notesOf: (lesson: Lesson) => Note[]
+    notesOf: (lesson: Lesson) => Note[],
+    beside: readonly Beside[]
   ): [string, Experimental_DecisionQuestion][] => {
     const text = lesson.staged?.text ?? "";
     const support = lesson.sources.flatMap(
@@ -3985,11 +4373,16 @@ export const createMemoryRun = ({
           : [];
       }
     );
-    return [...support, ...pairQuestions(`${id}`, notesOf(lesson))];
+    return [
+      ...support,
+      ...pairQuestions(`${id}`, notesOf(lesson)),
+      ...keptQuestions(id, text, beside),
+    ];
   };
 
   /**
-   * What Jev's answers make of a lesson staged while it was off: one resting
+   * What Jev's answers make of a lesson staged while it was off: one that
+   * says what a live lesson of `beside` says is merged into it; else one resting
    * on the person's message lands when a message states it and is retired
    * when none does; one resting on notes lands when two count as two
    * sessions saying the same. Nothing when it waits on.
@@ -3997,9 +4390,13 @@ export const createMemoryRun = ({
   const recheckedChange = (
     id: string,
     lesson: Lesson,
-    notes: Note[],
+    { notes, beside }: { beside: readonly Beside[]; notes: Note[] },
     answers: Map<string, number> | undefined
   ): Change | undefined => {
+    const into = keptAs(id, beside, answers);
+    if (into) {
+      return { kind: "merge", id, into };
+    }
     const saids = lesson.sources.flatMap((source) =>
       source.kind === "said" ? [source.send] : []
     );

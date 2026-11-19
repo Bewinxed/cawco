@@ -526,6 +526,7 @@ const LessonShape = declared(
         on: z.string(),
         text: z.string(),
         why: z.enum([
+          "merged",
           "replaced",
           "expired",
           "reverted",

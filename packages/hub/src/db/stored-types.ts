@@ -175,8 +175,9 @@ export interface Lesson {
     by?: string;
     on: string;
     text: string;
-    /** `stale`: the file it rested on, or the match in it, is gone. */
+    /** `stale`: the file it rested on, or the match in it, is gone. `merged`: another lesson said the same, and holds its sources now (`by`). */
     why:
+      | "merged"
       | "replaced"
       | "expired"
       | "reverted"

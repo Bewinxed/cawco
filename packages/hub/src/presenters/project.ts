@@ -84,7 +84,9 @@ export const viewQueryWords = (data: unknown): string => JSON.stringify(data);
  * nowhere, and why. A union, so no path is answered with another's words.
  */
 export type Noted = { id: string } & (
-  { reaches: "run" } | { reaches: "nowhere"; verdict: "duplicate" | "secret" }
+  | { reaches: "run" }
+  | { reaches: "nowhere"; verdict: "secret" }
+  | { reaches: "nowhere"; verdict: "duplicate"; lesson: string }
 );
 
 /** `memory_note`. */
@@ -94,7 +96,7 @@ export const memoryNotedWords = (noted: Noted): string => {
   }
   return noted.verdict === "secret"
     ? memoryRunWords.notedSecret(noted.id)
-    : memoryRunWords.notedDuplicate(noted.id);
+    : memoryRunWords.notedDuplicate(noted.id, noted.lesson);
 };
 
 /** `memory_apply`: one line per operation, what it committed or why it was refused. */
