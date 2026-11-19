@@ -22,12 +22,12 @@
 </script>
 
 <script lang="ts">
+  import { untrack } from "svelte";
   import {
     Markdown,
     type MarkdownSnippets,
     type MarkdownWhen,
-  } from "@cawco/words-svelte";
-  import { untrack } from "svelte";
+  } from "svelte-words";
   import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { PROSE } from "#lib/prose.js";
   import { cn } from "#lib/utils.js";

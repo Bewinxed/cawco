@@ -500,9 +500,7 @@
       // - core's signal.ts, the one door to signal-wall.ts, which imports
       //   nothing so the srt host can signal through it alone;
       // - cawrier's entry, Workers' `main`, where a Durable Object class is
-      //   found among the entry's exports;
-      // - a published package's entry, the one module its `exports` names,
-      //   and its one door to the library it wraps (@cawco/words-svelte).
+      //   found among the entry's exports.
       "includes": [
         "apps/dashboard/src/lib/components/ui/**/index.ts",
         "apps/dashboard/src/lib/icons.ts",
@@ -510,8 +508,6 @@
         "packages/icons/src/marks.ts",
         "packages/core/src/signal.ts",
         "apps/cawrier/src/index.ts",
-        "packages/words-svelte/src/index.ts",
-        "packages/words-svelte/src/words.ts",
       ],
       "linter": {
         "rules": {

@@ -6,12 +6,12 @@
    * `cawco:` link its kind's element.
    */
   import { inlineBlockName } from "@cawco/core/inline-blocks";
+  import type { ComponentProps } from "svelte";
   import type {
     CodeOptions,
     MarkdownInlineCode,
     MarkdownLink,
-  } from "@cawco/words-svelte";
-  import type { ComponentProps } from "svelte";
+  } from "svelte-words";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { markMentions } from "./find/mention.svelte";
