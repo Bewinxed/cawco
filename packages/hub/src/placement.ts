@@ -44,7 +44,7 @@ import { projectAccountWords } from "@cawco/core/words/project-account";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { markOn } from "./account-marks";
 import type { DbShape } from "./db";
-import { LOOK_AHEAD_MS, runsShortWith } from "./decide";
+import { breaksFloor, LOOK_AHEAD_MS, runsShortWith } from "./decide";
 import type { AccountPaces } from "./window-paces";
 
 /**
@@ -118,7 +118,8 @@ export interface PlacementInput {
    */
   outOfCredit?: readonly AccountCredit[];
   /**
-   * Each account's window paces (forecast.ts `accountPaces`), for the
+   * Each account's window paces (forecast.ts `accountPaces`, read by
+   * rebalance.ts `readProvider`), for the
    * run-out test every strategy reads ({@link runsOutBy}); absent: no
    * forecast, the order alone decides.
    */
@@ -236,9 +237,10 @@ const LASTS_HOURS = (2 * LOOK_AHEAD_MS) / HOUR_MS;
  * `factsOf`): each window's use, its pace, the burn arriving there that its
  * pace misses ({@link arrivingBurn}) and what a percent of it costs, the
  * policy's wait before its reset. Null when it lasts. So no strategy starts
- * a session on an account a forecast moves sessions off (rebalance.ts).
+ * a session on an account a forecast moves sessions off (rebalance.ts
+ * `turnEnded`).
  */
-export const runsOutBy = (
+const runsOutBy = (
   windows: readonly PacedWindow[],
   burn: number,
   arrivals: readonly Arrival[],
@@ -366,6 +368,23 @@ export const pinnedOf = (
   choice: StrategyChoice,
   accounts: Account[]
 ): string | undefined => choice.pinnedAccountId ?? byOrder(accounts)[0]?.id;
+
+/**
+ * The percent `account` keeps free of a window of `group` (core
+ * `Account.reservePct`, `sessionReservePct`): its floor, 0 for none. What
+ * the floor test reads (decide.ts `breaksFloor`), for a start and a move.
+ */
+export const floorOf = (
+  account: Pick<Account, "reservePct" | "sessionReservePct"> | undefined,
+  group: string
+): number => {
+  const floors: Record<string, number | null | undefined> = {
+    weekly: account?.reservePct,
+    session: account?.sessionReservePct,
+  };
+  const used = floors[group];
+  return used === null || used === undefined ? 0 : Math.max(0, 100 - used);
+};
 
 /** The order {@link Usage.said} lists an account's windows in: by length, over all models before one model's. */
 const SAID_ORDER: Record<string, number> = {
@@ -567,17 +586,30 @@ class Usage {
     return this.crossed(account) !== null;
   }
 
-  /** The floor it is past and the window that crossed it (the 5-hour window first); null when it is past none. */
+  /**
+   * The floor it is past and the window that crossed it (the 5-hour window
+   * first), by the one floor test for a new session (decide.ts
+   * `breaksFloor`, nothing priced landing); null when it is
+   * past none.
+   */
   crossed(account: Account): CrossedFloor | null {
     if (
       account.sessionReservePct !== null &&
-      this.session(account.id) >= account.sessionReservePct
+      breaksFloor(
+        100 - this.session(account.id),
+        null,
+        floorOf(account, "session")
+      )
     ) {
       return { pct: account.sessionReservePct, window: "5-hour" };
     }
     if (
       account.reservePct !== null &&
-      this.weekly(account.id) >= account.reservePct
+      breaksFloor(
+        100 - this.weekly(account.id),
+        null,
+        floorOf(account, "weekly")
+      )
     ) {
       return { pct: account.reservePct, window: "weekly" };
     }
@@ -629,19 +661,12 @@ class Usage {
           (one.scope === null || one.scope === this.#scope)
       )
       .map((one) => one.until);
-    const reserve = account.reservePct ?? Number.POSITIVE_INFINITY;
     const resets = this.#bearing(account.id).flatMap((window) => {
       const at = windowResetAt(window);
-      const session = account.sessionReservePct ?? Number.POSITIVE_INFINITY;
-      let stops = 100;
-      if (window.group === "weekly") {
-        stops = Math.min(100, reserve);
-      } else if (window.group === "session") {
-        stops = Math.min(100, session);
-      }
-      return at !== null && at > now && windowUsed(window, now) >= stops
-        ? [at]
-        : [];
+      const left = 100 - windowUsed(window, now);
+      const stops =
+        left <= 0 || breaksFloor(left, null, floorOf(account, window.group));
+      return at !== null && at > now && stops ? [at] : [];
     });
     const all = [...benched, ...resets];
     return all.length > 0 ? Math.max(...all) : undefined;
@@ -1379,6 +1404,8 @@ export interface AccountRow {
   organization: string | null;
   /** The floor it is past, percent of the window that crossed it; null otherwise. */
   pastReserve: number | null;
+  /** What the strategies order it by ({@link pacedOrder}), the session's burn and the burn arriving there counted. */
+  ranked: Ranked;
   /** Whether its limits have been read at all. */
   read: boolean;
   /** Whether it is signed in on the session's machine. */
@@ -1446,6 +1473,7 @@ export const accountRows = (
         read: usage.read(account),
         benchedUntil: benched.length > 0 ? Math.max(...benched) : null,
         pastReserve: usage.crossed(account)?.pct ?? null,
+        ranked: usage.ranked(account),
         backAt: usage.backAt(account) ?? null,
         windows: usage.carryWindows(account.id),
         arrivals: (input.arrivals ?? []).filter(

@@ -1,6 +1,5 @@
 import { accountNameAmong, modelScope } from "@cawco/core/accounts";
 import { OVER_STATUSES } from "@cawco/core/protocol";
-import { DAY_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {
   bearing,
@@ -12,18 +11,22 @@ import {
 } from "@cawco/core/usage/windows";
 import type { DbShape } from "./db";
 import type { PublicInstanceRow } from "./db/instances";
-import { historyPoints, usdPerPercent } from "./forecast";
+import { readPeriods, usdPerPercent } from "./forecast";
+import type { Arrival } from "./placement";
 
 /**
  * The ledger every move of a session onto another account (a held session
- * at a limit, a rebalance, a cold wake) is charged against, one per target
+ * at a limit, a move at a turn's end, a cold wake) is charged against, one per target
  * account, so each decision sees the moves admitted before it and a reset
  * never takes the whole herd at once. Each session is charged its projected
  * re-read (its context written into the target's cold cache, or read from it
  * when its warm cache carries) plus an allowance for its next real turn, in
  * dollars, against every window of the target that bears on the session
  * (core `bearing`), each measured in dollars per percent from that
- * account's own history of it (forecast.ts `usdPerPercent`). The ledger of
+ * account's own periods of it (forecast.ts `usdPerPercent`, over the usage
+ * summary). A charge also carries the session's burn, so the run-out test
+ * counts it arriving on its target ({@link Admission} `arrivals`) until its
+ * cost shows there. The ledger of
  * each window is what the one decision reads of an account here (decide.ts,
  * its floor test): nothing here refuses a move.
  *
@@ -39,11 +42,6 @@ import { historyPoints, usdPerPercent } from "./forecast";
  * apart. One that sleeps still owing its move (taken up at its wake) keeps
  * its charge: it is not on the target yet.
  */
-
-/** How far back an account's dollars per percent is measured: a weekly window and a day, as the forecast reads. */
-const LOOKBACK_MS = 8 * DAY_MS;
-/** How long one account's measured dollars per percent is kept between reads. */
-const PER_PCT_FOR_MS = 60_000;
 
 /**
  * What the ledger holds of one window of a target account now, each a
@@ -73,6 +71,8 @@ export interface Ledger {
 interface Charge {
   accountId: string;
   at: number;
+  /** The session's expected burn, weighted tokens an hour; null when unmeasured. */
+  burn: number | null;
   instanceId: string;
   /** The reset minute of every window it was charged against, by window (null for a fresh one, which nothing opened yet): a new window of any of them drops it. */
   resets: ReadonlyMap<string, number | null>;
@@ -111,34 +111,22 @@ const bearingWindows = (
 export const createAdmission = (db: DbShape) => {
   /** Each session's standing charge, by session. */
   const charges = new Map<string, Charge>();
-  const perPctRead = new Map<string, { at: number; value: number | null }>();
 
   /**
    * Dollars per percent of one of `accountId`'s windows, from its own
-   * history of it: a week measures as a session window does, its readings
-   * grouped by reset.
+   * periods of it in the usage summary: a week measures as a session
+   * window does.
    */
   const perPctOf = (
     accountId: string,
     window: Pick<LimitWindow, "kind" | "scopeLabel">,
     now: number
-  ): number | null => {
-    const key = `${accountId}\u0000${windowKey(window)}`;
-    const known = perPctRead.get(key);
-    if (known && now - known.at < PER_PCT_FOR_MS) {
-      return known.value;
-    }
-    const since = now - LOOKBACK_MS;
-    const history = historyPoints(db, accountId, since);
-    const value = usdPerPercent(
+  ): number | null =>
+    usdPerPercent(
       { kind: window.kind, scopeLabel: window.scopeLabel },
-      history,
-      db.turnUsage.list({ accountId, since }),
+      readPeriods(db, [accountId], now),
       accountId
     );
-    perPctRead.set(key, { at: now, value });
-    return value;
-  };
 
   /** The target's name, as a journal line says it. */
   const nameOf = (accountId: string): string => {
@@ -279,14 +267,35 @@ export const createAdmission = (db: DbShape) => {
   return {
     ledger,
     /**
+     * Each standing charge with a measured burn, as it arrives on its
+     * target (placement.ts `Arrival`): the run-out test counts it there
+     * until its cost shows in that account's measured state.
+     */
+    arrivals(): Arrival[] {
+      prune(Date.now());
+      return [...charges.values()].flatMap((one) =>
+        one.burn
+          ? [
+              {
+                accountId: one.accountId,
+                burn: one.burn,
+                instanceId: one.instanceId,
+                since: one.at,
+              },
+            ]
+          : []
+      );
+    },
+    /**
      * Charges `instanceId`'s move onto `accountId` at `usd` (its re-read and
      * next turn; null when unpriced), against every window there that bears
-     * on its model.
+     * on its model, its `burn` arriving there.
      */
     charge(
       session: Pick<PublicInstanceRow, "id" | "model">,
       accountId: string,
-      usd: number | null
+      usd: number | null,
+      burn: number | null
     ): void {
       const now = Date.now();
       const { windows, reported } = bearingWindows(
@@ -297,6 +306,7 @@ export const createAdmission = (db: DbShape) => {
       );
       charges.set(session.id, {
         accountId,
+        burn,
         instanceId: session.id,
         at: now,
         resets: new Map(

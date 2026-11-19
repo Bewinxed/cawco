@@ -66,8 +66,7 @@ import {
   unreportedHarnessRefusal,
 } from "./placement";
 import { projectOfHubFolder, projectRoot } from "./project-folder";
-import type { ForecastRead } from "./rebalance";
-import { kindBurn, readForecast } from "./rebalance";
+import { readProvider } from "./rebalance";
 import type { createSends } from "./sends";
 import { UNREAD } from "./sends";
 import type { SpawnProblem } from "./spawn-problems";
@@ -653,9 +652,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       model: payload.model,
       ...asks,
       ...(fork ? { fork } : {}),
-      ...carryTestFor(provider, (forecast) =>
-        kindBurn(forecast, isOfKind(forecast, asks.kind), now)
-      ),
+      ...carryTestFor(provider, asks.kind),
       now,
     };
   };
@@ -663,20 +660,20 @@ export const createSpawns = (ctx: SpawnsContext) => {
   /**
    * What placement's run-out test reads (placement `paces`, `burn` and
    * `arrivals`), for every strategy: each of `provider`'s accounts' paces,
-   * the burn the session brings, and the sessions already arriving on each
-   * account but `self`. The figures a forecast reads (rebalance.ts
-   * `readForecast`), so a start never lands where a forecast moves off.
+   * the burn a new session of `kind` brings, and the sessions already
+   * arriving on each account. The figures every decision reads
+   * (rebalance.ts `readProvider`), so a start never lands where a forecast
+   * moves off.
    */
   const carryTestFor = (
     provider: AccountProvider,
-    burnOf: (forecast: ForecastRead) => number | null,
-    self?: string
+    kind: "yours" | "delegates"
   ): Pick<PlacementInput, "arrivals" | "burn" | "paces"> => {
-    const forecast = readForecast(ctx.db, provider, Date.now(), owedTargets());
+    const read = readProvider(ctx.db, provider, Date.now(), owedTargets());
     return {
-      paces: forecast.paces,
-      burn: burnOf(forecast),
-      arrivals: forecast.arrivals.filter((one) => one.instanceId !== self),
+      paces: read.paces,
+      burn: read.kinds[kind],
+      arrivals: read.arrivals,
     };
   };
 
@@ -699,27 +696,6 @@ export const createSpawns = (ctx: SpawnsContext) => {
       }
     }
     return owed;
-  };
-
-  /** Whether a session with turns in `forecast` is of `kind`: a person's, or a session's delegate. */
-  const isOfKind = (
-    forecast: ForecastRead,
-    kind: "yours" | "delegates"
-  ): ((instanceId: string) => boolean) => {
-    const ids = [
-      ...new Set(
-        [...forecast.turns.values()].flatMap((turns) =>
-          turns.map((turn) => turn.instanceId)
-        )
-      ),
-    ];
-    const delegates = new Set(
-      ctx.db
-        .getInstancesByIds(ids)
-        .filter((row) => row.parentInstanceId)
-        .map((row) => row.id)
-    );
-    return (instanceId) => delegates.has(instanceId) === (kind === "delegates");
   };
 
   /**

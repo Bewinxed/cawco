@@ -1,7 +1,6 @@
 import {
   type Account,
   type AccountMove,
-  type AccountProvider,
   type AccountReading,
   type AccountSignin,
   accountNameAmong,
@@ -17,8 +16,6 @@ import { OVER_STATUSES } from "@cawco/core/protocol";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
-  aheadOfWeek,
-  earliestReset,
   openedAt,
   windowKey,
   windowResetAt,
@@ -32,7 +29,7 @@ import type { KeptOff } from "./account-marks";
 import { type Admission, usdWords } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
-import type { LimitHold } from "./db/at-limit";
+import type { HeldMove, LimitHold } from "./db/at-limit";
 import {
   type DecidedMove,
   type DecideFacts,
@@ -66,15 +63,14 @@ import {
 } from "./limit-decision";
 import {
   type AccountRow,
-  type Arrival,
   accountRows,
   arrivingBurn,
+  floorOf,
   type PlacementInput,
   pacedOrder,
   pinnedOf,
-  runsOutBy,
 } from "./placement";
-import { createRebalancer, readForecast, sessionBurn } from "./rebalance";
+import { createRebalancer, readProvider } from "./rebalance";
 
 /**
  * A running Claude session whose account reached its limit: its turn was
@@ -109,10 +105,15 @@ import { createRebalancer, readForecast, sessionBurn } from "./rebalance";
  * in turn. A move that fails for the target's part ({@link Kept.target})
  * goes to the next account the same decision weighed.
  *
- * The same controller rebalances before any limit (rebalance.ts): a
- * session on an account that runs short moves only when the move is free
- * (its cache carries, or is cold already), and held sessions are looked at
- * again at once.
+ * The same controller decides ahead of any limit (rebalance.ts): at its
+ * own turn's end, a session on an account that runs short moves only when
+ * the move is free (its cache carries). It acts only on events: a refused
+ * turn or sign-in, a turn's end, a person's move, a message held at a
+ * limit, a machine back, and, for the holds alone, any change of their
+ * provider's accounts (a reading, a sign-in, a bench) or the moment a hold
+ * waits for ({@link plan}); no clock looks at every account. Decisions of
+ * one provider are taken one at a time, in the order their events came
+ * ({@link serially}).
  *
  * A turn that ran on its account's extra usage past a plan limit was not
  * refused: Claude Code answered it on the account's credits. The account's
@@ -140,16 +141,20 @@ import { createRebalancer, readForecast, sessionBurn } from "./rebalance";
  * A hold carries on by itself only within its provider's cutoff (core
  * `AtLimit.staleAfterHours`, a day by default): past its reset by more, or
  * held that long on a refused sign-in, it goes stale ({@link goneStale}):
- * nothing sends to it, wakes it or moves it, whatever looks at it (a recheck,
- * a machine connecting, a hub's boot), until a person or its parent writes
- * to it.
+ * nothing sends to it, wakes it or moves it, whatever looks at it (a
+ * change of its accounts, a machine connecting, a hub's boot), until a
+ * person or its parent writes to it.
  */
 
 /* ------------------------------------------------------ the controller — */
 
-/** How often a held session is looked at again before its reset. */
-const RECHECK_MS = 5 * MINUTE_MS;
-/** How soon a refused session still mid-turn on its machine is looked at again… */
+/**
+ * How soon a refused session still mid-turn on its machine is looked at
+ * again… The refused turn's result is the turn's end the hub hears
+ * (agent-socket turn-flow.ts), and the machine may still report the session
+ * busy as it reads it (server.ts `sessionIdle`); no later event comes for
+ * that turn, so this poll, for that session alone, is what decides it.
+ */
 const SETTLE_MS = 5000;
 /** …for this long: a session busy past it started a turn its account took. */
 const SETTLE_FOR_MS = 2 * MINUTE_MS;
@@ -163,16 +168,6 @@ const SETTLE_FOR_MS = 2 * MINUTE_MS;
  * waits there for its next message, and nothing holds it where it is.
  */
 type Cause = "limit" | "refused-credential" | "extra-usage";
-
-/** The percent `account` keeps free of a window of `group` (core `Account.reservePct`, `sessionReservePct`): its floor; 0 for none. */
-const floorOf = (account: Account | undefined, group: string): number => {
-  const floors: Record<string, number | null | undefined> = {
-    weekly: account?.reservePct,
-    session: account?.sessionReservePct,
-  };
-  const used = floors[group];
-  return used === null || used === undefined ? 0 : Math.max(0, 100 - used);
-};
 
 /**
  * Why `row` (placement's row of an account) can't take a session whatever
@@ -216,20 +211,21 @@ const outOf = (
 /**
  * Every account of `leaving`'s provider as the decision for `row` reads it
  * ({@link AtLimitPorts.accountRows}): placement's rows (placement.ts
- * `accountRows`) with the burn already arriving on each (`how.owed`: the
- * sessions on their way to an account; `landing`: those a look already
- * sent), the ledger's figures (admission.ts), each window's floor, and
- * where the kind's strategy ranks it, a sign-in a turn on `row`'s machine
- * proved since `how.provenSince` breaking ties; `row`'s own burn and its
- * model's window; and the provider's refusals the hub keeps for its model
- * (`how.keptOff`, hub account-marks.ts), which no move lands on.
+ * `accountRows`) over the provider as read once (rebalance.ts
+ * `readProvider`: the usage summary's paces, the burn already arriving on
+ * each, `how.owed` the sessions on their way to an account and the ledger's
+ * admitted moves), the ledger's figures (admission.ts), each window's floor
+ * (placement.ts `floorOf`), and where the kind's strategy ranks it
+ * (placement's own order, `AccountRow.ranked`), a sign-in a turn on `row`'s
+ * machine proved since `how.provenSince` breaking ties; `row`'s own burn
+ * and its model's window; and the provider's refusals the hub keeps for its
+ * model (`how.keptOff`, hub account-marks.ts), which no move lands on.
  */
 export const accountsRead = (
   db: DbShape,
-  admission: Pick<Admission, "ledger">,
+  admission: Pick<Admission, "arrivals" | "ledger">,
   row: LimitRow,
   leaving: string,
-  landing: readonly Arrival[],
   how: {
     asks: Pick<
       PlacementInput,
@@ -262,11 +258,9 @@ export const accountsRead = (
     pinned: pinnedOf(choice, accounts) ?? null,
     prefers: asks.typeAccount ?? null,
   };
-  const forecast = readForecast(db, provider, now, how.owed);
-  const burn = sessionBurn([...forecast.turns.values()].flat(), row.id, now);
+  const read = readProvider(db, provider, now, how.owed, admission.arrivals());
+  const burn = read.burns.get(row.id) ?? null;
   const proven = db.turnUsage.accountsUsedOn(row.machineId, how.provenSince);
-  const arriving = landing.filter((one) => one.instanceId !== row.id);
-  const landed = new Set(arriving.map((one) => one.instanceId));
   const rows = accountRows(
     {
       accounts,
@@ -280,41 +274,22 @@ export const accountsRead = (
       ...(row.model ? { model: row.model } : {}),
       ...asks,
       ...how.keptOff,
-      paces: forecast.paces,
-      arrivals: [
-        ...forecast.arrivals.filter(
-          (one) => one.instanceId !== row.id && !landed.has(one.instanceId)
-        ),
-        ...arriving,
-      ],
+      paces: read.paces,
+      burn,
+      arrivals: read.arrivals.filter((one) => one.instanceId !== row.id),
       now,
     },
     ""
   );
   const byId = new Map(accounts.map((account) => [account.id, account]));
   const order = pacedOrder(strategy.kind, strategy.pinned ?? undefined);
-  const ranked = (one: AccountRow) => ({
-    ahead: aheadOfWeek(one.windows, now) !== undefined,
-    id: one.id,
-    order: one.order,
-    createdAt: one.createdAt,
-    binding: Math.max(
-      0,
-      ...one.windows.map((window) => windowUsed(window, now))
-    ),
-    reset: earliestReset(one.windows, now),
-    runsOut: runsOutBy(one.windows, burn ?? 0, one.arrivals, one.id, {
-      now,
-      waitMs: db.accounts.routing(provider).atLimit.waitMinutes * MINUTE_MS,
-    }),
-  });
   const ranks = new Map(
     [...rows]
       .sort(
         (a, b) =>
           Number(b.id === strategy.prefers) -
             Number(a.id === strategy.prefers) ||
-          order(ranked(a), ranked(b)) ||
+          order(a.ranked, b.ranked) ||
           Number(proven.has(b.id)) - Number(proven.has(a.id))
       )
       .map((one, at) => [one.id, at])
@@ -436,16 +411,13 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    */
   const towards = new Map<string, { from: Account; to: Account }>();
   /**
-   * The sessions this look at the holds sent to another account, as they
-   * arrive there: a later decision in the same look counts their burn on it
-   * (each one's charge it reads from the ledger). Emptied as a look begins.
+   * The move `instanceId`'s hold waits to make once its work in flight
+   * ends, as its hold's row keeps it (db at-limit.ts `heldMove`), so a hub
+   * restart keeps it: put, or gone (null).
    */
-  const landing = new Map<string, Arrival>();
-  /**
-   * Held sessions no person waits on whose move waits for work their process
-   * holds for later: where it goes, and that work in its machine's words.
-   */
-  const later = new Map<string, { to: string; why: string }>();
+  const waitsToMove = (instanceId: string, move: HeldMove | null): void => {
+    db.atLimit.putHeldMove(instanceId, move);
+  };
 
   /**
    * `instanceId`'s move no longer waits for work in flight, and nothing is
@@ -474,9 +446,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     cause: Cause,
     now: number
   ): { decision: MoveChoice; facts: DecideFacts } | undefined => {
-    const facts = factsOf(db, ports, row, current, now, {
-      landing: [...landing.values()],
-    });
+    const facts = factsOf(db, ports, row, current, now);
     if (!facts) {
       return;
     }
@@ -715,9 +685,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         settling.delete(row.id);
         return;
       }
-      act(fresh, current, cause).catch((error: unknown) => {
-        console.error(failedWords(fresh, current, error));
-      });
+      detach(
+        serially(current.provider, "a settling session's look", () =>
+          act(fresh, current, cause).catch((error: unknown) => {
+            console.error(failedWords(fresh, current, error));
+          })
+        ),
+        "at-limit settle"
+      );
     });
     settling.set(row.id, { timer: next, until });
   };
@@ -729,7 +704,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     error: unknown
   ): string => {
     const named = accountNameAmong(current, db.accounts.list());
-    return `[at-limit] ${ports.named(row)}: the hub's answer to ${named}'s limit failed: ${messageOf(error)}. It stays on ${named} as it was; the next look at the limit decides again.`;
+    return `[at-limit] ${ports.named(row)}: the hub's answer to ${named}'s limit failed: ${messageOf(error)}. It stays on ${named} as it was; the next change of its accounts, or a message to it, decides again.`;
   };
 
   /** The line a move writes: what it re-read and what the decision priced, beside the next best, and the window, or the refused sign-in, that sent it. */
@@ -774,7 +749,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     };
   };
 
-  /** When `row` may go on on `current` again: the reset that refused it, else the next look the policy allows. */
+  /** When `row` may go on on `current` again: the reset that refused it, else the policy's wait from now. */
   const holdUntil = (row: LimitRow, current: Account, now: number): number =>
     refusedUntil(
       db.accounts.bench(now),
@@ -851,8 +826,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * ({@link planOf}), its line written once it has moved whole or compacts
    * there; a compaction before the move, or a summary, writes its own as it
    * goes. A move off a refused sign-in is also said to whoever hears its
-   * reports. A move that ended work its process held for later says so.
-   * Answers why it did not move.
+   * reports. A move that ended work its process held for later says so;
+   * with `keepWork`, the move waits for that work instead. Answers why it
+   * did not move.
    */
   const carryMove = async (
     row: LimitRow,
@@ -861,7 +837,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     move: DecidedMove,
     tokens: number | null,
     cause: Cause,
-    laterSince: number | undefined
+    keepWork: boolean
   ): Promise<Kept | undefined> => {
     const refused = cause === "refused-credential";
     const plan = planOf(move);
@@ -888,7 +864,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       move,
       carryOn[cause],
       plan.method === "whole" ? undefined : { line, move: moved, plan },
-      laterSince
+      keepWork
     );
     if ("kept" in done) {
       return done.kept;
@@ -985,9 +961,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         if (!fresh || over(fresh)) {
           return;
         }
-        act(fresh, current, cause).catch((error: unknown) => {
-          console.error(failedWords(fresh, current, error));
-        });
+        detach(
+          serially(current.provider, "an announced move", () =>
+            act(fresh, current, cause).catch((error: unknown) => {
+              console.error(failedWords(fresh, current, error));
+            })
+          ),
+          "at-limit notice"
+        );
       })
     );
     return true;
@@ -1110,7 +1091,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       const decided = decide(row, current, cause, now);
       if (!decided) {
         console.info(
-          `[at-limit] ${ports.named(row)} isn't decided: ${accountNameAmong(current, db.accounts.list())} is none of its provider's accounts the hub reads now. The next look decides again.`
+          `[at-limit] ${ports.named(row)} isn't decided: ${accountNameAmong(current, db.accounts.list())} is none of its provider's accounts the hub reads now. The next change of the accounts decides again.`
         );
         return;
       }
@@ -1151,7 +1132,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
     if (decision.kind === "stay") {
       settling.delete(row.id);
-      later.delete(row.id);
+      waitsToMove(row.id, null);
       waitEnded(row.id);
       if (cause === "extra-usage") {
         stillOnExtraUsage(row, current, decision);
@@ -1213,9 +1194,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   /**
    * Reserves `row`'s move to `target` before any await, so a decision
    * meanwhile counts it: its charge on the ledger (its re-read and its next
-   * turn there), its burn arriving there, its chip on its way (one on extra
-   * usage was answered, not stopped: its chip says nothing, as at a
-   * rebalance's move).
+   * turn there, and its burn arriving there), its chip on its way (one on
+   * extra usage was answered, not stopped: its chip says nothing, as at a
+   * move ahead of a limit).
    */
   const reserve = (
     row: LimitRow,
@@ -1229,34 +1210,27 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     ports.admission.charge(
       row,
       target.id,
-      move.usd === null || next === null ? null : move.usd + next
+      move.usd === null || next === null ? null : move.usd + next,
+      facts.session.burn
     );
-    if (facts.session.burn) {
-      landing.set(row.id, {
-        accountId: target.id,
-        burn: facts.session.burn,
-        instanceId: row.id,
-        since: facts.now,
-      });
-    }
     if (cause !== "extra-usage") {
       towards.set(row.id, { from: current, to: target });
     }
     ports.changed();
   };
 
-  /** A reserved move that did not go: its charge and its arrival go with it. */
+  /** A reserved move that did not go: its charge, and its arrival with it, goes. */
   const unreserve = (row: LimitRow): void => {
     ports.admission.refund(row.id);
-    landing.delete(row.id);
   };
 
   /**
    * A move whose carry left `row` where it was (`kept`): one on extra usage
    * goes on there, its next turn's end deciding again; any other is held,
    * its hold keeping its start (`since`), and one whose move waits for work
-   * its process holds for later (`laterSince` given) says so. Answers why
-   * when the target's own part failed, so the next target may take it.
+   * its process holds for later (`keepWork`) says so, the move it waits to
+   * make kept on its hold. Answers why when the target's own part failed, so
+   * the next target may take it.
    */
   const keptAt = (
     row: LimitRow,
@@ -1265,8 +1239,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     kept: Kept,
     how: {
       cause: Cause;
+      keepWork: boolean;
       last: boolean;
-      laterSince: number | undefined;
       since: number | undefined;
     }
   ): string | undefined => {
@@ -1278,17 +1252,19 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       );
       return;
     }
-    const { laterSince } = how;
-    const waits = kept.later !== undefined && laterSince !== undefined;
-    if (kept.later !== undefined && laterSince !== undefined) {
-      later.set(row.id, { to: target.id, why: kept.later });
-    }
+    const waits = kept.later !== undefined && how.keepWork;
     unmoved(row, current, target, kept.why, {
       held: !kept.target || how.last,
       refused: how.cause === "refused-credential",
       since: how.since,
       waits,
     });
+    waitsToMove(
+      row.id,
+      waits && kept.later !== undefined
+        ? { to: target.id, why: kept.later }
+        : null
+    );
     return kept.target ? kept.why : undefined;
   };
 
@@ -1299,7 +1275,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * settling otherwise. A person waiting on it never waits for what its
    * process holds for later: the move ends that work now. Nobody waiting,
    * that work is never ended for the move (decided 2026-11-19): the move
-   * waits for it, decided again at each look.
+   * waits for it, decided again whenever its hold is.
    */
   const moveTo = async (
     row: LimitRow,
@@ -1334,10 +1310,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       settling.delete(row.id);
     }
     const held = db.atLimit.hold(row.id);
-    // Given, `laterSince` keeps that work: counted from now at every look,
-    // its cap is never reached, so nothing ends it for the move.
-    const laterSince =
-      facts.session.personWaiting || cause !== "limit" ? undefined : Date.now();
+    // Nobody waits on a session stopped at its limit: its move keeps the
+    // work its process holds for later, and waits for it.
+    const keepWork = !facts.session.personWaiting && cause === "limit";
     if (
       move.announce &&
       announce(row, current, target, move, tokens, cause, now)
@@ -1365,16 +1340,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       move,
       tokens,
       cause,
-      laterSince
+      keepWork
     );
     if (!kept) {
-      later.delete(row.id);
+      waitsToMove(row.id, null);
       return;
     }
     return keptAt(row, current, target, kept, {
       cause,
+      keepWork,
       last: how.last,
-      laterSince,
       since: held?.since,
     });
   };
@@ -1394,7 +1369,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   ): void => {
     settling.delete(row.id);
     // Whatever it waited for before, this decision keeps it here now.
-    later.delete(row.id);
+    waitsToMove(row.id, null);
     waitEnded(row.id);
     if (cause === "extra-usage") {
       return;
@@ -1551,7 +1526,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       return;
     }
     db.atLimit.markStale(row.id, now);
-    later.delete(row.id);
+    waitsToMove(row.id, null);
     waitEnded(row.id);
     const from = accountNameAmong(current, db.accounts.list());
     const hours = cutoffOf(current) / HOUR_MS;
@@ -1602,24 +1577,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     return { ...held, since: now, staleAt: null };
   };
 
-  /** Held sessions a look is on now: one look at a hold at a time ({@link lookAt}). */
-  const looking = new Set<string>();
-
   /**
    * One held session, its hold as it stands now: past the cutoff, nothing is
    * done to it ({@link goneStale}) unless `asked`: a person's or its
    * parent's word, or a Continue, took it up ({@link takenUp}); else it is
    * carried on ({@link carryHold}). One that runs no more has its hold
-   * dropped.
-   *
-   * Looks run side by side (a recheck, a rebalance's pass, an account back
-   * from its bench, a message held at the limit), each over the holds it
-   * listed as it began. So a hold is looked at by one look at a time, read
-   * as it stands when that look reaches it: one another look is on is left
-   * to it, and one another look ended (it moved the session, or carried it
-   * on at its reset) is not looked at. A look acting on its list's copy
-   * moved a session it no longer held a second time (obelisk, 2026-11-05
-   * 12:40:30: a move re-reading 1,000k tokens cold, 3 s after the first).
+   * dropped. Read as it stands when its turn comes ({@link serially}): one an
+   * earlier decision ended (it moved the session, or carried it on at its
+   * reset) is not looked at. Two looks side by side once each moved the
+   * same session (obelisk, 2026-11-05 12:40:30: a move re-reading 1,000k
+   * tokens cold, 3 s after the first).
    */
   const lookAt = async (
     instanceId: string,
@@ -1627,14 +1594,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     asked: TakenUpBy | undefined
   ): Promise<void> => {
     const held = db.atLimit.hold(instanceId);
-    if (!held || looking.has(instanceId)) {
-      return;
-    }
-    looking.add(instanceId);
-    try {
+    if (held) {
       await lookAtHeld(held, now, asked);
-    } finally {
-      looking.delete(instanceId);
     }
   };
 
@@ -1648,7 +1609,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const current = db.accounts.get(held.accountId);
     if (over(row) || !row || !current) {
       db.atLimit.dropHold(held.instanceId);
-      later.delete(held.instanceId);
+      waitsToMove(held.instanceId, null);
       waitEnded(held.instanceId);
       if (held.staleAt !== null) {
         ports.unstale({ id: held.instanceId });
@@ -1715,7 +1676,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
     if (await ports.idle(row)) {
       db.atLimit.dropHold(row.id);
-      later.delete(row.id);
+      waitsToMove(row.id, null);
       waitEnded(row.id);
       console.info(
         `[at-limit] ${ports.named(row)}: ${accountNameAmong(current, db.accounts.list())}'s limit has reset, so it carries on there, told to pick up where the limit stopped it.`
@@ -1759,38 +1720,151 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
-   * One look at every hold, one decision each in admission order
-   * ({@link admissionOrder}): each charges its move to the ledger and counts
-   * its burn as arriving on its target before the next is decided.
+   * The provider of `accountId`, whose decisions run one at a time
+   * ({@link serially}); "" for an account the hub no longer has.
    */
-  const lookAtHolds = async (): Promise<void> => {
+  const providerOf = (accountId: string | null | undefined): string =>
+    (accountId ? db.accounts.get(accountId)?.provider : undefined) ?? "";
+
+  /** Each provider's decisions, as one chain: the next starts once the one before it ended. */
+  const chains = new Map<string, Promise<void>>();
+
+  /**
+   * Runs `work` once every decision of `provider` before it has ended, so
+   * decisions of one provider are taken one at a time, in the order their
+   * events came. A failure is logged as `what`'s and ends only that work.
+   */
+  const serially = (
+    provider: string,
+    what: string,
+    work: () => Promise<void>
+  ): Promise<void> => {
+    const before = chains.get(provider) ?? Promise.resolve();
+    const run = before.then(work).catch((error: unknown) => {
+      console.error(`[at-limit] ${what} failed: ${messageOf(error)}`);
+    });
+    chains.set(provider, run);
+    // The chain's tail is let go once nothing waits behind it.
+    run.finally(() => {
+      if (chains.get(provider) === run) {
+        chains.delete(provider);
+      }
+    });
+    return run;
+  };
+
+  /**
+   * One look at every hold of `provider`, one decision each in admission
+   * order ({@link admissionOrder}): each charges its move to the ledger,
+   * its burn arriving on its target, before the next is decided.
+   */
+  const lookAtHolds = async (provider: string): Promise<void> => {
     const now = Date.now();
-    landing.clear();
-    for (const held of admissionOrder(db.atLimit.holds())) {
+    const holds = db.atLimit
+      .holds()
+      .filter((one) => providerOf(one.accountId) === provider);
+    for (const held of admissionOrder(holds)) {
       await lookAt(held.instanceId, now, undefined);
     }
   };
+
+  /** The providers whose holds wait to be looked at again, a look queued for each ({@link lookAgain}). */
+  const looksQueued = new Map<string, Promise<void>>();
+
+  /**
+   * `provider`'s holds decided again, after the decisions queued before:
+   * one look queued at a time, a change while it waits taken by it (its
+   * caller waits on that look).
+   */
+  const lookAgain = (provider: string, why: string): Promise<void> => {
+    const queued = looksQueued.get(provider);
+    if (queued !== undefined) {
+      return queued;
+    }
+    const look = serially(
+      provider,
+      `the look at the holds (${why})`,
+      async () => {
+        looksQueued.delete(provider);
+        await lookAtHolds(provider);
+        plan();
+      }
+    );
+    looksQueued.set(provider, look);
+    return look;
+  };
+
+  /** Whether any hold is carried on by the hub now: one not stale. */
+  const anyHeld = (): boolean =>
+    db.atLimit.holds().some((one) => one.staleAt === null);
 
   const rebalancer = createRebalancer({
     db,
     lifetime,
     ports,
     acting,
-    lookAtHolds,
-    replan: () => plan(),
+    accountsChanged: () => accountsChanged(),
   });
 
-  /** One look: every hold, then every provider on every machine rebalanced. */
-  const tick = async (): Promise<void> => {
-    await lookAtHolds();
-    await rebalancer.everyPair();
+  /**
+   * The hub says the accounts moved (a reading, a sign-in, a bench, at
+   * every one: account-probes.ts `publishUsage`), or a bench ended: every
+   * hold is decided again, by provider, the moves and resets that read
+   * changed counted; with nothing held, nothing is read. An account newly
+   * signed in, or back from its bench, also says on the Accounts page what
+   * that did to the holds it reached.
+   */
+  const accountsChanged = (): void => {
+    const came = rebalancer.came();
+    if (!anyHeld() || lifetime.closed()) {
+      return;
+    }
+    const providers = new Set(
+      db.atLimit
+        .holds()
+        .filter((one) => one.staleAt === null)
+        .map((one) => providerOf(one.accountId))
+    );
+    for (const provider of providers) {
+      const reached = came.filter((one) => one.provider === provider);
+      const before = reached.map((one) => ({
+        came: one,
+        held: rebalancer.heldOn(one.provider, one.machineId),
+      }));
+      detach(
+        lookAgain(provider, "its accounts changed").then(() => {
+          for (const one of before) {
+            rebalancer.notify(one.came, one.held);
+          }
+        }),
+        "at-limit look"
+      );
+    }
   };
 
   /**
-   * Arms the next look: the earliest moment a held session's account frees
-   * (its own reset, or another's that comes first), else the recheck, while anything is
-   * held or two accounts could balance. A stale hold waits on no moment
-   * ({@link goneStale}).
+   * The moment a hold waits for next: its reset, else, once that passed, the
+   * moment it goes stale ({@link goneStale}). Undefined for a stale hold, and
+   * for one whose moments have both passed: a change of its accounts, a
+   * message to it or its machine coming back decides it then.
+   */
+  const nextMoment = (held: LimitHold, now: number): number | undefined => {
+    if (held.staleAt !== null) {
+      return;
+    }
+    const current = db.accounts.get(held.accountId);
+    const start = held.until ?? held.since ?? now;
+    const moments = [
+      held.until,
+      current ? start + cutoffOf(current) + 1000 : null,
+    ].filter((at): at is number => at !== null && at > now);
+    return moments.length > 0 ? Math.min(...moments) : undefined;
+  };
+
+  /**
+   * Arms the one timer the controller keeps: the soonest moment a hold
+   * waits for ({@link nextMoment}), its provider's holds decided again
+   * then. Nothing when nothing is held.
    */
   const plan = (): void => {
     lifetime.cancel(timer);
@@ -1799,16 +1873,20 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       return;
     }
     const now = Date.now();
-    const holds = db.atLimit.holds().filter((one) => one.staleAt === null);
-    if (holds.length === 0 && rebalancer.pairs().length === 0) {
+    let soonest: { at: number; provider: string } | undefined;
+    for (const held of db.atLimit.holds()) {
+      const at = nextMoment(held, now);
+      if (at !== undefined && (!soonest || at < soonest.at)) {
+        soonest = { at, provider: providerOf(held.accountId) };
+      }
+    }
+    if (!soonest) {
       return;
     }
-    const at = Math.min(
-      now + RECHECK_MS,
-      ...holds.map((one) => one.until ?? Number.POSITIVE_INFINITY)
-    );
-    timer = lifetime.after("at-limit look", Math.max(1000, at - now), () => {
-      detach(tick().finally(plan), "at-limit look");
+    const { provider } = soonest;
+    timer = lifetime.after("at-limit hold's moment", soonest.at - now, () => {
+      timer = undefined;
+      detach(lookAgain(provider, "a hold's moment came"), "at-limit look");
     });
   };
 
@@ -1869,7 +1947,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (held.until === null) {
       return { words: words.refused(name) };
     }
-    const carry = later.get(held.instanceId);
+    const carry = db.atLimit.heldMove(held.instanceId);
     if (carry) {
       return carryStall(name, carry, held.until);
     }
@@ -1893,14 +1971,54 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     };
   };
 
-  rebalancer.accountsChanged();
+  /**
+   * A turn of `instanceId` was refused at its account's limit, and has
+   * ended: a person's move owed to it is all that is done; a turn the hub's
+   * own word started is left alone ({@link leftAlone}); else the one
+   * decision moves it or holds it ({@link act}).
+   */
+  const answerRefused = async (instanceId: string): Promise<void> => {
+    const row = rowOf(instanceId);
+    const current = row ? currentOf(row) : undefined;
+    if (!(row && current)) {
+      return;
+    }
+    const now = Date.now();
+    const resets = refusedUntil(
+      db.accounts.bench(now),
+      readingOf(current.id),
+      current.id,
+      row.model,
+      now
+    );
+    console.info(
+      `[at-limit] ${ports.named(row)}'s turn was refused: ${accountNameAmong(current, db.accounts.list())} is at its limit${resets === null ? "" : ` until ${clockWords(resets)}`}. ${ports.handMove(row) ? "A person moved it, so that move is all the hub does with it." : "The hub decides now, from what it knows of every account, whether it moves whole or waits."}`
+    );
+    // A person moved it: that move is all that is done, whoever started
+    // the turn and whoever's work it is.
+    if (ports.handMove(row)) {
+      await act(row, current);
+      return;
+    }
+    const word = ports.startedBy(row);
+    if (word && noticeTurn(word.origin) && leftAlone(row, current, word)) {
+      return;
+    }
+    if (!stays(row, current)) {
+      await act(row, current);
+    }
+  };
+
+  // The sign-ins and benches as they stand, learnt; the holds' next moment armed.
+  rebalancer.came();
+  plan();
 
   return {
     /**
      * `instanceId` stopped at its account's limit, in words, while it is:
      * on its way to an account that can take it (now, or once its turn
-     * ends), its move waiting for work in flight (by the cap at the latest:
-     * {@link carryStall}), held until the earliest reset (`until`, epoch ms;
+     * ends), its move waiting for work in flight ({@link carryStall}),
+     * held until the earliest reset (`until`, epoch ms;
      * its own account's, or another's that frees first and takes it), held
      * on a refused sign-in until an account can take it, or held past the
      * cutoff (`stale`), carried on only once written to; a hold whose
@@ -1953,33 +2071,39 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       );
     },
     /**
-     * `instanceId`'s hold looked at now rather than at the next recheck
-     * ({@link RECHECK_MS}): its machine is back, or a message to it is held
-     * at its limit. The move a person asked is carried out, or the move this
-     * controller decides goes, as at any look; `why` is
-     * logged with it. Nothing for a session held by nothing, or being acted on.
+     * `instanceId`'s hold looked at now, after the decisions of its provider
+     * queued before ({@link serially}): its machine is back, or a message to
+     * it is held at its limit. The move a person asked is carried out, or
+     * the move this controller decides goes, as at any look; `why` is logged
+     * with it. Nothing for a session held by nothing, or being acted on.
      * Past the cutoff it is carried on only when `asked`: the message is a
      * person's or its parent's, or a Continue's ({@link goneStale}).
      */
-    async lookNow(
-      instanceId: string,
-      why: string,
-      asked?: TakenUpBy
-    ): Promise<void> {
+    lookNow(instanceId: string, why: string, asked?: TakenUpBy): Promise<void> {
       const held = db.atLimit.hold(instanceId);
-      if (
-        !held ||
-        acting.has(instanceId) ||
-        (held.staleAt !== null && asked === undefined)
-      ) {
-        return;
+      if (!held) {
+        return Promise.resolve();
       }
-      const row = rowOf(instanceId);
-      console.info(
-        `[at-limit] ${row ? ports.named(row) : instanceId} is looked at again now, not at the next recheck: ${why}.`
+      return serially(
+        providerOf(held.accountId),
+        `the look at ${instanceId.slice(0, 8)}'s hold`,
+        async () => {
+          const now = db.atLimit.hold(instanceId);
+          if (
+            !now ||
+            acting.has(instanceId) ||
+            (now.staleAt !== null && asked === undefined)
+          ) {
+            return;
+          }
+          const row = rowOf(instanceId);
+          console.info(
+            `[at-limit] ${row ? ports.named(row) : instanceId} is looked at again now: ${why}.`
+          );
+          await lookAt(instanceId, Date.now(), asked);
+          plan();
+        }
       );
-      await lookAt(instanceId, Date.now(), asked);
-      plan();
     },
     /**
      * `instanceId` never runs again (a continuation took its work item on):
@@ -1993,7 +2117,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         settling.delete(instanceId);
       }
       towards.delete(instanceId);
-      later.delete(instanceId);
+      waitsToMove(instanceId, null);
       rebalancer.forget(instanceId);
       const notice = notices.get(instanceId);
       if (notice) {
@@ -2051,9 +2175,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
      * What the router would do with `instanceId` now, read and nothing
      * carried out (`account_read`): held at its limit or on a refused
      * sign-in, or owing a person's move, the decision a look would take
-     * ({@link decide}); else what a rebalancing pass would
-     * (rebalance.ts `outlook`). Undefined for a session on no account the
-     * hub reads.
+     * ({@link decide}); else what its next turn's end would (rebalance.ts
+     * `outlook`). Undefined for a session on no account the hub reads.
      */
     outlook(instanceId: string): Outlook | undefined {
       const row = rowOf(instanceId);
@@ -2103,36 +2226,13 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       return decision?.kind === "move" ? decision.moves[0]?.to : undefined;
     },
     /** A turn of `instanceId` was refused at its account's limit, and has ended. */
-    async turnRefused(instanceId: string): Promise<void> {
+    turnRefused(instanceId: string): Promise<void> {
       const row = rowOf(instanceId);
-      const current = row ? currentOf(row) : undefined;
-      if (!(row && current)) {
-        return;
-      }
-      const now = Date.now();
-      const resets = refusedUntil(
-        db.accounts.bench(now),
-        readingOf(current.id),
-        current.id,
-        row.model,
-        now
+      return serially(
+        providerOf(row?.accountId),
+        `the answer to ${instanceId.slice(0, 8)}'s refused turn`,
+        () => answerRefused(instanceId)
       );
-      console.info(
-        `[at-limit] ${ports.named(row)}'s turn was refused: ${accountNameAmong(current, db.accounts.list())} is at its limit${resets === null ? "" : ` until ${clockWords(resets)}`}. ${ports.handMove(row) ? "A person moved it, so that move is all the hub does with it." : "The hub decides now, from what it knows of every account, whether it moves whole or waits."}`
-      );
-      // A person moved it: that move is all that is done, whoever started
-      // the turn and whoever's work it is.
-      if (ports.handMove(row)) {
-        await act(row, current);
-        return;
-      }
-      const word = ports.startedBy(row);
-      if (word && noticeTurn(word.origin) && leftAlone(row, current, word)) {
-        return;
-      }
-      if (!stays(row, current)) {
-        await act(row, current);
-      }
     },
     /**
      * A turn of `instanceId` ended on Claude Code refusing its account's
@@ -2140,37 +2240,46 @@ export const createAtLimit = (ports: AtLimitPorts) => {
      * it moves whole to another account and carries on there; with none to
      * take it, it is held ({@link holdRefused}).
      */
-    async signedOut(instanceId: string): Promise<void> {
+    signedOut(instanceId: string): Promise<void> {
       const row = rowOf(instanceId);
-      const current = row ? currentOf(row) : undefined;
-      if (!(row && current)) {
-        return;
-      }
-      const named = accountNameAmong(current, db.accounts.list());
-      console.info(
-        `[at-limit] ${ports.named(row)}'s turn ended because Claude Code refused ${named}'s sign-in, so ${named} is signed out on its machine. It moves to another account and carries on there; with none free, it waits until ${named} is signed in again in ${configurePage("accounts")}.`
+      return serially(
+        providerOf(row?.accountId),
+        `the answer to ${instanceId.slice(0, 8)}'s refused sign-in`,
+        async () => {
+          const fresh = rowOf(instanceId);
+          const current = fresh ? currentOf(fresh) : undefined;
+          if (!(fresh && current)) {
+            return;
+          }
+          const named = accountNameAmong(current, db.accounts.list());
+          console.info(
+            `[at-limit] ${ports.named(fresh)}'s turn ended because Claude Code refused ${named}'s sign-in, so ${named} is signed out on its machine. It moves to another account and carries on there; with none free, it waits until ${named} is signed in again in ${configurePage("accounts")}.`
+          );
+          await act(fresh, current, "refused-credential");
+        }
       );
-      await act(row, current, "refused-credential");
     },
     /**
-     * A turn of `instanceId` ended as any turn does: the rebalancer may look
-     * at it again, and one its account's extra usage answered past a plan
-     * limit moves, or stays, as that account says ({@link extraUsageTurn}).
+     * A turn of `instanceId` ended as any turn does, after the decisions of
+     * its provider queued before: one its account's extra usage answered
+     * past a plan limit moves, or stays, as that account says
+     * ({@link extraUsageTurn}); any other is decided ahead of its account's
+     * run-out (rebalance.ts `turnEnded`).
      */
     turnEnded(instanceId: string): void {
-      rebalancer.turnEnded(instanceId);
-      detach(extraUsageTurn(instanceId), "at-limit extra usage");
+      const row = rowOf(instanceId);
+      detach(
+        serially(
+          providerOf(row?.accountId),
+          `the decision at ${instanceId.slice(0, 8)}'s turn's end`,
+          async () => {
+            await extraUsageTurn(instanceId);
+            await rebalancer.turnEnded(instanceId);
+          }
+        ),
+        "at-limit turn's end"
+      );
     },
-    /** Looks at every hold now, then rebalances every provider on every machine. */
-    look: () => tick().finally(plan),
-    /**
-     * The hub says an account moved (a sign-in, a reading, a bench): an
-     * account newly signed in on a machine, or back from its bench, sets
-     * its provider rebalancing there.
-     */
-    accountsChanged: rebalancer.accountsChanged,
-    /** Rebalances `provider`'s accounts on `machineId` now, then looks at every hold. */
-    rebalance: (provider: AccountProvider, machineId: string) =>
-      rebalancer.rebalance(provider, machineId),
+    accountsChanged,
   };
 };

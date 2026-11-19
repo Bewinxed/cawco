@@ -111,12 +111,13 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
    * limit's owed move carried at a look or at the refusal
    * (`takeUpOwedMove`), and the at-limit controller's own move (at the
    * refusal, at a look a held message or a reconnect asks for, at a reset:
-   * its `move` port). A stopped session no person waits on, its hold's start
-   * `laterSince` given, waits for that work instead, until it has been held
-   * the restart bound (core `waitedOut`), from that start across a hub
-   * restart too: the controller's looks carry it then. A running session's
-   * move waits for that work instead, up to the restart bound
-   * ({@link waitForLater}). A row with no conversation yet, or of another
+   * its `move` port). A stopped session no person waits on (`keepWork`)
+   * waits for that work instead and never ends it (decided 2026-11-19): its
+   * hold keeps the move, and its next look carries it once that work ends.
+   * A running session's move waits for that work instead: a person's, up
+   * to the restart bound ({@link waitForLater}), the cut-off their own move
+   * keeps; the hub's own (`keepWork`), until its next turn's end decides
+   * again. A row with no conversation yet, or of another
    * harness, has nothing of Claude's to carry. Answers the rows that moved,
    * what each move ended, and why each other did not.
    */
@@ -130,15 +131,13 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     accountId: string | null,
     stop = false,
     stopped?: "limit" | "signin",
-    laterSince?: number
+    keepWork = false
   ): Promise<{
     ended: Map<string, MoveEnded>;
     kept: Map<string, Kept>;
     moved: string[];
   }> => {
-    const endsLater =
-      stopped !== undefined &&
-      (laterSince === undefined || waitedOut(laterSince));
+    const endsLater = stopped !== undefined && !keepWork;
     const requests: CarrySessionRequest[] = rows.flatMap((row) =>
       traitsOf(row.harness).accountDir && row.sessionId
         ? [
@@ -167,8 +166,11 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
         : undefined;
       if (why) {
         kept.set(row.id, why);
-        // A stopped session's wait is its hold's (at-limit.ts `moveTo`).
-        if (why.later && stopped === undefined) {
+        // A stopped session's wait is its hold's (at-limit.ts `moveTo`);
+        // the hub's own move of a running one (`keepWork`) waits for its
+        // next turn's end, never cutting that work: only a person's move
+        // waits out the restart bound.
+        if (why.later && stopped === undefined && !keepWork) {
           waitForLater(row.id);
         }
         continue;

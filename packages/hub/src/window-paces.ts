@@ -1,5 +1,5 @@
 /**
- * Each account's window paces as placement and rebalancing read them: made by
+ * Each account's window paces as placement and the one decision read them: made by
  * forecast.ts (`accountPaces`), read by placement.ts's carry test.
  */
 
@@ -9,7 +9,7 @@ export interface WindowPace {
   /** Percent per hour since the window opened; null when not measured or nothing runs there. */
   pace: number | null;
   scopeLabel: string | null;
-  /** Weighted tokens (forecast.ts `weightedTokens`) one percent of the window took; null when unmeasured. */
+  /** Weighted tokens (turn-weight.ts `weightedTokens`) one percent of the window took; null when unmeasured. */
   tokensPerPct: number | null;
 }
 

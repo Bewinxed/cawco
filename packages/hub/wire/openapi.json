@@ -35451,7 +35451,7 @@
                     "$ref": "#/components/schemas/NamedAccount"
                   },
                   "waits": {
-                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up), and no person waits on it: the move goes when that\nwork ends, or once it has been held {@link RESTART_WAIT_CAP_MS},\nending it.",
+                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up), and no person waits on it: the move goes when that\nwork ends, and never ends it (decided 2026-11-19).",
                     "const": true,
                     "type": "boolean"
                   }
@@ -50720,7 +50720,7 @@
                     "$ref": "#/components/schemas/NamedAccount"
                   },
                   "waits": {
-                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up), and no person waits on it: the move goes when that\nwork ends, or once it has been held {@link RESTART_WAIT_CAP_MS},\nending it.",
+                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up), and no person waits on it: the move goes when that\nwork ends, and never ends it (decided 2026-11-19).",
                     "const": true,
                     "type": "boolean"
                   }
@@ -54960,7 +54960,7 @@
             "type": "string"
           },
           "running": {
-            "description": "Running sessions moved off an account forecast to run out, by account and target.",
+            "description": "Always empty: a running session moves at its own turn's end, each\nwriting its own line, never at a look an account's coming starts. Sent\nbecause the shipped apps decode it (the iPhone app's `RebalanceNotice`).",
             "type": "array",
             "items": {
               "type": "object",

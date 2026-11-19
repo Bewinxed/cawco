@@ -3,6 +3,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { and, asc, desc, eq, gte, isNotNull, lte } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { instances, turnUsage } from "./schema";
+import { noteTurns } from "./usage-periods";
 
 /** Two weeks: two weekly windows, enough to measure a rate across a reset. */
 const TURN_USAGE_RETENTION_MS = 14 * DAY_MS;
@@ -31,7 +32,9 @@ export interface TurnUsageDb {
   readonly prune: (now?: number) => number;
   /**
    * A claimed turn's rows, and the Claude session's new cumulative baseline,
-   * together; a second put of the same turn's rows is ignored.
+   * together, each new row counted into the usage summary
+   * (usage-periods.ts `noteTurns`); a second put of the same turn's rows is
+   * ignored.
    */
   readonly put: (
     instanceId: string,
@@ -60,7 +63,17 @@ export const turnUsageDb = (db: BunSQLiteDatabase): TurnUsageDb => ({
   put: (instanceId, rows, seen) => {
     db.transaction((tx) => {
       if (rows.length > 0) {
-        tx.insert(turnUsage).values(rows).onConflictDoNothing().run();
+        // Only the rows written now join the usage summary: a second put of
+        // the same turn's rows counts nothing twice.
+        noteTurns(
+          tx,
+          tx
+            .insert(turnUsage)
+            .values(rows)
+            .onConflictDoNothing()
+            .returning()
+            .all()
+        );
       }
       if (seen) {
         tx.update(instances)

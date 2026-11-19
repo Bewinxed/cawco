@@ -40,6 +40,16 @@ export interface LimitHold {
 }
 
 /**
+ * The move a held session waits to make once the work its process holds
+ * for later ends (schema `limitHolds` `laterTo`): the account it goes to,
+ * and that work in its machine's words.
+ */
+export interface HeldMove {
+  to: string;
+  why: string;
+}
+
+/**
  * A session whose latest turn a usage limit ended (schema `limitStops`):
  * when, and the account that refused it (null: the machine's own sign-in).
  */
@@ -157,6 +167,8 @@ export interface AtLimitDb {
   /** The lines written into these sessions' transcripts, oldest first: every one that reads. */
   readonly events: (instanceIds: string[]) => LimitEvent[];
   readonly forget: (instanceIds: string[]) => void;
+  /** The move `instanceId`'s hold waits to make once its work in flight ends; undefined when none. */
+  readonly heldMove: (instanceId: string) => HeldMove | undefined;
   readonly hold: (instanceId: string) => LimitHold | undefined;
   readonly holds: () => LimitHold[];
   /**
@@ -185,6 +197,8 @@ export interface AtLimitDb {
   readonly putCompaction: (compaction: LimitCompaction) => void;
   /** Writes a line; one already written under its id is what it says now (a compaction's move line as it goes). */
   readonly putEvent: (event: LimitEvent) => void;
+  /** The move `instanceId`'s hold waits to make, or none (null); nothing for a session not held. */
+  readonly putHeldMove: (instanceId: string, move: HeldMove | null) => void;
   /** Holds a session, its stale mark cleared: a put is a decision made now. */
   readonly putHold: (hold: Omit<LimitHold, "staleAt">) => void;
   /** Marks a session's context risen to its threshold, in place of any rise it had. */
@@ -398,6 +412,22 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .where(eq(limitHolds.instanceId, instanceId))
       .get();
     return row ? toHold(row) : undefined;
+  },
+  heldMove: (instanceId) => {
+    const row = db
+      .select({ to: limitHolds.laterTo, why: limitHolds.laterWhy })
+      .from(limitHolds)
+      .where(eq(limitHolds.instanceId, instanceId))
+      .get();
+    return row?.to && row.why !== null
+      ? { to: row.to, why: row.why }
+      : undefined;
+  },
+  putHeldMove: (instanceId, move) => {
+    db.update(limitHolds)
+      .set({ laterTo: move?.to ?? null, laterWhy: move?.why ?? null })
+      .where(eq(limitHolds.instanceId, instanceId))
+      .run();
   },
   putHold: ({ instanceId, accountId, until, since }) => {
     const values = {

@@ -19,12 +19,15 @@ import { DAY_MS } from "@cawco/core/time";
 import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
-import { accountForecasts, carrySequence, historyPoints } from "../forecast";
+import { accountForecasts, carrySequence, readPeriods } from "../forecast";
 import type { HubContext } from "../hub-context";
 import { place as placeAccount } from "../placement";
 
 import { accountProvider, wireRouting } from "../routes/accounts";
 import { harnessSchema } from "../routes/harness-schema";
+
+/** How far back the usage screen reads each window's pace: a week. */
+const USAGE_LOOKBACK_MS = 7 * DAY_MS;
 
 const strategyChoice = t.Object({
   strategy: t.UnionEnum(PLACEMENT_STRATEGIES),
@@ -307,7 +310,10 @@ export const accountPlacementRoutes = ({
         }
       )
       // Each account's windows with their pace and run-out, and which account
-      // carries a person's and a session's new sessions to the relay's horizon.
+      // carries a person's and a session's new sessions to the relay's
+      // horizon: read from the usage summary's periods of the last week
+      // (forecast.ts `readPeriods`), a handful of rows per account, at every
+      // usage frame.
       .get(
         "/api/accounts/forecast",
         { query: t.Object({ provider: accountProvider }) },
@@ -317,14 +323,17 @@ export const accountPlacementRoutes = ({
             .list()
             .filter((account) => account.provider === query.provider);
           const readings = db.accounts.readings();
-          const history = accounts.flatMap((account) =>
-            historyPoints(db, account.id, now - 7 * DAY_MS)
+          const periods = readPeriods(
+            db,
+            accounts.map((account) => account.id),
+            now,
+            USAGE_LOOKBACK_MS
           );
           const running = new Set(db.runningAccountIds());
           const forecasts = accountForecasts(
             accounts,
             readings,
-            history,
+            periods,
             running,
             now
           );

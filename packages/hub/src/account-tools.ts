@@ -565,7 +565,7 @@ export const createAccountTools = (deps: AccountToolsDeps) => {
       ...base,
       windows,
       pastFloorPct: pastFloorOf(fact.account),
-      // The one test of running short, as a rebalancing pass reads a source (rebalance.ts `shortOf`).
+      // The one test of running short, as a turn's end reads its account (rebalance.ts `shortOf`).
       runsOutAt: runsShort(windows, 0, LOOK_AHEAD_MS, fact.waitMs, now),
       takesNone,
       unread: null,

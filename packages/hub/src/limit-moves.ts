@@ -65,7 +65,7 @@ import {
   refusedUntil,
   type Stall,
 } from "./limit-decision";
-import type { Arrival, PlacementInput, TaskAccounts } from "./placement";
+import type { PlacementInput, TaskAccounts } from "./placement";
 import { runningAccounts, signedInForWords } from "./placement";
 import { unreachable } from "./unreachable";
 
@@ -1066,7 +1066,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     if (stale) {
       ctx.owedMoves.delete(row.id);
       console.info(
-        `[accounts] ${ctx.sessionName(row)}'s move to ${ctx.accountWords(owed.to)} was decided more than ${CHOICE_FRESH_MS / 60_000} minutes ago and not carried out, so it is dropped: the hub decides again when it next looks.`
+        `[accounts] ${ctx.sessionName(row)}'s move to ${ctx.accountWords(owed.to)} was decided more than ${CHOICE_FRESH_MS / 60_000} minutes ago and not carried out, so it is dropped: the next event that can move it (its turn's end, a message to it, a change of its accounts while it is held) decides again.`
       );
       return;
     }
@@ -1446,18 +1446,50 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     row: ReturnType<typeof ctx.db.getInstancesByIds>[number]
   ): void => {
     const from = wakesOff(row);
-    if (!from) {
+    const woke = from
+      ? wakeMove(row, from, "wakes on", "as it wakes")
+      : undefined;
+    if (!(from && woke)) {
       return;
     }
-    const now = Date.now();
-    const facts = factsFor(row, from, now);
+    console.info(
+      `${woke.head} Its conversation is copied there before it starts.`
+    );
+    ctx.owedMoves.set(row.id, {
+      to: woke.to.id,
+      move: woke.line,
+      waits: "turn",
+    });
+  };
+
+  /**
+   * The one decision for `row` waking on `from` (decide.ts, trigger
+   * `wake`), its move charged against its target's room before anything
+   * else: the move, its target, the line it writes (whole, cold), and the
+   * journal's words for it, `when` it moves. Undefined when it stays, said
+   * when no account holds it either (`on`: "wakes on", "is written to on").
+   */
+  const wakeMove = (
+    row: MoverRow,
+    from: Account,
+    on: string,
+    when: string
+  ):
+    | {
+        head: string;
+        line: Extract<AccountMove, { kind: "moved" }>;
+        move: DecidedMove;
+        to: Account;
+      }
+    | undefined => {
+    const facts = factsFor(row, from, Date.now());
     const choice = facts ? decide(facts, { kind: "wake" }) : undefined;
     const accounts = ctx.db.accounts.list();
     const fromName = accountNameAmong(from, accounts);
     if (choice?.kind !== "move") {
       if (choice?.kind === "stay" && choice.why === "full") {
         console.info(
-          `[rebalance] ${ctx.sessionName(row)} wakes on ${fromName}, which no longer holds it, but no move of it holds elsewhere either.`
+          `[rebalance] ${ctx.sessionName(row)} ${on} ${fromName}, which no longer holds it, but no move of it holds elsewhere either.`
         );
       }
       return;
@@ -1467,19 +1499,19 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     if (!(move && to && facts)) {
       return;
     }
-    const toName = accountNameAmong(to, accounts);
     const next = facts.session.costs.nextTurnUsd;
     ctx.admission.charge(
       row,
       to.id,
-      move.usd === null || next === null ? null : move.usd + next
+      move.usd === null || next === null ? null : move.usd + next,
+      facts.session.burn
     );
-    console.info(
-      `[rebalance] ${ctx.sessionName(row)} moves from ${fromName} to ${toName} as it wakes: its prompt cache is cold, so it re-reads its context on either account, and ${fromName} no longer holds it; ${moveSideWords(move, choice.tokens, toName)}. Its conversation is copied there before it starts.`
-    );
-    ctx.owedMoves.set(row.id, {
-      to: to.id,
-      move: {
+    const toName = accountNameAmong(to, accounts);
+    return {
+      move,
+      to,
+      head: `[rebalance] ${ctx.sessionName(row)} moves from ${fromName} to ${toName} ${when}: its prompt cache is cold, so it re-reads its context on either account, and ${fromName} no longer holds it; ${moveSideWords(move, choice.tokens, toName)}.`,
+      line: {
         kind: "moved",
         from: namedAccount(from, accounts),
         to: namedAccount(to, accounts),
@@ -1491,8 +1523,90 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         ...lineCost(move),
         price: linePrice(move.price, accounts),
       },
-      waits: "turn",
-    });
+    };
+  };
+
+  /** Sessions a message waits on while they move ({@link moveAtMessage}): what is sent to them is kept at the hub meanwhile. */
+  const movingAtMessage = new Set<string>();
+
+  /**
+   * A message that starts a turn reaches `row`, whose process runs, idle
+   * with its prompt cache cold: it is decided now, on this moment's
+   * readings (decide.ts, trigger `wake`; decided 2026-11-19, "At your next
+   * message"), as a sleeping session is at its wake ({@link replaceAtWake}).
+   * A cold cache re-reads its whole context wherever it runs, so it moves
+   * only where the move is free, and only when its own account no longer
+   * holds it; an unknown cache is not free, and stays. A move is charged
+   * against the target's room like every move, carried between turns
+   * ({@link moveAs}) and its line written; the message, and anything sent
+   * after it meanwhile, waits at the hub (sends.ts `heldAtLimit`) and goes
+   * once the move has landed or stayed. True when the message waits for a
+   * move; false when the session stays where it is.
+   */
+  const moveAtMessage = (row: MoverRow): boolean => {
+    if (movingAtMessage.has(row.id)) {
+      return true;
+    }
+    // A warm cache, most messages' case, reads nothing more.
+    const cold =
+      cacheOf(row).kind === "cold" &&
+      processWorks(row) &&
+      !ctx.db.atLimit.compaction(row.id) &&
+      !continuingAsMove(row.id);
+    const from = cold ? wakesOff(row) : undefined;
+    const woke = from
+      ? wakeMove(
+          row,
+          from,
+          "is written to on",
+          "before the message just sent to it starts its turn"
+        )
+      : undefined;
+    if (!(from && woke)) {
+      return false;
+    }
+    console.info(
+      `${woke.head} The message waits at the hub until its conversation is copied there.`
+    );
+    movingAtMessage.add(row.id);
+    detach(carryAtMessage(row, from, woke), "move at a message");
+    return true;
+  };
+
+  /**
+   * The move {@link moveAtMessage} decided, carried between turns as its
+   * plan says and its line written; one that stays is refunded and says
+   * why. Whatever came of it, what the session was sent meanwhile goes.
+   */
+  const carryAtMessage = async (
+    row: MoverRow,
+    from: Account,
+    woke: NonNullable<ReturnType<typeof wakeMove>>
+  ): Promise<void> => {
+    const plan = planOf(woke.move);
+    const line = compactedLine(woke.line, plan, row.harness);
+    const id = crypto.randomUUID();
+    try {
+      // The hub's own move between turns keeps any work in flight.
+      const done = await moveAs(
+        row,
+        woke.move,
+        false,
+        plan.method === "whole" ? undefined : { line: id, move: line, plan },
+        true
+      );
+      if ("kept" in done) {
+        ctx.admission.refund(row.id);
+        console.info(
+          `[rebalance] ${ctx.sessionName(row)} stays on ${ctx.accountWords(from.id)}, not moved to ${ctx.accountWords(woke.to.id)}: ${done.kept.why}. The message goes to it there.`
+        );
+      } else if (!("later" in done)) {
+        ctx.noteAtLimit(row, line, id);
+      }
+    } finally {
+      movingAtMessage.delete(row.id);
+      ctx.releaseOwed({ instanceId: row.id });
+    }
   };
 
   /**
@@ -1538,10 +1652,9 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    */
   const limitRows = (
     row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
-    leaving: string,
-    landing: readonly Arrival[] = []
+    leaving: string
   ): AccountsRead =>
-    accountsRead(ctx.db, ctx.admission, row, leaving, landing, {
+    accountsRead(ctx.db, ctx.admission, row, leaving, {
       asks: rowAsks(row),
       keptOff: rowKeptOff(row),
       machineName: ctx.machineName(row.machineId),
@@ -1657,16 +1770,16 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * and only then does its row say the account; it starts again there when
    * that process worked (read before the carry ends it). One that did not
    * move stays on its account; a process the carry ended there is asleep. A
-   * stopped session's move ends what it holds for later, unless no person
-   * waits on it: then it waits for that work up to the cap from
-   * `laterSince`. A rebalance's of a running one waits for it.
+   * stopped session's move ends what it holds for later, unless `keepWork`
+   * (no person waits on it): then it waits for that work. A move of a
+   * running one between turns waits for it.
    */
   const carryTo = async (
     row: MoverRow,
     accountId: string,
     stopped: false | "limit" | "signin",
     compact: { line: string; move: MovedLine } | undefined,
-    laterSince: number | undefined,
+    keepWork: boolean,
     /** A model picked to go with the move: the row takes it as the carry lands, before it relaunches there. */
     picked?: string
   ): Promise<{ kept: Kept } | { ended?: MoveEnded }> => {
@@ -1691,7 +1804,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         accountId,
         true,
         stopped || undefined,
-        laterSince
+        keepWork
       )
     );
     const why = kept.get(row.id);
@@ -1732,15 +1845,15 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * one that can't leaves it where it is, as does a compaction before the
    * move that compacted nothing (`compactFirstFailed`): a move goes
    * the way its plan says or not at all. Every mover calls this: the
-   * at-limit controller, the rebalance, a person's move and a move owed to a
-   * turn's end.
+   * at-limit controller, a move at a turn's end or at a message, a person's
+   * move and a move owed to a turn's end.
    */
   const moveAs = async (
     row: MoverRow,
     decided: DecidedMove,
     stopped: false | "limit" | "signin",
     asked: MoveHow | undefined,
-    laterSince?: number
+    keepWork = false
   ): Promise<{ kept: Kept } | { ended?: MoveEnded } | { later: true }> => {
     const accountId = decided.to;
     // A choice is carried out within moments of being made, or made again.
@@ -1771,7 +1884,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         accountId,
         stopped,
         undefined,
-        laterSince,
+        keepWork,
         asked?.picked
       );
     }
@@ -1799,7 +1912,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       accountId,
       stopped,
       { line: how.line, move: how.move },
-      laterSince,
+      keepWork,
       how.picked
     );
     return done;
@@ -2350,6 +2463,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     takeUpMovesOn,
     moveOwedAtRefusal,
     replaceAtWake,
+    moveAtMessage,
+    /** Whether a message to `instanceId` waits for its move ({@link moveAtMessage}). */
+    movingAtMessage: (instanceId: string): boolean =>
+      movingAtMessage.has(instanceId),
     limitRows,
     carryTo,
     moveAs,

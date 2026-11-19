@@ -95,6 +95,7 @@ import { type TrimDb, trimDb } from "./trim";
 import { type TurnCutsDb, turnCutsDb } from "./turn-cuts";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 import { type UsageDb, usageDb } from "./usage";
+import { type UsagePeriodsDb, usagePeriodsDb } from "./usage-periods";
 import { closeWal, useWal } from "./wal";
 
 /** The store's own members and the stores it wires in. */
@@ -206,6 +207,8 @@ interface HubStore {
   readonly turnCuts: TurnCutsDb;
   /** Each completed turn's tokens, on the account it ran on. */
   readonly turnUsage: TurnUsageDb;
+  /** Each account's window periods, kept as readings and turns arrive (usage-periods.ts). */
+  readonly usagePeriods: UsagePeriodsDb;
 }
 
 export type DbShape = DataMigrationsDb &
@@ -371,6 +374,7 @@ const make = async (path: string): Promise<DbShape> => {
     accounts: accountsDb(db),
     areas: core.areasStore,
     turnUsage: turnUsageDb(db),
+    usagePeriods: usagePeriodsDb(db),
     capabilityCalls: capabilityCallsDb(db),
     toolCallKeys: toolCallKeysDb(db),
     turnCuts: turnCutsDb(db),

@@ -1734,6 +1734,8 @@ export const createServer = (
     processEvent: () => processEvent,
     processGeneration: () => processGeneration,
     replaceAtWake: () => replaceAtWake,
+    moveAtMessage: () => moveAtMessage,
+    movingAtMessage: () => movingAtMessage,
     takeOwedMove: () => takeOwedMove,
     tellEndedByMove: () => tellEndedByMove,
     unstrand: () => unstrand,
@@ -1913,6 +1915,8 @@ export const createServer = (
     removalOf,
     removeWithSessions,
     replaceAtWake,
+    moveAtMessage,
+    movingAtMessage,
     keepCodex,
     signOutCodex,
     signOutMachine,
@@ -3808,9 +3812,10 @@ export const createServer = (
     Boolean(payload.cwd);
   /** Every screen's limits and spend, said again after a reading or a sign-in moved. */
   /**
-   * What rebalancing makes of the accounts as they stand now (at-limit's
-   * `accountsChanged`): an account newly signed in, or back from its bench,
-   * puts its provider's sessions on the move. Set once the controller exists.
+   * What the at-limit controller makes of the accounts as they stand now
+   * (its `accountsChanged`): every hold decided again, and an account newly
+   * signed in, or back from its bench, says on the Accounts page what that
+   * did. Set once the controller exists.
    */
   const accountsMovedPort = portOf<() => void>(
     "accountsMoved",
@@ -4004,10 +4009,19 @@ export const createServer = (
 
   /**
    * The one ledger every move onto an account is charged against
-   * (admission.ts): at-limit, rebalance and the cold wake. A recorded turn
+   * (admission.ts): at-limit, a move at a turn's end, at a message and at a
+   * cold wake. A recorded turn
    * and a sleep tell it ({@link recordTurnUsage}, {@link sessionAsleep}).
    */
   const admission = createAdmission(db);
+  // The usage summary every account decision reads, filled once from the
+  // readings and turns kept before it existed (db usage-periods.ts `fill`).
+  const periodsFilled = db.usagePeriods.fill();
+  if (periodsFilled > 0) {
+    console.info(
+      `[accounts] the usage summary was filled from the readings and turns kept before it: ${periodsFilled} window periods.`
+    );
+  }
 
   /**
    * A session's process went away with nothing failed: its machine put it to

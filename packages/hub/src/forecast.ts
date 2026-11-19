@@ -9,95 +9,93 @@ import {
   type WindowForecast,
   type WindowRef,
 } from "@cawco/core/accounts";
-import { HOUR_MS } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {
   bearing,
   freshWindows,
   resetMinute,
-  sameReset,
   windowKey,
   windowResetAt,
   windowSpan,
 } from "@cawco/core/usage/windows";
 import type { DbShape } from "./db";
+import type { UsagePeriod } from "./db/usage-periods";
+import { LOOK_AHEAD_MS } from "./decide";
 import { place } from "./placement";
 import type { WindowPace } from "./window-paces";
 
 /**
  * Where a provider's accounts are heading: each window's pace and when it
- * runs out, and which account carries new sessions until the relay's
- * horizon. Pure: a function of the stored readings, their history and the
- * routing, so every reader (the usage screen, the at-limit logic) gets the
- * same answer.
+ * runs out, what a percent of it costs, and which account carries new
+ * sessions until the relay's horizon. Pure over the stored readings, the
+ * usage summary's periods (db usage-periods.ts) and the routing, so every
+ * reader (the usage screen, placement, the one decision) gets the same
+ * answer.
  */
 
-/** How far the carry sequence looks ahead: the relay's horizon, five hours. */
-const HORIZON_MS = 5 * HOUR_MS;
+/** How far ahead the carry sequence looks: the relay's horizon, the look-ahead. */
+const HORIZON_MS = LOOK_AHEAD_MS;
 
-/** One point of a window's history: its use and when it was read. */
-export interface HistoryPoint {
-  accountId: string;
-  fetchedAt: number;
-  kind: string;
-  percent: number;
-  resetsAt: string | null;
-  scopeLabel: string | null;
-}
+/**
+ * How far back a decision reads the accounts' readings: a weekly window,
+ * and a day over for its opening reading.
+ */
+const LOOKBACK_MS = 8 * DAY_MS;
 
-/** `accountId`'s usage readings since `since`, as a forecast reads them. */
-export const historyPoints = (
-  db: DbShape,
-  accountId: string,
-  since: number
-): HistoryPoint[] =>
-  db.accounts.history({ accountId, since }).map((row) => ({
-    accountId: row.accountId,
-    kind: row.kind,
-    scopeLabel: row.scopeLabel,
-    percent: row.percent,
-    resetsAt: row.resetsAt,
-    fetchedAt: row.fetchedAt.getTime(),
-  }));
+/**
+ * The periods of `accountIds` a forecast reads at `now`, as the readings of
+ * the last `lookBackMs` draw them (db usage-periods.ts `periods`): those
+ * read since, each from its first reading since.
+ */
+export const readPeriods = (
+  db: Pick<DbShape, "usagePeriods">,
+  accountIds: readonly string[],
+  now: number,
+  lookBackMs = LOOKBACK_MS
+): UsagePeriod[] => db.usagePeriods.periods(accountIds, now - lookBackMs);
 
 const resetMs = (window: Pick<LimitWindow, "resetsAt">): number | null =>
   window.resetsAt ? Date.parse(window.resetsAt) : null;
 
+/** Whether `period` is of `accountId`'s window `window` (its kind and scope). */
+const ofWindow = (
+  period: UsagePeriod,
+  accountId: string,
+  window: Pick<LimitWindow, "kind" | "scopeLabel">
+): boolean =>
+  period.accountId === accountId &&
+  period.kind === window.kind &&
+  period.scopeLabel === window.scopeLabel;
+
 /**
- * Percent per hour across the window's successive readings since it opened
- * (the points that share its reset minute, core `sameReset`). Null with
- * fewer than two readings.
+ * Percent per hour across the window's period that is open now (the period
+ * of its reset minute, core `resetMinute`): from its first reading to its
+ * latest. Null with fewer than two readings in it.
  */
 const paceOf = (
   window: LimitWindow,
-  history: HistoryPoint[],
+  periods: readonly UsagePeriod[],
   accountId: string
 ): number | null => {
-  const points = history
-    .filter(
-      (point) =>
-        point.accountId === accountId &&
-        point.kind === window.kind &&
-        point.scopeLabel === window.scopeLabel &&
-        sameReset(point.resetsAt, window.resetsAt)
-    )
-    .sort((a, b) => a.fetchedAt - b.fetchedAt);
-  const [first] = points;
-  const last = points.at(-1);
-  if (!(first && last) || last.fetchedAt <= first.fetchedAt) {
+  const minute = resetMinute(window);
+  const period = periods.find(
+    (one) => ofWindow(one, accountId, window) && one.resetMinute === minute
+  );
+  if (!period || period.lastAt <= period.firstAt) {
     return null;
   }
   return Math.max(
     0,
-    (last.percent - first.percent) /
-      ((last.fetchedAt - first.fetchedAt) / HOUR_MS)
+    (period.lastPercent - period.firstPercent) /
+      ((period.lastAt - period.firstAt) / HOUR_MS)
   );
 };
 
 /** One window now: use, pace and when it runs out. */
 const windowForecast = (
   window: LimitWindow,
-  history: HistoryPoint[],
+  periods: readonly UsagePeriod[],
   accountId: string,
   running: boolean,
   now: number
@@ -113,7 +111,7 @@ const windowForecast = (
     return { ...base, utilization: 0, pace: null };
   }
   // Nothing runs there: it is heading nowhere, a pace of zero, never unknown.
-  const pace = running ? paceOf(window, history, accountId) : 0;
+  const pace = running ? paceOf(window, periods, accountId) : 0;
   const left = 100 - window.percent;
   const runsOutAt =
     pace && pace > 0 ? now + (Math.max(left, 0) / pace) * HOUR_MS : undefined;
@@ -163,95 +161,37 @@ const bindingWindow = (
   );
 };
 
-/** One turn's tokens, as `turn_usage` keeps them. */
-export interface TurnTokens {
-  at: Date;
-  cacheReadTokens: number;
-  /** The part of {@link cacheWriteTokens} written for an hour; null when not split. */
-  cacheWrite1hTokens: number | null;
-  /** Every cache write, whatever its lifetime. */
-  cacheWriteTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-}
-
 /**
- * A turn's tokens weighted as Claude prices them against uncached input:
- * 5-minute cache writes 1.25×, 1-hour writes 2×, cache reads 0.1×, output
- * 5× (platform.claude.com/docs/en/build-with-claude/prompt-caching: Opus
- * 5.5 "$4 / MTok | $5 / MTok | $8 / MTok | $0.20 / MTok | $20 / MTok";
- * every current Claude model keeps the same ratios). A write not split by
- * lifetime counts as 5-minute. A subscription's window is spent in
- * proportion to these, as far as anything says.
- */
-export const weightedTokens = (turn: TurnTokens): number => {
-  const hour = turn.cacheWrite1hTokens ?? 0;
-  return (
-    turn.inputTokens +
-    1.25 * (turn.cacheWriteTokens - hour) +
-    2 * hour +
-    0.1 * turn.cacheReadTokens +
-    5 * turn.outputTokens
-  );
-};
-
-/** A re-read of `tokens` uncached on an account: written to its cache at the 5-minute or 1-hour rate. */
-export const reReadWeight = (
-  tokens: number,
-  ttl: string | null | undefined
-): number => tokens * (ttl === "1h" ? 2 : 1.25);
-
-/**
- * The fewest percent a window must have moved, summed over its readings,
+ * The fewest percent a window must have moved, summed over its periods,
  * before what a percent costs is taken from it: a reading rounds to whole
  * percents, so one or two of them say little.
  */
 const MIN_PCT_MEASURED = 3;
 
 /**
- * What one percent of an account's window costs, by `measure` of each turn:
- * the readings it moved across (the history), grouped by the window's
- * reset, laid beside the turns CawCo saw on it in the same spans. Null until
- * the window has moved {@link MIN_PCT_MEASURED} percent across spans whose
- * turns measured anything.
+ * What one percent of an account's window costs, by `measure` of the turns
+ * CawCo saw on it: over its periods (a usage summary row each), the percent
+ * each moved from its first reading to its latest, laid beside the turns
+ * recorded between them. A period that moved nothing, or whose turns
+ * measured nothing, says nothing. Null until the window has moved
+ * {@link MIN_PCT_MEASURED} percent across periods that measured anything.
  */
-const perPercent = <T extends { at: Date }>(
-  window: { kind: string; scopeLabel: string | null },
-  history: HistoryPoint[],
-  turns: readonly T[],
+const perPercent = (
+  window: Pick<LimitWindow, "kind" | "scopeLabel">,
+  periods: readonly UsagePeriod[],
   accountId: string,
-  measure: (turn: T) => number
+  measure: "tokens" | "usd"
 ): number | null => {
-  const series = new Map<string, HistoryPoint[]>();
-  for (const point of history) {
-    if (
-      point.accountId === accountId &&
-      point.kind === window.kind &&
-      point.scopeLabel === window.scopeLabel
-    ) {
-      // One window period per reset minute: a reset reported a second
-      // apart is the same window (core `resetMinute`).
-      const key = String(resetMinute(point) ?? "");
-      series.set(key, [...(series.get(key) ?? []), point]);
-    }
-  }
   let pct = 0;
   let measured = 0;
-  for (const points of series.values()) {
-    points.sort((a, b) => a.fetchedAt - b.fetchedAt);
-    const [first] = points;
-    const last = points.at(-1);
-    if (!(first && last) || last.percent <= first.percent) {
-      continue;
-    }
-    const spent = turns
-      .filter((turn) => {
-        const at = turn.at.getTime();
-        return at > first.fetchedAt && at <= last.fetchedAt;
-      })
-      .reduce((sum, turn) => sum + measure(turn), 0);
-    if (spent > 0) {
-      pct += last.percent - first.percent;
+  for (const period of periods) {
+    const spent = period[measure];
+    if (
+      ofWindow(period, accountId, window) &&
+      period.lastPercent > period.firstPercent &&
+      spent > 0
+    ) {
+      pct += period.lastPercent - period.firstPercent;
       measured += spent;
     }
   }
@@ -259,58 +199,44 @@ const perPercent = <T extends { at: Date }>(
 };
 
 /**
- * What one percent of an account's window costs in weighted tokens
- * ({@link perPercent}). Use CawCo never saw (another client on the account)
- * makes a percent look cheaper than it is, so re-reads priced from it are
- * priced high.
- */
-const tokensPerPercent = (
-  window: { kind: string; scopeLabel: string | null },
-  history: HistoryPoint[],
-  turns: TurnTokens[],
-  accountId: string
-): number | null =>
-  perPercent(window, history, turns, accountId, weightedTokens);
-
-/**
  * What one percent of an account's window costs in dollars
  * ({@link perPercent}): the `turn_usage` cost (Claude Code's own `costUSD`)
- * of the turns in its spans.
+ * of the turns in its periods.
  */
 export const usdPerPercent = (
-  window: { kind: string; scopeLabel: string | null },
-  history: HistoryPoint[],
-  turns: readonly { at: Date; costUsd: number | null }[],
+  window: Pick<LimitWindow, "kind" | "scopeLabel">,
+  periods: readonly UsagePeriod[],
   accountId: string
-): number | null =>
-  perPercent(window, history, turns, accountId, (turn) => turn.costUsd ?? 0);
+): number | null => perPercent(window, periods, accountId, "usd");
 
 /**
- * Each account's windows as placement and rebalancing read them: the pace
- * of each (null on an account nothing runs on, as {@link accountForecasts}
- * has it) and what one percent of it costs.
+ * Each account's windows as placement and the one decision read them: the
+ * pace of each (null on an account nothing runs on, as
+ * {@link accountForecasts} has it) and what one percent of it costs in
+ * weighted tokens (turn-weight.ts `weightedTokens`). Use CawCo never saw
+ * (another client on the account) makes a percent look cheaper than it is,
+ * so re-reads priced from it are priced high.
  */
 export const accountPaces = (
   accounts: Account[],
   readings: AccountReading[],
-  history: HistoryPoint[],
-  turns: ReadonlyMap<string, TurnTokens[]>,
+  periods: readonly UsagePeriod[],
   running: ReadonlySet<string>,
   now: number
 ): Map<string, WindowPace[]> =>
   new Map(
-    accountForecasts(accounts, readings, history, running, now).map(
+    accountForecasts(accounts, readings, periods, running, now).map(
       (forecast) => [
         forecast.accountId,
         forecast.windows.map((window) => ({
           kind: window.kind,
           scopeLabel: window.scopeLabel,
           pace: window.pace,
-          tokensPerPct: tokensPerPercent(
+          tokensPerPct: perPercent(
             window,
-            history,
-            turns.get(forecast.accountId) ?? [],
-            forecast.accountId
+            periods,
+            forecast.accountId,
+            "tokens"
           ),
         })),
       ]
@@ -321,7 +247,7 @@ export const accountPaces = (
 export const accountForecasts = (
   accounts: Account[],
   readings: AccountReading[],
-  history: HistoryPoint[],
+  periods: readonly UsagePeriod[],
   running: ReadonlySet<string>,
   now: number
 ): AccountForecast[] =>
@@ -334,7 +260,7 @@ export const accountForecasts = (
       reading?.windowKinds ?? null,
       now
     ).map((window) =>
-      windowForecast(window, history, account.id, running.has(account.id), now)
+      windowForecast(window, periods, account.id, running.has(account.id), now)
     );
     return {
       accountId: account.id,

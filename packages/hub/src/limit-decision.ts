@@ -8,7 +8,6 @@ import {
   modelScope,
   type RebalanceNotice,
 } from "@cawco/core/accounts";
-import { RESTART_WAIT_CAP_MS } from "@cawco/core/binary-updates";
 import { COMPACT_NAMED_HARNESSES } from "@cawco/core/harness/traits";
 import type { StallOffer } from "@cawco/core/protocol";
 import type { MoveEnded } from "@cawco/core/session/controls";
@@ -38,7 +37,6 @@ import type {
 } from "./decide";
 import type { CacheState } from "./keep-alive";
 import type { HubLifetimeShape } from "./lifetime";
-import type { Arrival } from "./placement";
 import { isLive } from "./work-item-state";
 
 /**
@@ -85,11 +83,9 @@ export interface Handed {
  * `running`: its Claude Code process still runs there and keeps something
  * a stop would lose, so a move waits for its next turn's end rather than
  * failing. `later`: what it keeps is only work it holds for later (a
- * background task, a one-time wake-up), which a move of a running session
- * waits for up to `RESTART_WAIT_CAP_MS` and then ends (server.ts
- * `waitForLater`). A stopped session a person waits on never meets it, as
- * its move ends that work; any other's move waits for it until it has been
- * held that long, counted from its hold's start. That work, in its
+ * background task, a one-time wake-up). A stopped session a person waits on
+ * never meets it, as its move ends that work; any other stopped session's
+ * move waits for it, never ending it (decided 2026-11-19). That work, in its
  * machine's words ("waiting for work in flight to end: 1 command
  * running"), where `why` is the line's whole reason.
  */
@@ -284,12 +280,7 @@ export interface AtLimitPorts {
    * its kind's strategy and its model's window: the one read of the accounts
    * a decision makes.
    */
-  accountRows: (
-    row: LimitRow,
-    leaving: string,
-    /** The sessions a look already sent to an account, as they arrive there. */
-    landing: readonly Arrival[]
-  ) => AccountsRead;
+  accountRows: (row: LimitRow, leaving: string) => AccountsRead;
   /** The one ledger every move onto an account is charged against (admission.ts), shared with the wake path. */
   admission: Admission;
   /** `row`'s prompt cache now (keep-alive.ts `cacheState`): warm until a moment, cold, or unknown; inside a turn is warm. */
@@ -326,7 +317,7 @@ export interface AtLimitPorts {
   handMove: (row: LimitRow) => string | undefined;
   /** Whether `row` is between turns: nothing running and nothing waiting on it. */
   idle: (row: LimitRow) => Promise<boolean>;
-  /** Runs the next look and each settling session's timer until the hub closes. */
+  /** Runs the controller's timers (a hold's moment, a settling session's look) until the hub closes. */
   lifetime: HubLifetimeShape;
   /** A machine as a sentence names it. */
   machineName: (machineId: string) => string;
@@ -334,11 +325,10 @@ export interface AtLimitPorts {
    * Relaunches `row` on `accountId`, its conversation with it, and, when
    * its limit or a sign-in failure stopped it (`carryOn` says which), has it
    * carry on there, told what its move ended. What it holds for later (a
-   * background task, a wake-up) ends with the move, unless `laterSince` is
-   * given: then the move waits for that work until it has been held
-   * {@link RESTART_WAIT_CAP_MS} since `laterSince` (its hold's start), and
-   * ends it after. A session moved between turns before any limit waits for
-   * its next message, and its move waits for what it holds for later. `how`
+   * background task, a wake-up) ends with the move, unless `keepWork`: then
+   * the move waits for that work and never ends it. A session moved between
+   * turns before any limit waits for its next message, and its move waits
+   * for what it holds for later. `how`
    * compacts it as its plan says ({@link MoveHow}; absent, whole): natively
    * after the move, its first steps there its filing turn and its harness's
    * `/compact`, before the carry-on and everything it is owed; natively
@@ -354,7 +344,7 @@ export interface AtLimitPorts {
     decided: DecidedMove,
     carryOn: false | "limit" | "signin",
     how?: MoveHow,
-    laterSince?: number
+    keepWork?: boolean
   ) => Promise<{ kept: Kept } | Carried | { later: true }>;
   /**
    * Whether `row` is compacting or going on from a summary as its move now
@@ -520,8 +510,6 @@ export const contextSize = (tokens: number | null): ContextSize =>
  * `DecideFacts`): one read of the accounts, its policy, its cache and
  * context, its prices, who waits on it, and the hub's last move of it; its
  * own account's reset or bench, else `resetAt` when the caller names it.
- * `landing`: the sessions this look already sent somewhere, as they arrive
- * there.
  */
 export const factsOf = (
   db: DbShape,
@@ -532,9 +520,9 @@ export const factsOf = (
   row: LimitRow,
   current: Account,
   now: number,
-  how: { landing?: readonly Arrival[]; resetAt?: number | null } = {}
+  how: { resetAt?: number | null } = {}
 ): DecideFacts | undefined => {
-  const read = ports.accountRows(row, current.id, how.landing ?? []);
+  const read = ports.accountRows(row, current.id);
   const { resetAt } = how;
   if (!read.current) {
     return;
@@ -616,7 +604,8 @@ export const factsOf = (
  * either that its account lasts (no window runs short, so nothing is
  * decided), that it runs short but its sessions go on its extra usage, or
  * the one decision for the trigger the hub would take it up for (its limit,
- * a refused sign-in, a person's owed move, or a forecast run-out).
+ * a refused sign-in, a person's owed move, or a forecast run-out at its next
+ * turn's end).
  */
 export type Outlook = { facts: DecideFacts } & (
   | { kind: "lasts" }

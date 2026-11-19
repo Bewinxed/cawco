@@ -3431,10 +3431,15 @@ export const accountBench = sqliteTable(
 /**
  * Sessions waiting out their account's limit: their last turn was refused,
  * and the hub sends them on when `until` comes (the reset), or sooner when
- * another account can take them. `until` null: no reset was named, and the
- * hub looks again on its own clock. `staleAt`: when the hold went stale,
- * held past the cutoff (core `AtLimit.staleAfterHours`): nothing carries it
- * on until a person or its parent writes; null while it is carried on.
+ * another account can take them. `until` null: no reset was named (a
+ * refused sign-in), and it waits for its account to be signed in again or
+ * another to take it. `staleAt`: when the hold went stale, held past the
+ * cutoff (core `AtLimit.staleAfterHours`): nothing carries it on until a
+ * person or its parent writes; null while it is carried on. `laterTo` and
+ * `laterWhy`: the move it waits to make once the work its process holds for
+ * later ends (nobody waits on it, so nothing ends that work for the move):
+ * the account it goes to, and that work in its machine's words; null when
+ * it waits for no such work.
  */
 export const limitHolds = sqliteTable("limit_holds", {
   instanceId: sessionColumn("instance_id").primaryKey(),
@@ -3442,6 +3447,8 @@ export const limitHolds = sqliteTable("limit_holds", {
   accountId: text("account_id").notNull(),
   until: timestamp("until"),
   staleAt: timestamp("stale_at"),
+  laterTo: text("later_to"),
+  laterWhy: text("later_why"),
   createdAt: stampedNow("created_at"),
 });
 
@@ -3801,6 +3808,83 @@ export const usageLimitHistory = sqliteTable(
     ),
     // Retention prunes by age alone, across every account and kind.
     index("usage_limit_history_fetched_idx").on(table.fetchedAt),
+  ]
+);
+
+/**
+ * One row per window period of an account (a window's readings that share
+ * one reset minute, core `resetMinute`; 0 for a window that names no
+ * reset): its first and latest reading that moved it, and the weighted
+ * tokens (turn-weight.ts `weightedTokens`) and dollars of the turns
+ * recorded on the account between them. The turns recorded after its latest
+ * reading wait in `pending*` and join the period at its next reading. Kept
+ * as readings and turns arrive (db usage-periods.ts), so a window's pace and
+ * what a percent of it costs are read from a handful of rows (forecast.ts),
+ * never from days of {@link usageLimitHistory} and {@link turnUsage}.
+ */
+export const usagePeriods = sqliteTable(
+  "usage_periods",
+  {
+    accountId: text("account_id").notNull(),
+    kind: text("kind").notNull(),
+    /** Its scope's label ("Fable"); "" for a window over every model. */
+    scopeLabel: text("scope_label").notNull(),
+    /** Its reset, epoch ms rounded to the minute; 0 for none named. */
+    resetMinute: integer("reset_minute").notNull(),
+    firstAt: timestamp("first_at").notNull(),
+    firstPercent: integer("first_percent").notNull(),
+    lastAt: timestamp("last_at").notNull(),
+    lastPercent: integer("last_percent").notNull(),
+    tokens: real("tokens").notNull(),
+    usd: real("usd").notNull(),
+    pendingTokens: real("pending_tokens").notNull(),
+    pendingUsd: real("pending_usd").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.accountId,
+        table.kind,
+        table.scopeLabel,
+        table.resetMinute,
+      ],
+    }),
+    index("usage_periods_account_last_idx").on(table.accountId, table.lastAt),
+  ]
+);
+
+/**
+ * Each reading that moved a window period of {@link usagePeriods}: its
+ * percent, and the weighted tokens and dollars of the turns recorded on the
+ * account from the period's first reading up to this one. A period that
+ * opened before a reader's look-back is read from its first mark inside it
+ * (db usage-periods.ts `periods`), as a read of the history from that moment
+ * would: a single keyed row, never the series.
+ */
+export const usagePeriodMarks = sqliteTable(
+  "usage_period_marks",
+  {
+    accountId: text("account_id").notNull(),
+    kind: text("kind").notNull(),
+    scopeLabel: text("scope_label").notNull(),
+    resetMinute: integer("reset_minute").notNull(),
+    at: timestamp("at").notNull(),
+    percent: integer("percent").notNull(),
+    tokens: real("tokens").notNull(),
+    usd: real("usd").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.accountId,
+        table.kind,
+        table.scopeLabel,
+        table.resetMinute,
+        table.at,
+      ],
+    }),
+    // Retention prunes by age alone.
+    index("usage_period_marks_at_idx").on(table.at),
   ]
 );
 

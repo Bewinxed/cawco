@@ -461,7 +461,9 @@ export type SendsContext = Pick<
   | "machinePause"
   | "machinePresence"
   | "memoryWatch"
+  | "moveAtMessage"
   | "moveJobOf"
+  | "movingAtMessage"
   | "nameFromLiveTurn"
   | "notifications"
   | "planChanges"
@@ -2780,7 +2782,22 @@ export const createSends = (ctx: SendsContext) => {
       !!target &&
       ctx.wakesForSend(target) &&
       !ctx.startsTurnIn(target, message);
-    // Kept, not handed: a turn at its account's limit would only be refused.
+    // A person's or a session's message about to start a turn in a running
+    // session whose cache went cold is the moment it is decided: it may
+    // move first, the message waiting at the hub until it has
+    // (limit-moves.ts `moveAtMessage`; a session at rest is decided at its
+    // wake, {@link wakeForSend}).
+    if (
+      !(refused || keepAlive || ahead) &&
+      target &&
+      message.origin.kind !== "system" &&
+      !ctx.wakesForSend(target) &&
+      ctx.startsTurnIn(target, message)
+    ) {
+      ctx.moveAtMessage(target);
+    }
+    // Kept, not handed: a turn at its account's limit would only be
+    // refused, and one whose session moves first waits for its move.
     const limited =
       !(refused || keepAlive || ahead) &&
       heldAtLimit(instanceId, message.origin, message.uuid);
@@ -2948,6 +2965,11 @@ export const createSends = (ctx: SendsContext) => {
     // the filing turn.
     if (origin.kind === "system" && origin.name === LIMIT_ORIGIN) {
       return false;
+    }
+    // Moving before a message starts its turn: what it is sent goes once it
+    // has landed (limit-moves.ts `moveAtMessage`).
+    if (ctx.movingAtMessage(instanceId)) {
+      return true;
     }
     const plan = ctx.db.atLimit.compaction(instanceId);
     if (plan) {

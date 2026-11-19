@@ -217,7 +217,6 @@ import type { createProjectStops } from "./project-stops";
 import type { ProjectTrash } from "./project-trash";
 import type { createProviderRetries } from "./provider-retries";
 import type { createPush } from "./push";
-import type { ForecastRead } from "./rebalance";
 import type { RegistryShape } from "./registry";
 import type { createRelayJourney } from "./relay-journey";
 import type { createRoutines, Routines } from "./routines";
@@ -447,15 +446,14 @@ export interface ClosureContext {
   ) => void;
   carryTestFor: (
     provider: AccountProvider,
-    burnOf: (forecast: ForecastRead) => number | null,
-    self?: string
+    kind: "yours" | "delegates"
   ) => Pick<PlacementInput, "arrivals" | "burn" | "paces">;
   carryTo: (
     row: PublicInstanceRow,
     accountId: string,
     stopped: false | "limit" | "signin",
     compact: { line: string; move: MovedLine } | undefined,
-    laterSince: number | undefined,
+    keepWork: boolean,
     picked?: string
   ) => Promise<{ kept: Kept } | { ended?: MoveEnded | undefined }>;
   catalogFaults: Map<string, string>;
@@ -848,6 +846,10 @@ export interface ClosureContext {
     harness: HarnessKind,
     model: string | undefined
   ) => string | undefined;
+  /** limit-moves.ts `moveAtMessage`: a message that starts a turn in a running, cold session moves it first when its account no longer holds it. */
+  moveAtMessage: (
+    row: ReturnType<ClosureContext["db"]["getInstancesByIds"]>[number]
+  ) => boolean;
   moveByHand: (
     row: StoredRow,
     account: Account
@@ -882,13 +884,15 @@ export interface ClosureContext {
     accountId: string | null,
     stop?: boolean,
     stopped?: "limit" | "signin" | undefined,
-    laterSince?: number | undefined
+    keepWork?: boolean
   ) => Promise<{
     ended: Map<string, MoveEnded>;
     kept: Map<string, Kept>;
     moved: string[];
   }>;
   moves: ReturnType<typeof createMoves>;
+  /** Whether a message to a session waits for its move (limit-moves.ts `moveAtMessage`). */
+  movingAtMessage: (instanceId: string) => boolean;
   movingFor: (row: {
     accountId?: string | null;
     harness: HarnessKind;

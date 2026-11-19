@@ -116,7 +116,7 @@ export const createCompaction = (ctx: CompactionContext) => {
   ): void => {
     const [row] = ctx.db.getInstancesByIds([instanceId]);
     console.error(
-      `[at-limit] ${row ? ctx.sessionName(row) : "A session no longer recorded"}: the hub's answer to ${what} failed: ${error instanceof Error ? error.message : String(error)}. It stays on ${ctx.accountWords(row?.accountId)} as it was; the next look at the limit decides again.`
+      `[at-limit] ${row ? ctx.sessionName(row) : "A session no longer recorded"}: the hub's answer to ${what} failed: ${error instanceof Error ? error.message : String(error)}. It stays on ${ctx.accountWords(row?.accountId)} as it was; its next refused turn, a message to it, or a change of its accounts while it is held decides again.`
     );
   };
 
@@ -659,7 +659,7 @@ export const createCompaction = (ctx: CompactionContext) => {
       move.to.id,
       false,
       undefined,
-      undefined,
+      false,
       plan.picked ?? undefined
     );
     if ("kept" in done) {

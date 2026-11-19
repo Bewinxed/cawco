@@ -410,6 +410,23 @@ export const runsShortWith = (
   now: number
 ): number | null => runsShort(windows, burn, 2 * LOOK_AHEAD_MS, waitMs, now);
 
+/**
+ * THE FLOOR TEST: whether landing `landingPct` percent on a window with
+ * `leftPct` left takes it under its account's floor, which keeps `floorPct`
+ * percent of it free (core `Account.reservePct`, `sessionReservePct`).
+ * `landingPct` null is a new session, whose spend is not priced but is more
+ * than nothing: a window at its floor has no room for it (placement.ts
+ * `Usage.crossed`, `Usage.backAt`). A move lands its priced percent, or 0
+ * for what was there before it ({@link windowHeld}): landing exactly on the
+ * floor holds.
+ */
+export const breaksFloor = (
+  leftPct: number,
+  landingPct: number | null,
+  floorPct: number
+): boolean =>
+  landingPct === null ? leftPct <= floorPct : leftPct - landingPct < floorPct;
+
 /** What a window has left before anything new lands, percent. */
 const leftOf = (window: FactWindow): number =>
   100 - window.usedPct - (window.spentPct ?? 0) - (window.pendingPct ?? 0);
@@ -472,14 +489,14 @@ const windowHeld = (
       ? (burn / window.tokensPerPct) * (ahead / HOUR_MS)
       : 0;
   const before = leftOf(window);
-  if (before < window.floorPct) {
+  if (breaksFloor(before, 0, window.floorPct)) {
     return {
       ok: false,
       reason: { kind: "reserve", pct: Math.round(100 - window.floorPct) },
     };
   }
   const after = before - (pct ?? 0) - burnPct;
-  if (after < window.floorPct) {
+  if (breaksFloor(before, (pct ?? 0) + burnPct, window.floorPct)) {
     return {
       ok: false,
       reason: { kind: "room", leftPct: before, movePct: pct ?? 0 },

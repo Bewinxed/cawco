@@ -718,7 +718,7 @@ export interface InstancesDb {
   }[];
   /**
    * The listed sessions running or starting on one of `accountIds`: what a
-   * forecast's arrivals are read from (rebalance.ts `readForecast`), by
+   * provider's arrivals are read from (rebalance.ts `readProvider`), by
    * status (`instances_status_harness`), where {@link listInstances} read
    * and parsed every listed row of the fleet at every at-limit look.
    */

@@ -52,6 +52,7 @@ import {
 } from "./schema";
 import type { StrandedWhy } from "./stored-types";
 import type { Tx } from "./tx";
+import { notePeriods } from "./usage-periods";
 
 /** 30 days — long enough to cover several weekly windows, short enough that the table stays small. */
 const LIMIT_HISTORY_RETENTION_MS = 30 * DAY_MS;
@@ -1156,6 +1157,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         if (moved.length === 0) {
           return;
         }
+        notePeriods(tx, accountId, moved, at);
         tx.insert(usageLimitHistory)
           .values(
             moved.map((w) => ({

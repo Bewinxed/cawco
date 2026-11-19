@@ -643,8 +643,8 @@ const unmovedNext = (
     return `It moves${move.to ? ` to ${move.to.name}` : ""} when that work ends`;
   }
   return move.signedOut
-    ? `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} once ${from} is signed in again in ${configurePage("accounts")}`
-    : `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} when ${from} resets`;
+    ? `It stays on ${from}, held: the hub tries again whenever an account's usage, sign-in or bench changes, and it carries on on ${from} once ${from} is signed in again in ${configurePage("accounts")}`
+    : `It stays on ${from}, held: the hub tries again whenever an account's usage, sign-in or bench changes, and it carries on on ${from} when ${from} resets`;
 };
 
 /** Trailing stops a clause ends on, so a sentence ends on one of its own. */
@@ -714,25 +714,8 @@ const continuedWords = (
   };
 };
 
-/** "2 sessions", "1 session". */
-const sessionsWords = (n: number): string =>
-  `${n} session${n === 1 ? "" : "s"}`;
-
 const thousands = (tokens: number | null): string =>
   tokens === null ? "its whole context" : `${Math.round(tokens / 1000)}k`;
-
-/** "3 sessions on pm@ (Petralab) forecast to run out at 20:10; 3 moved to design@ between turns (cache shared)". */
-const runningLine = (group: RebalanceNotice["running"][number]): string => {
-  const on = group.organization
-    ? `${group.from.name} (${group.organization})`
-    : group.from.name;
-  const why = group.cacheKept ? "cache shared" : "re-read on the move";
-  const left =
-    group.left > 0
-      ? `; ${group.left} more when ${group.left === 1 ? "its turn ends" : "their turns end"}`
-      : "";
-  return `${sessionsWords(group.moved + group.left)} on ${on} forecast to run out at ${clockWords(group.runsOutAt)}; ${group.moved} moved to ${group.to.name} between turns (${why})${left}`;
-};
 
 /** One held session moved: "180k re-read ≈ 2% of design@'s weekly window". */
 const heldMoveWords = (
@@ -770,10 +753,7 @@ const heldLine = (group: RebalanceNotice["held"][number]): string => {
 export const rebalanceWords = (
   notice: RebalanceNotice
 ): { title: string; lines: string[] } => {
-  const lines = [
-    ...notice.running.map(runningLine),
-    ...notice.held.map(heldLine),
-  ];
+  const lines = notice.held.map(heldLine);
   return { title: `${cameWords(notice.came)} on ${notice.machine}`, lines };
 };
 

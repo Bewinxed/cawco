@@ -1378,7 +1378,7 @@ export const modelScope = (model: string | null | undefined): string | null => {
 };
 
 /** What an account is called: its nickname, else the email it is signed in as. */
-export const accountName = (
+const accountName = (
   account: Pick<Account, "email" | "id" | "label">
 ): string => account.label ?? account.email ?? accountsWords.unnamed;
 
@@ -1743,8 +1743,7 @@ export type AccountMove =
       /**
        * Only work its process holds for later kept it (a background task, a
        * one-time wake-up), and no person waits on it: the move goes when that
-       * work ends, or once it has been held {@link RESTART_WAIT_CAP_MS},
-       * ending it.
+       * work ends, and never ends it (decided 2026-11-19).
        */
       waits?: true;
     };
@@ -1816,7 +1815,11 @@ export interface RebalanceNotice {
   }[];
   id: string;
   machine: string;
-  /** Running sessions moved off an account forecast to run out, by account and target. */
+  /**
+   * Always empty: a running session moves at its own turn's end, each
+   * writing its own line, never at a look an account's coming starts. Sent
+   * because the shipped apps decode it (the iPhone app's `RebalanceNotice`).
+   */
   running: {
     from: NamedAccount;
     organization: string | null;
