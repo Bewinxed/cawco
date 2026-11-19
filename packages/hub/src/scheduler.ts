@@ -30,7 +30,7 @@
  * It runs on the hub's lifetime (lifetime.ts): its turns and its sampler are
  * the lifetime's named timers, and they stop when it closes.
  */
-import { doing, syncSection } from "@cawco/core/loop-watch";
+import { syncSection } from "@cawco/core/loop-watch";
 
 /** Whose wait a job serves, first first. */
 export type JobPriority = "person" | "machine" | "background";
@@ -128,10 +128,15 @@ export const makeScheduler = (timers: SchedulerTimers): SchedulerShape => {
     return undefined;
   };
 
+  /**
+   * A job, run as a marked section alone (core loop-watch.ts `syncSection`):
+   * the minute line counts it once. Named work (`doing`) as well counted it
+   * twice, the second time until its turn's stack emptied, so obelisk's
+   * minute of 3,494 publishes said 6,986 (2026-11-19).
+   */
   const runJob = (job: Waiting): void => {
     queueOf(job.priority).delete(job.key);
     const name = `job: ${job.name}`;
-    doing(name);
     try {
       syncSection(name, job.run);
     } catch (error) {

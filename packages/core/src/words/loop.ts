@@ -74,6 +74,9 @@ export const loopWords = {
   /** A CPU profile written, and where. */
   profiled: (who: string, path: string) =>
     `[loop] the ${who}'s CPU profile is at ${path}: open it in Chrome DevTools' Performance panel, or speedscope.app`,
+  /** Why a process profiled itself: its main thread was busy most of the last minute. */
+  busyMinute: (percent: number) =>
+    `its main thread took ${percent}% of a core over the last minute`,
   /** Why a process profiled itself: the holds its tick said within the last minute passed their budget. */
   holdsPastBudget: (ms: number) =>
     `its loop was held ${ms} ms within the last minute, in holds its tick said`,

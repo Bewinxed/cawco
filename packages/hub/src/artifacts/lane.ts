@@ -17,12 +17,14 @@
  * 6801 on, and 6809's trial never saw the 60 s answered it needs
  * (probe-kit hub-live-copy, on a copy of that hub's database).
  *
- * A session's row is read only for the artifacts it holds, wrote the ask of
- * or made, so a session moving is a move of the lane only when it is one of
- * those its last read named ({@link LaneRead.sessions}): the board's every
- * written row (a pulse's activity, a turn's end) once read the whole lane
- * again, 10 to 22 times a minute at 150 to 200 ms each on obelisk's hub on
- * 2026-11-19 (`timer: artifact lane settled`, 0.9 to 3.8 s of every minute).
+ * A move is the lane's only when what the lane read reads otherwise: a
+ * session's when its end, place or plan as the last read read them moved
+ * ({@link ArtifactLaneDeps.sessionMoved}), an artifact's doc when its item
+ * or notice read alone moved ({@link ArtifactLaneDeps.artifactMoved}). From
+ * 16:45 to 16:55 on 2026-11-19 obelisk's hub read the whole lane 165 times
+ * a minute, 96 ms each: every board publish that laid a session it named (a
+ * turn's tokens, its last request, a row laid unchanged) moved it, as every
+ * update to an artifact's doc did, whatever it changed.
  */
 import {
   type ArtifactNeedsFrame,
@@ -30,32 +32,38 @@ import {
   unparked,
 } from "@cawco/core/artifact-needs";
 import type { HubLifetimeShape, HubTimer } from "../lifetime";
+import type { SessionRead } from "./facts";
 
 /** How long after a move the lane is read: a Send's doc writes land as one. Our call. */
 const MOVED_QUIET_MS = 150;
 
-/** One read of the lane, and the sessions it read: a move of any other is none of the lane's. */
+/** One read of the lane, and what it read of each session: a move of anything else is none of the lane's. */
 export interface LaneRead {
   read: ArtifactNeedsRead;
-  sessions: ReadonlySet<string>;
+  sessions: ReadonlyMap<string, SessionRead>;
 }
 
 export interface ArtifactLaneDeps {
+  /** Whether artifact `id` stands otherwise in the lane now than in `last` (artifacts service `laneMoved`). */
+  artifactMoved: (id: string, last: LaneRead) => boolean;
   /** Sends the frame to every dashboard. */
   broadcast: (frame: ArtifactNeedsFrame) => void;
   /** An artifact left the lane (answered, retired, put away, its session ended): its push is over. */
   left: (artifactId: string) => void;
   lifetime: HubLifetimeShape;
-  /** The lane as it stands now, and the sessions it read (artifacts service `needs`). */
+  /** The lane as it stands now, and what it read of each session (artifacts service `needs`). */
   read: () => LaneRead;
+  /** Whether session `id` reads otherwise now than `was`, the last read's of it (artifacts service `readsOtherwise`). */
+  sessionMoved: (id: string, was: SessionRead) => boolean;
 }
 
 export const createArtifactLane = (deps: ArtifactLaneDeps) => {
-  let current: ArtifactNeedsRead = { needs: [], notices: [] };
-  /** The sessions {@link current} was read from. */
-  let readFrom: ReadonlySet<string> = new Set();
+  let last: LaneRead = {
+    read: { needs: [], notices: [] },
+    sessions: new Map(),
+  };
   let timer: HubTimer | undefined;
-  /** Whether {@link current} is the lane as it stands: nothing it is read from moved since it was read. */
+  /** Whether {@link last} is the lane as it stands: nothing it is read from moved since it was read. */
   let held = false;
   /** Who hears each change besides the screens ({@link listen}). */
   const listeners = new Set<(read: ArtifactNeedsRead) => void>();
@@ -64,32 +72,34 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
   const settle = (): ArtifactNeedsRead => {
     deps.lifetime.cancel(timer);
     timer = undefined;
-    let read: ArtifactNeedsRead;
+    let next: LaneRead;
     try {
-      ({ read, sessions: readFrom } = deps.read());
+      next = deps.read();
     } catch (error) {
       console.warn(
         `[needs] the artifacts waiting on you were not read: ${error instanceof Error ? error.message : String(error)}`
       );
-      return current;
+      return last.read;
     }
     held = true;
-    if (Bun.deepEquals(read, current)) {
-      return current;
+    const before = last.read;
+    if (Bun.deepEquals(next.read, before)) {
+      // What it says stands; what it read of each session is the newest read's.
+      last = { read: before, sessions: next.sessions };
+      return before;
     }
-    const before = unparked(current.needs);
-    const after = unparked(read.needs);
-    current = read;
-    for (const need of before) {
+    last = next;
+    const after = unparked(next.read.needs);
+    for (const need of unparked(before.needs)) {
       if (!after.some((one) => one.artifactId === need.artifactId)) {
         deps.left(need.artifactId);
       }
     }
-    deps.broadcast({ kind: "artifact.needs", ...read });
+    deps.broadcast({ kind: "artifact.needs", ...next.read });
     for (const listener of listeners) {
-      listener(read);
+      listener(next.read);
     }
-    return current;
+    return next.read;
   };
 
   /** The read, wanted on the hub's admission; one asked meanwhile ({@link now}) read it already. */
@@ -107,6 +117,21 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
     });
   };
 
+  /**
+   * Whether `ask` says the lane reads otherwise now; one that could not be
+   * asked is taken for a move, so the next read settles it.
+   */
+  const otherwise = (ask: () => boolean): boolean => {
+    try {
+      return ask();
+    } catch (error) {
+      console.warn(
+        `[needs] whether the artifacts waiting on you moved was not read: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return true;
+    }
+  };
+
   /** Something the lane is read from moved: read again once it is quiet. */
   const moved = (): void => {
     held = false;
@@ -121,21 +146,32 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
 
   return {
     moved,
-    /** Sessions' rows moved (the board's change log): a move of the lane when its last read read one of them. */
+    /**
+     * Sessions moved (the board's change log, a plan's steps): a move of
+     * the lane when its last read read one of them and it reads otherwise
+     * now. While a read is owed already, nothing is asked.
+     */
     sessionsMoved(ids: Iterable<string>): void {
       if (!held) {
         return;
       }
       for (const id of ids) {
-        if (readFrom.has(id)) {
+        const was = last.sessions.get(id);
+        if (was && otherwise(() => deps.sessionMoved(id, was))) {
           moved();
           return;
         }
       }
     },
+    /** Artifact `id`'s doc took an update: a move of the lane when its item or notice reads otherwise now. */
+    artifactMoved(id: string): void {
+      if (held && otherwise(() => deps.artifactMoved(id, last))) {
+        moved();
+      }
+    },
     /** The lane as it stands now: the read it holds, or read at once when something moved since. */
     now(): ArtifactNeedsRead {
-      return held ? current : settle();
+      return held ? last.read : settle();
     },
     /** Hears each change of the lane, as every screen does: a session's plan reads what of it waits on the person from it (plans.ts `needsMoved`). */
     listen(listener: (read: ArtifactNeedsRead) => void): void {
@@ -143,7 +179,7 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
     },
     /** The frame every screen holds now: the `/api/pending` envelope carries it whole. */
     frame(): ArtifactNeedsFrame {
-      return { kind: "artifact.needs", ...(held ? current : settle()) };
+      return { kind: "artifact.needs", ...(held ? last.read : settle()) };
     },
   };
 };

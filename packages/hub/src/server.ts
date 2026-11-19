@@ -4534,6 +4534,8 @@ export const createServer = (
   const artifactLane = createArtifactLane({
     lifetime,
     read: () => artifacts.needs(),
+    sessionMoved: (id, was) => artifacts.readsOtherwise(id, was),
+    artifactMoved: (id, last) => artifacts.laneMoved(id, last),
     broadcast: (frame) => {
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame });
       // A pin answered: an artifact's push still saying more asks comes to its count.
@@ -4549,10 +4551,11 @@ export const createServer = (
   const artifactDocs = createArtifactDocs({
     db: db.artifacts,
     lifetime,
-    // What waits on the person in it may have moved: Needs you reads it again.
+    // What waits on the person in it may have moved: Needs you reads it
+    // again when its item or notice reads otherwise (lane.ts).
     // The person's own change: what of it the session hasn't heard goes once quiet.
     updated: (id, by) => {
-      artifactLane.moved();
+      artifactLane.artifactMoved(id);
       // Its document carries the doc's seed: built again (artifact-documents.ts).
       artifactDocuments.moved([id]);
       if (by === "person") {
@@ -8693,8 +8696,7 @@ export const createServer = (
   laws.fileWith(
     createLawTasks({
       after: lifetime.after,
-      gitRoot: GIT_ROOT,
-      projectIds: () => db.listProjects().map((project) => project.id),
+      projects: () => db.listProjects(),
       tasks,
       version: HUB_VERSION,
     }).broke
@@ -9637,7 +9639,9 @@ export const createServer = (
     publish: (instanceId, message) => {
       streams.planToFollowers(instanceId, message);
       // A step ticked, removed or waiting: an artifact's ask stands on it.
-      artifactLane.moved();
+      // A plan published because Needs you moved (`needsMoved` below) has
+      // the steps the lane read, and moves it no more.
+      artifactLane.sessionsMoved([instanceId]);
     },
   });
   // What a plan waits on the person on is Needs you's (core `planWaitsOf`): a change there is read again.

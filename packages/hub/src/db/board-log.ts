@@ -47,6 +47,13 @@ export interface BoardChange {
 /** Takes every change logged since the board last took them, on this connection. */
 export type TakeChanges = Statement<BoardChange, []>;
 
+/** The board's change log on the hub's connection: its taker, and whether it holds a change now. */
+export interface BoardChangeLog {
+  /** Whether a change waits in the log: one row read off a temporary table, never heard as a write. */
+  readonly logged: () => boolean;
+  readonly take: TakeChanges;
+}
+
 /**
  * A table the board reads, and what a write to it moved: `key` is the
  * column (of the row written, `old.` and `new.`) the change is filed under.
@@ -366,7 +373,7 @@ const triggersOf = (client: Database, logged: Logged): string[] => {
  * statement that fired it, so a register's upsert that touched a row twice
  * failed whole on a unique id here. Repeats are folded when the log is taken.
  */
-export const boardChangeLog = (client: Database): TakeChanges => {
+export const boardChangeLog = (client: Database): BoardChangeLog => {
   client.run(
     "CREATE TEMP TABLE IF NOT EXISTS board_changes (kind TEXT NOT NULL, id TEXT NOT NULL)"
   );
@@ -375,9 +382,15 @@ export const boardChangeLog = (client: Database): TakeChanges => {
       client.run(trigger);
     }
   }
-  return client.prepare<BoardChange, []>(
-    "DELETE FROM board_changes RETURNING kind, id"
+  const waiting = client.prepare<{ logged: number }, []>(
+    "SELECT EXISTS (SELECT 1 FROM board_changes) AS logged"
   );
+  return {
+    logged: () => waiting.get()?.logged === 1,
+    take: client.prepare<BoardChange, []>(
+      "DELETE FROM board_changes RETURNING kind, id"
+    ),
+  };
 };
 
 /** Whether `sql` may write: anything but a read, conservatively. */
@@ -388,13 +401,13 @@ const RUNS = ["run", "all", "get", "values", "iterate"] as const;
 
 /**
  * Hears every statement on `client` that may write, once it has run:
- * `wrote` is called after it, so the board's change log is taken on the
- * turn after any write (board-store.ts) and no writer has to say what it
- * wrote. bun:sqlite gives no update or commit hook (its `Database` has
- * neither), so the connection's own entry points are wrapped: a statement
- * prepared or queried, and SQL run directly. A read never calls it. The
- * board's own take (`boardChangeLog`) is prepared before this, so taking the
- * log is not heard as a write.
+ * `wrote` is called after it, and whoever hears it asks the change log
+ * whether the write moved anything (db/index.ts), so no writer has to say
+ * what it wrote. bun:sqlite gives no update or commit hook (its `Database`
+ * has neither), so the connection's own entry points are wrapped: a
+ * statement prepared or queried, and SQL run directly. A read never calls
+ * it. The board's own take and its look (`boardChangeLog`) are prepared
+ * before this, so neither is heard as a write.
  */
 export const hearWrites = (client: Database, wrote: () => void): void => {
   const heard = new WeakSet<object>();

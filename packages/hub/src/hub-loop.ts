@@ -142,7 +142,10 @@ const topWords = (top: NamedTime[]): string =>
  * `tallyNamedWork`), and what its admission merged and how long background
  * work was paused (scheduler.ts). Answers its stop.
  */
-const minuteLine = (lifetime: HubLifetimeShape): (() => void) => {
+const minuteLine = (
+  lifetime: HubLifetimeShape,
+  profiler: HubProfiler
+): (() => void) => {
   const delay = monitorEventLoopDelay({ resolution: DELAY_RESOLUTION_MS });
   delay.enable();
   const takeTop = tallyNamedWork();
@@ -156,15 +159,16 @@ const minuteLine = (lifetime: HubLifetimeShape): (() => void) => {
     const nowTicks = mainThreadTicks();
     const share = (cpuSeconds: number) =>
       Math.round((cpuSeconds / seconds) * 100);
+    const mainCpu =
+      ticks === undefined || nowTicks === undefined
+        ? undefined
+        : share((nowTicks - ticks) / CLOCK_TICKS);
     console.info(
       loopWords.minute({
         who: "hub",
         p50Ms: Math.round(delay.percentile(50) / 1e6),
         p99Ms: Math.round(delay.percentile(99) / 1e6),
-        mainCpu:
-          ticks === undefined || nowTicks === undefined
-            ? undefined
-            : share((nowTicks - ticks) / CLOCK_TICKS),
+        mainCpu,
         processCpu: share((used.user + used.system) / 1e6),
         heapMb: Math.round(heapSize() / 1024 / 1024),
         rssMb: Math.round(process.memoryUsage.rss() / 1024 / 1024),
@@ -172,6 +176,8 @@ const minuteLine = (lifetime: HubLifetimeShape): (() => void) => {
         admission: lifetime.jobs.minute(),
       })
     );
+    // A busy minute is profiled as a long hold is (hub-profile.ts).
+    profiler.minute(mainCpu);
     delay.reset();
     at = now;
     cpu = process.cpuUsage();
@@ -205,7 +211,7 @@ export const watchHubLoop = (
     who: "hub",
     end: { afterMs: endAfterMs, record },
   });
-  const stopMinute = minuteLine(lifetime);
+  const stopMinute = minuteLine(lifetime, profiler);
   return () => {
     stopTick();
     stopThread();

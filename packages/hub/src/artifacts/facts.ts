@@ -13,6 +13,7 @@ import {
   getMeta,
   type QuestionClose,
 } from "@cawco/core/doc-meta";
+import type { PlanStep } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { TUNED_MAP, tunedEntryOf } from "@cawco/core/tuned";
 import type { Doc } from "yjs";
@@ -61,6 +62,22 @@ export const metaOf = (doc: Doc) => {
         }),
   };
 };
+
+/** What the lane reads of an artifact's holder: whether it is over for good, and its harness and machine. */
+export type HolderRead = Pick<
+  ArtifactSessions,
+  "ended" | "harness" | "machineId"
+>;
+
+/**
+ * What one read of Needs you's lane read of a session: as the holder of an
+ * artifact in it, its {@link HolderRead}; as the writer of one's ask, its
+ * plan's steps (needs.ts `planHolds`).
+ */
+export interface SessionRead {
+  holder?: HolderRead;
+  steps?: readonly PlanStep[];
+}
 
 /** What createFacts reads of the artifact service: its deps, and the service's parts it calls, each read when called. */
 export interface FactsContext {
@@ -240,57 +257,85 @@ export const createFacts = (ctx: FactsContext) => {
       steps: writer ? deps.steps(writer) : [],
     };
   };
-  /**
-   * {@link sessionsOf} for one read of many artifacts (Needs you's lane):
-   * each session, plan and project read once however many artifacts name
-   * it, and the sessions it read (holders, writers, makers) kept in
-   * `sessions`, so the lane reads again only when one of them moves
-   * (lane.ts `sessionsMoved`). Whether a holder is over for good (server.ts
-   * `overForGood`) is most of a lane's read: per artifact, it was 1.4 of 2.0
-   * s of obelisk's start profile on 2026-11-19.
-   */
-  const sessionsReader = () => {
-    const sessions = new Set<string>();
-    /** `read` of each key, once per lane read. */
-    const once = <T>(read: (key: string) => T) => {
-      const kept = new Map<string, { value: T }>();
-      return (key: string): T => {
-        const held = kept.get(key) ?? { value: read(key) };
-        kept.set(key, held);
-        return held.value;
-      };
-    };
-    const ended = once((id) => {
-      const owner = deps.instance(id);
-      return {
-        ended: !owner || deps.finished(owner),
-        harness: owner?.harness ?? null,
-        machineId: owner?.machineId ?? null,
-      };
-    });
-    const steps = once((writer) => deps.steps(writer));
-    const setUp = once((project) => deps.setUp(project));
-    const named: ReadonlySet<string> = sessions;
+  /** What the lane reads of artifact holder `id` (rule 4): whether it is over for good, and where it runs. */
+  const heldOf = (id: string): HolderRead => {
+    const owner = deps.instance(id);
     return {
-      sessions: named,
+      ended: !owner || deps.finished(owner),
+      harness: owner?.harness ?? null,
+      machineId: owner?.machineId ?? null,
+    };
+  };
+  /**
+   * {@link sessionsOf} for one read of the lane (Needs you): each holder,
+   * plan and project read once however many artifacts name it, and what was
+   * read of each session kept in `sessions` (its end as a holder, its steps
+   * as a writer), so the lane reads again only when one of them reads
+   * otherwise ({@link readsOtherwise}; lane.ts `sessionsMoved`). Whether a
+   * holder is over for good (server.ts `overForGood`) is most of a lane's
+   * read: per artifact, it was 1.4 of 2.0 s of obelisk's start profile on
+   * 2026-11-19. With `kept`, a session's part it holds is taken from it,
+   * not read: one artifact read again against the lane's last read
+   * (service `laneMoved`), `fresh` saying whether anything was read anew.
+   */
+  const sessionsReader = (kept?: ReadonlyMap<string, SessionRead>) => {
+    const sessions = new Map<string, SessionRead>();
+    let fresh = false;
+    const entry = (id: string): SessionRead => {
+      const held = sessions.get(id) ?? {};
+      sessions.set(id, held);
+      return held;
+    };
+    const holderRead = (id: string): HolderRead => {
+      const read = entry(id);
+      const was = kept?.get(id)?.holder;
+      if (!read.holder) {
+        fresh ||= was === undefined;
+        read.holder = was ?? heldOf(id);
+      }
+      return read.holder;
+    };
+    const steps = (writer: string): readonly PlanStep[] => {
+      const read = entry(writer);
+      const was = kept?.get(writer)?.steps;
+      if (!read.steps) {
+        fresh ||= was === undefined;
+        read.steps = was ?? deps.steps(writer);
+      }
+      return read.steps;
+    };
+    const setUp = new Map<string, boolean>();
+    const setUpOf = (project: string): boolean => {
+      const held = setUp.get(project) ?? deps.setUp(project);
+      setUp.set(project, held);
+      return held;
+    };
+    return {
+      /** Whether a part of a session was read here that `kept` did not hold. */
+      fresh: () => fresh,
+      sessions,
       of: (row: ArtifactRow, facts: ArtifactFacts): ArtifactSessions => {
         const writer = askOf(row, facts)?.by;
-        for (const id of [row.instanceId, row.madeBy, writer]) {
-          if (id) {
-            sessions.add(id);
-          }
-        }
         const project = boardOf(row);
         return {
           ...(row.instanceId === null
             ? { ended: true, harness: null, machineId: null }
-            : ended(row.instanceId)),
-          setUp: project !== null && setUp(project),
+            : holderRead(row.instanceId)),
+          setUp: project !== null && setUpOf(project),
           steps: writer ? steps(writer) : [],
         };
       },
     };
   };
+  /**
+   * Whether session `id` reads otherwise now than `was`, what the lane's
+   * last read read of it: its end or place as a holder, its steps as a
+   * writer. A row written for anything else (a turn's tokens, its last
+   * request, its title) moves nothing the lane reads.
+   */
+  const readsOtherwise = (id: string, was: SessionRead): boolean =>
+    (was.holder !== undefined && !Bun.deepEquals(heldOf(id), was.holder)) ||
+    (was.steps !== undefined && !Bun.deepEquals(deps.steps(id), was.steps));
   /** The artifacts each decision page's Canvas and Preview pieces show, by the page's id, read once per change of it. */
   const mediaKept = new Map<string, { at: number; ids: string[] }>();
   const mediaOf = (row: ArtifactRow): string[] => {
@@ -334,6 +379,7 @@ export const createFacts = (ctx: FactsContext) => {
     factsOf,
     mediaOf,
     questionsFrom,
+    readsOtherwise,
     sessionsOf,
     sessionsReader,
     withMedia,

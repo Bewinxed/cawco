@@ -7,10 +7,14 @@
  * it is done or dropped, the next break files a new one. The person sees
  * the task on the board as he sees any defect, never the law on his screen.
  *
- * The project is the one whose main repository on the hub (its bare
- * `<projectId>.git`, git-remote.ts) has CawCo's root commit
- * (`CAWCO_ROOT_COMMIT`): a fleet that does not develop CawCo has none, and
- * files nothing. None or more than one, the `[law]` log line says why, and
+ * The project is the one with a checkout of CawCo's repository among its
+ * places: a place whose root commit (`project_places.root`, read where the
+ * checkout is, machine-commands.ts `learnCheckout`) is CawCo's
+ * (`CAWCO_ROOT_COMMIT`), the checkout its delegates are cut from. The hub's
+ * own bare repositories are not it: a project's main one there is its
+ * folder's, and a repository its delegates work in is held there only once
+ * one is cut from it (obelisk's "cockpit" project, 2026-11-19, holds none of
+ * CawCo's). A fleet that does not develop CawCo has none, and files nothing. None or more than one, the `[law]` log line says why, and
  * the next break looks again, so a project added later is found. A match is
  * kept for the hub's run.
  *
@@ -27,10 +31,7 @@ import {
   type Law,
   type LawAbout,
 } from "@cawco/core/invariant";
-import { runCaptured } from "@cawco/core/run-captured";
-import { GIT_LOCALE, safeGitArgv } from "@cawco/core/safe-git";
 import { ElysiaStatus } from "elysia";
-import { bareRepoPath } from "./git-remote";
 import { hubActor, type Tasks } from "./tasks";
 
 /** The least time between two comments on one law's task: 10 min. */
@@ -143,10 +144,11 @@ const noteWords = (owed: Owed): string =>
 export interface LawTasksDeps {
   /** A timer the hub's lifetime ends (lifetime.ts `after`). */
   after: (name: string, ms: number, run: () => void) => unknown;
-  /** The hub's bare repositories' folder (config.ts `GIT_ROOT`). */
-  gitRoot: string;
-  /** Every project the hub has. */
-  projectIds: () => string[];
+  /** Every project the hub has, with the root commit of each of its places (null: not a checkout, or not read yet). */
+  projects: () => readonly {
+    id: string;
+    places: readonly { root: string | null }[];
+  }[];
   tasks: Pick<Tasks, "comment" | "create" | "list">;
   /** The hub's version, as the description names it. */
   version: string;
@@ -161,30 +163,17 @@ export const createLawTasks = (deps: LawTasksDeps) => {
   /** Laws whose task is being written or whose gap is running: a break meanwhile waits in {@link owed}. */
   const writing = new Set<Law>();
 
-  /** The root commit of `projectId`'s main repository on the hub; null when it has none. */
-  const rootOf = async (projectId: string): Promise<string | null> => {
-    const ran = await runCaptured(
-      safeGitArgv([
-        "-C",
-        bareRepoPath(deps.gitRoot, { projectId }),
-        "rev-list",
-        "--max-parents=0",
-        "--first-parent",
-        "HEAD",
-      ]),
-      { env: { ...process.env, ...GIT_LOCALE } }
-    );
-    return ran.code === 0 ? ran.stdout.trim() : null;
-  };
-
   /** The project whose repository is CawCo's; why none takes it when there is not one alone. */
-  const homeOf = async (): Promise<{ projectId: string } | { why: string }> => {
+  const homeOf = (): { projectId: string } | { why: string } => {
     if (home) {
       return { projectId: home };
     }
-    const ids = deps.projectIds();
-    const roots = await Promise.all(ids.map(rootOf));
-    const ours = ids.filter((_, index) => roots[index] === CAWCO_ROOT_COMMIT);
+    const ours = deps
+      .projects()
+      .filter((project) =>
+        project.places.some((place) => place.root === CAWCO_ROOT_COMMIT)
+      )
+      .map((project) => project.id);
     const [only] = ours;
     if (only && ours.length === 1) {
       home = only;
@@ -193,8 +182,8 @@ export const createLawTasks = (deps: LawTasksDeps) => {
     return {
       why:
         ours.length === 0
-          ? `no project on this hub has CawCo's repository (root commit ${CAWCO_ROOT_COMMIT.slice(0, 10)})`
-          : `${ours.length} projects have CawCo's repository (${ours.join(", ")}), and the hub files in one alone`,
+          ? `no project on this hub has a checkout of CawCo's repository (root commit ${CAWCO_ROOT_COMMIT.slice(0, 10)}) among its places`
+          : `${ours.length} projects have a checkout of CawCo's repository (${ours.join(", ")}), and the hub files in one alone`,
     };
   };
 
@@ -214,7 +203,7 @@ export const createLawTasks = (deps: LawTasksDeps) => {
 
   /** Puts `due` on the law's open task, else on a new one. */
   const write = async (law: Law, due: Owed): Promise<void> => {
-    const found = await homeOf();
+    const found = homeOf();
     if ("why" in found) {
       console.error(`[law] ${law}: no task filed: ${found.why}.`);
       return;

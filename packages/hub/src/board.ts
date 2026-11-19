@@ -107,10 +107,21 @@ class Keyed<Entry> {
   readonly #gone = new Map<string, number>();
   floor = 0;
 
-  put(key: string, entry: Entry, version: number): void {
+  /**
+   * `entry` laid at `version`; whether it moved. An entry laid as it is held
+   * moves nothing: no frame carries it and nothing that follows a move is
+   * told of it (a pulse that relaid a session's row unchanged once read
+   * Needs you's whole lane again).
+   */
+  put(key: string, entry: Entry, version: number): boolean {
+    const held = this.entries.get(key);
+    if (held !== undefined && Bun.deepEquals(held, entry)) {
+      return false;
+    }
     this.entries.set(key, entry);
     this.#at.set(key, version);
     this.#gone.delete(key);
+    return true;
   }
 
   /** Whether the key was held. */
@@ -689,8 +700,9 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     for (const { id } of rows) {
       const row = laid.get(id);
       if (row) {
-        sessions.put(id, row, at);
-        changes.upserts.push(row);
+        if (sessions.put(id, row, at)) {
+          changes.upserts.push(row);
+        }
       } else if (sessions.drop(id, at)) {
         changes.removed.push(id);
       }
@@ -709,8 +721,9 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     for (const machineId of owed) {
       const entry = read(machineId);
       if (entry) {
-        collection.put(machineId, entry, at);
-        changes.upserts.push(entry);
+        if (collection.put(machineId, entry, at)) {
+          changes.upserts.push(entry);
+        }
       } else if (collection.drop(machineId, at)) {
         changes.removed.push(machineId);
       }
@@ -917,7 +930,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
       listsOwed.add(list);
     }
     flushOnce(false);
-    ctx.db.onWrite(schedule);
+    ctx.db.onLogged(schedule);
   };
 
   /** Takes what is owed now, before a read. */

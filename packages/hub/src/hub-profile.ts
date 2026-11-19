@@ -8,7 +8,9 @@
  * compiled binary alike, for {@link PROFILE_MS}:
  *
  * - by itself, when the loop's holds pass a budget ({@link HOLD_BUDGET_MS}
- *   within {@link HOLD_WINDOW_MS}), at most once every {@link AUTO_GAP_MS};
+ *   within {@link HOLD_WINDOW_MS}), or a minute's main thread took
+ *   {@link BUSY_PERCENT} of a core or more, at most once every
+ *   {@link AUTO_GAP_MS} between them;
  * - on the owner's ask, `POST /api/hub/profile` (routes/hub-info.ts).
  *
  * Each profile is one `.cpuprofile` file beside the database and the loop
@@ -34,6 +36,13 @@ const PROFILE_MS = 20_000;
 const HOLD_BUDGET_MS = 3000;
 /** The stretch the hold budget is summed over. */
 const HOLD_WINDOW_MS = MINUTE_MS;
+/**
+ * A minute's main-thread CPU, as a share of one core, from which the hub
+ * profiles by itself. Work cut into short jobs holds the loop in no hold the
+ * tick says: obelisk's hub ran its main thread at 84 to 98% for ten minutes
+ * on 2026-11-19 in jobs of 3 to 96 ms, and profiled none of it.
+ */
+const BUSY_PERCENT = 70;
 /**
  * The least time between two profiles the hub takes by itself. At an hour,
  * the one a restart's holds took was the only one for the hour after: on
@@ -61,6 +70,12 @@ export interface HubProfiler {
    * budget, a profile begun once it is passed and none ran within the hour.
    */
   held: (ms: number) => void;
+  /**
+   * A minute's main-thread CPU, as a share of one core (hub-loop.ts's
+   * minute line; undefined where it is not read): a profile begun from
+   * {@link BUSY_PERCENT} on, when none ran within {@link AUTO_GAP_MS}.
+   */
+  minute: (mainCpu: number | undefined) => void;
   /**
    * Profiles the main thread now, or joins the profile already running;
    * answers the path its file was written at.
@@ -126,6 +141,16 @@ export const createHubProfiler = ({
     return running;
   };
 
+  /** A profile the hub takes by itself, saying `why`: none while one runs, nor within {@link AUTO_GAP_MS} of the last. */
+  const auto = (why: () => string): void => {
+    const now = Date.now();
+    if (running || now - lastAuto < AUTO_GAP_MS) {
+      return;
+    }
+    lastAuto = now;
+    detach(take(why()), "hub CPU profile");
+  };
+
   const held = (ms: number): void => {
     const now = Date.now();
     holds.push({ at: now, ms });
@@ -133,15 +158,16 @@ export const createHubProfiler = ({
       holds.shift();
     }
     const total = holds.reduce((sum, hold) => sum + hold.ms, 0);
-    if (total < HOLD_BUDGET_MS || running || now - lastAuto < AUTO_GAP_MS) {
-      return;
+    if (total >= HOLD_BUDGET_MS) {
+      auto(() => loopWords.holdsPastBudget(Math.round(total)));
     }
-    lastAuto = now;
-    detach(
-      take(loopWords.holdsPastBudget(Math.round(total))),
-      "hub CPU profile"
-    );
   };
 
-  return { held, take };
+  const minute = (mainCpu: number | undefined): void => {
+    if (mainCpu !== undefined && mainCpu >= BUSY_PERCENT) {
+      auto(() => loopWords.busyMinute(mainCpu));
+    }
+  };
+
+  return { held, minute, take };
 };

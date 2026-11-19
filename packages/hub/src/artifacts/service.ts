@@ -171,6 +171,7 @@ import { createPreviewKind } from "./kinds/preview";
 import type { LaneRead } from "./lane";
 import { createMarks, labelOf, linkOfPin } from "./marks";
 import {
+  type ArtifactFacts,
   answeredWhole,
   answersUnheard,
   heardSeq,
@@ -2679,6 +2680,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     factsOf,
     mediaOf,
     questionsFrom,
+    readsOtherwise,
     sessionsOf,
     sessionsReader,
     withMedia,
@@ -2899,6 +2901,43 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     }
     return parked;
+  };
+
+  /**
+   * Artifact `row`'s item in Needs you and its notice, from `kept` (its
+   * facts, its media read), its sessions by `reader`; the person's
+   * acknowledgements in `marks`. Neither when it could not wait at all.
+   */
+  const laneEntryOf = (
+    row: ArtifactRow,
+    kept: ArtifactFacts,
+    reader: ReturnType<typeof sessionsReader>,
+    marks: { parked: ReadonlyMap<string, number>; seen: ReadonlySet<string> }
+  ): {
+    need?: ArtifactNeedsRead["needs"][number];
+    notice?: ArtifactNeedsRead["notices"][number];
+  } => {
+    if (!mayWait(row, kept)) {
+      return {};
+    }
+    const facts = { ...kept, asked: askOf(row, kept) };
+    const sessions = reader.of(row, kept);
+    const need = needOf(row, facts, sessions);
+    const notice = noticeOf(row, facts, sessions);
+    const parts = notice?.parts.filter((part) => !marks.seen.has(part.id));
+    return {
+      ...(need
+        ? {
+            need: {
+              ...need,
+              parked: (marks.parked.get(row.id) ?? -1) >= need.raisedAt,
+            },
+          }
+        : {}),
+      ...(notice && parts && parts.length > 0
+        ? { notice: { ...notice, parts } }
+        : {}),
+    };
   };
 
   /** One artifact as `artifact_list` answers it, read for `caller`. */
@@ -3473,8 +3512,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     needs: (): LaneRead => {
       const reader = sessionsReader();
       const acknowledged = deps.acknowledged();
-      const seen = new Set(acknowledged);
-      const parked = parkedNow(acknowledged);
+      const marks = {
+        parked: parkedNow(acknowledged),
+        seen: new Set(acknowledged),
+      };
       const needs: ArtifactNeedsRead["needs"] = [];
       const notices: ArtifactNeedsRead["notices"] = [];
       const rows = db.asking();
@@ -3493,27 +3534,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         (row) => row.instanceId
       );
       for (const row of rows) {
-        const kept = withMedia(
+        const { need, notice } = laneEntryOf(
           row,
-          factsOf(row, heldNext.has(row.id)),
-          pages.get(row.instanceId) ?? []
+          withMedia(
+            row,
+            factsOf(row, heldNext.has(row.id)),
+            pages.get(row.instanceId) ?? []
+          ),
+          reader,
+          marks
         );
-        if (!mayWait(row, kept)) {
-          continue;
-        }
-        const facts = { ...kept, asked: askOf(row, kept) };
-        const sessions = reader.of(row, kept);
-        const need = needOf(row, facts, sessions);
         if (need) {
-          needs.push({
-            ...need,
-            parked: (parked.get(row.id) ?? -1) >= need.raisedAt,
-          });
+          needs.push(need);
         }
-        const notice = noticeOf(row, facts, sessions);
-        const parts = notice?.parts.filter((part) => !seen.has(part.id));
-        if (notice && parts && parts.length > 0) {
-          notices.push({ ...notice, parts });
+        if (notice) {
+          notices.push(notice);
         }
       }
       return {
@@ -3524,6 +3559,41 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         sessions: reader.sessions,
       };
     },
+
+    /**
+     * Whether artifact `id` stands otherwise in the lane now than in `last`,
+     * the lane's last read ({@link needs}): its item and its notice read
+     * again alone, its sessions as `last` read them. A change of its doc
+     * that moves neither (a look, a cursor, ink that asks nothing) moves no
+     * read of the whole lane; one that names a session `last` did not read
+     * does.
+     */
+    laneMoved: (id: string, last: LaneRead): boolean => {
+      const row = db.get(id);
+      const reader = sessionsReader(last.sessions);
+      const acknowledged = deps.acknowledged();
+      const now =
+        row && row.heldFor === null
+          ? laneEntryOf(row, withMedia(row, factsOf(row)), reader, {
+              parked: parkedNow(acknowledged),
+              seen: new Set(acknowledged),
+            })
+          : {};
+      return (
+        reader.fresh() ||
+        !Bun.deepEquals(
+          now.need,
+          last.read.needs.find((one) => one.artifactId === id)
+        ) ||
+        !Bun.deepEquals(
+          now.notice,
+          last.read.notices.find((one) => one.artifactId === id)
+        )
+      );
+    },
+
+    /** Whether session `id` reads otherwise now than the lane's last read read it ({@link readsOtherwise}). */
+    readsOtherwise,
 
     /** Whether the person had artifact `id` on screen at or after `at` (ms epoch). */
     /**

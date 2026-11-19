@@ -157,10 +157,11 @@ interface HubStore {
   /** What each session's move ended, until it is told (move-endings.ts). */
   readonly moveEndings: MoveEndingsDb;
   /**
-   * Hears every statement that may have written, once it ran (db/board-log.ts
-   * `hearWrites`): the board takes its change log after one.
+   * Hears a write that logged a change the board or the views read
+   * (db/board-log.ts), once the stack that wrote it empties: the board takes
+   * its change log after one. A write that changed none of it is not heard.
    */
-  readonly onWrite: (listener: () => void) => void;
+  readonly onLogged: (listener: () => void) => void;
   /** The moves sessions owe to their next launch, one per session (owed-moves.ts). */
   readonly owedMoves: OwedMovesDb;
   /** Host mode's preview passes, one per browser (preview-access.ts). */
@@ -297,18 +298,35 @@ const make = async (path: string): Promise<DbShape> => {
   db.transaction = (run) => deferredTransaction(run, { behavior: "immediate" });
   await applyMigrations(db, db.$client, path);
 
-  const takeBoardChanges = boardChangeLog(db.$client);
+  const boardLog = boardChangeLog(db.$client);
   // Every write heard from here on, before any reader below prepares its
-  // own statements: the board takes its change log on the turn after one.
-  const writeListeners: (() => void)[] = [];
+  // own statements. Its listeners hear it only when it logged a change the
+  // board or the views read: once the stack that wrote empties (a
+  // transaction's writes are one, and one rolled back logged nothing), the
+  // log is asked whether it holds one. A write that changes nothing they
+  // read (a usage bucket, a turn's cost, a doc's update log, an UPDATE that
+  // sets what was there) wakes nothing: each once wanted a board publish,
+  // 58 a second on obelisk while its sessions streamed (2026-11-19).
+  const loggedListeners: (() => void)[] = [];
+  let looking = false;
   hearWrites(db.$client, () => {
-    for (const listener of writeListeners) {
-      listener();
+    if (looking) {
+      return;
     }
+    looking = true;
+    queueMicrotask(() => {
+      looking = false;
+      if (!boardLog.logged()) {
+        return;
+      }
+      for (const listener of loggedListeners) {
+        listener();
+      }
+    });
   });
   // Every statement prepared from here on, explained once it is armed.
   const statementPlans = explainStatements(db.$client);
-  const core: DbCore = dbCore(db, takeBoardChanges);
+  const core: DbCore = dbCore(db, boardLog.take);
   // The fleet's delegate types, seeded once.
   const delegateTypes = makeDelegateTypes(db);
 
@@ -344,8 +362,8 @@ const make = async (path: string): Promise<DbShape> => {
     revokedAmong: core.revokedAmong,
     onCredentialsRevoked: core.onCredentialsRevoked,
     close: () => closeWal(db.$client),
-    onWrite: (listener) => {
-      writeListeners.push(listener);
+    onLogged: (listener) => {
+      loggedListeners.push(listener);
     },
     statementPlans,
     delegateTypes,
