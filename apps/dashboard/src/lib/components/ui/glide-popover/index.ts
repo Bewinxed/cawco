@@ -34,8 +34,18 @@ export const glidePopoverVariants = tv({
      * whose rows carry their own (`snug`, the trigger menu).
      */
     pad: { roomy: "", snug: "p-space-1" },
+    /**
+     * Its height's cap: the form's own (`cap`), or the whole room
+     * floating-ui leaves it (`room`), for a surface whose list is its
+     * subject and would otherwise scroll inside a scroller (the location's
+     * repositories).
+     */
+    height: {
+      cap: "",
+      room: "max-h-(--ns-pop-room,var(--bits-popover-content-available-height)) max-phone:not-data-fit:max-h-(--ns-pop-room,var(--bits-popover-content-available-height,55dvh))",
+    },
   },
-  defaultVariants: { pad: "roomy" },
+  defaultVariants: { pad: "roomy", height: "cap" },
 });
 
 /**

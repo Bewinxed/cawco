@@ -55,6 +55,7 @@
   import { isGitUrl, repoIdentity, repoPath } from "@cawco/core/protocol";
   import { unhandled } from "@cawco/core/unhandled";
   import { spawnWords } from "@cawco/core/words/spawn";
+  import { untrack } from "svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
@@ -82,6 +83,7 @@
     repo,
     onrepo,
     oncommit,
+    focus = false,
   }: {
     machineId: string;
     machineName: string;
@@ -91,7 +93,21 @@
     onrepo: (url: string) => void;
     /** Enter picked the active row: the location is set. */
     oncommit?: () => void;
+    /** The search takes focus as the picker opens: it is what the popover opened for. */
+    focus?: boolean;
   } = $props();
+
+  /**
+   * Focus in the search a frame after it mounts: the popover's focus scope
+   * moves focus to its first stop as it opens, and this lands after it.
+   */
+  function searchFirst(node: HTMLInputElement) {
+    if (!untrack(() => focus)) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => node.focus());
+    return () => cancelAnimationFrame(frame);
+  }
 
   const uid = $props.id();
   const tips = provideGlide();
@@ -343,6 +359,7 @@
       role="combobox"
       spellcheck="false"
       value={query}
+      {@attach searchFirst}
     />
   </label>
 

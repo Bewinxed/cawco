@@ -113,7 +113,10 @@
           preventOverflowTextSelection={false}
           strategy="fixed"
           align={shown.align}
-          class={cn("ns-theme", glidePopoverVariants())}
+          class={cn(
+            "ns-theme",
+            glidePopoverVariants({ height: shown?.tall ? "room" : "cap" })
+          )}
           collisionPadding={inset}
           customAnchor={shown.trigger}
           onCloseAutoFocus={(event) => {

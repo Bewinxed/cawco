@@ -36,6 +36,7 @@
     gap = 0,
     align = "start",
     trapFocus = true,
+    tall = false,
     pad = "roomy",
     anchor = null,
     label,
@@ -68,6 +69,12 @@
     gap?: number;
     align?: "start" | "end" | "center";
     trapFocus?: boolean;
+    /**
+     * As tall as the room floating-ui leaves it, past the form's cap: a
+     * surface whose list is its subject (the location's repositories), so
+     * the list scrolls alone, never inside a scrolling surface.
+     */
+    tall?: boolean;
     /**
      * The surface's inset: the sheet's own (`roomy`), or the ladder's 4px
      * round a menu whose rows carry their own (`snug`, the trigger menu).
@@ -138,6 +145,9 @@
     get open() {
       return open;
     },
+    get tall() {
+      return tall;
+    },
     get trapFocus() {
       return trapFocus;
     },
@@ -200,7 +210,10 @@
         data-fit={fit || undefined}
         {align}
         aria-label={rest["aria-label"]}
-        class={cn("ns-theme", glidePopoverVariants({ pad }))}
+        class={cn(
+          "ns-theme",
+          glidePopoverVariants({ pad, height: tall ? "room" : "cap" })
+        )}
         collisionPadding={inset}
         customAnchor={anchor}
         id={`${id}-popover`}

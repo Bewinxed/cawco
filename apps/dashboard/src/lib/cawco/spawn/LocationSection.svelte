@@ -452,7 +452,14 @@
     inert={mode !== "repo"}
     {@attach folds(() => mode === "repo", REPO_PART)}
   >
-    <RepoPicker {machineId} {machineName} {oncommit} {onrepo} {repo} />
+    <RepoPicker
+      focus={mode === "repo"}
+      {machineId}
+      {machineName}
+      {oncommit}
+      {onrepo}
+      {repo}
+    />
   </div>
 
   <div data-slot="path" class="grid min-w-0 gap-space-2">

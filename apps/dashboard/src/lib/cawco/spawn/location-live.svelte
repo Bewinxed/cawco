@@ -9,6 +9,7 @@
   import { type BenchFs, standSocket } from "../hub/socket.svelte";
   import LifetimeChip from "./LifetimeChip.svelte";
   import LocationChip from "./LocationChip.svelte";
+  import LocationSection from "./LocationSection.svelte";
   import {
     filesOf,
     type MockAnswer,
@@ -23,6 +24,7 @@
     repo: startRepo,
     dir: startDir,
     height,
+    bare = false,
   }: {
     /** What the machine's gh answers. */
     answer: MockAnswer;
@@ -34,6 +36,8 @@
     dir: string;
     /** The frame's least height, px: room for the popover under its chip. */
     height: number;
+    /** The popover's form alone in the frame, for its states to be read off the frame itself. */
+    bare?: boolean;
   } = $props();
 
   const files: BenchFs = (_machineId, op, path) => filesOf(op, path);
@@ -52,50 +56,69 @@
   /** The chip whose popover stands open; the location's as it opens. */
   let popover = $state<"location" | "lifetime" | null>("location");
   let ephemeral = $state(false);
+  /** What the form's own handlers do with the location: a press sets it in place. */
+  const form = {
+    ondir: (value: string) => {
+      dir = value;
+    },
+    onmode: (value: "dir" | "repo") => {
+      mode = value;
+      dir ||= "~";
+    },
+    onoverride: () => undefined,
+    onrepo: (value: string) => {
+      repo = value;
+    },
+  };
 </script>
 
 <div
   class="relative flex min-h-(--frame-h) items-start gap-space-2 p-space-5"
   style:--frame-h={`${height}px`}
 >
-  <NsPopoverGroup>
-    <LocationChip
-      {dir}
-      locked={false}
-      machineId={mockMachine(answer)}
-      machineName="obelisk-of-light"
-      {mode}
-      onchange={(next) => {
-        popover = next ? "location" : null;
-      }}
-      onclosefocus={() => false}
-      oncommit={() => {
-        popover = null;
-      }}
-      ondir={(value) => {
-        dir = value;
-      }}
-      onmode={(value) => {
-        mode = value;
-        dir ||= "~";
-      }}
-      onoverride={() => undefined}
-      onrepo={(value) => {
-        repo = value;
-      }}
-      open={popover === "location"}
-      reading=""
-      {repo}
-    />
-    <LifetimeChip
-      {ephemeral}
-      onchange={(next) => {
-        popover = next ? "lifetime" : null;
-      }}
-      onlifetime={(value) => {
-        ephemeral = value;
-      }}
-      open={popover === "lifetime"}
-    />
-  </NsPopoverGroup>
+  {#if bare}
+    <div class="w-130 max-w-full">
+      <LocationSection
+        {dir}
+        locked={false}
+        machineId={mockMachine(answer)}
+        machineName="obelisk-of-light"
+        {mode}
+        {...form}
+        reading=""
+        {repo}
+      />
+    </div>
+  {:else}
+    <NsPopoverGroup>
+      <LocationChip
+        {dir}
+        locked={false}
+        machineId={mockMachine(answer)}
+        machineName="obelisk-of-light"
+        {mode}
+        onchange={(next) => {
+          popover = next ? "location" : null;
+        }}
+        onclosefocus={() => false}
+        oncommit={() => {
+          popover = null;
+        }}
+        {...form}
+        open={popover === "location"}
+        reading=""
+        {repo}
+      />
+      <LifetimeChip
+        {ephemeral}
+        onchange={(next) => {
+          popover = next ? "lifetime" : null;
+        }}
+        onlifetime={(value) => {
+          ephemeral = value;
+        }}
+        open={popover === "lifetime"}
+      />
+    </NsPopoverGroup>
+  {/if}
 </div>

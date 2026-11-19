@@ -77,6 +77,7 @@
     // Never wider than its row: a long name ends in its ellipsis.
     class: "min-w-0",
   })}
+  tall
   width={520}
 >
   {#snippet trigger()}

@@ -40,6 +40,8 @@ export interface PopoverMember {
   readonly open: boolean;
   /** The rows the surface's hover ghost glides between (components/ui/highlight). */
   readonly rows?: string;
+  /** The surface is as tall as its room allows, past the form's cap (glide-popover `height`). */
+  readonly tall?: boolean;
   readonly trapFocus: boolean;
   readonly trigger: HTMLElement | null;
   readonly width: PopoverWidth;
