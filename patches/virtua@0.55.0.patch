@@ -1,8 +1,8 @@
 diff --git a/lib/svelte/Virtualizer.svelte b/lib/svelte/Virtualizer.svelte
-index 2821bbe0c9f8ba5a241c6acd0dfa289f59b79d68..5c95b3cae3024eb49cf557d3df580851751b6691 100644
+index 4e3e40dcc8e619e6e3dd81b96b151cd8e03908d0..1ab8ce7d6060f1d822854672c7365a5d23132535 100644
 --- a/lib/svelte/Virtualizer.svelte
 +++ b/lib/svelte/Virtualizer.svelte
-@@ -85,23 +85,32 @@
+@@ -87,13 +87,22 @@
      // https://svelte.dev/docs/svelte/await-expressions#Breaking-changes
      // https://github.com/inokawa/virtua/pull/847
      // https://github.com/inokawa/virtua/pull/1018
@@ -27,9 +27,7 @@ index 2821bbe0c9f8ba5a241c6acd0dfa289f59b79d68..5c95b3cae3024eb49cf557d3df580851
          mounted.add(i);
        }
        for (const index of sort([...mounted])) {
--        if (index < len) {
-+        if (index >= 0 && index < len) {
-           arr.push(index);
+@@ -102,8 +111,8 @@
          }
        }
      } else {
