@@ -101,7 +101,7 @@
         "photoswipe": "^5.4.4",
         "rfc6902": "5.3.0",
         "socket-activation": "3.2.0",
-        "svelte-words": "github:Bewinxed/svelte-words#d151fc8deaa56ac28007c3752382b7c1238484d5",
+        "svelte-words": "^0.1.1",
         "tailwind-merge": "^3.7.0",
         "tailwind-variants": "^3.3.1",
         "torph": "^0.1.3",
@@ -3558,7 +3558,7 @@
 
     "svelte-toolbelt": ["svelte-toolbelt@0.10.7", "", { "dependencies": { "clsx": "^2.1.1", "runed": "^0.35.1", "style-to-object": "^1.0.8" }, "peerDependencies": { "svelte": "^5.30.2" } }, "sha512-gjuUVEEpo38UJCeI1ssE3NxG31tYENczPTcTGTXf4338qAQNdR9I1oAEbQY0KQFmbdUojNIhHuRNix7ThwFNxQ=="],
 
-    "svelte-words": ["svelte-words@github:Bewinxed/svelte-words#d151fc8", { "peerDependencies": { "@pierre/words": "^0.2.2", "svelte": "^5.40.0" } }, "Bewinxed-svelte-words-d151fc8", "sha512-/UqU+nUDN9Fvrk2d46ssvHSxm04jftjzZFiiS+Gl62m3SWofCeUzYIsIa8lclSgZHy5UxWa/oBEyPcvsAE35zw=="],
+    "svelte-words": ["svelte-words@0.1.1", "", { "peerDependencies": { "@pierre/words": "^0.2.2", "svelte": "^5.40.0" } }, "sha512-+XDz8nE0NhwzBTO/TXw8BBVXjaaj39nK526RARRuZRbJaW6KrK+Ll1ButwQg7MWXc2jnhRgClfRmfXdtHiqOSA=="],
 
     "svelte2tsx": ["svelte2tsx@0.7.61", "", { "dependencies": { "dedent-js": "^1.0.1", "scule": "^1.3.0" }, "peerDependencies": { "svelte": "^3.55 || ^4.0.0-next.0 || ^4.0 || ^5.0.0-next.0", "typescript": "^4.9.4 || ^5.0.0 || ^6.0.0" } }, "sha512-EpQ/+UHITBULeUojx/LLD3uTYasZXcX1BrqlrzfLUnT9vdUhaOWK59a3ryWcFU8L0sY1SP+gRhJ2Beiis98+qw=="],
 
