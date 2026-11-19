@@ -125,7 +125,7 @@ const accountLine = (
     case "past-reserve":
       return words.account(
         name,
-        words.pastReserve(standing.reservePct ?? 0),
+        words.pastReserve(standing.reserve?.pct ?? 0, standing.reserve?.window),
         back(standing.backAt)
       );
     case "at-limit":

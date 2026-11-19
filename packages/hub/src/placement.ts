@@ -564,12 +564,24 @@ class Usage {
    * percent it keeps free of new sessions and of the hub's moves.
    */
   pastReserve(account: Account): boolean {
-    return (
-      (account.reservePct !== null &&
-        this.weekly(account.id) >= account.reservePct) ||
-      (account.sessionReservePct !== null &&
-        this.session(account.id) >= account.sessionReservePct)
-    );
+    return this.crossed(account) !== null;
+  }
+
+  /** The floor it is past and the window that crossed it (the 5-hour window first); null when it is past none. */
+  crossed(account: Account): CrossedFloor | null {
+    if (
+      account.sessionReservePct !== null &&
+      this.session(account.id) >= account.sessionReservePct
+    ) {
+      return { pct: account.sessionReservePct, window: "5-hour" };
+    }
+    if (
+      account.reservePct !== null &&
+      this.weekly(account.id) >= account.reservePct
+    ) {
+      return { pct: account.reservePct, window: "weekly" };
+    }
+    return null;
   }
 
   /**
@@ -1180,7 +1192,8 @@ const choose = (
         return `${usage.name(account)} is benched until its window resets`;
       }
       if (usage.pastReserve(account)) {
-        return `${usage.name(account)} is past its ${account.reservePct}% reserve`;
+        const crossed = usage.crossed(account);
+        return `${usage.name(account)} is ${spawnWords.startModel.pastReserve(crossed?.pct ?? 0, crossed?.window)}`;
       }
       return usage.read(account)
         ? `${usage.name(account)} is at its limit`
@@ -1364,7 +1377,7 @@ export interface AccountRow {
   notAllowedBy: "project" | "task" | null;
   order: number;
   organization: string | null;
-  /** Its reserve, percent of its week, when its week is past it; null otherwise. */
+  /** The floor it is past, percent of the window that crossed it; null otherwise. */
   pastReserve: number | null;
   /** Whether its limits have been read at all. */
   read: boolean;
@@ -1432,9 +1445,7 @@ export const accountRows = (
         notAllowedBy: allowed.includes(account) ? null : notAllowedBy,
         read: usage.read(account),
         benchedUntil: benched.length > 0 ? Math.max(...benched) : null,
-        pastReserve: usage.pastReserve(account)
-          ? (account.reservePct ?? account.sessionReservePct)
-          : null,
+        pastReserve: usage.crossed(account)?.pct ?? null,
         backAt: usage.backAt(account) ?? null,
         windows: usage.carryWindows(account.id),
         arrivals: (input.arrivals ?? []).filter(
@@ -1464,7 +1475,7 @@ export type Standing =
       backAt: number | null;
       /** Why its extra usage is off, in Claude Code's words; null when on, or unsaid. */
       creditOff: string | null;
-      reservePct: number | null;
+      reserve: CrossedFloor | null;
     }
   | { kind: "room" };
 
@@ -1521,7 +1532,7 @@ export const standings = (
       kind,
       backAt: usage.backAt(account) ?? null,
       creditOff: overage?.disabledReason ?? null,
-      reservePct: account.reservePct,
+      reserve: usage.crossed(account),
     };
   };
   return byOrder(input.accounts).map((account) => ({
@@ -1530,6 +1541,12 @@ export const standings = (
     standing: standingOf(account),
   }));
 };
+
+/** A floor an account is past: its percent and the window that crossed it. */
+export interface CrossedFloor {
+  pct: number;
+  window: "5-hour" | "weekly";
+}
 
 export const place = (asked: PlacementInput): Placement => {
   const input = ofProvider(asked);

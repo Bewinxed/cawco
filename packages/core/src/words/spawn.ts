@@ -119,7 +119,9 @@ export const spawnWords = {
     /** When a mark began: its clock time today, else its day and time ("2 Oct 23:41"). */
     since: (day: string | null, clock: string) =>
       day ? `${day} ${clock}` : clock,
-    pastReserve: (percent: number) => `past its ${percent}% reserve`,
+    /** `window` names the window whose floor it is ("5-hour", "weekly"); both floors are percents of different windows. */
+    pastReserve: (percent: number, window?: string) =>
+      `past its ${percent}% ${window ? `${window} ` : ""}reserve`,
     atLimit: "at its limit",
     /** At its limit, with its extra usage off for `reason` (Claude Code's words: "out of credits"). */
     noCredit: (reason: string) =>
