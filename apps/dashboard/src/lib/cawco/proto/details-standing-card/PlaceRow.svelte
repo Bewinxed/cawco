@@ -7,14 +7,24 @@
    * starts. Its acts stand on the row under the folder: Move and Find
    * folder on every checkout (Find folder leading on a missing one), Drop on
    * any that is not where work starts. The hub's folder has none.
+   *
+   * A place being moved shows its step in place of its acts, and a press on
+   * it opens the move again. Drop asks beside the row. A place just added
+   * says what the hub learned of it.
    */
   import { machineLabel } from "@cawco/core/machine-names";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import type { ProjectPlace } from "#lib/cawco/projects.js";
   import type { Machine } from "#lib/cawco/stores/board.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { IconFolderLinear, IconWarningTriangle } from "#lib/icons.js";
-  import type { PlaceFolder } from "./details";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import {
+    IconChevronRight,
+    IconFolderLinear,
+    IconWarningTriangle,
+  } from "#lib/icons.js";
+  import { reveal } from "#lib/platform/motion/curves.svelte.js";
+  import type { PlaceFolder, PlaceLearned, PlaceMoving } from "./details";
   import { standingWords } from "./words";
 
   const words = standingWords.places;
@@ -23,17 +33,35 @@
     place,
     machine,
     folder,
+    moving = null,
+    dropping = false,
+    learned = null,
+    sunk = false,
     onmove,
     onfind,
     ondrop,
+    onkeep,
+    ondropped,
+    onreopen,
   }: {
     place: ProjectPlace;
     /** The place's machine as the board lists it; null once it left the fleet. */
     machine: Machine | null;
     folder: PlaceFolder;
+    /** Its folder is being moved. */
+    moving?: PlaceMoving | null;
+    /** Drop stands asked beside it. */
+    dropping?: boolean;
+    /** It was just added: what the hub learned of it. */
+    learned?: PlaceLearned | null;
+    /** The hub is out of reach: its acts are sunk. */
+    sunk?: boolean;
     onmove: (placeId: string) => void;
     onfind: (placeId: string) => void;
     ondrop: (placeId: string) => void;
+    onkeep: () => void;
+    ondropped: (placeId: string) => void;
+    onreopen: (placeId: string) => void;
   } = $props();
 
   const onHub = $derived(place.kind === "hub");
@@ -102,23 +130,70 @@
     {#if folder.made}
       <span class="type-meta text-ink-subtle">{words.made}</span>
     {/if}
-    {#if !onHub}
+    {#if learned}
+      <span class="type-meta text-ink-muted" in:reveal
+        >{learned.repository
+          ? words.learned(learned.repository)
+          : words.learnsLater}</span
+      >
+    {/if}
+    {#if moving}
+      <!-- The move's step, live, in place of the acts: a press opens the move again. -->
+      <Button
+        class="self-start"
+        onclick={() => onreopen(place.id)}
+        size="xs"
+        variant="secondary"
+      >
+        <LiveDot size="row" />
+        <span>{moving.step}</span>
+        <span class="text-ink-muted tabular-nums">{moving.progress}</span>
+        <IconChevronRight aria-hidden="true" />
+      </Button>
+    {:else if dropping}
+      <div
+        class="flex min-w-0 flex-wrap items-center gap-space-2 pt-space-1"
+        in:reveal
+      >
+        <span class="min-w-0 flex-auto type-meta text-ink-strong text-pretty"
+          >{words.drops}</span
+        >
+        <Button onclick={onkeep} size="xs" variant="outline"
+          >{words.keep}</Button
+        >
+        <Button
+          onclick={() => ondropped(place.id)}
+          size="xs"
+          variant="destructive">{words.drop}</Button
+        >
+      </div>
+    {:else if !onHub}
       <div class="flex flex-wrap gap-space-2 pt-space-1">
         {#if folder.missing}
-          <Button onclick={() => onfind(place.id)} size="xs" variant="outline"
-            >{words.find}</Button
+          <Button
+            disabled={sunk}
+            onclick={() => onfind(place.id)}
+            size="xs"
+            variant="outline">{words.find}</Button
           >
         {/if}
-        <Button onclick={() => onmove(place.id)} size="xs" variant="outline"
-          >{words.move}</Button
+        <Button
+          disabled={sunk}
+          onclick={() => onmove(place.id)}
+          size="xs"
+          variant="outline">{words.move}</Button
         >
         {#if !folder.missing}
-          <Button onclick={() => onfind(place.id)} size="xs" variant="outline"
-            >{words.find}</Button
+          <Button
+            disabled={sunk}
+            onclick={() => onfind(place.id)}
+            size="xs"
+            variant="outline">{words.find}</Button
           >
         {/if}
         {#if !place.isPrimary}
           <Button
+            disabled={sunk}
             onclick={() => ondrop(place.id)}
             size="xs"
             tone="quiet"
