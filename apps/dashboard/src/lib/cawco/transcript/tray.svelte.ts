@@ -96,6 +96,41 @@ export function admit(instanceId: string, entry: "fade" | "none"): void {
   });
 }
 
+/** How often a tray reads its chips again (DelegateTray's beat), ms. */
+export const TRAY_TICK = 250;
+
+/** The trays' one beat: the time of its last tick, null while no tray stands. */
+const beat = $state<{ at: number | null }>({ at: null });
+let beating = 0;
+let beatTimer: ReturnType<typeof setInterval> | undefined;
+
+/**
+ * The trays' one clock, as each tray mounts: a tray reads `trayBeat()` in
+ * an effect and is answered every `TRAY_TICK` while any tray stands. One
+ * interval for every tray a group keeps built, the hidden ones too: an
+ * interval each, the 26 trays of a 29-tab layout woke the page 104 times a
+ * second at rest, each wake a flush of its own. Returns the leave.
+ */
+export function joinTrayBeat(): () => void {
+  beating += 1;
+  if (beating === 1) {
+    beatTimer = setInterval(() => {
+      beat.at = Date.now();
+    }, TRAY_TICK);
+  }
+  return () => {
+    beating -= 1;
+    if (beating === 0) {
+      clearInterval(beatTimer);
+      beatTimer = undefined;
+      beat.at = null;
+    }
+  };
+}
+
+/** The last tick's time (`joinTrayBeat`), tracked. */
+export const trayBeat = (): number | null => beat.at;
+
 /** Whether a delegate's card is on screen right now. */
 export const cardVisible = (instanceId: string): boolean =>
   cards.get(instanceId) === "visible";

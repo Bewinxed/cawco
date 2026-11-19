@@ -91,7 +91,10 @@
     entered,
     flightKey,
     inTray,
+    joinTrayBeat,
     left,
+    TRAY_TICK as TICK,
+    trayBeat,
     trayNews,
     trayReveal,
   } from "./tray.svelte";
@@ -239,8 +242,6 @@
   let openKey = $state<string | null>(null);
   /** What the shelf lists while it is open: the failures, or what "+N" holds. */
   let shelf = $state<"failed" | "more" | null>(null);
-
-  const TICK = 250;
 
   /**
    * A delegate whose card has had its chance to be on screen and is not:
@@ -418,22 +419,17 @@
   }
 
   /**
-   * The tray's beat: the interval only marks the time, and the tray reads
-   * its chips in an effect on that mark. A tray leaving (Composer's keyed
-   * fade, on every switch) is paused until its fade ends; a paused tray's
-   * effects do not run, so nothing reads its chips once it is on its way
-   * out, while the interval itself goes with the tray.
+   * The tray's beat: the trays' one clock (tray.svelte.ts `trayBeat`) only
+   * marks the time, and the tray reads its chips in an effect on that mark.
+   * A tray leaving (Composer's keyed fade, on every switch) is paused until
+   * its fade ends; a paused tray's effects do not run, so nothing reads its
+   * chips once it is on its way out. A tick from before the tray mounted is
+   * not its own: its first is the clock's next.
    */
-  let beatAt = $state<number | null>(null);
+  $effect(() => joinTrayBeat());
   $effect(() => {
-    const beat = setInterval(() => {
-      beatAt = Date.now();
-    }, TICK);
-    return () => clearInterval(beat);
-  });
-  $effect(() => {
-    const now = beatAt;
-    if (now === null) {
+    const now = trayBeat();
+    if (now === null || now <= mountedAt) {
       return;
     }
     untrack(() => {
