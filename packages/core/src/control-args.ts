@@ -531,6 +531,7 @@ const ARGS: {
 
   // GitHub's sign-ins on a machine, and its forge writes.
   ghAccounts: tuple([]),
+  ghRepos: tuple([]),
   ghToken: tuple([text, text]),
   forgePost: tuple([storedAs(ForgeAskSchema, controlWords.meant.forgeWrite)]),
 

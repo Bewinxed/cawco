@@ -2606,6 +2606,45 @@ const GhAccountShape = declared(
 export const GhAccountSchema = GhAccountShape;
 export type GhAccountOutput = z.output<typeof GhAccountShape>;
 
+const GhRepoOwnerShape = declared(
+  z.object({
+    avatarUrl: z.string(),
+    kind: z.enum(["user", "org"]),
+    login: z.string(),
+  }),
+  "GhRepoOwner",
+  "packages/core/src/connections.ts"
+);
+export type GhRepoOwnerOutput = z.output<typeof GhRepoOwnerShape>;
+
+const GhRepoShape = declared(
+  z.object({
+    description: z.string().nullable(),
+    isPrivate: z.boolean(),
+    nameWithOwner: z.string(),
+    owner: GhRepoOwnerShape,
+    sshUrl: z.string(),
+    updatedAt: z.string(),
+    url: z.string(),
+  }),
+  "GhRepo",
+  "packages/core/src/connections.ts"
+);
+export const GhRepoSchema = GhRepoShape;
+export type GhRepoOutput = z.output<typeof GhRepoShape>;
+
+const GhRepoListShape = declared(
+  z.union([
+    z.object({ kind: z.literal("listed"), repos: z.array(GhRepoShape) }),
+    z.object({ kind: z.literal("no-gh") }),
+    z.object({ kind: z.literal("signed-out") }),
+  ]),
+  "GhRepoList",
+  "packages/core/src/connections.ts"
+);
+export const GhRepoListSchema = GhRepoListShape;
+export type GhRepoListOutput = z.output<typeof GhRepoListShape>;
+
 const GhTokenShape = declared(
   z.object({ token: z.string() }),
   "GhToken",

@@ -9,10 +9,11 @@
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { GhAccount } from "@cawco/core/connections";
+import type { GhAccount, GhRepo, GhRepoList } from "@cawco/core/connections";
 import { workspaceScratchRoot } from "@cawco/core/paths/roots";
 import { workspaceCacheDir, workspacesDir } from "@cawco/core/paths/workspace";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { GhRepoSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
 
 /** Where a workspace writes, so nothing run on the host is found there. */
@@ -50,29 +51,45 @@ export const hostProgram = async (
 /** `gh` as the host runs it ({@link hostProgram}). */
 export const hostGh = (): Promise<string | undefined> => hostProgram("gh");
 
+/** What the host's gh said and how it exited. */
+interface GhRun {
+  exitCode: number;
+  stderr: string;
+  stdout: string;
+}
+
 /**
- * What the host's gh prints for `args`, when it exits 0; none when gh is not
- * here or refuses. gh runs with the host's environment as it is now (core
- * `hostEnvironment`).
+ * The host's gh run with `args`, with the host's environment as it is now
+ * (core `hostEnvironment`); none when gh is not here.
  */
-export const ghSays = async (args: string[]): Promise<string | undefined> => {
+const ghRun = async (args: string[]): Promise<GhRun | undefined> => {
   const gh = await hostGh();
   if (!gh) {
     return;
   }
   // Not spawnSync: gh reads its token from the login keychain, and a
   // spawnSync would wait on the keychain on the agent's JS thread.
-  const read = Bun.spawn([gh, ...args], {
+  const run = Bun.spawn([gh, ...args], {
     env: hostEnvironment(),
     stdin: "ignore",
     stdout: "pipe",
-    stderr: "ignore",
+    stderr: "pipe",
   });
-  const [out] = await Promise.all([
-    new Response(read.stdout).text(),
-    read.exited,
+  const [stdout, stderr] = await Promise.all([
+    new Response(run.stdout).text(),
+    new Response(run.stderr).text(),
+    run.exited,
   ]);
-  return read.exitCode === 0 ? out : undefined;
+  return { exitCode: run.exitCode ?? 1, stdout, stderr };
+};
+
+/**
+ * What the host's gh prints for `args`, when it exits 0; none when gh is not
+ * here or refuses ({@link ghRun}).
+ */
+export const ghSays = async (args: string[]): Promise<string | undefined> => {
+  const run = await ghRun(args);
+  return run?.exitCode === 0 ? run.stdout : undefined;
 };
 
 /** The host's GitHub token (`gh auth token`, from its keyring); none when gh has none or is not here. */
@@ -148,4 +165,57 @@ export const ghAccounts = async (): Promise<GhAccount[]> => {
         : [];
     })
   );
+};
+
+/** GitHub's most per page (docs.github.com/rest/repos/repos#list-repositories-for-the-authenticated-user). */
+const REPOS_PER_PAGE = 100;
+/** The pages {@link ghRepos} reads at most: the 300 latest updated, one gh call each, inside the form's 15 s read. */
+const REPO_PAGES = 3;
+/** gh's exit code for a command that needs a sign-in it has none of (`gh help exit-codes`). */
+const GH_EXIT_AUTH = 4;
+/** What gh prints of a token GitHub refused: one it had, since revoked or expired. */
+const BAD_CREDENTIALS = /HTTP 401/u;
+
+/** Each repository as one line of JSON, in {@link GhRepo}'s names. */
+const REPO_LINE =
+  '.[] | {nameWithOwner: .full_name, owner: {login: .owner.login, avatarUrl: .owner.avatar_url, kind: (if .owner.type == "Organization" then "org" else "user" end)}, url: .clone_url, sshUrl: .ssh_url, updatedAt: .updated_at, description: .description, isPrivate: .private}';
+
+/**
+ * The GitHub repositories the host's gh sees, latest updated first, as
+ * `GET /user/repos` lists them: the person's own, the ones they collaborate
+ * on and their organizations' (`affiliation=owner,collaborator,
+ * organization_member`, `sort=updated`, which GitHub orders newest first).
+ * `no-gh` when gh is not here; `signed-out` when gh has no sign-in (exit 4)
+ * or GitHub refused the one it has (401). Any other failure is thrown in
+ * gh's words.
+ */
+export const ghRepos = async (): Promise<GhRepoList> => {
+  const repos: GhRepo[] = [];
+  for (let page = 1; page <= REPO_PAGES; page += 1) {
+    const run = await ghRun([
+      "api",
+      `user/repos?affiliation=owner,collaborator,organization_member&sort=updated&per_page=${REPOS_PER_PAGE}&page=${page}`,
+      "--jq",
+      REPO_LINE,
+    ]);
+    if (!run) {
+      return { kind: "no-gh" };
+    }
+    if (run.exitCode === GH_EXIT_AUTH || BAD_CREDENTIALS.test(run.stderr)) {
+      return { kind: "signed-out" };
+    }
+    if (run.exitCode !== 0) {
+      throw new Error(
+        `gh api user/repos failed: ${run.stderr.trim() || `exit ${run.exitCode}`}`
+      );
+    }
+    const lines = run.stdout.split("\n").filter((line) => line.trim());
+    for (const line of lines) {
+      repos.push(GhRepoSchema.parse(JSON.parse(line)));
+    }
+    if (lines.length < REPOS_PER_PAGE) {
+      break;
+    }
+  }
+  return { kind: "listed", repos };
 };

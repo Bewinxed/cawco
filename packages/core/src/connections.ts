@@ -131,6 +131,53 @@ export interface GhToken {
   token: string;
 }
 
+/** A {@link GhRepo}'s owner: a person's account or an organization. */
+export interface GhRepoOwner {
+  avatarUrl: string;
+  kind: "user" | "org";
+  login: string;
+}
+
+/**
+ * One GitHub repository a machine's gh sees, as GitHub's `GET /user/repos`
+ * lists it (`full_name`, `owner`, `clone_url`, `ssh_url`,
+ * `updated_at`, `description`, `private`), named as `gh repo list --json` names the same
+ * fields.
+ */
+export interface GhRepo {
+  /** None when the repository has no description. */
+  description: string | null;
+  isPrivate: boolean;
+  /** `owner/name`. */
+  nameWithOwner: string;
+  /** Who owns it: GitHub's `owner.login`, `owner.avatar_url`, and `owner.type` ("Organization" an `org`, any other a `user`). */
+  owner: GhRepoOwner;
+  /** `git@github.com:owner/name.git`. */
+  sshUrl: string;
+  /** ISO 8601, when GitHub last updated the repository. */
+  updatedAt: string;
+  /** `https://github.com/owner/name.git`: what the clone takes. */
+  url: string;
+}
+
+/**
+ * What {@link CONTROL_GH_REPOS} answers: the repositories, latest updated
+ * first; or that the machine has no gh (`no-gh`), or a gh signed in to
+ * nothing GitHub accepts (`signed-out`).
+ */
+export type GhRepoList =
+  | { kind: "listed"; repos: GhRepo[] }
+  | { kind: "no-gh" }
+  | { kind: "signed-out" };
+
+/**
+ * The machine control that lists the GitHub repositories its gh sees, the
+ * person's own, the ones they collaborate on and their organizations'
+ * (agent host-gh.ts `ghRepos`): no args; answers {@link GhRepoList}. The
+ * New session form's repository picker asks it of the selected machine.
+ */
+export const CONTROL_GH_REPOS = "ghRepos";
+
 /** `signed-in`: its tools answer. `needs-sign-in`: a key or a sign-in is owed. `error`: `reason` says what failed. */
 export type ConnectionState = "signed-in" | "needs-sign-in" | "error";
 

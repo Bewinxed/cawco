@@ -5,6 +5,7 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
+import { CONTROL_GH_REPOS, type GhRepoList } from "@cawco/core/connections";
 import {
   CONTROL_REPLIES,
   type ControlReply,
@@ -16,6 +17,7 @@ import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import type { FleetFetchFrame } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { FsPayload } from "@cawco/core/protocol";
+import { knowsNotControl } from "@cawco/core/session/controls";
 import { machineWords } from "@cawco/core/words/machine";
 import { sidebarWords } from "@cawco/core/words/sidebar";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
@@ -97,6 +99,30 @@ export async function machineFs<O extends FsOp>(
     () => send({ verb: "fs", machineId, requestId, payload }),
     (result) => readReply(FS_REPLIES[op], `fs ${op}`, result)
   );
+}
+
+/**
+ * The GitHub repositories machine `machineId`'s gh sees, latest updated
+ * first (core `CONTROL_GH_REPOS`), for the New session form's repository
+ * picker. A daemon from before the control says it has no such function: a
+ * read it never answers, as one that ran out of time is, never a hang.
+ */
+export async function machineRepos(
+  machineId: string
+): Promise<Bounded<GhRepoList>> {
+  const started = performance.now();
+  try {
+    return await machineControl(machineId, CONTROL_GH_REPOS, []);
+  } catch (error) {
+    if (knowsNotControl(error, CONTROL_GH_REPOS)) {
+      return {
+        kind: "unanswered",
+        after: Math.round(performance.now() - started),
+        reason: "dead",
+      };
+    }
+    throw error;
+  }
 }
 
 /** Who hears `fleet.fetch` frames, and is told when the socket that carries them drops. */

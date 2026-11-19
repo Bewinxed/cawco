@@ -99,6 +99,9 @@ import type { CommandResult as CommandResultType } from "./commands/controls";
 import type {
   ConnectionState as ConnectionStateType,
   GhAccount as GhAccountType,
+  GhRepoList as GhRepoListType,
+  GhRepoOwner as GhRepoOwnerType,
+  GhRepo as GhRepoType,
   GhToken as GhTokenType,
 } from "./connections";
 import type {
@@ -567,6 +570,9 @@ import type {
   FsPayloadOutput,
   GeneratedImageOutput,
   GhAccountOutput,
+  GhRepoListOutput,
+  GhRepoOutput,
+  GhRepoOwnerOutput,
   GhTokenOutput,
   GitChangesOutput,
   GithubProjectOutput,
@@ -1119,6 +1125,9 @@ prove<
     Same<ImageProviderIdOutput, ImageProviderIdType>,
     Same<GeneratedImageOutput, GeneratedImageType>,
     Same<GhAccountOutput, GhAccountType>,
+    Same<GhRepoOwnerOutput, GhRepoOwnerType>,
+    Same<GhRepoOutput, GhRepoType>,
+    Same<GhRepoListOutput, GhRepoListType>,
     Same<GhTokenOutput, GhTokenType>,
     Same<GitChangesOutput, GitChangesType>,
     Same<StatusOptionOutput, StatusOptionType>,

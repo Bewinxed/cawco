@@ -47,7 +47,11 @@ import {
   CONTROL_CANCEL_COMMAND,
   CONTROL_RUN_COMMAND,
 } from "@cawco/core/commands/controls";
-import { CONTROL_GH_ACCOUNTS, CONTROL_GH_TOKEN } from "@cawco/core/connections";
+import {
+  CONTROL_GH_ACCOUNTS,
+  CONTROL_GH_REPOS,
+  CONTROL_GH_TOKEN,
+} from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
 import type {
   DaemonFrame,
@@ -275,7 +279,7 @@ import {
 } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { moveHookFields } from "./hook-fields-move";
-import { ghAccounts, ghAccountToken } from "./host-gh";
+import { ghAccounts, ghAccountToken, ghRepos } from "./host-gh";
 import { hostOutputs, removeHostScratch } from "./host-scratch";
 import { cancelCommand, runFollowedCommand } from "./hub-command";
 import { serveHubCredential } from "./hub-git";
@@ -3584,6 +3588,8 @@ const startDaemon = (rediscover = false) =>
     // machine's gh is signed in to, and one account's token, read each time.
     supervisor.declareControl(CONTROL_GH_ACCOUNTS, () => ghAccounts());
     supervisor.declareControl(CONTROL_GH_TOKEN, ghAccountToken);
+    // The New session form's repository picker: what this machine's gh sees.
+    supervisor.declareControl(CONTROL_GH_REPOS, () => ghRepos());
     // A session's forge write, or a landing's pull or merge request
     // (forges/forge.ts): made here with this machine's own sign-in.
     supervisor.declareControl(CONTROL_FORGE_POST, forgePost);

@@ -82,8 +82,12 @@ import {
   CONTROL_CANCEL_COMMAND,
   CONTROL_RUN_COMMAND,
 } from "./commands/controls";
-import type { GhAccount, GhToken } from "./connections";
-import { CONTROL_GH_ACCOUNTS, CONTROL_GH_TOKEN } from "./connections";
+import type { GhAccount, GhRepoList, GhToken } from "./connections";
+import {
+  CONTROL_GH_ACCOUNTS,
+  CONTROL_GH_REPOS,
+  CONTROL_GH_TOKEN,
+} from "./connections";
 import type { ContinuationRead } from "./continuation-read";
 import { CONTROL_READ_CONTINUATION } from "./continuation-read";
 import {
@@ -269,6 +273,7 @@ import {
   FsMediaSchema,
   GeneratedImageSchema,
   GhAccountSchema,
+  GhRepoListSchema,
   GhTokenSchema,
   GitChangesSchema,
   HomeCredentialSchema,
@@ -581,6 +586,7 @@ const CONTROLS = {
   // GitHub's sign-ins on a machine, and its forge writes.
   [CONTROL_GH_ACCOUNTS]: reply<GhAccount[]>(z.array(GhAccountSchema)),
   [CONTROL_GH_TOKEN]: reply<GhToken>(GhTokenSchema),
+  [CONTROL_GH_REPOS]: reply<GhRepoList>(GhRepoListSchema),
   [CONTROL_FORGE_POST]: reply<ForgeVerdict>(ForgeVerdictSchema),
   // A machine's tools and their sign-ins (tools.ts).
   [CONTROL_BEGIN_TOOL_SIGNIN]: reply<ToolSigninChallenge>(
