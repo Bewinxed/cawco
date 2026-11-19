@@ -1021,6 +1021,7 @@
        the canvas's box, do not. -->
   <div
     data-slot="composer"
+    data-composer-holding={press.holding || undefined}
     class="relative flex-none w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     bind:this={canvas.column}
     {@attach dockFoot.measurePanel}

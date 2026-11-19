@@ -465,10 +465,15 @@
   [data-slot="provider-logo"][data-ink] * {
     fill: currentColor;
   }
-  /* While a press is held on the composer and while its wheel is up, nothing
-     on the page selects (Composer marks the root). */
-  :root[data-composer-holding],
-  :root[data-composer-holding] * {
+  /* While a press is held on the composer and while its wheel is up, the
+     pill and the wheel inside it select nothing (Composer marks itself):
+     iOS starts a selection where the long press lands. -webkit-user-select
+     and -webkit-touch-callout inherit, and user-select's `auto` is its
+     parent's `none`; only an element that sets a selectable value of its
+     own is named. */
+  [data-slot="composer"][data-composer-holding],
+  [data-slot="composer"][data-composer-holding] .select-all,
+  [data-slot="composer"][data-composer-holding] .select-text {
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;

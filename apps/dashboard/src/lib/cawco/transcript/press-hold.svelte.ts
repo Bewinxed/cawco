@@ -63,6 +63,12 @@ export class PressHold {
    */
   #pen: { id: number; x: number; y: number } | null = null;
 
+  /** A press is held on the composer, or the wheel it brought up is up. */
+  get holding(): boolean {
+    const recall = this.#parts.recall();
+    return !!(this.hold || (recall && !recall.keys));
+  }
+
   constructor(parts: PressHoldParts) {
     this.#parts = parts;
     this.#swallowClick = false;
@@ -116,22 +122,20 @@ export class PressHold {
 
     /*
      * While a press is held on the composer, and while the wheel it brought
-     * up is up, nothing on the page selects: iOS would otherwise turn the hold
-     * into a text selection and drag it across the page. Only for a hold: the
-     * switch restyles the whole page, which a key or a click has no need of.
+     * up is up, nothing selects: iOS would otherwise turn the hold into a
+     * text selection and drag it across the page. iOS starts a selection
+     * where the long press lands, so the composer marks itself (`holding`,
+     * app.css) and the pill and the wheel inside it refuse one; the page
+     * refuses any other start.
      */
     $effect(() => {
-      const recall = parts.recall();
-      if (!(this.hold || (recall && !recall.keys))) {
+      if (!this.holding) {
         return;
       }
-      const root = document.documentElement;
-      root.dataset.composerHolding = "";
       getSelection()?.removeAllRanges();
       const refuse = (event: Event) => event.preventDefault();
       document.addEventListener("selectstart", refuse);
       return () => {
-        delete root.dataset.composerHolding;
         document.removeEventListener("selectstart", refuse);
       };
     });
