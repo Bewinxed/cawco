@@ -1248,7 +1248,9 @@
           title: browser.handBackGaveUp
             ? browserWords.stoppedTitle
             : browserWords.failedTitle,
-          line: browserWords.failedLine(machine.name),
+          line: browser.handBackGaveUp
+            ? browserWords.stoppedLine(machine.name)
+            : browserWords.failedLine(machine.name),
           ...(browser.why ? { details: browser.why } : {}),
           again: true,
         };

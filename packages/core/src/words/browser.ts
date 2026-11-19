@@ -57,6 +57,8 @@ export const browserWords = {
   failedTitle: "The browser didn't start",
   /** Its hand-back gave up and its machine stopped it; the details line says what happened. */
   stoppedTitle: "The browser stopped",
+  stoppedLine: (machine: string) =>
+    `Try again starts it again; Show details has what ${machine} found.`,
   failedLine: (machine: string) =>
     `${machine} couldn't start it. Try again starts it again; Show details has what ${machine} said.`,
   /** Its machine isn't connected to the hub. */
