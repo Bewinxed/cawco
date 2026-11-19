@@ -43977,6 +43977,11 @@
         "description": "One dirent of an `fs list`. `size` is 0 for a directory.",
         "type": "object",
         "properties": {
+          "git": {
+            "description": "A directory that holds a git checkout (a `.git` in it); absent on a file, and from a daemon before it said so.",
+            "const": true,
+            "type": "boolean"
+          },
           "kind": {
             "$ref": "#/components/schemas/FsEntryKind"
           },

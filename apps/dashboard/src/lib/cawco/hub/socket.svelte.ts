@@ -10,6 +10,7 @@
 import { backoffWait } from "@cawco/core/backoff";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { GATED_PAGE_MARK, GATED_PAGE_PARAM } from "@cawco/core/browser-gate";
+import type { FsOp } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
 import type { ClientEnvelope } from "@cawco/core/envelopes";
 import type { HarnessFailed, HarnessUnanswered } from "@cawco/core/frames";
@@ -134,16 +135,24 @@ export type BenchSpawn = (
   spawn: NamedSpawn
 ) => void | Promise<void>;
 
-/** What a bench's machines answer a control with (machines.ts `machineControl`). */
+/** What a bench's machines answer a control with (machines.ts `machineControl`), at once or once it is ready. */
 export type BenchControl = (
   machineId: string,
   method: string,
   args: unknown[]
 ) => unknown;
 
-/** A bench's stand-ins for the hub (dev only): its commands, its starts and its machines' controls. */
+/**
+ * What a bench's machines answer an `fs` op with (machines.ts `machineFs`),
+ * at once or once it is ready; a folder that is not there throws, as the
+ * machine refuses it, `ENOENT: …`.
+ */
+export type BenchFs = (machineId: string, op: FsOp, path: string) => unknown;
+
+/** A bench's stand-ins for the hub (dev only): its commands, its starts, and its machines' controls and files. */
 export interface Bench {
   control: BenchControl | null;
+  fs?: BenchFs;
   hub: BenchHub;
   spawn: BenchSpawn | null;
 }

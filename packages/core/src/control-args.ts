@@ -744,6 +744,7 @@ const McpServerStatusShape = object({
 });
 
 const FsEntryShape = object({
+  git: optional(boolean()),
   kind: picklist(["dir", "file"]),
   name: text,
   size: count,

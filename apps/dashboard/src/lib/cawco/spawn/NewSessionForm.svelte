@@ -25,7 +25,7 @@
   import { traitsOf } from "@cawco/core/harness/traits";
   import { modelRun } from "@cawco/core/model-names";
   import { type MoveEstimate, moveSize as sizeWords } from "@cawco/core/move";
-  import { isGitUrl, repoPath } from "@cawco/core/protocol";
+  import { isGitUrl, repoLeaf } from "@cawco/core/protocol";
   import { unhandled } from "@cawco/core/unhandled";
   import { commonWords } from "@cawco/core/words/common";
   import { configurePage } from "@cawco/core/words/configure";
@@ -157,7 +157,12 @@
   import { deriveModelEntries, type ModelEntry } from "./model-entries";
   import { lastSpawnAt, lastUsedAt, recordModelUse } from "./modelUse.svelte";
   import NsPopoverGroup from "./NsPopoverGroup.svelte";
-  import { placeOf, type SpawnPrefill, spawning } from "./new-session.svelte";
+  import {
+    LOCATION_SETTLE_MS,
+    placeOf,
+    type SpawnPrefill,
+    spawning,
+  } from "./new-session.svelte";
   import type {
     LeadChip,
     MachineItem,
@@ -711,7 +716,7 @@
   const workdir = $derived(
     repo === undefined
       ? cwd.trim()
-      : `${cwd.trim().replace(/\/+$/u, "")}/${repoPath(repo).split("/").pop() ?? ""}`
+      : `${cwd.trim().replace(/\/+$/u, "")}/${repoLeaf(repo)}`
   );
   const project = $derived(
     projectsStore.projects.find((row) => row.id === projectId)
@@ -1567,7 +1572,7 @@
             unreadable = true;
           }
         });
-    }, 600);
+    }, LOCATION_SETTLE_MS);
     return () => {
       stale = true;
       clearTimeout(timer);

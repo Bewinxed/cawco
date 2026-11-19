@@ -1,18 +1,20 @@
 <script lang="ts">
+  import { isGitUrl, repoIdentity, repoPath } from "@cawco/core/protocol";
   import { spawnWords } from "@cawco/core/words/spawn";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   /**
-   * Location as a composer chip: where the session works — an existing folder
-   * or a repository to clone by its git URL — named on the chip, chosen in
-   * its popover.
-   * The popover is the same Location form the dialog used to show as its own
-   * section, so browsing, override and clone behave exactly as they did.
+   * Location as a composer chip: where the session works, a repository
+   * cloned for it or an existing folder, named on the chip and chosen in its
+   * popover (LocationSection). A repository is named `owner/name`, beside
+   * GitHub's mark when it is on GitHub; a folder by its path.
    */
   import {
     IconChevronDown as Down,
     IconFolderGit as FolderGit,
     IconFolderOpen as FolderOpen,
   } from "#lib/icons.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import LocationSection, {
     type LocationFields,
   } from "./LocationSection.svelte";
@@ -49,13 +51,17 @@
     const parts = path.split("/").filter(Boolean);
     return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : path;
   };
+  const picked = $derived(isGitUrl(repo) ? repo.trim() : "");
+  const onGithub = $derived(
+    !picked || repoIdentity(picked).startsWith("github.com/")
+  );
   const label = $derived.by(() => {
     if (mode === "repo") {
-      return repo.trim() || spawnWords.location.cloneRepo;
+      return picked ? repoPath(picked) : spawnWords.location.chooseRepo;
     }
     return dir.trim() ? short(dir.trim()) : spawnWords.location.chooseFolder;
   });
-  const empty = $derived(mode === "repo" ? !repo.trim() : !dir.trim());
+  const empty = $derived(mode === "repo" ? !picked : !dir.trim());
 </script>
 
 <NsPopover
@@ -71,25 +77,28 @@
     // Never wider than its row: a long name ends in its ellipsis.
     class: "min-w-0",
   })}
-  width={440}
+  width={520}
 >
   {#snippet trigger()}
-    {#if mode === "repo"}
+    {#if mode === "repo" && onGithub}
+      <ProviderLogo provider="github" />
+    {:else if mode === "repo"}
       <FolderGit class="text-mark-3" />
     {:else}
       <FolderOpen class="text-mark-3" />
     {/if}
+    <!-- A folder is a path, set in the mono face; a repository is a name. -->
     <span
       data-slot="chip-label"
       class="data-mono:font-(family-name:--font-mono)"
-      data-mono={!empty || undefined}
-      title={mode === "repo" ? repo : dir}>{label}</span
+      data-mono={(mode === "dir" && !empty) || undefined}
+      title={mode === "repo" ? picked : dir}
+      {@attach morph({ width: true, on: ["data-mono"] })}>{label}</span
     >
     <Down data-slot="chevron" />
   {/snippet}
   <LocationSection
     {dir}
-    embedded
     {informational}
     {locked}
     {machineId}

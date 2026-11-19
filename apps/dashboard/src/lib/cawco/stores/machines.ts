@@ -60,7 +60,7 @@ export async function machineControl<K extends ControlName>(
       value: readReply(
         CONTROL_REPLIES[method],
         method,
-        benchControl(machineId, method, args)
+        await benchControl(machineId, method, args)
       ),
     };
   }
@@ -83,6 +83,19 @@ export async function machineFs<O extends FsOp>(
   /** `path` is relative to this root, as the machine places it (`FsPayload.root`). */
   root?: FsPayload["root"]
 ): Promise<Bounded<FsReply<O>>> {
+  const benchFs = standingBench()?.fs;
+  if (import.meta.env.DEV && benchFs && !root) {
+    // A bench's machine answers it in place of the wire (dev only), read
+    // as the wire's answer is.
+    return {
+      kind: "answered",
+      value: readReply(
+        FS_REPLIES[op],
+        `fs ${op}`,
+        await benchFs(machineId, op, path)
+      ),
+    };
+  }
   await waitForHub();
   const requestId = newId();
   const payload: FsPayload = {

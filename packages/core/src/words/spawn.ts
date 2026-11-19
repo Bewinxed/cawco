@@ -263,7 +263,7 @@ export const spawnWords = {
   held: {
     machine: "Choose a machine to run this session on.",
     mode: "Choose a permission mode to start.",
-    repo: "Enter the repository's git URL.",
+    repo: "Choose a repository, or paste its git URL.",
     uploading: "Wait for your file to finish uploading.",
   },
   /** The mode chip's accessible name: "Permission mode: Ask first". */
@@ -447,15 +447,19 @@ export const spawnWords = {
     new: "New project…",
   },
 
-  /** The location chip, and its folder browser and clone field. */
+  /** The location chip, its repository picker and its folder browser. */
   location: {
     name: "Location",
     chip: (location: string) => `Location: ${location}`,
     chooseFolder: "Choose folder",
+    chooseRepo: "Choose a repository",
+    /** The switch between cloning a repository and working in a folder. */
     source: "Location source",
-    existingFiles: "Existing files",
-    cloneRepo: "Clone a repository",
-    directory: "Directory",
+    repository: "Repository",
+    folder: "Folder",
+    /** The path box's label, by the switch. */
+    cloneInto: "Clone into",
+    workIn: "Work in",
     directoryPlaceholder: "~/code/project",
     fromProject: "From project",
     override: "Override",
@@ -465,11 +469,34 @@ export const spawnWords = {
     loadingFolders: "Loading folders…",
     noSubfolders: "No subfolders",
     useFolder: "Use this folder",
+    gitRepository: "git repository",
     listingMissed: "the folder's listing didn't come back",
-    repository: "Repository",
-    repoPlaceholder: "https://host/owner/repository.git",
-    clonedInto: "Cloned into",
-    clonedWhere: " on each machine, pulled fresh before the agent starts.",
+    /** The repository picker: its search, its owners, its list. */
+    search: "Search repositories or paste a git URL",
+    owners: "Owner",
+    allOwners: "All",
+    repositories: "Repositories",
+    private: "Private",
+    loadingRepos: "Reading repositories…",
+    reposMissed: "the repositories didn't come back",
+    noMatch: (query: string) =>
+      `No repository matches “${query}”. Paste a git URL to clone any other.`,
+    noRepos: "No repositories on GitHub yet. Paste a git URL to clone one.",
+    noGh: (machine: string) =>
+      `gh isn't installed on ${machine}. Paste a git URL, or install gh to list your repositories.`,
+    signedOut: (machine: string) =>
+      `gh isn't signed in on ${machine}. Run \`gh auth login\` there, or paste a git URL.`,
+    oldDaemon: (machine: string) =>
+      `CawCo on ${machine} is too old to list repositories. Update it (Configure › Updates), or paste a git URL.`,
+    /** What happens once the session starts, under the path box. */
+    clones: (repo: string, target: string, machine: string) =>
+      `Clones ${repo} into ${target} on ${machine}.`,
+    usesClone: (target: string, machine: string) =>
+      `Uses the clone already at ${target} on ${machine}.`,
+    holdsOther: (target: string, machine: string) =>
+      `${target} on ${machine} holds another folder. Clone into another folder.`,
+    folderMissing: (path: string, machine: string) =>
+      `${path} isn't on ${machine}.`,
   },
 
   /** The model picker. */

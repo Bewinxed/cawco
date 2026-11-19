@@ -60,11 +60,17 @@ const list = async (path: string): Promise<FsEntry[]> => {
   const entries = await Promise.all(
     names.map(async (name): Promise<FsEntry> => {
       const stat = await lstat(join(path, name));
-      return {
-        name,
-        kind: stat.isDirectory() ? "dir" : "file",
-        size: stat.isDirectory() ? 0 : stat.size,
-      };
+      if (!stat.isDirectory()) {
+        return { name, kind: "file", size: stat.size };
+      }
+      // A checkout's `.git` is a folder, or a worktree's file naming one.
+      const git = await lstat(join(path, name, ".git")).then(
+        () => true,
+        () => false
+      );
+      return git
+        ? { name, kind: "dir", size: 0, git: true }
+        : { name, kind: "dir", size: 0 };
     })
   );
   return entries.sort((a, b) => {

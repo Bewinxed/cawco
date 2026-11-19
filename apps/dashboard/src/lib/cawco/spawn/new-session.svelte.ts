@@ -23,6 +23,13 @@ import type { SendExtras } from "../send-store";
 import { type ForkSource, forkSession } from "../stores/session-start.svelte";
 import { projectOfTab, tabOfPath } from "../workspace/tabs";
 
+/**
+ * How long a location typed into the form is left to settle before the
+ * machine is asked about it (the form's folder check, the location
+ * popover's outcome line): a word's keystrokes are one read.
+ */
+export const LOCATION_SETTLE_MS = 600;
+
 export interface SpawnPrefill {
   cwd?: string;
   /** A fork its source had no mode for: Start forks it, on the mode picked. */

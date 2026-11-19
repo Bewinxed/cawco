@@ -389,6 +389,35 @@ export const repoPath = (repo: string): string =>
     .replace(SCP_LIKE_HOST, "")
     .replace(DOT_GIT_SUFFIX, "");
 
+/** A `<scheme>://` git URL's host and path, past any login and port. */
+const SCHEME_URL_PARTS =
+  /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?([^/:]*)(?::\d*)?(\/.*)?$/iu;
+/** An scp-like git URL's host and path, past any login. */
+const SCP_URL_PARTS = /^(?:[^@/:]*@)?([^/:]+):\/?(.*)$/u;
+const LEADING_SLASHES = /^\/+/u;
+
+/**
+ * A git URL as `host/path`, lowercased, without its login, port, `.git` or
+ * trailing slash: the same repository, under whichever of its URLs
+ * (`https://`, `ssh://`, scp-like), is the same repository, and the same
+ * path on another host is another. A clone whose origin is the asked
+ * repository's identity is that repository's clone (agent session.ts
+ * `cloneRepo`, the New session form's outcome line).
+ */
+export const repoIdentity = (url: string): string => {
+  const bare = url
+    .trim()
+    .replace(TRAILING_SLASHES, "")
+    .replace(DOT_GIT_SUFFIX, "");
+  const parts = bare.match(SCHEME_URL_PARTS) ?? bare.match(SCP_URL_PARTS);
+  const [host = "", path = ""] = parts ? [parts[1], parts[2]] : ["", bare];
+  return `${host}/${path.replace(LEADING_SLASHES, "")}`.toLowerCase();
+};
+
+/** What a clone of `repo` is called on disk: git's own default, its last path segment. */
+export const repoLeaf = (repo: string): string =>
+  repoPath(repo).split("/").pop() ?? "";
+
 /**
  * `send`: one turn of input for a live session's prompt stream.
  *
@@ -767,6 +796,8 @@ export interface FsMedia {
  * @socketFrame fromHub
  */
 export interface FsEntry {
+  /** A directory that holds a git checkout (a `.git` in it); absent on a file, and from a daemon before it said so. */
+  git?: true;
   kind: "dir" | "file";
   name: string;
   size: number;

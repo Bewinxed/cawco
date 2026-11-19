@@ -96,7 +96,12 @@ import type {
   SpawnPayload,
   StopPayload,
 } from "@cawco/core/protocol";
-import { AGENT_BUSY, isGitUrl, repoPath } from "@cawco/core/protocol";
+import {
+  AGENT_BUSY,
+  isGitUrl,
+  repoIdentity,
+  repoLeaf,
+} from "@cawco/core/protocol";
 import { lastErrorKindOf } from "@cawco/core/relaunch";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { GitChanges, WorkInFlight } from "@cawco/core/session/controls";
@@ -531,32 +536,6 @@ const unreadGit = (
     ? { limitMs: GIT_CHANGES_TIMEOUT_MS }
     : {}),
 });
-
-/** A `<scheme>://` git URL's host and path, past any login and port. */
-const SCHEME_URL_PARTS =
-  /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?([^/:]*)(?::\d*)?(\/.*)?$/iu;
-/** An scp-like git URL's host and path, past any login. */
-const SCP_URL_PARTS = /^(?:[^@/:]*@)?([^/:]+):\/?(.*)$/u;
-const TRAILING_SLASHES = /\/+$/u;
-const DOT_GIT = /\.git$/u;
-const LEADING_SLASHES = /^\/+/u;
-
-/**
- * A git URL as `host/path`, lowercased, without its login, port, `.git` or
- * trailing slash: the same repository, under whichever of its URLs
- * (`https://`, `ssh://`, scp-like), is the same repository, and the same
- * path on another host is another.
- */
-const repoIdentity = (url: string): string => {
-  const bare = url.trim().replace(TRAILING_SLASHES, "").replace(DOT_GIT, "");
-  const parts = bare.match(SCHEME_URL_PARTS) ?? bare.match(SCP_URL_PARTS);
-  const [host = "", path = ""] = parts ? [parts[1], parts[2]] : ["", bare];
-  return `${host}/${path.replace(LEADING_SLASHES, "")}`.toLowerCase();
-};
-
-/** What a clone of it is called on disk — git's own default. */
-const repoLeaf = (repo: string): string =>
-  repoPath(repo).split("/").pop() ?? "";
 
 /** A reason's own full stop, dropped where a sentence carries on after it. */
 const FINAL_STOP = /\.$/u;

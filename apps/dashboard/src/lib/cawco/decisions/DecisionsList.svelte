@@ -46,6 +46,7 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { plainClick } from "#lib/platform/plain-click.js";
   import { formatAgeShort, formatTimestamp } from "#lib/utils/time.js";
+  import Marked from "../Marked.svelte";
   import { makeDecisionTasks } from "./decisions-api";
   import { isDecided } from "./words";
 
@@ -157,39 +158,10 @@
     event.preventDefault();
     onopen(name);
   }
-
-  /** The query's matches in a line, marked; the rest as written. */
-  function marked(text: string): { hit: boolean; part: string }[] {
-    if (!q) {
-      return [{ part: text, hit: false }];
-    }
-    const parts: { hit: boolean; part: string }[] = [];
-    const lower = text.toLowerCase();
-    let from = 0;
-    for (
-      let at = lower.indexOf(q);
-      at !== -1;
-      at = lower.indexOf(q, at + q.length)
-    ) {
-      if (at > from) {
-        parts.push({ part: text.slice(from, at), hit: false });
-      }
-      parts.push({ part: text.slice(at, at + q.length), hit: true });
-      from = at + q.length;
-    }
-    if (from < text.length) {
-      parts.push({ part: text.slice(from), hit: false });
-    }
-    return parts;
-  }
 </script>
 
 {#snippet hl(text: string)}
-  {#each marked(text) as piece, index (index)}
-    {#if piece.hit}<mark class="rounded-hair bg-selection text-inherit"
-        >{piece.part}</mark
-      >{:else}{piece.part}{/if}
-  {/each}
+  <Marked query={q} {text} />
 {/snippet}
 
 {#snippet links(label: string, to: DecisionLink[], kind: string)}

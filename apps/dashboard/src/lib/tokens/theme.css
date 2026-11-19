@@ -28,6 +28,8 @@
   --container-table-878px: 878px;
   --container-table-1102px: 1102px;
   --container-stop-tray: 420px;
+  /* The location popover's repository list under which a row's lock and time go to its second line, so its name has the row's width. */
+  --container-repo-narrow: 420px;
   --container-stop-tray-rail: 300px;
   --container-forgotten: 51.25rem;
   --container-kinds: 480px;
