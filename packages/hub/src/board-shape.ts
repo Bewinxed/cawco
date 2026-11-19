@@ -50,6 +50,8 @@ export interface BoardShape {
   machines: () => AgentRow[];
   /** The board's rows, as every reader is handed them. */
   rows: () => BoardRow[];
+  /** How many delegates of session `id` run, as the board last read them: no read of its own. */
+  runningDelegates: (id: string) => number;
   /** What a session's row is laid from moved, the database aside (held, a queued send, a refused move, damage). */
   sessionsMoved: (ids: Iterable<string>) => void;
   /** The board takes what the database logged now, rather than on the turn after the write. */

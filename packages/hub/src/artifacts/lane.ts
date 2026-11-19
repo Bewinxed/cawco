@@ -16,6 +16,13 @@
  * question, it held obelisk's hub 5 to 15 s at a time on every nightly from
  * 6801 on, and 6809's trial never saw the 60 s answered it needs
  * (probe-kit hub-live-copy, on a copy of that hub's database).
+ *
+ * A session's row is read only for the artifacts it holds, wrote the ask of
+ * or made, so a session moving is a move of the lane only when it is one of
+ * those its last read named ({@link LaneRead.sessions}): the board's every
+ * written row (a pulse's activity, a turn's end) once read the whole lane
+ * again, 10 to 22 times a minute at 150 to 200 ms each on obelisk's hub on
+ * 2026-11-19 (`timer: artifact lane settled`, 0.9 to 3.8 s of every minute).
  */
 import {
   type ArtifactNeedsFrame,
@@ -27,18 +34,26 @@ import type { HubLifetimeShape, HubTimer } from "../lifetime";
 /** How long after a move the lane is read: a Send's doc writes land as one. Our call. */
 const MOVED_QUIET_MS = 150;
 
+/** One read of the lane, and the sessions it read: a move of any other is none of the lane's. */
+export interface LaneRead {
+  read: ArtifactNeedsRead;
+  sessions: ReadonlySet<string>;
+}
+
 export interface ArtifactLaneDeps {
   /** Sends the frame to every dashboard. */
   broadcast: (frame: ArtifactNeedsFrame) => void;
   /** An artifact left the lane (answered, retired, put away, its session ended): its push is over. */
   left: (artifactId: string) => void;
   lifetime: HubLifetimeShape;
-  /** The lane as it stands now (artifacts service `needs`). */
-  read: () => ArtifactNeedsRead;
+  /** The lane as it stands now, and the sessions it read (artifacts service `needs`). */
+  read: () => LaneRead;
 }
 
 export const createArtifactLane = (deps: ArtifactLaneDeps) => {
   let current: ArtifactNeedsRead = { needs: [], notices: [] };
+  /** The sessions {@link current} was read from. */
+  let readFrom: ReadonlySet<string> = new Set();
   let timer: HubTimer | undefined;
   /** Whether {@link current} is the lane as it stands: nothing it is read from moved since it was read. */
   let held = false;
@@ -51,7 +66,7 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
     timer = undefined;
     let read: ArtifactNeedsRead;
     try {
-      read = deps.read();
+      ({ read, sessions: readFrom } = deps.read());
     } catch (error) {
       console.warn(
         `[needs] the artifacts waiting on you were not read: ${error instanceof Error ? error.message : String(error)}`
@@ -92,17 +107,31 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
     });
   };
 
+  /** Something the lane is read from moved: read again once it is quiet. */
+  const moved = (): void => {
+    held = false;
+    // Once quiet, read on the hub's admission (scheduler.ts): background,
+    // one read however often it moved meanwhile.
+    timer ??= deps.lifetime.after(
+      "artifact lane quiet",
+      MOVED_QUIET_MS,
+      wantSettled
+    );
+  };
+
   return {
-    /** Something the lane is read from moved: read again once it is quiet. */
-    moved(): void {
-      held = false;
-      // Once quiet, read on the hub's admission (scheduler.ts): background,
-      // one read however often it moved meanwhile.
-      timer ??= deps.lifetime.after(
-        "artifact lane quiet",
-        MOVED_QUIET_MS,
-        wantSettled
-      );
+    moved,
+    /** Sessions' rows moved (the board's change log): a move of the lane when its last read read one of them. */
+    sessionsMoved(ids: Iterable<string>): void {
+      if (!held) {
+        return;
+      }
+      for (const id of ids) {
+        if (readFrom.has(id)) {
+          moved();
+          return;
+        }
+      }
     },
     /** The lane as it stands now: the read it holds, or read at once when something moved since. */
     now(): ArtifactNeedsRead {

@@ -439,16 +439,26 @@ export const createFindEngine = (deps: EngineDeps) => {
         return [];
       }
       const name = machineLabel(index.hostname(machineId));
+      // A harness that never listed has no sessions it listed last.
+      const never = (harness: string) => known.neverListed.has(harness);
       const words = [
         ...known.unanswered.map(({ harness, after }) =>
-          catalogWords.harnessDidntAnswer(
+          (never(harness)
+            ? catalogWords.harnessDidntAnswerYet
+            : catalogWords.harnessDidntAnswer)(
             harnessLabel(harness),
             name,
             secondsOf(after)
           )
         ),
         ...known.failed.map(({ harness, error }) =>
-          catalogWords.harnessCouldntList(harnessLabel(harness), name, error)
+          (never(harness)
+            ? catalogWords.harnessCouldntListYet
+            : catalogWords.harnessCouldntList)(
+            harnessLabel(harness),
+            name,
+            error
+          )
         ),
       ];
       return words.length > 0 ? [{ machineId, words }] : [];

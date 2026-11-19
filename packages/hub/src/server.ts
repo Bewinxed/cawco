@@ -71,11 +71,7 @@ import type { FleetSyncReport, MemoryScope } from "@cawco/core/fleet";
 import { FLEET_DELTA, machinePlatform, mcpRunsOn } from "@cawco/core/fleet";
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
 import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
-import type {
-  ArrivingAsk,
-  ArtifactSessionFrame,
-  FramePayload,
-} from "@cawco/core/frames";
+import type { ArrivingAsk, FramePayload } from "@cawco/core/frames";
 import {
   type HandoverCommand,
   type HandoverEvent,
@@ -2638,7 +2634,10 @@ export const createServer = (
         registry.broadcast(parkedCard(requestId));
         // A browser ask is read by its session's artifact tabs too.
         if (envelope.payload.browserAsk) {
-          artifactSessions.refresh(envelope.instanceId);
+          artifactSessions.moved({
+            kind: "shown",
+            instanceId: envelope.instanceId,
+          });
         }
         if (!existed && envelope.payload.routedTo !== "parent") {
           push.onAsk(envelope);
@@ -2907,7 +2906,7 @@ export const createServer = (
     // only once the hub serves, so `artifactSessions` is made by then.
     publish: (frame) => {
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame });
-      artifactSessions.refresh();
+      artifactSessions.moved({ kind: "shown" });
     },
     // A note its next turn reads: the take-over asks nothing of it.
     tell: (instanceId, text) =>
@@ -3123,7 +3122,7 @@ export const createServer = (
     }
     // A browser ask leaves its session's artifact tabs too.
     if (parked.payload.browserAsk) {
-      artifactSessions.refresh(parked.instanceId);
+      artifactSessions.moved({ kind: "shown", instanceId: parked.instanceId });
     }
     const answering = answeringPermissions.get(parked.requestId);
     if (answering) {
@@ -7284,10 +7283,9 @@ export const createServer = (
    * row's name and place, whether it works, the machines. Read as the board
    * reads them, for one row.
    */
-  const artifactSessions = createArtifactSessions(
-    (instanceId, artifactId): ArtifactSessionFrame => {
+  const artifactSessions = createArtifactSessions({
+    shown: (instanceId, artifactId) => {
       const target = tabTarget(artifactId);
-      const [row] = db.listedBoardInstancesByIds([instanceId]);
       const key = target ? browserKeyOf(target) : null;
       // The session's open browser ask for that browser: by its artifact or its key.
       const asked = key
@@ -7301,48 +7299,53 @@ export const createServer = (
           })
         : undefined;
       const browserAsk = asked?.payload.browserAsk;
+      const machineId = key
+        ? db.listedInstancesByIds([instanceId])[0]?.machineId
+        : undefined;
       return {
-        type: "artifact.session",
-        instanceId,
         ask:
           asked?.requestId && browserAsk
             ? { requestId: asked.requestId, browserAsk }
             : null,
         browser:
-          key && row
+          key && machineId
             ? (browsers
                 .list()
                 .find(
-                  (one) => one.key === key && one.machineId === row.machineId
+                  (one) => one.key === key && one.machineId === machineId
                 ) ?? null)
             : null,
         preview: target ? shownFrame(instanceId, target, true) : null,
-        session: row
-          ? {
-              id: row.id,
-              title: row.title ?? null,
-              cwd: row.cwd,
-              machineId: row.machineId,
-              projectId: row.projectId ?? null,
-            }
-          : null,
-        machines: db.machineFacts().map((agent) => ({
-          machineId: agent.machineId,
-          hostname: agent.hostname,
-          os: agent.os,
-          online: registry.agent(agent.machineId) !== undefined,
-        })),
-        // As a dashboard reads a session it follows no stream of: its pulse,
-        // a project move it waits on, a delegate it parents still running.
-        working:
-          pulses.get(instanceId)?.activity === "working" ||
-          row?.status === "moving" ||
-          (db.runningDelegateCounts().get(instanceId) ?? 0) > 0,
       };
     },
-    (instanceId, artifactId) =>
-      db.artifacts.get(artifactId)?.instanceId === instanceId
-  );
+    session: (instanceId) => {
+      const [row] = db.listedBoardInstancesByIds([instanceId]);
+      return row
+        ? {
+            id: row.id,
+            title: row.title ?? null,
+            cwd: row.cwd,
+            machineId: row.machineId,
+            projectId: row.projectId ?? null,
+          }
+        : null;
+    },
+    machines: () =>
+      db.machineFacts().map((agent) => ({
+        machineId: agent.machineId,
+        hostname: agent.hostname,
+        os: agent.os,
+        online: registry.agent(agent.machineId) !== undefined,
+      })),
+    // As a dashboard reads a session it follows no stream of: its pulse,
+    // a project move it waits on, a delegate it parents still running.
+    working: (instanceId) =>
+      pulses.get(instanceId)?.activity === "working" ||
+      db.getInstancesByIds([instanceId])[0]?.status === "moving" ||
+      board.runningDelegates(instanceId) > 0,
+    holds: (instanceId, artifactId) =>
+      db.artifacts.get(artifactId)?.instanceId === instanceId,
+  });
 
   // The board read whole, once everything it lays its rows from is made;
   // from here on each keeper's word and each write moves only its entries.
@@ -12924,6 +12927,26 @@ export const createServer = (
     }
   };
 
+  /**
+   * A machine's message as the loop's watch names it (core loop-watch.ts
+   * `doing`), and the minute line tallies it: its verb, and a frame's kind
+   * (a session's frame by its message's type), so the line says which kind
+   * of frame holds the loop, not only whose.
+   */
+  const machineWork = (
+    addressed: Addressed,
+    envelope: MachineEnvelope | undefined
+  ): string => {
+    const from = `from machine ${addressed.machineId}`;
+    if (envelope?.verb !== "frames") {
+      return `${addressed.verb} ${from}`;
+    }
+    const { payload } = envelope;
+    return payload.kind === "frame"
+      ? `frames (${payload.kind}: ${payload.message.type}) ${from}`
+      : `frames (${payload.kind}) ${from}`;
+  };
+
   /** The beats waiting for their turn, by machine ({@link admitBeat}). */
   const beatsWaiting = new Map<
     string,
@@ -13013,7 +13036,7 @@ export const createServer = (
         dropped: envelope.payload.binaryUpdatePhaseDropped,
       });
     }
-    doing(`${addressed.verb} from machine ${addressed.machineId}`);
+    doing(machineWork(addressed, envelope));
     contact.heard(
       addressed.machineId,
       envelope?.verb === "heartbeat"

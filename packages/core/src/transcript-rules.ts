@@ -2153,13 +2153,46 @@ export const newer = (
   held === undefined || STATE_ORDER[record.state] >= STATE_ORDER[held.state];
 
 /**
+ * Each record's rows as {@link sendRow} drew them, by the stored entry's id
+ * they were drawn under. A record is never changed in place (a newer word on
+ * a send is a record of its own, `applyRecord`), so its rows are drawn once:
+ * every send is placed again on every change of the transcript
+ * ({@link placeSends}), and drawn afresh each time, a send's marker parsed
+ * five ways over was most of a long transcript's cost (obelisk's hub,
+ * 2026-11-19: `sendRow` 3.1 of 3.7 s in `placeSends`, as older windows were
+ * read).
+ */
+const drawnSends = new WeakMap<
+  SendRecord,
+  Map<string | undefined, TranscriptBlock[]>
+>();
+
+/** {@link sendRow}, drawn once per record and stored entry. */
+function sendRowOnce(
+  record: SendRecord,
+  sdkUuid: string | undefined = record.harnessId
+): TranscriptBlock[] {
+  let drawn = drawnSends.get(record);
+  if (!drawn) {
+    drawn = new Map();
+    drawnSends.set(record, drawn);
+  }
+  let rows = drawn.get(sdkUuid);
+  if (!rows) {
+    rows = sendRow(record, sdkUuid);
+    drawn.set(sdkUuid, rows);
+  }
+  return rows;
+}
+
+/**
  * A send's row, from its record alone: the words the sender submitted, the
  * hub's clock, the record's state. `sdkUuid` is the stored entry's own id,
  * when it has one — the handle a rewind goes by.
  */
 function sendRow(
   record: SendRecord,
-  sdkUuid: string | undefined = record.harnessId
+  sdkUuid: string | undefined
 ): TranscriptBlock[] {
   const { state } = record;
   // A replaced record is never drawn (see `placeSends`).
@@ -2421,23 +2454,23 @@ export function placeSends(
 
   const placed: TranscriptBlock[] = first
     .sort(byAcceptance)
-    .flatMap((r) => sendRow(r));
+    .flatMap((r) => sendRowOnce(r));
   rows.forEach((row, index) => {
     if (isSendRef(row)) {
       const record = records[row.id];
       if (record?.state === "read" || record?.state === "failed") {
-        placed.push(...sendRow(record, row.sdkUuid));
+        placed.push(...sendRowOnce(record, row.sdkUuid));
       }
     } else {
       placed.push(row);
     }
     const failed = after.get(index);
     if (failed) {
-      placed.push(...failed.sort(byAcceptance).flatMap((r) => sendRow(r)));
+      placed.push(...failed.sort(byAcceptance).flatMap((r) => sendRowOnce(r)));
     }
   });
   return {
     blocks: placed,
-    queued: waiting.sort(byAcceptance).flatMap((r) => sendRow(r)),
+    queued: waiting.sort(byAcceptance).flatMap((r) => sendRowOnce(r)),
   };
 }

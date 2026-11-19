@@ -24,7 +24,7 @@ import { Session } from "node:inspector/promises";
 import { join } from "node:path";
 import { detach } from "@cawco/core/detach";
 import { syncSection } from "@cawco/core/loop-watch";
-import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+import { MINUTE_MS } from "@cawco/core/time";
 import { loopWords } from "@cawco/core/words/loop";
 import type { HubLifetimeShape } from "./lifetime";
 
@@ -34,9 +34,14 @@ const PROFILE_MS = 20_000;
 const HOLD_BUDGET_MS = 3000;
 /** The stretch the hold budget is summed over. */
 const HOLD_WINDOW_MS = MINUTE_MS;
-/** The least time between two profiles the hub takes by itself. */
-const AUTO_GAP_MS = HOUR_MS;
-/** The profiles kept: the newest, a day of the hourly ones. */
+/**
+ * The least time between two profiles the hub takes by itself. At an hour,
+ * the one a restart's holds took was the only one for the hour after: on
+ * 2026-11-19 obelisk's hub held 2 to 4 s at a time from 12:30 on and wrote
+ * no profile of them, its 12:22 one all start-up.
+ */
+const AUTO_GAP_MS = 15 * MINUTE_MS;
+/** The profiles kept: the newest, six hours of the ones the hub takes by itself. */
 const PROFILES_KEPT = 24;
 /** An ISO time's milliseconds, left out of a profile's name. */
 const MILLISECONDS = /\.\d+Z$/u;

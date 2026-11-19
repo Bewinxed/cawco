@@ -168,6 +168,7 @@ import { createCanvasKind } from "./kinds/canvas";
 import { createComponentKind } from "./kinds/component";
 import { createPageKind, newestHash } from "./kinds/page";
 import { createPreviewKind } from "./kinds/preview";
+import type { LaneRead } from "./lane";
 import { createMarks, labelOf, linkOfPin } from "./marks";
 import {
   answeredWhole,
@@ -2679,6 +2680,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     mediaOf,
     questionsFrom,
     sessionsOf,
+    sessionsReader,
     withMedia,
   } = createFacts({
     choicesAsked,
@@ -3468,7 +3470,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * again; and each artifact's
      * notice, its parts the person has not acknowledged, newest first.
      */
-    needs: (): ArtifactNeedsRead => {
+    needs: (): LaneRead => {
+      const reader = sessionsReader();
       const acknowledged = deps.acknowledged();
       const seen = new Set(acknowledged);
       const parked = parkedNow(acknowledged);
@@ -3499,7 +3502,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           continue;
         }
         const facts = { ...kept, asked: askOf(row, kept) };
-        const sessions = sessionsOf(row, kept);
+        const sessions = reader.of(row, kept);
         const need = needOf(row, facts, sessions);
         if (need) {
           needs.push({
@@ -3514,8 +3517,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
       }
       return {
-        needs: needs.sort((a, b) => a.raisedAt - b.raisedAt),
-        notices: notices.sort((a, b) => b.at - a.at),
+        read: {
+          needs: needs.sort((a, b) => a.raisedAt - b.raisedAt),
+          notices: notices.sort((a, b) => b.at - a.at),
+        },
+        sessions: reader.sessions,
       };
     },
 

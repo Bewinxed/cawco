@@ -29,7 +29,14 @@
  * took before it went.
  *
  * Partials go out live when nothing is waiting ahead of them and are dropped
- * otherwise, for the same reason.
+ * otherwise, for the same reason. Live is every {@link PARTIALS_MS}: a
+ * session's partials meanwhile are gathered, consecutive deltas joined
+ * (stream-so-far.ts `joined`), and go as one frame per run, ahead of any
+ * other frame of the session. Partials are the one frame kind a session
+ * sends a lot of, one per few tokens, each read whole on the hub's one
+ * thread: obelisk's agent sent its hub 35 to 65 frames a second on
+ * 2026-11-19, and they held the hub's loop 2 to 5 s of every minute (its
+ * minute line's `frames from machine`).
  *
  * At most {@link OUTBOX_BYTES} are kept, across the machine's sessions. Past
  * it the oldest go first; a session whose frames went before the hub could
@@ -51,11 +58,22 @@ import type { DeliveryMark } from "@cawco/core/protocol";
 import {
   FRAMES_LOST,
   type NeutralMessage,
+  type NeutralStreamMessage,
   type NeutralSystemMessage,
 } from "@cawco/core/session-messages";
+import { joined } from "./stream-so-far";
 
 /** How much the outbox keeps, across every session on the machine. */
 const OUTBOX_BYTES = 32 * 1024 * 1024;
+
+/**
+ * How long a session's partials gather before they go: ten times a second,
+ * the running reply's pace on a screen. Ours.
+ */
+const PARTIALS_MS = 100;
+
+/** A partial as it is gathered: its harness's own copy (`raw`) left out, which nothing past the agent reads. */
+type Partial = OutboxFrame & { message: NeutralStreamMessage };
 
 /** One session frame, as the supervisor hands it to its sink. */
 export interface OutboxFrame {
@@ -103,6 +121,10 @@ export class Outbox {
   #hubEpoch: string | undefined;
   readonly #send: (frame: OutboxFrame) => boolean;
   readonly #log: (line: string) => void;
+  /** Each session's partials gathered since the last went ({@link PARTIALS_MS}). */
+  readonly #partials = new Map<string, Partial[]>();
+  /** When the gathered partials go: one wait for every session's. */
+  #partialsDue: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     send: (frame: OutboxFrame) => boolean,
@@ -113,20 +135,23 @@ export class Outbox {
   }
 
   /**
-   * One frame a session wrote. A partial (`stream_event`) goes out live when
-   * the link is up and nothing is waiting ahead of it, else nowhere: the
-   * reply so far carries it. Anything else is stamped, kept, and handed now
-   * when the link is up and nothing of its session is waiting ahead of it.
+   * One frame a session wrote. A partial (`stream_event`) is gathered while
+   * the link is up, to go out with the session's others
+   * ({@link PARTIALS_MS}), else nowhere: the reply so far carries it.
+   * Anything else goes after the session's gathered partials, and is
+   * stamped, kept, and handed now when the link is up and nothing of its
+   * session is waiting ahead of it.
    */
   frame(frame: OutboxFrame): void {
     const { instanceId } = frame;
-    const waiting = this.#waiting(instanceId);
     if (frame.message.type === "stream_event") {
-      if (this.#ready && !waiting) {
-        this.#hand(frame);
+      if (this.#ready) {
+        this.#gather({ ...frame, message: frame.message });
       }
       return;
     }
+    this.#sendPartials(instanceId);
+    const waiting = this.#waiting(instanceId);
     const seq = (this.#seq.get(instanceId) ?? 0) + 1;
     this.#seq.set(instanceId, seq);
     const stamped = { ...frame, sent: { epoch: this.epoch, seq } };
@@ -147,9 +172,47 @@ export class Outbox {
     this.#trim();
   }
 
-  /** The socket is gone: what comes next waits for the next register. */
+  /** The socket is gone: what comes next waits for the next register, and the partials gathered go nowhere (the reply so far carries them). */
   linkDown(): void {
     this.#readyValue = false;
+    this.#partials.clear();
+    clearTimeout(this.#partialsDue);
+    this.#partialsDue = undefined;
+  }
+
+  /** `partial` gathered onto its session's, joined to the one before it when they are the same kind of delta. */
+  #gather(partial: Partial): void {
+    const { raw: _raw, ...message } = partial.message;
+    const list = this.#partials.get(partial.instanceId) ?? [];
+    const last = list.at(-1);
+    const merged = joined(last?.message, message);
+    if (last && merged) {
+      list[list.length - 1] = { ...last, message: merged };
+    } else {
+      list.push({ ...partial, message });
+    }
+    this.#partials.set(partial.instanceId, list);
+    this.#partialsDue ??= setTimeout(() => {
+      this.#partialsDue = undefined;
+      for (const instanceId of [...this.#partials.keys()]) {
+        this.#sendPartials(instanceId);
+      }
+    }, PARTIALS_MS);
+  }
+
+  /** A session's gathered partials, handed in order when the link is up and nothing of its session waits ahead of them. */
+  #sendPartials(instanceId: string): void {
+    const list = this.#partials.get(instanceId);
+    if (!list) {
+      return;
+    }
+    this.#partials.delete(instanceId);
+    for (const partial of list) {
+      if (!this.#ready || this.#waiting(instanceId)) {
+        return;
+      }
+      this.#hand(partial);
+    }
   }
 
   /**

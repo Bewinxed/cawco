@@ -240,6 +240,57 @@ export const createFacts = (ctx: FactsContext) => {
       steps: writer ? deps.steps(writer) : [],
     };
   };
+  /**
+   * {@link sessionsOf} for one read of many artifacts (Needs you's lane):
+   * each session, plan and project read once however many artifacts name
+   * it, and the sessions it read (holders, writers, makers) kept in
+   * `sessions`, so the lane reads again only when one of them moves
+   * (lane.ts `sessionsMoved`). Whether a holder is over for good (server.ts
+   * `overForGood`) is most of a lane's read: per artifact, it was 1.4 of 2.0
+   * s of obelisk's start profile on 2026-11-19.
+   */
+  const sessionsReader = () => {
+    const sessions = new Set<string>();
+    /** `read` of each key, once per lane read. */
+    const once = <T>(read: (key: string) => T) => {
+      const kept = new Map<string, { value: T }>();
+      return (key: string): T => {
+        const held = kept.get(key) ?? { value: read(key) };
+        kept.set(key, held);
+        return held.value;
+      };
+    };
+    const ended = once((id) => {
+      const owner = deps.instance(id);
+      return {
+        ended: !owner || deps.finished(owner),
+        harness: owner?.harness ?? null,
+        machineId: owner?.machineId ?? null,
+      };
+    });
+    const steps = once((writer) => deps.steps(writer));
+    const setUp = once((project) => deps.setUp(project));
+    const named: ReadonlySet<string> = sessions;
+    return {
+      sessions: named,
+      of: (row: ArtifactRow, facts: ArtifactFacts): ArtifactSessions => {
+        const writer = askOf(row, facts)?.by;
+        for (const id of [row.instanceId, row.madeBy, writer]) {
+          if (id) {
+            sessions.add(id);
+          }
+        }
+        const project = boardOf(row);
+        return {
+          ...(row.instanceId === null
+            ? { ended: true, harness: null, machineId: null }
+            : ended(row.instanceId)),
+          setUp: project !== null && setUp(project),
+          steps: writer ? steps(writer) : [],
+        };
+      },
+    };
+  };
   /** The artifacts each decision page's Canvas and Preview pieces show, by the page's id, read once per change of it. */
   const mediaKept = new Map<string, { at: number; ids: string[] }>();
   const mediaOf = (row: ArtifactRow): string[] => {
@@ -284,6 +335,7 @@ export const createFacts = (ctx: FactsContext) => {
     mediaOf,
     questionsFrom,
     sessionsOf,
+    sessionsReader,
     withMedia,
   };
 };

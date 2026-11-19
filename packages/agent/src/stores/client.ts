@@ -50,6 +50,7 @@ const reading: { [K in StoreOp]: Map<string, Promise<StoreAnswer<K>>> } = {
   "opencode.sessions": new Map(),
   "opencode.backupV1": new Map(),
   "usage.scan": new Map(),
+  "claude.saidWindow": new Map(),
 };
 
 /** Every ask thread `ended` held, failed as gone, and the thread let go; a thread already let go is nothing more. */

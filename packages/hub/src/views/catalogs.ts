@@ -7,6 +7,7 @@
  * Recent's stored list read it (views/find-index.ts, views/stored.ts).
  */
 
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import { detach } from "@cawco/core/detach";
 import type { HarnessFailed, HarnessUnanswered } from "@cawco/core/frames";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -14,16 +15,20 @@ import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 
 /**
  * How long after a listing that left a harness out for want of time the
- * machine is listed again, doubled each time it still does, up to
- * {@link ASK_AGAIN_MAX_MS}. The machine's listing goes on past the bound it
- * answered within and fills its index (agent catalog-index.ts), so the next
- * ask is quick. Our call. Seen 2026-11-19: Claude on obelisk, starved at a
- * restart by every dashboard reopening its conversations at once, listed
- * its 4,083 transcripts a moment after its 10 s ran out, and the notice
- * stood until someone pressed Try again.
+ * machine is listed again (core backoff.ts): 15 s, doubled each time it
+ * still does, up to 5 minutes, and given up after eight, about 23 minutes,
+ * when the notice's Try again is the person's. The machine's listing goes
+ * on past the bound it answered within and fills its index (agent
+ * catalog-index.ts), so the next ask is quick. Our call. Seen 2026-11-19:
+ * Claude on obelisk, starved at a restart by every dashboard reopening its
+ * conversations at once, listed its 4,083 transcripts a moment after its
+ * 10 s ran out, and the notice stood until someone pressed Try again.
  */
-const ASK_AGAIN_FIRST_MS = 15_000;
-const ASK_AGAIN_MAX_MS = 5 * 60_000;
+const ASK_AGAIN: BackoffPolicy = {
+  firstMs: 15_000,
+  mostMs: 5 * 60_000,
+  giveUp: { afterTries: 8 },
+};
 
 /** A machine's listing as the machine answered it, or why it gave none. */
 export type Listed =
@@ -37,6 +42,8 @@ export type Listed =
 /** One machine's catalog: its sessions by harness session id, and the harnesses its last listing left out. */
 interface Catalog {
   failed: HarnessFailed[];
+  /** The harnesses every listing of the machine left out: none of their sessions was ever read, so none is kept. */
+  neverListed: ReadonlySet<string>;
   sessions: Map<string, NeutralSessionInfo>;
   unanswered: HarnessUnanswered[];
 }
@@ -54,17 +61,18 @@ export const createCatalogs = (deps: CatalogsDeps) => {
   const catalogs = new Map<string, Catalog>();
   /** Each machine's listing under way, to wait on rather than ask twice. */
   const reading = new Map<string, Promise<void>>();
-  /** Each machine to be listed again, by its timer, with the wait after that one. */
+  /** Each machine to be listed again: its listings short in a row, and the timer of the next. */
   const again = new Map<
     string,
-    { timer: ReturnType<typeof setTimeout>; waitMs: number }
+    { backoff: Backoff; timer?: ReturnType<typeof setTimeout> }
   >();
 
   /**
    * After each listing of `machineId`, however it ended: while its catalog
    * holds a harness that did not answer in time, it is listed again after
-   * a wait, longer each time, so a listing starved once is never held as
-   * the machine's last word; a catalog whole again stops it.
+   * a wait, longer each time ({@link ASK_AGAIN}), so a listing starved once
+   * is never held as the machine's last word; a catalog whole again stops
+   * it, and past the policy's end it waits on the person's Try again.
    */
   const askAgain = (machineId: string): void => {
     const catalog = catalogs.get(machineId);
@@ -72,14 +80,19 @@ export const createCatalogs = (deps: CatalogsDeps) => {
       again.delete(machineId);
       return;
     }
-    const waitMs = again.get(machineId)?.waitMs ?? ASK_AGAIN_FIRST_MS;
-    const timer = setTimeout(() => {
+    const held = again.get(machineId) ?? { backoff: new Backoff(ASK_AGAIN) };
+    again.set(machineId, held);
+    const step = held.backoff.failed();
+    if (step.kind === "gave-up") {
+      console.info(
+        `[find] ${machineLabel(deps.hostname(machineId))}'s listing left a harness out ${step.tries} times in a row; it is listed again on Try again or its next register`
+      );
+      again.delete(machineId);
+      return;
+    }
+    held.timer = setTimeout(() => {
       detach(relist(machineId), `find: ${machineId}'s stored sessions again`);
-    }, waitMs);
-    again.set(machineId, {
-      timer,
-      waitMs: Math.min(waitMs * 2, ASK_AGAIN_MAX_MS),
-    });
+    }, step.ms);
   };
 
   /**
@@ -110,21 +123,29 @@ export const createCatalogs = (deps: CatalogsDeps) => {
         const kept = [...(known?.sessions.values() ?? [])].filter((info) =>
           silent.has(info.harness)
         );
-        const keptOf = (harness: string) =>
-          kept.filter((info) => info.harness === harness).length;
+        const neverListed: ReadonlySet<string> = new Set(
+          [...silent].filter(
+            (harness) => !known || known.neverListed.has(harness)
+          )
+        );
+        const keptWords = (harness: string) =>
+          neverListed.has(harness)
+            ? "it hasn't listed them yet, so none are kept"
+            : `its stored sessions are kept as last read (${kept.filter((info) => info.harness === harness).length})`;
         const name = machineLabel(deps.hostname(machineId));
         for (const { harness, after } of answer.unanswered) {
           console.info(
-            `[find] ${harness} on ${name} didn't answer within ${after / 1000} s; its stored sessions are kept as last read (${keptOf(harness)})`
+            `[find] ${harness} on ${name} didn't answer within ${after / 1000} s; ${keptWords(harness)}`
           );
         }
         for (const { harness, error } of answer.failed) {
           console.info(
-            `[find] ${harness} on ${name} couldn't list its sessions: ${error}; its stored sessions are kept as last read (${keptOf(harness)})`
+            `[find] ${harness} on ${name} couldn't list its sessions: ${error}; ${keptWords(harness)}`
           );
         }
         catalogs.set(machineId, {
           failed: answer.failed,
+          neverListed,
           unanswered: answer.unanswered,
           sessions: new Map(
             [...answer.sessions, ...kept].map((info) => [info.sessionId, info])
@@ -192,7 +213,7 @@ export const createCatalogs = (deps: CatalogsDeps) => {
     /** The harnesses `machineId`'s last listing left out, as it said them. */
     leftOut: (
       machineId: string
-    ): Pick<Catalog, "failed" | "unanswered"> | undefined =>
+    ): Pick<Catalog, "failed" | "neverListed" | "unanswered"> | undefined =>
       catalogs.get(machineId),
   };
 };

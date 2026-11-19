@@ -394,7 +394,9 @@ const messageOf = (error: unknown): string =>
  * does here. One a continuation took the work item of (`continuedInto`)
  * never runs again: no hold of its is kept and no reset resumes it.
  */
-const over = (row: LimitRow | undefined): boolean =>
+const over = (
+  row: Pick<LimitRow, "continuedInto" | "status"> | undefined
+): boolean =>
   !row || row.continuedInto !== null || OVER_STATUSES.has(row.status);
 
 /** The carry-on the hub sends at a reset: a turn the limit itself resumed. */
@@ -1729,13 +1731,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * group by how long it has been held.
    */
   const admissionOrder = (holds: LimitHold[]): LimitHold[] => {
-    const rows = db.listInstances();
+    // The held rows and their children, by key: never the fleet's every row.
+    const ids = holds.map((held) => held.instanceId);
     const parents = new Set(
-      rows.flatMap((one) =>
-        one.parentInstanceId && !over(one) ? [one.parentInstanceId] : []
-      )
+      db
+        .childrenOf(ids)
+        .flatMap((one) => (over(one) ? [] : [one.parentInstanceId]))
     );
-    const byId = new Map(rows.map((one) => [one.id, one]));
+    const byId = new Map(
+      db.listedInstancesByIds(ids).map((one) => [one.id, one])
+    );
     const rank = (held: LimitHold): number => {
       const row = byId.get(held.instanceId);
       if (!row) {

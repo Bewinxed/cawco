@@ -321,6 +321,7 @@ import {
   RingLineSchema,
   readRing,
 } from "../sessiond-custody";
+import { storeWork } from "../stores/client";
 import { sawTool } from "../tools";
 import {
   forgetWakeups,
@@ -336,7 +337,6 @@ import {
   CLAUDE_PROMPT_TYPES,
   claudePromptAt,
   hookFailureId,
-  readSaidWindow,
   readSessionChain,
   readSessionContext,
   readSessionEnd,
@@ -5866,7 +5866,8 @@ class ClaudeHarness implements Harness<"claude"> {
     if (!file) {
       return { entries: [], older: null, newer: null };
     }
-    const window = await readSaidWindow(file, ask);
+    // Parsed on the stores thread, off the loop (stores/ops.ts).
+    const window = await storeWork("claude.saidWindow", { path: file, ask });
     return {
       entries: withQuestionResults(window.messages),
       older: window.older,

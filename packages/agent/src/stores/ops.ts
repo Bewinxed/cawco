@@ -4,6 +4,8 @@
  * and answers once.
  */
 
+import type { WindowAsk } from "@cawco/core/transcript-types";
+import { readSaidWindow } from "../harnesses/claude-transcript";
 import { opencodeReads, type SessionQuery } from "./opencode-reads";
 import { usageHost } from "./usage-host";
 
@@ -19,6 +21,16 @@ const opsOf = {
   "opencode.sessions": (query: SessionQuery) => opencodeReads.sessions(query),
   "opencode.backupV1": (dataHome: string) => opencodeReads.backupV1(dataHome),
   "usage.scan": (now: number) => usageHost.scan(now),
+  /**
+   * A window of a Claude conversation as it was said (claude-transcript.ts
+   * `readSaidWindow`): its lines parsed and its chain walked here, never on
+   * the loop. On the loop, a window took 1 to 7.5 s each on obelisk's agent
+   * after its 12:22 restart on 2026-11-19, a dozen at once as dashboards
+   * opened their conversations again, and its own listing ran past 10 s
+   * behind them.
+   */
+  "claude.saidWindow": (read: { ask: WindowAsk; path: string }) =>
+    readSaidWindow(read.path, read.ask),
 } satisfies Record<string, (arg: never, tell: Tell) => Promise<unknown>>;
 
 type StoreOps = typeof opsOf;

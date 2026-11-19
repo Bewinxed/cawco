@@ -567,6 +567,17 @@ export interface InstancesDb {
    */
   readonly boardAncestors: (ids: string[]) => BoardInstanceRow[];
   /**
+   * The listed sessions under one of `parentIds`, as little of each as says
+   * whether it goes on: an at-limit look's order reads which held session
+   * has children (at-limit.ts `admissionOrder`), where it read and parsed
+   * every listed row of the fleet.
+   */
+  readonly childrenOf: (parentIds: string[]) => {
+    continuedInto: string | null;
+    parentInstanceId: string;
+    status: InstanceStatus;
+  }[];
+  /**
    * The effort the operator chose for the session: what its every launch asks
    * for. Written by a spawn that names one and by a `set-effort` its session
    * applied or had no process to answer, never by a reading
@@ -705,6 +716,13 @@ export interface InstancesDb {
     id: string;
     machineId: string;
   }[];
+  /**
+   * The listed sessions running or starting on one of `accountIds`: what a
+   * forecast's arrivals are read from (rebalance.ts `readForecast`), by
+   * status (`instances_status_harness`), where {@link listInstances} read
+   * and parsed every listed row of the fleet at every at-limit look.
+   */
+  readonly liveOnAccounts: (accountIds: string[]) => PublicInstanceRow[];
   /**
    * The person pressed Done on these sessions (an archive) at `at`; a null
    * `at` takes it back (unarchive). `updatedAt` stays, as {@link markSeen}'s.
@@ -1098,6 +1116,38 @@ export const instancesDb = (core: DbCore): InstancesDb => {
     core;
 
   /**
+   * One session's row by its id: read for every frame a machine sends (its
+   * gate, its keep-alive check, its transcript's fan-out) and from hundreds
+   * of places by one key, so each is prepared once. Built and prepared
+   * afresh, drizzle's builder and SQLite's prepare were nearly all of a
+   * frame's cost: obelisk's hub, 2026-11-19, `ownedInstance` 546 of 571 ms
+   * in drizzle's `_prepare`, `getInstancesByIds` 304 of 333 ms, at about
+   * 35 frames a second. Still read each time, never kept: one row by its
+   * primary key.
+   */
+  const sessionKey = sql.placeholder("id");
+  const keptById = db
+    .select(publicColumns)
+    .from(instances)
+    .where(and(eq(instances.id, sessionKey), keptInstances()))
+    .prepare();
+  const ownedById = db
+    .select(ownedColumns)
+    .from(instances)
+    .where(eq(instances.id, sessionKey))
+    .prepare();
+  const ownedOnMachine = db
+    .select(ownedColumns)
+    .from(instances)
+    .where(
+      and(
+        eq(instances.id, sessionKey),
+        eq(instances.machineId, sql.placeholder("machineId"))
+      )
+    )
+    .prepare();
+
+  /**
    * The conversation a session's new key replaces (a `/clear`, a fresh
    * start, a relaunch under a new key) kept among its prior ones, last: its
    * file is read before the new one, as a continuation's is. Once: a key
@@ -1342,18 +1392,9 @@ export const instancesDb = (core: DbCore): InstancesDb => {
         .where(and(eq(instanceTooling.instanceId, id), keptInstances()))
         .get()?.tooling,
     ownedInstance: (id, machineId) =>
-      db
-        .select(ownedColumns)
-        .from(instances)
-        .where(
-          and(
-            eq(instances.id, id),
-            machineId === undefined
-              ? undefined
-              : eq(instances.machineId, machineId)
-          )
-        )
-        .get(),
+      machineId === undefined
+        ? ownedById.get({ id })
+        : ownedOnMachine.get({ id, machineId }),
     hiddenSession: (id) =>
       !!db
         .select({ id: instances.id })
@@ -2887,6 +2928,38 @@ export const instancesDb = (core: DbCore): InstancesDb => {
         )
         .all()
         .map((row) => row.accountId),
+    childrenOf: (parentIds) =>
+      parentIds.length === 0
+        ? []
+        : db
+            .select({
+              continuedInto: instances.continuedInto,
+              parentInstanceId: sql<string>`${instances.parentInstanceId}`,
+              status: instances.status,
+            })
+            .from(instances)
+            .where(
+              and(
+                inArray(instances.parentInstanceId, parentIds),
+                listedInstances()
+              )
+            )
+            .all(),
+    liveOnAccounts: (accountIds) =>
+      accountIds.length === 0
+        ? []
+        : db
+            .select(publicColumns)
+            .from(instances)
+            .where(
+              and(
+                inArray(instances.status, ["running", "starting"]),
+                inArray(instances.accountId, accountIds),
+                listedInstances()
+              )
+            )
+            .all()
+            .map(asListed),
     runningInstancesOf: (harness) =>
       db
         .select(publicColumns)
@@ -2910,6 +2983,9 @@ export const instancesDb = (core: DbCore): InstancesDb => {
     getInstancesByIds: (ids) => {
       if (ids.length === 0) {
         return [];
+      }
+      if (ids.length === 1) {
+        return keptById.all({ id: ids[0] });
       }
       return db
         .select(publicColumns)

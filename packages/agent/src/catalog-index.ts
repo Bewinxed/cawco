@@ -49,10 +49,21 @@ const IndexShape = z.record(
  */
 const LISTING_READS = 8;
 
-/** `read` over every item, at most {@link LISTING_READS} at a time; results in order. */
+/**
+ * How many transcripts a listing stats at once. A stat holds nothing past
+ * its answer, so the reads' memory bound is not its: at
+ * {@link LISTING_READS}, obelisk's 4,083 transcripts took about 510 rounds
+ * of the agent's loop to stat (2026-11-19), each round behind whatever else
+ * the loop had queued (a restart's transcript reads), and the listing ran
+ * past its 10 s. Ours.
+ */
+const LISTING_STATS = 64;
+
+/** `read` over every item, at most `width` ({@link LISTING_READS}) at a time; results in order. */
 export const listingRead = async <T, R>(
   items: readonly T[],
-  read: (item: T) => Promise<R>
+  read: (item: T) => Promise<R>,
+  width = LISTING_READS
 ): Promise<R[]> => {
   const results = new Array<R>(items.length);
   let next = 0;
@@ -64,7 +75,7 @@ export const listingRead = async <T, R>(
     }
   };
   await Promise.all(
-    Array.from({ length: Math.min(LISTING_READS, items.length) }, reader)
+    Array.from({ length: Math.min(width, items.length) }, reader)
   );
   return results;
 };
@@ -114,11 +125,14 @@ export async function indexedListing<T extends { file: string }>(
   read: (item: T) => Promise<NeutralSessionInfo | undefined>
 ): Promise<IndexedListing> {
   const index = await loadIndex();
-  const stats = await listingRead(files, (item) =>
-    stat(item.file).then(
-      (one) => ({ mtimeMs: one.mtimeMs, size: one.size }),
-      () => null
-    )
+  const stats = await listingRead(
+    files,
+    (item) =>
+      stat(item.file).then(
+        (one) => ({ mtimeMs: one.mtimeMs, size: one.size }),
+        () => null
+      ),
+    LISTING_STATS
   );
   const stale: { item: T; mtimeMs: number; size: number }[] = [];
   const listed = new Set<string>();

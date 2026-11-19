@@ -780,7 +780,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
         })
       );
     }
-    tellMoved(changes, written.length > 0);
+    tellMoved(changes, written);
   };
 
   /**
@@ -840,15 +840,16 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
   };
 
   /**
-   * What moved, told to what follows a move; `written`, whether a session's
-   * stored row was written, on the board or not (a rule's facts are any
+   * What moved, told to what follows a move; `written`, the sessions whose
+   * stored rows were written, on the board or not (a rule's facts are any
    * live session's).
    */
-  const tellMoved = (changes: BoardChanges, written: boolean): void => {
-    if (!written && Object.keys(changes).length === 0) {
+  const tellMoved = (changes: BoardChanges, written: string[]): void => {
+    if (written.length === 0 && Object.keys(changes).length === 0) {
       return;
     }
-    const sessionsMovedNow = written || changes.sessions !== undefined;
+    const sessionsMovedNow =
+      written.length > 0 || changes.sessions !== undefined;
     const machinesMovedNow =
       changes.machines !== undefined ||
       changes.machineStatus !== undefined ||
@@ -858,23 +859,35 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
       syncSection("publish: rule facts forgotten", () =>
         ctx.ruleEngine.forgetFacts()
       );
-      // A session ending ends its artifacts' asks (Needs you's rule 4).
+      // A session ending ends its artifacts' asks (Needs you's rule 4):
+      // the lane hears which sessions moved, and reads again only for one
+      // it read.
       syncSection("publish: artifact lane moved", () =>
-        ctx.artifactLane.moved()
+        ctx.artifactLane.sessionsMoved([
+          ...written,
+          ...(changes.sessions?.upserts.map((row) => row.id) ?? []),
+          ...(changes.sessions?.removed ?? []),
+        ])
       );
     }
     if (sessionsMovedNow || machinesMovedNow) {
       syncSection("publish: tool lists armed", () => ctx.toolsMayHaveChanged());
     }
-    // An artifact's tab hears what moved of its own session, and every one
-    // the machines when one moved (its frame lists them).
+    // An artifact's tab hears what moved of its own session, every one the
+    // machines when one moved (its frame lists them), and what it shows
+    // when a preview opened or closed.
     syncSection("publish: artifact tabs refreshed", () => {
-      if (machinesMovedNow || changes.previews !== undefined) {
-        ctx.artifactSessions.refresh();
-        return;
+      if (machinesMovedNow) {
+        ctx.artifactSessions.moved({ kind: "machines" });
+      }
+      if (changes.previews !== undefined) {
+        ctx.artifactSessions.moved({ kind: "shown" });
       }
       for (const row of changes.sessions?.upserts ?? []) {
-        ctx.artifactSessions.refresh(row.id);
+        ctx.artifactSessions.moved({ kind: "session", instanceId: row.id });
+      }
+      for (const id of changes.sessions?.removed ?? []) {
+        ctx.artifactSessions.moved({ kind: "session", instanceId: id });
       }
     });
   };
@@ -1098,6 +1111,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
       settle();
       return [...sessions.entries.values()];
     },
+    runningDelegates: (id) => delegateCounts.get(id) ?? 0,
     sessionsMoved: (ids) => {
       for (const id of ids) {
         sessionsOwed.add(id);

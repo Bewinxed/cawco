@@ -31,8 +31,14 @@ import {
 const threadOf = (message: { parent_tool_use_id?: string | null }): string =>
   message.parent_tool_use_id ?? "";
 
-/** `next` joined onto `last` when both are the same kind of delta on the same loop. */
-const joined = (
+/**
+ * `next` joined onto `last` when both are the same kind of delta on the same
+ * loop: text onto text, reasoning onto reasoning, and a run of the deltas no
+ * reader draws (a tool call's arguments, a signature, citations: core
+ * transcript-rules.ts `streamPhase` reads only their type) as the one that
+ * ends it.
+ */
+export const joined = (
   last: NeutralStreamMessage | undefined,
   next: NeutralStreamMessage
 ): NeutralStreamMessage | undefined => {
@@ -46,6 +52,13 @@ const joined = (
   }
   const a = last.event.delta;
   const b = next.event.delta;
+  if (
+    a.type === b.type &&
+    a.type !== "text_delta" &&
+    a.type !== "thinking_delta"
+  ) {
+    return next;
+  }
   if (a.type === "text_delta" && b.type === "text_delta") {
     return {
       ...last,

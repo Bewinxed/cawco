@@ -258,7 +258,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       pageProject(target.artifact.id)
     );
     ctx.streams.sequence(instanceId, frame);
-    ctx.artifactSessions.refresh(instanceId);
+    ctx.artifactSessions.moved({ kind: "shown", instanceId });
     // A project's decision page is read by the project's sessions, some of
     // which follow no session's stream: the board carries every open
     // preview, so every dashboard hears it there too.

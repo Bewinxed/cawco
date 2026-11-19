@@ -120,12 +120,24 @@ export const readForecast = (
     ])
   );
   const ids = new Set(accounts.map((account) => account.id));
-  const rows = db.listInstances();
+  // Read by key, never the fleet's every row: the sessions on these
+  // accounts, those owed to one, and the parents of whoever burned on them
+  // within the burn's span ({@link arrivalsOf}).
+  const live = db.liveOnAccounts([...ids]);
+  const held = new Set(live.map((row) => row.id));
+  const burned = [...turns.values()]
+    .flat()
+    .filter((turn) => turn.at.getTime() > now - BURN_SPAN_MS)
+    .map((turn) => turn.instanceId);
+  const rows = [
+    ...live,
+    ...db.listedInstancesByIds(
+      [...new Set([...owed.keys(), ...burned])].filter((id) => !held.has(id))
+    ),
+  ];
   const running = new Set(
-    rows.flatMap((row) =>
-      row.status === "running" && row.accountId && ids.has(row.accountId)
-        ? [row.accountId]
-        : []
+    live.flatMap((row) =>
+      row.status === "running" && row.accountId ? [row.accountId] : []
     )
   );
   const readings = db.accounts.readings();

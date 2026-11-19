@@ -14,4 +14,10 @@ export const catalogWords = {
   /** One harness on `machine` couldn't list (its listing threw), in harnessDidntAnswer's voice. */
   harnessCouldntList: (harness: string, machine: string, error: string) =>
     `${harness} on ${machine} couldn't list its stored sessions (${error}), so they are the ones it listed last.`,
+  /** One harness on `machine` didn't list in time and never has since the hub started: nothing of it is shown. */
+  harnessDidntAnswerYet: (harness: string, machine: string, seconds: number) =>
+    `${harness} on ${machine} didn't answer within ${seconds} s and hasn't listed its stored sessions yet, so none of them are shown.`,
+  /** One harness on `machine` couldn't list, and never has since the hub started, in harnessDidntAnswerYet's voice. */
+  harnessCouldntListYet: (harness: string, machine: string, error: string) =>
+    `${harness} on ${machine} couldn't list its stored sessions (${error}) and hasn't listed them yet, so none of them are shown.`,
 };

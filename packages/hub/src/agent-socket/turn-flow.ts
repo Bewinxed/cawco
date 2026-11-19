@@ -391,7 +391,10 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
       const { pulse } = body;
       if (pulse) {
         ctx.pulses.set(message.instanceId, pulse);
-        ctx.artifactSessions.refresh(message.instanceId);
+        ctx.artifactSessions.moved({
+          kind: "working",
+          instanceId: message.instanceId,
+        });
         ctx.workItems.turnState(message.instanceId, pulse.busy);
         ctx.caw.pulse(message.instanceId, pulse.busy);
         // A summariser is the hub's own worker: nothing watches it.
