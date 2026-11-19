@@ -334,6 +334,7 @@
 @custom-variant run-end-end (&[data-run-end="end"]);
 @custom-variant run-end-start (&[data-run-end="start"]);
 @custom-variant scheme-dark (&[data-scheme="dark"]);
+@custom-variant section-tasks (&[data-section="tasks"]);
 @custom-variant session-hover-tone-done (&[data-session-hover-tone="done"]);
 @custom-variant session-hover-tone-failed (&[data-session-hover-tone="failed"]);
 @custom-variant session-hover-tone-needs (&[data-session-hover-tone="needs"]);
