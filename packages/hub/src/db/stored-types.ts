@@ -167,6 +167,8 @@ export interface Lesson {
    * run on a model it was not tested on.
    */
   probe?: { pass: string; prompt: string };
+  /** The task that builds it into CawCo: it says how CawCo behaves, or should behave, for every user. The lesson stays until the task is done, then retires `product`. */
+  product?: { task: string };
   /** Times he stated it again while it was live. */
   repeats: number;
   /** Removed, why and when, with its words kept for 30 days. */
@@ -174,10 +176,10 @@ export interface Lesson {
     /** The lesson that replaced it. */
     by?: string;
     on: string;
-    /** The task that builds it into CawCo, when it went there (`product`). */
+    /** The task that built it into CawCo (`product`). */
     task?: string;
     text: string;
-    /** `stale`: the file it rested on, or the match in it, is gone. `merged`: another lesson said the same, and holds its sources now (`by`). `product`: it says how CawCo itself works, which CawCo holds, never a project's memory. */
+    /** `stale`: the file it rested on, or the match in it, is gone. `merged`: another lesson said the same, and holds its sources now (`by`). `product`: CawCo carries it now, its task (`task`) done. */
     why:
       | "merged"
       | "product"
@@ -230,14 +232,14 @@ export interface MemoryRunState {
     retired: number;
     /** Lessons taken back because the person stated the opposite; none before it was counted. */
     reverted?: number;
-    /** Lessons about how CawCo itself works, left to CawCo; none before it was counted. */
+    /** Lessons about CawCo given a task to build them into CawCo; none before it was counted. */
     product?: number;
     staged: number;
   } | null;
   /** The model ids the project's lessons were re-tested on (or the project's sessions ran on when it first had none): one not here is a re-test. */
   models?: string[];
-  /** The day the lessons retired `product` were judged again by whether every user of CawCo needs them, once they have. */
-  productJudged?: string;
+  /** The day the recovery put back every lesson taken out as CawCo's before CawCo carried it, and gave each lesson about CawCo its task, once it has. */
+  productTasked?: string;
   /** The day the one-time recovery run of the archived notes ran, once it has. */
   recovered?: string;
   /** The newest of the person's messages a run has read (an ISO time). */

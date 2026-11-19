@@ -51,7 +51,7 @@ const ROWS = {
   // Asked in memory-run.ts: what the person's messages are, what each note
   // is, whether a message states a lesson, whether two notes say the same,
   // whether a new lesson says what a kept one says, whether a lesson says
-  // how CawCo itself works, whether an open task builds such a lesson into
+  // how CawCo behaves for every user, whether an open task builds such a lesson into
   // CawCo already,
   // whether a message states a lesson kept again or the opposite, whether a
   // model's answer passes a lesson's probe; and in
@@ -61,7 +61,7 @@ const ROWS = {
   support: "Lesson source",
   same: "Same lesson",
   kept: "Lesson kept already",
-  product: "About CawCo itself",
+  product: "About CawCo",
   covers: "Product task open",
   corrects: "Corrected again",
   probe: "Lesson probe",

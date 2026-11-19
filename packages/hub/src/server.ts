@@ -8970,6 +8970,38 @@ export const createServer = (
           ? task.kind
           : "open";
       },
+      reopen: async (projectId, id, reason) => {
+        const task = await tasks.get(projectId, id);
+        if (task instanceof ElysiaStatus) {
+          return task.status === 404
+            ? "gone"
+            : { refused: task.response.detail };
+        }
+        if (task.kind === "done") {
+          return "done";
+        }
+        if (task.kind !== "dropped") {
+          return "open";
+        }
+        const stages = await tasks.stages(projectId);
+        if (stages instanceof ElysiaStatus) {
+          return { refused: stages.response.detail };
+        }
+        const ready = stages.stages.find((stage) => stage.kind === "todo");
+        if (!ready) {
+          return { refused: "the project has no stage of kind todo" };
+        }
+        const moved = await tasks.move(
+          projectId,
+          id,
+          ready.name,
+          hubActor("the project's memory run opens a task again"),
+          reason
+        );
+        return moved instanceof ElysiaStatus
+          ? { refused: moved.response.detail }
+          : "reopened";
+      },
       drop: async (projectId, id, { field, value, reason }) => {
         const task = await tasks.get(projectId, id);
         if (task instanceof ElysiaStatus) {

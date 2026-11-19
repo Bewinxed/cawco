@@ -519,6 +519,7 @@ const LessonShape = declared(
     held: z.literal(true).optional(),
     home: LessonHomeShape,
     probe: z.object({ pass: z.string(), prompt: z.string() }).optional(),
+    product: z.object({ task: z.string() }).optional(),
     repeats: z.number(),
     retired: z
       .object({

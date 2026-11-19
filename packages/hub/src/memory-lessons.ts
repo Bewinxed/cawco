@@ -571,11 +571,11 @@ export type Change =
     }
   /** A knowledge lesson no brief carried for the archive's days, to `knowledge/archive/<topic>.md`. */
   | { id: string; kind: "archive" }
-  /** A lesson about how CawCo itself works, taken out of the project's memory: retired `product`, with the task that builds it into CawCo when one does. */
-  | { id: string; kind: "product"; task?: string }
+  /** A lesson CawCo carries now, the task that built it into CawCo (`task`) done: retired `product`, its line taken out. */
+  | { id: string; kind: "product"; task: string }
   /**
-   * A lesson retired `product`, judged again as the project's: its ledger
-   * entry put back as `entry` (as it stood before it was taken out, its
+   * A lesson retired `product` before CawCo carried it, put back: its
+   * ledger entry as `entry` (as it stood before it was taken out, its
    * sources with it), and `line` in its home when it was live.
    */
   | { entry: Lesson; id: string; kind: "return"; line?: LessonLine }
