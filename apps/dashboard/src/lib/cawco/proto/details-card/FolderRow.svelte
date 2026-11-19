@@ -99,6 +99,7 @@
     <MachineRow
       hue={machineHue(hue, folder.machine.online)}
       icon={machineIcon(folder.machine.os)}
+      line
       {meta}
       name={folder.machine.name}
       presence={folder.machine.online ? "online" : "off"}
@@ -151,10 +152,6 @@
         <span class="ps-c-details-indent type-meta text-ink-muted"
           >{folderWords.builtinNote(folder.machine.name)}</span
         >
-      {:else if folder.role === "main"}
-        <span class="ps-c-details-indent type-meta text-ink-muted"
-          >{folderWords.mainNote}</span
-        >
       {/if}
     </div>
   {:else}
@@ -174,10 +171,6 @@
         <span
           class="mark-line flex items-center gap-space-2 ps-c-details-indent type-meta text-ink-strong"
           data-box><LiveDot /><span>{running}</span></span
-        >
-      {:else if folder.role === "main"}
-        <span class="ps-c-details-indent type-meta text-ink-muted"
-          >{folderWords.mainNote}</span
         >
       {/if}
     </button>

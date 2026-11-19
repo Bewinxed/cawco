@@ -57,7 +57,6 @@ export const folderWords = {
     extra: "Extra folder",
     builtin: "Built-in folder",
   } satisfies Record<FolderRole, string>,
-  mainNote: "Agents begin work here.",
   builtinNote: (host: string) =>
     `Kept on ${host}. Holds tasks and the files agents save.`,
   online: "online",

@@ -4,6 +4,10 @@
    * machine's kind, its name, and a meta line led by a presence dot. The row
    * element itself (a toggle button in the new-session picker, a plain item
    * in a rollout popover) belongs to the caller; this is what sits inside it.
+   *
+   * `line`: the name and the meta on one line, the meta after the name (a
+   * project's folder row, where the folder's own facts take the lines
+   * under it).
    */
   import type { Component, Snippet } from "svelte";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
@@ -16,6 +20,7 @@
     meta,
     presence,
     ink = false,
+    line = false,
     trailing,
   }: {
     icon: Component;
@@ -25,6 +30,8 @@
     presence: MachinePresence;
     /** Inverts the tile, for a chosen row. */
     ink?: boolean;
+    /** The name and the meta on one line. */
+    line?: boolean;
     trailing?: Snippet;
   } = $props();
 </script>
@@ -36,9 +43,14 @@
   style:color={ink ? undefined : hue}
   ><Icon class="size-icon-md flex-none" /></span
 >
-<span data-slot="text" class="min-w-0 flex-1">
-  <span data-slot="name" class="type-label block truncate text-ink-strong"
-    >{name}</span
+<span
+  data-slot="text"
+  class="min-w-0 flex-1 data-line:flex data-line:items-center data-line:gap-space-2"
+  data-line={line || undefined}
+>
+  <span
+    data-slot="name"
+    class="type-label block min-w-0 truncate text-ink-strong">{name}</span
   >
   <span
     data-slot="meta"
