@@ -198,9 +198,9 @@
       {#if linked}
         {@const service = SERVICE[linked.kind]}
         <!-- The connected service's facts, on the section's own edge under
-             the tiles, in two lines: where it updates (the codebase or
-             team, how many tasks are linked, the status board, and
-             Change…); then how it stands, with Refresh now. -->
+             the tiles: where it updates (the codebase or team and how many
+             tasks are linked, with Change… at the line's end); for GitHub,
+             the status board; then how it stands, with Refresh now. -->
         <div class="flex flex-col gap-space-1" data-facts={linked.kind}>
           <div class="flex flex-wrap items-center gap-x-space-2 gap-y-space-1">
             <span class="type-meta">
@@ -215,35 +215,11 @@
                 /></a
               >
             </span>
-            <span class="type-meta tabular-nums text-ink-muted">
+            <span
+              class="type-meta whitespace-nowrap tabular-nums text-ink-muted"
+            >
               · {taskWords.linked(linked.linked)}
             </span>
-            {#if linked.kind === "github"}
-              <!-- The board stays beside its name. -->
-              <span class="flex min-w-0 items-center gap-x-space-2 type-meta">
-                <span class="whitespace-nowrap text-ink-muted"
-                  >· {taskWords.board}</span
-                >
-                {#if linked.board && "url" in linked.board}
-                  <a
-                    class="mark-line inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
-                    href={linked.board.url}
-                    rel="noreferrer"
-                    target="_blank"
-                    ><span>{linked.board.name}</span><IconArrowUpRight
-                      aria-hidden="true"
-                      class="size-icon-sm flex-none"
-                    /></a
-                  >
-                {:else if linked.board}
-                  <span class="text-pretty text-ink-muted"
-                    >{linked.board.reason}</span
-                  >
-                {:else}
-                  <span class="text-ink-muted">{taskWords.noBoard}</span>
-                {/if}
-              </span>
-            {/if}
             <Button
               class="ms-auto"
               disabled={sunk}
@@ -252,6 +228,33 @@
               variant="ghost">{taskWords.change}</Button
             >
           </div>
+          {#if linked.kind === "github"}
+            <span
+              class="flex min-w-0 flex-wrap items-center gap-x-space-2 type-meta"
+            >
+              <span class="whitespace-nowrap text-ink-muted"
+                >{taskWords.board}</span
+              >
+              {#if linked.board && "url" in linked.board}
+                <a
+                  class="mark-line inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
+                  href={linked.board.url}
+                  rel="noreferrer"
+                  target="_blank"
+                  ><span>{linked.board.name}</span><IconArrowUpRight
+                    aria-hidden="true"
+                    class="size-icon-sm flex-none"
+                  /></a
+                >
+              {:else if linked.board}
+                <span class="text-pretty text-ink-muted"
+                  >{linked.board.reason}</span
+                >
+              {:else}
+                <span class="text-ink-muted">{taskWords.noBoard}</span>
+              {/if}
+            </span>
+          {/if}
           <div class="flex flex-wrap items-center gap-x-space-3 gap-y-space-1">
             <!-- mark-line: the glyph stands at the top of words that may wrap -->
             <span

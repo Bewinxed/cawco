@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { provideHub } from "#lib/cawco/hub-seam.js";
   /**
    * The project details card to use, as the project page holds it: the
    * project's head as it ships (ProjectHead), whose place mark hangs the
@@ -14,6 +13,8 @@
    * `again` starts it over at the person's press: the stand-in is made anew
    * from them, so the args set where it starts and the presses carry it on.
    */
+  import { untrack } from "svelte";
+  import { provideHub } from "#lib/cawco/hub-seam.js";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import { accountsState } from "#lib/cawco/stores/accounts.svelte.js";
@@ -71,13 +72,24 @@
   /** The stand-in hub, made anew whenever the args name another start. */
   let hub = $state.raw<DetailsStandIn | null>(null);
   $effect.pre(() => {
-    const made = new DetailsStandIn(situation, () => answer, FRAMES, again);
+    const start = { situation, again, open };
+    // The stand-in writes the stores as the hub's frames would: what it
+    // writes is no start of its own.
+    const made = untrack(() => {
+      const next = new DetailsStandIn(
+        start.situation,
+        () => answer,
+        FRAMES,
+        start.again
+      );
+      if (start.open) {
+        detailsOpen.open(PROJECT.id);
+      } else {
+        detailsOpen.close(PROJECT.id);
+      }
+      return next;
+    });
     hub = made;
-    if (open) {
-      detailsOpen.open(PROJECT.id);
-    } else {
-      detailsOpen.close(PROJECT.id);
-    }
     return () => made.dispose();
   });
   // What the card under this frame reads of the hub: the stand-in as it

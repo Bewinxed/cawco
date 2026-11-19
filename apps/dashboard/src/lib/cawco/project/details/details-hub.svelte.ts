@@ -234,9 +234,10 @@ export class DetailsHub {
     const homes = new Map(
       this.#src.machines().map((row) => [row.machineId, row.home])
     );
+    const hubHome = this.#src.machines().find((row) => row.hostsHub)?.home;
     return this.#project.places.map((place) => {
       const hub = place.kind === "hub";
-      const home = homes.get(place.machineId);
+      const home = hub ? hubHome : homes.get(place.machineId);
       let role: Folder["role"] = "extra";
       if (hub) {
         role = "builtin";
