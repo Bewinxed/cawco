@@ -926,34 +926,6 @@ const transcriptStore = (file: string): SessionStore => ({
   },
 });
 
-/** The folders directly inside `dir`; none when it does not exist. */
-const subdirectories = async (dir: string): Promise<string[]> => {
-  try {
-    return (await readdir(dir, { withFileTypes: true }))
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name);
-  } catch (error) {
-    if (isGone(error)) {
-      return [];
-    }
-    throw error;
-  }
-};
-
-/** The transcripts directly inside a project folder; none when it does not exist. */
-const jsonlNames = async (dir: string): Promise<string[]> => {
-  try {
-    return (await readdir(dir, { withFileTypes: true }))
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
-      .map((entry) => entry.name);
-  } catch (error) {
-    if (isGone(error)) {
-      return [];
-    }
-    throw error;
-  }
-};
-
 /**
  * The entrypoints a person starts Claude Code by: its terminal, its desktop
  * app (on Anthropic's API or another provider's) and its VS Code extension.
@@ -5766,22 +5738,17 @@ class ClaudeHarness implements Harness<"claude"> {
         .map(accountConfigDir)
         .filter((configDir) => configDir !== sdkDir),
     ];
-    const files: { file: string; sessionId: string }[] = [];
-    for (const configDir of configDirs) {
-      const projects = join(configDir, "projects");
+    const roots = configDirs.map((configDir) => join(configDir, "projects"));
+    for (const projects of roots) {
       // A transcript moving there is told to the hub, read as below
       // (catalog-index.ts).
       watchCatalogDir(projects, STORED_READER);
-      const projectDirs = slug ? [slug] : await subdirectories(projects);
-      for (const project of projectDirs) {
-        for (const name of await jsonlNames(join(projects, project))) {
-          files.push({
-            file: join(projects, project, name),
-            sessionId: name.slice(0, -".jsonl".length),
-          });
-        }
-      }
     }
+    // Found and stat'd on the stores thread, off the loop (stores/ops.ts).
+    const files = await storeWork("catalog.transcripts", {
+      only: slug,
+      roots,
+    });
     // Each transcript read again only when it moved (catalog-index.ts).
     const { infos } = await indexedListing(
       STORED_READER.harness,

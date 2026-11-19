@@ -5,6 +5,7 @@
  */
 
 import type { WindowAsk } from "@cawco/core/transcript-types";
+import { storedTranscripts } from "../catalog-index";
 import { readSaidWindow } from "../harnesses/claude-transcript";
 import { opencodeReads, type SessionQuery } from "./opencode-reads";
 import { usageHost } from "./usage-host";
@@ -31,6 +32,13 @@ const opsOf = {
    */
   "claude.saidWindow": (read: { ask: WindowAsk; path: string }) =>
     readSaidWindow(read.path, read.ask),
+  /**
+   * The transcripts in a harness's project folders, each with its mtime and
+   * size (catalog-index.ts `storedTranscripts`): listed and stat'd here, so
+   * the machine's listing costs the loop only the files that moved.
+   */
+  "catalog.transcripts": (read: { only: string | null; roots: string[] }) =>
+    storedTranscripts(read),
 } satisfies Record<string, (arg: never, tell: Tell) => Promise<unknown>>;
 
 type StoreOps = typeof opsOf;

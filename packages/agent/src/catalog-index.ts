@@ -14,9 +14,11 @@
  * a machine's catalog read the two ends of each of its thousands of
  * transcripts again.
  */
-import { type FSWatcher, watch } from "node:fs";
-import { stat } from "node:fs/promises";
+import { type Dirent, type FSWatcher, watch } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { isGone } from "@cawco/core/absent";
+import { detach } from "@cawco/core/detach";
 import { catalogIndexPath } from "@cawco/core/paths/cawco";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -51,12 +53,10 @@ const IndexShape = z.record(
 const LISTING_READS = 8;
 
 /**
- * How many transcripts a listing stats at once. A stat holds nothing past
- * its answer, so the reads' memory bound is not its: at
- * {@link LISTING_READS}, obelisk's 4,083 transcripts took about 510 rounds
- * of the agent's loop to stat (2026-11-19), each round behind whatever else
- * the loop had queued (a restart's transcript reads), and the listing ran
- * past its 10 s. Ours.
+ * How many transcripts {@link storedTranscripts} stats at once, on the
+ * stores thread. A stat holds nothing past its answer, so the reads' memory
+ * bound ({@link LISTING_READS}) is not its: at that width, obelisk's 4,083
+ * transcripts took about 510 rounds to stat (2026-11-19). Ours.
  */
 const LISTING_STATS = 64;
 
@@ -134,43 +134,107 @@ export interface IndexedListing {
   read: number;
 }
 
+/** A transcript as {@link storedTranscripts} found it: its file, its session, and its mtime and size then. */
+export interface StoredTranscript {
+  file: string;
+  mtimeMs: number;
+  sessionId: string;
+  size: number;
+}
+
+/** The names of the entries directly inside `dir` that `keep` keeps; none when it does not exist. */
+const entriesOf = async (
+  dir: string,
+  keep: (entry: Dirent) => boolean
+): Promise<string[]> => {
+  try {
+    return (await readdir(dir, { withFileTypes: true }))
+      .filter(keep)
+      .map((entry) => entry.name);
+  } catch (error) {
+    if (isGone(error)) {
+      return [];
+    }
+    throw error;
+  }
+};
+
 /**
- * The sessions in `files` (each a transcript `file` of one `harness`), each
- * read by `read` only when the index has no reading of it at its current
- * mtime and size. A file no longer there leaves the index with this
- * listing; the files of another harness keep their place in it.
+ * Every transcript in `roots` (each a harness's folder of per-project
+ * transcript folders, a transcript `<session>.jsonl` one folder down), or
+ * only in each root's folder `only`, with its mtime and size. Run on the
+ * stores thread (stores/ops.ts `catalog.transcripts`): the agent's own
+ * profile of a start on obelisk (2026-11-19) had this walk on the loop, its
+ * listing of every project folder 3.1 s of the loop's own time and the
+ * listing 8.9 s in all.
  */
-export async function indexedListing<T extends { file: string }>(
-  harness: string,
-  files: readonly T[],
-  read: (item: T) => Promise<NeutralSessionInfo | undefined>
-): Promise<IndexedListing> {
-  const index = await loadIndex();
+export async function storedTranscripts(read: {
+  only: string | null;
+  roots: readonly string[];
+}): Promise<StoredTranscript[]> {
+  const found: { file: string; sessionId: string }[] = [];
+  for (const root of read.roots) {
+    const folders = read.only
+      ? [read.only]
+      : await entriesOf(root, (entry) => entry.isDirectory());
+    const named = await listingRead(
+      folders,
+      (folder) =>
+        entriesOf(
+          join(root, folder),
+          (entry) => entry.isFile() && entry.name.endsWith(".jsonl")
+        ).then((names) => names.map((name) => join(root, folder, name))),
+      LISTING_STATS
+    );
+    for (const file of named.flat()) {
+      found.push({ file, sessionId: basename(file, ".jsonl") });
+    }
+  }
   const stats = await listingRead(
-    files,
-    (item) =>
-      stat(item.file).then(
+    found,
+    ({ file }) =>
+      stat(file).then(
         (one) => ({ mtimeMs: one.mtimeMs, size: one.size }),
         () => null
       ),
     LISTING_STATS
   );
-  const stale: { item: T; mtimeMs: number; size: number }[] = [];
-  const listed = new Set<string>();
-  for (const [at, item] of files.entries()) {
+  return found.flatMap((one, at) => {
     const now = stats[at];
-    if (!now) {
-      continue;
-    }
+    return now ? [{ ...one, ...now }] : [];
+  });
+}
+
+/**
+ * The sessions in `files` (each a transcript of one `harness`, as
+ * {@link storedTranscripts} found it), each read by `read` only when the
+ * index has no reading of it at its mtime and size. A file no longer there
+ * leaves the index with this listing; the files of another harness keep
+ * their place in it.
+ */
+export async function indexedListing(
+  harness: string,
+  files: readonly StoredTranscript[],
+  read: (item: StoredTranscript) => Promise<NeutralSessionInfo | undefined>
+): Promise<IndexedListing> {
+  const index = await loadIndex();
+  const stale: StoredTranscript[] = [];
+  const listed = new Set<string>();
+  for (const item of files) {
     listed.add(item.file);
     const kept = index.get(item.file);
-    if (!(kept && kept.mtimeMs === now.mtimeMs && kept.size === now.size)) {
-      stale.push({ item, ...now });
+    if (!(kept && kept.mtimeMs === item.mtimeMs && kept.size === item.size)) {
+      stale.push(item);
     }
   }
-  const fresh = await listingRead(stale, async ({ item, mtimeMs, size }) => ({
+  const fresh = await listingRead(stale, async (item) => ({
     file: item.file,
-    entry: { harness, info: (await read(item)) ?? null, mtimeMs, size },
+    entry: {
+      harness,
+      info: (await read(item)) ?? null,
+      mtimeMs: item.mtimeMs,
+      size: item.size,
+    },
   }));
   let moved = fresh.length > 0;
   for (const { file, entry } of fresh) {
@@ -217,8 +281,14 @@ export interface MovedTranscript {
   sessionId: string;
 }
 
+/** A watched harness folder: its own watch, and on Linux one per project folder in it ({@link WATCH_PER_FOLDER}), by name. */
+interface WatchedDir {
+  folders: Map<string, FSWatcher>;
+  root: FSWatcher;
+}
+
 /** The folders watched for transcripts moving, by path. */
-const watched = new Map<string, FSWatcher>();
+const watched = new Map<string, WatchedDir>();
 /** Who hears of a transcript moving: the session supervisor's report to the hub. */
 const listeners = new Set<(moved: MovedTranscript) => void>();
 
@@ -231,40 +301,160 @@ export function onCatalogMoved(
 }
 
 /**
+ * Whether a harness folder is watched one project folder at a time rather
+ * than by one recursive watch. On Linux, Bun's recursive watch walks the
+ * whole tree on the loop as it starts and adds an inotify watch per folder
+ * (oven-sh/bun `path_watcher.zig` `walk_and_add`, no thread): every
+ * session's own folders and their `subagents` and `tool-results`, none of
+ * which holds a transcript the listing reads. It was 5,355 ms of the loop at
+ * obelisk's start (the agent's profile, 2026-11-19). A watch of one folder
+ * is one `inotify_add_watch` (about 18 µs, measured). On macOS a watch is a
+ * path in the process's one FSEventStream, recursive by nature with no
+ * walk, and the stream is built anew on each watch added or closed
+ * (transcript-tail.ts): there the one recursive watch stays.
+ */
+const WATCH_PER_FOLDER = process.platform === "linux";
+
+/** How many project folders are watched before the loop takes its next turn. Ours. */
+const FOLDER_WATCHES_AT_ONCE = 64;
+
+/** A transcript at `name` (from `dir`) moved: told to every listener when it is one. */
+const told = (dir: string, name: string, reader: FolderReader): void => {
+  const sessionId = TRANSCRIPT_NAME.exec(name)?.[1];
+  if (!sessionId) {
+    return;
+  }
+  const moved = { file: join(dir, name), reader, sessionId };
+  for (const listener of listeners) {
+    listener(moved);
+  }
+};
+
+/** Watches project folder `folder` of `dir` for its transcripts moving; false when it is already watched or cannot be. */
+const watchFolder = (
+  dir: string,
+  folder: string,
+  reader: FolderReader,
+  folders: Map<string, FSWatcher>
+): boolean => {
+  if (folders.has(folder)) {
+    return false;
+  }
+  let one: FSWatcher;
+  try {
+    one = watch(join(dir, folder), (_event, name) => {
+      if (name) {
+        told(dir, `${folder}/${name}`, reader);
+      }
+    });
+  } catch {
+    // Gone since it was named: the root's watch hears it again if it comes back.
+    return false;
+  }
+  one.on("error", () => {
+    one.close();
+    folders.delete(folder);
+  });
+  one.unref();
+  folders.set(folder, one);
+  return true;
+};
+
+/**
+ * Project folder `folder` of `dir` was made, renamed or removed: watched
+ * when it is there, with each transcript it already holds told, since they
+ * were written before its watch began; its watch closed when it is gone.
+ */
+const folderMoved = async (
+  dir: string,
+  folder: string,
+  reader: FolderReader,
+  folders: Map<string, FSWatcher>
+): Promise<void> => {
+  const path = join(dir, folder);
+  const isFolder = await stat(path).then(
+    (one) => one.isDirectory(),
+    () => false
+  );
+  if (!isFolder) {
+    folders.get(folder)?.close();
+    folders.delete(folder);
+    return;
+  }
+  if (!watchFolder(dir, folder, reader, folders)) {
+    return;
+  }
+  const names = await entriesOf(
+    path,
+    (entry) => entry.isFile() && entry.name.endsWith(".jsonl")
+  );
+  for (const name of names) {
+    told(dir, `${folder}/${name}`, reader);
+  }
+};
+
+/** Watches every project folder of `dir`, {@link FOLDER_WATCHES_AT_ONCE} before each turn of the loop. */
+const watchFolders = async (
+  dir: string,
+  reader: FolderReader,
+  folders: Map<string, FSWatcher>
+): Promise<void> => {
+  const names = await entriesOf(dir, (entry) => entry.isDirectory());
+  for (let at = 0; at < names.length; at += FOLDER_WATCHES_AT_ONCE) {
+    for (const folder of names.slice(at, at + FOLDER_WATCHES_AT_ONCE)) {
+      watchFolder(dir, folder, reader, folders);
+    }
+    await new Promise((turn) => setImmediate(turn));
+  }
+};
+
+/**
  * Watches `dir` (a harness's folder of per-project transcript folders) for
  * a transcript written, added or removed, once per folder for the agent's
  * life: so a session run outside CawCo is told to the hub as it moves,
  * never found only by the next full ask. A folder not there yet is watched
  * by a later listing that finds it. `reader` reads a moved transcript as
- * the listing does ({@link readMoved}).
+ * the listing does ({@link readMoved}). On Linux the root's own watch hears
+ * project folders come and go, and each project folder has a watch of its
+ * own ({@link WATCH_PER_FOLDER}).
  */
 export function watchCatalogDir(dir: string, reader: FolderReader): void {
   if (watched.has(dir)) {
     return;
   }
-  let watcher: FSWatcher;
+  const folders = new Map<string, FSWatcher>();
+  let root: FSWatcher;
   try {
-    watcher = watch(dir, { recursive: true }, (_event, name) => {
-      const sessionId = name ? TRANSCRIPT_NAME.exec(name)?.[1] : undefined;
-      if (!(name && sessionId)) {
+    root = watch(dir, { recursive: !WATCH_PER_FOLDER }, (_event, name) => {
+      if (!name) {
         return;
       }
-      const moved = { file: join(dir, name), reader, sessionId };
-      for (const listener of listeners) {
-        listener(moved);
+      if (WATCH_PER_FOLDER) {
+        detach(
+          folderMoved(dir, name, reader, folders),
+          "watch a moved project folder"
+        );
+        return;
       }
+      told(dir, name, reader);
     });
   } catch {
     // Not there yet: a later listing that finds it watches it.
     return;
   }
-  watcher.on("error", (error) => {
+  root.on("error", (error) => {
     console.warn(`[catalog] stopped watching ${basename(dir)}: ${error}`);
-    watcher.close();
+    root.close();
+    for (const one of folders.values()) {
+      one.close();
+    }
     watched.delete(dir);
   });
-  watcher.unref();
-  watched.set(dir, watcher);
+  root.unref();
+  watched.set(dir, { folders, root });
+  if (WATCH_PER_FOLDER) {
+    detach(watchFolders(dir, reader, folders), "watch the project folders");
+  }
 }
 
 /** What moved transcripts read as: the sessions to list as they stand now, and the ones to list no more. */
