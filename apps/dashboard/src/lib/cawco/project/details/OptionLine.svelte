@@ -73,9 +73,16 @@
   <span class="flex w-full min-w-0 flex-col gap-space-1 text-start">
     <span class="flex min-w-0 items-start gap-space-2">
       {@render lead()}
-      {@render title()}
+      <span class="min-w-0 flex-1 type-label text-pretty text-ink-strong"
+        >{name}</span
+      >
       {@render wait()}
     </span>
+    {#if note}
+      <span class="type-meta text-status-attn-ink">{note}</span>
+    {:else if tag}
+      <span class="type-meta font-medium text-ink-strong">{tag}</span>
+    {/if}
     {#if line}
       <span class="type-meta text-pretty text-ink-muted">{line}</span>
     {/if}
