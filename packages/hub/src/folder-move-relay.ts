@@ -10,7 +10,7 @@
  * side ending early ends the other's request too, and the job's own end
  * closes both. Off the control link: no heartbeat waits behind a folder.
  */
-import { problem } from "elysia";
+import { bytes, problem } from "elysia";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 /** How long one side waits for the other to arrive. */
@@ -95,11 +95,8 @@ export const createFolderMoveRelay = (lifetime: HubLifetimeShape) => {
     }
   };
 
-  /** The destination's machine takes the stream, as the put sends it. */
-  const take = async (
-    token: string,
-    set: { headers: Record<string, string | number | string[]> }
-  ) => {
+  /** The destination's machine takes the stream, as the put sends it (`application/octet-stream`, Elysia's `bytes`). */
+  const take = async (token: string) => {
     const pipe = pipes.get(token);
     if (!pipe) {
       return gone();
@@ -110,9 +107,7 @@ export const createFolderMoveRelay = (lifetime: HubLifetimeShape) => {
       );
     });
     try {
-      const body = await Promise.race([pipe.body, stopped]);
-      set.headers["content-type"] = "application/octet-stream";
-      return body;
+      return bytes(await Promise.race([pipe.body, stopped]));
     } catch (error) {
       return problem(410, {
         code: "folder-move-relay-ended",

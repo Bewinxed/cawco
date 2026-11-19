@@ -5,6 +5,7 @@
  */
 
 import { Elysia, t } from "elysia";
+import { byteRoutes } from "../byte-routes";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 
@@ -18,6 +19,7 @@ export const folderMoveRoutes = ({
   folderMoves,
 }: Pick<HubContext, "folderMoves">) =>
   new Elysia()
+    .use(byteRoutes)
     // What moving the folder would do, before anything runs.
     .get(
       "/api/projects/:id/places/:placeId/move-preview",
@@ -54,12 +56,22 @@ export const folderMoveRoutes = ({
       folderMoves.interrupt(params.instanceId)
     )
     // The bytes between two machines, each side a machine's agent; the
-    // stream is read by the take as it is put, and kept nowhere.
+    // stream is read by the take as it is put, and kept nowhere. Each side
+    // may wait for the other, or for a slow disk, longer than the server's
+    // idle timer, so neither request is timed out.
     .put(
       "/api/folder-moves/relay/:token",
-      { parse: "none", ...hidden },
-      ({ params, request }) => folderMoves.relayPut(params.token, request)
+      { parse: "none", bytesIn: true, ...hidden },
+      ({ params, request, server }) => {
+        server?.timeout(request, 0);
+        return folderMoves.relayPut(params.token, request);
+      }
     )
-    .get("/api/folder-moves/relay/:token", { ...hidden }, ({ params, set }) =>
-      folderMoves.relayTake(params.token, set)
+    .get(
+      "/api/folder-moves/relay/:token",
+      { bytesOut: true, ...hidden },
+      ({ params, request, server }) => {
+        server?.timeout(request, 0);
+        return folderMoves.relayTake(params.token);
+      }
     );

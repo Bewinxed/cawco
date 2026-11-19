@@ -16,11 +16,27 @@
  * default (the nightly from 886030601, refused as anonymous). Dates stay the
  * strings the hub sent (`parseDate: false`): Eden would otherwise make every
  * ISO string a `Date` its route doesn't type.
+ *
+ * A route marked as a byte route (hub byte-routes.ts) gains two calls of
+ * this client's own, through Eden's plugin API
+ * (next.elysiajs.com/eden/treaty/plugin): `putBytes(stream)` on a `bytesIn`
+ * PUT and `getBytes()` on a `bytesOut` GET, a stream sent and read as it
+ * goes. Eden's own verbs send a stream as the JSON text `{}` and read an
+ * `application/octet-stream` answer whole (elysiajs/eden#35); these keep the
+ * route's address, parameters and refusals typed from the hub's route and
+ * go through the same `send`, `headers` and `onRequest` as every call.
  */
 
 import { problemWords } from "@cawco/core/hub-refusal";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
-import { type Treaty, treaty } from "@elysia/eden";
+import {
+  EdenFetchError,
+  type PluginTypeFn,
+  type PluginVerbContext,
+  type Treaty,
+  type TreatyPlugin,
+  treaty,
+} from "@elysia/eden";
 import type { HubApp } from "./app";
 
 /** What sends a hub request: `fetch` itself, or one that carries the caller's credential or deadline. */
@@ -38,8 +54,183 @@ const fetcherOf = (send: HubSender): typeof fetch =>
       send(String(input), init ?? {}),
   });
 
+/** No headers bound on the client's type: each caller adds its own at run time ({@link HubConfig}). */
+type NoHead = Record<string, never>;
+
+/** No call a route gains: the type fn's answer for a route that is no byte route. */
+type NoCalls = Record<never, never>;
+
+/** The calls a byte route gains (hub byte-routes.ts): on a `bytesIn` PUT, `putBytes`; on a `bytesOut` GET, `getBytes`. */
+export interface ByteCallsFn extends PluginTypeFn {
+  output: (this["node"] extends {
+    put: {
+      meta: { bytesIn: true };
+      response: infer Res extends Record<number, unknown>;
+    };
+  }
+    ? {
+        /** `body` sent as it is read, answered as the route answers. */
+        putBytes: (
+          body: ReadableStream<Uint8Array>,
+          options?: { signal?: AbortSignal }
+        ) => Promise<Treaty.TreatyResponse<Res>>;
+      }
+    : NoCalls) &
+    (this["node"] extends {
+      get: {
+        meta: { bytesOut: true };
+        response: infer Res extends Record<number, unknown>;
+      };
+    }
+      ? {
+          /** The answer's bytes as a stream, unread; a refusal as the route answers it. */
+          getBytes: (options?: {
+            signal?: AbortSignal;
+          }) => Promise<Treaty.TreatyResponse<Res>>;
+        }
+      : NoCalls);
+}
+
+/** The names of the calls {@link ByteCallsFn} adds, for a reader of the client's chains (hub scripts/agent-calls.ts). */
+export const BYTE_CALLS = ["putBytes", "getBytes"] as const;
+
 /** Eden's client of the hub. */
-export type HubClient = Treaty.Create<HubApp>;
+export type HubClient = Treaty.Create<HubApp, NoHead, [ByteCallsFn]>;
+
+/**
+ * A config's or a call's headers as Eden reads them, lower-cased: an object,
+ * `Headers`, a name and value pair, a function of the path and the request
+ * so far that answers any of these, or a list of them.
+ */
+const headersOf = async (
+  given: unknown,
+  path: string,
+  init: RequestInit
+): Promise<Record<string, string>> => {
+  const out: Record<string, string> = {};
+  const pending: unknown[] = [given];
+  while (pending.length > 0) {
+    const one = pending.shift();
+    if (typeof one === "function") {
+      pending.unshift(await one(path, init));
+    } else if (one instanceof Headers) {
+      one.forEach((value, name) => {
+        out[name.toLowerCase()] = value;
+      });
+    } else if (Array.isArray(one)) {
+      if (typeof one[0] === "string") {
+        out[one[0].toLowerCase()] = String(one[1]);
+      } else {
+        pending.unshift(...one);
+      }
+    } else if (one && typeof one === "object") {
+      for (const [name, value] of Object.entries(one)) {
+        out[name.toLowerCase()] = String(value);
+      }
+    }
+  }
+  return out;
+};
+
+/** An answer's body as Eden reads a refusal's: its JSON, else its text. */
+const bodyOf = async (response: Response): Promise<unknown> => {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
+/** The byte calls, sent through `send` with the client's `headers` and `onRequest`, answered in Eden's shape. */
+const byteCalls = (
+  send: HubSender,
+  config: HubConfig
+): TreatyPlugin<ByteCallsFn> => {
+  const ask = async (
+    context: PluginVerbContext,
+    asked: RequestInit,
+    read: (response: Response) => unknown
+  ) => {
+    const path = `/${context.paths.map(encodeURIComponent).join("/")}`;
+    let named = {
+      ...(await headersOf(config.headers, path, asked)),
+      ...(await headersOf(asked.headers, path, asked)),
+    };
+    let init: RequestInit = { ...asked, headers: named };
+    for (const hook of [config.onRequest ?? []].flat()) {
+      const more = await hook(path, init);
+      if (more) {
+        named = {
+          ...named,
+          ...(await headersOf(more.headers, path, init)),
+        };
+        init = { ...init, ...more, headers: named };
+      }
+    }
+    let response: Response;
+    try {
+      response = await send(`${context.domain}${path}`, init);
+    } catch (error) {
+      return {
+        data: null,
+        error: new EdenFetchError(503, error),
+        response: undefined,
+        status: 503,
+        headers: undefined,
+      };
+    }
+    const { status, headers } = response;
+    if (status < 200 || status >= 300) {
+      return {
+        data: null,
+        error: new EdenFetchError(status, await bodyOf(response)),
+        response,
+        status,
+        headers,
+      };
+    }
+    return {
+      data: await read(response),
+      error: null,
+      response,
+      status,
+      headers,
+    };
+  };
+  return {
+    name: "byte-calls",
+    verbs: {
+      putBytes: (
+        context: PluginVerbContext,
+        body: ReadableStream<Uint8Array>,
+        options?: { signal?: AbortSignal }
+      ) => {
+        // A stream as a request's body is sent as it is read (fetch's half duplex).
+        const put: RequestInit & { duplex: "half" } = {
+          method: "PUT",
+          body,
+          duplex: "half",
+          headers: { "content-type": "application/octet-stream" },
+          ...(options?.signal ? { signal: options.signal } : {}),
+        };
+        return ask(context, put, bodyOf);
+      },
+      getBytes: (
+        context: PluginVerbContext,
+        options?: { signal?: AbortSignal }
+      ) =>
+        ask(
+          context,
+          {
+            method: "GET",
+            ...(options?.signal ? { signal: options.signal } : {}),
+          },
+          (response) => response.body
+        ),
+    },
+  };
+};
 
 /**
  * What a caller adds to every request of its client: fixed `headers`, or an
@@ -65,7 +256,7 @@ export const hubClient = (
     keepDomain: true,
     parseDate: false,
     fetcher: fetcherOf(send),
-  });
+  }).use(byteCalls(send, config));
 
 /** What the hub refused a request with. */
 export interface HubRefusal {
