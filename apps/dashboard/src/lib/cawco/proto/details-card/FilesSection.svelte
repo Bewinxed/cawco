@@ -100,7 +100,7 @@
         />
       {/each}
     </div>
-    <div class="flex flex-wrap gap-space-2 ps-space-3">
+    <div class="flex flex-wrap gap-x-space-1 gap-y-space-2">
       <Button
         disabled={sunk}
         icon={IconLink}
