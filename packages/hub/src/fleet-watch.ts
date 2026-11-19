@@ -259,6 +259,7 @@ export interface FleetWatchDeps {
     | "putWatchNotice"
     | "watchNotices"
     | "workItem"
+    | "workItemTexts"
   >;
   /** Ends a session (a triage run that decided, or ran out of time). */
   end: (instanceId: string) => void;
@@ -604,7 +605,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
     if (item) {
       const task = item.taskId ? `Task ${item.taskId}: ` : "";
-      return `${task}${item.title}\n\n${clip(item.brief, BRIEF_LIMIT)}`;
+      return `${task}${item.title}\n\n${clip(db.workItemTexts(item.id).brief, BRIEF_LIMIT)}`;
     }
     return `A session ${row.parentInstanceId ? "another session started" : "the person started"}, titled “${deps.name(row)}”; no task or brief.`;
   };

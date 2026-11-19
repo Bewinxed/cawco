@@ -18,8 +18,10 @@ import {
   instances,
   limitEvents,
   type PriorConversation,
+  sentMessageBodies,
   sentMessages,
 } from "./schema";
+import { writeBody } from "./sends";
 import type { Tx } from "./tx";
 
 /** What folding a session's former rows into it did, for the hub's log. */
@@ -194,8 +196,12 @@ export const foldDb = (core: DbCore): FoldDb => {
     // line before it rather than read as a hand-off.
     for (const member of members) {
       const [first] = tx
-        .select({ uuid: sentMessages.uuid, body: sentMessages.body })
+        .select({ uuid: sentMessages.uuid, body: sentMessageBodies.body })
         .from(sentMessages)
+        .innerJoin(
+          sentMessageBodies,
+          eq(sentMessageBodies.uuid, sentMessages.uuid)
+        )
         .where(eq(sentMessages.instanceId, member.id))
         .orderBy(asc(sentMessages.acceptedAt))
         .limit(1)
@@ -208,15 +214,10 @@ export const foldDb = (core: DbCore): FoldDb => {
         origin.fromSession &&
         ids.includes(origin.fromSession)
       ) {
-        tx.update(sentMessages)
-          .set({
-            body: {
-              ...first.body,
-              origin: { kind: "system", name: CONTINUATION_ORIGIN },
-            },
-          })
-          .where(eq(sentMessages.uuid, first.uuid))
-          .run();
+        writeBody(tx, first.uuid, {
+          ...first.body,
+          origin: { kind: "system", name: CONTINUATION_ORIGIN },
+        });
       }
     }
     walkOwned(

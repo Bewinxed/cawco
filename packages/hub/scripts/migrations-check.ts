@@ -219,7 +219,7 @@ const storedMarkers = (
       },
       [string]
     >(
-      "SELECT uuid, instance_id AS instance, json_extract(body, '$.message') AS message, json_extract(body, '$.origin.kind') = 'system' AND json_extract(body, '$.origin.name') IS ?1 AS artifact FROM sent_messages WHERE instr(body, '[cawco:') > 0 OR (json_extract(body, '$.origin.kind') = 'system' AND json_extract(body, '$.origin.name') IS ?1)"
+      "SELECT uuid, instance_id AS instance, json_extract(body, '$.message') AS message, json_extract(body, '$.origin.kind') = 'system' AND json_extract(body, '$.origin.name') IS ?1 AS artifact FROM sent_messages JOIN sent_message_bodies USING (uuid) WHERE instr(body, '[cawco:') > 0 OR (json_extract(body, '$.origin.kind') = 'system' AND json_extract(body, '$.origin.name') IS ?1)"
     )
     .all(ARTIFACT_ORIGIN);
   const lines = sqlite

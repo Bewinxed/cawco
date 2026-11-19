@@ -330,6 +330,7 @@ export interface RoutineDeps {
     | "routines"
     | "trim"
     | "workItem"
+    | "workItemTexts"
   >;
   /** What a run's session handed `holderId` that it has not opened (artifacts/service.ts `handedUnopened`): its report lists them. */
   readonly handedUnopened: Artifacts["handedUnopened"];
@@ -1398,7 +1399,7 @@ export const createRoutines = ({
                   lead ? handedUnopened(lead, item.instanceId) : []
                 ),
                 session: sessionLink(item.instanceId, item.title),
-                summary: item.summary,
+                summary: db.workItemTexts(item.id).summary,
               }
             : undefined;
         },

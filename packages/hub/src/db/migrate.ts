@@ -465,7 +465,7 @@ const stopOn = (path: string, why: string): never => {
  * The first table or column the schema declares (`./schema`, its module
  * given) that the database on `client` does not have, as `table` or
  * `table.column`. Read with `table_xinfo`, which lists a generated column
- * (`sent_messages.origin_kind`) as `table_info` does not.
+ * as `table_info` does not.
  */
 const missingDeclared = (
   client: Database,
@@ -620,6 +620,9 @@ const applyPending = (
   });
   const tags = pending.map((entry) => entry.tag);
   let missing: string | undefined;
+  // How long they held the start, said with them: a migration that rewrites
+  // a large table holds the hub's start for its length.
+  const began = performance.now();
   try {
     db.transaction(
       (tx) => {
@@ -660,7 +663,7 @@ const applyPending = (
     );
   }
   console.info(
-    `[migrations] applied ${tags.length <= 5 ? tags.join(", ") : `${tags.length} migrations, ${tags[0]} to ${tags.at(-1)}`}`
+    `[migrations] applied ${tags.length <= 5 ? tags.join(", ") : `${tags.length} migrations, ${tags[0]} to ${tags.at(-1)}`} in ${((performance.now() - began) / 1000).toFixed(1)} s`
   );
   for (const line of behind) {
     console.info(

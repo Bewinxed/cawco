@@ -179,6 +179,7 @@ export interface DelegationTreeDeps {
     | "projectAttempts"
     | "sendsIn"
     | "workItemsOfParents"
+    | "workItemTexts"
   >;
   /** Every held workspace on the fleet (work-items `heldWorkspaces`). */
   held: () => HeldWork[];
@@ -429,7 +430,9 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     // A finished item's headline is its report at a glance; else its
     // report's first line, or why it failed.
     const report =
-      item.headline ?? firstLine(item.result) ?? firstLine(item.error);
+      item.headline ??
+      firstLine(deps.db.workItemTexts(item.id).result) ??
+      firstLine(item.error);
     const landingWait = deps.landingWait(item.id);
     const plan = await deps.plan(item.instanceId).then(
       (progress) => (progress && "done" in progress ? progress : undefined),

@@ -56,11 +56,13 @@ import {
   instanceMayStart,
   instanceStartingSet,
   instances,
+  instanceTooling,
   limitEvents,
   lineAnchors,
   type PriorConversation,
   queuedTaskStarts,
   queuedWorkItems,
+  sentMessageBodies,
   sentMessages,
   workItems,
 } from "./schema";
@@ -141,17 +143,13 @@ const sessionLists = {
 };
 
 /**
- * A session's row as the hub's readers take it: no hub-private column, and
- * no `tooling` or `commands`. `tooling` is the session's MCP servers and
- * tools, 17 KB of JSON a row on average and 36 KB at most (2026-10-09),
- * parsed on every read and read by one route alone
- * ({@link DbShape.instanceTooling}); `commands`, its `/` menu, is read only
- * as its transcript is built ({@link DbShape.instanceCommands}).
+ * A session's row as the hub's readers take it: no hub-private column. What
+ * its harness reported it has is not in it (schema.ts `instanceTooling`),
+ * read by key alone ({@link DbShape.instanceTooling},
+ * {@link DbShape.instanceCommands}).
  */
 export type PublicInstanceRow = Omit<
   StoredInstanceRow,
-  | "tooling"
-  | "commands"
   | "endIntent"
   | "endConfirmedAt"
   | "endReason"
@@ -176,8 +174,8 @@ export type BoardInstanceRow = PublicInstanceRow & {
   workspaceId: string | null;
 };
 
-/** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
-type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling" | "commands">;
+/** A session's whole row ({@link PublicInstanceRow}'s hub-private columns too). */
+type OwnedInstanceRow = StoredInstanceRow;
 
 /**
  * A session the returning daemon no longer carries. `resumes` is the whole
@@ -223,6 +221,30 @@ export const listedAt = (
   row.status === "running" ||
   (row.status === "sleeping" && sleepKeeps(row)) ||
   row.updatedAt.getTime() > now - STALE_AFTER_MS;
+
+/**
+ * What a session's harness reported it has (`tooling`, `commands`), kept
+ * beside its row (schema.ts `instanceTooling`): each kept until an `init`
+ * carries it again.
+ */
+const keepReported = (
+  tx: Tx,
+  id: string,
+  tooling: SessionTooling | undefined,
+  commands: SessionCommands | undefined
+): void => {
+  const reported = {
+    ...(tooling ? { tooling } : {}),
+    ...(commands ? { commands } : {}),
+  };
+  if (Object.keys(reported).length === 0) {
+    return;
+  }
+  tx.insert(instanceTooling)
+    .values({ instanceId: id, ...reported })
+    .onConflictDoUpdate({ target: instanceTooling.instanceId, set: reported })
+    .run();
+};
 
 /** What a continuation's new session took on from the session it continues ({@link DbShape.adoptChildren}). */
 interface AdoptedChildren {
@@ -274,8 +296,6 @@ const {
   owedAt: _owedAt,
   freshStartAt: _freshStartAt,
   turnOpenAt: _turnOpenAt,
-  tooling: _tooling,
-  commands: _commands,
   ...publicColumns
 } = wholeColumns;
 
@@ -297,11 +317,7 @@ const boardColumns = {
   >`(SELECT ${workItems.workspaceId} FROM ${workItems} WHERE ${workItems.id} = ${instances.workItemId})`,
 };
 
-const {
-  tooling: _ownTooling,
-  commands: _ownCommands,
-  ...ownedColumns
-} = wholeColumns;
+const ownedColumns = wholeColumns;
 
 /** A row its machine still holds: not removed, not discarded, not being ended (a stop keeps it). */
 const keptInstances = () =>
@@ -630,7 +646,7 @@ export interface InstancesDb {
    * first (`line_anchors`).
    */
   readonly lineAnchorsOf: (instanceId: string) => Map<string, string[]>;
-  /** Board rows never fetch/decode the per-session tooling document. */
+  /** Every listed row, as the board lays it. */
   readonly listBoardInstances: () => BoardInstanceRow[];
   /** {@link listBoardInstances}, of these ids only. */
   readonly listedBoardInstancesByIds: (ids: string[]) => BoardInstanceRow[];
@@ -1272,15 +1288,16 @@ export const instancesDb = (core: DbCore): InstancesDb => {
     },
     instanceCommands: (id) =>
       db
-        .select({ commands: instances.commands })
-        .from(instances)
-        .where(eq(instances.id, id))
+        .select({ commands: instanceTooling.commands })
+        .from(instanceTooling)
+        .where(eq(instanceTooling.instanceId, id))
         .get()?.commands,
     instanceTooling: (id) =>
       db
-        .select({ tooling: instances.tooling })
-        .from(instances)
-        .where(and(eq(instances.id, id), keptInstances()))
+        .select({ tooling: instanceTooling.tooling })
+        .from(instanceTooling)
+        .innerJoin(instances, eq(instances.id, instanceTooling.instanceId))
+        .where(and(eq(instanceTooling.instanceId, id), keptInstances()))
         .get()?.tooling,
     ownedInstance: (id, machineId) =>
       db
@@ -1421,34 +1438,38 @@ export const instancesDb = (core: DbCore): InstancesDb => {
           )
         )
         .all(),
-    // Found by ids first, each kind by what reads it cheapest, then read
-    // whole by id: `status` lies past the row's `tooling` (kilobytes a row),
-    // so one scan that tested it read every row's overflow, 54 ms on the live
-    // database at every heartbeat; ends and removals are tested on the
-    // columns before it (13 ms), and running sessions by their index.
+    // Found by ids first, each kind by its own index (migration 0448:
+    // `instances_ends_owed`, `instances_removed`, `instances_machine_status`),
+    // so a heartbeat reads the rows it reconciles and no other of its
+    // machine's, then read whole by id.
     ownedToReconcile: (machineId, named) => {
       const ids = new Set<string>(named);
+      // An end still owed, or a transcript's delete still to finish.
       for (const { id } of db
         .select({ id: instances.id })
         .from(instances)
         .where(
           and(
             eq(instances.machineId, machineId),
+            isNotNull(instances.endIntent),
             or(
-              // An end still owed, or a transcript's delete still to finish.
-              and(
-                isNotNull(instances.endIntent),
-                or(
-                  isNull(instances.endConfirmedAt),
-                  eq(instances.endIntent, "delete-transcript")
-                )
-              ),
-              // A removed opencode session, which the reconcile recovers.
-              and(
-                eq(instances.machineRemoved, true),
-                inArray(instances.harness, SERVER_HARNESSES)
-              )
+              isNull(instances.endConfirmedAt),
+              eq(instances.endIntent, "delete-transcript")
             )
+          )
+        )
+        .all()) {
+        ids.add(id);
+      }
+      // A removed opencode session, which the reconcile recovers.
+      for (const { id } of db
+        .select({ id: instances.id })
+        .from(instances)
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            eq(instances.machineRemoved, true),
+            inArray(instances.harness, SERVER_HARNESSES)
           )
         )
         .all()) {
@@ -2217,8 +2238,12 @@ export const instancesDb = (core: DbCore): InstancesDb => {
           return [];
         }
         const [first] = db
-          .select({ body: sentMessages.body })
+          .select({ body: sentMessageBodies.body })
           .from(sentMessages)
+          .innerJoin(
+            sentMessageBodies,
+            eq(sentMessageBodies.uuid, sentMessages.uuid)
+          )
           .where(eq(sentMessages.instanceId, targetId))
           .orderBy(asc(sentMessages.acceptedAt))
           .limit(1)
@@ -2347,11 +2372,12 @@ export const instancesDb = (core: DbCore): InstancesDb => {
                   projectId: sql`COALESCE(${instances.projectId}, ${placed})`,
                 }
               : {}),
-            ...(tooling ? { tooling } : {}),
-            ...(commands ? { commands } : {}),
           })
           .where(eq(instances.id, id))
           .run();
+        if (before) {
+          keepReported(tx, id, tooling, commands);
+        }
       });
     },
     launchDirOf: (id) => {

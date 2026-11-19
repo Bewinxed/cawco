@@ -1687,6 +1687,16 @@ export const createWorkItems = ({
     receiver.id === sender.parentInstanceId ||
     projectLead(sender.projectId ?? null, sender.id)?.id === receiver.id;
 
+  /** The first lines of an item's brief, report and error, as its chip shows them. */
+  const firstLinesOf = (item: WorkItemRow) => {
+    const words = db.workItemTexts(item.id);
+    return {
+      brief: firstLine(words.brief),
+      result: item.headline ?? firstLine(words.result),
+      error: firstLine(item.error),
+    };
+  };
+
   /** The item's project's conversation, when it has one that is not the item's own session. */
   const leadFor = (item: WorkItemRow): InstanceRow | undefined =>
     isHubParent(item.parentInstanceId)
@@ -1729,11 +1739,7 @@ export const createWorkItems = ({
     waitUntil: item.waitUntil?.getTime() ?? null,
     waitReason: item.waitReason,
     checkQueue: landingRun.landingWaitOf(item.id),
-    firstLines: {
-      brief: firstLine(item.brief),
-      result: item.headline ?? firstLine(item.result),
-      error: firstLine(item.error),
-    },
+    firstLines: firstLinesOf(item),
   });
 
   /**
@@ -2403,7 +2409,8 @@ export const createWorkItems = ({
   const groupPart = (item: WorkItemRow, index: number): string => {
     const head = `${index + 1}. ${item.title} (work item ${item.id.slice(0, 8)}, workspace ${item.workspaceId.slice(0, 8)}): ${item.state}`;
     if (item.state === "done") {
-      return `${head}\n${(item.digest ?? firstLine(item.result)).trim()}`;
+      const words = db.workItemTexts(item.id);
+      return `${head}\n${(words.digest ?? firstLine(words.result)).trim()}`;
     }
     if (item.state === "cancelled") {
       return `${head}: stopped before it finished.`;
@@ -5098,7 +5105,7 @@ export const createWorkItems = ({
     }
     if (item.state === "done") {
       if (!(await followsUp(item))) {
-        return `The item is done.\n\n${item.result ?? ""}\n\nEnd your turn.`;
+        return `The item is done.\n\n${db.workItemTexts(item.id).result ?? ""}\n\nEnd your turn.`;
       }
       console.log(
         `[work-items] ${item.id}: finish_item on done work whose workspace holds work since it landed: it runs again to land it`

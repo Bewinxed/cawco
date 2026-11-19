@@ -8677,6 +8677,7 @@ export const createServer = (
       fleetChanged();
     },
     attempts: db.projectAttempts,
+    attemptSummary: (workItemId) => db.workItemTexts(workItemId).summary,
     commentSaid: db.taskCommentSaid,
     noteComment: db.noteTaskComment,
     saveResult: (workItemId, taskResult) => {
@@ -9960,10 +9961,11 @@ export const createServer = (
       return;
     }
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    const words = item ? db.workItemTexts(item.id) : undefined;
     try {
       const judged = await jevAttach(access, row.projectId, {
         cache: "cold",
-        lastWork: item?.digest ?? item?.result ?? item?.error ?? "",
+        lastWork: words?.digest ?? words?.result ?? item?.error ?? "",
         message,
         session: sessionLabel(row).name,
       });
@@ -10827,6 +10829,7 @@ export const createServer = (
           ].map((item) => [item.id, item])
         ).values(),
       ].toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+    texts: (itemId) => db.workItemTexts(itemId),
     // Every picture a send that reached the session carried, as its record
     // keeps it: a media store address (`sentFrame`, `externalizeImages`).
     sentPictures: (instanceId) =>

@@ -1256,22 +1256,6 @@ export const instances = sqliteTable("instances", {
    */
   titleSource: storedEnum(InstanceTitleSourceSchema)("title_source"),
   /**
-   * The MCP servers and tool names the session's newest `init` announced, as
-   * JSON — overwritten on every `init` that carries them, so a reload or a hub
-   * restart still knows what the session has. Null for a harness whose `init`
-   * carries neither.
-   */
-  tooling: storedJson(SessionToolingSchema)("tooling"),
-  /**
-   * The `/` menu the session's newest `init` listed (its names, and which of
-   * them are skills), as JSON, overwritten as `tooling` is: a transcript the
-   * hub reads back from the machine's stored file (a Claude session's holds no
-   * `init`) still offers it, once the hub let the built one go
-   * (transcripts.ts `sweep`) or restarted. Null for a harness whose `init`
-   * lists none.
-   */
-  commands: storedJson(SessionCommandsSchema)("commands"),
-  /**
    * What the session called itself by what it was first asked to do: the first
    * user message, cleaned by core's `deriveTitleFromFirstMessage`. Written once,
    * the first time the hub sees that message, so a listing already carries the
@@ -1438,6 +1422,37 @@ export const instances = sqliteTable("instances", {
    * refuses it), and what is sent to it goes there. Null on every other.
    */
   continuedInto: sessionColumn("continued_into"),
+});
+
+/**
+ * What a session's harness reported it has, one row per session, apart from
+ * its {@link instances} row: 15 KB of JSON a session on average, 42 KB at
+ * most (the live hub, 2026-11-19). In the row, every read of a column stored
+ * after it walked its overflow pages, so a scan of `instances` read 157 MB;
+ * here a session's row stays a few hundred bytes and these are read by key
+ * alone (db/instances.ts `instanceTooling`, `instanceCommands`). The row goes
+ * with the session's.
+ */
+export const instanceTooling = sqliteTable("instance_tooling", {
+  instanceId: sessionColumn("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  /**
+   * The MCP servers and tool names the session's newest `init` announced, as
+   * JSON — overwritten on every `init` that carries them, so a reload or a hub
+   * restart still knows what the session has. Null for a harness whose `init`
+   * carries neither.
+   */
+  tooling: storedJson(SessionToolingSchema)("tooling"),
+  /**
+   * The `/` menu the session's newest `init` listed (its names, and which of
+   * them are skills), as JSON, overwritten as `tooling` is: a transcript the
+   * hub reads back from the machine's stored file (a Claude session's holds no
+   * `init`) still offers it, once the hub let the built one go
+   * (transcripts.ts `sweep`) or restarted. Null for a harness whose `init`
+   * lists none.
+   */
+  commands: storedJson(SessionCommandsSchema)("commands"),
 });
 
 /** Only hashes reach disk; installing a replacement does not revoke a live credential before ACK. */
@@ -1808,7 +1823,6 @@ export const workItems = sqliteTable(
     parentInstanceId: sessionColumn("parent_instance_id").notNull(),
     /** Its one session. */
     instanceId: sessionColumn("instance_id").notNull(),
-    brief: text("brief").notNull(),
     title: text("title").notNull(),
     /** The delegate type it was asked for by name, if any. */
     type: text("type"),
@@ -2002,16 +2016,6 @@ export const workItems = sqliteTable(
     /** The `finish_item` the running landing answers, kept while it runs. */
     submission: storedJson(WorkItemSubmissionSchema)("submission"),
     /**
-     * The final report: the session's summary, the landing, commits and
-     * findings, as the hub built them when it landed.
-     */
-    result: text("result"),
-    /**
-     * Its session's own words for what it did: the `summary` of the
-     * `finish_item` that landed, its full report. Null until then.
-     */
-    summary: text("summary"),
-    /**
      * That `finish_item`'s `headline`: its outcome in one or two sentences,
      * what a glance at its report shows (the delegate tree, a routine's
      * project note). A routine's run reads its output contract here. Null
@@ -2090,11 +2094,6 @@ export const workItems = sqliteTable(
      * not, so a group used again starts a new round.
      */
     groupReportedAt: timestamp("group_reported_at"),
-    /**
-     * What a group's combined report says of it: its summary and its landing
-     * line, written when it lands.
-     */
-    digest: text("digest"),
     /** What it may spend before the hub stops it; one that did not read stops it. */
     ...budgetColumns(),
     /** Turns its session has ended since it started. */
@@ -2115,8 +2114,43 @@ export const workItems = sqliteTable(
       .where(
         sql`${table.blockedKind} IS NOT NULL OR ${table.blockedUnread} IS NOT NULL`
       ),
+    // The live items' parents, by state, read off the index alone
+    // (project-work.ts `runningDelegateCounts`, at every board publish).
+    index("work_items_state").on(table.state, table.parentInstanceId),
   ]
 );
+
+/**
+ * A work item's long words, one row per item, apart from its
+ * {@link workItems} row: its brief, report, summary and group digest held
+ * 3 to 7 KB an item each on average and up to 439 KB (the live hub,
+ * 2026-11-19), mid-row, so each read of a column stored after them walked
+ * their overflow pages, and a scan of `work_items` read 119 MB. An item's
+ * row stays small; these are read by key (project-work.ts `workItemTexts`)
+ * or joined to a read that needs them. The row goes with its item's.
+ */
+export const workItemTexts = sqliteTable("work_item_texts", {
+  workItemId: text("work_item_id")
+    .primaryKey()
+    .references(() => workItems.id, { onDelete: "cascade" }),
+  /** The brief it was started with. */
+  brief: text("brief").notNull(),
+  /**
+   * The final report: the session's summary, the landing, commits and
+   * findings, as the hub built them when it landed.
+   */
+  result: text("result"),
+  /**
+   * Its session's own words for what it did: the `summary` of the
+   * `finish_item` that landed, its full report. Null until then.
+   */
+  summary: text("summary"),
+  /**
+   * What a group's combined report says of it: its summary and its landing
+   * line, written when it lands.
+   */
+  digest: text("digest"),
+});
 
 /**
  * One session of a stop that walks a delegation tree (tree-stops.ts): every
@@ -2304,17 +2338,6 @@ export const delegateEvents = sqliteTable(
   ]
 );
 
-/**
- * A field of a send's origin (`body`'s `origin`), when the body is JSON and
- * the field is text; null otherwise. The JSON functions sit inside a CASE
- * that proved the body JSON: a body that is not reads as no origin, never
- * an error on every read of its row.
- */
-const originOf = (field: "from" | "kind" | "name") =>
-  sql.raw(
-    `CASE WHEN json_valid(body) THEN CASE WHEN json_type(body, '$.origin.${field}') = 'text' THEN json_extract(body, '$.origin.${field}') END END`
-  );
-
 export const sentMessages = sqliteTable(
   "sent_messages",
   {
@@ -2339,8 +2362,6 @@ export const sentMessages = sqliteTable(
      * Claude send stored under its own uuid.
      */
     harnessId: text("harness_id"),
-    /** What the sender submitted, pictures as media references. */
-    body: storedJson(NeutralUserMessageSchema)("body").notNull(),
     /** Records from before modes were kept were all ordinary turns to the reader. */
     mode: storedEnum(SendModeSchema)("mode").notNull().default("turn"),
     /**
@@ -2416,22 +2437,16 @@ export const sentMessages = sqliteTable(
     delivery: text("delivery"),
     /**
      * Who sent it (core `NeutralOrigin` `kind`: the person, a peer
-     * session, the hub itself), read out of {@link sentMessages.body} by
-     * SQLite as the row is read, so a session's sends are found by it with
-     * the body unread. Null when the body names none, or one whose kind is
-     * not text: a send from no one, never the person's or a peer's.
+     * session, the hub itself), written from its body with the body
+     * (db/sends.ts `bodyColumns`), so a session's sends are found by it with
+     * the body unread. Null when the body names none: a send from no one,
+     * never the person's or a peer's.
      */
-    originKind: text("origin_kind").generatedAlwaysAs(originOf("kind"), {
-      mode: "virtual",
-    }),
-    /** Its origin's `name` (a peer's, or the hub's own line, as `keepalive`), as {@link sentMessages.originKind} is read. */
-    originName: text("origin_name").generatedAlwaysAs(originOf("name"), {
-      mode: "virtual",
-    }),
-    /** A peer's session as it signed the send (`from`), as {@link sentMessages.originKind} is read. */
-    originFrom: text("origin_from").generatedAlwaysAs(originOf("from"), {
-      mode: "virtual",
-    }),
+    originKind: text("origin_kind"),
+    /** Its origin's `name` (a peer's, or the hub's own line, as `keepalive`), written as {@link sentMessages.originKind} is. */
+    originName: text("origin_name"),
+    /** A peer's session as it signed the send (`from`), written as {@link sentMessages.originKind} is. */
+    originFrom: text("origin_from"),
   },
   (table) => [
     index("sent_messages_harness_id").on(table.harnessId),
@@ -2441,8 +2456,30 @@ export const sentMessages = sqliteTable(
       table.originKind,
       table.acceptedAt
     ),
+    // The sends still pending, oldest first, fleet-wide (db/sends.ts
+    // `pendingSends`, `owedSessionsHeld`, `unkeptSends`): a handful of rows,
+    // where `state` alone named every send the hub ever kept.
+    index("sent_messages_pending")
+      .on(table.acceptedAt)
+      .where(sql`${table.state} = 'pending'`),
   ]
 );
+
+/**
+ * What each send's sender submitted, pictures as media references
+ * (`NeutralUserMessage`), by its send, apart from its {@link sentMessages}
+ * row: 3.4 KB a send on average and 1 MB at most (the live hub,
+ * 2026-11-19), and before the row's state, its hold and its envelope, so
+ * each read of those walked its overflow pages. A send's row stays small
+ * and its body is read by key with it (db/sends.ts `sendColumns`). The row
+ * goes with its send's.
+ */
+export const sentMessageBodies = sqliteTable("sent_message_bodies", {
+  uuid: text("uuid")
+    .primaryKey()
+    .references(() => sentMessages.uuid, { onDelete: "cascade" }),
+  body: storedJson(NeutralUserMessageSchema)("body").notNull(),
+});
 
 /**
  * What the fleet is supposed to have (NEW.md §10). One row per catalog tool the

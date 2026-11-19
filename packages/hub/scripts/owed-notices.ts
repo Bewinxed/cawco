@@ -34,6 +34,9 @@ const { client, has } = countedDatabase("owed-notices");
 const owed = has("sent_messages", "owed_held")
   ? "s.owed_held = 1"
   : "s.owed IS NOT NULL";
+// From 0448 a send's body is a row of its own (`sent_message_bodies`).
+const apart = has("sent_message_bodies", "body");
+const body = apart ? "b.body" : "s.body";
 // A column an older hub's schema did not have yet reads as none.
 const column = (table: string, name: string, as: string): string =>
   `${has(table, name) ? `${table === "instances" ? "i" : "s"}.${name}` : "NULL"} AS ${as}`;
@@ -42,10 +45,10 @@ const column = (table: string, name: string, as: string): string =>
 const rows = client
   .query<OwedRow, []>(
     `SELECT s.instance_id AS instanceId, s.accepted_at AS acceptedAt, ${column("sent_messages", "hold", "hold")},
-      CASE WHEN json_valid(s.body) THEN json_extract(s.body, '$.origin.kind') END AS originKind,
-      CASE WHEN json_valid(s.body) THEN json_extract(s.body, '$.origin.name') END AS originName,
+      CASE WHEN json_valid(${body}) THEN json_extract(${body}, '$.origin.kind') END AS originKind,
+      CASE WHEN json_valid(${body}) THEN json_extract(${body}, '$.origin.name') END AS originName,
       i.status AS status, ${column("instances", "last_error_kind", "lastErrorKind")}
-    FROM sent_messages s LEFT JOIN instances i ON i.id = s.instance_id
+    FROM sent_messages s LEFT JOIN instances i ON i.id = s.instance_id${apart ? " LEFT JOIN sent_message_bodies b ON b.uuid = s.uuid" : ""}
     WHERE s.state = 'pending' AND ${owed}
     ORDER BY s.accepted_at`
   )

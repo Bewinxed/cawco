@@ -8,6 +8,7 @@ import {
   capabilityCalls,
   instanceConversations,
   instances,
+  instanceTooling,
   mcpServers,
 } from "./schema";
 
@@ -135,11 +136,12 @@ export const capabilityCallsDb = (
   listings: (since) =>
     db
       .select({
-        commands: instances.commands,
-        tooling: instances.tooling,
+        commands: instanceTooling.commands,
+        tooling: instanceTooling.tooling,
         machine: agents.hostname,
       })
       .from(instances)
+      .leftJoin(instanceTooling, eq(instanceTooling.instanceId, instances.id))
       .innerJoin(agents, eq(agents.machineId, instances.machineId))
       .where(gte(instances.updatedAt, since))
       .all()

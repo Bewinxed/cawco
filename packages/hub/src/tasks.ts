@@ -357,6 +357,8 @@ export interface TaskStore {
     projectId: string,
     taskId: string
   ) => Promise<string | undefined>;
+  /** A work item's own words for what it did (db `workItemTexts`'s `summary`); null for none. */
+  readonly attemptSummary: (workItemId: string) => string | null;
   /** Every work item at one of the project's tasks, newest first. */
   readonly attempts: (
     projectId: string
@@ -370,7 +372,6 @@ export interface TaskStore {
     | "instanceId"
     | "state"
     | "stoppedBy"
-    | "summary"
     | "taskId"
     | "taskResult"
     | "unmetAt"
@@ -1189,19 +1190,22 @@ const attemptOf = (
 
 /** The newest attempt that finished with a report, as a task's read shows it ({@link TaskResult}). */
 const resultOf = (
-  attempts: ReturnType<TaskStore["attempts"]>
+  attempts: ReturnType<TaskStore["attempts"]>,
+  attemptSummary: TaskStore["attemptSummary"]
 ): TaskResult | null => {
-  const done = attempts.find(
-    (item) => item.state === "done" && item.summary?.trim()
-  );
-  return done
-    ? {
-        workItemId: done.id,
-        at: (done.endedAt ?? done.createdAt).getTime(),
-        headline: done.headline?.trim() || null,
-        report: done.summary?.trim() ?? "",
-      }
-    : null;
+  for (const item of attempts) {
+    const report =
+      item.state === "done" ? attemptSummary(item.id)?.trim() : "";
+    if (report) {
+      return {
+        workItemId: item.id,
+        at: (item.endedAt ?? item.createdAt).getTime(),
+        headline: item.headline?.trim() || null,
+        report,
+      };
+    }
+  }
+  return null;
 };
 
 /** Every indexed task, by id. */
@@ -3495,7 +3499,8 @@ export const createTasks = (store: TaskStore) => {
       resultOf(
         store
           .attempts(projectId)
-          .filter((item) => item.taskId === taskId(number))
+          .filter((item) => item.taskId === taskId(number)),
+        store.attemptSummary
       ),
       store.links(projectId, taskId(number)),
       store.carried(projectId, taskId(number))

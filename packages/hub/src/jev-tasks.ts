@@ -91,6 +91,7 @@ export interface JevTasksDeps {
     | "getOpenRouterConnection"
     | "project"
     | "projectAttempts"
+    | "workItemTexts"
   >;
   readonly dispatcher: Pick<Dispatcher, "retryFor" | "startFor">;
   /**
@@ -385,9 +386,10 @@ export const createJevTasks = ({
   ): Promise<"attach" | "continue" | "fresh"> => {
     const { warm } = warmth(row);
     const cache = warm ? "warm" : "cold";
+    const itemWords = db.workItemTexts(newest.id);
     const judged = await jevAttach(jev, projectId, {
       cache,
-      lastWork: newest.digest ?? newest.result ?? newest.error ?? "",
+      lastWork: itemWords.digest ?? itemWords.result ?? newest.error ?? "",
       message: text,
       session: row.title ?? row.derivedTitle ?? newest.title,
       task: `${task.id} ${task.title}`,

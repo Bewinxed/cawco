@@ -8,6 +8,7 @@ import {
   asc,
   desc,
   eq,
+  getTableColumns,
   inArray,
   isNotNull,
   isNull,
@@ -16,13 +17,70 @@ import {
   sql,
 } from "drizzle-orm";
 import type { DbCore } from "./core";
-import { dataMigrations, instances, sentMessages } from "./schema";
+import {
+  dataMigrations,
+  instances,
+  sentMessageBodies,
+  sentMessages,
+} from "./schema";
 import type { SendHold } from "./stored-types";
+import type { Tx } from "./tx";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
 const SENDS_FOR_BATCH = 500;
 
-export type SentMessageRow = typeof sentMessages.$inferSelect;
+/** A send's record with its body, read by key from `sent_message_bodies` ({@link sendColumns}). */
+export type SentMessageRow = typeof sentMessages.$inferSelect & {
+  body: NeutralUserMessage;
+};
+
+/** A send as it is recorded: its row's columns, its body, and none of the columns its body writes ({@link bodyColumns}). */
+export type NewSend = Omit<
+  typeof sentMessages.$inferInsert,
+  "originKind" | "originName" | "originFrom"
+> & { body: NeutralUserMessage };
+
+/** A send's row and its body, joined by its uuid: every read of a whole send. */
+const sendColumns = {
+  ...getTableColumns(sentMessages),
+  body: sentMessageBodies.body,
+};
+
+/** A field of an origin when it is text; null otherwise. */
+const originText = (origin: object | undefined, field: string): string | null => {
+  const value =
+    origin && field in origin
+      ? (origin as Record<string, unknown>)[field]
+      : undefined;
+  return typeof value === "string" ? value : null;
+};
+
+/**
+ * The columns of a send's row its body decides, written with the body
+ * wherever it is written: who sent it, by the origin's `kind`, `name` and
+ * `from`, so a session's sends are found by them with no body read.
+ */
+export const bodyColumns = (body: NeutralUserMessage) => ({
+  originKind: originText(body.origin, "kind"),
+  originName: originText(body.origin, "name"),
+  originFrom: originText(body.origin, "from"),
+});
+
+/** `body` kept as the send's body, and its row's origin columns written from it. */
+export const writeBody = (
+  tx: Tx,
+  uuid: string,
+  body: NeutralUserMessage
+): void => {
+  tx.insert(sentMessageBodies)
+    .values({ uuid, body })
+    .onConflictDoUpdate({ target: sentMessageBodies.uuid, set: { body } })
+    .run();
+  tx.update(sentMessages)
+    .set(bodyColumns(body))
+    .where(eq(sentMessages.uuid, uuid))
+    .run();
+};
 
 /**
  * `instances.turn_open_at` of a session from before the hub kept the turn it
@@ -126,7 +184,7 @@ export interface SendsDb {
   /**
    * The sessions with a send owed to their machine whose hold is one of
    * `holds`, or none written yet (its keeping never said why): the ids
-   * alone, by the pending sends' index, no send read whole.
+   * alone, each once, by the pending sends' index, no send read whole.
    */
   readonly owedSessionsHeld: (holds: readonly SendHold[]) => string[];
   /** Every send still pending (accepted, not yet read by its session), each session's oldest first. */
@@ -139,9 +197,7 @@ export interface SendsDb {
    * which asks the harness and not the session. Null when none is owed.
    */
   readonly personUnanswered: (id: string) => "read" | "pending" | null;
-  readonly recordSend: (
-    send: typeof sentMessages.$inferInsert
-  ) => SentMessageRow;
+  readonly recordSend: (send: NewSend) => SentMessageRow;
   /** One send's record, by its uuid. */
   readonly sendRecord: (uuid: string) => SentMessageRow | undefined;
   /**
@@ -194,6 +250,17 @@ export interface SendsDb {
 export const sendsDb = (core: DbCore): SendsDb => {
   const { db } = core;
 
+  /** Whole sends, each row with its body. */
+  const sends = () =>
+    db
+      .select(sendColumns)
+      .from(sentMessages)
+      .innerJoin(sentMessageBodies, eq(sentMessageBodies.uuid, sentMessages.uuid));
+
+  /** One send whole, by its uuid. */
+  const sendOf = (uuid: string): SentMessageRow | undefined =>
+    sends().where(eq(sentMessages.uuid, uuid)).get();
+
   /**
    * Whose owed sends {@link SendsDb.owedSends} reads: a session's; a
    * machine's, by its sessions' ids, so SQLite finds each one's pending
@@ -230,37 +297,34 @@ export const sendsDb = (core: DbCore): SendsDb => {
           return null;
         }
         let changed = 0;
-        for (const send of tx
-          .select({ uuid: sentMessages.uuid, body: sentMessages.body })
-          .from(sentMessages)
-          .all()) {
-          const body = send.body ? rewrite(send.body) : null;
+        for (const send of tx.select().from(sentMessageBodies).all()) {
+          const body = rewrite(send.body);
           if (body) {
-            tx.update(sentMessages)
-              .set({ body })
-              .where(eq(sentMessages.uuid, send.uuid))
-              .run();
+            writeBody(tx, send.uuid, body);
             changed += 1;
           }
         }
         tx.insert(dataMigrations).values({ name, at: new Date() }).run();
         return changed;
       }),
-    recordSend: (send) =>
-      db.insert(sentMessages).values(send).returning().get(),
-    sendRecord: (uuid) =>
-      db.select().from(sentMessages).where(eq(sentMessages.uuid, uuid)).get(),
+    recordSend: ({ body, ...send }) =>
+      db.transaction((tx) => {
+        const row = tx
+          .insert(sentMessages)
+          .values({ ...send, ...bodyColumns(body) })
+          .returning()
+          .get();
+        tx.insert(sentMessageBodies).values({ uuid: row.uuid, body }).run();
+        return { ...row, body };
+      }),
+    sendRecord: sendOf,
     pendingSends: () =>
-      db
-        .select()
-        .from(sentMessages)
+      sends()
         .where(eq(sentMessages.state, "pending"))
         .orderBy(asc(sentMessages.acceptedAt))
         .all(),
     sendsIn: (instanceId, states) =>
-      db
-        .select()
-        .from(sentMessages)
+      sends()
         .where(
           and(
             eq(sentMessages.instanceId, instanceId),
@@ -269,9 +333,13 @@ export const sendsDb = (core: DbCore): SendsDb => {
         )
         .orderBy(asc(sentMessages.acceptedAt))
         .all(),
-    owedSessionsHeld: (holds) =>
-      db
-        .selectDistinct({ instanceId: sentMessages.instanceId })
+    // Each once in JS: a DISTINCT in SQL walked every send's entry in
+    // `sent_messages_state` for its order, where the pending sends' own
+    // index reads only those.
+    owedSessionsHeld: (holds) => [
+      ...new Set(
+        db
+        .select({ instanceId: sentMessages.instanceId })
         .from(sentMessages)
         .where(
           and(
@@ -284,11 +352,11 @@ export const sendsDb = (core: DbCore): SendsDb => {
           )
         )
         .all()
-        .map((row) => row.instanceId),
+        .map((row) => row.instanceId)
+      ),
+    ],
     owedSends: (of) =>
-      db
-        .select()
-        .from(sentMessages)
+      sends()
         .where(
           and(
             owedOf(of),
@@ -312,15 +380,12 @@ export const sendsDb = (core: DbCore): SendsDb => {
         .returning({ uuid: sentMessages.uuid })
         .all().length === 1,
     unkeptSends: () =>
-      db
-        .select()
-        .from(sentMessages)
+      sends()
         .where(
           and(
             eq(sentMessages.state, "pending"),
             isNull(sentMessages.envelope),
-            eq(sentMessages.owedHeld, false),
-            isNotNull(sentMessages.body)
+            eq(sentMessages.owedHeld, false)
           )
         )
         .all(),
@@ -399,9 +464,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
         .run();
     },
     lastPeerSend: (to, from) =>
-      db
-        .select()
-        .from(sentMessages)
+      sends()
         .where(
           and(
             eq(sentMessages.instanceId, to),
@@ -416,10 +479,14 @@ export const sendsDb = (core: DbCore): SendsDb => {
       const [last] = db
         .select({
           answeredAt: sentMessages.answeredAt,
-          body: sentMessages.body,
+          body: sentMessageBodies.body,
           state: sentMessages.state,
         })
         .from(sentMessages)
+        .innerJoin(
+          sentMessageBodies,
+          eq(sentMessageBodies.uuid, sentMessages.uuid)
+        )
         .where(
           and(
             eq(sentMessages.instanceId, id),
@@ -441,9 +508,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
       return last.state === "read" ? "read" : "pending";
     },
     latestSends: (id) => {
-      const [read] = db
-        .select()
-        .from(sentMessages)
+      const [read] = sends()
         .where(
           and(
             eq(sentMessages.instanceId, id),
@@ -454,9 +519,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
         .orderBy(desc(sentMessages.readAt))
         .limit(1)
         .all();
-      const [person] = db
-        .select()
-        .from(sentMessages)
+      const [person] = sends()
         .where(
           and(
             eq(sentMessages.instanceId, id),
@@ -490,27 +553,31 @@ export const sendsDb = (core: DbCore): SendsDb => {
         )
         .returning({ uuid: sentMessages.uuid })
         .all().length === 1,
-    updateSend: (uuid, change) =>
-      db
-        .update(sentMessages)
+    updateSend: (uuid, { body, ...change }) =>
+      db.transaction((tx) => {
         // A send no longer pending is handed on no more: what it was is its body.
-        .set(
+        const set =
           change.state && change.state !== "pending"
             ? { ...change, envelope: null, owedHeld: false, hold: null }
-            : change
-        )
-        .where(eq(sentMessages.uuid, uuid))
-        .returning()
-        .get(),
+            : change;
+        if (Object.keys(set).length > 0) {
+          tx.update(sentMessages)
+            .set(set)
+            .where(eq(sentMessages.uuid, uuid))
+            .run();
+        }
+        if (body) {
+          writeBody(tx, uuid, body);
+        }
+        return sendOf(uuid);
+      }),
     sendsFor: (ids) => {
       const rows: SentMessageRow[] = [];
       // A long transcript names more ids than SQLite binds in one statement.
       for (let at = 0; at < ids.length; at += SENDS_FOR_BATCH) {
         const batch = ids.slice(at, at + SENDS_FOR_BATCH);
         rows.push(
-          ...db
-            .select()
-            .from(sentMessages)
+          ...sends()
             .where(
               or(
                 inArray(sentMessages.uuid, batch),

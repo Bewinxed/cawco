@@ -33,6 +33,7 @@ import {
   workItemGlobs,
   workItemOutputs,
   workItems,
+  workItemTexts,
   workItemWaits,
   workspaceCreates,
   workspaces,
@@ -152,6 +153,23 @@ export const projectWorkDb = (db: BunSQLiteDatabase): ProjectWorkDb => ({
 export type WorkItemRow = typeof workItems.$inferSelect;
 
 /**
+ * A work item's long words (schema.ts `workItemTexts`): its brief, report,
+ * summary and group digest, read by key apart from its row.
+ */
+export type WorkItemTexts = Omit<
+  typeof workItemTexts.$inferSelect,
+  "workItemId"
+>;
+
+/** What an item that has no row of words reads as: none of its words kept. */
+const NO_TEXTS: WorkItemTexts = {
+  brief: "",
+  result: null,
+  summary: null,
+  digest: null,
+};
+
+/**
  * Whether an item is blocked ({@link itemBlockOf}): by a block that reads,
  * or by one that did not read as blocks became columns (schema.ts
  * `workItems.blockedUnread`), which holds it blocked all the same.
@@ -233,11 +251,12 @@ export const landedWork = (
  * it replaces cleared.
  */
 export type WorkItemChange = Partial<
+  Pick<WorkItemTexts, "result" | "summary" | "digest">
+> &
+  Partial<
   Pick<
     WorkItemRow,
     | "state"
-    | "result"
-    | "summary"
     | "headline"
     | "error"
     | "endedBlocked"
@@ -265,7 +284,6 @@ export type WorkItemChange = Partial<
     | "stoppingAt"
     | "prUrl"
     | "groupReportedAt"
-    | "digest"
     | "turns"
     | "instanceId"
     | "origin"
@@ -378,6 +396,8 @@ export interface WorkRowsDb {
   /** Files a work item as the hub accepted it, the globs it owns, the outputs it declares and the cards and pins it was dispatched on with it in one transaction. */
   readonly createWorkItem: (
     item: typeof workItems.$inferInsert & {
+      /** The brief it starts with, kept with its words (schema.ts `workItemTexts`). */
+      brief: string;
       outputs?: string[] | null;
       owns?: string[] | null;
       waitedOn?: readonly WaitWitness[] | null;
@@ -505,6 +525,8 @@ export interface WorkRowsDb {
   readonly workItemsIn: (workspaceId: string) => WorkItemRow[];
   /** Every work item any of these sessions delegated, newest first (delegation-tree.ts). */
   readonly workItemsOfParents: (parentInstanceIds: string[]) => WorkItemRow[];
+  /** A work item's long words, by its id ({@link WorkItemTexts}); none kept for an id with no row of them. */
+  readonly workItemTexts: (id: string) => WorkItemTexts;
   /** The cards and pins a work item was dispatched on, in the order kept; none when it waited on none. */
   readonly workItemWaits: (itemId: string) => WaitWitness[];
   /** Unfiled creates to discard when this machine next registers. */
@@ -662,9 +684,10 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
             .where(sql`${workspaces.id} LIKE ${`${idOrPrefix}%`}`)
             .all();
     },
-    createWorkItem: ({ outputs, owns, waitedOn, ...item }) =>
+    createWorkItem: ({ brief, outputs, owns, waitedOn, ...item }) =>
       db.transaction((tx) => {
         const row = tx.insert(workItems).values(item).returning().get();
+        tx.insert(workItemTexts).values({ workItemId: row.id, brief }).run();
         const owned = [...new Set(owns ?? [])];
         if (owned.length > 0) {
           tx.insert(workItemGlobs)
@@ -693,6 +716,17 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
       }),
     workItem: (id) =>
       db.select().from(workItems).where(eq(workItems.id, id)).get(),
+    workItemTexts: (id) =>
+      db
+        .select({
+          brief: workItemTexts.brief,
+          result: workItemTexts.result,
+          summary: workItemTexts.summary,
+          digest: workItemTexts.digest,
+        })
+        .from(workItemTexts)
+        .where(eq(workItemTexts.workItemId, id))
+        .get() ?? NO_TEXTS,
     workItemGlobs: (itemId) =>
       db
         .select({ glob: workItemGlobs.glob })
@@ -762,18 +796,32 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         .orderBy(desc(workItems.createdAt))
         .all(),
     runningDelegateCounts: () => {
-      const parents = new Map(
-        db
-          .select({ id: instances.id, parent: instances.parentInstanceId })
-          .from(instances)
-          .all()
-          .map((row) => [row.id, row.parent])
-      );
       const live = db
         .select({ parent: workItems.parentInstanceId })
         .from(workItems)
         .where(inArray(workItems.state, ["starting", "running"]))
         .all();
+      // The live items' parents and theirs, a generation at a time by key:
+      // the sessions above live work, never every session's row.
+      const parents = new Map<string, string | null>();
+      let next = [...new Set(live.map((item) => item.parent))];
+      while (next.length > 0) {
+        for (const row of db
+          .select({ id: instances.id, parent: instances.parentInstanceId })
+          .from(instances)
+          .where(inArray(instances.id, next))
+          .all()) {
+          parents.set(row.id, row.parent);
+        }
+        next = [
+          ...new Set(
+            next.flatMap((id) => {
+              const parent = parents.get(id);
+              return parent && !parents.has(parent) ? [parent] : [];
+            })
+          ),
+        ];
+      }
       const counts = new Map<string, number>();
       for (const item of live) {
         const visited = new Set<string>();
@@ -966,17 +1014,33 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         )
         .orderBy(workItems.createdAt)
         .all(),
-    updateWorkItem: (id, { landed, ...change }) =>
-      db
-        .update(workItems)
-        .set({
+    updateWorkItem: (id, { landed, result, summary, digest, ...change }) =>
+      db.transaction((tx) => {
+        const words = {
+          ...(result === undefined ? {} : { result }),
+          ...(summary === undefined ? {} : { summary }),
+          ...(digest === undefined ? {} : { digest }),
+        };
+        if (Object.keys(words).length > 0) {
+          tx.update(workItemTexts)
+            .set(words)
+            .where(eq(workItemTexts.workItemId, id))
+            .run();
+        }
+        const set = {
           ...change,
           ...lastWaitColumns(change.waitUntil),
           ...(landed ? landedColumns(landed) : {}),
-        })
-        .where(eq(workItems.id, id))
-        .returning()
-        .get(),
+        };
+        return Object.keys(set).length > 0
+          ? tx
+              .update(workItems)
+              .set(set)
+              .where(eq(workItems.id, id))
+              .returning()
+              .get()
+          : tx.select().from(workItems).where(eq(workItems.id, id)).get();
+      }),
     activeWorkspacesOn: (machineId) =>
       db
         .select()

@@ -95,7 +95,7 @@ const REWRITES: readonly Rewrite[] = [
     why: "a plan's move is a moved line whose to's id, compactFirst, asked and a refused because move to their own columns, the rest of the line kept; one that is not a moved line reading whole moves, as stored with its kind, to move_unread with move null, and the plan reads as none",
   },
   {
-    column: "sent_messages.body",
+    column: "sent_message_bodies.body",
     migration: "0436_peer_origin_from",
     why: "a peer origin with no from is given its fromSession as from; one that names no session becomes unclassified; nothing else of the send changes and no row is deleted",
   },

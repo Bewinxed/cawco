@@ -5808,14 +5808,7 @@
       "server"
     ]
   },
-  "instances.cache_ttl": {
-    "type": "string",
-    "enum": [
-      "5m",
-      "1h"
-    ]
-  },
-  "instances.commands": {
+  "instance_tooling.commands": {
     "type": "object",
     "properties": {
       "names": {
@@ -5834,6 +5827,46 @@
     "required": [
       "names",
       "skills"
+    ]
+  },
+  "instance_tooling.tooling": {
+    "type": "object",
+    "properties": {
+      "servers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "status"
+          ]
+        }
+      },
+      "tools": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "servers",
+      "tools"
+    ]
+  },
+  "instances.cache_ttl": {
+    "type": "string",
+    "enum": [
+      "5m",
+      "1h"
     ]
   },
   "instances.end_intent": {
@@ -6326,39 +6359,6 @@
     "enum": [
       "owner",
       "agent"
-    ]
-  },
-  "instances.tooling": {
-    "type": "object",
-    "properties": {
-      "servers": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string"
-            },
-            "status": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "name",
-            "status"
-          ]
-        }
-      },
-      "tools": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      }
-    },
-    "required": [
-      "servers",
-      "tools"
     ]
   },
   "lfs_offers.answer": {
@@ -11267,7 +11267,7 @@
       "both"
     ]
   },
-  "sent_messages.body": {
+  "sent_message_bodies.body": {
     "type": "object",
     "properties": {
       "compactSummary": {

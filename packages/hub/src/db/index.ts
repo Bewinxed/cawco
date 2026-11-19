@@ -248,6 +248,20 @@ const make = async (path: string): Promise<DbShape> => {
   // conversion to WAL below waits out a reader of a file not yet converted.
   db.$client.run("PRAGMA busy_timeout = 5000");
   useWal(db.$client, path);
+  // WHAT THE CONNECTION KEEPS IN MEMORY. SQLite's page cache defaults to
+  // 2 MB ("the default suggested cache size is -2000, which means the cache
+  // size is limited to 2048000 bytes of memory", sqlite.org/pragma.html
+  // #pragma_cache_size), so each read of more than that read the file again
+  // a page at a time; 64 MiB keeps the tables hot reads walk in memory.
+  // `mmap_size`: reads take pages from the file's mapping, with no copy
+  // "between kernel space and user space" (sqlite.org/mmap.html); 1 GiB
+  // covers the whole file (950 MB on the live hub, 2026-11-19). An I/O error on a mapped page ends the process
+  // (mmap.html), as a failed read already stops the hub. `temp_store =
+  // MEMORY`: a sort or a temporary index of a statement stays off the disk.
+  // Each is the connection's own, so it is set at every open.
+  db.$client.run("PRAGMA cache_size = -65536");
+  db.$client.run("PRAGMA mmap_size = 1073741824");
+  db.$client.run("PRAGMA temp_store = MEMORY");
   // BEGIN IMMEDIATE: that wait is only for a lock asked for with no read
   // open. drizzle's bun-sqlite `transaction` is DEFERRED unless told
   // otherwise (`nativeTx[config.behavior ?? "deferred"]()`), so one that

@@ -141,7 +141,7 @@ import { workWords } from "@cawco/core/words/work";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Caw } from "./caw";
 import type { DbShape } from "./db";
-import type { WorkItemRow } from "./db/project-work";
+import type { WorkItemRow, WorkItemTexts } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { AttemptAsk, Origin } from "./db/stored-types";
 import { needsDesignSystem } from "./design-offers";
@@ -244,6 +244,7 @@ export interface DispatchDeps {
     | "markAttemptUnmet"
     | "setProjectDispatch"
     | "workItemByPrUrl"
+    | "workItemTexts"
   >;
   /**
    * The brief's `## Design system` section, read from the attempt's clone
@@ -380,8 +381,8 @@ const landedAs = (
  * build's four criteria shown (0.07 to 0.32, nightly 3944): the sourced
  * tokens and DESIGN.md's answers were said only in its task_result.
  */
-const attemptReport = (item: WorkItemRow): string => {
-  const report = (item.digest ?? item.result ?? "").trim();
+const attemptReport = (item: WorkItemRow, texts: WorkItemTexts): string => {
+  const report = (texts.digest ?? texts.result ?? "").trim();
   const handIn = item.taskResult;
   if (!handIn) {
     return report;
@@ -519,11 +520,12 @@ const landedNotes = (item: WorkItemRow, max: number): string => {
  */
 const attemptWork = async (
   item: WorkItemRow,
+  texts: () => WorkItemTexts,
   reads: WorkReads,
   readDiff: DispatchDeps["landedDiff"]
 ): Promise<AttemptWork> => {
   if (item.landedSha === null && item.landedUnread === null) {
-    return { text: tailOf(attemptReport(item), reads.report) };
+    return { text: tailOf(attemptReport(item, texts()), reads.report) };
   }
   const notes = landedNotes(item, reads.notes);
   const diff =
@@ -1369,7 +1371,8 @@ export const createDispatcher = ({
       ? {
           workItemId: previous.id,
           state: previous.state,
-          failure: previous.error ?? previous.result ?? "",
+          failure:
+            previous.error ?? db.workItemTexts(previous.id).result ?? "",
         }
       : undefined;
     // The comments left since the task's newest attempt started.
@@ -2512,7 +2515,12 @@ export const createDispatcher = ({
       return await judgedByJev(access, projectId, task, criteria, item);
     }
     if (db.project(projectId)?.eventsOn) {
-      const work = await attemptWork(item, LEAD_READS, landedDiff);
+      const work = await attemptWork(
+        item,
+        () => db.workItemTexts(item.id),
+        LEAD_READS,
+        landedDiff
+      );
       const attempt = attemptNamed(item, task);
       offLine(
         "judged",
@@ -2576,7 +2584,12 @@ export const createDispatcher = ({
       tellStarter(item, judgedWords.toldStarter(link, left, task.stage));
       return "stays";
     };
-    const work = await attemptWork(item, JEV_READS, landedDiff);
+    const work = await attemptWork(
+      item,
+      () => db.workItemTexts(item.id),
+      JEV_READS,
+      landedDiff
+    );
     if (work.unread !== undefined) {
       return await stays(
         judgedWords.notJudged(

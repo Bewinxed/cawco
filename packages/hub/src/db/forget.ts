@@ -223,9 +223,9 @@ const first = <T>(tx: Tx, query: SQL): T | undefined => tx.all<T>(query)[0];
 
 /**
  * The table's columns as it stands, as an insert names them; empty when
- * there is no such table. `table_info` leaves out a generated column
- * (`sent_messages.origin_kind`), which no insert may name: a kept row's
- * value of one is read back from what it was generated from.
+ * there is no such table. `table_info` leaves out a generated column,
+ * which no insert may name: a kept row's value of one is read back from
+ * what it was generated from.
  */
 const columnsOf = (tx: Tx, table: string): string[] =>
   tx

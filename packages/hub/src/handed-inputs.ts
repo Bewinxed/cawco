@@ -27,7 +27,7 @@ import { workWords } from "@cawco/core/words/work";
 import { ElysiaStatus, problem } from "elysia";
 import type { HandedArtifactFile } from "./artifacts/deps";
 import type { Artifacts } from "./artifacts/service";
-import type { WorkItemRow } from "./db/project-work";
+import type { WorkItemRow, WorkItemTexts } from "./db/project-work";
 import { type HeldInput, inputFileName } from "./handed-input";
 import { byHandle } from "./handles";
 import { mediaBytes, mediaFilePath, storedFilePath } from "./media";
@@ -107,6 +107,8 @@ export interface HandedInputDeps {
    * as sent, whatever copy its harness stored.
    */
   sentPictures: (instanceId: string) => string[];
+  /** A work item's report and summary, by its id (db `workItemTexts`). */
+  texts: (itemId: string) => Pick<WorkItemTexts, "result" | "summary">;
   /** The sessions of the caller's delegation tree (delegation-tree.ts `treeSessions`). */
   tree: (caller: InstanceRow) => Set<string>;
   /** A text file of a workspace, by path from its clone's root, read inside its boundary; throws in the machine's words. */
@@ -217,9 +219,10 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     if (item instanceof ElysiaStatus) {
       return item;
     }
+    const { result, summary } = deps.texts(item.id);
     const body =
-      item.result ??
-      item.summary ??
+      result ??
+      summary ??
       (item.error ? `It ${item.state}: ${item.error}` : null);
     if (!body) {
       return unhanded(

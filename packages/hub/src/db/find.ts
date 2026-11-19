@@ -25,6 +25,7 @@ import {
   routines,
   sessionPlanSteps,
   workItems,
+  workItemTexts,
   workspaces,
 } from "./schema";
 
@@ -270,9 +271,10 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
       .select({
         id: workItems.id,
         endedAt: sql<number>`${workItems.endedAt}`,
-        result: workItems.result,
+        result: workItemTexts.result,
       })
       .from(workItems)
+      .leftJoin(workItemTexts, eq(workItemTexts.workItemId, workItems.id))
       .where(sql`${workItems.endedAt} > ${after}`)
       .all()
       .map((row) => ({ ...row, endedAt: new Date(row.endedAt) })),
@@ -332,7 +334,7 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         instanceId: workItems.instanceId,
         parentInstanceId: workItems.parentInstanceId,
         title: workItems.title,
-        brief: sql<string>`substr(${workItems.brief}, 1, ${BRIEF_OPENING})`,
+        brief: sql<string>`coalesce(substr(${workItemTexts.brief}, 1, ${BRIEF_OPENING}), '')`,
         endedBlocked: workItems.endedBlocked,
         headline: workItems.headline,
         state: workItems.state,
@@ -344,6 +346,7 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         endedAt: workItems.endedAt,
       })
       .from(workItems)
+      .leftJoin(workItemTexts, eq(workItemTexts.workItemId, workItems.id))
       .all(),
   workspaceBranches: () =>
     new Map(
