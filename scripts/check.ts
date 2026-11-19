@@ -570,6 +570,10 @@ const gated: Gated[] = [
   // joins Blink's one shared :has() invalidation set, which restyles a
   // whole subtree under every anchor on the page.
   bun("apps/dashboard/scripts/has-subject-check.ts"),
+  // A word written on html, body or the shell sets only custom properties
+  // registered `inherits: false`: one that inherits restyles every element
+  // in the document each time the word comes or goes.
+  bun("apps/dashboard/scripts/root-flip-check.ts"),
   bun("apps/dashboard/scripts/lib-import-check.ts"),
   bun("apps/dashboard/scripts/svelte-unused-css.ts"),
   // The release build's layers guard, over the house's sheets unbundled.

@@ -96,9 +96,12 @@
      drawer's surface while it was open. Over every layer, toasts' (sonner,
      --layer-toast) included (--layer-screen-edge): the strip is the colour of whatever stands on its edge,
      so it is never seen as itself. Each strip runs two clocks in one
-     transition, its colour's and its showing's. -->
+     transition, its colour's and its showing's. `data-screen-edge` is
+     where app.css sets the strips' own --edge-* (they inherit from no one,
+     so a sheet or scrim opening restyles four boxes, not the document). -->
 <div
   data-slot="edge-top"
+  data-screen-edge
   aria-hidden="true"
   class="fixed inset-x-0 -top-space-2 z-(--layer-screen-edge) h-(--edge-h) pointer-events-none edge-mask-top opacity-(--edge-shown) bg-(--edge-top-background) transition-[background-color,opacity] duration-(--edge-top-durs) ease-out"
   ontransitionend={read}
@@ -108,6 +111,7 @@
 ></div>
 <div
   data-slot="edge-bottom"
+  data-screen-edge
   aria-hidden="true"
   class="fixed inset-x-0 -bottom-space-2 z-(--layer-screen-edge) h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-bottom-background) transition-[background-color,opacity] duration-(--edge-bottom-durs) ease-out"
   style:--edge-h="max(var(--spacing-icon-sm), env(safe-area-inset-bottom))"
