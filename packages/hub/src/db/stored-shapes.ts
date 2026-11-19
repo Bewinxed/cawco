@@ -538,8 +538,8 @@ const LessonShape = declared(
     sources: z.array(LessonSourceShape),
     staged: z
       .object({
+        home: LessonHomeShape,
         text: z.string(),
-        topic: z.string(),
         waits: z.literal("jev").optional(),
       })
       .optional(),
@@ -784,16 +784,13 @@ const ProposalShape = declared(
     base: z.string(),
     by: z.string(),
     files: z.array(ProposalFileShape),
-    fleet: z.literal(true).optional(),
     id: z.string(),
-    kind: z.enum(["archive", "rewrite"]).optional(),
     notes: z.array(z.string()),
     projectId: z.string(),
     session: z.string(),
     time: z.string(),
     toolUseId: z.string().optional(),
     why: z.string(),
-    withdraws: z.string().optional(),
   }),
   "Proposal",
   "packages/hub/src/db/stored-types.ts"

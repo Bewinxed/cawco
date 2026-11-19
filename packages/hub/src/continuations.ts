@@ -113,7 +113,7 @@ export type ContinuationsContext = Pick<
   | "owedMoves"
   | "parkForPerson"
   | "pending"
-  | "projectMemory"
+  | "typeProposals"
   | "publishSend"
   | "readAgent"
   | "registry"
@@ -1341,18 +1341,18 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         ctx.parkForPerson(askEnvelope(ask, target));
       }
     }
-    // Its memory and design proposals go on with it too: each names the
-    // session it went on in from here, across restarts, and its card is
+    // Its delegate type and design proposals go on with it too: each names
+    // the session it went on in from here, across restarts, and its card is
     // drawn there.
     detach(
-      ctx.projectMemory.folded(from, to).then((done) => {
+      ctx.typeProposals.folded(from, to).then((done) => {
         if (done instanceof ElysiaStatus) {
           console.warn(
-            `[memory proposals of a folded session] failed: ${done.response.detail}`
+            `[type proposals of a folded session] failed: ${done.response.detail}`
           );
         }
       }),
-      "memory proposals of a folded session"
+      "type proposals of a folded session"
     );
     ctx.designSystem.folded(to);
     if (folded && folded.ending.length > 0) {

@@ -32,7 +32,7 @@
  * deterministic step is generating tokens.css and tokens.ts, a build, not a
  * judgment.
  *
- * Changes arrive as proposals the person approves, as memory proposals do
+ * Changes arrive as proposals the person approves, as delegate type proposals do
  * (spec §5.7). Which system is the project's is read from git, never a
  * clock: in a workspace, one on its base branch on origin; in any other
  * checkout, one at HEAD; in the project's folder, one first committed by
@@ -1449,7 +1449,7 @@ export const createDesignSystem = (deps: {
   /** A word from the hub to a session (work-items.ts `tellSession`). */
   tell: (instanceId: string, content: string) => void;
   /**
-   * Tells a proposal's session that it closed, as a memory proposal's is
+   * Tells a proposal's session that it closed, as a delegate type proposal's is
    * told (server.ts `tellProposer`): under the ask's origin, its transcript
    * reading `line`; false when that session can never act again.
    */

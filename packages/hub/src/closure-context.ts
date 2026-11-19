@@ -191,6 +191,7 @@ import type { createMachineContact } from "./machine-contact";
 import type { createMachineCredentials } from "./machine-credentials";
 import type { CommandOptions, MachinePause } from "./machine-pause";
 import type { createMemory, createTurnWatch } from "./memory";
+import type { MemoryRun } from "./memory-run";
 import type { createMoves } from "./moves";
 import type { createNoticesSeen } from "./notices";
 import type { createNotifications } from "./notifications";
@@ -246,6 +247,7 @@ import type {
 import type { createTreeStops } from "./tree-stops";
 import type { turnState } from "./turn-state";
 import type { turnUsageOf } from "./turn-usage";
+import type { TypeProposals } from "./type-proposals";
 import type { UsageCounter } from "./usage-count";
 import type { ViewChanges } from "./views/changes";
 import type { WelcomeConverge } from "./welcome-converge";
@@ -835,6 +837,8 @@ export interface ClosureContext {
   mayRun: (status: string) => boolean;
   mcpChanges: FleetMcpChanges;
   mcpReady: Promise<unknown>;
+  /** A project's nightly memory run and every write to its memory files (memory-run.ts). */
+  memoryRun: MemoryRun;
   memoryWatch: ReturnType<typeof createTurnWatch>;
   merging: MergeDeps;
   /** What `harness` lists on `machineId` (core `modelListingOn`). */
@@ -1453,6 +1457,8 @@ export interface ClosureContext {
     string,
     { machineId: string; resolve: () => void; reject: (error: Error) => void }
   >;
+  /** A project's delegate type proposals, the person's asks (type-proposals.ts). */
+  typeProposals: TypeProposals;
   /** A row's delegate type as a spawn names it, with the tools that type denies. */
   typeSettingsOf: (
     row: Pick<InstanceRow, "delegateType" | "delegateTypeProject">

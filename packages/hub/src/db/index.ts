@@ -152,7 +152,7 @@ interface HubStore {
   readonly ingress: IngressDb;
   /** Git LFS offered for a place's left-out large files (lfs-offers.ts). */
   readonly lfsOffers: LfsOffersDb;
-  /** A project's fact uses and declined rewrites (memory.ts). */
+  /** When briefs last carried a project's knowledge lessons (memory.ts). */
   readonly memoryFacts: MemoryFactsDb;
   /** What each session's move ended, until it is told (move-endings.ts). */
   readonly moveEndings: MoveEndingsDb;

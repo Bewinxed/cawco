@@ -67,8 +67,13 @@ import type {
   MachineVerb,
 } from "@cawco/core/envelopes";
 import type { ExternalRef } from "@cawco/core/external-items";
-import type { FleetSyncReport, MemoryScope } from "@cawco/core/fleet";
-import { FLEET_DELTA, machinePlatform, mcpRunsOn } from "@cawco/core/fleet";
+import type { FleetSyncReport } from "@cawco/core/fleet";
+import {
+  FLEET_DELTA,
+  machinePlatform,
+  mcpRunsOn,
+  skillDescription,
+} from "@cawco/core/fleet";
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
 import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
 import type { ArrivingAsk, FramePayload } from "@cawco/core/frames";
@@ -265,8 +270,6 @@ import {
   machineSilenceWords,
 } from "@cawco/core/words/machine-names";
 import { pauseClock } from "@cawco/core/words/machine-pause";
-import { memoryWords } from "@cawco/core/words/memory";
-import { scopeWords } from "@cawco/core/words/memory-scope";
 import { noticeWords } from "@cawco/core/words/notices";
 import {
   continuedInWords,
@@ -365,7 +368,7 @@ import { answered as browserAnswered } from "./browser-answered";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
 import { BROWSER_CALL_MS, browserRoutes, createBrowsers } from "./browsers";
-import { TEMPLATE_SKILLS } from "./bundled-skills";
+import { bundledSkills, TEMPLATE_SKILLS } from "./bundled-skills";
 import { createCallKeys } from "./call-keys";
 import { capabilityCalls } from "./capability-calls";
 import {
@@ -547,11 +550,11 @@ import { mediaBase64 } from "./media";
 import {
   createMemory,
   createTurnWatch,
-  FLEET_MAIN_MEMORY,
   inboxNotes,
   memoryRoutes,
   ROUTINE_ORIGIN,
 } from "./memory";
+import { createMemoryRun } from "./memory-run";
 import { createMoves } from "./moves";
 import { uuidOf } from "./named-uuid";
 import { createNoticesSeen } from "./notices";
@@ -676,7 +679,7 @@ import { fleetHarnessConfigRoutes } from "./routes/fleet-harness-configs";
 import { fleetHookRoutes } from "./routes/fleet-hooks";
 import { fleetMarketplaceRoutes } from "./routes/fleet-marketplaces";
 import { fleetMcpRoutes } from "./routes/fleet-mcp";
-import { fleetMemoryCalls, fleetMemoryRoutes } from "./routes/fleet-memory";
+import { fleetMemoryRoutes } from "./routes/fleet-memory";
 import { fleetPluginRoutes } from "./routes/fleet-plugins";
 import { fleetSkillRoutes } from "./routes/fleet-skills";
 import { fleetSyncRoutes } from "./routes/fleet-sync";
@@ -777,6 +780,7 @@ import { createTranscripts } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
 import { turnState } from "./turn-state";
 import { turnOrigin, turnUsageOf } from "./turn-usage";
+import { createTypeProposals } from "./type-proposals";
 import { unknownFieldsOf } from "./unknown-fields";
 import { unreachable } from "./unreachable";
 import { createTrim } from "./unused-trim";
@@ -1571,6 +1575,8 @@ export const createServer = (
     owedMoves: () => owedMoves,
     parkForPerson: () => parkForPerson,
     projectMemory: () => projectMemory,
+    memoryRun: () => memoryRun,
+    typeProposals: () => typeProposals,
     publishSend: () => publishSend,
     releaseOwed: () => releaseOwed,
     retireSession: () => retireSession,
@@ -8776,8 +8782,6 @@ export const createServer = (
         payload: { kind: "blocks.changed", projectId },
       }),
   });
-  // A project's memory (memory.ts): the agents' inbox, its curator's
-  // proposals as your asks, and "Make a note" into AGENTS.md.
   /**
    * A proposal's session told that its proposal closed (proposal-base.ts):
    * the session as it is now (a former id is the one it went on in), under
@@ -8796,7 +8800,7 @@ export const createServer = (
     tellSession(now, text, { name: ASK_ORIGIN, line });
     return true;
   };
-  /** A parked ask of a memory proposal or a system change settled, `closed` when it was withdrawn. */
+  /** A parked ask of a type proposal or a system change settled, `closed` when it was withdrawn. */
   const settleParked = (requestId: string, closed?: string): void => {
     if (closed === undefined) {
       pending.resolve(requestId);
@@ -8805,61 +8809,69 @@ export const createServer = (
     }
   };
 
-  /** The sessions a fleet memory document with `scope` loads into, in words (core memory-scope.ts). */
-  const fleetDocReach = (scope: MemoryScope | undefined): string =>
-    scopeWords(
-      scope,
-      (id) => db.project(id)?.name ?? id,
-      (id) => db.areas.get(id)?.name ?? id
-    );
+  /**
+   * The skills the fleet lists for a project's sessions, each with its
+   * SKILL.md's one-line description where the hub holds its files: the ones
+   * CawCo ships, the fleet's, and those bound to the project or its area.
+   */
+  const skillsListedFor = (projectId: string) => {
+    const areaId = db.project(projectId)?.areaId ?? null;
+    const reaches = (skill: { areaId?: string; projectId?: string }) =>
+      !(skill.projectId || skill.areaId) ||
+      skill.projectId === projectId ||
+      (areaId !== null && skill.areaId === areaId);
+    const described = new Map<string, string>();
+    for (const skill of [...bundledSkills(), ...db.fleetConfig().skills]) {
+      if (!reaches(skill)) {
+        continue;
+      }
+      const file = skill.files?.find((each) => each.path === "SKILL.md");
+      const text = file
+        ? Buffer.from(file.contentBase64, "base64").toString("utf8")
+        : "";
+      described.set(skill.name, skillDescription(text) ?? "");
+    }
+    for (const skill of db.listSkills()) {
+      if (skill.enabled && reaches(skill) && !described.has(skill.name)) {
+        described.set(skill.name, "");
+      }
+    }
+    return [...described].map(([name, description]) => ({
+      name,
+      description,
+    }));
+  };
+  // A project's memory (memory.ts): the agents' inbox, Make a note into
+  // AGENTS.md, the index every session launches with and a brief's facts.
+  // Its nightly run (memory-run.ts) is the one writer of its lessons.
+  const memoryRun = createMemoryRun({
+    db,
+    fleetHosts: () =>
+      new Set(
+        [
+          osHostname(),
+          ...db
+            .machineFacts()
+            .flatMap((agent) => [agent.hostname, agent.machineId]),
+        ].map((host) => host.toLowerCase())
+      ),
+    folderChanged: (projectId) => tasks.touched(projectId),
+    skillsFor: (projectId) => skillsListedFor(projectId),
+  });
   const projectMemory = createMemory({
     db,
     watch: memoryWatch,
     // The routines are made further down; a note reaches them only once the hub is up.
     curator: () => ({
       ensure: (projectId) => routines.ensureCurator(projectId),
-      inboxPassed: (projectId) => routines.inboxPassed(projectId),
     }),
-    // A fleet proposal's document, through the write admin_memory_write's
-    // set (the main CLAUDE.md) or set_doc (a linked document) makes: a
-    // document's scope left as it is, the replaced text kept.
-    fleetDocs: {
-      list: () => [
-        { path: FLEET_MAIN_MEMORY, loadedInto: memoryWords.scopeAll },
-        ...db.listFleetMemoryDocs().map((doc) => ({
-          path: doc.path,
-          loadedInto: fleetDocReach(doc.scope),
-        })),
-      ],
-      loadedInto: (path) =>
-        path === FLEET_MAIN_MEMORY
-          ? memoryWords.scopeAll
-          : fleetDocReach(db.getFleetMemoryDoc(path)?.scope),
-      // The main CLAUDE.md is there to write before the fleet has one.
-      read: (path) =>
-        path === FLEET_MAIN_MEMORY
-          ? (db.getFleetMemory()?.content ?? "")
-          : db.getFleetMemoryDoc(path)?.content,
-      write: (path, content) => {
-        const calls = fleetMemoryCalls(ctx);
-        const saved =
-          path === FLEET_MAIN_MEMORY
-            ? calls.set({ content })
-            : calls.setDoc({ path, content });
-        if (!(saved instanceof ElysiaStatus)) {
-          return saved.hash;
-        }
-        const { response } = saved;
-        return {
-          refused:
-            typeof response === "object" &&
-            response !== null &&
-            "detail" in response
-              ? String(response.detail)
-              : `the hub answered ${saved.status}`,
-        };
-      },
-    },
+    apply: (actor, ops) => memoryRun.apply(actor, ops),
+    folderChanged: (projectId) => tasks.touched(projectId),
+  });
+  // A project's delegate type proposals (type-proposals.ts): Caw's
+  // delegates/ writes, the person's asks.
+  const typeProposals = createTypeProposals({
+    db,
     folderChanged: (projectId) => tasks.touched(projectId),
     // The conversation's notes are made further down; read once a call runs.
     notice: noticeProject,
@@ -8867,7 +8879,7 @@ export const createServer = (
     settle: settleParked,
     tell: (instanceId, text, line) => tellProposer(instanceId, text, line),
   });
-  // Open proposals are the person's asks again as the hub starts.
+  // Open type proposals are the person's asks again as the hub starts.
   // Read by the boot's sweep of the asks push took (below), which waits on it.
   let memoryParked: Promise<void> = Promise.resolve();
   /**
@@ -9065,7 +9077,7 @@ export const createServer = (
     caps,
     db,
     proposeType: (actor, path, content, toolUseId) =>
-      projectMemory.proposeType(actor, path, content, toolUseId),
+      typeProposals.proposeType(actor, path, content, toolUseId),
     online: (machineId) =>
       machineId === undefined
         ? onlineMachines().length > 0
@@ -10231,8 +10243,8 @@ export const createServer = (
   // Routines (routines.ts): prompts the hub runs on a schedule, once per slot.
   const routines = createRoutines({
     caw,
-    // A curator run's inbox, sorted first (memory.ts).
-    curatorBrief: (projectId) => projectMemory.curatorBrief(projectId),
+    // The nightly memory run's brief and end (memory-run.ts).
+    memoryRun,
     // A run's report lists what it handed Caw unopened.
     handedUnopened: (holderId, makerId) =>
       artifacts.handedUnopened(holderId, makerId),
@@ -10666,7 +10678,7 @@ export const createServer = (
       return task.kind !== "done" && task.kind !== "dropped";
     },
     // An agent's change to a system its project had is the person's ask,
-    // as a memory proposal is, answered below with the rest.
+    // as a delegate type proposal is, answered below with the rest.
     park: (envelope) => parkForPerson(envelope),
     settle: settleParked,
     tell: (instanceId, content) => workItems.tellSession(instanceId, content),
@@ -10703,7 +10715,11 @@ export const createServer = (
       );
     reread(
       projectMemory.folderCommitted(projectId, paths),
-      "memory proposals on the files a commit changed"
+      "the memory index a commit changed"
+    );
+    reread(
+      typeProposals.folderCommitted(projectId, paths),
+      "type proposals on the files a commit changed"
     );
     detach(
       designSystem.folderCommitted(projectId, paths),
@@ -11124,7 +11140,7 @@ export const createServer = (
     ingressTools: (actor) => ingress.tools(actor),
     actionTools: (actor) => actions.tools(actor),
     relayTools: (actor) => relays.tools(actor),
-    memoryTools: (actor, toolUseId) => projectMemory.tools(actor, toolUseId),
+    memoryTools: (actor) => projectMemory.tools(actor),
     projectSettings: settings,
     triageTools: (actor) => watchPort.now()?.tools(actor) ?? [],
     askPerson: (actor, name, input, toolUseId) =>
@@ -12226,10 +12242,16 @@ export const createServer = (
         run: () => detach(recordTemplates(), "project templates"),
       },
       {
-        name: "memory proposals",
+        // Each project's memory moved to lessons once (memory-run.ts
+        // `cutover`), then its index read for the sessions it launches, and
+        // the open delegate type proposals parked again.
+        name: "memory and type proposals",
         run: () => {
-          memoryParked = projectMemory.start();
-          detach(memoryParked, "memory proposals");
+          memoryParked = memoryRun
+            .start(db.listProjects())
+            .then(() => projectMemory.start())
+            .then(() => typeProposals.start());
+          detach(memoryParked, "memory and type proposals");
         },
       },
       // Pages sent before a Send decided them are decided once, from their sent picks.
@@ -12287,7 +12309,7 @@ export const createServer = (
         },
       },
       // Last off the boot path, once every ask the hub parks again as it starts
-      // is parked (design proposals at once, memory proposals once read): the
+      // is parked (design proposals at once, type proposals once read): the
       // waits the person was told of whose asks are parked no more ended with
       // the hub that held them (a browser or connect ask's call, refused as it
       // went) and never settled. Their marks go here (db `askPushes`), and a
@@ -13509,7 +13531,9 @@ export const createServer = (
         dispatchRoutes(dispatcher),
         cawRoutes(caw),
         phoneRequestRoutes(jevTasks),
-        memoryRoutes(projectMemory),
+        memoryRoutes(projectMemory, {
+          withdraw: (projectId, note) => memoryRun.withdraw(projectId, note),
+        }),
         routineRoutes(routines),
         connectionRoutes(connections),
         trackerRoutes(trackers),

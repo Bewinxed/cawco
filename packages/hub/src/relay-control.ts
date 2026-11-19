@@ -174,12 +174,13 @@ export type RelayControlContext = Pick<
   | "pickWithMove"
   | "pending"
   | "pendingInstalls"
-  | "projectMemory"
+  | "memoryRun"
   | "recordDelegateAnswer"
   | "registry"
   | "relaunchOnAccount"
   | "sendToClient"
   | "sessionIdle"
+  | "typeProposals"
   | "silentWords"
   | "streams"
 > &
@@ -296,13 +297,13 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     };
     ctx.answeringPermissions.set(requestId, receipt);
     try {
-      // A memory proposal (memory.ts): applied or rejected here, its ask
-      // settled once that is done; one that no longer applies stays parked.
-      // It reads the person's own answer: the files they edited in the
-      // card's diff (`updatedInput.edits`) are theirs, the proposal itself
-      // the hub's kept file, never the client's copy.
-      if (ctx.projectMemory.owns(requestId)) {
-        const refused = await ctx.projectMemory.answer(requestId, answer);
+      // A delegate type proposal (type-proposals.ts): applied or rejected
+      // here, its ask settled once that is done; one that no longer applies
+      // stays parked. It reads the person's own answer: the files they
+      // edited in the card's diff (`updatedInput.edits`) are theirs, the
+      // proposal itself the hub's kept file, never the client's copy.
+      if (ctx.typeProposals.owns(requestId)) {
+        const refused = await ctx.typeProposals.answer(requestId, answer);
         if (refused) {
           return refused;
         }
@@ -748,7 +749,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         if (row.projectId) {
           const what = `memory: notes of purged session ${row.id}`;
           detach(
-            ctx.projectMemory.purged(row.projectId, row.id).then((purged) => {
+            ctx.memoryRun.purged(row.projectId, row.id).then((purged) => {
               if (purged instanceof ElysiaStatus) {
                 console.warn(`[${what}] failed: ${purged.response.detail}`);
               }

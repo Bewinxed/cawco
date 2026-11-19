@@ -172,12 +172,12 @@ export interface Lesson {
   since: string;
   sources: LessonSource[];
   /**
-   * A staged lesson's words and the topic it goes to once it lands: it has
+   * A staged lesson's words and the home it goes to once it lands: it has
    * no line in any file until a second session or a file bears it out.
    * `jev`: its sources wait for Jev's check (Jev was off when it was
    * written).
    */
-  staged?: { text: string; topic: string; waits?: "jev" };
+  staged?: { home: LessonHome; text: string; waits?: "jev" };
   state: "staged" | "live" | "enforced" | "stale" | "retired";
 }
 
@@ -210,38 +210,24 @@ export interface MemoryRunState {
 /** One file a proposal changes (proposal-base.ts). */
 export type ProposalFile = ProposedFile;
 
-/** A proposal as `memory/proposals/<id>.json` keeps it. */
+/** A delegate type proposal as `memory/proposals/<id>.json` keeps it (type-proposals.ts). */
 export interface Proposal {
   /** The folder's commit when it was proposed. */
   base: string;
-  /** Who proposed it: the curator, Caw, Jev's sort, or the hub (an archive, a withdrawal). */
+  /** Who proposed it: the session that wrote the type, by its title. */
   by: string;
   /** Every file it changes, in the order the card draws them. */
   files: ProposalFile[];
-  /**
-   * Its one file is a fleet memory document (by its path under the fleet's
-   * memories), not the project's: read and written through the fleet's
-   * memory, and always the person's to approve (hub memory.ts `propose`).
-   */
-  fleet?: true;
   id: string;
-  /**
-   * What the hub proposed it as, when its rejection says something to
-   * remember: an `archive` rejected keeps its lines as used now; a `rewrite`
-   * of a prose file rejected is not proposed again until the file changes.
-   */
-  kind?: "archive" | "rewrite";
-  /** The inbox notes it comes from. */
+  /** Notes it cites: none for a delegate type; kept by proposals from before the nightly memory run. */
   notes: string[];
   projectId: string;
   /** The proposing session. */
   session: string;
   time: string;
-  /** The `memory_propose` call that made it (Claude Code's `_meta`): where it is drawn. */
+  /** The `folder_write` call that made it (Claude Code's `_meta`): where it is drawn. */
   toolUseId?: string;
   why: string;
-  /** A withdrawal's note: approved, it leaves for the archive, `withdrawn`. */
-  withdraws?: string;
 }
 
 /** Everything a job has learned and decided, as its record keeps it. */

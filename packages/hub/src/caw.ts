@@ -93,12 +93,8 @@ import { boardTitle } from "./labels";
 import type { createLeadHome } from "./lead-home";
 import { awayProblem } from "./machine-answers";
 import { defineTool, type McpTool, sentence } from "./mcp-tool";
-import {
-  AGENTS_FILE,
-  type Memory,
-  personsTier,
-  ROUTINE_ORIGIN,
-} from "./memory";
+import { personsTier, ROUTINE_ORIGIN } from "./memory";
+import { INDEX_FILE } from "./memory-lessons";
 import { VIEW_PROMPT } from "./openui";
 import {
   folderReadWords,
@@ -138,6 +134,7 @@ import {
   type Tasks,
   type TaskView,
 } from "./tasks";
+import type { TypeProposals } from "./type-proposals";
 import type { Views } from "./views";
 import { budgetOf } from "./work-limits";
 import type { WorkPlace } from "./work-place";
@@ -448,7 +445,7 @@ const saidOf = (
 };
 
 const STAGES_FILE = "stages.md";
-/** A project's delegate types: a write there is a proposal the person approves (memory.ts `proposeType`). */
+/** A project's delegate types: a write there is a proposal the person approves (type-proposals.ts `proposeType`). */
 const DELEGATES_DIR = "delegates/";
 
 /** stages.md as Caw writes it, refused with what does not read; undefined when it reads. */
@@ -470,12 +467,12 @@ const stagesRead = (body: string | Uint8Array) => {
  * it wrote from is `approved` by the person's Send.
  */
 const notWriters = (rel: string, approved: boolean): string | undefined =>
-  approved && rel === AGENTS_FILE ? undefined : personsTier(rel);
+  approved && rel === INDEX_FILE ? undefined : personsTier(rel);
 
 /**
  * A `delegates/` write's text, refused when it is bytes; with the setup
  * page's Send as its approval (`approved`), refused too when it makes no
- * whole type, as an approved proposal is (memory.ts `proposeType`).
+ * whole type, as an approved proposal is (type-proposals.ts `proposeType`).
  */
 const typeText = (
   rel: string,
@@ -581,10 +578,10 @@ export interface CawDeps {
   readonly projectsChanged: () => void;
   /**
    * A `folder_write` of a `delegates/` file, parked as the person's proposal
-   * and drawn at the call `toolUseId` (memory.ts `proposeType`): nothing is
+   * and drawn at the call `toolUseId` (type-proposals.ts `proposeType`): nothing is
    * committed until they approve it.
    */
-  readonly proposeType: Memory["proposeType"];
+  readonly proposeType: TypeProposals["proposeType"];
   /**
    * Renames the project as the dashboard's rename does (project-edit.ts
    * `edit`), every client reading it again; answers the name as kept, or

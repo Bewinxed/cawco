@@ -68,8 +68,8 @@ import { JevFailed, jevStarters, startersOff } from "./jev-placement";
 import { projectDesign } from "./landed";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { MachineCall } from "./machine-answers";
-import { AGENTS_FILE, fileOr } from "./memory";
-import { KNOWLEDGE_DIR } from "./memory-facts";
+import { fileOr } from "./memory";
+import { INDEX_FILE, KNOWLEDGE_DIR } from "./memory-lessons";
 import { folderFilePaths } from "./project-folder";
 
 import {
@@ -203,7 +203,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
   const reads = async (projectId: string) => {
     const [list, agents, knowledge, drafts, landed] = await Promise.all([
       tasks.list(projectId),
-      fileOr(projectId, AGENTS_FILE),
+      fileOr(projectId, INDEX_FILE),
       filesIn(projectId, KNOWLEDGE_DIR, true),
       filesIn(projectId, DRAFTS_DIR, false),
       projectDesign(deps, projectId, COMMITS_READ),

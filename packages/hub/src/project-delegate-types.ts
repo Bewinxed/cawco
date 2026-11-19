@@ -344,7 +344,7 @@ export const isTypeFile = (path: string): boolean =>
 /**
  * Why `content` written at `path` (`delegates/<name>.md`) would not make a
  * type whole, or nothing when it would: what Caw's proposed type is checked
- * against before the person sees it (memory.ts `proposeType`).
+ * against before the person sees it (type-proposals.ts `proposeType`).
  */
 export const typeFileProblem = (
   path: string,

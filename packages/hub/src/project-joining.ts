@@ -32,6 +32,7 @@ export type ProjectJoiningContext = Pick<
   | "projectStarters"
   | "projectsChanged"
   | "registry"
+  | "routines"
   | "runOnMachine"
 >;
 
@@ -231,6 +232,13 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * sets the project up whether its Caw is on or off.
    */
   const startProject = (created: ProjectRow, asked: ProjectAsk): void => {
+    // Its nightly memory run, made with it (routines.ts `ensureCurator`).
+    const curated = ctx.routines.ensureCurator(created.id);
+    if (curated) {
+      console.warn(
+        `[project-joining] ${created.id}: its nightly memory run was not made: ${curated.response.detail}`
+      );
+    }
     if (asked.setup) {
       detach(
         ctx.caw.setup(created.id, asked.setup).then((set) => {

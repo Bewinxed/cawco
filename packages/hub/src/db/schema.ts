@@ -6054,39 +6054,23 @@ export const sessionSubagents = sqliteTable(
 );
 
 /**
- * When a brief last carried each of a project's fact lines (memory.ts
- * `contextFor`), by its file and the hash of its words: the hub's own record
- * of use, written into the line's `used` only inside a diff the curator or
- * Jev's sort proposes anyway, so a brief commits nothing.
+ * When a brief last carried each of a project's knowledge lessons
+ * (memory.ts `contextFor`), by its lesson id: what the nightly run's upkeep
+ * reads to archive one no brief carried for long (memory-run.ts), and
+ * eviction to pick a knowledge line to archive first. A brief commits
+ * nothing.
  */
 export const factUses = sqliteTable(
   "fact_uses",
   {
     projectId: projectKey(),
-    /** `knowledge/<topic>.md`. */
+    /** Empty: a lesson's id names it across the files it moves between. Kept from when lines were keyed by file. */
     path: text("path").notNull(),
-    /** The fact's words, hashed (memory-facts.ts `factKey`): its parenthesis may change, its words not. */
+    /** The lesson's id (`L-` and six hex characters). */
     key: text("key").notNull(),
     usedAt: timestamp("used_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.path, table.key] })]
-);
-
-/**
- * A knowledge file's prose the person declined to have rewritten as fact
- * lines (memory.ts `proposeConversions`), by the hash of the words declined:
- * its rewrite is proposed again only once the file says something else.
- */
-export const declinedRewrites = sqliteTable(
-  "declined_rewrites",
-  {
-    projectId: projectKey(),
-    path: text("path").notNull(),
-    /** The declined prose, hashed (memory-facts.ts `factKey` of the whole file). */
-    words: text("words").notNull(),
-    at: timestamp("at").notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.projectId, table.path] })]
 );
 
 /**

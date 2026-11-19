@@ -50,6 +50,7 @@ import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { resolveReal } from "@cawco/core/workspace-judge";
 import { Elysia, ElysiaStatus, problem, t, type UnwrapSchema } from "elysia";
@@ -124,7 +125,8 @@ const GIT_TIMEOUT_MS = 30_000;
 
 const HUB_NAME = "CawCo hub";
 const NO_REPLY = "noreply@cawco.invalid";
-const AGENTS_STUB = "# AGENTS.md\n\nOwned by you; agents propose changes.\n";
+/** A new project's index, in the shape the nightly memory run keeps it (memory-lessons.ts `indexShape`), which names it at its first run. */
+const AGENTS_STUB = `# AGENTS.md\n\n${memoryRunWords.indexIntro}\n\n## Notes\n\n## Rules\n`;
 
 /** Who a commit is by: you, or the session that asked for it. */
 export interface FolderAuthor {
@@ -283,7 +285,7 @@ const commitListeners = new Set<
  * turn is over: the files it wrote (a move's destination included) and the
  * files it took out (a move's source included). What lives as long as a
  * file there (a project's page, server.ts) goes with it; what was made
- * against a file (a memory proposal, memory.ts) is checked again. Answers
+ * against a file (a delegate type proposal, type-proposals.ts) is checked again. Answers
  * what stops hearing.
  */
 export const onFolderCommits = (
@@ -2281,47 +2283,6 @@ export const folderFileTimes = async (projectId: string, rawDir: string) => {
   const next = timesAt(root, rel, tip, known);
   timesRead.set(key, next);
   return await next;
-};
-
-const BLAME_HEAD = /^[0-9a-f]{40} \d+ (\d+)/u;
-const AUTHOR_TIME = /^author-time (\d+)$/u;
-
-/**
- * When each line of a folder file was written, by git blame's author time
- * (1-based line → time), and the file's own mtime for a line git has no
- * date for (never committed, or a folder git cannot read).
- */
-export const folderBlame = async (projectId: string, rawPath: string) => {
-  const file = await inFolder(projectId, rawPath);
-  if (file instanceof ElysiaStatus) {
-    return file;
-  }
-  const { rel, root } = file;
-  const { mtime } = await stat(join(root, rel));
-  const lines = new Map<number, Date>();
-  const blamed = await run(root, [
-    "blame",
-    "--line-porcelain",
-    "--",
-    rel,
-  ]).catch(() => undefined);
-  if (!(blamed instanceof ElysiaStatus) && blamed?.code === 0) {
-    let line = 0;
-    for (const row of blamed.stdout.split("\n")) {
-      const at = BLAME_HEAD.exec(row);
-      const time = at ? undefined : AUTHOR_TIME.exec(row);
-      if (at) {
-        line = Number(at[1]);
-      } else if (time) {
-        lines.set(line, new Date(Number(time[1]) * 1000));
-      }
-    }
-  }
-  const blame: { lines: ReadonlyMap<number, Date>; mtime: Date } = {
-    lines,
-    mtime,
-  };
-  return blame;
 };
 
 /** The files under `rawDir` whose content is not their last commit's: changed, or never committed. */

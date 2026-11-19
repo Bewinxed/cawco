@@ -32,7 +32,60 @@ import type {
   Lesson,
   LessonHome,
 } from "./db/stored-types";
-import { BRAND, KNOWLEDGE_ARCHIVE, KNOWLEDGE_DIR } from "./memory-facts";
+
+export const KNOWLEDGE_DIR = "knowledge";
+/** Where a knowledge lesson goes once archived: `knowledge/archive/<topic>.md`, kept as history. */
+export const KNOWLEDGE_ARCHIVE = "knowledge/archive";
+export const NOTE_ID = /^n-\d{8}-\d{6}-[0-9a-f]{6}$/u;
+/** The brand kit: `knowledge/brand/…` and `knowledge/brand*.md`; images and voice, not lessons. */
+export const BRAND = /^knowledge\/brand(?:\/|[^/]*\.md$)/iu;
+
+/** The day of an ISO time or a date: `2026-10-18`. */
+export const dayOf = (at: string | Date): string =>
+  (typeof at === "string" ? at : at.toISOString()).slice(0, 10);
+
+// --- words, as a grep counts them ------------------------------------------------------
+
+const STOP = new Set(
+  "the and for with from that this are was were has have had not but its into than then when what which who will would can could should a an of to in on at by is it be as or if do does did done our we you they them their there here also only just more most some any all each one now new use used uses using get got via per out off over under about after before".split(
+    " "
+  )
+);
+const NOT_WORD = /[^\p{L}\p{N}]+/u;
+
+/** The words of `text` a grep counts: lower case, three letters or more, the commonest left out. */
+export const wordsOf = (text: string): Set<string> =>
+  new Set(
+    text
+      .toLowerCase()
+      .split(NOT_WORD)
+      .filter((word) => word.length >= 3 && !STOP.has(word))
+  );
+
+/** Whether two words are one: the same, or one the other's stem (deploy, deploys, deployed). */
+const sameWord = (a: string, b: string): boolean => {
+  if (a === b) {
+    return true;
+  }
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return (
+    short.length >= 4 &&
+    long.startsWith(short) &&
+    long.length - short.length <= 3
+  );
+};
+
+/** How many of `query`'s words `text` holds: a grep's score. */
+export const grepScore = (query: Set<string>, text: string): number => {
+  const words = [...wordsOf(text)];
+  let score = 0;
+  for (const word of query) {
+    if (words.some((each) => sameWord(word, each))) {
+      score += 1;
+    }
+  }
+  return score;
+};
 
 export const INDEX_FILE = "AGENTS.md";
 export const LESSONS_DIR = "lessons";
@@ -42,8 +95,6 @@ export const RUN_STATE_FILE = "memory/state.json";
 /** Where an index or skill lesson evicted from its home goes: still live, carried by a brief's words. */
 const RULES_TOPIC = "rules";
 
-/** `L-7f3a2c`. */
-export const LESSON_ID = /^L-[0-9a-f]{6}$/u;
 const LESSON_LINE = /^- (.*\S) \((L-[0-9a-f]{6})\)\s*$/u;
 const WHY_LINE = /^ {2}Why: (.*\S)\s*$/u;
 const BULLET = /^- (.*\S)\s*$/u;
@@ -111,8 +162,10 @@ export const pathOf = (home: LessonHome): string | undefined => {
       return `${LESSONS_DIR}/${home.skill}.md`;
     case "knowledge":
       return `${KNOWLEDGE_DIR}/${home.topic}.md`;
-    default:
+    case "none":
       return;
+    default:
+      return unhandled("lesson home", home);
   }
 };
 
@@ -249,7 +302,9 @@ export const indexShape = (projectName: string, content: string): string => {
     memoryRunWords.indexIntro,
     ...(his.length > 0 ? [his.join("\n")] : []),
     block(NOTES, sections.notes),
-    ...sections.others.map((section) => block(section.name, section.lines)),
+    ...sections.others
+      .filter((section) => section.lines.length > 0)
+      .map((section) => block(section.name, section.lines)),
     block(RULES, sections.rules),
     ...(sections.skills.length > 0 ? [block(SKILLS, sections.skills)] : []),
   ].join("\n\n")}\n`;
@@ -354,31 +409,24 @@ export const parseLessons = (
   return { lessons, unmarked };
 };
 
-/** `content` with lesson `id`'s line (and its `Why:`) gone. */
-const withoutLine = (content: string, id: string): string => {
-  const lines = linesOf(content);
-  const at = lines.findIndex((line) => LESSON_LINE.exec(line)?.[2] === id);
-  if (at < 0) {
-    return content;
-  }
-  const span = WHY_LINE.test(lines[at + 1] ?? "") ? 2 : 1;
-  return [...lines.slice(0, at), ...lines.slice(at + span)].join("\n");
-};
-
-/** `content` with lesson `id`'s line (and its `Why:`) put in place by `line`. */
-const swappedLine = (content: string, id: string, line: LessonLine): string => {
+/** `content` with lesson `id`'s line (and its `Why:`) put in place by `put`'s lines; as it was when it holds no such line. */
+const spliced = (content: string, id: string, put: string[]): string => {
   const lines = linesOf(content);
   const at = lines.findIndex((each) => LESSON_LINE.exec(each)?.[2] === id);
   if (at < 0) {
     return content;
   }
   const span = WHY_LINE.test(lines[at + 1] ?? "") ? 2 : 1;
-  return [
-    ...lines.slice(0, at),
-    renderLesson(line),
-    ...lines.slice(at + span),
-  ].join("\n");
+  return [...lines.slice(0, at), ...put, ...lines.slice(at + span)].join("\n");
 };
+
+/** `content` with lesson `id`'s line (and its `Why:`) gone. */
+const withoutLine = (content: string, id: string): string =>
+  spliced(content, id, []);
+
+/** `content` with lesson `id`'s line (and its `Why:`) put in place by `line`. */
+const swappedLine = (content: string, id: string, line: LessonLine): string =>
+  spliced(content, id, [renderLesson(line)]);
 
 /** A new knowledge or skill lessons file's first lines: what it holds. */
 const fileHead = (path: string): string => {
@@ -410,10 +458,14 @@ const withLine = (path: string, content: string, line: LessonLine): string => {
   return `${body}\n${renderLesson(line)}\n`;
 };
 
+/** The index with `line` added at the end of its `## Rules`. */
+export const indexWithRule = (index: string, line: LessonLine): string =>
+  withLine(INDEX_FILE, index, line);
+
 // --- the ledger ----------------------------------------------------------------------
 
 /** A ledger that holds nothing yet. */
-export const emptyLedger = (): Ledger => ({ version: 1, lessons: {} });
+const emptyLedger = (): Ledger => ({ version: 1, lessons: {} });
 
 /** `memory/lessons.json` read; an empty ledger for none; the words of why it does not read otherwise. */
 export const parseLedger = (text: string): Ledger | string => {
@@ -484,7 +536,7 @@ export type Change =
       id: string;
       kind: "add";
       sources: Lesson["sources"];
-      staged?: { topic: string; waits?: "jev" };
+      staged?: { waits?: "jev" };
       text: string;
       why: string | null;
     }
@@ -531,7 +583,10 @@ export interface Applied {
 }
 
 /** A lesson line's words as its file says them now; undefined when it has none. */
-const lineOf = (tree: MemoryTree, id: string): LessonLine | undefined => {
+export const lineOf = (
+  tree: MemoryTree,
+  id: string
+): LessonLine | undefined => {
   const lesson = tree.ledger.lessons[id];
   const path = lesson ? pathOf(lesson.home) : undefined;
   return path
@@ -597,7 +652,7 @@ const overCap = (tree: MemoryTree, path: string): boolean => {
  * never leaves, nor his own lines (the index's Notes, which hold no
  * lessons). Undefined when every line is held.
  */
-export const evict = (
+const evict = (
   path: string,
   content: string,
   ledger: Ledger,
@@ -783,7 +838,7 @@ const dropSection = (content: string, name: string): string => {
 };
 
 /** The index's `## Skills` lines: one pointer per `lessons/<skill>.md` that holds a lesson, by the skill's name. */
-export const pointerLines = (tree: MemoryTree): string[] =>
+const pointerLines = (tree: MemoryTree): string[] =>
   Object.keys(tree.files)
     .flatMap((path) => {
       const home = homeOf(path);
@@ -806,6 +861,26 @@ interface Done {
 
 type ChangeOf<K extends Change["kind"]> = Extract<Change, { kind: K }>;
 
+/** `now` with `line` added in `home`'s file and its entry as `entry`; the file it grew. */
+const placed = (
+  now: MemoryTree,
+  home: LessonHome,
+  line: LessonLine,
+  entry: Lesson
+): Done => {
+  const path = pathOf(home) ?? INDEX_FILE;
+  return {
+    tree: {
+      files: {
+        ...now.files,
+        [path]: withLine(path, now.files[path] ?? "", line),
+      },
+      ledger: withEntry(now.ledger, line.id, entry),
+    },
+    grew: path,
+  };
+};
+
 /** A new lesson: staged in the ledger alone, or a line in its home (knowledge when every index line is held). */
 const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done => {
   const base: Lesson = {
@@ -825,7 +900,7 @@ const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done => {
           ...base,
           home: { at: "none" },
           state: "staged",
-          staged: { text: op.text, ...op.staged },
+          staged: { home: op.home, text: op.text, ...op.staged },
         }),
       },
     };
@@ -834,20 +909,16 @@ const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done => {
   const home: LessonHome = redirected
     ? { at: "knowledge", topic: RULES_TOPIC }
     : op.home;
-  const path = pathOf(home) ?? INDEX_FILE;
   return {
-    tree: {
-      files: {
-        ...now.files,
-        [path]: withLine(path, now.files[path] ?? "", {
-          id: op.id,
-          text: op.text,
-          why: op.why,
-        }),
-      },
-      ledger: withEntry(now.ledger, op.id, { ...base, home }),
-    },
-    grew: path,
+    ...placed(
+      now,
+      home,
+      { id: op.id, text: op.text, why: op.why },
+      {
+        ...base,
+        home,
+      }
+    ),
     ...(redirected ? { redirected: true as const } : {}),
   };
 };
@@ -923,28 +994,12 @@ const corroborated = (
       },
     };
   }
-  const home: LessonHome = { at: "knowledge", topic: staged.topic };
-  const path = pathOf(home) ?? "";
-  return {
-    tree: {
-      files: {
-        ...now.files,
-        [path]: withLine(path, now.files[path] ?? "", {
-          id: op.id,
-          text: staged.text,
-          why: null,
-        }),
-      },
-      ledger: withEntry(now.ledger, op.id, {
-        ...rest,
-        home,
-        state: "live",
-        seen: today,
-        sources,
-      }),
-    },
-    grew: path,
-  };
+  return placed(
+    now,
+    staged.home,
+    { id: op.id, text: staged.text, why: null },
+    { ...rest, home: staged.home, state: "live", seen: today, sources }
+  );
 };
 
 /** One change, by its kind. */

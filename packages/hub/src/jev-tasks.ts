@@ -51,7 +51,7 @@ import {
   sameFilesAndChecks,
   TRIAGE_FIELD,
 } from "./jev-placement";
-import { grepScore, wordsOf } from "./memory-facts";
+import { grepScore, wordsOf } from "./memory-lessons";
 import {
   hubActor,
   type TaskEvent,
