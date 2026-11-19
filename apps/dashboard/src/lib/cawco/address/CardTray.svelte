@@ -120,7 +120,10 @@
       {/if}
       {#if words.primary}
         <span
-          class={["flex justify-center", form === "phone" && "w-full *:w-full"]}
+          class={[
+            "flex justify-center",
+            form === "phone" && "w-full [&>*]:w-full",
+          ]}
         >
           <TrayPress
             press={words.primary}

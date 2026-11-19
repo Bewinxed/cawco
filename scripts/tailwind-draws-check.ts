@@ -45,7 +45,7 @@ const ROOT = join(import.meta.dir, "..");
 const DASHBOARD = join(ROOT, "apps/dashboard");
 const TOKENS = "apps/dashboard/src/lib/tokens/theme.css";
 /** A stylesheet that is a Tailwind entry: it imports Tailwind itself. */
-const ENTRY = /@import\s+["']tailwindcss["']/u;
+const ENTRY = /@import\s+["']tailwindcss(?:\/utilities\.css)?["']/u;
 const STYLESHEET = /^apps\/dashboard\/src\/.*\.css$/u;
 const THEME_VAR = /var\((--[\w-]+)/gu;
 

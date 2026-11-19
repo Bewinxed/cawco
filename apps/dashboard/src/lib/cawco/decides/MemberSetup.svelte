@@ -739,7 +739,7 @@
               variant={removeAsked ? "secondary" : "default"}
             >
               <span
-                class="grid grid-cols-1 grid-rows-1 *:col-start-1 *:row-start-1"
+                class="grid grid-cols-1 grid-rows-1 [&>*]:col-start-1 [&>*]:row-start-1"
                 data-box
               >
                 <span class={[(last || setup.saving) && "invisible"]}

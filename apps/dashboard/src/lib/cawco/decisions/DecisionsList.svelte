@@ -277,7 +277,7 @@
       {@render fact(page)}
     </span>
     <span
-      class="col-start-4 row-start-1 grid items-center justify-items-end *:col-start-1 *:row-start-1 @max-decisions-520px/decisions:col-start-3"
+      class="col-start-4 row-start-1 grid items-center justify-items-end [&>*]:col-start-1 [&>*]:row-start-1 @max-decisions-520px/decisions:col-start-3"
       data-slot="end"
     >
       {#if page.updatedAt > 0}

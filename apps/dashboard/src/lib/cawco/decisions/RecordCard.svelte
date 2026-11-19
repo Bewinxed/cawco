@@ -192,7 +192,7 @@
             <IconChevronDown
               data-chev
               aria-hidden="true"
-              class="transition-[scale] duration-(--duration-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off *:vector-non-scaling"
+              class="transition-[scale] duration-(--duration-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off [&>*]:vector-non-scaling"
               data-icon="inline-end"
             />
           </Button>

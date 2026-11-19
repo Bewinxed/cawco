@@ -2055,6 +2055,7 @@
         <!-- A phone: the folder's file is its own page, with Back to the view. -->
         <div
           data-slot="project-page"
+          data-project-page
           data-safe-bottom
           class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom)"
         >
@@ -2071,6 +2072,7 @@
         <!-- A phone: the task is its own page, with Back to the view. -->
         <div
           data-slot="project-page"
+          data-project-page
           data-safe-bottom
           class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom)"
         >
@@ -2103,6 +2105,7 @@
            0px while the page wears no fade). -->
           <div
             data-slot="project-page"
+            data-project-page
             data-safe-bottom
             class={[
               "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--reveal-foot) max-phone:fade-inset-end-(--bar-fade-inset)",

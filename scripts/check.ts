@@ -574,6 +574,9 @@ const gated: Gated[] = [
   // registered `inherits: false`: one that inherits restyles every element
   // in the document each time the word comes or goes.
   bun("apps/dashboard/scripts/root-flip-check.ts"),
+  // Every rule names its element, or an ancestor most elements lack: one
+  // that names neither is run on every element Blink restyles.
+  bun("apps/dashboard/scripts/universal-key-check.ts"),
   bun("apps/dashboard/scripts/lib-import-check.ts"),
   bun("apps/dashboard/scripts/svelte-unused-css.ts"),
   // The release build's layers guard, over the house's sheets unbundled.
@@ -584,6 +587,9 @@ const gated: Gated[] = [
   bun("scripts/tailwind-draws-check.ts"),
   inDashboard("scripts/role-order.ts"),
   inDashboard("scripts/build-variants.ts", "--check"),
+  // Tailwind's Preflight, its box reset asked of each pseudo-element a rule
+  // makes, as the CSS the house ships says them.
+  inDashboard("scripts/preflight.ts", "--check"),
   // The web app manifest's colours are the theme's, as the tokens make them.
   inDashboard("scripts/web-manifest.ts", "--check"),
   bun("packages/hub/scripts/skills-check.ts"),

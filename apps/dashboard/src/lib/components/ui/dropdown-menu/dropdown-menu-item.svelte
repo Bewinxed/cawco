@@ -52,7 +52,7 @@
     "data-[variant=destructive]:focus:text-error-9",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
-    "px-2.5 data-[variant=destructive]:*:[svg]:text-error-9",
+    "px-2.5 data-[variant=destructive]:[&>svg]:text-error-9",
     dropdownMenuItemVariants({ marks, row }),
     className
   )}

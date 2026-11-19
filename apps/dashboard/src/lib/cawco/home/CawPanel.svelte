@@ -274,7 +274,7 @@
       <!-- Notices part with a hairline, as rows of one list do. -->
       <ul
         data-slot="notices"
-        class="m-0 list-none divide-y divide-border-hairline p-0"
+        class="m-0 list-none p-0 [&>li]:border-border-hairline [&>li:not(:last-child)]:border-b"
       >
         {#if damaged}
           <!-- The damaged record: its words on the rows' text column, Reset

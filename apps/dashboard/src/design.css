@@ -563,28 +563,24 @@
      its text colour. On what takes focus only: on every element, it was a
      tenth of a restyle of the page (conversation-frames, 790 elements:
      16.9ms against 15.4ms without it). */
-  :where(
-    a[href],
-    button,
-    input,
-    select,
-    textarea,
-    summary,
-    iframe,
-    [tabindex],
-    [contenteditable]:not([contenteditable="false"])
-  ) {
+  :where(a[href]),
+  :where(button),
+  :where(input),
+  :where(select),
+  :where(textarea),
+  :where(summary),
+  :where(iframe),
+  :where([tabindex]),
+  :where([contenteditable]:not([contenteditable="false"])) {
     outline-color: var(--color-focus-ring);
   }
 
   /* An enabled button takes the pointer hand; a disabled or pending one
      (aria-disabled, its press swallowed) the arrow
      (tailwindcss.com/docs/upgrade-guide, "Buttons use the default cursor"). */
-  button,
-  [role="button"] {
-    &:not(:disabled, [aria-disabled="true"]) {
-      cursor: pointer;
-    }
+  button:not(:disabled, [aria-disabled="true"]),
+  [role="button"]:not(:disabled, [aria-disabled="true"]) {
+    cursor: pointer;
   }
 
   /* The root never scrolls (the shell's panes do), so it keeps no gutter on
@@ -889,11 +885,12 @@
 /* A row held under a finger (utils/longpress.ts marks it `data-holding`,
    whatever row it is) takes the press tint (`press-tint`, the behaviours,
    below) for as long as it is held, over the row's own fill:
-   `#\#` is an id no element has, so `:is(…, #\#)` matches as its other
-   argument does and weighs an id (Selectors 4). Its inks go strong by day,
-   as a pressed control's do. */
+   `#\#` is an id no element has, so `:not(#\#)` matches every element
+   and weighs an id (Selectors 4), and `:where()` weighs nothing: the row
+   is asked for by its attribute, which Blink files the rule under. Its inks
+   go strong by day, as a pressed control's do. */
 @layer utilities {
-  :is([data-holding], #\#) {
+  :where([data-holding]):not(#\#) {
     background-color: var(--color-surface-pressed);
   }
   :root:not(.dark) [data-holding] {
@@ -965,10 +962,12 @@
     --r-start: var(--r-join);
     --r-end: var(--r-join);
   }
-  & :is([data-glass-at="leading"], [data-glass-at="only"]) {
+  & [data-glass-at="leading"],
+  & [data-glass-at="only"] {
     --r-start: var(--r-inner);
   }
-  & :is([data-glass-at="trailing"], [data-glass-at="only"]) {
+  & [data-glass-at="trailing"],
+  & [data-glass-at="only"] {
     --r-end: var(--r-inner);
   }
   /* An item whose card or menu hangs from the glass (the glass
@@ -1320,7 +1319,9 @@
     line-height: inherit;
     color: inherit;
   }
-  & :is(p, ul, ol) {
+  & p,
+  & ul,
+  & ol {
     margin-block: 0;
   }
   & .prose > * {
@@ -1329,7 +1330,8 @@
   & .prose > :first-child {
     margin-block-start: 0;
   }
-  & :is(ul, ol) {
+  & ul,
+  & ol {
     padding-inline-start: var(--spacing-space-5);
   }
   & strong {
@@ -2178,8 +2180,8 @@
    agent's own transition styles compete here, and any author layer outranks
    those, so it stands with the element defaults. */
 @layer base {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
+  :root::view-transition-old(root),
+  :root::view-transition-new(root) {
     animation-duration: var(--duration-fade);
     animation-timing-function: var(--ease-out);
   }
@@ -2196,7 +2198,8 @@
    the box's computed position as it mounted instead, and that read
    restyled the page between the writes of the flush that mounted it. */
 @layer base {
-  :where([data-highlight], [data-reflow]) {
+  :where([data-highlight]),
+  :where([data-reflow]) {
     position: relative;
   }
 }
@@ -2405,9 +2408,14 @@
    run that truncates clips with `overflow: clip`: Gecko does not trim a
    scroll container. */
 @utility mark-line {
+  /* mark-text's two declarations, written out: applied here, its own
+     `:where(&)` wrapped this whole selector, and Blink reads no ancestor
+     inside the compound it files a rule under, so every element it
+     restyled tested the rule (universal-key-check.ts). */
   :where(&)
     > :where(:not(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box])) {
-    @apply mark-text;
+    text-box: trim-both ex alphabetic;
+    padding-block: calc((1lh - 1ex) / 2);
   }
 }
 /* A mark beside words that wrap stands on their first line: the row is set
@@ -2441,7 +2449,7 @@
     display: inline-grid;
     place-items: center;
   }
-  :where(& > *) {
+  :where(&) > :where(*) {
     display: inline-flex;
     grid-area: 1 / 1;
     transition-property: opacity, scale;
@@ -3011,14 +3019,17 @@
     & .pele-node .pele-label {
       font-weight: var(--font-weight-medium);
     }
-    & .pele-edge :is(path, line, polyline) {
+    & .pele-edge path,
+    & .pele-edge line,
+    & .pele-edge polyline {
       stroke-width: 1px;
     }
     & .pele-edge-label {
       font-size: var(--text-meta);
       fill: var(--color-ink-muted);
     }
-    & .pele-cluster > :is(rect, path) {
+    & .pele-cluster > rect,
+    & .pele-cluster > path {
       stroke: var(--color-border-hairline);
     }
     & .pele-cluster-label {

@@ -19,7 +19,7 @@
       body: "@max-phone/table:block",
       header: "@max-phone/table:hidden",
       section:
-        "@max-phone/table:block @max-phone/table:*:flex @max-phone/table:[&_th:not(:first-child)]:hidden",
+        "@max-phone/table:block @max-phone/table:[&>*]:flex @max-phone/table:[&_th:not(:first-child)]:hidden",
       row: {
         /** Spaced and ruled, the body's last one too (a section follows it). */
         stacks:
@@ -57,7 +57,7 @@
       body: "@max-table-424px/table:block",
       header: "@max-table-424px/table:hidden",
       section:
-        "@max-table-424px/table:block @max-table-424px/table:*:flex @max-table-424px/table:[&_th:not(:first-child)]:hidden",
+        "@max-table-424px/table:block @max-table-424px/table:[&>*]:flex @max-table-424px/table:[&_th:not(:first-child)]:hidden",
       row: {
         stacks:
           "@max-table-424px/table:grid @max-table-424px/table:grid-cols-(--card-cols) @max-table-424px/table:items-center @max-table-424px/table:gap-x-space-3 @max-table-424px/table:gap-y-space-1 @max-table-424px/table:border-b @max-table-424px/table:border-b-border-hairline @max-table-424px/table:px-space-3 @max-table-424px/table:py-space-2 @max-table-424px/table:[&:is(tbody>tr):last-child]:border-b-none",

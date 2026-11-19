@@ -155,11 +155,15 @@
      (`--spacing-c-edge-fade-len`, `-phone`), which `fade-len-*` sets per scroller;
      PaneTabs' phone strip redraws the inline mask on its own run
      (`strip-edge-mask`). */
-  :where(.kit-edge-fade, .kit-edge-fade-block, .kit-edge-fade-pan) {
+  :where(.kit-edge-fade),
+  :where(.kit-edge-fade-block),
+  :where(.kit-edge-fade-pan) {
     --fade-len: var(--spacing-c-edge-fade-len);
   }
   @media (width < --theme(--breakpoint-phone)) {
-    :where(.kit-edge-fade, .kit-edge-fade-block, .kit-edge-fade-pan) {
+    :where(.kit-edge-fade),
+    :where(.kit-edge-fade-block),
+    :where(.kit-edge-fade-pan) {
       --fade-len: var(--spacing-c-edge-fade-len-phone);
     }
   }
@@ -197,7 +201,8 @@
      (motion/fade-runs `watchEdgeFades` says which do): Chromium leaves a
      scroll timeline whose range collapsed at its end, which stood the
      start fade in full over a box that does not scroll. */
-  :is(.kit-edge-fade, .kit-edge-fade-block):not([data-fade-runs]) {
+  .kit-edge-fade:not([data-fade-runs]),
+  .kit-edge-fade-block:not([data-fade-runs]) {
     mask-image: none;
   }
 }

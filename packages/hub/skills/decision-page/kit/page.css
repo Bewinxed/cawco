@@ -358,7 +358,8 @@ a {
   line-height: 1.4;
 }
 /* What it costs and what it builds, under what it gets: the meta size. */
-.dp-opt :is(.dp-cost, .dp-builds) {
+.dp-opt .dp-cost,
+.dp-opt .dp-builds {
   font-size: var(--text-meta);
 }
 /* Recommended, first in its option, over the label: the badge (DESIGN.md, Badges, chips and pills), so the option's line under the label reads as

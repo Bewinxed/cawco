@@ -30,6 +30,10 @@ import { groupsAsCombinators } from "./group-selectors.ts";
 import { precompressAll } from "./precompress-adapter.ts";
 import { publicOrigin } from "./public-origin.js";
 import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
+import {
+  VENDOR_COMPONENT_SHEETS,
+  VENDOR_IMPORTED_SHEETS,
+} from "./vendor-sheets.ts";
 import { leaveOutShiki } from "./vite/leave-out-shiki.ts";
 
 /**
@@ -320,13 +324,9 @@ const runningVersion = (): Plugin => ({
  * sheet's order or first words place a layer. A sheet naming a layer that
  * statement leaves out fails the build, naming its asset and layer: the
  * document would place it after `overrides`, over every rule of the house.
+ * The libraries and folders are vendor-sheets.ts's, which
+ * scripts/preflight.ts reads as well.
  */
-const VENDOR_COMPONENT_SHEETS = [
-  "svelte-sonner",
-  "vaul-svelte",
-  "bits-ui",
-  "@xyflow/svelte",
-];
 /**
  * The libraries with component sheets that dev compiles like the app's own
  * components (`optimizeDeps.exclude`; bits-ui stays pre-bundled, below).
@@ -361,10 +361,6 @@ const COMPILED_LIBRARY_DEPS = COMPILED_LIBRARIES.flatMap((library) => {
     (dependency) => `${library} > ${dependency}`
   );
 });
-const VENDOR_IMPORTED_SHEETS = [
-  "@event-calendar/core/src/styles",
-  "photoswipe/dist",
-];
 const pathPattern = (path: string): string => path.split("/").join("[\\\\/]");
 const VENDOR_COMPONENT_STYLE = new RegExp(
   [

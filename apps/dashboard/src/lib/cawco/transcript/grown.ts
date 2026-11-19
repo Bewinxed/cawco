@@ -111,7 +111,7 @@ const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const LAYER =
-  "absolute z-1 inset-x-0 bottom-0 pointer-events-none *:block *:size-full *:overflow-visible";
+  "absolute z-1 inset-x-0 bottom-0 pointer-events-none [&>svg]:block [&>svg]:size-full [&>svg]:overflow-visible";
 
 let made = 0;
 

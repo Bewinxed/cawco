@@ -29,9 +29,14 @@
  *
  * Prints `file:line: selector --property` per declaration; exits 1 on any.
  */
-import { AtRule, type Rule } from "postcss";
 import selectorParser, { type Selector } from "postcss-selector-parser";
-import { compoundsOf, fullSelector, readHouseCss } from "./lib/house-css";
+import {
+  compoundsOf,
+  fullSelector,
+  placedOnce,
+  readHouseCss,
+  styleRules,
+} from "./lib/house-css";
 
 // Read at run time beyond its imports (lib/house-css.ts); check.ts keys the
 // check on them.
@@ -121,16 +126,13 @@ interface Hit {
 }
 const hits: Hit[] = [];
 for (const sheet of house.sheets) {
-  sheet.root.walkRules((rule: Rule) => {
-    if (rule.parent instanceof AtRule && rule.parent.name === "keyframes") {
-      return;
-    }
+  for (const rule of styleRules(sheet.root)) {
     const inheriting = rule.nodes
       .filter((node) => node.type === "decl" && node.prop.startsWith("--"))
       .map((node) => (node.type === "decl" ? node.prop : ""))
       .filter((prop) => inherits.get(prop) !== false);
     if (inheriting.length === 0) {
-      return;
+      continue;
     }
     const selector = fullSelector(rule);
     for (const flipped of flipping(selector)) {
@@ -140,12 +142,10 @@ for (const sheet of house.sheets) {
         }
       }
     }
-  });
+  }
 }
 
-const unique = [
-  ...new Map(hits.map((h) => [`${h.file}:${h.line}: ${h.text}`, h])).values(),
-].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+const unique = placedOnce(hits, (h) => h.text);
 if (unique.length > 0) {
   console.error(
     `root-flip: ${unique.length} custom propert(ies) inherit from html, body or the shell under a word written there, so each flip restyles every element in the document:`

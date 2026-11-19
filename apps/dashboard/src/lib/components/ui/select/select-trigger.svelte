@@ -29,7 +29,7 @@
       /** `end`: its value at its end, before its mark, as a number field
           writes its figure (the design graph's Controls: a select whose
           options are a figure and a unit). */
-      align: { end: "*:first:flex-1 *:first:text-end" },
+      align: { end: "[&>*:first-child]:flex-1 [&>*:first-child]:text-end" },
       /** A filter chip that is on (`data-on`): the selected pair, no edge,
           its ink held over the placeholder's. */
       chosen: {
@@ -79,10 +79,10 @@
     "type-body disabled:cursor-not-allowed",
     "disabled:opacity-50 aria-invalid:border-error-9",
     "data-placeholder:text-ink-muted",
-    "*:data-[slot=select-value]:line-clamp-1",
-    "*:data-[slot=select-value]:flex",
-    "*:data-[slot=select-value]:items-center",
-    "*:data-[slot=select-value]:gap-1.5",
+    "[&>[data-slot=select-value]]:line-clamp-1",
+    "[&>[data-slot=select-value]]:flex",
+    "[&>[data-slot=select-value]]:items-center",
+    "[&>[data-slot=select-value]]:gap-1.5",
     "dark:aria-invalid:border-error-9/50",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",

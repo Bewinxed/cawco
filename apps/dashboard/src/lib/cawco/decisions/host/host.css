@@ -8,7 +8,10 @@
    tailwindcss.com/docs/detecting-classes-in-source-files); each source is
    named below, one line per part the host imports. */
 @layer theme, base, vendor, components, utilities, overrides;
-@import "tailwindcss" source(none);
+@import "tailwindcss/theme.css" layer(theme);
+/* Tailwind's Preflight as the dashboard takes it (app.css). */
+@import "../../../tokens/preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
 @import "../../../../design.css";
 /* The house's picture viewer, which a pressed Image opens (Image.svelte):
    PhotoSwipe's own sheet in the libraries' layer, then the house's chrome

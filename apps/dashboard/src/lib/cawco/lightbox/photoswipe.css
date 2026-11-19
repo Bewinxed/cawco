@@ -112,7 +112,8 @@
     /* One picture has nowhere to swipe to: PhotoSwipe hides its arrows and
        counter then (`pswp--one-slide`), which the buttons' and counter's
        `display` above outranks from this layer, so it is said again here. */
-    &.pswp--one-slide :is(.pswp__button--arrow, .pswp__counter) {
+    &.pswp--one-slide .pswp__button--arrow,
+    &.pswp--one-slide .pswp__counter {
       display: none;
     }
   }

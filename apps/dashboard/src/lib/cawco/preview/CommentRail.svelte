@@ -876,7 +876,7 @@
     <header
       data-slot="head"
       data-searching={searching || undefined}
-      class="relative grid flex-none grid-cols-1 items-center h-c-btn-h-lg px-space-2 hit-gap-x-space-1 coarse:hit-gap-x-space-5 data-[layout=beside]:mt-space-2 *:col-start-1 *:row-start-1"
+      class="relative grid flex-none grid-cols-1 items-center h-c-btn-h-lg px-space-2 hit-gap-x-space-1 coarse:hit-gap-x-space-5 data-[layout=beside]:mt-space-2 [&>*]:col-start-1 [&>*]:row-start-1"
       data-layout={layout}
     >
       {#if searching}

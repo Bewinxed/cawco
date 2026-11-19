@@ -10,6 +10,7 @@
     "build": "vite build && bun scripts/publish-build.ts",
     "dev": "vite dev",
     "fmt": "bun ../../scripts/fmt.ts .",
+    "preflight": "bun scripts/preflight.ts",
     "preview": "vite preview",
     "tab-icon": "bun scripts/tab-icon-art.ts",
     "variants": "bun scripts/build-variants.ts",

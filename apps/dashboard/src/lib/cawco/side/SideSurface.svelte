@@ -656,7 +656,7 @@
       data-led={inLead.some((one) => stands(one.key)) || undefined}
       data-controlled={titleControl ? "" : undefined}
       data-switched={switcher && switcherAt === "start" ? "" : undefined}
-      class="-m-space-1 flex min-w-(--name-keeps) flex-1 items-center overflow-hidden p-space-1 ps-space-3 *:max-w-full data-led:me-0 data-led:flex-initial data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1"
+      class="-m-space-1 flex min-w-(--name-keeps) flex-1 items-center overflow-hidden p-space-1 ps-space-3 [&>*]:max-w-full data-led:me-0 data-led:flex-initial data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1"
       style:--name-keeps="{nameKeeps}px"
       bind:this={identity}
     >

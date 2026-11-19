@@ -11,7 +11,11 @@
    field's type floor, a loop held still, the theme flip). A later layer
    wins over an earlier one whatever the selectors' weight
    (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer). */
-@import "tailwindcss" source(".");
+@import "tailwindcss/theme.css" layer(theme);
+/* Tailwind's Preflight, its box reset asked only of the pseudo-elements the
+   house makes (scripts/preflight.ts writes it). */
+@import "./lib/tokens/preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities) source(".");
 /* The house faces, Figtree, JetBrains Mono and Nunito, as every CawCo web
    surface serves them: woff2 pieces cut from the repository's own files (core
    house-faces.ts), written here by vite.config.ts's `houseFaces`. */
@@ -179,7 +183,7 @@
   [data-slot="listing"] [data-item][data-drawn] {
     visibility: inherit !important;
   }
-  [data-slot="listing"] > :first-child {
+  [data-slot="listing"] > div:first-child {
     pointer-events: inherit !important;
   }
   /* The transcript's dock stands at zero height over its foot, taking no
@@ -188,9 +192,11 @@
   [data-slot="dock"] button {
     pointer-events: auto;
   }
-  /* A tool row's gallery: each Shot grows from the shot width and never
-     overflows the row. */
-  [data-slot="shots"] > * {
+  /* A tool row's gallery: each Shot (its figure) and captions file
+     (DocThumb's button) grows from the shot width and never overflows the
+     row. */
+  [data-slot="shots"] > figure,
+  [data-slot="shots"] > button {
     flex: 1 1 var(--tx-shot);
     min-inline-size: 0;
     max-inline-size: 100%;
@@ -198,6 +204,16 @@
   /* A conversation turn's rendered words (MessageBody), in the body role and
      the turn's rhythm. */
   [data-slot="msg"] {
+    & p,
+    & li,
+    & h1,
+    & h2,
+    & h3,
+    & h4,
+    & h5,
+    & h6 {
+      text-wrap-style: stable;
+    }
     /* A paragraph after a paragraph, and a list in a list item, keep their
        gap over the zero margins below (more specific, so first here). */
     & p + p {
@@ -207,12 +223,10 @@
     & li > ol {
       margin-block-start: var(--spacing-space-1);
     }
-    & :is(p, li, h1, h2, h3, h4, h5, h6) {
-      text-wrap-style: stable;
-    }
     /* Settled words (a comment's thread, MessageBody `wrap`): no word alone
        on a last line. */
-    &[data-wrap="pretty"] :is(p, li) {
+    &[data-wrap="pretty"] p,
+    &[data-wrap="pretty"] li {
       text-wrap-style: pretty;
     }
     /* biome-ignore-start lint/style/noDescendingSpecificity: the more specific
@@ -260,13 +274,23 @@
     & .prose > :last-child {
       margin-block-end: 0;
     }
-    & .prose :is(h1, h2, h3, h4, h5, h6) {
+    & .prose h1,
+    & .prose h2,
+    & .prose h3,
+    & .prose h4,
+    & .prose h5,
+    & .prose h6 {
       font-size: var(--text-body);
       line-height: var(--leading-ui);
       font-weight: var(--font-weight-medium);
       color: var(--color-ink-strong);
     }
-    & .prose > :is(h1, h2, h3, h4, h5, h6):where(:not(:first-child)) {
+    & .prose > h1:where(:not(:first-child)),
+    & .prose > h2:where(:not(:first-child)),
+    & .prose > h3:where(:not(:first-child)),
+    & .prose > h4:where(:not(:first-child)),
+    & .prose > h5:where(:not(:first-child)),
+    & .prose > h6:where(:not(:first-child)) {
       margin-block-start: var(--spacing-space-5);
     }
     & .prose > pre {
@@ -302,7 +326,7 @@
   }
   /* An instruction's markdown starts at its box: its first block gives back
      the gap above it. */
-  [data-slot="instruction"] [data-slot="md"] > :first-child {
+  [data-slot="instruction"] [data-slot="md"] > .prose:first-child {
     margin-block-start: 0;
   }
 
@@ -311,7 +335,12 @@
   [data-slot="transcript-brief"] {
     [data-slot="msg"],
     [data-slot="msg"] .prose,
-    [data-slot="msg"] .prose :is(h1, h2, h3, h4, h5, h6) {
+    [data-slot="msg"] .prose h1,
+    [data-slot="msg"] .prose h2,
+    [data-slot="msg"] .prose h3,
+    [data-slot="msg"] .prose h4,
+    [data-slot="msg"] .prose h5,
+    [data-slot="msg"] .prose h6 {
       color: var(--color-ink-muted);
     }
     [data-slot="msg"] .prose {
@@ -417,10 +446,12 @@
      finger's element up to the nearest scroller, so a scrolling list in the
      sheet would otherwise claim the drag that dismisses it
      (motion/drag.svelte.ts). The sheet's children are its caller's. */
-  [data-slot="sheet-content"]:is([data-side="left"], [data-side="right"]) * {
+  [data-slot="sheet-content"][data-side="left"] *,
+  [data-slot="sheet-content"][data-side="right"] * {
     touch-action: pan-y;
   }
-  [data-slot="sheet-content"]:is([data-side="top"], [data-side="bottom"]) * {
+  [data-slot="sheet-content"][data-side="top"] *,
+  [data-slot="sheet-content"][data-side="bottom"] * {
     touch-action: pan-x;
   }
 
@@ -507,14 +538,23 @@
     :is(strong, b, h1, h2, h3, h4, h5, h6, th) {
     font-weight: var(--font-weight-medium);
   }
-  [data-slot="crepe-host"] .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+  [data-slot="crepe-host"] .milkdown .ProseMirror h1,
+  [data-slot="crepe-host"] .milkdown .ProseMirror h2,
+  [data-slot="crepe-host"] .milkdown .ProseMirror h3,
+  [data-slot="crepe-host"] .milkdown .ProseMirror h4,
+  [data-slot="crepe-host"] .milkdown .ProseMirror h5,
+  [data-slot="crepe-host"] .milkdown .ProseMirror h6 {
     margin-top: var(--spacing-space-5);
     padding: var(--spacing-space-1) 0;
   }
-  [data-slot="crepe-host"] .milkdown .ProseMirror :is(h1, h2) {
+  [data-slot="crepe-host"] .milkdown .ProseMirror h1,
+  [data-slot="crepe-host"] .milkdown .ProseMirror h2 {
     font-size: var(--text-title);
   }
-  [data-slot="crepe-host"] .milkdown .ProseMirror :is(h3, h4, h5, h6) {
+  [data-slot="crepe-host"] .milkdown .ProseMirror h3,
+  [data-slot="crepe-host"] .milkdown .ProseMirror h4,
+  [data-slot="crepe-host"] .milkdown .ProseMirror h5,
+  [data-slot="crepe-host"] .milkdown .ProseMirror h6 {
     font-size: var(--text-body);
   }
   [data-slot="crepe-host"] .milkdown .ProseMirror {
@@ -559,7 +599,8 @@
     border: 1px solid var(--color-border-hairline);
     border-radius: var(--radius-sm);
   }
-  [data-slot="crepe-host"] .milkdown :is(.cm-editor, .cm-gutters) {
+  [data-slot="crepe-host"] .milkdown .cm-editor,
+  [data-slot="crepe-host"] .milkdown .cm-gutters {
     background: var(--color-surface-recess);
   }
   [data-slot="crepe-host"] .milkdown :is(button, input, [role="button"]) {
@@ -1024,7 +1065,11 @@
     flex: 0 1 auto;
     min-inline-size: 0;
   }
-  [data-slot="project-page"] {
+  /* On a phone the page is one scroller, and nothing in it shrinks to fit.
+     Asked by its own attribute, which Blink's ancestor filter reads (most
+     elements stand under some data-slot, so that name filters nothing):
+     an element outside a project page sets the rule aside unread. */
+  [data-project-page] {
     @variant max-phone {
       & > * {
         flex-shrink: 0;
@@ -1186,7 +1231,9 @@
       background: var(--color-surface-raised);
       box-shadow: var(--shadow-tile);
     }
-    & :is(.ec-day-head, .ec-slots, .ec-all-day) {
+    & .ec-day-head,
+    & .ec-slots,
+    & .ec-all-day {
       font: var(--type-meta);
       color: var(--color-ink-muted);
     }

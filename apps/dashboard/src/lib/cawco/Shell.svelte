@@ -1624,7 +1624,7 @@
         <div
           data-slot="slot"
           data-flip
-          class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 max-desk:pe-space-3 coarse:portrait:pe-space-3 max-desk:group-data-floating/top:invisible group-data-under/top:*:pointer-events-auto"
+          class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 max-desk:pe-space-3 coarse:portrait:pe-space-3 max-desk:group-data-floating/top:invisible group-data-under/top:[&>*]:pointer-events-auto"
         >
           {#if barLeaves.length > 0}
             <!-- Nothing inside reaches the strip's own size or what is
@@ -1724,7 +1724,7 @@
              and the glass takes its own back, as the toggle does. -->
         <div
           data-slot="right"
-          class="relative ms-auto flex min-w-0 items-center group-data-hosting/top:flex-none group-data-hosting/top:ps-space-3 max-desk:self-stretch max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:ps-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:ps-0 max-desk:group-data-floating/top:*:pointer-events-auto group-data-under/top:*:pointer-events-auto"
+          class="relative ms-auto flex min-w-0 items-center group-data-hosting/top:flex-none group-data-hosting/top:ps-space-3 max-desk:self-stretch max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:ps-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:ps-0 max-desk:group-data-floating/top:[&>*]:pointer-events-auto group-data-under/top:[&>*]:pointer-events-auto"
         >
           <!-- The glass (kit BarGlass), as one shape with the card hanging
                from it while one does (bar-glass: Caw's panel, the machines,
@@ -1884,7 +1884,7 @@
       <div
         data-slot="rail-toggle"
         data-away={railHidden || undefined}
-        class="absolute top-0 start-0 z-(--layer-bar) flex items-center h-c-top-bar-h ps-space-2 pointer-events-none *:pointer-events-auto *:data-[slot=tools]:before:transition-[opacity] *:data-[slot=tools]:before:duration-(--turn-dur) *:data-[slot=tools]:before:ease-drawer not-data-away:*:data-[slot=tools]:before:opacity-0"
+        class="absolute top-0 start-0 z-(--layer-bar) flex items-center h-c-top-bar-h ps-space-2 pointer-events-none [&>*]:pointer-events-auto [&>[data-slot=tools]]:before:transition-[opacity] [&>[data-slot=tools]]:before:duration-(--turn-dur) [&>[data-slot=tools]]:before:ease-drawer not-data-away:[&>[data-slot=tools]]:before:opacity-0"
         style:--turn-dur={railHidden
           ? "var(--duration-panel-exit)"
           : "var(--duration-panel)"}

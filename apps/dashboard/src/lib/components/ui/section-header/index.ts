@@ -14,7 +14,7 @@ export { default as SectionHeader } from "./section-header.svelte";
  *   as an xs button so a head with an action and one without stand alike.
  */
 export const sectionHeadVariants = tv({
-  base: "flex items-center gap-space-1 border-b border-border-hairline pb-space-1 text-start text-ink-muted type-label mark-line",
+  base: "flex items-center gap-space-1 border-b border-border-hairline mark-line pb-space-1 text-start text-ink-muted type-label",
   variants: {
     inset: {
       list: "mb-space-1 px-space-3",

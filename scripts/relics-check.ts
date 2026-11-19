@@ -80,6 +80,14 @@ const SANCTIONED: readonly {
       "virtua 0.54.1 writes a measuring item's visibility inline (lib/svelte/ListItem.svelte:54) and its container's pointer-events while it scrolls (lib/svelte/Virtualizer.svelte:180), with no option to skip either; only an important declaration outranks an inline style",
     docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
   },
+  {
+    file: "apps/dashboard/src/lib/tokens/preflight.css",
+    kind: "important",
+    text: /^\s*display: none !important;$/u,
+    reason:
+      "Tailwind's own Preflight, written out as Tailwind ships it (apps/dashboard/scripts/preflight.ts): `[hidden]` hides an element whatever display a class gives it",
+    docs: "https://tailwindcss.com/docs/preflight",
+  },
 ];
 const sanctioned = (file: string, kind: Kind, text: string): boolean =>
   SANCTIONED.some(

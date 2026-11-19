@@ -901,7 +901,7 @@
                    one text column; its Show in conversation at the row's
                    end. -->
               <li
-                class="group/row relative grid grid-cols-1 rounded-sm *:col-start-1 *:row-start-1"
+                class="group/row relative grid grid-cols-1 rounded-sm [&>*]:col-start-1 [&>*]:row-start-1"
                 data-files-row
               >
                 {#if file.open.kind === "file"}

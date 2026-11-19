@@ -33,6 +33,25 @@
     };
   };
   /** Tabs whose first report has been drawn: a resize after it is read in `read`. */
+  /**
+   * Whether something follows the box's hit, as the box's `data-trailed`,
+   * read as its children come and go: the end padding keys on it. Asked as
+   * `:not(:has([data-slot=hit]:last-child))` in the box's own class, Blink
+   * tested that `:has()` for every element it restyled under a tab, 5,285
+   * attempts over four tab switches (work item 01a3cc2e).
+   */
+  const trailed = (box: HTMLElement): (() => void) => {
+    const read = () =>
+      box.toggleAttribute(
+        "data-trailed",
+        box.lastElementChild?.getAttribute("data-slot") !== "hit"
+      );
+    read();
+    const watch = new MutationObserver(read);
+    watch.observe(box, { childList: true });
+    return () => watch.disconnect();
+  };
+
   const drawnOnce = new WeakSet<Element>();
   /** The drawings a delivery's reads answered, made in the next frame. */
   const resized: (() => void)[] = [];
@@ -387,8 +406,8 @@
   class={cn(
     "group/ff-tab relative flex h-(--item) min-w-0 flex-initial items-center rounded-(--shape) text-ink-muted",
     "[&>:where(:not([data-slot=fold],[data-slot=hit]))]:relative [&>:where(:not([data-slot=fold],[data-slot=hit]))]:z-3",
-    "[&:not(:has([data-slot=hit]:last-child))]:pe-(--end-pad)",
-    "in-variant-folder:[&:not(:has([data-slot=hit]:last-child))]:pe-(--fold-end-pad)",
+    "data-trailed:pe-(--end-pad)",
+    "in-variant-folder:data-trailed:pe-(--fold-end-pad)",
     "data-tab-item-selected:text-ink-strong hover-hover:data-ghosted:not-data-tab-item-selected:text-ink-strong",
     "in-variant-folder:data-tab-item-selected:text-ink-muted",
     "motion-safe:transition-[color] motion-safe:duration-(--duration-ghost) motion-safe:ease-out",
@@ -398,12 +417,14 @@
     // A glyph alone is narrower than a finger: under one it takes the touch
     // floor across, its glyph centred (The 44 Touch Rule), since its
     // neighbours' edges bound its hit area.
-    glyphOnly && "coarse:min-w-c-touch-floor coarse:*:data-hit:justify-center",
+    glyphOnly &&
+      "coarse:min-w-c-touch-floor coarse:[&>[data-hit]]:justify-center",
     className
   )}
   data-flush={flush}
   data-tab-index={index}
   bind:this={node}
+  {@attach trailed}
   style:--pick={pick}
   style:--z-rest={restAt}
   style:--end-pad="calc(var(--px) - var(--spacing-space-2))"

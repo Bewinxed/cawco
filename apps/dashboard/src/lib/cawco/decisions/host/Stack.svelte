@@ -28,7 +28,7 @@
 
 <div
   class={[
-    "flex min-w-0 gap-space-3 *:min-w-0",
+    "flex min-w-0 gap-space-3 [&>*]:min-w-0",
     axis === "row" ? "flex-row flex-wrap" : "flex-col",
     along,
     across,

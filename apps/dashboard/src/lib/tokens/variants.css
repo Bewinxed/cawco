@@ -49,45 +49,48 @@
 /* shadcn-svelte's state variants, as its stylesheet (shadcn-svelte/tailwind.css,
    no longer imported) writes them, and where it stood: before the theme
    switch. Each matches the kit's two ways of saying a state, at no
-   specificity of its own, so a state never outweighs hover: or focus:. */
+   specificity of its own, so a state never outweighs hover: or focus:.
+   Both ways stand in one :where(): two selectors under the variant became
+   :is(a, b) under a second one (data-open:hover:), which Blink files
+   under no key (universal-key-check.ts). */
 @custom-variant data-open {
-  &:where([data-state="open"]),
-  &:where([data-open]:not([data-open="false"])) {
+  &:where([data-state="open"], [data-open]:not([data-open="false"])) {
     @slot;
   }
 }
 
 @custom-variant data-closed {
-  &:where([data-state="closed"]),
-  &:where([data-closed]:not([data-closed="false"])) {
+  &:where([data-state="closed"], [data-closed]:not([data-closed="false"])) {
     @slot;
   }
 }
 
 @custom-variant data-checked {
-  &:where([data-state="checked"]),
-  &:where([data-checked]:not([data-checked="false"])) {
+  &:where([data-state="checked"], [data-checked]:not([data-checked="false"])) {
     @slot;
   }
 }
 
 @custom-variant data-unchecked {
-  &:where([data-state="unchecked"]),
-  &:where([data-unchecked]:not([data-unchecked="false"])) {
+  &:where(
+    [data-state="unchecked"],
+    [data-unchecked]:not([data-unchecked="false"])
+  ) {
     @slot;
   }
 }
 
 @custom-variant data-disabled {
-  &:where([data-disabled="true"]),
-  &:where([data-disabled]:not([data-disabled="false"])) {
+  &:where(
+    [data-disabled="true"],
+    [data-disabled]:not([data-disabled="false"])
+  ) {
     @slot;
   }
 }
 
 @custom-variant data-active {
-  &:where([data-state="active"]),
-  &:where([data-active]:not([data-active="false"])) {
+  &:where([data-state="active"], [data-active]:not([data-active="false"])) {
     @slot;
   }
 }
@@ -368,6 +371,7 @@
 @custom-variant slot-badge (&[data-slot="badge"]);
 @custom-variant slot-bar (&[data-slot="bar"]);
 @custom-variant slot-bar-fill (&[data-slot="bar-fill"]);
+@custom-variant slot-bar-symbol (&[data-slot="bar-symbol"]);
 @custom-variant slot-beat (&[data-slot="beat"]);
 @custom-variant slot-block (&[data-slot="block"]);
 @custom-variant slot-block-head (&[data-slot="block-head"]);
@@ -432,6 +436,7 @@
 @custom-variant slot-drawer-grabber (&[data-slot="drawer-grabber"]);
 @custom-variant slot-drop (&[data-slot="drop"]);
 @custom-variant slot-dropdown-menu-content (&[data-slot="dropdown-menu-content"]);
+@custom-variant slot-dropdown-menu-group (&[data-slot="dropdown-menu-group"]);
 @custom-variant slot-edge-bottom (&[data-slot="edge-bottom"]);
 @custom-variant slot-edge-label (&[data-slot="edge-label"]);
 @custom-variant slot-edge-top (&[data-slot="edge-top"]);
@@ -577,6 +582,7 @@
 @custom-variant slot-section-row-label (&[data-slot="section-row-label"]);
 @custom-variant slot-segment (&[data-slot="segment"]);
 @custom-variant slot-select-trigger (&[data-slot="select-trigger"]);
+@custom-variant slot-select-value (&[data-slot="select-value"]);
 @custom-variant slot-send-held (&[data-slot="send-held"]);
 @custom-variant slot-session-details (&[data-slot="session-details"]);
 @custom-variant slot-session-row-note (&[data-slot="session-row-note"]);

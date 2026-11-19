@@ -190,7 +190,7 @@
     chip.className =
       "m-px inline-flex h-[calc(var(--prompt-lh)-2px)] items-center gap-space-1 rounded-sm border border-border-control bg-surface-fill ps-space-1 pe-space-2 align-top font-sans text-label leading-none font-medium whitespace-nowrap text-ink-strong select-all";
     const mark = document.createElement("span");
-    mark.className = "inline-flex *:[svg]:size-icon-sm";
+    mark.className = "inline-flex [&>svg]:size-icon-sm";
     mark.style.color = item.hue ?? "";
     chip.append(mark);
     chips.set(chip, mount(item.icon, { target: mark, props: item.props }));

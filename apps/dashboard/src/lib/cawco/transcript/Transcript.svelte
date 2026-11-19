@@ -667,7 +667,7 @@
     data-transcript-shown={shown || undefined}
     data-slot="listing"
     data-shown={shown || undefined}
-    class="isolate not-data-shown:invisible *:pointer-events-auto!"
+    class="isolate not-data-shown:invisible [&>div]:pointer-events-auto!"
     bind:this={pin.listing}
     style:padding-top={whole.spare ? `${whole.spare}px` : undefined}
     {@attach whole.wholeHeight}

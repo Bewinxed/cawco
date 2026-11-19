@@ -156,7 +156,7 @@
     // (`--bar-room`: centred in the bar on a desk, `--tools-top` down on a
     // phone), where a counted item's badge stops its lift (BarItem).
     form === "bar" &&
-      "[--bar-room:calc((var(--spacing-c-top-bar-h)_-_var(--spacing-c-btn-h))_/_2)] @max-desk/shell:[--bar-room:var(--tools-top)] @max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:[--r-inner:var(--tools-round)] @max-desk/shell:**:data-bar-item:rounded-e-none @max-desk/shell:**:data-bar-item:w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:min-w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:h-c-bar-caw-glass-phone",
+      "[--bar-room:calc((var(--spacing-c-top-bar-h)_-_var(--spacing-c-btn-h))_/_2)] @max-desk/shell:[--bar-room:var(--tools-top)] @max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:[--r-inner:var(--tools-round)] @max-desk/shell:[&_[data-bar-item]]:rounded-e-none @max-desk/shell:[&_[data-bar-item]]:w-c-bar-caw-glass-phone @max-desk/shell:[&_[data-bar-item]]:min-w-c-bar-caw-glass-phone @max-desk/shell:[&_[data-bar-item]]:h-c-bar-caw-glass-phone",
   ]}
   bind:this={node}
   {@attach (glass) => (form === "title" ? undefined : placeItems(glass))}

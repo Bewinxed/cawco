@@ -164,7 +164,7 @@
        Nothing between its glasses takes a press from the drawing. -->
   {#if stale || compare || variant}
     <div
-      class="pointer-events-none absolute inset-x-0 top-(--notices-top) z-2 flex min-w-0 flex-col items-start gap-space-2 px-space-3 *:pointer-events-auto"
+      class="pointer-events-none absolute inset-x-0 top-(--notices-top) z-2 flex min-w-0 flex-col items-start gap-space-2 px-space-3 [&>*]:pointer-events-auto"
       data-slot="stage-notices"
       style:--notices-top="calc(var(--side-room, 0px) + var(--spacing-space-2))"
     >

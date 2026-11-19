@@ -74,7 +74,7 @@
         },
       },
       body: { document: { grid: "flex flex-col overflow-hidden" } },
-      closed: { true: { grid: "*:first:pe-9" } },
+      closed: { true: { grid: "[&>*:first-child]:pe-9" } },
     },
   });
 

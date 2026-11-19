@@ -118,45 +118,42 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 /* shadcn-svelte's state variants, as its stylesheet (shadcn-svelte/tailwind.css,
    no longer imported) writes them, and where it stood: before the theme
    switch. Each matches the kit's two ways of saying a state, at no
-   specificity of its own, so a state never outweighs hover: or focus:. */
+   specificity of its own, so a state never outweighs hover: or focus:.
+   Both ways stand in one :where(): two selectors under the variant became
+   :is(a, b) under a second one (data-open:hover:), which Blink files
+   under no key (universal-key-check.ts). */
 @custom-variant data-open {
-  &:where([data-state="open"]),
-  &:where([data-open]:not([data-open="false"])) {
+  &:where([data-state="open"], [data-open]:not([data-open="false"])) {
     @slot;
   }
 }
 
 @custom-variant data-closed {
-  &:where([data-state="closed"]),
-  &:where([data-closed]:not([data-closed="false"])) {
+  &:where([data-state="closed"], [data-closed]:not([data-closed="false"])) {
     @slot;
   }
 }
 
 @custom-variant data-checked {
-  &:where([data-state="checked"]),
-  &:where([data-checked]:not([data-checked="false"])) {
+  &:where([data-state="checked"], [data-checked]:not([data-checked="false"])) {
     @slot;
   }
 }
 
 @custom-variant data-unchecked {
-  &:where([data-state="unchecked"]),
-  &:where([data-unchecked]:not([data-unchecked="false"])) {
+  &:where([data-state="unchecked"], [data-unchecked]:not([data-unchecked="false"])) {
     @slot;
   }
 }
 
 @custom-variant data-disabled {
-  &:where([data-disabled="true"]),
-  &:where([data-disabled]:not([data-disabled="false"])) {
+  &:where([data-disabled="true"], [data-disabled]:not([data-disabled="false"])) {
     @slot;
   }
 }
 
 @custom-variant data-active {
-  &:where([data-state="active"]),
-  &:where([data-active]:not([data-active="false"])) {
+  &:where([data-state="active"], [data-active]:not([data-active="false"])) {
     @slot;
   }
 }

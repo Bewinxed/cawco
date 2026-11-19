@@ -581,7 +581,7 @@
    the card fills the frame edge to edge: the panel's well holds it, with no
    page round it. -->
 <div
-  class="flex h-dvh bg-surface-recess p-space-2 *:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
+  class="flex h-dvh bg-surface-recess p-space-2 [&>*]:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
 >
   <SideSurface
     items={[

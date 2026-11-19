@@ -67,7 +67,7 @@
     onOpenAutoFocus={(event) => event.preventDefault()}
   >
     <div
-      class="grid grid-flow-col auto-cols-fr divide-x divide-border-hairline max-desk:grid-flow-row max-desk:divide-x-0 max-desk:divide-y"
+      class="grid grid-flow-col auto-cols-fr max-desk:grid-flow-row [&>[data-slot=dropdown-menu-group]]:border-border-hairline [&>[data-slot=dropdown-menu-group]:not(:last-child)]:border-e max-desk:[&>[data-slot=dropdown-menu-group]:not(:last-child)]:border-e-0 max-desk:[&>[data-slot=dropdown-menu-group]:not(:last-child)]:border-b"
     >
       {#each levels as chosen, at (at)}
         <DropdownMenu.Group>

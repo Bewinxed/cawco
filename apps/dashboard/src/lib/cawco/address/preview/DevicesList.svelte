@@ -20,7 +20,9 @@
   </div>
 {/snippet}
 
-<div class="grid divide-y divide-border-hairline">
+<div
+  class="grid [&>div]:border-border-hairline [&>div:not(:last-child)]:border-b"
+>
   {@render setting("Paired devices", "3 devices can open this dashboard")}
   {@render children()}
   {@render setting(

@@ -25,7 +25,7 @@ import { createRequire } from "node:module";
 import { dirname, extname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { compile, toSourceMap } from "@tailwindcss/node";
-import postcss, { type AtRule, Rule } from "postcss";
+import postcss, { AtRule, Rule } from "postcss";
 import selectorParser from "postcss-selector-parser";
 import { compile as compileSvelte } from "svelte/compiler";
 import { repoFiles } from "../../../../scripts/lib/repo-files";
@@ -33,7 +33,7 @@ import { repoFiles } from "../../../../scripts/lib/repo-files";
 const DASHBOARD = join(import.meta.dir, "../..");
 const ROOT = join(DASHBOARD, "../..");
 /** A stylesheet that is a Tailwind entry: it imports Tailwind itself. */
-const ENTRY = /@import\s+["']tailwindcss["']/u;
+const ENTRY = /@import\s+["']tailwindcss(?:\/utilities\.css)?["']/u;
 const STYLE = /<style\b/u;
 const NODE_MODULES = "/node_modules/";
 
@@ -97,6 +97,28 @@ export interface HouseCss {
 export const rel = (path: string): string => relative(ROOT, path);
 export const lineAt = (text: string, index: number): number =>
   text.slice(0, index).split("\n").length;
+
+/** A sheet's style rules, each rule of a `@keyframes` (a step, no selector) left out. */
+export function styleRules(root: postcss.Root): Rule[] {
+  const rules: Rule[] = [];
+  root.walkRules((rule) => {
+    if (!(rule.parent instanceof AtRule && rule.parent.name === "keyframes")) {
+      rules.push(rule);
+    }
+  });
+  return rules;
+}
+
+/** Each finding once, by its place and its words, in file and line order. */
+export const placedOnce = <T extends Place>(
+  found: T[],
+  words: (one: T) => string
+): T[] =>
+  [
+    ...new Map(
+      found.map((one) => [`${one.file}:${one.line}: ${words(one)}`, one])
+    ).values(),
+  ].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
 
 /** A complex selector's compounds, in order, without the combinators between them. */
 export function compoundsOf(
@@ -225,14 +247,25 @@ export async function readHouseCss(): Promise<HouseCss> {
     const known = new Set(candidates);
     const classesOf = (selector: string): string[] => {
       const out: string[] = [];
+      /** A candidate's class inside an `:is()` Tailwind wrapped it in (`*:`'s `:is(.\*\:flex > *)`), for a selector with none outside. */
+      const wrapped: string[] = [];
       selectorParser((r) => {
         r.walkClasses((node) => {
-          if (node.parent?.parent?.type === "root" && known.has(node.value)) {
+          if (!known.has(node.value)) {
+            return;
+          }
+          if (node.parent?.parent?.type === "root") {
             out.push(node.value);
+          } else if (
+            node.parent?.parent?.type === "pseudo" &&
+            node.parent.parent.value === ":is" &&
+            node.parent.parent.parent?.parent?.type === "root"
+          ) {
+            wrapped.push(node.value);
           }
         });
       }).processSync(selector);
-      return out;
+      return out.length > 0 ? out : wrapped;
     };
     /** Where each candidate is written, read once per candidate asked. */
     const written = new Map<string, Place[]>();

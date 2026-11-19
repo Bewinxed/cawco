@@ -1064,7 +1064,7 @@
                   {#if one.command}
                     <div
                       data-slot="step-command"
-                      class="col-start-2 mt-space-1 flex min-w-0 *:min-w-0 *:flex-auto"
+                      class="col-start-2 mt-space-1 flex min-w-0 [&>*]:min-w-0 [&>*]:flex-auto"
                       data-box
                     >
                       <CopyBox
@@ -1076,7 +1076,7 @@
                   {:else if one.href}
                     <div
                       data-slot="step-link"
-                      class="col-start-2 mt-space-1 flex min-w-0 *:min-w-0 *:flex-initial"
+                      class="col-start-2 mt-space-1 flex min-w-0 [&>*]:min-w-0 [&>*]:flex-initial"
                       data-box
                     >
                       <Button

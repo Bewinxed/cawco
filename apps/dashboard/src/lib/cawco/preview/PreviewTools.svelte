@@ -115,8 +115,8 @@
     // Spread, its groups keep their own width, so the row's need is theirs
     // (the surface folds them past it); centred (folded), a group that
     // gives up width (`min-w-0`) takes the row's shortfall.
-    spread ? "justify-between *:flex-none" : "justify-center",
-    away ? "translate-y-full opacity-0" : "*:pointer-events-auto",
+    spread ? "justify-between [&>*]:flex-none" : "justify-center",
+    away ? "translate-y-full opacity-0" : "[&>*]:pointer-events-auto",
   ]}
   style:--lift="{lift}px"
   {@attach frameSize(

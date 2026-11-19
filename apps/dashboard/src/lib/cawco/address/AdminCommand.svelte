@@ -10,7 +10,7 @@
 </script>
 
 {#if copy}
-  <div class="flex min-w-0 *:min-w-0 *:flex-auto">
+  <div class="flex min-w-0 [&>*]:min-w-0 [&>*]:flex-auto">
     <CopyBox label="Command for your admin" text={command} wrap />
   </div>
 {:else}
