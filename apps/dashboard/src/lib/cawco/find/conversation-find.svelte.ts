@@ -475,15 +475,6 @@ export class ConversationFind {
     this.messageAsked += 1;
   }
 
-  /** Command-F: open, or close what is open. */
-  toggle(): void {
-    if (this.open) {
-      this.close();
-    } else {
-      this.show();
-    }
-  }
-
   /** The words typed: the places are read again once typing settles. */
   type(words: string): void {
     this.words = words;

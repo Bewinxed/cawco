@@ -573,9 +573,10 @@
 
   /**
    * The conversation Command-F finds in: the one the keyboard is in (its
-   * pane or its composer, `data-find-view`), else the workspace's tab in
-   * front, else the one conversation on screen (Caw's panel over a project's
-   * page); none, and the browser's own find takes the key.
+   * pane or its composer, `data-find-view`; Caw's panel too), else the
+   * conversation that is the workspace's tab in front. Any other view (the
+   * board, a project, a task, settings, an artifact) has none, and the
+   * browser's own find takes the key.
    */
   function findView(): string | null {
     const at =
@@ -586,22 +587,15 @@
     if (at) {
       return at;
     }
-    const front = workspace.activeTab;
-    if (onSession && front && composerBindings.has(front)) {
-      return front;
-    }
-    const shown = [
-      ...document.querySelectorAll<HTMLElement>(
-        '[data-slot="pane"][data-find-view]'
-      ),
-    ].filter((pane) => pane.checkVisibility());
-    return shown.length === 1 ? (shown[0]?.dataset.findView ?? null) : null;
+    const front = workspace.activeSessionId;
+    return onSession && front && composerBindings.has(front) ? front : null;
   }
 
   /**
-   * Command-F finds in a conversation (`findView`); pressed again, it closes
-   * find. A key: what it opens lands at once (motion/keyed). Never forwarded
-   * from an artifact's page, whose own find it is.
+   * Command-F opens find in a conversation (`findView`). Pressed while that
+   * find stands open, it is the browser's own find, as in other apps. A
+   * key: what it opens lands at once (motion/keyed). Never forwarded from an
+   * artifact's page, whose own find it is.
    */
   function findKey(event: KeyboardEvent): boolean {
     if (
@@ -617,9 +611,13 @@
     if (!viewId) {
       return false;
     }
+    const find = findIn(viewId);
+    if (find.open) {
+      return false;
+    }
     event.preventDefault();
     landKey();
-    findIn(viewId).toggle();
+    find.show();
     return true;
   }
 

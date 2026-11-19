@@ -32,7 +32,6 @@
     if (find.focusAsked > 0 && field) {
       // The caret at the words' end, not the words chosen: chosen, they
       // would wear the selection's coral, which reads as a match marked.
-      // Command-F in the field chooses them (`onkeydown`).
       field.focus();
       field.setSelectionRange(field.value.length, field.value.length);
     }
@@ -63,16 +62,6 @@
     } else if (event.key === "Escape") {
       event.preventDefault();
       find.close();
-    } else if (
-      (event.metaKey || event.ctrlKey) &&
-      event.key.toLowerCase() === "f" &&
-      field &&
-      field.value !== "" &&
-      !(field.selectionStart === 0 && field.selectionEnd === field.value.length)
-    ) {
-      // Command-F in the field chooses its words; pressed again it closes find.
-      event.preventDefault();
-      field.select();
     }
   }
 </script>

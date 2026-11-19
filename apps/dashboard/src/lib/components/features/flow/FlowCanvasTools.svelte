@@ -75,6 +75,7 @@
   onkeydown={(event) => {
     if (
       event.key.toLowerCase() === "f" &&
+      !(event.metaKey || event.ctrlKey || event.altKey) &&
       !(
         event.target instanceof HTMLInputElement ||
         event.target instanceof HTMLTextAreaElement ||
