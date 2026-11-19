@@ -2065,6 +2065,41 @@ const fileHashAt = async (path: string): Promise<string | null> => {
   return (await file.exists()) ? hashText(await file.text()) : null;
 };
 
+/**
+ * Whether the folder at `path` holds a copy CawCo placed for checkout
+ * `placeId` (a skill or a memory document, by the sidecar's record of it
+ * under `<name>@<place id>`), as it was placed: what tells that CawCo has
+ * been in a folder for that project, wherever the folder is now (Locate
+ * folder, core `CONTROL_FOLDER_LOOK`). Reads only.
+ */
+export const placedCopiesIn = async (
+  placeId: string,
+  path: string
+): Promise<boolean> => {
+  const managed = await readSidecar();
+  const ofPlace = <T extends { hash: string; name: string }>(
+    records: Record<string, T>
+  ): T[] =>
+    Object.entries(records)
+      .filter(([key]) => key.endsWith(`@${placeId}`))
+      .map(([, record]) => record);
+  for (const skill of ofPlace(managed.placedSkills)) {
+    if (
+      (await heldHash(join(placedSkillsDir(path), skill.name))) === skill.hash
+    ) {
+      return true;
+    }
+  }
+  for (const doc of ofPlace(managed.placedMemory)) {
+    if (
+      (await fileHashAt(join(placedMemoryDir(path), doc.name))) === doc.hash
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
 type MemoryPlan = "write" | "skip" | "drift" | "remove" | "unmanage" | "none";
 
 /**

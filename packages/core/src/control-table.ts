@@ -157,6 +157,8 @@ import type {
 import type { ToolSigninChallenge, ToolStatus } from "./tools";
 import type { TranscriptWindow } from "./transcript-types";
 import type {
+  FolderLook,
+  FolderLookAsk,
   FolderRemoved,
   HostOutputs,
   HostScratchAsk,
@@ -305,6 +307,7 @@ interface ControlTable {
     [cwd: string, account?: string | null, model?: string | null],
     SupportedCommands
   >;
+  folderLook: Entry<[asked: FolderLookAsk], FolderLook>;
   foldersStand: Entry<[paths: string[]], boolean[]>;
   forgePost: Entry<[ask: ForgeAsk], ForgeVerdict>;
   forgetAccount: Unread<[account: string, into?: string | null]>;

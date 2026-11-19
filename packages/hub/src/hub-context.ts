@@ -31,12 +31,18 @@ import type { createLimitMoves } from "./limit-moves";
 import type { createLoginMoves } from "./login-moves";
 import type { createMachineCalls } from "./machine-calls";
 import type { createMachineCommands } from "./machine-commands";
+import type { createProjectLocate } from "./project-locate";
 import type { createRelayControl } from "./relay-control";
 import type { createSends } from "./sends";
 import type { createSessionNotes } from "./session-notes";
 import type { createSettingPicks } from "./setting-picks";
 import type { createSpawns } from "./spawns";
 import type { createStartHolds } from "./start-holds";
+
+/** Locate folder: a project's checkout pointed at where its folder is now (project-locate.ts). */
+interface ProjectLocateMember {
+  projectLocate: ReturnType<typeof createProjectLocate>;
+}
 
 export interface HubContext
   extends
@@ -106,6 +112,7 @@ export interface HubContext
       "handAgain" | "lateAnswer" | "logUnroutedReply" | "resendHeld" | "waiting"
     >,
     Pick<ReturnType<typeof createMachineCommands>, "learnCheckout">,
+    ProjectLocateMember,
     Pick<
       ReturnType<typeof createRelayControl>,
       "allowGranted" | "withdrawUnshown"

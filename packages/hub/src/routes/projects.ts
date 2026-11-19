@@ -41,6 +41,7 @@ export const projectRoutes = ({
   presenceSaid,
   previewListeners,
   projectEdits,
+  projectLocate,
   projectMoved,
   projectOut,
   projectStops,
@@ -59,6 +60,7 @@ export const projectRoutes = ({
   | "presenceSaid"
   | "previewListeners"
   | "projectEdits"
+  | "projectLocate"
   | "projectMoved"
   | "projectOut"
   | "projectStops"
@@ -443,6 +445,25 @@ export const projectRoutes = ({
       { body: t.Object({ machineId: t.String(), path: t.String() }) },
       ({ params, body }) =>
         addProjectPlace(params.id, body.machineId, body.path)
+    )
+    // Locate folder (project-locate.ts): what pointing a checkout at where
+    // its folder is now would do, read from its machine, before anything runs.
+    .post(
+      "/api/projects/:id/places/:placeId/locate/preview",
+      { body: t.Object({ path: t.String() }) },
+      ({ params, body }) =>
+        projectLocate.preview(params.id, params.placeId, body.path)
+    )
+    // Locate folder: the checkout pointed there, or held while its machine is
+    // away. `joins` is the person's yes to the project the preview named as
+    // already having the folder's codebase.
+    .post(
+      "/api/projects/:id/places/:placeId/locate",
+      {
+        body: t.Object({ path: t.String(), joins: t.Optional(t.String()) }),
+      },
+      ({ params, body }) =>
+        projectLocate.locate(params.id, params.placeId, body.path, body.joins)
     )
     // The accounts the project's sessions may run on; null: every account.
     .put(

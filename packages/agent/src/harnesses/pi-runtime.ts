@@ -120,6 +120,7 @@ import {
   contentOf,
   LOADED_SKILL,
   modelCatalog,
+  piFileUnder,
   piModelValue,
   piSessionPath,
   resolvePiModel,
@@ -2135,7 +2136,11 @@ const sessionManagerFor = async (
     return SessionManager.create(cwd);
   }
   const { sessionKey, fork, atMessage } = spec.resume;
-  const source = await piSessionPath(sessionKey, cwd);
+  // A conversation goes on filed under the folder it runs in now; a fork
+  // reads its origin's where it is.
+  const source = fork
+    ? await piSessionPath(sessionKey, cwd)
+    : await piFileUnder(sessionKey, cwd);
   // Its session file is gone: the conversation is, as a Claude Code
   // transcript or an OpenCode session can be (core relaunch.ts).
   if (!source) {

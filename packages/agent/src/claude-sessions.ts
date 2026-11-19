@@ -194,6 +194,12 @@ const moveEntry = async (from: string, to: string): Promise<void> => {
 export interface CarryRequest {
   /** The account whose dir it runs in; null for {@link claudeHome}. */
   accountId: string | null;
+  /**
+   * The folder it runs in now: its conversation is filed under that folder's
+   * name in the dir too ({@link fileUnder}). Absent: left under whichever
+   * folder's name it is.
+   */
+  cwd?: string;
   sessionId: string;
 }
 
@@ -329,6 +335,9 @@ const carryNow = async (
         carried.entries += entries.length;
         carried.from.push(dir);
       }
+      if (request.cwd) {
+        await fileUnder(into, request.sessionId, request.cwd);
+      }
       results.set(request.sessionId, carried);
     } catch (error) {
       results.set(request.sessionId, {
@@ -338,6 +347,53 @@ const carryNow = async (
     }
   }
   return results;
+};
+
+/**
+ * Files session `sessionId`'s conversation in `configDir` under the folder it
+ * runs in now, `cwd`: its transcript, its folder (subagent transcripts, tool
+ * output) and the copies Claude Code set aside move from the project folder
+ * that holds them into `projects/<cwd's name>/`, as the Agent SDK's "resume
+ * across hosts" restores a session "inside any directory under
+ * ~/.claude/projects/", and the project's auto memory is copied there when
+ * that name has none. A session whose project folder changed (Locate folder
+ * pointed its project's folder elsewhere, hub project-locate.ts) then goes
+ * on filed under its new folder: Claude Code resumes an id from any project
+ * folder, but keeps writing under the one it found it in. One already there
+ * is left as it is.
+ */
+const fileUnder = async (
+  configDir: string,
+  sessionId: string,
+  cwd: string
+): Promise<void> => {
+  const projects = join(configDir, "projects");
+  const here = join(projects, projectSlug(cwd));
+  const found = await transcriptIn(configDir, sessionId, cwd);
+  if (!found || dirname(found) === here) {
+    return;
+  }
+  const there = dirname(found);
+  const entries = (await entriesOf(there)).filter(
+    (entry) => projectEntryOwner(entry) === sessionId
+  );
+  for (const entry of entries) {
+    await moveEntry(join(there, entry.name), join(here, entry.name));
+  }
+  const memory = join(there, "memory");
+  if (
+    (await lstat(memory).catch(() => undefined))?.isDirectory() &&
+    !(await lstat(join(here, "memory")).catch(() => undefined))
+  ) {
+    await cp(memory, join(here, "memory"), {
+      recursive: true,
+      preserveTimestamps: true,
+      verbatimSymlinks: true,
+    });
+  }
+  console.info(
+    `[claude] session ${sessionId}: filed under ${here}, from ${there} (${entries.length} entr${entries.length === 1 ? "y" : "ies"})`
+  );
 };
 
 /**

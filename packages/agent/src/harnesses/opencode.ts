@@ -6146,6 +6146,26 @@ class OpencodeHarness implements Harness<"opencode"> {
           unhandled("read", found);
       }
       sessionId = sessionKey;
+      // Its project's folder was pointed elsewhere (Locate folder, hub
+      // project-locate.ts): the session goes on in the folder it runs in
+      // now. OpenCode records the move at once when the old folder is gone
+      // and nothing runs (`session.move`, @opencode/client 2.3.0), and
+      // otherwise queues it for the session's next turn.
+      const was = found.value.location.directory;
+      const now = await realpath(ctx.cwd).catch(() => ctx.cwd);
+      if ((await realpath(was).catch(() => was)) !== now) {
+        await ask(
+          `the move of session ${sessionKey} to ${ctx.cwd}`,
+          (options) =>
+            client.session.move(
+              { sessionID: sessionKey, directory: ctx.cwd, delivery: "queue" },
+              options
+            )
+        );
+        console.info(
+          `[opencode] session ${sessionKey} moved from ${was} to ${ctx.cwd}`
+        );
+      }
     } else {
       // Its permission set is put before its first turn, whole, with what it
       // needs then (a fenced session's fence reads the location's MCP servers).

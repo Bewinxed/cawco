@@ -977,6 +977,21 @@ export interface InstancesDb {
   ) => void;
   /** `machineId`'s rows for sessions removed with a machine (`machineRemoved`). */
   readonly removedOn: (machineId: string) => OwnedInstanceRow[];
+  /**
+   * Every session of `projectId` on `machineId` launched in folder `from`, or
+   * a folder inside it, launches from now on in the same folder under `to`
+   * (Locate folder, project-locate.ts): its next start resumes its
+   * conversation there, which its machine files under that folder as it
+   * starts (agent claude-sessions.ts `fileUnder`, pi-services.ts
+   * `piFileUnder`, opencode.ts's `session.move`; Codex resumes by id with
+   * the folder it is given). The ids of the rows it rewrote.
+   */
+  readonly repointSessions: (
+    projectId: string,
+    machineId: string,
+    from: string,
+    to: string
+  ) => string[];
   readonly restoreRemovedSessions: (
     machineId: string,
     held: string[],
@@ -2093,6 +2108,27 @@ export const instancesDb = (core: DbCore): InstancesDb => {
     // activity, `touchInstanceActivity`, or a status change). Stamped here, a
     // sign-in that carried every session to an account read sessions asleep
     // for weeks as "active 1m ago", and kept stopped ones listed a day more.
+    repointSessions: (projectId, machineId, from, to) => {
+      const inside = from.endsWith("/") ? from : `${from}/`;
+      return db
+        .update(instances)
+        .set({
+          cwd: sql`${to} || substr(${instances.cwd}, ${from.length + 1})`,
+        })
+        .where(
+          and(
+            eq(instances.projectId, projectId),
+            eq(instances.machineId, machineId),
+            or(
+              sql`${instances.cwd} = ${from}`,
+              sql`substr(${instances.cwd}, 1, ${inside.length}) = ${inside}`
+            )
+          )
+        )
+        .returning({ id: instances.id })
+        .all()
+        .map((row) => row.id);
+    },
     patchInstance: (id, patch) =>
       db
         .update(instances)

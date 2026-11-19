@@ -5459,7 +5459,9 @@ class ClaudeHarness implements Harness<"claude"> {
         }
       } else {
         const carried = (
-          await carrySessions([{ sessionId: spec.resume.sessionKey, ...place }])
+          await carrySessions([
+            { sessionId: spec.resume.sessionKey, ...place, cwd },
+          ])
         ).get(spec.resume.sessionKey);
         if (carried && "error" in carried) {
           throw new Error(

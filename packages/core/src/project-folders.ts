@@ -60,6 +60,12 @@ export interface MoveResult {
 /** What pointing a folder at the path named would do, and what CawCo can tell of that folder. */
 export interface FindPlan {
   forecast: FolderForecast;
+  /**
+   * The project that already has the folder's codebase, when it is another:
+   * What will happen asks before the two become one, naming both, and Locate
+   * folder sends its id back as the person's yes. Null: no other project has it.
+   */
+  joins: { id: string; name: string } | null;
   /** What CawCo can tell: the same codebase, another, the same folder moved, or that it can't tell. */
   tell: string;
 }

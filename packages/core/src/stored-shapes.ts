@@ -2466,6 +2466,18 @@ const FleetSyncReportShape = declared(
 export const FleetSyncReportSchema = FleetSyncReportShape;
 export type FleetSyncReportOutput = z.output<typeof FleetSyncReportShape>;
 
+const FolderLookShape = declared(
+  z.object({
+    placed: z.boolean(),
+    sameFolder: z.boolean().nullable(),
+    stands: z.boolean(),
+  }),
+  "FolderLook",
+  "packages/core/src/workspace/controls.ts"
+);
+export const FolderLookSchema = FolderLookShape;
+export type FolderLookOutput = z.output<typeof FolderLookShape>;
+
 const FolderRemovedShape = declared(
   z.object({ removed: z.boolean() }),
   "FolderRemoved",

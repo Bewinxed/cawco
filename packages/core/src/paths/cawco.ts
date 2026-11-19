@@ -79,6 +79,14 @@ export const madeFoldersPath = (): string =>
   join(cawcoDataDir(), "made-folders.json");
 
 /**
+ * Each project checkout's folder as this machine last saw it standing, by
+ * its path, with its identity on disk (agent seen-folders.ts): what tells a
+ * folder moved or renamed by hand from another one (Locate folder).
+ */
+export const seenFoldersPath = (): string =>
+  join(cawcoDataDir(), "seen-folders.json");
+
+/**
  * Each tool CawCo installed on this machine, by tool id: where the copy it
  * put on is, with which method, which version and when (agent tools.ts
  * `recordInstall`). What says a copy is CawCo's own (core `ToolCopy`), so

@@ -755,6 +755,7 @@
             found: true,
             made: false,
             missing: false,
+            locateTo: null,
             path: `/srv/${name}`,
             projectId: id,
             within: [],

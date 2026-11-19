@@ -274,6 +274,7 @@ import {
   DesignMapSchema,
   FleetAckSchema,
   FleetMcpTakeAnswerSchema,
+  FolderLookSchema,
   FolderRemovedSchema,
   FolderWeightSchema,
   ForgeVerdictSchema,
@@ -369,6 +370,7 @@ import {
 import type { TranscriptWindow } from "./transcript-types";
 import { controlWords } from "./words/controls";
 import type {
+  FolderLook,
   FolderRemoved,
   HostOutputs,
   InputsAdmitted,
@@ -389,6 +391,7 @@ import type {
 } from "./workspace/controls";
 import {
   CONTROL_CLONE_HOLDING,
+  CONTROL_FOLDER_LOOK,
   CONTROL_FOLDERS_STAND,
   CONTROL_HOST_OUTPUTS,
   CONTROL_HOST_SCRATCH_REMOVE,
@@ -558,6 +561,7 @@ const CONTROLS = {
   [CONTROL_REMOVE_FOLDER]: reply<FolderRemoved>(FolderRemovedSchema),
   [CONTROL_REMOVE_FOLDER_REFUSAL]: z.string().nullable(),
   [CONTROL_FOLDERS_STAND]: z.array(z.boolean()),
+  [CONTROL_FOLDER_LOOK]: reply<FolderLook>(FolderLookSchema),
   [CONTROL_CLONE_HOLDING]: reply<WorkspaceRef | null>(
     WorkspaceRefSchema.nullable()
   ),

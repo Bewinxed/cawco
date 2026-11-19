@@ -28,6 +28,10 @@ import type {
   MadeFolders as MadeFoldersType,
   MadeFolder as MadeFolderType,
 } from "./made-folders";
+import type {
+  SeenFolders as SeenFoldersType,
+  SeenFolder as SeenFolderType,
+} from "./seen-folders";
 import type { Worktree as WorktreeType } from "./spin-offs";
 import type {
   BrowserRecordOutput,
@@ -43,6 +47,8 @@ import type {
   MediaMeasurementOutput,
   OpencodeServerFactsOutput,
   OpencodeServerRecordOutput,
+  SeenFolderOutput,
+  SeenFoldersOutput,
   ServerIdentityOutput,
   SetHarnessConfigOutput,
   SetHookOutput,
@@ -95,6 +101,8 @@ prove<
     Same<OpencodeServerFactsOutput, OpencodeServerFactsType>,
     Same<ServerIdentityOutput, ServerIdentityType>,
     Same<OpencodeServerRecordOutput, OpencodeServerRecordType>,
+    Same<SeenFolderOutput, SeenFolderType>,
+    Same<SeenFoldersOutput, SeenFoldersType>,
     Same<ToolInstallRecordOutput, ToolInstallRecordType>,
     Same<ToolInstallUnderwayOutput, ToolInstallUnderwayType>,
     Same<ToolInstallsOutput, ToolInstallsType>,

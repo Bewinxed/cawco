@@ -24059,6 +24059,195 @@
         }
       }
     },
+    "/api/projects/{id}/places/{placeId}/locate": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "placeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "joins": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdPlacesByPlaceIdLocate",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdLocate 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdLocate200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdLocate 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdLocate400"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdLocate 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdLocate404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdLocate 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdLocate409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdLocate 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdLocate422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/places/{placeId}/locate/preview": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "placeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdPlacesByPlaceIdLocatePreview",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdLocatePreview 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindPlan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdLocatePreview 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdLocatePreview400"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdLocatePreview 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdLocatePreview404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdLocatePreview 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdLocatePreview409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdLocatePreview 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdLocatePreview422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/preview-address": {
       "post": {
         "parameters": [
@@ -41778,6 +41967,39 @@
           "places"
         ]
       },
+      "FindPlan": {
+        "description": "What pointing a folder at the path named would do, and what CawCo can tell of that folder.",
+        "type": "object",
+        "properties": {
+          "forecast": {
+            "$ref": "#/components/schemas/FolderForecast"
+          },
+          "joins": {
+            "description": "The project that already has the folder's codebase, when it is another:\nWhat will happen asks before the two become one, naming both, and Locate\nfolder sends its id back as the person's yes. Null: no other project has it.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "tell": {
+            "description": "What CawCo can tell: the same codebase, another, the same folder moved, or that it can't tell.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "forecast",
+          "tell"
+        ]
+      },
       "FindProject": {
         "type": "object",
         "properties": {
@@ -43448,6 +43670,55 @@
           "content",
           "path",
           "size"
+        ]
+      },
+      "FolderForecast": {
+        "description": "What will happen, written from the computer and folder named, or what stands in the way and what to do.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "blocked"
+                ]
+              },
+              "todo": {
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "todo",
+              "why"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "lines": {
+                "description": "Each line of What will happen, in order.",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ready"
+                ]
+              }
+            },
+            "required": [
+              "lines",
+              "state"
+            ]
+          }
         ]
       },
       "FolderHistory": {
@@ -93576,6 +93847,18 @@
                   "kind": {
                     "$ref": "#/components/schemas/PlaceKind"
                   },
+                  "locateTo": {
+                    "anyOf": [
+                      {
+                        "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                        "type": "string"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^projects/.*$"
+                      }
+                    ]
+                  },
                   "machineId": {
                     "type": "string"
                   },
@@ -115938,6 +116221,18 @@
                 },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
+                },
+                "locateTo": {
+                  "anyOf": [
+                    {
+                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^projects/.*$"
+                    }
+                  ]
                 },
                 "machineId": {
                   "type": "string"
@@ -157216,6 +157511,18 @@
               "kind": {
                 "$ref": "#/components/schemas/PlaceKind"
               },
+              "locateTo": {
+                "anyOf": [
+                  {
+                    "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                    "type": "string"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^projects/.*$"
+                  }
+                ]
+              },
               "machineId": {
                 "type": "string"
               },
@@ -157273,6 +157580,18 @@
                 },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
+                },
+                "locateTo": {
+                  "anyOf": [
+                    {
+                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^projects/.*$"
+                    }
+                  ]
                 },
                 "machineId": {
                   "type": "string"
@@ -167666,6 +167985,18 @@
               "kind": {
                 "$ref": "#/components/schemas/PlaceKind"
               },
+              "locateTo": {
+                "anyOf": [
+                  {
+                    "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                    "type": "string"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^projects/.*$"
+                  }
+                ]
+              },
               "machineId": {
                 "type": "string"
               },
@@ -167723,6 +168054,18 @@
                 },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
+                },
+                "locateTo": {
+                  "anyOf": [
+                    {
+                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^projects/.*$"
+                    }
+                  ]
                 },
                 "machineId": {
                   "type": "string"
@@ -167965,6 +168308,908 @@
         ]
       },
       "postApiProjectsByIdPlaces422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdLocate200": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "accountAtLimit": {
+            "$ref": "#/components/schemas/ProjectAtLimit"
+          },
+          "accounts": {
+            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "appleGate": {
+            "type": "boolean"
+          },
+          "areaId": {
+            "type": "string"
+          },
+          "attemptsHearComments": {
+            "type": "boolean"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
+          },
+          "capPeriod": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "capUsd": {
+            "type": "number"
+          },
+          "cawHarness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "cawMode": {
+            "$ref": "#/components/schemas/EventRouteViewMode"
+          },
+          "cawModel": {
+            "type": "string"
+          },
+          "conversationInstanceId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "dispatch": {
+            "type": "boolean"
+          },
+          "eventsOn": {
+            "type": "boolean"
+          },
+          "hearsTasks": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inEffect": {
+            "$ref": "#/components/schemas/SettingsInEffect",
+            "description": "Its settings in effect, each with where it came from: its own, else its\narea's, else the fleet's (core `settingsInEffect`), read with the row.\nEvery reader that acts on one of them reads it here."
+          },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
+          "lfsConnection": {
+            "type": "string"
+          },
+          "lfsUrl": {
+            "type": "string"
+          },
+          "links": {
+            "description": "Its links (`project_links`), one per repository, oldest first.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "moveDeclinedAt": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "createdAt": {
+                  "type": "string"
+                },
+                "found": {
+                  "type": "boolean"
+                },
+                "held": {
+                  "$ref": "#/components/schemas/BridgedHeldPlace"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PlaceKind"
+                },
+                "locateTo": {
+                  "anyOf": [
+                    {
+                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^projects/.*$"
+                    }
+                  ]
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "made": {
+                  "type": "boolean"
+                },
+                "missing": {
+                  "type": "boolean"
+                },
+                "path": {
+                  "$ref": "#/components/schemas/PlacePath"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "root": {
+                  "type": "string"
+                },
+                "within": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlaceProject"
+                  }
+                }
+              },
+              "required": [
+                "createdAt",
+                "found",
+                "id",
+                "isPrimary",
+                "kind",
+                "machineId",
+                "made",
+                "missing",
+                "path",
+                "projectId",
+                "within"
+              ]
+            }
+          },
+          "primaryPlaceId": {
+            "type": "string"
+          },
+          "remote": {
+            "type": "string"
+          },
+          "review": {
+            "type": "boolean"
+          },
+          "reviewLimit": {
+            "type": "number"
+          },
+          "runsOn": {
+            "type": "string"
+          },
+          "tapped": {
+            "$ref": "#/components/schemas/StagesTemplate"
+          },
+          "template": {
+            "$ref": "#/components/schemas/StagesTemplate"
+          },
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
+          }
+        },
+        "required": [
+          "accountAtLimit",
+          "appleGate",
+          "attemptsHearComments",
+          "cawHarness",
+          "createdAt",
+          "dispatch",
+          "eventsOn",
+          "hearsTasks",
+          "id",
+          "inEffect",
+          "lands",
+          "links",
+          "maxAttempts",
+          "name",
+          "places",
+          "review",
+          "reviewLimit",
+          "tracker"
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdLocate400": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "machine-path-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "project-not-edited"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "project-place-scratch"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdLocate404": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "locate-place-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "locate-project-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdLocate409": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "locate-blocked"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "locate-fold-unasked"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "locate-hub-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdLocate422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdLocatePreview400": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "machine-path-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "project-place-scratch"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdLocatePreview404": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "locate-place-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "locate-project-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdLocatePreview409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "locate-hub-folder"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdLocatePreview422": {
         "anyOf": [
           {
             "type": "object",
@@ -214564,6 +215809,18 @@
                 },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
+                },
+                "locateTo": {
+                  "anyOf": [
+                    {
+                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^projects/.*$"
+                    }
+                  ]
                 },
                 "machineId": {
                   "type": "string"
