@@ -60,6 +60,7 @@ import {
   linePrice,
   liveWorkOf,
   moveSideWords,
+  type Outlook,
   planOf,
   refusedUntil,
   type Stall,
@@ -2054,6 +2055,44 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     manages(instanceId: string): boolean {
       const row = rowOf(instanceId);
       return !!row && !!currentOf(row);
+    },
+    /**
+     * What the router would do with `instanceId` now, read and nothing
+     * carried out (`account_read`): held at its limit or on a refused
+     * sign-in, or owing a person's move, the decision a look would take
+     * ({@link decide}); else what a rebalancing pass would
+     * (rebalance.ts `outlook`). Undefined for a session on no account the
+     * hub reads.
+     */
+    outlook(instanceId: string): Outlook | undefined {
+      const row = rowOf(instanceId);
+      const current = row ? currentOf(row) : undefined;
+      if (!(row && current)) {
+        return;
+      }
+      const held = db.atLimit.hold(instanceId);
+      const byHand = ports.handMove(row);
+      if (!(held || byHand)) {
+        return rebalancer.outlook(row, current);
+      }
+      // A person's move owed to a session that runs is decided as not
+      // stopped, as {@link decide} takes any cause but a limit's.
+      let cause: Cause = "extra-usage";
+      if (held) {
+        cause = held.until === null ? "refused-credential" : "limit";
+      }
+      const looked = decide(row, current, cause, Date.now());
+      if (!looked) {
+        return;
+      }
+      return {
+        kind: "decided",
+        facts: looked.facts,
+        decision: looked.decision,
+        trigger: byHand
+          ? { kind: "hand", to: byHand, stopped: cause !== "extra-usage" }
+          : { kind: cause },
+      };
     },
     /**
      * Where `instanceId` would go off its account if Claude Code refused that

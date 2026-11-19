@@ -305,6 +305,7 @@ import { z } from "zod";
 import { createAccountCarry } from "./account-carry";
 import { createAccountProbes } from "./account-probes";
 import { createAccountSignin } from "./account-signin";
+import { createAccountTools } from "./account-tools";
 import {
   confirmReading,
   noteProviderReading,
@@ -469,6 +470,7 @@ import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { createForgePosts } from "./forge-posts";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { githubReposOf } from "./github";
+import { handMoveOf } from "./hand-move";
 import { createHandedInputs } from "./handed-inputs";
 import { handleId, isHandle } from "./handles";
 import type { HarnessConfigBody } from "./harness-config-body";
@@ -510,6 +512,7 @@ import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import {
   contextSize,
+  type Outlook,
   type Stall,
   sessionCostsOf,
   type TakenUpBy,
@@ -653,7 +656,10 @@ import {
 } from "./relay-journey";
 import { createRepoPublish } from "./repo-publish";
 import { accountHomeLoginRoutes } from "./routes/account-home-logins";
-import { accountPlacementRoutes } from "./routes/account-placement";
+import {
+  accountPlacementRoutes,
+  placementPreview,
+} from "./routes/account-placement";
 import { accountSigninRoutes } from "./routes/account-signins";
 import { accountRoutes } from "./routes/accounts";
 import { agentControlRoutes, agentUpdate } from "./routes/agent-control";
@@ -3812,6 +3818,11 @@ export const createServer = (
   const stalledNowPort = portOf<() => string[]>(
     "stalledNow",
     (): string[] => []
+  );
+  /** What the router would do with a session now (at-limit.ts `outlook`), for `account_read`. Set once the controller exists. */
+  const outlookPort = portOf<(_instanceId: string) => Outlook | undefined>(
+    "outlook",
+    (_instanceId: string): Outlook | undefined => undefined
   );
 
   /**
@@ -10899,6 +10910,15 @@ export const createServer = (
       })),
     trimPropose: (actor, toolUseId) => trim.propose(actor, toolUseId),
   });
+  // The account router as an orchestrator reads it, and a move of one of
+  // its delegates to an account the person named (account-tools.ts).
+  const accountTools = createAccountTools({
+    db,
+    handMove: handMoveOf(ctx),
+    machineName,
+    outlook: (instanceId) => outlookPort.now()(instanceId),
+    placement: placementPreview(ctx),
+  });
   // A relayed tool call sent again under its key is answered, not run again.
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
   // A session's sends and starts through its tools (delegation-sends.ts).
@@ -11020,6 +11040,7 @@ export const createServer = (
     connections,
     hubTools,
     browserTools: (actor, toolUseId) => browserAsks.tools(actor, toolUseId),
+    accountTools: (actor) => accountTools.tools(actor),
     connectTools: (actor, toolUseId) => connectAsks.tools(actor, toolUseId),
     askTools: (actor, toolUseId) => hubAsks.tools(actor, toolUseId),
     workItemTask: (id) => db.workItem(id)?.taskId,
@@ -11742,6 +11763,7 @@ export const createServer = (
       );
     return offer ? { ...stall, offer } : stall;
   });
+  outlookPort.fill((instanceId) => atLimit.outlook(instanceId));
   stalledNowPort.fill(() => [
     ...new Set([
       ...atLimit.stalled(),

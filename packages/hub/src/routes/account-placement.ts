@@ -56,6 +56,128 @@ const compactionAsked = (
       }
     : saved;
 
+/** A start the placement preview is asked about (`GET /api/accounts/placement`'s query). */
+export interface PlacementQuery {
+  account?: string;
+  /** The session's directory: what pi's `default` is there. */
+  cwd?: string;
+  forkOf?: string;
+  harness: string;
+  kind?: "yours" | "delegates";
+  machineId: string;
+  model?: string;
+  projectId?: string;
+  taskId?: string;
+  type?: string;
+}
+
+/**
+ * Which account a start would go on, and why: what the New session modal
+ * says beside "Auto", and what `account_read` says a new delegate starts on
+ * (account-tools.ts). Where a start would go says what its start would
+ * (spawns.ts `placeSpawn`): a machine that refuses the harness refuses it,
+ * and a task's allow-list that does not read whole refuses it
+ * (`placedNew`); else the task's allow-list holds it, as a start reads it.
+ */
+export const placementPreview =
+  ({
+    askedStart,
+    db,
+    machineName,
+    placementInput,
+    refusedHarness,
+    resolvedModel,
+    startModelOf,
+    taskAccounts,
+  }: Pick<
+    HubContext,
+    | "askedStart"
+    | "db"
+    | "machineName"
+    | "placementInput"
+    | "refusedHarness"
+    | "resolvedModel"
+    | "startModelOf"
+    | "taskAccounts"
+  >) =>
+  async (query: PlacementQuery) => {
+    /**
+     * A machine that refuses the harness refuses the start, and a task's
+     * allow-list that does not read whole refuses it; else that allow-list.
+     */
+    const allowedOrProblem = (
+      start: Pick<PlacementQuery, "machineId" | "projectId" | "taskId">,
+      harness: HarnessKind
+    ) => {
+      const refused = refusedHarness(start.machineId, harness);
+      if (refused) {
+        return problem(400, { code: "harness-refused", detail: refused });
+      }
+      const listed = taskAccounts(start.projectId, start.taskId);
+      return "unread" in listed
+        ? problem(409, {
+            code: "spawn-task-accounts-unread",
+            detail: spawnWords.taskAccountsUnread(listed.path, listed.unread),
+          })
+        : listed.accounts;
+    };
+    const started = await askedStart(query);
+    if (started instanceof ElysiaStatus) {
+      return started;
+    }
+    const allowed = allowedOrProblem(query, started.asked.harness);
+    if (allowed instanceof ElysiaStatus) {
+      return allowed;
+    }
+    // The model its start would run on: the one it picked, else the one
+    // the hub names for it (spawns.ts `placeSpawn`).
+    const named = startModelOf(
+      query.machineId,
+      started.asked,
+      { projectId: query.projectId, taskId: query.taskId },
+      started.own
+    );
+    if ("refusal" in named) {
+      return problem(400, { code: "not-placed", detail: named.refusal });
+    }
+    const asked = { ...started.asked, model: named.model };
+    const input = placementInput(
+      query.machineId,
+      asked,
+      { projectId: query.projectId, accounts: allowed },
+      query.forkOf
+        ? {
+            accountId:
+              db.getInstancesByIds([query.forkOf])[0]?.accountId ?? null,
+          }
+        : undefined
+    );
+    // The model named, or a bare id as pi resolves it, as the session
+    // would start on it: the screen names the session's provider by it.
+    const resolved =
+      resolvedModel(query.machineId, query.harness, asked.model) ?? asked.model;
+    if (!input) {
+      const said =
+        resolved === asked.model ? asked.model : `${asked.model} (${resolved})`;
+      return {
+        accountId: null,
+        strategy: "none",
+        why: `${said} is no account's model on ${machineName(query.machineId)}: it runs from the machine's own ${query.harness} store.`,
+        model: resolved,
+      } satisfies PlacementPreview;
+    }
+    // A model the hub named keeps off the accounts its start would
+    // (spawns.ts `keptOffBy`): out of credit for it, or not enabled.
+    const placed = placeAccount(
+      named.keptOff ? { ...input, ...named.keptOff } : input
+    );
+    if (!placed.ok) {
+      return problem(400, { code: "not-placed", detail: placed.refusal });
+    }
+    const { ok: _ok, ...explain } = placed;
+    return { ...explain, model: resolved } satisfies PlacementPreview;
+  };
+
 export const accountPlacementRoutes = ({
   askedStart,
   db,
@@ -78,6 +200,16 @@ export const accountPlacementRoutes = ({
   | "startModelOf"
   | "taskAccounts"
 >) => {
+  const preview = placementPreview({
+    askedStart,
+    db,
+    machineName,
+    placementInput,
+    refusedHarness,
+    resolvedModel,
+    startModelOf,
+    taskAccounts,
+  });
   /**
    * Why a routing save can't route `provider` by `choice`, or undefined when
    * it can. Spread and Soonest reset weigh the limits CawCo reads, so a
@@ -116,28 +248,6 @@ export const accountPlacementRoutes = ({
         detail: `There is no account ${choice.pinnedAccountId} to pin.`,
       });
     }
-  };
-  /**
-   * Where a start would go says what its start would (spawns.ts
-   * `placeSpawn`): a machine that refuses the harness refuses it, and a
-   * task's allow-list that does not read whole refuses it (`placedNew`).
-   * Else the task's allow-list, as a start reads it.
-   */
-  const allowedOrProblem = (
-    query: { machineId: string; projectId?: string; taskId?: string },
-    harness: HarnessKind
-  ) => {
-    const refused = refusedHarness(query.machineId, harness);
-    if (refused) {
-      return problem(400, { code: "harness-refused", detail: refused });
-    }
-    const allowed = taskAccounts(query.projectId, query.taskId);
-    return "unread" in allowed
-      ? problem(409, {
-          code: "spawn-task-accounts-unread",
-          detail: spawnWords.taskAccountsUnread(allowed.path, allowed.unread),
-        })
-      : allowed.accounts;
   };
   return (
     new Elysia()
@@ -264,66 +374,7 @@ export const accountPlacementRoutes = ({
             cwd: t.Optional(t.String()),
           }),
         },
-        async ({ query }) => {
-          const started = await askedStart(query);
-          if (started instanceof ElysiaStatus) {
-            return started;
-          }
-          const allowed = allowedOrProblem(query, started.asked.harness);
-          if (allowed instanceof ElysiaStatus) {
-            return allowed;
-          }
-          // The model its start would run on: the one it picked, else the
-          // one the hub names for it (spawns.ts `placeSpawn`).
-          const named = startModelOf(
-            query.machineId,
-            started.asked,
-            { projectId: query.projectId, taskId: query.taskId },
-            started.own
-          );
-          if ("refusal" in named) {
-            return problem(400, { code: "not-placed", detail: named.refusal });
-          }
-          const asked = { ...started.asked, model: named.model };
-          const input = placementInput(
-            query.machineId,
-            asked,
-            { projectId: query.projectId, accounts: allowed },
-            query.forkOf
-              ? {
-                  accountId:
-                    db.getInstancesByIds([query.forkOf])[0]?.accountId ?? null,
-                }
-              : undefined
-          );
-          // The model named, or a bare id as pi resolves it, as the session
-          // would start on it: the screen names the session's provider by it.
-          const resolved =
-            resolvedModel(query.machineId, query.harness, asked.model) ??
-            asked.model;
-          if (!input) {
-            const said =
-              resolved === asked.model
-                ? asked.model
-                : `${asked.model} (${resolved})`;
-            return {
-              accountId: null,
-              strategy: "none",
-              why: `${said} is no account's model on ${machineName(query.machineId)}: it runs from the machine's own ${query.harness} store.`,
-              model: resolved,
-            } satisfies PlacementPreview;
-          }
-          // A model the hub named keeps off the accounts its start would
-          // (spawns.ts `keptOffBy`): out of credit for it, or not enabled.
-          const placed = placeAccount(
-            named.keptOff ? { ...input, ...named.keptOff } : input
-          );
-          if (!placed.ok) {
-            return problem(400, { code: "not-placed", detail: placed.refusal });
-          }
-          const { ok: _ok, ...explain } = placed;
-          return { ...explain, model: resolved } satisfies PlacementPreview;
-        }
+        ({ query }) => preview(query)
       )
   );
 };

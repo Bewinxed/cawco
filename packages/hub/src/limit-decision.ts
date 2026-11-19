@@ -31,6 +31,8 @@ import type {
   DecidedMove,
   DecideFacts,
   FactAccount,
+  MoveChoice,
+  MoveTrigger,
   Rates,
   SessionCosts,
 } from "./decide";
@@ -593,6 +595,20 @@ export const factsOf = (
     },
   };
 };
+
+/**
+ * What the router would do with a session now, read and nothing acted on
+ * (at-limit.ts `outlook`, `account_read`): the facts it is decided on, and
+ * either that its account lasts (no window runs short, so nothing is
+ * decided), that it runs short but its sessions go on its extra usage, or
+ * the one decision for the trigger the hub would take it up for (its limit,
+ * a refused sign-in, a person's owed move, or a forecast run-out).
+ */
+export type Outlook = { facts: DecideFacts } & (
+  | { kind: "lasts" }
+  | { kind: "credits"; runsOutAt: number }
+  | { kind: "decided"; decision: MoveChoice; trigger: MoveTrigger }
+);
 
 /** What a decided move re-reads, as its line's cost says it: a percent of the window it is counted against; none when its cache carries, or it is unpriced or counted against no window. */
 export const lineCost = (

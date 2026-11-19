@@ -158,10 +158,17 @@ import {
  * 2026-11-17: Codex joins the harnesses (tsk-387): every tool schema that
  * names a harness lists `codex` beside the others (worker 30,996
  * measured).
+ * 2026-11-19: account_read and account_move, which the owner asked for that
+ * day ("a cawco tool available to sessions for the orchestrators to be able
+ * to switch accounts for delegates or see the usage data at a glance"): the
+ * router's own view of the accounts and of each delegate, and a move of one
+ * to an account the person named, through the router's decision; a session
+ * that may start delegates lists them (worker 31,274, delegate 11,683
+ * measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_000,
-  delegate: 11_440,
+  worker: 31_300,
+  delegate: 11_700,
   overseer: 770,
   "web-facing": 3400,
   curator: 1385,

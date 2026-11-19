@@ -1,11 +1,9 @@
-import type { Account } from "@cawco/core/accounts";
-import { accountNameAmong } from "@cawco/core/accounts";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { harnessNamed } from "@cawco/core/harness/kinds";
 import { TAB_NAMES_PER_ASK } from "@cawco/core/protocol";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
-import { owedMoveWords } from "@cawco/core/words/owed-moves";
-import { Elysia, problem, t } from "elysia";
+import { Elysia, t } from "elysia";
+import { handMoveOf } from "../hand-move";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 import { contextSizeCalls } from "../session-calls";
@@ -16,9 +14,6 @@ import { contextSizeCalls } from "../session-calls";
  * body from turning a single request into a fleet-wide transcript sweep.
  */
 const TITLE_ASK_LIMIT = 64;
-
-/** A sentence's closing stop, dropped so it sits inside another. */
-const SENTENCE_STOP = /\.$/u;
 
 /**
  * How many stored entries each window of a conversation's head holds, read
@@ -58,21 +53,15 @@ export const instanceTitleRoutes = ({
   | "storedWindow"
   | "tabNamed"
 >) => {
-  /** A person's move the hub refused: which account it stays on, which it was not moved to, and why. */
-  const notMovedWords = (
-    row: ReturnType<typeof db.getInstancesByIds>[number],
-    account: Account,
-    why: string
-  ): string => {
-    const accounts = db.accounts.list();
-    const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
-    return owedMoveWords.notMoved(
-      sessionName(row),
-      from ? accountNameAmong(from, accounts) : "no account",
-      accountNameAmong(account, accounts),
-      why.replace(SENTENCE_STOP, "")
-    );
-  };
+  const handMove = handMoveOf({
+    db,
+    forgetMoveRefusal,
+    handMoveRefusal,
+    moveByHand,
+    owedCarries,
+    owedMoves,
+    sessionName,
+  });
   return (
     new Elysia()
       // Moves a session to another account of its provider, whole: its
@@ -83,54 +72,7 @@ export const instanceTitleRoutes = ({
       .post(
         "/api/instances/:id/account",
         { body: t.Object({ accountId: t.String() }) },
-        async ({ params, body }) => {
-          // A move it owed being carried now goes first: its machine refuses
-          // a second carry of the conversation meanwhile, and this one
-          // starts from where that one left the row.
-          await owedCarries.get(params.id)?.catch(() => undefined);
-          // A move asked again: the one that didn't happen is no longer news.
-          forgetMoveRefusal(params.id);
-          const [row] = db.getInstancesByIds([params.id]);
-          if (!row) {
-            return problem(404, {
-              code: "session-not-found",
-              detail: "Session not found",
-            });
-          }
-          const account = db.accounts.get(body.accountId);
-          if (!account) {
-            return problem(404, {
-              code: "no-account",
-              detail: `There is no account ${body.accountId}.`,
-            });
-          }
-          const why = handMoveRefusal(row, account);
-          if (why) {
-            return problem(409, {
-              code: "move-refused",
-              detail: notMovedWords(row, account, why),
-            });
-          }
-          if (row.accountId === account.id) {
-            // Back to the account it runs on: a move asked mid-turn is off.
-            if (owedMoves.get(row.id)?.to !== undefined) {
-              owedMoves.delete(row.id);
-            }
-            return {
-              state: "moved" as const,
-              accountId: account.id,
-              why: `${sessionName(row)} already runs on ${accountNameAmong(account, db.accounts.list())}.`,
-            };
-          }
-          const moved = await moveByHand(row, account);
-          // A person's move, in the words its answer gives them.
-          console.info(
-            `[accounts] ${"refusal" in moved ? moved.refusal : moved.why}`
-          );
-          return "refusal" in moved
-            ? problem(409, { code: "move-refused", detail: moved.refusal })
-            : moved;
-        }
+        ({ params, body }) => handMove(params.id, body.accountId)
       )
       .post("/api/instances/:id/context-size", hidden, ({ params }) =>
         contextSizeCalls({ db, reportedContextOf }).contextSize(params.id)

@@ -245,7 +245,7 @@ const movedWords = (
 };
 
 /** An option of the decision as a move's detail names it ({@link MovePriceOption}). */
-const OPTION_WORDS: Record<MovePriceOption, string> = {
+export const OPTION_WORDS: Record<MovePriceOption, string> = {
   stay: "staying",
   wait: "waiting for the reset",
   credits: "staying on extra usage",
@@ -256,7 +256,7 @@ const OPTION_WORDS: Record<MovePriceOption, string> = {
 };
 
 /** Dollars as a move's detail says them: "$4.17", or "an unpriced amount". */
-const dollarWords = (usd: number | null): string =>
+export const dollarWords = (usd: number | null): string =>
   usd === null ? "an unpriced amount" : `$${usd.toFixed(2)}`;
 
 /**

@@ -28,6 +28,7 @@ import {
   decide,
   LOOK_AHEAD_MS,
   type MoveChoice,
+  type MoveTrigger,
   runsShort,
 } from "./decide";
 import {
@@ -47,6 +48,7 @@ import {
   lineCost,
   linePrice,
   moveSideWords,
+  type Outlook,
   planOf,
 } from "./limit-decision";
 import type { Arrival } from "./placement";
@@ -678,16 +680,20 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     return done;
   };
 
+  /** Whether `from`'s sessions keep going on its extra usage past its plan (core `keepsGoingOnExtraUsage`). */
+  const onCredits = (from: Account): boolean =>
+    keepsGoingOnExtraUsage(
+      from,
+      db.accounts.readings().find((one) => one.accountId === from.id)
+    );
+
   /**
    * Whether `from`'s plan limit stops nothing: past it, its sessions keep
    * going on its extra usage (core `keepsGoingOnExtraUsage`), so none is
    * moved ahead of its run-out. Says so when it does.
    */
   const keepsGoing = (from: Account, runsOutAt: number): boolean => {
-    const reading = db.accounts
-      .readings()
-      .find((one) => one.accountId === from.id);
-    if (!keepsGoingOnExtraUsage(from, reading)) {
+    if (!onCredits(from)) {
       return false;
     }
     console.info(
@@ -1239,6 +1245,38 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     /** `instanceId` never runs again: its marker to decide at its turn's end goes with it. */
     forget: (instanceId: string): void => {
       atTurnEnd.delete(instanceId);
+    },
+    /**
+     * What a pass would do with `row` on `from` now, read and nothing
+     * carried out: its account lasts ({@link shortOf}), goes on its extra
+     * usage ({@link keepsGoing}), or runs short and the one decision for a
+     * forecast is taken for it ({@link step}); undefined when its account
+     * is none the hub reads.
+     */
+    outlook: (row: LimitRow, from: Account): Outlook | undefined => {
+      const now = Date.now();
+      const waitMs =
+        db.accounts.routing(from.provider).atLimit.waitMinutes * 60_000;
+      const short = shortOf(row, from, 0, waitMs);
+      const facts = factsOf(db, ports, row, from, now, {
+        ...(short ? { resetAt: short.at } : {}),
+      });
+      if (!facts) {
+        return;
+      }
+      if (!short) {
+        return { kind: "lasts", facts };
+      }
+      if (onCredits(from)) {
+        return { kind: "credits", runsOutAt: short.at, facts };
+      }
+      const trigger: MoveTrigger = { kind: "forecast", runsOutAt: short.at };
+      return {
+        kind: "decided",
+        trigger,
+        decision: decide(facts, trigger),
+        facts,
+      };
     },
   };
 };

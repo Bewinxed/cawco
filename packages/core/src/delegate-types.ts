@@ -298,6 +298,7 @@ export const PERSON_AND_READ_TOOLS = [
   "list_sessions",
   "list_delegate_types",
   "delegate_list",
+  "account_read",
   "find",
   "task_read",
   "folder_read",
@@ -356,6 +357,13 @@ export const WEB_FETCH_TOOLS = harnessToolsOf("fetch");
 export const WEB_SEARCH_TOOLS = harnessToolsOf("search");
 
 /**
+ * Where the account router runs a session's delegates, and a move of one to
+ * an account the person named (hub account-tools.ts): a session that may
+ * start delegates has them.
+ */
+export const ACCOUNT_TOOL_NAMES = ["account_read", "account_move"] as const;
+
+/**
  * The CawCo tools a leaf (a session whose {@link MayStart} list is not
  * `["any"]`) never gets: everything that spawns, steers a spawn or reads its
  * spawns, but what a leaf whose list names a type keeps ({@link
@@ -376,16 +384,19 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
   "discard_workspace",
   // It stops every turn on a machine: an orchestrator's, never a leaf's.
   "machine_pause",
+  ...ACCOUNT_TOOL_NAMES,
 ]);
 
 /**
  * The {@link SPAWNING_TOOLS} a leaf whose list names a type keeps: starting
- * a delegate of a type it may start, and answering what that delegate asks
- * it (its asks route to its parent).
+ * a delegate of a type it may start, answering what that delegate asks
+ * it (its asks route to its parent), and seeing and moving the account it
+ * runs on.
  */
 const LEAF_STARTING_TOOLS: ReadonlySet<string> = new Set([
   "delegate",
   "answer_delegate",
+  ...ACCOUNT_TOOL_NAMES,
 ]);
 
 /** Whether a session that may start `mayStart` gets the CawCo tool `name`, as far as spawning goes. */

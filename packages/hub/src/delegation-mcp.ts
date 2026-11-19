@@ -19,6 +19,11 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { ElysiaStatus } from "elysia";
 import { problemResponse } from "elysia/error";
+import {
+  ACCOUNT_DEFINITIONS,
+  ACCOUNT_TOOLS,
+  type AccountTools,
+} from "./account-tools";
 import { ACTION_DEFINITIONS, ACTION_TOOLS, type Actions } from "./actions";
 import type { AdminCalls } from "./admin-calls";
 import { adminTools, answeredWithoutAsking } from "./admin-tools";
@@ -113,6 +118,7 @@ type HubTool = ReturnType<ReturnType<typeof createHubTools>>[number];
 type BrowserTool = ReturnType<BrowserAsks["tools"]>[number];
 type ConnectTool = ReturnType<ConnectAsks["tools"]>[number];
 type AskTool = ReturnType<Asks["tools"]>[number];
+type AccountTool = ReturnType<AccountTools["tools"]>[number];
 
 /** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
 type ProjectTool =
@@ -309,6 +315,7 @@ const GROUPS_DEFINED: readonly (readonly [
   [ROUTINE_TOOLS, ROUTINE_DEFINITIONS],
   [INGRESS_TOOLS, INGRESS_DEFINITIONS],
   [ACTION_TOOLS, ACTION_DEFINITIONS],
+  [ACCOUNT_TOOLS, ACCOUNT_DEFINITIONS],
 ];
 
 /**
@@ -353,6 +360,7 @@ export const definedTools = (
   ...HUB_DEFINITIONS,
   ...BROWSER_DEFINITIONS,
   ...CONNECT_DEFINITIONS,
+  ...ACCOUNT_DEFINITIONS,
 ];
 
 /**
@@ -540,6 +548,8 @@ export function createDelegationMcp(options: {
     actor: InstanceRow | undefined,
     toolUseId?: string
   ) => ConnectTool[];
+  /** `account_read` and `account_move` (account-tools.ts): the router's view of the accounts, and a move the person named. */
+  accountTools?: AccountTools["tools"];
   /** `ask` (asks.ts): the session asks the person something and carries on. */
   askTools?: (actor: InstanceRow | undefined, toolUseId?: string) => AskTool[];
   /**
@@ -1050,6 +1060,7 @@ export function createDelegationMcp(options: {
           | AskTool
           | CawTool
           | TriageTool
+          | AccountTool
         )[])
       | undefined
     ),
@@ -1065,6 +1076,7 @@ export function createDelegationMcp(options: {
     [ROUTINE_TOOLS, options.routineTools],
     [INGRESS_TOOLS, options.ingressTools],
     [ACTION_TOOLS, options.actionTools],
+    [ACCOUNT_TOOLS, options.accountTools],
   ];
 
   /** Every call, MCP or REST, from any machine: held for a hub restart while it runs, refused behind its fence. */

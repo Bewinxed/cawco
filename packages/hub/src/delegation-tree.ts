@@ -321,8 +321,21 @@ export const treeSessions = (
   // skipped each of them as it reached it, and everything under them, so
   // a session with a parent never had its own delegates in its tree
   // (2026-10-31: an orchestrator's page refused its delegate's preview).
-  const walked = new Set<string>([top.id]);
-  let level = [top.id];
+  return new Set([...sessionsUnder(db, top.id), ...above]);
+};
+
+/**
+ * `top` and every session under it, one level at a time: by the work items
+ * `delegate_list` reads (their sessions alone), and by the children's own
+ * `parentInstanceId`, so a child started with no work item is under its
+ * parent as it is from its own side.
+ */
+export const sessionsUnder = (
+  db: Pick<DbShape, "childIdsOfParents" | "itemSessionsOfParents">,
+  top: string
+): Set<string> => {
+  const walked = new Set<string>([top]);
+  let level = [top];
   while (level.length > 0) {
     const below = [
       ...db.itemSessionsOfParents(level),
@@ -333,7 +346,7 @@ export const treeSessions = (
       walked.add(id);
     }
   }
-  return new Set([...walked, ...above]);
+  return walked;
 };
 
 export const createDelegationTree = (deps: DelegationTreeDeps) => {
