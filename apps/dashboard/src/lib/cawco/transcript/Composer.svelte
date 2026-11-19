@@ -795,6 +795,7 @@
   data-minimized={grown.minimized || undefined}
   data-flush={flush || undefined}
   class="group/dock not-data-flush:absolute not-data-flush:inset-x-0 not-data-flush:top-0 not-data-flush:bottom-(--dock-foot) data-flush:relative z-(--layer-dock) flex flex-col justify-end items-center pointer-events-none"
+  data-composer-dock
   data-keeps-draft
   data-safe-bottom
   bind:this={dockEl}
@@ -815,11 +816,18 @@
        draws it, then dissolves over `space-8` under the layer: rows pass
        behind the layer and the tray row as they pass behind the pill, whole
        or not at all. It fades with the layer and moves nothing. Under
-       everything else in the dock. -->
+       everything else in the dock. Whether a layer is open the dock says
+       from its own `:has()` (`--layer-shown`, `--layer-seen`, `--layer-fade`;
+       design.css, `[data-composer-dock]`), as it says the list of what waits
+       stands open for the minimized question's bar (`--waiting-*`): asked from here past the
+       dock (`group-has-*`), the `:has()` stood outside the rule's subject,
+       where Blink's one shared invalidation set restyles a whole subtree
+       under every anchor on the page, find's places with it
+       (apps/dashboard/scripts/has-subject-check.ts). -->
   <div
     data-slot="layer-ground"
     aria-hidden="true"
-    class="absolute inset-x-0 bottom-(--ground-bottom) -z-1 h-(--ground-h) pointer-events-none bg-(image:--layer-ground-image) opacity-0 invisible transition-fade-hide group-has-slot-plan/dock:opacity-100 group-has-slot-plan/dock:visible group-has-slot-plan/dock:transition-fade-show group-has-slot-shelf/dock:opacity-100 group-has-slot-shelf/dock:visible group-has-slot-shelf/dock:transition-fade-show group-has-slot-waiting/dock:opacity-100 group-has-slot-waiting/dock:visible group-has-slot-waiting/dock:transition-fade-show"
+    class="absolute inset-x-0 bottom-(--ground-bottom) -z-1 h-(--ground-h) pointer-events-none bg-(image:--layer-ground-image) opacity-(--layer-shown,0)"
     style:--layer-ground-image={LAYER_GROUND}
     style:--ground-bottom={GROUND_BOTTOM}
     style:--ground-h={GROUND_H}
@@ -902,7 +910,8 @@
            the bar as it fades. -->
       {@const [first] = grown.askQuestions ?? []}
       <div
-        class="absolute inset-0 flex items-box-end pb-c-tray-gap pe-(--ring-room,0px) pointer-events-none transition-fade-show group-has-slot-waiting/dock:opacity-0 group-has-slot-waiting/dock:invisible group-has-slot-waiting/dock:transition-fade-hide"
+        class="absolute inset-0 flex items-box-end pb-c-tray-gap pe-(--ring-room,0px) pointer-events-none opacity-(--waiting-shown,1)"
+        data-minimized-bar
         style:--ring-room={planRing
           ? `calc(${dockFoot.ringWidth}px + var(--spacing-space-2))`
           : undefined}

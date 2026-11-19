@@ -161,14 +161,6 @@
 /* A row whose link is held down (config SectionRow). */
 @custom-variant has-link-active (&:has([data-link]:active));
 
-/* Inside a tree mark whose own hit is held down (TreeMark): the tile gives
-   a little under it. */
-@custom-variant mark-pressed (&:is([data-tree-mark]:has([data-slot="hit"]:active) *));
-
-/* Inside a live tree mark while its dot beats (TreeMark). At the weight of
-   the selector it came from, so it outranks the mark's hole mask. */
-@custom-variant mark-beating (&:is([data-tree-mark][data-dot="live"]:has([data-beating]) *));
-
 /* Not hidden by its `hidden` attribute (a pane head's fitted controls). */
 @custom-variant unhidden (&:not([hidden]));
 

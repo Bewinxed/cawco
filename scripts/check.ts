@@ -566,6 +566,10 @@ const gated: Gated[] = [
   bun("apps/dashboard/scripts/mark-line-check.ts"),
   bun("apps/dashboard/scripts/outro-reads-check.ts"),
   bun("apps/dashboard/scripts/specificity-trap.ts"),
+  // A :has() stands only in its rule's subject: one before a combinator
+  // joins Blink's one shared :has() invalidation set, which restyles a
+  // whole subtree under every anchor on the page.
+  bun("apps/dashboard/scripts/has-subject-check.ts"),
   bun("apps/dashboard/scripts/lib-import-check.ts"),
   bun("apps/dashboard/scripts/svelte-unused-css.ts"),
   // The release build's layers guard, over the house's sheets unbundled.

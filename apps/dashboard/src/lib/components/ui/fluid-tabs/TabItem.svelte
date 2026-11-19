@@ -394,7 +394,7 @@
     "motion-safe:transition-[color] motion-safe:duration-(--duration-ghost) motion-safe:ease-out",
     "in-variant-folder:motion-safe:[transition:color_var(--duration-ghost)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
     "[[data-variant=folder]_[data-ride]_&]:transition-off",
-    "hit-pressed:bg-surface-pressed in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong",
+    "hit-pressed:bg-surface-pressed in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong hit-pressed:[--sheet-press:var(--color-surface-pressed)]",
     // A glyph alone is narrower than a finger: under one it takes the touch
     // floor across, its glyph centred (The 44 Touch Rule), since its
     // neighbours' edges bound its hit area.
@@ -451,13 +451,16 @@
            at the strength the tab is chosen at now. Under the pointer an
            unchosen tab lights its own shape in the hover tint (the track's
            ghost cannot glide between overlapping tabs); pressed, the press
-           fill. The sheet and the hit are named by their own attributes
+           fill, which the tab hands its sheet from its own `hit-pressed`
+           (`--sheet-press`): asked of the tab from the sheet
+           (`group-hit-pressed`), the `:has()` stood outside the rule's
+           subject (apps/dashboard/scripts/has-subject-check.ts). The sheet and the hit are named by their own attributes
            (`data-ff-sheet`, `data-hit`): Chrome keys an attribute selector's
            invalidation to the attribute's name alone, so a `data-slot` there
            restyled every `data-slot` in the tab under each state change. -->
       <use
         data-ff-sheet
-        class="pick-inherit paint-tab-sheet hover-hover:group-data-ghosted/ff-tab:not-group-data-tab-item-selected/ff-tab:paint-tab-hover group-hit-pressed/ff-tab:fill-surface-pressed"
+        class="pick-inherit paint-tab-sheet hover-hover:group-data-ghosted/ff-tab:not-group-data-tab-item-selected/ff-tab:paint-tab-hover"
         href="#{uid}-outline"
       />
       {#if !hung}

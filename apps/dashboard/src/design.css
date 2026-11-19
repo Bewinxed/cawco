@@ -1153,14 +1153,6 @@
 @utility content-visibility-hidden {
   content-visibility: hidden;
 }
-/* A row of a long list that is laid out, styled and painted only near the
-   view (find's places: up to the hub's 500, a dozen in view). Off screen it
-   stands at the height it last had, a fresh row at a desk row's floor
-   (FindRow's `min-h-13`) until it is first drawn. */
-@utility row-skip-unseen {
-  content-visibility: auto;
-  contain-intrinsic-block-size: auto calc(var(--spacing) * 13);
-}
 @utility scheme-inherit {
   color-scheme: inherit;
 }
@@ -1497,15 +1489,21 @@
 /* A folder tab's drawn parts (fluid-tabs TabItem): the sheet's fill picked
    in by `--pick`, its hover fill, the status rim's strength, glow, stroke
    and ink, and the chosen tab's square-shouldered hit with its flared foot. */
+/* A tab's sheet, chosen and under the pointer; either gives way to the
+   press fill its tab hands it while its hit is held (`--sheet-press`,
+   fluid-tabs TabItem). */
 @utility paint-tab-sheet {
-  fill: color-mix(
-    in oklab,
-    var(--sheet) calc(var(--pick) * 100%),
-    var(--tab-fill, var(--color-surface-recess-deep))
+  fill: var(
+    --sheet-press,
+    color-mix(
+      in oklab,
+      var(--sheet) calc(var(--pick) * 100%),
+      var(--tab-fill, var(--color-surface-recess-deep))
+    )
   );
 }
 @utility paint-tab-hover {
-  fill: var(--tab-hover, var(--color-surface-hover));
+  fill: var(--sheet-press, var(--tab-hover, var(--color-surface-hover)));
 }
 @utility rim-strength {
   opacity: calc(
@@ -2578,8 +2576,13 @@
    A pane whose group's divider holds the keyboard (paneforge marks it
    `data-active="keyboard"` while it has focus): a step from the keyboard is
    a jump, so the panes either side tween to it (ui/resizable Pane, `grid`).
-   Here rather than in variants.css, which `bun run variants` writes whole. */
-@custom-variant pane-keyed (:where([data-pane-group]:has(> [data-pane-resizer][data-active="keyboard"])) > &);
+   Here rather than in variants.css, which `bun run variants` writes whole.
+   Asked of the pane itself, by its siblings (a divider holding the keyboard
+   after it or before it), never of the group: a group's `:has()` before
+   `> &` stood outside the rule's subject, where Blink's one shared
+   invalidation set restyles a whole subtree under every anchor on the page
+   (scripts/has-subject-check.ts). */
+@custom-variant pane-keyed (:where([data-pane-group]) > &:where(:has(~ [data-pane-resizer][data-active="keyboard"]), [data-pane-resizer][data-active="keyboard"] ~ *));
 /* The phone's session strip (ui/fluid-tabs TabsList, cawco/tab-strips `SESSION_STRIP`):
    its ends fade over a short run, each cut short at a tab drawn chosen
    (TabsList's `--fade-cap-start`/`--fade-cap-end`), so a tab slides under
@@ -2759,6 +2762,10 @@
      the mark, never across it. */
   z-index: 1;
   pointer-events: none;
+  /* Past any box a stroke has: a cut this far out cuts nothing (the
+     inset of each stroke's clip on a side it never cuts). */
+  /* biome-ignore lint/plugin/no-raw-css-values: no cut, a sentinel past any box rather than a size, as --nest-cut-r and --nest-cut-b rest at. */
+  --past-box: 9999px;
 
   & > span {
     position: absolute;
@@ -2801,34 +2808,122 @@
     bottom: 0;
   }
   /* The line's start, from the glyph's foot to the row's own, while its
-     first child follows it (an outgoing one's too, until it has gone). */
+     first child follows it (an outgoing one's too, until it has gone), cut
+     while the group after its row draws in or runs back, and held whole
+     from below while that group is held: the row says each from its own
+     `:has()` (`--line-start-shown`, and the space toggles
+     `--line-start-drawing` and `--line-start-held`, below the utility).
+     Unsaid, a toggle leaves its declaration invalid: the start has no clip
+     and its foot cut rests (--nest-cut-b's initial value), as a stroke at
+     rest does. A stroke of a group that is itself drawing or held takes the
+     group's own rules after these. */
   & > [data-line-down] {
-    display: none;
+    display: var(--line-start-shown, none);
     top: calc(var(--line-y) + var(--line-foot));
     bottom: 0;
+    --nest-cut-b: var(--line-start-held) var(--past-box);
   }
-  [data-line-row]:has(+ [data-line-first]) > & > [data-line-down] {
-    display: block;
+  & > [data-line-down][data-branch-cut] {
+    clip-path: var(--line-start-drawing)
+      inset(
+        calc(-1 * var(--past-box)) var(--nest-cut-r) var(--nest-cut-b)
+          calc(-1 * var(--past-box))
+      );
   }
-  [data-branch-draw] & > [data-branch-cut],
-  [data-line-row]:has(+ [data-branch-draw])
-    > &
-    > [data-line-down][data-branch-cut] {
-    /* biome-ignore lint/plugin/no-raw-css-values: no cut on these sides, a sentinel past any box rather than a size, as --nest-cut-r and --nest-cut-b rest at. */
-    clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
+  &:dir(rtl) > [data-line-down][data-branch-cut] {
+    clip-path: var(--line-start-drawing)
+      inset(
+        calc(-1 * var(--past-box)) calc(-1 * var(--past-box)) var(--nest-cut-b)
+          var(--nest-cut-r)
+      );
   }
-  [data-branch-hold] & > [data-branch-cut],
-  [data-line-row]:has(+ [data-branch-hold]) > & > [data-line-down] {
-    /* biome-ignore lint/plugin/no-raw-css-values: no cut at the foot while the line holds, the same sentinel as --nest-cut-b's rest. */
-    --nest-cut-b: 9999px;
+  [data-branch-draw] & > [data-branch-cut] {
+    clip-path: inset(
+      calc(-1 * var(--past-box)) var(--nest-cut-r) var(--nest-cut-b)
+        calc(-1 * var(--past-box))
+    );
+  }
+  [data-branch-hold] & > [data-branch-cut] {
+    --nest-cut-b: var(--past-box);
   }
   /* Right to left the line's head travels leftward: its cut is on the left. */
-  [data-branch-draw] &:dir(rtl) > [data-branch-cut],
-  [data-line-row]:has(+ [data-branch-draw])
-    > &:dir(rtl)
-    > [data-line-down][data-branch-cut] {
-    /* biome-ignore lint/plugin/no-raw-css-values: no cut on these sides, the same sentinel as above, mirrored. */
-    clip-path: inset(-9999px -9999px var(--nest-cut-b) var(--nest-cut-r));
+  [data-branch-draw] &:dir(rtl) > [data-branch-cut] {
+    clip-path: inset(
+      calc(-1 * var(--past-box)) calc(-1 * var(--past-box)) var(--nest-cut-b)
+        var(--nest-cut-r)
+    );
+  }
+}
+/* What follows a tree row, said by the row's own `:has()` and handed to the
+   start of its line (.kit-tree-line `[data-line-down]`): its first child
+   (`data-line-first`), and a group drawing in or held after it
+   (motion/branch). Asked of the row from the line instead
+   (`[data-line-row]:has(+ …) > & > …`), the `:has()` stood outside the
+   rule's subject, where Blink's one shared invalidation set restyles a
+   whole subtree under every anchor on the page
+   (apps/dashboard/scripts/has-subject-check.ts). A toggle is set empty,
+   which makes the declaration that reads it valid. */
+@layer components {
+  [data-line-row]:has(+ [data-line-first]) {
+    --line-start-shown: block;
+  }
+  [data-line-row]:has(+ [data-branch-draw]) {
+    --line-start-drawing: ;
+  }
+  [data-line-row]:has(+ [data-branch-hold]) {
+    --line-start-held: ;
+  }
+}
+/* What an anchor's parts take from what happens inside it, said by the
+   anchor's own `:has()` and handed down as custom properties its parts read
+   (apps/dashboard/scripts/has-subject-check.ts):
+   - a tree mark (TreeMark): its hit held down gives its tile the press
+     scale (`--mark-press`); live, its echo beating takes the tile's hole
+     and its dots away (`--beat-mask`, `--beat-dot`), the dot's beat drawn
+     in their place;
+   - the composer's dock (Composer): an open layer (the plan, the tray's
+     shelf, the list of what waits on the person) shows the layer's ground
+     (`--layer-*`), and the list of what waits hides the minimized
+     question's bar (`--waiting-*`);
+   - a transcript's dock (Transcript): lines over the pills stand the pills
+     a step under them (`--pills-step`). */
+@layer components {
+  [data-tree-mark]:has([data-slot="hit"]:active) {
+    --mark-press: var(--press-scale);
+  }
+  [data-tree-mark][data-dot="live"]:has([data-beating]) {
+    --beat-mask: none;
+    --beat-dot: none;
+  }
+  [data-composer-dock]:has(
+    [data-slot="plan"],
+    [data-slot="shelf"],
+    [data-slot="waiting"]
+  ) {
+    --layer-shown: 1;
+    --layer-seen: visible;
+    --layer-fade: var(--transition-fade-show);
+  }
+  [data-composer-dock]:has([data-slot="waiting"]) {
+    --waiting-shown: 0;
+    --waiting-seen: hidden;
+    --waiting-fade: var(--transition-fade-hide);
+  }
+  [data-slot="dock"]:has(> [data-slot="dock-lines"] > *) {
+    --pills-step: var(--spacing-space-2);
+  }
+  /* The parts that read them, where a utility cannot take a property's
+     value from a variable. Unsaid, the bar's visibility is its parent's. */
+  [data-tree-mark] [data-slot="dot"] {
+    display: var(--beat-dot, block);
+  }
+  [data-composer-dock] [data-slot="layer-ground"] {
+    visibility: var(--layer-seen, hidden);
+    transition: var(--layer-fade, var(--transition-fade-hide));
+  }
+  [data-composer-dock] [data-minimized-bar] {
+    visibility: var(--waiting-seen);
+    transition: var(--waiting-fade, var(--transition-fade-show));
   }
 }
 

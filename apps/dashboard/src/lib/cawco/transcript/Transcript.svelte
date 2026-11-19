@@ -801,10 +801,15 @@
          the way back stands only off the tail, and the catch-up passes as
          the rows it brings arrive; given room, each one's going moved the
          rows it had just made room for. The pills stand a step under the
-         lines when there are any (`peer-has`), as the dock's gap set them. -->
+         lines when there are any, as the dock's gap set them: the dock says
+         so from its own `:has()` (`--pills-step`, design.css). Asked of the lines from
+         the pills (`peer-has-*`), the `:has()` stood outside the rule's
+         subject, where Blink's one shared invalidation set restyles a whole
+         subtree under every anchor on the page
+         (apps/dashboard/scripts/has-subject-check.ts). -->
     <div
       data-slot="dock-lines"
-      class="peer self-stretch flex flex-col items-center gap-space-2"
+      class="self-stretch flex flex-col items-center gap-space-2"
       {@attach measureDockRoom}
     >
       <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
@@ -832,7 +837,7 @@
     </div>
     {#if rowBuild.catching || finder.showLatest || finder.showBack}
       <div
-        class="flex justify-center items-box-end gap-space-2 peer-has-[>*]:mt-space-2"
+        class="flex justify-center items-box-end gap-space-2 mt-(--pills-step)"
       >
         {#if rowBuild.catching}
           <CatchUp />

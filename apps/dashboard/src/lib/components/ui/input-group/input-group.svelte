@@ -69,10 +69,15 @@
     "has-data-[align=block-end]:rounded-md",
     "has-data-[align=block-start]:rounded-md",
     "has-[[data-slot][aria-invalid=true]]:border-error-9",
-    "has-[>[data-align=block-end]]:[&>input]:pt-3",
-    "has-[>[data-align=inline-end]]:[&>input]:pr-1.5",
-    "has-[>[data-align=block-start]]:[&>input]:pb-3",
-    "has-[>[data-align=inline-start]]:[&>input]:pl-1.5",
+    // The field's own input steps clear of an addon beside it, asked of the
+    // input by its siblings: asked of the frame (`has-[…]:[&>input]:`), the
+    // `:has()` stood outside the rule's subject, where Blink's one shared
+    // invalidation set restyles a whole subtree under every anchor on the
+    // page (apps/dashboard/scripts/has-subject-check.ts).
+    "[&>input:is([data-align=block-end]~*,:has(~[data-align=block-end]))]:pt-3",
+    "[&>input:is([data-align=inline-end]~*,:has(~[data-align=inline-end]))]:pr-1.5",
+    "[&>input:is([data-align=block-start]~*,:has(~[data-align=block-start]))]:pb-3",
+    "[&>input:is([data-align=inline-start]~*,:has(~[data-align=inline-start]))]:pl-1.5",
     // A value's frame is dragged across: every part of it says so to the
     // pointer until its field holds the caret, a horizontal drag is the
     // frame's under a finger (a vertical one still scrolls), and its edge

@@ -137,7 +137,15 @@
      A step up while its rows are out (--mark-level): their marks start and
      end their ride under it (app.css, motion/branch). No tile: the face
      stands bare in the slot, in the muted ink (a row that is no session or
-     project: "N older"). The dot's ink is its status's (--dot). -->
+     project: "N older"). The dot's ink is its status's (--dot). What its
+     parts take from what happens inside it, the mark hands down from its
+     own `:has()` (design.css, beside .kit-tree-line): its hit held down
+     (`--mark-press`, the tile's press) and, live, its echo beating
+     (`--beat-mask`, `--beat-dot`). Asked of the mark
+     from each part instead (`:is([data-tree-mark]:has(…) *)`), the `:has()`
+     stood outside the rule's subject, where Blink's one shared invalidation
+     set restyles a whole subtree under every anchor on the page
+     (apps/dashboard/scripts/has-subject-check.ts). -->
 <span
   data-tree-mark
   class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-mark-glyph data-bare:text-ink-muted"
@@ -204,13 +212,13 @@
     data-slot="tile"
     aria-hidden="true"
     class={[
-      "absolute inset-0 grid place-items-center rounded-xs bg-(--fill) group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:duration-(--duration-toggle) motion-safe:ease-out motion-safe:mark-pressed:press-by-(--press-scale) group-data-dot/mark:mask-(--hole-mask) mark-beating:mask-none",
+      "absolute inset-0 grid place-items-center rounded-xs bg-(--fill) group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:duration-(--duration-toggle) motion-safe:ease-out motion-safe:press-by-(--mark-press,1) group-data-dot/mark:mask-(--hole-mask)",
       !(has && !faceAlways) && "bg-mark-overlay",
     ]}
     style:--hole={dot
       ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
       : undefined}
-    style:--hole-mask={"radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--spacing-c-tree-mark-hole-edge)), var(--color-mask-opaque) calc(var(--hole) + var(--spacing-c-tree-mark-hole-edge)))"}
+    style:--hole-mask={"var(--beat-mask, radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--spacing-c-tree-mark-hole-edge)), var(--color-mask-opaque) calc(var(--hole) + var(--spacing-c-tree-mark-hole-edge))))"}
   >
     <span
       data-slot="tree-mark-rest"
@@ -268,7 +276,7 @@
     <span
       data-slot="dot"
       aria-hidden="true"
-      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-(--status-dot-size) rounded-pill bg-(--dot) pointer-events-none mark-beating:hidden"
+      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-(--status-dot-size) rounded-pill bg-(--dot) pointer-events-none"
       style:--dot-off="calc(var(--status-dot-size) / -2)"
     ></span>
   {/if}
@@ -315,7 +323,7 @@
       data-ping
       data-slot="dot"
       aria-hidden="true"
-      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-(--status-dot-size) rounded-pill bg-(--dot) pointer-events-none opacity-0 mark-beating:hidden"
+      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-(--status-dot-size) rounded-pill bg-(--dot) pointer-events-none opacity-0"
       data-echo
       data-echo-key={echoKey}
       data-echo-status={status}

@@ -380,14 +380,22 @@
     color: var(--color-ink-muted);
   }
   /* A split's panes glide together while paneforge marks one collapsing or
-     expanding; a drag stays 1:1. */
+     expanding; a drag stays 1:1. Each pane asks it of itself and its
+     siblings (one collapsing or expanding before it, after it, or itself),
+     never of the group: a group's `:has()` before `> [data-pane]` stood
+     outside the rule's subject, where Blink's one shared invalidation set
+     restyles a whole subtree under every anchor on the page
+     (apps/dashboard/scripts/has-subject-check.ts). */
   @media (prefers-reduced-motion: no-preference) {
     [data-slot="pane"]
-      [data-pane-group]:has(
-        > [data-pane-state="collapsing"],
-        > [data-pane-state="expanding"]
-      )
-      > [data-pane] {
+      [data-pane-group]
+      > [data-pane]:is(
+        [data-pane-state="collapsing"],
+        [data-pane-state="expanding"],
+        [data-pane-state="collapsing"] ~ *,
+        [data-pane-state="expanding"] ~ *,
+        :has(~ [data-pane-state="collapsing"], ~ [data-pane-state="expanding"])
+      ) {
       transition: flex-grow var(--duration-panel) var(--ease-in-out);
     }
   }

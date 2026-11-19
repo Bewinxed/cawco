@@ -286,6 +286,8 @@ export default {
         // scripts/check.ts
         "scripts/css-layers-check.ts",
         // scripts/check.ts
+        "scripts/has-subject-check.ts",
+        // scripts/check.ts
         "scripts/role-order.ts",
       ],
       project: [
