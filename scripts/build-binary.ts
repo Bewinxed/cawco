@@ -53,6 +53,7 @@ const ROOT = resolve(import.meta.dir, "..");
 const requireAgent = createRequire(join(ROOT, "packages/agent/package.json"));
 /** Where `prepare` leaves the assets every target shares, and each compile its own root. */
 const WORK = join(ROOT, ".context/binary-build");
+
 /** `prepare`'s record of what it left ({@link Prepared}). */
 const PREPARED = join(WORK, "prepared.json");
 
@@ -439,7 +440,7 @@ export async function compileBinary(options: {
     const [platform, arch] = options.target.split("-");
     const prebuilds = `native/${platform}/prebuilds/${platform}-${arch}`;
     await cp(join(tui, prebuilds), join(root, prebuilds), { recursive: true });
-    await bundled("The standalone binary", {
+    const output = await bundled("The standalone binary", {
       entrypoints: entries.map(([name]) => join(root, name)),
       root,
       compile: {
@@ -449,7 +450,11 @@ export async function compileBinary(options: {
         autoloadDotenv: false,
         autoloadBunfig: false,
       },
-      minify: true,
+      // A CPU profile of the hub (hub-profile.ts) names each function by its
+      // source name, file and line: identifiers keep their names, and the
+      // executable embeds the source map ("linked" in a compile).
+      minify: { whitespace: true, syntax: true, identifiers: false },
+      sourcemap: "linked",
       // cpu-features: an optional native addon of ssh2 (dockerode's
       // docker-modem loads it), built by no install here; ssh2 requires it
       // inside a try and goes on without it, and the browser runtime speaks to
@@ -567,6 +572,13 @@ export async function compileBinary(options: {
         },
       ],
     });
+    // The executable carries every entry's map; the copies Bun also writes
+    // beside the outfile (`cawco.map`, each worker's) are not shipped.
+    await Promise.all(
+      output.outputs
+        .filter((file) => file.kind === "sourcemap")
+        .map((file) => rm(file.path, { force: true }))
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
