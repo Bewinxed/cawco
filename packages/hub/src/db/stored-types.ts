@@ -198,7 +198,11 @@ export interface MemoryRunState {
     dropped: number;
     read: number;
     replaced: number;
+    /** Lessons put back because the person stated them again; none before it was counted. */
+    restored?: number;
     retired: number;
+    /** Lessons taken back because the person stated the opposite; none before it was counted. */
+    reverted?: number;
     staged: number;
   } | null;
   /** The day the one-time recovery run of the archived notes ran, once it has. */

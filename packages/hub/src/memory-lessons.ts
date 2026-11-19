@@ -31,6 +31,7 @@ import type {
   MemoryLedger as Ledger,
   Lesson,
   LessonHome,
+  LessonSource,
 } from "./db/stored-types";
 
 export const KNOWLEDGE_DIR = "knowledge";
@@ -566,7 +567,33 @@ export type Change =
       why: NonNullable<Lesson["retired"]>["why"];
     }
   /** A knowledge lesson no brief carried for the archive's days, to `knowledge/archive/<topic>.md`. */
-  | { id: string; kind: "archive" };
+  | { id: string; kind: "archive" }
+  /**
+   * A lesson the run took out, put back in its home as `line` (its words as
+   * the folder held them before), live again; `held` when the person stated
+   * it again, his message (`source`) one of its sources.
+   */
+  | {
+      held: boolean;
+      id: string;
+      kind: "restore";
+      line: LessonLine;
+      source?: LessonSource;
+    }
+  /** A lesson the run made, taken back because the person stated the opposite: retired, and held, so no run touches it again. */
+  | { id: string; kind: "revert" }
+  /**
+   * The person stated a live lesson again: one more repeat, his message one
+   * of its sources, his rule from now on; `held` from his second, and moved
+   * `up` a home when it has one to go to.
+   */
+  | {
+      held: boolean;
+      id: string;
+      kind: "repeat";
+      source: LessonSource;
+      up?: LessonHome;
+    };
 
 /** A line moved out of a file past its cap, and where to. */
 export interface Eviction {
@@ -975,12 +1002,7 @@ const corroborated = (
   if (!lesson) {
     return { tree: now };
   }
-  const sources = [
-    ...lesson.sources,
-    ...op.sources.filter(
-      (source) => !lesson.sources.some((had) => Bun.deepEquals(had, source))
-    ),
-  ];
+  const sources = withSourcesAdded(lesson.sources, op.sources);
   const { staged, ...rest } = lesson;
   if (!(op.lands && staged)) {
     return {
@@ -1002,6 +1024,65 @@ const corroborated = (
   );
 };
 
+/** `sources` with `more` added, none twice. */
+const withSourcesAdded = (
+  sources: readonly LessonSource[],
+  more: readonly LessonSource[]
+): LessonSource[] => [
+  ...sources,
+  ...more.filter(
+    (source) => !sources.some((had) => Bun.deepEquals(had, source))
+  ),
+];
+
+/** A lesson put back in its home as `op.line`, live again, its retirement gone. */
+const restored = (
+  now: MemoryTree,
+  op: ChangeOf<"restore">,
+  today: string
+): Done => {
+  const lesson = now.ledger.lessons[op.id];
+  if (!lesson || lineOf(now, op.id)) {
+    return { tree: now };
+  }
+  const { retired: _retired, staged: _staged, ...rest } = lesson;
+  return placed(now, lesson.home, op.line, {
+    ...rest,
+    ...(op.source ? { by: "owner" as const } : {}),
+    state: "live",
+    seen: today,
+    sources: withSourcesAdded(rest.sources, op.source ? [op.source] : []),
+    ...(op.held || rest.held ? { held: true as const } : {}),
+  });
+};
+
+/** A lesson stated again: counted, its source kept, his from now on; moved up a home when asked. */
+const repeated = (
+  now: MemoryTree,
+  op: ChangeOf<"repeat">,
+  today: string
+): Done => {
+  const lesson = now.ledger.lessons[op.id];
+  if (lesson?.state !== "live") {
+    return { tree: now };
+  }
+  const counted: MemoryTree = {
+    ...now,
+    ledger: withEntry(now.ledger, op.id, {
+      ...lesson,
+      by: "owner",
+      repeats: lesson.repeats + 1,
+      seen: today,
+      sources: withSourcesAdded(lesson.sources, [op.source]),
+      ...(op.held || lesson.held ? { held: true as const } : {}),
+    }),
+  };
+  const grew = op.up ? pathOf(op.up) : undefined;
+  return op.up && grew
+    ? { tree: moveLine(counted, op.id, op.up), grew }
+    : { tree: counted };
+};
+
 /** One change, by its kind. */
 const changed = (now: MemoryTree, op: Change, today: string): Done => {
   switch (op.kind) {
@@ -1020,6 +1101,22 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
     }
     case "retire":
       return { tree: retireLine(now, op.id, op.why, today) };
+    case "restore":
+      return restored(now, op, today);
+    case "repeat":
+      return repeated(now, op, today);
+    case "revert": {
+      const out = retireLine(now, op.id, "reverted", today);
+      const lesson = out.ledger.lessons[op.id];
+      return {
+        tree: lesson
+          ? {
+              ...out,
+              ledger: withEntry(out.ledger, op.id, { ...lesson, held: true }),
+            }
+          : out,
+      };
+    }
     case "archive": {
       const { home } = now.ledger.lessons[op.id] ?? {};
       return {

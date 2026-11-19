@@ -16,6 +16,15 @@
  *   notes agents left. Jev sorts them in one request ({@link jevRead}):
  *   which messages say how agents should work, and what each note is. Jev
  *   off, the newest messages go to the run as they are.
+ * - **Corrected again, no model** ({@link revertCorrected}): Jev's second
+ *   request asks, of each message the run reads and each lesson grep pairs
+ *   it with (live, or taken out in the last 30 days), whether it states the
+ *   lesson again or its opposite. A lesson the run took out that the person
+ *   states again is put back as git held its line, and held; one the run
+ *   made that he states the opposite of is taken back, and held; a live one
+ *   he states again counts a repeat, and his second holds it and moves it
+ *   up a home. Each is one commit, by the hub, and said under the message
+ *   in the brief.
  * - **The run** is one delegate in the `curator` role, briefed by the hub
  *   ({@link brief}), that writes through `memory_apply` alone
  *   ({@link apply}). It cites each source by a handle the hub gave it, and
@@ -81,6 +90,8 @@ import {
   isTopic,
   KNOWLEDGE_DIR,
   LEDGER_FILE,
+  LESSONS_DIR,
+  type LessonLine,
   lineOf,
   type MemoryTree,
   NOTE_ID,
@@ -98,7 +109,9 @@ import { countsTogether, quoteProblem, rootOf } from "./memory-sources";
 import {
   changeFolderFiles,
   type FolderAuthor,
+  folderCommitsChanging,
   folderHistory,
+  readFolderFileAt,
   YOU,
 } from "./project-folder";
 import { redactSecrets } from "./secret-filter";
@@ -150,9 +163,35 @@ interface Counts {
   notes: number;
   read: number;
   replaced: number;
+  /** Lessons put back because the person stated them again. */
+  restored: number;
   retired: number;
+  /** Lessons taken back because the person stated the opposite. */
+  reverted: number;
   staged: number;
 }
+
+/** What Jev read a message of the person's to do to a lesson kept (§6.2). */
+interface Correction {
+  does: "repeats" | "reverses";
+  /** The message's handle in the run (`m3`). */
+  handle: string;
+  id: string;
+  text: string;
+}
+
+/** A lesson a message may state again or change: a live one's line, or the words of one the run took out. */
+interface Kept {
+  id: string;
+  live: boolean;
+  text: string;
+}
+
+/** Why a lesson left that a repeat of the person's puts back: the run replaced it, or archived it unused. */
+const TAKEN_OUT: ReadonlySet<string> = new Set(["replaced", "unneeded"]);
+
+/** The memory files a lesson's line lives in, as git's pickaxe reads them for its commits (the archive among them). */
+const LESSON_PATHS = [INDEX_FILE, LESSONS_DIR, KNOWLEDGE_DIR] as const;
 
 /** One message given to a run, under its handle. */
 interface Given {
@@ -171,6 +210,8 @@ interface Run {
   carried: ReadonlySet<string>;
   changes: number;
   consumed: Set<string>;
+  /** What Jev read each message to do to lessons kept, and what the hub did, as the brief says it under the message, by handle. */
+  corrected: Map<string, string[]>;
   counts: Counts;
   jev: boolean;
   kind: "nightly" | "recovery";
@@ -224,7 +265,9 @@ const RunStateSchema = z.object({
       dropped: z.number(),
       read: z.number(),
       replaced: z.number(),
+      restored: z.number().optional(),
       retired: z.number(),
+      reverted: z.number().optional(),
       staged: z.number(),
     })
     .nullable(),
@@ -309,7 +352,9 @@ const emptyCounts = (): Counts => ({
   notes: 0,
   read: 0,
   replaced: 0,
+  restored: 0,
   retired: 0,
+  reverted: 0,
   staged: 0,
 });
 
@@ -418,6 +463,7 @@ const newRun = (
   kind,
   jev,
   messages: new Map(),
+  corrected: new Map(),
   notes: new Map(notes.map((note) => [note.id, note])),
   said: [],
   consumed: new Set(),
@@ -474,6 +520,48 @@ const roomFor = (tree: MemoryTree, path: string): boolean => {
   );
   return topics.includes(path) || topics.length < CAPS.knowledgeFiles;
 };
+
+/**
+ * The lessons a message of the person's may state again or change (§2 B):
+ * every live line, and each the run took out (replaced, or archived
+ * unused) whose words the ledger keeps, which it does for
+ * {@link CAPS.retiredDays} days.
+ */
+const keptLessons = (tree: MemoryTree): Kept[] => [
+  ...Object.keys(tree.files).flatMap((path) =>
+    homeOf(path)
+      ? parseLessons(path, tree.files[path] ?? "").lessons.map((line) => ({
+          id: line.id,
+          text: line.text,
+          live: true,
+        }))
+      : []
+  ),
+  ...Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) =>
+    lesson.state === "retired" &&
+    lesson.retired?.text &&
+    TAKEN_OUT.has(lesson.retired.why)
+      ? [{ id, text: lesson.retired.text, live: false }]
+      : []
+  ),
+];
+
+/** A lesson the run made itself, in the last {@link CAPS.retiredDays} days: not adopted from a hand edit, not one he approved before the run. */
+const madeByRun = (lesson: Lesson, today: string): boolean =>
+  !(
+    olderThan(lesson.since, today, CAPS.retiredDays) ||
+    lesson.sources.some(
+      (source) => source.kind === "hand" || source.kind === "approved"
+    )
+  );
+
+/** A message's source as the ledger keeps it: the send, by reference. */
+const saidSource = (said: PersonSaid): LessonSource => ({
+  kind: "said",
+  send: said.uuid,
+  session: said.instanceId,
+  at: said.acceptedAt.toISOString(),
+});
 
 /**
  * The run's state once a run ends (§2 D): a failed run's is as it was, so
@@ -948,18 +1036,15 @@ export const createMemoryRun = ({
 
   // --- the brief -----------------------------------------------------------------
 
-  /** The lessons a message shares the most words with, at most {@link RELATED}: what it may repeat or change. */
-  const relatedTo = (text: string, tree: MemoryTree) => {
+  /** The lessons of `kept` a message shares the most words with, at most {@link RELATED}: what it may repeat or change. */
+  const relatedTo = (text: string, kept: readonly Kept[]): Kept[] => {
     const words = wordsOf(text);
-    return Object.keys(tree.files)
-      .flatMap((path) =>
-        homeOf(path) ? parseLessons(path, tree.files[path] ?? "").lessons : []
-      )
-      .map((line) => ({ line, score: grepScore(words, line.text) }))
+    return kept
+      .map((lesson) => ({ lesson, score: grepScore(words, lesson.text) }))
       .filter(({ score }) => score >= 2)
       .sort((a, b) => b.score - a.score)
       .slice(0, RELATED)
-      .map(({ line }) => line);
+      .map(({ lesson }) => lesson);
   };
 
   /** The skill lessons and knowledge files, each by name, first line and line count; the room each cap has left. */
@@ -1005,11 +1090,17 @@ export const createMemoryRun = ({
   const briefText = (project: ProjectRow, tree: MemoryTree, run: Run) => {
     const messages = [...run.messages].filter(([, given]) => given.said);
     const legacy = [...run.messages].filter(([, given]) => given.legacy);
+    const live = keptLessons(tree).filter((lesson) => lesson.live);
     const listed = messages.map(([handle, given]) => {
-      const related = relatedTo(given.text, tree);
+      const corrected = run.corrected.get(handle) ?? [];
+      // Jev on, what it read the message to do; off, the lessons grep pairs it with.
+      const related = run.jev ? [] : relatedTo(given.text, live);
       return [
         `### ${handle} · ${dayOf(given.said?.acceptedAt ?? new Date())} · ${given.session}`,
         given.text,
+        ...(corrected.length > 0
+          ? [`${memoryRunWords.briefCorrected}\n${corrected.join("\n")}`]
+          : []),
         ...(related.length > 0
           ? [
               `${memoryRunWords.briefRelated}\n${related.map((line) => `- ${line.id}: ${line.text}`).join("\n")}`,
@@ -1126,7 +1217,349 @@ export const createMemoryRun = ({
         session: sessionHandle(run, one.instanceId),
       });
     }
+    const corrected = await revertCorrected(project, run);
+    if (corrected instanceof ElysiaStatus) {
+      return corrected;
+    }
     return await ready(project, run);
+  };
+
+  // --- a lesson corrected again (§6.2) -------------------------------------------------
+
+  /**
+   * Jev's second request of the night (§2 B): for each message the run reads
+   * and each lesson grep pairs it with ({@link keptLessons}, at most
+   * {@link RELATED}), whether the message states the lesson again, states
+   * its opposite, or neither. The pairs that do something, in the messages'
+   * order; none with Jev off. Jev failing throws its words.
+   */
+  const correctsRead = async (
+    project: ProjectRow,
+    run: Run,
+    tree: MemoryTree
+  ): Promise<Correction[]> => {
+    const key = jevAccess(db);
+    if (!key) {
+      return [];
+    }
+    const kept = keptLessons(tree);
+    const named = new Map(kept.map((lesson) => [lesson.id, lesson]));
+    const asked: [string, ChoiceQuestion][] = [...run.messages].flatMap(
+      ([handle, given]) =>
+        given.said
+          ? relatedTo(given.text, kept).map(
+              (lesson): [string, ChoiceQuestion] => [
+                `corrects:${handle}:${lesson.id}`,
+                {
+                  type: "choice",
+                  instructions: {
+                    message: given.text,
+                    lesson: lesson.text,
+                    question: memoryJevWords.correctsQuestion,
+                  },
+                  criteria: memoryJevWords.correctsKinds,
+                },
+              ]
+            )
+          : []
+    );
+    const found: Correction[] = [];
+    for (let at = 0; at < asked.length; at += JEV_QUESTIONS) {
+      const batch = Object.fromEntries(asked.slice(at, at + JEV_QUESTIONS));
+      const result = await askRow(
+        "corrects",
+        project.id,
+        key,
+        { project: project.name },
+        batch
+      );
+      for (const [name, answer] of Object.entries(result.answers)) {
+        const [, handle = "", id = ""] = name.split(":");
+        const lesson = named.get(id);
+        if (
+          lesson &&
+          (answer.choice === "repeats" || answer.choice === "reverses")
+        ) {
+          found.push({ handle, id, does: answer.choice, text: lesson.text });
+        }
+      }
+    }
+    const order = [...run.messages.keys()];
+    return found.sort(
+      (a, b) => order.indexOf(a.handle) - order.indexOf(b.handle)
+    );
+  };
+
+  /**
+   * What the hub does, with no model, when the person states a lesson again
+   * or its opposite (§6.2), each lesson by his newest message on it, each
+   * change one commit: a lesson the run took out that he states again is put
+   * back as git held its line, and held; one the run made in the last
+   * {@link CAPS.retiredDays} days that he states the opposite of is taken
+   * back (the one it replaced put back), and held, so no run makes it
+   * again; a live one he states again counts a repeat, and at his second it
+   * is held and moves up a home. Any other is the run's to replace. What
+   * was done is said under each message in the brief.
+   */
+  const revertCorrected = async (project: ProjectRow, run: Run) => {
+    if (!run.jev) {
+      return;
+    }
+    const first = await treeOf(project.id);
+    if (first instanceof ElysiaStatus) {
+      return first;
+    }
+    const found = await correctsRead(project, run, first.tree);
+    const newest = new Map(found.map((one) => [one.id, one]));
+    const did = new Map<string, string>();
+    for (const one of newest.values()) {
+      const read = await treeOf(project.id);
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      const done = await correctedOne(project.id, run, read.tree, one);
+      if (done instanceof ElysiaStatus) {
+        return done;
+      }
+      did.set(one.id, done);
+    }
+    for (const one of found) {
+      const lines = run.corrected.get(one.handle) ?? [];
+      lines.push(
+        memoryRunWords.briefCorrection(
+          one.id,
+          one.does,
+          one.text,
+          did.get(one.id) ?? memoryRunWords.didNothing
+        )
+      );
+      run.corrected.set(one.handle, lines);
+    }
+  };
+
+  /** What the hub does to one lesson a message corrects, committed; what it did, as the brief says it. */
+  const correctedOne = async (
+    projectId: string,
+    run: Run,
+    tree: MemoryTree,
+    one: Correction
+  ) => {
+    const lesson = tree.ledger.lessons[one.id];
+    const said = run.messages.get(one.handle)?.said;
+    if (!(lesson && said)) {
+      return memoryRunWords.didNothing;
+    }
+    const source = saidSource(said);
+    const today = dayOf(new Date());
+    if (
+      one.does === "repeats" &&
+      lesson.state === "retired" &&
+      lesson.retired &&
+      TAKEN_OUT.has(lesson.retired.why)
+    ) {
+      return await putBack(projectId, run, tree, one.id, lesson, source);
+    }
+    if (one.does === "repeats" && lesson.state === "live") {
+      return await repeatOf(projectId, tree, one.id, lesson, source);
+    }
+    if (
+      one.does === "reverses" &&
+      lesson.state === "live" &&
+      !lesson.held &&
+      madeByRun(lesson, today)
+    ) {
+      return await takeBack(projectId, run, tree, one.id);
+    }
+    return memoryRunWords.didNothing;
+  };
+
+  /**
+   * Lesson `id` as its line stood before `commit` (in its home's file at
+   * the commit's parent), its `Why:` with it; the ledger's words when git
+   * no longer reads it there.
+   */
+  const lineBefore = async (
+    projectId: string,
+    at: { parent: string | null } | undefined,
+    id: string,
+    lesson: Lesson
+  ): Promise<LessonLine> => {
+    const path = pathOf(lesson.home);
+    const kept: LessonLine = {
+      id,
+      text: lesson.retired?.text ?? "",
+      why: null,
+    };
+    if (!(at?.parent && path)) {
+      return kept;
+    }
+    const content = await readFolderFileAt(projectId, at.parent, path);
+    if (content instanceof ElysiaStatus || content === undefined) {
+      return kept;
+    }
+    return (
+      parseLessons(path, content).lessons.find((line) => line.id === id) ?? kept
+    );
+  };
+
+  /** The commits that changed lesson `id`'s line, newest first (git's pickaxe on its id). */
+  const lineCommits = (projectId: string, id: string) =>
+    folderCommitsChanging(projectId, `(${id})`, LESSON_PATHS);
+
+  /**
+   * A lesson the run took out and the person stated again, put back as its
+   * line stood before the commit that took it out, held, his message a
+   * source; the lesson that replaced it, if one did, taken back. One commit.
+   */
+  const putBack = async (
+    projectId: string,
+    run: Run,
+    tree: MemoryTree,
+    id: string,
+    lesson: Lesson,
+    source: LessonSource
+  ) => {
+    const commits = await lineCommits(projectId, id);
+    if (commits instanceof ElysiaStatus) {
+      return commits;
+    }
+    const [removal] = commits;
+    const line = await lineBefore(projectId, removal, id, lesson);
+    if (line.text === "") {
+      return memoryRunWords.didNothing;
+    }
+    const by = lesson.retired?.by;
+    const replacing = by ? tree.ledger.lessons[by] : undefined;
+    const changes: Change[] = [
+      ...(by && replacing?.state === "live"
+        ? [{ kind: "revert" as const, id: by }]
+        : []),
+      { kind: "restore", id, line, held: true, source },
+    ];
+    const sha = await revertCommitted(
+      projectId,
+      tree,
+      changes,
+      removal?.sha ?? ""
+    );
+    if (sha instanceof ElysiaStatus) {
+      return sha;
+    }
+    run.counts.restored += 1;
+    return memoryRunWords.didPutBack;
+  };
+
+  /**
+   * A lesson the run made and the person stated the opposite of, taken
+   * back as the commit that made it put it in: retired and held; the lesson
+   * it replaced, if it did, put back as its line stood before that commit.
+   * One commit.
+   */
+  const takeBack = async (
+    projectId: string,
+    run: Run,
+    tree: MemoryTree,
+    id: string
+  ) => {
+    const commits = await lineCommits(projectId, id);
+    if (commits instanceof ElysiaStatus) {
+      return commits;
+    }
+    // Its first commit is the one that put its line in (an id is never reused).
+    const making = commits.at(-1);
+    const replaced = Object.entries(tree.ledger.lessons).find(
+      ([, each]) =>
+        each.state === "retired" &&
+        each.retired?.why === "replaced" &&
+        each.retired.by === id
+    );
+    const before = replaced
+      ? await lineBefore(projectId, making, replaced[0], replaced[1])
+      : undefined;
+    const changes: Change[] = [
+      { kind: "revert", id },
+      ...(replaced && before?.text
+        ? [
+            {
+              kind: "restore" as const,
+              id: replaced[0],
+              line: before,
+              held: false,
+            },
+          ]
+        : []),
+    ];
+    const sha = await revertCommitted(
+      projectId,
+      tree,
+      changes,
+      making?.sha ?? ""
+    );
+    if (sha instanceof ElysiaStatus) {
+      return sha;
+    }
+    run.counts.reverted += 1;
+    return memoryRunWords.didTookBack;
+  };
+
+  /** `changes` applied and committed as the revert of `sha`, by the hub. */
+  const revertCommitted = async (
+    projectId: string,
+    tree: MemoryTree,
+    changes: Change[],
+    sha: string
+  ) => {
+    const today = dayOf(new Date());
+    const uses = usesOf(projectId);
+    const after = changes.reduce(
+      (now, change) => applyOp(now, checked(change), today, uses).tree,
+      tree
+    );
+    return await commit(projectId, tree, after, {
+      author: HUB,
+      message: `memory: ${memoryRunWords.reverted(sha.slice(0, 9))}`,
+    });
+  };
+
+  /**
+   * A live lesson the person stated again: one more repeat, his message a
+   * source; at his second, held, and a knowledge lesson moved up to the
+   * index when its words fit a rule. One commit.
+   */
+  const repeatOf = async (
+    projectId: string,
+    tree: MemoryTree,
+    id: string,
+    lesson: Lesson,
+    source: LessonSource
+  ) => {
+    const times = lesson.repeats + 1;
+    const held = times >= 2;
+    const text = lineOf(tree, id)?.text ?? "";
+    const up: LessonHome | undefined =
+      held && lesson.home.at === "knowledge" && text.length <= CAPS.rule
+        ? { at: "index" }
+        : undefined;
+    const today = dayOf(new Date());
+    const after = applyOp(
+      tree,
+      checked({ kind: "repeat", id, source, held, ...(up ? { up } : {}) }),
+      today,
+      usesOf(projectId)
+    ).tree;
+    const sha = await commit(projectId, tree, after, {
+      author: HUB,
+      message: `memory: ${up ? memoryRunWords.repeatedUp(id, INDEX_FILE) : memoryRunWords.repeated(id, times)}`,
+    });
+    if (sha instanceof ElysiaStatus) {
+      return sha;
+    }
+    if (up) {
+      return memoryRunWords.didHeld(INDEX_FILE);
+    }
+    return held
+      ? memoryRunWords.didHeldStays
+      : memoryRunWords.didCounted(times);
   };
 
   /**
@@ -1383,14 +1816,7 @@ export const createMemoryRun = ({
     head: string
   ): LessonSource[] => [
     ...messages.map((given): LessonSource =>
-      given.said
-        ? {
-            kind: "said",
-            send: given.said.uuid,
-            session: given.said.instanceId,
-            at: given.said.acceptedAt.toISOString(),
-          }
-        : { kind: "approved", commit: head }
+      given.said ? saidSource(given.said) : { kind: "approved", commit: head }
     ),
     ...notes.map(noteSource),
   ];
@@ -2029,8 +2455,12 @@ export const createMemoryRun = ({
       detachedClose(projectId, run, "failed");
       return;
     }
-    const { added, dropped, replaced, retired, staged } = run.counts;
-    if (added + replaced + retired + staged + dropped === 0) {
+    const { added, dropped, replaced, restored, retired, reverted, staged } =
+      run.counts;
+    if (
+      added + replaced + retired + staged + dropped + restored + reverted ===
+      0
+    ) {
       detachedClose(projectId, run, "silent");
       return { outcome: "silent", output: null };
     }

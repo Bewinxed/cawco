@@ -1931,28 +1931,59 @@ export const folderCommitsCarrying = async (
   projectId: string,
   line: string
 ) => {
-  const root = await forReading(projectId);
-  if (root instanceof ElysiaStatus) {
-    return root;
-  }
-  const out = await git(root, [
-    "log",
+  const records = await logRecords(projectId, [
     "--fixed-strings",
     `--grep=${line}`,
     "--name-only",
     "--format=%x1e%H",
   ]);
+  return records instanceof ElysiaStatus
+    ? records
+    : records.map((record) => {
+        const [sha = "", ...paths] = record.split("\n").filter(Boolean);
+        return { sha, paths };
+      });
+};
+
+/** `git log` over a project's folder with `args`, its output split into records at `\x1e`, each trimmed, none empty. */
+const logRecords = async (projectId: string, args: string[]) => {
+  const root = await forReading(projectId);
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
+  const out = await git(root, ["log", ...args]);
   if (out instanceof ElysiaStatus) {
     return out;
   }
   return out
     .split("\x1e")
     .map((record) => record.trim())
-    .filter(Boolean)
-    .map((record) => {
-      const [sha = "", ...paths] = record.split("\n").filter(Boolean);
-      return { sha, paths };
-    });
+    .filter(Boolean);
+};
+
+/**
+ * Every commit of a project's folder that changed how many times `text`
+ * stands in one of `paths` (git's pickaxe, `-S`, the text literal), newest
+ * first, each with its first parent: the commits that put a line holding it
+ * in, took it out or moved it. None for text no commit changed.
+ */
+export const folderCommitsChanging = async (
+  projectId: string,
+  text: string,
+  paths: readonly string[]
+) => {
+  const records = await logRecords(projectId, [
+    `-S${text}`,
+    "--format=%H%x1f%P%x1e",
+    "--",
+    ...paths,
+  ]);
+  return records instanceof ElysiaStatus
+    ? records
+    : records.map((record) => {
+        const [sha = "", parents = ""] = record.split("\x1f");
+        return { sha, parent: parents.split(" ")[0] || null };
+      });
 };
 
 /**
