@@ -9,13 +9,7 @@ import {
   RUN_HOLDING,
   RUN_STOPPING,
 } from "./fixtures/records";
-import {
-  AT_REST,
-  PHONE,
-  SMALLER_DESK,
-  type StoryPlay,
-  seedStores,
-} from "./fixtures/stories";
+import { AT_REST, type StoryPlay, seedStores } from "./fixtures/stories";
 import StandingCardInShell from "./standing-card-in-shell.svelte";
 
 export default {
@@ -33,12 +27,6 @@ export const Copying = {
     await update({ face: "move-running", run: RUN_COPYING });
   },
 };
-
-/** On a smaller desk the steps still read as one line. */
-export const CopyingSmallerDesk = { ...SMALLER_DESK };
-
-/** On a phone the steps wrap to two lines in the sheet. */
-export const CopyingOnPhone = { ...PHONE };
 
 /** Stopping sessions: Caw is mid-turn, and can be interrupted now. */
 export const StoppingSessions = { args: { run: RUN_STOPPING } };

@@ -11,13 +11,7 @@ import {
   MOVE_REFUSED,
   MOVE_RENAME,
 } from "./fixtures/records";
-import {
-  AT_REST,
-  PHONE,
-  SMALLER_DESK,
-  type StoryPlay,
-  seedStores,
-} from "./fixtures/stories";
+import { AT_REST, type StoryPlay, seedStores } from "./fixtures/stories";
 import StandingCardInShell from "./standing-card-in-shell.svelte";
 
 export default {
@@ -35,12 +29,6 @@ export const WhereTo = {
     await update({ face: "move-before", plan: MOVE_PLAN });
   },
 };
-
-/** On a smaller desk the move's face fills the card. */
-export const WhereToSmallerDesk = { ...SMALLER_DESK };
-
-/** On a phone the move's face fills the sheet, Move pinned to its foot. */
-export const WhereToOnPhone = { ...PHONE };
 
 /** The hub is still reading the folder, so no count shows yet. */
 export const ReadingFolder = { args: { plan: MOVE_READING } };

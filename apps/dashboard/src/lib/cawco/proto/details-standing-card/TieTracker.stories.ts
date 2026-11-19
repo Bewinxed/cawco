@@ -13,13 +13,7 @@ import {
   TIE_READING,
   TIE_REFUSED,
 } from "./fixtures/records";
-import {
-  AT_REST,
-  PHONE,
-  SMALLER_DESK,
-  type StoryPlay,
-  seedStores,
-} from "./fixtures/stories";
+import { AT_REST, type StoryPlay, seedStores } from "./fixtures/stories";
 import StandingCardInShell from "./standing-card-in-shell.svelte";
 
 export default {
@@ -37,12 +31,6 @@ export const TieGithub = {
     await update({ face: "tie", tie: TIE_GITHUB });
   },
 };
-
-/** On a smaller desk the stages stand beside the connection and repository. */
-export const TieGithubSmallerDesk = { ...SMALLER_DESK };
-
-/** On a phone, one column, Tie pinned to the sheet's foot. */
-export const TieGithubOnPhone = { ...PHONE };
 
 /** The connections and repositories are still being read. */
 export const ReadingConnections = { args: { tie: TIE_READING } };

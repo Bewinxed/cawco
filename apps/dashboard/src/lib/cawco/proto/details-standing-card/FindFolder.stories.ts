@@ -14,13 +14,7 @@ import {
   FIND_SAME,
   OBELISK_MISSING,
 } from "./fixtures/records";
-import {
-  AT_REST,
-  PHONE,
-  SMALLER_DESK,
-  type StoryPlay,
-  seedStores,
-} from "./fixtures/stories";
+import { AT_REST, type StoryPlay, seedStores } from "./fixtures/stories";
 import StandingCardInShell from "./standing-card-in-shell.svelte";
 
 export default {
@@ -43,12 +37,6 @@ export const PointAtFolder = {
     await update({ face: "find", find: FIND_SAME });
   },
 };
-
-/** On a smaller desk the folder and what follows stand side by side. */
-export const PointAtFolderSmallerDesk = { ...SMALLER_DESK };
-
-/** On a phone, one column, Point here pinned to the sheet's foot. */
-export const PointAtFolderOnPhone = { ...PHONE };
 
 /** Nothing typed yet, so Point here waits. */
 export const NothingTyped = { args: { typed: "", find: FIND_EMPTY } };

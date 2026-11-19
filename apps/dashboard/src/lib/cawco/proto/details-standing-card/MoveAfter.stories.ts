@@ -8,13 +8,7 @@ import {
   RESULT_LEFT,
   RESULT_PROVEN,
 } from "./fixtures/records";
-import {
-  AT_REST,
-  PHONE,
-  SMALLER_DESK,
-  type StoryPlay,
-  seedStores,
-} from "./fixtures/stories";
+import { AT_REST, type StoryPlay, seedStores } from "./fixtures/stories";
 import StandingCardInShell from "./standing-card-in-shell.svelte";
 
 export default {
@@ -32,12 +26,6 @@ export const MoveProven = {
     await update({ face: "move-after", result: RESULT_PROVEN });
   },
 };
-
-/** On a smaller desk the proof reads first, the sessions under it. */
-export const MoveProvenSmallerDesk = { ...SMALLER_DESK };
-
-/** On a phone the proof fills the sheet, Done at its foot. */
-export const MoveProvenOnPhone = { ...PHONE };
 
 /** Moved, with .env.local left behind and one conversation that didn't resume. */
 export const LeftBehind = { args: { result: RESULT_LEFT } };

@@ -2,7 +2,7 @@
  * What every Standing card states file shares: the fixture's args at rest
  * (Atlas site on two machines and the hub, tied to GitHub Issues, three
  * accounts, the card open on its details), the stores written for the rail
- * and the head, and the two other forms a screen is drawn in.
+ * and the head, and what a flow's `play` is handed.
  */
 import {
   ACCOUNTS,
@@ -56,18 +56,6 @@ export async function seedStores(): Promise<void> {
   board.boardState.fleetRead = true;
   projects.keepProjects([ATLAS], projects.projectsLeave());
 }
-
-/** A smaller desk, 1024 by 768. */
-export const SMALLER_DESK = {
-  args: { frame: "short" },
-  parameters: { viewport: 1024 },
-};
-
-/** A phone, 390 wide: the bottom sheet. */
-export const PHONE = {
-  args: { frame: "phone" },
-  parameters: { viewport: 390 },
-};
 
 /** What a flow's `play` is handed: the live instance's `update`, which changes its args in place. */
 export interface StoryPlay {

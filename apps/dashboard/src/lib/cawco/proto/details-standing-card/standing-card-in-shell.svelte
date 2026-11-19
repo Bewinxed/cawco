@@ -80,8 +80,8 @@
     find,
     tie,
   }: {
-    /** The frame's room: a desk 900 tall, a smaller desk 768, a phone 844. */
-    frame?: "desk" | "short" | "phone";
+    /** The frame's room: a desk 900 tall (a phone 844), or a shorter screen 768. */
+    frame?: "desk" | "short";
     project: ProjectRow;
     machines: Machine[];
     folders: Record<string, PlaceFolder>;
@@ -464,9 +464,8 @@
 <div
   class={[
     "@container/shell relative flex w-full overflow-hidden bg-surface-recess",
-    frame === "desk" && "h-225",
+    frame === "desk" && "h-211 phone:h-225",
     frame === "short" && "h-192",
-    frame === "phone" && "h-211",
   ]}
 >
   <aside

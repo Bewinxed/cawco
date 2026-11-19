@@ -9,21 +9,12 @@
  */
 import {
   ACCOUNTS,
-  CONNECTIONS,
-  FIND_TYPED,
-  FIRST_SYNC,
   KEPT_HERE,
   NOTES_ONLY,
   OBELISK_MISSING,
   READ_AT,
 } from "./fixtures/records";
-import {
-  AT_REST,
-  PHONE,
-  SMALLER_DESK,
-  type StoryPlay,
-  seedStores,
-} from "./fixtures/stories";
+import { AT_REST, seedStores } from "./fixtures/stories";
 import StandingCardInShell from "./standing-card-in-shell.svelte";
 
 export default {
@@ -37,11 +28,8 @@ export default {
 /** Checking how Atlas site is set to run: where it lives, where its tasks and finished work go, and the account it runs on. */
 export const HowItRuns = {};
 
-/** On a smaller desk the card covers most of the board, and still needs no scroll. */
-export const HowItRunsSmallerDesk = { ...SMALLER_DESK };
-
-/** On a phone the details rise as a sheet over the board. */
-export const HowItRunsOnPhone = { ...PHONE };
+/** On a shorter screen the card still stands whole, with no scroll. */
+export const ShortScreen = { args: { frame: "short" } };
 
 /** The hub hasn't said yet: each fact waits in its own shape. */
 export const Reading = { args: { reading: true } };
@@ -60,30 +48,6 @@ export const NotesOnly = {
 export const TrackerUnread = {
   args: {
     tracker: { unread: "GitHub answered 502 (bad gateway)." },
-  },
-};
-
-/** Branch was picked: it waits for the hub while PR stays in force. */
-export const BranchAsked = {
-  args: { change: { setting: "lands", state: "asked", value: "branch" } },
-  from: "HowItRuns",
-  play: async ({ update }: StoryPlay) => {
-    await update({
-      change: { setting: "lands", state: "asked", value: "branch" },
-    });
-  },
-};
-
-/** The hub refused Branch: PR stays, the reason under it with Try again. */
-export const BranchRefused = {
-  args: {
-    change: {
-      setting: "lands",
-      state: "refused",
-      value: "branch",
-      reason:
-        "The hub couldn't save it: the projects table is locked by a migration (SQLITE_BUSY). PR is still in force.",
-    },
   },
 };
 
@@ -110,113 +74,6 @@ export const AccountSignedOut = {
   },
 };
 
-/** Adding nixbox as another place, its folder already there. */
-export const AddingPlace = {
-  args: {
-    opened: {
-      kind: "add-place",
-      draft: {
-        machineId: "m-nixbox",
-        folder: "/srv/work/northwind-studio/atlas-site",
-        copy: false,
-      },
-    },
-  },
-  from: "HowItRuns",
-  play: async ({ update }: StoryPlay) => {
-    await update({
-      opened: {
-        kind: "add-place",
-        draft: {
-          machineId: "m-nixbox",
-          folder: "/srv/work/northwind-studio/atlas-site",
-          copy: false,
-        },
-      },
-    });
-  },
-};
-
-/** Copying the project to nixbox instead: the original stays, secrets stay behind. */
-export const CopyingThere = {
-  args: {
-    opened: {
-      kind: "add-place",
-      draft: {
-        machineId: "m-nixbox",
-        folder: "/srv/work/northwind-studio/atlas-site",
-        copy: true,
-      },
-    },
-  },
-};
-
-/** nixbox was added, and the hub read its repository. */
-export const PlaceAdded = {
-  args: {
-    project: {
-      ...AT_REST.project,
-      places: [
-        ...AT_REST.project.places,
-        {
-          createdAt: new Date(READ_AT).toISOString(),
-          id: "place-nixbox",
-          isPrimary: false,
-          kind: "checkout",
-          machineId: "m-nixbox",
-          path: "/srv/work/northwind-studio/atlas-site",
-          projectId: AT_REST.project.id,
-          within: [],
-        },
-      ],
-    },
-    learned: {
-      placeId: "place-nixbox",
-      repository: "northwind-studio/atlas-site",
-    },
-  },
-};
-
-/** Dropping the MacBook's place: asked on its row, the folder stays on disk. */
-export const DropAsked = {
-  args: { opened: { kind: "drop", placeId: "place-mbp" } },
-  from: "HowItRuns",
-  play: async ({ update }: StoryPlay) => {
-    await update({ opened: { kind: "drop", placeId: "place-mbp" } });
-  },
-};
-
-/** CawCo was picked while tied: asked beside the tiles, the links let go. */
-export const BackToCawco = {
-  args: { opened: { kind: "back-to-cawco" } },
-  from: "HowItRuns",
-  play: async ({ update }: StoryPlay) => {
-    await update({ opened: { kind: "back-to-cawco" } });
-  },
-};
-
-/** Large files at one address: typed, and the storage connection that signs in. */
-export const OneAddress = {
-  args: {
-    opened: {
-      kind: "lfs-address",
-      url: "https://lfs.northwind.studio/atlas",
-      connection: "r2-assets",
-    },
-    connections: CONNECTIONS,
-  },
-  from: "HowItRuns",
-  play: async ({ update }: StoryPlay) => {
-    await update({
-      opened: {
-        kind: "lfs-address",
-        url: "https://lfs.northwind.studio/atlas",
-        connection: "r2-assets",
-      },
-    });
-  },
-};
-
 /** obelisk's folder is moving to nixbox: its row shows the step, and a press reopens it. */
 export const MoveUnderWay = {
   args: {
@@ -230,70 +87,3 @@ export const MoveUnderWay = {
 
 /** Tasks are kept in CawCo alone. */
 export const KeptHere = { args: { tracker: KEPT_HERE } };
-
-/** Just tied to GitHub Issues: the first sync is under way. */
-export const FirstSync = {
-  args: { tracker: FIRST_SYNC },
-  from: "TieGithub",
-  play: async ({ update }: StoryPlay) => {
-    await update({ face: "details", tracker: FIRST_SYNC });
-  },
-};
-
-/** Found: obelisk's place points at the folder it was moved to. */
-export const FolderFound = {
-  args: {
-    project: {
-      ...AT_REST.project,
-      places: AT_REST.project.places.map((one) =>
-        one.id === "place-obelisk" ? { ...one, path: FIND_TYPED } : one
-      ),
-    },
-  },
-  from: "PointAtFolder",
-  play: async ({ update }: StoryPlay) => {
-    await update({
-      face: "details",
-      folders: AT_REST.folders,
-      cantStart: null,
-      project: {
-        ...AT_REST.project,
-        places: AT_REST.project.places.map((one) =>
-          one.id === "place-obelisk" ? { ...one, path: FIND_TYPED } : one
-        ),
-      },
-    });
-  },
-};
-
-/** Moved: obelisk's place is now on nixbox, in its new folder. */
-export const MovedToNixbox = {
-  args: {
-    project: {
-      ...AT_REST.project,
-      places: AT_REST.project.places.map((one) =>
-        one.id === "place-obelisk"
-          ? { ...one, machineId: AT_REST.to.machineId, path: AT_REST.to.folder }
-          : one
-      ),
-    },
-  },
-  from: "MoveProven",
-  play: async ({ update }: StoryPlay) => {
-    await update({
-      face: "details",
-      project: {
-        ...AT_REST.project,
-        places: AT_REST.project.places.map((one) =>
-          one.id === "place-obelisk"
-            ? {
-                ...one,
-                machineId: AT_REST.to.machineId,
-                path: AT_REST.to.folder,
-              }
-            : one
-        ),
-      },
-    });
-  },
-};
