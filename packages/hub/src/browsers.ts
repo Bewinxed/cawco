@@ -104,7 +104,7 @@ const RELAY_TTL_MS = 7 * DAY_MS;
 /** What a machine says of a browser now, kept from its latest frame (core `BrowserRow`). */
 export type LiveBrowserFacts = Pick<
   BrowserRow,
-  "why" | "progress" | "origin" | "originUnread"
+  "why" | "progress" | "origin" | "originUnread" | "handBackGaveUp"
 >;
 
 export interface BrowsersDeps {
@@ -191,6 +191,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       ...(row.progress ? { progress: row.progress } : {}),
       ...(row.origin ? { origin: row.origin } : {}),
       ...(row.originUnread ? { originUnread: true as const } : {}),
+      ...(row.handBackGaveUp ? { handBackGaveUp: true as const } : {}),
     };
     live.set(liveKey(machineId, row.key), facts);
   };

@@ -774,6 +774,7 @@ export type BrowserStateOutput = z.output<typeof BrowserStateShape>;
 
 export const BrowserRowShape = declared(
   z.object({
+    handBackGaveUp: z.literal(true).optional(),
     host: BrowserHostKindShape,
     key: BrowserKeyShape,
     lastUsedAt: z.number(),

@@ -1245,7 +1245,9 @@
       if (browser?.state === "failed" && !starting) {
         return {
           kind: "fail",
-          title: browserWords.failedTitle,
+          title: browser.handBackGaveUp
+            ? browserWords.stoppedTitle
+            : browserWords.failedTitle,
           line: browserWords.failedLine(machine.name),
           ...(browser.why ? { details: browser.why } : {}),
           again: true,

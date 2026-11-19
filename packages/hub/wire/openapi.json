@@ -36710,6 +36710,11 @@
         "description": "One browser as its machine reports it.",
         "type": "object",
         "properties": {
+          "handBackGaveUp": {
+            "description": "It is `failed` because its hand-back gave up and its machine stopped it, not because it did not start.",
+            "const": true,
+            "type": "boolean"
+          },
           "host": {
             "$ref": "#/components/schemas/BrowserHostKind"
           },
@@ -47455,6 +47460,11 @@
         "description": "One browser of the fleet as the hub lists it (`GET /api/browsers`, and\n{@link BrowserListFrame}): the row its machine last reported, kept by the\nhub, with the machine's name and what the machine says of it now (`why`,\n`progress`, `origin`, from its latest frame).",
         "type": "object",
         "properties": {
+          "handBackGaveUp": {
+            "description": "{@link BrowserRow.handBackGaveUp}",
+            "const": true,
+            "type": "boolean"
+          },
           "host": {
             "$ref": "#/components/schemas/BrowserHostKind"
           },

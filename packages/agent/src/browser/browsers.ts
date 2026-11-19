@@ -157,6 +157,7 @@ const rowOf = (record: BrowserRecord): BrowserRow => {
     viewers: 0,
     takeover: record.takeover,
     ...(record.why ? { why: record.why } : {}),
+    ...(record.handBackGaveUp ? { handBackGaveUp: true as const } : {}),
     ...(record.state === "live" && frontOrigin(record.key)
       ? { origin: frontOrigin(record.key) }
       : {}),
@@ -605,7 +606,12 @@ const launch = async (
         told(ports);
       },
     });
-    const { why: _why, runtimeAway: _away, ...live } = started;
+    const {
+      why: _why,
+      runtimeAway: _away,
+      handBackGaveUp: _gaveUp,
+      ...live
+    } = started;
     const now: BrowserRecord = {
       ...live,
       state: "live",
@@ -629,8 +635,9 @@ const launch = async (
       );
       return launch(ports, placed, host, relay, held, true);
     }
+    const { handBackGaveUp: _gaveUp, ...earlier } = record;
     const failed: BrowserRecord = {
-      ...record,
+      ...earlier,
       state: "failed",
       why: why(error),
       ...(running ? {} : { takeover: null }),
@@ -986,7 +993,13 @@ const moveIntoContainer = (
       await local.stop(from);
       goOn(abort.signal);
       const placed = await slotted(from, await container.heldSlots());
-      const { local: _local, why: _why, runtimeAway: _away, ...kept } = placed;
+      const {
+        local: _local,
+        why: _why,
+        runtimeAway: _away,
+        handBackGaveUp: _gaveUp,
+        ...kept
+      } = placed;
       await intoContainer(
         ports,
         container,

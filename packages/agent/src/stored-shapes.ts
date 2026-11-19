@@ -57,6 +57,7 @@ const BrowserRecordShape = declared(
         volume: z.string(),
       })
       .optional(),
+    handBackGaveUp: z.literal(true).optional(),
     host: BrowserHostKindSchema,
     key: BrowserKeyShape,
     lastUsedAt: z.number(),

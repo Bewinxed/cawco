@@ -90,6 +90,8 @@ export type BrowserRuntime =
 
 /** One browser as its machine reports it. */
 export interface BrowserRow {
+  /** It is `failed` because its hand-back gave up and its machine stopped it, not because it did not start. */
+  handBackGaveUp?: true;
   host: BrowserHostKind;
   key: BrowserKey;
   /** ms epoch of the last agent connection or viewer. */
@@ -409,6 +411,8 @@ export interface BrowserHandback {
  * `progress`, `origin`, from its latest frame).
  */
 export interface ListedBrowser {
+  /** {@link BrowserRow.handBackGaveUp} */
+  handBackGaveUp?: true;
   host: BrowserHostKind;
   key: BrowserKey;
   /** ms epoch of the last agent connection or viewer. */

@@ -939,6 +939,7 @@ const giveUpHandBack = async (
           ...record,
           state: "failed",
           why: browserFaultWords.handBackGaveUp,
+          handBackGaveUp: true,
         });
       }
     });

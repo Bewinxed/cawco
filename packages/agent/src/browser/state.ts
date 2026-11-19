@@ -105,6 +105,8 @@ export interface BrowserRecord {
     userPassword: string;
     volume: string;
   };
+  /** `failed` because its hand-back gave up (shield.ts `giveUpHandBack`), not because it did not start; cleared by any later start. */
+  handBackGaveUp?: true;
   /**
    * The host it runs on. A browser made for the first time picks it from
    * what answers then; one made on the local host moves into a container

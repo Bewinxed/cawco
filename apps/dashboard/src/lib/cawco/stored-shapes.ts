@@ -116,6 +116,7 @@ const BrowserStateShape = z.enum([
 export type BrowserStateOutput = z.output<typeof BrowserStateShape>;
 
 const ListedBrowserShape = z.object({
+  handBackGaveUp: z.literal(true).optional(),
   host: BrowserHostKindShape,
   key: BrowserKeyShape,
   lastUsedAt: z.number(),
