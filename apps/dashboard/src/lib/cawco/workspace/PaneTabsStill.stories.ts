@@ -11,6 +11,7 @@ import { JUMP, NEXT, switchMeta } from "./tab-switch-seed";
 export default {
   title: "Tab switch/No sweep",
   component: PaneTabsLive,
+  parameters: { viewport: "desk" },
   ...switchMeta("still"),
 };
 
