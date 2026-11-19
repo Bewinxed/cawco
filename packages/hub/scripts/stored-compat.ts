@@ -37,7 +37,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { baseRefOf } from "./openapi-inputs";
-import { newestNightly } from "./shipped";
+import { newestNightly, nightliesAhead } from "./shipped";
 import { storedColumns } from "./stored-rows";
 import {
   extraKinds,
@@ -611,11 +611,21 @@ for (const entry of REWRITES) {
   }
 }
 
+// A nightly this branch does not descend from is not compared: a shape it
+// widened would read as one narrowed here. The branch is refused as behind.
+const nightly = newestNightly(HUB);
+const ancestry = nightliesAhead(HUB, [nightly]);
+if (ancestry.unknown) {
+  console.log(ancestry.unknown);
+}
+if (ancestry.behind) {
+  problems.push(ancestry.behind);
+}
 // One compare per commit: the nightly can be the base itself.
 const byCommit = new Map<string, string>();
 for (const base of [
   { label: "the base", commit: baseRefOf(process.argv) },
-  newestNightly(HUB),
+  ...(ancestry.behind ? [] : [nightly]),
 ]) {
   const commit = git("rev-parse", `${base.commit}^{commit}`).trim();
   if (!byCommit.has(commit)) {

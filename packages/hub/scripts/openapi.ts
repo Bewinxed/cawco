@@ -1591,11 +1591,8 @@ const readers = bases.map((base) => {
   };
 });
 const refused: string[] = [];
-const [newestAhead] = ancestry.ahead;
-if (newestAhead) {
-  refused.push(
-    `This branch is older than ${newestAhead.label} (${newestAhead.commit.slice(0, 10)}): rebase onto origin/main, then run the check again.`
-  );
+if (ancestry.behind) {
+  refused.push(ancestry.behind);
 }
 /**
  * What the hub sends, with every bridge that holds a kind back holding it
@@ -1629,7 +1626,7 @@ for (const bridge of BRIDGES.filter(
 // that holds a kind back is needed while sending that kind in `beside`
 // breaks a shipped reader. A branch behind a nightly leaves that reader out,
 // so whether a bridge is still needed waits for the rebase.
-for (const bridge of newestAhead ? [] : sentBridges) {
+for (const bridge of ancestry.behind ? [] : sentBridges) {
   const without = withoutBridge(sentWithout(bridge), bridge);
   const needed = readers.some((reader) => {
     const built = withoutBridge(reader.schema, bridge);

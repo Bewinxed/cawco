@@ -194,14 +194,17 @@ const inCheckout = (cwd: string, args: string[]) =>
  * newer than the branch, so its wire holds what the branch has not met yet,
  * and a compare against it reports that as fields "the hub no longer sends".
  * Such a branch is behind, not breaking: it is rebased, then checked.
+ * `behind` is the one sentence that refuses such a branch, naming the newest
+ * nightly it does not descend from; every check that compares against a
+ * nightly fails with it and leaves those nightlies out of its compare.
  * `unknown` says why ancestry could not be read (a shallow clone, a nightly's
- * commit missing here); those nightlies are left in `ahead` and compared as
- * before.
+ * commit missing here); those nightlies are left out of `ahead` and compared
+ * as before.
  */
 export const nightliesAhead = (
   cwd: string,
   nightlies: Baseline[]
-): { ahead: Baseline[]; unknown?: string } => {
+): { ahead: Baseline[]; behind?: string; unknown?: string } => {
   const shallow = inCheckout(cwd, ["rev-parse", "--is-shallow-repository"]);
   if (shallow.exitCode !== 0 || shallow.stdout.toString().trim() === "true") {
     return {
@@ -225,12 +228,16 @@ export const nightliesAhead = (
       unread.push(`${nightly.label} (${nightly.commit.slice(0, 10)})`);
     }
   }
-  return unread.length
-    ? {
-        ahead,
-        unknown: `Whether the branch descends from ${unread.join(", ")} could not be read here, so ${unread.length === 1 ? "it is" : "they are"} compared as before.`,
-      }
-    : { ahead };
+  const [newest] = ahead;
+  return {
+    ahead,
+    ...(newest && {
+      behind: `This branch is older than ${newest.label} (${newest.commit.slice(0, 10)}): rebase onto origin/main, then run the check again.`,
+    }),
+    ...(unread.length > 0 && {
+      unknown: `Whether the branch descends from ${unread.join(", ")} could not be read here, so ${unread.length === 1 ? "it is" : "they are"} compared as before.`,
+    }),
+  };
 };
 
 /** Everything a hub built now must still be read by. */

@@ -96,7 +96,7 @@ import { type OwnerKind, ownerOf } from "../src/db/owner-columns";
 import { PROGRAM_FILE } from "../src/decision-program";
 import { hubInProcess, writeFixtureKey } from "./hub-in-process";
 import { baseRefOf } from "./openapi-inputs";
-import { type Baseline, newestNightly } from "./shipped";
+import { type Baseline, newestNightly, nightliesAhead } from "./shipped";
 import { storedRows, storedRowsReport } from "./stored-rows";
 
 // Read at run time beyond its imports; check.ts keys the check on them.
@@ -437,12 +437,12 @@ const unshippedExcuse = (
       : undefined;
 };
 
-/** The commits whose journals freeze migrations here, each once with its label: the base, then `nightly`. */
-const frozenBases = (nightly: Baseline): Map<string, string> => {
+/** The commits whose journals freeze migrations here, each once with its label: the base, then `nightly` when it is compared. */
+const frozenBases = (nightly: Baseline | undefined): Map<string, string> => {
   const bases = new Map<string, string>();
   for (const base of [
     { label: "the base", commit: baseRefOf(process.argv) },
-    nightly,
+    ...(nightly ? [nightly] : []),
   ]) {
     const commit = gitOut(["rev-parse", `${base.commit}^{commit}`])?.trim();
     if (!commit) {
@@ -469,17 +469,23 @@ const frozenBases = (nightly: Baseline): Map<string, string> => {
  * migration-state.ts). Its tag may be renumbered. A migration found wrong
  * after it lands is fixed by a new one. The bases are the ones
  * stored-compat.ts holds the stored shapes to. The one way past it is
- * {@link UNSHIPPED_EDITS}, against the merge-base only.
+ * {@link UNSHIPPED_EDITS}, against the merge-base only. A nightly this
+ * branch does not descend from is not compared: its newer migrations would
+ * read as ones taken out here. The branch is refused as behind instead.
  */
 const editedMigrations = (
   journal: readonly JournalEntry[]
 ): { problems: string[]; said: string } => {
   const byWhen = new Map(journal.map((entry) => [entry.when, entry]));
   const nightly = newestNightly(HUB);
-  const bases = frozenBases(nightly);
+  const ancestry = nightliesAhead(HUB, [nightly]);
+  if (ancestry.unknown) {
+    console.log(ancestry.unknown);
+  }
+  const bases = frozenBases(ancestry.behind ? undefined : nightly);
   const excused = unshippedExcuse(nightly);
   const allowed: string[] = [];
-  const problems: string[] = [];
+  const problems: string[] = ancestry.behind ? [ancestry.behind] : [];
   for (const [commit, label] of bases) {
     const text = gitOut([
       "show",
