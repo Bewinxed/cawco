@@ -87,6 +87,9 @@ export const stageRenderWords = {
   andMore: (more: number, what: string) => `and ${more} more ${what}`,
   /** A frame whose body held more elements than a reading walks (agent canvas measure.ts `ELEMENTS_READ`): its parts, its look and its states' deltas are of the first `read` only. */
   elementsRead: (read: number, of: number) => `${read} of ${of} elements read`,
+  /** A read of the stage that waited while it compiled, until nothing on it compiled for `quiet` seconds (agent stage.ts `READ_QUIET_MS`): what it was to do, and how long it waited in all. */
+  stoppedMoving: (what: string, quiet: number, waited: number) =>
+    `The stage did not ${what}: it compiled nothing for ${quiet} s, after ${Math.round(waited)} s of waiting. Its errors, if any, stand in the canvas's stage state; read the canvas again to retry.`,
   /** The page itself never loaded. */
   notLoaded: (seconds: number) =>
     `The stage's page did not load within ${seconds} s: its stage is up but did not serve it. Read the design graph without render to see its stage's state and errors.`,

@@ -57,6 +57,46 @@ export const readWithin = <T>(
   options: { signal?: AbortSignal } = {}
 ): Promise<Bounded<T>> => {
   const started = performance.now();
+  return readUntil(ms, () => ms - (performance.now() - started), read, options);
+};
+
+/**
+ * Runs `read` for as long as the side it asks keeps moving: it is let go
+ * once `quietMs` pass with no move, counted from the read's start or from
+ * `movedAt()` (a `Date.now()` time, the side's last move as it said it),
+ * whichever is later. A read whose work is long but moving (a dev server
+ * compiling a screen's thousand modules) answers however long it takes; one
+ * whose side went still answers `unanswered` a quiet spell after it
+ * stopped. Otherwise as {@link readWithin}: the same signal, the same
+ * outcomes, the same catch-up for a process that was held.
+ */
+export const readWhileMoving = <T>(
+  quietMs: number,
+  movedAt: () => number,
+  read: (signal: AbortSignal) => Promise<T>,
+  options: { signal?: AbortSignal } = {}
+): Promise<Bounded<T>> => {
+  const started = Date.now();
+  return readUntil(
+    quietMs,
+    () => quietMs - (Date.now() - Math.max(started, movedAt())),
+    read,
+    options
+  );
+};
+
+/**
+ * The one deadline both reads share: `left()` says how long the read has
+ * still, and the timer is set again for that while it is more than none.
+ * `bound` names the time in the abort's words.
+ */
+const readUntil = <T>(
+  bound: number,
+  left: () => number,
+  read: (signal: AbortSignal) => Promise<T>,
+  options: { signal?: AbortSignal }
+): Promise<Bounded<T>> => {
+  const started = performance.now();
   const elapsed = () => Math.round(performance.now() - started);
   const deadline = new AbortController();
   const signal = options.signal
@@ -69,28 +109,38 @@ export const readWithin = <T>(
         return;
       }
       deadline.abort(
-        new DOMException(`no answer within ${ms} ms`, "TimeoutError")
+        new DOMException(`no answer within ${bound} ms`, "TimeoutError")
       );
       resolve({ kind: "unanswered", after: elapsed(), reason: "timeout" });
     };
-    let timer = setTimeout(() => {
-      if (elapsed() - ms < HELD_LATE_MS) {
-        giveUp();
-        return;
-      }
-      const until = performance.now() + CATCH_UP_MS;
-      const look = () => {
-        if (settled) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = (ms: number) => {
+      const due = performance.now() + ms;
+      timer = setTimeout(() => {
+        const more = left();
+        if (more > 0) {
+          arm(more);
           return;
         }
-        if (performance.now() >= until) {
+        if (performance.now() - due < HELD_LATE_MS) {
           giveUp();
           return;
         }
+        const until = performance.now() + CATCH_UP_MS;
+        const look = () => {
+          if (settled) {
+            return;
+          }
+          if (performance.now() >= until) {
+            giveUp();
+            return;
+          }
+          timer = setTimeout(look, CATCH_UP_STEP_MS);
+        };
         timer = setTimeout(look, CATCH_UP_STEP_MS);
-      };
-      timer = setTimeout(look, CATCH_UP_STEP_MS);
-    }, ms);
+      }, ms);
+    };
+    arm(Math.max(0, left()));
     let pending: Promise<T>;
     try {
       pending = read(signal);

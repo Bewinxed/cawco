@@ -58,7 +58,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { PictureCut } from "@cawco/core/artifact-picture";
 import { backoffWait } from "@cawco/core/backoff";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { type Bounded, readWhileMoving, readWithin } from "@cawco/core/bounded";
 import { BROWSER_PORTS } from "@cawco/core/browser";
 import { browserGatePort } from "@cawco/core/env-ports";
 import { makeFolder } from "@cawco/core/folders";
@@ -119,6 +119,7 @@ import {
   writeTail,
 } from "@cawco/core/words/helpers";
 import { sheetWords } from "@cawco/core/words/sheet";
+import { stageRenderWords } from "@cawco/core/words/stage-render";
 import type {
   WorkspaceArchive,
   WorkspaceRef,
@@ -335,6 +336,8 @@ interface Stage {
   message?: string;
   /** A place's sheet stage's mirror of its checkout into its clone, while it is live ({@link mirrorWhileLive}). */
   mirror?: ReturnType<typeof setInterval>;
+  /** When it last said it moved (`moved`, a module compiled; or it began to serve), `Date.now()`: a read waits on it while it moves ({@link READ_QUIET_MS}). */
+  movedAt: number;
   readonly port: number;
   /** Where its changes are told. */
   readonly ports: StagePorts;
@@ -718,6 +721,7 @@ type StagePlace = Omit<
   | "errors"
   | "restarts"
   | "lastUse"
+  | "movedAt"
   | "slept"
   | "stopping"
   | "viewers"
@@ -736,6 +740,7 @@ function newStage(found: StagePlace): Stage {
     errors: [],
     restarts: 0,
     lastUse: Date.now(),
+    movedAt: 0,
     slept: false,
     stopping: false,
     viewers: 0,
@@ -890,7 +895,8 @@ const bridgeName = (stage: Stage) =>
 async function askStage<T>(
   stage: Stage,
   path: string,
-  waitMs: number,
+  /** A fixed time to answer, or `"moving"`: for as long as the stage moves ({@link READ_QUIET_MS}). */
+  bound: number | "moving",
   take: (response: Response) => Promise<T>,
   body?: object
 ): Promise<Bounded<T>> {
@@ -899,7 +905,7 @@ async function askStage<T>(
     stage.boundary.id,
     stage.port
   );
-  return readWithin(waitMs, async (signal) =>
+  const asked = async (signal: AbortSignal) =>
     take(
       await fetch(
         reached === "host"
@@ -917,12 +923,26 @@ async function askStage<T>(
           ...(reached === "host" ? {} : { unix: reached }),
         }
       )
-    )
-  );
+    );
+  return bound === "moving"
+    ? readWhileMoving(READ_QUIET_MS, () => stage.movedAt, asked)
+    : readWithin(bound, asked);
 }
 
-/** How long a sheet's read or write may take on its stage: the first read of a component runs its docgen, under 2 s measured. Ours. */
-const READ_WAIT_MS = 15_000;
+/**
+ * How long a sheet's read or write waits on a stage that has stopped
+ * moving: it waits for as long as the stage says it compiles (host.ts
+ * `moved`), and gives up only after this long with no module compiled. A
+ * cold screen's 1,264 modules took 22.5 s on obelisk (2026-11-19, the
+ * project page), past the 15 s a read once had in all; between two of its
+ * moves the stage ran at most 5.8 s still (its report read cold beside the
+ * panel's page, a component's first docgen, a dependency pre-bundle). Ours:
+ * that spell, with room for a machine under load.
+ */
+const READ_QUIET_MS = 15_000;
+
+/** How long the design map may take on its stage: it reads every component's docgen, none of which says it moved. Ours: four of a sheet's quiet spells. */
+const MAP_WAIT_MS = READ_QUIET_MS * 4;
 
 /** The refusal in words a stage's failed answer carries (`{ error }`); none when it carries none. */
 const refusalIn = (answer: unknown): string | undefined =>
@@ -940,7 +960,7 @@ const refusalIn = (answer: unknown): string | undefined =>
 async function answerOf<T>(
   stage: Stage,
   path: string,
-  waitMs: number,
+  bound: number | "moving",
   what: string,
   shape: z.ZodType<T>,
   body?: object
@@ -948,7 +968,7 @@ async function answerOf<T>(
   const read = await askStage(
     stage,
     path,
-    waitMs,
+    bound,
     async (response) => {
       const answer: unknown = await response.json();
       if (!response.ok) {
@@ -965,7 +985,15 @@ async function answerOf<T>(
     case "answered":
       return read.value;
     case "unanswered":
-      throw new Error(`The stage did not ${what} within ${waitMs / 1000} s.`);
+      throw new Error(
+        bound === "moving"
+          ? stageRenderWords.stoppedMoving(
+              what,
+              READ_QUIET_MS / 1000,
+              read.after / 1000
+            )
+          : `The stage did not ${what} within ${bound / 1000} s.`
+      );
     default:
       unhandled("read", read);
   }
@@ -1235,6 +1263,7 @@ const up = (stage: Stage) => {
   stage.status = "live";
   stage.message = undefined;
   stage.lastUse = Date.now();
+  stage.movedAt = Date.now();
   watch(stage);
   mirrorWhileLive(stage);
   tell(stage);
@@ -1249,6 +1278,9 @@ const heard = (stage: Stage, word: HostWord): boolean => {
   if (word.cawco === "errors") {
     stage.errors = word.errors ?? [];
     tell(stage);
+  }
+  if (word.cawco === "moved") {
+    stage.movedAt = Date.now();
   }
   return false;
 };
@@ -1564,7 +1596,7 @@ export async function ensureStage(
     answerOf(
       stage,
       `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
-      READ_WAIT_MS,
+      "moving",
       `read ${rel}'s stories`,
       SheetReadSchema
     ),
@@ -1572,7 +1604,7 @@ export async function ensureStage(
     answerOf(
       stage,
       `${REPORT_PATH}?${all.map((one) => `file=${encodeURIComponent(one)}`).join("&")}`,
-      READ_WAIT_MS,
+      "moving",
       "read what a browser drew",
       ReportAnswerSchema
     ),
@@ -1603,7 +1635,7 @@ async function sheetWeight(
   const { weight } = await answerOf(
     stage,
     `${WEIGHT_PATH}?file=${encodeURIComponent(rel)}`,
-    READ_WAIT_MS,
+    "moving",
     `read what ${rel} loads`,
     z.object({ weight: SheetWeightSchema.nullable() })
   );
@@ -1634,17 +1666,10 @@ export async function writeSheet(
   const stage = await storyStage(tree, story, "a write");
   const rel = relative(stage.root, story);
   const written = () =>
-    answerOf(
-      stage,
-      WRITE_PATH,
-      READ_WAIT_MS,
-      `write ${rel}`,
-      SheetWrittenSchema,
-      {
-        ...write,
-        file: rel,
-      }
-    );
+    answerOf(stage, WRITE_PATH, "moving", `write ${rel}`, SheetWrittenSchema, {
+      ...write,
+      file: rel,
+    });
   const done =
     pin !== undefined || isPlace(workspace.id)
       ? await inCloneTurn(tree.boundary.id, async () => {
@@ -1868,7 +1893,7 @@ export async function stageComponents(
   const map = await answerOf(
     stage,
     `${COMPONENTS_PATH}?${query}`,
-    READ_WAIT_MS * 4,
+    MAP_WAIT_MS,
     "map its components",
     DesignMapSchema
   );

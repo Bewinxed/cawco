@@ -25,6 +25,7 @@ import { readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_PATH,
   CANVAS_PLAN_ID,
+  FORMS,
   RENDER_STATE_PARAM,
   REPORT_PATH,
   type RenderAsk,
@@ -32,6 +33,7 @@ import {
   type SectionUndrawn,
   STAGE_RENDER_MS,
   type StageRendered,
+  screenHeight,
   sectionPlansOf,
 } from "@cawco/core/stage";
 import { ReportAnswerSchema } from "@cawco/core/stored-shapes";
@@ -55,6 +57,19 @@ const POLL_MS = 250;
 const SETTLE_MS = 600;
 /** The window a render opens in: the desk's. A state the stage can't hold whole at its own size grows it (frame-picture.ts `poseState`). */
 const VIEWPORT = { width: 1440, height: 900 };
+
+/**
+ * The browser a render of `width` opens as: a read of a phone's width
+ * (under core {@link FORMS}' tablet, as the canvas's frames answer a
+ * phone, canvas/width.ts) opens as that phone, its screen upright
+ * (`screenHeight`, 390×844) and its touch emulated, so the window answers
+ * the device features a page reads off it as the frame does; any other,
+ * the desk's {@link VIEWPORT} with a mouse.
+ */
+const browserFor = (width: number | undefined) =>
+  width !== undefined && width < FORMS.tablet
+    ? { viewport: { width, height: screenHeight(width) }, touch: true }
+    : { viewport: VIEWPORT, touch: false };
 
 /** A render's answer (core `StageRendered`): `png` a PNG, base64, when asked. */
 export type Rendered = StageRendered;
@@ -259,9 +274,12 @@ export async function renderCanvas(
     throw error;
   });
   try {
+    const opened = browserFor(ask.state?.width);
     const page = await browser.newPage({
-      viewport: VIEWPORT,
+      viewport: opened.viewport,
       colorScheme: ask.state?.scheme ?? "light",
+      // Chromium's touch emulation (CDP `Emulation.setTouchEmulationEnabled`): `(pointer: coarse)` and `(hover: none)` hold, measured.
+      hasTouch: opened.touch,
     });
     const seconds = RENDER_WAIT_MS / 1000;
     await page

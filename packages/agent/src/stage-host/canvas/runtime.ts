@@ -687,13 +687,20 @@ export function boot(options: BootOptions): void {
     const widthNow = () =>
       (asked === undefined ? (mode?.mediaWidth() ?? null) : asked) ??
       document.documentElement.getBoundingClientRect().width;
-    // What the window still answers (a media type, a hover), and where its changes are heard.
-    const rest = media(split.media || query);
-    return answered(query, rest, () => {
-      const held = holdsAt(split.container, widthNow());
-      return held === null
-        ? media(query).matches
-        : held && (!split.media || rest.matches);
+    // Where its changes are heard: the window's own list; each query holds where the frame and the window both answer it (width.ts `FramePart`).
+    const asWritten = media(query);
+    return answered(query, asWritten, () => {
+      const at = widthNow();
+      let unknown = false;
+      const holds = split.parts.some(({ container, media: rest }) => {
+        const held = container ? holdsAt(container, at) : true;
+        if (held === null) {
+          unknown = true;
+        }
+        return held === true && (!rest || media(rest).matches);
+      });
+      // A condition the engine takes in no container query: the window answers the list as written.
+      return holds || (unknown ? asWritten.matches : false);
     });
   };
 
