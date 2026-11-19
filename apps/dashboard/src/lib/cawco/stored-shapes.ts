@@ -311,7 +311,11 @@ const AtLimitShape = z.object({
 export const AtLimitSchema = AtLimitShape;
 export type AtLimitOutput = z.output<typeof AtLimitShape>;
 
-const BesideShape = z.object({ projectId: z.string(), taskId: z.string() });
+const BesideShape = z.object({
+  projectId: z.string(),
+  taskId: z.string(),
+  todo: z.string().optional(),
+});
 export const BesideSchema = BesideShape;
 export type BesideOutput = z.output<typeof BesideShape>;
 

@@ -37,6 +37,7 @@
    */
   import { type Snippet, untrack } from "svelte";
   import { presenceDocked } from "#lib/cawco/presence.js";
+  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
@@ -83,6 +84,7 @@
   import { planAsked } from "./reference-things.svelte";
   import type { SendExtras } from "./send-store";
   import { cawOf } from "./session-status";
+  import FailedSurface from "./side/FailedSurface.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
   import { asksStore } from "./stores/asks.svelte";
@@ -127,7 +129,12 @@
   } from "./stores/transcript-reads.svelte";
   import { seededSession } from "./stores/transcripts.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
-  import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
+  import {
+    besideOf,
+    provideBeside,
+    putAway,
+    standBeside,
+  } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
   import Composer from "./transcript/Composer.svelte";
   import ConnectCard from "./transcript/ConnectCard.svelte";
@@ -286,34 +293,48 @@
   );
 
   /*
-   * A task standing beside the session (tasks/beside.svelte.ts): its review
-   * opened the session that worked it. Its project's tasks and stages are
-   * read for the pane, again when they change.
+   * A task standing beside the session (tasks/beside.svelte.ts): a task or
+   * to-do chip pressed in its transcript stood it there, or its review
+   * opened the session that worked it. A docked conversation stands nothing
+   * beside it, so its chips open the task's page. Its project's tasks and
+   * stages are read for the pane, again when they change; a read the hub
+   * refused is said in the side card's failure (FailedSurface) with Try
+   * again.
    */
+  provideBeside(() => (docked ? null : viewId));
   const beside = $derived(besideOf(viewId));
   let besideTasks = $state<TaskSummary[]>([]);
   let besideStages = $state<StagesView | null>(null);
+  let besideProblem = $state<string | null>(null);
   const besideReads = newestRead();
   async function readBeside(projectId: string): Promise<void> {
     const newest = besideReads.next();
-    const [{ tasks }, stagesNow] = await Promise.all([
-      listTasks(projectId),
-      readStages(projectId),
-    ]);
-    if (newest() && beside?.projectId === projectId) {
-      besideTasks = tasks;
-      besideStages = stagesNow;
+    try {
+      const [{ tasks }, stagesNow] = await Promise.all([
+        listTasks(projectId),
+        readStages(projectId),
+      ]);
+      if (newest() && beside?.projectId === projectId) {
+        besideTasks = tasks;
+        besideStages = stagesNow;
+        besideProblem = null;
+      }
+    } catch (error) {
+      if (newest() && beside?.projectId === projectId) {
+        besideProblem = failureWords(error);
+      }
     }
   }
   $effect(() => {
     const projectId = beside?.projectId;
     if (!projectId) {
       besideStages = null;
+      besideProblem = null;
       return;
     }
     track(tickersStore.tasksChangedOf(projectId));
     untrack(() => {
-      readBeside(projectId).catch(() => undefined);
+      detach(readBeside(projectId), "read the task beside");
     });
   });
   /** Another task (an edge, a blocker) in this one's place. */
@@ -325,7 +346,7 @@
   async function moveBeside(taskId: string, stage: string): Promise<TaskView> {
     const projectId = beside?.projectId ?? "";
     const moved = await moveTask(projectId, taskId, stage);
-    readBeside(projectId).catch(() => undefined);
+    detach(readBeside(projectId), "read the task beside");
     return moved;
   }
 
@@ -1825,23 +1846,43 @@
   </EmptyState>
 {/snippet}
 
-{#snippet besideSurface(switcher: Snippet | undefined)}
+{#snippet besideSurface(switcher: Snippet | undefined, sheet: boolean)}
   {#if beside && besideStages}
     <TaskPane
       allowedFrom={(stage) =>
         besideStages ? movesFrom(besideStages, stage) : new Set()}
       onchanged={() => {
-        readBeside(beside?.projectId ?? "").catch(() => undefined);
+        detach(readBeside(beside?.projectId ?? ""), "read the task beside");
       }}
       onclose={() => putAway(viewId)}
       onmove={moveBeside}
       onopen={showBeside}
       projectId={beside.projectId}
+      {sheet}
       stages={besideStages}
       {switcher}
       taskId={beside.taskId}
       tasks={besideTasks}
+      todo={beside.todo}
     />
+  {:else if beside && besideProblem}
+    <FailedSurface onclose={() => putAway(viewId)} {switcher} what="task">
+      <Alert class="m-space-3" variant="destructive">
+        <AlertDescription>
+          {besideProblem}
+          <Button
+            class="mt-space-2"
+            onclick={() =>
+              detach(
+                readBeside(beside?.projectId ?? ""),
+                "read the task beside"
+              )}
+            size="sm"
+            variant="outline">{commonWords.tryAgain}</Button
+          >
+        </AlertDescription>
+      </Alert>
+    </FailedSurface>
   {/if}
 {/snippet}
 
@@ -2042,7 +2083,7 @@
       <SideSplit
         {active}
         phone={drawer}
-        task={besideStages ? besideSurface : undefined}
+        task={besideStages || besideProblem ? besideSurface : undefined}
         taskOpen={!!beside}
         {viewId}
         {visible}

@@ -25,6 +25,7 @@ import { boardStore } from "./stores/board.svelte";
 import { plansStore } from "./stores/plans.svelte";
 import { projectsStore } from "./stores/projects.svelte";
 import { tickersStore } from "./stores/tickers.svelte";
+import type { Beside } from "./tasks/beside.svelte";
 
 /** The kinds this module names. */
 const THING_KINDS = [
@@ -42,9 +43,16 @@ export type ThingKind = (typeof THING_KINDS)[number];
 export const isThingKind = (kind: ReferenceKind): kind is ThingKind =>
   isOneOf(THING_KINDS, kind);
 
-/** Where a press opens a thing: a page of the app, a session's plan (at a step), or the machines' list. */
+/**
+ * Where a press opens a thing: a page of the app, a session's plan (at a
+ * step), or the machines' list. A task's and a to-do's page names the task
+ * too (`task`), which a press in a conversation stands beside it instead
+ * (tasks/beside.svelte.ts).
+ */
 type ThingPlace =
-  { href: string } | { plan: string; step?: string } | { machines: string };
+  | { href: string; task?: Beside }
+  | { plan: string; step?: string }
+  | { machines: string };
 
 /** A thing as its chip reads it. */
 export interface Thing {
@@ -183,6 +191,7 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
       ].filter(Boolean),
       place: {
         href: `${projectHref(project)}?task=${encodeURIComponent(task)}`,
+        task: { projectId: project, taskId: task },
       },
     };
   },
@@ -204,6 +213,7 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
           peek: [`${view.id} · ${view.title}`],
           place: {
             href: `${projectHref(project)}?task=${encodeURIComponent(task)}&todo=${encodeURIComponent(todo)}`,
+            task: { projectId: project, taskId: task, todo },
           },
         }
       : null;

@@ -5,11 +5,15 @@
    * A task, whole, in the page beside what it was opened from (DESIGN.md,
    * The Open Page Rule): on a desk the side card of a split (Split, through
    * the project page or a conversation's SideSplit), the board or the
-   * transcript live beside it; on a phone its own page, its bar Back's
+   * transcript live beside it. Beside a conversation on a phone, or in a
+   * desk's pane under 900px, it is the same card in the sheet the preview
+   * rises in (SideSheet, `sheet`), Close leading as the preview's does. On
+   * the project page on a phone it is its own page, its bar Back's
    * symbol alone, named by where it goes (DESIGN.md, The Title Bars Follow
    * Liquid Glass Rule: "Back and Close are symbols, named by where they
-   * go"). Neither bar names the task: its title is the head's first
-   * heading under it, and its id, never a bar's ("A title is the view's own
+   * go"). Opened at a to-do (`todo`, a to-do's chip or link), it opens on
+   * Details with that to-do brought into view. Neither bar names the task:
+   * its title is the head's first heading under it, and its id, never a bar's ("A title is the view's own
    * short name, never … an id"), leads the facts line, as it leads the
    * board's card (TaskCard).
    *
@@ -60,6 +64,7 @@
     revealOut,
   } from "#lib/platform/motion/curves.svelte.js";
   import { newestRead } from "#lib/platform/newest-read.js";
+  import { track } from "#lib/platform/track.js";
   import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
   import { artifactNamed } from "../artifact-names.svelte";
 
@@ -115,7 +120,9 @@
     onclose,
     onopen,
     page,
+    sheet = false,
     switcher,
+    todo = null,
     pageOf = () => null,
   }: {
     /** A decision page of the project's, by its artifact: its name in Decisions; null when the project lists none by it. */
@@ -131,14 +138,18 @@
     onmove: (taskId: string, stage: string) => Promise<TaskView>;
     /** The hub wrote the task: the list is read again. */
     onchanged: (task: TaskView) => void;
-    /** Close on a desk; Back on a phone. */
+    /** Close beside a page and in a conversation's sheet; Back on the project page's phone page. */
     onclose: () => void;
     /** Shows another task in this one's place (an edge, a blocker). */
     onopen: (id: string) => void;
     /** A phone: the task is its own page, with Back to `backTo` (the view's name, Back's tooltip and accessible name), not a card beside the board. */
     page?: { backTo: string };
+    /** In the sheet beside a conversation (SideSheet): Close leads the bar, as the preview's does there. */
+    sheet?: boolean;
     /** The switch between what stands beside a conversation (SideSplit). */
     switcher?: Snippet;
+    /** The to-do it opens at: on Details, that to-do brought into view (TodoList `linked`). */
+    todo?: string | null;
   } = $props();
 
   let task = $state<TaskView | null>(null);
@@ -229,9 +240,16 @@
         reviewOf(shown) !== null ||
         ((flags.failed || flags.stopped) && !flags.live))
   );
-  /** The switch's choice; null: Review while there is one, else Details. */
-  let picked = $state<"review" | "details" | null>(null);
-  const view = $derived(picked ?? (reviewable ? "review" : "details"));
+  /**
+   * The switch's choice; null: Details at a to-do, else Review while there
+   * is one, else Details. Each task, and each to-do it is opened at, starts
+   * unpicked.
+   */
+  let picked = $derived.by<"review" | "details" | null>(() => {
+    track(taskId, todo);
+    return null;
+  });
+  const view = $derived(picked ?? (reviewable && !todo ? "review" : "details"));
 
   // A new task starts clean, and is read.
   let readFor = "";
@@ -241,7 +259,6 @@
       return;
     }
     readFor = id;
-    picked = null;
     history = null;
     titleDraft = null;
     stageProblem = null;
@@ -700,6 +717,7 @@
         />
 
         <TodoList
+          linked={todo}
           onadd={async (text, under) => {
             if (shown) {
               took(await addTodo(projectId, shown.id, { text, under }));
@@ -837,11 +855,14 @@
     {@render content()}
   </PageSurface>
 {:else}
+  <!-- In the sheet its ground is the sheet's own well (SideSheet), so the
+       head's scroll edge fades into the well. -->
   <SideSurface
     of="task"
     label="Task {taskId}"
     {onclose}
-    recessed={false}
+    placement={sheet ? "sheet" : "beside"}
+    recessed={sheet}
     {switcher}
   >
     {@render content()}

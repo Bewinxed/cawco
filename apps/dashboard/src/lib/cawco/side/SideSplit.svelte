@@ -3,19 +3,21 @@
    * A conversation and the surface beside it (PRD §5.2): the transcript in
    * one side of the resizable split (Split), and on the other, inset on the
    * preview sheet's recipe, what the conversation has to show — its
-   * preview, a task one of its cards opened, or both under a switch. On a
-   * desk and at an iPad's regular width it is the split. On a phone, or in
-   * a desk's pane under 900px (layoutPolicy.sideDrawer), the preview rises
-   * as a sheet (SideSheet): on a phone over the composer, which it covers
-   * while it is up; in the desk's narrow pane standing on it, so the mouse
-   * can write while it is up. A task there is its own page (the project page's
-   * `?task=`), never a sheet. The plan is not here: its ring is the composer's, so it opens
-   * as a layer of the composer over the transcript (plan/PlanPane), never
-   * beside it.
+   * preview, a task (a task or to-do chip pressed in its transcript, or a
+   * task's review opening it: tasks/beside.svelte.ts), or both under a
+   * switch. On a desk and at an iPad's regular width it is the split. On a
+   * phone, or in a desk's pane under 900px (layoutPolicy.sideDrawer), the
+   * same surface rises as a sheet (SideSheet), the switch in its head while
+   * both are open: on a phone over the composer, which it covers while it
+   * is up; in the desk's narrow pane standing on it, so the mouse can write
+   * while it is up. Either way the conversation stays on screen (DESIGN.md,
+   * The Open Page Rule). The plan is not here: its ring is the composer's,
+   * so it opens as a layer of the composer over the transcript
+   * (plan/PlanPane), never beside it.
    *
    * The split opens when there is something to show and the reader or the
    * agent asked for it: an agent showing a preview opens it on Preview, a
-   * task card on the task. Each
+   * task stood beside it on the task, each time one is (`besideAsked`). Each
    * pane closes its own content; with nothing left the split collapses. Its
    * width and expansion are the conversation's own, kept across visits.
    */
@@ -30,7 +32,7 @@
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import { closePreview, previewsStore } from "../stores/previews.svelte";
-  import { putAway } from "../tasks/beside.svelte";
+  import { besideAsked, putAway } from "../tasks/beside.svelte";
   import FailedSurface from "./FailedSurface.svelte";
   import SideSheet from "./SideSheet.svelte";
   import Split from "./Split.svelte";
@@ -63,10 +65,10 @@
      * split nor a sheet opens before it is known which one the pane asks for.
      */
     phone: boolean | null;
-    /** A task one of the conversation's cards opened stands beside it (a desk only). */
+    /** A task stands beside the conversation (tasks/beside.svelte.ts). */
     taskOpen?: boolean;
-    /** The task's card, handed the switch while another surface is open too. */
-    task?: Snippet<[Snippet | undefined]>;
+    /** The task's card, handed the switch while another surface is open too, and whether it stands in the sheet. */
+    task?: Snippet<[Snippet | undefined, boolean]>;
     /** The surface's share of the width, in percent: 0 while closed or a sheet. */
     share?: number;
     /** The transcript's side. */
@@ -82,7 +84,7 @@
   const previewOpen = $derived(
     previewsStore.previews[viewId]?.state === "open"
   );
-  const taskShown = $derived(taskOpen && !!task && phone === false);
+  const taskShown = $derived(taskOpen && !!task);
   const open = $derived(previewOpen || taskShown);
   /** What is open, in the switch's order. */
   const opened = $derived<Shown[]>([
@@ -111,6 +113,16 @@
     }
     taskWas = now;
   });
+  // A task stood beside it while it is open (another chip, the same one
+  // again over the preview) comes to the front too.
+  let askedWas = untrack(() => besideAsked(viewId));
+  $effect(() => {
+    const now = besideAsked(viewId);
+    if (now !== askedWas) {
+      tab = "task";
+    }
+    askedWas = now;
+  });
 
   /** The surface beside the transcript, on screen or not: a measured pane that splits. */
   const desktopOpen = $derived(open && phone === false);
@@ -126,12 +138,12 @@
    * drawn and it goes at once.
    *
    * `standing` is set as the sheet opens, before any close, so the render
-   * that closes the preview still reads it and keeps the sheet. Set by an
+   * that closes the last of what it holds still reads it and keeps the sheet. Set by an
    * effect as the close was seen, after that render, the `{#if}` below had
    * already taken the sheet away, and a new one mounted closed: never open,
    * its close never landed, so it never went (preview-touch 2).
    */
-  const sheetOpen = $derived(previewOpen && visible && active);
+  const sheetOpen = $derived(open && visible && active);
   let standing = $state(untrack(() => sheetOpen));
   $effect(() => {
     if (sheetOpen) {
@@ -140,7 +152,18 @@
       standing = false;
     }
   });
-  const sheetMounted = $derived(previewOpen || (standing && visible && active));
+  const sheetMounted = $derived(open || (standing && visible && active));
+  /**
+   * What the sheet showed last: a preview put away keeps its pane through
+   * the slide down, as it did before the sheet held a task; a task put
+   * away has no card left to draw, and the sheet slides down bare.
+   */
+  let sheetLast = $state<Shown>("preview");
+  $effect(() => {
+    if (open) {
+      sheetLast = shown;
+    }
+  });
 
   const LABEL: Record<Shown, string> = {
     preview: sideWords.preview,
@@ -180,14 +203,15 @@
   </Tabs>
 {/snippet}
 
-{#snippet surface()}
+{#snippet surface(sheet: boolean)}
   {@const switched = opened.length > 1 ? switcher : undefined}
   {#if shown === "task" && taskShown && task}
-    {@render task(switched)}
-  {:else if previewOpen}
+    {@render task(switched, sheet)}
+  {:else if previewOpen || (sheet && !open && sheetLast === "preview")}
     <PreviewPane
       instanceId={viewId}
-      onScreen={visible}
+      onScreen={sheet ? visible && active : visible}
+      {sheet}
       switcher={switched}
       bind:this={previewPane}
     />
@@ -196,12 +220,13 @@
 
 <!-- What stood beside the conversation, stopped on a render error: its
      card's switch, name and Close outlive it, round its face (RegionBoundary,
-     FailedSurface). A press on the switch builds the other one afresh. -->
-{#snippet bounded()}
+     FailedSurface), in the split and in the sheet alike. A press on the
+     switch builds the other one afresh. -->
+{#snippet bounded(sheet: boolean)}
   {@const switched = opened.length > 1 ? switcher : undefined}
   {#key shown}
     <RegionBoundary part={shown}>
-      {@render surface()}
+      {@render surface(sheet)}
       {#snippet chrome(face)}
         <FailedSurface
           onclose={() => closeFailed(shown)}
@@ -216,10 +241,15 @@
   {/key}
 {/snippet}
 
+{#snippet beside()}
+  {@render bounded(false)}
+{/snippet}
+
 {#snippet sheets()}
   {#if sheetMounted && phone}
-    <!-- The preview's sheet on the composer. Off screen it stays, closed,
-         with its page held. -->
+    <!-- The sheet on the composer, holding what the split would: the
+         preview, the task, or both under the switch. Off screen it stays,
+         closed, with its page held. -->
     <SideSheet
       content={root}
       instanceId={viewId}
@@ -230,23 +260,7 @@
       onkeyescape={(event) => previewPane?.parentEscape(event)}
       open={sheetOpen}
     >
-      <RegionBoundary part="preview">
-        <PreviewPane
-          instanceId={viewId}
-          onScreen={visible && active}
-          sheet
-          bind:this={previewPane}
-        />
-        {#snippet chrome(face)}
-          <FailedSurface
-            onclose={() => closeFailed("preview")}
-            title={failedTitle("preview")}
-            what="preview"
-          >
-            {@render face()}
-          </FailedSurface>
-        {/snippet}
-      </RegionBoundary>
+      {@render bounded(true)}
     </SideSheet>
   {/if}
 {/snippet}
@@ -263,7 +277,7 @@
   main={children}
   onescape={(event) => previewPane?.parentEscape(event)}
   open={desktopOpen}
-  side={bounded}
+  side={beside}
   {visible}
   bind:root
   bind:share

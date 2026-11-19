@@ -2086,6 +2086,7 @@
             stages={board.stages}
             taskId={openTask}
             tasks={board.tasks}
+            todo={here.searchParams.get("todo")}
           />
         </div>
       {:else}
@@ -2293,6 +2294,7 @@
       stages={board.stages}
       taskId={sideHeld.task}
       tasks={board.tasks}
+      todo={here.searchParams.get("todo")}
     />
   {/if}
 {/snippet}

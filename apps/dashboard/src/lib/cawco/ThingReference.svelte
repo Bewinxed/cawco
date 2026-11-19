@@ -9,8 +9,11 @@
    *
    * Resting a mouse on it peeks it under it after `--duration-peek`: its name,
    * its state and its facts (the floating tag recipe, as a pin's chip
-   * peeks). Pressed, it opens where the thing lives: its page, its project
-   * at the task or to-do, the session's plan at the step, the machines.
+   * peeks). Pressed in a conversation, a task or a to-do stands beside it
+   * (the conversation's side card, or on a phone its sheet), the
+   * conversation staying on screen; elsewhere it opens where the thing
+   * lives: its page, its project at the task or to-do, the session's plan
+   * at the step, the machines (reference-open.svelte.ts `openThing`).
    */
   import { Portal } from "bits-ui";
   import { numberOf } from "#lib/platform/motion/curves.svelte.js";
@@ -20,6 +23,7 @@
   import { REFERENCE_LOOKS } from "./reference-looks";
   import { openThing } from "./reference-open.svelte";
   import { isThingKind, thingNamed } from "./reference-things.svelte";
+  import { besideHere } from "./tasks/beside.svelte";
 
   let { id, kind, label = "" }: ElementProps = $props();
 
@@ -28,6 +32,9 @@
   const look = $derived(isThingKind(kind) ? REFERENCE_LOOKS[kind] : null);
   const words = $derived(thing?.label || label);
   const name = $derived(thing?.state ? `${words}, ${thing.state}` : words);
+
+  /** The conversation it stands in, which a task or a to-do stands beside. */
+  const beside = besideHere();
 
   let chip = $state<HTMLButtonElement>();
   // Inside the viewport: a chip near its end side peeks back from it.
@@ -54,7 +61,7 @@
     onclick={() => {
       peek.leave();
       if (thing) {
-        openThing(thing);
+        openThing(thing, beside?.());
       }
     }}
     onpointerenter={peek.rest}

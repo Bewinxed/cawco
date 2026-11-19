@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sideWords } from "@cawco/core/words/side";
   import { Portal } from "bits-ui";
   import { type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -6,14 +7,17 @@
   import { holdStyle } from "#lib/components/ui/drawer/hold-style.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   /**
-   * The preview on a phone (SideSplit): a sheet over the transcript and
+   * What stands beside a conversation on a phone, and in a desk's pane
+   * under 900px (SideSplit): its preview, a task stood beside it (a task or
+   * to-do chip pressed in its transcript: tasks/beside.svelte.ts), or both
+   * under the switch in the card's head. A sheet over the transcript and
    * the composer, down to the screen's foot, so the page has the composer's
-   * room too. While it is open it covers the composer (the owner: "the
-   * preview and drawer should cover the composer"): it never stands on it,
-   * and the composer under it is inert, out of reach of a finger, a key or
-   * a screen reader, until the preview closes, its draft and the
-   * transcript's place kept as they were. The preview closes it from its
-   * own header.
+   * room too. While it is open on a phone it covers the composer (the owner:
+   * "the preview and drawer should cover the composer"): it never stands on
+   * it, and the composer under it is inert, out of reach of a finger, a key
+   * or a screen reader, until the sheet closes, its draft and the
+   * transcript's place kept as they were. Each card closes what it holds
+   * from its own header; with nothing left the sheet goes.
    */
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
@@ -23,6 +27,7 @@
   import { closePeeks } from "../HoverPanel.svelte";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import { previewsStore } from "../stores/previews.svelte";
+  import { besideAsked } from "../tasks/beside.svelte";
 
   let {
     instanceId,
@@ -606,9 +611,12 @@
     }
     return holdStyle(node, { "--initial-transform": initial ?? null });
   });
+  // A preview shown again, or a task stood beside, brings a folded or
+  // pulled-down sheet back to where it rests.
   $effect(() => {
     const request = previewsStore.previewRequests[instanceId];
-    if (request !== undefined && placed) {
+    const asked = besideAsked(instanceId);
+    if ((request !== undefined || asked > 0) && placed) {
       untrack(() => {
         snap = values[restStop()];
       });
@@ -829,7 +837,7 @@
         event.preventDefault();
       }}
       onOpenAutoFocus={(event) => event.preventDefault()}
-      title="Beside the conversation"
+      title={sideWords.label}
       trapFocus={false}
       bind:ref={drawer}
     >

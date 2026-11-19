@@ -34,6 +34,7 @@ import { barGlass } from "./bar-glass.svelte";
 import { askPlan, type Thing } from "./reference-things.svelte";
 import { refusals } from "./refusals.svelte";
 import { previewsStore, revealPreview } from "./stores/previews.svelte";
+import { standBeside } from "./tasks/beside.svelte";
 
 /** Whether `named` is a project's setup page, which opens in no panel (hub artifacts/service.ts `boardOf`). */
 const isSetupPage = (named: NamedArtifact): boolean =>
@@ -152,12 +153,20 @@ export async function openArtifactIn(
 
 /**
  * A thing's chip pressed (a task's, a to-do's, a plan's, a step's, a
- * routine's, a project's, a machine's): its page opens; a
- * plan or a step opens over its session's composer, at the step; a machine opens
- * the machines onto its row, where the dashboard keeps them (the bar's card,
- * a phone's sidebar).
+ * routine's, a project's, a machine's). A task or a to-do pressed in a
+ * conversation (`beside`, the session it stands in: tasks/beside.svelte.ts
+ * `besideHere`) stands beside it, at the to-do, in place of any task that
+ * stood there, and the conversation stays on screen (DESIGN.md, The Open
+ * Page Rule). Elsewhere it opens its page: a task or a to-do its project's
+ * page at it (`?task=`, `&todo=`), which opens its own side card. A plan or
+ * a step opens over its session's composer, at the step; a machine opens
+ * the machines onto its row, where the dashboard keeps them (the bar's
+ * card, a phone's sidebar).
  */
-export async function openThing(thing: Thing): Promise<void> {
+export async function openThing(
+  thing: Thing,
+  beside?: string | null
+): Promise<void> {
   const { place } = thing;
   if ("machines" in place) {
     barGlass.showMachine(place.machines);
@@ -169,6 +178,10 @@ export async function openThing(thing: Thing): Promise<void> {
     if (page.url.pathname !== at) {
       await goto(at);
     }
+    return;
+  }
+  if (place.task && beside) {
+    standBeside(beside, place.task);
     return;
   }
   await goto(place.href);

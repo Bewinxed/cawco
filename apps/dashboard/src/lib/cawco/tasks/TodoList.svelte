@@ -21,15 +21,17 @@
   import { failureWords } from "#lib/platform/hub-read.js";
   import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
-  import { page } from "$app/state";
 
   let {
     todos,
     ontick,
     onedit,
     onadd,
+    linked = null,
   }: {
     todos: Todo[];
+    /** The to-do a link named (`?todo=td-3` on the project page, a to-do's chip beside a conversation): brought into view and marked for a moment once it is drawn, once per link. */
+    linked?: string | null;
     ontick: (ref: string, done: boolean) => Promise<void>;
     onedit: (ref: string, text: string) => Promise<void>;
     onadd: (text: string, under?: string) => Promise<void>;
@@ -38,11 +40,6 @@
   /** A to-do is named by its id, or by its place when it has none. */
   const refOf = (todo: Todo): string => todo.id ?? todo.path;
 
-  /*
-   * The to-do a link named (`?todo=td-3`, a to-do's chip): brought into view
-   * and marked for a moment once it is drawn, once per link.
-   */
-  const linked = $derived(page.url.searchParams.get("todo"));
   let broughtFor: string | null = null;
   let marked = $state<string | null>(null);
   $effect(() => {
