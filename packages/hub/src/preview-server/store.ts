@@ -9,7 +9,11 @@ import { Database } from "bun:sqlite";
 import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { DB_PATH } from "../config";
-import { type ArtifactDocumentRow, documentOf } from "../db/artifact-documents";
+import {
+  type ArtifactDocumentRow,
+  documentOf,
+  documentStands,
+} from "../db/artifact-documents";
 import { type ArtifactRow, artifactOf } from "../db/artifacts";
 import { previewPassesDb } from "../db/preview-passes";
 import {
@@ -91,6 +95,8 @@ export const openPreviewStore = (path = DB_PATH) => {
     artifact,
     document: (id: string): ArtifactDocumentRow | undefined =>
       documentOf(db, id),
+    /** Whether document `row` stands: each doc it was read from still at the seq it read (db/artifact-documents.ts `documentStands`). */
+    stands: (row: ArtifactDocumentRow): boolean => documentStands(db, row),
     /** The key of the origin that serves artifact `row` (hub artifact-pages.ts `originKeyOf`). */
     originOf: (row: ArtifactRow): string | undefined => {
       const project = pageProject(row);

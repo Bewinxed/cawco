@@ -1,13 +1,15 @@
 /**
  * What a page's or a canvas's document carries of the hub's state
  * (schema.ts `artifactDocuments`): the hub writes a row whenever the
- * artifact's doc, its row or what its pages show moves (artifact-documents.ts),
- * and the preview server reads it by key on its own read-only connection
- * (preview-server/store.ts), so an open is one keyed read.
+ * artifact's row or what its pages show moves, and when the preview server
+ * finds one read from a doc that moved since ({@link documentStands};
+ * artifact-documents.ts), and the preview server reads it by key on its own
+ * read-only connection (preview-server/store.ts).
  */
 import { eq, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { artifactDocuments } from "./schema";
+import { z } from "zod";
+import { artifactDocuments, artifacts } from "./schema";
 
 export type ArtifactDocumentRow = typeof artifactDocuments.$inferSelect;
 
@@ -33,6 +35,36 @@ const pagesShowing = (
     )
     .all()
     .map((row) => row.id);
+
+const SeqsSchema = z.record(z.string(), z.number());
+
+/**
+ * Whether document `row` stands, on any connection: every doc it was read
+ * from (`seqs`) is at the seq it read, by one keyed read each. One that
+ * names no seq of its own (built before `seqs` was kept) never does.
+ */
+export const documentStands = (
+  db: Pick<BunSQLiteDatabase, "select">,
+  row: ArtifactDocumentRow
+): boolean => {
+  let seqs: Record<string, number>;
+  try {
+    seqs = SeqsSchema.parse(JSON.parse(row.seqs));
+  } catch {
+    return false;
+  }
+  return (
+    Object.hasOwn(seqs, row.artifactId) &&
+    Object.entries(seqs).every(
+      ([id, seq]) =>
+        db
+          .select({ seq: artifacts.seq })
+          .from(artifacts)
+          .where(eq(artifacts.id, id))
+          .get()?.seq === seq
+    )
+  );
+};
 
 /** Artifact `id`'s document row, on any connection (the preview server's is read-only). */
 export const documentOf = (

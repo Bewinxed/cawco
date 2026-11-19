@@ -19,7 +19,11 @@
  * `bundleOverlay`), and started from it as a blob (artifact.ts).
  */
 
-import { honourDeletions, lostWrites } from "@cawco/core/comments/model";
+import {
+  honourDeletions,
+  indexEntries,
+  lostWrites,
+} from "@cawco/core/comments/model";
 import {
   ARTIFACT_GONE,
   RESYNC_MS,
@@ -227,7 +231,7 @@ const changesOf = (
 
 /** Every transaction on `own` that changed a mirrored map: its keys' values now, to the page. */
 const watch = (own: Doc, at: number) => {
-  honourDeletions(own);
+  honourDeletions(own, indexEntries(own));
   const named = new Map<unknown, { map: YMap<unknown>; name: string }>(
     MIRRORED_MAPS.map((name) => {
       const map = own.getMap(name);

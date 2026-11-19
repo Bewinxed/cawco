@@ -4557,8 +4557,6 @@ export const createServer = (
     // The person's own change: what of it the session hasn't heard goes once quiet.
     updated: (id, by) => {
       artifactLane.artifactMoved(id);
-      // Its document carries the doc's seed: built again (artifact-documents.ts).
-      artifactDocuments.moved([id]);
       if (by === "person") {
         artifacts.personMarked(id);
       }

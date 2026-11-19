@@ -78,7 +78,15 @@ import {
   type Transaction,
   Map as YMap,
 } from "yjs";
-import { addedTo, elementIdOf, elementsOf, MAPS } from "./doc-parts";
+import {
+  addedTo,
+  type Changed,
+  elementIdOf,
+  elementsOf,
+  keysIn,
+  MAPS,
+  rootOf,
+} from "./doc-parts";
 
 /** A doc's top-level map, by name. */
 type MapName = (typeof MAPS)[number];
@@ -128,28 +136,6 @@ interface Roots {
   elements: unknown;
   maps: Map<unknown, string>;
 }
-
-/** A changed type of a transaction (`transaction.changed`'s key). */
-type Changed = Transaction["changed"] extends Map<infer T, unknown> ? T : never;
-
-/** `type`'s root, and the type right under the root that holds it (none when `type` is a root). */
-const rootOf = (type: Changed): { child: Changed | null; top: Changed } => {
-  let top = type;
-  let child: Changed | null = null;
-  while (top._item !== null) {
-    const { parent } = top._item;
-    if (!(parent instanceof AbstractType)) {
-      break;
-    }
-    child = top;
-    top = parent;
-  }
-  return { child, top };
-};
-
-/** The string keys of `subs` (a map's keys; null is an array's order). */
-const keysIn = (subs: Set<string | null>): string[] =>
-  [...subs].filter((sub): sub is string => sub !== null);
 
 /**
  * A change of map `name`, at `type` (`subs`, its keys): its own keys, or

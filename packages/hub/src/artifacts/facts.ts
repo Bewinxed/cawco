@@ -1,11 +1,6 @@
 import { type ChoiceEntry, unsentChoices } from "@cawco/core/choices";
 import { pinsToTell } from "@cawco/core/comments/deliver";
-import {
-  newAnswer,
-  type Pin,
-  readPins,
-  seenOf,
-} from "@cawco/core/comments/model";
+import { newAnswer, type Pin, seenOf } from "@cawco/core/comments/model";
 import type { DecisionCard } from "@cawco/core/decisions";
 import {
   type ArtifactAsked,
@@ -89,7 +84,15 @@ export interface FactsContext {
   programOf: (row: ArtifactRow) => string | undefined;
 }
 
-/** What an artifact's doc and row say for Needs you and the session lists, read once per change of either, and the caches that hold them. */
+/**
+ * What an artifact's doc and row say for Needs you and the session lists,
+ * read once per change of what they are read from, and the caches that
+ * hold them. A person's update to the doc (sync.ts) asks for them twice
+ * (lane.ts `artifactMoved`, service `answersMoved`): one that writes none
+ * of their parts reads the kept ones, and one that does reads its pins off
+ * the doc's kept pins (docs.ts `pins`), each read again only once touched,
+ * so neither walks the doc.
+ */
 export const createFacts = (ctx: FactsContext) => {
   const { choicesAsked, db, deps, docs, holder, programOf } = ctx;
 
@@ -97,9 +100,19 @@ export const createFacts = (ctx: FactsContext) => {
 
   /** Each artifact's facts as last read, with the row's marks they were read at. */
   const factsKept = new Map<string, { facts: ArtifactFacts; mark: string }>();
-  /** What a change of the doc (its seq) or of the row moves: past it, the facts are read again. */
-  const factsMark = (row: ArtifactRow): string =>
-    `${row.seq}:${row.revision}:${row.openedRevision}:${row.readSeq}:${row.deliveredSeq}:${row.updatedAt.getTime()}`;
+  /**
+   * What a change of the facts' sources moves: past it, they are read
+   * again. Of the doc, the parts they are read from (its facts stamp,
+   * docs.ts `factsStamp`): ink, a canvas's elements, files or requests move
+   * none. Of the row, every field but the two each doc update moves
+   * (`seq`, `updatedAt`, db/artifacts.ts `append`). A page's files move
+   * with a revision, whose stamp of the doc's meta follows them
+   * (service `stampMeta`).
+   */
+  const factsMark = (row: ArtifactRow): string => {
+    const { seq: _seq, updatedAt: _updatedAt, ...written } = row;
+    return `${docs.factsStamp(row.id)}:${JSON.stringify(written)}`;
+  };
   /** When the agent last answered on `pin`: its newest entry, or its resolve. */
   const answeredOn = (pin: Pin): string => {
     const entry = pin.thread.findLast((one) => one.by === "agent")?.at ?? "";
@@ -185,7 +198,7 @@ export const createFacts = (ctx: FactsContext) => {
     const meta = docMeta(doc);
     const state = stateOf(doc);
     const { sentAt } = metaOf(doc);
-    const pins = pinsToTell(readPins(doc).values()).sort(
+    const pins = pinsToTell(docs.pins(row.id).values()).sort(
       (a, b) => a.number - b.number
     );
     const questions = questionsFrom(row, doc, pins, {

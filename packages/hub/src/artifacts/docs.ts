@@ -10,18 +10,41 @@
  * delivery to the session read): a page's `state` keys, by whoever's client
  * wrote them; a canvas's element ids, by the `by` each element carries (a
  * screen writes the agent's converted elements too). It is sent to every
- * other joined client. Every {@link COMPACT_EVERY} updates the log is
- * replaced by one snapshot.
+ * other joined client.
+ *
+ * Whatever the hub reads of a doc on every update is read off what that
+ * update's transaction wrote (doc-parts.ts `mapKeysOf`): the `state` keys,
+ * the elements, the pins it touched (each pin read again alone,
+ * {@link ArtifactDocs.pins}), and whether it moved a part Needs you's facts
+ * are read from ({@link ArtifactDocs.factsStamp}). Nothing on an update's
+ * way reads the whole doc.
+ *
+ * The log is replaced by one snapshot, the doc's whole state, once it holds
+ * {@link COMPACT_AT} updates and the doc has stood quiet
+ * {@link COMPACT_QUIET_MS}: y-indexeddb's practice (9.0.12,
+ * src/y-indexeddb.js: `PREFERRED_TRIM_SIZE = 500`, and `storeState`, which
+ * writes `Y.encodeStateAsUpdate(doc)` and drops the updates before it, is
+ * debounced by `_storeTimeout = 1000` after each update past it); y-leveldb
+ * trims at the same size (0.2.0, `PREFERRED_TRIM_SIZE`, `flushDocument`).
+ * A snapshot costs the whole doc (95 ms for a 13 MB page, 177 ms for a
+ * 19,000-element canvas), so it runs on the hub's admission once the
+ * person's burst is over, never inside an update.
  */
 import type { CanvasAuthor } from "@cawco/core/canvas";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import {
   dropRepeatedFiles,
+  type EntryIndex,
+  entryPin,
   honourDeletions,
+  indexEntries,
+  type Pin,
+  readPinAt,
+  readPins,
   splitWholePins,
 } from "@cawco/core/comments/model";
 import { RESYNC_MS } from "@cawco/core/doc-link";
-import { mapsOf } from "@cawco/core/doc-maps";
+import { mapsOf, PIN_MAPS } from "@cawco/core/doc-maps";
 import { getMeta } from "@cawco/core/doc-meta";
 import { keepTuned, TUNED_MAP, type TunedRecord } from "@cawco/core/tuned";
 import {
@@ -37,7 +60,14 @@ import {
 } from "yjs";
 import type { ArtifactsDb } from "../db/artifacts";
 import type { HubLifetimeShape, HubTimer } from "../lifetime";
-import { addedTo, elementIdOf, elementsOf, MAPS } from "./doc-parts";
+import {
+  addedTo,
+  elementIdOf,
+  elementsOf,
+  FACT_MAPS,
+  MAPS,
+  mapKeysOf,
+} from "./doc-parts";
 import { createGate, type Gate } from "./gate";
 
 /**
@@ -66,8 +96,11 @@ function moveTunedOut(doc: Doc): boolean {
   return true;
 }
 
-/** Updates kept one by one before the log becomes one snapshot. The brief's number. */
-const COMPACT_EVERY = 100;
+/** Updates the log holds before it becomes one snapshot: y-indexeddb's and y-leveldb's `PREFERRED_TRIM_SIZE`. */
+const COMPACT_AT = 500;
+
+/** How long a doc stands quiet before its log becomes one snapshot: y-indexeddb's `_storeTimeout`. */
+const COMPACT_QUIET_MS = 1000;
 
 /** How long a doc no client holds stays loaded after its last use. Our choice. */
 const IDLE_MS = 5 * 60_000;
@@ -88,17 +121,79 @@ export interface ArtifactClient {
 
 interface Loaded {
   clients: Set<ArtifactClient>;
+  /** The log's snapshot, owed once the doc stands quiet ({@link COMPACT_QUIET_MS}). */
+  compacting?: HubTimer;
   doc: Doc;
   /** The check of a person's updates (gate.ts): made by the first one, let go with the last client or a refusal. */
   gate?: Gate;
   idle?: HubTimer;
+  /** How many updates its log holds. */
+  logged: number;
+  /** Its pins, each read again once a change touched it ({@link keepPins}). */
+  pins: PinsKept;
 }
+
+/** A doc's pins whole, kept as it takes each transaction: what {@link ArtifactDocs.pins} hands out. */
+interface PinsKept {
+  /** Every pin now: those a change touched since the last read are read again, alone. */
+  read: () => ReadonlyMap<string, Pin>;
+  /** A transaction wrote `keys` (doc-parts.ts `mapKeysOf`): the pins they name are read again at the next read. */
+  touched: (keys: ReadonlyMap<string, ReadonlySet<string>>) => void;
+}
+
+/**
+ * `doc`'s pins, read whole once (core `readPins`) at the first read, and
+ * after it each pin a transaction touched read again at its own entry keys
+ * (core `readPinAt`, `entries` the doc's {@link EntryIndex}): a reply on a
+ * pin of a thread-heavy page reads that pin's thread, not every pin's.
+ */
+const keepPins = (doc: Doc, entries: EntryIndex): PinsKept => {
+  let pins: Map<string, Pin> | undefined;
+  const touched = new Set<string>();
+  return {
+    touched: (keys) => {
+      if (!pins) {
+        return;
+      }
+      for (const name of PIN_MAPS) {
+        for (const key of keys.get(name) ?? []) {
+          touched.add(name === "entries" ? entryPin(key) : key);
+        }
+      }
+    },
+    read: () => {
+      if (!pins) {
+        pins = readPins(doc);
+        touched.clear();
+        return pins;
+      }
+      for (const id of touched) {
+        const pin = readPinAt(doc, id, entries.keysOf(id));
+        if (pin) {
+          pins.set(id, pin);
+        } else {
+          pins.delete(id);
+        }
+      }
+      touched.clear();
+      return pins;
+    },
+  };
+};
 
 export interface ArtifactDocs {
   /** The artifact's doc, loaded from its log when it is not in memory. */
   doc: (id: string) => Doc;
   /** The artifact was removed: every joined client's socket is ended and its doc let go. */
   drop: (id: string) => void;
+  /**
+   * When a change last moved a part of the artifact's doc Needs you's
+   * facts are read from (doc-parts.ts `FACT_MAPS`), as a stamp unique in
+   * this hub's life, 0 for a doc no change moved since the hub started:
+   * facts read at the same stamp stand (facts.ts `factsOf`). Read without
+   * loading the doc; an unloaded doc keeps the stamp it had.
+   */
+  factsStamp: (id: string) => number;
   /** Artifact `to`'s doc made a copy of `from`'s whole, as one update of `to`'s, by the hub: a held next version's start. */
   fork: (from: string, to: string) => void;
   /** Starts sending `client` every update another makes. */
@@ -111,6 +206,12 @@ export interface ArtifactDocs {
    * person's picks) stays beside it.
    */
   merge: (from: string, to: string, origin: ChangeOrigin) => void;
+  /**
+   * Every pin of the artifact's doc, whole (core `readPins`), as it stands
+   * now: each pin read again only once a change touched one of its parts.
+   * Read it at once; it moves with the doc.
+   */
+  pins: (id: string) => ReadonlyMap<string, Pin>;
   /**
    * Why `update`, from a person's client, may not be applied to the
    * artifact's doc; null when it may, the caller applying it next (sync.ts
@@ -193,6 +294,9 @@ export const createArtifactDocs = (deps: {
   updated?: (id: string, by: CanvasAuthor) => void;
 }): ArtifactDocs => {
   const loaded = new Map<string, Loaded>();
+  /** Each doc's facts stamp ({@link ArtifactDocs.factsStamp}), kept while it is unloaded. */
+  const stamps = new Map<string, number>();
+  let stamped = 0;
 
   /*
    * Every joined client hears the hub every RESYNC_MS, whatever its page's
@@ -220,10 +324,45 @@ export const createArtifactDocs = (deps: {
     entry.idle = deps.lifetime.after("doc unloaded when idle", IDLE_MS, () => {
       if (entry.clients.size === 0) {
         loaded.delete(id);
-        letGate(entry);
-        entry.doc.destroy();
+        unload(entry);
       }
     });
+  };
+
+  /** A doc let go: its gate, its owed snapshot and the doc. */
+  const unload = (entry: Loaded) => {
+    deps.lifetime.cancel(entry.idle);
+    deps.lifetime.cancel(entry.compacting);
+    letGate(entry);
+    entry.doc.destroy();
+  };
+
+  /**
+   * The log of `id` replaced by one snapshot once the doc stands quiet
+   * {@link COMPACT_QUIET_MS} (see the top): each update past
+   * {@link COMPACT_AT} pushes it back; it runs on the hub's admission,
+   * background, while the doc is still the one loaded.
+   */
+  const compactWhenQuiet = (id: string, entry: Loaded) => {
+    deps.lifetime.cancel(entry.compacting);
+    entry.compacting = deps.lifetime.after(
+      "doc log quiet",
+      COMPACT_QUIET_MS,
+      () => {
+        entry.compacting = undefined;
+        deps.lifetime.jobs.want({
+          key: `doc log ${id}`,
+          name: "doc log compacted",
+          priority: "background",
+          run: () => {
+            if (loaded.get(id) === entry && entry.logged >= COMPACT_AT) {
+              deps.db.compact(id, encodeStateAsUpdate(entry.doc));
+              entry.logged = 1;
+            }
+          },
+        });
+      }
+    );
   };
 
   /** The doc's gate let go: a refusal left it holding what the doc never took, or nobody writes. */
@@ -251,8 +390,9 @@ export const createArtifactDocs = (deps: {
         other.send(update);
       }
     }
-    if (deps.db.updateCount(id) >= COMPACT_EVERY) {
-      deps.db.compact(id, encodeStateAsUpdate(entry.doc));
+    entry.logged += 1;
+    if (entry.logged >= COMPACT_AT) {
+      compactWhenQuiet(id, entry);
     }
     if (changed.keys.length > 0) {
       deps.changed?.(id, changed.keys, by);
@@ -271,40 +411,49 @@ export const createArtifactDocs = (deps: {
       doc.getMap(name);
     }
     const elements = elementsOf(doc);
-    for (const update of deps.db.updates(id)) {
+    const updates = deps.db.updates(id);
+    for (const update of updates) {
       applyUpdate(doc, update, "load");
     }
-    const entry: Loaded = { doc, clients: new Set() };
+    // Made before honourDeletions' watch, so its entry observer hears a change first (core `honourDeletions`).
+    const entries = indexEntries(doc);
+    const entry: Loaded = {
+      doc,
+      clients: new Set(),
+      logged: updates.length,
+      pins: keepPins(doc, entries),
+    };
+    const roots = new Map<unknown, string>(
+      MAPS.map((name) => [doc.getMap(name), name])
+    );
     // What a transaction changed, read before its update is emitted.
     let changed: { keys: string[]; elements: Map<string, CanvasAuthor> } = {
       keys: [],
       elements: new Map(),
     };
-    // What a transaction changed, heard before its `afterTransaction`
-    // (Yjs calls observers first): the `state` keys, whether the tuned
-    // timing changed, and the elements it added or changed.
-    let stateKeys: string[] = [];
-    doc.getMap("state").observe((event) => {
-      stateKeys = [...event.keysChanged];
-    });
-    // A component's tuned timing reads as the one `tuned` entry of its state (core tuned.ts `tunedEntryOf`): a change to it is that key's.
-    let tunedChanged = false;
-    doc.getMap(TUNED_MAP).observe(() => {
-      tunedChanged = true;
-    });
+    // The elements it added or changed, heard before its `afterTransaction`
+    // (Yjs calls observers first).
     let touched = new Map<string, CanvasAuthor>();
     elements.observeDeep((events, transaction) => {
       for (const element of elementsIn(elements, events, transaction)) {
         touched.set(element.id, element.by);
       }
     });
-    doc.on("afterTransaction", () => {
+    doc.on("afterTransaction", (transaction: Transaction) => {
+      const keys = mapKeysOf(transaction, roots);
+      if (FACT_MAPS.some((name) => keys.has(name))) {
+        stamped += 1;
+        stamps.set(id, stamped);
+      }
+      entry.pins.touched(keys);
       changed = {
-        keys: [...stateKeys, ...(tunedChanged ? [TUNED_MAP] : [])],
+        // A component's tuned timing reads as the one `tuned` entry of its state (core tuned.ts `tunedEntryOf`): a change to it is that key's.
+        keys: [
+          ...(keys.get("state") ?? []),
+          ...(keys.has(TUNED_MAP) ? [TUNED_MAP] : []),
+        ],
         elements: touched,
       };
-      stateKeys = [];
-      tunedChanged = false;
       touched = new Map();
     });
     doc.on("update", (update: Uint8Array, origin: unknown) => {
@@ -345,7 +494,7 @@ export const createArtifactDocs = (deps: {
     // the hub before its tombstone (a page placing its pins on a stale load,
     // a delivery's stamp, an agent's reply) is undone as the tombstone lands,
     // and that undoing is kept and sent like any update.
-    honourDeletions(doc);
+    honourDeletions(doc, entries);
     loaded.set(id, entry);
     sleep(id, entry);
     return entry;
@@ -359,15 +508,15 @@ export const createArtifactDocs = (deps: {
         return;
       }
       loaded.delete(id);
-      deps.lifetime.cancel(entry.idle);
+      stamps.delete(id);
       const clients = [...entry.clients];
       entry.clients.clear();
       for (const client of clients) {
         client.close();
       }
-      letGate(entry);
-      entry.doc.destroy();
+      unload(entry);
     },
+    factsStamp: (id) => stamps.get(id) ?? 0,
     fork: (from, to) => {
       const whole = encodeStateAsUpdate(load(from).doc);
       const { doc } = load(to);
@@ -397,6 +546,7 @@ export const createArtifactDocs = (deps: {
         sleep(id, entry);
       }
     },
+    pins: (id) => load(id).pins.read(),
     problem: (id, update) => {
       const entry = load(id);
       entry.gate ??= createGate(entry.doc);

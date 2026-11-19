@@ -1058,22 +1058,97 @@ export function buryPin(doc: MapDoc, id: string, at: string): void {
     if (!gone.has(id)) {
       gone.set(id, at);
     }
-    letGo(doc, [id]);
+    letGo(doc, [id], entryKeysIn(doc));
   });
 }
 
-/** Every part of pins `ids` let go of `doc`: their heads, places, resolves, looks, stamps and entries. */
-const letGo = (doc: MapDoc, ids: readonly string[]): void => {
-  const buried = new Set(ids);
-  for (const name of PIN_MAPS) {
-    const map = doc.getMap(name);
-    for (const key of [...map.keys()]) {
-      if (buried.has(name === "entries" ? entryPin(key) : key)) {
-        map.delete(key);
+/**
+ * Each pin's entry keys in a doc (`entries`, `<pin>:<entry>`), kept as the
+ * map changes: one pin's thread is read or let go at its own keys, not by
+ * walking every pin's entries ({@link readPinAt}, {@link honourDeletions}).
+ */
+export interface EntryIndex {
+  /** Pin `pin`'s entry keys the doc holds now. */
+  keysOf: (pin: string) => ReadonlySet<string>;
+  /** Stops keeping it. */
+  stop: () => void;
+}
+
+const NO_KEYS: ReadonlySet<string> = new Set();
+
+/** `doc`'s {@link EntryIndex}: its entries read once, then each change at the keys it wrote. */
+export function indexEntries(doc: MapDoc): EntryIndex {
+  const entries = entriesOf(doc);
+  const byPin = new Map<string, Set<string>>();
+  const note = (key: string) => {
+    const pin = entryPin(key);
+    const keys = byPin.get(pin);
+    if (entries.has(key)) {
+      if (keys) {
+        keys.add(key);
+      } else {
+        byPin.set(pin, new Set([key]));
+      }
+    } else if (keys?.delete(key) && keys.size === 0) {
+      byPin.delete(pin);
+    }
+  };
+  for (const key of entries.keys()) {
+    note(key);
+  }
+  const watch = (change: MapChange) => {
+    for (const key of change.keysChanged) {
+      note(key);
+    }
+  };
+  entries.observe(watch);
+  return {
+    keysOf: (pin) => byPin.get(pin) ?? NO_KEYS,
+    stop: () => entries.unobserve(watch),
+  };
+}
+
+/** Pin `pin`'s entry keys in `doc`, read off every key: for a writer that holds no {@link EntryIndex}. */
+const entryKeysIn =
+  (doc: MapDoc) =>
+  (pin: string): string[] =>
+    [...entriesOf(doc).keys()].filter((key) => entryPin(key) === pin);
+
+/**
+ * Every part of pins `ids` let go of `doc`, at their own keys: their heads,
+ * places, resolves, looks and stamps by id, their entries at the keys
+ * `keysOf` names.
+ */
+const letGo = (
+  doc: MapDoc,
+  ids: Iterable<string>,
+  keysOf: (pin: string) => Iterable<string>
+): void => {
+  const entries = entriesOf(doc);
+  for (const id of ids) {
+    for (const name of PIN_MAPS) {
+      if (name === "entries") {
+        for (const key of [...keysOf(id)]) {
+          entries.delete(key);
+        }
+        continue;
+      }
+      const map = doc.getMap(name);
+      if (map.has(id)) {
+        map.delete(id);
       }
     }
   }
 };
+
+/** Whether `doc` holds any part of pin `id`. */
+const holdsPin = (
+  doc: MapDoc,
+  id: string,
+  keysOf: (pin: string) => ReadonlySet<string>
+): boolean =>
+  keysOf(id).size > 0 ||
+  PIN_MAPS.some((name) => name !== "entries" && doc.getMap(name).has(id));
 
 /** The origin of the writes {@link honourDeletions} makes. */
 const HONOUR_ORIGIN = "gone";
@@ -1082,45 +1157,43 @@ const HONOUR_ORIGIN = "gone";
  * From now on, `doc` lets go of every pin its tombstones name, whenever
  * a pin map or `gone` changes (a merge from the device, the hub or another
  * view), and of any it holds now: a write that stood a deleted pin up again
- * is undone in the next transaction. A pin map's change is read at the keys
- * it wrote alone, so a reply costs its own keys, not every pin's; a
- * tombstone written reads them all, once. Returns the watch's end.
+ * is undone in the next transaction. Each change is read at the keys it
+ * wrote and lets go of the pins those keys name, at their own keys
+ * (`entries`, its {@link EntryIndex}, made before this watch so it hears an
+ * entry first): a reply costs its own keys, a tombstone its own pin's.
+ * Returns the watch's end.
  */
-export function honourDeletions(doc: MapDoc): () => void {
+export function honourDeletions(doc: MapDoc, entries: EntryIndex): () => void {
   const gone = goneOf(doc);
-  const letGoAll = () =>
-    doc.transact(() => letGo(doc, [...gone.keys()]), HONOUR_ORIGIN);
-  const sweep = () => {
-    const held = PIN_MAPS.some((name) =>
-      [...doc.getMap(name).keys()].some((key) =>
-        gone.has(name === "entries" ? entryPin(key) : key)
-      )
+  const letGoOf = (ids: Iterable<string>) => {
+    const held = [...new Set(ids)].filter((id) =>
+      holdsPin(doc, id, entries.keysOf)
     );
-    if (held) {
-      letGoAll();
+    if (held.length > 0) {
+      doc.transact(() => letGo(doc, held, entries.keysOf), HONOUR_ORIGIN);
     }
   };
+  const buried = (change: MapChange) =>
+    letGoOf([...change.keysChanged].filter((id) => gone.has(id)));
   const watches = PIN_MAPS.map((name) => {
     const map = doc.getMap(name);
-    const watch = (change: MapChange) => {
-      const held = [...change.keysChanged].some(
-        (key) =>
-          map.has(key) && gone.has(name === "entries" ? entryPin(key) : key)
+    const watch = (change: MapChange) =>
+      letGoOf(
+        [...change.keysChanged].flatMap((key) => {
+          const pin = name === "entries" ? entryPin(key) : key;
+          return map.has(key) && gone.has(pin) ? [pin] : [];
+        })
       );
-      if (held) {
-        letGoAll();
-      }
-    };
     map.observe(watch);
     return () => map.unobserve(watch);
   });
-  gone.observe(sweep);
-  sweep();
+  gone.observe(buried);
+  letGoOf(gone.keys());
   return () => {
     for (const unwatch of watches) {
       unwatch();
     }
-    gone.unobserve(sweep);
+    gone.unobserve(buried);
   };
 }
 

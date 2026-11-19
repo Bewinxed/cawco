@@ -5924,8 +5924,9 @@ export const previewSettings = sqliteTable("preview_settings", {
 
 /**
  * An artifact's Yjs document as its update log: every update appended in
- * order; every `COMPACT_EVERY` (hub artifacts/docs.ts) updates the log is replaced by
- * one snapshot (`Y.encodeStateAsUpdate`).
+ * order; once it holds `COMPACT_AT` updates and its doc stands quiet (hub
+ * artifacts/docs.ts), the log is replaced by one snapshot
+ * (`Y.encodeStateAsUpdate`).
  */
 export const artifactUpdates = sqliteTable(
   "artifact_updates",
@@ -5943,10 +5944,11 @@ export const artifactUpdates = sqliteTable(
 
 /**
  * What a page's or a canvas's document carries of the hub's state, built by
- * the hub whenever the artifact's doc, its row or what its page shows moves
- * (artifact-documents.ts), and read by the preview server, which composes the
- * document from it and the page's own file without asking the hub
- * (preview-server/pages.ts): the doc's seed its overlay tag carries, a
+ * the hub whenever the artifact's row or what its page shows moves, and when
+ * the preview server finds it read from a doc that moved since
+ * (artifact-documents.ts, `seqs`), and read by the preview server, which
+ * composes the document from it and the page's own file
+ * (preview-server/serve.ts): the doc's seed its overlay tag carries, a
  * decision page's program hash, its media and its pictures' sizes, the
  * artifacts its pieces show (its origin serves those inside it), and the
  * key of its folder's files. `etag` names all of it: an open whose document
@@ -5971,6 +5973,13 @@ export const artifactDocuments = sqliteTable("artifact_documents", {
   shows: text("shows").notNull().default("[]"),
   /** A page's folder's key (core `folderKey`); null for a canvas. */
   folderKey: text("folder_key"),
+  /**
+   * The seq of each artifact's doc it was read from, as a JSON object by
+   * id: its own (the seed), and a design graph's a piece shows (its shapes).
+   * Once one of them moves, the preview server has it built again before it
+   * serves it; `{}` (one built before this column) is never current.
+   */
+  seqs: text("seqs").notNull().default("{}"),
   builtAt: timestamp("built_at").notNull(),
 });
 

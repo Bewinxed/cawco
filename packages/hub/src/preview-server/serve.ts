@@ -431,12 +431,16 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     return null;
   };
 
-  /** Artifact `id`'s document row: as last built, else built by the hub now. */
+  /**
+   * Artifact `id`'s document row: as last built while it stands (each doc it
+   * was read from at the seq it read), else built by the hub now, so an
+   * open after the person's edits serves the doc as it stands.
+   */
   const documentRow = async (
     id: string
   ): Promise<ArtifactDocumentRow | undefined> => {
     const kept = env.store.document(id);
-    if (kept) {
+    if (kept && env.store.stands(kept)) {
       return kept;
     }
     try {
@@ -451,6 +455,8 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
         null,
         `the hub didn't build ${id}'s document: ${causeOf(error)}`
       );
+      // The last one built, which its overlay's socket brings up to date once the hub answers.
+      return kept;
     }
   };
 

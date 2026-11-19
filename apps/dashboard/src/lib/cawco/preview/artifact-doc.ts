@@ -9,6 +9,7 @@ import {
   deletePin,
   goneOf,
   honourDeletions,
+  indexEntries,
   lostWrites,
   type Pin,
   type RefusedWrites,
@@ -375,7 +376,7 @@ export function joinArtifact(
 
   function join(into: Doc): WebsocketProvider {
     // A pin deleted anywhere stays deleted here (core `honourDeletions`).
-    honourDeletions(into);
+    honourDeletions(into, indexEntries(into));
     into.on("update", () => changed(viewOf(into)));
     const joined = new WebsocketProvider(url, artifactId, into, {
       disableBc: true,

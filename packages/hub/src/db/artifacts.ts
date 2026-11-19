@@ -4,7 +4,6 @@ import { isPlace } from "@cawco/core/workspace-policy";
 import {
   and,
   asc,
-  count,
   desc,
   eq,
   gt,
@@ -327,8 +326,6 @@ export interface ArtifactsDb {
     id: string,
     patch: ArtifactPatch
   ) => ArtifactRow | undefined;
-  /** How many updates the log holds now. */
-  readonly updateCount: (id: string) => number;
   /** An artifact's log, in order: what its document is loaded from. */
   readonly updates: (id: string) => Uint8Array[];
   /**
@@ -769,12 +766,6 @@ export const artifactsDb = (
       .orderBy(asc(artifactUpdates.seq))
       .all()
       .map((row) => row.update),
-  updateCount: (id) =>
-    db
-      .select({ count: count() })
-      .from(artifactUpdates)
-      .where(eq(artifactUpdates.artifactId, id))
-      .get()?.count ?? 0,
 });
 
 export interface ArtifactListenersDb {

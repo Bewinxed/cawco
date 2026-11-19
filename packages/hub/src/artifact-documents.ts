@@ -1,17 +1,21 @@
 /**
- * Each page's and canvas's document as the hub's state makes it, built as
- * that state moves and stored (db/artifact-documents.ts), so the preview
- * server composes a page's document from the row and the page's own file
- * without asking the hub (preview-server/pages.ts). Nothing here runs when a
- * page opens: what an open reads was written when it last moved.
+ * Each page's and canvas's document as the hub's state makes it, built and
+ * stored (db/artifact-documents.ts), so the preview server composes a
+ * page's document from the row and the page's own file
+ * (preview-server/serve.ts): an open of one that stands is one keyed read.
  *
- * A document is built again when its artifact's doc takes an update, when
- * its row is written, and when an artifact one of its pages' pieces shows
- * is written (a Preview's revision, its origin): each such change marks its
- * ids, and the marks are built together a moment later ({@link GATHER_MS}),
- * one keyed build each. An artifact with no row yet (one opened for the
- * first time since this table came) is built when the preview server asks
- * for it ({@link ArtifactDocuments.build}).
+ * A document is built again when its row is written, and when an artifact
+ * one of its pages' pieces shows is written (a Preview's revision, its
+ * origin): each such change marks its ids, and the marks are built together
+ * a moment later ({@link GATHER_MS}), one keyed build each. An update to a
+ * doc builds nothing: the seed is the whole doc, so building it on each
+ * update made every person's edit cost the doc (175 to 260 ms a burst on a
+ * 13 MB page, 140 to 160 ms on a 19,000-element canvas, 2026-11-19). The
+ * document says the seq of each doc it read (`seqs`: its own, and each
+ * design graph whose shapes a piece carries); the preview server, finding
+ * one of them moved, or no document, has it built now
+ * ({@link ArtifactDocuments.build}), so an open serves the doc as it stands
+ * and its overlay's socket carries it on from there.
  */
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
@@ -53,7 +57,7 @@ export interface ArtifactDocumentsDeps {
     pictures: Record<string, PictureSize>;
   } | null;
   row: (id: string) => ArtifactRow | undefined;
-  /** The doc's seed (artifacts/docs.ts `seed`). */
+  /** The doc's seed (artifacts/docs.ts `seed`), read whole: only when the doc moved since the document was built. */
   seed: (id: string) => { maps: string; state: string };
 }
 
@@ -109,13 +113,49 @@ export const createArtifactDocuments = (deps: ArtifactDocumentsDeps) => {
     }
   };
 
-  /** Artifact `id`'s document built now and kept; nothing for an artifact whose document carries none of the hub's state. */
+  /**
+   * The seq of each doc a document of `id` reads now: its own, and each
+   * design graph's whose shapes one of its pieces carries (artifacts
+   * service `programServed`). Read after the reads it names, so a load's
+   * own writes are counted.
+   */
+  const seqsOf = (
+    id: string,
+    media: Record<string, ServedMedia | null> | undefined
+  ): Record<string, number> => {
+    const seqs: Record<string, number> = {};
+    for (const piece of Object.values(media ?? {})) {
+      if (piece?.shapes) {
+        seqs[piece.id] = deps.row(piece.id)?.seq ?? 0;
+      }
+    }
+    seqs[id] = deps.row(id)?.seq ?? 0;
+    return seqs;
+  };
+
+  /** A document's etag: its fields but the seed, which its own seq in `seqs` names. */
+  const etagOf = (fields: object): string =>
+    createHash("sha256")
+      .update(JSON.stringify(fields))
+      .digest("base64url")
+      .slice(0, 22);
+
+  /**
+   * Artifact `id`'s document built now and kept; nothing for an artifact
+   * whose document carries none of the hub's state, and no seed read when
+   * the one kept was read at the doc's seq now.
+   */
   const buildOne = async (id: string): Promise<void> => {
+    if (!documented(deps.row(id))) {
+      return;
+    }
+    const folder =
+      deps.row(id)?.kind === "page" ? await pageFolderKey(id) : null;
+    // Read at once from here: what it says and the seqs it read it at.
     const row = deps.row(id);
     if (!documented(row)) {
       return;
     }
-    const seed = deps.seed(id);
     const program = row.kind === "page" ? deps.program(id) : null;
     const media = program ? storedMedia(id, program.media) : null;
     const shows = program
@@ -123,33 +163,32 @@ export const createArtifactDocuments = (deps: ArtifactDocumentsDeps) => {
           held ? [shown] : []
         )
       : [];
-    const folder = row.kind === "page" ? await pageFolderKey(id) : null;
     const fields = {
-      seedState: seed.state,
-      seedMaps: seed.maps,
       programHash: program?.hash ?? null,
       media: media && JSON.stringify(media),
       pictures: program && JSON.stringify(program.pictures),
       shows: JSON.stringify(shows),
       folderKey: folder,
+      seqs: JSON.stringify(seqsOf(id, program?.media)),
     };
-    const etag = createHash("sha256")
-      .update(JSON.stringify(fields))
-      .digest("base64url")
-      .slice(0, 22);
-    if (deps.documents.get(id)?.etag === etag) {
+    if (deps.documents.get(id)?.etag === etagOf(fields)) {
       return;
     }
+    const seed = deps.seed(id);
+    // A first load writes its own changes (docs.ts `load`): the seed holds them.
+    const read = {
+      ...fields,
+      seqs: JSON.stringify(seqsOf(id, program?.media)),
+    };
     const kept: ArtifactDocumentRow = {
       artifactId: id,
-      etag,
-      ...fields,
+      etag: etagOf(read),
+      seedState: seed.state,
+      seedMaps: seed.maps,
+      ...read,
       builtAt: new Date(),
     };
-    // Its row may have gone while its folder was read: the foreign key refuses it then.
-    if (deps.row(id)) {
-      deps.documents.keep(kept);
-    }
+    deps.documents.keep(kept);
   };
 
   /** Every mark built, each once, then told. */
@@ -171,8 +210,8 @@ export const createArtifactDocuments = (deps: ArtifactDocumentsDeps) => {
 
   return {
     /**
-     * Artifacts `ids` moved (their doc, their row): each one's document is
-     * built again, and each page's that shows one of them.
+     * Artifact rows `ids` were written: each one's document is built
+     * again, and each page's that shows one of them.
      */
     moved(ids: readonly string[]): void {
       for (const id of ids) {
@@ -187,7 +226,7 @@ export const createArtifactDocuments = (deps: ArtifactDocumentsDeps) => {
       }
     },
 
-    /** Artifact `id`'s document built now, after any build running: what the preview server asks for when it finds none. */
+    /** Artifact `id`'s document built now, after any build running: what the preview server asks for when it finds none, or one read from a doc that moved since. */
     async build(id: string): Promise<ArtifactDocumentRow | undefined> {
       const run = building.then(() => buildOne(id));
       building = run.catch(() => undefined);
