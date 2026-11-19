@@ -1466,6 +1466,12 @@ const DELETES: readonly Deletion[] = [
     rows: "by_hand=0 AND to_account_id IS NOT NULL AND carry_on IS NULL AND json_extract(move,'$.because.kind') IN ('forecast','cold')",
     why: "stored automatic cold or forecast moves with a target; the one decision decides at carry time and stores none",
   },
+  {
+    migration: "0455_memory_lessons",
+    table: "fact_uses",
+    rows: "1=1",
+    why: "a brief's use of a lesson is kept by its lesson id now; the uses kept by a fact line's hash name no lesson",
+  },
 ];
 
 /** How many rows each deletion that runs on the database at `path` takes, by table. */
