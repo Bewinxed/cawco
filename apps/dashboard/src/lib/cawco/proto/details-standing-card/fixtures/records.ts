@@ -574,7 +574,7 @@ export const FIND_AWAY: FindPlan = { ...FIND_EMPTY, away: true, tell: null };
 
 export const FIND_MERGE: FindPlan = {
   ...FIND_EMPTY,
-  merge: { other: "Atlas site (old)", keep: null },
+  merge: { other: "Atlas legacy", keep: null },
   tell: "other-repository",
 };
 
