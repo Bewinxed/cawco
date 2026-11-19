@@ -83,7 +83,6 @@ as-cast	{ jsonrpc?: unknown; id?: unknown; result?: unknown; } | null	packages/p
 as-cast	{ lightSelector?: string; selector?: string; }	packages/design-tokens/src/design-tokens.ts	1
 as-cast	{ method: string; path: string }[]	packages/hub/scripts/openapi.ts	1
 as-cast	{ model?: string }	packages/jsonl-parser/src/text.ts	1
-as-cast	{ n: number }	packages/jsonl-parser/src/fts5.ts	2
 as-cast	{ names: number; classes: number; bare: number }	scripts/codemods/lib/token-merge.ts	1
 as-cast	{ nodes?: Node[]; type?: string }	apps/dashboard/scripts/mark-line-check.ts	1
 as-cast	{ origin?: unknown; at?: unknown }	site/src/oauth/handoff.ts	1

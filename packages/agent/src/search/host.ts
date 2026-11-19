@@ -212,6 +212,14 @@ const serve = async (): Promise<void> => {
       watermarks.set(row.key, Number(row.value));
     }
     ops = writeOps(index, watermarks);
+    // An index made before its prefix index builds it beside the old one,
+    // between this writer's syncs (fts5.ts `rebuildFts`); one stopped here
+    // goes on the next time a writer opens the index.
+    index.rebuildFts().catch((error: unknown) => {
+      console.warn(
+        `[search] transcript index: its prefix index build stopped (${failure(error).message}); it goes on when the index next opens`
+      );
+    });
   } else {
     index = new TranscriptIndex(path, { readonly: true });
     ops = readOps(index);

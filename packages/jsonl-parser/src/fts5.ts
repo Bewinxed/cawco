@@ -27,6 +27,74 @@ import {
 } from "./text.ts";
 
 /**
+ * The prefix indexes the FTS table keeps (https://www.sqlite.org/fts5.html#prefix_indexes):
+ * "querying for a prefix token can be slow, as it requires a range scan",
+ * and FTS5 merges every term the range holds across the whole index before
+ * a rowid range narrows it, so find in one conversation paid for the whole
+ * machine. A prefix index answers a prefix of exactly its length from one
+ * doclist, which FTS5 seeks to a conversation's rowids like any word's.
+ *
+ * Three letters only, measured on obelisk's 2,041,537 records (2026-11-19),
+ * each table built whole: its FTS data 644 MB with none, 1,096 MB with
+ * '3', 1,533 MB with '2 3', 1,917 MB with '2 3 4'. The phrase matched in a
+ * 41,790-record conversation, median ms with none, '3', '2 3', '2 3 4':
+ * "the"* 98, 25, 25, 28; "con"* 52, 17, 18, 17; "th"* 160, 104, 28, 37;
+ * "file"* 24, 23, 23, 15; "erro"* 13, 13, 13, 10. A word shorter than
+ * {@link PREFIX_MIN} is never matched as a prefix, so a two-letter index
+ * answers nothing a search asks; a four-letter one ('3 4', 1,481 MB) saves
+ * under 10 ms where four letters already cost under 25, for 35% more data.
+ */
+const FTS_PREFIX = "3";
+
+/** The FTS table `name`, over `docs`, with the index's tokenizer and {@link FTS_PREFIX}. */
+const ftsTable = (name: string): string => `CREATE VIRTUAL TABLE IF NOT EXISTS ${name} USING fts5(
+  text, thinking, tools, output,
+  content='docs', content_rowid='id',
+  tokenize='porter unicode61', prefix='${FTS_PREFIX}'
+);`;
+
+/** `docs_fts` kept to `docs`: each record's words in as it is inserted, out as it is deleted. */
+const FTS_TRIGGERS = `
+CREATE TRIGGER IF NOT EXISTS docs_ai AFTER INSERT ON docs BEGIN
+  INSERT INTO docs_fts(rowid, text, thinking, tools, output) VALUES (new.id, new.text, new.thinking, new.tools, new.output);
+END;
+CREATE TRIGGER IF NOT EXISTS docs_ad AFTER DELETE ON docs BEGIN
+  INSERT INTO docs_fts(docs_fts, rowid, text, thinking, tools, output) VALUES ('delete', old.id, old.text, old.thinking, old.tools, old.output);
+END;
+`;
+
+/**
+ * The `meta` key of the {@link FTS_PREFIX} `docs_fts` was made with: an
+ * index whose value differs (an older one has none) builds its next table
+ * ({@link TranscriptIndex.rebuildFts}), once.
+ */
+const FTS_LAYOUT = "fts_prefix";
+
+/** The `meta` key of the {@link FTS_PREFIX} `docs_fts_next` is being built with. */
+const FTS_NEXT_LAYOUT = "fts_next_prefix";
+
+/**
+ * The `meta` key of how far `docs_fts_next` is built: it holds every record
+ * of `docs` whose rowid is at most this, and no other. The build takes the
+ * next rowids above it; a record inserted or deleted at or below it
+ * (a rowid freed by a forget and used again, a reattribution's delete) is
+ * kept there by {@link FTS_NEXT_TRIGGERS}.
+ */
+const FTS_NEXT_THROUGH = "fts_next_through";
+
+/** `docs_fts_next` kept to the records of `docs` it already holds ({@link FTS_NEXT_THROUGH}). */
+const FTS_NEXT_TRIGGERS = `
+CREATE TRIGGER IF NOT EXISTS docs_next_ai AFTER INSERT ON docs
+WHEN new.id <= (SELECT CAST(value AS INTEGER) FROM meta WHERE key = '${FTS_NEXT_THROUGH}') BEGIN
+  INSERT INTO docs_fts_next(rowid, text, thinking, tools, output) VALUES (new.id, new.text, new.thinking, new.tools, new.output);
+END;
+CREATE TRIGGER IF NOT EXISTS docs_next_ad AFTER DELETE ON docs
+WHEN old.id <= (SELECT CAST(value AS INTEGER) FROM meta WHERE key = '${FTS_NEXT_THROUGH}') BEGIN
+  INSERT INTO docs_fts_next(docs_fts_next, rowid, text, thinking, tools, output) VALUES ('delete', old.id, old.text, old.thinking, old.tools, old.output);
+END;
+`;
+
+/**
  * A document is one record, deduplicated on its time, `doc_id` and harness
  * (`docs_key`): the same record, read again or copied into a resumed or
  * forked session, carries the same uuid and the same timestamp (Claude Code
@@ -92,17 +160,8 @@ CREATE TABLE IF NOT EXISTS docs (
 CREATE UNIQUE INDEX IF NOT EXISTS docs_key ON docs(coalesce(ts, ''), doc_id, harness);
 CREATE INDEX IF NOT EXISTS docs_author_ts ON docs(author, ts);
 CREATE INDEX IF NOT EXISTS docs_conversation ON docs(session, sidechain, ts, id, author);
-CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
-  text, thinking, tools, output,
-  content='docs', content_rowid='id',
-  tokenize='porter unicode61'
-);
-CREATE TRIGGER IF NOT EXISTS docs_ai AFTER INSERT ON docs BEGIN
-  INSERT INTO docs_fts(rowid, text, thinking, tools, output) VALUES (new.id, new.text, new.thinking, new.tools, new.output);
-END;
-CREATE TRIGGER IF NOT EXISTS docs_ad AFTER DELETE ON docs BEGIN
-  INSERT INTO docs_fts(docs_fts, rowid, text, thinking, tools, output) VALUES ('delete', old.id, old.text, old.thinking, old.tools, old.output);
-END;
+${ftsTable("docs_fts")}
+${FTS_TRIGGERS}
 CREATE TABLE IF NOT EXISTS files (
   path TEXT PRIMARY KEY,
   size INTEGER NOT NULL,
@@ -715,6 +774,38 @@ const INSERT_CHUNK = 500;
  */
 const TRANSACTION_MS = 150;
 
+/**
+ * How long one step of the prefix build ({@link TranscriptIndex.rebuildFts})
+ * aims to take, ms: its next step takes as many records as this one took
+ * this long for. As long as a sync's transaction ({@link TRANSACTION_MS}),
+ * so a sync waits on a step no longer than on its own commits.
+ */
+const FTS_BUILD_MS = TRANSACTION_MS;
+
+/**
+ * The bytes the first step of the prefix build takes, of records' words or
+ * of the old table's pages. Each next step's are what this one took at its
+ * pace for {@link FTS_BUILD_MS}, at most twice this one's and at least
+ * {@link FTS_BUILD_BYTES_MIN}. In bytes, not records, since a record's
+ * words run from none to a tool's whole answer (obelisk's 2,041,537
+ * records hold 1.39 GB, 48 to 146 MB a hundred thousand of them), and a
+ * step's cost is its bytes'. Our own call.
+ */
+const FTS_BUILD_BYTES = 1024 * 1024;
+
+/** The fewest bytes one step of the prefix build takes. Our own call. */
+const FTS_BUILD_BYTES_MIN = 64 * 1024;
+
+/**
+ * The most rows one step of the prefix build looks at for its bytes, so
+ * finding where a step ends never reads far ahead. Our own call.
+ */
+const FTS_BUILD_ROWS_MAX = 20_000;
+
+/** A record's words, in bytes, read off their lengths without their content. */
+const DOC_BYTES =
+  "octet_length(text) + coalesce(octet_length(thinking), 0) + coalesce(octet_length(tools), 0) + coalesce(octet_length(output), 0)";
+
 export interface SyncResult {
   filesScanned: number;
   filesFull: number;
@@ -850,6 +941,8 @@ export class TranscriptIndex {
   readonly #strings = new Map<string, number>();
   /** The places of the last few finds, by conversation and phrase ({@link TranscriptIndex.#placeList}). */
   readonly #placeLists = new Map<string, PlaceList>();
+  /** {@link TranscriptIndex.close} was called: a build in the background stops. */
+  #closed = false;
 
   constructor(path: string, options: IndexOpenOptions = {}) {
     if (options.readonly) {
@@ -862,22 +955,279 @@ export class TranscriptIndex {
     if (this.#olderLayout()) {
       this.#rebuild(path);
     }
+    const made =
+      this.db.query("SELECT 1 FROM sqlite_master WHERE name = 'docs_fts'").get() === null;
     this.db.exec(SCHEMA);
     this.db.exec(MARKING);
+    if (made) {
+      this.#putMeta(FTS_LAYOUT, FTS_PREFIX);
+    }
+    this.#configure("docs_fts");
+    if (this.meta(FTS_LAYOUT) !== FTS_PREFIX) {
+      this.#beginNextFts();
+    }
+    this.#reloadStrings();
+    this.#reattribute();
+  }
+
+  /** The FTS table `table` merged as the index merges ({@link FTS_AUTOMERGE}, {@link FTS_USERMERGE}, {@link FTS_CRISISMERGE}). */
+  #configure(table: "docs_fts" | "docs_fts_next"): void {
     for (const [key, value] of [
       ["automerge", FTS_AUTOMERGE],
       ["usermerge", FTS_USERMERGE],
       ["crisismerge", FTS_CRISISMERGE],
     ] as const) {
-      const held = this.db.query("SELECT v FROM docs_fts_config WHERE k = ?").get(key) as {
+      const held = this.db.query(`SELECT v FROM ${table}_config WHERE k = ?`).get(key) as {
         v: number;
       } | null;
       if (held?.v !== value) {
-        this.db.query("INSERT INTO docs_fts(docs_fts, rank) VALUES (?, ?)").run(key, value);
+        this.db.query(`INSERT INTO ${table}(${table}, rank) VALUES (?, ?)`).run(key, value);
       }
     }
-    this.#reloadStrings();
-    this.#reattribute();
+  }
+
+  /** A `meta` value written in the caller's transaction, or its own. */
+  #putMeta(key: string, value: string): void {
+    this.db
+      .query(
+        "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      )
+      .run(key, value);
+  }
+
+  /**
+   * `docs_fts_next` made beside `docs_fts`, with {@link FTS_PREFIX}, empty
+   * and its triggers in place, or kept as an earlier open left it, so
+   * {@link TranscriptIndex.rebuildFts} goes on from where it stopped. FTS5
+   * takes no new option on a table that exists, so an index made with
+   * other prefix indexes builds a new table whole. One begun with another
+   * {@link FTS_PREFIX} than this is dropped and begun again.
+   */
+  #beginNextFts(): void {
+    const begin = this.db.transaction(() => {
+      const building = this.meta(FTS_NEXT_LAYOUT);
+      if (building !== null && building !== FTS_PREFIX) {
+        this.db.exec(`
+          DROP TRIGGER IF EXISTS docs_next_ai;
+          DROP TRIGGER IF EXISTS docs_next_ad;
+          DROP TABLE IF EXISTS docs_fts_next;
+          DELETE FROM meta WHERE key IN ('${FTS_NEXT_LAYOUT}', '${FTS_NEXT_THROUGH}');
+        `);
+      }
+      this.db.exec(ftsTable("docs_fts_next"));
+      this.#putMeta(FTS_NEXT_LAYOUT, FTS_PREFIX);
+      this.db
+        .query("INSERT OR IGNORE INTO meta (key, value) VALUES (?, '0')")
+        .run(FTS_NEXT_THROUGH);
+      this.db.exec(FTS_NEXT_TRIGGERS);
+    });
+    begin();
+    this.#configure("docs_fts_next");
+  }
+
+  /**
+   * `docs_fts` built again with {@link FTS_PREFIX} when it was made without
+   * it, in the background of the index's one writer, and swapped in: answers
+   * whether it was. Searches read `docs_fts` throughout, so they answer from
+   * the old table until the swap and from the new one after it.
+   *
+   * The new table is `docs_fts_next`, filled in rowid order, each step its
+   * own transaction of as many bytes of records as take about
+   * {@link FTS_BUILD_MS} ({@link FTS_BUILD_BYTES}),
+   * its segments merged a step at a time between ({@link MERGE_PAGES}), with
+   * a pause as long as the step after each, so a sync's inserts and commits
+   * take their turns and the writer builds at most half its time. A step
+   * never begins inside a sync's open transaction. Once it holds every
+   * record, it is merged into one segment, a step at a time ("executing the
+   * 'merge' command with a negative parameter until the before and after
+   * difference in the return value of sqlite3_total_changes() is less than
+   * two optimizes the FTS index in the same way as the FTS5 optimize
+   * command … only the first call to 'merge' should specify a negative
+   * parameter", https://www.sqlite.org/fts5.html#the_merge_command). Left as
+   * the fill leaves it, every level held up to {@link FTS_USERMERGE} less one
+   * segment, and the syncs after the swap merged the whole table again: on
+   * obelisk's 2,041,537 records, 2.5 GB written by one sync, 2.9 GB over
+   * 200, where the old table wrote 105 MB.
+   *
+   * Where it has come is `meta`'s {@link FTS_NEXT_THROUGH}, written with each
+   * step, so a writer stopped mid-build goes on from its last step when it
+   * opens again. The step that takes the newest records once the table is
+   * merged swaps the tables in the same transaction: the old table and its
+   * triggers dropped, the new one renamed `docs_fts` and given them, and
+   * {@link FTS_LAYOUT} written, so it runs once per index. The drop is the
+   * one statement no step can bound, so the old table is read through in
+   * steps just before it ({@link TranscriptIndex.#readOldFts}).
+   */
+  async rebuildFts(): Promise<boolean> {
+    if (this.meta(FTS_LAYOUT) === FTS_PREFIX) {
+      return false;
+    }
+    const started = performance.now();
+    const from = Number(this.meta(FTS_NEXT_THROUGH) ?? 0);
+    console.info(
+      `[search] transcript index: building its prefix index (prefix='${FTS_PREFIX}')${from > 0 ? `, going on from record ${from}` : ""}`,
+    );
+    /** The bytes the next step takes, of records' words and of the old table's pages. */
+    const bytes = { fill: FTS_BUILD_BYTES, read: FTS_BUILD_BYTES };
+    /** The next step's bytes, from how long this one took for `taken` of them. */
+    const pace = (taken: number, at: number) =>
+      Math.min(
+        2 * taken,
+        Math.max(
+          FTS_BUILD_BYTES_MIN,
+          Math.round((taken * FTS_BUILD_MS) / Math.max(1, performance.now() - at)),
+        ),
+      );
+    let merging = false;
+    let merged = false;
+    /** The old table's pages read so far, by table, the last rowid read; null once all are. */
+    let read: { at: number; table: number } | null = { at: Number.MIN_SAFE_INTEGER, table: 0 };
+    let pause = 0;
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, pause));
+      if (this.#closed) {
+        return false;
+      }
+      if (this.db.inTransaction) {
+        // A sync's commit is between its inserts: the step waits for it.
+        pause = TRANSACTION_MS;
+        continue;
+      }
+      const at = performance.now();
+      if (merging) {
+        merging = section("search index: prefix build merge", () =>
+          this.#mergeStep("docs_fts_next"),
+        );
+      } else if (merged && read !== null) {
+        const from: { at: number; table: number } = read;
+        read = section("search index: prefix build read", () => this.#readOldFts(from, bytes.read));
+        bytes.read = pace(bytes.read, at);
+      } else {
+        const step = section("search index: prefix build step", () =>
+          this.#buildStep(bytes.fill, merged),
+        );
+        if (step === "swapped") {
+          console.info(
+            `[search] transcript index: prefix index built and in use, ${Math.round((performance.now() - started) / 1000)} s`,
+          );
+          return true;
+        }
+        if (step === "whole" && !merged) {
+          section("search index: prefix build merge", () =>
+            this.#mergeStep("docs_fts_next", -MERGE_PAGES),
+          );
+          merged = true;
+        }
+        merging = true;
+        bytes.fill = pace(bytes.fill, at);
+      }
+      pause = performance.now() - at;
+    }
+  }
+
+  /**
+   * The rows of `table` above `from` one step takes: from the first, each
+   * whose bytes before it (`weight`, a row's size read off its length, never
+   * its content) are under `bytes`, of the next {@link FTS_BUILD_ROWS_MAX};
+   * the highest of their rowids, and whether rows are left above it. Null
+   * when no row is above `from`.
+   */
+  #span(
+    table: "docs" | "docs_fts_data" | "docs_fts_docsize",
+    weight: string,
+    from: number,
+    bytes: number,
+  ): { high: number; more: boolean } | null {
+    const high =
+      this.db
+        .query<{ high: number | null }, [number, number, number]>(
+          `SELECT max(id) AS high FROM (
+             SELECT id, w, sum(w) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING) AS run
+             FROM (SELECT id, ${weight} AS w FROM ${table} WHERE id > ? ORDER BY id LIMIT ?)
+           ) WHERE run - w < ?`,
+        )
+        .get(from, FTS_BUILD_ROWS_MAX, bytes)?.high ?? null;
+    if (high === null) {
+      return null;
+    }
+    const more = this.db.query(`SELECT 1 FROM ${table} WHERE id > ? LIMIT 1`).get(high) !== null;
+    return { high, more };
+  }
+
+  /**
+   * The old table's next `bytes` of rows read, from `from`, so the swap's
+   * `DROP TABLE` finds its pages in the page cache: SQLite reads every page
+   * it frees, overflow pages too, and a drop of obelisk's 643 MB held the
+   * writer 6.4 s read from disk and 0.25 s read from memory (2026-11-19).
+   * Only its pages of terms and of sizes are large; its own shadow tables
+   * are read, as an FTS5 table's may be (only writing them is refused).
+   * Answers where the next read starts, or null once every row is read.
+   */
+  #readOldFts(
+    from: { at: number; table: number },
+    bytes: number,
+  ): { at: number; table: number } | null {
+    const tables = [
+      ["docs_fts_data", "block"],
+      ["docs_fts_docsize", "sz"],
+    ] as const;
+    const read = tables[from.table];
+    if (!read) {
+      return null;
+    }
+    const [table, column] = read;
+    const span = this.#span(table, `octet_length(${column})`, from.at, bytes);
+    if (span) {
+      // `count` of the column's end loads each row whole; its length alone would not.
+      this.db
+        .query(`SELECT count(substr(${column}, -1)) FROM ${table} WHERE id > ? AND id <= ?`)
+        .get(from.at, span.high);
+    }
+    return span?.more
+      ? { at: span.high, table: from.table }
+      : { at: Number.MIN_SAFE_INTEGER, table: from.table + 1 };
+  }
+
+  /**
+   * The next `bytes` of records above {@link FTS_NEXT_THROUGH} put in
+   * `docs_fts_next`, in one transaction. Answers `more` while records are
+   * left above them, else `whole`; or, when they were the last and `swap`
+   * says the table is merged, `swapped`: the tables swapped in the same
+   * transaction.
+   */
+  #buildStep(bytes: number, swap: boolean): "more" | "swapped" | "whole" {
+    const step = this.db.transaction(() => {
+      const through = Number(this.meta(FTS_NEXT_THROUGH) ?? 0);
+      const span = this.#span("docs", DOC_BYTES, through, bytes);
+      if (span) {
+        this.db
+          .query(
+            `INSERT INTO docs_fts_next(rowid, text, thinking, tools, output)
+             SELECT id, text, thinking, tools, output FROM docs WHERE id > ? AND id <= ?`,
+          )
+          .run(through, span.high);
+        this.#putMeta(FTS_NEXT_THROUGH, String(span.high));
+      }
+      if (span?.more) {
+        return "more";
+      }
+      if (!swap) {
+        return "whole";
+      }
+      this.db.exec(`
+        DROP TRIGGER docs_next_ai;
+        DROP TRIGGER docs_next_ad;
+        DROP TRIGGER docs_ai;
+        DROP TRIGGER docs_ad;
+        DROP TABLE docs_fts;
+        ALTER TABLE docs_fts_next RENAME TO docs_fts;
+        ${FTS_TRIGGERS}
+        DELETE FROM meta WHERE key IN ('${FTS_NEXT_LAYOUT}', '${FTS_NEXT_THROUGH}');
+      `);
+      this.#putMeta(FTS_LAYOUT, FTS_PREFIX);
+      return "swapped";
+    });
+    return step();
   }
 
   /**
@@ -921,11 +1271,7 @@ export class TranscriptIndex {
           }
         }
       }
-      this.db
-        .query(
-          "INSERT INTO meta (key, value) VALUES ('author_rules', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        )
-        .run(String(AUTHOR_RULES));
+      this.#putMeta("author_rules", String(AUTHOR_RULES));
       return { copies, moved };
     });
     try {
@@ -1051,6 +1397,7 @@ export class TranscriptIndex {
   }
 
   close(): void {
+    this.#closed = true;
     this.db.close();
   }
 
@@ -1198,16 +1545,23 @@ export class TranscriptIndex {
    * (https://www.sqlite.org/fts5.html#the_merge_command).
    */
   async #merge(): Promise<void> {
-    const changes = this.db.query("SELECT total_changes() AS n");
-    const merge = this.db.query("INSERT INTO docs_fts(docs_fts, rank) VALUES ('merge', ?)");
     for (;;) {
       await new Promise((resolve) => setImmediate(resolve));
-      const before = (changes.get() as { n: number }).n;
-      section("search index: merge step", () => merge.run(MERGE_PAGES));
-      if ((changes.get() as { n: number }).n - before < 2) {
+      if (!section("search index: merge step", () => this.#mergeStep("docs_fts"))) {
         return;
       }
     }
+  }
+
+  /**
+   * One merge step of `table`'s segments, `pages` of them ({@link MERGE_PAGES};
+   * negative, every segment merged into one); answers whether it merged any.
+   */
+  #mergeStep(table: "docs_fts" | "docs_fts_next", pages = MERGE_PAGES): boolean {
+    const changes = this.db.query<{ n: number }, []>("SELECT total_changes() AS n");
+    const before = changes.get()?.n ?? 0;
+    this.db.query(`INSERT INTO ${table}(${table}, rank) VALUES ('merge', ?)`).run(pages);
+    return (changes.get()?.n ?? 0) - before >= 2;
   }
 
   /**
