@@ -11,7 +11,7 @@ The page is a **page** artifact whose source is a program in OpenUI Lang over Ca
 
 ## One way to ask
 
-A choice that is no design reaches the person only as a decision card on a page, so every pick is in the Decisions tab, in the record, and something work can wait on. A choice is between two or more real options, on a page with one card (or a few, for one topic): a project's Caw asks in a thread with a one-card page whose card his reply names by its link, drawn there as the card's chip. What is no such choice goes another way: a fact only the person knows, or a go-ahead, through `ask`; a design, one or several directions of it, on the design graph (the `show` skill), where their pins are the answer and the pick between directions is an `ask` with the graph open. A page holds no design of the product's UI.
+A choice that is no design reaches the person only as a decision card on a page, so every pick is in the Decisions tab, in the record, and something work can wait on. A choice is between two or more real options, on a page with one card (or a few, for one topic): a project's Caw asks in a thread with a one-card page whose card his reply names by its link, drawn there as the card's chip. What is no such choice goes another way: a fact only the person knows, or a go-ahead, through `ask`; a design, one or several directions of it, on the design graph (the `show` skill), where their pins are the answer and they pick between directions with the graph's Pick, read as `artifact_read`'s `picked`. A page holds no design of the product's UI.
 
 ## The card
 
@@ -68,7 +68,7 @@ Each row refuses the page until it is fixed.
 
 | Refuse | Fix |
 | --- | --- |
-| A design of the product's UI: a `Preview`, a wireframe, a mockup, a screenshot of a design | The design graph (the `show` skill): directions as one states file each, the pick through `ask` |
+| A design of the product's UI: a `Preview`, a wireframe, a mockup, a screenshot of a design | The design graph (the `show` skill): directions as one states file each, the pick made on the graph (`picked`) |
 | One design under a yes or no | Judge it on its design graph (the `show` skill); a go-ahead is `ask` |
 | A `look` card with an option lacking a picture | Give every option an `Image` or `Canvas` in its media; media every option shares goes once in the Decision's media, drawn below them |
 | A card with no question | Ask the choice in the person's plain words, ending in "?" |
