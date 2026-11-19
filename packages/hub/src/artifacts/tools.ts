@@ -223,7 +223,7 @@ export const artifactCreate = {
       .max(CANVAS_SPEC_LIMITS.files)
       .optional()
       .describe(
-        "Two or more directions of one design, a states file each: one graph switching between them; his pick is artifact_read's `picked`."
+        "Two or more directions of one design, a states file each: one graph switching between them; their pick is artifact_read's `picked`."
       ),
     dir: z.string().startsWith("/").max(4096).optional().describe("Absolute."),
     port: z

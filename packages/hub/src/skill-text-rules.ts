@@ -39,6 +39,11 @@ const SKILL_TEXT_BANS: readonly SkillTextBan[] = [
     rule: "motion to judge is a move on the design graph, played on the real component",
   },
   {
+    pattern:
+      /\bpicks?\b[^.]{0,40}\bthrough `?ask\b|\bpick is (?:an )?`?ask\b/iu,
+    rule: "a pick between directions is made on the design graph with its Pick, read as artifact_read's `picked`; ask holds a go-ahead or a fact",
+  },
+  {
     pattern: /over\W{0,3}budget|250 modules/iu,
     rule: "a states file's weight is reported, never held to a budget",
   },

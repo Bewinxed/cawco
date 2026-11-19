@@ -333,9 +333,9 @@ const doesProblem = (
   return null;
 };
 
-/** Directions of a design to pick between: where they open, and how the pick is asked. */
+/** Directions of a design to pick between: where they open, and where the pick is made. */
 const DESIGN_PICKED =
-  'Two or more directions of a design open in one design graph: kind "component", does "judge", its file one states file per direction (show skill). Which one they pick is an ask, naming each direction, with the graph open.';
+  'Two or more directions of a design open in one design graph: kind "component", does "judge", directions naming one states file each (show skill). They pick one there with its Pick, which artifact_read answers as picked.';
 
 /** Words that name a screen's design, in a drawn canvas's ask or title. */
 const SCREEN_WORDS =

@@ -13,7 +13,7 @@
  * 3. No `artifact_create(` call carries `about`: the field is `ask`.
  * 4. No markdown file of it holds a phrase src/skill-text-rules.ts bans
  *    (the design graph's old names, a verdict card, a width number, a frame
- *    per width, an animated mockup, a weight budget).
+ *    per width, a pick through ask, an animated mockup, a weight budget).
  * 5. The skills that route a design (`DESIGN_GRAPH_NAMED`) name the design
  *    graph, and so does artifact_create's `kind`, which every session loads.
  */

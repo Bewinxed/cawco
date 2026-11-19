@@ -102,7 +102,7 @@ export const ASK_TOOLS: ReadonlySet<string> = new Set(["ask"]);
 /** The words the model reads for `ask`. */
 const ASK_DESCRIPTION =
   "Questions put to the person, whose answer arrives later as a message while you carry on. " +
-  "Use it when only the person can answer something your work turns on.";
+  "Use it for a go-ahead or a fact only the person knows that your work turns on; a design to judge and a choice between options open in their panel, as the `show` skill says.";
 
 /** The most questions one ask carries, answered one at a time in a row. */
 const QUESTIONS_MAX = 4;

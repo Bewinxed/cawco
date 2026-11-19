@@ -51,7 +51,7 @@ The **design graph** is what `artifact_create` opens for `kind: "component"`: th
 
 ## Who builds it
 
-What they asked to see is a live story on the design graph: build it yourself where your role builds, or brief an effort-type delegate (`medium`; `low` where the components exist and only the story is new). A `design` run is for a screen designed whole from its task (`shape-first`, `design-pipeline`). Their pins on a design that exists go to the session that drew it.
+What they asked to see is a live story on the design graph: build it yourself where your role builds, or brief an effort-type delegate (`medium`; `low` where the components exist and only the story is new). A whole screen designed from its journey is the `screen` skill's. Their pins on a design that exists go to the session that drew it.
 
 ## Briefing a delegate
 
