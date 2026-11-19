@@ -173,13 +173,17 @@ import {
  * person's pick read back as `picked` (tsk-405: directions leave decision
  * pages for the graph) (worker 30,977, delegate 11,807 measured); the
  * worker's budget holds it, the delegate's is raised to it.
+ * 2026-11-19: memory_apply's add takes an `anchor`, a file of the repository
+ * and a literal string in it, which the hub reads to bear an agent's lesson
+ * out and reads again each night (the memory build's step 8) (curator 1,355
+ * measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 31_300,
   delegate: 11_830,
   overseer: 770,
   "web-facing": 3400,
-  curator: 1300,
+  curator: 1400,
   trimmer: 1400,
 };
 

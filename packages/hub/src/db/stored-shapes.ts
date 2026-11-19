@@ -530,6 +530,7 @@ const LessonShape = declared(
           "unneeded",
           "withdrawn",
           "hand",
+          "stale",
         ]),
       })
       .optional(),

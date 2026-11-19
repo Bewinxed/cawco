@@ -8,8 +8,11 @@
  *   (memory-lessons.ts `reconcile`), staged lessons past their days
  *   retired, inbox notes no run reached in a week archived unread, a
  *   knowledge lesson no brief carried for the archive's days (config.ts
- *   `MEMORY_ARCHIVE_DAYS`) archived, a retired entry past its days taken
- *   out of the ledger, the index in its shape. One commit.
+ *   `MEMORY_ARCHIVE_DAYS`) archived, every file a lesson rests on read
+ *   again on a machine of the project ({@link anchorsRead}: one gone makes
+ *   its lesson stale, one there lands a staged lesson), a retired entry
+ *   past its days taken out of the ledger, the index in its shape. One
+ *   commit.
  * - **What it reads**: what the person typed to the project's sessions since
  *   the last run (db sends.ts `personSaidIn`, the hub's own record of who
  *   spoke: no transcript, so no agent's turn and no tool's result), and the
@@ -32,8 +35,9 @@
  *   run's; a message states the lesson (Jev, at {@link SUPPORTS}); the
  *   lesson quotes no one (memory-sources.ts `quoteProblem`); an agent's
  *   lesson goes to knowledge, and lands only when notes of two sessions say
- *   it (memory-sources.ts `countsTogether`, and Jev on the pair), staged in
- *   the ledger until then; the caps and the night's limits hold. Each
+ *   it (memory-sources.ts `countsTogether`, and Jev on the pair) or a file
+ *   it names holds its match ({@link anchored}), staged in the ledger until
+ *   then; the caps and the night's limits hold. Each
  *   operation is one commit, by the Memory curator, with the notes it
  *   consumed archived in it.
  * - **Close** ({@link close}): where the run read up to is kept
@@ -105,12 +109,21 @@ import {
   renderLedger,
   wordsOf,
 } from "./memory-lessons";
-import { countsTogether, quoteProblem, rootOf } from "./memory-sources";
+import {
+  ANCHOR_MATCH,
+  type AnchorPlace,
+  anchorRead,
+  countsTogether,
+  type MachineRead,
+  quoteProblem,
+  rootOf,
+} from "./memory-sources";
 import {
   changeFolderFiles,
   type FolderAuthor,
   folderCommitsChanging,
   folderHistory,
+  folderPath,
   readFolderFileAt,
   YOU,
 } from "./project-folder";
@@ -187,8 +200,19 @@ interface Kept {
   text: string;
 }
 
-/** Why a lesson left that a repeat of the person's puts back: the run replaced it, or archived it unused. */
-const TAKEN_OUT: ReadonlySet<string> = new Set(["replaced", "unneeded"]);
+/** Why a lesson left that a repeat of the person's puts back: the run replaced it, archived it unused, or its file went. */
+const TAKEN_OUT: ReadonlySet<string> = new Set([
+  "replaced",
+  "unneeded",
+  "stale",
+]);
+
+/** Whether `lesson` is one the run took out, with its words kept: a repeat of the person's puts it back. */
+const takenOut = (lesson: Lesson): boolean =>
+  (lesson.state === "retired" || lesson.state === "stale") &&
+  lesson.retired !== undefined &&
+  lesson.retired.text !== "" &&
+  TAKEN_OUT.has(lesson.retired.why);
 
 /** The memory files a lesson's line lives in, as git's pickaxe reads them for its commits (the archive among them). */
 const LESSON_PATHS = [INDEX_FILE, LESSONS_DIR, KNOWLEDGE_DIR] as const;
@@ -242,6 +266,15 @@ export interface MemoryRunDeps {
   readonly fleetHosts: () => ReadonlySet<string>;
   /** The project's folder changed under its tasks (a commit landed). */
   readonly folderChanged: (projectId: string) => void;
+  /**
+   * A machine's files, over the `fs` verb: a file's text (`read`), and
+   * whether a folder is there (`listed`; undefined when the machine did not
+   * answer). What an anchor is read with (memory-sources.ts `anchorRead`).
+   */
+  readonly machine: {
+    listed: (machineId: string, path: string) => Promise<boolean | undefined>;
+    read: (machineId: string, path: string) => Promise<MachineRead>;
+  };
   /** The skills the fleet lists for the project's sessions, each with its one-line description. */
   readonly skillsFor: (
     projectId: string
@@ -538,9 +571,7 @@ const keptLessons = (tree: MemoryTree): Kept[] => [
       : []
   ),
   ...Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) =>
-    lesson.state === "retired" &&
-    lesson.retired?.text &&
-    TAKEN_OUT.has(lesson.retired.why)
+    takenOut(lesson) && lesson.retired
       ? [{ id, text: lesson.retired.text, live: false }]
       : []
   ),
@@ -750,6 +781,7 @@ export const createMemoryRun = ({
   db,
   fleetHosts,
   folderChanged,
+  machine,
   skillsFor,
 }: MemoryRunDeps) => {
   /** Each project's run under way. */
@@ -909,6 +941,7 @@ export const createMemoryRun = ({
         ({ tree } = applyOp(tree, checked(change), today, uses));
       }
     }
+    tree = await anchorsRead(project.id, tree, today);
     tree = withoutOldRetired(tree, today);
     const inbox = await notesIn(project.id, INBOX_DIR);
     if (inbox instanceof ElysiaStatus) {
@@ -929,6 +962,76 @@ export const createMemoryRun = ({
       message: `memory: upkeep ${today}`,
       notes: unread.map((note) => ({ note, outcome: "dropped: unread" })),
     });
+  };
+
+  /**
+   * Every file a lesson rests on read again (§2 A.3), the person's held
+   * lessons aside: a lesson whose file or match is gone goes stale, its line
+   * taken out; one whose file is there keeps the day and the sha256 it was
+   * read at, and a staged one it bears out lands. A file no machine
+   * answered for is tried the next night.
+   */
+  const anchorsRead = async (
+    projectId: string,
+    tree: MemoryTree,
+    today: string
+  ): Promise<MemoryTree> => {
+    const places = checkoutsOf(projectId);
+    const uses = usesOf(projectId);
+    let now = tree;
+    for (const [id, lesson] of Object.entries(tree.ledger.lessons)) {
+      if (
+        !lesson.held &&
+        (lesson.state === "live" || lesson.state === "staged")
+      ) {
+        now = await anchorsOf(now, id, lesson, places, today, uses);
+      }
+    }
+    return now;
+  };
+
+  /** {@link anchorsRead} for one lesson: its files read, and `now` with what came of them. */
+  const anchorsOf = async (
+    now: MemoryTree,
+    id: string,
+    lesson: Lesson,
+    places: readonly AnchorPlace[],
+    today: string,
+    uses: ReadonlyMap<string, Date>
+  ): Promise<MemoryTree> => {
+    const files = lesson.sources.flatMap((source, at) =>
+      source.kind === "file" ? [{ at, source }] : []
+    );
+    if (files.length === 0) {
+      return now;
+    }
+    const reads = await Promise.all(
+      files.map(({ source }) => anchorRead(machine, places, source))
+    );
+    if (reads.some((read) => read.kind === "gone")) {
+      return applyOp(now, checked({ kind: "stale", id }), today, uses).tree;
+    }
+    const sources = [...lesson.sources];
+    files.forEach(({ at, source }, n) => {
+      const read = reads[n];
+      if (read?.kind === "found") {
+        sources[at] = { ...source, sha256: read.sha256, read: today };
+      }
+    });
+    const kept = withSources(now, id, sources);
+    const borne = reads.some((each) => each.kind === "found");
+    const into = lesson.staged ? (pathOf(lesson.staged.home) ?? "") : "";
+    return lesson.state === "staged" &&
+      borne &&
+      !lesson.staged?.waits &&
+      roomFor(kept, into)
+      ? applyOp(
+          kept,
+          checked({ kind: "corroborate", id, lands: true, sources: [] }),
+          today,
+          uses
+        ).tree
+      : kept;
   };
 
   /** The ledger without retired, stale and expired entries past their days. */
@@ -1351,12 +1454,7 @@ export const createMemoryRun = ({
     }
     const source = saidSource(said);
     const today = dayOf(new Date());
-    if (
-      one.does === "repeats" &&
-      lesson.state === "retired" &&
-      lesson.retired &&
-      TAKEN_OUT.has(lesson.retired.why)
-    ) {
+    if (one.does === "repeats" && takenOut(lesson)) {
       return await putBack(projectId, run, tree, one.id, lesson, source);
     }
     if (one.does === "repeats" && lesson.state === "live") {
@@ -1869,21 +1967,94 @@ export const createMemoryRun = ({
     if (run.adds >= adds(run)) {
       return memoryRunWords.nightAdds(adds(run));
     }
-    const waits =
-      !run.jev && (kept.messages.length > 0 || kept.notes.length > 1);
-    const staged =
-      waits || !(by === "owner" || twoSessions(index, kept.notes, answers));
+    const file = op.anchor ? await anchored(projectId, op.anchor) : undefined;
+    if (typeof file === "string") {
+      return file;
+    }
+    const staged = stagingOf(run, kept, by, file, () =>
+      twoSessions(index, kept.notes, answers)
+    );
     if (staged && stagedCount(tree) >= CAPS.staged) {
       return memoryRunWords.stagedFull(CAPS.staged);
     }
     return addPlanned(tree, head, op.sources, kept, {
       by,
+      file,
       home,
       text,
       why,
-      staged: staged ? { waits } : undefined,
+      staged,
     });
   };
+
+  /**
+   * Whether a new lesson is staged, and on what (§4.3): one whose sources
+   * Jev must read while it is off waits for it; an agent's lesson waits for
+   * a second session unless a file the hub read bears it out (one no
+   * machine answered for is read again each night). Undefined: it lands.
+   */
+  const stagingOf = (
+    run: Run,
+    kept: { messages: Given[]; notes: Note[] },
+    by: Lesson["by"],
+    file: LessonSource | undefined,
+    twoOf: () => boolean
+  ): { waits: boolean } | undefined => {
+    const waits =
+      !run.jev && (kept.messages.length > 0 || kept.notes.length > 1);
+    const borne = file?.kind === "file" && file.read !== "";
+    return waits || !(by === "owner" || borne || twoOf())
+      ? { waits }
+      : undefined;
+  };
+
+  /**
+   * An anchor checked and read (§4.3): a path inside the project's
+   * checkout and a literal match of at most {@link ANCHOR_MATCH} characters
+   * on one line, the file read at the first checkout whose machine answers.
+   * Its source when the match is there, or when no machine answered (its
+   * day and sha256 empty: read again each night); why not when the file or
+   * the match is not there, or the anchor does not read.
+   */
+  const anchored = async (
+    projectId: string,
+    anchor: { match: string; path: string }
+  ): Promise<Extract<LessonSource, { kind: "file" }> | string> => {
+    const path = folderPath(anchor.path.trim());
+    const { match } = anchor;
+    if (
+      path instanceof ElysiaStatus ||
+      path === "" ||
+      match.trim() === "" ||
+      match.includes("\n") ||
+      match.length > ANCHOR_MATCH
+    ) {
+      return memoryRunWords.anchorUnfit(ANCHOR_MATCH);
+    }
+    const read = await anchorRead(machine, checkoutsOf(projectId), {
+      path,
+      match,
+    });
+    if (read.kind === "gone") {
+      return memoryRunWords.anchorGone(path, match);
+    }
+    const found = read.kind === "found";
+    return {
+      kind: "file",
+      path,
+      match,
+      sha256: found ? read.sha256 : "",
+      read: found ? dayOf(new Date()) : "",
+    };
+  };
+
+  /** The project's checkouts, the primary first, as an anchor is read at. */
+  const checkoutsOf = (projectId: string): AnchorPlace[] =>
+    (db.project(projectId)?.places ?? []).flatMap((place) =>
+      place.kind === "checkout"
+        ? [{ machineId: place.machineId, path: place.path }]
+        : []
+    );
 
   /** A checked `add` as one operation commits it: the change, the notes it consumes, and what it says. */
   const addPlanned = (
@@ -1893,6 +2064,8 @@ export const createMemoryRun = ({
     kept: { messages: Given[]; notes: Note[] },
     lesson: {
       by: Lesson["by"];
+      /** The file it names, read or to be read. */
+      file: LessonSource | undefined;
       home: LessonHome;
       staged: { waits: boolean } | undefined;
       text: string;
@@ -1900,14 +2073,17 @@ export const createMemoryRun = ({
     }
   ): Planned => {
     const id = newLessonId((taken) => taken in tree.ledger.lessons);
-    const { by, home, staged, text, why } = lesson;
+    const { by, file, home, staged, text, why } = lesson;
     return {
       change: {
         kind: "add",
         id,
         by,
         home,
-        sources: sourcesFor(kept.messages, kept.notes, head),
+        sources: [
+          ...sourcesFor(kept.messages, kept.notes, head),
+          ...(file ? [file] : []),
+        ],
         text,
         why: why || null,
         ...(staged

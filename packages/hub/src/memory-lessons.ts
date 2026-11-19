@@ -582,6 +582,8 @@ export type Change =
     }
   /** A lesson the run made, taken back because the person stated the opposite: retired, and held, so no run touches it again. */
   | { id: string; kind: "revert" }
+  /** A lesson whose file, or the match in it, is gone: its line taken out, its words kept for the ledger's days. */
+  | { id: string; kind: "stale" }
   /**
    * The person stated a live lesson again: one more repeat, his message one
    * of its sources, his rule from now on; `held` from his second, and moved
@@ -1083,6 +1085,18 @@ const repeated = (
     : { tree: counted };
 };
 
+/** `tree` with retired lesson `id`'s entry patched by `patch`. */
+const retiredAs = (
+  tree: MemoryTree,
+  id: string,
+  patch: Partial<Lesson>
+): MemoryTree => {
+  const lesson = tree.ledger.lessons[id];
+  return lesson
+    ? { ...tree, ledger: withEntry(tree.ledger, id, { ...lesson, ...patch }) }
+    : tree;
+};
+
 /** One change, by its kind. */
 const changed = (now: MemoryTree, op: Change, today: string): Done => {
   switch (op.kind) {
@@ -1105,18 +1119,18 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
       return restored(now, op, today);
     case "repeat":
       return repeated(now, op, today);
-    case "revert": {
-      const out = retireLine(now, op.id, "reverted", today);
-      const lesson = out.ledger.lessons[op.id];
+    case "revert":
       return {
-        tree: lesson
-          ? {
-              ...out,
-              ledger: withEntry(out.ledger, op.id, { ...lesson, held: true }),
-            }
-          : out,
+        tree: retiredAs(retireLine(now, op.id, "reverted", today), op.id, {
+          held: true,
+        }),
       };
-    }
+    case "stale":
+      return {
+        tree: retiredAs(retireLine(now, op.id, "stale", today), op.id, {
+          state: "stale",
+        }),
+      };
     case "archive": {
       const { home } = now.ledger.lessons[op.id] ?? {};
       return {

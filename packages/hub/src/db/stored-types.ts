@@ -141,7 +141,11 @@ export type LessonSource =
       root: string;
       session: string;
     }
-  /** A file the hub read, and a literal match in it. */
+  /**
+   * A file of the project's checkout the hub read, from the checkout's root,
+   * and a literal match in it: the file's sha256 and the day it was last
+   * read, both empty until a machine first answered for it.
+   */
   | { kind: "file"; match: string; path: string; read: string; sha256: string }
   /** A line the person approved before the nightly run, at its commit. */
   | { commit: string; kind: "approved" }
@@ -163,8 +167,15 @@ export interface Lesson {
     by?: string;
     on: string;
     text: string;
+    /** `stale`: the file it rested on, or the match in it, is gone. */
     why:
-      "replaced" | "expired" | "reverted" | "unneeded" | "withdrawn" | "hand";
+      | "replaced"
+      | "expired"
+      | "reverted"
+      | "unneeded"
+      | "withdrawn"
+      | "hand"
+      | "stale";
   };
   /** The last day a source stated it again (YYYY-MM-DD). */
   seen: string;

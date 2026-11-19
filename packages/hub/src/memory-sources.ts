@@ -11,6 +11,10 @@
  *   sessions say it, their roots differ (the top of each one's chain of
  *   parents), and at least one has no label: two sessions that read the same
  *   page would both carry it ({@link countsTogether}).
+ * - **A file.** Or an agent's lesson lands when a file of the project bears
+ *   it out: a path in its checkout and a literal match, read by the hub on
+ *   the first machine that answers for a checkout ({@link anchorRead}), and
+ *   read again every night.
  */
 import type { InstanceRow } from "@cawco/core/protocol";
 import { isRoutineParent } from "./work-item-state";
@@ -106,3 +110,62 @@ export interface NoteSource {
 /** Whether two notes count as two sessions: their roots differ, and at least one has no label. */
 export const countsTogether = (a: NoteSource, b: NoteSource): boolean =>
   a.root !== b.root && (a.labels.length === 0 || b.labels.length === 0);
+
+/** The longest literal match an anchor may name: a symbol, a command or a config key, not a passage. */
+export const ANCHOR_MATCH = 120;
+
+/** What a machine's file read came to: its text, not there, or no answer (the machine away, or it refused). */
+export type MachineRead =
+  { kind: "text"; text: string } | { kind: "missing" } | { kind: "unread" };
+
+/** A project's checkout as an anchor is read at: on a machine, at a folder. */
+export interface AnchorPlace {
+  machineId: string;
+  path: string;
+}
+
+/**
+ * Whether a file of the project bears a lesson out (§4.3): `anchor.path`
+ * read at the first of `places` whose machine answers (`read`, the `fs`
+ * verb's read), and `anchor.match` looked for in it, literally. `found`
+ * with the file's sha256; `gone` when that machine's checkout is there
+ * (`listed`) and the file or the match is not; `unread` when no machine
+ * answered for its checkout, so the lesson waits for the next night.
+ */
+export const anchorRead = async (
+  machine: {
+    listed: (machineId: string, path: string) => Promise<boolean | undefined>;
+    read: (machineId: string, path: string) => Promise<MachineRead>;
+  },
+  places: readonly AnchorPlace[],
+  anchor: { match: string; path: string }
+): Promise<
+  { kind: "found"; sha256: string } | { kind: "gone" } | { kind: "unread" }
+> => {
+  for (const place of places) {
+    const file = await machine.read(
+      place.machineId,
+      `${place.path.replace(TRAILING_SLASH, "")}/${anchor.path}`
+    );
+    if (file.kind === "text") {
+      return file.text.includes(anchor.match)
+        ? {
+            kind: "found",
+            sha256: new Bun.CryptoHasher("sha256")
+              .update(file.text)
+              .digest("hex"),
+          }
+        : { kind: "gone" };
+    }
+    // A file not there is gone only where its checkout is.
+    if (
+      file.kind === "missing" &&
+      (await machine.listed(place.machineId, place.path)) === true
+    ) {
+      return { kind: "gone" };
+    }
+  }
+  return { kind: "unread" };
+};
+
+const TRAILING_SLASH = /\/+$/u;

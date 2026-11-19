@@ -760,6 +760,12 @@ const OpInput = z.discriminatedUnion("op", [
     why: z.string().optional(),
     home: HomeInput,
     sources: z.array(z.string()),
+    anchor: z
+      .object({ path: z.string(), match: z.string() })
+      .optional()
+      .describe(
+        "A repository file and a literal string in it that bear the lesson out."
+      ),
   }),
   z.object({
     op: z.literal("replace"),

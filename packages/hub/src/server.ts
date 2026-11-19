@@ -8869,6 +8869,42 @@ export const createServer = (
         ].map((host) => host.toLowerCase())
       ),
     folderChanged: (projectId) => tasks.touched(projectId),
+    machine: {
+      read: async (machineId, path) => {
+        const agent = registry.agent(machineId);
+        if (!agent) {
+          return { kind: "unread" };
+        }
+        const answer = asRead(
+          await callFs(machineId, agent, { op: "read", path })
+        );
+        if (answer.kind === "unanswered") {
+          return { kind: "unread" };
+        }
+        if (answer.value.ok) {
+          return { kind: "text", text: answer.value.result };
+        }
+        return answer.value.refusal?.kind === "missing"
+          ? { kind: "missing" }
+          : { kind: "unread" };
+      },
+      listed: async (machineId, path) => {
+        const agent = registry.agent(machineId);
+        if (!agent) {
+          return;
+        }
+        const answer = asRead(
+          await callFs(machineId, agent, { op: "list", path })
+        );
+        if (answer.kind === "unanswered") {
+          return;
+        }
+        if (answer.value.ok) {
+          return true;
+        }
+        return answer.value.refusal?.kind === "missing" ? false : undefined;
+      },
+    },
     skillsFor: (projectId) => skillsListedFor(projectId),
   });
   const projectMemory = createMemory({
