@@ -282,9 +282,16 @@
     /* A reply holding an agent's block that needs the room (TranscriptBlock,
        tsk-330: a `full` Diagram, a Table wider than the measure,
        `data-block-wide`): the block stands the turn's width (MessageBody
-       lifts its measure), and the reply's words keep theirs. */
-    &:has([data-block-wide]) .prose > :not([data-block-key]) {
-      max-inline-size: var(--spacing-c-measure);
+       lifts its measure), and the reply's words keep theirs, the measure
+       the frame hands them from its own `:has()` (REPLY_FRAME
+       `--words-measure`). Asked here past the words' ancestors instead
+       (`&:has([data-block-wide]) .prose > …`), the `:has()` stood in no
+       subject: every ancestor of a reply's words was an anchor to test, and
+       each node added under one (a row, find's places, the composer's dock)
+       restyled every element under it, 24k elements a frame while find
+       stepped. */
+    & .prose > :not([data-block-key]) {
+      max-inline-size: var(--words-measure, none);
     }
   }
   /* An instruction's markdown starts at its box: its first block gives back
