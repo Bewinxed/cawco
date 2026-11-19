@@ -132,6 +132,7 @@ import type { ModelInfo } from "./harness/kinds";
 import type { GeneratedImage } from "./image-generation";
 import { GENERATE_IMAGE } from "./image-generation";
 import type {
+  MoveCloned,
   MoveInspection,
   MoveLfsResult,
   MoveRemoteAuth,
@@ -287,6 +288,7 @@ import {
   MachineHookScriptSchema,
   MachineMemorySetSchema,
   ModelInfoSchema,
+  MoveClonedSchema,
   MoveInspectionSchema,
   MoveLfsResultShape,
   MoveRemoteAuthSchema,
@@ -380,6 +382,7 @@ import type {
 } from "./workspace/controls";
 import {
   CONTROL_CLONE_HOLDING,
+  CONTROL_FOLDERS_STAND,
   CONTROL_HOST_OUTPUTS,
   CONTROL_HOST_SCRATCH_REMOVE,
   CONTROL_INPUTS_ADMIT,
@@ -391,6 +394,7 @@ import {
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_REMOVE_FOLDER,
+  CONTROL_REMOVE_FOLDER_REFUSAL,
   CONTROL_REPO_ROOT,
   CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -545,6 +549,8 @@ const CONTROLS = {
   [CONTROL_PLACE_REPO]: reply<PlaceRepo>(PlaceRepoSchema),
   [CONTROL_REPO_ROOT]: z.string().nullable(),
   [CONTROL_REMOVE_FOLDER]: reply<FolderRemoved>(FolderRemovedSchema),
+  [CONTROL_REMOVE_FOLDER_REFUSAL]: z.string().nullable(),
+  [CONTROL_FOLDERS_STAND]: z.array(z.boolean()),
   [CONTROL_CLONE_HOLDING]: reply<WorkspaceRef | null>(
     WorkspaceRefSchema.nullable()
   ),
@@ -577,7 +583,7 @@ const CONTROLS = {
   [CONTROL_MOVE_INSPECT]: reply<MoveInspection>(MoveInspectionSchema),
   [CONTROL_MOVE_PREPARE]: UNREAD,
   [CONTROL_MOVE_SNAPSHOT]: reply<MoveSnapshotResult>(MoveSnapshotResultShape),
-  [CONTROL_MOVE_CLONE]: reply<MoveLfsResult>(MoveLfsResultShape),
+  [CONTROL_MOVE_CLONE]: reply<MoveCloned>(MoveClonedSchema),
   [CONTROL_MOVE_LFS]: reply<MoveLfsResult>(MoveLfsResultShape),
   [CONTROL_MOVE_CANCEL]: UNREAD,
   [CONTROL_MOVE_REMOTE_CREDENTIAL]: reply<MoveRemoteAuth>(MoveRemoteAuthSchema),

@@ -263,12 +263,13 @@
     }
   }
 
-  /** The checkouts a delete with its files removes, by machine name and path (its hub folder goes either way). */
+  /** Its checkouts by machine name and path, those a delete with its files removes `made` (its hub folder goes either way). */
   const checkoutsOf = (one: ForgottenProject) =>
     one.places
       .filter((place) => place.kind === "checkout")
       .map((place) => ({
         machine: place.machineName,
+        made: place.made,
         path: place.path,
         within: place.within.map((holder) => holder.name),
       }));
@@ -288,7 +289,7 @@
         title: projectEndWords.deleteForgotten(name),
         body: projectEndWords.deleteForgottenBody,
         confirmLabel: () =>
-          fromDisk && checkoutsOf(one).length > 0
+          fromDisk && checkoutsOf(one).some((place) => place.made)
             ? projectEndWords.deleteWithFiles
             : projectEndWords.deletePlain,
         pendingLabel: projectEndWords.deleting,

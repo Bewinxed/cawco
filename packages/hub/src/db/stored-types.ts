@@ -179,6 +179,8 @@ export interface MoveState {
   kept?: string;
   lfs?: MoveLfsResult;
   lfsFile?: MoveJob["lfsFile"];
+  /** The clone made the target's folder, nothing having stood there (core `MoveCloned`): its place is filed as made. */
+  made?: true;
   moved?: string;
   progress?: MoveJob["progress"];
   /** The first prompt's send, so it goes once whatever restarts. */

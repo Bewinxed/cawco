@@ -27,6 +27,7 @@ import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import {
   FREE_SPACE_MARGIN,
   LARGE_FILE_BYTES,
+  type MoveCloned,
   type MoveCloneRequest,
   type MoveInspection,
   type MoveLargeFile,
@@ -52,6 +53,7 @@ import { holdingRemote, withoutCredential } from "./git/hub-credential";
 import { hubGitEnv, hubRepo, hubRepoOf } from "./git/hub-remote";
 import { LFS_FILTERS } from "./git/lfs";
 import { configEnv, useHubCredentialHelper } from "./git-credential";
+import { madeStanding, recordMade } from "./made-folders";
 import { notAProject, placeSettled, placeTurn } from "./place-repo";
 import { remoteWithoutCredential } from "./remote-credential";
 
@@ -160,7 +162,7 @@ class Step<T> {
 
 const PREPARE = new Step<{ commit: string | null }>("prepare");
 const SNAPSHOT = new Step<MoveSnapshotResult>("snapshot");
-const CLONE = new Step<MoveLfsResult>("clone");
+const CLONE = new Step<MoveCloned>("clone");
 const LFS = new Step<MoveLfsResult>("lfs");
 
 /** The step running for each job here. */
@@ -1229,25 +1231,55 @@ const clonedBefore = async (path: string, jobId: string): Promise<boolean> =>
     await readFile(join(path, ".git", MARKER), "utf8").catch(() => "")
   ).trim() === jobId;
 
+/** This job's finished clone, asked again: what follows it, and whether the folder is the one CawCo recorded making. */
+const clonedAgain = async (
+  path: string,
+  commit: string
+): Promise<MoveCloned> => ({
+  ...(await lfsOf(path, commit)),
+  made: (await madeStanding(path).catch(() => "unrecorded")) === "made",
+});
+
+/**
+ * The finished clone `scratch` put at `path`: in place of the empty folder
+ * that stood there (`stood`), which stays the person's, else where nothing
+ * stood, recorded as made. Whether it was.
+ */
+const placeClone = async (
+  scratch: string,
+  path: string,
+  stood: boolean
+): Promise<boolean> => {
+  if (stood) {
+    await rm(path, { recursive: true, force: true });
+    await rename(scratch, path);
+    return false;
+  }
+  await rename(scratch, path);
+  return await recordMade(path);
+};
+
 export const moveClone = (
   request: MoveCloneRequest,
   ports: Pick<AgentPorts, "moveProgress">
-): Promise<MoveLfsResult> =>
+): Promise<MoveCloned> =>
   holdingRemote(request.remoteBasic, () => cloneStep(request, ports));
 
 /**
  * The clone itself. An outside remote's URL carries no credential, so the
  * clone's `origin` is the bare URL; its credential, when it has one, reaches
- * git through the environment for this one command.
+ * git through the environment for this one command. A clone put where
+ * nothing stood is recorded as a folder CawCo made (made-folders.ts); one
+ * put in place of an empty folder that stood there is not.
  */
 const cloneStep = (
   request: MoveCloneRequest,
   { moveProgress }: Pick<AgentPorts, "moveProgress">
-): Promise<MoveLfsResult> =>
+): Promise<MoveCloned> =>
   runStep(CLONE, request.jobId, async (run) => {
     const { path, jobId, snapshot } = request;
     if (await clonedBefore(path, jobId)) {
-      return lfsOf(path, snapshot.commit);
+      return clonedAgain(path, snapshot.commit);
     }
     const info = await stat(path).catch(() => undefined);
     if (info && !(info.isDirectory() && (await readdir(path)).length === 0)) {
@@ -1307,10 +1339,7 @@ const cloneStep = (
       }
       const lfs = await lfsOf(scratch, snapshot.commit);
       await writeStateFile(join(scratch, ".git", MARKER), `${jobId}\n`);
-      if (info) {
-        await rm(path, { recursive: true, force: true });
-      }
-      await rename(scratch, path);
+      const made = await placeClone(scratch, path, info !== undefined);
       const whole = Math.max(received, request.bytes);
       moveProgress({
         kind: "move_progress",
@@ -1319,7 +1348,7 @@ const cloneStep = (
         bytes: whole,
         total: whole,
       });
-      return lfs;
+      return { ...lfs, made };
     } catch (error) {
       // A partial clone cannot be resumed; it goes, on a failure or a Cancel alike.
       await rm(scratch, { recursive: true, force: true });

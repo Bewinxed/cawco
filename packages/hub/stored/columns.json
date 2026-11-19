@@ -6184,6 +6184,9 @@
           "persistSession": {
             "type": "boolean"
           },
+          "place": {
+            "type": "string"
+          },
           "processGeneration": {
             "type": "string"
           },
@@ -8371,6 +8374,10 @@
           "file",
           "total"
         ]
+      },
+      "made": {
+        "type": "boolean",
+        "const": true
       },
       "moved": {
         "type": "string"

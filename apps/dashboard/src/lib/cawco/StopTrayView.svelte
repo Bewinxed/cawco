@@ -690,6 +690,7 @@
           onchange={onfromdisk}
           places={job.places.map((place) => ({
             machine: nameOf(place.machineId),
+            made: place.made,
             path: place.path,
             within: place.within.map((one) => one.name),
           }))}

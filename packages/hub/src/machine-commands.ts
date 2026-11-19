@@ -6,10 +6,14 @@ import {
 } from "@cawco/core/commands/controls";
 import { cutShort } from "@cawco/core/words/helpers";
 import { queueWords } from "@cawco/core/words/queue";
-import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import {
+  CONTROL_FOLDERS_STAND,
+  type WorkspaceRef,
+} from "@cawco/core/workspace/controls";
 import type { ClosureContext } from "./closure-context";
 import type { CommandOptions } from "./machine-pause";
 import { throwIfStopped, WouldWait, whenStopped } from "./machine-pause";
+import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { mergeSameRemote } from "./project-merge";
 import { readCheckout } from "./projects";
 import { unreachable } from "./unreachable";
@@ -21,6 +25,8 @@ export type MachineCommandsContext = Pick<
   | "db"
   | "machinePause"
   | "merging"
+  | "projectsChanged"
+  | "readAgent"
   | "silentWords"
   | "unansweredFault"
 >;
@@ -266,8 +272,31 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
   };
 
   /**
-   * What one of a project's checkouts says of its repository, read there:
-   * its root commit, kept on the checkout (a move compares it with the
+   * Whether a folder stands at `path` on `machineId`
+   * (`CONTROL_FOLDERS_STAND`); undefined when the machine did not say (away,
+   * silent, or an agent that predates the read).
+   */
+  const folderStands = async (
+    machineId: string,
+    path: string
+  ): Promise<boolean | undefined> => {
+    const answer = await ctx.readAgent(
+      machineId,
+      CONTROL_FOLDERS_STAND,
+      [[path]],
+      READ_TIMEOUT_MS
+    );
+    return answer.kind === "answered" && answer.value.ok
+      ? answer.value.result[0]
+      : undefined;
+  };
+
+  /**
+   * What one of a project's checkouts says, read there: whether its folder
+   * stands, kept on the checkout (`missing`, and `found` once it has) and
+   * told to every client when it changes, so a folder moved or removed by
+   * hand shows as missing and is never made again by a start; its
+   * root commit, kept on the checkout (a move compares it with the
    * source's machine away, moves.ts `plan`), and its `origin`, linked to the
    * project. Nothing read (the machine away, no `origin`, no commit) leaves
    * it for the next chance. A link another project already has makes the
@@ -279,6 +308,13 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     machineId: string;
     path: string;
   }): Promise<void> => {
+    const stands = await folderStands(place.machineId, place.path);
+    if (stands !== undefined && ctx.db.setPlaceFolder(place.id, stands)) {
+      ctx.projectsChanged();
+    }
+    if (stands === false) {
+      return;
+    }
     const { remote, root } = await readCheckout(
       runOnMachine,
       place.machineId,

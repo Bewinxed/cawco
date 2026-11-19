@@ -23,6 +23,7 @@ export type ProjectJoiningContext = Pick<
   HubContext,
   | "caw"
   | "db"
+  | "learnCheckout"
   | "machineName"
   | "machinePause"
   | "onlineMachines"
@@ -128,6 +129,18 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     return making;
   };
 
+  /**
+   * Whether the folder of a checkout just filed stands, read on its machine
+   * (machine-commands.ts `learnCheckout`), so one there is never made again
+   * by a start once it goes. One not there yet is the project's new folder,
+   * which its first session makes.
+   */
+  const lookFor = (place: PlaceRow | undefined): void => {
+    if (place) {
+      detach(ctx.learnCheckout(place), `read ${place.path}'s folder`);
+    }
+  };
+
   /** A folder of a repository `known` links joins it as a checkout, its root commit kept. */
   const joinProject = (
     known: ProjectRow,
@@ -144,6 +157,7 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     }
     if (added) {
       placesChanged(checkout.machineId, known.id);
+      lookFor(place);
     }
     return {
       project: ctx.db.project(known.id) ?? known,
@@ -204,6 +218,7 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
       placeAdded: false,
       joined: false,
     };
+    lookFor(checkoutOf(created));
     return made;
   };
 

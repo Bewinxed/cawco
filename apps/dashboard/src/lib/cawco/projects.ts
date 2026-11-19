@@ -12,12 +12,18 @@ import { primaryPlaceOf } from "@cawco/core/project-membership";
  */
 export interface ProjectPlace {
   createdAt: string;
+  /** The checkout's folder has stood at its path: a start there never makes it again (hub launches.ts `placeHolding`). */
+  found: boolean;
   id: string;
   /** The project's primary checkout: exactly one once it has any. */
   isPrimary: boolean;
   /** A `hub` place is the project's folder on the hub (machine `hub`, path `projects/<id>`). */
   kind: "checkout" | "hub";
   machineId: string;
+  /** CawCo made the checkout's folder (a move's clone): a delete with its files removes it; any other stays on disk. */
+  made: boolean;
+  /** The checkout's folder has gone: its machine found none at its path when it last looked. */
+  missing: boolean;
   path: string;
   projectId: string;
   /** A checkout's live projects whose checkout holds it: a delete with its files takes their files there too (core place-nesting.ts). */
@@ -92,6 +98,31 @@ export function checkoutOn(
     (place) => place.machineId === machineId && place.kind === "checkout"
   );
   return checkouts.find((place) => place.isPrimary) ?? checkouts[0];
+}
+
+/**
+ * The checkout of any of `projects` on `machineId` whose folder `path`
+ * (absolute) is or is inside, the deepest where they nest, once its folder
+ * has stood there (`found`): a start there never makes it again, and is
+ * refused while it is gone (hub launches.ts `placeHolding`).
+ */
+export function foundCheckoutAt(
+  projects: readonly ProjectRow[],
+  machineId: string,
+  path: string
+): ProjectPlace | undefined {
+  const slash = (one: string): string => (one.endsWith("/") ? one : `${one}/`);
+  const at = slash(path);
+  return projects
+    .flatMap((project) => project.places)
+    .filter(
+      (place) =>
+        place.kind === "checkout" &&
+        place.found &&
+        place.machineId === machineId &&
+        at.startsWith(slash(place.path))
+    )
+    .sort((a, b) => b.path.length - a.path.length)[0];
 }
 
 /** Whether a session on `machineId` can be one of the project's: it has a place there. */

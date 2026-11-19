@@ -55,17 +55,20 @@ export const ACTIVITY: Record<string, Activity> = {
 };
 
 const PLACES: StopJob["places"] = [
-  // Inside two live projects' home folder, as on obelisk.
+  // Inside two live projects' home folder, as on obelisk: named, it stays.
   {
     machineId: "m1",
+    made: false,
     path: "/home/bewinxed/office",
     within: [
       { id: "hyucksfield", name: "HyucksField" },
       { id: "obeliskcel", name: "OBELISKCEL CHUDMAXXING" },
     ],
   },
+  // A move's clone onto another machine: CawCo made it, so it goes.
   {
     machineId: "m2",
+    made: true,
     path: "/Users/omar/Documents/office-archive-2026",
     within: [],
   },

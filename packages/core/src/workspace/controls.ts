@@ -92,12 +92,14 @@ export const CONTROL_REPO_ROOT = "repoRoot";
 /**
  * A folder of a project deleted for good removed from its machine (hub
  * project-delete.ts), the hub having held it to the project's own recorded
- * places first: a checkout or folder of the project (`place`), or a carry
- * one of its workspaces left (`carry`, which must stand in the machine's
- * carries dir). The machine refuses a path that is not absolute, its root,
- * its home or a folder holding it, or anything in CawCo's own dirs; a link
+ * places first: a checkout CawCo made (`place`), or a carry one of its
+ * workspaces left (`carry`, which must stand in the machine's carries dir).
+ * The machine refuses a path that is not absolute, its root, its home or a
+ * folder holding it, or anything in CawCo's own dirs, and a `place` unless
+ * the folder there is still the one it made (agent made-folders.ts); a link
  * goes as the link. Args `[RemoveFolder]`; answers {@link FolderRemoved}.
- * Machine-scoped; only the hub sends it.
+ * Machine-scoped; only the hub sends it, once
+ * {@link CONTROL_REMOVE_FOLDER_REFUSAL} let every removal of the delete go.
  */
 export const CONTROL_REMOVE_FOLDER = "removeFolder";
 export interface RemoveFolder {
@@ -108,6 +110,26 @@ export interface RemoveFolder {
 export interface FolderRemoved {
   removed: boolean;
 }
+
+/**
+ * {@link CONTROL_REMOVE_FOLDER} asked, nothing removed: why the machine
+ * would refuse it, by the one rule the removal itself runs (agent
+ * remove-folder.ts), or null when it would go (nothing standing there goes
+ * too). The hub asks it of every removal of a delete before the first runs.
+ * A control of its own, so an agent that predates it answers it unknown
+ * and removes nothing. Args `[RemoveFolder]`; answers `string | null`.
+ * Reads only. Machine-scoped; only the hub sends it.
+ */
+export const CONTROL_REMOVE_FOLDER_REFUSAL = "removeFolderRefusal";
+
+/**
+ * Whether a folder stands at each of `paths` (a link to one counts), in
+ * their order: what the hub reads of a checkout at each register, so a place
+ * whose folder has gone is seen as missing (hub machine-commands.ts
+ * `learnCheckout`). Reads only. Args `[paths]`; answers `boolean[]`.
+ * Machine-scoped.
+ */
+export const CONTROL_FOLDERS_STAND = "foldersStand";
 
 /**
  * The delegation workspace whose clone holds a folder, by the machine's own

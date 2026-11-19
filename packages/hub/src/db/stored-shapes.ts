@@ -502,6 +502,7 @@ export const MoveStateShape = declared(
     kept: z.string().optional(),
     lfs: MoveLfsResultShape.optional(),
     lfsFile: MoveJobShape.shape.lfsFile.optional(),
+    made: z.literal(true).optional(),
     moved: z.string().optional(),
     progress: MoveJobShape.shape.progress.optional(),
     promptUuid: z.string(),

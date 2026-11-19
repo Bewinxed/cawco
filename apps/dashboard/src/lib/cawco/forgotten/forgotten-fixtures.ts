@@ -42,6 +42,7 @@ const trash = (id: string, at: string): ForgottenPlace => ({
   kind: "hub",
   machineId: "hub",
   machineName: "hub",
+  made: true,
   path: `/home/bewinxed/.local/share/cawco/trash/projects/${id}-${Date.parse(at)}`,
   within: [],
 });
@@ -106,6 +107,8 @@ export const BALCONY = named(
     {
       machineId: "m1",
       machineName: "obelisk",
+      // A folder the person named: it stays on disk.
+      made: false,
       path: "/home/bewinxed/garden",
       // Its folder sits inside a live project's whole home folder, as on obelisk.
       within: [{ id: "hyucksfield", name: "HyucksField" }],

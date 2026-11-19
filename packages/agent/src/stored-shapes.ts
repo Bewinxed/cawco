@@ -250,6 +250,26 @@ const LegacyFleetSidecarShape = declared(
 export const LegacyFleetSidecarSchema = LegacyFleetSidecarShape;
 export type LegacyFleetSidecarOutput = z.output<typeof LegacyFleetSidecarShape>;
 
+const MadeFolderShape = declared(
+  z.object({
+    at: z.number(),
+    born: z.string(),
+    dev: z.string(),
+    ino: z.string(),
+  }),
+  "MadeFolder",
+  "packages/agent/src/made-folders.ts"
+);
+export type MadeFolderOutput = z.output<typeof MadeFolderShape>;
+
+const MadeFoldersShape = declared(
+  z.object({ folders: z.record(z.string(), MadeFolderShape) }),
+  "MadeFolders",
+  "packages/agent/src/made-folders.ts"
+);
+export const MadeFoldersSchema = MadeFoldersShape;
+export type MadeFoldersOutput = z.output<typeof MadeFoldersShape>;
+
 const MediaMeasurementShape = declared(
   z.object({
     at: z.number(),

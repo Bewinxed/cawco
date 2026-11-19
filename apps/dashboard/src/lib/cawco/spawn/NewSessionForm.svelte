@@ -23,6 +23,7 @@
   } from "@cawco/core/harness/kinds";
   import type { PermissionMode } from "@cawco/core/harness/modes";
   import { traitsOf } from "@cawco/core/harness/traits";
+  import { machinePath } from "@cawco/core/machine-path";
   import { modelRun } from "@cawco/core/model-names";
   import { type MoveEstimate, moveSize as sizeWords } from "@cawco/core/move";
   import { isGitUrl, repoLeaf } from "@cawco/core/protocol";
@@ -120,7 +121,12 @@
     modeRefusal,
     permissionModesFor,
   } from "../permission-modes";
-  import { checkoutOf, checkoutOn, placedOn } from "../projects";
+  import {
+    checkoutOf,
+    checkoutOn,
+    foundCheckoutAt,
+    placedOn,
+  } from "../projects";
   import { folderCommands } from "../slash-commands";
   import {
     rememberedMachine,
@@ -1000,6 +1006,22 @@
           : []
       )
   );
+  /**
+   * The machines where the folder is missing and is a project checkout's
+   * that has stood there: a start there is refused, never made again (hub
+   * launches.ts `placeHolding`), where any other missing folder is made.
+   */
+  const goneMachines = $derived(
+    missingMachines.filter((id) => {
+      const row = boardStore.machines.find((one) => one.machineId === id);
+      try {
+        const path = machinePath(row?.home, cwd, row?.hostname ?? id);
+        return foundCheckoutAt(projectsStore.projects, id, path) !== undefined;
+      } catch {
+        return false;
+      }
+    })
+  );
   const locationReading = $derived.by(() => {
     if (offlineMachine) {
       return spawnWords.form.machineOffline(offlineMachine.hostname);
@@ -1017,13 +1039,19 @@
     if (away) {
       return awayWords(away, Date.now());
     }
+    const named = (ids: readonly string[]) =>
+      ids
+        .map(
+          (id) =>
+            boardStore.machines.find((row) => row.machineId === id)?.hostname ??
+            id
+        )
+        .join(", ");
+    if (!locationUnverified && goneMachines.length) {
+      return spawnWords.form.placeMissing(named(goneMachines));
+    }
     if (!locationUnverified && missingMachines.length) {
-      const names = missingMachines.map(
-        (id) =>
-          boardStore.machines.find((row) => row.machineId === id)?.hostname ??
-          id
-      );
-      return spawnWords.form.folderMissing(names.join(", "));
+      return spawnWords.form.folderMissing(named(missingMachines));
     }
     return "";
   });
@@ -1086,6 +1114,7 @@
             offlineMachine
           ) &&
           missingMachines.length &&
+          goneMachines.length === 0 &&
           connectionStore.hub === "connected"
         )
   );
@@ -1617,7 +1646,7 @@
     if (!cwd.trim()) {
       return spawnWords.form.enterDirectory;
     }
-    if (unreadable || offlineMachine) {
+    if (unreadable || offlineMachine || goneMachines.length) {
       return locationReading;
     }
     return "";

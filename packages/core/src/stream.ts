@@ -444,12 +444,16 @@ import type { TailnetServing } from "./tailnet-https";
  * 88: a states file's weight (`SheetWeight`) is a measurement alone: it no
  *    longer carries `budget`, `over` or `cut`. A page built for 87 reads
  *    `budget` and `over` as required, so it reloads first.
+ * 89: a project's delete is refused before anything goes when a machine
+ *    would not remove one of its folders (`delete-folder-refused`, 409) or
+ *    did not say (`delete-folder-unasked`, 502). A page built for 88 reads
+ *    neither code, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 88;
+export const WIRE_PROTOCOL = 89;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

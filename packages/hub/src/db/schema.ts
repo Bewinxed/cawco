@@ -1055,6 +1055,29 @@ export const projectPlaces = sqliteTable(
      * machine away (moves.ts `plan`). Null: not read yet, or no commit.
      */
     root: text("root"),
+    /**
+     * CawCo made the checkout's folder: a move's clone put it where nothing
+     * stood (moves.ts `startSession`), and its machine keeps the folder's
+     * identity on disk (agent made-folders.ts). A delete with its files
+     * removes a made folder and never any other (project-delete.ts). False:
+     * the person named a folder that was there, and every place filed
+     * before the hub kept this.
+     */
+    made: integer("made", { mode: "boolean" }).notNull().default(false),
+    /**
+     * The checkout's folder has gone: it had stood there (`found`), and
+     * nothing stood there when its machine last looked, at its register or
+     * as it was added (machine-commands.ts `learnCheckout`).
+     */
+    missing: integer("missing", { mode: "boolean" }).notNull().default(false),
+    /**
+     * The checkout's folder has stood at its path, as its machine looked or
+     * a move's clone put it there: from then on a session start there never
+     * makes it again, and is refused while it is gone (launches.ts
+     * `placeHolding`, agent session.ts `workdirFor`). Until then a start
+     * makes it, as a new project's folder is made by its first session.
+     */
+    found: integer("found", { mode: "boolean" }).notNull().default(false),
     createdAt: stampedNow("created_at"),
   },
   (table) => [

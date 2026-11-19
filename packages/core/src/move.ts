@@ -420,6 +420,16 @@ export interface MoveLfsResult {
 }
 
 /**
+ * {@link CONTROL_MOVE_CLONE}'s answer: what follows it, and whether the
+ * clone made the folder, nothing having stood at its path, and its machine
+ * recorded it as CawCo's (agent made-folders.ts). A folder that stood there,
+ * empty, stays the person's. Absent from an agent that predates it: not made.
+ */
+export interface MoveCloned extends MoveLfsResult {
+  made?: boolean;
+}
+
+/**
  * Daemon → hub: how far the step in flight is. `file` only while a file of
  * at least {@link LARGE_FILE_BYTES} is in flight (the largest).
  */

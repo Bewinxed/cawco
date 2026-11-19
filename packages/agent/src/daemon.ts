@@ -167,6 +167,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import {
   CONTROL_CLONE_HOLDING,
+  CONTROL_FOLDERS_STAND,
   CONTROL_HOST_OUTPUTS,
   CONTROL_HOST_SCRATCH_REMOVE,
   CONTROL_INPUTS_ADMIT,
@@ -179,6 +180,7 @@ import {
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_REMOVE_FOLDER,
+  CONTROL_REMOVE_FOLDER_REFUSAL,
   CONTROL_REPO_ROOT,
   CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -295,6 +297,7 @@ import {
   savePicture,
   writeInputs,
 } from "./inputs";
+import { isDirectory } from "./is-directory";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
@@ -346,7 +349,7 @@ import {
   redactConsole,
   storedHashes,
 } from "./redaction";
-import { removeFolder } from "./remove-folder";
+import { removalRefusal, removeFolder } from "./remove-folder";
 import { repoRoot } from "./repo-top";
 import { fenced } from "./restart";
 import {
@@ -3523,6 +3526,15 @@ const startDaemon = (rediscover = false) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : removeFolder(asked)
+    );
+    // The same rule asked before a delete's first removal runs: read only.
+    supervisor.declareControl(
+      CONTROL_REMOVE_FOLDER_REFUSAL,
+      async (asked) => (await removalRefusal(asked)) ?? null
+    );
+    // Whether each checkout's folder stands, read at the register: read only.
+    supervisor.declareControl(CONTROL_FOLDERS_STAND, (paths) =>
+      Promise.all(paths.map((path) => isDirectory(path)))
     );
     // The checkout a folder is in, as a workspace cut there reads it: read only.
     supervisor.declareControl(CONTROL_REPO_ROOT, (path) => repoRoot(path));

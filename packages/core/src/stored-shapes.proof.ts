@@ -253,6 +253,7 @@ import type {
 import type { MachinePath as MachinePathType } from "./machine-path";
 import type {
   MoveAsk as MoveAskType,
+  MoveCloned as MoveClonedType,
   MoveError as MoveErrorType,
   MoveInspection as MoveInspectionType,
   MoveJob as MoveJobType,
@@ -655,6 +656,7 @@ import type {
   ModelInfoOutput,
   MoveAskOutput,
   MoveBecauseOutput,
+  MoveClonedOutput,
   MoveEndedOutput,
   MoveErrorOutput,
   MoveInspectionOutput,
@@ -1193,9 +1195,10 @@ prove<
     Same<OpencodeProviderOutput, OpencodeProviderType>,
     Same<PiProviderOutput, PiProviderType>,
     Same<MachineProviderListsOutput, MachineProviderListsType>,
+    Same<MoveLfsResultOutput, MoveLfsResultType>,
+    Same<MoveClonedOutput, MoveClonedType>,
     Same<MoveLargeFileOutput, MoveLargeFileType>,
     Same<MoveInspectionOutput, MoveInspectionType>,
-    Same<MoveLfsResultOutput, MoveLfsResultType>,
     Same<MoveRemoteAuthOutput, MoveRemoteAuthType>,
     Same<HubRepoKeyOutput, HubRepoKeyType>,
     Same<MoveLfsObjectOutput, MoveLfsObjectType>,

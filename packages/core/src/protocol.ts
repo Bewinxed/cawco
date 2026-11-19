@@ -262,6 +262,16 @@ export interface SpawnPayload {
   permissionMode?: import("./harness/modes").PermissionMode;
   /** `false` asks the harness never to store this session's transcript. */
   persistSession?: boolean;
+  /**
+   * The project checkout whose folder {@link cwd} is, or is inside, once
+   * that folder has stood there: the machine never makes it again, and
+   * refuses the start while nothing stands there (agent session.ts
+   * `workdirFor`). Set by the hub alone, on every launch, from the
+   * checkouts it holds on the session's machine; absent where the folder is
+   * no such checkout's (a new project's, which its first session makes),
+   * and made when missing.
+   */
+  place?: string;
   /** Hub-owned launch identity, retained when reattaching a surviving process. */
   processGeneration?: string;
   /** The project this session was started from, when it was started from one. */

@@ -71,6 +71,14 @@ export const claudeVersionPath = (): string =>
   join(cawcoDataDir(), "claude-version.json");
 
 /**
+ * Each folder CawCo made on this machine for a project, by its path, with
+ * its identity on disk as it was made (agent made-folders.ts): what a delete
+ * with its files holds a folder to before it removes it.
+ */
+export const madeFoldersPath = (): string =>
+  join(cawcoDataDir(), "made-folders.json");
+
+/**
  * Each tool CawCo installed on this machine, by tool id: where the copy it
  * put on is, with which method, which version and when (agent tools.ts
  * `recordInstall`). What says a copy is CawCo's own (core `ToolCopy`), so

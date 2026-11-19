@@ -10,20 +10,22 @@
  * them (browsers.ts `remove`); its workspaces' clones (`unlanded: "drop"`:
  * nothing read, nothing carried) and the carries earlier ones left; its work
  * items and workspace rows; and its sessions' hub records (a session's
- * `delete` end). With `fromDisk` it also removes its places on disk on
- * every machine, its checkouts and folders (core `CONTROL_REMOVE_FOLDER`),
- * and its sessions' transcripts (a session's `delete-transcript` end).
+ * `delete` end). The copies of its fleet rows placed in its folders leave
+ * as its rows do (routes/projects.ts `projectMoved`). With `fromDisk` it
+ * also removes, on every machine, each checkout of it CawCo made (schema
+ * `made`: a move's clone where nothing stood), and its sessions'
+ * transcripts (a session's `delete-transcript` end). A folder the person
+ * named stays on disk, whatever it holds: the owner's pick of 2026-11-19,
+ * "Only what CawCo made".
  *
  * What it refuses, in core's words (words/project-trash.ts), before anything
  * is removed:
  * - a session of it still running: they stop first, as a forget's do;
- * - with `fromDisk`, a place of it that is a live project's checkout too,
- *   or holds one, on the same machine: removing it would remove that
- *   project's files whole (core place-nesting.ts). A place inside a live
- *   project's wider checkout goes, and the files box names that project
- *   beside it, as losing those files too. Every path removed is one of the
- *   project's own recorded places, and its machine holds it to a floor of
- *   its own (agent remove-folder.ts);
+ * - with `fromDisk`, a made checkout of it that is a live project's
+ *   checkout too, or holds one, on the same machine: removing it would
+ *   remove that project's files whole (core place-nesting.ts). A made
+ *   checkout inside a live project's wider checkout goes, and the files box
+ *   names that project beside it, as losing those files too;
  * - a machine that holds something of it to remove and is not connected.
  *   Of what a machine is told to remove, only a session's end has an owed
  *   rule: its end intent is kept on its row and delivered at the machine's
@@ -33,17 +35,27 @@
  *   every session's end does, and anything else on a machine that is away
  *   refuses the delete, naming the machine; nothing is removed, and the
  *   person deletes it again once the machine is back. A machine removed from
- *   the fleet holds nothing CawCo can reach and is passed over.
+ *   the fleet holds nothing CawCo can reach and is passed over;
+ * - a folder a machine would not remove: every path removed is one of the
+ *   project's own recorded places or its workspaces' carries, and each is
+ *   asked of its machine first (core `CONTROL_REMOVE_FOLDER_REFUSAL`), which
+ *   answers by the floor its removal holds it to (agent remove-folder.ts):
+ *   its root, its home, CawCo's own dirs, and a checkout whose folder is no
+ *   longer the one CawCo made there.
  *
- * Machines first, then the hub: a removal a machine refuses or fails stops
- * the delete there, in words naming it, the hub's rows kept, so deleting it
- * again finishes it (each removal finds nothing left of what went before).
+ * Machines first, then the hub: a removal a machine refuses or fails after
+ * all were let go (something changed on its disk since, or a removal
+ * failed) stops the delete there, in words naming it, the hub's rows kept,
+ * so deleting it again finishes it (each removal finds nothing left of what
+ * went before).
  */
 
 import type { BrowserKey } from "@cawco/core/browser";
+import { knowsNotControl } from "@cawco/core/session/controls";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import {
   CONTROL_REMOVE_FOLDER,
+  CONTROL_REMOVE_FOLDER_REFUSAL,
   CONTROL_WORKSPACE_ARCHIVE,
   type RemoveFolder,
   type WorkspaceArchive,
@@ -104,6 +116,8 @@ class AgentTooOld extends Error {
 
 /** One removal on a machine: what it removes, counted under `kind`. */
 interface Removal {
+  /** The folder it removes, asked of its machine before any removal runs. */
+  folder?: RemoveFolder;
   kind: Exclude<keyof MachineRemoved, "sessions">;
   machineId: string;
   /** Removes it; what it answers is read only for a refusal, which fails it as a throw does. */
@@ -140,7 +154,7 @@ export interface ProjectDeleteDeps {
 /** Everything a delete removes of a project, read before anything goes. */
 interface Plan {
   browsers: { key: BrowserKey; machineId: string }[];
-  /** Its places on disk, removed with `fromDisk`. */
+  /** Its checkouts CawCo made, removed with `fromDisk`; those the person named stay. */
   places: DiskPlace[];
   sessions: HeldSession[];
   workspaces: HeldWorkspace[];
@@ -166,7 +180,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
         .list()
         .filter((row) => row.key === `project:${id}`)
         .map(({ key, machineId }) => ({ key, machineId })),
-      places: diskPlaces(db, id, trashed),
+      places: diskPlaces(db, id, trashed).filter((place) => place.made),
       sessions,
       workspaces: workspaces.filter((one) => joined.has(one.machineId)),
     };
@@ -204,7 +218,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
   const removeFolder = (machineId: string, folder: RemoveFolder) =>
     deps.call(machineId, CONTROL_REMOVE_FOLDER, [folder]);
 
-  /** Every removal `plan` holds on a machine, in order: browsers, clones, carries, then (`fromDisk`) places. */
+  /** Every removal `plan` holds on a machine, in order: browsers, clones, carries, then (`fromDisk`) its made checkouts. */
   const removalsOf = (plan: Plan, fromDisk: boolean): Removal[] => {
     const cut = plan.workspaces.filter((one) => !one.host);
     return [
@@ -222,28 +236,86 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
           what: `Workspace ${workspace.id}`,
           run: () => dropClone(workspace),
         })),
-      ...cut.flatMap(({ carry, machineId }): Removal[] =>
-        carry
-          ? [
-              {
-                kind: "carries",
-                machineId,
-                what: `The carry ${carry}`,
-                run: () =>
-                  removeFolder(machineId, { kind: "carry", path: carry }),
-              },
-            ]
-          : []
-      ),
-      ...(fromDisk ? plan.places : []).map((place): Removal => ({
-        kind: "places",
-        machineId: place.machineId,
-        what: place.path,
-        run: () =>
-          removeFolder(place.machineId, { kind: "place", path: place.path }),
-      })),
+      ...cut.flatMap(({ carry, machineId }): Removal[] => {
+        if (!carry) {
+          return [];
+        }
+        const folder: RemoveFolder = { kind: "carry", path: carry };
+        return [
+          {
+            folder,
+            kind: "carries",
+            machineId,
+            what: `The carry ${carry}`,
+            run: () => removeFolder(machineId, folder),
+          },
+        ];
+      }),
+      ...(fromDisk ? plan.places : []).map((place): Removal => {
+        const folder: RemoveFolder = { kind: "place", path: place.path };
+        return {
+          folder,
+          kind: "places",
+          machineId: place.machineId,
+          what: place.path,
+          run: () => removeFolder(place.machineId, folder),
+        };
+      }),
     ];
   };
+
+  /**
+   * Why a removal's machine would refuse its folder, asked there before
+   * anything goes (core `CONTROL_REMOVE_FOLDER_REFUSAL`): the delete's
+   * refusal in words, naming the folder and that nothing was removed; an
+   * agent too old to be asked is updated first. Undefined when it may go.
+   */
+  const refusalOf = async (name: string, removal: Removal) => {
+    if (!removal.folder) {
+      return;
+    }
+    const machine = deps.machineName(removal.machineId);
+    try {
+      const why = await deps.call(
+        removal.machineId,
+        CONTROL_REMOVE_FOLDER_REFUSAL,
+        [removal.folder]
+      );
+      return why === null
+        ? undefined
+        : problem(409, {
+            code: "delete-folder-refused",
+            detail: projectTrashWords.folderRefused(
+              name,
+              removal.what,
+              machine,
+              why,
+              removal.kind === "places"
+            ),
+          });
+    } catch (error) {
+      return knowsNotControl(error, CONTROL_REMOVE_FOLDER_REFUSAL)
+        ? problem(409, {
+            code: "delete-agent-too-old",
+            detail: projectTrashWords.agentTooOld(name, removal.what, machine),
+          })
+        : problem(502, {
+            code: "delete-folder-unasked",
+            detail: projectTrashWords.folderUnasked(
+              name,
+              removal.what,
+              machine,
+              wordsOf(error)
+            ),
+          });
+    }
+  };
+
+  /** The first of `removals` its machine would refuse, every one asked at once: the delete's refusal, before anything goes. */
+  const refusedOnMachines = async (name: string, removals: Removal[]) =>
+    (
+      await Promise.all(removals.map((removal) => refusalOf(name, removal)))
+    ).find((refusal) => refusal !== undefined);
 
   /** Each session's end recorded as a delete, owed to its machine as every session's end is, away or not. */
   const endSessions = (
@@ -275,10 +347,11 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
     }
   };
 
-  /** Each removal `plan` holds, on its machine, the first that fails the delete's refusal in words; what went, by machine. */
+  /** Each of `removals`, on its machine, the first that fails the delete's refusal in words; what went, by machine. */
   const removeOnMachines = async (
     name: string,
     plan: Plan,
+    removals: Removal[],
     fromDisk: boolean
   ) => {
     const removed = new Map<string, MachineRemoved>();
@@ -293,7 +366,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
       removed.set(machineId, counts);
       return counts;
     };
-    for (const removal of removalsOf(plan, fromDisk)) {
+    for (const removal of removals) {
       const failed = await failureOf(removal);
       if (failed) {
         const { error } = failed;
@@ -406,7 +479,12 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
       if (held) {
         return held;
       }
-      const removed = await removeOnMachines(name, plan, fromDisk);
+      const removals = removalsOf(plan, fromDisk);
+      const refused = await refusedOnMachines(name, removals);
+      if (refused) {
+        return refused;
+      }
+      const removed = await removeOnMachines(name, plan, removals, fromDisk);
       if (removed instanceof ElysiaStatus) {
         return removed;
       }

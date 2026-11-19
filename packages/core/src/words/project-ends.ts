@@ -162,10 +162,12 @@ export const projectEndWords = {
   /** Said under what asked while what runs in the project is read. */
   reading: "Checking for running sessions…",
 
-  /** Delete's box: its places on disk and its transcripts go too. */
+  /** Delete's box: the checkouts CawCo made and its transcripts go too. */
   fromDisk: "Also delete its files on disk",
-  /** Delete's box for a project with no checkout on any machine: what it still removes. */
+  /** Delete's box for a project with no checkout CawCo made on any machine: what it still removes. */
   transcriptsOnly: "Also delete its sessions' transcripts",
+  /** Checked, over the checkouts the person named: they are not removed. */
+  staysOnDisk: "Stays on disk",
   /** Checked, beside a checkout it lists: the live projects whose wider folder holds it lose those files too. */
   within: (holders: readonly string[]) =>
     holders.length === 1

@@ -76,6 +76,7 @@ import type {
 } from "./image-generation";
 import type {
   MoveCancelled,
+  MoveCloned,
   MoveCloneRequest,
   MoveInspection,
   MoveLfsRequest,
@@ -299,6 +300,7 @@ interface ControlTable {
     [cwd: string, account?: string | null, model?: string | null],
     SupportedCommands
   >;
+  foldersStand: Entry<[paths: string[]], boolean[]>;
   forgePost: Entry<[ask: ForgeAsk], ForgeVerdict>;
   forgetAccount: Unread<[account: string, into?: string | null]>;
   forgetCodexLogin: Unread<[account: string]>;
@@ -380,7 +382,7 @@ interface ControlTable {
   mcpServerStatus: Entry<[], McpServerStatus[]>;
   modelCatalog: Entry<[], ModelInfo[]>;
   moveCancel: Entry<[jobId: string], MoveCancelled>;
-  moveClone: Entry<[request: MoveCloneRequest], MoveLfsResult>;
+  moveClone: Entry<[request: MoveCloneRequest], MoveCloned>;
   moveHomeCredential: Entry<
     [
       account: string,
@@ -450,6 +452,7 @@ interface ControlTable {
     CustodyPresence[]
   >;
   removeFolder: Entry<[asked: RemoveFolder], FolderRemoved>;
+  removeFolderRefusal: Entry<[asked: RemoveFolder], string | null>;
   renameSession: Unread<[sessionKey: string, title: string, dir?: CatalogDir]>;
   repoRoot: Entry<[path: string], string | null>;
   resolvePermission: Unread<[requestId: string, result: PermissionResult]>;

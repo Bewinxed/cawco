@@ -293,10 +293,11 @@ export const projectRoutes = ({
       return { ok: true };
     })
     // A project deleted for good, live or forgotten (project-delete.ts):
-    // nothing CawCo holds of it remains; `fromDisk`, its places on disk
-    // and its sessions' transcripts go too. Refused, in the hub's words,
-    // while a session of it runs, a place it would remove from disk is
-    // another live project's, or a machine holding part of it is away.
+    // nothing CawCo holds of it remains; `fromDisk`, the checkouts CawCo
+    // made and its sessions' transcripts go too. Refused, in the hub's
+    // words, before anything goes, while a session of it runs, a checkout
+    // it would remove from disk is another live project's, a machine
+    // holding part of it is away, or a machine would not remove a folder.
     .post(
       "/api/projects/:id/discard",
       {

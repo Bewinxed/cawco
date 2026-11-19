@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { cleanStartRefusal } from "@cawco/core/harness";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import {
@@ -561,6 +562,29 @@ export const createLaunches = (ctx: LaunchesContext) => {
     };
   };
 
+  /**
+   * The checkout on `machineId` whose folder `cwd` is or is inside, the
+   * deepest where they nest, once its folder has stood there (schema
+   * `found`): the folder the machine never makes again
+   * ({@link SpawnPayload.place}). None where `cwd` is in none, or in a new
+   * project's folder its first session makes.
+   */
+  const placeHolding = (
+    machineId: string,
+    cwd: string
+  ): Pick<SpawnPayload, "place"> => {
+    const slash = (path: string): string =>
+      path.endsWith("/") ? path : `${path}/`;
+    const at = slash(posix.normalize(cwd));
+    const [place] = ctx.db
+      .checkoutsOn(machineId)
+      .filter((one) => one.found)
+      .map((one) => one.path)
+      .filter((path) => at.startsWith(slash(path)))
+      .sort((a, b) => b.length - a.length);
+    return place ? { place } : {};
+  };
+
   const bounded = (given: SpawnPayload, knownRow?: InstanceRow) => {
     const payload = withHeldPicks(given);
     const {
@@ -571,6 +595,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
       schedulesToParent: _callerSchedules,
       clean: _callerClean,
       startingSet: _callerSet,
+      place: _callerPlace,
       ...asked
     } = payload;
     const owned = ctx.db.ownedInstance(payload.instanceId);
@@ -630,6 +655,8 @@ export const createLaunches = (ctx: LaunchesContext) => {
       // Its work item's boundary, or a host-scope one's scratch dir.
       ...ctx.workItems.spawnPlace(row),
       ...(payload.reattachOnly ? where : {}),
+      // A checkout's folder is the person's: its machine never makes it.
+      ...placeHolding(read.machineId, payload.cwd),
     };
     return bound;
   };

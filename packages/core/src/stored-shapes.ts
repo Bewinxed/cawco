@@ -3257,6 +3257,7 @@ const SpawnPayloadShape = declared(
       .optional(),
     permissionMode: PermissionModeShape.optional(),
     persistSession: z.boolean().optional(),
+    place: z.string().optional(),
     processGeneration: z.string().optional(),
     projectId: z.string().optional(),
     reattachOnly: z
@@ -3396,6 +3397,21 @@ export type MachineProviderListsOutput = z.output<
   typeof MachineProviderListsShape
 >;
 
+export const MoveLfsResultShape = declared(
+  z.object({ bytes: z.number(), files: z.number() }),
+  "MoveLfsResult",
+  "packages/core/src/move.ts"
+);
+export type MoveLfsResultOutput = z.output<typeof MoveLfsResultShape>;
+
+const MoveClonedShape = declared(
+  MoveLfsResultShape.extend({ made: z.boolean().optional() }),
+  "MoveCloned",
+  "packages/core/src/move.ts"
+);
+export const MoveClonedSchema = MoveClonedShape;
+export type MoveClonedOutput = z.output<typeof MoveClonedShape>;
+
 export const MoveLargeFileShape = declared(
   z.object({ bytes: z.number(), path: z.string() }),
   "MoveLargeFile",
@@ -3428,13 +3444,6 @@ const MoveInspectionShape = declared(
 );
 export const MoveInspectionSchema = MoveInspectionShape;
 export type MoveInspectionOutput = z.output<typeof MoveInspectionShape>;
-
-export const MoveLfsResultShape = declared(
-  z.object({ bytes: z.number(), files: z.number() }),
-  "MoveLfsResult",
-  "packages/core/src/move.ts"
-);
-export type MoveLfsResultOutput = z.output<typeof MoveLfsResultShape>;
 
 const MoveRemoteAuthShape = declared(
   z.object({ remoteBasic: z.string().optional() }),

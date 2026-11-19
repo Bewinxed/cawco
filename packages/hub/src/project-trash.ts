@@ -757,10 +757,20 @@ export interface TrashedProject {
   folders: string[];
   /** The name its newest record gives it; null when none does. */
   name: string | null;
-  /** Its places as its records keep them. */
-  places: { id: string; kind: string; machineId: string; path: string }[];
+  /** Its places as its records keep them; `made` false where a record predates it (schema `made`). */
+  places: RecordedPlace[];
   /** The sessions its forgets unlinked. */
   sessions: string[];
+}
+
+/** A place of a project as the hub records it, live or in a forget's record. */
+interface RecordedPlace {
+  id: string;
+  kind: string;
+  machineId: string;
+  /** CawCo made its folder (schema `made`): a delete with its files removes it. */
+  made: boolean;
+  path: string;
 }
 
 /** One table's rows of a record as objects, by column name. */
@@ -822,6 +832,8 @@ const heldIn = async (mine: readonly Entry[]): Promise<TrashedProject> => {
         id: String(place.id),
         kind: String(place.kind),
         machineId: String(place.machine_id),
+        // A record written before the column holds none: the person's.
+        made: place.made === 1,
         path: String(place.path),
       });
     }
@@ -834,26 +846,32 @@ export const recordedPlaces = (
   db: Pick<DbShape, "project">,
   id: string,
   trashed: TrashedProject | undefined
-): { id: string; kind: string; machineId: string; path: string }[] => [
+): RecordedPlace[] => [
   ...(db.project(id)?.places ?? []),
   ...(trashed?.places ?? []),
 ];
 
-/** A checkout on a machine's disk that a delete with `fromDisk` removes, read against the live projects there (core place-nesting.ts). */
+/** A checkout of a project on a machine's disk, as a delete with `fromDisk` reads it against the live projects there (core place-nesting.ts). */
 export interface DiskPlace extends PlaceNesting {
   id: string;
   machineId: string;
+  /** CawCo made its folder: a delete with `fromDisk` removes it. Else it stays on disk. */
+  made: boolean;
   path: string;
 }
 
 /**
- * The checkouts a delete of project `id` with `fromDisk` removes
+ * The checkouts a delete of project `id` with `fromDisk` reads
  * (project-delete.ts): its own live ones and those its trash records keep,
  * each machine and path once, on machines still in the fleet (one removed
  * from it holds nothing CawCo can reach), each read against the other live
  * projects' checkouts: the one that refuses it, and those whose wider
- * folder holds it. The list of forgotten projects names the same, and a
- * live project's places carry the same reading (project-out.ts `createProjectOut`).
+ * folder holds it. Only those CawCo made (`made`) are removed: the owner's
+ * pick of 2026-11-19, "Only what CawCo made"; a folder the person named
+ * stays on disk, however it sits. One recorded twice is made when either
+ * record says so. The list of forgotten projects names the same, and a
+ * live project's places carry the same reading (project-out.ts
+ * `createProjectOut`).
  */
 export const diskPlaces = (
   db: Pick<DbShape, "machineFacts" | "listProjects" | "project">,
@@ -862,17 +880,21 @@ export const diskPlaces = (
 ): DiskPlace[] => {
   const joined = new Set(db.machineFacts().map((agent) => agent.machineId));
   const live = db.listProjects();
-  return [
-    ...new Map(
-      recordedPlaces(db, id, trashed)
-        .filter((place) => place.kind === "checkout")
-        .map((place) => [`${place.machineId}\0${place.path}`, place])
-    ).values(),
-  ]
+  const once = new Map<string, RecordedPlace>();
+  for (const place of recordedPlaces(db, id, trashed)) {
+    if (place.kind !== "checkout") {
+      continue;
+    }
+    const key = `${place.machineId}\0${place.path}`;
+    const seen = once.get(key);
+    once.set(key, seen ? { ...seen, made: seen.made || place.made } : place);
+  }
+  return [...once.values()]
     .filter((place) => joined.has(place.machineId))
-    .map(({ id: placeId, machineId, path }) => ({
+    .map(({ id: placeId, machineId, made, path }) => ({
       id: placeId,
       machineId,
+      made,
       path,
       ...placeNesting(id, { machineId, path }, live),
     }));
@@ -1198,9 +1220,9 @@ export const projectTrash = (
       ? machineCalled(machineId, fleet)
       : machineId;
   /**
-   * Every place deleting project `id` with its files removes, read as the
-   * delete reads them (project-delete.ts): its folders in the trash, then
-   * {@link diskPlaces}.
+   * Every place deleting project `id` with its files reads, as the delete
+   * reads them (project-delete.ts): its folders in the trash, which go,
+   * then {@link diskPlaces}, of which the made go and the rest stay.
    */
   const placesOf = (
     id: string,
@@ -1211,14 +1233,16 @@ export const projectTrash = (
       kind: "hub",
       machineId: TRASH_MACHINE,
       machineName: TRASH_MACHINE,
+      made: true,
       path,
       within: [],
     })),
     ...diskPlaces(db, id, held).map(
-      ({ machineId, path, within }): ForgottenPlace => ({
+      ({ machineId, made, path, within }): ForgottenPlace => ({
         kind: "checkout",
         machineId,
         machineName: nameOf(machineId, fleet),
+        made,
         path,
         within,
       })

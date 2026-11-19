@@ -78,6 +78,19 @@ export const projectTrashWords = {
   /** A machine's agent predates deleting a workspace's clone: it is updated first, then the delete runs again. */
   agentTooOld: (name: string, what: string, machine: string) =>
     `CawCo on ${machine} is too old to remove ${what.charAt(0).toLowerCase()}${what.slice(1)}, so ${name} is not deleted yet. Update it (Configure › Updates), then delete ${name} again.`,
+  /** A machine would refuse one folder, asked before anything went (agent remove-folder.ts gives `why`): nothing was removed. */
+  folderRefused: (
+    name: string,
+    what: string,
+    machine: string,
+    why: string,
+    /** The folder is one of its checkouts, which a delete without its files leaves. */
+    checkout: boolean
+  ) =>
+    `${what} on ${machine} can't be removed (${why}), so nothing of ${name} was removed.${checkout ? " Delete it again without removing its files." : ""}`,
+  /** A machine did not say whether it would remove one folder: nothing was removed. */
+  folderUnasked: (name: string, what: string, machine: string, why: string) =>
+    `Whether ${what.charAt(0).toLowerCase()}${what.slice(1)} on ${machine} can be removed is not known (${why}), so nothing of ${name} was removed. Delete it again.`,
   /** A machine refused or failed one removal: what went before it stays gone, the project stays listed. */
   notRemoved: (name: string, what: string, machine: string, why: string) =>
     `${what} on ${machine} was not removed (${why}), so ${name} is not deleted yet. What was removed before it stays removed; delete it again to finish.`,

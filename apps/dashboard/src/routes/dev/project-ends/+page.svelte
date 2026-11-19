@@ -279,6 +279,7 @@
         kind: "checkout" as const,
         machineId: place.machineId,
         machineName: MACHINES[place.machineId] ?? place.machineId,
+        made: place.made,
         path: place.path,
         within: place.within,
       })),

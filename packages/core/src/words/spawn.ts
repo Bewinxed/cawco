@@ -18,6 +18,13 @@ export const spawnWords = {
   /** One refused start, in the refusal's own words. */
   refusedLine: (refusal: string) => `${spawnWords.refused}: ${refusal}`,
   /**
+   * A start refused on its machine because the project checkout it runs in
+   * has no folder there (agent session.ts `workdirFor`): moved or removed by
+   * hand, never made again empty.
+   */
+  placeMissing: (path: string) =>
+    `The project's folder ${path} is missing, so the session didn't start. Put the folder back there, or start in another folder.`,
+  /**
    * A start refused because its project's starting-set file does not read
    * (hub server.ts `startingSetOf`), to the agent or person who asked: it
    * never starts with everything for a file the hub could not read.
@@ -319,6 +326,9 @@ export const spawnWords = {
       `That directory can't be read on ${machine}. Check the path and try again.`,
     folderMissing: (machines: string) =>
       `Folder missing. Start creates it on ${machines}.`,
+    /** The folder is a project checkout's that has gone (hub launches.ts `placeHolding`): a start there is refused. */
+    placeMissing: (machines: string) =>
+      `The project's folder is missing on ${machines}. Put it back there, or pick another folder.`,
     enterDirectory: "Enter the directory this session should work in.",
     /** What a machine that didn't answer leaves unknown (`didntAnswer`). */
     folderUnknown: "whether the folder is there is not known",

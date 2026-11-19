@@ -5078,13 +5078,18 @@ export class SessionSupervisor {
  * that has nothing to find; a throw for a spawn that has nowhere to run.
  */
 async function workdirFor(payload: SpawnPayload): Promise<string | undefined> {
-  const { bootstrap, reattachOnly, workspace } = payload;
+  const { bootstrap, place, reattachOnly, workspace } = payload;
   // Every folder a spawn names is a MachinePath: the hub settled it.
   const workdir = bootstrap ? await cloneRepo(bootstrap) : payload.cwd;
   // A workspace's directory is its clone: one that is gone was removed
   // after its work landed, and an empty folder made in its place would be
-  // a session resumed into nothing.
+  // a session resumed into nothing. A project checkout's folder is the
+  // person's: one that is gone was moved or removed by them, and an empty
+  // folder made at its path would hide that, so the start is refused.
   if (!(bootstrap || reattachOnly || workspace)) {
+    if (place && !(await isDirectory(place))) {
+      throw new Error(spawnWords.placeMissing(place));
+    }
     await makeFolder(workdir);
   }
   if (await isDirectory(workdir)) {

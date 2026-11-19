@@ -97,8 +97,17 @@ export interface StopJob {
   phase: StopPhase;
   /** Caw off: the rows checked to stop, every one at first. */
   picked: string[];
-  /** A delete only: the checkouts its files box removes, as the project listed them when asked, each with the live projects whose checkout holds it. */
-  places: { machineId: string; path: string; within: PlaceProject[] }[];
+  /**
+   * A delete only: the project's checkouts as it listed them when asked,
+   * each with the live projects whose checkout holds it; its files box
+   * removes those CawCo made (`made`), and the rest stay on disk.
+   */
+  places: {
+    machineId: string;
+    made: boolean;
+    path: string;
+    within: PlaceProject[];
+  }[];
   /** When the stop was pressed (Date.now()), for a slow row's seconds. */
   pressedAt: number;
   projectId: string;
@@ -115,7 +124,7 @@ export function endWordsOf(job: StopJob): EndWords {
   return job.kind === "delete"
     ? projectEndWords.delete(
         job.projectName,
-        job.fromDisk && job.places.length > 0
+        job.fromDisk && job.places.some((place) => place.made)
       )
     : projectEndWords.forget(job.projectName);
 }
@@ -217,7 +226,8 @@ class StopWork {
     }
     // A job kept before a delete could be asked holds no files box and no
     // places: it reads as a forget with neither; one kept before a place
-    // named the projects holding it names none. So a stop parked across
+    // named the projects holding it names none, and one kept before a place
+    // said CawCo made it names it the person's. So a stop parked across
     // the update is not dropped with the record it sits in.
     const kept = readJson(
       KEY,
@@ -233,7 +243,7 @@ class StopWork {
                 ...job,
                 places: job.places.map((place: unknown) =>
                   place && typeof place === "object"
-                    ? { within: [], ...place }
+                    ? { made: false, within: [], ...place }
                     : place
                 ),
               }
@@ -305,6 +315,7 @@ class StopWork {
       places: {
         kind: string;
         machineId: string;
+        made: boolean;
         path: string;
         within: PlaceProject[];
       }[];
@@ -323,8 +334,9 @@ class StopWork {
         kind === "delete"
           ? project.places
               .filter((place) => place.kind === "checkout")
-              .map(({ machineId, path, within }) => ({
+              .map(({ machineId, made, path, within }) => ({
                 machineId,
+                made,
                 path,
                 within,
               }))

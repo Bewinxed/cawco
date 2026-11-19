@@ -447,6 +447,10 @@ const ARGS: {
   removeFolder: tuple([
     object({ kind: picklist(["place", "carry"]), path: text }),
   ]),
+  removeFolderRefusal: tuple([
+    object({ kind: picklist(["place", "carry"]), path: text }),
+  ]),
+  foldersStand: tuple([array(absolute)]),
   cloneHolding: tuple([named]),
   placeLfs: tuple([
     absolute,

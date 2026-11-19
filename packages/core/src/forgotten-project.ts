@@ -62,6 +62,12 @@ export interface ForgottenPlace {
   machineId: string;
   /** The machine's name as the hub holds it now; its id when the hub holds none. */
   machineName: string;
+  /**
+   * CawCo made the folder, so a delete with its files removes it: the hub's
+   * own, and a checkout a move cloned where nothing stood. A checkout the
+   * person named stays on disk.
+   */
+  made: boolean;
   /** Absolute on its machine. */
   path: string;
   /** The live projects whose checkout holds this folder: they lose these files too (place-nesting.ts). Empty for the hub's own. */

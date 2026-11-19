@@ -1195,7 +1195,7 @@ export const createMoves = (deps: MovesDeps) => {
             "There is no snapshot to clone: the source had no commit."
           );
         }
-        const lfs = await deps.call(
+        const { made, ...lfs } = await deps.call(
           state.targetMachineId,
           CONTROL_MOVE_CLONE,
           [
@@ -1213,9 +1213,11 @@ export const createMoves = (deps: MovesDeps) => {
           ],
           STEP_TIMEOUT_MS
         );
-        return state.steps.includes("lfs")
-          ? { lfs, progress: undefined }
-          : { progress: undefined };
+        return {
+          ...(made ? { made: true as const } : {}),
+          ...(state.steps.includes("lfs") ? { lfs } : {}),
+          progress: undefined,
+        };
       }
       case "lfs": {
         if (!state.snapshot) {
@@ -1253,8 +1255,10 @@ export const createMoves = (deps: MovesDeps) => {
 
   /**
    * The last step: the target folder becomes a checkout place of the
-   * project, the session starts there from the stored request, and its first
-   * prompt goes to it. The words of what moved and what stayed are kept.
+   * project, made when the clone made it (a place filed before stays as it
+   * was filed), the session starts there from the stored request, and its
+   * first prompt goes to it. The words of what moved and what stayed are
+   * kept.
    */
   const startSession = async (
     row: MoveRow
@@ -1265,10 +1269,13 @@ export const createMoves = (deps: MovesDeps) => {
       machineId: state.targetMachineId,
       path: state.targetPath,
       kind: "checkout",
+      made: state.made === true,
     });
     if (state.root) {
       db.setPlaceRoot(place.id, state.root);
     }
+    // The clone stands there: a start never makes its folder again.
+    db.setPlaceFolder(place.id, true);
     if (added) {
       deps.placesChanged(place.machineId, row.projectId);
     }

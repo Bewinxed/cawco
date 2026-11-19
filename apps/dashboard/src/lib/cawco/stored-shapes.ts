@@ -1301,6 +1301,7 @@ const StopJobShape = z.object({
   places: z.array(
     z.object({
       machineId: z.string(),
+      made: z.boolean(),
       path: z.string(),
       within: z.array(PlaceProjectShape),
     })

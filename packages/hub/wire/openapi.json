@@ -43683,6 +43683,10 @@
             "description": "The machine's name as the hub holds it now; its id when the hub holds none.",
             "type": "string"
           },
+          "made": {
+            "description": "CawCo made the folder, so a delete with its files removes it: the hub's\nown, and a checkout a move cloned where nothing stood. A checkout the\nperson named stays on disk.",
+            "type": "boolean"
+          },
           "path": {
             "description": "Absolute on its machine.",
             "type": "string"
@@ -43699,6 +43703,7 @@
           "kind",
           "machineId",
           "machineName",
+          "made",
           "path",
           "within"
         ]
@@ -58727,6 +58732,10 @@
           "persistSession": {
             "description": "`false` asks the harness never to store this session's transcript.",
             "type": "boolean"
+          },
+          "place": {
+            "description": "The project checkout whose folder {@link cwd} is, or is inside, once\nthat folder has stood there: the machine never makes it again, and\nrefuses the start while nothing stands there (agent session.ts\n`workdirFor`). Set by the hub alone, on every launch, from the\ncheckouts it holds on the session's machine; absent where the folder is\nno such checkout's (a new project's, which its first session makes),\nand made when missing.",
+            "type": "string"
           },
           "processGeneration": {
             "description": "Hub-owned launch identity, retained when reattaching a surviving process.",
@@ -93537,6 +93546,9 @@
                   "createdAt": {
                     "type": "string"
                   },
+                  "found": {
+                    "type": "boolean"
+                  },
                   "held": {
                     "$ref": "#/components/schemas/BridgedHeldPlace"
                   },
@@ -93551,6 +93563,12 @@
                   },
                   "machineId": {
                     "type": "string"
+                  },
+                  "made": {
+                    "type": "boolean"
+                  },
+                  "missing": {
+                    "type": "boolean"
                   },
                   "path": {
                     "$ref": "#/components/schemas/PlacePath"
@@ -93570,10 +93588,13 @@
                 },
                 "required": [
                   "createdAt",
+                  "found",
                   "id",
                   "isPrimary",
                   "kind",
                   "machineId",
+                  "made",
+                  "missing",
                   "path",
                   "projectId",
                   "within"
@@ -115888,6 +115909,9 @@
                 "createdAt": {
                   "type": "string"
                 },
+                "found": {
+                  "type": "boolean"
+                },
                 "held": {
                   "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
@@ -115902,6 +115926,12 @@
                 },
                 "machineId": {
                   "type": "string"
+                },
+                "made": {
+                  "type": "boolean"
+                },
+                "missing": {
+                  "type": "boolean"
                 },
                 "path": {
                   "$ref": "#/components/schemas/PlacePath"
@@ -115921,10 +115951,13 @@
               },
               "required": [
                 "createdAt",
+                "found",
                 "id",
                 "isPrimary",
                 "kind",
                 "machineId",
+                "made",
+                "missing",
                 "path",
                 "projectId",
                 "within"
@@ -157156,6 +157189,9 @@
               "createdAt": {
                 "type": "string"
               },
+              "found": {
+                "type": "boolean"
+              },
               "id": {
                 "type": "string"
               },
@@ -157167,6 +157203,12 @@
               },
               "machineId": {
                 "type": "string"
+              },
+              "made": {
+                "type": "boolean"
+              },
+              "missing": {
+                "type": "boolean"
               },
               "path": {
                 "$ref": "#/components/schemas/PlacePath"
@@ -157180,10 +157222,13 @@
             },
             "required": [
               "createdAt",
+              "found",
               "id",
               "isPrimary",
               "kind",
               "machineId",
+              "made",
+              "missing",
               "path",
               "projectId"
             ]
@@ -157199,6 +157244,9 @@
                 "createdAt": {
                   "type": "string"
                 },
+                "found": {
+                  "type": "boolean"
+                },
                 "held": {
                   "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
@@ -157213,6 +157261,12 @@
                 },
                 "machineId": {
                   "type": "string"
+                },
+                "made": {
+                  "type": "boolean"
+                },
+                "missing": {
+                  "type": "boolean"
                 },
                 "path": {
                   "$ref": "#/components/schemas/PlacePath"
@@ -157232,10 +157286,13 @@
               },
               "required": [
                 "createdAt",
+                "found",
                 "id",
                 "isPrimary",
                 "kind",
                 "machineId",
+                "made",
+                "missing",
                 "path",
                 "projectId",
                 "within"
@@ -166076,6 +166133,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "delete-folder-refused"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "delete-machines-away"
                 ]
               },
@@ -166281,39 +166374,79 @@
         ]
       },
       "postApiProjectsByIdDiscard502": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "delete-not-removed"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "delete-folder-unasked"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
           },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              502
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "delete-not-removed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
           }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
         ]
       },
       "postApiProjectsByIdHeldDiscard200": {
@@ -167506,6 +167639,9 @@
               "createdAt": {
                 "type": "string"
               },
+              "found": {
+                "type": "boolean"
+              },
               "id": {
                 "type": "string"
               },
@@ -167517,6 +167653,12 @@
               },
               "machineId": {
                 "type": "string"
+              },
+              "made": {
+                "type": "boolean"
+              },
+              "missing": {
+                "type": "boolean"
               },
               "path": {
                 "$ref": "#/components/schemas/PlacePath"
@@ -167530,10 +167672,13 @@
             },
             "required": [
               "createdAt",
+              "found",
               "id",
               "isPrimary",
               "kind",
               "machineId",
+              "made",
+              "missing",
               "path",
               "projectId"
             ]
@@ -167549,6 +167694,9 @@
                 "createdAt": {
                   "type": "string"
                 },
+                "found": {
+                  "type": "boolean"
+                },
                 "held": {
                   "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
@@ -167563,6 +167711,12 @@
                 },
                 "machineId": {
                   "type": "string"
+                },
+                "made": {
+                  "type": "boolean"
+                },
+                "missing": {
+                  "type": "boolean"
                 },
                 "path": {
                   "$ref": "#/components/schemas/PlacePath"
@@ -167582,10 +167736,13 @@
               },
               "required": [
                 "createdAt",
+                "found",
                 "id",
                 "isPrimary",
                 "kind",
                 "machineId",
+                "made",
+                "missing",
                 "path",
                 "projectId",
                 "within"
@@ -214378,6 +214535,9 @@
                 "createdAt": {
                   "type": "string"
                 },
+                "found": {
+                  "type": "boolean"
+                },
                 "held": {
                   "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
@@ -214392,6 +214552,12 @@
                 },
                 "machineId": {
                   "type": "string"
+                },
+                "made": {
+                  "type": "boolean"
+                },
+                "missing": {
+                  "type": "boolean"
                 },
                 "path": {
                   "$ref": "#/components/schemas/PlacePath"
@@ -214411,10 +214577,13 @@
               },
               "required": [
                 "createdAt",
+                "found",
                 "id",
                 "isPrimary",
                 "kind",
                 "machineId",
+                "made",
+                "missing",
                 "path",
                 "projectId",
                 "within"

@@ -24,6 +24,10 @@ import type {
   OpencodeServerRecord as OpencodeServerRecordType,
   ServerIdentity as ServerIdentityType,
 } from "./harnesses/opencode-server";
+import type {
+  MadeFolders as MadeFoldersType,
+  MadeFolder as MadeFolderType,
+} from "./made-folders";
 import type { Worktree as WorktreeType } from "./spin-offs";
 import type {
   BrowserRecordOutput,
@@ -34,6 +38,8 @@ import type {
   FleetSidecarOutput,
   LegacyFleetSidecarOutput,
   MachineNetworkOutput,
+  MadeFolderOutput,
+  MadeFoldersOutput,
   MediaMeasurementOutput,
   OpencodeServerFactsOutput,
   OpencodeServerRecordOutput,
@@ -83,6 +89,8 @@ prove<
     Same<FleetPlaceSetOutput, FleetPlaceSetType>,
     Same<FleetSidecarOutput, FleetSidecarType>,
     Same<LegacyFleetSidecarOutput, LegacyFleetSidecarType>,
+    Same<MadeFolderOutput, MadeFolderType>,
+    Same<MadeFoldersOutput, MadeFoldersType>,
     Same<MediaMeasurementOutput, MediaMeasurementType>,
     Same<OpencodeServerFactsOutput, OpencodeServerFactsType>,
     Same<ServerIdentityOutput, ServerIdentityType>,

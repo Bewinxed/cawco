@@ -202,7 +202,8 @@ export interface ProjectsDb {
   /**
    * Files a place of a project. One already there for that project, machine
    * and folder is answered as it is, with `added` false. A project's first
-   * checkout becomes its primary.
+   * checkout becomes its primary. A checkout is one the person named unless
+   * `made` says CawCo made its folder (schema `made`).
    */
   readonly addPlace: (
     place:
@@ -211,6 +212,7 @@ export interface ProjectsDb {
           machineId: string;
           path: MachinePath;
           kind: "checkout";
+          made?: boolean;
         }
       | {
           projectId: string;
@@ -243,10 +245,10 @@ export interface ProjectsDb {
     lastTurnAt: number | null;
     threads: number;
   };
-  /** Every project's checkouts on `machineId`, oldest first: each one's `origin` and root commit are to read. */
+  /** Every project's checkouts on `machineId`, oldest first: each one's `origin` and root commit are to read; `found`, schema `found`. */
   readonly checkoutsOn: (
     machineId: string
-  ) => { id: string; projectId: string; path: string }[];
+  ) => { found: boolean; id: string; projectId: string; path: string }[];
   /**
    * A project, with its folder on the hub as its first place, and the
    * checkout it was made from (`checkout`), its primary, when it has one.
@@ -389,6 +391,14 @@ export interface ProjectsDb {
   readonly sessionTaint: (instanceId: string) => SessionTaintRow | undefined;
   /** Whether passkey relay is enabled fleet-wide. */
   readonly setPasskeyRelay: (enabled: boolean) => void;
+  /**
+   * Records whether a folder stands at checkout place `id`'s path on its
+   * machine, as it was looked for: `found` from the first time one does,
+   * `missing` while none does after that (schema `found`, `missing`): a new
+   * project's folder its first session has not made yet is not missing.
+   * Whether either changed.
+   */
+  readonly setPlaceFolder: (id: string, stands: boolean) => boolean;
   /** A move's "Don't move", remembered on its project; null forgets it. */
   /** Records the root commit checkout place `id` was read at. */
   readonly setPlaceRoot: (id: string, commit: string) => void;
@@ -606,6 +616,7 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
     checkoutsOn: (machineId) =>
       db
         .select({
+          found: projectPlaces.found,
           id: projectPlaces.id,
           projectId: projectPlaces.projectId,
           path: projectPlaces.path,
@@ -632,6 +643,26 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
         .where(eq(projectPlaces.id, id))
         .run();
     },
+    setPlaceFolder: (id, stands) =>
+      db
+        .update(projectPlaces)
+        .set(stands ? { missing: false, found: true } : { missing: true })
+        .where(
+          and(
+            eq(projectPlaces.id, id),
+            stands
+              ? or(
+                  eq(projectPlaces.missing, true),
+                  eq(projectPlaces.found, false)
+                )
+              : and(
+                  eq(projectPlaces.found, true),
+                  eq(projectPlaces.missing, false)
+                )
+          )
+        )
+        .returning({ id: projectPlaces.id })
+        .all().length > 0,
     projectLinkPublishedFrom: (projectId, segment) =>
       db
         .select({ remote: projectLinks.remote })
