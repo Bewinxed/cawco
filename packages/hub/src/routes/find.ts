@@ -3,12 +3,10 @@
  */
 
 import type {
-  FindPlace,
   FindPlacesAnswer,
   FindSessionsAnswer,
   FindSettings,
   PlacesHeard,
-  TranscriptPlacesQuery,
 } from "@cawco/core/find";
 import { CONTROL_TRANSCRIPT_PLACES } from "@cawco/core/session/controls";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -18,7 +16,12 @@ import {
   FIND_QUERY,
   FIND_SESSIONS_BODY,
 } from "../find";
-import { PLACES_LIMIT, placesForScreens, placesHeard } from "../find-places";
+import {
+  placeCounts,
+  placesForScreens,
+  placesHeard,
+  placesQuery,
+} from "../find-places";
 import { forScreens } from "../find-secrets";
 import type { HubContext } from "../hub-context";
 
@@ -72,10 +75,11 @@ export const findRoutes = ({
       { body: FIND_SESSIONS_BODY },
       ({ body }): Promise<FindSessionsAnswer> => find.named(body.names)
     )
-    // The person's find in one conversation (find-places.ts): every place
-    // its machine's transcript index holds the words in, oldest first,
-    // what tools answered included. A machine that does not answer is
-    // said so, by name, never as a conversation without the words.
+    // The person's find in one conversation (find-places.ts): how many
+    // places its machine's transcript index holds the words in, and one
+    // window of them, oldest first, what tools answered included. A
+    // machine that does not answer is said so, by name, never as a
+    // conversation without the words.
     .get(
       "/api/find/places",
       { query: FIND_PLACES_QUERY },
@@ -89,16 +93,19 @@ export const findRoutes = ({
         }
         const named = (
           took: PlacesHeard,
-          places: FindPlace[] = [],
-          more = false
+          window: Omit<FindPlacesAnswer, "machine"> = {
+            counts: placeCounts(null),
+            offset: 0,
+            places: [],
+            through: null,
+          }
         ): FindPlacesAnswer => ({
           machine: {
             heard: took,
             id: row.machineId,
             name: machineName(row.machineId),
           },
-          more,
-          places,
+          ...window,
         });
         const sessions = [row.sessionId, ...row.priorSessionIds].filter(
           (each): each is string => !!each
@@ -110,13 +117,7 @@ export const findRoutes = ({
         const answer = await readStoppable(
           row.machineId,
           CONTROL_TRANSCRIPT_PLACES,
-          [
-            {
-              sessions,
-              words,
-              limit: PLACES_LIMIT + 1,
-            } satisfies TranscriptPlacesQuery,
-          ],
+          [placesQuery(sessions, words, query)],
           FIND_PLACES_MS,
           {
             caller: "the person's find in a conversation",
@@ -127,14 +128,14 @@ export const findRoutes = ({
         if (heard.heard !== "answered") {
           return named(heard.heard);
         }
-        return named(
-          "answered",
-          await placesForScreens(
-            heard.places.slice(0, PLACES_LIMIT),
-            db.findSettings.hideSecrets()
-          ),
-          heard.places.length > PLACES_LIMIT
-        );
+        const { counts, offset, places, through } = heard.places;
+        const at = through === null ? Number.NaN : Date.parse(through);
+        return named("answered", {
+          counts: placeCounts(counts),
+          offset,
+          places: await placesForScreens(places, db.findSettings.hideSecrets()),
+          through: Number.isNaN(at) ? null : at,
+        });
       }
     )
     // The person's Find settings, the same on every screen: kept at the hub.

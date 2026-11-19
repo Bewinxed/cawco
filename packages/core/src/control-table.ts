@@ -52,7 +52,7 @@ import type {
 } from "./continuation-read";
 import type {
   TranscriptAnswer,
-  TranscriptPlace,
+  TranscriptPlaces,
   TranscriptPlacesQuery,
   TranscriptQuery,
   TranscriptTurns,
@@ -511,7 +511,10 @@ interface ControlTable {
     [sessionKey: string, tag: string | null, dir?: CatalogDir]
   >;
   toggleMcpServer: Unread<[name: string, enabled: boolean]>;
-  transcriptPlaces: Entry<[query: TranscriptPlacesQuery], TranscriptPlace[]>;
+  transcriptPlaceWindow: Entry<
+    [query: TranscriptPlacesQuery],
+    TranscriptPlaces
+  >;
   transcriptTurns: Entry<[query: TranscriptTurnsQuery], TranscriptTurns | null>;
   /** The machine's login keychain unlocked (macOS): answers the machine's word on Claude. */
   unlockKeychain: Entry<[password: string], AuthState | null>;

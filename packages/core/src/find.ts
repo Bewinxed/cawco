@@ -7,7 +7,7 @@
  * a file.
  */
 
-import type { DocAuthor } from "@cawco/jsonl-parser";
+import type { DocAuthor, PlaceKind } from "@cawco/jsonl-parser";
 import { everyOf } from "./every-of";
 import type { CawStatus } from "./project-conversation";
 import type { StageKind } from "./views";
@@ -185,13 +185,36 @@ export type TranscriptTurns =
   | { missing: string };
 
 /**
+ * Whose words a place is, as a machine's index tells them (jsonl-parser
+ * fts5.ts `PlaceKind`): the person's, the agent's (said or thought), a
+ * delegate's report, or what a tool answered.
+ */
+export const TRANSCRIPT_PLACE_KINDS = everyOf<TranscriptPlaceKind>()([
+  "owner",
+  "agent",
+  "report",
+  "output",
+]);
+type TranscriptPlaceKind = Extract<PlaceKind, string>;
+
+/**
  * What the hub asks a machine's transcript index for one conversation's
- * places (`transcriptPlaces`): every record whose words hold the words
- * together, what tools answered included.
+ * places (`transcriptPlaceWindow`): one window of the records whose words
+ * hold the words together, what tools answered included, oldest first.
  */
 export interface TranscriptPlacesQuery {
-  /** The most places answered, oldest first. */
+  /** Only the places of this kind; every place when absent. */
+  kind?: TranscriptPlaceKind;
+  /** The most places the window holds. */
   limit: number;
+  /**
+   * The window round the place at this position among every place (the
+   * first kept at or after it, else the last kept before it), in place of
+   * `offset`.
+   */
+  near?: number;
+  /** The window's first place, by its position among those kept, from 0; absent: the newest, where find starts. */
+  offset?: number;
   /** The conversation, by every harness session id it went by. */
   sessions: string[];
   /** The words, as one phrase. */
@@ -200,13 +223,26 @@ export interface TranscriptPlacesQuery {
 
 /** One place a machine's index answers a {@link TranscriptPlacesQuery} with. */
 export interface TranscriptPlace {
-  author: TranscriptAuthor;
   /** Which of the record's columns holds the words. */
   column: "output" | "text" | "thinking";
   docId: string;
   /** The words round the match, the match between 「 and 」. */
   excerpt: string;
+  kind: TranscriptPlaceKind;
+  /** Its position among every place of the find, from 0. */
+  n: number;
   timestamp: string | null;
+}
+
+/** What a machine's index answers a {@link TranscriptPlacesQuery} with: how many places, and one window of them. */
+export interface TranscriptPlaces {
+  /** How many places of each kind the conversation holds. */
+  counts: Record<TranscriptPlaceKind, number>;
+  /** The position of the window's first place among those kept. */
+  offset: number;
+  places: TranscriptPlace[];
+  /** When the newest record of the conversation the index holds was said; null when it holds none with a time. */
+  through: string | null;
 }
 
 /** Every kind of thing a find answers with. */
@@ -286,6 +322,8 @@ export interface FindPlace {
   docId: string;
   /** The words round the match, terms between 「 and 」. */
   excerpt: string;
+  /** Its position among every place of the find, from 0: where it stands whoever's words are kept. */
+  n: number;
   /**
    * The secrets its excerpt holds, in the excerpt's words with its 「 」
    * marks left out: present only while "Hide secrets in Find" is on.
@@ -312,13 +350,45 @@ export type PlacesHeard = "answered" | "silent" | "outdated";
  */
 export type FindSessionsAnswer = Record<string, FindConversation | null>;
 
-/** `GET /api/find/places`' answer: every place, oldest first, and how the machine holding them took the read. */
+/**
+ * How many places one window of `GET /api/find/places` holds: a few screens
+ * of the places list, so a scroll or a step reads the next one before it
+ * reaches its end. The machine finds every place once a find and holds
+ * them (jsonl-parser fts5.ts `PLACE_LISTS`); a window is only its records
+ * read and cut. Our call.
+ */
+export const PLACES_WINDOW = 50;
+
+/** Whose words a place is (`FindPlace.whose`): the person's, the agent's, what its tools returned, a delegate's report. */
+export type PlaceWhose = FindPlace["whose"];
+
+/** Every {@link PlaceWhose}, as `GET /api/find/places`' `whose` may name one. */
+export const PLACE_WHOSE = everyOf<PlaceWhose>()([
+  "me",
+  "agent",
+  "tools",
+  "delegates",
+]);
+
+/**
+ * `GET /api/find/places`' answer: how many places the conversation holds of
+ * each whose, and one window of them, oldest first; and how the machine
+ * holding them took the read.
+ */
 export interface FindPlacesAnswer {
+  /** How many places there are, by whose words they are: unless the machine answered, none. */
+  counts: Record<PlaceWhose, number>;
   /** The machine holding the conversation's transcript: unless it answered, `places` is empty. */
   machine: { heard: PlacesHeard; id: string; name: string };
-  /** The conversation holds more places than the list does: `places` is the oldest of them. */
-  more: boolean;
+  /** The position of `places[0]` among the places asked for (every one, or one whose's). */
+  offset: number;
   places: FindPlace[];
+  /**
+   * When the newest record of the conversation the machine's index holds
+   * was said, ms epoch: what was said after it is in no window yet. Null
+   * when it holds none with a time.
+   */
+  through: number | null;
 }
 
 /**

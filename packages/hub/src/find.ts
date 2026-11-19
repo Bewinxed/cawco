@@ -19,6 +19,7 @@ import {
   type FindKind,
   type FindResult,
   type MomentAuthor,
+  PLACE_WHOSE,
   type WaitingAnswer,
 } from "@cawco/core/find";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
@@ -180,10 +181,19 @@ export const FIND_SESSIONS_BODY = t.Object({
   }),
 });
 
-/** `GET /api/find/places`' query: one conversation, by its instance id, and the words. */
+/**
+ * `GET /api/find/places`' query: one conversation, by its instance id, the
+ * words, whose words to keep (every place when absent), and which window:
+ * its first place by its position among those kept (`offset`), or the
+ * window round a place by its position among every place (`near`, a
+ * place's `n`); neither, the newest window, where find starts.
+ */
 export const FIND_PLACES_QUERY = t.Object({
   session: t.String({ minLength: 1 }),
   q: t.String(),
+  whose: t.Optional(t.UnionEnum(PLACE_WHOSE)),
+  offset: t.Optional(t.Numeric({ minimum: 0 })),
+  near: t.Optional(t.Numeric({ minimum: 0 })),
 });
 
 /** Whether `kind` is one find answers with. */

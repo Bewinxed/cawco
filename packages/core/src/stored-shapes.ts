@@ -5544,19 +5544,45 @@ const TranscriptAnswerShape = declared(
 export const TranscriptAnswerSchema = TranscriptAnswerShape;
 export type TranscriptAnswerOutput = z.output<typeof TranscriptAnswerShape>;
 
+const PlaceKindShape = declared(
+  z.union([DocAuthorShape.exclude(["injected"]), z.literal("output")]),
+  "PlaceKind",
+  "packages/jsonl-parser/src/text.ts"
+);
+export type PlaceKindOutput = z.output<typeof PlaceKindShape>;
+
+const TranscriptPlaceKindShape = declared(
+  PlaceKindShape,
+  "TranscriptPlaceKind",
+  "packages/core/src/find.ts"
+);
+
 const TranscriptPlaceShape = declared(
   z.object({
-    author: TranscriptAuthorShape,
     column: z.enum(["output", "text", "thinking"]),
     docId: z.string(),
     excerpt: z.string(),
+    kind: TranscriptPlaceKindShape,
+    n: z.number(),
     timestamp: z.string().nullable(),
   }),
   "TranscriptPlace",
   "packages/core/src/find.ts"
 );
-export const TranscriptPlaceSchema = TranscriptPlaceShape;
 export type TranscriptPlaceOutput = z.output<typeof TranscriptPlaceShape>;
+
+const TranscriptPlacesShape = declared(
+  z.object({
+    counts: z.record(TranscriptPlaceKindShape, z.number()),
+    offset: z.number(),
+    places: z.array(TranscriptPlaceShape),
+    through: z.string().nullable(),
+  }),
+  "TranscriptPlaces",
+  "packages/core/src/find.ts"
+);
+export const TranscriptPlacesSchema = TranscriptPlacesShape;
+export type TranscriptPlacesOutput = z.output<typeof TranscriptPlacesShape>;
 
 const TranscriptTurnShape = declared(
   z.object({

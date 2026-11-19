@@ -141,43 +141,54 @@
 
   // The hub's place: every turn is loaded here, so the engine's answer adds
   // none; a machine that does not answer is obelisk, as a real one is named.
-  askPlacesWith(async (): Promise<Read<FindPlacesAnswer>> => ({
-    ok: true,
-    value: {
-      machine: {
-        heard: HEARD[findState],
-        id: "obelisk",
-        name: "obelisk",
+  /** What the engine answers for this conversation: every place, each by its stored record. */
+  const ENGINE = SAID.flatMap((s, n): Omit<FindPlace, "n">[] => {
+    const text = wordsOf(s);
+    const at = text.indexOf(WORDS);
+    if (at < 0) {
+      return [];
+    }
+    const WHOSE = {
+      user: "me",
+      assistant: "agent",
+      thinking: "agent",
+      tool: "tools",
+      report: "delegates",
+    } as const;
+    return [
+      {
+        at: whenOf(s),
+        docId: s.k === "tool" ? resultOf(MAIN, n) : recordOf(MAIN, n),
+        excerpt: `${text.slice(Math.max(0, at - 40), at)}「${WORDS}」${text.slice(at + WORDS.length, at + WORDS.length + 40)}`,
+        thinking: s.k === "thinking",
+        whose: WHOSE[s.k],
       },
-      more: false,
-      // What the engine answers for this conversation: every place, each
-      // by its stored record; every one is loaded here, so each is the
-      // transcript's own place.
-      places: SAID.flatMap((s, n): FindPlace[] => {
-        const text = wordsOf(s);
-        const at = text.indexOf(WORDS);
-        if (at < 0) {
-          return [];
-        }
-        const WHOSE = {
-          user: "me",
-          assistant: "agent",
-          thinking: "agent",
-          tool: "tools",
-          report: "delegates",
-        } as const;
-        return [
-          {
-            at: whenOf(s),
-            docId: s.k === "tool" ? resultOf(MAIN, n) : recordOf(MAIN, n),
-            excerpt: `${text.slice(Math.max(0, at - 40), at)}「${WORDS}」${text.slice(at + WORDS.length, at + WORDS.length + 40)}`,
-            thinking: s.k === "thinking",
-            whose: WHOSE[s.k],
-          },
-        ];
-      }),
-    },
-  }));
+    ];
+  }).map((place, n): FindPlace => ({ ...place, n }));
+
+  // The hub's place: every turn is loaded here, so the engine's places are
+  // each the transcript's own; a machine that does not answer is obelisk,
+  // as a real one is named. One window holds every place.
+  askPlacesWith((_viewId, _words, window): Promise<Read<FindPlacesAnswer>> => {
+    const kept = ENGINE.filter(
+      (place) => !window.whose || place.whose === window.whose
+    );
+    const counts = { me: 0, agent: 0, tools: 0, delegates: 0 };
+    for (const place of ENGINE) {
+      counts[place.whose] += 1;
+    }
+    const heard = HEARD[findState];
+    return Promise.resolve({
+      ok: true,
+      value: {
+        counts,
+        machine: { heard, id: "obelisk", name: "obelisk" },
+        offset: 0,
+        places: heard === "answered" ? kept : [],
+        through: Date.now(),
+      },
+    });
+  });
 
   const leaf = $state<LeafNode>(untrack(() => benchLeaf("find", ids, "1")));
   const bound = $derived(composerBindings.get(MAIN));
@@ -223,7 +234,7 @@
       find.show();
       find.type(WORDS);
       setTimeout(() => {
-        find.goTo(find.places[2]);
+        find.goTo(2);
         if (findState === "closed") {
           setTimeout(() => find.close(), 900);
         }

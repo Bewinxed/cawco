@@ -4,7 +4,10 @@
  * to be the declared type it is made from. Read by the typecheck through its
  * package's tsconfig `include`.
  */
-import type { DocAuthor as DocAuthorType } from "@cawco/jsonl-parser";
+import type {
+  DocAuthor as DocAuthorType,
+  PlaceKind as PlaceKindType,
+} from "@cawco/jsonl-parser";
 import type {
   AccountCheck as AccountCheckType,
   AccountIdentity as AccountIdentityType,
@@ -132,6 +135,7 @@ import type {
 } from "./external-items";
 import type {
   TranscriptAnswer as TranscriptAnswerType,
+  TranscriptPlaces as TranscriptPlacesType,
   TranscriptPlace as TranscriptPlaceType,
   TranscriptTurns as TranscriptTurnsType,
   TranscriptTurn as TranscriptTurnType,
@@ -698,6 +702,7 @@ import type {
   PictureTakenOutput,
   PiProviderOutput,
   PlacedSectionOutput,
+  PlaceKindOutput,
   PlaceLeftOutOutput,
   PlaceLfsMadeOutput,
   PlaceLfsRowOutput,
@@ -817,6 +822,7 @@ import type {
   TrackerSyncStateOutput,
   TranscriptAnswerOutput,
   TranscriptPlaceOutput,
+  TranscriptPlacesOutput,
   TranscriptTurnOutput,
   TranscriptTurnsOutput,
   TranscriptWindowOutput,
@@ -1335,7 +1341,9 @@ prove<
     Same<TrackerSyncStateOutput, TrackerSyncStateType>,
     Same<DocAuthorOutput, DocAuthorType>,
     Same<TranscriptAnswerOutput, TranscriptAnswerType>,
+    Same<PlaceKindOutput, PlaceKindType>,
     Same<TranscriptPlaceOutput, TranscriptPlaceType>,
+    Same<TranscriptPlacesOutput, TranscriptPlacesType>,
     Same<TranscriptTurnOutput, TranscriptTurnType>,
     Same<TranscriptTurnsOutput, TranscriptTurnsType>,
     Same<TranscriptWindowOutput, TranscriptWindowType>,

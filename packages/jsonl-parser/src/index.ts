@@ -39,6 +39,7 @@ export {
   type DocAuthor,
   extractDoc,
   type ExtractOptions,
+  type PlaceKind,
   TOOL_OUTPUT_CHARS,
   type TranscriptDoc,
   userAuthor,

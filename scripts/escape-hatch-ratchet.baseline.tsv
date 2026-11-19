@@ -40,7 +40,6 @@ as-cast	{ anchors?: unknown; box?: unknown; seq?: unknown; type?: unknown; near?
 as-cast	{ artifact: Parameters<typeof artifact.join>[0]; sync: Parameters<typeof	packages/preview/src/overlay/page.ts	1
 as-cast	{ at: number; }	scripts/binary/e2e-db-rows.ts	1
 as-cast	{ author: DocAuthor; doc_id: string; id: number; output: string | null; 	packages/jsonl-parser/src/fts5.ts	1
-as-cast	{ author: DocAuthor; doc_id: string; output: string | null; text: string	packages/jsonl-parser/src/fts5.ts	1
 as-cast	{ bareScroll?: unknown }	packages/preview/src/overlay/page.ts	1
 as-cast	{ bottom?: unknown; side?: unknown; top?: unknown } | undefined	packages/preview/src/overlay/page.ts	1
 as-cast	{ c: number }	packages/jsonl-parser/src/fts5.ts	1

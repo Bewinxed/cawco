@@ -41,6 +41,8 @@
     onpeek,
     onhover,
     onsecret,
+    posinset,
+    setsize,
   }: {
     row: Row;
     id: string;
@@ -57,6 +59,9 @@
     onhover?: () => void;
     /** A press on a hidden secret: show it, rather than opening the row. */
     onsecret?: (key: string) => void;
+    /** Its position in a list drawn only near the view, from 1, and that list's length: what a screen reader says of it. */
+    posinset?: number;
+    setsize?: number;
   } = $props();
 
   const ago = $derived(row.clock ?? age(row.at, now));
@@ -79,7 +84,9 @@
     class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-13 px-space-3 py-space-2 border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-off select-none active:bg-surface-fill data-phone:min-h-14 data-phone:py-space-3 data-peekable:pe-c-btn-h-lg"
     aria-describedby={peeked ? `${id}-peek` : undefined}
     aria-label={row.spoken}
+    aria-posinset={posinset}
     aria-selected={active}
+    aria-setsize={setsize}
     data-active={active ? "" : undefined}
     data-find-row
     data-has-reason={row.reason === null ? undefined : ""}

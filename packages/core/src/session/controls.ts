@@ -326,12 +326,14 @@ export const CONTROL_ABANDON = "abandon";
 export const CONTROL_TRANSCRIPT_TURNS = "transcriptTurns";
 
 /**
- * Every place in one conversation where the words stand, as a machine's
- * transcript index holds them (daemon-scoped): args
- * `[TranscriptPlacesQuery]` (core find.ts), answers `TranscriptPlace[]`,
- * oldest first. The person's find in that conversation reads it.
+ * One window of the places in one conversation where the words stand, as a
+ * machine's transcript index holds them, and how many there are
+ * (daemon-scoped): args `[TranscriptPlacesQuery]` (core find.ts), answers
+ * `TranscriptPlaces`. The person's find in that conversation reads it. An
+ * agent from before windows answers it has no such function, which the hub
+ * says as a machine needing an update.
  */
-export const CONTROL_TRANSCRIPT_PLACES = "transcriptPlaces";
+export const CONTROL_TRANSCRIPT_PLACES = "transcriptPlaceWindow";
 
 /** One Claude session the hub has a machine carry into the dir its row names. */
 export interface CarrySessionRequest {

@@ -146,13 +146,9 @@ export class RecordSeek {
     }
     // Find's own seek marks the words, not the row, and its place is said
     // by its count (find/FindLine).
-    const found = this.#host.finder.findHere.sought?.docId === docId;
+    const found = this.#host.finder.findHere.sought === docId;
     if (found) {
-      const { back } = this.#host.finder.findHere.sought ?? { back: false };
       this.#host.finder.findHere.sought = null;
-      if (!back) {
-        this.#host.finder.findHere.arrived();
-      }
     }
     this.marked = found
       ? null

@@ -86,11 +86,15 @@ export class TranscriptFind {
     };
     const within = current ? drawnAt(current) : null;
     // Whose words the places keep reaches the transcript: with a filter
-    // pressed, only the places it keeps are washed.
+    // pressed, only the places it keeps are washed. Every place drawn is
+    // in a loaded turn, so the loaded turns' places name them all.
+    const { whose } = this.findHere;
     const kept =
-      this.findHere.whose === "all"
+      whose === "all"
         ? null
-        : this.findHere.places.flatMap((place) => drawnAt(place) ?? []);
+        : this.findHere.held.flatMap((place) =>
+            place.whose === whose ? (drawnAt(place) ?? []) : []
+          );
     const all = rangesOf(root, words).filter(
       (range) =>
         kept === null || kept.some((at) => at.contains(range.startContainer))

@@ -21,7 +21,11 @@
     IconListRows,
     IconSearch,
   } from "#lib/icons.js";
-  import type { ConversationFind } from "./conversation-find.svelte";
+  import {
+    type ConversationFind,
+    placeId,
+    placesId,
+  } from "./conversation-find.svelte";
 
   let { find }: { find: ConversationFind } = $props();
 
@@ -37,7 +41,7 @@
     }
   });
 
-  const total = $derived(find.places.length);
+  const total = $derived(find.total);
   /** Known to hold nothing: the hub answered (or cannot), and nothing loaded holds the words either. */
   const none = $derived(
     find.words.trim() !== "" && total === 0 && !find.asking
@@ -85,6 +89,10 @@
       />
       <input
         class="flex-1 min-w-0 h-c-composer-field appearance-none border-none p-0 [&::-webkit-search-cancel-button]:hidden bg-transparent font-sans text-(length:--text-field-floor) text-ink-strong caret-brand-solid placeholder:text-ink-subtle outline-none"
+        aria-activedescendant={find.listOpen && find.index !== null
+          ? placeId(find.viewId, find.index)
+          : undefined}
+        aria-controls={find.listOpen ? placesId(find.viewId) : undefined}
         aria-keyshortcuts="Enter Shift+Enter Escape"
         aria-label={findInWords.field}
         autocomplete="off"

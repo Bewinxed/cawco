@@ -59,6 +59,7 @@ function place(
     glyph: face.glyph ?? GLYPH[whose],
     key,
     live: face.live ?? false,
+    n: null,
     record: key,
     title: face.title ?? TITLE[whose],
     whose,
@@ -140,19 +141,25 @@ const RELAY: Place[] = [
   ),
 ];
 
-/** A find as a conversation's would stand: its places, filter, step and the hub's read. */
+/**
+ * A find as a conversation's would stand: its places, filter, step and the
+ * hub's read; `unread`, the positions whose window the hub has not
+ * answered yet (drawn as skeletons).
+ */
 function standing(
   all: Place[],
   {
     at = "p3",
     whose = "all",
-    hub = { kind: "answered", places: [], more: false },
+    hub,
     words = WORDS,
+    unread = () => false,
   }: {
     at?: string | null;
     hub?: HubRead;
     whose?: WhoseFilter;
     words?: string;
+    unread?: (index: number) => boolean;
   } = {}
 ): PlacesView {
   const places = all.filter((each) => whose === "all" || each.whose === whose);
@@ -161,18 +168,30 @@ function standing(
     counts.all += 1;
     counts[each.whose] += 1;
   }
+  const index = places.findIndex((each) => each.key === at);
   return {
     agent: "Claude Code",
-    all,
-    asking: hub.kind === "asking",
+    asking: hub?.kind === "asking",
     at,
     close: () => undefined,
     counts,
     filter: () => undefined,
-    hub,
+    hub: hub ?? {
+      kind: "answered",
+      counts: {
+        me: counts.me,
+        agent: counts.agent,
+        tools: counts.tools,
+        delegates: counts.delegates,
+      },
+      through: null,
+    },
+    index: index < 0 ? null : index,
+    need: () => undefined,
     pick: () => undefined,
-    places,
+    placeAt: (n: number) => (unread(n) ? null : (places[n] ?? null)),
     retry: () => undefined,
+    total: places.length,
     viewId: "relay",
     whose,
     words,
@@ -292,6 +311,27 @@ export const ManyPlaces = {
         )
       ),
       { at: "m120" }
+    ),
+  },
+};
+
+/**
+ * Two thousand places, the newest window read and the one before it still
+ * being read: its rows stand as skeletons until the hub answers it.
+ */
+export const WindowBeingRead = {
+  args: {
+    find: standing(
+      Array.from({ length: 2000 }, (_, n) =>
+        place(
+          `w${n}`,
+          (["me", "agent", "tools", "delegates"] as const)[n % 4],
+          6000 - n * 3,
+          `Run ${n + 1}: the socket closed with `,
+          " again while the phone slept, and the relay retried a second later."
+        )
+      ),
+      { at: "w1999", unread: (n) => n >= 1900 && n < 1950 }
     ),
   },
 };

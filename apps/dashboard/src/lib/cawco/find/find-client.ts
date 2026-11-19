@@ -12,7 +12,7 @@
  * landed before the hub answered or while its body was still arriving, and
  * the caller drops it.
  */
-import type { FindBy, FindKind } from "@cawco/core/find";
+import type { FindBy, FindKind, FindPlace } from "@cawco/core/find";
 import { hub } from "#lib/platform/hub.js";
 import {
   type HubAsked,
@@ -135,13 +135,28 @@ export const findWaiting = (signal?: AbortSignal) =>
   read(hubAsk(hub.api.find.waiting.get({ fetch: { signal } })), signal);
 
 /**
- * Every place in one conversation where the words stand, its machine's
+ * How many places in one conversation hold the words, and one window of
+ * them (the newest unless `window` names another), its machine's
  * transcript index asked (find in a conversation, conversation-find).
  */
-export const findPlaces = (session: string, q: string, signal?: AbortSignal) =>
+export const findPlaces = (
+  session: string,
+  q: string,
+  window: { near?: number; offset?: number; whose?: FindPlace["whose"] },
+  signal?: AbortSignal
+) =>
   read(
     hubAsk(
-      hub.api.find.places.get({ query: { session, q }, fetch: { signal } })
+      hub.api.find.places.get({
+        query: {
+          session,
+          q,
+          ...(window.whose ? { whose: window.whose } : {}),
+          ...(window.offset === undefined ? {} : { offset: window.offset }),
+          ...(window.near === undefined ? {} : { near: window.near }),
+        },
+        fetch: { signal },
+      })
     ),
     signal
   );

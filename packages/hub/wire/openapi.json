@@ -8455,6 +8455,52 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "whose",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "agent",
+                "delegates",
+                "me",
+                "tools"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "name": "near",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
           }
         ],
         "operationId": "getApiFindPlaces",
@@ -41619,6 +41665,10 @@
             "description": "The words round the match, terms between 「 and 」.",
             "type": "string"
           },
+          "n": {
+            "description": "Its position among every place of the find, from 0: where it stands whoever's words are kept.",
+            "type": "number"
+          },
           "secrets": {
             "description": "The secrets its excerpt holds, in the excerpt's words with its 「 」\nmarks left out: present only while \"Hide secrets in Find\" is on.",
             "type": "array",
@@ -41651,6 +41701,7 @@
         "required": [
           "docId",
           "excerpt",
+          "n",
           "thinking",
           "whose"
         ]
@@ -41665,9 +41716,33 @@
         ]
       },
       "FindPlacesAnswer": {
-        "description": "`GET /api/find/places`' answer: every place, oldest first, and how the machine holding them took the read.",
+        "description": "`GET /api/find/places`' answer: how many places the conversation holds of\neach whose, and one window of them, oldest first; and how the machine\nholding them took the read.",
         "type": "object",
         "properties": {
+          "counts": {
+            "type": "object",
+            "properties": {
+              "agent": {
+                "type": "number"
+              },
+              "delegates": {
+                "type": "number"
+              },
+              "me": {
+                "type": "number"
+              },
+              "tools": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "agent",
+              "delegates",
+              "me",
+              "tools"
+            ],
+            "description": "How many places there are, by whose words they are: unless the machine answered, none."
+          },
           "machine": {
             "description": "The machine holding the conversation's transcript: unless it answered, `places` is empty.",
             "type": "object",
@@ -41688,20 +41763,25 @@
               "name"
             ]
           },
-          "more": {
-            "description": "The conversation holds more places than the list does: `places` is the oldest of them.",
-            "type": "boolean"
+          "offset": {
+            "description": "The position of `places[0]` among the places asked for (every one, or one whose's).",
+            "type": "number"
           },
           "places": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/FindPlace"
             }
+          },
+          "through": {
+            "description": "When the newest record of the conversation the machine's index holds\nwas said, ms epoch: what was said after it is in no window yet. Null\nwhen it holds none with a time.",
+            "type": "number"
           }
         },
         "required": [
+          "counts",
           "machine",
-          "more",
+          "offset",
           "places"
         ]
       },

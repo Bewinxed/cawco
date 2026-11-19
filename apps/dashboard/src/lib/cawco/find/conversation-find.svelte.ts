@@ -8,19 +8,31 @@
  * One record per conversation, by its view id, so the composer (lent by
  * the pane's group, PaneLeaf) and the transcript read the same find.
  *
- * The places come from two reads, put together oldest first:
- * - the turns the transcript holds now, read here at once, the live turn
- *   included (its place breathes while it is written);
+ * The places are a list by position, oldest first, drawn from two reads:
  * - the hub's find engine, narrowed to this conversation with what tools
- *   returned (`GET /api/find/places`), which reaches the turns not loaded.
- *   A machine that does not answer leaves the first read alone, said with
- *   its name and Retry (The Claim Of Nothing Rule: a place is never claimed
- *   absent while its machine is not heard).
+ *   returned (`GET /api/find/places`): how many places there are of each
+ *   whose, read in windows (`PLACES_WINDOW`), the newest first, where find
+ *   starts, then each window a step or a scroll of the list comes near
+ *   (`need`). The engine finds them on the machine; the page holds only
+ *   the windows read, per words (`FOUND_HELD`), so words typed again are
+ *   drawn at once and read again behind them;
+ * - the turns the transcript holds now, read here at once: what the
+ *   machine's index has not reached (said after its `through`, the live
+ *   turn breathing as it is written) follows the engine's places, and
+ *   every place stands on these alone while the engine is asked, or when
+ *   its machine does not answer, said with its name and Retry (The Claim
+ *   Of Nothing Rule: a place is never claimed absent while its machine is
+ *   not heard). A place the engine found whose turn is loaded is drawn as
+ *   the transcript names it.
  */
+
+import { detach } from "@cawco/core/detach";
 import type { FindPlace, FindPlacesAnswer } from "@cawco/core/find";
+import { PLACES_WINDOW } from "@cawco/core/find";
 import { unhandled } from "@cawco/core/unhandled";
 import { findInWords } from "@cawco/core/words/find-in";
 import type { Component } from "svelte";
+import { SvelteMap } from "svelte/reactivity";
 import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
 import {
   IconAgent,
@@ -54,10 +66,12 @@ export interface Place {
   /** Its words around the match, matched runs strong. */
   excerpt: Run[];
   glyph: Component;
-  /** Stable across reads: the record, or for a tool's output the call. */
+  /** Stable across reads: the record the engine found it in, else the transcript's own record, or for a tool's output the call. */
   key: string;
   /** Said as this turn is written: its glyph breathes. */
   live: boolean;
+  /** Its position among every place the engine found (`FindPlace.n`); null for one only the transcript holds. */
+  n: number | null;
   /**
    * The transcript record it is in, as the hub's index names it (a block's
    * stored entry, `sdkUuid`; for a tool's output, the record its result
@@ -76,21 +90,58 @@ export interface Place {
 export type HubRead =
   | { kind: "idle" }
   | { kind: "asking" }
-  | { kind: "answered"; places: FindPlace[]; more: boolean }
+  /** The engine counted its places (`counts`, by whose); its windows are in the find's `found`. */
+  | {
+      kind: "answered";
+      counts: Record<Whose, number>;
+      /** Said after this, ms: no window holds it yet (`FindPlacesAnswer.through`). */
+      through: number | null;
+    }
   | { kind: "unreached"; machine: string }
   /** The machine's agent is older than the places read: an update brings it. */
   | { kind: "outdated"; machine: string }
   | { kind: "refused"; detail: string };
 
+/** Which window of the places a read asks for (`GET /api/find/places`): none, the newest. */
+export interface PlacesWindow {
+  /** The window round the place at this position among every place (a place's `n`). */
+  near?: number;
+  /** The window's first place, by its position among those `whose` keeps. */
+  offset?: number;
+  /** Whose words it keeps; every place when absent. */
+  whose?: Whose;
+}
+
 /** What reads the hub: the engine's session-scoped find, or a bench's fixture. */
 export type AskPlaces = (
   viewId: string,
   words: string,
+  window: PlacesWindow,
   signal: AbortSignal
 ) => Promise<Read<FindPlacesAnswer> | null>;
 
-/** How long typing settles before the hub is asked, ms: the finder's own pace (Finder `SETTLE_MS`). */
-const SETTLE_MS = 180;
+/** The engine's windows of one find's places, by the filter they were read for, then by position, each as its row draws it. */
+interface Found {
+  /** How many places the engine last counted of each whose, and how far its index reached. */
+  counts: Record<Whose, number>;
+  /** The words, as their find is held by (`foundKey`). */
+  key: string;
+  through: number | null;
+  windows: Record<WhoseFilter, SvelteMap<number, Place>>;
+}
+
+/**
+ * How many finds' windows a conversation holds: the words being found and
+ * those typed just before, so a word taken back and typed again draws its
+ * places at once (and is read again behind them). Our own call: a few
+ * windows each, a few tens of KB.
+ */
+const FOUND_HELD = 8;
+
+/** The words a find is held by: the engine matches without case. */
+const foundKey = (words: string): string => words.trim().toLowerCase();
+
+const WHOSE: readonly Whose[] = ["me", "agent", "tools", "delegates"];
 
 /**
  * How many characters of a place's words stand before the match and after
@@ -238,6 +289,7 @@ function placesHeld(
             ? `call:${message.toolCallId ?? message.id}`
             : message.id,
         live: false,
+        n: null,
         // A call's output is in the record its result came in.
         record: message.metadata?.resultRecord ?? message.sdkUuid ?? message.id,
         title: said.title,
@@ -248,8 +300,8 @@ function placesHeld(
   });
 }
 
-/** A place the hub found, in a turn the transcript has not loaded; `n`, its place among those of its record. */
-function placeFound(place: FindPlace, n: number, agent: string): Place {
+/** A place the hub found, as its row draws it until its turn is loaded. */
+function placeFound(place: FindPlace, agent: string): Place {
   const FACE: Record<Whose, { glyph: Component; title: string }> = {
     me: { glyph: IconUser, title: findInWords.me },
     agent: { glyph: IconAgent, title: agent },
@@ -266,7 +318,7 @@ function placeFound(place: FindPlace, n: number, agent: string): Place {
   const face = place.thinking
     ? { glyph: IconCpu, title: findInWords.reasoning }
     : FACE[place.whose];
-  const key = `found:${place.docId}:${n}`;
+  const key = `found:${place.docId}`;
   return {
     at: place.at,
     docId: place.docId,
@@ -274,6 +326,7 @@ function placeFound(place: FindPlace, n: number, agent: string): Place {
     glyph: face.glyph,
     key,
     live: false,
+    n: place.n,
     record: place.docId,
     title: face.title,
     whose: place.whose,
@@ -290,10 +343,8 @@ export class ConversationFind {
   words = $state("");
   /** Whose words the places keep. */
   whose = $state<WhoseFilter>("all");
-  /** The hub's read of the turns not loaded. */
+  /** How the hub's read stands. */
   hub = $state<HubRead>({ kind: "idle" });
-  /** The place stepped to, by its key; null before the first step. */
-  at = $state<string | null>(null);
   /** Find closed at a place: its wash stays, and Back where you were stands. */
   landed = $state(false);
   /** Narrow, the places stand over the conversation until one is picked. */
@@ -313,18 +364,28 @@ export class ConversationFind {
    * the row's own mark and its "Opened at that line" (the words are marked,
    * and the place is said by the count).
    */
-  sought: { back: boolean; docId: string } | null = null;
+  sought: string | null = null;
   /** The step count as find last opened: a later step moved the conversation. */
   #openedAt = 0;
-  /** The place stepped to, by whose words and its record, for when its key changes as its turn loads. */
-  #atRecord = $state<string | null>(null);
+  /** The position of the place stepped to among those kept; null before the first step. */
+  #index = $state<number | null>(null);
+  /** The engine's windows of the words being found; null before it answered them. */
+  #found = $state.raw<Found | null>(null);
+  /** Each find's windows, by its words, the latest last ({@link FOUND_HELD}). */
+  readonly #held = new Map<string, Found>();
+  /** The windows being read, by words, filter and first position: each asked once. */
+  readonly #reading = new Set<string>();
+  /** A place stepped to whose window was being read: sought once it is. */
+  #unsought: number | null = null;
 
   readonly #ask: AskPlaces;
   readonly #agent: () => string;
-  #reading: () => { tail: true } | { tail: false; docId: string } | null = () =>
-    null;
-  #settle: ReturnType<typeof setTimeout> | undefined;
+  #readFrom: () => { tail: true } | { tail: false; docId: string } | null =
+    () => null;
+  /** The read of the newest window, let go when the words change. */
   #abort: AbortController | null = null;
+  /** Every read of the words being found, let go together when they change. */
+  #windows = new AbortController();
 
   constructor(viewId: string, ask: AskPlaces, agent: () => string) {
     this.viewId = viewId;
@@ -341,16 +402,16 @@ export class ConversationFind {
   readFrom(
     reading: () => { tail: true } | { tail: false; docId: string } | null
   ) {
-    this.#reading = reading;
+    this.#readFrom = reading;
     return () => {
-      if (this.#reading === reading) {
-        this.#reading = () => null;
+      if (this.#readFrom === reading) {
+        this.#readFrom = () => null;
       }
     };
   }
 
-  /** The places in the turns loaded now, the live one too. */
-  readonly #held = $derived.by((): Place[] => {
+  /** The places in the turns loaded now, the live one last. */
+  readonly held = $derived.by((): Place[] => {
     const session = sessionsStore.session(this.viewId);
     if (!((this.open || this.landed) && session)) {
       return [];
@@ -368,6 +429,7 @@ export class ConversationFind {
         glyph: IconAgent,
         key: `${this.viewId}:live`,
         live: true,
+        n: null,
         record: "",
         title: agent,
         whose: "agent",
@@ -377,42 +439,66 @@ export class ConversationFind {
     return held;
   });
 
-  /** Every place, the hub's and the loaded turns', oldest first; the live one last. */
-  readonly all = $derived.by((): Place[] => {
-    const held = this.#held;
-    if (this.hub.kind !== "answered") {
-      return held;
+  /** The loaded turns' places, by whose words and record: how a place the engine found is drawn once its turn is loaded. */
+  readonly #heldByRecord = $derived(
+    new Map(this.held.map((place) => [`${place.whose}|${place.record}`, place]))
+  );
+
+  /**
+   * The places that follow the engine's: with its answer, those of the
+   * loaded turns said after its index's reach, the live one last; without
+   * it, every place of the loaded turns.
+   */
+  readonly #after = $derived.by((): Place[] => {
+    const { hub } = this;
+    if (hub.kind !== "answered") {
+      return this.held;
     }
-    // A place the hub found whose turn is loaded is the transcript's own.
-    const loaded = new Set(
-      held.map((place) => `${place.whose}|${place.record}`)
+    const { through } = hub;
+    const later = this.held.filter(
+      (place) =>
+        !place.live &&
+        place.at !== null &&
+        (through === null || place.at > through)
     );
-    const agent = this.#agent();
-    const ofRecord = new Map<string, number>();
-    const found = this.hub.places
-      .map((place) => {
-        const n = ofRecord.get(place.docId) ?? 0;
-        ofRecord.set(place.docId, n + 1);
-        return placeFound(place, n, agent);
-      })
-      .filter((place) => !loaded.has(`${place.whose}|${place.record}`));
-    const said = [...found, ...held.filter((place) => !place.live)].toSorted(
-      (a, b) => (a.at ?? 0) - (b.at ?? 0)
-    );
-    return [...said, ...held.filter((place) => place.live)];
+    return [
+      ...later.toSorted((a, b) => (a.at ?? 0) - (b.at ?? 0)),
+      ...this.held.filter((place) => place.live),
+    ];
   });
 
-  /** The places the filter keeps. */
-  readonly places = $derived(
-    this.all.filter(
+  /** Of {@link ConversationFind.#after}, the places the filter keeps. */
+  readonly #afterKept = $derived(
+    this.#after.filter(
       (place) => this.whose === "all" || place.whose === this.whose
     )
   );
 
+  /** How many of the engine's places the filter keeps. */
+  readonly #engine = $derived.by((): number => {
+    const { hub } = this;
+    if (hub.kind !== "answered") {
+      return 0;
+    }
+    return this.whose === "all"
+      ? WHOSE.reduce((sum, whose) => sum + hub.counts[whose], 0)
+      : hub.counts[this.whose];
+  });
+
+  /** How many places the filter keeps: the list's length. */
+  readonly total = $derived(this.#engine + this.#afterKept.length);
+
   /** Each filter's count. */
   readonly counts = $derived.by((): Record<WhoseFilter, number> => {
+    const { hub } = this;
     const counts = { all: 0, me: 0, agent: 0, tools: 0, delegates: 0 };
-    for (const place of this.all) {
+    if (hub.kind === "answered") {
+      for (const whose of WHOSE) {
+        counts[whose] = hub.counts[whose];
+        counts.all += hub.counts[whose];
+      }
+    }
+    for (const place of this.#after) {
       counts.all += 1;
       counts[place.whose] += 1;
     }
@@ -420,22 +506,54 @@ export class ConversationFind {
   });
 
   /**
-   * The place stepped to, among those kept: by its key, or, a place the hub
-   * found whose turn has loaded since, by its record.
+   * The place at `index` among those the filter keeps; null for one of the
+   * engine's whose window is not read yet (its row stands as a skeleton,
+   * and the list asks for it, `need`).
    */
+  placeAt(index: number): Place | null {
+    const engine = this.#engine;
+    if (index >= engine) {
+      return this.#afterKept[index - engine] ?? null;
+    }
+    const place = this.#found?.windows[this.whose].get(index);
+    if (!place) {
+      return null;
+    }
+    // A place the engine found whose turn is loaded is drawn as the
+    // transcript names it: its call, its report's sender. Made once for
+    // each pair, so a row drawn again is handed the place it had.
+    const loaded = this.#heldByRecord.get(`${place.whose}|${place.record}`);
+    if (!loaded) {
+      return place;
+    }
+    const drawn = this.#drawn.get(place);
+    if (drawn?.loaded === loaded) {
+      return drawn.place;
+    }
+    const named = { ...loaded, key: place.key, n: place.n };
+    this.#drawn.set(place, { loaded, place: named });
+    return named;
+  }
+
+  /** Each place the engine found whose turn is loaded, as the transcript names it, by the place and the loaded one it was drawn from. */
+  readonly #drawn = new WeakMap<Place, { loaded: Place; place: Place }>();
+
+  /** The place stepped to; null before the first step, or while its window is read. */
   readonly current = $derived(
-    this.places.find((place) => place.key === this.at) ??
-      this.places.find(
-        (place) =>
-          this.#atRecord !== null &&
-          `${place.whose}|${place.record}` === this.#atRecord
-      ) ??
-      null
+    this.#index === null ? null : this.placeAt(this.#index)
   );
+
+  /** The place stepped to, by its key; null before the first step. */
+  readonly at = $derived(this.current?.key ?? null);
+
+  /** Its position among the places kept, from 0; null before the first step. */
+  get index(): number | null {
+    return this.#index;
+  }
 
   /** Its number among the places kept, from 1; 0 with none. */
   readonly placeNo = $derived(
-    this.current ? this.places.indexOf(this.current) + 1 : 0
+    this.#index === null || this.total === 0 ? 0 : this.#index + 1
   );
 
   /** The hub is still being asked: nothing is claimed absent yet. */
@@ -444,18 +562,18 @@ export class ConversationFind {
   /** Open find (Command-F, Attach's Find): the field takes the focus. */
   show(): void {
     if (!this.open) {
-      this.reading = this.landed ? this.reading : this.#reading();
+      this.reading = this.landed ? this.reading : this.#readFrom();
       this.open = true;
       this.landed = false;
       this.#openedAt = this.stepped;
       this.listOpen = true;
-      if (this.words) {
-        this.#askHub();
+      if (this.words.trim()) {
+        this.#askNewest();
       }
       // Find opens again at the place it stood at: it is stepped to, so the
       // place the count names is the one the conversation shows.
-      if (this.current) {
-        this.goTo(this.current);
+      if (this.#index !== null) {
+        this.goTo(this.#index);
       }
     }
     this.focusAsked += 1;
@@ -471,31 +589,134 @@ export class ConversationFind {
     this.landed = this.stepped !== this.#openedAt && this.current !== null;
     this.open = false;
     this.#abort?.abort();
-    clearTimeout(this.#settle);
     this.messageAsked += 1;
   }
 
-  /** The words typed: the places are read again once typing settles. */
+  /**
+   * The words typed: the hub is asked at once, the read of the words
+   * before let go (no settle: each read is the engine's index and one
+   * window, and the newer one takes the older one's place). Words found
+   * before draw their windows at once while they are read again.
+   */
   type(words: string): void {
     this.words = words;
-    this.at = null;
-    this.#atRecord = null;
-    clearTimeout(this.#settle);
+    this.#index = null;
     this.#abort?.abort();
-    if (!words.trim()) {
+    this.#windows.abort();
+    this.#windows = new AbortController();
+    this.#reading.clear();
+    const key = foundKey(words);
+    if (!key) {
+      this.#found = null;
       this.hub = { kind: "idle" };
       return;
     }
-    this.hub = { kind: "asking" };
-    this.#settle = setTimeout(() => this.#askHub(), SETTLE_MS);
+    const held = this.#held.get(key) ?? null;
+    this.#found = held;
+    if (held) {
+      // Drawn at once as last found, and read again behind.
+      this.hub = {
+        kind: "answered",
+        counts: held.counts,
+        through: held.through,
+      };
+    }
+    this.#askNewest();
   }
 
   /** Ask the hub again (Retry). */
   retry(): void {
-    this.#askHub();
+    this.#askNewest();
   }
 
-  async #askHub(): Promise<void> {
+  /** The words' windows, held for when they are typed again. */
+  #foundFor(
+    key: string,
+    counts: Record<Whose, number>,
+    through: number | null
+  ): Found {
+    const held = this.#held.get(key);
+    this.#held.delete(key);
+    const found: Found = held ?? {
+      counts,
+      key,
+      through,
+      windows: {
+        all: new SvelteMap(),
+        me: new SvelteMap(),
+        agent: new SvelteMap(),
+        tools: new SvelteMap(),
+        delegates: new SvelteMap(),
+      },
+    };
+    this.#held.set(key, found);
+    for (const old of this.#held.keys()) {
+      if (this.#held.size <= FOUND_HELD) {
+        break;
+      }
+      this.#held.delete(old);
+    }
+    return found;
+  }
+
+  /**
+   * One window of the words' places for `filter`, read and kept, its
+   * counts taken as the engine's latest; the answer, or null when it was
+   * let go or failed (a failed window's rows stay skeletons, and are asked
+   * again as the list comes near them).
+   */
+  async #read(
+    words: string,
+    filter: WhoseFilter,
+    window: Omit<PlacesWindow, "whose">,
+    signal: AbortSignal
+  ): Promise<Read<FindPlacesAnswer> | null> {
+    const read = await this.#ask(
+      this.viewId,
+      words,
+      { ...window, ...(filter === "all" ? {} : { whose: filter }) },
+      signal
+    );
+    if (
+      read === null ||
+      signal.aborted ||
+      foundKey(this.words) !== foundKey(words)
+    ) {
+      return null;
+    }
+    if (read.ok && read.value.machine.heard === "answered") {
+      const { counts, through } = read.value;
+      const found = this.#foundFor(foundKey(words), counts, through);
+      found.counts = counts;
+      found.through = through;
+      this.#found = found;
+      const kept = found.windows[filter];
+      const agent = this.#agent();
+      for (const [i, place] of read.value.places.entries()) {
+        kept.set(read.value.offset + i, placeFound(place, agent));
+      }
+      const was = this.hub;
+      // A window that moved no count leaves the read as it stood: what
+      // reads it (every row's place) is not drawn again for it.
+      if (!(
+        was.kind === "answered" &&
+        was.through === through &&
+        WHOSE.every((whose) => was.counts[whose] === counts[whose])
+      )) {
+        this.hub = { kind: "answered", counts, through };
+      }
+      const waiting = this.#unsought;
+      const place = waiting === null ? null : this.placeAt(waiting);
+      if (place && waiting === this.#index && filter === this.whose) {
+        this.#unsought = null;
+        this.#seek(place);
+      }
+    }
+    return read;
+  }
+
+  /** Ask the hub for the newest window, where find starts: its places' counts too. */
+  async #askNewest(): Promise<void> {
     const words = this.words.trim();
     if (!words) {
       return;
@@ -503,20 +724,17 @@ export class ConversationFind {
     this.#abort?.abort();
     const abort = new AbortController();
     this.#abort = abort;
-    this.hub = { kind: "asking" };
-    const read = await this.#ask(this.viewId, words, abort.signal);
-    if (read === null || abort.signal.aborted) {
+    if (!this.#found) {
+      this.hub = { kind: "asking" };
+    }
+    const read = await this.#read(words, this.whose, {}, abort.signal);
+    if (read === null) {
       return;
     }
     if (read.ok) {
       const { heard, name } = read.value.machine;
       switch (heard) {
         case "answered":
-          this.hub = {
-            kind: "answered",
-            places: read.value.places,
-            more: read.value.more,
-          };
           break;
         case "outdated":
           this.hub = { kind: "outdated", machine: name };
@@ -532,8 +750,57 @@ export class ConversationFind {
         ? { kind: "unreached", machine: this.#machine() }
         : { kind: "refused", detail: read.detail };
     }
-    if (this.at === null) {
+    if (this.#index === null) {
       this.#first();
+    }
+  }
+
+  /**
+   * Read the windows that hold the places from `from` to `to` among those
+   * kept, each not read yet: the list asks for the rows near its view, a
+   * step for the window ahead of it.
+   */
+  need(from: number, to: number): void {
+    const words = this.words.trim();
+    const filter = this.whose;
+    const kept = this.#found?.windows[filter];
+    const end = Math.min(to, this.#engine - 1);
+    if (!(words && this.hub.kind === "answered")) {
+      return;
+    }
+    for (
+      let start = Math.floor(Math.max(0, from) / PLACES_WINDOW) * PLACES_WINDOW;
+      start <= end;
+      start += PLACES_WINDOW
+    ) {
+      const last = Math.min(start + PLACES_WINDOW, this.#engine) - 1;
+      const id = `${foundKey(words)}|${filter}|${start}`;
+      if (this.#reading.has(id) || (kept?.has(start) && kept.has(last))) {
+        continue;
+      }
+      this.#reading.add(id);
+      detach(
+        this.#readWindow(id, words, filter, start),
+        "find's places window"
+      );
+    }
+  }
+
+  /** One window of the places from `start` read; a window that came to nothing is asked again when the list comes near it. */
+  async #readWindow(
+    id: string,
+    words: string,
+    filter: WhoseFilter,
+    start: number
+  ): Promise<void> {
+    const { signal } = this.#windows;
+    let read: Read<FindPlacesAnswer> | null = null;
+    try {
+      read = await this.#read(words, filter, { offset: start }, signal);
+    } finally {
+      if (!read?.ok) {
+        this.#reading.delete(id);
+      }
     }
   }
 
@@ -547,57 +814,120 @@ export class ConversationFind {
 
   /** The newest place said before the live turn: where find starts. */
   #first(): void {
-    const said = this.places.filter((place) => !place.live);
-    const last = said.at(-1);
-    if (last) {
-      this.goTo(last);
+    for (let index = this.total - 1; index >= 0; index -= 1) {
+      if (!this.placeAt(index)?.live) {
+        this.goTo(index);
+        return;
+      }
     }
   }
 
-  /** Whose words to keep: the place stays when it is kept, else the newest kept. */
+  /**
+   * Whose words to keep: the place stays when it is kept (the engine says
+   * where it stands among them, `near`), else the newest kept.
+   */
   filter(whose: WhoseFilter): void {
+    const was = this.current;
     this.whose = whose;
-    if (!this.current) {
+    this.#index = null;
+    if (was !== null && (whose === "all" || was.whose === whose)) {
+      const after = this.#afterKept.findIndex((place) => place.key === was.key);
+      if (after >= 0) {
+        this.#index = this.#engine + after;
+        return;
+      }
+      const { n } = was;
+      if (n !== null && this.hub.kind === "answered") {
+        detach(this.#keepAt(whose, n), "find's places filter");
+        return;
+      }
+    }
+    if (this.hub.kind === "answered") {
+      this.#askNewest();
+    } else {
+      this.#first();
+    }
+  }
+
+  /**
+   * The place at `n` among every place stepped to again among those
+   * `whose` keeps, where the engine says it stands; else the newest kept.
+   */
+  async #keepAt(whose: WhoseFilter, n: number): Promise<void> {
+    const read = await this.#read(
+      this.words.trim(),
+      whose,
+      { near: n },
+      this.#windows.signal
+    );
+    if (!read?.ok || this.whose !== whose || this.#index !== null) {
+      return;
+    }
+    const at = read.value.places.findIndex((place) => place.n === n);
+    if (at >= 0) {
+      this.#index = read.value.offset + at;
+    } else {
       this.#first();
     }
   }
 
   /** Step to the next place (1) or the previous (-1), round from the ends. */
   step(by: 1 | -1): void {
-    const n = this.places.length;
+    const n = this.total;
     if (n === 0) {
       return;
     }
-    const now = this.current ? this.places.indexOf(this.current) : -1;
+    const now = this.#index ?? -1;
     const start = by === 1 ? 0 : n - 1;
     const next = now < 0 ? start : (now + by + n) % n;
-    this.goTo(this.places[next]);
+    this.goTo(next);
   }
 
-  /** A place picked from the list: stepped to, and, `fold`, the list folds so it reads whole. */
-  pick(key: string, fold: boolean): void {
-    const place = this.places.find((each) => each.key === key);
-    if (place) {
-      this.goTo(place);
-      if (fold) {
-        this.listOpen = false;
-      }
+  /** A place picked from the list, by its position: stepped to, and, `fold`, the list folds so it reads whole. */
+  pick(index: number, fold: boolean): void {
+    this.goTo(index);
+    if (fold) {
+      this.listOpen = false;
     }
   }
 
-  /** Seek the place, its fold opened; the live turn's is the conversation's tail (Transcript). */
-  goTo(place: Place | undefined): void {
-    if (!place) {
+  /**
+   * Seek the place at `index`, its fold opened; the live turn's is the
+   * conversation's tail (Transcript). One whose window is not read yet is
+   * read first, and sought once it is, unless a later step moved on.
+   */
+  goTo(index: number): void {
+    if (index < 0 || index >= this.total) {
       return;
     }
-    this.at = place.key;
-    this.#atRecord = `${place.whose}|${place.record}`;
-    if (place.live) {
-      this.stepped += 1;
-      return;
-    }
+    this.#index = index;
     this.stepped += 1;
-    this.sought = { back: false, docId: place.docId };
+    const place = this.placeAt(index);
+    this.#unsought = place ? null : index;
+    if (place) {
+      this.#seek(place);
+    } else {
+      this.need(index, index);
+    }
+    // The windows a step either way reaches next are read before it does:
+    // half a window on, and round from either end.
+    const n = this.total;
+    for (const ahead of [
+      index + PLACES_WINDOW / 2,
+      index - PLACES_WINDOW / 2,
+      (index + 1) % n,
+      (index - 1 + n) % n,
+    ]) {
+      this.need(ahead, ahead);
+    }
+  }
+
+  /** The transcript opens at `place`, its words brought into the room the reader sees. */
+  #seek(place: Place): void {
+    if (place.live) {
+      return;
+    }
+    this.sought = place.docId;
     // The seek brings the words themselves into the room the reader sees,
     // opening the fold they are in (Transcript `seekInto`).
     askOpenAt(this.viewId, place.docId, [this.words.trim()]);
@@ -615,23 +945,11 @@ export class ConversationFind {
     // The caret goes back to the message, as the pill it was pressed on goes.
     this.messageAsked += 1;
     if (reading && !reading.tail) {
-      this.sought = { back: true, docId: reading.docId };
+      this.sought = reading.docId;
       askOpenAt(this.viewId, reading.docId);
       return { tail: false };
     }
     return { tail: true };
-  }
-
-  /**
-   * The transcript arrived at the place stepped to: a place the hub found
-   * is the transcript's own now that its turn is loaded.
-   */
-  arrived(): void {
-    const place = this.current;
-    if (!place) {
-      return;
-    }
-    this.at = place.key;
   }
 
   /** The reader moved on from the place find closed at: its wash goes. */
@@ -644,27 +962,36 @@ export class ConversationFind {
 export type PlacesView = Pick<
   ConversationFind,
   | "agent"
-  | "all"
   | "asking"
   | "at"
   | "close"
   | "counts"
   | "filter"
   | "hub"
+  | "index"
+  | "need"
   | "pick"
-  | "places"
+  | "placeAt"
   | "retry"
+  | "total"
   | "viewId"
   | "whose"
   | "words"
 >;
 
+/** The places list of the find in `viewId`, by id: what the find field controls. */
+export const placesId = (viewId: string): string => `places-${viewId}`;
+
+/** The row of the place at `index` in the find in `viewId`, by id: what the find field names as the one stepped to. */
+export const placeId = (viewId: string, index: number): string =>
+  `place-${viewId}-${index}`;
+
 /** Each conversation's find, by its view id. */
 const finds = new Map<string, ConversationFind>();
 
 /** How the hub is asked: the engine's places read, or a bench's fixture. */
-let asker: AskPlaces = async (viewId, words, signal) => {
-  const asked = await findPlaces(viewId, words, signal);
+let asker: AskPlaces = async (viewId, words, window, signal) => {
+  const asked = await findPlaces(viewId, words, window, signal);
   return asked.kind === "answered" ? asked.read : null;
 };
 
@@ -695,7 +1022,7 @@ export function findIn(viewId: string): ConversationFind {
   const make = (): ConversationFind =>
     new ConversationFind(
       viewId,
-      (id, words, signal) => asker(id, words, signal),
+      (id, words, window, signal) => asker(id, words, window, signal),
       () =>
         cawOf(viewId) === null
           ? speakerName(sessionsStore.session(viewId)?.harness)

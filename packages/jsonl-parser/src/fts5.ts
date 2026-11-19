@@ -21,6 +21,7 @@ import {
   AUTHOR_RULES,
   type DocAuthor,
   type ExtractOptions,
+  type PlaceKind,
   type TranscriptDoc,
   userAuthor,
 } from "./text.ts";
@@ -42,9 +43,19 @@ import {
  * new documents are its newest, so a sync's entries land at the right edge of
  * that author's range: a handful of pages a sync, one per author written.
  *
- * Nothing is indexed by the session: search filters on it after the FTS
- * match, never through an index, and `docs_session` cost each live session a
- * page split every other sync.
+ * `docs_conversation` serves find in one conversation ({@link TranscriptIndex.places}):
+ * its records in time order with who said each, read off the index alone,
+ * and the span of rowids they hold, which FTS5 seeks its doclists to.
+ * Without it the phrase was matched across the whole machine and each
+ * match's row read to learn its session: "the" in a 41,790-record
+ * conversation of a 2,032,817-record index (obelisk, 2026-11-19) read
+ * 824,000 rows for its 500 oldest places, 696 ms; through it, every one of
+ * its 18,090 places and their counts, 268 ms, "dashboard" 203 ms to 56. An
+ * index by session was dropped once (75f8254006), keyed by the session's
+ * uuid as text; keyed by its `strings` id, a session's entries are ~40
+ * bytes and land at its own right edge, one page a live session a sync, as
+ * `docs_author_ts`'s land at each author's. On that index it is 88 MB, 3%
+ * of the file, built in 2.6 s as the writer first opens it.
  *
  * The harness, session, role, author, cwd and model are the same few strings
  * on row after row, so a row holds each as the id of its one copy in
@@ -80,6 +91,7 @@ CREATE TABLE IF NOT EXISTS docs (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS docs_key ON docs(coalesce(ts, ''), doc_id, harness);
 CREATE INDEX IF NOT EXISTS docs_author_ts ON docs(author, ts);
+CREATE INDEX IF NOT EXISTS docs_conversation ON docs(session, sidechain, ts, id, author);
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
   text, thinking, tools, output,
   content='docs', content_rowid='id',
@@ -268,26 +280,54 @@ export interface TurnsOptions {
 }
 
 /**
- * What `places` reads: every place in one conversation where the words
- * stand together, what tools answered included, for the person's find in
- * that conversation to step through (core `FindPlace`).
+ * What `places` reads: one window of the places in one conversation where
+ * the words stand together, what tools answered included, oldest first, for
+ * the person's find in that conversation to step through (core `FindPlace`).
  */
 export interface PlacesOptions {
   /** The conversation, by every harness session id it went by. */
   sessions: readonly string[];
   /** The words, matched as one phrase, the last also as the start of a longer word. */
   words: string;
-  /** The most places answered, the oldest first. */
+  /** Only the places of this kind; every place when absent. */
+  kind?: PlaceKind;
+  /** The window's first place, by its position among the places kept, from 0; absent: the newest `limit`, where find starts. */
+  offset?: number;
+  /**
+   * The window round the place at this position among every place (the
+   * first kept at or after it, else the last kept before it), in place of
+   * `offset`: where a place stepped to stands among the places one
+   * whose's words keep.
+   */
+  near?: number;
+  /** The most places the window holds. */
   limit: number;
+}
+
+/** What `places` answers: how many places there are, and one window of them. */
+export interface PlacesAnswer {
+  /** How many places of each kind the conversation holds. */
+  counts: Record<PlaceKind, number>;
+  /** The position of the window's first place among the places kept. */
+  offset: number;
+  places: IndexedPlace[];
+  /**
+   * When the newest record of the conversation the index holds was said:
+   * what was said after it is not in these places yet. Null when it holds
+   * none with a time.
+   */
+  through: string | null;
 }
 
 /** One place `places` answers. */
 export interface IndexedPlace {
-  author: DocAuthor;
+  kind: PlaceKind;
+  /** Its position among every place of the find, from 0. */
+  n: number;
   /** Which of its columns holds the words. */
   column: "output" | "text" | "thinking";
   docId: string;
-  /** The words round the match, the match between 「 and 」. */
+  /** The words round the match, the match between 「 and 」 (none when only a stem of them is there). */
   excerpt: string;
   timestamp: string | null;
 }
@@ -305,6 +345,34 @@ function placeExcerpt(column: string, at: number, length: number): string {
   const to = Math.min(column.length, at + length + PLACE_TAIL);
   const flat = (text: string) => text.replace(SPACES, " ");
   return `${from > 0 ? "…" : ""}${flat(column.slice(from, at))}「${flat(column.slice(at, at + length))}」${flat(column.slice(at + length, to))}${to < column.length ? "…" : ""}`;
+}
+
+/**
+ * The columns a place in what was said or thought is matched in: what a
+ * tool was called by is not a place, its answer is (`output`).
+ */
+const SAID_PLACE_COLUMNS = "text thinking";
+
+/**
+ * How many finds' places a reader holds ({@link TranscriptIndex.#placeList}):
+ * the find being stepped through and the words typed just before it, each
+ * a few hundred KB at most (two numbers a place). Our own call.
+ */
+const PLACE_LISTS = 4;
+
+/** Every place of one find in one conversation, oldest first, as `places` holds them between windows. */
+interface PlaceList {
+  /** The phrase's first word, as typed: where a stemmed match is cut round. */
+  first: string;
+  /** Each place's record, by rowid. */
+  ids: number[];
+  kinds: PlaceKind[];
+  /** {@link PlacesAnswer.through}. */
+  through: string | null;
+  /** The words as typed. */
+  typed: string;
+  /** The index's `data_version` they were read at. */
+  version: number;
 }
 
 /** One record of a conversation as `turns` answers it: its words, each column cut to {@link TURN_CHARS}. */
@@ -780,6 +848,8 @@ export class TranscriptIndex {
    * adds strings after the reader opened.
    */
   readonly #strings = new Map<string, number>();
+  /** The places of the last few finds, by conversation and phrase ({@link TranscriptIndex.#placeList}). */
+  readonly #placeLists = new Map<string, PlaceList>();
 
   constructor(path: string, options: IndexOpenOptions = {}) {
     if (options.readonly) {
@@ -1627,6 +1697,231 @@ export class TranscriptIndex {
   }
 
   /**
+   * One window of the places in one conversation whose words hold `words`
+   * together (an FTS5 phrase over what was said, thought and what tools
+   * answered; the last word also as the start of a longer one), oldest
+   * first, its own words and never a subagent's (a sidechain), with how
+   * many there are of each kind. A place's kind is whose words hold the
+   * phrase: what was said or thought first, a tool's answer only where
+   * nothing said holds it. Each is cut round where the words stand in it,
+   * as they were typed, else their first word. A tool's answer is named by
+   * its own record (a Claude Code `tool_result` entry, a pi result entry,
+   * the OpenCode message holding the call): the transcript a dashboard
+   * reads keeps which call each result answered, by the call's own id, so
+   * it opens the place at that very call (core transcript-rules
+   * `applyToolResult`, `resultRecord`), however many calls ran beside it
+   * and however long it took to answer.
+   *
+   * Every place is found from the index alone ({@link TranscriptIndex.#placeList}),
+   * and only the window's records are read: their words are what an
+   * excerpt is cut from.
+   */
+  places(options: PlacesOptions): PlacesAnswer {
+    return section("search index: places", () => this.#placesNow(options));
+  }
+
+  #placesNow(options: PlacesOptions): PlacesAnswer {
+    const counts: Record<PlaceKind, number> = { owner: 0, agent: 0, report: 0, output: 0 };
+    const list = this.#placeList(options.sessions, options.words);
+    if (list === null) {
+      return { counts, offset: 0, places: [], through: null };
+    }
+    for (const kind of list.kinds) {
+      counts[kind] += 1;
+    }
+    const { kind } = options;
+    const kept =
+      kind === undefined
+        ? list.ids.map((_, i) => i)
+        : list.kinds.flatMap((each, i) => (each === kind ? [i] : []));
+    const limit = Math.max(0, Math.trunc(options.limit));
+    const { near } = options;
+    let from = options.offset === undefined ? kept.length - limit : Math.trunc(options.offset);
+    if (near !== undefined) {
+      const at = kept.findIndex((i) => i >= near);
+      from = (at < 0 ? kept.length - 1 : at) - Math.floor(limit / 2);
+    }
+    const offset = Math.min(Math.max(0, from), Math.max(0, kept.length - 1));
+    const window = kept.slice(offset, offset + limit);
+    const rows = this.db
+      .query<
+        {
+          doc_id: string;
+          id: number;
+          output: string | null;
+          text: string;
+          thinking: string | null;
+          ts: string | null;
+        },
+        [string]
+      >(
+        `SELECT id, doc_id, ts, text, thinking, output FROM docs
+         WHERE id IN (SELECT value FROM json_each(?))`,
+      )
+      .all(JSON.stringify(window.map((i) => list.ids[i])));
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const needle = list.typed.replace(SPACES, " ").toLowerCase();
+    const first = list.first.toLowerCase();
+    const places = window.flatMap((i): IndexedPlace[] => {
+      const row = byId.get(list.ids[i] ?? -1);
+      const kind = list.kinds[i];
+      if (!(row && kind)) {
+        return [];
+      }
+      const columns =
+        kind === "output"
+          ? ([["output", row.output]] as const)
+          : ([
+              ["text", row.text],
+              ["thinking", row.thinking],
+            ] as const);
+      const at = (word: string) =>
+        word === ""
+          ? undefined
+          : columns
+              .map(([name, column]) => ({
+                name,
+                column: column ?? "",
+                at: column?.toLowerCase().indexOf(word) ?? -1,
+                length: word.length,
+              }))
+              .find((each) => each.at >= 0);
+      // Where the words stand as typed; else (a stemmed match) where their
+      // first word does; else (a stem of the first alone) the start of the
+      // column that holds them.
+      const found = at(needle) ?? at(first);
+      const [name, column] = columns.find(([, each]) => each) ?? columns[0];
+      return [
+        {
+          kind,
+          n: i,
+          column: found?.name ?? name,
+          docId: row.doc_id,
+          excerpt: found
+            ? placeExcerpt(found.column, found.at, found.length)
+            : placeExcerpt(column ?? "", 0, 0).replace("「」", ""),
+          timestamp: row.ts,
+        },
+      ];
+    });
+    return { counts, offset, places, through: list.through };
+  }
+
+  /**
+   * Every place of `words` in the conversation `sessions` names, oldest
+   * first, and the kind of each: found off the index, the conversation's
+   * records' own rows read only where the phrase matched them. Its span of
+   * rowids and its newest time are `docs_conversation`'s; the phrase is
+   * matched twice, in what was said or thought and in what tools answered,
+   * each sought within that span (FTS5 seeks every doclist to it) and kept
+   * to the conversation's records; its records in time order, with who said
+   * each, are `docs_conversation`'s again. Held for the next window of the
+   * same find ({@link PLACE_LISTS}) until the index changes (`PRAGMA
+   * data_version`: "the integer values returned by two invocations of
+   * "PRAGMA data_version" from the same connection will be different if
+   * changes were committed to the database by any other connection in the
+   * interim", https://www.sqlite.org/pragma.html#pragma_data_version). Null
+   * when there is nothing to match or no record of the conversation.
+   */
+  #placeList(sessions: readonly string[], typed: string): PlaceList | null {
+    const { words, prefix } = matchQueries(typed);
+    const ids = this.#sessionIds(sessions);
+    if (words.length === 0 || ids === null) {
+      return null;
+    }
+    const phrase = `"${words.join(" ")}"${prefix ? "*" : ""}`;
+    const key = `${ids}\u0000${phrase}`;
+    const version =
+      this.db.query<{ data_version: number }, []>("PRAGMA data_version").get()?.data_version ?? 0;
+    const held = this.#placeLists.get(key);
+    this.#placeLists.delete(key);
+    if (held && held.version === version) {
+      this.#placeLists.set(key, held);
+      return held;
+    }
+    // The conversation's span of rowids, and its newest time, off the index.
+    const span = this.db
+      .query<{ high: number | null; low: number | null; through: string | null }, [string]>(
+        `SELECT min(id) AS low, max(id) AS high, max(ts) AS through
+         FROM docs INDEXED BY docs_conversation
+         WHERE session IN (SELECT value FROM json_each(?)) AND sidechain = 0`,
+      )
+      .get(ids);
+    const list: PlaceList = {
+      first: words[0] ?? "",
+      ids: [],
+      kinds: [],
+      through: span?.through ?? null,
+      typed: typed.trim(),
+      version,
+    };
+    const { low, high } = span ?? {};
+    // The phrase in `columns` (FTS5, stems and every word its last one
+    // starts), kept to the records whose `held` hold its first word as
+    // typed: a place is one whose words the transcript marks (find-marks.ts
+    // marks the words as typed), so a match on a stem alone ("run" for
+    // "running") is none. `lower` folds ASCII's case alone, on both sides
+    // (LIKE folds the same, and was 7 ms quicker for "the" in the
+    // conversation above, but ends a column at its first NUL, which tool
+    // output holds).
+    const typedFirst = words[0] ?? "";
+    const matched = (columns: string, held: string) =>
+      low === null || low === undefined || high === null || high === undefined
+        ? new Set<number>()
+        : new Set(
+            this.db
+              .query<{ id: number }, [string, number, number, string, string]>(
+                `SELECT f.rowid AS id FROM docs_fts f JOIN docs d ON d.id = f.rowid
+                 WHERE docs_fts MATCH ?1 AND f.rowid BETWEEN ?2 AND ?3
+                   AND +f.rowid IN (
+                     SELECT id FROM docs INDEXED BY docs_conversation
+                     WHERE session IN (SELECT value FROM json_each(?4)) AND sidechain = 0
+                   )
+                   AND (${held})`,
+              )
+              .all(`{${columns}}: ${phrase}`, low, high, ids, typedFirst)
+              .map(({ id }) => id),
+          );
+    const said = matched(
+      SAID_PLACE_COLUMNS,
+      "instr(lower(d.text), lower(?5)) > 0 OR instr(lower(d.thinking), lower(?5)) > 0",
+    );
+    const answered = matched("output", "instr(lower(d.output), lower(?5)) > 0");
+    if (said.size + answered.size > 0) {
+      // Whose words hold a place, by the author's id; `injected` holds none.
+      const author = new Map<number, PlaceKind>(
+        (["owner", "agent", "report"] as const satisfies readonly DocAuthor[]).flatMap((name) => {
+          const id = this.#idOf(name);
+          return id === undefined ? [] : [[id, name]];
+        }),
+      );
+      // In time order, as the conversation was said.
+      const records = this.db
+        .query<{ author: number; id: number }, [string]>(
+          `SELECT id, author FROM docs INDEXED BY docs_conversation
+           WHERE session IN (SELECT value FROM json_each(?)) AND sidechain = 0
+           ORDER BY ts, id`,
+        )
+        .all(ids);
+      for (const { id, author: by } of records) {
+        const kind = said.has(id) ? author.get(by) : answered.has(id) ? "output" : undefined;
+        if (kind) {
+          list.ids.push(id);
+          list.kinds.push(kind);
+        }
+      }
+    }
+    this.#placeLists.set(key, list);
+    for (const old of this.#placeLists.keys()) {
+      if (this.#placeLists.size <= PLACE_LISTS) {
+        break;
+      }
+      this.#placeLists.delete(old);
+    }
+    return list;
+  }
+
+  /**
    * A conversation's turns around one of its records, as the index holds
    * them ({@link TurnsOptions}): the centre sought at its time (or walked to
    * from the newest when no time is given), then up to `side` turns either
@@ -1634,92 +1929,6 @@ export class TranscriptIndex {
    * A neighbour is a record with words or calls outside a subagent; a tool's
    * answer or a thought alone is a turn only at the centre.
    */
-  /**
-   * Every place in one conversation whose words hold `words` together (an
-   * FTS5 phrase over what was said, thought, called and what tools
-   * answered; the last word also as the start of a longer one), oldest
-   * first, its own words and never a subagent's (a sidechain). Each is cut
-   * round where the words stand in it, the column that holds them as they
-   * were typed first (what was said, then thought, then what a tool
-   * answered). A tool's answer is named by its own record (a Claude Code
-   * `tool_result` entry, a pi result entry, the OpenCode message holding
-   * the call): the transcript a dashboard reads keeps which call each
-   * result answered, by the call's own id, so it opens the place at that
-   * very call (core transcript-rules `applyToolResult`, `resultRecord`),
-   * however many calls ran beside it and however long it took to answer.
-   */
-  places(options: PlacesOptions): IndexedPlace[] {
-    return section("search index: places", () => this.#placesNow(options));
-  }
-
-  #placesNow(options: PlacesOptions): IndexedPlace[] {
-    const { words, prefix } = matchQueries(options.words);
-    const sessions = this.#sessionIds(options.sessions);
-    if (words.length === 0 || sessions === null) {
-      return [];
-    }
-    const phrase = `"${words.join(" ")}"${prefix ? "*" : ""}`;
-    const rows = this.db
-      .prepare(
-        `SELECT d.doc_id, a.value AS author, d.ts, d.text, d.thinking, d.output
-         FROM docs_fts f
-         JOIN docs d ON d.id = f.rowid
-         JOIN strings a ON a.id = d.author
-         WHERE docs_fts MATCH ?
-           AND d.session IN (SELECT value FROM json_each(?))
-           AND d.sidechain = 0
-         ORDER BY coalesce(d.ts, ''), d.id
-         LIMIT ?`,
-      )
-      .all(phrase, sessions, options.limit) as {
-      author: DocAuthor;
-      doc_id: string;
-      output: string | null;
-      text: string;
-      thinking: string | null;
-      ts: string | null;
-    }[];
-    const needle = options.words.trim().replace(SPACES, " ").toLowerCase();
-    const first = words[0]?.toLowerCase() ?? "";
-    return rows.flatMap((row): IndexedPlace[] => {
-      const columns = [
-        ["text", row.text],
-        ["thinking", row.thinking],
-        ["output", row.output],
-      ] as const;
-      // Where the words stand as typed; else (a stemmed match) where their first word does.
-      const found =
-        columns
-          .map(([name, column]) => ({
-            name,
-            column,
-            at: column?.toLowerCase().indexOf(needle) ?? -1,
-            length: needle.length,
-          }))
-          .find((each) => each.at >= 0) ??
-        columns
-          .map(([name, column]) => ({
-            name,
-            column,
-            at: first ? (column?.toLowerCase().indexOf(first) ?? -1) : -1,
-            length: first.length,
-          }))
-          .find((each) => each.at >= 0);
-      if (!found?.column) {
-        return [];
-      }
-      return [
-        {
-          author: row.author,
-          column: found.name,
-          docId: row.doc_id,
-          excerpt: placeExcerpt(found.column, found.at, found.length),
-          timestamp: row.ts,
-        },
-      ];
-    });
-  }
-
   turns(options: TurnsOptions): TurnsAnswer {
     return section("search index: turns", () => this.#turnsNow(options));
   }

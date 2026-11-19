@@ -100,7 +100,7 @@ import {
 import type { ControlName, ControlResult } from "./control-table";
 import type {
   TranscriptAnswer,
-  TranscriptPlace,
+  TranscriptPlaces,
   TranscriptTurns,
 } from "./find";
 import type {
@@ -319,7 +319,7 @@ import {
   TaskOutputSchema,
   ToolSigninChallengeSchema,
   TranscriptAnswerSchema,
-  TranscriptPlaceSchema,
+  TranscriptPlacesSchema,
   TranscriptTurnsSchema,
   TranscriptWindowSchema,
   UpdateReportSchema,
@@ -513,9 +513,7 @@ const CONTROLS = {
   [CONTROL_TRANSCRIPT_TURNS]: reply<TranscriptTurns | null>(
     TranscriptTurnsSchema.nullable()
   ),
-  [CONTROL_TRANSCRIPT_PLACES]: reply<TranscriptPlace[]>(
-    z.array(TranscriptPlaceSchema)
-  ),
+  [CONTROL_TRANSCRIPT_PLACES]: reply<TranscriptPlaces>(TranscriptPlacesSchema),
   [CONTROL_CARRY_SESSIONS]: reply<Record<string, CarrySessionOutcome>>(
     z.record(z.string(), CarrySessionOutcomeSchema)
   ),

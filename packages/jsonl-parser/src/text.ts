@@ -24,6 +24,15 @@ import type {
  */
 export type DocAuthor = "owner" | "agent" | "report" | "injected";
 
+/**
+ * Whose words a place of find in a conversation is, as the index tells
+ * them (fts5.ts `places`): the person's, the agent's (said or thought), a
+ * delegate's report, or what a tool answered (`output`), whoever's record
+ * it came in. Words the index holds as `injected` (what a harness or CawCo
+ * put under the person's role) are no one's, and hold no place.
+ */
+export type PlaceKind = Exclude<DocAuthor, "injected"> | "output";
+
 /** A normalized, harness-agnostic searchable document. */
 export interface TranscriptDoc {
   /** Which harness produced it (claude-code, opencode, pi). */

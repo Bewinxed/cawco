@@ -14,7 +14,7 @@ import {
   TRANSCRIPT_ANSWER_MS,
   TRANSCRIPT_QUERY_MS,
   type TranscriptAnswer,
-  type TranscriptPlace,
+  type TranscriptPlaces,
   type TranscriptPlacesQuery,
   type TranscriptQuery,
   type TranscriptTurns,
@@ -71,11 +71,10 @@ const MAX_LISTED_DOCS = 200;
 /** The most turns either side of a centre `turns` answers with: `find`'s detailed `around` asks five. */
 const MAX_TURNS_SIDE = 10;
 /**
- * The most places one conversation's find answers with: the hub's own
- * limit (hub find-places.ts `PLACES_LIMIT`, 500) and one more, so the hub
- * can tell a conversation holds more and say so to the person.
+ * The most places one window of a conversation's find holds: the hub's
+ * own window (core find.ts `PLACES_WINDOW`) and room over it.
  */
-const MAX_PLACES = 501;
+const MAX_PLACES = 200;
 
 /** A failed sync in a few words: SQLite's own message, with its code when it has one. */
 function syncFailure(error: unknown): string {
@@ -299,21 +298,29 @@ export class TranscriptSearchService {
   }
 
   /**
-   * Every place in one conversation where the words stand (fts5.ts
-   * `places`), oldest first, brought up to date first as a search is: what
-   * the person's find in that conversation steps through.
+   * One window of the places in one conversation where the words stand
+   * (fts5.ts `places`), oldest first, and how many there are, brought up to
+   * date first as a search is when it asks for the newest (where find
+   * starts): what the person's find in that conversation steps through. A
+   * window further in (a step or a scroll) is read as the index stands, so
+   * the find it belongs to keeps its places where they were.
    */
   async places(
     query: TranscriptPlacesQuery,
     signal?: AbortSignal
-  ): Promise<TranscriptPlace[]> {
-    await this.#fresh();
+  ): Promise<TranscriptPlaces> {
+    if (query.offset === undefined && query.near === undefined) {
+      await this.#fresh();
+    }
     return this.#reader.read(
       "places",
       {
         sessions: query.sessions,
         words: query.words,
         limit: Math.min(Math.max(1, query.limit), MAX_PLACES),
+        ...(query.kind === undefined ? {} : { kind: query.kind }),
+        ...(query.offset === undefined ? {} : { offset: query.offset }),
+        ...(query.near === undefined ? {} : { near: query.near }),
       },
       signal
     );

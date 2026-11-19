@@ -435,12 +435,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    (`moved`) and the ones removed (`removed`), no longer their ids alone
  *    (`sessions`). A page drops it either way; the wire's own record names
  *    it, so a page built for 85 reloads first.
+ * 87: find in a conversation is read in windows: `GET /api/find/places`
+ *    answers how many places there are of each whose (`counts`), one
+ *    window of them from `offset` (the newest when none is asked), and how
+ *    far the machine's index reaches (`through`), no longer every place
+ *    with `more`. A page built for 86 reads `more` and the places whole, so
+ *    it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 86;
+export const WIRE_PROTOCOL = 87;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

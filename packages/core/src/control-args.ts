@@ -49,7 +49,7 @@ import type {
   ControlArgs,
   ControlName,
 } from "./control-table";
-import { TRANSCRIPT_AUTHORS } from "./find";
+import { TRANSCRIPT_AUTHORS, TRANSCRIPT_PLACE_KINDS } from "./find";
 import { HARNESSES, isEffortLevel } from "./harness/kinds";
 import { WIRE_PERMISSION_MODES } from "./harness/modes";
 import { CREDENTIAL_STORE_HARNESSES } from "./harness/traits";
@@ -356,8 +356,15 @@ const ARGS: {
       side: count,
     }),
   ]),
-  transcriptPlaces: tuple([
-    object({ limit: count, sessions: texts, words: text }),
+  transcriptPlaceWindow: tuple([
+    object({
+      kind: optional(picklist(TRANSCRIPT_PLACE_KINDS)),
+      limit: count,
+      near: optional(count),
+      offset: optional(count),
+      sessions: texts,
+      words: text,
+    }),
   ]),
   carrySessions: tuple([
     array(

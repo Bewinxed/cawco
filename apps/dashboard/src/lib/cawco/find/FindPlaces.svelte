@@ -5,6 +5,17 @@
    * oldest first, the one stepped to chosen. Made of Jump's parts: its
    * who-said chips, its row (FindRow), its ghost and pill (highlight).
    *
+   * The rows are drawn only near the view (virtua's `Virtualizer`, the
+   * transcript's own), however many places there are: a row whose window
+   * the hub has not answered yet stands as a skeleton, and the list asks
+   * for the windows near its view as it scrolls (`need`). Each option says
+   * its position and the list's length (`aria-posinset`, `aria-setsize`),
+   * since a screen reader meets only the rows drawn (WAI-ARIA 1.2: "If all
+   * items in a set are not present in the DOM, authors need to set
+   * aria-setsize"), and the find field names the one stepped to
+   * (`aria-activedescendant`, FindLine), kept drawn wherever the list
+   * scrolls.
+   *
    * It is the composer's layer (FindLayer), at every width. Where it is a
    * phone's or a narrow panel's width (`compact`), its rows wrap as Jump's
    * phone rows do, and a place picked folds it so the place reads whole.
@@ -14,24 +25,28 @@
    * loaded; while the hub is asked and nothing loaded holds the words, the
    * list claims nothing (The Claim Of Nothing Rule).
    */
-  import { bringIntoView } from "@cawco/core/bring-into-view";
+  import { PLACES_WINDOW } from "@cawco/core/find";
   import { unhandled } from "@cawco/core/unhandled";
   import { findInWords } from "@cawco/core/words/find-in";
   import { findSecretWords } from "@cawco/core/words/find-secrets";
   import { untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
+  import { Virtualizer } from "virtua/svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconSearch } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
+  import { track } from "#lib/platform/track.js";
   import { barGlass } from "../bar-glass.svelte";
   import { TURN_CLOCK } from "../turn/clock";
-  import type {
-    Place,
-    PlacesView,
-    WhoseFilter,
+  import {
+    type Place,
+    type PlacesView,
+    placeId,
+    placesId,
+    type WhoseFilter,
   } from "./conversation-find.svelte";
   import FindRow from "./FindRow.svelte";
   import { type Row, secretsIn } from "./find-rows";
@@ -51,7 +66,18 @@
     { value: "delegates", label: findInWords.delegates },
   ]);
 
+  /** Each place's row, made once: a row drawn again (a scroll back, a window read) is handed the row it had. */
+  const rowsOf = new WeakMap<Place, Row>();
   const rowOf = (place: Place): Row => {
+    const held = rowsOf.get(place);
+    if (held) {
+      return held;
+    }
+    const row = rowFor(place);
+    rowsOf.set(place, row);
+    return row;
+  };
+  const rowFor = (place: Place): Row => {
     const words = place.excerpt
       .map((run) => (run.secret ? findSecretWords.hidden : run.text))
       .filter(
@@ -75,7 +101,8 @@
       titleParts: [{ matched: false, text: place.title }],
     };
   };
-  const rows = $derived(find.places.map(rowOf));
+  /** Every position the list holds: the virtualizer draws those near the view. */
+  const positions = $derived(Array.from({ length: find.total }, (_, i) => i));
   /** The secrets the person showed, by key; the rest are drawn as dots (Find's "Hide secrets"). */
   const shown = new SvelteSet<string>();
 
@@ -94,9 +121,6 @@
       case "refused":
         return { retries: true, words: findInWords.refused(hub.detail) };
       case "answered":
-        return hub.more
-          ? { retries: false, words: findInWords.more(hub.places.length) }
-          : null;
       case "asking":
       case "idle":
         return null;
@@ -107,29 +131,42 @@
 
   /** Known to hold nothing: nothing loaded holds the words, and the hub said none or cannot be heard. */
   const nothing = $derived(
-    find.words.trim() !== "" && find.all.length === 0 && !find.asking
+    find.words.trim() !== "" && find.counts.all === 0 && !find.asking
   );
   /** Asked and not answered, nothing loaded holding the words: the list waits at its size. */
-  const waiting = $derived(find.all.length === 0 && find.asking);
+  const waiting = $derived(find.counts.all === 0 && find.asking);
+
+  let list = $state<HTMLElement | undefined>();
+  let rows = $state<Virtualizer<number> | undefined>();
+
+  /** The rows in view and half a window either side: their windows are read. */
+  function needSeen(): void {
+    if (!rows) {
+      return;
+    }
+    const top = rows.getScrollOffset();
+    const first = rows.findItemIndex(top);
+    const last = rows.findItemIndex(top + rows.getViewportSize());
+    find.need(first - PLACES_WINDOW / 2, last + PLACES_WINDOW / 2);
+  }
+
+  // A list drawn again (words, a filter, the hub's count) reads what it shows.
+  $effect(() => {
+    track(find.total, find.whose, find.words);
+    const frame = requestAnimationFrame(() => untrack(needSeen));
+    return () => cancelAnimationFrame(frame);
+  });
 
   // Each step brings its row into view in the list.
-  let list = $state<HTMLElement | null>(null);
   $effect(() => {
-    const key = find.at;
-    if (!(key && list)) {
+    const at = find.index;
+    if (at === null || !rows) {
       return;
     }
     // After the frame the list is laid out in: opened again, its
     // height is set by then.
     const frame = requestAnimationFrame(() =>
-      untrack(() => {
-        const row = list?.querySelector<HTMLElement>(
-          `[data-key="${CSS.escape(key)}"]`
-        );
-        if (row) {
-          bringIntoView(row);
-        }
-      })
+      untrack(() => rows?.scrollToIndex(at, { align: "nearest" }))
     );
     return () => cancelAnimationFrame(frame);
   });
@@ -250,12 +287,13 @@
         {/each}
       </div>
     {:else}
-      <!-- Each place is drawn only near the view (`row-skip-unseen`): every
-           place drawn, a keystroke over a word the conversation says often
-           styled and laid out the hub's 500 rows, with a dozen in view. -->
+      <!-- Only the rows near the view are drawn (Virtualizer, scrolling
+           this listbox); the one stepped to stays drawn wherever the list
+           scrolls, as the find field names it. -->
       <div
-        class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto overscroll-contain p-space-1 pt-0 *:row-skip-unseen"
+        class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto overscroll-contain p-space-1 pt-0"
         aria-label={findInWords.places}
+        id={placesId(find.viewId)}
         onmousedown={keepField}
         role="listbox"
         bind:this={list}
@@ -264,18 +302,44 @@
           hovered: "[data-active]",
         })}
       >
-        {#each rows as row (row.key)}
-          <FindRow
-            active={row.key === find.at}
-            id={`place-${find.viewId}-${row.key}`}
-            {now}
-            onpick={() => find.pick(row.key, compact)}
-            onsecret={(key) => shown.add(key)}
-            phone={compact}
-            {row}
-            {shown}
-          />
-        {/each}
+        <Virtualizer
+          bind:this={rows}
+          data={positions}
+          keepMounted={find.index === null ? undefined : [find.index]}
+          onscroll={needSeen}
+          scrollRef={list}
+        >
+          {#snippet children(index: number)}
+            {@const place = find.placeAt(index)}
+            {#if place}
+              <FindRow
+                active={index === find.index}
+                id={placeId(find.viewId, index)}
+                {now}
+                onpick={() => find.pick(index, compact)}
+                onsecret={(key) => shown.add(key)}
+                phone={compact}
+                posinset={index + 1}
+                row={rowOf(place)}
+                setsize={find.total}
+                {shown}
+              />
+            {:else}
+              <div
+                class="px-space-3 py-space-2"
+                id={placeId(find.viewId, index)}
+                aria-busy="true"
+                aria-posinset={index + 1}
+                aria-selected={index === find.index}
+                aria-setsize={find.total}
+                role="option"
+                tabindex="-1"
+              >
+                <Skeleton height="reason-row" />
+              </div>
+            {/if}
+          {/snippet}
+        </Virtualizer>
       </div>
     {/if}
   {/if}
