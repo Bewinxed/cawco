@@ -593,6 +593,7 @@ import { mintSessionTicket } from "./preview-access";
 import { createPreviewBrowse, WORKSPACE_TIMEOUT_MS } from "./preview-browse";
 import {
   createPreviewLink,
+  fromPreviewServer,
   type PreviewOriginDeps,
   previewControlRoutes,
 } from "./preview-control";
@@ -13157,10 +13158,16 @@ export const createServer = (
         return answer ? compressAnswer(request, answer) : answer;
       })
       // No page of another origin calls the hub with the browser's cookies:
-      // a previewed app on its own port of this host least of all.
-      .onRequest(({ request }) => {
+      // a previewed app on its own port of this host least of all. The
+      // preview server's relay of a preview origin's page is let by: it
+      // carries that page's own Origin, never the hub's, and its token on
+      // loopback is its credential (preview-control.ts `fromPreviewServer`).
+      .onRequest(({ request, server }) => {
         // The work the hub started last, for its loop's watch (hub-loop.ts).
         doing(`${request.method} ${new URL(request.url).pathname}`);
+        if (fromPreviewServer(request, server)) {
+          return;
+        }
         const refused = crossSiteRefusal(
           request.method,
           (name) => request.headers.get(name),

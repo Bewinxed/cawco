@@ -43,6 +43,7 @@ import {
   LOCK_HEADER,
   OPEN_PATH,
   ORIGIN_PATH,
+  PREVIEW_SERVER_PREFIX,
   REACHED_HEADER,
   SYNC_PATH,
   serverSaid,
@@ -113,6 +114,24 @@ const requestFromServer = (
     (name) => request.headers.get(name),
     server?.requestIP(request)?.address
   );
+
+/**
+ * Whether `request` is the preview server's, to one of its routes
+ * (wire.ts): the one request the hub's cross-site gate (server.ts) lets by
+ * whatever its `Origin` and `Sec-Fetch-*` say. A relayed one (an entry, a
+ * doc socket's upgrade, a Send, a fault report) carries them as the browser
+ * sent them, from a page on a preview origin, never the hub's own, and the
+ * route reads them as sent (preview-stale.ts reads `Sec-Fetch-Dest`). The
+ * server's token, which only a process that reads the hub's secret key
+ * holds, on loopback, is what lets it by; a page can't send that header
+ * cross-origin without a preflight nothing here answers.
+ */
+export const fromPreviewServer = (
+  request: Request,
+  server: { requestIP: (request: Request) => { address: string } | null } | null
+): boolean =>
+  new URL(request.url).pathname.startsWith(`${PREVIEW_SERVER_PREFIX}/`) &&
+  requestFromServer(request, server);
 
 /** A request not from the preview server, refused (the origin route's own answer is a Response, {@link notServerResponse}). */
 const notServer = () =>

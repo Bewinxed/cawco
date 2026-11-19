@@ -30,19 +30,19 @@ import type { PreviewStop } from "../preview-stops";
 import { hubSecrets } from "../secret-box";
 
 /** Everything of the hub's for its preview server, under one prefix. */
-const PREFIX = "/__cawco-preview";
+export const PREVIEW_SERVER_PREFIX = "/__cawco-preview";
 /** The control link, a WebSocket. */
-export const CONTROL_PATH = `${PREFIX}/control`;
+export const CONTROL_PATH = `${PREVIEW_SERVER_PREFIX}/control`;
 /** `<ORIGIN_PATH><key or ->/<the path the browser asked>`: a hub-owned path on origin `key` (`-` for a port no origin holds). */
-export const ORIGIN_PATH = `${PREFIX}/origin/`;
+export const ORIGIN_PATH = `${PREVIEW_SERVER_PREFIX}/origin/`;
 /** `<SYNC_PATH><key>/<artifact id>`: an artifact's doc socket joined on origin `key` (`?screen=1` for a canvas's host page). */
-export const SYNC_PATH = `${PREFIX}/sync/`;
+export const SYNC_PATH = `${PREVIEW_SERVER_PREFIX}/sync/`;
 /** `<UPSTREAM_PATH><key>`: where machine artifact origin `key`'s preview is served now, its listener started when none serves it. */
-export const UPSTREAM_PATH = `${PREFIX}/upstream/`;
+export const UPSTREAM_PATH = `${PREVIEW_SERVER_PREFIX}/upstream/`;
 /** `POST <OPEN_PATH><key>`: origin `key`'s port, opened when it has none. */
-export const OPEN_PATH = `${PREFIX}/open/`;
+export const OPEN_PATH = `${PREVIEW_SERVER_PREFIX}/open/`;
 /** `POST <DOCUMENT_PATH><id>`: artifact `id`'s document built now. */
-export const DOCUMENT_PATH = `${PREFIX}/document/`;
+export const DOCUMENT_PATH = `${PREVIEW_SERVER_PREFIX}/document/`;
 
 /** The header every request from the preview server carries: {@link previewServerToken}. */
 export const TOKEN_HEADER = "x-cawco-preview-server";

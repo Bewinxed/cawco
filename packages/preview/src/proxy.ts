@@ -1232,6 +1232,12 @@ export const previewWebSocket = {
     upstream.onclose = (event) =>
       socket.close(sendable(event.code), event.reason);
     upstream.onerror = (event) => {
+      // The viewer went first (a reload, a closed pane): `close` below closed
+      // an upstream still connecting, and Bun says so as an error ("WebSocket
+      // is closed before the connection is established"). Nothing failed.
+      if (data.closed) {
+        return;
+      }
       const why = failureOf(event);
       previewFailed(
         data.hop,
