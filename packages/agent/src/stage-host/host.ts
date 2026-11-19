@@ -48,7 +48,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
 import {
@@ -189,6 +189,8 @@ interface DevServer {
         getModulesByFile: (file: string) => Set<ModuleNode> | undefined;
         idToModuleMap: Map<string, ModuleNode>;
         invalidateModule: (mod: ModuleNode, ...rest: unknown[]) => void;
+        /** What Vite does with a file its watcher saw change: each of its modules, and their importers, let go of. */
+        onFileChange: (file: string) => void;
       };
     };
   };
@@ -218,7 +220,7 @@ interface DevServer {
   /** Vite's file watcher (chokidar): a `change` on it is what Vite's HMR runs on. */
   watcher: {
     add: (paths: string[]) => unknown;
-    emit: (event: "add" | "change", file: string) => boolean;
+    emit: (event: "add" | "change" | "unlink", file: string) => boolean;
     on: (
       event: "add" | "change" | "unlink",
       listener: (file: string) => void
@@ -1620,6 +1622,7 @@ async function serveCanvas(
     } else if (by === "stage") {
       loaded = sweptFiles(files, plans, asked.get(RENDER_STATE_PARAM));
     }
+    freshen(dev);
     const urls = await settledClosureOf(dev, loaded);
     // One key for the page's tags and its graph's list, read once its graph has settled.
     const key = generationOf(dev);
@@ -1648,8 +1651,10 @@ async function serveCanvas(
  * module's own address>`, Vite's prebundled dependencies too (one of them
  * may import a module of the page's: the stage's `cawco:yjs`, which imports
  * Vite's client). The key is new whenever Vite lets go of a module's
- * served code ({@link rekeyOnInvalidate}) or its server starts, and with
- * each build of the dependencies, so one
+ * served code ({@link rekeyOnInvalidate}: its watcher saw a file change,
+ * or a page's load found one it missed, {@link freshen}) or its server
+ * starts, and with each build of the dependencies, and an address is kept
+ * for good only at its own generation ({@link keyedModule}), so one
  * address always holds one module's code: kept by the browser for good
  * (`immutable`), a decision page's embeds of one states file fetch each
  * module once, where through the hub's preview proxy each fetched all of
@@ -1690,6 +1695,77 @@ function rekeyOnInvalidate(dev: DevServer): void {
     rekey();
     invalidate(mod, ...rest);
   };
+}
+
+/**
+ * Each file a module of the stage's was read from, by its absolute path, as
+ * it stood just before it was read ({@link fileStamp}): its inode, size and
+ * modification time. Taken by {@link readStamps} on each load; let go of
+ * when Vite's watcher reports the file, which Vite then lets go of itself.
+ */
+const readAs = new Map<string, string>();
+
+/** A file's inode, size and modification time; null when there is none. An atomic write (a new file renamed over it) is a new inode. */
+const fileStamp = (file: string): string | null => {
+  const at = statSync(file, { throwIfNoEntry: false });
+  return at ? `${at.ino}:${at.size}:${at.mtimeMs}` : null;
+};
+
+/**
+ * Takes each project file's stamp as Vite reads it ({@link readAs}): a
+ * `load` that answers nothing, ahead of every other (`pre` in a `pre`
+ * plugin), so the stamp is the file's before Vite reads it, and a write that
+ * lands between the two reads as changed. A dependency's file
+ * (`node_modules`) is Vite's prebundle's, which it builds again itself, and
+ * a virtual module has no file.
+ */
+function readStamps() {
+  return {
+    name: "cawco:stage-read",
+    enforce: "pre" as const,
+    load: {
+      order: "pre" as const,
+      handler(id: string) {
+        const [file = id] = id.split("?");
+        if (isAbsolute(file) && !file.includes(`${sep}node_modules${sep}`)) {
+          const read = fileStamp(file);
+          if (read !== null) {
+            readAs.set(file, read);
+          }
+        }
+        return null;
+      },
+    },
+  };
+}
+
+/**
+ * Lets go of every module whose file changed since Vite read it and that
+ * Vite's watcher never reported, before a page is keyed: the page's key is
+ * the stage's files as they stand, never only the watcher's record of them.
+ * Vite's watcher (chokidar 3, bundled in Vite 8.3.5) misses some writes:
+ * its per-file listener reports a change only when the file's modification
+ * time moved or its access time is no later ("if (!at || at <= mt || mt !==
+ * prevStats.mtimeMs)", `_handleFile`), so a write that keeps the time (a
+ * copy or extraction that preserves it) goes unreported, and it drops an
+ * event within 5 ms of the one before (`_throttle(THROTTLE_MODE_WATCH, file,
+ * 5)`). A missed write left the stage serving a module's code from before it,
+ * at a key that no edit moved on. Each such file goes through Vite's own path: its modules
+ * and their importers let go of in its graph now (`onFileChange`, which
+ * keys the stage anew, {@link rekeyOnInvalidate}), so this page's graph is
+ * read again, and the change handed to the watcher as its own, so the open
+ * pages hear it by HMR as they hear any edit.
+ */
+function freshen(dev: DevServer): void {
+  for (const [file, read] of readAs) {
+    const now = fileStamp(file);
+    if (now === read) {
+      continue;
+    }
+    readAs.delete(file);
+    dev.environments.client.moduleGraph.onFileChange(file);
+    dev.watcher.emit(now === null ? "unlink" : "change", file);
+  }
 }
 
 /** The key a page loaded now asks for its modules under: the files' generation and the dependencies' build. */
@@ -1842,10 +1918,22 @@ function mapApart(
   };
 }
 
+/** A keyed module's answer, and whether it is its address's for good: read at the key the stage serves now. */
+interface KeyedAnswer {
+  answer: Keyed;
+  lasting: boolean;
+}
+
 /**
  * The stage's own answer at `address`, asked of itself, keyed at `key`:
  * what it imports keyed alike, Vite's client's HMR base the page's key, its
- * source map apart ({@link mapApart}). Kept when it answered; an error (a
+ * source map apart ({@link mapApart}). An address holds one module's code
+ * for good only at the generation that wrote it: an answer is kept, and
+ * `lasting`, only when `key` is the stage's generation once it is read. At
+ * a generation gone (a page loaded before an edit asks for a module it had
+ * not loaded yet, or Vite let go of a module while this one was read) Vite
+ * holds that generation's code no more: the answer is its code now, kept
+ * nowhere, so no cache holds two codes under one address. An error (a
  * module that doesn't compile) is never kept, and is the answer as it came.
  */
 async function keyedModule(
@@ -1853,11 +1941,11 @@ async function keyedModule(
   req: IncomingMessage,
   key: string,
   address: string
-): Promise<Keyed | { failed: Response }> {
+): Promise<KeyedAnswer | { failed: Response }> {
   const at = `${MODULES_PATH}${key}${address}`;
   const known = keyedServed.get(at);
   if (known) {
-    return known;
+    return { answer: known, lasting: true };
   }
   const listening = dev.httpServer?.address();
   const stagePort =
@@ -1895,14 +1983,17 @@ async function keyedModule(
       map: null,
     };
   }
-  keyedServed.set(at, kept);
-  return kept;
+  const lasting = key === generationOf(dev);
+  if (lasting) {
+    keyedServed.set(at, kept);
+  }
+  return { answer: kept, lasting };
 }
 
 /**
  * A module at a key (`/@cawco/m/<key>/<address>`), or its source map
- * (`/@cawco/m/<key>/@cawco-map/<address>`): kept for good, as every keyed
- * address is.
+ * (`/@cawco/m/<key>/@cawco-map/<address>`): kept for good when it is its
+ * generation's ({@link keyedModule}), `no-store` when its generation is gone.
  */
 async function serveKeyed(
   dev: DevServer,
@@ -1916,27 +2007,28 @@ async function serveKeyed(
   const asked = `${rest.slice(cut)}${url.search}`;
   const forMap = asked.startsWith(`${MAP_AT}/`);
   const address = forMap ? asked.slice(MAP_AT.length) : asked;
-  const kept = await keyedModule(dev, req, key, address);
-  if ("failed" in kept) {
-    res.statusCode = kept.failed.status;
+  const read = await keyedModule(dev, req, key, address);
+  if ("failed" in read) {
+    res.statusCode = read.failed.status;
     res.setHeader(
       "content-type",
-      kept.failed.headers.get("content-type") ?? "application/octet-stream"
+      read.failed.headers.get("content-type") ?? "application/octet-stream"
     );
     res.setHeader("cache-control", "no-store");
-    res.end(Buffer.from(await kept.failed.arrayBuffer()));
+    res.end(Buffer.from(await read.failed.arrayBuffer()));
     return;
   }
-  if (forMap && kept.map === null) {
+  const { answer, lasting } = read;
+  if (forMap && answer.map === null) {
     res.statusCode = 404;
     res.setHeader("cache-control", "no-store");
     res.end();
     return;
   }
   res.statusCode = 200;
-  res.setHeader("content-type", forMap ? "application/json" : kept.type);
-  res.setHeader("cache-control", KEPT);
-  res.end(forMap ? kept.map : kept.body);
+  res.setHeader("content-type", forMap ? "application/json" : answer.type);
+  res.setHeader("cache-control", lasting ? KEPT : "no-store");
+  res.end(forMap ? answer.map : answer.body);
 }
 
 /** An attribute's value, its quotes and ampersands written as entities. */
@@ -3554,6 +3646,13 @@ function cawcoStage() {
       // A server Vite (re)started (its config, a file the config imports or an env file changed: its own restart) serves at new addresses, and so does one that let go of a module.
       rekey();
       rekeyOnInvalidate(dev);
+      // A file the watcher reports is Vite's to let go of: no page load need look at it again (freshen).
+      const reported = (abs: string) => {
+        readAs.delete(abs);
+      };
+      dev.watcher.on("add", reported);
+      dev.watcher.on("change", reported);
+      dev.watcher.on("unlink", reported);
       dev.watcher.on("add", nowWritten);
       dev.watcher.on("change", nowWritten);
       dev.watcher.on("unlink", (abs: string) => {
@@ -3962,6 +4061,7 @@ const CONFIGS = ["ts", "mts", "js", "mjs", "cts", "cjs"].map(
 
 /** The stage's plugins for the Vite inside any toolchain: a Svelte element carries its place already; the stand-ins serve SvelteKit's client modules and each story's own. */
 const plugins = () => [
+  readStamps(),
   cawcoStage(),
   linkedRebundle(),
   ...(framework === "svelte" ? [] : [stamp()]),
