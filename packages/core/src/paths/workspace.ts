@@ -240,3 +240,13 @@ export const workspaceSpillDir = (id: string, instanceId: string): string =>
  */
 export const workspaceProjectFile = (id: string): string =>
   join(workspaceStateDir(id), "project.json");
+
+/**
+ * The objects dirs a place's repository borrows from, a JSON list of real
+ * paths the agent writes once, as it first holds the place, from the
+ * repository's alternates (agent workspace-records.ts `keepBorrowedObjects`),
+ * so the place's git reads them (`workspacePolicy`). In the state dir, which
+ * nothing inside the boundary writes.
+ */
+export const workspaceBorrowedObjectsFile = (id: string): string =>
+  join(workspaceStateDir(id), "borrowed-objects.json");

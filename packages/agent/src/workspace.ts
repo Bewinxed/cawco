@@ -1645,7 +1645,9 @@ const closedCloneGit = async (
  * borrowed ones included (no `-l`), then the alternates file goes: what `git
  * clone --dissociate` does (git-clone(1): "this option can be used to stop
  * the borrowing"). Git on this host once its boundary is closed
- * ({@link closedCloneGit}). One that borrows nothing is left as it is.
+ * ({@link closedCloneGit}). One that borrows nothing is left as it is: no
+ * alternates file, or the empty one that stands in for it while a sandbox
+ * runs (core clone-denies.ts `GIT_EMPTY`).
  */
 const ownObjects = async (
   workspace: WorkspaceRef,
@@ -1654,7 +1656,12 @@ const ownObjects = async (
   const alternates = access.at(
     join(workspace.path, ".git", "objects", "info", "alternates")
   );
-  if (!(await lstat(alternates).catch(() => undefined))) {
+  const listed = await readFile(alternates, "utf8").catch(() => "");
+  if (
+    !listed
+      .split("\n")
+      .some((line) => line.trim() && !line.trim().startsWith("#"))
+  ) {
     return;
   }
   const git = await closedCloneGit(workspace, access);

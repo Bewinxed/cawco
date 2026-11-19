@@ -8,8 +8,9 @@
  *
  * - Reads: the whole home dir is denied, and back come the workspace's own
  *   trees (its clone, its state dir's read-only part and its scratch dir, the
- *   shared workspace cache, the
- *   objects dir its clone borrows), the `package.json` of each folder
+ *   shared workspace cache, and for a place the objects dirs its
+ *   repository borrows, as the agent recorded them (`borrowedObjects`)),
+ *   the `package.json` of each folder
  *   above the clone up to the home dir (`ancestorManifests`), the
  *   toolchains on PATH and the tool
  *   trees their commands link into (`homeToolchains`), the user's git
@@ -27,7 +28,7 @@
  *   file tools also read its own `projects/<slug>/` dir, which the judge adds
  *   from the transcript the CLI names.
  * - Writes: the clone, the scratch dir and the workspace caches only; never
- *   the clone's git config, hooks or submodule dirs, or the harness project
+ *   the clone's git config, hooks, submodule dirs or alternates, or the harness project
  *   config the host loads at the next session, outside any boundary
  *   ({@link cloneDenies}).
  * - Every credential store (`credentialStores`) is denied for reading and
@@ -48,6 +49,7 @@ import {
   resolve,
 } from "node:path";
 import { z } from "zod";
+import { unlessGone } from "./absent";
 import { binaryRoot } from "./binary-installation";
 import {
   type CloneDeny,
@@ -77,6 +79,7 @@ import { hubProjectsDir } from "./paths/hub";
 import { xdgDataHome } from "./paths/roots";
 import {
   workspaceAccountsFile,
+  workspaceBorrowedObjectsFile,
   workspaceDoorDir,
   workspaceProjectFile,
   workspaceReadOnlyDir,
@@ -532,31 +535,76 @@ const linkedIn = async (root: string): Promise<string[]> => {
 const unique = (paths: string[]): string[] => [...new Set(paths)];
 
 /**
- * The objects dirs a clone borrows from (`.git/objects/info/alternates`), and
- * every one those borrow from in turn: git reads each borrowed dir's own
+ * The objects dirs `repo`'s git borrows from (`.git/objects/info/alternates`),
+ * and every one those borrow from in turn: git reads each borrowed dir's own
  * alternates too, so a clone of a clone needs the whole chain. A relative
  * entry is relative to the objects dir that names it (gitrepository-layout).
+ * Each as a real path, and only a dir that is there: git skips the rest.
+ *
+ * Read by the agent alone, as it first holds a place (agent
+ * workspace-records.ts `keepBorrowedObjects`), never by the policy: a
+ * command in the folder can write that file, and what a command writes never
+ * widens what it may read ({@link borrowedObjects}).
  */
-const alternatesOf = async (clone: string): Promise<string[]> => {
+export const borrowedObjectsOf = async (repo: string): Promise<string[]> => {
   const found: string[] = [];
-  const pending = [join(clone, ".git", "objects")];
+  const pending = [join(repo, ".git", "objects")];
   for (let objects = pending.shift(); objects; objects = pending.shift()) {
+    // Absent is "borrows nothing"; any other failure stands, so no record is
+    // kept of a store that could not be read.
     const listed = await readFile(
       join(objects, "info", "alternates"),
       "utf8"
-    ).catch(() => "");
+    ).catch(unlessGone(""));
     for (const line of listed.split("\n").map((each) => each.trim())) {
       if (!line || line.startsWith("#")) {
         continue;
       }
-      const borrowed = isAbsolute(line) ? line : resolve(objects, line);
-      if (!found.includes(borrowed)) {
+      const borrowed = await realpath(
+        isAbsolute(line) ? line : resolve(objects, line)
+      ).catch(() => undefined);
+      if (
+        borrowed &&
+        !found.includes(borrowed) &&
+        (await stat(borrowed).catch(() => undefined))?.isDirectory()
+      ) {
         found.push(borrowed);
         pending.push(borrowed);
       }
     }
   }
   return found;
+};
+
+/**
+ * The objects dirs the workspace's git borrows from, read only, as the agent
+ * recorded them ({@link workspaceBorrowedObjectsFile}), never as the
+ * alternates file in its folder says now: a command there can write that
+ * file. A place's are what its repository borrowed when the agent first held
+ * it. A clone borrows nothing: it is cut with a store of its own (agent
+ * clone.ts `prepareClone`), and whatever store it is ever cut to borrow from
+ * is granted here, from its own record. None that lies where the workspace
+ * writes ({@link Policy.allowWrite}): it reads that already, and a link a
+ * command put there would lead elsewhere.
+ */
+const borrowedObjects = async (
+  id: string,
+  writable: readonly string[]
+): Promise<string[]> => {
+  if (!isPlace(id)) {
+    return [];
+  }
+  const listed =
+    (await readRecord(
+      workspaceBorrowedObjectsFile(id),
+      z.array(z.unknown())
+    )) ?? [];
+  return listed.filter(
+    (dir): dir is string =>
+      typeof dir === "string" &&
+      isAbsolute(dir) &&
+      !writable.some((root) => within(dir, root))
+  );
 };
 
 const NODE_MODULES = "/node_modules";
@@ -1135,6 +1183,11 @@ export const workspacePolicy = async (
   const mac = process.platform === "darwin";
   const caches = [...workspaceCaches(), ...(await darwinUserDirs())];
   const javaHome = hostJavaHome();
+  const allowWrite = real([
+    workspace.path,
+    workspaceScratchDir(workspace.id),
+    ...caches,
+  ]);
   const allowRead = unique([
     ...real([
       workspace.path,
@@ -1145,7 +1198,6 @@ export const workspacePolicy = async (
       // Its door sockets, under the runtime dir on Linux (`workspaceDoorDir`).
       workspaceDoorDir(workspace.id),
       ...caches,
-      ...(await alternatesOf(workspace.path)),
       ...(await homeToolchains(home)),
       ...ancestorManifests(workspace.path, home),
       ...ancestorManifests(clone, home),
@@ -1169,6 +1221,9 @@ export const workspacePolicy = async (
           )
         : []),
     ]),
+    // Kept as recorded: each is a real path already, outside every folder
+    // the workspace writes, so no link a command makes leads it elsewhere.
+    ...(await borrowedObjects(workspace.id, allowWrite)),
     ...(await accountLayers(workspace.id)),
     ...(mac ? [] : programDirsUnder([home, ...LINUX_HOST_PRIVATE_DIRS])),
     ...(await projectFolder(workspace.id)),
@@ -1201,11 +1256,7 @@ export const workspacePolicy = async (
     // srt and the judge agree on every path. A store deeper than an entry
     // stays denied: the deeper entry decides.
     allowRead: allowRead.filter((path) => !denyRead.includes(path)),
-    allowWrite: real([
-      workspace.path,
-      workspaceScratchDir(workspace.id),
-      ...caches,
-    ]),
+    allowWrite,
     denyWrite: unique([
       ...denied(
         (await workspaceDenies(workspace))

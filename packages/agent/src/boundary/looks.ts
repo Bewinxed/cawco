@@ -153,7 +153,7 @@ let narrowAgain: { readonly cause: NarrowCause } | undefined;
  *   or removal checks ({@link accountsChangedHere});
  * - this build (`binaryRoot`, the form): the agent's start re-arms every
  *   boundary in use, through an ensure (control.ts `rearmHooks`);
- * - the clone's alternates, the toolchains under home (`homeToolchains`),
+ * - the toolchains under home (`homeToolchains`),
  *   Xcode's developer dir, a place's own files (`ownerOnlyIn`, `linkedIn`,
  *   `protectedIn`) and every link a path resolves through: no event says
  *   these, and no file watch is kept for them (a watch per workspace is what
@@ -162,7 +162,7 @@ let narrowAgain: { readonly cause: NarrowCause } | undefined;
  *
  * What is fixed for a workspace's life (its clone, state and scratch dirs,
  * doors, caches, the gitconfig, the host's tool caches, Linux's host-private
- * paths) needs none.
+ * paths, a place's borrowed objects dirs as recorded) needs none.
  */
 export const recheckNarrowed = (
   cause: NarrowCause,

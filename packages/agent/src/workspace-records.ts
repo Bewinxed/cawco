@@ -4,11 +4,14 @@
  * before the clone is cut, the running boundary's `boundary.json`, and a
  * place's `place.json`, written once a stage runs there ({@link keepPlace}).
  */
-import { readdir, realpath } from "node:fs/promises";
+import { lstat, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
-import { workspacesDir } from "@cawco/core/paths/workspace";
+import {
+  workspaceBorrowedObjectsFile,
+  workspacesDir,
+} from "@cawco/core/paths/workspace";
 import {
   type DamagedRecord,
   isDamagedRecord,
@@ -16,7 +19,7 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { borrowedObjectsOf, isPlace } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { reportDamaged } from "./damaged-records";
 import { ownFolderSync } from "./layer";
@@ -40,6 +43,33 @@ export const keepPlace = async (ref: WorkspaceRef): Promise<void> => {
     join(dir, "place.json"),
     `${JSON.stringify({ path: ref.path })}\n`
   );
+};
+
+/**
+ * Records what place `ref`'s repository borrows objects from (core
+ * `borrowedObjectsOf`), once: as the agent first holds the place, before a
+ * sandbox of this build has run in it, so what is read is the person's own
+ * setup. Its policy grants read on those from this record for the place's
+ * life (core workspace-policy.ts `borrowedObjects`), and the alternates file
+ * itself, which a command in the place could write, is never read for it
+ * again. A place held before the record existed has it written at its first
+ * hold since.
+ */
+export const keepBorrowedObjects = async (ref: WorkspaceRef): Promise<void> => {
+  const file = workspaceBorrowedObjectsFile(ref.id);
+  if (await lstat(file).catch(() => undefined)) {
+    return;
+  }
+  // Exclusive: of two holds at once, the first record stands.
+  await writeStateFile(
+    file,
+    `${JSON.stringify(await borrowedObjectsOf(ref.path))}\n`,
+    { exclusive: true }
+  ).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "EEXIST") {
+      throw error;
+    }
+  });
 };
 
 /**

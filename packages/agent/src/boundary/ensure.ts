@@ -128,6 +128,7 @@ import type { SessiondClient } from "../sessiond-client";
 import { hasLeftDirs, listStandIns, rewriteLeftFiles } from "../stand-ins";
 import { openToolDoor } from "../tool-door";
 import { linkWorkspaceModules } from "../workspace-modules";
+import { keepBorrowedObjects } from "../workspace-records";
 import {
   behindGate,
   decided,
@@ -283,7 +284,8 @@ const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
 
 /**
  * The folder a boundary holds, ready for it: a place, whatever folder it is
- * over, which stays as the person keeps it; or a delegate's layer of its
+ * over, which stays as the person keeps it, with what its repository borrows
+ * recorded at its first hold ({@link keepBorrowedObjects}); or a delegate's layer of its
  * folder (layer.ts): a folder there, and on Linux its view running, which
  * the srt host then enters (decisions.ts `viewOfBoundary`). A delegate's copy that
  * held a repository and whose `.git` is no repository any more (a deleted
@@ -298,6 +300,7 @@ const placeReady = async (ref: WorkspaceRef): Promise<void> => {
     return;
   }
   if (isPlace(ref.id)) {
+    await keepBorrowedObjects(ref);
     return;
   }
   const layer = await layerOf(ref.id, ref.path);

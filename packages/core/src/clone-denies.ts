@@ -91,11 +91,18 @@ const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> =
 export const HARNESS_CONFIG: readonly string[] =
   Object.keys(HARNESS_CONFIG_EMPTY);
 
-/** What host git runs or reads from a repository, by path from its work tree: its config, its hooks, its submodules' git dirs. */
+/**
+ * What host git runs or reads from a repository, by path from its work tree:
+ * its config, its hooks, its submodules' git dirs, and the objects dirs it
+ * borrows (`objects/info/alternates`), whose objects host git takes in as the
+ * repository's own (a repack, a push through the git door). An empty
+ * alternates file borrows nothing.
+ */
 const GIT_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
   ".git/config": { kind: "none" },
   ".git/hooks": DIR,
   ".git/modules": DIR,
+  ".git/objects/info/alternates": EMPTY,
 };
 
 /**
@@ -160,7 +167,8 @@ export const PROTECTED_PARENTS: ReadonlySet<string> = new Set(
  * Every path in a clone the workspace's policy denies writing, and srt's own
  * mandatory names at its root ({@link SRT_FILES}, {@link SRT_DIRS}), each
  * with its stand-in. What host git runs or reads from a clone
- * ({@link GIT_EMPTY}): its config, its hooks, its submodules' git dirs. And
+ * ({@link GIT_EMPTY}): its config, its hooks, its submodules' git dirs, its
+ * alternates. And
  * the harness project config the host
  * loads at the workspace's next session, outside any boundary, at the clone's
  * root ({@link HARNESS_CONFIG_EMPTY}: Claude Code's, OpenCode's, pi's and Codex's);
