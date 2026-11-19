@@ -169,53 +169,88 @@ export const ghAccounts = async (): Promise<GhAccount[]> => {
 
 /** GitHub's most per page (docs.github.com/rest/repos/repos#list-repositories-for-the-authenticated-user). */
 const REPOS_PER_PAGE = 100;
-/** The pages {@link ghRepos} reads at most: the 300 latest updated, one gh call each, inside the form's 15 s read. */
-const REPO_PAGES = 3;
+/** How many of the pages after the first {@link ghRepos} reads at once. */
+const PAGES_AT_ONCE = 6;
 /** gh's exit code for a command that needs a sign-in it has none of (`gh help exit-codes`). */
 const GH_EXIT_AUTH = 4;
-/** What gh prints of a token GitHub refused: one it had, since revoked or expired. */
+/** What gh prints of a token GitHub refused: one it had, since revoked or expired ("gh: Bad credentials (HTTP 401)"). */
 const BAD_CREDENTIALS = /HTTP 401/u;
+/** Where `gh api --include`'s headers end and the answer begins. */
+const HEADERS_END = /\r?\n\r?\n/u;
+/** The last page's number in GitHub's `Link` header, which names one only when there are more pages than the first. */
+const LAST_PAGE = /[?&]page=(\d+)[^>]*>;\s*rel="last"/u;
 
 /** Each repository as one line of JSON, in {@link GhRepo}'s names. */
 const REPO_LINE =
   '.[] | {nameWithOwner: .full_name, owner: {login: .owner.login, avatarUrl: .owner.avatar_url, kind: (if .owner.type == "Organization" then "org" else "user" end)}, url: .clone_url, sshUrl: .ssh_url, updatedAt: .updated_at, description: .description, isPrivate: .private}';
 
+/** One page of `GET /user/repos`, with the last page's number when it was asked with its headers; or why gh could not list it. */
+type RepoPage =
+  | { kind: "page"; last: number; repos: GhRepo[] }
+  | Exclude<GhRepoList, { kind: "listed" }>;
+
 /**
- * The GitHub repositories the host's gh sees, latest updated first, as
+ * Page `page` of the repositories the host's gh sees, latest updated first
+ * (`affiliation=owner,collaborator,organization_member`, `sort=updated`,
+ * which GitHub orders newest first). The first is asked with its headers
+ * (`--include`), whose `Link` names the last page.
+ */
+const repoPage = async (page: number): Promise<RepoPage> => {
+  const first = page === 1;
+  const run = await ghRun([
+    "api",
+    ...(first ? ["--include"] : []),
+    `user/repos?affiliation=owner,collaborator,organization_member&sort=updated&per_page=${REPOS_PER_PAGE}&page=${page}`,
+    "--jq",
+    REPO_LINE,
+  ]);
+  if (!run) {
+    return { kind: "no-gh" };
+  }
+  if (run.exitCode === GH_EXIT_AUTH || BAD_CREDENTIALS.test(run.stderr)) {
+    return { kind: "signed-out" };
+  }
+  if (run.exitCode !== 0) {
+    throw new Error(
+      `gh api user/repos failed: ${run.stderr.trim() || `exit ${run.exitCode}`}`
+    );
+  }
+  const end = first ? HEADERS_END.exec(run.stdout) : null;
+  const head = end ? run.stdout.slice(0, end.index) : "";
+  const body = end ? run.stdout.slice(end.index + end[0].length) : run.stdout;
+  const repos = body
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => GhRepoSchema.parse(JSON.parse(line)));
+  const last = Number(LAST_PAGE.exec(head)?.[1] ?? page);
+  return { kind: "page", last, repos };
+};
+
+/**
+ * Every GitHub repository the host's gh sees, latest updated first, as
  * `GET /user/repos` lists them: the person's own, the ones they collaborate
- * on and their organizations' (`affiliation=owner,collaborator,
- * organization_member`, `sort=updated`, which GitHub orders newest first).
+ * on and their organizations'. The first page says how many there are; the
+ * rest are read {@link PAGES_AT_ONCE} at a time and kept in page order.
  * `no-gh` when gh is not here; `signed-out` when gh has no sign-in (exit 4)
  * or GitHub refused the one it has (401). Any other failure is thrown in
  * gh's words.
  */
 export const ghRepos = async (): Promise<GhRepoList> => {
-  const repos: GhRepo[] = [];
-  for (let page = 1; page <= REPO_PAGES; page += 1) {
-    const run = await ghRun([
-      "api",
-      `user/repos?affiliation=owner,collaborator,organization_member&sort=updated&per_page=${REPOS_PER_PAGE}&page=${page}`,
-      "--jq",
-      REPO_LINE,
-    ]);
-    if (!run) {
-      return { kind: "no-gh" };
-    }
-    if (run.exitCode === GH_EXIT_AUTH || BAD_CREDENTIALS.test(run.stderr)) {
-      return { kind: "signed-out" };
-    }
-    if (run.exitCode !== 0) {
-      throw new Error(
-        `gh api user/repos failed: ${run.stderr.trim() || `exit ${run.exitCode}`}`
-      );
-    }
-    const lines = run.stdout.split("\n").filter((line) => line.trim());
-    for (const line of lines) {
-      repos.push(GhRepoSchema.parse(JSON.parse(line)));
-    }
-    if (lines.length < REPOS_PER_PAGE) {
-      break;
-    }
+  const first = await repoPage(1);
+  if (first.kind !== "page") {
+    return first;
   }
-  return { kind: "listed", repos };
+  const pages: GhRepo[][] = [first.repos];
+  let next = 2;
+  const reader = async (): Promise<void> => {
+    while (next <= first.last) {
+      const page = next;
+      next += 1;
+      const read = await repoPage(page);
+      // A sign-in lost between pages: the pages read stand.
+      pages[page - 1] = read.kind === "page" ? read.repos : [];
+    }
+  };
+  await Promise.all(Array.from({ length: PAGES_AT_ONCE }, reader));
+  return { kind: "listed", repos: pages.flat() };
 };

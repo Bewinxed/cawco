@@ -102,24 +102,25 @@ export async function machineFs<O extends FsOp>(
 }
 
 /**
+ * What {@link machineRepos} reads: the machine's answer, or `old-daemon`
+ * when its CawCo is from before the control and said it has none of it, so
+ * asking again finds nothing until it is updated.
+ */
+export type MachineRepos = GhRepoList | { kind: "old-daemon" };
+
+/**
  * The GitHub repositories machine `machineId`'s gh sees, latest updated
  * first (core `CONTROL_GH_REPOS`), for the New session form's repository
- * picker. A daemon from before the control says it has no such function: a
- * read it never answers, as one that ran out of time is, never a hang.
+ * picker.
  */
 export async function machineRepos(
   machineId: string
-): Promise<Bounded<GhRepoList>> {
-  const started = performance.now();
+): Promise<Bounded<MachineRepos>> {
   try {
     return await machineControl(machineId, CONTROL_GH_REPOS, []);
   } catch (error) {
     if (knowsNotControl(error, CONTROL_GH_REPOS)) {
-      return {
-        kind: "unanswered",
-        after: Math.round(performance.now() - started),
-        reason: "dead",
-      };
+      return { kind: "answered", value: { kind: "old-daemon" } };
     }
     throw error;
   }
