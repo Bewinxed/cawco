@@ -80,7 +80,11 @@
   import type { HTMLAttributes } from "svelte/elements";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
-  import { type FoldPose, restPose } from "#lib/platform/motion/fold-path.js";
+  import {
+    type FoldPose,
+    restPose,
+    samePose,
+  } from "#lib/platform/motion/fold-path.js";
   import { msOf } from "#lib/platform/motion/time.js";
   import { cn } from "#lib/utils.js";
   import {
@@ -489,6 +493,20 @@
       );
     };
   }
+  /**
+   * Each tab's pose for this frame of a come-forward, written only where it
+   * differs from the pose it is drawn in: the frame's poses are new objects
+   * for every tab in the strip, and written whole, each tab drew its path
+   * again from its pose, however far it stood from the two that change places.
+   */
+  function setPoses(poses: Map<HTMLElement, FoldPose>) {
+    for (const [item, pose] of poses) {
+      const drawn = list.poses.get(item);
+      if (!(drawn && samePose(drawn, pose))) {
+        list.poses.set(item, pose);
+      }
+    }
+  }
   /** Every tab's pose as drawn now: the come-forward's where one runs, else its rest. */
   function drawnPoses(items: HTMLElement[]) {
     const running = forward?.poseAt(progressOf(forward.clock));
@@ -609,14 +627,10 @@
         endForward(track, fresh, at);
         return;
       }
-      for (const [item, pose] of poseAt(p)) {
-        list.poses.set(item, pose);
-      }
+      setPoses(poseAt(p));
       now.frame = requestAnimationFrame(step);
     };
-    for (const [item, pose] of poseAt(0)) {
-      list.poses.set(item, pose);
-    }
+    setPoses(poseAt(0));
     now.frame = requestAnimationFrame(step);
   }
   /** The tab the stack was last ranked for, and the tabs the strip held then. */

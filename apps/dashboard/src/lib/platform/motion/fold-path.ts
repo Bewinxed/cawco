@@ -39,6 +39,13 @@ export interface FoldPose {
   tuck: readonly [number, number];
 }
 
+/** Whether two poses draw the same path. */
+export const samePose = (a: FoldPose, b: FoldPose): boolean =>
+  a.spread[0] === b.spread[0] &&
+  a.spread[1] === b.spread[1] &&
+  a.tuck[0] === b.tuck[0] &&
+  a.tuck[1] === b.tuck[1];
+
 /** A tab at rest: a foot on each side not folded, each side on its edge. */
 export const restPose = (fold: readonly [boolean, boolean]): FoldPose => ({
   spread: [fold[0] ? 0 : 1, fold[1] ? 0 : 1],

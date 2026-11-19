@@ -19,6 +19,7 @@
  */
 import type { FrameSays } from "@cawco/core/page-wire";
 import { CANVAS_AWAY } from "@cawco/core/stage";
+import { skipObserved } from "#lib/platform/frame-observer.js";
 
 /** Marks the root while the tab is hidden. Returns the cleanup. */
 export function restWhenHidden(): () => void {
@@ -50,6 +51,10 @@ export function restWhenHidden(): () => void {
  * instead, it would play its rest as they came back (a cover's wait seen
  * again); a run already held (paused) stays as it is.
  *
+ * The shared ResizeObserver lets go of what it watches in it until it is
+ * back (frame-observer `skipObserved`): Chromium visits a skipped target's
+ * observation every frame all the same.
+ *
  * Every frame in it is told it is away (core `CANVAS_AWAY`), one loaded
  * while it is too, and told it is back as the pane comes back: a canvas
  * frame's stories run their own animation-frame loops, which WebKit runs
@@ -62,6 +67,7 @@ export function holdSkipped(away: boolean) {
       return;
     }
     const settled = settleAway(node);
+    const observed = skipObserved(node);
     tellFrames(node, true);
     const loaded = (event: Event) => {
       if (event.target instanceof HTMLIFrameElement) {
@@ -72,6 +78,7 @@ export function holdSkipped(away: boolean) {
     node.addEventListener("load", loaded, true);
     return () => {
       settled();
+      observed();
       node.removeEventListener("load", loaded, true);
       tellFrames(node, false);
     };

@@ -336,17 +336,74 @@ const sharedObserver = (): Shared => {
   return shared;
 };
 
-/** Observes `target` for its holds, on the border box if any asks for it: a new hold's first report comes in the next delivery. */
+/**
+ * Subtrees the engine skips (`content-visibility: hidden`: a pane put away,
+ * a kept sheet at rest), whose targets the shared observer lets go of while
+ * they are skipped ({@link skipObserved}).
+ */
+const skipped = new Set<Element>();
+
+/** Whether `target` stands in a skipped subtree. */
+const isSkipped = (target: Element) => {
+  if (skipped.size === 0) {
+    return false;
+  }
+  for (let at: Element | null = target; at; at = at.parentElement) {
+    if (skipped.has(at)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** Observes `target` for its holds, on the border box if any asks for it: a new hold's first report comes in the next delivery. Skipped, its holds wait for it to be shown. */
 const observeFor = (target: Element) => {
   const boxes = [...(holds.get(target)?.values() ?? [])].map(
     (hold) => hold.box
   );
   const observer = sharedObserver();
   observer.unobserve(target);
+  if (isSkipped(target)) {
+    return;
+  }
   observer.observe(target, {
     box: boxes.includes("border-box") ? "border-box" : "content-box",
   });
 };
+
+/**
+ * `root`'s subtree is skipped (`content-visibility: hidden`) until the
+ * returned function is called: the shared observer lets go of every target
+ * in it, and of any observed there meanwhile, and observes them again as it
+ * is shown. Each site keeps its holds and the size it last heard, so it
+ * hears a target again only if the size it is shown at differs.
+ *
+ * Chromium reports nothing from a skipped subtree, but still visits each of
+ * its observations every frame, and one whose size differs from the last it
+ * reported (a row mounted in a pane put away, never laid out) is held back
+ * without that size being kept: "Skip resize observations on locked
+ * elements", `IsInLockedSubtreeCrossingFrames` returning false before the
+ * size is taken (resize_observation.cc `ObservationSizeOutOfSync`), an
+ * ancestor walk for each such target, every frame. A 29-tab layout's panes put away held 773 of the observer's 1,236
+ * targets: `NotifyResizeObservers` took 37ms of a switch window's main
+ * thread against 3ms with two tabs, and 9ms once they were let go.
+ */
+export function skipObserved(root: Element): () => void {
+  skipped.add(root);
+  for (const target of holds.keys()) {
+    if (root.contains(target)) {
+      shared?.unobserve(target);
+    }
+  }
+  return () => {
+    skipped.delete(root);
+    for (const target of holds.keys()) {
+      if (root.contains(target)) {
+        observeFor(target);
+      }
+    }
+  };
+}
 
 /** A site's holds: observe, let go, let go of all. */
 const holdsOf = (site: Site) => {
