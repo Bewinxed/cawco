@@ -123,15 +123,32 @@
         layout="list"
       >
         {#each KINDS as kind (kind)}
-          <OptionGroupItem title={taskWords[kind].line} value={kind}>
-            <OptionLine
-              glyph={IconFolder}
-              line={chosen === kind ? taskWords[kind].line : undefined}
-              mark={kind === "here" ? undefined : SERVICE_MARK[kind]}
-              name={taskWords[kind].name}
-              waiting={pending?.value === kind && !pending.refused}
-            />
-          </OptionGroupItem>
+          <!-- The connected service carries Change… on its own row, at its
+               end: the row and the button share one cell. -->
+          <div class="grid">
+            <OptionGroupItem
+              class="col-start-1 row-start-1"
+              title={taskWords[kind].line}
+              value={kind}
+            >
+              <OptionLine
+                glyph={IconFolder}
+                line={chosen === kind ? taskWords[kind].line : undefined}
+                mark={kind === "here" ? undefined : SERVICE_MARK[kind]}
+                name={taskWords[kind].name}
+                waiting={pending?.value === kind && !pending.refused}
+              />
+            </OptionGroupItem>
+            {#if linked && kind === linked.kind}
+              <Button
+                class="col-start-1 row-start-1 me-space-3 self-center justify-self-end"
+                disabled={sunk}
+                onclick={onchange}
+                size="xs"
+                variant="outline">{taskWords.change}</Button
+              >
+            {/if}
+          </div>
 
           {#if kind === "here" && confirmStop && linked}
             <div
@@ -169,7 +186,7 @@
             <!-- The chosen row's facts, on its name's edge, in two lines:
                  where it updates (the codebase or team, how many tasks are
                  linked, the status board); then how it stands, with Refresh
-                 now and Change…. -->
+                 now. Change… stands on the chosen row itself. -->
             <div
               class="m-0 flex flex-col gap-space-1 ps-c-details-option-text pe-space-3 pt-space-1 pb-space-2"
               data-facts={linked.kind}
@@ -246,7 +263,7 @@
                       aria-hidden="true"
                       class="mt-px size-icon-sm flex-none text-status-done-ink"
                     />
-                    <span class="text-ink-strong"
+                    <span class="whitespace-nowrap text-ink-strong"
                       >{taskWords.upToDate(linked.standing.value.at)}</span
                     >
                   {:else}
@@ -273,14 +290,6 @@
                     size="xs"
                     variant="outline"
                   />
-                </span>
-                <span>
-                  <Button
-                    disabled={sunk}
-                    onclick={onchange}
-                    size="xs"
-                    variant="ghost">{taskWords.change}</Button
-                  >
                 </span>
               </div>
             </div>
