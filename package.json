@@ -64,11 +64,11 @@
     "words:check": "bun scripts/words-swift.ts --check"
   },
   "overrides": {
-    "@golar/darwin-arm64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-darwin-arm64-0.1.11-cawco.6.tgz",
-    "@golar/linux-x64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-linux-x64-0.1.11-cawco.6.tgz",
-    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-svelte-0.1.11-cawco.6.tgz",
+    "@golar/darwin-arm64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-darwin-arm64-0.1.11-cawco.7.tgz",
+    "@golar/linux-x64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-linux-x64-0.1.11-cawco.7.tgz",
+    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-svelte-0.1.11-cawco.7.tgz",
     "@types/bun": "^1.4.3",
-    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-0.1.11-cawco.6.tgz",
+    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-0.1.11-cawco.7.tgz",
     "oniguruma-to-es": "^4.3.6",
     "vite": "^8.3.5"
   },
@@ -80,7 +80,7 @@
     "@earendil-works/pi-agent-core": "1.5.2",
     "@earendil-works/pi-codemode": "1.5.2",
     "@earendil-works/pi-tui": "1.5.2",
-    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-svelte-0.1.11-cawco.6.tgz",
+    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-svelte-0.1.11-cawco.7.tgz",
     "@types/bun": "^1.4.3",
     "@types/fontkit": "2.0.9",
     "@types/node": "^26.6.4",
@@ -91,7 +91,7 @@
     "drizzle-orm": "^0.45.3",
     "events": "^3.3.0",
     "fontkit": "2.0.4",
-    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-0.1.11-cawco.6.tgz",
+    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-0.1.11-cawco.7.tgz",
     "jscpd": "5.4.2",
     "knip": "6.43.0",
     "oxc-parser": "0.155.0",

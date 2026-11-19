@@ -12,7 +12,7 @@
         "@earendil-works/pi-agent-core": "1.5.2",
         "@earendil-works/pi-codemode": "1.5.2",
         "@earendil-works/pi-tui": "1.5.2",
-        "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-svelte-0.1.11-cawco.6.tgz",
+        "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-svelte-0.1.11-cawco.7.tgz",
         "@types/bun": "^1.4.3",
         "@types/fontkit": "2.0.9",
         "@types/node": "^26.6.4",
@@ -23,7 +23,7 @@
         "drizzle-orm": "^0.45.3",
         "events": "^3.3.0",
         "fontkit": "2.0.4",
-        "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-0.1.11-cawco.6.tgz",
+        "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-0.1.11-cawco.7.tgz",
         "jscpd": "5.4.2",
         "knip": "6.43.0",
         "oxc-parser": "0.155.0",
@@ -399,11 +399,11 @@
     "@anthropic-ai/sdk@0.129.0": "patches/@anthropic-ai%2Fsdk@0.129.0.patch",
   },
   "overrides": {
-    "@golar/darwin-arm64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-darwin-arm64-0.1.11-cawco.6.tgz",
-    "@golar/linux-x64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-linux-x64-0.1.11-cawco.6.tgz",
-    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-svelte-0.1.11-cawco.6.tgz",
+    "@golar/darwin-arm64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-darwin-arm64-0.1.11-cawco.7.tgz",
+    "@golar/linux-x64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-linux-x64-0.1.11-cawco.7.tgz",
+    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-svelte-0.1.11-cawco.7.tgz",
     "@types/bun": "^1.4.3",
-    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-0.1.11-cawco.6.tgz",
+    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-0.1.11-cawco.7.tgz",
     "oniguruma-to-es": "^4.3.6",
     "vite": "^8.3.5",
   },
@@ -828,7 +828,7 @@
 
     "@gitbeaker/rest": ["@gitbeaker/rest@43.8.0", "", { "dependencies": { "@gitbeaker/core": "^43.8.0", "@gitbeaker/requester-utils": "^43.8.0" } }, "sha512-xxqsNsUXaFang9b2e/NTIgqUeuUlifA2Opy1mOVqTDuJZZNIOTgUNyziwBJoleBhMC0XuvY3JNVMWthufcVjRw=="],
 
-    "@golar/darwin-arm64": ["@golar/darwin-arm64@https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-darwin-arm64-0.1.11-cawco.6.tgz", {}, "sha512-Kq+A8ELNkder83OMPfAmBWXqWIFoYXvZpbX0+Mgxqakmcp8qPB/au8H7J/NJbr4BrbyQROxFYsYqlVNihAbbGA=="],
+    "@golar/darwin-arm64": ["@golar/darwin-arm64@https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-darwin-arm64-0.1.11-cawco.7.tgz", {}, "sha512-YRUfYqAZq1kTwzhMPKaMGkgTZeBwfOXOR1iwwyg96zQzMiTiE0lTMY8y1w8sQYaJDzi7QECfA9v0jUHTU+Tliw=="],
 
     "@golar/darwin-x64": ["@golar/darwin-x64@0.1.11", "", { "os": "darwin", "cpu": "x64" }, "sha512-d/H0scCx0xe9mxx8LFDR32H/QYIeEj+sTVOi4/r2QRpHrKjOwNvVj8OCD40ZpB3V0+kNrGUqKDlY9lo00CTNmw=="],
 
@@ -836,13 +836,13 @@
 
     "@golar/linux-arm64-musl": ["@golar/linux-arm64-musl@0.1.11", "", { "os": "linux", "cpu": "arm64", "libc": "musl" }, "sha512-NOkZL+K/SUxvm7Ux4hNKUpichyMzFUI6FmEXmalFa9z6N+g3jTgs+X34Pi/uMzUKmOemeJjac85aLuvn+xbKIg=="],
 
-    "@golar/linux-x64": ["@golar/linux-x64@https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-linux-x64-0.1.11-cawco.6.tgz", {}, "sha512-8wTKUPN0KjxE5vtmKOsi3YghcAYoQcoMdoazVAwHst4JqKkdNXOXkyqomrkkaqS2DOzz109p1tAts3nYjCTr6w=="],
+    "@golar/linux-x64": ["@golar/linux-x64@https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-linux-x64-0.1.11-cawco.7.tgz", {}, "sha512-T0/KysQ0qsc0fWYrfAI8bFA46JS+mZWC3oRL0oXNhVuddos4kXnjNfAnlPjm33RpaBt6469Qufi4KOSpMbhvQA=="],
 
     "@golar/linux-x64-musl": ["@golar/linux-x64-musl@0.1.11", "", { "os": "linux", "cpu": "x64", "libc": "musl" }, "sha512-cJ7M6214bbaFrcb9U2HUblHJxJ6+du3m9KynVyWZfval7VtemcnYqhM8OtXFM23ZLMfIoopxPp9fmdfjPYaKOA=="],
 
     "@golar/sourcemap": ["@golar/sourcemap@0.1.11", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.5", "golar": "0.1.11" } }, "sha512-oqUxwo0ifWwFDDjcV7bxG3Sx0w17w9Ip3IOdrSZMhDPcwVp14hcYVpCdWP+b06xG0HsnyG3tK3uAUijiZCKWIg=="],
 
-    "@golar/svelte": ["@golar/svelte@https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-svelte-0.1.11-cawco.6.tgz", { "dependencies": { "@golar/sourcemap": "0.1.11", "golar": "0.1.11-cawco.6", "svelte2tsx": "0.7.57" }, "peerDependencies": { "svelte": "^4.0.0 || ^5.0.0", "typescript": "^5.4.0" } }, "sha512-H+pOS3ajLLfjK/Q6xF8o5qAgzAN7eOB/tqCJUGaHhrge4m+AVaZgXr3cFj4vAkaze+3NelR41esr44u2sCgM2Q=="],
+    "@golar/svelte": ["@golar/svelte@https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-svelte-0.1.11-cawco.7.tgz", { "dependencies": { "@golar/sourcemap": "0.1.11", "golar": "0.1.11-cawco.7", "svelte2tsx": "0.7.57" }, "peerDependencies": { "svelte": "^4.0.0 || ^5.0.0", "typescript": "^5.4.0" } }, "sha512-sAKf7BCdTroSjXj9fIuKBmkTyBYM9xL9flwGRyH3uTExYqXodcicUB9af06UmewZkHyhZ3S4reziNTsS4CaXVw=="],
 
     "@golar/util": ["@golar/util@0.1.11", "", {}, "sha512-5aMgT1NkA877w062TU+vnOygV7Eja+G6fKV/xSkewIeRVRq7M53/KoXjQmWgJRALzofweY+8YH1j/LKOFEMGYQ=="],
 
@@ -2620,7 +2620,7 @@
 
     "glur": ["glur@1.1.2", "", {}, "sha512-l+8esYHTKOx2G/Aao4lEQ0bnHWg4fWtJbVoZZT9Knxi01pB8C80BR85nONLFwkkQoFRCmXY+BUcGZN3yZ2QsRA=="],
 
-    "golar": ["golar@https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-0.1.11-cawco.6.tgz", { "dependencies": { "@golar/util": "0.1.11", "detect-libc": "^2.1.2", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "@golar/darwin-arm64": "0.1.11-cawco.6", "@golar/darwin-x64": "0.1.11", "@golar/linux-arm64": "0.1.11", "@golar/linux-arm64-musl": "0.1.11", "@golar/linux-x64": "0.1.11-cawco.6", "@golar/linux-x64-musl": "0.1.11", "@golar/win32-x64": "0.1.11" }, "bin": { "golar": "./dist/bin.js" } }, "sha512-aRT9/pD5TTVwKUutVYEBQAv3fMOBkH577m4/EKwzYkYKrJ1GqcvAjZcpbWa4L1MotZK2WFK5ur9BA6ZzbSTAWg=="],
+    "golar": ["golar@https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.7/golar-0.1.11-cawco.7.tgz", { "dependencies": { "@golar/util": "0.1.11", "detect-libc": "^2.1.2", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "@golar/darwin-arm64": "0.1.11-cawco.7", "@golar/darwin-x64": "0.1.11", "@golar/linux-arm64": "0.1.11", "@golar/linux-arm64-musl": "0.1.11", "@golar/linux-x64": "0.1.11-cawco.7", "@golar/linux-x64-musl": "0.1.11", "@golar/win32-x64": "0.1.11" }, "bin": { "golar": "./dist/bin.js" } }, "sha512-Ns0SsKG0TPPXdNiGRx1fvNEUSbf9wHlt8Z/jzMZeubl8ppGUmyuxxYP9m+k6C+8nb34N//wPd1ivkKl3c1bCkw=="],
 
     "google-auth-library": ["google-auth-library@10.5.0", "", { "dependencies": { "base64-js": "^1.3.0", "ecdsa-sig-formatter": "^1.0.11", "gaxios": "^7.0.0", "gcp-metadata": "^8.0.0", "google-logging-utils": "^1.0.0", "gtoken": "^8.0.0", "jws": "^4.0.0" } }, "sha512-7ABviyMOlX5hIVD60YOfHw4/CxOfBhyduaYB+wbFWCWoni4N7SLcV46hrVRktuBbZjFC9ONyqamZITN7q3n32w=="],
 
