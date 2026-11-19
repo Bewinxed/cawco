@@ -158,7 +158,9 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
    * A Claude session's CLI listed its background tasks (its
    * `background_tasks_changed`, the whole list each time): kept on the
    * hub's records, ambient ones left out, so what a restart or a kill of
-   * its process cuts is known after it ({@link tellCutTasks}).
+   * its process cuts is known after it ({@link tellCutTasks}); a held
+   * session whose move waits for that work is decided again (at-limit.ts
+   * `workChanged`).
    */
   const keepTasks = (instanceId: string, message: unknown): void => {
     const read = TASKS_LINE.safeParse(message);
@@ -188,6 +190,8 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
       ),
       new Date()
     );
+    // A held session's move may wait for exactly this work.
+    ctx.atLimit.workChanged(instanceId);
   };
 
   /** How long the hub waits for a session's next process to come up to read what a cut task printed. */

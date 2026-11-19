@@ -34,7 +34,8 @@ import type { Arrival } from "./placement";
  * recorded there since that reading (a Claude turn that reached the model
  * confirms the reading up to it: server.ts `recordTurnUsage`). A charge
  * stands only while its move's cost is not in that state: it goes once the
- * session's first turn on the target is recorded, once it sleeps on the
+ * session's first turn on the target is recorded (or, moved from a summary,
+ * the first turn of the session it continued into), once it sleeps on the
  * target with no turn there (nothing more of the move's cost is coming; a
  * wake is admitted again like any move), once it is over, or at the reset
  * of any window it was charged against: a real reset, its reset a new
@@ -147,11 +148,25 @@ export const createAdmission = (db: DbShape) => {
     );
   };
 
+  /**
+   * Whether the session a charge stands for is over: `row`'s own, or, moved
+   * from a summary, the session it continued into (continuations.ts).
+   */
+  const overFor = (
+    row: Pick<PublicInstanceRow, "continuedInto" | "status">
+  ): boolean => {
+    if (!row.continuedInto) {
+      return OVER_STATUSES.has(row.status);
+    }
+    const [next] = db.getInstancesByIds([row.continuedInto]);
+    return !next || OVER_STATUSES.has(next.status);
+  };
+
   /** Drops the charges whose cost the target's measured state holds now, or that stand for nothing. */
   const prune = (now: number): void => {
     for (const [id, charge] of charges) {
       const [row] = db.getInstancesByIds([id]);
-      if (!row || OVER_STATUSES.has(row.status)) {
+      if (!row || overFor(row)) {
         release(id, "as the session is over");
         continue;
       }
@@ -172,9 +187,15 @@ export const createAdmission = (db: DbShape) => {
         release(id, "as a window it was charged against reset");
         continue;
       }
+      // A move from a summary goes on in the session it continues into
+      // (continuations.ts): that session's first turn there is the move's.
+      const on = new Set([
+        id,
+        ...(row.continuedInto ? [row.continuedInto] : []),
+      ]);
       const first = db.turnUsage
         .list({ accountId: charge.accountId, since: charge.at })
-        .find((turn) => turn.instanceId === id);
+        .find((turn) => on.has(turn.instanceId));
       if (first) {
         release(
           id,

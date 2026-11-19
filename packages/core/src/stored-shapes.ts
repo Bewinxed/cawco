@@ -200,6 +200,7 @@ const HeldReasonShape = declared(
   z.union([
     z.object({
       kind: z.literal("room"),
+      keepsPct: z.number().optional(),
       leftPct: z.number(),
       movePct: z.number(),
     }),

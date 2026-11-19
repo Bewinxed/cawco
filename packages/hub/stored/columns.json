@@ -3538,6 +3538,9 @@
                               "type": "string",
                               "const": "room"
                             },
+                            "keepsPct": {
+                              "type": "number"
+                            },
                             "leftPct": {
                               "type": "number"
                             },
@@ -7897,6 +7900,9 @@
                           "type": "string",
                           "const": "room"
                         },
+                        "keepsPct": {
+                          "type": "number"
+                        },
                         "leftPct": {
                           "type": "number"
                         },
@@ -9513,6 +9519,9 @@
                         "kind": {
                           "type": "string",
                           "const": "room"
+                        },
+                        "keepsPct": {
+                          "type": "number"
                         },
                         "leftPct": {
                           "type": "number"

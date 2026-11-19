@@ -121,7 +121,7 @@ export const heldAccountWords = (one: HeldAccount, now: number): string => {
     case "alone":
       return `${name} takes one move at a time until its window is measured, and one is landing there`;
     case "room":
-      return `${name} ${leftWords(reason.leftPct)}, its move takes ${Math.max(1, Math.ceil(reason.movePct))}%`;
+      return `${name} ${leftWords(reason.leftPct)}, its move takes ${Math.max(1, Math.ceil(reason.movePct))}%${reason.keepsPct === undefined ? "" : ` and it keeps ${reason.keepsPct}% free`}`;
     case "runsOut":
       return `${name} ${leftWords(reason.leftPct)}, runs out by ${clockWords(reason.at)}`;
     case "fits":

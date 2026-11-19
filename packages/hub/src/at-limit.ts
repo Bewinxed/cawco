@@ -417,6 +417,70 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    */
   const waitsToMove = (instanceId: string, move: HeldMove | null): void => {
     db.atLimit.putHeldMove(instanceId, move);
+    if (!move) {
+      workWaits.delete(instanceId);
+      moveSaid.delete(instanceId);
+    }
+  };
+
+  /**
+   * Holds whose move waits for their work in flight, by session: what their
+   * target account read as when that wait began ({@link targetRead}). Until
+   * the work changes (`workChanged`), that account reads otherwise, or the
+   * hold's moment comes, a change of the accounts decides nothing new for
+   * them ({@link lookAtHolds}). Empty after a restart: each such hold is
+   * decided once more at the next change, then waits again.
+   */
+  const workWaits = new Map<string, string>();
+
+  /** The journal line of each session's last move decision, said once while it says the same ({@link moveTo}). */
+  const moveSaid = new Map<string, string>();
+
+  /**
+   * What `row`'s decision reads of account `accountId`: its windows' use and
+   * resets, its bench, and its sign-in on `row`'s machine, as one
+   * comparable text.
+   */
+  const targetRead = (accountId: string, row: LimitRow): string => {
+    const reading = readingOf(accountId);
+    return JSON.stringify({
+      windows: (reading?.windows ?? []).map((one) => [
+        windowKey(one),
+        Math.round(one.percent),
+        one.resetsAt,
+      ]),
+      bench: db.accounts
+        .bench()
+        .filter((one) => one.accountId === accountId)
+        .map((one) => [one.scope, one.until]),
+      signedIn: db.accounts
+        .signins()
+        .some(
+          (one) =>
+            one.accountId === accountId &&
+            one.machineId === row.machineId &&
+            one.state === "signed-in"
+        ),
+    });
+  };
+
+  /**
+   * Whether a change of the accounts leaves `held`'s outcome as it was: its
+   * move waits for its work in flight, its moment has not come, and its
+   * target reads as it did when that wait began.
+   */
+  const stillWaitsOnWork = (held: LimitHold, now: number): boolean => {
+    const move = db.atLimit.heldMove(held.instanceId);
+    const seen = workWaits.get(held.instanceId);
+    const row = rowOf(held.instanceId);
+    return (
+      move !== undefined &&
+      seen !== undefined &&
+      row !== undefined &&
+      held.until !== null &&
+      held.until > now &&
+      seen === targetRead(move.to, row)
+    );
   };
 
   /**
@@ -1265,6 +1329,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         ? { to: target.id, why: kept.later }
         : null
     );
+    if (waits) {
+      workWaits.set(row.id, targetRead(target.id, row));
+    }
     return kept.target ? kept.why : undefined;
   };
 
@@ -1323,9 +1390,12 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     db.atLimit.dropHold(row.id);
     const accounts = db.accounts.list();
     const to = accountNameAmong(target, accounts);
-    console.info(
-      `[at-limit] ${ports.named(row)} moves from ${accountNameAmong(current, accounts)} to ${to}: moving ${moveSideWords(move, tokens, to)}; ${waitSide(current, move, cause)}.`
-    );
+    const said = `[at-limit] ${ports.named(row)} moves from ${accountNameAmong(current, accounts)} to ${to}: moving ${moveSideWords(move, tokens, to)}; ${waitSide(current, move, cause)}.`;
+    // The same decision again (its move still waiting) says nothing new.
+    if (moveSaid.get(row.id) !== said) {
+      moveSaid.set(row.id, said);
+      console.info(said);
+    }
     if (cause === "extra-usage") {
       extraUsageSaid.delete(row.id);
       const named = accountNameAmong(current, accounts);
@@ -1756,42 +1826,64 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   /**
    * One look at every hold of `provider`, one decision each in admission
    * order ({@link admissionOrder}): each charges its move to the ledger,
-   * its burn arriving on its target, before the next is decided.
+   * its burn arriving on its target, before the next is decided. A look a
+   * change of the accounts asked for (`accountsMoved`) passes over each
+   * hold whose outcome that change leaves as it was ({@link stillWaitsOnWork}).
    */
-  const lookAtHolds = async (provider: string): Promise<void> => {
+  const lookAtHolds = async (
+    provider: string,
+    accountsMoved: boolean
+  ): Promise<void> => {
     const now = Date.now();
     const holds = db.atLimit
       .holds()
-      .filter((one) => providerOf(one.accountId) === provider);
+      .filter(
+        (one) =>
+          providerOf(one.accountId) === provider &&
+          !(accountsMoved && stillWaitsOnWork(one, now))
+      );
     for (const held of admissionOrder(holds)) {
       await lookAt(held.instanceId, now, undefined);
     }
   };
 
-  /** The providers whose holds wait to be looked at again, a look queued for each ({@link lookAgain}). */
-  const looksQueued = new Map<string, Promise<void>>();
+  /**
+   * The look queued for each provider's holds ({@link lookAgain}), and
+   * whether only a change of the accounts asked for it.
+   */
+  const looksQueued = new Map<
+    string,
+    { accountsMoved: boolean; look: Promise<void> }
+  >();
 
   /**
    * `provider`'s holds decided again, after the decisions queued before:
    * one look queued at a time, a change while it waits taken by it (its
-   * caller waits on that look).
+   * caller waits on that look). `accountsMoved`: only a change of the
+   * accounts asks; any other cause (a hold's moment) looks at every hold.
    */
-  const lookAgain = (provider: string, why: string): Promise<void> => {
+  const lookAgain = (
+    provider: string,
+    why: string,
+    accountsMoved: boolean
+  ): Promise<void> => {
     const queued = looksQueued.get(provider);
     if (queued !== undefined) {
-      return queued;
+      queued.accountsMoved &&= accountsMoved;
+      return queued.look;
     }
-    const look = serially(
+    const entry = { accountsMoved, look: Promise.resolve() };
+    entry.look = serially(
       provider,
       `the look at the holds (${why})`,
       async () => {
         looksQueued.delete(provider);
-        await lookAtHolds(provider);
+        await lookAtHolds(provider, entry.accountsMoved);
         plan();
       }
     );
-    looksQueued.set(provider, look);
-    return look;
+    looksQueued.set(provider, entry);
+    return entry.look;
   };
 
   /** Whether any hold is carried on by the hub now: one not stale. */
@@ -1832,7 +1924,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         held: rebalancer.heldOn(one.provider, one.machineId),
       }));
       detach(
-        lookAgain(provider, "its accounts changed").then(() => {
+        lookAgain(provider, "its accounts changed", true).then(() => {
           for (const one of before) {
             rebalancer.notify(one.came, one.held);
           }
@@ -1886,7 +1978,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const { provider } = soonest;
     timer = lifetime.after("at-limit hold's moment", soonest.at - now, () => {
       timer = undefined;
-      detach(lookAgain(provider, "a hold's moment came"), "at-limit look");
+      detach(
+        lookAgain(provider, "a hold's moment came", false),
+        "at-limit look"
+      );
     });
   };
 
@@ -2009,6 +2104,46 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
   };
 
+  /**
+   * `instanceId`'s hold looked at now, after the decisions of its provider
+   * queued before ({@link serially}): its machine is back, or a message to
+   * it is held at its limit. The move a person asked is carried out, or
+   * the move this controller decides goes, as at any look; `why` is logged
+   * with it. Nothing for a session held by nothing, or being acted on.
+   * Past the cutoff it is carried on only when `asked`: the message is a
+   * person's or its parent's, or a Continue's ({@link goneStale}).
+   */
+  const lookNow = (
+    instanceId: string,
+    why: string,
+    asked?: TakenUpBy
+  ): Promise<void> => {
+    const held = db.atLimit.hold(instanceId);
+    if (!held) {
+      return Promise.resolve();
+    }
+    return serially(
+      providerOf(held.accountId),
+      `the look at ${instanceId.slice(0, 8)}'s hold`,
+      async () => {
+        const now = db.atLimit.hold(instanceId);
+        if (
+          !now ||
+          acting.has(instanceId) ||
+          (now.staleAt !== null && asked === undefined)
+        ) {
+          return;
+        }
+        const row = rowOf(instanceId);
+        console.info(
+          `[at-limit] ${row ? ports.named(row) : instanceId} is looked at again now: ${why}.`
+        );
+        await lookAt(instanceId, Date.now(), asked);
+        plan();
+      }
+    );
+  };
+
   // The sign-ins and benches as they stand, learnt; the holds' next moment armed.
   rebalancer.came();
   plan();
@@ -2070,40 +2205,20 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         db.atLimit.hold(instanceId) !== undefined
       );
     },
+    lookNow,
     /**
-     * `instanceId`'s hold looked at now, after the decisions of its provider
-     * queued before ({@link serially}): its machine is back, or a message to
-     * it is held at its limit. The move a person asked is carried out, or
-     * the move this controller decides goes, as at any look; `why` is logged
-     * with it. Nothing for a session held by nothing, or being acted on.
-     * Past the cutoff it is carried on only when `asked`: the message is a
-     * person's or its parent's, or a Continue's ({@link goneStale}).
+     * `instanceId`'s process said its background work changed (cut-turns.ts
+     * `keepTasks`): a hold whose move waits for that work is decided again
+     * now ({@link lookNow}); anything else is left as it is.
      */
-    lookNow(instanceId: string, why: string, asked?: TakenUpBy): Promise<void> {
-      const held = db.atLimit.hold(instanceId);
-      if (!held) {
-        return Promise.resolve();
+    workChanged(instanceId: string): void {
+      if (db.atLimit.heldMove(instanceId)) {
+        workWaits.delete(instanceId);
+        detach(
+          lookNow(instanceId, "the work its move waits for changed"),
+          "at-limit look"
+        );
       }
-      return serially(
-        providerOf(held.accountId),
-        `the look at ${instanceId.slice(0, 8)}'s hold`,
-        async () => {
-          const now = db.atLimit.hold(instanceId);
-          if (
-            !now ||
-            acting.has(instanceId) ||
-            (now.staleAt !== null && asked === undefined)
-          ) {
-            return;
-          }
-          const row = rowOf(instanceId);
-          console.info(
-            `[at-limit] ${row ? ports.named(row) : instanceId} is looked at again now: ${why}.`
-          );
-          await lookAt(instanceId, Date.now(), asked);
-          plan();
-        }
-      );
     },
     /**
      * `instanceId` never runs again (a continuation took its work item on):

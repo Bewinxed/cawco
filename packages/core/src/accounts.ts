@@ -1463,7 +1463,8 @@ export type WaitReason =
  * reserve, its limits never read, at its own limit, kept out of the pinned
  * strategy's backups, a move already landing there while its window isn't
  * measured in dollars (`alone`), too little left for this move (`room`:
- * what it has left and what the move takes, percent of its window), or
+ * what it has left, what the move takes and the floor it keeps free,
+ * percent of its window; lines from before the floor was kept name none), or
  * running out within the wait the policy allows with it (`runsOut`). A
  * provider's refusal of it the hub keeps ({@link AccountMark}: `credit`,
  * `access`) is read right after its lists.
@@ -1479,7 +1480,7 @@ export type HeldReason =
   | { kind: "limit" }
   | { kind: "backup" }
   | { kind: "alone" }
-  | { kind: "room"; leftPct: number; movePct: number }
+  | { kind: "room"; keepsPct?: number; leftPct: number; movePct: number }
   | { kind: "runsOut"; at: number; leftPct: number }
   | { kind: "fits"; carries: boolean; leftPct: number };
 

@@ -432,21 +432,24 @@ const leftOf = (window: FactWindow): number =>
   100 - window.usedPct - (window.spentPct ?? 0) - (window.pendingPct ?? 0);
 
 /**
- * Whether `usd` (null: unpriced) landing on `account`, with the session's
- * `burn` until each window resets (capped at the look-ahead), leaves every
- * window at or above its floor. Unpriced or unmeasured, a move holds only
- * alone (no other move landing there) and where the floor holds before it.
+ * Whether `usd` (null: unpriced) landing on `account` leaves every window
+ * at or above its floor: the room the account keeps after the move (decided
+ * 2026-11-19, move-redesign "room"), read as a start reads it (placement.ts
+ * `Usage.crossed`). What the session burns there after it lands is the
+ * run-out test's ({@link runsShort}), never the floor's: counted against the
+ * floor over the next five hours, it refused every account a heavy session
+ * could burn through, those with all their room left among them. Unpriced
+ * or unmeasured, a move holds only alone (no other move landing there) and
+ * where the floor holds before it.
  */
 const holdsOn = (
   account: Pick<FactAccount, "pendingMoves" | "windows">,
-  usd: number | null,
-  burn: number | null,
-  now: number
+  usd: number | null
 ): Held => {
   let least: Extract<Held, { ok: true }> | null = null;
   let left = 100;
   for (const window of account.windows) {
-    const one = windowHeld(window, usd, burn, now, account.pendingMoves);
+    const one = windowHeld(window, usd, account.pendingMoves);
     if (!one.ok) {
       return one;
     }
@@ -471,8 +474,6 @@ const holdsOn = (
 const windowHeld = (
   window: FactWindow,
   usd: number | null,
-  burn: number | null,
-  now: number,
   pendingMoves: number
 ): Held => {
   const pct =
@@ -480,14 +481,6 @@ const windowHeld = (
   if (pct === null && usd !== 0 && pendingMoves > 0) {
     return { ok: false, reason: { kind: "alone" } };
   }
-  const ahead =
-    window.resetAt === null
-      ? LOOK_AHEAD_MS
-      : Math.min(Math.max(window.resetAt - now, 0), LOOK_AHEAD_MS);
-  const burnPct =
-    burn && window.tokensPerPct
-      ? (burn / window.tokensPerPct) * (ahead / HOUR_MS)
-      : 0;
   const before = leftOf(window);
   if (breaksFloor(before, 0, window.floorPct)) {
     return {
@@ -495,11 +488,16 @@ const windowHeld = (
       reason: { kind: "reserve", pct: Math.round(100 - window.floorPct) },
     };
   }
-  const after = before - (pct ?? 0) - burnPct;
-  if (breaksFloor(before, (pct ?? 0) + burnPct, window.floorPct)) {
+  const after = before - (pct ?? 0);
+  if (breaksFloor(before, pct ?? 0, window.floorPct)) {
     return {
       ok: false,
-      reason: { kind: "room", leftPct: before, movePct: pct ?? 0 },
+      reason: {
+        kind: "room",
+        leftPct: before,
+        movePct: pct ?? 0,
+        keepsPct: Math.round(window.floorPct),
+      },
     };
   }
   return {
@@ -668,12 +666,12 @@ const heldOf = (
   if (account.out) {
     return { ok: false, reason: account.out };
   }
-  const target = holdsOn(account, priced?.onTarget ?? null, session.burn, now);
+  const target = holdsOn(account, priced?.onTarget ?? null);
   if (!target.ok) {
     return target;
   }
   if (priced && priced.onSource > 0) {
-    const source = holdsOn(current, priced.onSource, null, now);
+    const source = holdsOn(current, priced.onSource);
     if (!source.ok) {
       return source;
     }
@@ -1040,10 +1038,12 @@ const aheadHeld = (
   if (trigger.kind !== "wake") {
     return;
   }
-  const here = holdsOn(current, 0, session.burn, now);
+  // Its own account is read as a target is: its floor, then whether it
+  // runs short with the session's burn on it.
+  const here = holdsOn(current, 0);
   const short = runsShortWith(
     current.windows,
-    0,
+    session.burn ?? 0,
     policy.waitMinutes * MINUTE_MS,
     now
   );
