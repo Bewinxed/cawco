@@ -53,6 +53,16 @@ import type { Attachment } from "svelte/attachments";
  * any. A target it took is not answered again for that report. It reads,
  * and answers what it writes: every site's `read` and `first` run before
  * any of those writes (the shared observer, below).
+ *
+ * A target that leaves the page is let go of (`unobserve`, or
+ * `observeChildren`'s own) in the task that takes it out. Held, it reports
+ * its new size, nothing, at the depth of a box with no parent: shallower
+ * than every box a delivery reaches. Taken out in the flush after a
+ * delivery (Svelte's, a microtask), that report came after the delivery
+ * had passed every depth, and both engines held it back as "ResizeObserver
+ * loop completed with undelivered notifications"; and `holds` kept the box,
+ * with all it holds, for as long as the site lived (fade-runs' scroller
+ * parts, for the page's life).
  */
 export interface FrameObserver {
   disconnect: () => void;
@@ -65,6 +75,17 @@ export interface FrameObserver {
    * answer: a frame loop at rest, nightly 8296).
    */
   observe: (target: Element, options?: ResizeObserverOptions) => void;
+  /**
+   * `parent`'s element children observed: those it holds now and each one
+   * put in later, each let go of in the mutation that takes it out (a
+   * MutationObserver's callback, in the microtask checkpoint that took it
+   * out, before the next delivery is gathered). Hands back its stop, which
+   * lets go of the children it holds then; `disconnect` stops it too.
+   */
+  observeChildren: (
+    parent: Element,
+    options?: ResizeObserverOptions
+  ) => () => void;
   /** `read` and `inside` in the next frame's delivery, on that frame's layout, then the answer in the frame after, with nothing resized. */
   readNext: () => void;
   /** The answer in the next frame, with nothing resized (`changed` empty unless something also was). */
@@ -340,6 +361,7 @@ const holdsOf = (site: Site) => {
     mine.delete(target);
   };
   return {
+    has: (target: Element) => mine.has(target),
     observe: (target: Element, how?: ResizeObserverOptions) => {
       let held = holds.get(target);
       if (!held) {
@@ -486,15 +508,69 @@ export function frameObserver(
     },
   };
   const held = holdsOf(site);
+  const unobserve = (target: Element) => {
+    held.release(target);
+    changed.delete(target);
+  };
+  /** Each `observeChildren` still standing, by its stop. */
+  const parents = new Set<() => void>();
+  const observeChildren = (
+    parent: Element,
+    how?: ResizeObserverOptions
+  ): (() => void) => {
+    const take = (child: Element) => {
+      if (!held.has(child)) {
+        held.observe(child, how);
+      }
+    };
+    const went = (record: MutationRecord) => {
+      for (const gone of record.removedNodes) {
+        if (gone instanceof Element && gone.parentNode !== parent) {
+          unobserve(gone);
+        }
+      }
+    };
+    const came = (record: MutationRecord) => {
+      for (const come of record.addedNodes) {
+        if (come instanceof Element && come.parentNode === parent) {
+          take(come);
+        }
+      }
+    };
+    const heard = (records: MutationRecord[]) => {
+      for (const record of records) {
+        went(record);
+        came(record);
+      }
+    };
+    const kids = new MutationObserver(heard);
+    kids.observe(parent, { childList: true });
+    for (const child of parent.children) {
+      take(child);
+    }
+    const stop = () => {
+      if (!parents.delete(stop)) {
+        return;
+      }
+      heard(kids.takeRecords());
+      kids.disconnect();
+      for (const child of parent.children) {
+        unobserve(child);
+      }
+    };
+    parents.add(stop);
+    return stop;
+  };
   return {
     observe: held.observe,
+    observeChildren,
     readNext: () => readInNextDelivery(site),
     request,
-    unobserve: (target) => {
-      held.release(target);
-      changed.delete(target);
-    },
+    unobserve,
     disconnect: () => {
+      for (const stop of [...parents]) {
+        stop();
+      }
       due.delete(me);
       held.releaseAll();
       changed.clear();

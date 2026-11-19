@@ -15,11 +15,19 @@
  * run past has no fade to draw.
  *
  * A scroller is read when it or one of its parts changes size (one
- * ResizeObserver, frameObserver), and when anything is put in or taken out
- * inside it (a MutationObserver over its own subtree), inside the next
- * delivery, and written in the frame after. The watch over the document
- * only finds scrollers: each element put in is looked through for them, and
- * an element whose class changed is one or not by its own class. What
+ * ResizeObserver, frameObserver; its parts are its children, each observed
+ * as it comes and let go of as it goes, `observeChildren`), and when
+ * anything is put in or taken out inside it (a MutationObserver over its
+ * own subtree), inside the next delivery, and written in the frame after.
+ * The watch over the document finds scrollers, and lets go of each one
+ * that has left the page, with its parts: each element put in is looked
+ * through for them, and an element whose class changed is one or not by
+ * its own class. A scroller that left was once only dropped from the
+ * watch: it stayed observed with every part it ever had, kept by the
+ * shared observer for the page's life, and a part taken out in the flush
+ * after a delivery was reported shallower than that delivery had reached
+ * ("ResizeObserver loop completed with undelivered notifications",
+ * frame-observer). What
  * changes outside every scroller (a transcript's rows, a streamed record)
  * is looked at no further: read on its nearest scroller from one
  * MutationObserver over the whole document, every change on the page walked
@@ -38,7 +46,8 @@ const runs = (node: Element): boolean =>
 
 /** Starts the watch over `root`; hands back its stop. */
 export function watchEdgeFades(root: ParentNode = document): () => void {
-  const watched = new Set<Element>();
+  /** Each scroller watched, by the stop of its parts' watch (`observeChildren`). */
+  const watched = new Map<Element, () => void>();
   /** Scrollers to read in the next delivery. */
   const due = new Set<Element>();
   /** What the delivery read, written in the next frame. */
@@ -96,22 +105,13 @@ export function watchEdgeFades(root: ParentNode = document): () => void {
     }
     return null;
   };
-  /**
-   * Parts put into a scroller, at any depth: the scroller read again, and
-   * those put in as its own children watched for their size from now on.
-   */
+  /** Parts put into a scroller or taken out of it, at any depth: the scroller read again. */
   const inside = new MutationObserver((records) => {
     const grown = new Set<Element>();
     for (const record of records) {
       const scroller = scrollerOf(record);
-      if (!scroller) {
-        continue;
-      }
-      grown.add(scroller);
-      for (const added of record.addedNodes) {
-        if (added instanceof Element && added.parentElement === scroller) {
-          sizes.observe(added);
-        }
+      if (scroller) {
+        grown.add(scroller);
       }
     }
     for (const scroller of grown) {
@@ -122,13 +122,18 @@ export function watchEdgeFades(root: ParentNode = document): () => void {
     if (watched.has(node)) {
       return;
     }
-    watched.add(node);
     sizes.observe(node);
-    for (const part of node.children) {
-      sizes.observe(part);
-    }
+    watched.set(node, sizes.observeChildren(node));
     inside.observe(node, { childList: true, subtree: true });
     soon(node);
+  };
+  /** A scroller that has left the page, let go of with its parts. */
+  const unwatch = (node: Element, stopParts: () => void) => {
+    watched.delete(node);
+    stopParts();
+    sizes.unobserve(node);
+    due.delete(node);
+    verdicts.delete(node);
   };
   /**
    * Every scroller at or under `node`. The document (or a shadow root) is no Element:
@@ -170,9 +175,9 @@ export function watchEdgeFades(root: ParentNode = document): () => void {
     for (const record of records) {
       discover(record);
     }
-    for (const node of watched) {
+    for (const [node, stopParts] of watched) {
       if (!node.isConnected) {
-        watched.delete(node);
+        unwatch(node, stopParts);
       }
     }
   });

@@ -791,13 +791,14 @@ export class ScrollPin {
     }
     this.pinAsked = true;
     this.pinSizes ??= frameObserver(null, {
-      read: () => {
+      read: (entries) => {
         if (!this.pinAsked) {
           return;
         }
         this.pinAsked = false;
-        if (this.pinMark) {
-          this.pinSizes?.unobserve(this.pinMark);
+        // Each mark it reported, the one now and one a remount replaced.
+        for (const { target } of entries) {
+          this.pinSizes?.unobserve(target);
         }
         if (this.pinned()) {
           this.#host.whole.keepWhole();

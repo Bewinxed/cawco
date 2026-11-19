@@ -1011,13 +1011,15 @@
       if (node.style.maxBlockSize !== cap) {
         node.style.maxBlockSize = cap;
       }
-      for (const one of rows) {
-        sizes.observe(one);
-      }
     };
     // Taken now, and a change in the next frame (frameObserver): the cap is
-    // the list's height. Rows arriving in a delivery's own writes too.
+    // the list's height. Rows arriving in a delivery's own writes too. Each
+    // row is observed as it comes and let go of as it goes
+    // (`observeChildren`): observed again from the answer, every row
+    // reported afresh in the next delivery, whose answer observed them
+    // again, a frame every frame while the list stood.
     const sizes = frameObserver(take);
+    sizes.observeChildren(node);
     const rowsChange = new MutationObserver(() => sizes.request());
     rowsChange.observe(node, { childList: true });
     take();

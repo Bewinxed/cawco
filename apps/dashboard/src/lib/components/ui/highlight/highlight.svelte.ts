@@ -1534,6 +1534,9 @@ export function highlight(options: HighlightOptions) {
       }
     };
     const watch = new MutationObserver((records) => {
+      // A row the layers stand on, taken out (a virtual list scrolling it
+      // away), is let go of here, in the task that took it out (`watchRows`).
+      watchRows();
       // A row moved without a size of its own changing: a list's padding, or
       // a virtual list's rows placed by their inline style (virtua's `top`).
       // The layers follow, without a glide, in the next frame.
@@ -1680,7 +1683,12 @@ export function highlight(options: HighlightOptions) {
      * `spanOf`). Nothing else here heard it: placed while the width was on
      * its way, the rail's pill stood at the row's old width for good (198px
      * on a 185px row). A row's first report aims the layers once more too:
-     * the box they were measured at may have moved on before it.
+     * the box they were measured at may have moved on before it. A row that
+     * has left the page is let go of, though a layer still names it until
+     * its next aim, and observed again if it comes back: held, a row a
+     * virtual list takes out in the flush after a delivery reports
+     * shallower than that delivery reached, and the page reports a
+     * ResizeObserver loop (frame-observer).
      */
     const watchedRows = new Set<Element>();
     // A watched row's report, and a move heard without one, aim the layers
@@ -1689,13 +1697,13 @@ export function highlight(options: HighlightOptions) {
     const toRealign = () => rowWatch.readNext();
     watchRows = () => {
       for (const row of watchedRows) {
-        if (row !== pillRow && row !== ghostRow) {
+        if ((row !== pillRow && row !== ghostRow) || !row.isConnected) {
           rowWatch.unobserve(row);
           watchedRows.delete(row);
         }
       }
       for (const row of [pillRow, ghostRow]) {
-        if (row && !watchedRows.has(row)) {
+        if (row?.isConnected && !watchedRows.has(row)) {
           watchedRows.add(row);
           rowWatch.observe(row, { box: "border-box" });
         }

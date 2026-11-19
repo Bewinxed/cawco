@@ -134,7 +134,9 @@
 
   // Read in the delivery (its layout is the one just done), written in the
   // next frame; the strip's children change as Needs you, the filter or
-  // the hairline come and go, and each is observed as it comes.
+  // the hairline come and go, and each is observed as it comes and let go
+  // of as it goes (`observeChildren`), as is each tab the ruler measures. A
+  // change in either is read in the next delivery (`readNext`).
   $effect(() => {
     const strip = root?.parentElement;
     const list = ruler;
@@ -152,22 +154,32 @@
         },
       }
     );
-    const watch = () => {
-      sized.observe(strip);
-      sized.observe(list);
-      for (const child of strip.children) {
-        sized.observe(child);
+    sized.observe(strip);
+    sized.observe(list);
+    sized.observeChildren(strip);
+    let tabs = new Set<Element>();
+    const watchTabs = () => {
+      const now = new Set(
+        list.querySelectorAll(
+          '[data-slot="ff-tab"], [data-ruler-picker], [data-ruler-more-counted]'
+        )
+      );
+      for (const gone of tabs) {
+        if (!now.has(gone)) {
+          sized.unobserve(gone);
+        }
       }
-      for (const tab of list.querySelectorAll(
-        '[data-slot="ff-tab"], [data-ruler-picker], [data-ruler-more-counted]'
-      )) {
-        sized.observe(tab);
+      for (const come of now) {
+        if (!tabs.has(come)) {
+          sized.observe(come);
+        }
       }
+      tabs = now;
     };
-    watch();
+    watchTabs();
     const children = new MutationObserver(() => {
-      watch();
-      sized.request();
+      watchTabs();
+      sized.readNext();
     });
     children.observe(strip, { childList: true });
     children.observe(list, { childList: true, subtree: true });

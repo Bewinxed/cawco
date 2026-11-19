@@ -70,7 +70,8 @@ interface FloatSize {
  * next frame (frameObserver): what it holds grows inside a ResizeObserver
  * pass (the composer's field, a thread's entries), and a size written inside
  * that pass would place it again there, a box the pass could no longer
- * deliver. The room's contents are watched too: under a cap they grow
+ * deliver. The room's contents are watched too, each entry as it comes
+ * and let go of as it goes (`observeChildren`): under a cap they grow
  * inside a box that keeps its size. Returns the stop.
  */
 const watchSize = (
@@ -95,9 +96,7 @@ const watchSize = (
   const watch = frameObserver(read);
   watch.observe(float);
   for (const one of rooms) {
-    for (const part of one.children) {
-      watch.observe(part);
-    }
+    watch.observeChildren(one);
   }
   return () => watch.disconnect();
 };

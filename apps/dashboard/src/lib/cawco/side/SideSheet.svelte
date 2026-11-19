@@ -719,9 +719,10 @@
     // `transitionend`: its `introend` and `outroend` are the element's own,
     // never bubbling, so they are heard on their way down (`capture`). A sheet
     // that stood while the pill rose in found no part of it drawn, and stood
-    // at no height for good.
-    for (const part of composer?.children ?? []) {
-      observer.observe(part);
+    // at no height for good. Each part is observed as it comes and let go
+    // of as it goes (`observeChildren`).
+    if (composer) {
+      observer.observeChildren(composer);
     }
     const shows = new MutationObserver(remeasure);
     if (composer) {

@@ -64,23 +64,16 @@
       overflowing = list.scrollHeight > list.clientHeight;
     };
     // Its own box (the window, its cap) and each section's (rows arriving,
-    // notes folding), the sections that come later too.
+    // notes folding), the sections that come later too, each let go of as
+    // it goes (`observeChildren`).
     // Read now, and a change in the next frame (frameObserver): the fade
     // comes and goes on it, and rows arriving in a delivery's own writes
     // are heard there too.
     const sized = frameObserver(read);
-    const watch = () => {
-      sized.observe(list);
-      for (const child of list.children) {
-        sized.observe(child);
-      }
-    };
-    watch();
+    sized.observe(list);
+    sized.observeChildren(list);
     read();
-    const rows = new MutationObserver(() => {
-      watch();
-      sized.request();
-    });
+    const rows = new MutationObserver(() => sized.request());
     rows.observe(list, { childList: true, subtree: true });
     return () => {
       sized.disconnect();

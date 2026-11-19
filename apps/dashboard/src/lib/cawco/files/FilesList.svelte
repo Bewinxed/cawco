@@ -392,9 +392,7 @@
       measure();
       const seen = frameObserver(measure);
       seen.observe(scroller);
-      for (const child of scroller.children) {
-        seen.observe(child);
-      }
+      seen.observeChildren(scroller);
       let frame = 0;
       const added = new MutationObserver(() => {
         if (frame === 0) {
