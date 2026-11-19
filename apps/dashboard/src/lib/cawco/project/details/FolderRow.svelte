@@ -9,6 +9,12 @@
    * edge's column; the chevron and the role stand on the trailing edge. The
    * Built-in folder wears a folder glyph in place of its computer's mark.
    *
+   * Three looks, one meaning each: the Built-in folder, which can't be
+   * pressed, lies flat on the card; an opened folder and its acts stand in
+   * one recessed box; while CawCo is out of reach every row fades as each
+   * disabled control on the card does (50%), and its computer reads as last
+   * read (`asOf`): a grey dot, never a live one.
+   *
    * A press on the row opens its rare acts under it, each a row with its
    * name and one line saying what it does (Move files, Locate folder,
    * Disconnect folder); the Main folder has no Disconnect folder and the
@@ -49,6 +55,8 @@
     running = null,
     disconnecting,
     sunk = false,
+    still = false,
+    asOf = null,
     ontoggle,
     onact,
     onconfirm,
@@ -68,6 +76,10 @@
     disconnecting?: Pending;
     /** Nothing can be sent: the row reads, and opens nothing. */
     sunk?: boolean;
+    /** It only reads here (the folder a step acts on): flat, with no acts. */
+    still?: boolean;
+    /** CawCo is out of reach: when the details shown were read. */
+    asOf?: string | null;
     ontoggle: () => void;
     onact: (act: FolderAct) => void;
     /** Disconnect folder was pressed: ask under the row. */
@@ -78,12 +90,18 @@
 
   const id = $props.id();
   const role = $derived(folderWords.role[folder.role]);
+  /** When what the row says of its computer was read, if not just now. */
+  const readAt = $derived(folder.readAt ?? asOf);
   const meta = $derived.by(() => {
-    if (folder.readAt) {
-      return folderWords.readAt(folder.readAt);
+    if (readAt) {
+      return folderWords.asOf(folder.machine.online, readAt);
     }
     return folder.machine.online ? folderWords.online : folderWords.offline;
   });
+  /** Live only while read just now: a presence read earlier is never shown as live. */
+  const presence = $derived(
+    folder.machine.online && !readAt ? "online" : "off"
+  );
   /** The acts this folder offers, in the order they read. */
   const acts = $derived<
     { act: FolderAct | "disconnect"; icon: typeof IconTransfer }[]
@@ -100,7 +118,7 @@
     act === "disconnect" ? folderWords.disconnectLine : actWords[act].line;
   /** The Main folder missing stops every agent; another folder missing stops agents only there. */
   const blocks = $derived(folder.missing && folder.role === "main");
-  const pressable = $derived(folder.role !== "builtin" && !sunk);
+  const pressable = $derived(folder.role !== "builtin" && !sunk && !still);
 </script>
 
 {#snippet face()}
@@ -110,7 +128,7 @@
       line
       {meta}
       name={folder.machine.name}
-      presence={folder.machine.online ? "online" : "off"}
+      {presence}
     >
       {#snippet mark()}
         {#if folder.role === "builtin"}
@@ -163,8 +181,14 @@
   {/if}
 {/snippet}
 
+<!-- Opened, the row and its acts stand in one recessed box. -->
 <div
-  class="flex min-w-0 flex-col"
+  class={[
+    "flex min-w-0 flex-col rounded-sm border motion-safe:transition-[border-color,background-color] motion-safe:duration-(--duration-control) motion-safe:ease-out",
+    open && pressable
+      ? "border-border-hairline bg-surface-recess pb-space-1"
+      : "border-transparent",
+  ]}
   data-folder={folder.id}
   data-role={folder.role}
 >
@@ -172,7 +196,7 @@
     <button
       class={cn(
         menuItemVariants(),
-        "press-tint focus-inset flex w-full flex-col items-stretch gap-space-1 rounded-sm border border-transparent px-space-2 py-space-1 text-start aria-expanded:border-border-hairline aria-expanded:bg-surface-recess not-aria-expanded:can-hover:hover:bg-surface-hover"
+        "press-tint focus-inset flex w-full flex-col items-stretch gap-space-1 rounded-sm px-space-2 py-space-1 text-start not-aria-expanded:can-hover:hover:bg-surface-hover"
       )}
       aria-controls="{id}-acts"
       aria-expanded={open}
@@ -182,9 +206,12 @@
       {@render face()}
     </button>
   {:else}
-    <!-- Sunk: it reads, and nothing on it can be pressed. -->
+    <!-- Flat: it reads, and nothing on it can be pressed. -->
     <div
-      class="flex flex-col gap-space-1 rounded-sm border border-border-hairline bg-surface-recess px-space-2 py-space-1"
+      class={[
+        "flex flex-col gap-space-1 px-space-2 py-space-1",
+        sunk && "opacity-50",
+      ]}
     >
       {@render face()}
     </div>
@@ -209,12 +236,14 @@
         />
         <span class="text-pretty">{folderWords.missing}</span>
       </span>
-      <Button
-        disabled={sunk}
-        onclick={() => onact("locate")}
-        size="sm"
-        variant="outline">{actWords.locate.name}</Button
-      >
+      {#if !still}
+        <Button
+          disabled={sunk}
+          onclick={() => onact("locate")}
+          size="sm"
+          variant="outline">{actWords.locate.name}</Button
+        >
+      {/if}
     </div>
   {/if}
 

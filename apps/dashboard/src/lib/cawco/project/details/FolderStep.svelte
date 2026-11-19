@@ -55,6 +55,7 @@
     facts,
     folder,
     fleet,
+    holders = [],
     sunk = false,
     oncancel,
     onrun,
@@ -71,6 +72,8 @@
     /** The folder acted on; none for Connect existing folder and Copy to computer. */
     folder: Folder | null;
     fleet: Computer[];
+    /** The computers that already hold the project's code: Copy to computer can't pick them. */
+    holders?: string[];
     sunk?: boolean;
     oncancel: () => void;
     onrun: () => void;
@@ -82,6 +85,8 @@
   } = $props();
 
   const act = $derived(actWords[step.act]);
+  /** Copy to computer and the computer already holds the code: said on its chip, before any press. */
+  const holds = (id: string) => step.act === "copy" && holders.includes(id);
   const locating = $derived(step.act === "locate");
   /** The computer the folder ends on: Locate keeps the folder's own. */
   const target = $derived(
@@ -115,7 +120,8 @@
         onconfirm={() => undefined}
         ondisconnect={() => undefined}
         ontoggle={() => undefined}
-        sunk
+        still
+        {sunk}
       />
     </StepGroup>
   {/if}
@@ -141,7 +147,10 @@
             glide
           >
             {#each fleet as computer (computer.id)}
-              <OptionGroupItem disabled={!computer.online} value={computer.id}>
+              <OptionGroupItem
+                disabled={!computer.online || holds(computer.id)}
+                value={computer.id}
+              >
                 <span class="mark-line flex items-center gap-space-2">
                   <OsMark
                     aria-hidden="true"
@@ -149,7 +158,11 @@
                     os={computer.os}
                   />
                   <span>{computer.name}</span>
-                  {#if !computer.online}
+                  {#if holds(computer.id)}
+                    <span class="type-meta text-ink-muted"
+                      >{stepWords.hasCode}</span
+                    >
+                  {:else if !computer.online}
                     <span class="type-meta text-ink-muted"
                       >{folderWords.offline}</span
                     >

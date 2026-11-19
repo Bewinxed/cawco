@@ -32,7 +32,7 @@ export default {
 const REVIEW = /Ask for review/u;
 const SEPARATE = /Keep separate/u;
 const COPY = /^Copy to computer$/u;
-const STUDIO = /studio-mac/u;
+const LAB = /lab-nuc/u;
 const FOLDER = /Folder/u;
 const LINEAR = /Connect Linear/u;
 const MORE = /More code details/u;
@@ -78,14 +78,14 @@ export const FolderActs = {
   play: presses({ role: "button", name: MAIN_ROW, after: 800 }),
 };
 
-/** Copy to computer's step opened, studio-mac picked and a folder typed. */
+/** Copy to computer's step opened, lab-nuc (no copy of the code yet) picked and a folder typed. */
 const COPY_ASKED: Press[] = [
   { role: "button", name: COPY, after: 400 },
-  { role: "radio", name: STUDIO, after: 100 },
+  { role: "radio", name: LAB, after: 100 },
   { role: "textbox", name: FOLDER, text: "~/code/hy", after: 1700 },
 ];
 
-/** Copy to computer: studio-mac and a folder named, and what will happen. */
+/** Copy to computer: lab-nuc and a folder named, and what will happen. */
 export const CopyAsked = {
   beforeEach: ownStores,
   from: "Opening",

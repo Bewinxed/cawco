@@ -200,9 +200,10 @@
 
       {#if named}
         <!-- At account limit, on one line: its name, then the two answers
-             as option chips, what each does in its tooltip. -->
+             as option chips, what each does in its tooltip. It belongs to
+             One account, so it stands on the picker's edge. -->
         <div
-          class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2"
+          class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 ps-c-details-option-text"
           transition:unfold
         >
           <span class="type-meta font-medium text-ink-muted" id="{limitId}-name"

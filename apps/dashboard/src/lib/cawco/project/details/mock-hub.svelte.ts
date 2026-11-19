@@ -375,17 +375,12 @@ export class MockHub {
         this.#step = this.#folderStep(
           "copy",
           null,
-          "m-studio",
+          "m-lab",
           "~/code/hyucksfield"
         );
         this.folderFacts = {
           ...noFolderFacts(),
-          forecast: forecastFor(
-            "copy",
-            "studio-mac",
-            "~/code/hyucksfield",
-            false
-          ),
+          forecast: forecastFor("copy", "lab-nuc", "~/code/hyucksfield", false),
         };
         break;
       case "tasks-github":

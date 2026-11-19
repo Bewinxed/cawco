@@ -55,7 +55,7 @@ export const LocateReady = {
 /** Linking a folder on render-box that already has these files. */
 export const ConnectReady = { args: { view: "connect-ready" } };
 
-/** Copying the saved code to studio-mac, the original untouched. */
+/** Copying the saved code to lab-nuc, the original untouched; obelisk and studio-mac already have it. */
 export const CopyReady = { args: { view: "copy-ready" } };
 
 /** I picked studio-mac and typed the folder: it checks, then says what will happen. */

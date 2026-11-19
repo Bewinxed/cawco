@@ -33,7 +33,7 @@
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
-  import { IconChevronLeft } from "#lib/icons.js";
+  import { IconChevronLeft, IconClose } from "#lib/icons.js";
   import { crossIn } from "#lib/platform/motion/curves.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { cn } from "#lib/utils.js";
@@ -86,6 +86,10 @@
   const folders = $derived(
     details.folders.state === "read" ? details.folders.value : []
   );
+  /** The computers holding one of the project's folders: Copy to computer can't pick them. */
+  const holders = $derived(
+    folders.filter((f) => f.role !== "builtin").map((f) => f.machine.id)
+  );
   const stepFolder = $derived.by(() => {
     const now = step;
     return now?.kind === "folder"
@@ -131,16 +135,22 @@
     >
       <Verdict onjump={jump} ontry={acts.tryAgain} {verdict} />
       {#if !phone}
-        <Button onclick={acts.close} size="sm" variant="outline"
-          >{cardWords.done}</Button
-        >
+        <!-- On a bar's line, so Done stands where the step's bar puts it. -->
+        <span class="flex min-h-c-btn-h items-center">
+          <Button onclick={acts.close} size="sm" variant="outline"
+            >{cardWords.done}</Button
+          >
+        </span>
       {/if}
     </header>
   {:else}
+    <!-- The step's one bar: Back, its name, then Done on a desk and Close
+         on a phone, whose sheet draws no bar of its own while a step
+         stands (DetailsHang, `ownHead`). Its edges are the card's. -->
     <header
       class={cn(
         "grid flex-none grid-cols-3 items-center gap-space-3",
-        phone ? "px-space-1 pb-space-3" : "px-space-4 pt-space-4 pb-space-3"
+        phone ? "px-space-1 pb-space-3" : "px-space-5 pt-space-4 pb-space-3"
       )}
     >
       <span class="flex">
@@ -158,7 +168,15 @@
         {stepTitle(step)}
       </h3>
       <span class="flex justify-end">
-        {#if !phone}
+        {#if phone}
+          <BarGlass form="group">
+            <BarItem
+              icon={IconClose}
+              label={commonWords.close}
+              onclick={acts.close}
+            />
+          </BarGlass>
+        {:else}
           <Button onclick={acts.close} size="sm" variant="outline"
             >{cardWords.done}</Button
           >
@@ -189,6 +207,7 @@
                 class="grid grid-cols-1 gap-x-space-7 gap-y-space-6 @min-details-card/card:grid-cols-2"
               >
                 <FilesSection
+                  asOf={details.hub.reachable ? null : details.hub.readAt}
                   bind:confirming={opened.disconnect}
                   disconnecting={pending.disconnect}
                   {fleet}
@@ -269,6 +288,7 @@
                 facts={folderFacts}
                 {fleet}
                 folder={stepFolder}
+                {holders}
                 oncalloff={acts.callOff}
                 oncancel={acts.cancelStep}
                 ondone={acts.close}
