@@ -23,7 +23,6 @@ export interface OlderPagesHost {
   readonly landed: boolean;
   readonly pin: {
     readonly atBottom: boolean;
-    lastWrite: number | null;
     readonly list: VirtualizerHandle | undefined;
     readonly listing: HTMLElement | undefined;
     readonly pinBottom: () => void;
@@ -35,6 +34,9 @@ export interface OlderPagesHost {
   readonly session: SessionState;
   readonly shown: boolean;
   readonly visible: boolean;
+  readonly whole: {
+    readonly holdView: () => void;
+  };
 }
 
 export class OlderPages {
@@ -143,26 +145,29 @@ export class OlderPages {
   /**
    * How tall the strip before the list stands (see the markup): the page
    * being read, or the one that could not be. The list starts under it, and
-   * virtua is told so (`startMargin`).
+   * virtua is told so (`startMargin`). Its border box as laid out, to the
+   * layout's own fraction of a pixel: `offsetHeight` rounds it, and the list
+   * was taken to start where it does not.
    */
   olderRoom = $state(0);
 
   /**
    * THE STRIP BEFORE THE LIST MOVES NOTHING. It comes and goes with the
    * cursor, and grows when a read fails — above every row, where a change of
-   * height would push the whole conversation by as much. So the view moves
-   * with it, in the resize itself, after the frame's layout and before its
-   * paint: the rows on screen stand where they stood. At the tail the pin
-   * does the same from the other end.
+   * height would push the whole conversation by as much. Heard in the
+   * resize itself, after the frame's layout and before its paint, and
+   * handed to what keeps the view: at the tail the pin, anywhere else the
+   * rows on screen (ListWhole `holdView`).
    */
   keepPlace = (node: HTMLElement) => {
-    // biome-ignore lint/style/noRestrictedGlobals: THE STRIP BEFORE THE LIST MOVES NOTHING: the view moves by the strip's growth after the frame's layout and before its paint, so the rows on screen never jump; deferred, a frame paints them pushed down
-    const watch = new ResizeObserver(() => {
-      const grew = node.offsetHeight - this.olderRoom;
-      if (grew === 0) {
+    // biome-ignore lint/style/noRestrictedGlobals: THE STRIP BEFORE THE LIST MOVES NOTHING: the view is kept after the frame's layout and before its paint, so the rows on screen never jump; deferred, a frame paints them pushed down
+    const watch = new ResizeObserver((entries) => {
+      const room =
+        entries.at(-1)?.borderBoxSize[0]?.blockSize ?? node.offsetHeight;
+      if (room === this.olderRoom) {
         return;
       }
-      this.olderRoom = node.offsetHeight;
+      this.olderRoom = room;
       flushSync();
       if (
         !(this.#host.landed && this.#host.pin.scroller) ||
@@ -174,8 +179,7 @@ export class OlderPages {
         this.#host.pin.pinBottom();
         return;
       }
-      this.#host.pin.scroller.scrollTop += grew;
-      this.#host.pin.lastWrite = this.#host.pin.scroller.scrollTop;
+      this.#host.whole.holdView();
     });
     watch.observe(node);
     return () => watch.disconnect();

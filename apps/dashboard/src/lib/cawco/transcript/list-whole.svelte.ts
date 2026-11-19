@@ -1,23 +1,46 @@
+import { flushSync, untrack } from "svelte";
 import type { VirtualizerHandle } from "virtua/svelte";
+import type { Row } from "./rows";
 
 export interface ListWholeHost {
+  readonly jumper: {
+    readonly jumping: boolean;
+  };
+  readonly landed: boolean;
   readonly older: {
     readonly olderRoom: number;
   };
   readonly pin: {
+    readonly atBottom: boolean;
     readonly endMoved: (shift: number) => void;
+    lastWrite: number | null;
     readonly list: VirtualizerHandle | undefined;
     readonly listing: HTMLElement | undefined;
     readonly pinned: () => boolean;
     readonly pinNext: () => void;
+    readonly scroller: HTMLElement | undefined;
+    readonly writes: number;
   };
+  readonly rowDraw: {
+    readonly renderedRows: Row[];
+  };
+  readonly shown: boolean;
+  readonly visible: boolean;
 }
+
+/** How many rows past the one at the view's top `see` looks for one drawn. */
+const SEEN_REACH = 8;
 
 export class ListWhole {
   readonly #host: ListWholeHost;
 
   /**
-   * The part of a pixel that makes the scroll range a whole number of pixels,
+   * The part of a pixel laid above the list's first row. At the tail it is
+   * the part that makes the scroll range a whole number of pixels
+   * (`keepWhole`); away from the tail it is the part that keeps the rows on
+   * screen where they stood (`holdView`).
+   *
+   * At the tail: the part of a pixel that makes the scroll range whole,
    * laid above the list's first row. A scroll offset is whole (at a device
    * pixel ratio of 1, in Chromium and WebKit alike), and the range it moves
    * over — the content's height less the scroller's own box — rarely is: the
@@ -77,8 +100,17 @@ export class ListWhole {
    * streamed reply grew.
    *
    * A list that fits its view has no range to make whole, and no spare.
+   *
+   * Only while the view holds the tail. Away from it the spare stands above
+   * the rows the reader is reading, and a spare chosen for the range moved
+   * every one of them by its change: a page landing in front moved the row
+   * at the view's top a pixel, its part of a pixel down and virtua's
+   * rounded jump the rest (older.mjs, every run). There it is `holdView`'s.
    */
   keepWhole(): boolean {
+    if (!this.#host.pin.atBottom) {
+      return false;
+    }
     const height = this.listHeight();
     const viewport = this.#host.pin.list?.getViewportSize() ?? 0;
     if (!(viewport > 0 && this.rooms.measured && Number.isFinite(height))) {
@@ -132,6 +164,126 @@ export class ListWhole {
     measured: false,
   };
 
+  /**
+   * THE ROWS ON SCREEN STAND WHERE THE READER LEFT THEM.
+   *
+   * Away from the tail, whatever changes above the view (a page put in
+   * front, rows above measured, the strip before the list coming, growing
+   * or going with the page that ends the conversation) moves the rows on
+   * screen by nothing at all. virtua keeps them for its own rows (`shift`,
+   * and its correction for a row measured above the view), but it scrolls by
+   * its sizes' change, a fraction of a pixel among them (`scrollBy(426.5)`),
+   * and the engine puts a scroll offset on a whole pixel (Chromium rounds it,
+   * WebKit drops the fraction): the row at the view's top moved by what was
+   * dropped. Nor does it scroll for the room before the list (its
+   * `startMargin`), and its `shift` holds the distance from the list's end,
+   * so a row measured below the view moved the rows on it.
+   *
+   * So once virtua has written, this puts back the row the reader last saw
+   * at the view's top (`seen`), where it stood: the view moves by the whole
+   * pixels of the change, and the spare above the list takes up its part of
+   * a pixel, so the row stands at the very same place, not the nearest
+   * pixel to it. One write, read off the layout virtua's own write has just
+   * laid out. Heard where the list's height is written (`wholeHeight`), as
+   * the strip before the list resizes (OlderPages `keepPlace`), never at the
+   * tail, which is the pin's, nor under a jump to the latest, which is its
+   * own.
+   */
+  holdView(): void {
+    const { seen } = this;
+    const { scroller } = this.#host.pin;
+    if (
+      !(
+        seen &&
+        scroller &&
+        seen.row.isConnected &&
+        this.#host.landed &&
+        this.#host.shown &&
+        this.#host.visible
+      ) ||
+      this.#host.pin.atBottom ||
+      this.#host.jumper.jumping ||
+      seen.writes !== this.#host.pin.writes
+    ) {
+      return;
+    }
+    const stands =
+      seen.row.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top;
+    const now = scroller.scrollTop;
+    if (stands !== seen.top) {
+      // Where the view would stand with no spare, on the layout's own
+      // 1/64px steps; the whole pixel at or past it, and the spare the rest.
+      const bare = Math.round((now - this.spare + stands - seen.top) * 64) / 64;
+      const offset = Math.ceil(bare);
+      if (offset - bare !== this.spare) {
+        this.spare = offset - bare;
+        flushSync();
+      }
+      if (offset !== now) {
+        scroller.scrollTop = offset;
+      }
+    }
+    // The view moved, by virtua's write or this one: its scroll is told from
+    // the reader's as this component's own (ScrollPin `whoseScroll`), and
+    // what the reader saw stays seen.
+    if (scroller.scrollTop !== seen.offset) {
+      this.#host.pin.lastWrite = scroller.scrollTop;
+      seen.offset = scroller.scrollTop;
+      seen.writes = this.#host.pin.writes;
+    }
+  }
+
+  /**
+   * The row at the view's top as the reader's own scroll, or a write of this
+   * component's, last left it: its element, how far below the scroller's
+   * top it stood (`holdView`), the scroll offset then, and the count of
+   * this component's writes then (ScrollPin `writes`): another write since
+   * (a place put back, the end followed) moved it as meant, and it is seen
+   * again at the scroll that write makes.
+   */
+  seen: {
+    offset: number;
+    row: HTMLElement;
+    top: number;
+    writes: number;
+  } | null = null;
+
+  /** Takes the row at the view's top at `offset` as seen (`seen`), or nothing at none. Read in the scroll event, on the layout virtua's read of it has just laid out. */
+  see(offset: number | null): void {
+    const { list, listing, scroller } = this.#host.pin;
+    const rows = this.#host.rowDraw.renderedRows;
+    let row: HTMLElement | null | undefined = null;
+    let key: string | undefined;
+    // The row at the view's top, or the first under it that is drawn: a
+    // scroll can bring the view to rows virtua mounts only in the flush
+    // behind it.
+    if (list && listing && offset !== null) {
+      const first = list.findItemIndex(offset);
+      for (
+        let index = first;
+        !row && index < Math.min(rows.length, first + SEEN_REACH);
+        index += 1
+      ) {
+        key = rows[index]?.key;
+        row = listing.querySelector<HTMLElement>(
+          `[data-row="${CSS.escape(key)}"]`
+        );
+      }
+    }
+    this.seen =
+      row && scroller && offset !== null
+        ? {
+            offset,
+            row,
+            top:
+              row.getBoundingClientRect().top -
+              scroller.getBoundingClientRect().top,
+            writes: this.#host.pin.writes,
+          }
+        : null;
+  }
+
   wholeHeight = (node: HTMLElement) => {
     const inner = node.firstElementChild;
     if (!inner) {
@@ -143,6 +295,10 @@ export class ListWhole {
       const now = this.#host.pin.list?.getScrollSize() ?? 0;
       const shrank = now < size;
       size = now;
+      if (!this.#host.pin.atBottom) {
+        this.holdView();
+        return;
+      }
       // A list that got shorter under a view pinned at its end is the
       // pin's: it reads where the clamp leaves the view, and tags it
       // (`pinBottom`). Read here as well, behind the pin, the scroller's
@@ -160,6 +316,13 @@ export class ListWhole {
 
   constructor(host: ListWholeHost) {
     this.#host = host;
+
+    // The view comes back to the tail: the spare is the tail's again.
+    $effect(() => {
+      if (this.#host.pin.atBottom) {
+        untrack(() => this.keepWhole());
+      }
+    });
 
     $effect(() => {
       const footNode = this.foot;

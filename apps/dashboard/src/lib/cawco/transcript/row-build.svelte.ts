@@ -5,7 +5,7 @@
  * genuine arrivals — and blocked-on-you — through a dedicated live region
  * beside the log, never through the virtualized container itself.
  */
-import { flushSync, onDestroy, untrack } from "svelte";
+import { onDestroy, untrack } from "svelte";
 import { track } from "#lib/platform/track.js";
 import type { SessionState } from "../stores/sessions.svelte";
 import { rebuildScheduler } from "../workspace/scheduler.svelte";
@@ -138,14 +138,6 @@ export interface RowBuildHost {
     buffer: number;
     frontHeld: string[];
     readonly onList: () => Set<string>;
-  };
-  readonly older: {
-    olderRoom: number;
-  };
-  readonly pin: {
-    readonly atBottom: boolean;
-    lastWrite: number | null;
-    readonly scroller: HTMLElement | undefined;
   };
   readonly session: SessionState;
   readonly slides: {
@@ -494,34 +486,10 @@ export class RowBuild {
       this.#host.mounted.buffer = 0;
     }
     // The page that ends the conversation's pages takes the strip before
-    // the list with it (`Built.before`).
-    const strip =
-      steps.front &&
-      this.frozenBefore &&
-      this.#host.session.cursor === null &&
-      !this.#host.pin.atBottom
-        ? this.#host.older.olderRoom
-        : 0;
+    // the list with it (`Built.before`), in this same flush: the rows on
+    // screen are put back where they stood behind both (ListWhole
+    // `holdView`, heard as virtua writes the list's new height).
     this.fronted += 1;
-    if (strip > 0 && this.#host.pin.scroller) {
-      this.stripGone(this.#host.pin.scroller, strip);
-    }
-  }
-
-  /**
-   * THE STRIP GOES WITH THE PAGE THAT ENDS IT, AND MOVES NOTHING. Left to
-   * its own observer (`keepPlace`), WebKit delivered its shrink a frame
-   * after the rows came in under it (transcript-holds, webkit 390: the
-   * row at the view's top painted 53.375px up for a frame). So the flush
-   * that hands the page over is run now, and the view moved up by the
-   * strip's height in the same task, behind virtua's own jump (whose write
-   * laid the page out): the observer then hears nothing left to move.
-   */
-  stripGone(node: HTMLElement, strip: number): void {
-    flushSync();
-    this.#host.older.olderRoom = 0;
-    node.scrollTop -= strip;
-    this.#host.pin.lastWrite = node.scrollTop;
   }
 
   build(): Built {

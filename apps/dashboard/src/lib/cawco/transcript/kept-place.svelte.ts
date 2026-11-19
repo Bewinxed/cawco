@@ -397,8 +397,12 @@ export class KeptPlace {
     )) {
       return false;
     }
+    // Where the first row begins (virtua's container, under the spare):
+    // where the place was read from (`placeAt`, `listStart`).
     const start =
-      this.#host.pin.listing.getBoundingClientRect().top -
+      (
+        this.#host.pin.listing.firstElementChild ?? this.#host.pin.listing
+      ).getBoundingClientRect().top -
       this.#host.pin.scroller.getBoundingClientRect().top +
       this.#host.pin.scroller.scrollTop;
     // Never past the row's own end as virtua has it sized: a row it has not

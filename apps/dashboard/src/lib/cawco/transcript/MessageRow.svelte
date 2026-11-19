@@ -499,7 +499,8 @@
    * the list (transcript-holds' steady wheel, profiled). At rest the strip
    * is unseen and takes its room, so until the pointer comes onto the turn
    * or the keyboard's focus comes into it (`stripBuilt`) it holds plain
-   * buttons of the same box, named as the real ones are. The strip itself
+   * buttons of the same box and the same icon slot (`plain`), named as the
+   * real ones are, so building it moves no line. The strip itself
    * stays the same element, so its fade in plays as before; a plain button
    * that takes the focus hands it to the real one it stands for, in the
    * same task.
@@ -821,7 +822,14 @@
   </span>
 {/snippet}
 
-<!-- A strip button before the strip is built: its box and its name (`stripBuilt`). -->
+<!-- A strip button before the strip is built: its box, its name
+     (`stripBuilt`) and its icon slot's box, which is what sets the speaker
+     line's baseline. Empty, the button's baseline was its own bottom edge,
+     and a later part's line (`part-line`) stood 9.984px taller than with the
+     real buttons: each turn shrank by that as the pointer first crossed it,
+     under a reader scrolling past, and every row below it moved up. The slot
+     is the one PendingContent draws (`btn-slot`), its icon an empty glyph of
+     the icon's size. -->
 {#snippet plain(label: string)}
   <button
     aria-label={label}
@@ -831,7 +839,18 @@
     onclick={reachStrip}
     onfocus={reachStrip}
     type="button"
-  ></button>
+  >
+    <span class="icon-swap w-(--btn-icon) flex-none"
+      ><span
+        ><svg
+          aria-hidden="true"
+          class="size-(--btn-icon)"
+          height="1.2em"
+          width="1.2em"
+        ></svg></span
+      ></span
+    >
+  </button>
 {/snippet}
 
 <!-- Where nothing hovers: one handle on the speaker line, at rest, to the

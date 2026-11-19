@@ -97,6 +97,7 @@ export interface ScrollPinHost {
   readonly visible: boolean;
   readonly whole: {
     readonly keepWhole: () => boolean;
+    readonly see: (offset: number | null) => void;
   };
 }
 
@@ -152,7 +153,7 @@ export class ScrollPin {
    */
   lastTop = 0;
 
-  /** Where the list begins in the scroller, as the scroll handler last saw it. */
+  /** Where the list's first row begins in the scroller (virtua's container, under the spare), as the scroll handler last saw it. */
   listStart = 0;
 
   /** The scroll height the last scroll event saw — what tells a clamp from a reader. */
@@ -324,7 +325,7 @@ export class ScrollPin {
     const shrank = height < this.lastHeight;
     this.lastHeight = height;
     this.listStart =
-      (this.listing?.getBoundingClientRect().top ?? 0) -
+      (this.listing?.firstElementChild?.getBoundingClientRect().top ?? 0) -
       this.scroller.getBoundingClientRect().top +
       offset;
     // Until the reveal the list is laid out but not painted: nothing on it
@@ -343,27 +344,13 @@ export class ScrollPin {
       this.#host.jumper.jumpScrolled(this.scroller);
       return;
     }
-    // Every write this component makes is tagged with the position it wrote.
-    // An event that matches the tag is our OWN motion — the paced follow, or
-    // the pin holding the bottom while a row opens — and says nothing about
-    // where the reader is looking, even under their finger. Neither does the
-    // browser clamping the offset because the content under it got shorter
-    // (a tail row folding shut): that event comes with a smaller scroll
-    // height and leaves the offset at its end. Nor does any scroll that
-    // follows none of the reader's input (`inputOn`): virtua keeping the rows
-    // on screen where they are while rows above them change size, measured
-    // as they mount under a ride to the tail or a landing, a history chunk
-    // put in front. Taken for the reader, one of those let go of the tail in
-    // the middle of a returning pane's catch-up and left it 2,800px short for
-    // good. A scroll their input makes is the READER: wheel, scrollbar drag,
-    // keyboard, a finger, its momentum and its bounce.
-    const clamped = shrank && offset >= height - this.scroller.clientHeight - 1;
-
-    if (
-      (this.lastWrite !== null && Math.abs(offset - this.lastWrite) <= 1) ||
-      clamped ||
-      !this.inputOn
-    ) {
+    const whose = this.whoseScroll(offset, shrank, height);
+    // Where the rows on screen are held away from the tail (ListWhole
+    // `holdView`): seen at the reader's scroll and at this component's own,
+    // and at no other (a smooth scroll to a row, a clamp), which its hold
+    // would write over.
+    this.#host.whole.see(whose === "other" ? null : offset);
+    if (whose !== "reader") {
       return;
     }
     // A fling goes on after the finger lifts: each scroll of it holds on.
@@ -413,6 +400,37 @@ export class ScrollPin {
   }
 
   /**
+   * Whose scroll to `offset` was, in a scroller `height` tall that `shrank`.
+   *
+   * Every write this component makes is tagged with the position it wrote.
+   * An event that matches the tag is our OWN motion — the paced follow, or
+   * the pin holding the bottom while a row opens — and says nothing about
+   * where the reader is looking, even under their finger. Neither does the
+   * browser clamping the offset because the content under it got shorter
+   * (a tail row folding shut): that event comes with a smaller scroll
+   * height and leaves the offset at its end. Nor does any scroll that
+   * follows none of the reader's input (`inputOn`): virtua keeping the rows
+   * on screen where they are while rows above them change size, measured
+   * as they mount under a ride to the tail or a landing, a history chunk
+   * put in front. Taken for the reader, one of those let go of the tail in
+   * the middle of a returning pane's catch-up and left it 2,800px short for
+   * good. A scroll their input makes is the READER: wheel, scrollbar drag,
+   * keyboard, a finger, its momentum and its bounce.
+   */
+  whoseScroll(
+    offset: number,
+    shrank: boolean,
+    height: number
+  ): "ours" | "reader" | "other" {
+    if (this.lastWrite !== null && Math.abs(offset - this.lastWrite) <= 1) {
+      return "ours";
+    }
+    const clamped =
+      shrank && offset >= height - (this.scroller?.clientHeight ?? 0) - 1;
+    return clamped || !this.inputOn ? "other" : "reader";
+  }
+
+  /**
    * Where the reader's own scrolling last left the view, until it comes to
    * rest: at the tail, or away from it. Null once a rest has read it, and
    * while nothing of the reader's has moved the view since.
@@ -457,7 +475,19 @@ export class ScrollPin {
 
   // Null until the first write: a number here (it was -1) is within a pixel
   // of the top, and the reader's scroll to 0 read as our own write.
-  lastWrite: number | null = null;
+  #lastWrite: number | null = null;
+
+  get lastWrite(): number | null {
+    return this.#lastWrite;
+  }
+
+  set lastWrite(offset: number | null) {
+    this.#lastWrite = offset;
+    this.writes += 1;
+  }
+
+  /** How many times `lastWrite` has been tagged: a write of this component's since the reader's place was seen (ListWhole `seen`). */
+  writes = 0;
 
   stopFollow(): void {
     if (this.following !== null) {
