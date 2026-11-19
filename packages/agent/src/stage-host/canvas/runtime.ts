@@ -334,7 +334,7 @@ function holdWhileAway(): void {
   });
 }
 
-/** The states files a page sweeps as it opens, in order (page.ts `sweeps`). */
+/** The states files a page sweeps as it opens, in order (page.ts `sweeps`): none on the panel's page in its frame. */
 const sweepsOf = (
   by: PageBy,
   files: string[],
@@ -344,7 +344,8 @@ const sweepsOf = (
   if (by === "stage") {
     return sweptFiles(files, plans, state);
   }
-  return by === "panel" ? [] : files;
+  // The panel's page, framed by its design graph, which asks for each file it needs; a page on its own sweeps them all.
+  return by === "panel" && window.top !== window ? [] : files;
 };
 
 /** The dials' values as they set the page: each `cssVar` dial's variable with its unit, each `arg` dial's arg; a dial with no value sets nothing. */

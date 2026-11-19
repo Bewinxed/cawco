@@ -176,6 +176,8 @@ const MOTION_MS = 3000;
 const QUIET_MS = 250;
 /** The rest a drawing comes to as it mounts: its own arrivals (a read-back the hub answered) have played. */
 const REST_MS = 600;
+/** The longest a sweep of the canvas's other states files waits for the page to go idle, ms: a page never idle still sweeps them. */
+const IDLE_MOST_MS = 2000;
 /** The quiet after the last edit or view change before the report's sections are read again. Ours. */
 const READ_AGAIN_MS = 300;
 /** The gap between two stories' boxes in a section's read, px: their places in the report, one under another. */
@@ -840,6 +842,8 @@ export function bootStage(page: Page): Mode {
   /** How many reaches the panel has asked for, in the order they came; the last one's place: one still waiting its turn behind it is passed over. */
   let arrivals = 0;
   let latest = 0;
+  /** The reach whose turn it is: a later one (`latest`) ends its drawing's wait for rest. */
+  let serving = 0;
   /** The reach under way: each waits for the one before it, so no two act on the instance at once. */
   let reaching: Promise<unknown> = Promise.resolve();
   /** The things the last reach moved, by the ids its clips name them by. */
@@ -938,7 +942,12 @@ export function bootStage(page: Page): Mode {
     const end = performance.now() + MOTION_MS;
     const known = new Set<Animation>();
     let still = performance.now();
-    while (performance.now() < end && performance.now() - still < REST_MS) {
+    while (
+      performance.now() < end &&
+      performance.now() - still < REST_MS &&
+      // A newer reach replaces this drawing: its rest is no one's to wait for.
+      !(holder === drawing && latest !== serving)
+    ) {
       await nextFrame();
       for (const animation of holder.getAnimations({ subtree: true })) {
         if (!(known.has(animation) || statesOwn(animation))) {
@@ -1045,15 +1054,21 @@ export function bootStage(page: Page): Mode {
     holdHeight(true);
     posed = null;
     moved = new Map();
-    live = mountDrawing(page, stage, target, live, () => {
-      clearFault();
-      dress(drawing, target);
-      ground();
-      mark(target);
-      frame.style.setProperty("--frame-w", `${roomWidth(target.story)}px`);
-      waiting.remove();
-    });
-    const { into } = live;
+    const swap = () => {
+      live = mountDrawing(page, stage, target, live, () => {
+        clearFault();
+        dress(drawing, target);
+        ground();
+        mark(target);
+        frame.style.setProperty("--frame-w", `${roomWidth(target.story)}px`);
+        waiting.remove();
+      });
+      return live;
+    };
+    // Another states file in the drawing's place (a design's directions):
+    // the two cross-fade as one change.
+    const crossing = !!live && live.section !== target.section && moving();
+    const { into } = crossing ? crossFade(swap) : swap();
     await frameTick();
     if (into.error) {
       holdHeight(false);
@@ -1319,6 +1334,7 @@ export function bootStage(page: Page): Mode {
       answer({ move: null, superseded: true });
       return;
     }
+    serving = mine;
     const target = await targetOf(asking.to);
     if ("refused" in target) {
       answer(refusal(target.refused));
@@ -1337,6 +1353,34 @@ export function bootStage(page: Page): Mode {
     } else {
       answer(await actOn(asking, target, play));
     }
+    sweepRest();
+  }
+
+  /** The canvas's other states files swept once its first reach is answered. */
+  let restSwept = false;
+  /**
+   * The canvas's other states files, once the first state a panel's page
+   * reached stands at rest: each swept in turn (`sweepOne`) as the page
+   * goes idle, so a flip to another direction finds it loaded and draws at
+   * once, where it waited on its load and its sheet. The first paint waits
+   * on the front one alone (runtime.ts `sweepsOf`).
+   */
+  function sweepRest(): void {
+    if (restSwept || page.by !== "panel") {
+      return;
+    }
+    restSwept = true;
+    page.quietly(
+      (async () => {
+        for (const file of page.files) {
+          const section = page.sectionOf(file);
+          if (section && !section.loaded) {
+            await idleTurn();
+            await sweepOne(file);
+          }
+        }
+      })()
+    );
   }
 
   /** A refusal as a reach's answer. */
@@ -1654,12 +1698,50 @@ export function bootStage(page: Page): Mode {
     });
   }
 
+  /** Motion plays: the panel's Reduce motion is off and the person's system asks for none less. */
+  const moving = (): boolean =>
+    view.motion !== "reduce" &&
+    matchMedia("(prefers-reduced-motion: no-preference)").matches;
+
+  /**
+   * The drawing swapped under a picture of the one it replaces, which then
+   * fades out over it, one --duration-fade on --ease-crossfade: two states
+   * trading places where they stand. The picture is the old drawing's DOM
+   * copied as it stands (inert, hidden from a reader), laid over the frame
+   * at its box, so the swap holds no frame back; it goes once faded. A
+   * same-document view transition held the page's frames for its capture
+   * (press to paint 22 ms → 58 ms on the address tray) and, framed in the
+   * panel, crashed the page's renderer on its third flip in Chromium 1255.
+   */
+  function crossFade(swap: () => Live): Live {
+    const leaving = drawing.cloneNode(true);
+    if (!(leaving instanceof HTMLElement)) {
+      return swap();
+    }
+    leaving.toggleAttribute("inert", true);
+    leaving.setAttribute("aria-hidden", "true");
+    leaving.classList.add("cawco-stage-leaving");
+    leaving.style.setProperty("--leave-x", `${drawing.offsetLeft}px`);
+    leaving.style.setProperty("--leave-y", `${drawing.offsetTop}px`);
+    leaving.style.setProperty("--leave-w", `${drawing.offsetWidth}px`);
+    frame.append(leaving);
+    const swapped = swap();
+    const fade = leaving.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: page.style.duration("--duration-fade", 200),
+      easing:
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--ease-crossfade")
+          .trim() || "ease-in-out",
+      fill: "forwards",
+    });
+    const gone = () => leaving.remove();
+    fade.addEventListener("finish", gone);
+    fade.addEventListener("cancel", gone);
+    return swapped;
+  }
+
   /** How the page scrolls to what it brings into view: at once where motion is reduced. */
-  const scrolling = (): ScrollBehavior =>
-    view.motion === "reduce" ||
-    !matchMedia("(prefers-reduced-motion: no-preference)").matches
-      ? "instant"
-      : "smooth";
+  const scrolling = (): ScrollBehavior => (moving() ? "smooth" : "instant");
 
   /** How far a change ring stands outside the box it rings, px: its offset and its width. */
   const ringOut = () =>
@@ -3053,3 +3135,9 @@ function bootColumn(page: Page): Mode {
     selected: () => undefined,
   };
 }
+
+/** The page's next idle period: what waits on it runs when nothing the person does is waiting, or after {@link IDLE_MOST_MS}. */
+const idleTurn = (): Promise<void> =>
+  new Promise((resolve) => {
+    requestIdleCallback(() => resolve(), { timeout: IDLE_MOST_MS });
+  });
