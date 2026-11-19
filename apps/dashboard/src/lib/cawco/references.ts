@@ -62,9 +62,15 @@ interface ReferenceElement {
   /**
    * Opens it as a press on its element does, from a page of another origin
    * standing in `here`'s panel (a session's id; none: the page stands on no
-   * session's): the refusal's words, or null once it opened.
+   * session's), in the conversation `beside` names where the page stands in
+   * one (tasks/beside-here.ts; none in an artifact's own tab): the refusal's
+   * words, or null once it opened.
    */
-  follow: (id: string, here?: string) => Promise<string | null>;
+  follow: (
+    id: string,
+    here?: string,
+    beside?: string | null
+  ) => Promise<string | null>;
 }
 
 /** A face whose words are the link's written label. */
@@ -92,10 +98,10 @@ const thing = (kind: ThingKind): ReferenceElement => ({
         named?.label && named.state ? `${named.label}, ${named.state}` : null,
     };
   },
-  follow: async (id) => {
+  follow: async (id, _here, beside) => {
     const named = thingNamed(kind, id);
     if (named) {
-      await openThing(named);
+      await openThing(named, beside);
     }
     return null;
   },
@@ -271,17 +277,19 @@ export function referenceFace(href: string): ReferenceFace | null {
 }
 
 /**
- * A page's press on the reference `href`, from `here`'s panel: it opens as
- * its element pressed opens. The refusal's words, or null once it opened;
+ * A page's press on the reference `href`, from `here`'s panel and in the
+ * conversation `beside` names: it opens as its element pressed there
+ * opens (a task or a to-do beside that conversation). The refusal's words, or null once it opened;
  * a reference the dashboard holds nothing by is said so.
  */
 export function followReference(
   href: string,
-  here?: string
+  here?: string,
+  beside?: string | null
 ): Promise<string | null> {
   const found = held(href);
   return found
-    ? found.entry.follow(found.id, here)
+    ? found.entry.follow(found.id, here, beside)
     : Promise.resolve(
         "It was not opened: the hub holds nothing by that link now."
       );

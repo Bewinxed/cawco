@@ -154,16 +154,19 @@
   });
   const sheetMounted = $derived(open || (standing && visible && active));
   /**
-   * What the sheet showed last: a preview put away keeps its pane through
-   * the slide down, as it did before the sheet held a task; a task put
-   * away has no card left to draw, and the sheet slides down bare.
+   * What the surface showed last, and what it draws while it closes: put
+   * away, it goes with what it held still in it. A task's card stays drawn
+   * as the split slides shut and as the sheet slides down (SessionPane
+   * hands the task just put away to `task` until then); a preview stays in
+   * the sheet, as it did before the sheet held a task.
    */
-  let sheetLast = $state<Shown>("preview");
+  let last = $state<Shown>("preview");
   $effect(() => {
     if (open) {
-      sheetLast = shown;
+      last = shown;
     }
   });
+  const drawn = $derived<Shown>(open ? shown : last);
 
   const LABEL: Record<Shown, string> = {
     preview: sideWords.preview,
@@ -205,9 +208,9 @@
 
 {#snippet surface(sheet: boolean)}
   {@const switched = opened.length > 1 ? switcher : undefined}
-  {#if shown === "task" && taskShown && task}
+  {#if drawn === "task" && task && (taskShown || !open)}
     {@render task(switched, sheet)}
-  {:else if previewOpen || (sheet && !open && sheetLast === "preview")}
+  {:else if previewOpen || (sheet && !open && last === "preview")}
     <PreviewPane
       instanceId={viewId}
       onScreen={sheet ? visible && active : visible}
@@ -224,15 +227,15 @@
      switch builds the other one afresh. -->
 {#snippet bounded(sheet: boolean)}
   {@const switched = opened.length > 1 ? switcher : undefined}
-  {#key shown}
-    <RegionBoundary part={shown}>
+  {#key drawn}
+    <RegionBoundary part={drawn}>
       {@render surface(sheet)}
       {#snippet chrome(face)}
         <FailedSurface
-          onclose={() => closeFailed(shown)}
+          onclose={() => closeFailed(drawn)}
           switcher={switched}
-          title={failedTitle(shown)}
-          what={shown}
+          title={failedTitle(drawn)}
+          what={drawn}
         >
           {@render face()}
         </FailedSurface>

@@ -11,7 +11,9 @@
  * Each reference has its face said to the frame as the dashboard reads it
  * now (references.ts `referenceFace`), again whenever one changes. The
  * frame's two asks to open are answered on one path ({@link heard}): a
- * reference opens as its chip pressed here opens (`followReference`), an
+ * reference opens as its chip pressed here opens (`followReference`; a
+ * task or a to-do beside the conversation the page stands in, read from
+ * its context as the class is made), an
  * artifact where a chip of it opens (`openReference`), from the panel of
  * `here`; a reference or an artifact outside the page's links is refused
  * with a sentence.
@@ -25,6 +27,7 @@ import { type PageLinks, REFERENCE_FACES } from "@cawco/core/reference-faces";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { untrack } from "svelte";
 import { artifactLinks } from "../artifact-api";
+import { besideHere } from "../tasks/beside-here";
 import { previewOpenArtifact, previewOpenReference } from "./wire";
 
 type Registry = typeof import("../references");
@@ -59,11 +62,14 @@ export class FrameLinks {
   };
   readonly #post: (message: object) => void;
   readonly #here: () => string | undefined;
+  /** The conversation the page stands in, which a task chip in it stands its task beside; none in an artifact's own tab. */
+  readonly #beside = besideHere();
   readonly #artifact: () => string | null;
 
   /**
-   * Made where a component starts, for the artifact `artifact` names (its
-   * host's own word, never the frame's): its faces are said while it stands.
+   * Made where a component starts (its context is read then), for the
+   * artifact `artifact` names (its host's own word, never the frame's): its
+   * faces are said while it stands.
    */
   constructor(
     post: (message: object) => void,
@@ -136,7 +142,11 @@ export class FrameLinks {
         linked: (links) => links.references.includes(reference.href),
         refusal: decisionsWords.referenceNotOnPage,
         open: async () =>
-          (await registry()).followReference(reference.href, this.#here()),
+          (await registry()).followReference(
+            reference.href,
+            this.#here(),
+            this.#beside?.()
+          ),
       };
     }
     const artifact = previewOpenArtifact(data);

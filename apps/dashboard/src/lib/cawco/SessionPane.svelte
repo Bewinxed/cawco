@@ -130,11 +130,12 @@
   import { seededSession } from "./stores/transcripts.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import {
+    type Beside,
     besideOf,
-    provideBeside,
     putAway,
     standBeside,
   } from "./tasks/beside.svelte";
+  import { provideBeside } from "./tasks/beside-here";
   import TaskPane from "./tasks/TaskPane.svelte";
   import Composer from "./transcript/Composer.svelte";
   import ConnectCard from "./transcript/ConnectCard.svelte";
@@ -303,33 +304,57 @@
    */
   provideBeside(() => (docked ? null : viewId));
   const beside = $derived(besideOf(viewId));
-  let besideTasks = $state<TaskSummary[]>([]);
-  let besideStages = $state<StagesView | null>(null);
-  let besideProblem = $state<string | null>(null);
+  /**
+   * The task the card draws: the one beside, else the one just put away,
+   * so its card slides down with the task in it (SideSplit draws it while
+   * the surface closes), as a closing preview keeps its page.
+   */
+  let besideLast = $state<Beside | null>(untrack(() => beside));
+  $effect(() => {
+    if (beside) {
+      besideLast = beside;
+    }
+  });
+  const besideDrawn = $derived(beside ?? besideLast);
+  /** The project's tasks and stages as last read, for the project they were read for. */
+  let besideRead = $state<{
+    projectId: string;
+    tasks: TaskSummary[];
+    stages: StagesView;
+  } | null>(null);
+  let besideProblem = $state<{ projectId: string; words: string } | null>(null);
+  /** What the card has read of the drawn task's project: its tasks and stages, or the hub's refusal. */
+  const besideStages = $derived(
+    besideRead && besideRead.projectId === besideDrawn?.projectId
+      ? besideRead
+      : null
+  );
+  const besideRefused = $derived(
+    besideProblem && besideProblem.projectId === besideDrawn?.projectId
+      ? besideProblem.words
+      : null
+  );
   const besideReads = newestRead();
   async function readBeside(projectId: string): Promise<void> {
     const newest = besideReads.next();
     try {
-      const [{ tasks }, stagesNow] = await Promise.all([
+      const [{ tasks }, stages] = await Promise.all([
         listTasks(projectId),
         readStages(projectId),
       ]);
-      if (newest() && beside?.projectId === projectId) {
-        besideTasks = tasks;
-        besideStages = stagesNow;
+      if (newest()) {
+        besideRead = { projectId, tasks, stages };
         besideProblem = null;
       }
     } catch (error) {
-      if (newest() && beside?.projectId === projectId) {
-        besideProblem = failureWords(error);
+      if (newest()) {
+        besideProblem = { projectId, words: failureWords(error) };
       }
     }
   }
   $effect(() => {
     const projectId = beside?.projectId;
     if (!projectId) {
-      besideStages = null;
-      besideProblem = null;
       return;
     }
     track(tickersStore.tasksChangedOf(projectId));
@@ -1847,37 +1872,35 @@
 {/snippet}
 
 {#snippet besideSurface(switcher: Snippet | undefined, sheet: boolean)}
-  {#if beside && besideStages}
+  {#if besideDrawn && besideStages}
+    {@const read = besideStages}
     <TaskPane
-      allowedFrom={(stage) =>
-        besideStages ? movesFrom(besideStages, stage) : new Set()}
+      allowedFrom={(stage) => movesFrom(read.stages, stage)}
       onchanged={() => {
-        detach(readBeside(beside?.projectId ?? ""), "read the task beside");
+        detach(readBeside(read.projectId), "read the task beside");
       }}
       onclose={() => putAway(viewId)}
       onmove={moveBeside}
       onopen={showBeside}
-      projectId={beside.projectId}
+      projectId={besideDrawn.projectId}
       {sheet}
-      stages={besideStages}
+      stages={read.stages}
       {switcher}
-      taskId={beside.taskId}
-      tasks={besideTasks}
-      todo={beside.todo}
+      taskId={besideDrawn.taskId}
+      tasks={read.tasks}
+      todo={besideDrawn.todo}
     />
-  {:else if beside && besideProblem}
+  {:else if besideDrawn && besideRefused}
+    {@const projectId = besideDrawn.projectId}
     <FailedSurface onclose={() => putAway(viewId)} {switcher} what="task">
       <div class="p-space-3">
         <Alert variant="destructive">
           <AlertDescription>
-            {besideProblem}
+            {besideRefused}
             <Button
               class="mt-space-2"
               onclick={() =>
-                detach(
-                  readBeside(beside?.projectId ?? ""),
-                  "read the task beside"
-                )}
+                detach(readBeside(projectId), "read the task beside")}
               size="sm"
               variant="outline">{commonWords.tryAgain}</Button
             >
@@ -2085,7 +2108,7 @@
       <SideSplit
         {active}
         phone={drawer}
-        task={besideStages || besideProblem ? besideSurface : undefined}
+        task={besideStages || besideRefused ? besideSurface : undefined}
         taskOpen={!!beside}
         {viewId}
         {visible}

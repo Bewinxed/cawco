@@ -4,7 +4,7 @@
  * in a desk's pane under 900px the sheet the preview rises in (SideSheet).
  * It stands there two ways: a task or to-do chip pressed in the
  * conversation (ThingReference, through the conversation's own
- * {@link besideHere}), and a task's review opening the session that worked
+ * `besideHere`, beside-here.ts), and a task's review opening the session that worked
  * it (`openBeside`), the transcript in its own layout and the decision
  * still in the task's pane. Kept per session in this tab's sessionStorage,
  * so a reload keeps the task beside; the session's address stays the
@@ -12,7 +12,7 @@
  * workspace.svelte.ts `project`).
  */
 
-import { getContext, setContext, untrack } from "svelte";
+import { untrack } from "svelte";
 import { z } from "zod";
 import { BesideSchema } from "#lib/cawco/stored-shapes.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
@@ -72,18 +72,3 @@ export function openBeside(
   standBeside(instanceId, { projectId, taskId });
   return goto(rowHref(instanceId));
 }
-
-const HERE = Symbol("task-beside");
-
-/**
- * The components under this one stand in a conversation that can hold a
- * task beside it: `at` answers its session, or null where nothing stands
- * beside it (a conversation docked in a project's panel).
- */
-export function provideBeside(at: () => string | null): void {
-  setContext(HERE, at);
-}
-
-/** The session a task chip here stands its task beside; none outside a conversation (a project's page, Home, an artifact's own tab). */
-export const besideHere = (): (() => string | null) | undefined =>
-  getContext<(() => string | null) | undefined>(HERE);

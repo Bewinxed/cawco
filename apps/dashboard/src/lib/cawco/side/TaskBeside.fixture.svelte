@@ -7,7 +7,7 @@
    * beside it (SideSplit), as SessionPane composes them. The transcript is
    * an agent's reply drawn by the conversation's own markdown (MessageBody),
    * its task and to-do chips the dashboard's own (ThingReference), standing
-   * in the conversation its context names (tasks/beside.svelte.ts
+   * in the conversation its context names (tasks/beside-here.ts
    * `provideBeside`), so a press on one stands the task beside it. The task
    * stands as SessionPane stands it: TaskPane over the project's tasks and
    * stages, or the side card's failure when the hub refused them. The hub's
@@ -24,12 +24,8 @@
   import { liveMarkdown } from "../markdown-live";
   import type { TaskView } from "../project-tasks";
   import { takePreview } from "../stores/previews.svelte";
-  import {
-    besideOf,
-    provideBeside,
-    putAway,
-    standBeside,
-  } from "../tasks/beside.svelte";
+  import { besideOf, putAway, standBeside } from "../tasks/beside.svelte";
+  import { provideBeside } from "../tasks/beside-here";
   import TaskPane from "../tasks/TaskPane.svelte";
   import { layoutPolicy } from "../workspace/layout-policy.svelte";
   import FailedSurface from "./FailedSurface.svelte";
@@ -263,6 +259,14 @@
   provideBeside(() => VIEW);
 
   const beside = $derived(besideOf(VIEW));
+  // The task just put away stays in its card while the card goes, as SessionPane keeps it.
+  let last = $state(untrack(() => beside));
+  $effect(() => {
+    if (beside) {
+      last = beside;
+    }
+  });
+  const drawn = $derived(beside ?? last);
   let width = $state(0);
   const measure = frameSize(
     (node: HTMLElement) => node.clientWidth,
@@ -275,22 +279,22 @@
 </script>
 
 {#snippet taskCard(switcher: Snippet | undefined, sheet: boolean)}
-  {#if beside && !refused}
+  {#if drawn && !refused}
     <TaskPane
       allowedFrom={() => new Set(["Ready", "Review", "Shipped"])}
       onchanged={() => undefined}
       onclose={() => putAway(VIEW)}
       onmove={() => Promise.resolve(view)}
       onopen={() => undefined}
-      projectId={beside.projectId}
+      projectId={drawn.projectId}
       {sheet}
       {stages}
       {switcher}
-      taskId={beside.taskId}
+      taskId={drawn.taskId}
       tasks={[summary]}
-      todo={beside.todo}
+      todo={drawn.todo}
     />
-  {:else if beside}
+  {:else if drawn}
     <FailedSurface onclose={() => putAway(VIEW)} {switcher} what="task">
       <div class="p-space-3">
         <Alert variant="destructive">

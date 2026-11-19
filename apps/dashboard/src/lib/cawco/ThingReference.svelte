@@ -23,7 +23,7 @@
   import { REFERENCE_LOOKS } from "./reference-looks";
   import { openThing } from "./reference-open.svelte";
   import { isThingKind, thingNamed } from "./reference-things.svelte";
-  import { besideHere } from "./tasks/beside.svelte";
+  import { besideHere } from "./tasks/beside-here";
 
   let { id, kind, label = "" }: ElementProps = $props();
 
