@@ -10,7 +10,7 @@
  * have rows: a migration that empties one is caught here, and one that drops
  * a table the schema still declares, unless every row it had is one a
  * migration declares it moves ({@link MOVES}), and each of those is found
- * where it went. A table the schema no longer declares
+ * where it went; or deletes on purpose ({@link DELETES}). A table the schema no longer declares
  * may be dropped, its rows with it. Every foreign key
  * the schema declares stands in the migrated database with the same
  * ON DELETE and ON UPDATE ({@link foreignKeyDrift}). The journal's `when`
@@ -1435,13 +1435,9 @@ const MOVES: readonly Move[] = [
   },
 ];
 
-/** What each move that runs on the database at `path` takes, by its source table: the keys its rows have where they go. */
-const moving = (
-  path: string,
-  runs: (migration: string) => boolean
-): Map<Move, string[]> => {
-  const sqlite = new Database(path, { readwrite: true });
-  const tables = new Set(
+/** The names of the tables `sqlite` has. */
+const tablesOf = (sqlite: Database): Set<string> =>
+  new Set(
     sqlite
       .query<{ name: string }, []>(
         "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -1449,6 +1445,69 @@ const moving = (
       .all()
       .map(({ name }) => name)
   );
+
+/**
+ * Rows a migration deletes on purpose: `rows`, a SQL condition on `table`
+ * naming them as the migration's DELETE does. A table whose rows all match
+ * is not counted as emptied. Read only over a database the migration runs on.
+ */
+interface Deletion {
+  /** The migration's tag, as the journal names it. */
+  migration: string;
+  rows: string;
+  table: string;
+  why: string;
+}
+
+const DELETES: readonly Deletion[] = [
+  {
+    migration: "0450_move_decision",
+    table: "owed_moves",
+    rows: "by_hand=0 AND to_account_id IS NOT NULL AND carry_on IS NULL AND json_extract(move,'$.because.kind') IN ('forecast','cold')",
+    why: "stored automatic cold or forecast moves with a target; the one decision decides at carry time and stores none",
+  },
+];
+
+/** How many rows each deletion that runs on the database at `path` takes, by table. */
+const deleting = (
+  path: string,
+  runs: (migration: string) => boolean
+): Map<string, number> => {
+  const sqlite = new Database(path, { readwrite: true });
+  const tables = tablesOf(sqlite);
+  const taken = new Map<string, number>();
+  for (const del of DELETES) {
+    if (!(runs(del.migration) && tables.has(del.table))) {
+      continue;
+    }
+    // A database older than the condition's columns (an earlier migration
+    // adds them) has none of these rows to count: the table is then judged
+    // as any other.
+    try {
+      const n =
+        sqlite
+          .query<{ n: number }, []>(
+            `SELECT count(*) AS n FROM "${del.table}" WHERE ${del.rows}`
+          )
+          .get()?.n ?? 0;
+      taken.set(del.table, (taken.get(del.table) ?? 0) + n);
+    } catch (error) {
+      if (!String(error).includes("no such column")) {
+        throw error;
+      }
+    }
+  }
+  sqlite.close();
+  return taken;
+};
+
+/** What each move that runs on the database at `path` takes, by its source table: the keys its rows have where they go. */
+const moving = (
+  path: string,
+  runs: (migration: string) => boolean
+): Map<Move, string[]> => {
+  const sqlite = new Database(path, { readwrite: true });
+  const tables = tablesOf(sqlite);
   const taken = new Map(
     MOVES.filter((move) => runs(move.migration) && tables.has(move.from)).map(
       (move) => [
@@ -1888,6 +1947,7 @@ try {
     migrationState(before.applied, journal).pending.map((entry) => entry.tag)
   );
   const moved = moving(dbPath, (migration) => pendingBefore.has(migration));
+  const deleted = deleting(dbPath, (migration) => pendingBefore.has(migration));
   const untitled = untitledBefore(dbPath);
   const { hub, lifetime } = await hubInProcess(dbPath, join(scratch, "home"));
   const answers: string[] = [];
@@ -1952,7 +2012,8 @@ try {
         n > 0 &&
         (after.rows.has(name) || declared.has(name)) &&
         (after.rows.get(name) ?? 0) === 0 &&
-        movedOut.get(name) !== n
+        movedOut.get(name) !== n &&
+        deleted.get(name) !== n
     )
     .filter(([name]) => !startEmpties(name))
     .map(([name]) => name);
