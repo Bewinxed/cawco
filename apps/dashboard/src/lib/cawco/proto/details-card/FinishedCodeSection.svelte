@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Code handoff: what happens to finished code when a task says nothing.
+   * Finished code: what happens to finished code when a task says nothing.
    * Four option rows, each its glyph, its name and its line, all in view. A
    * press is the change: no confirm, since the next finished piece of work
    * is the first thing it touches and it can be changed back. The pressed
@@ -24,16 +24,16 @@
   import OptionLine from "./OptionLine.svelte";
   import { pickOne } from "./pick-one";
   import Section from "./Section.svelte";
-  import { cardWords, handoffWords, sectionWords } from "./words";
+  import { cardWords, finishedWords, sectionWords } from "./words";
 
   let {
-    handoff,
+    finished,
     pending,
     sunk = false,
     onpick,
     ontry,
   }: {
-    handoff: Read<LandsMode>;
+    finished: Read<LandsMode>;
     pending?: Pending;
     sunk?: boolean;
     onpick: (pick: Choice) => void;
@@ -46,46 +46,49 @@
     pr: IconCompare,
     none: IconDocument,
   } as const;
-  const chosen = $derived(handoff.state === "read" ? handoff.value : null);
+  const chosen = $derived(finished.state === "read" ? finished.value : null);
   const pick = pickOne(
     () => chosen,
-    (value) => onpick({ section: "handoff", value })
+    (value) => onpick({ section: "finished", value })
   );
 </script>
 
 <Section
-  key="handoff"
-  line={sectionWords.handoff.line}
-  name={sectionWords.handoff.name}
+  key="finished"
+  line={sectionWords.finished.line}
+  name={sectionWords.finished.name}
 >
-  {#if handoff.state === "reading"}
+  {#if finished.state === "reading"}
     <div class="flex flex-col gap-space-2">
       {#each LANDS_MODES as mode (mode)}
         <Skeleton height="item" />
       {/each}
     </div>
-  {:else if handoff.state === "failed"}
-    <RowFault again={ontry} reason="{cardWords.couldntRead} {handoff.reason}" />
+  {:else if finished.state === "failed"}
+    <RowFault
+      again={ontry}
+      reason="{cardWords.couldntRead} {finished.reason}"
+    />
   {:else}
     <div in:reveal>
       <OptionGroup
-        aria-label={sectionWords.handoff.name}
+        aria-label={sectionWords.finished.name}
         bind:value={pick.get, pick.set}
         disabled={sunk}
         layout="list"
       >
         {#each LANDS_MODES as mode (mode)}
-          <OptionGroupItem value={mode}>
+          <OptionGroupItem title={finishedWords[mode].line} value={mode}>
             <OptionLine
               glyph={GLYPHS[mode]}
-              line={handoffWords[mode].line}
-              name={handoffWords[mode].name}
+              line={chosen === mode ? finishedWords[mode].line : undefined}
+              name={finishedWords[mode].name}
               waiting={pending?.value === mode && !pending.refused}
             />
           </OptionGroupItem>
           {#if pending?.value === mode && pending.refused}
             <RowFault
-              again={() => onpick({ section: "handoff", value: mode })}
+              again={() => onpick({ section: "finished", value: mode })}
               reason={pending.refused}
             />
           {/if}

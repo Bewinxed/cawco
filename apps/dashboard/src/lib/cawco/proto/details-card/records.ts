@@ -261,7 +261,7 @@ export function detailsOf(situation: Situation): Details {
       },
     },
     hasCode: true,
-    handoff: { state: "read", value: PROJECT.lands },
+    finished: { state: "read", value: PROJECT.lands },
     tasks: { state: "read", value: taskListOf(TRACKER) },
     codebases: PROJECT.links.map((link) => {
       const [host = "", ...rest] = link.split("/");
@@ -283,7 +283,7 @@ export function detailsOf(situation: Situation): Details {
         ...base,
         folders: { state: "reading" },
         ai: { state: "reading" },
-        handoff: { state: "reading" },
+        finished: { state: "reading" },
         tasks: { state: "reading" },
       };
     case "main-missing":
