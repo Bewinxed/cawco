@@ -25,6 +25,8 @@ import { openProblem } from "../../preview-stops";
 import {
   COMPONENT_EXAMPLE,
   canvasProblem,
+  directionOf,
+  directionsStaged,
   drawsHeld,
   errorsSaid,
   movesSaid,
@@ -396,14 +398,18 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
   };
   /** What a design graph's create names: its states files, and what the person does there; refused when it names no file or a canvas that does not hold. */
   const sheetAsked = (input: ArtifactInput) => {
-    const asked = input.file === undefined ? [] : [input.file].flat();
+    // A design's directions name its states files: file may be left out.
+    const asked =
+      input.file === undefined
+        ? (input.directions ?? []).map((one) => one.file)
+        : [input.file].flat();
     if (asked.length === 0) {
       return problem(400, {
         code: "artifact-sheet-file-none",
         detail: `A design graph takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`,
       });
     }
-    const misfit = canvasProblem(input);
+    const misfit = canvasProblem(input, asked);
     if (misfit) {
       return problem(400, { code: "artifact-sheet-unfit", detail: misfit });
     }
@@ -492,8 +498,13 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
           .join(" "),
       });
     }
-    const spec = specOf(input.name, input);
     const files = opened.report.sections.map((one) => one.file);
+    // Each direction names its file as the stage does, from the toolchain root.
+    const spec = specOf(input.name, {
+      ...input,
+      directions:
+        input.directions && directionsStaged(input.directions, asked, files),
+    });
     const source: PreviewSource = {
       port: opened.port,
       path: canvasPath(files, spec),
@@ -634,7 +645,14 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       reached && "unreached" in reached ? reached.unreached : undefined;
     const sheetNow = opened?.sheet;
     const base = ctx.read(row, since, ownersRead);
-    const { dials, tuned, layout: _layout, ...picks } = base.state;
+    const { dials, tuned, picked, layout: _layout, ...picks } = base.state;
+    // His pick among the design's directions, by its states file: the direction it names, or none taken back.
+    const pickedDirection = Object.hasOwn(base.state, "picked")
+      ? directionOf(
+          sheet?.spec,
+          typeof picked.value === "string" ? picked.value : undefined
+        )
+      : undefined;
     const story = ask.story
       ? sheetNow?.stories.find((one) => one.name === ask.story)
       : undefined;
@@ -661,6 +679,13 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ...(opened ? { weight: opened.weight } : {}),
       ...(Object.hasOwn(base.state, "dials") ? { dials: dials.value } : {}),
       ...(Object.hasOwn(base.state, "tuned") ? { tuned: tuned.value } : {}),
+      ...(sheet?.spec.directions?.length
+        ? {
+            picked: pickedDirection
+              ? { name: pickedDirection.name, file: pickedDirection.file }
+              : null,
+          }
+        : {}),
       ...(story && ask.detail === "story"
         ? {
             story: {

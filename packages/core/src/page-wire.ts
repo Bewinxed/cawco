@@ -46,6 +46,7 @@ import {
   STAGE_FAULT,
   STAGE_LAID,
   STAGE_LET_GO,
+  STAGE_LOAD,
   STAGE_PAUSE,
   STAGE_PLAY,
   STAGE_REACH,
@@ -64,6 +65,7 @@ import {
   type StageFault,
   type StageLaid,
   type StageLetGo,
+  type StageLoad,
   type StagePause,
   type StagePlay,
   type StageReach,
@@ -213,6 +215,7 @@ export interface FrameSaysBodies {
   [STAGE_COMPARE]: StageCompare;
   [STAGE_DIALS]: StageDials;
   [STAGE_LET_GO]: StageLetGo;
+  [STAGE_LOAD]: StageLoad;
   [STAGE_PAUSE]: StagePause;
   [STAGE_PLAY]: StagePlay;
   [STAGE_REACH]: StageReach;

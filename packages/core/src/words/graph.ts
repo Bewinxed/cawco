@@ -149,6 +149,32 @@ export const graphWords = {
     `Show ${more ? "more" : "less"} of the ${room.toLowerCase()}`,
   /** The component in front, when the ask names several: the switch's name. */
   components: "Component",
+  /**
+   * A design's directions (canvas spec `directions`): the head's switch
+   * between them, its name for a screen reader and its menu's heading.
+   */
+  directions: "Directions",
+  /** The switch folded to one button: its name, the direction in front said after it. */
+  directionsIn: (direction: string) => `Directions: ${direction}`,
+  /** A direction's tooltip: the agent's line on what it tries, and whether it is the one picked. */
+  directionTip: (line: string, picked: boolean) =>
+    picked ? `${line} Picked.` : line,
+  /** A direction picked, its mark's name in the folded switch's menu. */
+  pickedMark: "Picked",
+  /**
+   * Pick, the head's one prominent action, on the direction in front: with
+   * none picked, Pick this; with another picked, Pick this instead; on the
+   * picked one, Picked, which a press takes back.
+   */
+  pickThis: "Pick this",
+  pickInstead: "Pick this instead",
+  picked: "Picked",
+  /** Pick's tooltip and its words in a menu, naming the direction in front. */
+  pickNamed: (direction: string) => `Pick ${direction}`,
+  /** Picked's tooltip: what a press does. */
+  unpick: (direction: string) => `${direction} is picked. Take the pick back`,
+  /** Compare across directions, when the state compared differs from the kept one ("Week beside, Failed save"). */
+  directionAt: (direction: string, state: string) => `${direction}, ${state}`,
   /** A state the states file tags as a failure: its glyph's name and tooltip in the whole set. */
   errorState: "Error state",
   /** A state that is not its machine's start, with no move into it: its glyph's tooltip. */

@@ -168,10 +168,14 @@ import {
  * and no session lists a memory write tool; memory_note takes no `fleet`
  * (worker 30,865, curator 1,295 measured). The curator's budget is lowered
  * to it.
+ * 2026-11-19: artifact_create takes `directions`, two or more directions of
+ * one design opened in one design graph, a switch between them and the
+ * person's pick read back as `picked` (tsk-405: directions leave decision
+ * pages for the graph) (worker 31,400, delegate 11,810 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_300,
-  delegate: 11_700,
+  worker: 31_420,
+  delegate: 11_830,
   overseer: 770,
   "web-facing": 3400,
   curator: 1300,

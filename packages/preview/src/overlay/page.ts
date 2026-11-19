@@ -57,6 +57,7 @@ import {
   STAGE_FAULT,
   STAGE_LAID,
   STAGE_LET_GO,
+  STAGE_LOAD,
   STAGE_PAUSE,
   STAGE_PLAY,
   STAGE_REACH,
@@ -71,6 +72,7 @@ import {
   stageCompareOf,
   stageDialsOf,
   stageLetGoOf,
+  stageLoadOf,
   stagePauseOf,
   stagePlayOf,
   stageReachOf,
@@ -3652,6 +3654,7 @@ function stageAsks(): Record<string, (message: HostMessage) => void> {
     [STAGE_LET_GO]: stageLetGoOf,
     [STAGE_RETIME]: stageRetimeOf,
     [STAGE_RING]: stageRingOf,
+    [STAGE_LOAD]: stageLoadOf,
   };
   return Object.fromEntries(
     Object.entries(readers).map(([type, read]) => [

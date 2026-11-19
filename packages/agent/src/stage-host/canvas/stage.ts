@@ -95,6 +95,7 @@ import {
   STAGE_DIFFERENCES,
   STAGE_FAULT,
   STAGE_LAID,
+  STAGE_LOAD,
   STAGE_REACH,
   STAGE_REACHED,
   STAGE_REVEAL,
@@ -110,6 +111,7 @@ import {
   shownName,
   stageCompareOf,
   stageDialsOf,
+  stageLoadOf,
   stageReachOf,
   stageRevealOf,
   stageRoomOf,
@@ -1349,6 +1351,9 @@ export function bootStage(page: Page): Mode {
   ): Promise<Target | { refused: string }> {
     const section = page.sectionOf(ref.file);
     if (section && !section.loaded) {
+      // Its first reach sweeps it (loaded, read for the report, posted); the
+      // reach waits on its load alone, its read running after it lands.
+      page.quietly(sweepOne(ref.file));
       await page.loadSection(section);
     }
     return resolved(ref);
@@ -2139,6 +2144,13 @@ export function bootStage(page: Page): Mode {
       reveal(asking);
     }
   });
+  // The design graph's direction in front, its states not named yet: swept as a reach would.
+  window.addEventListener(STAGE_LOAD, (event) => {
+    const asking = stageLoadOf(event.detail);
+    if (asking && page.sectionOf(asking.file)) {
+      page.quietly(sweepOne(asking.file));
+    }
+  });
   window.addEventListener(STAGE_COMPARE, (event) => {
     const asking = stageCompareOf(event.detail);
     if (asking) {
@@ -2310,10 +2322,34 @@ export function bootStage(page: Page): Mode {
    */
   async function sweep(): Promise<void> {
     for (const file of state.sweeps) {
+      await sweepOne(file);
+    }
+    // A sweep of no section (a state no states file holds) still reports: the render reads it, then the page's refusal.
+    if (state.sweeps.length === 0) {
+      await page.post();
+    }
+    state.sweepAt = null;
+    state.swept = true;
+  }
+
+  /** The states files a sweep has taken or is taking, once each. */
+  const sweeping = new Map<string, Promise<void>>();
+
+  /**
+   * One states file loaded, read for the report and posted: the sweep's
+   * step, and the panel's first reach, Compare or load naming a file its
+   * page has not loaded (it sweeps none up front, runtime.ts `sweepsOf`).
+   */
+  function sweepOne(file: string): Promise<void> {
+    const had = sweeping.get(file);
+    if (had) {
+      return had;
+    }
+    const swept = (async () => {
       const section = page.sectionOf(file);
       if (!section) {
         unswept.delete(file);
-        continue;
+        return;
       }
       try {
         sweepOn(section, "load");
@@ -2327,13 +2363,9 @@ export function bootStage(page: Page): Mode {
       sweepOn(section, "post");
       await page.post();
       state.drawn.push(file);
-    }
-    // A sweep of no section (a state no states file holds) still reports: the render reads it, then the page's refusal.
-    if (state.sweeps.length === 0) {
-      await page.post();
-    }
-    state.sweepAt = null;
-    state.swept = true;
+    })();
+    sweeping.set(file, swept);
+    return swept;
   }
 
   /* --- Pictures: the stage at a state, posed and read for the daemon ------- */

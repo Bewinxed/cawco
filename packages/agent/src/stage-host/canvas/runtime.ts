@@ -334,6 +334,19 @@ function holdWhileAway(): void {
   });
 }
 
+/** The states files a page sweeps as it opens, in order (page.ts `sweeps`). */
+const sweepsOf = (
+  by: PageBy,
+  files: string[],
+  plans: Parameters<typeof sweptFiles>[1],
+  state: string | null
+): string[] => {
+  if (by === "stage") {
+    return sweptFiles(files, plans, state);
+  }
+  return by === "panel" ? [] : files;
+};
+
 /** The dials' values as they set the page: each `cssVar` dial's variable with its unit, each `arg` dial's arg; a dial with no value sets nothing. */
 function dialSetOf(
   dials: readonly CanvasDial[],
@@ -1715,10 +1728,12 @@ export function boot(options: BootOptions): void {
     report: null,
     reports: 0,
     swept: false,
-    sweeps:
-      by === "stage"
-        ? sweptFiles(files, plans, params.get(RENDER_STATE_PARAM))
-        : files,
+    // The panel's page loads no states file up front: only the one its
+    // design graph has in front, or reaches or compares into (stage.ts
+    // `sweepOne`). A whole screen is some 1,264 modules, so three directions
+    // swept as it opens tripled the first wait. The stage's own render
+    // sweeps the files it is asked for; an embed and a map card every one.
+    sweeps: sweepsOf(by, files, plans, params.get(RENDER_STATE_PARAM)),
     sweepAt: null,
     drawn: [],
     setView,

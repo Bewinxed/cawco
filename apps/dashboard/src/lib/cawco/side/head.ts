@@ -49,17 +49,19 @@ export interface HeadItem {
   words?: boolean;
 }
 
-/** The order the controls give up the head, first kept first (a browser's Take over or Hand back, its address, Send, the mode, Comments, Expand, Reload, Undock, Open in new tab). The panel offers no New canvas: a canvas is made from the composer. */
+/** The order the controls give up the head, first kept first (a browser's Take over or Hand back, its address, a design's directions and Pick, Send, the mode, Comments, Expand, Reload, Undock, Open in new tab). The directions stand before Pick, so where the head holds one of them it is the switch, folded to its menu with Pick at its foot. The panel offers no New canvas: a canvas is made from the composer. */
 export const HEAD_PRIORITY = {
   control: 0,
   address: 1,
-  send: 2,
-  mode: 3,
-  comments: 4,
-  expand: 5,
-  reload: 6,
-  undock: 7,
-  open: 8,
+  directions: 2,
+  pick: 3,
+  send: 4,
+  mode: 5,
+  comments: 6,
+  expand: 7,
+  reload: 8,
+  undock: 9,
+  open: 10,
 } as const;
 
 /** The name keeps its own width up to this, in px, before any control stands. */

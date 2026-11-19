@@ -12,6 +12,7 @@ import type { DrawnKept } from "@cawco/core/doc-meta";
 import {
   CANVAS_SPEC_LIMITS,
   type CanvasDial,
+  type CanvasDirection,
   type CanvasEdge,
   type CanvasSpec,
   type FrameRender,
@@ -32,6 +33,8 @@ import { stageRenderWords } from "@cawco/core/words/stage-render";
 /** What a design graph's create or update names beyond its files. */
 export interface CanvasInput {
   dials?: CanvasDial[] | undefined;
+  /** The directions of one design, each one of its states files, as the agent names them (from its clone's root, as `file` does). */
+  directions?: CanvasDirection[] | undefined;
   edges?: CanvasEdge[] | undefined;
   group?: Record<string, string> | undefined;
 }
@@ -41,10 +44,48 @@ export const COMPONENT_EXAMPLE =
   'artifact_create({ kind: "component", name: "pairing", title: "Pairing a phone", does: "judge", ask: "Judge pairing a phone: scan the code, approve it, and pin what reads wrong", file: "src/lib/Pairing.stories.ts", dials: [{ name: "answer", label: "What the phone answers", kind: "select", options: ["Approved", "Denied", "No answer"], target: { arg: "answer" } }] })';
 
 /** What `artifact_create` takes, said whole when a body is malformed or names no `title`, `does` or `ask`. */
-export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A design graph: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials? }; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "text" | "action", label?, group?, min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
+export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A design graph: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials?, directions? }; directions [{ file, name, line }], one per states file of one design, two or more (file may then be left out; a direction that differs only by a value is a dial); edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "text" | "action", label?, group?, min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
 
-/** Why a canvas's edges, groups or dials can't be taken, one sentence with the shape; null when they can. */
-export function canvasProblem(input: CanvasInput): string | null {
+/** An example of a design's directions, quoted by their refusals. */
+const DIRECTIONS_EXAMPLE =
+  'directions: [{ file: "src/lib/TrayFamily.stories.ts", name: "Family tray", line: "One thing per tray, replaced in place" }, { file: "src/lib/TrayCard.stories.ts", name: "Status card", line: "One card whose words change" }]';
+
+/** Why a design's directions can't be taken, among the canvas's states files `files` (as the agent named them); null when they can. */
+function directionsProblem(
+  directions: readonly CanvasDirection[],
+  files: readonly string[] | undefined
+): string | null {
+  if (directions.length === 1) {
+    return `A design graph's directions are two or more of one design: one alone is the design, given as file. Example: ${DIRECTIONS_EXAMPLE}.`;
+  }
+  if (directions.length > CANVAS_SPEC_LIMITS.files) {
+    return `A design graph takes at most ${CANVAS_SPEC_LIMITS.files} directions.`;
+  }
+  const names = new Set(directions.map((one) => one.name.trim()));
+  const named = new Set(directions.map((one) => one.file));
+  if (names.size < directions.length || named.size < directions.length) {
+    return `Each direction has a name and a states file of its own. Example: ${DIRECTIONS_EXAMPLE}.`;
+  }
+  const outside = files
+    ? directions.filter((one) => !files.includes(one.file))
+    : [];
+  if (outside.length > 0) {
+    return `Each direction is one of file: ${outside.map((one) => one.file).join(", ")} ${outside.length === 1 ? "is" : "are"} not. Leave file out to take the directions' files.`;
+  }
+  return null;
+}
+
+/** Why a canvas's edges, groups, dials or directions can't be taken, one sentence with the shape; null when they can. `files`: the states files they stand among, as the agent named them. */
+export function canvasProblem(
+  input: CanvasInput,
+  files?: readonly string[]
+): string | null {
+  if (input.directions?.length) {
+    const misfit = directionsProblem(input.directions, files);
+    if (misfit) {
+      return misfit;
+    }
+  }
   if ((input.edges?.length ?? 0) > CANVAS_SPEC_LIMITS.edges) {
     return `A design graph takes at most ${CANVAS_SPEC_LIMITS.edges} edges: { from: "<Story>", to: "<Story>", label? }, a story named by its export, or "file:Story" across states files.`;
   }
@@ -71,7 +112,7 @@ export function canvasProblem(input: CanvasInput): string | null {
   return null;
 }
 
-/** The canvas's spec its page is given: its name, edges, groups and dials. */
+/** The canvas's spec its page is given: its name, edges, groups, dials and directions (each its states file as the stage names it). */
 export const specOf = (name: string, input: CanvasInput): CanvasSpec => ({
   name,
   ...(input.edges?.length ? { edges: input.edges } : {}),
@@ -79,7 +120,39 @@ export const specOf = (name: string, input: CanvasInput): CanvasSpec => ({
     ? { group: input.group }
     : {}),
   ...(input.dials?.length ? { dials: input.dials } : {}),
+  ...(input.directions?.length ? { directions: input.directions } : {}),
 });
+
+/**
+ * The directions with each file as the stage names it (from the toolchain
+ * root, `staged`), where the agent named it from its clone's root
+ * (`asked`, in the same order): the file that ends the same.
+ */
+export const directionsStaged = (
+  directions: readonly CanvasDirection[],
+  asked: readonly string[],
+  staged: readonly string[]
+): CanvasDirection[] =>
+  directions.map((one) => {
+    const at = asked.indexOf(one.file);
+    const same = staged[at];
+    const file =
+      same !== undefined && (one.file === same || one.file.endsWith(`/${same}`))
+        ? same
+        : (staged.find(
+            (each) => one.file === each || one.file.endsWith(`/${each}`)
+          ) ?? one.file);
+    return { ...one, file };
+  });
+
+/** The direction `file` names in `spec` (a pin's states file, the person's pick); none where the canvas has no directions. */
+export const directionOf = (
+  spec: CanvasSpec | undefined,
+  file: string | undefined
+): CanvasDirection | undefined =>
+  file === undefined
+    ? undefined
+    : spec?.directions?.find((one) => one.file === file);
 
 /** At most this many frames an answer lists; past it, the count and how to read one. Ours: a canvas's first screenful. */
 const FRAMES_LISTED = 60;
@@ -164,6 +237,17 @@ const drawingUnseen = (report: RenderReport): string[] =>
     )
     .map((section) => section.file);
 
+/** The states files of `report` no browser drew as they stand and none is drawing: every frame `unseen`, no draw held. */
+const unopenedOf = (report: RenderReport, drawing: readonly string[]) =>
+  report.sections
+    .filter(
+      (section) =>
+        !(section.drawn || drawing.includes(section.file)) &&
+        section.frames.length > 0 &&
+        section.frames.every((frame) => frame.state === "unseen")
+    )
+    .map((section) => section.file);
+
 /** A render report as an answer says it: who drew, each section's frames (bounded; a state read's from that state, in its section), the unnamed stories, the stories that differ only by width, the labels that say code and the frames that look alike, what failed, the sections a browser is still drawing, and the sections the read's render did not draw. */
 export function renderSaid(
   report: RenderReport,
@@ -173,6 +257,7 @@ export function renderSaid(
 ) {
   const { listed, cut } = framesListed(report, state);
   const drawing = drawingUnseen(report);
+  const unopened = unopenedOf(report, report.drawing ?? []);
   const alike = framesAlike(report.sections);
   return {
     by: report.by,
@@ -194,6 +279,9 @@ export function renderSaid(
       : {}),
     ...(drawing.length > 0
       ? { drawing: stageRenderWords.drawing(drawing) }
+      : {}),
+    ...(unopened.length > 0
+      ? { unopened: stageRenderWords.unopened(unopened) }
       : {}),
     ...(undrawn.length > 0 ? { undrawn } : {}),
     ...(plansUnread && undrawn.length > 0 ? { plansUnread } : {}),

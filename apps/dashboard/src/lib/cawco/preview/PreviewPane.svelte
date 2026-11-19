@@ -51,6 +51,7 @@
   import AskHere from "../AskHere.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import DesignGraph from "../graph/DesignGraph.svelte";
+  import { directionItems } from "../graph/graph-head";
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
   import SideSurface from "../side/SideSurface.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -399,7 +400,8 @@
     const all: HeadItem[] =
       paneSubject.isBrowser && paneBrowser.browserRow
         ? browserItems(paneBrowser.browserRow)
-        : [];
+        : // A design's directions: their switch in the centre, Pick the prominent action.
+          directionItems(paneSheet.graphHead);
     // A decision page's one Send is its own, at its foot (its doc's
     // `ownSend`): the head stands none for it.
     if (
@@ -1241,6 +1243,14 @@
             // His dial values are the artifact's: its doc's `dials`, which
             // the panel's Send counts and artifact_read answers.
             const refused = paneDoc.doc?.keep("dials", values);
+            if (refused) {
+              paneNotice.say({ message: refused, again: null });
+            }
+          }}
+          picked={paneSheet.keptPick}
+          onpick={(file) => {
+            // His pick among a design's directions is the artifact's: its doc's `picked`, which artifact_read answers.
+            const refused = paneDoc.doc?.keep("picked", file);
             if (refused) {
               paneNotice.say({ message: refused, again: null });
             }

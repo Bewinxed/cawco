@@ -44,6 +44,12 @@ export class PaneSheet {
     return dials.values;
   });
 
+  /** The direction he picked, by its states file, as the artifact's doc keeps it (`picked`); null while none is. */
+  readonly keptPick = $derived.by(() => {
+    const kept = this.#deps.paneDoc.view?.choices.picked?.value;
+    return typeof kept === "string" ? kept : null;
+  });
+
   /** His tuning of every move as the artifact's doc keeps it (its `tuned` map): the design graph puts it back on each move's first read. */
   readonly keptTuned = $derived.by(() => this.#deps.paneDoc.view?.tuned ?? []);
 

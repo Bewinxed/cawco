@@ -69,6 +69,9 @@ export const stageRenderWords = {
   stateUndrawn: (state: string, seconds: number, at: SweepAt | null) =>
     `State ${state}'s section did not finish drawing within ${seconds} s${at ? `: it was still ${stageRenderWords.step(at)} in ${at.file}` : ", and its page never began it"}. That section alone needs longer than one read has: split its states file in two (each a section of the design graph, with its own moves), then read the state again.`,
   /** The sections a browser was drawing as a read answered, past the read's wait for them (hub component.ts `drawingUnseen`). */
+  /** States files no browser drew as they stand and none is drawing: on a design with directions, ones the person never brought in front (the panel loads the one in front alone). */
+  unopened: (files: readonly string[]) =>
+    `Not opened yet: ${files.join(", ")}. The person's panel loads only the direction in front, and no browser drew ${files.length === 1 ? "this one" : "these"} as ${files.length === 1 ? "it stands" : "they stand"}; read with render: true to draw ${files.length === 1 ? "it" : "them"} now.`,
   drawing: (files: readonly string[]) =>
     `A browser is drawing ${files.join(", ")} now and has not posted ${files.length === 1 ? "it" : "them"}: ${files.length === 1 ? "its" : "their"} frames read unseen until it does, within seconds. Read again.`,
   /** A move whose animations were still running when its wait for them ended (core `MoveRender.stillRunning`): what its report holds was read mid-motion. */
