@@ -8,11 +8,16 @@
  * to the reader, and is given {@link READ_LIMIT_MS} from when it is asked,
  * and may be let go sooner by its asker's signal (the hub stopped waiting).
  * Questions go to the reader one at a time, in the order they came: the one
- * there is the one running, so a question past its limit or let go while
- * there is stopped by killing the reader (SIGKILL), and one still waiting
- * here is dropped without touching it. Another reader is started at once,
- * and opens the index. The writer is never stopped for a question: a
- * search let go while a sync runs takes nothing of the sync with it.
+ * there is the one running. One past its limit there is stopped by killing
+ * the reader (SIGKILL), and another reader is started at once and opens the
+ * index. One let go there is answered as let go at once and left to finish,
+ * its answer dropped: the reader stays warm for the next, which a person
+ * typing in find asks 60 ms later, each keystroke letting the last go. A
+ * question let go that still holds the reader {@link LET_GO_MS} on, while
+ * another waits, is stopped as one past its limit is: past that, a new
+ * reader answers sooner. One still waiting here is dropped without touching
+ * it. The writer is never stopped for a question: a search let go while a
+ * sync runs takes nothing of the sync with it.
  *
  * Work (a sync, a forget) goes to the writer, and has no deadline of its
  * own: a catch-up runs for hours. It is bounded by its steps instead: a
@@ -46,6 +51,14 @@ import type {
  * 0.8 s (fts5.ts `MARKED_CHARS`). Our call.
  */
 const READ_LIMIT_MS = 5000;
+/**
+ * How long a question let go while it runs may go on holding the reader
+ * while another waits, ms: about what a new reader takes to start, open the
+ * index and answer (62-66 ms on a copy of obelisk's 2.04M-record index,
+ * bun 1.4.4), so a question that waits behind one let go waits at most
+ * about twice what a restart would have cost it. Our call.
+ */
+const LET_GO_MS = 100;
 /**
  * How long the process may say nothing while work runs, ms: it beats every
  * second its thread is free (host.ts), and each step of a sync is tens of
@@ -95,9 +108,11 @@ interface Work extends Owed {
 
 interface Question extends Owed {
   arg: SearchArg<SearchOp>;
-  /** Ends its limit's timer and its signal's listener. */
+  /** Ends its timers and its signal's listener. */
   done: () => void;
   id: number;
+  /** When its asker let it go while it ran, ms epoch: answered as let go, its answer dropped when it comes. */
+  letGoAt?: number;
   op: SearchOp;
 }
 
@@ -303,6 +318,24 @@ export class SearchProcess<R extends SearchRole> {
     this.#ended(running, why, all);
   }
 
+  /**
+   * The reader freed of a question let go {@link LET_GO_MS} ago or more
+   * that still runs, when another waits: stopped, and the next question
+   * asked of a new reader.
+   */
+  #unheld(): void {
+    const letGoAt = this.#asked?.letGoAt;
+    if (
+      letGoAt !== undefined &&
+      this.#waiting.length > 0 &&
+      Date.now() - letGoAt >= LET_GO_MS
+    ) {
+      this.#stop(
+        `${this.#asked?.op} ${searchWords.letGo}, and held the reader ${LET_GO_MS} ms on`
+      );
+    }
+  }
+
   #lookAtSilence(): void {
     const running = this.#running;
     if (!running) {
@@ -339,9 +372,19 @@ export class SearchProcess<R extends SearchRole> {
       }
       this.#nextId += 1;
       const id = this.#nextId;
-      const letGo = (why: string) => {
+      /** Set once it is let go while it runs: when it is looked at again ({@link #unheld}). */
+      let held: ReturnType<typeof setTimeout> | undefined;
+      /** Its asker answered `why`: dropped while it waits; while it runs, stopped with the reader past its limit, left to finish when let go. */
+      const end = (why: string, pastLimit: boolean) => {
         if (this.#asked === question) {
-          this.#stop(`${op} ${why}`);
+          if (pastLimit) {
+            this.#stop(`${op} ${why}`);
+            return;
+          }
+          signal?.removeEventListener("abort", abandoned);
+          question.letGoAt = Date.now();
+          reject(new SearchStopped(`${why} while it ran`));
+          held = setTimeout(() => this.#unheld(), LET_GO_MS);
           return;
         }
         const at = this.#waiting.indexOf(question);
@@ -352,10 +395,10 @@ export class SearchProcess<R extends SearchRole> {
         }
       };
       const timer = setTimeout(
-        () => letGo(searchWords.pastLimit(READ_LIMIT_MS / 1000)),
+        () => end(searchWords.pastLimit(READ_LIMIT_MS / 1000), true),
         READ_LIMIT_MS
       );
-      const abandoned = () => letGo(searchWords.letGo);
+      const abandoned = () => end(searchWords.letGo, false);
       signal?.addEventListener("abort", abandoned, { once: true });
       const question: Question = {
         id,
@@ -371,6 +414,7 @@ export class SearchProcess<R extends SearchRole> {
         reject,
         done: () => {
           clearTimeout(timer);
+          clearTimeout(held);
           signal?.removeEventListener("abort", abandoned);
         },
       };
@@ -378,6 +422,7 @@ export class SearchProcess<R extends SearchRole> {
       if (!this.#gated) {
         this.#process();
         this.#next();
+        this.#unheld();
       }
     });
   }

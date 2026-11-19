@@ -11,7 +11,9 @@
  * - `read`: answers searches, listings and a conversation's turns from the
  *   index opened read-only, beside the writer: what it holds as of the
  *   writer's last commit. The agent kills it (SIGKILL) when a question
- *   passes its limit or its asker lets it go, and starts another.
+ *   passes its limit, or holds it too long after its asker let it go
+ *   (process.ts `LET_GO_MS`), and starts another; one let go otherwise
+ *   runs to its end here, its answer dropped.
  *
  * Processes, not threads: a query inside `sqlite3_step()` stops for
  * nothing a JavaScript thread can send it. bun:sqlite has no
