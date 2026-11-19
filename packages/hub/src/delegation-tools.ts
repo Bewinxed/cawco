@@ -133,8 +133,8 @@ const dayStart = (day: string): number => {
  * own delegates' work) and `find` (words said).
  */
 const LIST_SESSIONS_DESCRIPTION =
-  "Sessions on every machine: state, stop reason, account, resume time, last message read, when the person last wrote, last activity; then machines online. " +
-  "For the session owning some work, or which stopped at a usage limit (stopped: limit) and whose (role: main); handoff nudges one. Not delegate_list (your delegates' work) or find (words said).";
+  "Sessions on every machine, each with its state, stop reason, account, resume time and last activity, then the machines online. " +
+  "Use it to find the session that owns some work or the ones stopped at a usage limit; your own delegates' work is delegate_list's, and what was said is find's.";
 
 /** An ISO time opens on its date; `Date.parse` alone takes "Oct 20" too. */
 const ISO_DATE_FIRST = /^\d{4}-\d{2}-\d{2}/u;
@@ -204,64 +204,71 @@ const forgeWriteOf = (asked: {
  * `$TMPDIR/outputs/`.
  */
 const finishItemDescription = (lands: ItemEnd = "main"): string => {
-  const alone =
-    " Your parent reads this report alone; chat messages reach no one.";
-  // Prompting Claude Fable 5.2, "Make reports easy to follow": the parent
-  // reads the report having seen none of the work behind it.
-  const reader =
-    " Write it for a reader who saw none of your tool calls or files: key points first, in plain full sentences, no term you coined during the work.";
-  const refused = " A report pointing at a chat message is refused.";
-  const ends =
-    "the work's loose ends: each caveat, what is left undone, each defect found, what your boundary could not run. With none, one line saying so";
-  const commits = `${alone}${reader} Your commits are the evidence, so \`summary\` is ${ends}.${refused}`;
-  const whole = `${alone}${reader} \`summary\` carries the deliverable whole, or names the file in $TMPDIR/outputs/ holding a long one, then ${ends}.${refused}`;
-  const commit =
-    "Finish your work item. Run the checks your project's instructions name, commit, and do not push.";
-  const back =
-    " Uncommitted work, a conflict or a refused push comes back with git's words: fix, commit, call again.";
-  const outputs =
-    " In a project, $TMPDIR/outputs/ and your declared outputs are copied to its folder's assets/; the report names each path. Everything else in $TMPDIR is deleted with the workspace.";
-  const close =
-    " `blocked` only when something outside your control stops the work. A task attempt's first call lists its open to-dos once: tick the done ones with todo_write, explain the rest, call again.";
+  const report = "Your work item's report, which ends the item";
+  const committed =
+    " Use it once your work is committed and the checks your project's instructions name pass, or with `blocked` when something outside your control stops the work.";
+  const done =
+    " Use it once the work is done, or with `blocked` when something outside your control stops it.";
   switch (lands) {
     case "host":
-      return `Finish your work item. Nothing is landed: you ran on the machine itself.${alone}${reader} \`summary\` carries the findings and changes whole, then ${ends}.${refused} In a project, files you leave in $TMPDIR/outputs/ are copied to its folder's assets/, readable from any machine; the report names each path.${close}`;
+      return `${report}; nothing is landed, as you ran on the machine itself.${done}`;
     case "branch":
-      return `${commit}${commits} Then the hub pushes your branch to origin, not the base branch.${back}${outputs}${close}`;
+      return `${report}; the hub then pushes your branch to origin, not to the base branch.${committed}`;
     case "pr":
-      return `${commit}${commits} Then the hub pushes your branch and opens a pull request against the base branch (or updates the open one).${back}${outputs}${close}`;
+      return `${report}; the hub then pushes your branch and opens a pull request against the base branch, or updates the open one.${committed}`;
     case "none":
-      return `Finish your work item. Nothing is pushed.${whole}${outputs} A missing declared one comes back to you.${close}`;
+      return `${report}; nothing is pushed.${done}`;
     case "main":
-      return `${commit}${commits} Then the hub rebases your commits onto the base branch and pushes.${back}${outputs}${close}`;
+      return `${report}; the hub then rebases your commits onto the base branch and pushes them.${committed}`;
   }
 };
 
-/** What every handoff says of a target's state as the message reaches it. */
-const HANDOFF_DELIVERY =
-  "An idle target starts on it at once; a busy one reads it at its next step, its running command kept going. " +
-  "A cold target (cache expired; never your parent) with uncommitted changes gets it; otherwise CawCo's Jev model decides when the hub has its route, and that is final. " +
-  "Repeat a call any other cold refusal answered to deliver it.";
+/**
+ * `finish_item`'s `summary`, the one place a report's content is told: the
+ * report is all the parent reads; the commits are the evidence, so it holds
+ * the work's loose ends and nothing else (the owner's rule, 2026-11-15); an
+ * item that lands no commits carries its deliverable whole.
+ */
+const summaryDescription = (lands: ItemEnd = "main"): string => {
+  // Prompting Claude Fable 5.2, "Make reports easy to follow": the parent
+  // reads the report having seen none of the work behind it.
+  const alone =
+    "All your parent reads; chat messages reach no one. Write it for a reader who saw none of your tool calls or files: key points first, in plain full sentences, no term you coined during the work.";
+  const ends =
+    "the work's loose ends: each caveat, what is left undone, each defect found, what your boundary could not run. With none, one line saying so";
+  switch (lands) {
+    case "host":
+      return `${alone} It carries the findings and changes whole, then ${ends}.`;
+    case "none":
+      return `${alone} It carries the deliverable whole, or names the file in $TMPDIR/outputs/ holding a long one, then ${ends}.`;
+    case "branch":
+    case "pr":
+    case "main":
+      return `${alone} Your commits are the evidence, so it holds ${ends}.`;
+  }
+};
 
 /**
  * `handoff`'s description: a session that may start delegates is told how
  * one is guided and reopened; a leaf that starts none, which has no
  * delegate of its own, is told what it does have, its parent and the
- * sessions that own work. Every session hands files with `inputs`.
+ * sessions that own work. How the message reaches its target is said by
+ * the answer, and a cold target's refusal says how to deliver it anyway
+ * (delegation-actions.ts).
  */
 const handoffDescription = (startsNone: boolean): string =>
   startsNone
-    ? `Message another session: your parent, or a session that already owns the work. ${HANDOFF_DELIVERY}`
-    : "Message another session: guide your delegate while it works, or brief a session that already owns the work; for new standalone work, delegate. " +
-      "To your delegate after it reported, it reopens its item in the same session; prefer a fresh delegate unless delegate_list shows that session warm. " +
-      HANDOFF_DELIVERY;
+    ? "Messages to another session: your parent, or a session that already owns the work. Use it to ask your parent while you work, or to tell the owner of some work what you found in it."
+    : "Messages to another session: your delegate, while it works or after it reported, or a session that already owns the work. Use it to guide or reopen a delegate, or to brief a running session on its own work; new standalone work goes to delegate.";
 
-/** `handoff`'s target and message, every session's. */
-const handoffShape = () => ({
+/** `handoff`'s target and message, every session's; a delegate's reopening is said to a session that has delegates. */
+const handoffShape = (startsNone: boolean) => ({
   target: z
     .string()
     .describe(
-      "A handle (cockpit#5a167bde), a mention, an id, a directory or a title."
+      startsNone
+        ? "A handle (cockpit#5a167bde), a mention, an id, a directory or a title."
+        : "A handle (cockpit#5a167bde), a mention, an id, a directory or a title. A delegate that reported reopens its item in the same session; a fresh delegate costs less unless delegate_list shows that session warm."
     ),
   message: z
     .string()
@@ -347,7 +354,7 @@ const catalogTool = toolOn<CatalogOn>();
 /** `list_delegate_types`: the same for every session, and read by a call that names none. */
 export const listDelegateTypesTool = catalogTool(
   "list_delegate_types",
-  "The live delegate types: what each is for and what it runs. A project's own types replace the fleet's of the same name. They rarely change, so one read serves a session. Running sessions are list_sessions'.",
+  "Delegate types you can start, each with what it is for and what it runs. Use it once a session, before choosing a `type` for delegate or start_session.",
   {},
   (_asked, _format, bound) => bound.actions.listDelegateTypes(),
   delegateTypesWords
@@ -444,7 +451,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "forge_post",
-      "Open an issue, a pull/merge request or a comment on a repository's forge, with your machine's own sign-in. Default: this project's repository. Push the head branch first.",
+      "Issues, pull or merge requests and comments, opened on a repository's forge with your machine's own sign-in. Use it to post to the repository you work in, or one the person names.",
       {
         kind: z
           .enum(FORGE_POST_KINDS)
@@ -464,7 +471,7 @@ export function handoffTools(view: ToolView) {
           .trim()
           .min(1)
           .optional()
-          .describe("The pushed branch."),
+          .describe("The branch it opens from, pushed first."),
         base: z
           .string()
           .trim()
@@ -563,15 +570,17 @@ export function handoffTools(view: ToolView) {
     handoffTool(
       "handoff",
       handoffDescription(view.mayStart.length === 0),
-      { ...handoffShape(), inputs: inputsParameter() },
+      {
+        ...handoffShape(view.mayStart.length === 0),
+        inputs: inputsParameter(),
+      },
       (asked, _format, bound) => handed(bound.actions)(asked),
       sentence
     ),
     handoffTool(
       "start_session",
-      "Start a new session of its own and give it work: its own sidebar row under this session and its own transcript, outliving this turn. " +
-        "Unlike a delegate it reports nothing back. Use it when the user asks to spin something off, or for work in another directory or machine where no session runs yet; " +
-        "prefer handoff to a session already running there. It runs on a delegate type ('medium' by default), on Claude Code, OpenCode or pi as the type or `harness` says.",
+      "New sessions of their own, each with its own sidebar row and transcript, that outlive this turn and report nothing back. " +
+        "Use it when the user asks to spin something off, or for work in a directory or machine where no session runs yet; a session already running there takes handoff.",
       {
         cwd: z
           .string()
@@ -642,16 +651,14 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "delegate",
-      "Run bounded work in a new session with its own workspace and fresh context. It reports back once the hub has rebased its commits and pushed them: its commits are the evidence, its report the loose ends you pick up.\n\n" +
-        "A delegate costs a whole session: it reads the code again from nothing, its workspace is cut and its checks run, and you wait for its report. " +
-        "That pays off for substantial work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs, independent pieces run at once. " +
-        "It does not for one command whose exact output you need, git status, log or diff, grep, a few file reads, a port check, a log tail, a restart, edits to files you are changing, or what the user wants to watch: do those yourself.\n\n" +
-        "Brief it as an engineer who cannot see this conversation: the goal and what done looks like, what you know and where, the person's constraints, the checks it must pass.\n\n" +
-        "Prefer it over start_session, and over handoff for new standalone work.",
+      "Bounded work run by a new session in its own workspace with fresh context, which reports back once the hub has landed its commits. " +
+        "Use it for substantial work worth a whole session (multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, independent pieces run at once); one command, a few reads, a restart or edits to files you are changing, you do yourself.",
       {
         prompt: z
           .string()
-          .describe("The full brief; unless forked, all the delegate sees."),
+          .describe(
+            "The full brief; unless forked, all the delegate sees. Write it for an engineer who cannot see this conversation: the goal and what done looks like, what you know and where, the person's constraints, the checks it must pass."
+          ),
         title: sessionTitle(),
         type: z
           .string()
@@ -799,7 +806,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "delegate_list",
-      "Your delegates, newest first, theirs nested: each one's state, cache warmth and report; then those queued for owned files and the workspaces held with unlanded work. Use it when you need where one stands; reports and refusals reach you by themselves. With target, that one delegate in full: its step now, its last steps, its context against its model's window, what it has made so far and its last words; use it while one works and you need its progress or context before its report.",
+      "Your delegates, newest first with theirs nested: each one's state, cache warmth and report, then the queued ones and the workspaces held with unlanded work. Use it when you need where one stands, and with `target` while one works and you need its progress or context before its report.",
       {
         target: z
           .string()
@@ -807,7 +814,7 @@ export function handoffTools(view: ToolView) {
           .min(1)
           .optional()
           .describe(
-            "A delegate's handle, directory or id, as handoff takes it."
+            "A delegate's handle, directory or id, as handoff takes it: that one delegate in full, its step now, its last steps, its context against its model's window, what it has made so far and its last words."
           ),
         page: z
           .number()
@@ -850,7 +857,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "wait_item",
-      "Declare a bounded wait on a command you started or a check your parent is running for you, then end your turn: the hub shows your parent what you wait for and wakes you when the wait's minutes run out or a message arrives. Any tool call but a CawCo read ends the wait.",
+      "A bounded wait on a command you started or a check your parent runs for you, which your parent sees. Use it just before ending your turn to wait on one; the hub wakes you when its minutes run out or a message arrives.",
       {
         minutes: z
           .number({ error: WAIT_ITEM_LIMIT })
@@ -882,8 +889,7 @@ export function handoffTools(view: ToolView) {
           .describe(
             "What is done, in one or two plain sentences. No ids or file names."
           ),
-        // What it carries is the tool's description's to say, once.
-        summary: z.string(),
+        summary: z.string().describe(summaryDescription(view.lands)),
         findings: z
           .array(z.object({ title: z.string(), detail: z.string() }))
           .optional()
@@ -891,19 +897,23 @@ export function handoffTools(view: ToolView) {
         blocked: z
           .object({ command: z.string(), error: z.string() })
           .optional()
-          .describe("The exact command and error."),
+          .describe(
+            "Only when something outside your control stops the work: the exact command and error."
+          ),
       },
       (request, _format, bound) => bound.actions.finishItem(request),
       sentence
     ),
     handoffTool(
       "continue_session",
-      "Continue another session (a stuck delegate) in a fresh conversation, summarised by a model you pick; it stays one session. Never this session.",
+      "Another session carried on in a fresh conversation, started from a summary of the old one by a model you pick; it stays one session. Use it when a delegate is stuck or its context is spent.",
       {
         session: z
           .string()
           .min(1)
-          .describe("Its id, short id, or directory name."),
+          .describe(
+            "Its id, short id, or directory name; another session than this one."
+          ),
         from: z
           .enum(["summary", "asks"])
           .optional()
@@ -945,7 +955,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "stop_delegate",
-      "Stop one of your delegates: its item is cancelled; a later handoff reopens it. A queued delegate's id withdraws it from the queue.",
+      "Stops one of your delegates and cancels its item, or withdraws a queued one from the queue. Use it when its work is no longer wanted; to cut a turn and keep the item, use interrupt_delegate.",
       {
         target: z
           .string()
@@ -956,10 +966,15 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "discard_workspace",
-      "Let go of a held workspace of your delegates' whose work you will not continue: what it holds is saved to a carry in ~/.cawco/carries on its machine, then its clone goes. Refused while it serves what waits on the person; ask lets him decide.",
+      "Lets go of a held workspace of your delegates': what it holds is saved to a carry in ~/.cawco/carries on its machine, then its clone goes. Use it for a workspace whose work you will not continue.",
       {
         workspace: z.string().describe("Its id, as the hub's notice names it."),
-        ask: z.boolean().optional(),
+        ask: z
+          .boolean()
+          .optional()
+          .describe(
+            "true asks the person, for a workspace that serves what waits on them, which is refused without it."
+          ),
         reason: z.string().max(300).optional().describe("With ask: why."),
       },
       ({ workspace, ask, reason }, _format, bound) =>
@@ -971,8 +986,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "interrupt_delegate",
-      "Interrupt one of your delegates mid-turn without ending it. It keeps its state and stays idle: " +
-        "nothing automatic wakes it, only your handoff or the person's message.",
+      "Interrupts one of your delegates mid-turn without ending it, its state kept. Use it to stop a turn going the wrong way before you redirect it with handoff.",
       {
         target: z.string().describe("Its handle, directory or id."),
       },
@@ -982,7 +996,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "machine_pause",
-      "Pause a machine for some minutes: its turns stop and nothing starts there until then; work for it waits. resume: true ends it.",
+      "Pauses a machine for some minutes: its turns stop and nothing starts there until then. Use it when work on a machine must stop for a while, and with `resume` to end the pause early.",
       {
         machine: z
           .string()
@@ -1007,15 +1021,22 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "answer_delegate",
-      'Answer an ask your delegate routed to you: answers keyed by the exact question text, each the chosen option label, copied from its "[delegate-ask ...]" message; deny refuses it; neither allows it as asked.',
+      'Answers an ask your delegate routed to you. Use it when a "[delegate-ask ...]" message reaches you.',
       {
         target: z.string().describe("Its handle, directory or id."),
         requestId: z.string().describe("The message's request=."),
         answers: z
           .record(z.string(), z.string())
           .optional()
-          .describe("Question text → chosen option label."),
-        deny: z.boolean().optional().describe("true refuses the ask."),
+          .describe(
+            "Each question's exact text → the chosen option's label, both copied from the message."
+          ),
+        deny: z
+          .boolean()
+          .optional()
+          .describe(
+            "true refuses the ask; with neither deny nor answers, it is allowed as asked."
+          ),
       },
       ({ target, requestId, answers, deny }, _format, bound) =>
         Promise.resolve(
@@ -1025,7 +1046,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "send_to_user",
-      "Show the user a message in this session's transcript, pushed to their phone: what they must see as written before the task finishes, like a result they asked to hear at once. A question goes by ask, a choice by a decision card, and progress in your plan with todo_write.",
+      "Messages shown to the user in this session's transcript and pushed to their phone. Use it for what they must see as written before the task finishes, like a result they asked to hear at once; a question goes by ask, a choice by a decision card, and progress by todo_write.",
       {
         message: z
           .string()
@@ -1043,7 +1064,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "open_items",
-      "Your open items, as every compaction lists them: read it first when one ends. Your plan, task to-dos, filed tasks, inbox notes, asks, and every question your tree put to the person, open or answered, yours first.",
+      "Your open items: your plan, task to-dos, filed tasks, inbox notes, asks, and every question your tree put to the person, open or answered, yours first. Use it first after a compaction, and to see which questions were answered.",
       {
         cursor: z
           .string()
@@ -1057,7 +1078,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "set_title",
-      "Name this session once its task is clear, and again only when the task changes.",
+      "This session's title, shown wherever the session is listed. Use it once its task is clear, and again only when the task changes.",
       {
         title: z
           .string()
@@ -1104,7 +1125,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "show_image",
-      "Show an image file to the user in this session's transcript, by path, without reading its pixels: whenever they should SEE a screenshot, render or diagram.",
+      "Image files shown to the user in this session's transcript, by path, without you reading their pixels. Use it whenever they should see a screenshot, render or diagram.",
       {
         path: z.string().describe("Absolute."),
         caption: z

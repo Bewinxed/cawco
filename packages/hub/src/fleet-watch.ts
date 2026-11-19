@@ -1180,9 +1180,13 @@ export type FleetWatch = ReturnType<typeof createFleetWatch>;
 
 const TRIAGE_DECIDE_DEFINITION = defineTool(
   "triage_decide",
-  "Decide once what happens to the session you were briefed on. nudge: its steward reads `words`. interrupt: cut its turn. stop: stop its process. tell: the person reads `words`. leave: nothing. Then end your turn.",
+  "Your one decision on the session you were briefed on: nudge, interrupt, stop, tell or leave. Use it once, then end your turn.",
   {
-    decision: z.enum(TRIAGE_DECISIONS),
+    decision: z
+      .enum(TRIAGE_DECISIONS)
+      .describe(
+        "nudge: its steward reads `words`. interrupt: cut its turn. stop: stop its process. tell: the person reads `words`. leave: nothing."
+      ),
     words: z
       .string()
       .optional()

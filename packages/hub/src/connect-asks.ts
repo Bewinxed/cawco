@@ -58,8 +58,8 @@ export const CONNECT_TOOLS: ReadonlySet<string> = new Set(["connect_ask"]);
 const REASON_MAX = 300;
 
 const DESCRIPTION =
-  "Ask the person to sign in to one of the fleet's MCP servers that needs a sign-in, when you need its tools and they are missing or refused for want of one. " +
-  "It waits for them; once they connect, its tools reach this session. No credential reaches you.";
+  "Asks the person to sign in to one of the fleet's MCP servers, so its tools reach this session without any credential reaching you. " +
+  "Use it when you need a server's tools and they are missing or refused for want of a sign-in.";
 
 /** What a session is denied, by where each denial comes from. */
 export interface SessionDenials {

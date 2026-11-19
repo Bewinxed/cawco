@@ -210,14 +210,26 @@ const ASKED_CHANGE = z.object({
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
 const definition = z.object({
-  changes: z.array(ASKED_CHANGE).min(1).max(6).optional(),
+  changes: z
+    .array(ASKED_CHANGE)
+    .min(1)
+    .max(6)
+    .optional()
+    .describe(
+      "Left out: read only. A starting set can be proposed again at any time."
+    ),
   reason: z.string().optional(),
-  ask: z.boolean().optional(),
+  ask: z
+    .boolean()
+    .optional()
+    .describe(
+      "true asks the person first; create_repo and set_review always do."
+    ),
   project: z.string().optional(),
 });
 
 const DESCRIPTION =
-  "Read your project's settings (no changes) or change them, noted in the project's conversation; ask: true asks the person first (create_repo and set_review always do). A starting set can be proposed again at any time, the same way.";
+  "Your project's settings, read or changed. Use it to read them, or to change one, like linking a repository, granting a connection or proposing a starting set.";
 
 /** What a malformed call is told, after what it got wrong. */
 const INPUT_HELP = `changes is a list of ${PROJECT_SETTING_KINDS.join(", ")}, and reason one sentence; leave changes out to read the settings.`;

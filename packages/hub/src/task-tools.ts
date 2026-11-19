@@ -453,9 +453,13 @@ export function taskTools(context: TaskToolContext | undefined) {
   return [
     tool(
       "task_read",
-      "Your project's tasks: the stages and a line per task, filtered by the other parameters; with `id`, one task whole, its Waits on and Unblocks lines included (`history` adds its changes).",
+      "Your project's tasks: its stages and a line per task, or one task whole. Use it to find a task, or to read one before you change or start it.",
       {
-        id: taskRef().optional(),
+        id: taskRef()
+          .optional()
+          .describe(
+            "One task whole, its Waits on and Unblocks lines included; without it, the list, filtered by the other parameters."
+          ),
         history: z.boolean().optional().describe("With id: adds its changes."),
         stage: z.string().optional().describe("Only tasks in this stage."),
         q: z
@@ -524,7 +528,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_create",
-      "File a task: work that must outlive this conversation or run without you. waits_on holds it until every target settles; part_of makes it a part of a whole, inheriting the whole's waits. The hub records where it was found. Answers its link (its id, tsk-12, ends it), what it waits on, when it is ready, and any duplicates to act on.",
+      "Tasks filed on your project's board: work that must outlive this conversation or run without you. Use it for follow-up work you find, or work to run later or elsewhere.",
       {
         title: z.string().describe("Verb first."),
         description: z.string().optional(),
@@ -538,7 +542,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         waits_on: z
           .array(z.string())
           .optional()
-          .describe(`What holds it until settled: ${WAIT_TARGETS}.`),
+          .describe(`What holds it until every one settles: ${WAIT_TARGETS}.`),
         part_of: taskRef()
           .optional()
           .describe("The whole it is a part of: it inherits every wait of it."),
@@ -610,10 +614,15 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_update",
-      "Change a task: move its `stage` (checked against the project's moves), or replace any field you give; the rest stays.",
+      "Changes a task: moves its stage, or replaces each field you give. Use it when a task's facts or stage change; links go through task_link.",
       {
         id: taskRef(),
-        stage: z.string().optional(),
+        stage: z
+          .string()
+          .optional()
+          .describe(
+            "The stage it moves to, checked against the project's moves."
+          ),
         reason: z.string().optional().describe("Why, with `stage`."),
         title: z.string().optional(),
         description: z.string().optional(),
@@ -676,17 +685,25 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_link",
-      "Link a task. waits_on: the hub holds it until every target settles (a task done, a card picked or picked as named, a pin resolved, a pull request merged, a run green, a session's work finished), then dispatch may start it. part_of: it becomes a part of that whole and inherits every wait of it; the whole closes when its last part is done. duplicate_of: it closes as a duplicate and every wait on it moves to the survivor. remove: the named links come out. Refuses a cycle, naming its path. Answers what it waits on and unblocks.",
+      "Links a task: a wait, a part of a whole, or a duplicate. Use it to hold a task until something settles, to make it a part of a whole, to close it as a duplicate, or with `remove` to take a link out.",
       {
         task: taskRef(),
         waits_on: z
           .array(z.string())
           .optional()
-          .describe(`Targets to wait on: ${WAIT_TARGETS}.`),
-        part_of: taskRef().optional().describe("The whole it is a part of."),
+          .describe(
+            `Targets the hub holds it on until every one settles (a task done, a card picked or picked as named, a pin resolved, a pull request merged, a run green, a session's work finished); then dispatch may start it: ${WAIT_TARGETS}.`
+          ),
+        part_of: taskRef()
+          .optional()
+          .describe(
+            "The whole it becomes a part of, inheriting every wait of it; the whole closes when its last part is done."
+          ),
         duplicate_of: taskRef()
           .optional()
-          .describe("The task it repeats: the survivor."),
+          .describe(
+            "The task it repeats, the survivor: it closes as a duplicate and every wait on it moves there."
+          ),
         remove: z
           .boolean()
           .optional()
@@ -717,7 +734,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_start",
-      "Start an attempt at a task: a delegate in a new workspace on a machine its runs_on names, briefed from the task file, reporting to you; the task moves to its active stage. Refused while one is live or it is done.",
+      "Starts an attempt at a task: a delegate in a new workspace on a machine its runs_on names, briefed from the task file and reporting to you. Use it when a task is ready and should run now.",
       { id: taskRef() },
       async ({ id }) => {
         const scoped = scope();
@@ -737,7 +754,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_retry",
-      "Retry a task whose last attempt failed or was stopped: a fresh session in that attempt's workspace, briefed with the failure, reporting to you.",
+      "Retries a task in a fresh session in its last attempt's workspace, briefed with how that attempt ended and reporting to you. Use it when a task's last attempt failed or was stopped and the task should go on.",
       { id: taskRef() },
       async ({ id }) => {
         const scoped = scope();
@@ -757,13 +774,26 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "todo_write",
-      "Your plan: `steps` replaces your step list (`depth` nests), `spec` your spec (what you build, how and why). Or a task's to-dos: tick, untick, add or reword by id (td-3, what ends its link) or position (2.1), on your work item's task (an orchestrator names any); all land together. Every compaction lists them.",
+      "Your plan and spec, or a task's to-dos. Use it to keep your plan current as you work, and to tick a task's to-dos as you finish them.",
       {
-        steps: z.array(stepParameter()).optional(),
-        spec: z.string().optional(),
-        task: z.string().optional().describe("Default: your work item's."),
-        tick: lines("To-dos by id or position."),
-        untick: lines("To-dos by id or position."),
+        steps: z
+          .array(stepParameter())
+          .optional()
+          .describe("Replaces your step list; `depth` nests."),
+        spec: z
+          .string()
+          .optional()
+          .describe("Your spec: what you build, how and why."),
+        task: z
+          .string()
+          .optional()
+          .describe(
+            "Default your work item's; an orchestrator names any. One call's changes land together."
+          ),
+        tick: lines(
+          "To-dos by id (td-3, what ends its link) or position (2.1)."
+        ),
+        untick: lines("As tick."),
         add: z
           .array(
             z.object({
@@ -774,7 +804,8 @@ export function taskTools(context: TaskToolContext | undefined) {
           .optional(),
         edit: z
           .array(z.object({ todo: z.string(), text: z.string() }))
-          .optional(),
+          .optional()
+          .describe("Rewords a to-do, by id or position."),
       },
       async ({ task, steps, spec, ...changes }) => {
         if (steps !== undefined || spec !== undefined) {
@@ -808,8 +839,14 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_comment",
-      "Comment on your work item's task (an orchestrator names any): an entry with your name and the time, never changed.",
-      { task: z.string().optional(), text: z.string() },
+      "Comments on a task: an entry with your name and the time, never changed. Use it to leave a note on a task.",
+      {
+        task: z
+          .string()
+          .optional()
+          .describe("Default your work item's; an orchestrator names any."),
+        text: z.string(),
+      },
       async ({ task, text }) => {
         const scoped = scope();
         if (scoped instanceof ElysiaStatus) {
@@ -829,7 +866,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_result",
-      "Hand in your task's work before finish_item, for the person who asked for it: they judged it then, and read this to learn it is done and what needs them. Again replaces it.",
+      "Your task attempt's work, handed in for the person who asked for it: they read it to learn it is done and what needs them. Use it before finish_item.",
       {
         summary: z
           .string()
@@ -901,8 +938,14 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_archive",
-      "Archive a task: off the board and lists, done for tasks that wait on it, kept with its history; not while an attempt is live. `archived: false` brings it back.",
-      { id: taskRef(), archived: z.boolean().optional() },
+      "Archives a task: off the board and lists, done for tasks that wait on it, kept with its history. Use it for a task that will not be done, or to bring one back.",
+      {
+        id: taskRef(),
+        archived: z
+          .boolean()
+          .optional()
+          .describe("false brings an archived task back."),
+      },
       async ({ id, archived }) => {
         const scoped = scope();
         if (scoped instanceof ElysiaStatus) {

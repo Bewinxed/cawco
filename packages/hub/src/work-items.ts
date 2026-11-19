@@ -5592,7 +5592,7 @@ export const createWorkItems = ({
       const waiting = declareWait(item, minutes, waitReason);
       const clock = waitClock(waiting.waitUntil);
       const line = `${item.title} is waiting until ${clock}: ${waitReason}`;
-      return `${line}\n\nEnd your turn. The hub will wake you when the wait ends.`;
+      return `${line}\n\nEnd your turn. The hub will wake you when the wait ends or a message arrives; any tool call but a CawCo read ends the wait.`;
     },
 
     /**

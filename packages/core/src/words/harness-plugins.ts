@@ -19,7 +19,7 @@ const RESTARTS =
  */
 const ENDS_AT_THE_CALL: NoReplyWords = {
   description:
-    "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them. The turn ends at the call: you take no step after it. It changes nothing else.",
+    "Ends this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them.",
   result: "This turn ended here with no reply.",
 };
 
@@ -30,7 +30,7 @@ const ENDS_AT_THE_CALL: NoReplyWords = {
  */
 const STEPS_ON_AFTER_THE_CALL: NoReplyWords = {
   description:
-    "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them, and write nothing after it: text after it reaches them as a reply. It changes nothing else.",
+    "Ends this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them.",
   result:
     "No reply this turn. End your step with no text: anything written now reaches the person as a reply.",
 };

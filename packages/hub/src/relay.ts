@@ -1444,7 +1444,7 @@ export const relayRoutes = (relay: Relay) =>
 
 const RELAY_CREATE_DEFINITION = defineTool(
   "relay_create",
-  "Open a public webhook path for your project (Tailscale Funnel) once the owner approves; GitHub's webhook is registered for you.",
+  "Relays: public webhook paths for your project over Tailscale Funnel, opened once the owner approves, with GitHub's webhook registered for you. Use it when a service must push events to your project's routes.",
   {
     provider: z.enum(RELAY_PROVIDERS).optional(),
     repo: z
@@ -1462,14 +1462,14 @@ const RELAY_CREATE_DEFINITION = defineTool(
 
 const RELAY_LIST_DEFINITION = defineTool(
   "relay_list",
-  "Your project's relays: URL, state, the owner's step.",
+  "Your project's relays, each with its URL, state and the owner's step. Use it to see whether a relay is open and what it waits on.",
   {},
   relayListWords
 );
 
 const RELAY_REMOVE_DEFINITION = defineTool(
   "relay_remove",
-  "Turn a relay off; the GitHub webhook the hub made goes with it.",
+  "Turns a relay off, with the GitHub webhook the hub made for it. Use it for a relay no longer wanted.",
   { id: z.string().trim().min(1) },
   relayRemovedWords
 );

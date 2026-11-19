@@ -2985,11 +2985,15 @@ export const routineRoutes = (routines: Routines) =>
 
 const ROUTINE_CREATE_DEFINITION = defineTool(
   "routine_create",
-  `Make a routine: a prompt the hub runs on a schedule. target 'delegate': a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). target 'orchestrator': a fresh session that may delegate, in the project's checkout, under the same contract; it outlives you. target 'conversation' messages the project's conversation, Caw. It runs once now as a test and turns off after 7 days unless kept. The owner is told, with what you said just before: say why first. To unlist unused skills and servers, turn on the hub's routine with routine_update.`,
+  "Routines: prompts the hub runs for your project on a schedule, the first run at once as a test. Use it for work that should recur without you, saying why in your reply first, since the owner is told of it with what you said just before.",
   {
     name: z.string().describe("3–6 plain words."),
     prompt: z.string().describe("What each run does."),
-    target: z.enum(MADE_ROUTINE_TARGETS),
+    target: z
+      .enum(MADE_ROUTINE_TARGETS)
+      .describe(
+        `delegate: a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). orchestrator: a fresh session that may delegate, in the project's checkout, under the same contract; it outlives you. conversation: a message to the project's conversation, Caw.`
+      ),
     ...scheduleParameters,
     delegate_type: z.string().optional(),
     lands: z
@@ -3005,7 +3009,9 @@ const ROUTINE_CREATE_DEFINITION = defineTool(
     keep: z
       .boolean()
       .optional()
-      .describe("Keep past 7 days: only on the owner's word."),
+      .describe(
+        "Keep past 7 days, after which it turns off otherwise: only on the owner's word."
+      ),
     mode: z
       .enum(SESSION_CHOSEN_MODES)
       .optional()
@@ -3018,18 +3024,26 @@ const ROUTINE_CREATE_DEFINITION = defineTool(
 
 const ROUTINE_LIST_DEFINITION = defineTool(
   "routine_list",
-  `List your project's routines with their schedule, next slot and newest runs (state, outcome, output, why skipped or failed), and the hub's ${TRIM_NAME} while off.`,
+  `Your project's routines, each with its schedule, next slot and newest runs, and the hub's ${TRIM_NAME} while off. Use it to see how routines ran, and why a run was skipped or failed.`,
   {},
   routineListWords
 );
 
 const ROUTINE_UPDATE_DEFINITION = defineTool(
   "routine_update",
-  `Change a routine: pause or resume it (enabled), keep it past 7 days (only on the owner's word), or any field it was made with; enabled: true alone turns on the hub's ${TRIM_NAME} while off.`,
+  `Changes a routine, or pauses, resumes or keeps it. Use it on one of your project's routines, or to turn on the hub's ${TRIM_NAME} while off.`,
   {
     id: routineRef(),
-    enabled: z.boolean().optional(),
-    keep: z.boolean().optional(),
+    enabled: z
+      .boolean()
+      .optional()
+      .describe(
+        `false pauses it, true resumes it; true alone turns on the hub's ${TRIM_NAME} while off.`
+      ),
+    keep: z
+      .boolean()
+      .optional()
+      .describe("Keep past 7 days: only on the owner's word."),
     cron: scheduleParameters.cron.optional(),
     time_zone: scheduleParameters.time_zone.optional(),
     prompt: z.string().optional(),
@@ -3044,7 +3058,7 @@ const ROUTINE_UPDATE_DEFINITION = defineTool(
 
 const ROUTINE_DELETE_DEFINITION = defineTool(
   "routine_delete",
-  "Delete a routine, its runs and the event routes that feed it.",
+  "Deletes a routine with its runs and the event routes that feed it. Use it for a routine no longer wanted; to stop one for a while, pause it with routine_update.",
   { id: routineRef() },
   ({ deleted, routes }: { deleted: boolean; routes: string[] }) =>
     deleted ? routineToolWords.deleted(routes) : routineToolWords.notThere
@@ -3052,21 +3066,25 @@ const ROUTINE_DELETE_DEFINITION = defineTool(
 
 const ROUTINE_RUN_NOW_DEFINITION = defineTool(
   "routine_run_now",
-  "Run a routine once now; skipped while its last run still goes.",
+  "Runs a routine once now, unless its last run still goes. Use it to try a routine or to run it off its schedule.",
   { id: routineRef() },
   routineRunWords
 );
 
 const ROUTINE_RESULT_DEFINITION = defineTool(
   "routine_result",
-  `Say how the routine's run that woke you went, once, before your turn ends: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <why> fails it, anything else is noted in the project's conversation.`,
+  "How the routine's run that woke you went, said once. Use it before your turn ends on a routine's run.",
   {
     run: z
       .string()
       .trim()
       .min(1)
       .describe("The run's id, from the message that woke you."),
-    result: z.string().describe("The run's output."),
+    result: z
+      .string()
+      .describe(
+        `The run's output: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <why> fails it, anything else is noted in the project's conversation.`
+      ),
   },
   routineRunWords
 );

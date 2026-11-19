@@ -130,6 +130,5 @@ export interface GeneratedImage {
 export const GENERATE_IMAGE = "generateImage";
 export const IMAGE_GENERATION_TIMEOUT_MS = 600_000;
 export const IMAGE_GENERATION_DESCRIPTION =
-  "Generate one image or reference-guided edit through an image provider on this machine's sign-in (`provider`). " +
-  "For photos, illustrations, textures and raster assets; SVGs, icons and code-native graphics are source to edit instead. " +
-  "Saved on your machine; show it with show_image.";
+  "Images made, or edited from reference images, by an image provider on this machine's sign-in, saved as a file on your machine. " +
+  "Use it for photos, illustrations, textures and other raster assets; write SVGs, icons and code-native graphics as source.";

@@ -666,7 +666,10 @@ export const taskCommentedWords = (
 
 /** `task_result`: what was handed in. */
 export const taskResultWords = (result: AttemptResult): string =>
-  lines(resultLines(result, Date.now()));
+  lines(
+    resultLines(result, Date.now()),
+    "Calling task_result again replaces it."
+  );
 
 /** `task_archive`. */
 export const taskArchivedWords = (

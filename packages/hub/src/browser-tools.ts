@@ -65,8 +65,8 @@ const isOrigin = (value: string): boolean => {
 };
 
 const DESCRIPTION =
-  "Ask the person to take over your browser for what only they may do: a sign-in, a one-time code, a CAPTCHA, a payment, a consent. " +
-  "Call it with that page open; it waits for them, and nothing they type or see reaches you.";
+  "Hands your browser to the person for what only they may do (a sign-in, a one-time code, a CAPTCHA, a payment, a consent), with nothing they type or see reaching you. " +
+  "Use it when your work reaches such a step, with that page open.";
 
 /** How browser asks reach the rest of the hub. */
 export interface BrowserAsksDeps {

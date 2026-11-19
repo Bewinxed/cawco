@@ -218,13 +218,16 @@ export const createHubTools =
 
 const UPDATE_MACHINES_DEFINITION = defineTool(
   "update_machines",
-  "Look for a new CawCo build and tell every machine (check_only), or install it on one machine or every online machine. Installing asks the person first when the hub requires paired devices.",
+  "Checks for a new CawCo build, or installs it on one machine or every online machine. Use it when the person asks to update CawCo on the fleet or a machine.",
   {
     machine: z
       .string()
       .optional()
       .describe("A machine id; every online machine when left out."),
-    check_only: z.boolean().optional(),
+    check_only: z
+      .boolean()
+      .optional()
+      .describe("true only looks for a new build and tells every machine."),
     reason: z
       .string()
       .max(300)
@@ -237,7 +240,7 @@ const UPDATE_MACHINES_DEFINITION = defineTool(
 
 const DESIGN_WRITE_DEFINITION = defineTool(
   "design_write",
-  "Write design/ files per the design-system skill: content, or from a file where you work. Changing an existing system is a proposal (why).",
+  "Writes the project's design/ files, each from its content or a file where you work. Use it while following the design-system skill.",
   {
     files: z
       .array(
@@ -245,19 +248,27 @@ const DESIGN_WRITE_DEFINITION = defineTool(
           path: z.string().min(1),
           content: z.string().max(FOLDER_CONTENT_LIMIT).optional(),
           encoding: z.enum(FOLDER_ENCODINGS).optional(),
-          from: z.string().min(1).optional(),
+          from: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("A file where you work, in place of content."),
         })
       )
       .min(1)
       .max(DESIGN_WRITE_FILES),
-    why: z.string().max(500).optional(),
+    why: z
+      .string()
+      .max(500)
+      .optional()
+      .describe("Required to change an existing system: why."),
   },
   designWrittenWords
 );
 
 const DESIGN_VERDICT_DEFINITION = defineTool(
   DESIGN_VERDICT,
-  "Your verdict as this design check's verifier, once: every must-fix finding tied to one element (its file and line, its CSS selector, what is wrong and what the system says instead), or no findings for a pass. It finishes your item.",
+  "Your verdict as this design check's verifier, which finishes your item. Use it once, when you have checked the result against the system.",
   {
     findings: z
       .array(
@@ -268,7 +279,10 @@ const DESIGN_VERDICT_DEFINITION = defineTool(
           problem: z.string().min(1).max(1000),
         })
       )
-      .max(50),
+      .max(50)
+      .describe(
+        "Every must-fix finding, each tied to one element: its file and line, its CSS selector, what is wrong and what the system says instead. None for a pass."
+      ),
     pick: z
       .object({
         variant: z.string().min(1),
@@ -285,14 +299,14 @@ const DESIGN_VERDICT_DEFINITION = defineTool(
 
 const CALLS_BY_ROLE_DEFINITION = defineTool(
   "calls_by_role",
-  `Which skills and MCP servers each role's sessions called in the last days: per role and name, how many sessions called it and when last. A role is a delegate type, or person for the sessions the person started. Project "all" also lists what sessions had installed and none called.`,
+  "Which skills and MCP servers each role's sessions called in the last days: per role and name, how many sessions called it and when last. Use it to see what a role uses before trimming its starting set or removing a skill or server.",
   {
     project: z
       .string()
       .min(1)
       .optional()
       .describe(
-        'A name or id; "all" for every project. Default: your own project, else all.'
+        'A name or id; "all" for every project, which also lists what sessions had installed and none called. Default: your own project, else all.'
       ),
     days: z
       .number()
@@ -305,7 +319,9 @@ const CALLS_BY_ROLE_DEFINITION = defineTool(
       .string()
       .min(1)
       .optional()
-      .describe("Only this role's rows, like build or person."),
+      .describe(
+        "Only this role's rows: a delegate type, like build, or person for the sessions the person started."
+      ),
   },
   (report: Parameters<typeof capabilityCallsWords>[0]) =>
     capabilityCallsWords(report),
@@ -321,7 +337,7 @@ const CALLS_BY_ROLE_DEFINITION = defineTool(
 
 const TRIM_PROPOSE_DEFINITION = defineTool(
   TRIM_PROPOSE,
-  "Put this run's trimmed starting sets to the person, each through its set's own approval; nothing changes until they approve. Call once; it answers the headline to finish with.",
+  "This run's trimmed starting sets, put to the person each through its set's own approval; nothing changes until they approve. Use it once in the unused skills and servers run, before finish_item.",
   {},
   sentence
 );

@@ -101,8 +101,8 @@ export const ASK_TOOLS: ReadonlySet<string> = new Set(["ask"]);
 
 /** The words the model reads for `ask`. */
 const ASK_DESCRIPTION =
-  "Ask the person something and carry on. It answers at once and the hub keeps the question; their answer arrives as a message naming it, and wakes you if your turn ended. " +
-  "Set blocks when going the wrong way would waste work; otherwise say what you'll go ahead with.";
+  "Questions put to the person, whose answer arrives later as a message while you carry on. " +
+  "Use it when only the person can answer something your work turns on.";
 
 /** The most questions one ask carries, answered one at a time in a row. */
 const QUESTIONS_MAX = 4;
@@ -727,7 +727,7 @@ export const createAsks = (deps: AsksDeps) => {
             blocks: z
               .boolean()
               .describe(
-                "true when work waits on the answer; false when you go ahead meanwhile."
+                "true when going the wrong way would waste work, so it waits on the answer; false when you go ahead meanwhile, saying with what in `meanwhile`."
               ),
             waiting: z
               .string()

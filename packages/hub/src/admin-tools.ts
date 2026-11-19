@@ -315,6 +315,19 @@ export const answeredWithoutAsking = (
 };
 
 /**
+ * An admin group's words: each tool's description, what it is and when to
+ * use it, and what each of its actions does, said on `action`. The person's
+ * approval of a write is said by the ask's answer (core ask-lines.ts).
+ */
+interface AdminWords {
+  read: string;
+  /** Said where an action's name alone leaves it open. */
+  readActions?: string;
+  write: string;
+  writeActions?: string;
+}
+
+/**
  * One group of fleet settings as two tools, named group first (§5.3):
  * `admin_<group>_read`, which takes only its read actions, and
  * `admin_<group>_write`, which takes the rest with the fields they need. One
@@ -324,7 +337,8 @@ export const answeredWithoutAsking = (
  */
 function admin<G extends string, T extends z.ZodRawShape, R>(
   group: G,
-  about: string,
+  /** Each tool's description (what it is, when to use it) and what each of its actions does. */
+  words: AdminWords,
   reads: readonly [string, ...string[]],
   writes: readonly [string, ...string[]],
   input: T,
@@ -334,15 +348,16 @@ function admin<G extends string, T extends z.ZodRawShape, R>(
   ) => Promise<R>,
   /** How an agent reads the group's answers, knowing the action asked. */
   present: Presenter<Answered<R>, { action: string } & Record<string, unknown>>,
-  writeNote = "",
   /** The fields of `input` a read takes too, by name; none by default. */
   readFields: readonly (keyof T & string)[] = []
 ) {
   const read = adminTool(
     `admin_${group}_read` as const,
-    `Read ${about} \`action\`: ${reads.map((action) => `'${action}'`).join(", ")}.`,
+    words.read,
     {
-      action: z.enum(reads),
+      action: words.readActions
+        ? z.enum(reads).describe(words.readActions)
+        : z.enum(reads),
       ...Object.fromEntries(readFields.map((name) => [name, input[name]])),
     },
     // A read names its action and the fields it was given; every other field is the write's.
@@ -356,8 +371,14 @@ function admin<G extends string, T extends z.ZodRawShape, R>(
   );
   const write = adminTool(
     `admin_${group}_write` as const,
-    `Change what admin_${group}_read reads. \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} The person approves it first, unless in Full Send; their answer arrives as a message.`,
-    { action: z.enum(writes), reason, ...input },
+    words.write,
+    {
+      action: words.writeActions
+        ? z.enum(writes).describe(words.writeActions)
+        : z.enum(writes),
+      reason,
+      ...input,
+    },
     // The reason is the person's to read on the approval, not a setting.
     (args, _format, on) => {
       // Legitimate: zod's object inference over the generic shape T is not relatable inside this function (https://github.com/colinhacks/zod/issues/4619).
@@ -478,10 +499,12 @@ export function adminTools() {
     // ── delegate types ───────────────────────────────────────────────────
     ...admin(
       "delegate_types",
-      "the fleet's delegate type presets: the named routes a `delegate` call's " +
-        "`type` parameter resolves against. Each type bundles a harness, model, effort, " +
-        "skills and denied tools so callers route by what the work needs, not by a model " +
-        "string.",
+      {
+        read: "The fleet's delegate types with their whole settings, which a `delegate` call's `type` resolves against. Use it before changing a type; to pick one to delegate to, use list_delegate_types.",
+        write:
+          "Changes the fleet's delegate types. Use it when the person asks for a type made or changed.",
+        writeActions: "put: add or replace `name`. delete: remove it.",
+      },
       ["list"],
       ["put", "delete"],
       {
@@ -586,9 +609,13 @@ export function adminTools() {
     // ── connections ──────────────────────────────────────────────────────
     ...admin(
       "connections",
-      "the hub's connections: outside services it signs in to, one per account. " +
-        "Sessions whose delegate type or project lists one call its tools as " +
-        "conn__<name>__<tool>; the hub keeps the key.",
+      {
+        read: "The hub's connections: outside services it signs in to, one per account, whose tools a granted session calls as conn__<name>__<tool>. Use it to find a connection's name, state and tools.",
+        write:
+          "Changes the hub's connections. Use it when the person asks to connect an outside service or change one.",
+        writeActions:
+          "update: the fields given. sign_in: answers the URL to open.",
+      },
       ["list"],
       ["create", "update", "sign_in", "remove"],
       {
@@ -602,10 +629,15 @@ export function adminTools() {
           .enum(["http", "sse", "stdio"])
           .optional()
           .describe("stdio: a command the hub runs."),
-        url: z.string().optional(),
-        command: z.string().optional(),
+        url: z.string().optional().describe("Changing it drops the key."),
+        command: z.string().optional().describe("Changing it drops the key."),
         args: z.array(z.string()).optional(),
-        auth: z.enum(MADE_AUTHS).optional(),
+        auth: z
+          .enum(MADE_AUTHS)
+          .optional()
+          .describe(
+            "A key never passes through a session: the owner runs `cawco connections set-key <name>`."
+          ),
         header: z
           .string()
           .optional()
@@ -654,15 +686,19 @@ export function adminTools() {
         }
         return await on.connections.update(name, fieldsGiven(fields));
       },
-      connectionSettingsWords,
-      " A key never goes through a session: the owner runs `cawco connections set-key <name>` on a machine joined to the hub. Never ask for a key in chat. sign_in answers the URL to open. Changing where it points drops the key."
+      connectionSettingsWords
     ),
 
     // ── skills ───────────────────────────────────────────────────────────
     ...admin(
       "skills",
-      "the fleet's skills: the slash-command skill directories synced to every " +
-        `machine under ${fleetClaudeLabel("skills")}/.`,
+      {
+        read: `The fleet's skills, synced to every machine under ${fleetClaudeLabel("skills")}/. Use it before changing them.`,
+        write:
+          "Changes the fleet's skills. Use it when the person asks for a skill added, updated or removed.",
+        writeActions:
+          "install: fetch `source` once at the hub and send it to every machine; again from the same source updates it. enable, disable: nothing fetched.",
+      },
       ["list"],
       ["install", "enable", "disable", "remove"],
       {
@@ -680,7 +716,7 @@ export function adminTools() {
             "Where to fetch the skill from. Required for install. Examples: " +
               "'github:owner/repo', 'npm:package-name', 'https://example.com/skill.tar.gz', " +
               "'skills:owner/repo@skill-name', 'file:/abs/path/to/skill-folder' (a folder " +
-              "holding a SKILL.md on your own machine, no publishing needed)."
+              "on your machine whose SKILL.md has a name and description)."
           ),
         projectId: z
           .string()
@@ -731,18 +767,19 @@ export function adminTools() {
             })
         );
       },
-      skillSettingsWords,
-      " Install fetches the source (github:owner/repo, npm:package, a URL, skills:slug, or file:<absolute path> to a skill folder on your machine) once at the hub and distributes the files to every machine. A folder's SKILL.md needs a name and description; installing from the same folder again updates it."
+      skillSettingsWords
     ),
 
     // ── plugins ──────────────────────────────────────────────────────────
     ...admin(
       "plugins",
-      "the fleet's Claude Code plugins: whole marketplace bundles synced to " +
-        `every machine under ${fleetPluginsLabel()}/. A plugin is the unit to reach for when ` +
-        "a repo ships MANY skills, or skills that read shared files beside them " +
-        "(references/, agents/, commands/); a skill copies one directory and " +
-        "cannot carry those.",
+      {
+        read: `The fleet's Claude Code plugins and marketplaces, synced to every machine under ${fleetPluginsLabel()}/. Use it before changing them.`,
+        write:
+          "Changes the fleet's Claude Code plugins. Use it for a repository that ships many skills, or skills that read files beside them (references/, agents/, commands/), which admin_skills_write cannot carry.",
+        writeActions:
+          "link the marketplace at `source` first: it answers the name install takes with the `plugin@marketplace` id. refresh fetches one whose upstream moved.",
+      },
       ["list"],
       ["link", "unlink", "install", "enable", "disable", "refresh", "remove"],
       {
@@ -810,14 +847,17 @@ export function adminTools() {
           Promise.resolve(on.plugins.put(id, { enabled: true }))
         );
       },
-      pluginSettingsWords,
-      " Order matters: 'link' the marketplace first, then 'install' a plugin from it by its `plugin@marketplace` id, with the name link answered; 'refresh' re-fetches one whose upstream moved. The hub resolves the bytes once and distributes them."
+      pluginSettingsWords
     ),
 
     // ── MCP servers ──────────────────────────────────────────────────────
     ...admin(
       "mcp_servers",
-      "the fleet's MCP servers: the servers every CawCo session on every machine loads at its launch.",
+      {
+        read: "The fleet's MCP servers, which every CawCo session loads at its launch. Use it before changing them.",
+        write:
+          "Changes the fleet's MCP servers. Use it when the person asks for a server added, changed or removed.",
+      },
       ["list"],
       ["put", "remove"],
       {
@@ -879,18 +919,20 @@ export function adminTools() {
           ...(shared === undefined ? {} : { shared }),
         });
       },
-      mcpSettingsWords,
-      " A change reaches running sessions within seconds (a put connects, a removal leaves);" +
-        " no new session is needed."
+      mcpSettingsWords
     ),
 
     // ── rules ────────────────────────────────────────────────────────────
     ...admin(
       "rules",
-      "the fleet's rules: standing instructions the hub enforces on every session's " +
-        "output stream. A rule watches for a phrase or regex in what sessions say (or think) " +
-        "and replies with a fixed message or an LLM evaluation. 'list' answers them with " +
-        "stats, 'templates' starter recipes; one scoped to a removed machine carries `orphaned`.",
+      {
+        read: "The fleet's rules: each watches what sessions say or think for a phrase, regex or meaning and replies when it matches. Use it before changing them.",
+        readActions:
+          "list: the rules with stats and the templates; one scoped to a removed machine carries `orphaned`.",
+        write:
+          "Changes the fleet's rules. Use it when the person wants sessions told something whenever they say or think a thing.",
+        writeActions: "update: the fields given, over the rule `id`.",
+      },
       ["list", "templates"],
       ["create", "update", "remove"],
       {
@@ -1033,13 +1075,14 @@ export function adminTools() {
     // ── hooks ────────────────────────────────────────────────────────────
     ...admin(
       "hooks",
-      "the fleet's hooks: Claude Code hooks synced to every machine, or to one " +
-        "project's sessions. A hook attaches a command, prompt or agent to a lifecycle event " +
-        "(SessionStart, PreToolUse, PostToolUse, Stop, etc.) and runs unattended. " +
-        "OpenCode runs command hooks on PreToolUse, PostToolUse and PostToolUseFailure, " +
-        "pi on those and SessionStart, UserPromptSubmit and Stop, matched on Claude's tool " +
-        "names; each machine's row says unsupported for the rest. " +
-        "'list' answers the hooks and the templates.",
+      {
+        read: "The fleet's hooks: commands, prompts or agents run unattended on sessions' lifecycle events. Use it before changing them.",
+        readActions: "list: the hooks and the templates.",
+        write:
+          "Changes the fleet's hooks. Use it when the person wants something run on sessions' events.",
+        writeActions:
+          "create: the hub makes its id. update: the fields given, over the hook `id`.",
+      },
       ["list"],
       ["create", "update", "remove"],
       {
@@ -1060,7 +1103,9 @@ export function adminTools() {
           .optional()
           .describe(
             "The lifecycle event: SessionStart, PreToolUse, PostToolUse, Stop, " +
-              "UserPromptSubmit, MessageDisplay, etc. Required for create."
+              "UserPromptSubmit, MessageDisplay, etc. Required for create. " +
+              "OpenCode runs command hooks on PreToolUse, PostToolUse and PostToolUseFailure, " +
+              "pi on those and SessionStart, UserPromptSubmit and Stop, by Claude's tool names; the rest unsupported."
           ),
         matcher: z
           .string()
@@ -1130,15 +1175,19 @@ export function adminTools() {
 
         return await Promise.resolve(on.hooks.put(id, body));
       },
-      hookSettingsWords,
-      " 'create' adds one (the hub mints the id), 'update' edits by id, 'remove' deletes by id."
+      hookSettingsWords
     ),
 
     // ── subagents ────────────────────────────────────────────────────────
     ...admin(
       "subagents",
-      `the fleet's Claude Code subagents, the files under ${fleetClaudeLabel("agents")}/. ` +
-        "'list': names and descriptions; 'get': one file and its hash.",
+      {
+        read: `The fleet's Claude Code subagents, the files under ${fleetClaudeLabel("agents")}/. Use it before changing one.`,
+        readActions:
+          "list: names and descriptions. get: one file and its hash.",
+        write:
+          "Changes the fleet's Claude Code subagents. Use it when the person asks for a subagent added, changed or removed.",
+      },
       ["list", "get"],
       ["put", "remove"],
       {
@@ -1198,17 +1247,17 @@ export function adminTools() {
         );
       },
       subagentSettingsWords,
-      " A removal leaves each machine's copy until its next sync.",
       ["name"]
     ),
 
     // ── Claude Code settings, OpenCode plugins, pi extensions ────────────
     ...admin(
       "claude_settings",
-      "the fleet's Claude Code settings: each row a settings object merged into " +
-        "the flag settings of CawCo's Claude Code sessions, every machine's or one " +
-        "project's. Hooks go through admin_hooks_write, Claude plugins through " +
-        "admin_plugins_write.",
+      {
+        read: "The fleet's Claude Code settings: rows of settings.json keys merged into CawCo's Claude Code sessions. Use it before changing them.",
+        write:
+          "Changes the fleet's Claude Code settings. Use it for a settings.json key such as env or permissions; hooks go through admin_hooks_write and plugins through admin_plugins_write.",
+      },
       ["list"],
       ["put", "remove"],
       {
@@ -1224,14 +1273,15 @@ export function adminTools() {
         ...harnessConfigPlacement,
       },
       harnessConfigHandler("claudeSettings"),
-      harnessConfigSettingsWords("claudeSettings"),
-      " A new session takes it as it starts; a running one keeps what it started with."
+      harnessConfigSettingsWords("claudeSettings")
     ),
     ...admin(
       "opencode_plugins",
-      "the fleet's OpenCode plugins: each an OpenCode 2 plugin module or npm " +
-        "package that CawCo's own plugin sets up in every location of CawCo's " +
-        "OpenCode sessions, every machine's or one project's.",
+      {
+        read: "The fleet's OpenCode plugins, set up in CawCo's OpenCode sessions. Use it before changing them.",
+        write:
+          "Changes the fleet's OpenCode plugins. Use it when the person asks for one added, changed or removed.",
+      },
       ["list"],
       ["put", "remove"],
       {
@@ -1242,13 +1292,15 @@ export function adminTools() {
         ...harnessConfigPlacement,
       },
       harnessConfigHandler("opencodePlugins"),
-      harnessConfigSettingsWords("opencodePlugins"),
-      " Each machine writes the module, or installs the package with npm; a location booted after that sets it up."
+      harnessConfigSettingsWords("opencodePlugins")
     ),
     ...admin(
       "pi_extensions",
-      "the fleet's pi extensions: each a pi extension module or npm package " +
-        "that CawCo's pi sessions load, every machine's or one project's.",
+      {
+        read: "The fleet's pi extensions, loaded by CawCo's pi sessions. Use it before changing them.",
+        write:
+          "Changes the fleet's pi extensions. Use it when the person asks for one added, changed or removed.",
+      },
       ["list"],
       ["put", "remove"],
       {
@@ -1259,18 +1311,20 @@ export function adminTools() {
         ...harnessConfigPlacement,
       },
       harnessConfigHandler("piExtensions"),
-      harnessConfigSettingsWords("piExtensions"),
-      " Each machine writes the module, or installs the package with npm; a new session loads it."
+      harnessConfigSettingsWords("piExtensions")
     ),
 
     // ── memory (fleet CLAUDE.md) ─────────────────────────────────────────
     ...admin(
       "memory",
-      "the fleet's CLAUDE.md, loaded into every session, and its documents: " +
-        `unscoped, linked under ${fleetMemoryLabel("memories")}/; scoped, loaded into the ` +
-        "sessions matching every `scope` field (role: orchestrator has delegate, else leaf; " +
-        "model: substring). `briefer`: handed to the delegate's caller instead. " +
-        "'get': CLAUDE.md; 'list_docs': the documents.",
+      {
+        read: `The fleet's memory: the CLAUDE.md every session loads, and its documents under ${fleetMemoryLabel("memories")}/. Use it before changing them.`,
+        readActions: "get: CLAUDE.md. list_docs: the documents.",
+        write:
+          "Changes the fleet's memory. Use it when the person asks for a fleet rule added, changed or removed.",
+        writeActions:
+          "set: CLAUDE.md's whole text. set_doc: a document's whole text.",
+      },
       ["get", "list_docs"],
       ["set", "set_doc", "remove_doc"],
       {
@@ -1304,7 +1358,7 @@ export function adminTools() {
           })
           .optional()
           .describe(
-            "set_doc: {} unscopes; omitted keeps it. list_docs: a filter."
+            "Scoped, a document loads into sessions matching every field (role: orchestrator has delegate, else leaf; model: a substring; briefer: handed to the delegate's caller instead); unscoped, CLAUDE.md links it. set_doc: {} unscopes, omitted keeps. list_docs: a filter."
           ),
         expectedHash: z
           .string()
@@ -1374,26 +1428,26 @@ export function adminTools() {
         return await Promise.resolve(on.memory.removeDoc(path));
       },
       memorySettingsWords,
-      "",
       ["scope"]
     ),
 
     // ── previews ─────────────────────────────────────────────────────────
     ...admin(
       "previews",
-      "how every session's previews are reached, fleet-wide: 'port' (the default, " +
-        "no setup) gives each session a port of the hub's preview range on the hub's " +
-        "host; 'host' adds an origin per session from `pattern`, routed to the range's " +
-        "first port, for clients under its domain. Host-mode names need " +
-        "the hub's own pass, no sign-in. " +
-        "'get' answers the mode, the pattern and the range.",
+      {
+        read: "How every session's previews are reached, fleet-wide. Use it before changing it.",
+        write:
+          "Changes how every session's previews are reached, fleet-wide. Use it when the person asks for previews by port or by host name.",
+      },
       ["get"],
       ["set"],
       {
         mode: z
           .enum(["port", "host"])
           .optional()
-          .describe("Required for 'set'."),
+          .describe(
+            "Required for 'set'. port (default): a port of the hub's preview range per session. host: an origin per session from `pattern`, routed to the range's first port, its names passed by the hub, no sign-in."
+          ),
         pattern: z
           .string()
           .optional()
@@ -1412,8 +1466,7 @@ export function adminTools() {
         }
         return await on.previews.set(fieldsGiven({ mode, pattern }));
       },
-      previewSettingsWords,
-      " It changes how every preview on the fleet is reached, so the person approves it first."
+      previewSettingsWords
     ),
   ];
 }

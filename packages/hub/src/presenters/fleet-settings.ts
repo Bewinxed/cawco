@@ -141,7 +141,13 @@ export const connectionSettingsWords = (
           connections.map(connectionLine)
         );
   }
-  return lines("Saved:", connectionLine(answer));
+  return lines(
+    "Saved:",
+    connectionLine(answer),
+    (answer.auth === "bearer" || answer.auth === "header") &&
+      !answer.hasSecret &&
+      `Its key: the owner runs \`cawco connections set-key ${answer.name}\` on a machine joined to the hub. A key never passes through a session, so it is never asked for in chat.`
+  );
 };
 
 const skillLine = (skill: FleetSkillMeta): string =>
@@ -240,7 +246,7 @@ export const mcpSettingsWords = (
   asked: Asked
 ): Presented => {
   if (isDeleted(answer)) {
-    return removedWords(`MCP server ${asked.name}`, answer);
+    return `${removedWords(`MCP server ${asked.name}`, answer)} Running sessions let it go within seconds.`;
   }
   if ("mcp" in answer) {
     const { mcp } = answer;
@@ -248,7 +254,7 @@ export const mcpSettingsWords = (
       ? "No fleet MCP servers."
       : lines(`${count(mcp.length, "MCP server")}:`, mcp.map(mcpLine));
   }
-  return `Saved MCP server ${asked.name}: ${valueWords(answer, 600)}`;
+  return `Saved MCP server ${asked.name}: ${valueWords(answer, 600)}\nRunning sessions connect to it within seconds; no new session is needed.`;
 };
 
 interface RuleTemplate {
@@ -461,6 +467,16 @@ const harnessConfigLine = (row: FleetHarnessConfig): string => {
   return `- ${row.name} · ${row.enabled ? "on" : "off"} · ${what} · ${placeWords(row)}`;
 };
 
+/** When a row written of each kind takes effect. */
+const HARNESS_CONFIG_TAKEN: Record<HarnessConfigKind, string> = {
+  claudeSettings:
+    "A new session takes it as it starts; a running one keeps what it started with.",
+  opencodePlugins:
+    "Each machine writes the module, or installs the package with npm; a location booted after that sets it up.",
+  piExtensions:
+    "Each machine writes the module, or installs the package with npm; a new session loads it.",
+};
+
 /** admin_claude_settings, admin_opencode_plugins, admin_pi_extensions: each row of the kind, or the one written. */
 export const harnessConfigSettingsWords =
   (kind: HarnessConfigKind) =>
@@ -481,5 +497,9 @@ export const harnessConfigSettingsWords =
             rows.map(harnessConfigLine)
           );
     }
-    return lines("Saved:", harnessConfigLine(answer));
+    return lines(
+      "Saved:",
+      harnessConfigLine(answer),
+      HARNESS_CONFIG_TAKEN[kind]
+    );
   };

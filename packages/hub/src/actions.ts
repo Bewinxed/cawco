@@ -922,7 +922,7 @@ export const createActions = ({
         return {
           id: filed.id,
           state: filed.state,
-          said: "Waiting for the owner's approval.",
+          said: "Waiting for the owner's approval; the hub makes the call once, at run_at or once approved. Go on working; action_list says how it went.",
         };
       }),
       ACTION_LIST_DEFINITION.run(async ({ state, skip }) => {
@@ -1038,7 +1038,7 @@ export const actionRoutes = (actions: Actions) =>
 
 const ACTION_PROPOSE_DEFINITION = defineTool(
   "action_propose",
-  "Propose one exact call of a connection's tool (a post, a send, a merge) for the owner to approve; the hub makes it once, at run_at or once approved. Go on working; action_list says how it went.",
+  "Proposed actions: one exact call of a connection's tool (a post, a send, a merge) that the hub makes once the owner approves it. Use it for a call that acts outside the fleet on the owner's behalf.",
   {
     connection: z
       .string()
@@ -1076,9 +1076,12 @@ const ACTION_PROPOSE_DEFINITION = defineTool(
 
 const ACTION_LIST_DEFINITION = defineTool(
   "action_list",
-  "Your project's approved actions, newest first: each one's call, time, state (proposed, approved, denied, running, done, failed, unknown, cancelled), result or error, and stage move.",
+  "Your project's proposed and approved actions, newest first, each with its call, time, state, result or error, and stage move. Use it to see how an action you proposed went.",
   {
-    state: z.enum(ACTION_STATES).optional(),
+    state: z
+      .enum(ACTION_STATES)
+      .optional()
+      .describe("Only actions in this state."),
     skip: z.number().int().min(0).optional(),
   },
   actionListWords
@@ -1086,7 +1089,7 @@ const ACTION_LIST_DEFINITION = defineTool(
 
 const ACTION_CANCEL_DEFINITION = defineTool(
   "action_cancel",
-  "Cancel an approved action of your project before it runs.",
+  "Cancels an approved action of your project before it runs. Use it when the call is no longer wanted.",
   { id: z.string().trim().min(1).describe("Its id.") },
   actionWords
 );

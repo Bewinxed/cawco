@@ -276,6 +276,7 @@ export const delegateListWords = (
     shown.flatMap((node) => nodeLines(node, 0, now)),
     roots.length > shown.length &&
       `…and ${roots.length - shown.length} older: narrow with since or before.`,
+    roots.length > 0 && "Their reports and refusals reach you by themselves.",
     tree.queued.length > 0 &&
       "Queued for files a live item owns (stop_delegate takes the id):",
     tree.queued.map((one) => queuedLine(one, now)),
@@ -351,7 +352,7 @@ export const delegateTypesWords = (catalog: {
   catalog.types.length === 0
     ? "No delegate types are configured."
     : lines(
-        `${count(catalog.types.length, "delegate type")}; delegate's type takes the name:`,
+        `${count(catalog.types.length, "delegate type")}; delegate's type takes the name, and a project's own type stands in for the fleet's of the same name:`,
         catalog.types.map((type) => typeLine(type, catalog.accountNames))
       );
 
@@ -452,7 +453,7 @@ export const sessionListWords = (list: SessionList): string => {
     shown === 0
       ? noneWords(list.query)
       : [
-          `${count(list.total, "session")}, ${sorted}${list.total > shown ? `; ${shown} shown` : ""}:`,
+          `${count(list.total, "session")}, ${sorted}${list.total > shown ? `; ${shown} shown` : ""}; handoff nudges one by the handle in its link:`,
           ...list.sessions.flatMap((row) => sessionRowLines(row, now)),
         ],
     list.has_more && list.next_cursor

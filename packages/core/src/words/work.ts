@@ -161,7 +161,7 @@ export const workWords = {
     `start held: ${why}; it starts once that is over`,
   /** When a parent hears from its delegate, as `delegate` and a continue answer it. */
   reportArrives:
-    "Its report arrives once it calls finish_item and the hub has landed its work.",
+    "Its report arrives once it calls finish_item and the hub has landed its work: its commits are the evidence, its report the loose ends you pick up.",
   /**
    * The title of your notice of a blocked item: held because its session
    * slept past its limit (hub work-items.ts `blockAsleep`), or because what
@@ -395,8 +395,8 @@ export const workWords = {
   /** `stop_delegate`'s answer: the stop walks `label`'s tree, `under` sessions below it (hub tree-stops.ts). */
   stopAsked: (label: string, under: number) =>
     under === 0
-      ? `Stopping your delegate ${label}. Its report comes once its machine confirms its session ended.`
-      : `Stopping your delegate ${label} and the ${under === 1 ? "delegate" : `${under} delegates`} under it: each ends before the session that started it, ${label} last. Its report, with how each one ended, comes once its machine confirms every end.`,
+      ? `Stopping your delegate ${label}: its item is cancelled, and a later handoff reopens it. Its report comes once its machine confirms its session ended.`
+      : `Stopping your delegate ${label} and the ${under === 1 ? "delegate" : `${under} delegates`} under it: each ends before the session that started it, ${label} last. Its item is cancelled, and a later handoff reopens it. Its report, with how each one ended, comes once its machine confirms every end.`,
   /** The headline of a stopped item's report (hub tree-stops.ts). */
   stoppedHeadline: (title: string, under: number) =>
     under === 0

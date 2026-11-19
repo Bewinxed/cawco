@@ -99,7 +99,7 @@ const ask = z
   .min(1)
   .max(ASK_LIMIT)
   .describe(
-    'The act and its object in their words, like "Pick the head for the phone project page".'
+    'The line that heads the panel until they act: the act and its object in their words, like "Pick the head for the phone project page".'
   );
 
 /** What names it to the person on every surface; a create without one is told how to write it. */
@@ -110,7 +110,7 @@ const title = z
   })
   .min(1)
   .max(ARTIFACT_TITLE_LIMIT)
-  .describe('Like "Title bars close".');
+  .describe('What names it to the person everywhere, like "Title bars close".');
 
 /** A component canvas's edges, groups and dials, as create and update take them. */
 const canvasFields = {
@@ -164,9 +164,8 @@ const mermaid = z
 export const artifactCreate = {
   name: "artifact_create" as const,
   description:
-    "Open something in the person's panel for them to act on; `title` names it to them everywhere, `ask` heads the panel until they act. The `show` skill " +
-    "chooses `does`, `ask` and `kind` before you build. Proof, references, plans and finished work go in your words; " +
-    "a task attempt's result is the exception (task_result). The same kind and name again replaces it, picks kept.",
+    "Something opened in the person's panel for them to act on: a page of decision cards, a live component, a preview or a canvas. " +
+    "Use it when they must pick, judge, try or draw, once the `show` skill has chosen `does`, `ask` and `kind`; proof, plans and finished work go in your own words, and a task attempt's result by task_result.",
   input: {
     kind: z
       .enum(MADE_ARTIFACT_KINDS)
@@ -178,7 +177,12 @@ export const artifactCreate = {
     ),
     ask,
     title,
-    name: z.string().regex(ARTIFACT_NAME).describe("Like onboarding."),
+    name: z
+      .string()
+      .regex(ARTIFACT_NAME)
+      .describe(
+        "Like onboarding. The same kind and name again replaces it, picks kept."
+      ),
     program: z
       .string()
       .min(1)
@@ -252,14 +256,12 @@ export const artifactCreate = {
 export const artifactUpdate = {
   name: "artifact_update" as const,
   description:
-    "Change an artifact of yours, or one a cold session of your project left. `statements`: a decision page's statements that change, merged by name (any of your project's pages). " +
-    "`html` replaces a page, picks kept. `patch`: JSON Patch over its state by choice id, all or none, like " +
-    '[{"op":"replace","path":"/hero/options","value":["b"]}]. A canvas: `elements` (added, or replacing that id), `delete` (ids), ' +
-    "`mermaid`. A component: `args` sets a story's values; `story` adds, duplicates, removes or moves one; `edges`, `group`, `dials`. " +
-    "`ask` changes the head's line, `title` its name.",
+    "Changes an artifact of yours, or one a cold session of your project left. Use it to revise one the person has open.",
   input: {
     id,
-    elements,
+    elements: elements.describe(
+      `${elements.description} One whose id is there replaces it.`
+    ),
     mermaid,
     args: z
       .object({
@@ -267,7 +269,8 @@ export const artifactUpdate = {
         values: argValues,
         unset: z.array(z.string()).optional(),
       })
-      .optional(),
+      .optional()
+      .describe("Sets a component story's values."),
     story: z
       .object({
         add: story,
@@ -279,14 +282,28 @@ export const artifactUpdate = {
         before: story.nullable(),
       })
       .partial()
-      .optional(),
+      .optional()
+      .describe("Adds, duplicates, removes or moves a component's story."),
     delete: z
       .array(z.string().min(1).max(100))
       .min(1)
       .max(CANVAS_LIMITS.deletePerCall)
-      .optional(),
-    statements: z.string().min(1).max(PROGRAM_MAX).optional(),
-    html: z.string().min(1).max(PAGE_LIMIT).optional(),
+      .optional()
+      .describe("A canvas's element ids to remove."),
+    statements: z
+      .string()
+      .min(1)
+      .max(PROGRAM_MAX)
+      .optional()
+      .describe(
+        "A decision page's statements that change, merged by name; any of your project's pages."
+      ),
+    html: z
+      .string()
+      .min(1)
+      .max(PAGE_LIMIT)
+      .optional()
+      .describe("Replaces a page's whole document, picks kept."),
     ask: ask.optional(),
     title: title.optional(),
     ...canvasFields,
@@ -307,31 +324,44 @@ export const artifactUpdate = {
         ])
       )
       .min(1)
-      .optional(),
+      .optional()
+      .describe(
+        'JSON Patch over its state by choice id, all or none, like [{"op":"replace","path":"/hero/options","value":["b"]}].'
+      ),
   },
 };
 
 export const artifactRead = {
   name: "artifact_read" as const,
   description:
-    "Read the person's picks, notes and values on an artifact artifact_list lists: each choice, " +
-    "picked or not. `since`: the seq your last read gave. No id: your newest. `png` adds its picture with pins, `width` px wide; " +
-    "a preview or a page drawn in `state`, its link's `?query` or `#hash`. `save` keeps it as a .png in your clone or $TMPDIR. " +
-    "A canvas: its outline and the person's changes. A component: its frames, moves, stories, `dials` and `tuned`; `state` adds a frame's style delta, " +
-    '`detail: "story"` a story\'s args, `render` draws it now, `verify` asks the design verifier.',
+    "The person's picks, notes and values on an artifact, each choice picked or not. Use it when the person has acted on an artifact, or to see one as they see it.",
   input: {
-    id: id.optional(),
-    since: z.number().int().min(0).optional(),
-    png: z.boolean().optional(),
+    id: id.optional().describe("Its name, handle or id; none, your newest."),
+    since: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("The seq your last read gave: only what is newer."),
+    png: z.boolean().optional().describe("Adds its picture, with pins."),
     width: z
       .number()
       .int()
       .min(PICTURE_LIMITS.minWidth)
       .max(PICTURE_LIMITS.maxWidth)
-      .optional(),
-    detail: z.enum(["summary", "story"]).optional(),
+      .optional()
+      .describe("The picture's width in px."),
+    detail: z
+      .enum(["summary", "story"])
+      .optional()
+      .describe("story: a component story's args."),
     story: z.string().optional(),
-    save: z.string().optional(),
+    save: z
+      .string()
+      .optional()
+      .describe(
+        "Keeps the picture as a .png at this path in your clone or $TMPDIR."
+      ),
     state: z
       .union([
         z.string(),
@@ -346,9 +376,12 @@ export const artifactRead = {
           width: z.number().int().positive().optional(),
         }),
       ])
-      .optional(),
-    render: z.boolean().optional(),
-    verify: z.boolean().optional(),
+      .optional()
+      .describe(
+        "A preview or page drawn in this state (its link's ?query or #hash); a component frame, adding its style delta."
+      ),
+    render: z.boolean().optional().describe("Draws it now."),
+    verify: z.boolean().optional().describe("Asks the design verifier."),
   },
 };
 
@@ -359,44 +392,45 @@ export const artifactList = {
   name: "artifact_list" as const,
   description:
     "Every artifact your artifact tools act on (yours, your tree's, your project's pages, what its cold sessions left), newest first, with whose move each is. " +
-    `${LIST_PAGE} a page. What you asked the person is open_items'.`,
+    "Use it to find an artifact's name before acting on it; what you asked the person is in open_items.",
   input: {
     cursor: z
       .string()
       .max(60)
       .optional()
-      .describe("A page's next_cursor, for the older ones."),
+      .describe(
+        `A page's next_cursor, for the older ones; ${LIST_PAGE} a page.`
+      ),
   },
 };
 
 export const artifactShow = {
   name: "artifact_show" as const,
   description:
-    "Bring an artifact, yours or your delegation tree's, to the front of your panel; one a delegate handed you opens by this, at its newest version.",
+    "Brings an artifact, yours or your delegation tree's, to the front of your panel at its newest version. Use it to open one a delegate handed you, or to put one back in front of the person.",
   input: { id },
 };
 
 export const artifactBrowse = {
   name: "artifact_browse" as const,
   description:
-    "Open an artifact in your own browser tool to click through it as the person would, when the brief asks for that or a fault needs seeing. " +
-    "Answers an address to load once, open for 15 minutes or until this session ends.",
+    "An address that opens an artifact in your own browser tool, to click through it as the person would. " +
+    "Use it when the brief asks for that or a fault needs seeing.",
   input: { id },
 };
 
 export const artifactPromote = {
   name: "artifact_promote" as const,
   description:
-    "Keep an artifact with your project: commits it to artifacts/<name>/ in the project's folder, which outlives this session.",
+    "Keeps an artifact with your project, committed to artifacts/<name>/ in the project's folder, which outlives this session. Use it for an artifact the project's later sessions need.",
   input: { id },
 };
 
 export const artifactDelete = {
   name: "artifact_delete" as const,
   description:
-    "Remove an artifact of yours a newer one superseded, one a delegate below you left once its work item ended, " +
-    "or one a cold session of your project left, once its pins are resolved. " +
-    "Pins go too; a promoted copy stays.",
+    "Removes an artifact with its pins; a promoted copy stays. " +
+    "Use it for one of yours a newer one superseded, one a delegate below you left once its work item ended, or one a cold session of your project left, once its pins are resolved.",
   input: { id },
 };
 
@@ -404,7 +438,7 @@ export const designMap = {
   name: "design_map" as const,
   description:
     "The project's component library: each component's states, frames drawn, what it is made of and used in. " +
-    "`component` (a file) answers its card: props, stories, moves, call sites. Mount what it lists.",
+    "Use it before building UI, to mount the components it lists.",
   input: {
     dir: z
       .string()
@@ -413,7 +447,14 @@ export const designMap = {
       .optional()
       .describe("From your workspace's root; default its source folder."),
     query: z.string().min(1).max(100).optional(),
-    component: z.string().min(1).max(1000).optional(),
+    component: z
+      .string()
+      .min(1)
+      .max(1000)
+      .optional()
+      .describe(
+        "A component's file: answers its card, with props, stories, moves and call sites."
+      ),
     limit: z.number().int().min(1).max(DESIGN_MAP_LIMITS.max).optional(),
     cursor: z.string().max(20).optional(),
   },
@@ -424,9 +465,11 @@ const pin = z.string().min(6).max(36).describe("Its handle or id.");
 export const commentRead = {
   name: "comment_read" as const,
   description:
-    "Read the person's pins on your artifacts: what each stands on (selector, file:line, text), and its thread. New ones reach you by themselves. No artifact: all of yours.",
+    "The person's pins on your artifacts: what each stands on (selector, file:line, text), and its thread. Use it to read a pin before you answer it, or to see what stays open on a page.",
   input: {
-    artifact: id.optional(),
+    artifact: id
+      .optional()
+      .describe("Its name, handle or id; none, all of yours."),
     filter: z.enum(["open", "resolved", "all"]).default("open"),
     since: z
       .string()
@@ -439,28 +482,41 @@ export const commentRead = {
 export const commentReply = {
   name: "comment_reply" as const,
   description:
-    "Answer a pin in its thread; after a change, name the files changed. `asks: true` when the reply " +
-    "needs their answer or pick: it reaches them in Needs you until they reply or resolve, so leave the pin " +
-    "open. A fix, a done or an FYI goes without it and stays on the page. Answers its link: name it by that.",
+    "Answers in a pin's thread. Use it to reply to a pin; once your change answers it, comment_resolve closes it.",
   input: {
     pin,
     text: z.string().min(1).max(COMMENT_LIMITS.text),
-    files: z.array(z.string().min(1).max(COMMENT_LIMITS.file)).optional(),
-    asks: z.boolean().optional(),
+    files: z
+      .array(z.string().min(1).max(COMMENT_LIMITS.file))
+      .optional()
+      .describe("After a change, the files it changed."),
+    asks: z
+      .boolean()
+      .optional()
+      .describe(
+        "true when the reply needs their answer or pick: it reaches them in Needs you until they reply or resolve, so leave the pin open. A fix, a done or an FYI goes without it and stays on the page."
+      ),
   },
 };
 
 export const commentResolve = {
   name: "comment_resolve" as const,
-  description:
-    "Resolve a pin once your change answers it, with a last line when it helps. The person can reopen it.",
-  input: { pin, text: z.string().min(1).max(COMMENT_LIMITS.text).optional() },
+  description: "Resolves a pin. Use it once your change answers the pin.",
+  input: {
+    pin,
+    text: z
+      .string()
+      .min(1)
+      .max(COMMENT_LIMITS.text)
+      .optional()
+      .describe("A last line in its thread, when it helps."),
+  },
 };
 
 export const questionClose = {
   name: "question_close" as const,
   description:
-    "Close a question your tree put to the person: use when open_items lists it answered and you acted on it, or when it no longer applies. He is asked it no more; nothing is deleted.",
+    "Closes a question your tree put to the person, so they are asked it no more; nothing is deleted. Use it when open_items lists it answered and you acted on it, or when it no longer applies.",
   input: {
     question: z
       .string()
@@ -483,7 +539,7 @@ export const questionClose = {
 export const settle = {
   name: "settle" as const,
   description:
-    "Pick an option on a decision card the project's Who decides gives you as a member of it: a card of yours whose kind goes to the agent that asked, or a card the hub sent you to settle. A card the person decides is refused.",
+    "Picks an option on a decision card that the project's Who decides gives you as a member. Use it on a card of yours whose kind goes to the agent that asked, or on a card the hub sent you to settle.",
   input: {
     card: z
       .string()

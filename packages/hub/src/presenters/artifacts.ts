@@ -782,13 +782,13 @@ export const commentReadWords = (
       ...artifact.pins.flatMap((pin) => pinLines(pin, now)),
     ]),
     "comment_reply and comment_resolve take a pin's handle; name a pin to the person by its link.",
-    `Read at ${read.at}: since takes it, for only what is newer.`
+    `Read at ${read.at}: since takes it, for only what is newer. New pins reach you by themselves.`
   );
 };
 
 /** `comment_reply`. */
 export const commentRepliedWords = (replied: CommentReplied): string =>
-  `Answered ${replied.link} in its thread, where they read it${replied.entry.files?.length ? `, naming ${listed(replied.entry.files)}` : ""}${replied.entry.asks ? "; it asks the person in Needs you until they reply or resolve" : ""}.`;
+  `Answered ${replied.link} in its thread, where they read it${replied.entry.files?.length ? `, naming ${listed(replied.entry.files)}` : ""}${replied.entry.asks ? "; it asks the person in Needs you until they reply or resolve" : ""}. Name the pin to the person by that link.`;
 
 /** `comment_resolve`. */
 export const commentResolvedWords = (resolved: CommentResolved): string =>

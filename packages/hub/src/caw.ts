@@ -2113,25 +2113,30 @@ export const cawRoutes = (caw: Caw) =>
 
 const FOLDER_READ_DEFINITION = defineTool(
   "folder_read",
-  "Read a file, or list a folder (no path: the root), of your project's folder on the hub.",
-  { path: z.string().optional() },
+  "Files and folders of your project's folder on the hub. Use it to read a file there or list a folder.",
+  { path: z.string().optional().describe("No path: the root.") },
   folderReadWords
 );
 
 const FOLDER_WRITE_DEFINITION = defineTool(
   "folder_write",
-  "Commit a file to your project's hub folder; bytes as base64. stages.md must parse; a delegates/ type waits for the person's approval unless their setup page's Send gave it.",
+  "Commits a file to your project's folder on the hub. Use it to add or change one of the project's own files.",
   {
-    path: z.string().min(1),
+    path: z
+      .string()
+      .min(1)
+      .describe(
+        "stages.md must parse; a delegates/ type waits for the person's approval unless their setup page's Send gave it."
+      ),
     content: z.string().max(FOLDER_CONTENT_LIMIT),
-    encoding: z.enum(FOLDER_ENCODINGS).optional(),
+    encoding: z.enum(FOLDER_ENCODINGS).optional().describe("base64 for bytes."),
   },
   folderWrittenWords
 );
 
 const VIEW_DRAFT_DEFINITION = defineTool(
   "view_draft",
-  "Draft a view for the person to keep or discard, as they asked. Components outside CawCo's library are dropped and named in the answer.",
+  "Draft views for the person to keep or discard. Use it when the person asks for a view.",
   {
     name: z.string().describe("Like weekly-review."),
     source: z.string().min(1).describe("openui-lang, no fences."),
@@ -2146,7 +2151,7 @@ const VIEW_DRAFT_DEFINITION = defineTool(
 
 const VIEW_QUERY_DEFINITION = defineTool(
   "view_query",
-  "What a view's Query(tool, args) reads, for your project.",
+  "What a view's Query(tool, args) reads, for your project. Use it to see the data a view will show before you draft it.",
   {
     tool: z.enum(VIEW_TOOLS),
     args: z.record(z.string(), z.unknown()).optional(),
@@ -2156,7 +2161,7 @@ const VIEW_QUERY_DEFINITION = defineTool(
 
 const PROJECT_SETUP_DEFINITION = defineTool(
   "project_setup",
-  "Facts for the project's setup page (project-setup skill).",
+  "Facts for the project's setup page. Use it while you run the project-setup skill.",
   {
     change: z
       .array(z.enum(SETUP_PARTS))
@@ -2168,14 +2173,14 @@ const PROJECT_SETUP_DEFINITION = defineTool(
 
 const PROJECT_NAME_DEFINITION = defineTool(
   "project_name",
-  "Name your project while it has its placeholder name.",
+  "Names your project. Use it while the project has its placeholder name.",
   { name: z.string().min(1).max(200) },
   (named: { name: string }) => `Named the project “${named.name}”.`
 );
 
 const VIEW_GUIDE_DEFINITION = defineTool(
   "view_guide",
-  "How a view's program is written.",
+  "How a view's program is written. Use it before you draft a view.",
   {},
   sentence
 );

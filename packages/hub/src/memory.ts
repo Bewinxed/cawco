@@ -5159,7 +5159,7 @@ export const memoryRoutes = (memory: Memory) =>
 
 const MEMORY_NOTE_DEFINITION = defineTool(
   "memory_note",
-  "Into this project's inbox: a lasting fact (convention, command, decision, place) or the person's correction or preference on how to work; the person decides what is kept.",
+  "Notes into this project's inbox, where the person decides what is kept. Use it as you learn a lasting fact (a convention, command, decision or place) or the person corrects how you work or says a preference.",
   {
     text: z.string().max(NOTE_LIMIT),
     since: z
@@ -5173,16 +5173,36 @@ const MEMORY_NOTE_DEFINITION = defineTool(
 
 const MEMORY_PROPOSE_DEFINITION = defineTool(
   "memory_propose",
-  "AGENTS.md or knowledge/ files' whole new text, citing its inbox notes, as one change. A fact is one line: `- <fact> (since <date>, from <note ids>, used <date>)`. A session's commits now (ask: true asks first); the curator's waits for the person. `card` carries out his own pick on a card of this project's (not one an advisor or agent settled; never with ask) without asking him: `notes` may be held by open proposals, which close; `drop` withdraws notes and the facts resting on them alone.",
+  "Changes to the project's AGENTS.md or knowledge/ files, each file's whole new text citing its inbox notes, as one change. Use it to turn inbox notes into lasting facts, or to carry out the person's own pick on a memory card.",
   {
     files: z
       .array(z.object({ path: z.string(), content: z.string() }))
-      .describe("Each path and whole text; none when card only drops."),
-    notes: z.array(z.string()).optional(),
+      .describe(
+        "Each path and whole text, a fact one line: `- <fact> (since <date>, from <note ids>, used <date>)`. None when card only drops."
+      ),
+    notes: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "The inbox notes it cites; with card, open proposals holding them close."
+      ),
     why: z.string().describe("One line."),
-    ask: z.boolean().optional(),
-    card: z.string().optional().describe("<page>#<card>"),
-    drop: z.array(z.string()).optional(),
+    ask: z
+      .boolean()
+      .optional()
+      .describe(
+        "true asks first; otherwise a session's commits now, the curator's waits for the person."
+      ),
+    card: z
+      .string()
+      .optional()
+      .describe(
+        "<page>#<card>: carries out his own pick on this project's card (not one an advisor or agent settled) without asking; never with ask."
+      ),
+    drop: z
+      .array(z.string())
+      .optional()
+      .describe("Withdraws notes and the facts resting on them alone."),
     fleet: z
       .boolean()
       .optional()
@@ -5193,7 +5213,7 @@ const MEMORY_PROPOSE_DEFINITION = defineTool(
 
 const MEMORY_CLASSIFY_DEFINITION = defineTool(
   "memory_classify",
-  "Archive inbox notes that are not lasting facts, each with what it is.",
+  "Archives inbox notes that are not lasting facts, each with what it is. Use it while curating the inbox, for the notes that will not become facts.",
   {
     notes: z
       .array(z.object({ id: z.string(), kind: z.enum(NOT_LASTING) }))
@@ -5205,9 +5225,14 @@ const MEMORY_CLASSIFY_DEFINITION = defineTool(
 
 const MEMORY_READ_DEFINITION = defineTool(
   "memory_read",
-  "Read AGENTS.md, a knowledge/ file or an inbox note; no path: the inbox's waiting notes and knowledge/'s files.",
+  "The project's memory: AGENTS.md, its knowledge/ files and its inbox notes. Use it to read what the project knows, or the inbox before curating it.",
   {
-    path: z.string().optional(),
+    path: z
+      .string()
+      .optional()
+      .describe(
+        "AGENTS.md, a knowledge/ file or an inbox note; no path, the inbox's waiting notes and knowledge/'s files."
+      ),
     fleet: z
       .boolean()
       .optional()

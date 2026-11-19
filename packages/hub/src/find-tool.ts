@@ -193,7 +193,9 @@ const INPUT = {
   project: z
     .string()
     .optional()
-    .describe('A name or id; "all" for every project.'),
+    .describe(
+      'A name or id; "all" for every project. A delegate searches its own project when left out.'
+    ),
   machine: z.string().optional().describe("A name or id: only sessions on it."),
   since: z.string().optional().describe("YYYY-MM-DD."),
   before: z.string().optional().describe("YYYY-MM-DD: nothing later."),
@@ -214,7 +216,7 @@ export type FindInput = z.infer<typeof SCHEMA> & {
 };
 
 const DESCRIPTION =
-  "Find anything said or made across the fleet, unlanded work included, and what tools returned in any session, best first, each hit dated with an excerpt. Use it before reading transcripts, files or the database for what was said or made. A delegate searches its own project unless project says otherwise.";
+  "Everything said or made across the fleet, unlanded work included, and what tools returned in any session, best first, each hit dated with an excerpt. Use it before reading transcripts, files or the database for what was said or made.";
 
 export interface FindToolDeps {
   find: Find;

@@ -472,7 +472,8 @@ export const projectFromSessionTool = (
 ) =>
   tool(
     PROJECT_FROM_SESSION,
-    "Make this session a project: its machine and folder become the project's place (or it joins the project that already has this repository), this session and its delegates move into it, and its open plan items are filed as tasks labelled `proposed`. Offer it in conversation when the work has outgrown one session (it runs for days, starts delegates, leaves follow-ups), and call it only after the operator says yes.",
+    "Makes this session a project: its machine and folder become the project's place, or it joins the project that already has this repository, and this session and its delegates move into it. " +
+      "Use it once the operator says yes to your offer, made in conversation when the work has outgrown one session (it runs for days, starts delegates, leaves follow-ups).",
     {
       confirm: z
         .literal(true)

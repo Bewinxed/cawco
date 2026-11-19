@@ -1803,7 +1803,7 @@ export const ingressRoutes = (ingress: Ingress) =>
 
 const EVENT_ROUTE_CREATE_DEFINITION = defineTool(
   "event_route_create",
-  "Send your project's matching inbound events (GitHub PRs, issues, comments; connector poll items) to one of its routines as that run's input; the oldest matching route takes an event.",
+  "Event routes: your project's inbound events that match (GitHub pull requests, issues, comments; connector poll items) sent to one of its routines as a run's input, the oldest matching route taking each event. Use it when a routine should run on an event rather than a schedule.",
   {
     ...conditions,
     routine: z.string().describe("The routine's id."),
@@ -1817,7 +1817,7 @@ const EVENT_ROUTE_CREATE_DEFINITION = defineTool(
 
 const EVENT_ROUTE_LIST_DEFINITION = defineTool(
   "event_route_list",
-  "Your project's event routes, whether its GitHub repo is polled (and why not), its connector polls and newest inbound events.",
+  "Your project's event routes, whether its GitHub repository is polled and why not, its connector polls and its newest inbound events. Use it to see what reaches your routines, and why an event did not.",
   {
     skip: z.number().int().min(0).optional(),
   },
@@ -1826,13 +1826,13 @@ const EVENT_ROUTE_LIST_DEFINITION = defineTool(
 
 const EVENT_ROUTE_UPDATE_DEFINITION = defineTool(
   "event_route_update",
-  "Change an event route, or pause it (enabled).",
+  "Changes an event route's conditions, routine or mode, or pauses it. Use it on one of your project's routes.",
   {
     id: ref(),
     ...conditions,
     source: conditions.source.optional(),
     routine: z.string().optional(),
-    enabled: z.boolean().optional(),
+    enabled: z.boolean().optional().describe("false pauses it."),
     mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
   },
   routeWords
@@ -1840,14 +1840,14 @@ const EVENT_ROUTE_UPDATE_DEFINITION = defineTool(
 
 const EVENT_ROUTE_DELETE_DEFINITION = defineTool(
   "event_route_delete",
-  "Delete an event route.",
+  "Deletes an event route. Use it for a route no longer wanted; to stop one for a while, pause it with event_route_update.",
   { id: ref() },
   deletedWords("event route")
 );
 
 const CONNECTOR_POLL_CREATE_DEFINITION = defineTool(
   "connector_poll_create",
-  "Call a read-only tool of a connection your project grants every interval; each new or changed item becomes an inbound event for your routes.",
+  "Connector polls: a read-only tool of a connection your project grants, called every interval, each new or changed item becoming an inbound event for your routes. Use it to bring a service without webhooks into your routines.",
   {
     connection: z.string(),
     tool: z
@@ -1860,14 +1860,14 @@ const CONNECTOR_POLL_CREATE_DEFINITION = defineTool(
 
 const CONNECTOR_POLL_LIST_DEFINITION = defineTool(
   "connector_poll_list",
-  "Your project's connector polls, each with what its last call saw or why it failed.",
+  "Your project's connector polls, each with what its last call saw or why it failed. Use it to check a poll is seeing items.",
   {},
   pollListWords
 );
 
 const CONNECTOR_POLL_UPDATE_DEFINITION = defineTool(
   "connector_poll_update",
-  "Change a connector poll, or pause it (enabled).",
+  "Changes a connector poll's call or interval, or pauses it. Use it on one of your project's polls.",
   {
     id: ref(),
     args: pollFields.args,
@@ -1875,14 +1875,14 @@ const CONNECTOR_POLL_UPDATE_DEFINITION = defineTool(
     items_path: pollFields.items_path,
     id_path: pollFields.id_path.optional(),
     version_path: pollFields.version_path.optional(),
-    enabled: z.boolean().optional(),
+    enabled: z.boolean().optional().describe("false pauses it."),
   },
   pollWords
 );
 
 const CONNECTOR_POLL_DELETE_DEFINITION = defineTool(
   "connector_poll_delete",
-  "Delete a connector poll.",
+  "Deletes a connector poll. Use it for a poll no longer wanted; to stop one for a while, pause it with connector_poll_update.",
   { id: ref() },
   deletedWords("connector poll")
 );
