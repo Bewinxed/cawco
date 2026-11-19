@@ -3793,7 +3793,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * asked once per {@link KEEP_UP_MS}, a third of what puts it to sleep:
      * the stage logs a line for a use after a quiet minute (the workspace
      * sweep, workspace-retire.ts, comes every minute and would say so every
-     * minute). One whose workspace is not active has nothing to run in.
+     * minute). One whose workspace is not active has nothing to run in;
+     * one whose maker sleeps sleeps with it and starts again on its next
+     * open (preview.ts `makerAwake`).
      */
     keepWaitingUp: (online: ReadonlySet<string>): void => {
       const up = waitingServers(online);

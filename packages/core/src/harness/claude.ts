@@ -44,6 +44,8 @@ export const CLAUDE = {
   words: CLAUDE_WORDS,
 
   accountDir: true,
+
+  mcpPerFolder: false,
   homeLogin: "dir",
   soleProvider: "anthropic",
   ownProviderIds: false,

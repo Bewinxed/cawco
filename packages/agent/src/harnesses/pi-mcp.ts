@@ -10,7 +10,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readWithin } from "@cawco/core/bounded";
-import type { BrowserDoor } from "@cawco/core/browser";
 import {
   type FleetItemState,
   type FleetMcpConfig,
@@ -20,7 +19,6 @@ import { standalone } from "@cawco/core/runtime";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { McpServerConfig } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
-import { CHROME_DEVTOOLS, throughGate } from "../browser/door";
 import { type McpGate, throughMcpGate } from "../mcp-gate";
 import { MCP_CONNECT_MS } from "../mcp-status";
 import { toolEnv } from "../tools";
@@ -29,34 +27,28 @@ import { toolEnv } from "../tools";
  * The fleet's servers as pi's entries, each `deferred` (declared once
  * `tool_search` loads it, as Claude Code defers MCP tools behind its
  * ToolSearch), and why any is left out: pi takes no SSE server ("`sse` is
- * rejected", pi.dev/docs/latest/mcp), and chrome-devtools goes through the
- * session's browser gate alone, so with no `door` it is not taken. A
- * workspace session takes every server with a command through its
- * workspace's MCP gate (`gate`, mcp-gate.ts), chrome-devtools too, as
- * Claude Code's and OpenCode's sessions there do.
+ * rejected", pi.dev/docs/latest/mcp). Every server with a command goes
+ * through the session's MCP gate (`gate`, mcp-gate.ts), which starts it at
+ * its first call, chrome-devtools through the gate's browser door: pi
+ * "connects every enabled server in the background when a session starts"
+ * (the same page), and the gate answers that connection from its last
+ * listing, starting nothing.
  */
 export const piMcpServers = (
   fleet: Record<string, FleetMcpConfig>,
-  door: BrowserDoor | undefined,
-  gate?: McpGate
+  gate: McpGate
 ): {
   servers: Record<string, McpServerConfig>;
   skipped: Record<string, string>;
 } => {
   const taken: Record<string, McpServerConfig> = {};
   const skipped: Record<string, string> = {};
-  const servers = gate ? throughMcpGate(fleet, gate) : fleet;
-  for (const [name, config] of Object.entries(servers)) {
+  for (const [name, config] of Object.entries(throughMcpGate(fleet, gate))) {
     const entry = piMcpEntry(config);
     if ("skipped" in entry) {
       skipped[name] = entry.skipped;
-    } else if (!(name === CHROME_DEVTOOLS && "command" in entry)) {
-      taken[name] = entry;
-    } else if (door) {
-      taken[name] = { ...entry, args: throughGate(entry.args ?? [], door) };
     } else {
-      skipped[name] =
-        "the session's browser door could not be made, so it takes no chrome-devtools.";
+      taken[name] = entry;
     }
   }
   return { servers: taken, skipped };

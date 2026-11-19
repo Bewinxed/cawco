@@ -39,6 +39,7 @@ export type HarnessTraits = HarnessHomeLogin &
     | "costMeaning"
     | "custody"
     | "listsAllConversations"
+    | "mcpPerFolder"
     | "modelCatalog"
     | "ownProviderIds"
     | "permissionModes"
@@ -81,6 +82,7 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   custody: "keeper", // as a compare with a name it isn't
   listsAllConversations: true, // as a compare with a name it isn't
   catalogProvesGone: false, // nothing claimed
+  mcpPerFolder: false, // nothing claimed
   readsStoredContext: false, // nothing claimed
   readsThroughCli: false, // nothing claimed
   rewindAnchor: "assistant-before", // as a compare with a name it isn't

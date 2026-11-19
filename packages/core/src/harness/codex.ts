@@ -51,6 +51,7 @@ export const CODEX = {
   // conversations sit in one thread store every home on the machine shares,
   // so a session that changes account carries nothing.
   accountDir: false,
+  mcpPerFolder: false,
   // No machine sign-in moves in: CawCo never reads a Codex token, the
   // machine's `~/.codex` included (the owner's pick "Codex's own sign-in",
   // 2026-11-17).

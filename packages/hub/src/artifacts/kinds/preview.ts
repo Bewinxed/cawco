@@ -107,7 +107,20 @@ export type PreviewKindContext = Pick<
 export const createPreviewKind = (ctx: PreviewKindContext) => {
   const { above, db, deps, holder, ofTree, pagesShowing, waitsOnPerson } = ctx;
 
-  /** The served preview waiting on the person for each server on a machine in `online`, by its workspace and port: waiting itself, or on a decision page that does, its workspace active to run it in. */
+  /**
+   * Whether the session that made `row` is awake: its process starting or
+   * running, as the hub holds it. A sleeping one's waiting servers sleep
+   * with it (the owner's pick on "What stays running on a machine",
+   * 2026-11-19: "Let it sleep"); the stage starts again on the first open
+   * (agent stage.ts `wakeSource`).
+   */
+  const makerAwake = (row: ArtifactRow): boolean => {
+    const maker = row.madeBy ?? row.instanceId;
+    const status = maker ? deps.instance(maker)?.status : undefined;
+    return status === "starting" || status === "running";
+  };
+
+  /** The served preview waiting on the person for each server on a machine in `online`, by its workspace and port: waiting itself, or on a decision page that does, its maker awake ({@link makerAwake}) and its workspace active to run it in. */
   const waitingServers = (
     online: ReadonlySet<string>
   ): Map<string, ArtifactRow> => {
@@ -115,7 +128,12 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     const servers = new Map<string, ArtifactRow>();
     for (const row of db.asking()) {
       const served = servedOf(row);
-      if (!(served && row.machineId && online.has(row.machineId))) {
+      if (!(
+        served &&
+        row.machineId &&
+        online.has(row.machineId) &&
+        makerAwake(row)
+      )) {
         continue;
       }
       const waits =

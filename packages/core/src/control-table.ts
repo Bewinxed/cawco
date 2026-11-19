@@ -27,7 +27,6 @@ import type { PictureAsk, PictureTaken } from "./artifact-picture";
 import type { BinaryUpdatePolicy } from "./binary-updates";
 import type {
   BrowserAskedPage,
-  BrowserDoor,
   BrowserFrame,
   BrowserHandback,
   BrowserInjectAdvertArgs,
@@ -287,18 +286,8 @@ interface ControlTable {
   configureBinaryUpdates: Unread<[policy: BinaryUpdatePolicy]>;
   deleteSession: Unread<[sessionKey: string, dir?: CatalogDir]>;
   fleetDelta: Entry<[delta: FleetDelta], FleetAck>;
-  /**
-   * `door`, a session's browser door, is the agent's own word to a pi
-   * session's host, which the hub never sends (agent pi-sessiond.ts).
-   */
-  fleetMcpChanged: Entry<
-    [changes: FleetMcpChange[], door?: BrowserDoor | null],
-    FleetMcpTakeAnswer
-  >;
-  fleetMcpHeal: Entry<
-    [names?: string[] | null, door?: BrowserDoor | null],
-    FleetMcpTakeAnswer
-  >;
+  fleetMcpChanged: Entry<[changes: FleetMcpChange[]], FleetMcpTakeAnswer>;
+  fleetMcpHeal: Entry<[names?: string[] | null], FleetMcpTakeAnswer>;
   fleetSettings: Unread<[]>;
   fleetStatus: Unread<[]>;
   folderCommands: Entry<

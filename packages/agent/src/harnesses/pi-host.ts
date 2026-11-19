@@ -46,16 +46,13 @@ function start(
   if (command.gateForm) {
     state.gateForm = command.gateForm;
   }
-  const { door } = command;
   const ctx: HarnessContext = {
     instanceId: command.spec.instanceId,
     cwd: command.spec.cwd,
     ...(command.boundary ? { boundary: command.boundary } : {}),
-    // Its workspace's MCP gate, which its agent named: its fleet servers
-    // with a command go through it.
+    // Its MCP gate, which its agent named: its fleet servers with a
+    // command go through it.
     ...(command.mcpGate ? { mcpGate: command.mcpGate } : {}),
-    // The door its agent made: the host makes none of its own.
-    ...(door ? { browserDoor: () => Promise.resolve(door) } : {}),
     frame: (message) => {
       if (message.type === "system" && message.subtype === MESSAGES_READ) {
         const read = new Set(message.read);

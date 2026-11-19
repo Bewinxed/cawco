@@ -19,7 +19,6 @@ import {
   waitingWords,
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { BrowserDoor } from "@cawco/core/browser";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
 import type { CutCommand } from "@cawco/core/commands/controls";
 import { CONTROL_RUN_COMMAND } from "@cawco/core/commands/controls";
@@ -47,6 +46,7 @@ import type {
   HarnessFailed,
   HarnessUnanswered,
 } from "@cawco/core/frames";
+import { folderGateId } from "@cawco/core/gateway-paths";
 import type { AgentBusyReport, AgentNotice } from "@cawco/core/harness";
 import {
   ACCOUNT_READ,
@@ -184,11 +184,7 @@ import { hookArmed } from "./boundary/ensure";
 import { sandboxOf } from "./boundary/sandboxes";
 import type { Boundary } from "./boundary/state";
 import { endSessionWork } from "./boundary/work";
-import {
-  browserDoor,
-  closeBrowserDoor,
-  forgetBrowserDoor,
-} from "./browser/door";
+import { closeBrowserDoor, forgetBrowserDoor } from "./browser/door";
 import {
   closeCanvasScreen,
   closeCanvasScreens,
@@ -245,7 +241,7 @@ import { watchLeaks } from "./leak-watch";
 import { createLeftRunning } from "./left-running";
 import { LiveSessions } from "./live-sessions";
 import { measureMemoryRoom } from "./machine-room";
-import { mcpGateOf, mcpHost } from "./mcp-host";
+import { type GateHome, mcpGateOf, mcpHost } from "./mcp-host";
 import { retireInstalls } from "./mcp-install";
 import { onFleetMcpMoved } from "./mcp-status";
 import { gaugeGroup, gaugeTables } from "./memory";
@@ -673,6 +669,39 @@ type SupervisorPorts = Pick<
   | "stage"
   | "stageClone"
 >;
+
+/**
+ * A session's MCP gate (mcp-gate.ts), which starts each fleet server with a
+ * command at its first call, chrome-devtools through the gate id's browser
+ * door: its workspace's when its boundary holds it, else its own, in its
+ * folder: its place's, the session's, or the folder's when one server of
+ * its harness runs a folder's MCP servers for all its sessions (core
+ * `mcpPerFolder`). A fenced session takes no fleet server, so has none.
+ */
+const gateOf = (
+  spec: SpawnPayload,
+  workdir: string,
+  place: string | undefined,
+  bounded: boolean
+): { home?: GateHome; id: string } | undefined => {
+  if (spec.fence) {
+    return;
+  }
+  if (bounded && place) {
+    return { id: place };
+  }
+  const own = traitsOf(spec.harness).mcpPerFolder
+    ? folderGateId(workdir)
+    : spec.instanceId;
+  // A place's door keeps its project with its record; a session's own, here.
+  return {
+    id: place ?? own,
+    home: {
+      path: workdir,
+      ...(spec.projectId && !place ? { projectId: spec.projectId } : {}),
+    },
+  };
+};
 
 export class SessionSupervisor {
   #stopSequence = 0;
@@ -3072,14 +3101,7 @@ export class SessionSupervisor {
       boundary && place ? { boundary, workspace: place.id } : undefined,
       sessionCredential,
       recovery,
-      // Its browser tool's door (browser/door.ts): its workspace's, else
-      // its own. A fenced session takes no fleet server, so has none.
-      spec.fence
-        ? undefined
-        : () =>
-            place
-              ? browserDoor(this.#ports, place.id)
-              : browserDoor(this.#ports, spec.instanceId, spec.projectId),
+      gateOf(spec, workdir, place?.id, boundary !== undefined),
       containerEnv,
       hostTmp
     );
@@ -3102,7 +3124,7 @@ export class SessionSupervisor {
     bounded?: { boundary: Boundary; workspace: string },
     sessionCredential?: string,
     recovery = false,
-    browser?: () => Promise<BrowserDoor>,
+    gate?: { home?: GateHome; id: string },
     containerEnv?: Readonly<Record<string, string>>,
     hostTmp?: string
   ): HarnessContext {
@@ -3110,12 +3132,12 @@ export class SessionSupervisor {
     if (!processGeneration) {
       throw new Error("The hub did not supply this process's generation.");
     }
-    // A workspace session reaches its fleet servers through its workspace's
+    // Every session but a fenced one reaches its fleet servers through its
     // gate (mcp-gate.ts), held while this process runs: the gate's own
     // processes end with the last one that holds it.
     const gateMember = `${instanceId}:${processGeneration}`;
-    if (bounded) {
-      mcpHost.joinGate(bounded.workspace, gateMember);
+    if (gate) {
+      mcpHost.joinGate(gate.id, gateMember, gate.home);
     }
     this.#generations.set(instanceId, processGeneration);
     this.#placed.set(instanceId, {
@@ -3167,10 +3189,9 @@ export class SessionSupervisor {
         ? { ingested: this.#ingested.get(instanceId) }
         : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
-      ...(browser ? { browserDoor: browser } : {}),
       ...(containerEnv ? { containerEnv } : {}),
       ...(hostTmp ? { hostTmp } : {}),
-      ...(bounded ? { mcpGate: mcpGateOf(bounded.workspace) } : {}),
+      ...(gate ? { mcpGate: mcpGateOf(gate.id) } : {}),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
        * an adapter that does not read its frames off a ring never calls it,
@@ -3345,9 +3366,10 @@ export class SessionSupervisor {
       closed: () => {
         // A session outside any workspace browsed through a door of its own:
         // its pages close with its process, as its browser tool's Chromium did.
-        if (bounded) {
-          mcpHost.leaveGate(bounded.workspace, gateMember);
-        } else {
+        if (gate) {
+          mcpHost.leaveGate(gate.id, gateMember);
+        }
+        if (!bounded) {
           closeBrowserDoor(instanceId);
         }
         // A dead process is never going to answer anything it asked.

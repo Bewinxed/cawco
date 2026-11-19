@@ -222,7 +222,6 @@ const BrowserRelay = object({
   username: text,
 });
 const KeyArgs = object({ key: BrowserKey });
-const BrowserDoor = object({ config: text });
 
 /** Each control's arguments, as its schema: the table's, no more and no less. */
 const ARGS: {
@@ -290,8 +289,8 @@ const ARGS: {
   mcpServerStatus: tuple([]),
   reconnectMcpServer: tuple([named]),
   toggleMcpServer: tuple([named, boolean()]),
-  fleetMcpChanged: tuple([array(FleetMcpChange), maybe(BrowserDoor)]),
-  fleetMcpHeal: tuple([maybe(texts), maybe(BrowserDoor)]),
+  fleetMcpChanged: tuple([array(FleetMcpChange)]),
+  fleetMcpHeal: tuple([maybe(texts)]),
   fleetSettings: tuple([]),
   sleep: tuple([]),
   restless: tuple([texts]),

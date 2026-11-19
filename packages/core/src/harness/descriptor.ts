@@ -280,6 +280,12 @@ interface HarnessDescriptorFacts<K extends string> {
   readonly kind: K;
   /** Whether a machine's listing names every conversation it holds, so one it doesn't name is gone; a filtered listing proves nothing by leaving one out. */
   readonly listsAllConversations: boolean;
+  /**
+   * Whether one server of it runs the MCP servers of a folder for every
+   * session there (OpenCode's location), so their MCP gate is the folder's
+   * (core `folderGateId`); otherwise each session holds its own.
+   */
+  readonly mcpPerFolder: boolean;
 
   /**
    * Where its model list comes from. `account`: read per account by the

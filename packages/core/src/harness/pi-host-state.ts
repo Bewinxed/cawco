@@ -113,14 +113,11 @@ const BOUNDARY = object({
   scratch: string(),
 });
 
-/** A workspace session's MCP gate (agent mcp-gate.ts `McpGate`), held to it as {@link BOUNDARY} is. */
+/** A session's MCP gate (agent mcp-gate.ts `McpGate`), held to it as {@link BOUNDARY} is. */
 const MCP_GATE = object({
   base: string(),
   headers: record(string(), string()),
 });
-
-/** The door a session's browser tool is launched through (core browser.ts `BrowserDoor`). */
-const BROWSER_DOOR = object({ config: string() });
 
 /** What a turn carries beside its message (agent harness.ts `TurnExtras`). */
 const TURN_EXTRAS = object({
@@ -141,9 +138,7 @@ const PI_HOST_COMMAND = variant("type", [
     boundary: optional(BOUNDARY),
     /** The gate form of the build that starts the host, which is the build the host runs (agent gate-form.ts). */
     gateForm: optional(string()),
-    /** The session's browser door, which the fleet's chrome-devtools goes through (agent `piBrowserDoor`). */
-    door: optional(BROWSER_DOOR),
-    /** A workspace session's MCP gate, which its fleet servers with a command go through. */
+    /** The session's MCP gate, which its fleet servers with a command go through, started at their first call. */
     mcpGate: optional(MCP_GATE),
   }),
   object({

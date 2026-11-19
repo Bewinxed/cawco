@@ -23,6 +23,8 @@ export const OPENCODE = {
   words: OPENCODE_WORDS,
 
   accountDir: false,
+
+  mcpPerFolder: true,
   homeLogin: "credentials",
   soleProvider: null,
   ownProviderIds: true,

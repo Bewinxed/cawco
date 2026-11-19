@@ -9,7 +9,6 @@ import {
   providerErrorOf,
 } from "@cawco/core/accounts";
 import type { RestartHold } from "@cawco/core/binary-updates";
-import type { BrowserDoor } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import type { StartingSet } from "@cawco/core/delegate-types";
 import { deniedToolsOn, inStartingSet } from "@cawco/core/delegate-types";
@@ -492,16 +491,12 @@ class FleetMcp {
   /** Each registered server's entry, as registered. */
   readonly #held = new Map<string, string>();
   readonly #cwd: string;
-  /** A workspace session's MCP gate, which its servers with a command go through ({@link piMcpServers}). */
-  readonly #gate: McpGate | undefined;
+  /** The session's MCP gate, which its servers with a command go through ({@link piMcpServers}). */
+  readonly #gate: McpGate;
   /** The servers it started with ({@link SpawnPayload.startingSet}): it takes no fleet server outside them. */
   readonly #set: StartingSet | undefined;
 
-  constructor(
-    cwd: string,
-    gate: McpGate | undefined,
-    set: StartingSet | undefined
-  ) {
+  constructor(cwd: string, gate: McpGate, set: StartingSet | undefined) {
     this.#cwd = cwd;
     this.#gate = gate;
     this.#set = set;
@@ -535,16 +530,14 @@ class FleetMcp {
 
   /**
    * The fleet's servers for this session's folder now ({@link piMcpServers}),
-   * held to its starting set, the gated chrome-devtools through `door`, and
-   * why any is not taken.
+   * held to its starting set, and why any is not taken.
    */
-  async read(door: BrowserDoor | undefined): Promise<{
+  async read(): Promise<{
     servers: Record<string, McpServerConfig>;
     skipped: Record<string, string>;
   }> {
     return piMcpServers(
       inStartingSet(await fleetMcpAt(this.#cwd), this.#set),
-      door,
       this.#gate
     );
   }
@@ -600,18 +593,14 @@ class FleetMcp {
    * sign-in takes it ({@link take}): pi's registrations are all it shows of
    * a server, and its `tool_search` and codemode wait on one connecting.
    */
-  async heal(
-    names: readonly string[],
-    door: BrowserDoor | undefined
-  ): Promise<FleetMcpTakeAnswer> {
+  async heal(names: readonly string[]): Promise<FleetMcpTakeAnswer> {
     const missing = names.filter((name) => !this.#held.has(name));
     const taken =
       missing.length === 0
         ? []
         : (
             await this.take(
-              missing.map((name) => ({ name, kind: "signed-in" })),
-              door
+              missing.map((name) => ({ name, kind: "signed-in" }))
             )
           ).servers;
     return {
@@ -654,10 +643,7 @@ class FleetMcp {
   }
 
   /** A fleet change taken in place: the set read again and applied ({@link #apply}). */
-  async take(
-    changes: readonly FleetMcpChange[],
-    door: BrowserDoor | undefined
-  ): Promise<FleetMcpTakeAnswer> {
+  async take(changes: readonly FleetMcpChange[]): Promise<FleetMcpTakeAnswer> {
     // A sign-in or sign-out at the hub, and a server switched back on, are
     // dialled anew: pi holds a server switched off on its config as it was,
     // and the hub folds a sign-in that lands with the switch into
@@ -666,7 +652,7 @@ class FleetMcp {
     const again = new Set(
       changes.filter(({ kind }) => AGAIN.has(kind)).map(({ name }) => name)
     );
-    const { servers, skipped } = await this.read(door);
+    const { servers, skipped } = await this.read();
     const done = this.#apply(servers, again);
     return {
       servers: changes.map(({ name, kind }) => ({
@@ -1829,11 +1815,10 @@ class PiSession implements HarnessSession {
       console.error(`[pi] cawco tools refreshed: ${count} listed`);
       return { listed: count };
     },
-    // The agent sends the session's door with the changes (pi-sessiond.ts).
-    [CONTROL_MCP_FLEET_CHANGED]: async (changes, door) =>
+    [CONTROL_MCP_FLEET_CHANGED]: async (changes) =>
       // A fenced session takes no MCP server ({@link cawcosExtensionsAlone}).
       this.#fleetMcp
-        ? await this.#fleetMcp.take(changes, door ?? undefined)
+        ? await this.#fleetMcp.take(changes)
         : {
             servers: changes.map(({ name, kind }) => ({
               name,
@@ -1842,11 +1827,11 @@ class PiSession implements HarnessSession {
               holds: false,
             })),
           },
-    // Named by the hub for a connect ask; the agent sends the door (pi-sessiond.ts).
-    [CONTROL_MCP_FLEET_HEAL]: async (asked, door) => {
+    // Named by the hub for a connect ask.
+    [CONTROL_MCP_FLEET_HEAL]: async (asked) => {
       const names = asked ?? [];
       return this.#fleetMcp
-        ? await this.#fleetMcp.heal(names, door ?? undefined)
+        ? await this.#fleetMcp.heal(names)
         : {
             servers: names.map((name) => ({
               name,
@@ -2192,16 +2177,15 @@ export async function startPiHost(
   // fenced session has none of them, and CawCo's extensions alone
   // ({@link cawcosExtensionsAlone}).
   const fenced = spec.fence === true;
-  const fleetMcp = fenced
-    ? undefined
-    : new FleetMcp(ctx.cwd, ctx.mcpGate, spec.startingSet);
+  const fleetMcp =
+    fenced || !ctx.mcpGate
+      ? undefined
+      : new FleetMcp(ctx.cwd, ctx.mcpGate, spec.startingSet);
   const mcp: ExtensionFactory[] = fleetMcp
     ? [
         createToolSearchExtension(),
         piMcpExtension(spec.startingSet),
-        fleetMcp.extension(
-          (await fleetMcp.read(await ctx.browserDoor?.())).servers
-        ),
+        fleetMcp.extension((await fleetMcp.read()).servers),
       ]
     : [];
   // The fleet's hooks, and its folder's project's (`FleetHooks`); a fenced

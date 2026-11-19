@@ -19,6 +19,8 @@ export const PI = {
   words: PI_WORDS,
 
   accountDir: false,
+
+  mcpPerFolder: false,
   homeLogin: "credentials",
   soleProvider: null,
   ownProviderIds: false,

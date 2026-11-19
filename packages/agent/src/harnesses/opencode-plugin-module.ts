@@ -75,11 +75,11 @@
  * - The fleet's OpenCode plugins and its project's placed at the location
  *   (the agent's fleet-harness-config.ts), each module's `setup` handed
  *   this location's `ctx` before CawCo's own hooks register.
- * - `ctx.mcp.transform`: the project MCP servers CawCo placed; in a
- *   workspace's location every fleet server with a command reached through
- *   the workspace's MCP gate on the agent (mcp-gate.ts), which runs it on
- *   the host, chrome-devtools through the workspace's browser door, as the
- *   workspace's Claude Code and pi sessions reach them; and every other
+ * - `ctx.mcp.transform`: the project MCP servers CawCo placed; every fleet
+ *   server with a command reached through the location's MCP gate on the
+ *   agent (mcp-gate.ts), which runs it on the host at its first call, in a
+ *   workspace's location chrome-devtools through the workspace's browser
+ *   door, as Claude Code's and pi's sessions reach them; and every other
  *   local server started on the machine's own data dir.
  */
 import { spawn } from "node:child_process";
@@ -96,6 +96,7 @@ import { fileURLToPath } from "node:url";
 import { CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import type { FleetMcpConfig } from "@cawco/core/fleet";
+import { folderGateId } from "@cawco/core/gateway-paths";
 import {
   type HookEvent,
   type HookVerdict,
@@ -722,8 +723,8 @@ const placeAt = (directory: string): FleetPlaceSet | undefined => {
   return undefined;
 };
 // The names of the fleet's servers for `directory`, its own and its
-// place's copies: in a workspace's location each one with a command goes
-// through the workspace's MCP gate. None when the set cannot be read.
+// place's copies: each one with a command goes through the location's MCP
+// gate. None when the set cannot be read.
 const fleetNames = (directory: string): Set<string> => {
   let set: Partial<FleetMcpSet>;
   try {
@@ -737,7 +738,7 @@ const fleetNames = (directory: string): Set<string> => {
   ]);
 };
 // The host key, or none when the agent has made none yet: then no fleet
-// server with a command is reached in a workspace's location.
+// server with a command is reached.
 const hostKey = (): string | undefined => {
   try {
     return readFileSync(settings.hostKeyFile, "utf8").trim() || undefined;
@@ -1278,17 +1279,18 @@ const placeMcp = (
 type McpEditor = Parameters<Parameters<Context["mcp"]["transform"]>[0]>[0];
 type McpServer = ReturnType<McpEditor["list"]>[number][1];
 
-/** What a location of a workspace reaches its local servers by. */
+/** What a location reaches its local servers by. */
 interface McpGate {
-  /** The fleet's servers a workspace's gate runs on the host. */
+  /** The fleet's servers its gate runs on the host. */
   gated: Set<string>;
+  /** Its gate: its workspace's, else its folder's (core `folderGateId`). */
+  id: string;
   /** The key the gate answers to, once the agent has made one. */
   key: string | undefined;
-  workspace: string | undefined;
 }
 
-// One local server of a location: through the workspace's gate when the gate
-// runs it, off when it is a browser tool, else on the machine's data dir.
+// One local server of a location: through its gate when the gate runs it,
+// off when it is a browser tool, else on the machine's data dir.
 const settleLocal = (
   editor: McpEditor,
   gate: McpGate,
@@ -1297,10 +1299,10 @@ const settleLocal = (
 ): void => {
   if (gate.gated.has(name)) {
     editor.remove(name);
-    if (gate.key && gate.workspace) {
+    if (gate.key) {
       editor.set(name, {
         type: "remote",
-        url: `${settings.hubBase}${settings.gatePrefix}${encodeURIComponent(gate.workspace)}/${encodeURIComponent(name)}`,
+        url: `${settings.hubBase}${settings.gatePrefix}${encodeURIComponent(gate.id)}/${encodeURIComponent(name)}`,
         oauth: false,
         ...(timeout ? { timeout } : {}),
         headers: { Authorization: `Bearer ${gate.key}` },
@@ -1336,15 +1338,23 @@ const transformMcp = async (ctx: Context, here: Here): Promise<void> => {
       return;
     }
     placeMcp(editor, here.directory);
-    // In a workspace's location the agent runs each fleet server with a
-    // command, on the host, one process for the workspace, chrome-devtools
-    // through its browser door (the agent's mcp-host.ts): the location
-    // dials its gate, and starts none of them itself. A location in no
-    // workspace has no door, so it launches no browser tool.
+    // The agent runs each fleet server with a command on the host, one
+    // process for the location's gate, started at its first call (the
+    // agent's mcp-host.ts): the location dials its gate, and starts none of
+    // them itself, as OpenCode's own "Servers connect automatically"
+    // (opencode.ai/docs/mcp-servers) would at the location's start. A
+    // workspace's gate is the workspace's, chrome-devtools through its
+    // browser door. A location in no workspace is its folder's, which every
+    // session there shares, so it takes no chrome-devtools, whose one
+    // selected page would be every session's.
+    const names = fleetNames(here.directory);
+    if (!here.workspace) {
+      names.delete(settings.chromeDevtools);
+    }
     const gate: McpGate = {
-      gated: here.workspace ? fleetNames(here.directory) : new Set<string>(),
-      key: here.workspace ? hostKey() : undefined,
-      workspace: here.workspace,
+      gated: names,
+      id: here.workspace ?? folderGateId(here.directory),
+      key: hostKey(),
     };
     for (const [name, config] of [...editor.list()]) {
       if (config.type === "local") {

@@ -67,14 +67,15 @@
  *   window by `tabIdentifier`, and "Permission dialog appears per-process"
  *   (https://github.com/ndrblinov/xcode-mcp-manager), so one process asks once.
  *
- * A workspace's sessions reach every other fleet server with a command
- * through its gate (mcp-gate.ts, `/mcp/gate/<gate id>/<name>`), answered
- * here the same way: one process per gate and server, started at its first
- * call in the workspace's own folder, chrome-devtools through the
- * workspace's browser door with its scratch and folder as its roots
- * ({@link gateLaunch}). So the process is the gate's alone, as chrome-devtools
- * needs, and runs outside the boundary its sessions' own processes run in.
- * It ends with the gate's last session ({@link McpHost.leaveGate}).
+ * Every session reaches every other fleet server with a command through its
+ * gate (mcp-gate.ts, `/mcp/gate/<gate id>/<name>`: its workspace's, else its
+ * own), answered here the same way: one process per gate and server,
+ * started at its first call in the gate's folder, chrome-devtools through
+ * the gate id's browser door with the folder (and a workspace's scratch) as
+ * its roots ({@link gateLaunch}). So the process is the gate's alone, as
+ * chrome-devtools needs, and runs outside any boundary its sessions' own
+ * processes run in. It ends with the gate's last session
+ * ({@link McpHost.leaveGate}).
  */
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
@@ -256,7 +257,19 @@ export const hostedEntry = (
   headers: { Authorization: `Bearer ${hostKey()}` },
 });
 
-/** Gate `gateId` (a workspace's id), as its sessions' harnesses dial it ({@link McpHost.fetchGate}). */
+/**
+ * Where a gate that is no workspace's runs its servers (a session outside
+ * every workspace, or an OpenCode location outside one): the folder, and
+ * the project its own browser door is kept beside. Named as its first
+ * session joins ({@link McpHost.joinGate}); a workspace's gate reads its
+ * folder from the workspace's record.
+ */
+export interface GateHome {
+  readonly path: string;
+  readonly projectId?: string;
+}
+
+/** Gate `gateId` (a workspace's id, a session's own, or a folder's: core `folderGateId`), as its sessions' harnesses dial it ({@link McpHost.fetchGate}). */
 export const mcpGateOf = (gateId: string): McpGate => ({
   base: harnessMcpUrl(gatePath(gateId)),
   headers: { Authorization: `Bearer ${hostKey()}` },
@@ -511,17 +524,19 @@ const sharedLaunch = (config: HostedConfig): Launch => ({
 });
 
 /**
- * A gate's server's launch: its config's command in the workspace's folder
- * `path`, and chrome-devtools through the workspace's browser door (made
- * here, starting no browser), with the workspace's scratch and folder as
- * the roots it saves a capture in, as OpenCode's plugin launched it.
+ * A gate's server's launch: its config's command in the gate's folder
+ * `path`, and chrome-devtools through the gate id's browser door (made
+ * here, starting no browser), with the folder as a root it saves a capture
+ * in, and a workspace's scratch besides, as OpenCode's plugin launched it.
+ * A gate with a `home` is a session's own: its door keeps its project.
  */
 const gateLaunch = async (
   ports: BrowserPorts,
   gateId: string,
   name: string,
   config: HostedConfig,
-  path: string
+  path: string,
+  home: GateHome | undefined
 ): Promise<Launch> => {
   const door = await import("./browser/door");
   const args =
@@ -529,9 +544,9 @@ const gateLaunch = async (
       ? [
           ...door.throughGate(
             config.args ?? [],
-            await door.browserDoor(ports, gateId)
+            await door.browserDoor(ports, gateId, home?.projectId)
           ),
-          `--filesystem-root=${workspaceScratchDir(gateId)}`,
+          ...(home ? [] : [`--filesystem-root=${workspaceScratchDir(gateId)}`]),
           `--filesystem-root=${path}`,
         ]
       : (config.args ?? []);
@@ -868,21 +883,33 @@ class McpHost {
   /** Each gate's servers, by gate id, with the sessions that hold it ({@link joinGate}). */
   readonly #gates = new Map<
     string,
-    { readonly members: Set<string>; readonly servers: Map<string, Hosted> }
+    {
+      home: GateHome | undefined;
+      readonly members: Set<string>;
+      readonly servers: Map<string, Hosted>;
+    }
   >();
 
   #gate(gateId: string) {
     let gate = this.#gates.get(gateId);
     if (!gate) {
-      gate = { members: new Set(), servers: new Map() };
+      gate = { home: undefined, members: new Set(), servers: new Map() };
       this.#gates.set(gateId, gate);
     }
     return gate;
   }
 
-  /** A session's process (`member`, its instance and generation) holds gate `gateId` from now. */
-  joinGate(gateId: string, member: string): void {
-    this.#gate(gateId).members.add(member);
+  /**
+   * A session's process (`member`, its instance and generation) holds gate
+   * `gateId` from now; `home` names the folder of a gate that is no
+   * workspace's ({@link GateHome}).
+   */
+  joinGate(gateId: string, member: string, home?: GateHome): void {
+    const gate = this.#gate(gateId);
+    gate.members.add(member);
+    if (home) {
+      gate.home = home;
+    }
   }
 
   /**
@@ -970,9 +997,11 @@ class McpHost {
   /**
    * One harness request on `/mcp/gate/<gate id>/<name>` (mcp-gate.ts): the
    * fleet's server `name` with a command, as the fleet's latest sync names it
-   * for the gate's workspace's folder (placed copies too), served as a shared
-   * one is, by its own process for this gate. A config that changed since
-   * its process started ends it; the next call starts the new one.
+   * for the gate's folder (placed copies too: its workspace's, or the home
+   * its sessions named as they joined), served as a shared one is, by its
+   * own process for this gate. A config that changed since its process
+   * started ends it; the next call starts the new one. A gate no session
+   * holds and no workspace names has no folder, and starts nothing.
    */
   async fetchGate(
     ports: BrowserPorts,
@@ -988,11 +1017,14 @@ class McpHost {
     }
     const id = decodeURIComponent(gateId);
     const server = decodeURIComponent(name);
-    const path = GATE_ID.test(id) ? await workspacePath(id) : undefined;
+    const home = this.#gates.get(id)?.home;
+    const path =
+      home?.path ?? (GATE_ID.test(id) ? await workspacePath(id) : undefined);
     if (!path) {
-      return new Response(`${id} is not a workspace on this machine.`, {
-        status: 404,
-      });
+      return new Response(
+        `${id} is not a workspace on this machine, nor a session's gate that one holds.`,
+        { status: 404 }
+      );
     }
     const config = (await fleetMcpAt(path))[server];
     if (!(config && "command" in config)) {
@@ -1006,7 +1038,7 @@ class McpHost {
     if (hosted?.key !== keyOf(config)) {
       hosted?.stop();
       hosted = new Hosted(server, config, gateKeptFile(keyOf(config)), () =>
-        gateLaunch(ports, id, server, config, path)
+        gateLaunch(ports, id, server, config, path, home)
       );
       gate.servers.set(server, hosted);
     }

@@ -100,15 +100,6 @@ export interface HarnessContext {
    * commands as it always has.
    */
   readonly boundary?: import("./boundary/state").Boundary;
-  /**
-   * The door its browser tool (the fleet's chrome-devtools) is launched
-   * through (browser/door.ts): its workspace's, else its own. Made when
-   * asked, starting no browser. Absent on a fenced session and on an attach,
-   * which launch none.
-   */
-  readonly browserDoor?: () => Promise<
-    import("@cawco/core/browser").BrowserDoor
-  >;
   /** Whether a turn is in flight — the supervisor's busy set and drain read this. */
   busy: (active: boolean) => void;
   /** The session's event loop ended; the supervisor drops its routing entry. */
@@ -162,10 +153,11 @@ export interface HarnessContext {
    */
   line?: (srcEpoch: string, srcSeq: number) => void;
   /**
-   * The gate a workspace session reaches every fleet MCP server with a
-   * command through (mcp-gate.ts): its {@link workspace}'s, on the agent's
-   * gateway. Absent with the boundary: such a session starts its fleet
-   * servers itself.
+   * The gate the session reaches every fleet MCP server with a command
+   * through (mcp-gate.ts), on the agent's gateway, which starts each at its
+   * first call: its {@link workspace}'s, else its own (an OpenCode
+   * location's folder's). Absent on a fenced session, which takes no fleet
+   * server.
    */
   readonly mcpGate?: import("./mcp-gate").McpGate;
   /** Park a permission request; the supervisor forwards it and tracks the reply. */

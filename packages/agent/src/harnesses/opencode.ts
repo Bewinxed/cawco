@@ -610,9 +610,9 @@ const fleetDigest = (config: Record<string, unknown>): string => {
  * What a status read says of chrome-devtools without reading it. OpenCode
  * reaches it only in a workspace's location, through that workspace's MCP
  * gate, which runs it through the workspace's browser door; the plugin
- * removes it from every other location, as Claude Code and pi load none
- * without a door. The read runs in the machine server's own location, which
- * no gate opens on, so it holds none to read.
+ * removes it from every other location, whose gate is the folder's, shared
+ * by its sessions. The read runs in the machine server's own location,
+ * which no gate opens on, so it holds none to read.
  */
 const DOOR_ONLY: FleetItemState = {
   state: "applied",

@@ -1,14 +1,17 @@
 /**
- * A workspace's MCP gate: the agent's gateway path its sessions reach every
- * fleet server with a command through, whatever their harness
- * (`/mcp/gate/<gate id>/<name>`, mcp-host.ts `McpHost.fetchGate`). The
- * server runs on the host, one process per gate and name, started at its
- * first call; a session of the workspace starts none of its own. A Claude
- * Code session in a workspace runs every process it spawns inside the
- * boundary (its shell prefix, boundary/hook-judge.ts `claudePrefixScript`), where no
- * fleet server reaches its install, its browser door or the owner's
- * machines; OpenCode's and pi's take the same gate, so each server works
- * the same in every harness.
+ * A session's MCP gate: the agent's gateway path it reaches every fleet
+ * server with a command through, whatever its harness
+ * (`/mcp/gate/<gate id>/<name>`, mcp-host.ts `McpHost.fetchGate`). The gate
+ * is its workspace's, else its own: the session's, or an OpenCode
+ * location's folder's (core `folderGateId`). The server runs on the host,
+ * one process per gate and name, started at its first call; no session
+ * starts one of its own, so a session's start starts no fleet server (the
+ * owner's pick of 2026-11-19 on "What stays running on a machine": browser
+ * tools "Start on first use"). A Claude Code session in a workspace runs
+ * every process it spawns inside the boundary (its shell prefix,
+ * boundary/hook-judge.ts `claudePrefixScript`), where no fleet server
+ * reaches its install, its browser door or the owner's machines; every
+ * harness takes the same gate, so each server works the same in each.
  *
  * A module with nothing to start, so a harness's own host (pi's) can read it.
  */
@@ -16,7 +19,7 @@ import { createHash } from "node:crypto";
 import type { FleetMcpConfig } from "@cawco/core/fleet";
 import { GATE_PREFIX } from "@cawco/core/gateway-paths";
 
-/** A workspace session's gate: the path its servers hang off, and the host key every call carries. */
+/** A session's gate: the path its servers hang off, and the host key every call carries. */
 export interface McpGate {
   /** `http://127.0.0.1:<gateway>/mcp/gate/<gate id>/`, each server's name after it. */
   readonly base: string;

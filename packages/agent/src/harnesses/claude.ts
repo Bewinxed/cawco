@@ -222,7 +222,6 @@ import {
   launchedHook,
   workspaceHook,
 } from "../boundary/launched-hook";
-import { CHROME_DEVTOOLS, throughGate } from "../browser/door";
 import { indexedListing, listingRead, watchCatalogDir } from "../catalog-index";
 import { CLAUDE_QUIET_ENV } from "../claude-env";
 import {
@@ -2327,54 +2326,30 @@ const fleetLaunchOptions = (
 /**
  * The fleet's MCP servers a session in `workdir` loads, from the set the
  * machine's fleet sync wrote (fleet-mcp-set.ts; in no file the person's own
- * `claude` reads): the fleet's own, a project's placed copies over them, and
- * the fleet's chrome-devtools through the session's browser gate
- * ({@link throughGate}), so no session's browser tool starts a Chromium of
- * its own. A session whose door could not be made loads no chrome-devtools,
- * and `denied` denies its tools: chrome-devtools-mcp reaches for a browser
- * only at a tool's call.
- *
- * A workspace session loads no server with a command: its CLI starts every
- * process through its shell prefix, inside the boundary, where no fleet
- * server reaches its install, its door or the owner's machines. Each comes
- * through its workspace's gate on the agent's gateway instead
- * (`ctx.mcpGate`, mcp-gate.ts), which runs it on the host and makes the
- * door itself. A project's own `.mcp.json` servers still start through the
- * prefix, inside.
+ * `claude` reads): the fleet's own and a project's placed copies over them.
+ * Every one with a command comes through the session's gate on the agent's
+ * gateway (`ctx.mcpGate`, mcp-gate.ts), which answers its handshake and
+ * lists from the server's last listing and starts its process at the first
+ * call, chrome-devtools through the gate's browser door. Claude Code starts
+ * a stdio server with the session and defers only "a remote server with a
+ * cached tool list" ("connects on its first tool call",
+ * https://code.claude.com/docs/en/agent-sdk/mcp, "Connection timing"), and a
+ * workspace session's CLI would start one inside its boundary, where no
+ * fleet server reaches its install, its door or the owner's machines. A
+ * project's own `.mcp.json` servers still start with the session. A
+ * session with no gate (a fenced one) takes the remote servers alone.
  */
 const fleetMcpFor = async (
   ctx: HarnessContext,
   workdir: string,
   set: StartingSet | undefined
-): Promise<{ denied: string[]; servers: Record<string, McpServerConfig> }> => {
+): Promise<Record<string, McpServerConfig>> => {
   const all = inStartingSet(await fleetMcpAt(workdir), set);
-  if (ctx.mcpGate) {
-    return { servers: throughMcpGate(all, ctx.mcpGate), denied: [] };
-  }
-  const { [CHROME_DEVTOOLS]: browser, ...servers } = all;
-  if (!(browser && "command" in browser)) {
-    return {
-      servers: browser ? { ...servers, [CHROME_DEVTOOLS]: browser } : servers,
-      denied: [],
-    };
-  }
-  const door = await ctx.browserDoor?.().catch((error: unknown) => {
-    console.warn(
-      `[claude] ${ctx.instanceId}: its browser's door could not be made, so it loads no chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
-    );
-  });
-  return door
-    ? {
-        servers: {
-          ...servers,
-          [CHROME_DEVTOOLS]: {
-            ...browser,
-            args: throughGate(browser.args ?? [], door),
-          },
-        },
-        denied: [],
-      }
-    : { servers, denied: [`mcp__${CHROME_DEVTOOLS}`] };
+  return ctx.mcpGate
+    ? throughMcpGate(all, ctx.mcpGate)
+    : Object.fromEntries(
+        Object.entries(all).filter(([, config]) => !("command" in config))
+      );
 };
 
 /**
@@ -2452,8 +2427,7 @@ const sessionSpecOf = (
  * reads:
  * - `fleet`: the fleet's MCP servers ({@link fleetMcpFor}), apart from the
  *   caller's: `ClaudeSession` sets them through `setMcpServers`. A caller's
- *   server keeps a name it shares with one of the fleet's. `denied`: the
- *   tools of a chrome-devtools it cannot take.
+ *   server keeps a name it shares with one of the fleet's.
  * - `hooks`: the fleet's hooks and the project's placed at its folder
  *   (fleet-harness-set.ts `hooksAt`), which its flag settings carry
  *   ({@link sessionSettingsOptions}).
@@ -2473,7 +2447,6 @@ const launchFleet = async (
   session: SessionSpec,
   ctx: HarnessContext
 ): Promise<{
-  denied: string[];
   fleet: Record<string, McpServerConfig>;
   hooks: SetHook[];
   memory?: string;
@@ -2481,18 +2454,17 @@ const launchFleet = async (
   settings: Record<string, unknown>;
 }> => {
   const fleet = session.fence
-    ? { servers: {}, denied: [] }
+    ? {}
     : await fleetMcpFor(ctx, ctx.cwd, session.startingSet);
   const set = await readFleetHarnessSet();
   const place = session.fence ? undefined : await placeSetAt(ctx.cwd);
   const memory = session.clean ? undefined : await readFleetMemory();
   return {
     fleet: Object.fromEntries(
-      Object.entries(fleet.servers).filter(
+      Object.entries(fleet).filter(
         ([name]) => !session.options.mcpServers?.[name]
       )
     ),
-    denied: fleet.denied,
     hooks: session.clean
       ? Object.values(place?.hooks ?? {})
       : hooksAt(set, place),
@@ -4304,8 +4276,7 @@ class ClaudeSession implements HarnessSession {
 
   /** The fleet's MCP servers a session starting here now would load ({@link fleetMcpFor}). */
   async #configuredMcp(): Promise<Record<string, McpServerConfig>> {
-    return (await fleetMcpFor(this.#ctx, this.#workdir, this.#startingSet))
-      .servers;
+    return await fleetMcpFor(this.#ctx, this.#workdir, this.#startingSet);
   }
 
   /**
@@ -5464,16 +5435,7 @@ class ClaudeHarness implements Harness<"claude"> {
       ctx.instanceId,
       ctx,
       ctx.cwd,
-      {
-        ...session,
-        options: {
-          ...session.options,
-          disallowedTools: [
-            ...(session.options.disallowedTools ?? []),
-            ...launch.denied,
-          ],
-        },
-      },
+      session,
       fleetDenyList,
       {
         ...(conversationKept ? { conversationKept } : {}),
