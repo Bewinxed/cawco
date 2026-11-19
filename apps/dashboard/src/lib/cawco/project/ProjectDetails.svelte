@@ -17,6 +17,7 @@
     type TrackerTarget,
     type TrackerView,
   } from "@cawco/core/trackers";
+  import { decidesWords } from "@cawco/core/words/decides";
   import { lfsWords } from "@cawco/core/words/lfs";
   import { projectWords } from "@cawco/core/words/project";
   import { projectAccountWords } from "@cawco/core/words/project-account";
@@ -1553,10 +1554,10 @@
               () => reviewAsked ?? project.review, (next) => setReview(next)
             }
           />
-          <span>Review before done</span>
+          <span>{decidesWords.review.label}</span>
         </label>
         <p data-slot="note" class="type-meta text-ink-muted">
-          Only you move a task to done; landed work waits in review.
+          {decidesWords.review.note}
         </p>
         <RowFault
           again={() => setReview(!project.review)}

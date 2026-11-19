@@ -234,6 +234,11 @@ export const decidesWords = {
   decisions: "Decisions",
   /** The project page's title. */
   title: (project: string) => `Who decides in ${project}`,
+  /** The project's Review before done: its switch's label, and what on means. */
+  review: {
+    label: "Review before done",
+    note: "Only you move a task to done; landed work waits in review.",
+  },
   /** The lede, every kind following the fleet. */
   follows: (project: string) =>
     `${project} follows the fleet on every kind of choice.`,
