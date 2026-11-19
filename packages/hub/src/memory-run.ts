@@ -40,6 +40,12 @@
  *   then; the caps and the night's limits hold. Each
  *   operation is one commit, by the Memory curator, with the notes it
  *   consumed archived in it.
+ * - **Checks** ({@link plannedCheck}): a rule a tool can test is filed as
+ *   a task in the project (`Check: <rule>`, through the tasks module, in
+ *   the stage new tasks enter), its id kept on the lesson; the rule stays
+ *   a line until the task is done, when upkeep enforces it and takes the
+ *   line out ({@link checksClosed}). A lesson of the index or a skill the
+ *   person states again twice is filed as one by the hub.
  * - **Close** ({@link close}): where the run read up to is kept
  *   (`memory/state.json`), messages it was given and named in no operation
  *   carried to the next night once, and the run's one line said.
@@ -177,6 +183,8 @@ type RunOutcome = Extract<RoutineOutcome, "delivered" | "failed" | "silent">;
 /** What a run read and wrote: the line it ends with. */
 interface Counts {
   added: number;
+  /** Checks filed as tasks. */
+  checks: number;
   dropped: number;
   notes: number;
   read: number;
@@ -197,6 +205,16 @@ interface Correction {
   id: string;
   text: string;
 }
+
+/** A check to file for a lesson: its id, its rule, and what to do instead. */
+interface CheckAsk {
+  id: string;
+  method: string;
+  text: string;
+}
+
+/** The task field naming the lesson a check's task is for. */
+const LESSON_FIELD = "lesson";
 
 /** A lesson a message may state again or change: a live one's line, or the words of one the run took out. */
 interface Kept {
@@ -286,6 +304,26 @@ export interface MemoryRunDeps {
   readonly skillsFor: (
     projectId: string
   ) => { description: string; name: string }[];
+  /**
+   * The project's tasks, as a check's is filed and read (tasks.ts): one
+   * filed by the hub in the stage new tasks enter, answering its id; and
+   * how one has ended (`gone` when there is no such task).
+   */
+  readonly tasks: {
+    file: (
+      projectId: string,
+      draft: {
+        acceptance: string;
+        description: string;
+        fields: Record<string, string>;
+        title: string;
+      }
+    ) => Promise<{ id: string } | { refused: string }>;
+    state: (
+      projectId: string,
+      id: string
+    ) => Promise<"open" | "done" | "dropped" | undefined>;
+  };
 }
 
 /** `memory/recovery.json`: what the recovery's runs read, until an operation names each. */
@@ -302,6 +340,7 @@ const RunStateSchema = z.object({
     .object({
       added: z.number(),
       at: z.string(),
+      checks: z.number().optional(),
       dropped: z.number(),
       read: z.number(),
       replaced: z.number(),
@@ -388,6 +427,7 @@ const jsonText = (value: unknown): string =>
 
 const emptyCounts = (): Counts => ({
   added: 0,
+  checks: 0,
   dropped: 0,
   notes: 0,
   read: 0,
@@ -822,6 +862,7 @@ export const createMemoryRun = ({
   machine,
   recoverNext,
   skillsFor,
+  tasks,
 }: MemoryRunDeps) => {
   /** Each project's run under way. */
   const runs = new Map<string, Run>();
@@ -981,6 +1022,7 @@ export const createMemoryRun = ({
       }
     }
     tree = await anchorsRead(project.id, tree, today);
+    tree = await checksClosed(project.id, tree, today);
     tree = withoutOldRetired(tree, today);
     const inbox = await notesIn(project.id, INBOX_DIR);
     if (inbox instanceof ElysiaStatus) {
@@ -1071,6 +1113,33 @@ export const createMemoryRun = ({
           uses
         ).tree
       : kept;
+  };
+
+  /**
+   * Every lesson's check whose task has ended (§2 A.4): done, the check
+   * holds the rule, so the lesson is enforced and its line taken out;
+   * dropped or gone, the rule stays a line and no check is waited for.
+   */
+  const checksClosed = async (
+    projectId: string,
+    tree: MemoryTree,
+    today: string
+  ): Promise<MemoryTree> => {
+    const uses = usesOf(projectId);
+    let now = tree;
+    for (const [id, lesson] of Object.entries(tree.ledger.lessons)) {
+      if (!(lesson.check && lesson.state === "live")) {
+        continue;
+      }
+      const ended = await tasks.state(projectId, lesson.check.task);
+      if (ended === "done") {
+        now = applyOp(now, checked({ kind: "enforce", id }), today, uses).tree;
+      } else if (ended === "dropped") {
+        const { check: _check, ...rest } = lesson;
+        now = withLesson(now, id, rest);
+      }
+    }
+    return now;
   };
 
   /** The ledger without retired, stale and expired entries past their days. */
@@ -1497,7 +1566,7 @@ export const createMemoryRun = ({
       return await putBack(projectId, run, tree, one.id, lesson, source);
     }
     if (one.does === "repeats" && lesson.state === "live") {
-      return await repeatOf(projectId, tree, one.id, lesson, source);
+      return await repeatOf(projectId, run, tree, one.id, lesson, source);
     }
     if (
       one.does === "reverses" &&
@@ -1665,6 +1734,7 @@ export const createMemoryRun = ({
    */
   const repeatOf = async (
     projectId: string,
+    run: Run,
     tree: MemoryTree,
     id: string,
     lesson: Lesson,
@@ -1695,8 +1765,36 @@ export const createMemoryRun = ({
       return memoryRunWords.didHeld(INDEX_FILE);
     }
     return held
-      ? memoryRunWords.didHeldStays
+      ? await checkedUp(projectId, run, { id, text }, lesson)
       : memoryRunWords.didCounted(times);
+  };
+
+  /**
+   * A held lesson of the index or a skill's lessons moved up its last home
+   * (§6.2): a check, filed by the hub, its method the rule itself. One in
+   * knowledge that could not move, or one with a check already, stays.
+   */
+  const checkedUp = async (
+    projectId: string,
+    run: Run,
+    line: { id: string; text: string },
+    lesson: Lesson
+  ) => {
+    if (lesson.home.at === "knowledge" || lesson.check) {
+      return memoryRunWords.didHeldStays;
+    }
+    const filed = await fileCheck(
+      projectId,
+      { ...line, method: line.text },
+      HUB
+    );
+    if (filed instanceof ElysiaStatus) {
+      return filed;
+    }
+    run.counts.checks += filed.task ? 1 : 0;
+    return filed.task
+      ? memoryRunWords.didChecked(filed.task)
+      : memoryRunWords.didHeldStays;
   };
 
   /**
@@ -1975,6 +2073,8 @@ export const createMemoryRun = ({
         said: string;
         /** Its commit's subject, when other than what it says. */
         subject?: string;
+        /** A check to file for a lesson once the commit stands. */
+        check?: CheckAsk;
       }
     | string;
 
@@ -2318,22 +2418,33 @@ export const createMemoryRun = ({
       return memoryRunWords.topicsFull(CAPS.knowledgeFiles);
     }
     return {
-      change: {
-        kind: "corroborate",
-        id: op.id,
-        lands,
-        sources: sourcesFor(kept.messages, kept.notes, head),
-      },
-      consumed: op.sources,
-      notes: kept.notes.map((note) => ({
-        note,
-        outcome: `corroborates ${op.id}`,
-      })),
+      ...corroboration(op.id, lands, kept, head, op.sources),
       said: lands
         ? memoryRunWords.landed(op.id, path)
         : memoryRunWords.corroborated(op.id),
     };
   };
+
+  /** What a source stating lesson `id` again commits: its sources kept on it, its notes archived as corroborating it. */
+  const corroboration = (
+    id: string,
+    lands: boolean,
+    kept: { messages: Given[]; notes: Note[] },
+    head: string,
+    consumed: string[]
+  ) => ({
+    change: {
+      kind: "corroborate" as const,
+      id,
+      lands,
+      sources: sourcesFor(kept.messages, kept.notes, head),
+    },
+    consumed,
+    notes: kept.notes.map((note) => ({
+      note,
+      outcome: `corroborates ${id}`,
+    })),
+  });
 
   /** A `move`, checked: a live lesson to another home, an agent's to knowledge only. */
   const plannedMove = (
@@ -2406,6 +2517,8 @@ export const createMemoryRun = ({
         return plannedCorroborate(run, tree, head, op, index, answers);
       case "move":
         return plannedMove(projectId, run, tree, op);
+      case "check":
+        return plannedCheck(projectId, run, tree, head, op, index, answers);
       case "drop":
         return plannedDrop(run, op);
       default:
@@ -2594,7 +2707,172 @@ export const createMemoryRun = ({
       run.notes.delete(handle);
     }
     count(run, plan.change, op);
-    return { tree: applied.tree, said, sha };
+    if (!plan.check) {
+      return { tree: applied.tree, said, sha };
+    }
+    const filed = await fileCheck(projectId, plan.check, CURATOR);
+    if (filed instanceof ElysiaStatus) {
+      return filed;
+    }
+    run.counts.checks += filed.task ? 1 : 0;
+    return {
+      tree: filed.tree ?? applied.tree,
+      said: `${said}; ${filed.said}`,
+      sha: filed.sha ?? sha,
+    };
+  };
+
+  /**
+   * A `check`, checked (§5.2): of a kept live lesson (`id`), its sources
+   * corroborating it; else a new lesson, as an `add` is, that must land, not
+   * stage. Either way its task is filed once the commit stands
+   * ({@link fileCheck}), and the rule stays a line until the task is done.
+   */
+  const plannedCheck = async (
+    projectId: string,
+    run: Run,
+    tree: MemoryTree,
+    head: string,
+    op: Extract<MemoryOp, { op: "check" }>,
+    index: number,
+    answers: Map<string, number> | undefined
+  ): Promise<Planned> => {
+    const method = op.method.trim();
+    const bad = await methodProblem(run, method);
+    if (bad) {
+      return bad;
+    }
+    if (op.id) {
+      return plannedCheckOf(
+        run,
+        tree,
+        head,
+        { ...op, id: op.id, method },
+        {
+          index,
+          answers,
+        }
+      );
+    }
+    const added = await plannedAdd(
+      projectId,
+      run,
+      tree,
+      head,
+      { op: "add", text: op.text, home: op.home, sources: op.sources },
+      index,
+      answers
+    );
+    if (typeof added === "string" || added.change?.kind !== "add") {
+      return added;
+    }
+    if (added.change.staged) {
+      return memoryRunWords.checkStaged;
+    }
+    return {
+      ...added,
+      check: { id: added.change.id, text: added.change.text, method },
+    };
+  };
+
+  /** A `check` of kept lesson `op.id`: live, with no check yet; its sources corroborate it. */
+  const plannedCheckOf = (
+    run: Run,
+    tree: MemoryTree,
+    head: string,
+    op: { id: string; method: string; sources: string[] },
+    at: { answers: Map<string, number> | undefined; index: number }
+  ): Planned => {
+    const lesson = tree.ledger.lessons[op.id];
+    const line = lineOf(tree, op.id);
+    if (!(lesson?.state === "live" && line)) {
+      return lesson
+        ? memoryRunWords.notLive(op.id)
+        : memoryRunWords.noLesson(op.id);
+    }
+    if (lesson.check) {
+      return memoryRunWords.checkHas(op.id, lesson.check.task);
+    }
+    const kept = checkedSources(run, op.sources, at.index, at.answers);
+    if (typeof kept === "string") {
+      return kept;
+    }
+    if (run.changes >= CAPS.nightChanges) {
+      return memoryRunWords.nightChanges(CAPS.nightChanges);
+    }
+    return {
+      ...corroboration(op.id, false, kept, head, op.sources),
+      said: memoryRunWords.checkAsked(op.id),
+      check: { id: op.id, text: line.text, method: op.method },
+    };
+  };
+
+  /** Why a check's method may not stand, or nothing: one line within a fact's cap, quoting no one, holding no secret. */
+  const methodProblem = async (
+    run: Run,
+    method: string
+  ): Promise<string | undefined> => {
+    if (method === "" || method.includes("\n")) {
+      return memoryRunWords.oneLine;
+    }
+    if (method.length > CAPS.fact) {
+      return memoryRunWords.tooLong(method.length, CAPS.fact, "method");
+    }
+    const said = wordsProblem(method, run.said);
+    if (said) {
+      return said;
+    }
+    return (await redactSecrets(method)) === method
+      ? undefined
+      : memoryRunWords.secret;
+  };
+
+  /**
+   * A lesson's check filed (§5.2 `check`): a task in the project, in the
+   * stage new tasks enter, through the tasks module (`checkTitle`, its
+   * method and lesson id in the description, one acceptance line); then a
+   * second commit writing the task into the lesson's ledger entry. A task
+   * that was not filed leaves the rule as a line, and says why.
+   */
+  const fileCheck = async (
+    projectId: string,
+    ask: CheckAsk,
+    author: FolderAuthor
+  ) => {
+    const task = await tasks.file(projectId, {
+      title: memoryRunWords.checkTitle(ask.text),
+      description: memoryRunWords.checkDescription(
+        ask.id,
+        ask.text,
+        ask.method
+      ),
+      acceptance: memoryRunWords.checkAcceptance,
+      fields: { [LESSON_FIELD]: ask.id },
+    });
+    if ("refused" in task) {
+      return { said: memoryRunWords.checkNotFiled(task.refused) };
+    }
+    const read = await treeOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const lesson = read.tree.ledger.lessons[ask.id];
+    if (!lesson) {
+      return { said: memoryRunWords.checkNotFiled(ask.id), task: task.id };
+    }
+    const tree = withLesson(read.tree, ask.id, {
+      ...lesson,
+      check: { task: task.id },
+    });
+    const said = memoryRunWords.checkFiled(ask.id, task.id);
+    const sha = await commit(projectId, read.tree, tree, {
+      author,
+      message: `memory: ${said}`,
+    });
+    if (sha instanceof ElysiaStatus) {
+      return sha;
+    }
+    return { said, task: task.id, tree, sha };
   };
 
   /** The run's counts and limits moved by one committed operation. */
@@ -2612,7 +2890,11 @@ export const createMemoryRun = ({
     } else if (change.kind === "replace") {
       counts.replaced += 1;
       run.changes += 1;
-    } else if (change.kind === "move") {
+    } else if (
+      change.kind === "move" ||
+      (change.kind === "corroborate" && op.op === "check")
+    ) {
+      // A kept lesson moved, or made a check.
       run.changes += 1;
     }
   };

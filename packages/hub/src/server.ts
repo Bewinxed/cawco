@@ -8922,6 +8922,28 @@ export const createServer = (
       },
     },
     skillsFor: (projectId) => skillsListedFor(projectId),
+    tasks: {
+      file: async (projectId, draft) => {
+        const task = await tasks.create(
+          projectId,
+          draft,
+          hubActor("the nightly memory run files a lesson's check")
+        );
+        return task instanceof ElysiaStatus
+          ? { refused: task.response.detail }
+          : { id: task.id };
+      },
+      state: async (projectId, id) => {
+        const task = await tasks.get(projectId, id);
+        if (task instanceof ElysiaStatus) {
+          // A task that is no more holds no check.
+          return task.status === 404 ? "dropped" : undefined;
+        }
+        return task.kind === "done" || task.kind === "dropped"
+          ? task.kind
+          : "open";
+      },
+    },
   });
   const projectMemory = createMemory({
     db,

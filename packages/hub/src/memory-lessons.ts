@@ -584,6 +584,8 @@ export type Change =
   | { id: string; kind: "revert" }
   /** A lesson whose file, or the match in it, is gone: its line taken out, its words kept for the ledger's days. */
   | { id: string; kind: "stale" }
+  /** A lesson a check holds now (its task done): its line taken out; the ledger keeps it, enforced. */
+  | { id: string; kind: "enforce" }
   /**
    * The person stated a live lesson again: one more repeat, his message one
    * of its sources, his rule from now on; `held` from his second, and moved
@@ -1125,6 +1127,25 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
           held: true,
         }),
       };
+    case "enforce": {
+      const lesson = now.ledger.lessons[op.id];
+      const from = lesson ? pathOf(lesson.home) : undefined;
+      return {
+        tree:
+          lesson && from
+            ? {
+                files: {
+                  ...now.files,
+                  [from]: withoutLine(now.files[from] ?? "", op.id),
+                },
+                ledger: withEntry(now.ledger, op.id, {
+                  ...lesson,
+                  state: "enforced",
+                }),
+              }
+            : now,
+      };
+    }
     case "stale":
       return {
         tree: retiredAs(retireLine(now, op.id, "stale", today), op.id, {

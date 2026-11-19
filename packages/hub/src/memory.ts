@@ -781,6 +781,14 @@ const OpInput = z.discriminatedUnion("op", [
   }),
   z.object({ op: z.literal("move"), id: z.string(), home: HomeInput }),
   z.object({
+    op: z.literal("check"),
+    id: z.string().optional(),
+    text: z.string(),
+    method: z.string(),
+    home: HomeInput,
+    sources: z.array(z.string()),
+  }),
+  z.object({
     op: z.literal("drop"),
     sources: z.array(z.string()),
     reason: z.enum([

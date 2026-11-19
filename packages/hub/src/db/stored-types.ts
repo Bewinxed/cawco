@@ -156,6 +156,8 @@ export type LessonSource =
 export interface Lesson {
   /** Whose rule it is: the person's (a message, a line he approved or wrote), or agents' (notes). */
   by: "owner" | "agent";
+  /** The task that builds its check, a lint rule or a hub refusal: once it is done the check holds the rule, and its line goes. */
+  check?: { task: string };
   /** He stated it again after the run changed or removed it: never evicted, demoted or retired by the run. */
   held?: true;
   home: LessonHome;
@@ -209,6 +211,8 @@ export interface MemoryRunState {
     dropped: number;
     read: number;
     replaced: number;
+    /** Checks filed as tasks; none before it was counted. */
+    checks?: number;
     /** Lessons put back because the person stated them again; none before it was counted. */
     restored?: number;
     retired: number;
