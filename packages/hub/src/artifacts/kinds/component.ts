@@ -362,7 +362,13 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       }
       const report = drawnHeld(row, drawn.report);
       if (!unseen(report, name)) {
-        frames = renderSaid(report).frames.filter((one) => one.story === name);
+        frames = renderSaid(
+          report,
+          [],
+          undefined,
+          undefined,
+          sheet.spec
+        ).frames.filter((one) => one.story === name);
       }
     }
     const said: ComponentWritten = {
@@ -554,7 +560,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ...ctx.openedOf(shown),
       stage: { ...sheetState(row, opened.state), errors: [] },
       render: {
-        ...renderSaid(report, undrawn, undefined, plansUnread),
+        ...renderSaid(report, undrawn, undefined, plansUnread, spec),
         weight: weightSaid(opened.weight),
       },
       moves: movesSaid(report),
@@ -670,7 +676,13 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       errors: errorsSaid(stage?.errors ?? []),
       ...(report
         ? {
-            render: renderSaid(report, undrawn, ask.state?.story, plansUnread),
+            render: renderSaid(
+              report,
+              undrawn,
+              ask.state?.story,
+              plansUnread,
+              sheet?.spec
+            ),
             moves: movesSaid(report),
             stories: storiesSaid(sheetNow, report),
             ...(ask.state ? { frame: stateSaid(report, ask.state) } : {}),

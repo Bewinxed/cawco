@@ -38679,6 +38679,9 @@
                                 "w"
                               ]
                             },
+                            "direction": {
+                              "type": "string"
+                            },
                             "elements": {
                               "type": "string"
                             },
@@ -38707,6 +38710,7 @@
                           },
                           "required": [
                             "box",
+                            "direction",
                             "elements",
                             "form",
                             "interaction",
@@ -38731,6 +38735,9 @@
                                 "h",
                                 "w"
                               ]
+                            },
+                            "direction": {
+                              "type": "string"
                             },
                             "error": {
                               "$ref": "#/components/schemas/PageError"
@@ -38757,6 +38764,7 @@
                           },
                           "required": [
                             "box",
+                            "direction",
                             "form",
                             "interaction",
                             "state",

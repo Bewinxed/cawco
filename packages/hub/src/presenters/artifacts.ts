@@ -330,7 +330,7 @@ const componentLines = (read: ComponentRead): string[] => {
           `Frames, as ${render.by} drew them:`,
           ...render.frames.map(
             (frame) =>
-              `- ${frame.story}${frame.label ? ` ${quote(frame.label, 60)}` : ""} · ${frame.interaction}${frame.scheme ? ` · ${frame.scheme}` : ""} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
+              `- ${frame.direction} · ${frame.story}${frame.label ? ` ${quote(frame.label, 60)}` : ""} · ${frame.interaction}${frame.scheme ? ` · ${frame.scheme}` : ""} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
           ),
           ...(render.cut ? [render.cut] : []),
           ...(render.unnamed.length > 0
@@ -585,7 +585,7 @@ export const artifactCreatedWords = (created: Created): string =>
       `Frames, as ${created.render.by} drew them:`,
       ...created.render.frames.map(
         (frame) =>
-          `- ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
+          `- ${frame.direction} · ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
       ),
       ...(created.render.cut ? [created.render.cut] : []),
       ...undrawnLines(created.render),
@@ -645,7 +645,7 @@ const componentChangedWords = (changed: ComponentChanged): string => {
           "Its frames, as drawn:",
           ...changed.render.map(
             (frame) =>
-              `- ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
+              `- ${frame.direction} · ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
           ),
         ]
   );

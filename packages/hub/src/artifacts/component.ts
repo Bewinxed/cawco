@@ -154,6 +154,16 @@ export const directionOf = (
     ? undefined
     : spec?.directions?.find((one) => one.file === file);
 
+/** A frame with the states file of the section that drew it. */
+interface FrameHeld {
+  file: string;
+  frame: FrameRender;
+}
+
+/** What names the states file `file` in an answer: its direction's name where the canvas has directions, else the file. */
+const directionNamed = (spec: CanvasSpec | undefined, file: string): string =>
+  directionOf(spec, file)?.name ?? file;
+
 /** At most this many frames an answer lists; past it, the count and how to read one. Ours: a canvas's first screenful. */
 const FRAMES_LISTED = 60;
 
@@ -169,8 +179,12 @@ const elementsSaid = (frame: FrameRender) =>
       }
     : {};
 
-const frameLine = (frame: FrameRender) => ({
+const frameLine = (
+  { frame, file }: FrameHeld,
+  spec: CanvasSpec | undefined
+) => ({
   story: frame.story,
+  direction: directionNamed(spec, file),
   label: frame.label,
   form: frame.form,
   interaction: frame.interaction,
@@ -200,12 +214,14 @@ const holdersIn = (report: RenderReport, name: string): SectionRender[] => {
 function framesListed(
   report: RenderReport,
   state: string | undefined
-): { cut?: string; listed: FrameRender[] } {
+): { cut?: string; listed: FrameHeld[] } {
   const story = state ? storyRefOf(state).story : undefined;
   const holder = state ? holdersIn(report, state)[0] : undefined;
   if (holder) {
     const from = holder.frames.findIndex((frame) => frame.story === story);
-    const listed = holder.frames.slice(from, from + FRAMES_LISTED);
+    const listed = holder.frames
+      .slice(from, from + FRAMES_LISTED)
+      .map((frame) => ({ file: holder.file, frame }));
     return listed.length < holder.frames.length
       ? {
           listed,
@@ -213,7 +229,9 @@ function framesListed(
         }
       : { listed };
   }
-  const frames = report.sections.flatMap((section) => section.frames);
+  const frames = report.sections.flatMap((section) =>
+    section.frames.map((frame) => ({ file: section.file, frame }))
+  );
   const listed = frames.slice(0, FRAMES_LISTED);
   return frames.length > listed.length
     ? {
@@ -253,7 +271,8 @@ export function renderSaid(
   report: RenderReport,
   undrawn: readonly SectionUndrawn[] = [],
   state?: string,
-  plansUnread?: true
+  plansUnread?: true,
+  spec?: CanvasSpec
 ) {
   const { listed, cut } = framesListed(report, state);
   const drawing = drawingUnseen(report);
@@ -268,7 +287,7 @@ export function renderSaid(
       frames: section.frames.length,
       ...(section.notForced.length > 0 ? { notForced: section.notForced } : {}),
     })),
-    frames: listed.map(frameLine),
+    frames: listed.map((one) => frameLine(one, spec)),
     ...(cut ? { cut } : {}),
     unnamed: report.unnamed,
     ...(report.widthOnly?.length ? { widthOnly: report.widthOnly } : {}),
