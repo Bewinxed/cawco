@@ -3,7 +3,8 @@
    * Where the project details card stands: on a desk, hung from the head's
    * place mark as one shape with it (the kit's HangCard), the page live
    * beside it; on a phone, the kit's bottom sheet titled with the card's or
-   * the step's name, at full height while a step stands. It closes by Done,
+   * the step's name, at full height while a step stands, when the step's
+   * own bar (Back, its name, Close) is the sheet's one bar. It closes by Done,
    * Escape or a second press on the mark; a press elsewhere on the page
    * leaves it standing, since the page beside it stays live.
    */
@@ -65,6 +66,7 @@
   <Drawer.Root bind:open>
     <Drawer.Content
       height={full ? "cap" : undefined}
+      ownHead={full}
       portalProps={{ to: layer.to }}
       {title}
     >

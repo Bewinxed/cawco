@@ -8,7 +8,8 @@
    * chips (ui/chip `chipsVariants`); `list`, one full-width row per option,
    * for options that carry a description under their label; `tiles`, equal
    * tiles on a grid of `--tiles-cols` columns (`--tiles-cols-phone` under the
-   * phone line), each its name over its note (OptionTiles).
+   * phone line), each its name over its note (OptionTiles), every row as
+   * tall as the tallest, so a grid of tiles never stands ragged.
    */
   const optionGroupVariants = tv({
     base: chipsVariants(),
@@ -17,7 +18,7 @@
         chips: "",
         list: "grid grid-cols-1",
         tiles:
-          "grid grid-cols-(--tiles-cols) max-phone:grid-cols-(--tiles-cols-phone)",
+          "grid auto-rows-fr grid-cols-(--tiles-cols) max-phone:grid-cols-(--tiles-cols-phone)",
       },
     },
     defaultVariants: { layout: "chips" },

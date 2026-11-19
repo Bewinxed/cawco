@@ -32,6 +32,7 @@
     running = null,
     disconnecting,
     sunk = false,
+    asOf = null,
     onact,
     ondisconnect,
     ontry,
@@ -47,6 +48,8 @@
     /** Disconnect folder sent: the folder's id, and the hub's refusal once it says no. */
     disconnecting?: Pending;
     sunk?: boolean;
+    /** CawCo is out of reach: when the details shown were read. */
+    asOf?: string | null;
     onact: (act: FolderAct, folderId: string | null) => void;
     ondisconnect: (folderId: string) => void;
     ontry: () => void;
@@ -93,6 +96,7 @@
       {#each rows as folder (folder.id)}
         <li data-flip>
           <FolderRow
+            {asOf}
             confirming={confirming === folder.id}
             disconnecting={disconnecting?.value === folder.id
               ? disconnecting

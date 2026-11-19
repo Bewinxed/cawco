@@ -42,10 +42,11 @@ const machine = (
   home: os === "darwin" ? "/Users/sam" : "/home/sam",
 });
 
-/** The fleet: the computer that keeps the project's own folder, a laptop, and a render box that is off. */
+/** The fleet: the computer that keeps the project's own folder, a laptop, a spare box with no copy of the code yet, and a render box that is off. */
 export const MACHINES: Machine[] = [
   { ...machine("m-obelisk", "obelisk", "linux", "online"), hostsHub: true },
   machine("m-studio", "studio-mac", "darwin", "online"),
+  machine("m-lab", "lab-nuc", "linux", "online"),
   machine("m-render", "render-box", "linux", "offline"),
 ];
 

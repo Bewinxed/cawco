@@ -55,7 +55,7 @@
     none: IconDocument,
   } as const;
   const TILES =
-    "--tiles-cols: repeat(2, minmax(0, 1fr)); --tiles-cols-phone: repeat(2, minmax(0, 1fr))";
+    "--tiles-cols: repeat(2, minmax(0, 1fr)); --tiles-cols-phone: minmax(0, 1fr)";
   const chosen = $derived(finished.state === "read" ? finished.value : null);
   const pick = pickOne(
     () => chosen,

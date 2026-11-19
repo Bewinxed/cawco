@@ -200,12 +200,15 @@
         <!-- The connected service's facts, on the section's own edge under
              the tiles: where it updates (the codebase or team and how many
              tasks are linked, with Change… at the line's end); for GitHub,
-             the status board; then how it stands, with Refresh now. -->
+             the status board; then how it stands, with Refresh now. One
+             button form and one size of words for the whole block: Change…
+             and Refresh now are the same ghost button in the meta size; each
+             link reaches the 24px floor (44 under a finger) round its words. -->
         <div class="flex flex-col gap-space-1" data-facts={linked.kind}>
           <div class="flex flex-wrap items-center gap-x-space-2 gap-y-space-1">
             <span class="type-meta">
               <a
-                class="mark-line inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
+                class="mark-line pointer-hit touch-hit inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
                 href={linked.target.url}
                 rel="noreferrer"
                 target="_blank"
@@ -224,7 +227,7 @@
               class="ms-auto"
               disabled={sunk}
               onclick={onchange}
-              size="xs"
+              size="meta"
               variant="ghost">{taskWords.change}</Button
             >
           </div>
@@ -237,7 +240,7 @@
               >
               {#if linked.board && "url" in linked.board}
                 <a
-                  class="mark-line inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
+                  class="mark-line pointer-hit touch-hit inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
                   href={linked.board.url}
                   rel="noreferrer"
                   target="_blank"
@@ -301,8 +304,8 @@
               onclick={onrefresh}
               pending={linked.standing.state === "read" &&
                 linked.standing.value.state === "updating"}
-              size="xs"
-              variant="outline"
+              size="meta"
+              variant="ghost"
             />
           </div>
         </div>

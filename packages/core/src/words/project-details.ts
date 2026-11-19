@@ -62,7 +62,9 @@ export const folderWords = {
     `Kept on ${host}. Holds tasks and the files agents save.`,
   online: "online",
   offline: "offline",
-  readAt: (at: string) => `offline · details from ${at}`,
+  /** A computer as last read, while what is shown was read earlier. */
+  asOf: (online: boolean, at: string) =>
+    `${online ? "online" : "offline"} · as of ${at}`,
   missing: "This folder is missing, so agents can't start in it.",
   actionsFor: (role: string, machine: string) =>
     `${role} on ${machine}: what you can do`,
@@ -196,6 +198,8 @@ export const stepWords = {
   whatMoves: "What moves",
   thisFolder: "This folder",
   whereTo: "Where to",
+  /** Copy to computer: a computer with one of the project's folders, which can't be picked. */
+  hasCode: "has this code",
   folderPlaceholder: "A full path, or one under that computer's home",
   folderLabel: "Folder",
   whatHappens: "What will happen",

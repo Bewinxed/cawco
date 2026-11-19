@@ -143,7 +143,7 @@ const REFUSED = {
   place:
     "render-box isn't answering, so ~/sites/hyucksfield can't be read there yet.",
   tracker: "Bad credentials: acme-bot's key was revoked on Nov 18 (401).",
-  copy: "studio-mac has 1.2 GB free; copying needs 2.6 GB.",
+  copy: "lab-nuc has 1.2 GB free; copying needs 2.6 GB.",
 };
 
 /** What the hub writes into the stores, as its frames would: each store's own writer. */
@@ -556,7 +556,7 @@ export class DetailsStandIn {
         : {
             ...job,
             stage: "started",
-            moved: "hyucksfield to studio-mac at a41c9e2",
+            moved: "hyucksfield to lab-nuc at a41c9e2",
             stayed: "your .env and ignored files stay on obelisk",
             updatedAt: new Date().toISOString(),
           };
@@ -581,12 +581,12 @@ export class DetailsStandIn {
       stage: how === "cancel" ? "cancelled" : "started",
       steps: ["snapshot", "clone", "lfs", "start"],
       targetInstanceId: "inst-copy",
-      targetMachineId: "m-studio",
+      targetMachineId: "m-lab",
       targetPath: "~/code/hyucksfield",
       updatedAt: new Date().toISOString(),
       ...(how === "cancel"
         ? {
-            kept: "A partial copy stays on studio-mac; nothing of yours is in it alone.",
+            kept: "A partial copy stays on lab-nuc; nothing of yours is in it alone.",
           }
         : {}),
     };

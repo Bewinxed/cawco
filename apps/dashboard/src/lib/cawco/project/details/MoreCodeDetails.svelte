@@ -110,9 +110,16 @@
         <span class="flex-none type-label font-medium text-ink-strong"
           >{sectionWords.more.name}</span
         >
+        <!-- The closed facts, only while closed: open, the same facts
+             stand laid out under the row. The span keeps its room, so the
+             chevron never moves. -->
         <span
-          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
-          title={summary}>{summary}</span
+          class={[
+            "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted transition-opacity duration-(--duration-control) ease-out",
+            open && "opacity-0",
+          ]}
+          aria-hidden={open || undefined}
+          title={open ? undefined : summary}>{summary}</span
         >
         <IconChevronDown
           aria-hidden="true"
