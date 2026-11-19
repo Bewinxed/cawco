@@ -161,9 +161,12 @@
   /* A streamed chunk's words, faded in by the markdown (@pierre/words marks
      them `data-animated` while they fade): one opacity fade at the menu's
      duration on the house ease-out, no stagger, nothing that moves
-     (ui/markdown `animated`, which hands Words the same duration). */
+     (ui/markdown `animated`, which hands Words the same duration). A design
+     graph tuning the fade sets --word-fade-duration and --word-fade-ease on
+     the markdown through ui/markdown/word-fade.ts; nothing else sets them. */
   [data-slot="md"] [data-markdown][data-animated="true"] {
-    animation: kit-fade-in var(--duration-menu) var(--ease-out) backwards;
+    animation: kit-fade-in var(--word-fade-duration, var(--duration-menu))
+      var(--word-fade-ease, var(--ease-out)) backwards;
   }
   /* A Mermaid diagram in the markdown (ui/markdown/mermaid.svelte.ts):
      Words sets it in its code block frame, whose header names the language
