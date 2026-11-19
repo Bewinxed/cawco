@@ -87,5 +87,8 @@ export function takeFrame(frame: FramePayload): void {
   routes.get(frame.kind)?.(frame);
 }
 
-/** The board, whole (`instances`) or as what moved (`instances_delta`). */
-export type BoardFrame = FrameOf<"instances" | "instances_delta">;
+/**
+ * The board: the socket's first frame (`instances`), whole or what moved
+ * since the board the page named, and each `board` frame after, what moved.
+ */
+export type BoardFrame = FrameOf<"instances" | "board">;

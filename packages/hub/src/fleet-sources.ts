@@ -177,7 +177,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     // by its register's `os` (core `machinePlatform`); any other is not sent
     // it, so its agent removes what it had and probes nothing.
     const targetRow = ctx.db
-      .listAgents()
+      .machineFacts()
       .find((agentRow) => agentRow.machineId === machineId);
     const platform = targetRow ? machinePlatform(targetRow) : undefined;
     const mcpRows = config.mcp.filter((row) => mcpRunsOn(row, platform));

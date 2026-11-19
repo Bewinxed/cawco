@@ -128,7 +128,7 @@ const machine = (
   os,
   status: presence === "offline" ? "offline" : "online",
   auth: "unknown",
-  lastSeenAt: new Date(presence === "offline" ? ago(190) : now).toISOString(),
+  joinedAt: 0,
   pausedUntil: presence === "paused" ? now + 90 * MINUTE_MS : null,
   pauseStopped: null,
   tools,

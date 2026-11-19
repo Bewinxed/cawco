@@ -673,7 +673,7 @@
     ].map((machine): Machine => ({
       ...machine,
       auth: "unknown",
-      lastSeenAt: now,
+      joinedAt: 0,
       pausedUntil: null,
       pauseStopped: null,
       // Staying, its machines are connected and say what Claude Code takes,

@@ -492,7 +492,7 @@ export interface ProjectSettingsDeps {
   readonly connections: Pick<Connections, "get" | "list" | "update">;
   readonly db: Pick<
     DbShape,
-    "addProjectLink" | "listAgents" | "project" | "projectByRemote"
+    "addProjectLink" | "machineFacts" | "project" | "projectByRemote"
   >;
   /**
    * Changes the project's dispatch settings, and reads them with what the
@@ -617,7 +617,7 @@ export const createProjectSettings = ({
     }
     let to: string | null = null;
     if (asked?.trim()) {
-      const value = runsOnValue(asked, db.listAgents());
+      const value = runsOnValue(asked, db.machineFacts());
       if (!("value" in value)) {
         return problem(400, { code: "runs-on-unknown", detail: value.problem });
       }

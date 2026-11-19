@@ -5,6 +5,7 @@ import { harnessWords } from "@cawco/core/words/harness";
 import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { instanceTimes } from "../instance-out";
+import { withKeepAliveFacts } from "../keep-alive";
 import { awayProblem, silentProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
 import { attachmentsOfPages } from "../session-attachments";
@@ -34,10 +35,8 @@ export const instanceEditRoutes = (
     | "db"
     | "everyPage"
     | "keepAliveScheduler"
-    | "publishInstances"
     | "sessionName"
     | "transcripts"
-    | "withKeepAlive"
     | keyof MachineReadsContext
   >
 ) => {
@@ -47,10 +46,8 @@ export const instanceEditRoutes = (
     db,
     everyPage,
     keepAliveScheduler,
-    publishInstances,
     sessionName,
     transcripts,
-    withKeepAlive,
   } = ctx;
   return (
     new Elysia()
@@ -283,11 +280,10 @@ export const instanceEditRoutes = (
               detail: `no session ${params.id}`,
             });
           }
-          publishInstances(row.machineId);
           // The stored toggle re-arms through the scheduler's one path.
           detach(keepAliveScheduler.wake(), "keepalive wake");
-          const [answered] = withKeepAlive([row]);
-          return answered && { ...answered, ...instanceTimes(answered) };
+          const answered = withKeepAliveFacts(row);
+          return { ...answered, ...instanceTimes(answered) };
         }
       )
   );

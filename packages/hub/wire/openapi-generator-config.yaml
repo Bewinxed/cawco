@@ -17,8 +17,6 @@ typeOverrides:
     AgentBusyReportRecovery: OpenEnums.AgentBusyReportRecovery
     AgentMemberHear: OpenEnums.AgentMemberHear
     AgentMemberPose: OpenEnums.AgentMemberPose
-    AgentRowAuth: OpenEnums.AgentRowAuth
-    AgentRowClaude: OpenEnums.AgentRowClaude
     ArtifactDoes: OpenEnums.ArtifactDoes
     ArtifactKind: OpenEnums.ArtifactKind
     ArtifactReadSentBy: OpenEnums.ArtifactReadSentBy
@@ -38,6 +36,7 @@ typeOverrides:
     BlockMetadataCompactBy: OpenEnums.BlockMetadataCompactBy
     BlockMetadataCompactResult: OpenEnums.BlockMetadataCompactResult
     BlockMetadataHandoffKind: OpenEnums.BlockMetadataHandoffKind
+    BlockMetadataPermissionMode: OpenEnums.BlockMetadataPermissionMode
     BlockMetadataReportKind: OpenEnums.BlockMetadataReportKind
     BlockMetadataToolStatus: OpenEnums.BlockMetadataToolStatus
     BlockMetadataTrigger: OpenEnums.BlockMetadataTrigger
@@ -130,7 +129,6 @@ typeOverrides:
     InstanceStatus: OpenEnums.InstanceStatus
     Interaction: OpenEnums.Interaction
     IssueTracker: OpenEnums.IssueTracker
-    KeepAliveState: OpenEnums.KeepAliveState
     KeepAliveTtl: OpenEnums.KeepAliveTtl
     LandsMode: OpenEnums.LandsMode
     LfsOfferStateAnswer: OpenEnums.LfsOfferStateAnswer
@@ -138,6 +136,7 @@ typeOverrides:
     LocalNameState: OpenEnums.LocalNameState
     MachineCapabilityId: OpenEnums.MachineCapabilityId
     MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
+    MachineFactsAuth: OpenEnums.MachineFactsAuth
     MemoryScopeRole: OpenEnums.MemoryScopeRole
     MomentAuthor: OpenEnums.MomentAuthor
     MovePriceOption: OpenEnums.MovePriceOption

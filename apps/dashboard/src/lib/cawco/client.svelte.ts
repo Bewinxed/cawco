@@ -10,7 +10,13 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import type { InstanceRow } from "@cawco/core/protocol";
+import type { BoardKeyed } from "@cawco/core/frames";
+import type {
+  InstanceRow,
+  MachineFacts,
+  MachineInventory,
+  MachineStatus,
+} from "@cawco/core/protocol";
 import { hub } from "#lib/platform/hub.js";
 import { hubData } from "#lib/platform/hub-read.js";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
@@ -105,7 +111,6 @@ import {
   takeProjectStop,
 } from "./stores/projects.svelte";
 import { keepRelayJourney, readRelayJourney } from "./stores/relay.svelte";
-import { patchRows } from "./stores/same";
 import { settleOpenings } from "./stores/session-start.svelte";
 import {
   hydrate,
@@ -321,7 +326,15 @@ function adoptMachines(incoming: Machine[]): void {
   }
 }
 
-/** The board, whole (`instances`) or as what moved (`instances_delta`), and what rides along with it. */
+/**
+ * Whether `frame` is the board whole: the socket's first frame that names
+ * no board the page held (core frames.ts `InstancesFrame.since`). Whatever
+ * the page held that it leaves out is gone.
+ */
+const boardWhole = (frame: BoardFrame): boolean =>
+  frame.kind === "instances" && frame.since === undefined;
+
+/** The board, whole or as what moved, and what rides along with it. */
 function takeBoard(frame: BoardFrame): void {
   takeBoardPreviews(frame);
   takeBoardMachines(frame);
@@ -335,21 +348,64 @@ function takeBoard(frame: BoardFrame): void {
 }
 
 /**
+ * Each machine's facts, live status and inventory as the board last carried
+ * them, by machine: the three collections a machine travels in, put
+ * together into the rows the stores read (core `AgentRow`).
+ */
+const machineParts = {
+  facts: new Map<string, MachineFacts>(),
+  status: new Map<string, MachineStatus>(),
+  inventory: new Map<string, MachineInventory>(),
+};
+
+/** One collection's changes taken into what it holds; whether any came. */
+function takeKeyed<Entry extends { machineId: string }>(
+  held: Map<string, Entry>,
+  changes: BoardKeyed<Entry> | undefined
+): boolean {
+  if (!changes) {
+    return false;
+  }
+  for (const key of changes.removed) {
+    held.delete(key);
+  }
+  for (const entry of changes.upserts) {
+    held.set(entry.machineId, entry);
+  }
+  return true;
+}
+
+/** Each machine put together from its three entries, in the order they joined. */
+function machinesHeld(): Machine[] {
+  return [...machineParts.facts.values()]
+    .sort(
+      (a, b) =>
+        a.joinedAt - b.joinedAt || a.machineId.localeCompare(b.machineId)
+    )
+    .map((facts) => ({
+      status: "offline",
+      ...machineParts.status.get(facts.machineId),
+      ...machineParts.inventory.get(facts.machineId),
+      ...facts,
+    }));
+}
+
+/**
  * The machines ride along so a daemon registering — the moment its auth
  * state is decided — reaches the rail without a re-fetch.
  */
 function takeBoardMachines(frame: BoardFrame): void {
-  if (frame.kind === "instances") {
-    adoptMachines(frame.agents);
-  } else if (frame.agents || frame.removedAgents) {
-    adoptMachines(
-      patchRows(
-        boardState.machines,
-        frame.agents ?? [],
-        frame.removedAgents ?? [],
-        (row) => row.machineId
-      )
-    );
+  const whole = boardWhole(frame);
+  if (whole) {
+    machineParts.facts.clear();
+    machineParts.status.clear();
+    machineParts.inventory.clear();
+  }
+  const facts = takeKeyed(machineParts.facts, frame.machines);
+  const status = takeKeyed(machineParts.status, frame.machineStatus);
+  const inventory = takeKeyed(machineParts.inventory, frame.inventories);
+  if (whole || facts || status || inventory) {
+    adoptMachines(machinesHeld());
   }
 }
 
@@ -365,13 +421,15 @@ function takeBoardNotices(frame: BoardFrame): void {
   }
 }
 
-/** The board's rows: the snapshot whole, a delta by what moved. */
+/** The board's rows: the board whole, else by what moved. */
 function takeBoardRows(frame: BoardFrame): void {
+  if (boardWhole(frame)) {
+    adoptInstances(frame.sessions?.upserts ?? []);
+  } else if (frame.sessions) {
+    patchInstances(frame.sessions.upserts, frame.sessions.removed);
+  }
   if (frame.kind === "instances") {
-    adoptInstances(frame.instances);
     boardState.liveRead = true;
-  } else {
-    patchInstances(frame.upserts, frame.removed);
   }
 }
 
@@ -494,7 +552,7 @@ export function startClient(): () => void {
     onFrame("permission_settled", takePermissionSettled),
     onFrame("preview", takePreview),
     onFrame("instances", takeBoard),
-    onFrame("instances_delta", takeBoard),
+    onFrame("board", takeBoard),
     onFrame("usage", takeUsage),
     onFrame("work_item", takeWorkItem),
     onFrame("project.cap", takeProjectCap),

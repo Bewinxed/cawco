@@ -773,13 +773,13 @@ export interface FsEntry {
 }
 
 /**
- * A machine from the hub's `agents` table — what `GET /api/agents` answers with,
- * and what rides alongside the sessions in an `instances` frame.
+ * A machine's facts: what it is and what the person set on it. One of the
+ * three collections a machine travels in on the board (core frames.ts
+ * `BoardChanges`): a beat that reports nothing new moves none of them.
  */
-export interface AgentRow {
+export interface MachineFacts {
   /** `unknown` until a daemon that probes has registered at least once. */
   auth: import("./session-messages").AuthState | "unknown";
-  binaryUpdate?: import("./binary-updates").BinaryUpdateState;
   /**
    * The cawco build this machine's daemon is running (NEW.md §12).
    */
@@ -795,8 +795,67 @@ export interface AgentRow {
       import("./harness/modes").PermissionMode
     >
   >;
+  /** The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has. */
+  home?: string;
+  hostname: string;
+  /** The hub runs on this machine, as the hub reads it: never stored. */
+  hostsHub?: boolean;
+  /**
+   * When the machine first joined (epoch ms): machines are listed in this
+   * order, which core `machineCalled` numbers machines that share a name by.
+   */
+  joinedAt: number;
+  machineId: string;
+  os: string;
+  /**
+   * The owner paused the machine until this time (epoch ms): CawCo starts
+   * nothing on it until then, though its agent stays connected. Null when it
+   * is not paused.
+   */
+  pausedUntil: number | null;
+  /**
+   * What the pause stopped as it began, as said ({@link stoppedWords}):
+   * "stopped 1 running check". Null when it stopped nothing, or is not paused.
+   */
+  pauseStopped: string | null;
+}
+
+/**
+ * A machine's live status: what the hub knows of its connection now, laid
+ * again only when one of these moves. Live, never stored, but `lastSeenAt`.
+ */
+export interface MachineStatus {
+  binaryUpdate?: import("./binary-updates").BinaryUpdateState;
   /** Last register's sessiond read, distinct from an available empty list. */
   custody?: SessionCustody;
+  /**
+   * When the hub last heard from the machine (epoch ms), as it stood when
+   * this status was laid: it moves with a status, never with a beat alone.
+   */
+  lastSeenAt: number | null;
+  /**
+   * Since when (epoch ms) the hub has heard nothing from this machine, once
+   * that has lasted `MACHINE_LOST_MS` with sessions on it (hub
+   * machine-contact.ts): Needs you's item. Null while it answers.
+   */
+  lostAt?: number | null;
+  machineId: string;
+  /**
+   * Until when (epoch ms, the hub's clock, as `lostAt`) the hub reads this
+   * machine as on its way back after its agent's link went: a read off it
+   * answers so then (`Retry-After`), and offline after. Null while it is
+   * connected or once it is offline.
+   */
+  reconnectingUntil?: number | null;
+  /** `online` while the hub holds the machine's socket and it answered its welcome. */
+  status: string;
+}
+
+/**
+ * What a machine has installed and reports of it: its tools, its harnesses
+ * and its fleet items. A tools report moves only this machine's inventory.
+ */
+export interface MachineInventory {
   /**
    * Last-known fleet-config sync report (NEW.md §11).
    */
@@ -814,42 +873,8 @@ export interface AgentRow {
   fleetSync?: import("./fleet").FleetSyncOutcome;
   /** What each installed harness can do, as the daemon reported at register. */
   harnesses?: import("./harness").HarnessReport[];
-  /** The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has. */
-  home?: string;
-  hostname: string;
-  /** The hub runs on this machine, as the hub reads it: live, never stored. */
-  hostsHub?: boolean;
-  /** A `Date` inside the hub, the ISO string it serialises to everywhere else. */
-  lastSeenAt: string | number | Date | null;
-  /**
-   * Since when (epoch ms) the hub has heard nothing from this machine, once
-   * that has lasted `MACHINE_LOST_MS` with sessions on it (hub
-   * machine-contact.ts): Needs you's item. Null while it answers. Live, as
-   * `status` is: never stored.
-   */
-  lostAt?: number | null;
   machineCapabilities?: import("./capabilities").MachineCapabilities;
   machineId: string;
-  os: string;
-  /**
-   * The owner paused the machine until this time (epoch ms): CawCo starts
-   * nothing on it until then, though its agent stays connected. Null when it
-   * is not paused.
-   */
-  pausedUntil: number | null;
-  /**
-   * What the pause stopped as it began, as said ({@link stoppedWords}):
-   * "stopped 1 running check". Null when it stopped nothing, or is not paused.
-   */
-  pauseStopped: string | null;
-  /**
-   * Until when (epoch ms, the hub's clock, as `lostAt`) the hub reads this
-   * machine as on its way back after its agent's link went: a read off it
-   * answers so then (`Retry-After`), and offline after. Null while it is
-   * connected or once it is offline. Live, as `status` is: never stored.
-   */
-  reconnectingUntil?: number | null;
-  status: string;
   /**
    * Last-known tool status by tool id (NEW.md §10).
    */
@@ -862,6 +887,13 @@ export interface AgentRow {
    */
   unknownHarnesses?: string[];
 }
+
+/**
+ * A machine whole: its facts, its live status and its inventory, as
+ * `GET /api/agents` answers it and a dashboard puts the board's three
+ * collections together.
+ */
+export type AgentRow = MachineFacts & MachineStatus & MachineInventory;
 
 export type SessionCustody =
   | {
@@ -1382,15 +1414,27 @@ export interface InstanceRow {
   wroteAt?: string | number | Date | null;
 }
 
+/**
+ * A session's keep-alive as the board carries it: facts and a deadline,
+ * never a state worked out from the clock, so a row moves only when one of
+ * these does. A reader that wants to know whether the cache is warm now
+ * compares {@link nextAt} with its own clock.
+ */
 export interface KeepAlive {
   cap: number;
   cold: { reason: string; at: number } | null;
   contextReadAt: number | null;
   contextTokens: number | null;
+  /**
+   * When the next ping is due (epoch ms): the measured cache's expiry less
+   * its margin. Null while none is planned (off, asleep, measured cold, or
+   * no measured lifetime). A time already past is a ping that came due.
+   */
   nextAt: number | null;
   on: boolean;
   sent: number;
-  state: "off" | "waiting" | "cold" | "paused-usage" | "asleep" | "stopped-cap";
+  /** Why it is off by itself: it reached its cap. Null otherwise. */
+  stopped: "stopped-cap" | null;
   ttl: "5m" | "1h" | null;
 }
 

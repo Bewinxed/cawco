@@ -153,7 +153,6 @@ export const fleetHookRoutes = (
     | "keepHookVersion"
     | "machineFleetItems"
     | "machineName"
-    | "publishInstances"
     | keyof MachineReadsContext
   >
 ) => {
@@ -164,7 +163,6 @@ export const fleetHookRoutes = (
     keepHookVersion,
     machineFleetItems,
     machineName,
-    publishInstances,
   } = ctx;
   const hookCalls = fleetHookCalls(ctx);
   return (
@@ -382,7 +380,6 @@ export const fleetHookRoutes = (
           fleetSyncs.changed(`an overwrite of hook(s) ${ids.join(", ")}`, {
             machineId: body.machineId,
           });
-          publishInstances(body.machineId);
           return { ok: true };
         }
       )

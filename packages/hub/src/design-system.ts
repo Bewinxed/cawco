@@ -1416,7 +1416,7 @@ export const createDesignSystem = (deps: {
     DbShape,
     | "designChecks"
     | "getInstancesByIds"
-    | "listAgents"
+    | "namedMachines"
     | "project"
     | "projectAttempts"
     | "workItem"

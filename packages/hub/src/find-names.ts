@@ -13,7 +13,7 @@ import type {
 } from "@cawco/core/find";
 import { field, KIND_WORDS, type MatchEntry } from "@cawco/core/find-match";
 import { machineLabel } from "@cawco/core/machine-names";
-import type { AgentRow } from "@cawco/core/protocol";
+import type { MachineFacts } from "@cawco/core/protocol";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -432,7 +432,10 @@ export const projectEntry = (project: ProjectRow): Entry => ({
   },
 });
 
-export const machineEntry = (machine: AgentRow, online: boolean): Entry => {
+export const machineEntry = (
+  machine: MachineFacts & { lastSeenAt: number | null },
+  online: boolean
+): Entry => {
   const name = machineLabel(machine.hostname);
   return {
     asked: new Set(KIND_WORDS.machine),
@@ -448,9 +451,7 @@ export const machineEntry = (machine: AgentRow, online: boolean): Entry => {
       title: name,
       project: null,
       online,
-      lastActivity: machine.lastSeenAt
-        ? new Date(machine.lastSeenAt).getTime()
-        : null,
+      lastActivity: machine.lastSeenAt,
       matched: [],
       score: 0,
     },

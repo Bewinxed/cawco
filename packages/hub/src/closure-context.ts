@@ -68,13 +68,11 @@ import type { MachinePath } from "@cawco/core/machine-path";
 import type { ModelListing } from "@cawco/core/model-names";
 import type { HubPreviewOrigins } from "@cawco/core/preview/hub-previews";
 import type {
-  AgentRow,
   BuildInfo,
   ContinuationJob,
   DelegateEvent,
   FsPayload,
   InstanceRow,
-  KeepAlive,
   NamedSpawn,
   SendPayload,
   SessionAddress,
@@ -118,6 +116,7 @@ import type { createArtifactLane } from "./artifacts/lane";
 import type { Artifacts } from "./artifacts/service";
 import type { createAsks } from "./asks";
 import type { createAtLimit } from "./at-limit";
+import type { BoardShape } from "./board-shape";
 import type { createBrowserStream } from "./browser-routes";
 import type { createBrowserAsks } from "./browser-tools";
 import type { createBrowsers } from "./browsers";
@@ -130,7 +129,7 @@ import type { LoginMove } from "./db/accounts";
 import type { LimitCompaction, MovedLine } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { DelegateTypesShape } from "./db/delegate-types";
-import type { BoardInstanceRow, PublicInstanceRow } from "./db/instances";
+import type { PublicInstanceRow } from "./db/instances";
 import type { OwedCarry, OwedMove } from "./db/owed-moves";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
@@ -414,7 +413,8 @@ export interface ClosureContext {
   awayError: (machineId: string) => MachineAway;
   awayWords: (machineId: string, answer: Unanswered) => string;
   binaryUpdateStates: Map<string, BinaryUpdateState>;
-  boardBase: Map<string, BoardInstanceRow>;
+  /** The board: its collections, and the typed events its keepers say what moved by (board.ts). */
+  board: BoardShape;
   boundProblem: ({
     projectId,
     areaId,
@@ -894,16 +894,8 @@ export interface ClosureContext {
     model?: string | null;
   }) => LoginMove | undefined;
   movingLogins: () => LoginMove[];
-  nameFromFirstTurn: (
-    machineId: string,
-    instanceId: string,
-    raw: string
-  ) => string;
-  nameFromLiveTurn: (
-    machineId: string,
-    instanceId: string,
-    message: unknown
-  ) => void;
+  nameFromFirstTurn: (instanceId: string, raw: string) => string;
+  nameFromLiveTurn: (instanceId: string, message: unknown) => void;
   nameStoredSessions: (machineId: string) => void;
   noteActivity: (instanceId: string) => void;
   noteAtLimit: (
@@ -1038,7 +1030,6 @@ export interface ClosureContext {
   processAt: Map<string, number>;
   processEvent: (instanceId: string) => boolean;
   processFailed: (
-    machineId: string,
     instanceId: string,
     reason: string,
     kind?: LastErrorKind
@@ -1064,20 +1055,6 @@ export interface ClosureContext {
   projectTypes: ProjectDelegateTypes;
   providerRetries: ReturnType<typeof createProviderRetries>;
   publishDelegateEvent: (machineId: string, event: DelegateEvent) => void;
-  publishedAgents: Map<string, string>;
-  publishedMetadata: Map<
-    | "previews"
-    | "continuations"
-    | "handoffs"
-    | "formerIds"
-    | "noticesSeen"
-    | "noticesDamaged"
-    | "previewSettings",
-    string
-  >;
-  publishedOverlays: Map<string, string>;
-  publishedRows: Map<string, string>;
-  publishInstances: SessionCallsDeps["publishInstances"];
   publishSend: (row: SentMessageRow) => void;
   publishStalls: () => void;
   publishUsage: (machineId?: string) => void;
@@ -1186,7 +1163,7 @@ export interface ClosureContext {
     relaunch?: boolean,
     paced?: boolean
   ) => void;
-  retireSession: (machineId: string, instanceId: string) => void;
+  retireSession: (instanceId: string) => void;
   retryFromTray: (item: WorkItemRow) => Promise<string | undefined>;
   rewinds: Map<string, string>;
   ridingReported: (
@@ -1263,7 +1240,7 @@ export interface ClosureContext {
   /** The hub's command to a machine's socket, as it is (wire-socket.ts). */
   sendToMachine: (socket: MachineSocket, frame: HubEnvelope) => void;
   sentFrame: (arg0: SendPayload) => SentMessage;
-  sessionAsleep: (machineId: string, instanceId: string) => void;
+  sessionAsleep: (instanceId: string) => void;
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;
   sessionName: WorkItemCallsDeps["sessionName"];
   sessionStartOf: (where: SessionLocation) => Promise<string>;
@@ -1516,25 +1493,6 @@ export interface ClosureContext {
     row: SentMessageRow,
     machineId: string
   ) => Promise<"withdrawn" | "started">;
-  withKeepAlive: <
-    Row extends
-      KeepAliveRow | ReturnType<DbShape["listBoardInstances"]>[number],
-  >(
-    rows: Row[]
-  ) => (Omit<
-    Row,
-    | "keepAliveEnabled"
-    | "keepAliveSent"
-    | "keepAliveStopped"
-    | "cacheTtl"
-    | "contextTokens"
-    | "contextReadAt"
-    | "cacheColdAt"
-    | "cacheColdReason"
-    | "cacheColdUnread"
-    | "keepAliveTurn"
-  > & { keepAlive: KeepAlive })[];
-  withPresence: (rows: AgentRow[]) => AgentRow[];
   workItems: ReturnType<typeof createWorkItems>;
   workspaceArchived: (workspace: WorkspaceRow) => void;
   workspaceRetire: { sweep: () => Promise<RetireSweep> };

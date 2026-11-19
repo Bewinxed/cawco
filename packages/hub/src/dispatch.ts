@@ -174,7 +174,7 @@ import type { HubLifetimeShape } from "./lifetime";
 import type { Memory } from "./memory";
 import type { ProblemsOf } from "./refusal";
 import { orchestrates } from "./roles";
-import { fits, type MachineFacts, runsOnValue } from "./runs-on";
+import { fits, type PlacedMachine, runsOnValue } from "./runs-on";
 import { moveProblem, waitingStageOf } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
 import {
@@ -235,7 +235,7 @@ export interface DispatchDeps {
     | "accounts"
     | "dropQueuedTaskStart"
     | "getInstancesByIds"
-    | "listAgents"
+    | "machineFacts"
     | "listProjects"
     | "project"
     | "projectAttempts"
@@ -991,8 +991,8 @@ export const createDispatcher = ({
   };
 
   /** The machines `runsOn` names (runs-on.ts), online or not. */
-  const machinesFor = (runsOn: string): MachineFacts[] =>
-    db.listAgents().filter((machine) => fits(runsOn, machine));
+  const machinesFor = (runsOn: string): PlacedMachine[] =>
+    db.machineFacts().filter((machine) => fits(runsOn, machine));
 
   /**
    * Where an attempt's work item is cut, as its request says it: the
@@ -2813,7 +2813,7 @@ export const createDispatcher = ({
     if (!runsOn) {
       return runsOn;
     }
-    const checked = runsOnValue(runsOn, db.listAgents());
+    const checked = runsOnValue(runsOn, db.machineFacts());
     return "value" in checked
       ? checked.value
       : problem(400, {

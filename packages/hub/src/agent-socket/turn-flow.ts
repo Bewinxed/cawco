@@ -413,7 +413,7 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
     // A session named by what it was first asked, whether the ask came
     // through this hub or the harness echoed one it was spawned with.
     if (body.kind === "frame" && message.instanceId) {
-      ctx.nameFromLiveTurn(message.machineId, message.instanceId, body.message);
+      ctx.nameFromLiveTurn(message.instanceId, body.message);
     }
     return "continue";
   };
@@ -654,7 +654,6 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         ctx.processGeneration(process)
       );
       ctx.processFailed(
-        message.machineId,
         message.instanceId,
         agentFrame.errorMessage?.trim() ||
           `The session's process on ${ctx.machineName(message.machineId)} failed, and its agent sent no words for why.`,

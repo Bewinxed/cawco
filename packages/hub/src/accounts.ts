@@ -845,7 +845,7 @@ export const usageLimits = (
         accountId: account.id,
         limits: view.limits(account.id, now),
       })),
-    openCodeGo: db.listAgents().flatMap((agent) => {
+    openCodeGo: db.machineFacts().flatMap((agent) => {
       const plan = goByMachine.get(agent.machineId);
       return plan
         ? [{ machineId: agent.machineId, hostname: agent.hostname, plan }]

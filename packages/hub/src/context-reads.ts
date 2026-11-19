@@ -129,7 +129,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
       return text;
     } finally {
       ctx.turnWaiters.delete(id);
-      ctx.retireSession(source.machineId, id);
+      ctx.retireSession(id);
     }
   };
 

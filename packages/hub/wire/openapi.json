@@ -17974,7 +17974,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiMachinesByMachineIdPause200"
+                  "$ref": "#/components/schemas/AgentRow"
                 }
               }
             }
@@ -18031,7 +18031,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiMachinesByMachineIdResume200"
+                  "$ref": "#/components/schemas/AgentRow"
                 }
               }
             }
@@ -33344,319 +33344,17 @@
         ]
       },
       "AgentRow": {
-        "description": "A machine from the hub's `agents` table — what `GET /api/agents` answers with,\nand what rides alongside the sessions in an `instances` frame.",
-        "type": "object",
-        "properties": {
-          "auth": {
-            "$ref": "#/components/schemas/AgentRowAuth",
-            "description": "`unknown` until a daemon that probes has registered at least once."
+        "description": "A machine whole: its facts, its live status and its inventory, as\n`GET /api/agents` answers it and a dashboard puts the board's three\ncollections together.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MachineFacts"
           },
-          "binaryUpdate": {
-            "$ref": "#/components/schemas/BinaryUpdateState"
+          {
+            "$ref": "#/components/schemas/MachineStatus"
           },
-          "build": {
-            "$ref": "#/components/schemas/BuildInfo",
-            "description": "The cawco build this machine's daemon is running (NEW.md §12)."
-          },
-          "chosenModes": {
-            "type": "object",
-            "properties": {
-              "claude": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              },
-              "codex": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              },
-              "opencode": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              },
-              "pi": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              }
-            },
-            "description": "The permission mode the person last started each harness's session in\non this machine, from any device (the hub's `chosen_modes`): the mode the\nNew session form opens on there. Absent for a harness never started."
-          },
-          "custody": {
-            "description": "Last register's sessiond read, distinct from an available empty list.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "instances": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "opencode": {
-                    "type": "boolean"
-                  },
-                  "pending": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "readStartedAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "available"
-                    ]
-                  },
-                  "stopSequence": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "instances",
-                  "opencode",
-                  "state"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "error": {
-                    "type": "string"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "unavailable"
-                    ]
-                  }
-                },
-                "required": [
-                  "error",
-                  "state"
-                ]
-              }
-            ]
-          },
-          "fleet": {
-            "$ref": "#/components/schemas/FleetSyncReport",
-            "description": "Last-known fleet-config sync report (NEW.md §11)."
-          },
-          "fleetItems": {
-            "type": "object",
-            "description": "Each fleet item as the machine's harnesses converge it (core fleet.ts\n`FleetConvergeFrame`), by item id. Absent until the machine has said."
-          },
-          "fleetSync": {
-            "description": "What became of the last fleet sync the hub sent it: sent, applied,\nfailed in the machine's words, or unanswered. Absent until the hub has\nsent it one.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number"
-                  },
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "acked"
-                    ]
-                  }
-                },
-                "required": [
-                  "at",
-                  "generation",
-                  "sentAt",
-                  "state"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number"
-                  },
-                  "error": {
-                    "type": "string"
-                  },
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "nacked"
-                    ]
-                  }
-                },
-                "required": [
-                  "at",
-                  "error",
-                  "generation",
-                  "sentAt",
-                  "state"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "sent"
-                    ]
-                  },
-                  "why": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "generation",
-                  "sentAt",
-                  "state",
-                  "why"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number"
-                  },
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "unacked"
-                    ]
-                  }
-                },
-                "required": [
-                  "at",
-                  "generation",
-                  "sentAt",
-                  "state"
-                ]
-              }
-            ]
-          },
-          "harnesses": {
-            "description": "What each installed harness can do, as the daemon reported at register.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/HarnessReport"
-            }
-          },
-          "home": {
-            "description": "The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has.",
-            "type": "string"
-          },
-          "hostname": {
-            "type": "string"
-          },
-          "hostsHub": {
-            "description": "The hub runs on this machine, as the hub reads it: live, never stored.",
-            "type": "boolean"
-          },
-          "lastSeenAt": {
-            "description": "A `Date` inside the hub, the ISO string it serialises to everywhere else.",
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          },
-          "lostAt": {
-            "description": "Since when (epoch ms) the hub has heard nothing from this machine, once\nthat has lasted `MACHINE_LOST_MS` with sessions on it (hub\nmachine-contact.ts): Needs you's item. Null while it answers. Live, as\n`status` is: never stored.",
-            "type": "number"
-          },
-          "machineCapabilities": {
-            "$ref": "#/components/schemas/MachineCapabilities"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "os": {
-            "type": "string"
-          },
-          "pauseStopped": {
-            "description": "What the pause stopped as it began, as said ({@link stoppedWords}):\n\"stopped 1 running check\". Null when it stopped nothing, or is not paused.",
-            "type": "string"
-          },
-          "pausedUntil": {
-            "description": "The owner paused the machine until this time (epoch ms): CawCo starts\nnothing on it until then, though its agent stays connected. Null when it\nis not paused.",
-            "type": "number"
-          },
-          "reconnectingUntil": {
-            "description": "Until when (epoch ms, the hub's clock, as `lostAt`) the hub reads this\nmachine as on its way back after its agent's link went: a read off it\nanswers so then (`Retry-After`), and offline after. Null while it is\nconnected or once it is offline. Live, as `status` is: never stored.",
-            "type": "number"
-          },
-          "status": {
-            "type": "string"
-          },
-          "tools": {
-            "type": "object",
-            "description": "Last-known tool status by tool id (NEW.md §10)."
-          },
-          "unknownHarnesses": {
-            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: one this hub does not know, or one whose\nsign-in word or refusal it does not know (a newer agent's report). Kept\nas reported, never among {@link harnesses}. Absent when there are none.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          {
+            "$ref": "#/components/schemas/MachineInventory"
           }
-        },
-        "required": [
-          "auth",
-          "hostname",
-          "machineId",
-          "os",
-          "status"
-        ]
-      },
-      "AgentRowAuth": {
-        "type": "string",
-        "enum": [
-          "authenticated",
-          "unauthenticated",
-          "unknown",
-          "unreadable-credentials"
-        ]
-      },
-      "AgentRowClaude": {
-        "type": "string",
-        "enum": [
-          "acceptEdits",
-          "auto",
-          "bypassPermissions",
-          "default",
-          "dontAsk",
-          "fullSend",
-          "plan"
         ]
       },
       "Anchor": {
@@ -35968,7 +35666,7 @@
             "type": "string"
           },
           "permissionMode": {
-            "$ref": "#/components/schemas/AgentRowClaude",
+            "$ref": "#/components/schemas/BlockMetadataPermissionMode",
             "description": "`init` only, and re-reported every turn: what the session answers tools with."
           },
           "preTokens": {
@@ -36316,6 +36014,18 @@
           "start"
         ]
       },
+      "BlockMetadataPermissionMode": {
+        "type": "string",
+        "enum": [
+          "acceptEdits",
+          "auto",
+          "bypassPermissions",
+          "default",
+          "dontAsk",
+          "fullSend",
+          "plan"
+        ]
+      },
       "BlockMetadataReportKind": {
         "type": "string",
         "enum": [
@@ -36459,6 +36169,192 @@
         "required": [
           "kind",
           "projectId"
+        ]
+      },
+      "BoardFrame": {
+        "description": "Hub-originated: what moved on the board since the frame before, and the version it is at now.",
+        "type": "object",
+        "properties": {
+          "continuations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContinuationJob"
+            }
+          },
+          "formerIds": {
+            "type": "object",
+            "description": "The ids sessions had before the hub folded each one's continuations\ninto it (a continuation anything but the person's own Continue asked\nfor, and those of hubs before migration 0128): former id → its id now,\nwhole. A tab or link that names a former id is that session."
+          },
+          "handoffs": {
+            "type": "object"
+          },
+          "inventories": {
+            "description": "What each machine has installed and reports, by machine.",
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "upserts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MachineInventory"
+                }
+              }
+            },
+            "required": [
+              "removed",
+              "upserts"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "board"
+            ]
+          },
+          "machineStatus": {
+            "description": "Each machine's live status, by machine.",
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "upserts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MachineStatus"
+                }
+              }
+            },
+            "required": [
+              "removed",
+              "upserts"
+            ]
+          },
+          "machines": {
+            "description": "Each machine's facts, by machine.",
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "upserts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MachineFacts"
+                }
+              }
+            },
+            "required": [
+              "removed",
+              "upserts"
+            ]
+          },
+          "noticesDamaged": {
+            "description": "The hub's notices record, when it found it damaged at start: notices\nare off and `noticesSeen` is not a record of anything until it is reset\n(hub notices.ts). Null when the record reads whole.",
+            "$ref": "#/components/schemas/DamagedHubRecord"
+          },
+          "noticesSeen": {
+            "description": "The notice ids a person acknowledged, on any tab or device (hub notices.ts).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "previewSettings": {
+            "description": "The fleet's preview mode (Settings › Previews): a switch moves every\npreview origin, so a decision page loaded before it loads again, its\nembeds at their new origins.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "host"
+                    ]
+                  },
+                  "passDomain": {
+                    "type": "string"
+                  },
+                  "pattern": {
+                    "type": "string"
+                  },
+                  "ports": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode",
+                  "passDomain",
+                  "pattern",
+                  "ports"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "port"
+                    ]
+                  },
+                  "ports": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode",
+                  "ports"
+                ]
+              }
+            ]
+          },
+          "previews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewFrame"
+            }
+          },
+          "sessions": {
+            "description": "The sessions the board lists, by id.",
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "upserts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InstanceRow"
+                }
+              }
+            },
+            "required": [
+              "removed",
+              "upserts"
+            ]
+          },
+          "version": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "version"
         ]
       },
       "BridgedHeldPlace": {
@@ -37264,7 +37160,7 @@
             "type": "string"
           },
           "permissionMode": {
-            "$ref": "#/components/schemas/AgentRowClaude"
+            "$ref": "#/components/schemas/BlockMetadataPermissionMode"
           }
         },
         "required": [
@@ -43751,6 +43647,9 @@
             "$ref": "#/components/schemas/BlocksChangedFrame"
           },
           {
+            "$ref": "#/components/schemas/BoardFrame"
+          },
+          {
             "$ref": "#/components/schemas/BrowserFrame"
           },
           {
@@ -43806,9 +43705,6 @@
           },
           {
             "$ref": "#/components/schemas/InstallsFrame"
-          },
-          {
-            "$ref": "#/components/schemas/InstancesDeltaFrame"
           },
           {
             "$ref": "#/components/schemas/InstancesFrame"
@@ -43921,6 +43817,7 @@
             "artifact.needs": "#/components/schemas/ArtifactNeedsFrame",
             "asleep": "#/components/schemas/AsleepFrame",
             "blocks.changed": "#/components/schemas/BlocksChangedFrame",
+            "board": "#/components/schemas/BoardFrame",
             "browser_handback": "#/components/schemas/BrowserHandedBackFrame",
             "browser_list": "#/components/schemas/BrowserListFrame",
             "browsers": "#/components/schemas/BrowserFrame",
@@ -43942,7 +43839,6 @@
             "hub_auth": "#/components/schemas/HubAuthFrame",
             "installs": "#/components/schemas/InstallsFrame",
             "instances": "#/components/schemas/InstancesFrame",
-            "instances_delta": "#/components/schemas/InstancesDeltaFrame",
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "moves": "#/components/schemas/MovesFrame",
             "passkey_advert": "#/components/schemas/PasskeyAdvertFrame",
@@ -44395,7 +44291,7 @@
           "permissionModes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AgentRowClaude"
+              "$ref": "#/components/schemas/BlockMetadataPermissionMode"
             }
           },
           "plugins": {
@@ -46559,7 +46455,8 @@
             "type": "string"
           },
           "keepAlive": {
-            "$ref": "#/components/schemas/KeepAlive"
+            "$ref": "#/components/schemas/KeepAlive",
+            "description": "A session's keep-alive as the board carries it: facts and a deadline,\nnever a state worked out from the clock, so a row moves only when one of\nthese does. A reader that wants to know whether the cache is warm now\ncompares {@link nextAt} with its own clock."
           },
           "kind": {
             "description": "`mainline`, `scratch` for a spin-off, or `summariser`, never on the board.",
@@ -46822,16 +46719,10 @@
           "unknown"
         ]
       },
-      "InstancesDeltaFrame": {
+      "InstancesFrame": {
+        "description": "Hub-originated: the first frame on every socket, reconnects included. With\nno `since` it is the board whole: every collection and list present, and\nwhatever a page held before and this leaves out is gone. With `since` it\nanswers a page that named the board it holds (its run and version, on its\nsocket's address): only what moved after that version, as a `board` frame\ncarries it. `kind` and `protocol` hold across every wire version, so a\npage built for an older one finds its way out through them.",
         "type": "object",
         "properties": {
-          "agents": {
-            "description": "Changed machines only; omitted when no machine moved.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentRow"
-            }
-          },
           "continuations": {
             "type": "array",
             "items": {
@@ -46840,30 +46731,110 @@
           },
           "formerIds": {
             "type": "object",
-            "description": "Present when it moved: every former id, by its id now ({@link InstancesFrame.formerIds}), whole."
+            "description": "The ids sessions had before the hub folded each one's continuations\ninto it (a continuation anything but the person's own Continue asked\nfor, and those of hubs before migration 0128): former id → its id now,\nwhole. A tab or link that names a former id is that session."
           },
           "handoffs": {
             "type": "object"
           },
-          "kind": {
-            "description": "Hub-originated: only changed rows and metadata; pulses travel separately.",
-            "type": "string",
-            "enum": [
-              "instances_delta"
+          "hubBuild": {
+            "$ref": "#/components/schemas/BuildInfo"
+          },
+          "hubRun": {
+            "description": "This hub's run, one value per hub start: the numbering every stream on\nthis socket counts in, and the board's versions too. A newest transcript\npage names the run its `seq` came from (`TranscriptPage.hubRun`); a page\nof this run resumes its stream here from that `seq`, and one of another\nrun is read again.",
+            "type": "string"
+          },
+          "inventories": {
+            "description": "What each machine has installed and reports, by machine.",
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "upserts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MachineInventory"
+                }
+              }
+            },
+            "required": [
+              "removed",
+              "upserts"
             ]
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "instances"
+            ]
+          },
+          "machineStatus": {
+            "description": "Each machine's live status, by machine.",
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "upserts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MachineStatus"
+                }
+              }
+            },
+            "required": [
+              "removed",
+              "upserts"
+            ]
+          },
+          "machines": {
+            "description": "Each machine's facts, by machine.",
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "upserts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MachineFacts"
+                }
+              }
+            },
+            "required": [
+              "removed",
+              "upserts"
+            ]
+          },
+          "moves": {
+            "description": "Every project move the hub is carrying; each change after this arrives on the `moves` frame.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoveJob"
+            }
+          },
           "noticesDamaged": {
-            "description": "Present when it moved: the damaged notices record, or null once it is reset.",
+            "description": "The hub's notices record, when it found it damaged at start: notices\nare off and `noticesSeen` is not a record of anything until it is reset\n(hub notices.ts). Null when the record reads whole.",
             "$ref": "#/components/schemas/DamagedHubRecord"
           },
           "noticesSeen": {
+            "description": "The notice ids a person acknowledged, on any tab or device (hub notices.ts).",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "previewSettings": {
-            "description": "Present when it moved: the fleet's preview mode ({@link InstancesFrame.previewSettings}).",
+            "description": "The fleet's preview mode (Settings › Previews): a switch moves every\npreview origin, so a decision page loaded before it loads again, its\nembeds at their new origins.",
             "anyOf": [
               {
                 "type": "object",
@@ -46917,122 +46888,52 @@
               "$ref": "#/components/schemas/PreviewFrame"
             }
           },
-          "removed": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "removedAgents": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "upserts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/InstanceRow"
-            }
-          }
-        },
-        "required": [
-          "kind",
-          "removed",
-          "upserts"
-        ]
-      },
-      "InstancesFrame": {
-        "type": "object",
-        "properties": {
-          "agents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentRow"
-            }
-          },
-          "continuations": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ContinuationJob"
-            }
-          },
-          "formerIds": {
-            "type": "object",
-            "description": "The ids sessions had before the hub folded each one's continuations\ninto it (a continuation anything but the person's own Continue asked\nfor, and those of hubs before migration 0128): former id → its id now. A\ntab or link that names a former id is that session."
-          },
-          "handoffs": {
-            "type": "object"
-          },
-          "hubBuild": {
-            "$ref": "#/components/schemas/BuildInfo"
-          },
-          "hubRun": {
-            "description": "This hub's run, one value per hub start: the numbering every stream on\nthis socket counts in. A newest transcript page names the run its `seq`\ncame from (`TranscriptPage.hubRun`); a page of this run resumes its\nstream here from that `seq`, and one of another run is read again.",
-            "type": "string"
-          },
-          "instances": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/InstanceRow"
-            }
-          },
-          "kind": {
-            "description": "Hub-originated: the complete board on every connection, including reconnects.",
-            "type": "string",
-            "enum": [
-              "instances"
-            ]
-          },
-          "moves": {
-            "description": "Every project move the hub is carrying; each change after this arrives on the `moves` frame.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MoveJob"
-            }
-          },
-          "noticesDamaged": {
-            "description": "The hub's notices record, when it found it damaged at start: notices\nare off and `noticesSeen` is not a record of anything until it is reset\n(hub notices.ts). Null when the record reads whole.",
-            "$ref": "#/components/schemas/DamagedHubRecord"
-          },
-          "noticesSeen": {
-            "description": "The notice ids a person acknowledged, on any tab or device (hub notices.ts).",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "previewSettings": {
-            "$ref": "#/components/schemas/PreviewSettings",
-            "description": "The fleet's preview mode (Settings › Previews): a switch moves every\npreview origin, so a decision page loaded before it loads again, its\nembeds at their new origins."
-          },
-          "previews": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PreviewFrame"
-            }
-          },
           "protocol": {
             "type": "number"
           },
           "pulses": {
-            "type": "object"
+            "type": "object",
+            "description": "Each session's pulse now, whole: each change after arrives on its `pulse` frame."
+          },
+          "sessions": {
+            "description": "The sessions the board lists, by id.",
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "upserts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InstanceRow"
+                }
+              }
+            },
+            "required": [
+              "removed",
+              "upserts"
+            ]
+          },
+          "since": {
+            "description": "The version of the board the page held; absent when this is the board whole.",
+            "type": "number"
+          },
+          "version": {
+            "description": "The board's version this frame brings the page to.",
+            "type": "number"
           }
         },
         "required": [
-          "agents",
-          "continuations",
-          "formerIds",
-          "handoffs",
           "hubBuild",
           "hubRun",
-          "instances",
           "kind",
           "moves",
-          "noticesSeen",
-          "previewSettings",
           "protocol",
-          "pulses"
+          "pulses",
+          "version"
         ]
       },
       "Interaction": {
@@ -47164,6 +47065,7 @@
         ]
       },
       "KeepAlive": {
+        "description": "A session's keep-alive as the board carries it: facts and a deadline,\nnever a state worked out from the clock, so a row moves only when one of\nthese does. A reader that wants to know whether the cache is warm now\ncompares {@link nextAt} with its own clock.",
         "type": "object",
         "properties": {
           "cap": {
@@ -47191,6 +47093,7 @@
             "type": "number"
           },
           "nextAt": {
+            "description": "When the next ping is due (epoch ms): the measured cache's expiry less\nits margin. Null while none is planned (off, asleep, measured cold, or\nno measured lifetime). A time already past is a ping that came due.",
             "type": "number"
           },
           "on": {
@@ -47199,8 +47102,10 @@
           "sent": {
             "type": "number"
           },
-          "state": {
-            "$ref": "#/components/schemas/KeepAliveState"
+          "stopped": {
+            "description": "Why it is off by itself: it reached its cap. Null otherwise.",
+            "const": "stopped-cap",
+            "type": "string"
           },
           "ttl": {
             "$ref": "#/components/schemas/KeepAliveTtl"
@@ -47209,19 +47114,7 @@
         "required": [
           "cap",
           "on",
-          "sent",
-          "state"
-        ]
-      },
-      "KeepAliveState": {
-        "type": "string",
-        "enum": [
-          "asleep",
-          "cold",
-          "off",
-          "paused-usage",
-          "stopped-cap",
-          "waiting"
+          "sent"
         ]
       },
       "KeepAliveTtl": {
@@ -47618,6 +47511,83 @@
           "udp+tcp"
         ]
       },
+      "MachineFacts": {
+        "description": "A machine's facts: what it is and what the person set on it. One of the\nthree collections a machine travels in on the board (core frames.ts\n`BoardChanges`): a beat that reports nothing new moves none of them.",
+        "type": "object",
+        "properties": {
+          "auth": {
+            "$ref": "#/components/schemas/MachineFactsAuth",
+            "description": "`unknown` until a daemon that probes has registered at least once."
+          },
+          "build": {
+            "$ref": "#/components/schemas/BuildInfo",
+            "description": "The cawco build this machine's daemon is running (NEW.md §12)."
+          },
+          "chosenModes": {
+            "type": "object",
+            "properties": {
+              "claude": {
+                "$ref": "#/components/schemas/BlockMetadataPermissionMode"
+              },
+              "codex": {
+                "$ref": "#/components/schemas/BlockMetadataPermissionMode"
+              },
+              "opencode": {
+                "$ref": "#/components/schemas/BlockMetadataPermissionMode"
+              },
+              "pi": {
+                "$ref": "#/components/schemas/BlockMetadataPermissionMode"
+              }
+            },
+            "description": "The permission mode the person last started each harness's session in\non this machine, from any device (the hub's `chosen_modes`): the mode the\nNew session form opens on there. Absent for a harness never started."
+          },
+          "home": {
+            "description": "The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has.",
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "hostsHub": {
+            "description": "The hub runs on this machine, as the hub reads it: never stored.",
+            "type": "boolean"
+          },
+          "joinedAt": {
+            "description": "When the machine first joined (epoch ms): machines are listed in this\norder, which core `machineCalled` numbers machines that share a name by.",
+            "type": "number"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "pauseStopped": {
+            "description": "What the pause stopped as it began, as said ({@link stoppedWords}):\n\"stopped 1 running check\". Null when it stopped nothing, or is not paused.",
+            "type": "string"
+          },
+          "pausedUntil": {
+            "description": "The owner paused the machine until this time (epoch ms): CawCo starts\nnothing on it until then, though its agent stays connected. Null when it\nis not paused.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "auth",
+          "hostname",
+          "joinedAt",
+          "machineId",
+          "os"
+        ]
+      },
+      "MachineFactsAuth": {
+        "type": "string",
+        "enum": [
+          "authenticated",
+          "unauthenticated",
+          "unknown",
+          "unreadable-credentials"
+        ]
+      },
       "MachineGoLimits": {
         "description": "One machine's OpenCode Go plan, read with that machine's Go key.",
         "type": "object",
@@ -47652,6 +47622,160 @@
         "required": [
           "content",
           "hash"
+        ]
+      },
+      "MachineInventory": {
+        "description": "What a machine has installed and reports of it: its tools, its harnesses\nand its fleet items. A tools report moves only this machine's inventory.",
+        "type": "object",
+        "properties": {
+          "fleet": {
+            "$ref": "#/components/schemas/FleetSyncReport",
+            "description": "Last-known fleet-config sync report (NEW.md §11)."
+          },
+          "fleetItems": {
+            "type": "object",
+            "description": "Each fleet item as the machine's harnesses converge it (core fleet.ts\n`FleetConvergeFrame`), by item id. Absent until the machine has said."
+          },
+          "fleetSync": {
+            "description": "What became of the last fleet sync the hub sent it: sent, applied,\nfailed in the machine's words, or unanswered. Absent until the hub has\nsent it one.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "number"
+                  },
+                  "generation": {
+                    "type": "number"
+                  },
+                  "sentAt": {
+                    "type": "number"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "acked"
+                    ]
+                  }
+                },
+                "required": [
+                  "at",
+                  "generation",
+                  "sentAt",
+                  "state"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "number"
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "generation": {
+                    "type": "number"
+                  },
+                  "sentAt": {
+                    "type": "number"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "nacked"
+                    ]
+                  }
+                },
+                "required": [
+                  "at",
+                  "error",
+                  "generation",
+                  "sentAt",
+                  "state"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "generation": {
+                    "type": "number"
+                  },
+                  "sentAt": {
+                    "type": "number"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "sent"
+                    ]
+                  },
+                  "why": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "generation",
+                  "sentAt",
+                  "state",
+                  "why"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "number"
+                  },
+                  "generation": {
+                    "type": "number"
+                  },
+                  "sentAt": {
+                    "type": "number"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "unacked"
+                    ]
+                  }
+                },
+                "required": [
+                  "at",
+                  "generation",
+                  "sentAt",
+                  "state"
+                ]
+              }
+            ]
+          },
+          "harnesses": {
+            "description": "What each installed harness can do, as the daemon reported at register.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HarnessReport"
+            }
+          },
+          "machineCapabilities": {
+            "$ref": "#/components/schemas/MachineCapabilities"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "tools": {
+            "type": "object",
+            "description": "Last-known tool status by tool id (NEW.md §10)."
+          },
+          "unknownHarnesses": {
+            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: one this hub does not know, or one whose\nsign-in word or refusal it does not know (a newer agent's report). Kept\nas reported, never among {@link harnesses}. Absent when there are none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "machineId"
         ]
       },
       "MachineMemoryDoc": {
@@ -47700,6 +47824,98 @@
       "MachinePath": {
         "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
         "type": "string"
+      },
+      "MachineStatus": {
+        "description": "A machine's live status: what the hub knows of its connection now, laid\nagain only when one of these moves. Live, never stored, but `lastSeenAt`.",
+        "type": "object",
+        "properties": {
+          "binaryUpdate": {
+            "$ref": "#/components/schemas/BinaryUpdateState"
+          },
+          "custody": {
+            "description": "Last register's sessiond read, distinct from an available empty list.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "instances": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "opencode": {
+                    "type": "boolean"
+                  },
+                  "pending": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "readStartedAt": {
+                    "type": "number"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "available"
+                    ]
+                  },
+                  "stopSequence": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "instances",
+                  "opencode",
+                  "state"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "error": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "unavailable"
+                    ]
+                  }
+                },
+                "required": [
+                  "error",
+                  "state"
+                ]
+              }
+            ]
+          },
+          "lastSeenAt": {
+            "description": "When the hub last heard from the machine (epoch ms), as it stood when\nthis status was laid: it moves with a status, never with a beat alone.",
+            "type": "number"
+          },
+          "lostAt": {
+            "description": "Since when (epoch ms) the hub has heard nothing from this machine, once\nthat has lasted `MACHINE_LOST_MS` with sessions on it (hub\nmachine-contact.ts): Needs you's item. Null while it answers.",
+            "type": "number"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "reconnectingUntil": {
+            "description": "Until when (epoch ms, the hub's clock, as `lostAt`) the hub reads this\nmachine as on its way back after its agent's link went: a read off it\nanswers so then (`Retry-After`), and offline after. Null while it is\nconnected or once it is offline.",
+            "type": "number"
+          },
+          "status": {
+            "description": "`online` while the hub holds the machine's socket and it answered its welcome.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "machineId",
+          "status"
+        ]
       },
       "MarketplaceLink": {
         "description": "A link of the marketplace at `source`, asked for: under way (`fetching`),\nlinked (`marketplace`, the row), or refused (`error`).",
@@ -47990,7 +48206,7 @@
             "type": "string"
           },
           "refused": {
-            "$ref": "#/components/schemas/AgentRowClaude",
+            "$ref": "#/components/schemas/BlockMetadataPermissionMode",
             "description": "The mode it would have started on, which its machine doesn't take; absent when none was named at all."
           }
         },
@@ -50466,7 +50682,7 @@
             }
           },
           "permissionMode": {
-            "$ref": "#/components/schemas/AgentRowClaude",
+            "$ref": "#/components/schemas/BlockMetadataPermissionMode",
             "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: bypass, with every approval approved for the\nsession (the owner, 2026-10-22: \"FULL SEND LITERALLY MEANS FULL SEND\"):\non Claude Code the host answers the checks and ask rules the CLI still\nraises in bypass, and on every harness the hub approves CawCo's admin\nwrites (hub asks.ts). A question to the person still asks; a\nfleet-denied tool still never runs. Each adapter maps `fullSend` onto its\nharness; none hands it to an SDK as is."
           },
           "rate_limit_info": {
@@ -59079,30 +59295,6 @@
           "views"
         ]
       },
-      "Stall": {
-        "description": "A session stopped at its account's limit, as its tray chip and\n`delegate_list` say it (core `accountsWords.stalled`): the words, and\nwhen it carries on (epoch ms): the reset it waits for.",
-        "type": "object",
-        "properties": {
-          "offer": {
-            "$ref": "#/components/schemas/StallOffer",
-            "description": "Stopped on a ChatGPT plan: what it offers the person (chatgpt-offer.ts `stallOffer`)."
-          },
-          "stale": {
-            "description": "Held past the cutoff: nothing carries it on until a person or its parent writes (at-limit.ts `goneStale`).",
-            "const": true,
-            "type": "boolean"
-          },
-          "until": {
-            "type": "number"
-          },
-          "words": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "words"
-        ]
-      },
       "StallOffer": {
         "description": "What a ChatGPT session stopped at its plan's limit, or left on no account\nby its plan, offers (core `isChatgptPlan`): CawCo moves it to no other\nChatGPT plan, so the person may continue it on their OpenAI API key or\non another agent or model, each a Continue they press. `key`: the OpenAI\nAPI-key account signed in on its machine and the session's model as that\nkey opens it; absent when no key is signed in there.",
         "type": "object",
@@ -62254,7 +62446,7 @@
                     "type": "string"
                   },
                   "permissionMode": {
-                    "$ref": "#/components/schemas/AgentRowClaude",
+                    "$ref": "#/components/schemas/BlockMetadataPermissionMode",
                     "description": "How the session answers tool permissions, by the newest `init`."
                   },
                   "sdkStatus": {
@@ -62509,7 +62701,7 @@
             "type": "string"
           },
           "permissionMode": {
-            "$ref": "#/components/schemas/AgentRowClaude",
+            "$ref": "#/components/schemas/BlockMetadataPermissionMode",
             "description": "How the session answers tool permissions, by the newest `init`."
           },
           "sdkStatus": {
@@ -78448,286 +78640,7 @@
       "getApiAgents200": {
         "type": "array",
         "items": {
-          "type": "object",
-          "properties": {
-            "auth": {
-              "$ref": "#/components/schemas/AgentRowAuth",
-              "description": "`unknown` until a daemon that probes has registered at least once."
-            },
-            "binaryUpdate": {
-              "$ref": "#/components/schemas/BinaryUpdateState"
-            },
-            "build": {
-              "$ref": "#/components/schemas/BuildInfo",
-              "description": "The cawco build this machine's daemon is running (NEW.md §12)."
-            },
-            "chosenModes": {
-              "type": "object",
-              "properties": {
-                "claude": {
-                  "$ref": "#/components/schemas/AgentRowClaude"
-                },
-                "codex": {
-                  "$ref": "#/components/schemas/AgentRowClaude"
-                },
-                "opencode": {
-                  "$ref": "#/components/schemas/AgentRowClaude"
-                },
-                "pi": {
-                  "$ref": "#/components/schemas/AgentRowClaude"
-                }
-              },
-              "description": "The permission mode the person last started each harness's session in\non this machine, from any device (the hub's `chosen_modes`): the mode the\nNew session form opens on there. Absent for a harness never started."
-            },
-            "custody": {
-              "description": "Last register's sessiond read, distinct from an available empty list.",
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "instances": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "opencode": {
-                      "type": "boolean"
-                    },
-                    "pending": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "readStartedAt": {
-                      "type": "number"
-                    },
-                    "state": {
-                      "type": "string",
-                      "enum": [
-                        "available"
-                      ]
-                    },
-                    "stopSequence": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "instances",
-                    "opencode",
-                    "state"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "state": {
-                      "type": "string",
-                      "enum": [
-                        "unavailable"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "state"
-                  ]
-                }
-              ]
-            },
-            "fleet": {
-              "$ref": "#/components/schemas/FleetSyncReport",
-              "description": "Last-known fleet-config sync report (NEW.md §11)."
-            },
-            "fleetItems": {
-              "type": "object",
-              "description": "Each fleet item as the machine's harnesses converge it (core fleet.ts\n`FleetConvergeFrame`), by item id. Absent until the machine has said."
-            },
-            "fleetSync": {
-              "description": "What became of the last fleet sync the hub sent it: sent, applied,\nfailed in the machine's words, or unanswered. Absent until the hub has\nsent it one.",
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "at": {
-                      "type": "number"
-                    },
-                    "generation": {
-                      "type": "number"
-                    },
-                    "sentAt": {
-                      "type": "number"
-                    },
-                    "state": {
-                      "type": "string",
-                      "enum": [
-                        "acked"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "at",
-                    "generation",
-                    "sentAt",
-                    "state"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "at": {
-                      "type": "number"
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "generation": {
-                      "type": "number"
-                    },
-                    "sentAt": {
-                      "type": "number"
-                    },
-                    "state": {
-                      "type": "string",
-                      "enum": [
-                        "nacked"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "at",
-                    "error",
-                    "generation",
-                    "sentAt",
-                    "state"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "generation": {
-                      "type": "number"
-                    },
-                    "sentAt": {
-                      "type": "number"
-                    },
-                    "state": {
-                      "type": "string",
-                      "enum": [
-                        "sent"
-                      ]
-                    },
-                    "why": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "generation",
-                    "sentAt",
-                    "state",
-                    "why"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "at": {
-                      "type": "number"
-                    },
-                    "generation": {
-                      "type": "number"
-                    },
-                    "sentAt": {
-                      "type": "number"
-                    },
-                    "state": {
-                      "type": "string",
-                      "enum": [
-                        "unacked"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "at",
-                    "generation",
-                    "sentAt",
-                    "state"
-                  ]
-                }
-              ]
-            },
-            "harnesses": {
-              "description": "What each installed harness can do, as the daemon reported at register.",
-              "type": "array",
-              "items": {
-                "$ref": "#/components/schemas/HarnessReport"
-              }
-            },
-            "home": {
-              "description": "The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has.",
-              "type": "string"
-            },
-            "hostname": {
-              "type": "string"
-            },
-            "hostsHub": {
-              "description": "The hub runs on this machine, as the hub reads it: live, never stored.",
-              "type": "boolean"
-            },
-            "lastSeenAt": {
-              "type": "string"
-            },
-            "lostAt": {
-              "description": "Since when (epoch ms) the hub has heard nothing from this machine, once\nthat has lasted `MACHINE_LOST_MS` with sessions on it (hub\nmachine-contact.ts): Needs you's item. Null while it answers. Live, as\n`status` is: never stored.",
-              "type": "number"
-            },
-            "machineCapabilities": {
-              "$ref": "#/components/schemas/MachineCapabilities"
-            },
-            "machineId": {
-              "type": "string"
-            },
-            "os": {
-              "type": "string"
-            },
-            "pauseStopped": {
-              "description": "What the pause stopped as it began, as said ({@link stoppedWords}):\n\"stopped 1 running check\". Null when it stopped nothing, or is not paused.",
-              "type": "string"
-            },
-            "pausedUntil": {
-              "description": "The owner paused the machine until this time (epoch ms): CawCo starts\nnothing on it until then, though its agent stays connected. Null when it\nis not paused.",
-              "type": "number"
-            },
-            "reconnectingUntil": {
-              "description": "Until when (epoch ms, the hub's clock, as `lostAt`) the hub reads this\nmachine as on its way back after its agent's link went: a read off it\nanswers so then (`Retry-After`), and offline after. Null while it is\nconnected or once it is offline. Live, as `status` is: never stored.",
-              "type": "number"
-            },
-            "status": {
-              "type": "string"
-            },
-            "tools": {
-              "type": "object",
-              "description": "Last-known tool status by tool id (NEW.md §10)."
-            },
-            "unknownHarnesses": {
-              "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: one this hub does not know, or one whose\nsign-in word or refusal it does not know (a newer agent's report). Kept\nas reported, never among {@link harnesses}. Absent when there are none.",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          "required": [
-            "auth",
-            "hostname",
-            "machineId",
-            "os",
-            "status"
-          ]
+          "$ref": "#/components/schemas/AgentRow"
         }
       },
       "getApiAgents422": {
@@ -86746,7 +86659,7 @@
             },
             "damaged": {
               "$ref": "#/components/schemas/DamagedRow",
-              "description": "What the hub lays over a session row whose record, or whose workspace's\nrecord, is damaged on its machine ({@link DamagedRecordReport}): the file,\nwhy, and the way out that removes it (`archive`: archive workspace\n`workspaceId`; `end`: end the session)."
+              "description": "Its record, or its workspace's, is damaged on its machine\n({@link DamagedRow}): laid over by the hub from the machine's last beat,\nnever stored. `lastError` says the same in words."
             },
             "delegateType": {
               "type": "string"
@@ -86769,6 +86682,22 @@
             },
             "harness": {
               "$ref": "#/components/schemas/HarnessKind"
+            },
+            "held": {
+              "description": "First-hand custody on the current agent connection, never stored liveness.",
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string"
+                },
+                "since": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "reason",
+                "since"
+              ]
             },
             "hubModel": {
               "type": "boolean"
@@ -86852,12 +86781,14 @@
               "type": "string"
             },
             "queuedSends": {
+              "description": "The sends waiting for it (accepted, not yet read by its session; a keep-\nalive ping aside): one starts its next turn. Laid over by the hub from\nits send records, never stored; absent at none. The sidebar counts a\nsession with one as still working.",
               "type": "number"
             },
             "role": {
               "$ref": "#/components/schemas/DelegateTypeRole"
             },
             "runningDelegates": {
+              "description": "Hub-derived count of live delegated work items, including descendants and checks.",
               "type": "number"
             },
             "seenAt": {
@@ -86870,7 +86801,23 @@
               "type": "string"
             },
             "stalled": {
-              "$ref": "#/components/schemas/Stall"
+              "description": "The session is stopped at its account's limit (or on its refused\nsign-in), in words, as the hub's at-limit controller holds it (hub\nat-limit.ts `stall`): what happened and when it carries on; `until`,\nepoch ms, the moment it does. Absent while it runs. Its row, its head and\nits transcript show it as an error with the way out: another account\nfrom its menu, or, for a ChatGPT session, the offer it makes\n({@link StallOffer}).",
+              "type": "object",
+              "properties": {
+                "offer": {
+                  "$ref": "#/components/schemas/StallOffer",
+                  "description": "What a ChatGPT session stopped at its plan's limit, or left on no account\nby its plan, offers (core `isChatgptPlan`): CawCo moves it to no other\nChatGPT plan, so the person may continue it on their OpenAI API key or\non another agent or model, each a Continue they press. `key`: the OpenAI\nAPI-key account signed in on its machine and the session's model as that\nkey opens it; absent when no key is signed in there."
+                },
+                "until": {
+                  "type": "number"
+                },
+                "words": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "words"
+              ]
             },
             "startingSet": {
               "description": "The skills and MCP servers it starts with (core `StartingSet`); null: everything installed.",
@@ -86918,7 +86865,6 @@
             "machineId",
             "mayStart",
             "origin",
-            "runningDelegates",
             "status",
             "updatedAt",
             "wakesItself"
@@ -153600,288 +153546,6 @@
           "type"
         ]
       },
-      "postApiMachinesByMachineIdPause200": {
-        "type": "object",
-        "properties": {
-          "auth": {
-            "$ref": "#/components/schemas/AgentRowAuth",
-            "description": "`unknown` until a daemon that probes has registered at least once."
-          },
-          "binaryUpdate": {
-            "$ref": "#/components/schemas/BinaryUpdateState"
-          },
-          "build": {
-            "$ref": "#/components/schemas/BuildInfo",
-            "description": "The cawco build this machine's daemon is running (NEW.md §12)."
-          },
-          "chosenModes": {
-            "type": "object",
-            "properties": {
-              "claude": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              },
-              "codex": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              },
-              "opencode": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              },
-              "pi": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              }
-            },
-            "description": "The permission mode the person last started each harness's session in\non this machine, from any device (the hub's `chosen_modes`): the mode the\nNew session form opens on there. Absent for a harness never started."
-          },
-          "custody": {
-            "description": "Last register's sessiond read, distinct from an available empty list.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "instances": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "opencode": {
-                    "type": "boolean"
-                  },
-                  "pending": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "readStartedAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "available"
-                    ]
-                  },
-                  "stopSequence": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "instances",
-                  "opencode",
-                  "state"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "error": {
-                    "type": "string"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "unavailable"
-                    ]
-                  }
-                },
-                "required": [
-                  "error",
-                  "state"
-                ]
-              }
-            ]
-          },
-          "fleet": {
-            "$ref": "#/components/schemas/FleetSyncReport",
-            "description": "Last-known fleet-config sync report (NEW.md §11)."
-          },
-          "fleetItems": {
-            "type": "object",
-            "description": "Each fleet item as the machine's harnesses converge it (core fleet.ts\n`FleetConvergeFrame`), by item id. Absent until the machine has said."
-          },
-          "fleetSync": {
-            "description": "What became of the last fleet sync the hub sent it: sent, applied,\nfailed in the machine's words, or unanswered. Absent until the hub has\nsent it one.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number"
-                  },
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "acked"
-                    ]
-                  }
-                },
-                "required": [
-                  "at",
-                  "generation",
-                  "sentAt",
-                  "state"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number"
-                  },
-                  "error": {
-                    "type": "string"
-                  },
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "nacked"
-                    ]
-                  }
-                },
-                "required": [
-                  "at",
-                  "error",
-                  "generation",
-                  "sentAt",
-                  "state"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "sent"
-                    ]
-                  },
-                  "why": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "generation",
-                  "sentAt",
-                  "state",
-                  "why"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number"
-                  },
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "unacked"
-                    ]
-                  }
-                },
-                "required": [
-                  "at",
-                  "generation",
-                  "sentAt",
-                  "state"
-                ]
-              }
-            ]
-          },
-          "harnesses": {
-            "description": "What each installed harness can do, as the daemon reported at register.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/HarnessReport"
-            }
-          },
-          "home": {
-            "description": "The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has.",
-            "type": "string"
-          },
-          "hostname": {
-            "type": "string"
-          },
-          "hostsHub": {
-            "description": "The hub runs on this machine, as the hub reads it: live, never stored.",
-            "type": "boolean"
-          },
-          "lastSeenAt": {
-            "type": "string"
-          },
-          "lostAt": {
-            "description": "Since when (epoch ms) the hub has heard nothing from this machine, once\nthat has lasted `MACHINE_LOST_MS` with sessions on it (hub\nmachine-contact.ts): Needs you's item. Null while it answers. Live, as\n`status` is: never stored.",
-            "type": "number"
-          },
-          "machineCapabilities": {
-            "$ref": "#/components/schemas/MachineCapabilities"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "os": {
-            "type": "string"
-          },
-          "pauseStopped": {
-            "description": "What the pause stopped as it began, as said ({@link stoppedWords}):\n\"stopped 1 running check\". Null when it stopped nothing, or is not paused.",
-            "type": "string"
-          },
-          "pausedUntil": {
-            "description": "The owner paused the machine until this time (epoch ms): CawCo starts\nnothing on it until then, though its agent stays connected. Null when it\nis not paused.",
-            "type": "number"
-          },
-          "reconnectingUntil": {
-            "description": "Until when (epoch ms, the hub's clock, as `lostAt`) the hub reads this\nmachine as on its way back after its agent's link went: a read off it\nanswers so then (`Retry-After`), and offline after. Null while it is\nconnected or once it is offline. Live, as `status` is: never stored.",
-            "type": "number"
-          },
-          "status": {
-            "type": "string"
-          },
-          "tools": {
-            "type": "object",
-            "description": "Last-known tool status by tool id (NEW.md §10)."
-          },
-          "unknownHarnesses": {
-            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: one this hub does not know, or one whose\nsign-in word or refusal it does not know (a newer agent's report). Kept\nas reported, never among {@link harnesses}. Absent when there are none.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "auth",
-          "hostname",
-          "machineId",
-          "os",
-          "status"
-        ]
-      },
       "postApiMachinesByMachineIdPause400": {
         "anyOf": [
           {
@@ -154092,288 +153756,6 @@
               "type"
             ]
           }
-        ]
-      },
-      "postApiMachinesByMachineIdResume200": {
-        "type": "object",
-        "properties": {
-          "auth": {
-            "$ref": "#/components/schemas/AgentRowAuth",
-            "description": "`unknown` until a daemon that probes has registered at least once."
-          },
-          "binaryUpdate": {
-            "$ref": "#/components/schemas/BinaryUpdateState"
-          },
-          "build": {
-            "$ref": "#/components/schemas/BuildInfo",
-            "description": "The cawco build this machine's daemon is running (NEW.md §12)."
-          },
-          "chosenModes": {
-            "type": "object",
-            "properties": {
-              "claude": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              },
-              "codex": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              },
-              "opencode": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              },
-              "pi": {
-                "$ref": "#/components/schemas/AgentRowClaude"
-              }
-            },
-            "description": "The permission mode the person last started each harness's session in\non this machine, from any device (the hub's `chosen_modes`): the mode the\nNew session form opens on there. Absent for a harness never started."
-          },
-          "custody": {
-            "description": "Last register's sessiond read, distinct from an available empty list.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "instances": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "opencode": {
-                    "type": "boolean"
-                  },
-                  "pending": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "readStartedAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "available"
-                    ]
-                  },
-                  "stopSequence": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "instances",
-                  "opencode",
-                  "state"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "error": {
-                    "type": "string"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "unavailable"
-                    ]
-                  }
-                },
-                "required": [
-                  "error",
-                  "state"
-                ]
-              }
-            ]
-          },
-          "fleet": {
-            "$ref": "#/components/schemas/FleetSyncReport",
-            "description": "Last-known fleet-config sync report (NEW.md §11)."
-          },
-          "fleetItems": {
-            "type": "object",
-            "description": "Each fleet item as the machine's harnesses converge it (core fleet.ts\n`FleetConvergeFrame`), by item id. Absent until the machine has said."
-          },
-          "fleetSync": {
-            "description": "What became of the last fleet sync the hub sent it: sent, applied,\nfailed in the machine's words, or unanswered. Absent until the hub has\nsent it one.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number"
-                  },
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "acked"
-                    ]
-                  }
-                },
-                "required": [
-                  "at",
-                  "generation",
-                  "sentAt",
-                  "state"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number"
-                  },
-                  "error": {
-                    "type": "string"
-                  },
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "nacked"
-                    ]
-                  }
-                },
-                "required": [
-                  "at",
-                  "error",
-                  "generation",
-                  "sentAt",
-                  "state"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "sent"
-                    ]
-                  },
-                  "why": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "generation",
-                  "sentAt",
-                  "state",
-                  "why"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number"
-                  },
-                  "generation": {
-                    "type": "number"
-                  },
-                  "sentAt": {
-                    "type": "number"
-                  },
-                  "state": {
-                    "type": "string",
-                    "enum": [
-                      "unacked"
-                    ]
-                  }
-                },
-                "required": [
-                  "at",
-                  "generation",
-                  "sentAt",
-                  "state"
-                ]
-              }
-            ]
-          },
-          "harnesses": {
-            "description": "What each installed harness can do, as the daemon reported at register.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/HarnessReport"
-            }
-          },
-          "home": {
-            "description": "The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has.",
-            "type": "string"
-          },
-          "hostname": {
-            "type": "string"
-          },
-          "hostsHub": {
-            "description": "The hub runs on this machine, as the hub reads it: live, never stored.",
-            "type": "boolean"
-          },
-          "lastSeenAt": {
-            "type": "string"
-          },
-          "lostAt": {
-            "description": "Since when (epoch ms) the hub has heard nothing from this machine, once\nthat has lasted `MACHINE_LOST_MS` with sessions on it (hub\nmachine-contact.ts): Needs you's item. Null while it answers. Live, as\n`status` is: never stored.",
-            "type": "number"
-          },
-          "machineCapabilities": {
-            "$ref": "#/components/schemas/MachineCapabilities"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "os": {
-            "type": "string"
-          },
-          "pauseStopped": {
-            "description": "What the pause stopped as it began, as said ({@link stoppedWords}):\n\"stopped 1 running check\". Null when it stopped nothing, or is not paused.",
-            "type": "string"
-          },
-          "pausedUntil": {
-            "description": "The owner paused the machine until this time (epoch ms): CawCo starts\nnothing on it until then, though its agent stays connected. Null when it\nis not paused.",
-            "type": "number"
-          },
-          "reconnectingUntil": {
-            "description": "Until when (epoch ms, the hub's clock, as `lostAt`) the hub reads this\nmachine as on its way back after its agent's link went: a read off it\nanswers so then (`Retry-After`), and offline after. Null while it is\nconnected or once it is offline. Live, as `status` is: never stored.",
-            "type": "number"
-          },
-          "status": {
-            "type": "string"
-          },
-          "tools": {
-            "type": "object",
-            "description": "Last-known tool status by tool id (NEW.md §10)."
-          },
-          "unknownHarnesses": {
-            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: one this hub does not know, or one whose\nsign-in word or refusal it does not know (a newer agent's report). Kept\nas reported, never among {@link harnesses}. Absent when there are none.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "auth",
-          "hostname",
-          "machineId",
-          "os",
-          "status"
         ]
       },
       "postApiMachinesByMachineIdResume404": {

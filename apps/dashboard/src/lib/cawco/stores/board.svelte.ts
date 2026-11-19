@@ -24,7 +24,12 @@ import type { Area, MachineVerdict, ServedBoard } from "../served-board";
 import { keepsLast, patchRows, reconcileRows } from "./same";
 
 /** A machine from the hub registry (`GET /api/agents`, and `instances` frames). */
-export type Machine = AgentRow;
+/**
+ * A machine as the dashboard holds it: its facts, live status and
+ * inventory, put together from the board's three collections. When it was
+ * last heard is no screen's.
+ */
+export type Machine = Omit<AgentRow, "lastSeenAt">;
 
 /**
  * A session that stays on the board until the operator discards it: live work,
@@ -439,8 +444,8 @@ export function holdMachines(incoming: Machine[]): boolean {
  * Whether the dashboard may ask `machineId` anything now: the one presence
  * every ask to a machine goes through. The hub is reached and its board on
  * this socket is in (`hubReached`), and that board says the machine is online,
- * which the hub derives from holding the machine's socket right now (server.ts
- * `withPresence`), the same test it routes by. Across a hub restart the page
+ * which the hub derives from holding the machine's socket right now (hub
+ * board.ts `statusOf`), the same test it routes by. Across a hub restart the page
  * is back before its machines are, and nothing is asked of them until the hub
  * says each one is back.
  */

@@ -35,11 +35,13 @@ import type { PermissionPresentation } from "./permission-presentation";
 import type { PreviewDown, PreviewSource } from "./preview/protocol";
 import type { PreviewSettings } from "./preview/routes";
 import type {
-  AgentRow,
   BuildInfo,
   ContinuationJob,
   DelegateEvent,
   InstanceRow,
+  MachineFacts,
+  MachineInventory,
+  MachineStatus,
   SessionPulse,
   StoredFrame,
   Verb,
@@ -232,30 +234,34 @@ interface RejectedFrame {
   uuid: string;
 }
 
-interface InstancesFrame {
-  agents: AgentRow[];
-  continuations: ContinuationJob[];
+/** One keyed collection's changes: each entry that moved, whole, and the keys that went. */
+export interface BoardKeyed<Entry> {
+  removed: string[];
+  upserts: Entry[];
+}
+
+/**
+ * What moved on the board, by collection. Each collection is keyed: a
+ * session by its id, a machine's facts, status and inventory each by the
+ * machine's id. The small lists beside them travel whole when they move.
+ * A collection or list absent did not move.
+ */
+export interface BoardChanges {
+  continuations?: ContinuationJob[];
   /**
    * The ids sessions had before the hub folded each one's continuations
    * into it (a continuation anything but the person's own Continue asked
-   * for, and those of hubs before migration 0128): former id → its id now. A
-   * tab or link that names a former id is that session.
+   * for, and those of hubs before migration 0128): former id → its id now,
+   * whole. A tab or link that names a former id is that session.
    */
-  formerIds: Record<string, string>;
-  handoffs: Record<string, { from: string; at: number }>;
-  hubBuild: BuildInfo;
-  /**
-   * This hub's run, one value per hub start: the numbering every stream on
-   * this socket counts in. A newest transcript page names the run its `seq`
-   * came from (`TranscriptPage.hubRun`); a page of this run resumes its
-   * stream here from that `seq`, and one of another run is read again.
-   */
-  hubRun: string;
-  instances: InstanceRow[];
-  /** Hub-originated: the complete board on every connection, including reconnects. */
-  kind: "instances";
-  /** Every project move the hub is carrying; each change after this arrives on the `moves` frame. */
-  moves: MoveJob[];
+  formerIds?: Record<string, string>;
+  handoffs?: Record<string, { from: string; at: number }>;
+  /** What each machine has installed and reports, by machine. */
+  inventories?: BoardKeyed<MachineInventory>;
+  /** Each machine's live status, by machine. */
+  machineStatus?: BoardKeyed<MachineStatus>;
+  /** Each machine's facts, by machine. */
+  machines?: BoardKeyed<MachineFacts>;
   /**
    * The hub's notices record, when it found it damaged at start: notices
    * are off and `noticesSeen` is not a record of anything until it is reset
@@ -263,36 +269,53 @@ interface InstancesFrame {
    */
   noticesDamaged?: import("./protocol").DamagedHubRecord | null;
   /** The notice ids a person acknowledged, on any tab or device (hub notices.ts). */
-  noticesSeen: string[];
+  noticesSeen?: string[];
   /**
    * The fleet's preview mode (Settings › Previews): a switch moves every
    * preview origin, so a decision page loaded before it loads again, its
    * embeds at their new origins.
    */
-  previewSettings: PreviewSettings;
-  previews?: PreviewFrame[];
-  protocol: number;
-  pulses: Record<string, SessionPulse>;
-}
-
-interface InstancesDeltaFrame {
-  /** Changed machines only; omitted when no machine moved. */
-  agents?: AgentRow[];
-  continuations?: ContinuationJob[];
-  /** Present when it moved: every former id, by its id now ({@link InstancesFrame.formerIds}), whole. */
-  formerIds?: Record<string, string>;
-  handoffs?: Record<string, { from: string; at: number }>;
-  /** Hub-originated: only changed rows and metadata; pulses travel separately. */
-  kind: "instances_delta";
-  /** Present when it moved: the damaged notices record, or null once it is reset. */
-  noticesDamaged?: import("./protocol").DamagedHubRecord | null;
-  noticesSeen?: string[];
-  /** Present when it moved: the fleet's preview mode ({@link InstancesFrame.previewSettings}). */
   previewSettings?: PreviewSettings;
   previews?: PreviewFrame[];
-  removed: string[];
-  removedAgents?: string[];
-  upserts: InstanceRow[];
+  /** The sessions the board lists, by id. */
+  sessions?: BoardKeyed<InstanceRow>;
+}
+
+/**
+ * Hub-originated: the first frame on every socket, reconnects included. With
+ * no `since` it is the board whole: every collection and list present, and
+ * whatever a page held before and this leaves out is gone. With `since` it
+ * answers a page that named the board it holds (its run and version, on its
+ * socket's address): only what moved after that version, as a `board` frame
+ * carries it. `kind` and `protocol` hold across every wire version, so a
+ * page built for an older one finds its way out through them.
+ */
+interface InstancesFrame extends BoardChanges {
+  hubBuild: BuildInfo;
+  /**
+   * This hub's run, one value per hub start: the numbering every stream on
+   * this socket counts in, and the board's versions too. A newest transcript
+   * page names the run its `seq` came from (`TranscriptPage.hubRun`); a page
+   * of this run resumes its stream here from that `seq`, and one of another
+   * run is read again.
+   */
+  hubRun: string;
+  kind: "instances";
+  /** Every project move the hub is carrying; each change after this arrives on the `moves` frame. */
+  moves: MoveJob[];
+  protocol: number;
+  /** Each session's pulse now, whole: each change after arrives on its `pulse` frame. */
+  pulses: Record<string, SessionPulse>;
+  /** The version of the board the page held; absent when this is the board whole. */
+  since?: number;
+  /** The board's version this frame brings the page to. */
+  version: number;
+}
+
+/** Hub-originated: what moved on the board since the frame before, and the version it is at now. */
+interface BoardFrame extends BoardChanges {
+  kind: "board";
+  version: number;
 }
 
 /**
@@ -857,7 +880,7 @@ export type FramePayload =
   | HeldSendFrame
   | TakenSendFrame
   | InstancesFrame
-  | InstancesDeltaFrame
+  | BoardFrame
   | PermissionRequestFrame
   | PermissionSettledFrame
   | UsageFrame

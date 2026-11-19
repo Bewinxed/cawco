@@ -27,7 +27,6 @@ export type ControlRepliesContext = Pick<
   | "pending"
   | "pendingInstalls"
   | "pickAsks"
-  | "publishInstances"
   | "registry"
   | "rewinds"
   | "sendToClient"
@@ -80,7 +79,6 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       );
       if (status.ok) {
         ctx.db.setAgentToolCell(message.machineId, status.result);
-        ctx.publishInstances(message.machineId);
       }
       // The answer moves whether a copy there is due, and an install
       // that was in flight held back the pass for that tool: it runs
@@ -143,17 +141,12 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
   };
 
   /** A pick its process applied: the session's row takes it, the mode from its receipt (launches.ts `noteSessionSettings`). */
-  const pickApplied = (
-    machineId: string,
-    instanceId: string,
-    pick: SettingPick
-  ): void => {
+  const pickApplied = (instanceId: string, pick: SettingPick): void => {
     if (pick.method === CONTROL_SET_EFFORT) {
       ctx.db.chooseEffort(instanceId, pick.value);
     }
     if (pick.method === CONTROL_SET_MODEL) {
       ctx.db.patchInstance(instanceId, { model: pick.value });
-      ctx.publishInstances(machineId);
     }
   };
 
@@ -176,7 +169,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     }
     ctx.pickAsks.delete(message.requestId);
     if (body.ok) {
-      pickApplied(message.machineId, asked.instanceId, asked.pick);
+      pickApplied(asked.instanceId, asked.pick);
       return "continue";
     }
     if (body.refusal?.kind !== "not-running") {

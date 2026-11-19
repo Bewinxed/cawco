@@ -232,7 +232,12 @@ import {
   ToolWantsSchema,
 } from "@cawco/core/stored-shapes";
 import type { CommandAck } from "@cawco/core/stream";
-import { type StreamHeartbeat, WIRE_PROTOCOL } from "@cawco/core/stream";
+import {
+  BOARD_HELD_PARAM,
+  readBoardHeld,
+  type StreamHeartbeat,
+  WIRE_PROTOCOL,
+} from "@cawco/core/stream";
 import type { AttemptStart } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
@@ -1465,7 +1470,6 @@ export const createServer = (
     pendingToolSignins: () => pendingToolSignins,
     pluginRow: () => pluginRow,
     projectTypes: () => projectTypes,
-    publishInstances: () => publishInstances,
     publishUsage: () => publishUsage,
     pushAgents: () => pushAgents,
     readAgent: () => readAgent,
@@ -1486,7 +1490,6 @@ export const createServer = (
     treeStops: () => treeStops,
     unpushable: () => unpushable,
     watch: () => watchPort.now(),
-    withPresence: () => withPresence,
     workItems: () => workItems,
     workspaceArchived: () => workspaceArchived,
     workspaceRetire: () => workspaceRetire,
@@ -1720,6 +1723,7 @@ export const createServer = (
     unstrand: () => unstrand,
     agentProtocols: () => agentProtocols,
     binaryUpdateStates: () => binaryUpdateStates,
+    board: () => board,
     launches: () => launches,
     processFailed: () => processFailed,
     speaksContract: () => speaksContract,
@@ -1734,7 +1738,6 @@ export const createServer = (
     unansweredFault: () => unansweredFault,
     toolFacts: () => toolFacts,
     toolReleases: () => toolReleases,
-    boardBase: () => boardBase,
     browsers: () => browsers,
     passkeyRelay: () => passkeyRelay,
     continuationTable: () => continuationTable,
@@ -1744,10 +1747,6 @@ export const createServer = (
     machineCustody: () => machineCustody,
     noticesSeen: () => noticesSeen,
     owedAfterBoard: () => owedAfterBoard,
-    publishedAgents: () => publishedAgents,
-    publishedMetadata: () => publishedMetadata,
-    publishedOverlays: () => publishedOverlays,
-    publishedRows: () => publishedRows,
     shownFrame: () => shownFrame,
     delegateWaits: () => delegateWaits,
     homeLoginMoveOf: () => homeLoginMoveOf,
@@ -1813,7 +1812,6 @@ export const createServer = (
     continuationNow: () => continuationNow,
     everyPage: () => everyPage,
     keepAliveScheduler: () => keepAliveScheduler,
-    withKeepAlive: () => withKeepAlive,
   });
   const {
     anchors,
@@ -2180,19 +2178,8 @@ export const createServer = (
     rebalanceNotices,
     syncAccounts,
   } = createAccountProbes(ctx);
-  const {
-    boardExtras,
-    boardMoved,
-    boardRows,
-    greetDashboard,
-    overlayOf,
-    publishInstances,
-    refreshBoard,
-    storedSessions,
-    withKeepAlive,
-    withPresence,
-    withSessionPresence,
-  } = createBoard(ctx);
+  const board = createBoard(ctx);
+  const { greetDashboard, storedSessions, withSessionPresence } = board;
 
   /**
    * Recent's stored transcripts, kept here off each machine's catalog as
@@ -2206,7 +2193,7 @@ export const createServer = (
     },
     behind: storedSessions,
     catalogOf: (machineId) => find.catalogOf(machineId),
-    machines: () => db.listAgents().map((agent) => agent.machineId),
+    machines: () => db.machineFacts().map((agent) => agent.machineId),
     relist: (machineId) => find.relist(machineId),
     projects: () =>
       db.listProjects().map((project) => ({
@@ -2312,8 +2299,8 @@ export const createServer = (
 
   // Honest ground, before anything is served. A fresh process holds no agent
   // sockets, so every row still claiming `online` is a leftover from a hub that
-  // was killed before its close handlers could run. The read-time overlay
-  // (`withPresence`, below) already makes the API tell the truth regardless —
+  // was killed before its close handlers could run. The board's machine
+  // status (board.ts `statusOf`) already makes the API tell the truth regardless —
   // this is for every *other* reader of the stored rows: a migration, a script,
   // a `sqlite3` session at 3am. A column nobody has to remember to distrust is
   // worth one write at startup.
@@ -2341,7 +2328,6 @@ export const createServer = (
       const key = target && frameKey(instanceId, target);
       if (target && !(key && previewListeners.bound(key))) {
         publishPreview(instanceId, "open", target);
-        publishInstances("");
       }
     },
     withdrawSend: async (machineId, instanceId, sendId) => {
@@ -2512,6 +2498,8 @@ export const createServer = (
           `[hub] ${command.machineId} did not come back within its reconnecting window: what was kept for it fails`
         );
         failOwedAway(command.machineId);
+        // Its reconnecting window is over: its status says offline now.
+        board.machineStatusMoved(command.machineId);
       } else if (command.kind === "release-owed") {
         releaseOwed({ machineId: command.machineId });
       }
@@ -2931,7 +2919,11 @@ export const createServer = (
   // passkey adverts when a browser needs one (passkey-relay.ts).
   const passkeyRelay = createPasskeyRelay({
     call: callAgent,
-    listAgents: () => db.listAgents(),
+    onlineMachines: () =>
+      db
+        .machineFacts()
+        .map((machine) => machine.machineId)
+        .filter((machineId) => registry.agent(machineId) !== undefined),
     hasBle: (machineId) => browsers.relayCapability(machineId)?.hasBle ?? false,
     machineName: (machineId) => machineName(machineId),
     personMachines: () => db.presence.counted(),
@@ -3112,7 +3104,9 @@ export const createServer = (
     // The fleet's machines are inside it: a fetch from one of them is no web read.
     fleetHosts: () => [
       osHostname(),
-      ...db.listAgents().flatMap((agent) => [agent.hostname, agent.machineId]),
+      ...db
+        .machineFacts()
+        .flatMap((agent) => [agent.hostname, agent.machineId]),
     ],
     // A fleet MCP server reached at a URL: an outside one's every tool reads the web.
     mcpUrl: (server) => {
@@ -3419,6 +3413,10 @@ export const createServer = (
   detach(
     ownMachineId.then((id) => {
       ownMachineIdRead = id;
+      // Its machine's facts say the hub runs there.
+      if (id) {
+        board.machineFactsMoved(id);
+      }
     }),
     "own machine id"
   );
@@ -3438,11 +3436,11 @@ export const createServer = (
         minutes: Math.round((Date.now() - since) / 60_000),
         still: () => contact.lostAt(machineId) !== null,
       });
-      publishInstances(machineId);
+      board.machineStatusMoved(machineId);
     },
     back: (machineId) => {
       push.machineBack(machineId);
-      publishInstances(machineId);
+      board.machineStatusMoved(machineId);
     },
   });
   /**
@@ -3456,7 +3454,7 @@ export const createServer = (
     fault: MachineFault,
     words: { next?: boolean } = {}
   ): string => {
-    const agents = db.listAgents();
+    const agents = db.namedMachines();
     return agents.some((each) => each.machineId === machineId)
       ? machineFaultWords(machineCalled(machineId, agents), fault, words)
       : machineFaultWords(undefined, "unknown", words);
@@ -3748,9 +3746,8 @@ export const createServer = (
       .map((signin) => signin.accountId);
     return modelListingOn(harness, {
       report: db
-        .listAgents()
-        .find((machine) => machine.machineId === machineId)
-        ?.harnesses?.find((one) => one.harness === harness),
+        .agentHarnesses(machineId)
+        ?.find((one) => one.harness === harness),
       catalogs: db.accounts
         .catalogs()
         .filter((catalog) => signedIn.includes(catalog.accountId))
@@ -3952,7 +3949,7 @@ export const createServer = (
     lifetime,
     tunnels: sshTunnels,
     fleet: () =>
-      db.listAgents().map((row) => ({
+      db.namedMachines().map((row) => ({
         machineId: row.machineId,
         hostname: row.hostname,
         online: Boolean(registry.agent(row.machineId)),
@@ -3999,7 +3996,7 @@ export const createServer = (
    * hands each back ({@link takeBack}), and the process the wake starts reads
    * it. What was already owed wakes it now.
    */
-  const sessionAsleep = (machineId: string, instanceId: string): void => {
+  const sessionAsleep = (instanceId: string): void => {
     db.accounts.removeMovedFrom(instanceId);
     if (!db.sleepInstance(instanceId)) {
       return;
@@ -4015,7 +4012,6 @@ export const createServer = (
     escalateRoutedAsks(instanceId);
     processEvent(instanceId);
     releaseOwed({ instanceId });
-    publishInstances(machineId);
     // Asleep, it holds its finished item's workspace no longer.
     workItems.settleFor(instanceId);
   };
@@ -4071,7 +4067,7 @@ export const createServer = (
   // machine's agent too, so a send to any of them waits for its register.
   hubStep({
     kind: "hub-start",
-    machines: db.listAgents().map((machine) => machine.machineId),
+    machines: db.namedMachines().map((machine) => machine.machineId),
     now: Date.now(),
   });
   /**
@@ -4082,7 +4078,7 @@ export const createServer = (
    * look.
    */
   const sayKeptAtStart = (): void => {
-    for (const machine of db.listAgents()) {
+    for (const machine of db.namedMachines()) {
       for (const send of db.owedSends({ machineId: machine.machineId })) {
         console.log(
           `[hub] kept at start: send ${send.uuid} to ${send.instanceId}, accepted ${send.acceptedAt.toISOString()}, held for ${send.hold ?? "a reason no hub wrote"}`
@@ -4191,20 +4187,17 @@ export const createServer = (
       welcomeConverge.sent(machineId, delta);
       return true;
     },
+    // Online once it answered its welcome: its status is laid again.
     ready: (machineId) => {
       db.markAgentReady(machineId);
-      publishInstances(machineId);
+      board.machineStatusMoved(machineId);
     },
     keep: (machineId, outcome) => {
       db.setAgentFleetSync(machineId, outcome);
-      publishInstances(machineId);
     },
-    keptItems: (machineId) =>
-      db.listAgents().find((row) => row.machineId === machineId)?.fleetItems ??
-      {},
+    keptItems: (machineId) => db.agentFleetItems(machineId),
     keepItems: (machineId, items) => {
       db.setAgentFleetItems(machineId, items);
-      publishInstances(machineId);
     },
   });
   /**
@@ -4346,7 +4339,10 @@ export const createServer = (
    * public address, its secret kept here, its health asked every minute.
    */
   const relayMachines = () =>
-    db.listAgents().map((agent) => {
+    db.namedMachines().map((agent) => {
+      const capabilities = db.machineInventory(
+        agent.machineId
+      )?.machineCapabilities;
       // A machine the hub reaches through its own SSH forward is seen at no
       // address of its own: its agent's connection comes from this hub's
       // loopback, and what the registry names it by is the SSH target the
@@ -4358,9 +4354,7 @@ export const createServer = (
         machineId: agent.machineId,
         name: machineName(agent.machineId),
         online: registry.agent(agent.machineId) !== undefined,
-        ...(agent.machineCapabilities
-          ? { capabilities: agent.machineCapabilities }
-          : {}),
+        ...(capabilities ? { capabilities } : {}),
         ...(seen ? { seen } : {}),
       };
     });
@@ -4480,7 +4474,7 @@ export const createServer = (
         detail: "No project with that id on this hub.",
       });
     }
-    if (!db.listAgents().some((row) => row.machineId === machineId)) {
+    if (!db.machineKnown(machineId)) {
       return problem(404, {
         code: "place-machine-unknown",
         detail: "No machine with that id on this hub.",
@@ -4608,7 +4602,7 @@ export const createServer = (
   };
   /** The machines online now, as the hub's registry holds them (Who decides). */
   const machinesOnline = () =>
-    db.listAgents().filter((machine) => registry.agent(machine.machineId));
+    db.namedMachines().filter((machine) => registry.agent(machine.machineId));
   /**
    * The models `harness` offers on `machineIds`, as the dashboard's picker
    * reads them (models.svelte.ts): Claude's from the catalog of each account
@@ -4621,10 +4615,8 @@ export const createServer = (
     machineIds: ReadonlySet<string>
   ): ModelInfo[] => {
     if (traitsOf(harness).modelCatalog !== "account") {
-      return db
-        .listAgents()
-        .filter((machine) => machineIds.has(machine.machineId))
-        .flatMap((machine) => machine.harnesses ?? [])
+      return [...db.harnessesOn([...machineIds]).values()]
+        .flat()
         .filter((report) => report.harness === harness)
         .flatMap((report) => report.models ?? []);
     }
@@ -4644,11 +4636,12 @@ export const createServer = (
   };
   /** Each harness on an online machine, with the models it offers there (Who decides' setup). */
   const harnessOffers = (): HarnessOffer[] => {
-    const fleet = db.listAgents();
+    const fleet = db.namedMachines();
     const online = machinesOnline();
+    const reported = db.harnessesOn(online.map((machine) => machine.machineId));
     return HARNESSES.map((harness) => {
       const reports = online.flatMap((machine) =>
-        (machine.harnesses ?? [])
+        (reported.get(machine.machineId) ?? [])
           .filter((report) => report.harness === harness && report.installed)
           .map((report) => ({ machine, report }))
       );
@@ -4682,7 +4675,7 @@ export const createServer = (
     const offered = harness
       ? harnessModels(
           harness,
-          new Set(db.listAgents().map((machine) => machine.machineId))
+          new Set(db.namedMachines().map((machine) => machine.machineId))
         )
       : [];
     return modelNameIn(offered, model) ?? model;
@@ -4705,11 +4698,13 @@ export const createServer = (
       return named ? harnessName(named) : harness;
     },
     harnessOnline: (harness) =>
-      machinesOnline().some((machine) =>
-        (machine.harnesses ?? []).some(
-          (report) => report.harness === harness && report.installed
-        )
-      ),
+      [
+        ...db
+          .harnessesOn(machinesOnline().map((machine) => machine.machineId))
+          .values(),
+      ]
+        .flat()
+        .some((report) => report.harness === harness && report.installed),
     modelName: modelNamed,
     handoff: (from, to, message) => delegationMcp.handoffAs(from, to, message),
     warm: (id) => {
@@ -4961,7 +4956,7 @@ export const createServer = (
         .map((project) => project.id),
     // A delegation tree reads its sessions' artifacts (delegation-tree.ts).
     tree: (instance) => treeSessions(db, instance),
-    machines: () => db.listAgents(),
+    machines: () => db.namedMachines(),
     hubMachine: () => ownMachineIdRead,
     // A page is the hub's: its target names no machine.
     open: async (artifact, panel = artifact.instanceId, again = false) => {
@@ -5037,9 +5032,7 @@ export const createServer = (
     // host when its agent says so (agent proxy-relay.ts); a Mac's Seatbelt
     // boundary dials as its host does.
     workspaceReach: async (url, machineId) => {
-      const machine = db
-        .listAgents()
-        .find((agent) => agent.machineId === machineId);
+      const machine = db.machineFactsOf(machineId);
       if (!machine?.os.startsWith("linux")) {
         return null;
       }
@@ -5057,9 +5050,11 @@ export const createServer = (
       }
       return await workspaceReach(
         url,
-        machine.machineCapabilities?.items.find(
-          (item) => item.id === "public-address"
-        )?.addresses ?? []
+        db
+          .machineInventory(machineId)
+          ?.machineCapabilities?.items.find(
+            (item) => item.id === "public-address"
+          )?.addresses ?? []
       );
     },
     previewAddress: (instanceId) => previewListeners.address(instanceId),
@@ -5684,7 +5679,6 @@ export const createServer = (
               publishPreview(instanceId, "open", target);
             }
           }
-          publishInstances("");
         });
       },
       artifactAt: (key) => {
@@ -6091,7 +6085,6 @@ export const createServer = (
               throw unreachable(answer);
           }
           settleRemovedCustody(machineId, answer.value.result);
-          publishInstances(machineId);
         })
         .catch((error: unknown) =>
           console.warn(
@@ -6138,11 +6131,10 @@ export const createServer = (
         restore(agent, row, true);
       }
     },
-    changed: (machineId, removed) => {
+    changed: (_machineId, removed) => {
       if (removed) {
         forgetInstances([removed]);
       }
-      publishInstances(machineId);
     },
     // A deletion that keeps failing is said in Needs you, once while it
     // stands (a hub restart drops notices of ended sessions, and the next
@@ -6466,10 +6458,9 @@ export const createServer = (
    * recorded stopped here whether or not the machine still held it — one a
    * restarted agent had already lost would otherwise sit `sleeping` forever.
    */
-  const retireSession = (machineId: string, instanceId: string): void => {
+  const retireSession = (instanceId: string): void => {
     lifecycle.oweEndSession(instanceId, "stop");
     forgetPending(instanceId, UNREAD.stopped);
-    publishInstances(machineId);
   };
   startsFreedPort.fill((machineId) => {
     for (const [id, on] of heldJobs) {
@@ -6614,10 +6605,9 @@ export const createServer = (
     // admission, and its CLI waited on a question nobody was shown.
     if (
       reattachOnly === true &&
-      heldProcesses(machineCustody.get(row.machineId)).includes(row.id) &&
-      db.markInstanceAttaching(row.id)
+      heldProcesses(machineCustody.get(row.machineId)).includes(row.id)
     ) {
-      publishInstances(row.machineId);
+      db.markInstanceAttaching(row.id);
     }
     // A reattach launches nothing, so no account refuses it (`bounded`).
     const bound = bounded(asked, row);
@@ -6741,37 +6731,18 @@ export const createServer = (
    * a script polling `/api/agents` can discover an unreachable machine instead of
    * being told a comfortable lie.
    *
-   * Applied at the only two places a machine's status is emitted to a reader:
-   * the `/api/agents` route and `instancesFrame`. The other
-   * `db.listAgents()` callers are fleet/config lookups that never read `status`,
-   * and are deliberately left alone.
+   * Laid on the board's machine status (board.ts `statusOf`), which the
+   * `/api/agents` route and every dashboard read; every other reader of a
+   * machine reads the columns it needs by key.
    */
   /**
    * One machine's row as `GET /api/agents` answers it; undefined when the hub
-   * knows none. Read and dressed alone: an update's trial asks it every
-   * second (cli binary-health.ts), so it costs one machine's row, never the
-   * fleet's (every machine's fleet document, tools, harness reports and held
-   * sessions, all but one thrown away).
+   * knows none. The board's own entries for it, put together: an update's
+   * trial asks it every second (cli binary-health.ts), so it costs one
+   * machine's entries and one keyed read, never the fleet's.
    */
-  const machineRow = (machineId: string): AgentRow | undefined => {
-    const row = db.agentRow(machineId);
-    return row ? withPresence([row])[0] : undefined;
-  };
-  /**
-   * THE BOARD, KEPT: every listed row as the database holds it, by id. Read
-   * whole once, as the hub starts; from then on only the rows the database's
-   * change log names (db `takeChangedInstances`) are read again, by key. The
-   * board was read whole on every publish, and on every board, list_sessions
-   * and dashboard read besides: 2,600 rows, their JSON columns parsed, while
-   * twenty sessions moved at once, held the hub's thread for seconds
-   * (2026-10-09). A row that ages out of the listing leaves by the listing's
-   * own rule ({@link listedAt}); what the database does not hold (presence,
-   * running delegates, keep-alive) is laid over it on each read, as before.
-   */
-  db.takeChangedInstances();
-  const boardBase = new Map(
-    db.listBoardInstances().map((row) => [row.id, row] as const)
-  );
+  const machineRow = (machineId: string): AgentRow | undefined =>
+    board.machine(machineId);
   /**
    * The find engine's sessions follow the same change log as the board
    * (find.ts `instancesChanged`): told here, once the engine is made below.
@@ -6781,17 +6752,12 @@ export const createServer = (
     () => undefined
   );
 
-  /**
-   * The whole board as one message: every row, every machine, and what each
-   * session is holding. Built in one place so the snapshot a dashboard is
-   * handed on connect and the snapshot it is pushed on every move are the same
-   * object by construction.
-   */
-  /** The notices a person acknowledged; every change goes out on the next board publish. */
+  /** The notices a person acknowledged; each change goes out on the board. */
   const noticesSeen = createNoticesSeen({
     dbPath: DB_PATH,
     changed: () => {
-      publishInstances("");
+      board.listMoved("noticesSeen");
+      board.listMoved("noticesDamaged");
       // A Not now or a notice's ✕: Needs you's artifacts read it.
       artifactLane.moved();
     },
@@ -7089,7 +7055,7 @@ export const createServer = (
     if (!former || former === message.machineId) {
       return;
     }
-    const known = db.listAgents().find((agent) => agent.machineId === former);
+    const known = db.machineFactsOf(former);
     if (!known || registry.agent(former)) {
       return;
     }
@@ -7261,7 +7227,6 @@ export const createServer = (
     },
     publish: (frame) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
-    rowsChanged: (machineId) => publishInstances(machineId),
     placesChanged,
     // The place-repo steps, made further down; no move is planned before the hub is up.
     settled: (machineId, path) => placeRepos.settled(machineId, path),
@@ -7365,7 +7330,7 @@ export const createServer = (
               projectId: row.projectId ?? null,
             }
           : null,
-        machines: db.listAgents().map((agent) => ({
+        machines: db.machineFacts().map((agent) => ({
           machineId: agent.machineId,
           hostname: agent.hostname,
           os: agent.os,
@@ -7383,48 +7348,16 @@ export const createServer = (
       db.artifacts.get(artifactId)?.instanceId === instanceId
   );
 
-  /**
-   * Each row as it was last published, serialised, by id. A publish sends
-   * only the rows whose serialisation differs and the ids that are gone: the
-   * board is ~900 rows and ~650KB, and every dashboard used to parse and
-   * re-render all of it on each move of any one of them. A dashboard that
-   * connects after a publish gets the whole board from `instancesFrame`,
-   * so the only rows this can leave stale are ones that changed without a
-   * publish — which the full frame never caught either.
-   */
-  const publishedRows = new Map<string, string>();
-  /**
-   * Each row's overlay (what the database does not hold: presence, running
-   * delegates, keep-alive) as last published. A row neither the database
-   * moved nor whose overlay changed is the row published last time, and is
-   * not serialised again.
-   */
-  const publishedOverlays = new Map<string, string>();
-  // Seeded from the board as the hub boots: every dashboard connects after
-  // this and is handed a snapshot at least this fresh, so the first publish
-  // sends what moved rather than all of it.
-  for (const row of boardRows()) {
-    publishedRows.set(row.id, JSON.stringify(row));
-    publishedOverlays.set(row.id, overlayOf(row));
-  }
-  boardMoved.clear();
-  const publishedExtras = boardExtras();
-  const publishedAgents = new Map(
-    publishedExtras.agents.map((row) => [row.machineId, JSON.stringify(row)])
-  );
-  const publishedMetadata = new Map(
-    (
-      [
-        "previews",
-        "handoffs",
-        "continuations",
-        "formerIds",
-        "noticesSeen",
-        "noticesDamaged",
-        "previewSettings",
-      ] as const
-    ).map((key) => [key, JSON.stringify(publishedExtras[key])])
-  );
+  // The board read whole, once everything it lays its rows from is made;
+  // from here on each keeper's word and each write moves only its entries.
+  board.start();
+  registry.onPresence((machineId) => board.machineMoved(machineId));
+  heldSessions.hear((id) => board.sessionsMoved([id]));
+  machineCustody.hear(board.machineStatusMoved);
+  binaryUpdateStates.hear(board.machineStatusMoved);
+  agentProtocols.hear(board.machineStatusMoved);
+  handoffs.hear(() => board.listMoved("handoffs"));
+  previewTargets.hear(() => board.listMoved("previews"));
   /**
    * A session's role, or a delegate type or toolset, may have moved what a
    * live cawco connection lists: bound once the MCP server exists below.
@@ -7440,14 +7373,10 @@ export const createServer = (
    * from the transcript. Write-once and never over a given title, so this can
    * be called from every path that might see the first message first.
    */
-  const nameFromFirstTurn = (
-    machineId: string,
-    instanceId: string,
-    raw: string
-  ): string => {
+  const nameFromFirstTurn = (instanceId: string, raw: string): string => {
     const derived = deriveTitleFromFirstMessage(raw);
-    if (derived && db.noteDerivedTitle(instanceId, derived)) {
-      publishInstances(machineId);
+    if (derived) {
+      db.noteDerivedTitle(instanceId, derived);
     }
     return derived;
   };
@@ -7509,26 +7438,15 @@ export const createServer = (
       })
     );
 
-    let named = false;
     for (const row of unnamed) {
       const name = row.sessionId && names.get(row.sessionId);
-      if (!name) {
-        continue;
+      if (name) {
+        db.noteDerivedTitle(row.id, name);
       }
-      if (db.noteDerivedTitle(row.id, name)) {
-        named = true;
-      }
-    }
-    if (named) {
-      publishInstances(machineId);
     }
   };
 
-  const nameFromLiveTurn = (
-    machineId: string,
-    instanceId: string,
-    message: unknown
-  ): void => {
+  const nameFromLiveTurn = (instanceId: string, message: unknown): void => {
     if (!awaitingFirstTurn.has(instanceId)) {
       return;
     }
@@ -7540,7 +7458,7 @@ export const createServer = (
       return;
     }
     awaitingFirstTurn.delete(instanceId);
-    nameFromFirstTurn(machineId, instanceId, text);
+    nameFromFirstTurn(instanceId, text);
   };
 
   /**
@@ -7674,9 +7592,7 @@ export const createServer = (
     );
     // Compare the machine's persisted content before overwriting its report;
     // timestamps and insertion order cannot cause a reload.
-    const previous = db
-      .listAgents()
-      .find((row) => row.machineId === machineId)?.fleet;
+    const previous = db.agentFleet(machineId);
     /** The names whose content hash moved: added, removed or changed. */
     const moved = (
       before: Record<string, string> = {},
@@ -7693,7 +7609,6 @@ export const createServer = (
       JSON.stringify(previous?.hooks ?? {}) !==
       JSON.stringify(report.hooks ?? {});
     db.setAgentFleet(machineId, report);
-    publishInstances(machineId);
     refreshSessions(machineId, agent, {
       skills: moved(previous?.have?.skills, report.have?.skills),
       plugins: pluginsChanged,
@@ -7928,7 +7843,7 @@ export const createServer = (
     const servers = db.fleetConfig().mcp;
     mcpChanges.note(
       servers,
-      db.listAgents().map((row) => row.machineId)
+      db.namedMachines().map((row) => row.machineId)
     );
     registry.broadcast({
       verb: "frames",
@@ -7982,12 +7897,9 @@ export const createServer = (
       // A move asked again: the one that didn't happen is no longer news.
       forgetMoveRefusal(instanceId);
       db.owedMoves.set(instanceId, owed);
-      publishInstances("");
     },
     delete: (instanceId: string): void => {
-      if (db.owedMoves.delete(instanceId)) {
-        publishInstances("");
-      }
+      db.owedMoves.delete(instanceId);
     },
   };
 
@@ -7999,9 +7911,7 @@ export const createServer = (
     readOlder,
     anchor: (instanceId, lineId, after) =>
       db.anchorLine(instanceId, lineId, after),
-    build: (machineId) =>
-      db.listAgents().find((agent) => agent.machineId === machineId)?.build
-        ?.commit,
+    build: (machineId) => db.machineFactsOf(machineId)?.build?.commit,
     reset: (instanceId) => streams.resetFollowers(instanceId),
     sequence: (instanceId, frame) => {
       streams.sequence(instanceId, frame);
@@ -8188,7 +8098,7 @@ export const createServer = (
   /** The machines connected now, in the order the hub keeps them. */
   const onlineMachines = (): string[] =>
     db
-      .listAgents()
+      .namedMachines()
       .map((agent) => agent.machineId)
       .filter((machineId) => registry.agent(machineId));
 
@@ -8309,9 +8219,7 @@ export const createServer = (
     // dashboard's address off this machine (core `withDashboardLine`).
     browserDashboard: (machineId, projectId) => {
       const browser = db.getMcpServer(CHROME_DEVTOOLS);
-      const machine = db
-        .listAgents()
-        .find((agentRow) => agentRow.machineId === machineId);
+      const machine = db.machineFactsOf(machineId);
       if (!(
         browser?.enabled &&
         (browser.projectId === null || browser.projectId === projectId) &&
@@ -8379,7 +8287,6 @@ export const createServer = (
         if (workspace.state !== "active") {
           workspaceStages.delete(workspace.id);
         }
-        publishInstances(workspace.machineId);
       },
     },
     // What a landing reads of the hub (landing-run.ts `LandingsHub`).
@@ -8480,7 +8387,7 @@ export const createServer = (
       ) {
         return { kind: "type", name: row.delegateType };
       }
-      if (!db.listAgents().some((one) => one.machineId === row.machineId)) {
+      if (!db.machineKnown(row.machineId)) {
         return { kind: "machine", name: row.machineId };
       }
       if (row.accountId && !db.accounts.get(row.accountId)) {
@@ -8498,7 +8405,6 @@ export const createServer = (
     // on any of them.
     publish: (item) => {
       const [parent] = db.getInstancesByIds([item.parentInstanceId]);
-      publishInstances(parent?.machineId ?? "");
       registry.broadcast({
         verb: "frames",
         machineId: parent?.machineId ?? "",
@@ -8669,7 +8575,7 @@ export const createServer = (
     approvalRefusal: (projectId, taskId) =>
       designApprovalPort.now()(projectId, taskId),
     project: (id) => db.project(id),
-    machines: () => db.listAgents(),
+    machines: () => db.machineFacts(),
     projectIds: () => db.listProjects().map((project) => project.id),
     index: db.taskIndex,
     waiters: db.taskWaiters,
@@ -9114,7 +9020,6 @@ export const createServer = (
       cutForPause(row.id, machineId, until);
     }
     workItems.pauseChanged(machineId);
-    publishInstances(machineId);
     return stopped;
   };
 
@@ -9132,7 +9037,6 @@ export const createServer = (
     // A copy due an update was held by the pause alone: it goes now
     // (tool-installs.ts `keepCopiesOn`).
     keepCopiesOn(machineId);
-    publishInstances(machineId);
   };
   // Each project's conversation: a session its events reach (caw.ts).
   const caw = createCaw({
@@ -9209,7 +9113,7 @@ export const createServer = (
     db,
     blockPage: (id) => isBlockProgram(artifacts.program(id)),
     purged: () => db.find.purged(),
-    refreshInstances: refreshBoard,
+    refreshInstances: board.settle,
     online: (machineId) => registry.agent(machineId) !== undefined,
     needsYou: waitingNow,
     artifactNeeds: () => artifactLane.now(),
@@ -9585,11 +9489,6 @@ export const createServer = (
     online: (machineId) => Boolean(registry.agent(machineId)),
     createProject: createOrJoinProject,
     setup: (projectId, note) => caw.setup(projectId, { note }),
-    moved: (machineIds) => {
-      for (const machineId of machineIds) {
-        publishInstances(machineId);
-      }
-    },
     publish: (row, offer) =>
       registry.broadcast({
         verb: "frames",
@@ -10198,7 +10097,6 @@ export const createServer = (
       forgetPending(item.instanceId, UNREAD.ended);
       escalateRoutedAsks(item.instanceId);
     }
-    publishInstances(workspace.machineId);
   };
   // A workspace lives as long as its work item; the sweep settles what no
   // event reached (workspace-retire.ts).
@@ -10671,9 +10569,7 @@ export const createServer = (
       const [row] = db.getInstancesByIds([instanceId]);
       return row ? sessionWorkspace(row)?.id : undefined;
     },
-    home: (machineId) =>
-      db.listAgents().find((agent) => agent.machineId === machineId)?.home ??
-      undefined,
+    home: (machineId) => db.machineHome(machineId) ?? undefined,
     itemsIn: (workspaceId) => db.workItemsIn(workspaceId),
     ledBy: (instanceId, leadId) => workItems.ledBy(instanceId, leadId),
     parentOf: (instanceId) => {
@@ -10797,7 +10693,7 @@ export const createServer = (
     instancesByPrefix: (prefix) =>
       db.getInstancesByIds(db.find.idsByPrefix(prefix)),
     machines: () =>
-      db.listAgents().map((agent) => ({
+      db.namedMachines().map((agent) => ({
         id: agent.machineId,
         name: machineLabel(agent.hostname),
       })),
@@ -11058,12 +10954,13 @@ export const createServer = (
       );
       publishPreview(instanceId, "open", moved);
     }
-    // The board's publish carries the mode (`previewSettings`, which
-    // a dashboard's Decisions page follows) and refreshes every
+    // The board carries the mode (`previewSettings`, which a
+    // dashboard's Decisions page follows) and refreshes every
     // artifact's tab, whose revision names the mode (`tabTarget`):
     // each frame of a page or a machine's preview loads again at its
     // new origin, its listener opened there.
-    publishInstances("");
+    board.listMoved("previewSettings");
+    board.listMoved("previews");
   };
   const adminCallsMade = adminCalls(ctx, {
     areas: projectAreas,
@@ -11183,8 +11080,8 @@ export const createServer = (
     // What `GET /api/instances` and `GET /api/agents` answer, without the
     // hub calling itself over HTTP for them.
     fleet: {
-      instances: boardRows,
-      machines: () => withPresence(db.listAgents()),
+      instances: board.rows,
+      machines: board.machines,
       ...sessionReads(db, (rows) =>
         withSessionPresence(rows).map((row) => {
           const stall = stallOfPort.now()(row.id);
@@ -11659,7 +11556,6 @@ export const createServer = (
     limits: () => sessionLimitsReader(db),
     idle: sessionIdle,
     send: deliverSend,
-    changed: () => publishInstances(""),
   });
   // A prompt whose session may run again stays as a permit; the rest go
   // with the process that parked them.
@@ -11785,7 +11681,7 @@ export const createServer = (
     // and each work item whose stop at its limit began, moved or ended goes
     // out again, its chip saying so.
     changed: () => {
-      publishInstances("");
+      board.stallsMoved();
       releaseLimitHeld();
       publishStalls();
     },
@@ -11809,6 +11705,8 @@ export const createServer = (
       ...db.accounts.stranded().map((one) => one.instanceId),
     ]),
   ]);
+  // The board was laid before the controller existed: its stalls now.
+  board.stallsMoved();
 
   workItems.resumeWaits();
   // Every stored pause armed again; one whose time came while the hub was
@@ -12128,7 +12026,6 @@ export const createServer = (
     if (awaitsItsName(message.payload)) {
       awaitingFirstTurn.add(message.instanceId);
     }
-    publishInstances(message.machineId);
   };
 
   /** The fleet's update policy and the builds it is offered; its channel is what an SSH add installs (join.ts). */
@@ -12137,7 +12034,7 @@ export const createServer = (
     states: () => binaryUpdateStates,
     online: () =>
       db
-        .listAgents()
+        .machineFacts()
         .filter((row) => registry.agent(row.machineId))
         .map((row) => ({
           machineId: row.machineId,
@@ -12149,16 +12046,12 @@ export const createServer = (
       heardBinaryUpdate(machineId, read);
       const known = read.state;
       if (known) {
-        const moved = !sameBinaryUpdate(
-          binaryUpdateStates.get(machineId),
-          known
-        );
-        binaryUpdateStates.set(machineId, known);
+        // Set only when it moved: each set lays the machine's status again.
+        if (!sameBinaryUpdate(binaryUpdateStates.get(machineId), known)) {
+          binaryUpdateStates.set(machineId, known);
+        }
         restarts.note(known);
         flushOwedStarts(machineId);
-        if (moved) {
-          publishInstances(machineId);
-        }
       }
     },
     cancel: (machineId) =>
@@ -12385,7 +12278,7 @@ export const createServer = (
     machinePauseRoutes(ctx),
     agentControlRoutes(ctx),
     new Elysia().get("/api/instances", () =>
-      boardRows().map((row) => ({ ...row, ...instanceTimes(row) }))
+      board.rows().map((row) => ({ ...row, ...instanceTimes(row) }))
     ),
     pulseRoutes(ctx),
     followupStateRoutes(ctx),
@@ -12642,19 +12535,22 @@ export const createServer = (
       beaten !== undefined &&
       !sameBinaryUpdate(binaryUpdateStates.get(machineId), beaten);
     if (beaten) {
-      binaryUpdateStates.set(machineId, beaten);
+      // Set only when it moved: each set lays the machine's status again.
+      if (updated) {
+        binaryUpdateStates.set(machineId, beaten);
+      }
       restarts.note(beaten);
     }
-    // The machine's damaged records: the rows they belong to say so
-    // from the next publish, and stop saying it once the machine's
-    // list drops them (the workspace archived, the session ended).
+    // The machine's damaged records: the rows they belong to say so, and
+    // stop saying it once the machine's list drops them (the workspace
+    // archived, the session ended).
     const { damagedRecords: damaged } = agentFrame;
-    const damageMoved =
-      damaged !== undefined && damagedRecords.heard(machineId, damaged);
+    if (damaged !== undefined) {
+      board.sessionsMoved(damagedRecords.heard(machineId, damaged));
+    }
     if (updated) {
       flushOwedStarts(machineId);
     }
-    return updated || damageMoved;
   };
 
   /**
@@ -12704,8 +12600,8 @@ export const createServer = (
     const claudeWord = AUTH_STATES.find(
       (state) => state === claudeReport?.auth
     );
-    if (claudeWord && db.setAgentAuth(machineId, claudeWord)) {
-      publishInstances(machineId);
+    if (claudeWord) {
+      db.setAgentAuth(machineId, claudeWord);
     }
     // Where each Claude account is signed in on this machine, as
     // its Claude Code config dirs say; the dirs it gave no answer
@@ -12744,7 +12640,6 @@ export const createServer = (
       return;
     }
     db.setAgentCapabilities(machineId, capabilities);
-    publishInstances(machineId);
   };
 
   /**
@@ -12795,9 +12690,7 @@ export const createServer = (
       }
       keptOn.set(machineId, kept);
     }
-    return db.dateStoredSessions(machineId, agentFrame.instances, served, () =>
-      publishInstances(machineId)
-    );
+    return db.dateStoredSessions(machineId, agentFrame.instances, served);
   };
 
   /**
@@ -12810,8 +12703,9 @@ export const createServer = (
    * read. It used to ride the register, which made the register wait on
    * those probes, and the register is what puts a machine back in the
    * registry. So everything that reads a machine's harnesses or tools runs
-   * here, off the part it reads. Then its stored sessions dated, one
-   * publish when anything moved, and its acknowledgement. Each step a
+   * here, off the part it reads. Then its stored sessions dated, and its
+   * acknowledgement. What any step wrote reaches the board by the database's
+   * change log, so a beat that moved nothing sends nothing. Each step a
    * section of its own (core loop-watch.ts `syncSection`): a hold in a beat
    * names its step.
    */
@@ -12824,9 +12718,7 @@ export const createServer = (
     syncSection("beat: taken up", () =>
       beatTakenUp(machineId, agentFrame, beat)
     );
-    const moved = syncSection("beat: states kept", () =>
-      beatStates(machineId, agentFrame)
-    );
+    syncSection("beat: states kept", () => beatStates(machineId, agentFrame));
     const { harnesses: reported } = agentFrame;
     if (reported) {
       syncSection("beat: harnesses reported", () =>
@@ -12839,18 +12731,9 @@ export const createServer = (
     syncSection("beat: accounts reported", () =>
       accountsReported(machineId, agentFrame)
     );
-    const dated = syncSection("beat: stored sessions dated", () =>
+    syncSection("beat: stored sessions dated", () =>
       beatDated(machineId, agentFrame)
     );
-    if (
-      dated > 0 ||
-      reported ||
-      moved ||
-      beat.promoted.length > 0 ||
-      beat.settled.length > 0
-    ) {
-      syncSection("beat: publish asked", () => publishInstances(machineId));
-    }
     syncSection("beat: acknowledged", () => {
       const beatIds = agentFrame.instances;
       const tailnetServing = tailnetHttps.serving();
@@ -13551,7 +13434,6 @@ export const createServer = (
           // The project conversations it ran are gone with it.
           caw.machineGone(machineId);
           db.reconcileInstances(machineId, []);
-          publishInstances(machineId);
         },
       })
       // An artifact's own tab follows its session here, and nothing else of
@@ -13684,10 +13566,9 @@ export const createServer = (
             : Boolean(page);
           if (older) {
             console.warn(
-              `[hub] dashboard page at ${page ?? ws.remoteAddress} is on wire ${Number.isFinite(named) ? named : "4 or older"}, this hub on ${WIRE_PROTOCOL}: it is sent the snapshot only, until it reloads`
+              `[hub] dashboard page at ${page ?? ws.remoteAddress} is on wire ${Number.isFinite(named) ? named : "4 or older"}, this hub on ${WIRE_PROTOCOL}: it is sent the board whole once, which reloads it, and no move after`
             );
           }
-          registry.addDashboard(ws, older);
           // The one moment the hub learns a URL that reaches its own dashboard:
           // this browser just used one. See `dashboardUrl` in dashboard-url.ts.
           // A dashboard served as a preview reached it at the address the
@@ -13699,7 +13580,10 @@ export const createServer = (
           noteParent(reachedAt);
           // The board, then the browsers: the FIRST messages every dashboard
           // receives, unconditionally.
-          greetDashboard(ws, older);
+          greetDashboard(ws, older, readBoardHeld(ws.query[BOARD_HELD_PARAM]));
+          // It hears the board's moves only after its first frame: a move
+          // the greeting itself took is in that frame already.
+          registry.addDashboard(ws, older);
           // A reconnected dashboard earns the current sign-in state again.
           // The snapshot follows startup discovery on this socket.
           detach(

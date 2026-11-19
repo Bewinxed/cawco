@@ -18,12 +18,33 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 export type KeepAliveRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
+/** What a session's keep-alive facts are read from: the columns of its row that say them. */
+type KeepAliveColumns = Pick<
+  KeepAliveRow,
+  | "cacheColdAt"
+  | "cacheColdReason"
+  | "cacheColdUnread"
+  | "cacheTtl"
+  | "contextReadAt"
+  | "contextTokens"
+  | "harness"
+  | "keepAliveEnabled"
+  | "keepAliveSent"
+  | "keepAliveStopped"
+  | "keepAliveTurn"
+  | "lastRequestAt"
+  | "model"
+  | "status"
+>;
+
 export const isKeepAlive = (
   message: NeutralUserMessage | null | undefined
 ): boolean =>
   message?.origin?.kind === "system" && message.origin.name === "keepalive";
 
-const keepAliveCap = (row: KeepAliveRow): number => {
+const keepAliveCap = (
+  row: Pick<KeepAliveColumns, "cacheTtl" | "model">
+): number => {
   // A ratio of two rates of one moment: the provider's clock cancels out.
   const rates = row.model ? resolveRates(row.model, Date.now()) : null;
   if (!rates || rates.cacheRead <= 0) {
@@ -126,30 +147,85 @@ export const provenCold = (
 ): boolean =>
   cacheState(row, { midTurn, lastTurnAt }, Date.now()).kind === "cold";
 
+/** How long before its cache expires a session is pinged. */
+const pingMargin = (row: Pick<KeepAliveColumns, "cacheTtl">): number =>
+  row.cacheTtl === "1h" ? 600_000 : 60_000;
+
+/**
+ * When `row`'s next ping is due, from its facts alone: its measured cache's
+ * expiry (its TTL from its last request) less the margin; null while none is
+ * planned (off, asleep, measured cold, or no measured lifetime). A time
+ * already past is one that came due.
+ */
+const pingDue = (row: KeepAliveColumns): number | null => {
+  const life = ttlMs(row.cacheTtl);
+  return row.keepAliveEnabled &&
+    row.status !== "sleeping" &&
+    !measuredCold(row) &&
+    life !== null &&
+    row.lastRequestAt
+    ? row.lastRequestAt.getTime() + life - pingMargin(row)
+    : null;
+};
+
+/**
+ * A session's keep-alive as the board carries it (core `KeepAlive`): its
+ * facts and the deadline of its next ping, never a state read off the
+ * clock, so its row moves only when one of these does.
+ */
+const keepAliveFacts = (row: KeepAliveColumns): KeepAlive => ({
+  on: row.keepAliveEnabled,
+  stopped: row.keepAliveStopped ?? null,
+  nextAt: pingDue(row),
+  sent: row.keepAliveSent,
+  cap: keepAliveCap(row),
+  ttl: row.cacheTtl,
+  cold: coldReading(row),
+  contextTokens: row.contextTokens,
+  contextReadAt: row.contextReadAt?.getTime() ?? null,
+});
+
+/**
+ * `row` as a reader is handed it: the columns its keep-alive is read from
+ * left out, and its keep-alive facts ({@link keepAliveFacts}) in their place.
+ */
+export const withKeepAliveFacts = <Row extends KeepAliveColumns>(row: Row) => {
+  const {
+    keepAliveEnabled: _enabled,
+    keepAliveSent: _sent,
+    keepAliveStopped: _stopped,
+    cacheColdAt: _coldAt,
+    cacheColdReason: _coldReason,
+    cacheColdUnread: _coldUnread,
+    keepAliveTurn: _turn,
+    cacheTtl: _ttl,
+    contextTokens: _contextTokens,
+    contextReadAt: _contextReadAt,
+    ...visible
+  } = row;
+  return { ...visible, keepAlive: keepAliveFacts(row) };
+};
+
+/** What the scheduler reads of a session's keep-alive now: whether a ping is due, and when. */
+interface KeepAliveDue {
+  nextAt: number | null;
+  state: "off" | "waiting" | "cold" | "paused-usage" | "asleep" | "stopped-cap";
+}
+
 /** Clock and account reading are explicit: this function sends and writes nothing. */
 export const keepAliveState = (
   row: KeepAliveRow,
   usage: ClaudeLimits | undefined,
   now: number
-): KeepAlive => {
-  const base = {
-    on: row.keepAliveEnabled,
-    nextAt: null,
-    sent: row.keepAliveSent,
-    cap: keepAliveCap(row),
-    ttl: row.cacheTtl,
-    cold: coldReading(row),
-    contextTokens: row.contextTokens,
-    contextReadAt: row.contextReadAt?.getTime() ?? null,
-  };
+): KeepAliveDue => {
   if (!row.keepAliveEnabled) {
-    return { ...base, state: row.keepAliveStopped ?? "off" };
+    return { state: row.keepAliveStopped ?? "off", nextAt: null };
   }
   if (row.status === "sleeping") {
-    return { ...base, state: "asleep" };
+    return { state: "asleep", nextAt: null };
   }
   if (measuredCold(row)) {
-    return { ...base, state: "cold" };
+    return { state: "cold", nextAt: null };
   }
   // Paused while the window that binds the session (core `headroom` over
   // its bearing windows, whichever the account has) is critical.
@@ -158,16 +234,12 @@ export const keepAliveState = (
     now
   )?.window;
   if (binds?.severity === "critical") {
-    return { ...base, state: "paused-usage" };
+    return { state: "paused-usage", nextAt: null };
   }
   const cache = cacheState(row, { midTurn: false }, now);
   return cache.kind === "warm"
-    ? {
-        ...base,
-        state: "waiting",
-        nextAt: cache.until - (row.cacheTtl === "1h" ? 600_000 : 60_000),
-      }
-    : { ...base, state: "cold" };
+    ? { state: "waiting", nextAt: cache.until - pingMargin(row) }
+    : { state: "cold", nextAt: null };
 };
 
 /** Usage counts include uncached input plus cache reads and writes, as Claude reports them. */
@@ -248,7 +320,6 @@ export const keepAliveResult = (
 };
 
 interface KeepAlivePorts {
-  changed: () => void;
   idle: (row: KeepAliveRow) => boolean | Promise<boolean>;
   /** Runs the scheduler's one timer until the hub closes. */
   lifetime: HubLifetimeShape;
@@ -371,7 +442,6 @@ export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
     lifetime.cancel(timer);
     try {
       await tickKeepAlive(ports);
-      ports.changed();
     } catch (error) {
       console.error("[keepalive] schedule wake failed:", error);
     } finally {

@@ -57,7 +57,6 @@ export type AccountCarryContext = Pick<
   | "owedCarries"
   | "owedMoves"
   | "pendingCodexLeaves"
-  | "publishInstances"
   | "publishStalls"
   | "publishUsage"
   | "readAgent"
@@ -640,7 +639,6 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
       console.log(
         `[accounts] ${rows.length} session${rows.length === 1 ? "" : "s"} that ran on ${named} ${rows.length === 1 ? "runs" : "run"} on ${accountWords(into)} now: ${named} left ${machines ? machines.map(ctx.machineName).join(", ") : "every machine"}, and its conversations went with its store. Each one's next start runs there.`
       );
-      ctx.publishInstances("");
     }
   };
 

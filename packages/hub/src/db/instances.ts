@@ -44,6 +44,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
+import type { BoardChange } from "./board-log";
 import type { DbCore } from "./core";
 import type { FoldMoved } from "./owned-rows";
 import { projectHoldingOf } from "./projects";
@@ -221,6 +222,21 @@ export const listedAt = (
   row.status === "running" ||
   (row.status === "sleeping" && sleepKeeps(row)) ||
   row.updatedAt.getTime() > now - STALE_AFTER_MS;
+
+/**
+ * Until when a row stays listed as it stands ({@link listedAt}): never
+ * (null) while it runs or its sleep keeps it, else {@link STALE_AFTER_MS}
+ * after it last moved. The board leaves a row by this time with no write.
+ */
+export const listedUntil = (row: {
+  origin: SessionOrigin;
+  status: string;
+  updatedAt: Date;
+  workLive: boolean | null;
+}): number | null =>
+  row.status === "running" || (row.status === "sleeping" && sleepKeeps(row))
+    ? null
+    : row.updatedAt.getTime() + STALE_AFTER_MS;
 
 /**
  * What a session's harness reported it has (`tooling`, `commands`), kept
@@ -1001,10 +1017,11 @@ export interface InstancesDb {
    */
   readonly sweepBootStatuses: () => number;
   /**
-   * The ids of the `instances` rows written since the last call (the
-   * connection's change log), and the log emptied: what the board reads again.
+   * What every write moved on the board since the last call (the
+   * connection's change log, db/board-log.ts), each once, and the log
+   * emptied: what the board lays again.
    */
-  readonly takeChangedInstances: () => string[];
+  readonly takeBoardChanges: () => BoardChange[];
   /** Takes one owed start off the books; true for exactly one caller. */
   readonly takeOwedSpawn: (id: string) => boolean;
   /**
@@ -2786,9 +2803,13 @@ export const instancesDb = (core: DbCore): InstancesDb => {
             .where(and(inArray(instances.id, ids), keptInstances()))
             .all()
             .map(asListed),
-    takeChangedInstances: () => [
-      ...new Set(takeChanges.all().map((row) => row.id)),
-    ],
+    takeBoardChanges: () => {
+      const seen = new Map<string, BoardChange>();
+      for (const change of takeChanges.all()) {
+        seen.set(`${change.kind} ${change.id}`, change);
+      }
+      return [...seen.values()];
+    },
     listedChildCount: (parentInstanceId) =>
       db
         .select({ n: sql<number>`count(*)` })

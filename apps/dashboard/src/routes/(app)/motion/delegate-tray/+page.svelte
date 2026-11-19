@@ -187,7 +187,7 @@
         },
       ],
       hostname: "bench",
-      lastSeenAt: null,
+      joinedAt: 0,
       machineId: "bench",
       os: "linux",
       pausedUntil: null,

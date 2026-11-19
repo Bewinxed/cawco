@@ -491,7 +491,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     const source = bindSkillSource(input.source, {
       hostname: skillFolderHost(actor.machineId),
       home: ctx.db
-        .listAgents()
+        .machineFacts()
         .find((agent) => agent.machineId === actor.machineId)?.home,
     });
     const folder = folderOf(source);

@@ -10,7 +10,7 @@ import type { DbShape } from "./db";
  */
 export const createRuleRows = (db: DbShape) => (list: Rule[]) => {
   const stats = new Map(db.ruleStats().map((row) => [row.ruleId, row]));
-  const fleet = new Set(db.listAgents().map((agent) => agent.machineId));
+  const fleet = new Set(db.machineFacts().map((agent) => agent.machineId));
   const removed = new Map(
     db.removedMachines().map((row) => [row.machineId, row])
   );

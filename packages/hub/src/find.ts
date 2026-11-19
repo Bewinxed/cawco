@@ -57,7 +57,7 @@ import type { HarnessFailed, HarnessUnanswered } from "@cawco/core/frames";
 import { harnessLabel } from "@cawco/core/harness/kinds";
 import { syncSection } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
-import type { AgentRow } from "@cawco/core/protocol";
+import type { MachineFacts } from "@cawco/core/protocol";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
@@ -88,6 +88,9 @@ import {
 import { boardTitle, leafOf } from "./labels";
 import type { ProblemsOf } from "./refusal";
 import type { Tasks } from "./tasks";
+
+/** A machine as find reads it: its facts, and when the hub last heard from it. */
+type FindMachine = MachineFacts & { lastSeenAt: number | null };
 
 /**
  * How stale the names part may be, ms: what it reads besides the sessions
@@ -366,7 +369,7 @@ interface Names {
    * words, and they are hidden from every board and catalog besides.
    */
   hubMade: ReadonlySet<string>;
-  machines: Map<string, AgentRow>;
+  machines: Map<string, FindMachine>;
   /** Each session a machine keeps that the hub never started, by `machineId:sessionId`. */
   stored: Map<string, Entry>;
 }
@@ -587,7 +590,7 @@ export const createFind = (deps: FindDeps) => {
    * couldn't list its sessions: …"): never read as having none. A listing
    * under way is the one waited on.
    */
-  const relist = (machine: AgentRow): Promise<void> => {
+  const relist = (machine: FindMachine): Promise<void> => {
     const { machineId } = machine;
     const under = storedReading.get(machineId);
     if (under !== undefined) {
@@ -637,7 +640,7 @@ export const createFind = (deps: FindDeps) => {
    * matter (hub stored-recent.ts); one never read yet is read now, in the
    * background.
    */
-  const catalogOf = (machine: AgentRow) => {
+  const catalogOf = (machine: FindMachine) => {
     const known = storedCatalogs.get(machine.machineId);
     if (!known && deps.online(machine.machineId)) {
       detach(relist(machine), `find: ${machine.machineId}'s stored sessions`);
@@ -665,7 +668,7 @@ export const createFind = (deps: FindDeps) => {
    * Each online machine whose last listing left a harness out, a sentence
    * for each in the words the person reads (core words/catalog.ts).
    */
-  const leftOutNow = (machines: Map<string, AgentRow>): FindLeftOut[] =>
+  const leftOutNow = (machines: Map<string, FindMachine>): FindLeftOut[] =>
     [...machines.values()].flatMap((machine) => {
       const known = storedCatalogs.get(machine.machineId);
       if (!(known && deps.online(machine.machineId))) {
@@ -774,7 +777,15 @@ export const createFind = (deps: FindDeps) => {
     );
     const machines = syncSection(
       "find index: machines read",
-      () => new Map(db.listAgents().map((agent) => [agent.machineId, agent]))
+      () =>
+        new Map(
+          db
+            .machineFacts()
+            .map((facts) => [
+              facts.machineId,
+              { ...facts, lastSeenAt: db.machineSeen(facts.machineId) ?? null },
+            ])
+        )
     );
     const projectOf = (id: string | null) => {
       const project = id ? projects.get(id) : undefined;
@@ -876,7 +887,7 @@ export const createFind = (deps: FindDeps) => {
    * `machineId:sessionId`.
    */
   const storedOf = (
-    machines: Map<string, AgentRow>,
+    machines: Map<string, FindMachine>,
     bySessionId: Map<string, string>,
     hubMade: ReadonlySet<string>
   ): Map<string, Entry> => {
@@ -966,7 +977,7 @@ export const createFind = (deps: FindDeps) => {
   };
 
   /** The machines a full find would ask, none asked yet: offline ones say so. */
-  const unasked = (machines: Map<string, AgentRow>): FindMachineCoverage[] =>
+  const unasked = (machines: Map<string, FindMachine>): FindMachineCoverage[] =>
     [...machines.values()].map((machine) => ({
       machineId: machine.machineId,
       name: machineLabel(machine.hostname),
@@ -991,7 +1002,7 @@ export const createFind = (deps: FindDeps) => {
 
   /** One machine asked, and how it went: its answer, or why it gave none. */
   const askOne = async (
-    machine: AgentRow,
+    machine: FindMachine,
     query: string,
     options: TranscriptQuery & { limit: number },
     ask: Pick<FindRequest, "caller" | "signal">
@@ -1433,10 +1444,10 @@ export const createFind = (deps: FindDeps) => {
       unpurged(machineId, storedCatalogs.get(machineId)?.sessions ?? []),
     /** Reads one machine's catalog again (a listing under way is the one waited on). */
     relist: (machineId: string): Promise<void> => {
-      const machine = db
-        .listAgents()
-        .find((agent) => agent.machineId === machineId);
-      return machine ? relist(machine) : Promise.resolve();
+      const machine = db.machineFactsOf(machineId);
+      return machine
+        ? relist({ ...machine, lastSeenAt: null })
+        : Promise.resolve();
     },
     /**
      * The board's change log named these sessions: their rows are read
@@ -1461,9 +1472,8 @@ export const createFind = (deps: FindDeps) => {
     /** One page of a find, or the refusal of a cursor this hub did not give. */
     async find(request: FindRequest) {
       const { relist: again } = request;
-      const machine = again
-        ? db.listAgents().find((agent) => agent.machineId === again)
-        : undefined;
+      const facts = again ? db.machineFactsOf(again) : undefined;
+      const machine = facts && { ...facts, lastSeenAt: null };
       if (machine && deps.online(machine.machineId)) {
         // Its listing as it stands now, whatever the last one left out.
         await relist(machine).catch((error: unknown) =>

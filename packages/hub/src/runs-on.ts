@@ -32,7 +32,7 @@ const CAPABILITY_WORDS: Record<RunsOnCapability, string> = {
 };
 
 /** What placement reads of a machine: the agents table's row. */
-export interface MachineFacts {
+export interface PlacedMachine {
   hostname: string;
   machineId: string;
   os: string;
@@ -48,7 +48,7 @@ const capabilitiesOf = (os: string): RunsOnCapability[] =>
   );
 
 /** Whether `machine` is one `runsOn` names: it has the capability, or it is that machine. */
-export const fits = (runsOn: string, machine: MachineFacts): boolean => {
+export const fits = (runsOn: string, machine: PlacedMachine): boolean => {
   if (isCapability(runsOn)) {
     return capabilitiesOf(machine.os).includes(runsOn);
   }
@@ -74,7 +74,7 @@ export const runsOnWords = (runsOn: string): string =>
  */
 export const runsOnValue = (
   value: string,
-  machines: MachineFacts[]
+  machines: PlacedMachine[]
 ): { problem: string } | { value: string } => {
   const trimmed = value.trim();
   if (

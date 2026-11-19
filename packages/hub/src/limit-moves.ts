@@ -90,6 +90,7 @@ export type LimitMovesContext = Pick<
   | "accountWords"
   | "admission"
   | "atLimit"
+  | "board"
   | "carryOn"
   | "catalogFaults"
   | "cloneForContinuation"
@@ -118,7 +119,6 @@ export type LimitMovesContext = Pick<
   | "prepareContinuation"
   | "processMayRun"
   | "projectTypes"
-  | "publishInstances"
   | "publishStalls"
   | "publishUsage"
   | "refusalMoved"
@@ -350,7 +350,6 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     console.log(
       `[hub] ${row.id}'s conversation is in ${accountId ?? "the machine's own"} dir now; its row says so`
     );
-    ctx.publishInstances(row.machineId);
   };
 
   /**
@@ -634,7 +633,6 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   /** A person's move of `row` went: a hold at its old account's limit ends, and every screen hears it. */
   const movedByHand = (row: StoredRow): void => {
     ctx.db.atLimit.dropHold(row.id);
-    ctx.publishInstances(row.machineId);
     ctx.publishStalls();
   };
 
@@ -835,7 +833,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     );
     moveRefusals.set(row.id, { from: row.accountId ?? null, words });
     console.warn(`[accounts] ${words}`);
-    ctx.publishInstances(row.machineId);
+    ctx.board.sessionsMoved([row.id]);
   };
 
   /** What `row`'s account line says of a move that didn't happen, while it still runs where it stayed. */
@@ -852,7 +850,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   /** A move of `instanceId` was asked again: the one that didn't happen is no longer news. */
   const forgetMoveRefusal = (instanceId: string): void => {
     if (moveRefusals.delete(instanceId)) {
-      ctx.publishInstances("");
+      ctx.board.sessionsMoved([instanceId]);
     }
   };
 
@@ -1008,7 +1006,6 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       landOwed(stored.id);
     }
     ctx.db.atLimit.dropHold(stored.id);
-    ctx.publishInstances(stored.machineId);
     ctx.publishStalls();
     if (owed.move) {
       ctx.noteAtLimit(stored, owed.move);
@@ -1158,7 +1155,6 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       return;
     }
     ctx.db.atLimit.dropHold(stored.id);
-    ctx.publishInstances(stored.machineId);
     ctx.publishStalls();
     if (!("later" in done)) {
       ctx.noteAtLimit(stored, how.move, how.line);

@@ -25,8 +25,8 @@
  * WHEN A PEER STOPS READING. A socket that takes nothing for
  * `WIRE_STALL_MS` while frames wait is closed (1013, try again later); one
  * whose peer reads, however far behind, is kept. A dashboard
- * reconnects by itself and is sent the whole board on open (server.ts
- * `/ws/dashboard` open: `instancesFrame("")`), and reads each session it
+ * reconnects by itself and is sent on open what moved on the board since the
+ * board it holds, or the board whole (board.ts `greetDashboard`), and reads each session it
  * follows again, whose page subscribes it (stream.ts `subscribe`). An agent
  * reconnects, registers, and the register ack's ledger tells it where every
  * session's frames resume (server.ts `registerAck`).

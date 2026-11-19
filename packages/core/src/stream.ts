@@ -423,12 +423,46 @@ import type { TailnetServing } from "./tailnet-https";
  *    carries the offer it makes (`StallOffer`), and a continuation's target
  *    may name its account. A page built for 83 reads the held reasons and
  *    the refusal's codes closed, so it reloads first.
+ * 85: the board travels as keyed collections with a version: a session's
+ *    row, a machine's facts, its live status and its inventory, each by key,
+ *    on a `board` frame that names only what moved (`instances_delta` is
+ *    gone), and the first frame (`instances`) whole or, for a page that
+ *    named the board it holds, only what moved since. A machine carries no
+ *    `lastSeenAt` but on its status, and a session's keep-alive no `state`,
+ *    only its facts and `nextAt`. A page built for 84 reads none of it, so
+ *    it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 84;
+export const WIRE_PROTOCOL = 85;
+
+/**
+ * The dashboard socket's address parameter a page names the board it holds
+ * by, as `<hubRun>:<version>` (core frames.ts `InstancesFrame`): the hub
+ * answers its first frame with what moved since that version, or the board
+ * whole when it holds no record that far back or runs another run.
+ */
+export const BOARD_HELD_PARAM = "board";
+
+/** The board a page holds, as {@link BOARD_HELD_PARAM} names it. */
+export const boardHeld = (hubRun: string, version: number): string =>
+  `${hubRun}:${version}`;
+
+/** {@link BOARD_HELD_PARAM}'s value read; undefined when it names no board. */
+export const readBoardHeld = (
+  value: unknown
+): { hubRun: string; version: number } | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const at = value.lastIndexOf(":");
+  const version = Number(value.slice(at + 1));
+  return at > 0 && Number.isSafeInteger(version) && version >= 0
+    ? { hubRun: value.slice(0, at), version }
+    : undefined;
+};
 
 /**
  * What a session's stream carries: the changes each frame made to its

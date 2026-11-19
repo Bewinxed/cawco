@@ -40,6 +40,7 @@ import { createPreviewPorts } from "./preview-ports";
 import { reachOrigin } from "./preview-reach-origin";
 import type { PreviewStop, PreviewUnloaded } from "./preview-stops";
 import type { TailnetHttpsService } from "./tailnet-https";
+import { WatchedMap } from "./watched-map";
 
 /**
  * What a session's panel shows: its artifact, and which open of it this is.
@@ -70,7 +71,7 @@ export interface PreviewTarget {
  * (`artifactOrigin`), never the session's, so whatever the panel shows
  * next, a frame of it keeps its own content.
  */
-export const previewTargets = new Map<string, PreviewTarget>();
+export const previewTargets = new WatchedMap<string, PreviewTarget>();
 
 /** An artifact as its panel's frame names it: its title, the head's name, and its ask, the head's line under it, when it has one. */
 export const shownArtifact = (

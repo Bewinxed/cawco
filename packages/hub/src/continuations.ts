@@ -114,7 +114,6 @@ export type ContinuationsContext = Pick<
   | "parkForPerson"
   | "pending"
   | "projectMemory"
-  | "publishInstances"
   | "publishSend"
   | "readAgent"
   | "registry"
@@ -570,7 +569,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       Math.max(0, row.updatedAt.getTime() + CONTINUATION_KEPT_MS - Date.now()),
       () => {
         ctx.db.deleteContinuation(row.id);
-        ctx.publishInstances(row.prepared.source.machineId);
       }
     );
   };
@@ -587,7 +585,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     if (!row) {
       return undefined;
     }
-    ctx.publishInstances(row.prepared.source.machineId);
     if (SETTLED.has(row.stage)) {
       for (const wake of continuationWaiters.get(id) ?? []) {
         wake();
@@ -692,7 +689,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     console.info(
       startedWords(prepared, request, askedBy, { files, summarise })
     );
-    ctx.publishInstances(prepared.source.machineId);
     // The job runs on its own; its record is what anyone follows.
     detach(advanceContinuation(row.id), "continuation");
     return row;
@@ -987,7 +983,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     );
     ctx.lifecycle.oweEndSession(target.id, "delete");
     ctx.forgetPending(target.id, UNREAD.stopped);
-    ctx.publishInstances(target.machineId);
   };
 
   /**
@@ -1081,7 +1076,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       );
     }
     const answered = await ctx.storedAnswer(current, false);
-    ctx.retireSession(source.machineId, current);
+    ctx.retireSession(current);
     if (answered) {
       return answered;
     }
@@ -1133,7 +1128,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       return open;
     }
     if (cancelledContinuation(row.id)) {
-      ctx.retireSession(targetMachineOf(row), row.targetInstanceId);
+      ctx.retireSession(row.targetInstanceId);
       return false;
     }
     openTarget(moveContinuation(row.id, { openItems: open }) ?? row, source);
@@ -1380,8 +1375,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       ctx.publishSend(opening);
     }
     ctx.transcripts.reread(to);
-    ctx.publishInstances(job.prepared.source.machineId);
-    ctx.publishInstances(targetMachineOf(job));
     ctx.releaseOwed({ instanceId: to });
   };
 
@@ -1419,7 +1412,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         why: `it was continued in ${to.slice(0, 8)}`,
       });
     }
-    ctx.publishInstances(row.machineId);
   };
 
   /**
@@ -1477,14 +1469,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     console.log(
       `[continuation] The new session${target ? ` ${ctx.sessionName(target)}` : ""} takes on ${source ? ctx.sessionName(source) : "its source"}'s live work: ${adopted.sessions.length} delegate(s), ${adopted.items} work item(s), ${adopted.queuedItems} queued delegate(s), ${adopted.queuedStarts} queued task start(s), ${adopted.asks} pending ask(s), ${adopted.artifacts} artifact(s). Their reports, and what is said on its artifacts, go to it from now on.`
     );
-    const machines = new Set(
-      ctx.db
-        .getInstancesByIds([to, ...adopted.sessions])
-        .map((row) => row.machineId)
-    );
-    for (const machineId of machines) {
-      ctx.publishInstances(machineId);
-    }
   };
 
   /**
@@ -1549,10 +1533,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       ctx.turnWaiters
         .get(row.summariserInstanceId)
         ?.reject(new Error(CONTINUATION_CANCELLED));
-      ctx.retireSession(
-        row.prepared.source.machineId,
-        row.summariserInstanceId
-      );
+      ctx.retireSession(row.summariserInstanceId);
     }
     console.info(
       `[continuation] ${row.prepared.source.title}: its continuation in a new session was cancelled while ${row.stage}. Nothing starts from it.`

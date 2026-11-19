@@ -1615,7 +1615,7 @@ export const createPush = ({
     }
     const harness = harnessName(row.harness);
     const host = db
-      .listAgents()
+      .machineFacts()
       .find((agent) => agent.machineId === row.machineId)?.hostname;
     return host ? `${harness} on ${machineLabel(host)}` : harness;
   };

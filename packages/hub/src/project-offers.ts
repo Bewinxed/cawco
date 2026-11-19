@@ -63,8 +63,6 @@ export interface ProjectOffersDeps {
    */
   createProject: CreateOrJoinProject;
   db: DbShape;
-  /** Sessions moved into a project: their machines' rails are published again. */
-  moved: (machineIds: string[]) => void;
   online: (machineId: string) => boolean;
   /**
    * The session's plan steps as its plan panel reads them: CawCo's list;
@@ -412,7 +410,6 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         moving.map((r) => r.id),
         project.id
       );
-      deps.moved([...new Set(moving.map((r) => r.machineId))]);
       db.answerProjectOffer(row.id, "accepted", project.id);
       deps.publish(row, null);
 

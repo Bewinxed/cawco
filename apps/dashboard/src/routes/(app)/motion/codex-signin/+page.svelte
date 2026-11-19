@@ -59,7 +59,7 @@
     os: "linux-x64",
     status: online ? "online" : "offline",
     auth: "authenticated",
-    lastSeenAt: new Date(online ? NOW : NOW - 190 * MINUTE_MS).toISOString(),
+    joinedAt: 0,
     pausedUntil: null,
     pauseStopped: null,
     harnesses: harnesses.map(report),

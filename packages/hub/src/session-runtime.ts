@@ -4,6 +4,7 @@
  * ({@link createSessionRuntime}).
  */
 import type { SessionPulse } from "@cawco/core/protocol";
+import { WatchedMap } from "./watched-map";
 
 export const createSessionRuntime = () => {
   /**
@@ -20,7 +21,8 @@ export const createSessionRuntime = () => {
    * wait for the next pulse to arrive.
    */
   const pulses = new Map<string, SessionPulse>();
-  const heldSessions = new Map<
+  /** Sessions held on their machine, by id: the board lays each one's row as it moves. */
+  const heldSessions = new WatchedMap<
     string,
     { machineId: string; since: number; reason: string }
   >();

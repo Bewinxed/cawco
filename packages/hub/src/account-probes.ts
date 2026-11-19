@@ -34,6 +34,7 @@ export type AccountProbesContext = Pick<
   ClosureContext,
   | "accountWords"
   | "accountsMoved"
+  | "board"
   | "db"
   | "dispatcher"
   | "lifetime"
@@ -388,6 +389,8 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
    * `stallChanged`): its tray chip says it at once.
    */
   const publishStalls = (): void => {
+    // The board's rows say their stall too.
+    ctx.board.stallsMoved();
     for (const instanceId of new Set([
       ...stallsShown.keys(),
       ...ctx.stalledNow(),

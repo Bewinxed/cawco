@@ -26,7 +26,6 @@ import {
   type PasskeyScanArgs,
   type PasskeyStatusFrame,
 } from "@cawco/core/browser";
-import type { AgentRow } from "@cawco/core/protocol";
 import type { AgentCall } from "./machine-answers";
 
 /** How long the relay waits for a BLE advert before timing out. */
@@ -52,10 +51,10 @@ export interface PasskeyRelayDeps {
   call: AgentCall;
   /** Whether the machine reported a BLE adapter (browsers.ts). */
   hasBle: (machineId: string) => boolean;
-  /** Every machine the hub knows. */
-  listAgents: () => AgentRow[];
   /** The name a machine is called by. */
   machineName: (machineId: string) => string;
+  /** The machines whose socket the hub holds now. */
+  onlineMachines: () => string[];
   /** The machines the person opted in to their presence: where they are. */
   personMachines: () => Set<string>;
 }
@@ -111,16 +110,13 @@ export const createPasskeyRelay = (deps: PasskeyRelayDeps) => {
   /** The machines to scan on: the person's own that have BLE, else every online machine that has. */
   const targetsFor = (browserMachineId: string) => {
     const capable = deps
-      .listAgents()
+      .onlineMachines()
       .filter(
-        (agent) =>
-          agent.status === "online" &&
-          agent.machineId !== browserMachineId &&
-          deps.hasBle(agent.machineId)
+        (machineId) => machineId !== browserMachineId && deps.hasBle(machineId)
       )
-      .map((agent) => ({
-        id: agent.machineId,
-        name: deps.machineName(agent.machineId),
+      .map((machineId) => ({
+        id: machineId,
+        name: deps.machineName(machineId),
       }));
     const mine = deps.personMachines();
     const own = capable.filter((machine) => mine.has(machine.id));

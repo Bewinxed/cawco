@@ -48,15 +48,12 @@ export interface RegistryShape {
     envelope: ClientFrame<F> | AskCard
   ) => void;
   /**
-   * A move of the board. A page on this hub's wire gets `delta`. An older one
-   * cannot read it and gets the snapshot instead: the one frame every build
-   * reads, and the one whose `protocol` reloads it. Built once, and only when
-   * an older page is connected.
+   * What moved on the board, to every page on this hub's wire. A page built
+   * for an older one was sent the board whole as its socket opened, which
+   * reloads it, and reads nothing after (dashboard socket.svelte.ts
+   * `olderThanHub`): it is sent none of this.
    */
-  readonly broadcastBoard: (
-    delta: FrameEnvelope<"instances_delta">,
-    snapshot: () => FrameEnvelope<"instances">
-  ) => void;
+  readonly broadcastBoard: (frame: FrameEnvelope<"board">) => void;
   /** A hub frame that is not an envelope (`{ type, … }`), to every dashboard and app socket. */
   readonly broadcastTyped: (frame: { readonly type: string }) => void;
   /** Every usable dashboard origin seen since the hub started, newest first: empty if none has connected. */
@@ -79,6 +76,12 @@ export interface RegistryShape {
   readonly onAgentLeft: (
     listener: (machineId: string, socketId: string) => void
   ) => void;
+  /**
+   * Hears each machine whose socket came or went, as it does: a register,
+   * one replacing it, a drop. What reads the machine's presence (the board)
+   * lays it again.
+   */
+  readonly onPresence: (listener: (machineId: string) => void) => void;
   readonly registerAgent: (
     machineId: string,
     socket: MachineSocket,
@@ -182,6 +185,12 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
   });
 
   const leftListeners: ((machineId: string, socketId: string) => void)[] = [];
+  const presenceListeners: ((machineId: string) => void)[] = [];
+  const presenceMoved = (machineId: string): void => {
+    for (const listener of presenceListeners) {
+      listener(machineId);
+    }
+  };
   const left = (machineId: string, socketId: string): void => {
     for (const listener of leftListeners) {
       listener(machineId, socketId);
@@ -192,6 +201,9 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
     onAgentLeft: (listener) => {
       leftListeners.push(listener);
     },
+    onPresence: (listener) => {
+      presenceListeners.push(listener);
+    },
     registerAgent: (machineId, socket, address) => {
       const before = agents.get(machineId);
       agents.set(machineId, socket);
@@ -201,6 +213,7 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
       if (before && before.id !== socket.id) {
         left(machineId, before.id);
       }
+      presenceMoved(machineId);
     },
     dropAgent: (socketId) => {
       for (const [machineId, socket] of agents) {
@@ -208,6 +221,7 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
           agents.delete(machineId);
           addresses.delete(machineId);
           left(machineId, socketId);
+          presenceMoved(machineId);
           return machineId;
         }
       }
@@ -240,14 +254,10 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
         sendToClient(socket, frame);
       }
     },
-    broadcastBoard: (delta, snapshot) => {
-      let whole: FrameEnvelope<"instances"> | undefined;
+    broadcastBoard: (frame) => {
       for (const socket of dashboards.values()) {
-        if (older.has(socket.id)) {
-          whole ??= snapshot();
-          sendToClient(socket, whole);
-        } else {
-          sendToClient(socket, delta);
+        if (!older.has(socket.id)) {
+          sendToClient(socket, frame);
         }
       }
     },

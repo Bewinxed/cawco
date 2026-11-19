@@ -756,7 +756,7 @@ export const createNotifications = ({
   const devices = (now: number): PresenceDevice[] => {
     const counted = db.presence.counted();
     const names = new Map(
-      db.listAgents().map((agent) => [agent.machineId, agent.hostname])
+      db.machineFacts().map((agent) => [agent.machineId, agent.hostname])
     );
     return [...new Set([...readable, ...machines.keys(), ...counted])]
       .flatMap((id) => {

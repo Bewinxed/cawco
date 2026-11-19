@@ -87,13 +87,13 @@ export type ArtifactPagesContext = Pick<
   ClosureContext,
   | "artifactSessions"
   | "artifacts"
+  | "board"
   | "callFs"
   | "db"
   | "decisionsChanged"
   | "machineName"
   | "previewListeners"
   | "previewService"
-  | "publishInstances"
   | "readAgent"
   | "readMachineMedia"
   | "registry"
@@ -262,9 +262,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     // A project's decision page is read by the project's sessions, some of
     // which follow no session's stream: the board carries every open
     // preview, so every dashboard hears it there too.
-    if (source && "page" in source) {
-      ctx.publishInstances("");
-    }
+    ctx.board.listMoved("previews");
     return frame;
   };
 

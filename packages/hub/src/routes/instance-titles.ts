@@ -310,7 +310,7 @@ export const instanceTitleRoutes = ({
               // Written down on the way past, so the next render of this tab is
               // the cheap path — and so is every other reader's.
               const derived = row
-                ? nameFromFirstTurn(row.machineId, row.id, first)
+                ? nameFromFirstTurn(row.id, first)
                 : deriveTitleFromFirstMessage(first);
               return { id: ask.id, title: derived || null };
             })

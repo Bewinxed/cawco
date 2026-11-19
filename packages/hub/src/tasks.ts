@@ -141,7 +141,7 @@ import {
   YOU,
 } from "./project-folder";
 import type { AnyProblem } from "./refusal";
-import { type MachineFacts, runsOnValue } from "./runs-on";
+import { type PlacedMachine, runsOnValue } from "./runs-on";
 import {
   firstStage,
   isCodeTemplate,
@@ -401,7 +401,7 @@ export interface TaskStore {
   /** A task's external items, its record first, as the hub mirrors them (db task-links.ts). */
   readonly links: (projectId: string, taskId: string) => ExternalRef[];
   /** Every machine the hub has seen: what a `runs_on` may name (runs-on.ts). */
-  readonly machines: () => MachineFacts[];
+  readonly machines: () => PlacedMachine[];
   /** A comment written under the id its device chose, once it is committed. */
   readonly noteComment: (said: {
     id: string;

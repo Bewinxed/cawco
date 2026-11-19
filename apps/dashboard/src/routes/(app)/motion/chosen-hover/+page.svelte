@@ -128,7 +128,7 @@
         },
       ],
       hostname: "studio",
-      lastSeenAt: null,
+      joinedAt: 0,
       machineId: "bench-models",
       os: "darwin",
       pausedUntil: null,

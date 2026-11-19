@@ -127,8 +127,6 @@ export interface MovesDeps {
   readonly placesChanged: (machineId: string, projectId: string) => void;
   /** Every dashboard and app: one frame. */
   readonly publish: (frame: MovesFrame) => void;
-  /** A session row on `machineId` changed: every board hears it (board.ts `publishInstances`). */
-  readonly rowsChanged: (machineId: string) => void;
   /** Puts the first prompt into the started session (sends.ts `deliverSend`). */
   readonly send: (envelope: HubEnvelope<"send">) => void;
   /** Takes a parked ask off the ledger, answered or withdrawn. */
@@ -346,7 +344,7 @@ export const createMoves = (deps: MovesDeps) => {
    */
   const holdRow = (row: MoveRow): void => {
     const { state, request } = row;
-    const held = db.holdMovingInstance({
+    db.holdMovingInstance({
       id: state.targetInstanceId,
       machineId: state.targetMachineId,
       cwd: state.targetPath,
@@ -359,9 +357,6 @@ export const createMoves = (deps: MovesDeps) => {
         deriveTitleFromFirstMessage(request.prompt ?? "") || undefined,
       at: row.createdAt,
     });
-    if (held) {
-      deps.rowsChanged(state.targetMachineId);
-    }
   };
 
   /**
@@ -370,20 +365,16 @@ export const createMoves = (deps: MovesDeps) => {
    */
   const followRow = (row: MoveRow): void => {
     const id = row.state.targetInstanceId;
-    let changed = false;
     if (row.stage === "cancelled") {
-      changed = db.dropMovingInstance(id);
+      db.dropMovingInstance(id);
     } else if (row.stage === "failed") {
-      changed = db.settleMovingInstance(
+      db.settleMovingInstance(
         id,
         "error",
         row.state.error?.message ?? "The move failed."
       );
     } else if (isWorking(row.stage)) {
-      changed = db.settleMovingInstance(id, "moving");
-    }
-    if (changed) {
-      deps.rowsChanged(row.state.targetMachineId);
+      db.settleMovingInstance(id, "moving");
     }
   };
 
@@ -1641,15 +1632,11 @@ export const createMoves = (deps: MovesDeps) => {
    */
   const unreadRowsSay = (): void => {
     for (const move of db.movesUnread()) {
-      if (
-        db.settleMovingInstance(
-          move.targetInstanceId,
-          "error",
-          spawnWords.form.moveUnread
-        )
-      ) {
-        deps.rowsChanged(move.targetMachineId);
-      }
+      db.settleMovingInstance(
+        move.targetInstanceId,
+        "error",
+        spawnWords.form.moveUnread
+      );
     }
   };
 

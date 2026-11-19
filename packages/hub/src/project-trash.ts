@@ -856,11 +856,11 @@ export interface DiskPlace extends PlaceNesting {
  * live project's places carry the same reading (project-out.ts `createProjectOut`).
  */
 export const diskPlaces = (
-  db: Pick<DbShape, "listAgents" | "listProjects" | "project">,
+  db: Pick<DbShape, "machineFacts" | "listProjects" | "project">,
   id: string,
   trashed: TrashedProject | undefined
 ): DiskPlace[] => {
-  const joined = new Set(db.listAgents().map((agent) => agent.machineId));
+  const joined = new Set(db.machineFacts().map((agent) => agent.machineId));
   const live = db.listProjects();
   return [
     ...new Map(
@@ -934,7 +934,7 @@ export const projectTrash = (
     | "browsers"
     | "createProject"
     | "forgetProject"
-    | "listAgents"
+    | "machineFacts"
     | "listProjects"
     | "namedMachines"
     | "project"

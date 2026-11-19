@@ -18,7 +18,6 @@ export type SessionSignalsContext = Pick<
   | "notesOnly"
   | "projectAtFolder"
   | "processGeneration"
-  | "publishInstances"
   | "recordTurnUsage"
   | "relaunchAtRest"
   | "releaseHeld"
@@ -116,7 +115,6 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
           ctx.interruptedTurns.delete(instanceId);
           ctx.resumeCutTurn(instanceId);
         }
-        ctx.publishInstances(message.machineId);
       }
       return "continue";
     }
@@ -127,12 +125,8 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
     const { kind } = message.payload;
     // Applied settings are filed before a control reply is consumed
     // by REST or turned into a dashboard acknowledgement.
-    if (
-      (kind === "frame" || kind === "control_result") &&
-      message.instanceId &&
-      ctx.noteSessionSettings(message.instanceId, message.payload)
-    ) {
-      ctx.publishInstances(message.machineId);
+    if ((kind === "frame" || kind === "control_result") && message.instanceId) {
+      ctx.noteSessionSettings(message.instanceId, message.payload);
     }
     return "continue";
   };
@@ -197,7 +191,7 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
     return "continue";
   });
 
-  const effortRead = onSessionFrame(({ message }, frame, instanceId) => {
+  const effortRead = onSessionFrame((_run, frame, instanceId) => {
     // The session's effort as its agent read it back: what its
     // chip shows, and no screen's line. Never the effort its
     // launches ask for: a launch that ran at its CLI's default
@@ -213,8 +207,8 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
       // process until it takes it (setting-picks.ts): its reading until
       // then is what it ran at before the pick, never shown over it.
       const held = ctx.db.heldPicks.get(instanceId)?.effort !== undefined;
-      if (!held && ctx.db.noteInstanceEffort(instanceId, effortNamed(effort))) {
-        ctx.publishInstances(message.machineId);
+      if (!held) {
+        ctx.db.noteInstanceEffort(instanceId, effortNamed(effort));
       }
       // Launched with no effort of its own: this is what its
       // model runs at by default on its account.

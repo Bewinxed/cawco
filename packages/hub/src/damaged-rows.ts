@@ -9,8 +9,11 @@ import type { DamagedRecordReport, DamagedRow } from "@cawco/core/protocol";
 import { damagedWords } from "@cawco/core/words/damaged";
 
 export interface DamagedRecords {
-  /** Takes a beat's list for `machineId`; answers whether it differs from the last one. */
-  heard: (machineId: string, reports: DamagedRecordReport[]) => boolean;
+  /**
+   * Takes a beat's list for `machineId`; answers the sessions whose rows it
+   * moved (damaged before or after), none when it is the last one again.
+   */
+  heard: (machineId: string, reports: DamagedRecordReport[]) => string[];
   /**
    * `rows` with each damaged one saying so: `damaged` names the file and the
    * way out. A damaged workspace's row with no running process is `error`
@@ -60,13 +63,16 @@ export const damagedRecordsOf = (
 
   return {
     heard(machineId, reports) {
-      const moved = !Bun.deepEquals(byMachine.get(machineId) ?? [], reports);
+      if (Bun.deepEquals(byMachine.get(machineId) ?? [], reports)) {
+        return [];
+      }
+      const before = [...byRow().keys()];
       if (reports.length > 0) {
         byMachine.set(machineId, reports);
       } else {
         byMachine.delete(machineId);
       }
-      return moved;
+      return [...new Set([...before, ...byRow().keys()])];
     },
     overlay(rows) {
       if (byMachine.size === 0) {

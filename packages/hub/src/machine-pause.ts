@@ -121,7 +121,10 @@ export interface PauseCaller {
 }
 
 export interface MachinePauseDeps {
-  readonly db: Pick<DbShape, "listAgents" | "setMachinePause">;
+  readonly db: Pick<
+    DbShape,
+    "machineFacts" | "namedMachines" | "setMachinePause"
+  >;
   readonly lifetime: HubLifetimeShape;
   /**
    * The pause took effect (or moved): what runs there now stops. Answers how
@@ -206,7 +209,7 @@ export const createMachinePause = (deps: MachinePauseDeps): MachinePause => {
 
   return {
     start: () => {
-      for (const row of db.listAgents()) {
+      for (const row of db.machineFacts()) {
         if (row.pausedUntil !== null && row.pausedUntil !== undefined) {
           ends.set(row.machineId, row.pausedUntil);
         }

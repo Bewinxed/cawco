@@ -6,24 +6,22 @@ import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 import { awayProblem, silentProblem } from "../machine-answers";
-import { machineOut } from "../machine-out";
 import type { MachineReadsContext } from "../machine-reads";
 
 export const agentListRoutes = ({
-  db,
+  board,
   machineFault,
   machineRow,
-  withPresence,
-}: Pick<HubContext, "db" | "machineFault" | "machineRow" | "withPresence">) =>
+}: Pick<HubContext, "board" | "machineFault" | "machineRow">) =>
   new Elysia()
     // The fleet's list is the person's. A machine reads its own row alone,
     // by its own id (hub-auth.ts): what its CLI's health, install and
     // service checks ask.
-    .get("/api/agents", () => withPresence(db.listAgents()).map(machineOut))
+    .get("/api/agents", () => board.machines())
     .get("/api/agents/:machineId", hidden, ({ params }) => {
       const row = machineRow(params.machineId);
       return row
-        ? machineOut(row)
+        ? row
         : problem(404, {
             code: "no-machine",
             detail: machineFault(params.machineId, "unknown"),
@@ -37,7 +35,6 @@ export const agentMediaRoutes = ({
   hubAuth,
   machineCredentials,
   machineFault,
-  publishInstances,
   readMachineMedia,
   registry,
   sshTunnels,
@@ -49,7 +46,6 @@ export const agentMediaRoutes = ({
   | "hubAuth"
   | "machineCredentials"
   | "machineFault"
-  | "publishInstances"
   | "readMachineMedia"
   | "registry"
   | "sshTunnels"
@@ -96,9 +92,7 @@ export const agentMediaRoutes = ({
     // proved its key) has no row, and what the hub holds for it goes all
     // the same: its key, its held connection, its SSH connection.
     .delete("/api/agents/:machineId", ({ params }) => {
-      const row = db
-        .listAgents()
-        .find((agent) => agent.machineId === params.machineId);
+      const row = db.machineFactsOf(params.machineId);
       if (!row) {
         if (!(
           hubAuth.holdsMachine(params.machineId) ||
@@ -131,6 +125,5 @@ export const agentMediaRoutes = ({
       sshTunnels.forget(params.machineId);
       // The frame that carries the machine list: every dashboard drops the
       // machine and its sessions without a reload.
-      publishInstances(params.machineId);
       return { sessions: gone.instanceIds.length };
     });

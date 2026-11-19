@@ -88,7 +88,7 @@ export const MACHINE_KEYS = [
   "build",
   "home",
   "hostsHub",
-  "lastSeenAt",
+  "joinedAt",
   "lostAt",
   "reconnectingUntil",
   "pausedUntil",

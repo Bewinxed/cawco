@@ -26,7 +26,6 @@ export const toolRoutes = ({
   keepCopiesOn,
   keptReleases,
   pendingToolSignins,
-  publishInstances,
   registry,
   updateAll,
 }: Pick<
@@ -39,7 +38,6 @@ export const toolRoutes = ({
   | "keepCopiesOn"
   | "keptReleases"
   | "pendingToolSignins"
-  | "publishInstances"
   | "registry"
   | "updateAll"
 >) => {
@@ -197,7 +195,6 @@ export const toolRoutes = ({
               }
               const tool = answer.value.result;
               db.setAgentToolCell(params.machineId, tool);
-              publishInstances(params.machineId);
               keepCopiesOn(params.machineId);
               return tool;
             }

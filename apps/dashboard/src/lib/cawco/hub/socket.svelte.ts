@@ -16,6 +16,8 @@ import { isRecord } from "@cawco/core/is-record";
 import type { NamedSpawn } from "@cawco/core/protocol";
 import type { ModeAsk } from "@cawco/core/session-messages";
 import {
+  BOARD_HELD_PARAM,
+  boardHeld,
   HEARTBEAT_DEADLINE_MS,
   HEARTBEAT_INTERVAL_MS,
   HUB_TAKE_MEASURE,
@@ -434,6 +436,11 @@ function connect(): void {
   // A page an agent opened in its project's browser names the gate that
   // owns it (core `GATED_PAGE_MARK`), so what it starts is that agent's check.
   const query = new URLSearchParams({ protocol: String(WIRE_PROTOCOL) });
+  // …and the board it holds, by its run and version, so a socket that opens
+  // again is sent only what moved meanwhile (core `BOARD_HELD_PARAM`).
+  if (socketRun !== null && boardVersion !== null && !connectionState.older) {
+    query.set(BOARD_HELD_PARAM, boardHeld(socketRun, boardVersion));
+  }
   const gatedBy: unknown = Reflect.get(globalThis, GATED_PAGE_MARK);
   if (typeof gatedBy === "string" && gatedBy) {
     query.set(GATED_PAGE_PARAM, gatedBy);
@@ -457,6 +464,13 @@ let connections = 0;
  * when the page names the same run. Null before the first board.
  */
 let socketRun: string | null = null;
+
+/**
+ * The version of the board the stores hold (core frames.ts
+ * `InstancesFrame.version`), as the last board frame taken brought it to:
+ * what the next socket names, with {@link socketRun}. Null before the first.
+ */
+let boardVersion: number | null = null;
 
 /** How many times this page has reached the hub: past one, a connection is a reconnect. */
 export function connectionCount(): number {
@@ -491,12 +505,22 @@ function boardOf(message: unknown): Record<string, unknown> | null {
   return isRecord(payload) && payload.kind === "instances" ? payload : null;
 }
 
+/** The board's version a board frame (`instances` or `board`) brings the page to; null for any other message. */
+function boardVersionOf(message: unknown): number | null {
+  const payload = isRecord(message) ? message.payload : null;
+  return isRecord(payload) &&
+    (payload.kind === "instances" || payload.kind === "board") &&
+    typeof payload.version === "number"
+    ? payload.version
+    : null;
+}
+
 /**
  * Whether this page was built for an older wire than the hub's, settled on
  * the board snapshot before anything in it is applied. The snapshot is the
- * first message on every socket, reconnects included, and the hub sends it
- * again in place of each delta to a page it knows is older; `kind` and
- * `protocol` are the two fields of it no wire version moves (`WIRE_PROTOCOL`).
+ * first message on every socket, reconnects included, and a page the hub
+ * knows is older is sent nothing after it; `kind` and `protocol` are the
+ * two fields of it no wire version moves (`WIRE_PROTOCOL`).
  *
  * An older page reads nothing more off the socket, the snapshot included,
  * and takes the new build as any page does: through the update toast
@@ -670,6 +694,10 @@ function takeMessage(message: unknown): void {
     return;
   }
   wiring.take(message);
+  const version = boardVersionOf(message);
+  if (version !== null) {
+    boardVersion = version;
+  }
 }
 
 /** The socket is gone, closed by either side or dropped as dead: everything that went with it. */

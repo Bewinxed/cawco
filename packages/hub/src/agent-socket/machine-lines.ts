@@ -19,7 +19,6 @@ export type MachineLinesContext = Pick<
   | "endLeak"
   | "heldSessions"
   | "noteMachineLine"
-  | "publishInstances"
   | "tellLeak"
   | "transcripts"
 >;
@@ -48,7 +47,6 @@ export const machineLineStagesOf = (ctx: MachineLinesContext) => {
         since: row.updatedAt.getTime(),
         reason: note,
       });
-      ctx.publishInstances(message.machineId);
       const said = { ...frame, message: custodyLine(row, note) };
       message.payload = said;
       ctx.transcripts.ingest(row.id, said);

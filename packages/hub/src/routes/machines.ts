@@ -6,10 +6,7 @@ import type { HubContext } from "../hub-context";
 import { machinePauseCalls } from "../session-calls";
 
 export const machinePauseRoutes = (
-  ctx: Pick<
-    HubContext,
-    "identities" | "machinePause" | "machineRow" | "publishInstances"
-  >
+  ctx: Pick<HubContext, "identities" | "machinePause" | "machineRow">
 ) => {
   const { pauseMachine, resumeMachine } = machinePauseCalls(ctx);
   return (

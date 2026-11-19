@@ -119,7 +119,7 @@ export interface ProjectDeleteDeps {
     DbShape,
     | "browsers"
     | "forgetProject"
-    | "listAgents"
+    | "machineFacts"
     | "listProjects"
     | "project"
     | "projectWork"
@@ -154,7 +154,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
     id: string,
     trashed: Awaited<ReturnType<typeof trashedProject>>
   ): Plan => {
-    const joined = new Set(db.listAgents().map((agent) => agent.machineId));
+    const joined = new Set(db.machineFacts().map((agent) => agent.machineId));
     const recorded = recordedPlaces(db, id, trashed);
     const { sessions, workspaces } = db.projectWork.held(
       id,

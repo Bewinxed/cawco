@@ -13,7 +13,6 @@ export type IngestLedgerContext = Pick<
   | "db"
   | "keepAliveScheduler"
   | "memoryWatch"
-  | "publishInstances"
   | "recordTurnUsage"
   | "routines"
   | "streams"
@@ -131,7 +130,6 @@ export const ingestLedgerStagesOf = (ctx: IngestLedgerContext) => {
             );
             // A refreshed request establishes the next original deadline.
             detach(ctx.keepAliveScheduler.wake(), "keepalive wake");
-            ctx.publishInstances(row.machineId);
           }
           ctx.streams.sequence(row.id, { ...frame, keepAlive: true });
           return "stop";

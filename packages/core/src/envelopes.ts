@@ -187,7 +187,7 @@ export interface RegisterPayload extends MachineIdentity {
 export type DaemonFrame = (
   | Exclude<
       FramePayload,
-      { kind: "instances" | "instances_delta" | "permission_request" }
+      { kind: "instances" | "board" | "permission_request" }
     >
   | DaemonPermissionRequestFrame
 ) &

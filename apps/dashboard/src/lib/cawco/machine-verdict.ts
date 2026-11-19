@@ -17,7 +17,10 @@ import type { MachineVerdict } from "./served-board";
 import { span } from "./span";
 
 /** {@link MachineVerdict} of `machine`, its ages read at `now`. */
-export function machineVerdict(machine: AgentRow, now: number): MachineVerdict {
+export function machineVerdict(
+  machine: Omit<AgentRow, "lastSeenAt">,
+  now: number
+): MachineVerdict {
   const blocks = machineBlocksOf(machine);
   const signIn = [
     signInWarning(machine, "pi"),

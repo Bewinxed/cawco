@@ -49,7 +49,7 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
       {
         hubFolder: projectRoot,
         hubMachine: ctx.ownMachineIdRead,
-        machines: ctx.db.listAgents(),
+        machines: ctx.db.machineFacts(),
         online: (machineId) => Boolean(ctx.registry.agent(machineId)),
         signins: ctx.db.accounts.signins(),
       },

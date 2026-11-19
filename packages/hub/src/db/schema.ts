@@ -469,7 +469,7 @@ export const agentTools = sqliteTable(
 /**
  * What one harness adapter on a machine can do, one row per harness, as its
  * daemon last reported it: the report is the daemon's own, written and read
- * whole. Read in the order they were last reported (rowid).
+ * whole. Read in the order each was first reported (rowid).
  */
 export const agentHarnesses = sqliteTable(
   "agent_harnesses",

@@ -179,7 +179,6 @@ export const fleetMemoryRoutes = (
     | "keepReplacedMemory"
     | "machineName"
     | "projectTypes"
-    | "publishInstances"
     | keyof MachineReadsContext
   >
 ) => {
@@ -191,7 +190,6 @@ export const fleetMemoryRoutes = (
     keepReplacedDoc,
     keepReplacedMemory,
     machineName,
-    publishInstances,
   } = ctx;
   const memoryCalls = fleetMemoryCalls(ctx);
   return (
@@ -431,7 +429,6 @@ export const fleetMemoryRoutes = (
           fleetSyncs.changed(`an overwrite of ${forced ?? "the memory"}`, {
             machineId: body.machineId,
           });
-          publishInstances(body.machineId);
           return { ok: true };
         }
       )

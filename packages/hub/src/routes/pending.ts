@@ -26,7 +26,6 @@ export const pendingRoutes = ({
   handoffs,
   notifications,
   pending,
-  publishInstances,
 }: Pick<
   HubContext,
   | "archiveView"
@@ -35,7 +34,6 @@ export const pendingRoutes = ({
   | "handoffs"
   | "notifications"
   | "pending"
-  | "publishInstances"
 >) =>
   new Elysia()
     // The owner looked at these sessions (a tab in front, after it ended)
@@ -84,7 +82,7 @@ export const pendingRoutes = ({
           }
         }
         const at = body.kind === "unarchive" ? null : new Date();
-        const seen = db.markSeen(instanceIds, at);
+        db.markSeen(instanceIds, at);
         // Done (an archive) takes it off the sidebar's Recent list until
         // the person writes to it again; an unarchive puts it back.
         if (body.kind !== "look") {
@@ -110,9 +108,6 @@ export const pendingRoutes = ({
             ],
             "look"
           );
-        }
-        for (const machineId of new Set(seen.map((row) => row.machineId))) {
-          publishInstances(machineId);
         }
         return { at: at?.getTime() ?? null };
       }

@@ -62,15 +62,14 @@ fact was stored, and then quietly promoted to a claim about the present.
 
 CawCo has one instance of this law already obeyed and one instance it was violating.
 
-**Obeyed: machine presence.** `packages/hub/src/server.ts` defines `withPresence()`, which maps
-every agent row through the hub's live socket registry at read time — `status: registry.agent(
-row.machineId) ? 'online' : 'offline'` — while every other field on the row (`lastSeenAt`,
-`build`, `harnesses`, `fleet`, `auth`) passes through from the database untouched. `lastSeenAt`
-is allowed to be history; `status` is not allowed to be. This overlay is applied at the only two
-places a machine's status reaches a reader — the `GET /api/agents` route and the
-`instancesFrame` snapshot sent to every dashboard — and nowhere else, because the other
-`db.listAgents()` call sites are fleet/config lookups that never read `status` and have nothing
-to derive. The hub additionally calls `db.markAllAgentsOffline()` at boot, so a hub that just
+**Obeyed: machine presence.** `packages/hub/src/board.ts` lays each machine's live status
+(`statusOf`) from the hub's live socket registry — `status: registry.agent(machineId) ? 'online'
+: 'offline'` — while the machine's facts and inventory (`build`, `harnesses`, `fleet`, `auth`)
+pass through from the database untouched, and `lastSeenAt` is read by key. `lastSeenAt` is
+allowed to be history; `status` is not allowed to be. The board's machine status is the only
+place a machine's status reaches a reader — the `GET /api/agents` route and every dashboard's
+board read it — and every other reader of a machine reads the columns it needs by key, none of
+them `status`. The hub additionally calls `db.markAllAgentsOffline()` at boot, so a hub that just
 restarted with an empty socket registry never serves a stale "online" from before it lost its
 sockets. Measured behavior matches the design: after a hub restart with an empty registry,
 every machine reads `offline`; the live ones flip to `online` within the next heartbeat cycle
@@ -86,7 +85,7 @@ was measurable: `/api/instances` reported 178 instances as `running` on one mach
 gap is not a rounding error or a race — it is the law's failure mode exactly as stated: a value
 that was true when written (`running`, at spawn) was served forever afterward as if writing it
 had made it durably true, long after the process it described was gone. This build closes that
-gap the same way `withPresence()` already closed it for machines: a read-time overlay
+gap the same way the board's machine status already closed it for machines: a read-time overlay
 (`withSessionPresence`, contract C6) that serves a session as `unknown` whenever its owning
 machine is absent from the socket registry, leaves the stored column untouched as history, and
 reconciles the column itself only from the daemon's own word — a heartbeat listing or a register
@@ -100,7 +99,7 @@ The law generalizes past these two instances: any time a new fact starts getting
 convenience or durability — a cache, a snapshot, a denormalized column — the question that must
 be asked before it ships is whether a reader can be handed that value as "what is true now." If
 the answer is no, the value needs a derivation step between the store and the response, the same
-shape as `withPresence()` and `withSessionPresence`, before it reaches a caller.
+shape as the board's machine status and `withSessionPresence`, before it reaches a caller.
 
 ## The status taxonomy
 
@@ -119,7 +118,7 @@ Table continues below.
 |---|---|
 | `stopped` | The operator or an automated policy recorded a stop decision. Machine confirmation is separate internal ownership state; a plain Stop preserves its conversation and can be woken. |
 | `discarded` | Removed from public consideration. Its hidden ownership remains until confirmed exit and requested session-owned teardown. |
-| `unknown` | The machine that would know is unreachable — the hub has no live socket for it, so it cannot ask. This is the presence-overlay value: `withSessionPresence` serves any row on a machine absent from the socket registry as `unknown` without touching the stored column, exactly mirroring what `withPresence()` already does for machines. It means "the hub cannot currently find out," not "the hub knows this is broken." |
+| `unknown` | The machine that would know is unreachable — the hub has no live socket for it, so it cannot ask. This is the presence-overlay value: `withSessionPresence` serves any row on a machine absent from the socket registry as `unknown` without touching the stored column, exactly mirroring what the board's machine status already does for machines. It means "the hub cannot currently find out," not "the hub knows this is broken." |
 | `error` | A real failure, distinct from `sleeping`: `lastError` is required and non-null. The old `RESTART_LOST` condition — a row the heartbeat should have listed but didn't, with no `sessionId` to resume from — lands here, not in `sleeping`, because there is nothing left to resume. |
 
 Two taxonomy rules follow directly from the derived-liveness law rather than being arbitrary
@@ -227,9 +226,9 @@ which is only ever allowed to render one someone else asserted.
 | Fact | Authority (writes/asserts) | Renderer (reads only) |
 |---|---|---|
 | A session's process is alive, busy, or blocked | The daemon (harness adapter + `SessionPulse`) | Hub (relays the pulse, retains a bounded map of the latest one per instance), UI (paints activity from the pulse) |
-| A session's `running`/`sleeping`/`error`/`starting` status | The hub, reconciling stored history against the daemon's heartbeat/register report | UI (never computes status itself — it renders whatever `/api/instances` or `instancesFrame` hands it) |
+| A session's `running`/`sleeping`/`error`/`starting` status | The hub, reconciling stored history against the daemon's heartbeat/register report | UI (never computes status itself — it renders whatever `/api/instances` or the board's frames hand it) |
 | Whether a session is reachable at all right now | The hub's socket registry, via the presence overlay | UI, and the hub's own history columns (which stay untouched by the overlay and record only what was last known) |
-| A machine's `online`/`offline` status | The hub's socket registry, via `withPresence()` | UI, daemon (the daemon knows its own aliveness trivially; it never needs to ask the hub whether it itself is online) |
+| A machine's `online`/`offline` status | The hub's socket registry, via the board's machine status (board.ts `statusOf`) | UI, daemon (the daemon knows its own aliveness trivially; it never needs to ask the hub whether it itself is online) |
 | History — what happened, when, in what order | The hub's database (append/update on lifecycle events only, never on a mere read) | UI (renders a timeline/log), daemon (never reads history to decide present-tense behavior) |
 | Fleet policy — rules, tool grants, deploy target | The hub | Daemon (executes what it's told), UI (edits policy through the hub's API, never locally) |
 | What the operator wants right now — approve, deny, spawn, stop | The UI, expressed as an action against the hub's ledger | Daemon (executes once the hub relays it), hub (records the action as history) |

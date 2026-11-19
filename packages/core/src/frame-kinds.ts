@@ -22,7 +22,7 @@ const FRAME_KINDS: ReadonlySet<string> = new Set(
     "held_send",
     "taken_send",
     "instances",
-    "instances_delta",
+    "board",
     "permission_request",
     "permission_settled",
     "usage",

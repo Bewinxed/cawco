@@ -113,7 +113,6 @@ export type CutTurnsContext = Pick<
   | "owedMoves"
   | "pending"
   | "planChanges"
-  | "publishInstances"
   | "push"
   | "readSessionProcess"
   | "registry"
@@ -584,7 +583,6 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
    * it failed (push.ts `sessionFailed`).
    */
   const processFailed = (
-    machineId: string,
     instanceId: string,
     reason: string,
     kind?: LastErrorKind
@@ -599,7 +597,6 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
     }
     ctx.escalateRoutedAsks(instanceId);
     ctx.push.sessionFailed(instanceId, reason);
-    ctx.publishInstances(machineId);
   };
 
   /**
@@ -649,14 +646,13 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
         );
       }
       processFailed(
-        machineId,
         instanceId,
         `${again}${cutWords ? `\n\n${cutWords}\n\n` : " "}A message to it starts it again once that is fixed.`
       );
       return;
     }
     signalDeaths.set(instanceId, now);
-    ctx.sessionAsleep(machineId, instanceId);
+    ctx.sessionAsleep(instanceId);
     const resumes = resumeKilledTurn(
       instanceId,
       died.signal,

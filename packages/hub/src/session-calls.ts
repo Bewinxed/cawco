@@ -37,7 +37,6 @@ import type {
 import type { KeepAliveRow } from "./keep-alive";
 import type { AgentCall, Unanswered } from "./machine-answers";
 import { awayProblem, silentProblem } from "./machine-answers";
-import { machineOut } from "./machine-out";
 import type { MachinePause, PauseCaller } from "./machine-pause";
 import type { createOpenItems } from "./open-items";
 import {
@@ -94,7 +93,6 @@ export interface SessionCallsDeps {
     asksOnly?: boolean
   ) => Promise<PreparedContinuation | ContinuationUnfound>;
   readonly projectTypes: ProjectDelegateTypes;
-  readonly publishInstances: (machineId: string) => void;
   readonly reportedContextOf: (
     row: KeepAliveRow
   ) => Promise<
@@ -443,10 +441,7 @@ export const mediaCalls = ({
 });
 
 /** A session naming itself. */
-export const titleCalls = ({
-  db,
-  publishInstances,
-}: Pick<SessionCallsDeps, "db" | "publishInstances">) => ({
+export const titleCalls = ({ db }: Pick<SessionCallsDeps, "db">) => ({
   /**
    * The session naming itself (`set_title`): the title it asks, or the
    * problem that says why not, with the owner's name in the answer once the
@@ -471,7 +466,6 @@ export const titleCalls = ({
         detail: `The owner named this session "${result.row.title}", so set_title leaves it alone. Carry on with the task; do not call set_title again.`,
       });
     }
-    publishInstances(result.row.machineId);
     return `Named this session "${title}".`;
   },
 });
@@ -480,11 +474,7 @@ export const titleCalls = ({
 export const machinePauseCalls = ({
   machinePause,
   machineRow,
-  publishInstances,
-}: Pick<
-  SessionCallsDeps,
-  "machinePause" | "machineRow" | "publishInstances"
->) => ({
+}: Pick<SessionCallsDeps, "machinePause" | "machineRow">) => ({
   /**
    * Pauses a machine until a time (machine-pause.ts): nothing CawCo starts
    * runs there until then, its agent connected throughout. Answers the
@@ -519,8 +509,7 @@ export const machinePauseCalls = ({
         detail: "No machine with that id on this hub.",
       });
     }
-    publishInstances(machineId);
-    return machineOut(row);
+    return row;
   },
 
   /** Ends a machine's pause now: what it was kept goes, in order. */
@@ -534,7 +523,7 @@ export const machinePauseCalls = ({
     machinePause.resume(machineId);
     const row = machineRow(machineId);
     return row
-      ? machineOut(row)
+      ? row
       : problem(404, {
           code: "no-machine",
           detail: "No machine with that id on this hub.",

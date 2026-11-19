@@ -41,7 +41,6 @@ export type ToolInstallsContext = Pick<
   | "machineName"
   | "machinePause"
   | "pendingInstalls"
-  | "publishInstances"
   | "registry"
   | "sendToMachine"
   | "silentWords"
@@ -76,7 +75,6 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       return;
     }
 
-    let sent = false;
     for (const policy of ctx.db.listToolPolicies()) {
       const cell = cells[policy.id];
       if (!policy.required || (cell && cell.state !== "missing")) {
@@ -91,14 +89,8 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
         { toolId: policy.id, ...installAsk(policy.id) },
         true
       );
-      sent = true;
     }
-    if (keepCopies(machineId, agent, cells)) {
-      sent = true;
-    }
-    if (sent) {
-      ctx.publishInstances(machineId);
-    }
+    keepCopies(machineId, agent, cells);
   };
 
   /**
@@ -378,7 +370,6 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       },
       false
     );
-    ctx.publishInstances(machineId);
   };
 
   /**
@@ -413,7 +404,6 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       startedBy: "cawco",
       at: Date.now(),
     });
-    ctx.publishInstances(machineId);
     return ctx.awaitReply(
       machineId,
       INSTALL_TOOL,

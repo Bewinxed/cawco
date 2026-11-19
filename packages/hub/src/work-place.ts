@@ -25,7 +25,7 @@ import { ElysiaStatus } from "elysia";
 import type { ProjectRow } from "./db/projects";
 import { onAccountMachines } from "./placement";
 import type { projectRoot } from "./project-folder";
-import { fits, type MachineFacts, runsOnWords } from "./runs-on";
+import { fits, type PlacedMachine, runsOnWords } from "./runs-on";
 
 /** The full stop a problem's sentence ends in, which a clause of a longer one drops. */
 const TRAILING_STOP = /\.$/u;
@@ -37,7 +37,7 @@ export interface WorkFleet {
   /** The machine the hub runs on; undefined before it is read. */
   hubMachine: string | undefined;
   /** Every machine the hub knows, online or not. */
-  machines: readonly MachineFacts[];
+  machines: readonly PlacedMachine[];
   online: (machineId: string) => boolean;
   signins: readonly AccountSignin[];
 }
@@ -126,7 +126,7 @@ const missing = (
   project: ProjectFacts,
   fleet: WorkFleet,
   runsOn: string | null,
-  fitting: MachineFacts[] | null
+  fitting: PlacedMachine[] | null
 ): { fix: string; why: string } => {
   const named = (machines: readonly { machineId: string }[]): string =>
     machinesCalled(

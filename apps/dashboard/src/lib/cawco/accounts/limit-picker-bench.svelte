@@ -323,7 +323,7 @@
         hostname: MACHINE,
         os: "linux-x64",
         auth: "authenticated",
-        lastSeenAt: new Date(NOW).toISOString(),
+        joinedAt: 0,
         pausedUntil: null,
         pauseStopped: null,
         status: "online",

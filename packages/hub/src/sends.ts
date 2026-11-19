@@ -70,6 +70,7 @@ import { OWED_NOTICE_DAYS, owedNoticeEnd, unsentLine } from "./owed-ends";
 import { talksWithPerson } from "./roles";
 import { LIMIT_ORIGIN, sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
+import { WatchedMap } from "./watched-map";
 
 /** What the hub did with a send, as `handoff` tells its sender. */
 export interface SendDelivery {
@@ -336,7 +337,7 @@ const normalizeRelayMessage = (body: SendPayload): string | undefined => {
 /**
  * Each session's sends still pending (accepted, not yet read by it), keep-
  * alive pings aside, by uuid: a send that will start its next turn. Laid on
- * its board row as `queuedSends` (createServer `boardRows`), so every screen
+ * its board row as `queuedSends` (board.ts `asBoard`), so every screen
  * counts a session with one waiting as still working, not only the page that
  * holds its transcript. Seeded from the database as the hub starts; every
  * record's change passes `publishSend`, which keeps it (`note`, whether that
@@ -425,6 +426,7 @@ export type SendsContext = Pick<
   | "advanceCompaction"
   | "artifactLane"
   | "atLimit"
+  | "board"
   | "cacheLapsesAt"
   | "callAgent"
   | "credentialTurns"
@@ -450,7 +452,6 @@ export type SendsContext = Pick<
   | "planChanges"
   | "plans"
   | "processAt"
-  | "publishInstances"
   | "pulses"
   | "push"
   | "readAgent"
@@ -484,7 +485,7 @@ export const createSends = (ctx: SendsContext) => {
    * rather than in a browser: a hand-off learnt by whichever tab happened to be
    * watching is invisible on every other device, and gone after a reload.
    */
-  const handoffs = new Map<string, { from: string; at: number }>();
+  const handoffs = new WatchedMap<string, { from: string; at: number }>();
 
   /* ---- send records: the hub's one account of every send (SendRecord) ---- */
 
@@ -513,10 +514,7 @@ export const createSends = (ctx: SendsContext) => {
   const publishSend = (row: SentMessageRow): void => {
     // A send coming or going from pending moves its session's board row.
     if (sendsPending.note(row)) {
-      const [session] = ctx.db.getInstancesByIds([row.instanceId]);
-      if (session) {
-        ctx.publishInstances(session.machineId);
-      }
+      ctx.board.sessionsMoved([row.instanceId]);
     }
     if (isKeepAlive(row.body)) {
       ctx.streams.sequence(row.instanceId, {
@@ -1983,7 +1981,7 @@ export const createSends = (ctx: SendsContext) => {
    * carries, and a send that starts a turn reads it; the parent's or the
    * reader's word to a delegate starts its item's count of quiet turns over.
    */
-  const afterSend = ({ machineId, payload }: HubEnvelope<"send">): void => {
+  const afterSend = ({ payload }: HubEnvelope<"send">): void => {
     const { instanceId, message } = payload;
     if (isKeepAlive(message)) {
       return;
@@ -1993,14 +1991,13 @@ export const createSends = (ctx: SendsContext) => {
     }
     ctx.workItems.heard(instanceId, message.origin);
     if (!hasAttachments(payload)) {
-      ctx.nameFromLiveTurn(machineId, instanceId, message);
+      ctx.nameFromLiveTurn(instanceId, message);
     }
     const from = peekPeer(payload);
     if (from && !isQuerySend(payload)) {
       handoffs.set(instanceId, { from, at: Date.now() });
-      ctx.publishInstances(machineId);
-    } else if (isQuerySend(payload) && handoffs.delete(instanceId)) {
-      ctx.publishInstances(machineId);
+    } else if (isQuerySend(payload)) {
+      handoffs.delete(instanceId);
     }
   };
 
@@ -2868,12 +2865,8 @@ export const createSends = (ctx: SendsContext) => {
     }
     // The person wrote to it: the sidebar's Recent list orders it by this
     // and lists it again after a Done.
-    if (
-      accepted &&
-      byPerson(message.origin) &&
-      ctx.db.noteWrote(instanceId, record.acceptedAt)
-    ) {
-      ctx.publishInstances(machineId);
+    if (accepted && byPerson(message.origin)) {
+      ctx.db.noteWrote(instanceId, record.acceptedAt);
     }
     // The send it retries goes first, so a screen folds that row away as
     // this one arrives.
@@ -2991,7 +2984,7 @@ export const createSends = (ctx: SendsContext) => {
   };
   /** A machine's name for a sentence, when this hub knows the machine. */
   const knownMachineName = (machineId: string): string | undefined =>
-    ctx.db.listAgents().some((each) => each.machineId === machineId)
+    ctx.db.machineFacts().some((each) => each.machineId === machineId)
       ? ctx.machineName(machineId)
       : undefined;
   /**

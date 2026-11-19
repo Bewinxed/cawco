@@ -65,7 +65,6 @@ export type MachineReturnContext = Pick<
   | "nameStoredSessions"
   | "pending"
   | "previewService"
-  | "publishInstances"
   | "pushAgents"
   | "readLaunchDirs"
   | "recordSessionAddress"
@@ -584,7 +583,6 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
 
   const boardPublished = (ret: MachineReturn): void => {
     const { message } = ret;
-    ctx.publishInstances(message.machineId);
     detach(ctx.pushAgents(message.machineId), "agent push");
     // Its catalog, for Recent's stored list, and what its stored
     // conversations are called, for the ones nobody has ever named,

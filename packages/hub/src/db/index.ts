@@ -24,7 +24,7 @@ import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AskPartsDb, type AsksDb, askPartsDb, asksDb } from "./asks";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
-import { boardChangeLog } from "./board-log";
+import { boardChangeLog, hearWrites } from "./board-log";
 import { type BrowsersDb, browsersDb } from "./browsers";
 import { type CapabilityCallsDb, capabilityCallsDb } from "./capability-calls";
 import { type ConnectionsDb, connectionsDb } from "./connections";
@@ -155,6 +155,11 @@ interface HubStore {
   readonly memoryFacts: MemoryFactsDb;
   /** What each session's move ended, until it is told (move-endings.ts). */
   readonly moveEndings: MoveEndingsDb;
+  /**
+   * Hears every statement that may have written, once it ran (db/board-log.ts
+   * `hearWrites`): the board takes its change log after one.
+   */
+  readonly onWrite: (listener: () => void) => void;
   /** The moves sessions owe to their next launch, one per session (owed-moves.ts). */
   readonly owedMoves: OwedMovesDb;
   /** Host mode's preview passes, one per browser (preview-access.ts). */
@@ -286,7 +291,16 @@ const make = async (path: string): Promise<DbShape> => {
   db.transaction = (run) => deferredTransaction(run, { behavior: "immediate" });
   await applyMigrations(db, db.$client, path);
 
-  const core: DbCore = dbCore(db, boardChangeLog(db.$client));
+  const takeBoardChanges = boardChangeLog(db.$client);
+  // Every write heard from here on, before any reader below prepares its
+  // own statements: the board takes its change log on the turn after one.
+  const writeListeners: (() => void)[] = [];
+  hearWrites(db.$client, () => {
+    for (const listener of writeListeners) {
+      listener();
+    }
+  });
+  const core: DbCore = dbCore(db, takeBoardChanges);
   // The fleet's delegate types, seeded once.
   const delegateTypes = makeDelegateTypes(db);
 
@@ -322,6 +336,9 @@ const make = async (path: string): Promise<DbShape> => {
     revokedAmong: core.revokedAmong,
     onCredentialsRevoked: core.onCredentialsRevoked,
     close: () => closeWal(db.$client),
+    onWrite: (listener) => {
+      writeListeners.push(listener);
+    },
     delegateTypes,
     atomically: (run) => db.transaction(() => run()),
     accounts: accountsDb(db),

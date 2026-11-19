@@ -45,7 +45,6 @@ export type StartHoldsContext = Pick<
   | "machinePresence"
   | "noteFreshStart"
   | "processFailed"
-  | "publishInstances"
   | "registry"
   | "releaseOwed"
   | "replaceAtWake"
@@ -316,7 +315,7 @@ export const createStartHolds = (
     /** The start does not go: its row fails once, with the reason. */
     const notStarted = (reason: string): undefined => {
       console.warn(`[hub] not starting ${instanceId}: ${reason}`);
-      ctx.processFailed(machineId, instanceId, reason);
+      ctx.processFailed(instanceId, reason);
     };
     try {
       // Its account may have been signed out there while the machine updated.
@@ -443,7 +442,6 @@ export const createStartHolds = (
     }
     // What a move ended with its old process, said to this one first.
     ctx.tellEndedByMove(row);
-    ctx.publishInstances(machineId);
   };
 
   return {

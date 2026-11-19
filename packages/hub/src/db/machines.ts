@@ -23,7 +23,11 @@ import {
   MachinePathRefused,
   machinePath,
 } from "@cawco/core/machine-path";
-import type { AgentRow, BuildInfo } from "@cawco/core/protocol";
+import type {
+  BuildInfo,
+  MachineFacts,
+  MachineInventory,
+} from "@cawco/core/protocol";
 import {
   AccountKindSchema,
   HarnessReportSchema,
@@ -159,20 +163,19 @@ const signinCells = (signin: ReportedToolStatus["signin"]) => ({
 });
 
 export interface MachinesDb {
+  /** The machine's fleet report, as its last sync said it; undefined before it has. */
+  readonly agentFleet: (machineId: string) => FleetSyncReport | undefined;
   /** The machine's fleet generation and the fingerprint of what it was to hold at it (hub fleet-sync.ts); generation 0 for a machine never sent one. */
   readonly agentFleetGeneration: (machineId: string) => {
     fingerprint: string | null;
     generation: number;
   };
+  /** Each fleet item as the machine converges it, by item id; empty before it has said. */
+  readonly agentFleetItems: (
+    machineId: string
+  ) => Record<string, FleetItemStatus>;
   /** The machine's reports of the harnesses this hub runs ({@link harnessesByMachine}); undefined when it has none. */
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
-  /**
-   * One machine's row as {@link listAgents} shapes it, read alone: what
-   * `GET /api/agents/:machineId` answers, which an update's trial asks every
-   * second through a loaded hub, so it reads that machine's cells and no
-   * other's. Undefined when the hub knows no such machine.
-   */
-  readonly agentRow: (machineId: string) => AgentRow | undefined;
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
   /** Files `mode` as the one the person last chose for `harness` on `machineId`. */
@@ -200,12 +203,30 @@ export interface MachinesDb {
     instanceIds: string[];
   };
   /**
-   * Every machine, in the shape everything downstream reads them: the `fleet`
-   * column is null until a machine has synced once, and `AgentRow` says absent.
+   * Each harness's reports on each machine (db `agentHarnesses`), every
+   * machine's, or those of `machineIds`: what a picker or a start reads of
+   * what the fleet's harnesses offer, without any machine's other cells.
    */
-  readonly listAgents: () => AgentRow[];
+  readonly harnessesOn: (
+    machineIds?: readonly string[]
+  ) => Map<string, HarnessReport[]>;
+  /**
+   * Every machine's facts (core `MachineFacts`, `hostsHub` aside), in the
+   * order they joined: core `machineCalled` numbers machines that share a
+   * name by it. Small columns only: no machine's tools, harness reports or
+   * fleet document is read.
+   */
+  readonly machineFacts: () => MachineFacts[];
+  /** One machine's facts ({@link machineFacts}); undefined when the hub knows none. */
+  readonly machineFactsOf: (machineId: string) => MachineFacts | undefined;
   /** The home folder `machineId`'s daemon reported; null when it has not, or the hub has no such machine. */
   readonly machineHome: (machineId: string) => string | null;
+  /** What one machine has installed and reports (core `MachineInventory`); undefined when the hub knows none. */
+  readonly machineInventory: (
+    machineId: string
+  ) => MachineInventory | undefined;
+  /** Whether the hub keeps a row for the machine. */
+  readonly machineKnown: (machineId: string) => boolean;
   /**
    * `raw` as a path on `machineId` ({@link machinePath}), against the home
    * that machine's daemon reported. Every path a person or a session names
@@ -217,6 +238,8 @@ export interface MachinesDb {
     machineId: string,
     raw: string
   ) => MachinePath | MachinePathRefused;
+  /** When the hub last heard from the machine (epoch ms); null when never, undefined when it knows none. */
+  readonly machineSeen: (machineId: string) => number | null | undefined;
   readonly markAgentOffline: (machineId: string) => void;
   /** The machine answered its welcome (hub fleet-sync.ts): it is online. */
   readonly markAgentReady: (machineId: string) => void;
@@ -250,7 +273,7 @@ export interface MachinesDb {
     machineId: string,
     statuses: ReportedToolStatus[]
   ) => void;
-  /** Every machine by its id and hostname, in {@link listAgents}' order: what a machine's name is read from. */
+  /** Every machine by its id and hostname, in {@link machineFacts}' order: what a machine's name is read from. */
   readonly namedMachines: () => { hostname: string; machineId: string }[];
   /**
    * A machine that re-joined under a new id (its id follows its hostname,
@@ -474,7 +497,7 @@ export const machinesDb = (core: DbCore): MachinesDb => {
   };
 
   /**
-   * Each machine's harness reports, in the order they were last reported;
+   * Each machine's harness reports, in the order each was first reported;
    * one machine's with `machineId`. A row keeps the machine's report in its
    * own words (core `NamedHarnessReport`), read here ({@link harnessReportOf}):
    * one this hub can read is among `known`; any other's harness is among
@@ -544,64 +567,55 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     return byMachine;
   };
 
-  /**
-   * Machines' rows in the shape everything downstream reads them, each with
-   * its tools, harness reports and chosen modes; with `machineId`, the cells
-   * of that machine alone are read ({@link DbShape.agentRow}).
-   */
-  const agentRows = (
-    rows: (typeof agents.$inferSelect)[],
+  /** The columns a machine's facts are read from: no report among them. */
+  const factColumns = {
+    machineId: agents.machineId,
+    hostname: agents.hostname,
+    os: agents.os,
+    auth: agents.auth,
+    build: agents.build,
+    home: agents.home,
+    pausedUntil: agents.pausedUntil,
+    pauseStoppedCommands: agents.pauseStoppedCommands,
+    pauseStoppedUnread: agents.pauseStoppedUnread,
+    createdAt: agents.createdAt,
+  };
+
+  /** Machines' facts as {@link MachinesDb.machineFacts} answers them; with `machineId`, that machine's modes alone are read. */
+  const factsOf = (
+    rows: {
+      auth: AgentAuth;
+      build: BuildInfo | null;
+      createdAt: Date;
+      home: string | null;
+      hostname: string;
+      machineId: string;
+      os: string;
+      pausedUntil: Date | null;
+      pauseStoppedCommands: number;
+      pauseStoppedUnread: string | null;
+    }[],
     machineId?: string
-  ): AgentRow[] => {
-    const toolCells = toolsByMachine(machineId);
-    const reports = harnessesByMachine(machineId);
+  ): MachineFacts[] => {
     const modes = chosenModesByMachine(machineId);
-    return rows.map(
-      ({
-        fleet,
-        fleetSync,
-        fleetItems,
-        fleetGeneration: _generation,
-        fleetFingerprint: _fingerprint,
-        build,
-        home,
-        machineCapabilities,
-        pausedUntil,
-        pauseStoppedCommands,
-        pauseStoppedUnread,
-        ...agent
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one optional field per nullable column, each left out of the row while null
-      }) => {
-        const harnesses = reports.known.get(agent.machineId);
-        const unknownHarnesses = reports.unknown.get(agent.machineId);
-        const chosen = modes.get(agent.machineId);
-        return {
-          ...agent,
-          tools: toolCells.get(agent.machineId) ?? {},
-          pausedUntil: pausedUntil?.getTime() ?? null,
-          pauseStopped:
-            pauseStoppedUnread === null
-              ? (stoppedWords(pauseStoppedCommands) ?? null)
-              : machinePauseWords.stoppedUncounted,
-          ...(fleet ? { fleet } : {}),
-          ...(fleetSync ? { fleetSync } : {}),
-          ...(fleetItems ? { fleetItems } : {}),
-          ...(build ? { build } : {}),
-          ...(harnesses ? { harnesses } : {}),
-          ...(unknownHarnesses ? { unknownHarnesses } : {}),
-          ...(chosen ? { chosenModes: chosen } : {}),
-          ...(home ? { home } : {}),
-          ...(machineCapabilities
-            ? {
-                machineCapabilities: capabilitiesOf(
-                  machineCapabilities,
-                  agent.os
-                ),
-              }
-            : {}),
-        };
-      }
-    );
+    return rows.map((row) => {
+      const chosen = modes.get(row.machineId);
+      return {
+        machineId: row.machineId,
+        hostname: row.hostname,
+        os: row.os,
+        auth: row.auth,
+        joinedAt: row.createdAt.getTime(),
+        pausedUntil: row.pausedUntil?.getTime() ?? null,
+        pauseStopped:
+          row.pauseStoppedUnread === null
+            ? (stoppedWords(row.pauseStoppedCommands) ?? null)
+            : machinePauseWords.stoppedUncounted,
+        ...(row.build ? { build: row.build } : {}),
+        ...(row.home ? { home: row.home } : {}),
+        ...(chosen ? { chosenModes: chosen } : {}),
+      };
+    });
   };
 
   return {
@@ -747,37 +761,24 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     mergeAgentTools: (machineId, statuses) => {
       putToolCells(machineId, statuses);
     },
-    // The harnesses reported replace their own rows, read after the ones this
-    // report did not name; every other harness stays as it was.
+    // The harnesses reported replace their own rows; every other harness
+    // stays as it was. Each in place, so a report the same as the last
+    // writes nothing the board hears (db/board-log.ts): a new harness is read
+    // after the ones the machine reported before.
     mergeAgentHarnesses: (machineId, reports) => {
       db.transaction((tx) => {
         if (!machineKept(tx, machineId)) {
           return;
         }
-        const latest = [
-          ...new Map(
-            reports.map((report) => [report.harness, report])
-          ).values(),
-        ];
-        for (const report of latest) {
-          tx.delete(agentHarnesses)
-            .where(
-              and(
-                eq(agentHarnesses.machineId, machineId),
-                eq(agentHarnesses.harness, report.harness)
-              )
-            )
-            .run();
-        }
-        if (latest.length > 0) {
+        for (const report of new Map(
+          reports.map((one) => [one.harness, one])
+        ).values()) {
           tx.insert(agentHarnesses)
-            .values(
-              latest.map((report) => ({
-                machineId,
-                harness: report.harness,
-                report,
-              }))
-            )
+            .values({ machineId, harness: report.harness, report })
+            .onConflictDoUpdate({
+              target: [agentHarnesses.machineId, agentHarnesses.harness],
+              set: { report },
+            })
             .run();
         }
       });
@@ -856,23 +857,98 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         .run();
       return true;
     },
-    listAgents: () =>
-      agentRows(
+    machineFacts: () =>
+      factsOf(
         db
-          .select()
+          .select(factColumns)
           .from(agents)
           // Join order: core `machineCalled` numbers machines that share a name by it.
           .orderBy(asc(agents.createdAt), asc(agents.machineId))
           .all()
       ),
-    agentRow: (machineId) => {
+    machineFactsOf: (machineId) => {
       const row = db
-        .select()
+        .select(factColumns)
         .from(agents)
         .where(eq(agents.machineId, machineId))
         .get();
-      return row ? agentRows([row], machineId)[0] : undefined;
+      return row ? factsOf([row], machineId)[0] : undefined;
     },
+    machineKnown: (machineId) =>
+      db
+        .select({ machineId: agents.machineId })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get() !== undefined,
+    machineSeen: (machineId) => {
+      const row = db
+        .select({ lastSeenAt: agents.lastSeenAt })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get();
+      return row ? (row.lastSeenAt?.getTime() ?? null) : undefined;
+    },
+    machineInventory: (machineId) => {
+      const row = db
+        .select({
+          os: agents.os,
+          fleet: agents.fleet,
+          fleetSync: agents.fleetSync,
+          fleetItems: agents.fleetItems,
+          machineCapabilities: agents.machineCapabilities,
+        })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get();
+      if (!row) {
+        return;
+      }
+      const reports = harnessesByMachine(machineId);
+      const harnesses = reports.known.get(machineId);
+      const unknownHarnesses = reports.unknown.get(machineId);
+      return {
+        machineId,
+        tools: toolsOf(machineId),
+        ...(row.fleet ? { fleet: row.fleet } : {}),
+        ...(row.fleetSync ? { fleetSync: row.fleetSync } : {}),
+        ...(row.fleetItems ? { fleetItems: row.fleetItems } : {}),
+        ...(harnesses ? { harnesses } : {}),
+        ...(unknownHarnesses ? { unknownHarnesses } : {}),
+        ...(row.machineCapabilities
+          ? {
+              machineCapabilities: capabilitiesOf(
+                row.machineCapabilities,
+                row.os
+              ),
+            }
+          : {}),
+      };
+    },
+    harnessesOn: (machineIds) => {
+      if (machineIds === undefined) {
+        return harnessesByMachine().known;
+      }
+      const known = new Map<string, HarnessReport[]>();
+      for (const machineId of new Set(machineIds)) {
+        const reports = harnessesByMachine(machineId).known.get(machineId);
+        if (reports) {
+          known.set(machineId, reports);
+        }
+      }
+      return known;
+    },
+    agentFleet: (machineId) =>
+      db
+        .select({ fleet: agents.fleet })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get()?.fleet ?? undefined,
+    agentFleetItems: (machineId) =>
+      db
+        .select({ fleetItems: agents.fleetItems })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get()?.fleetItems ?? {},
     deleteMachine: (machineId) =>
       db.transaction((tx) => {
         const ids = tx

@@ -41,7 +41,7 @@ export function machineOs(os: string) {
  * nothing to say.
  */
 export function signInWarning(
-  machine: AgentRow,
+  machine: Pick<AgentRow, "auth" | "harnesses" | "hostname">,
   harness: HarnessKind = "claude"
 ): string | undefined {
   const report = machine.harnesses?.find((one) => one.harness === harness);

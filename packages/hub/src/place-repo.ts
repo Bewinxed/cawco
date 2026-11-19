@@ -39,7 +39,7 @@ import { machineName } from "./machine-name";
 export interface PlaceRepoDeps {
   /** Runs a machine-scoped daemon function; throws the machine's own words. */
   readonly call: MachineCall;
-  readonly db: Pick<DbShape, "lfsOffers" | "listAgents" | "project">;
+  readonly db: Pick<DbShape, "lfsOffers" | "namedMachines" | "project">;
   /**
    * A note to the person in the project's conversation, waking no model
    * (caw.ts `notice`); called only once the hub is up, so it may reach a

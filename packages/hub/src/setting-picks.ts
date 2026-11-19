@@ -52,7 +52,6 @@ export type SettingPicksContext = Pick<
   | "machineName"
   | "modelRefusal"
   | "owedMoves"
-  | "publishInstances"
   | "registry"
   | "relaunchOnAccount"
   | "sessionIdle"
@@ -149,7 +148,6 @@ export const createSettingPicks = (ctx: SettingPicksContext) => {
     console.info(
       `[hub] ${ctx.sessionName(row)} keeps its ${pick.method} pick (${pick.value}) for its next launch: no process of it takes it now (${row.status})`
     );
-    ctx.publishInstances(row.machineId);
     return "kept";
   };
 

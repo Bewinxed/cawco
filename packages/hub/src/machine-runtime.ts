@@ -5,21 +5,23 @@
 import type { BinaryUpdatePhaseDropped } from "@cawco/core/agent-reads";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import type { BuildInfo, SessionCustody } from "@cawco/core/protocol";
+import { WatchedMap } from "./watched-map";
 
 /** `machineName`: a machine as a sentence names it, for the log. */
 export const createMachineRuntime = (
   machineName: (machineId: string) => string
 ) => {
-  const machineCustody = new Map<string, SessionCustody>();
+  /** Each machine's custody report: the board lays its status as it moves. */
+  const machineCustody = new WatchedMap<string, SessionCustody>();
 
   /** Each connected machine's binary update state, as its daemon last said. */
-  const binaryUpdateStates = new Map<string, BinaryUpdateState>();
+  const binaryUpdateStates = new WatchedMap<string, BinaryUpdateState>();
 
   /**
    * Each connected machine's agent's hub ↔ agent contract, as its last
    * register said ({@link BuildInfo.protocol}); none for one that said none.
    */
-  const agentProtocols = new Map<string, BuildInfo["protocol"]>();
+  const agentProtocols = new WatchedMap<string, BuildInfo["protocol"]>();
 
   /** The binary update phase each machine last said that this hub does not know, as the log said it. */
   const droppedPhases = new Map<string, string>();

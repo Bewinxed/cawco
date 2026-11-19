@@ -699,7 +699,7 @@ export const createHistory = (ctx: HistoryContext) => {
     if (!(row.title || row.derivedTitle)) {
       const first = ctx.firstTurnOf(transcript);
       if (first) {
-        ctx.nameFromFirstTurn(row.machineId, row.id, first);
+        ctx.nameFromFirstTurn(row.id, first);
       }
     }
   };

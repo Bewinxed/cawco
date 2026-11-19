@@ -254,7 +254,6 @@ export type SpawnsContext = Pick<
   | "pending"
   | "ownDefaultOf"
   | "projectTypes"
-  | "publishInstances"
   | "readAgent"
   | "refusedHarness"
   | "registry"
@@ -372,13 +371,14 @@ export const createSpawns = (ctx: SpawnsContext) => {
     // A machine that did not answer is not one without it: the locate is
     // a miss only when every machine asked answered.
     const silent: string[] = [];
-    for (const agent of ctx.db.listAgents()) {
+    for (const agent of ctx.db.namedMachines()) {
       if (!ctx.registry.agent(agent.machineId)) {
         continue;
       }
+      const reported = ctx.db.agentHarnesses(agent.machineId) ?? [];
       const kinds =
-        agent.harnesses && agent.harnesses.length > 0
-          ? agent.harnesses.map((report) => report.harness)
+        reported.length > 0
+          ? reported.map((report) => report.harness)
           : HARNESSES;
       // One machine, every adapter at once: the asks are independent reads and
       // the machine answers them concurrently, so the wait is the slowest one
@@ -440,7 +440,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     // A machine that is away keeps it, by its last catalog: not remembered,
     // so the machine's return finds it.
     const keeper = ctx.db
-      .listAgents()
+      .machineFacts()
       .find(
         (agent) =>
           !ctx.registry.agent(agent.machineId) &&
@@ -649,7 +649,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       routing,
       machineId,
       machineName: ctx.db
-        .listAgents()
+        .machineFacts()
         .find((agent) => agent.machineId === machineId)?.hostname,
       model: payload.model,
       ...asks,
@@ -1805,7 +1805,6 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (awaitsItsName(payload)) {
       ctx.awaitingFirstTurn.add(payload.instanceId);
     }
-    ctx.publishInstances(machineId);
     const { parentInstanceId: spawnedBy } = peekParent(payload);
     if (spawnedBy) {
       for (const heard of delegateSpawned) {
@@ -2095,7 +2094,6 @@ export const createSpawns = (ctx: SpawnsContext) => {
       ...openedAccount(payload, placed),
       ...ctx.forkedFromOf(payload),
     });
-    ctx.publishInstances(machineId);
     // Bound in the step that starts the wait: a launch that may run on no account goes nowhere.
     const bound = ctx.bounded(payload);
     if (bound instanceof ElysiaStatus) {

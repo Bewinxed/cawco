@@ -642,12 +642,7 @@ try {
       ...(frame.event?.frame?.kind ? [frame.event.frame.kind] : []),
     ])
   );
-  for (const kind of [
-    "instances",
-    "instances_delta",
-    "stream.event",
-    "preview",
-  ]) {
+  for (const kind of ["instances", "board", "stream.event", "preview"]) {
     if (!kinds.has(kind)) {
       throw new Error(`The hub's socket sent no ${kind} frame`);
     }

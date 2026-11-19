@@ -60,7 +60,6 @@ export const fleetSkillCalls = (
     | "fleetSyncs"
     | "installFromFolder"
     | "noteFetch"
-    | "publishInstances"
     | "readAgent"
     | "skillChoices"
     | "skillRow"
@@ -197,7 +196,6 @@ export const fleetSkillRoutes = (
     fetchSkill,
     fleetChanged,
     noteFetch,
-    publishInstances,
     readAgent,
     fleetSyncs,
     skillRow,
@@ -387,7 +385,6 @@ export const fleetSkillRoutes = (
           fleetSyncs.changed(`an overwrite of skill ${params.name}`, {
             machineId: body.machineId,
           });
-          publishInstances(body.machineId);
           return { ok: true };
         }
       )

@@ -4,9 +4,7 @@ import type { HubContext } from "../hub-context";
 
 import { titleCalls } from "../session-calls";
 
-export const instanceTitleRenameRoutes = (
-  ctx: Pick<HubContext, "db" | "publishInstances">
-) => {
+export const instanceTitleRenameRoutes = (ctx: Pick<HubContext, "db">) => {
   const { setTitle } = titleCalls(ctx);
   return (
     new Elysia()

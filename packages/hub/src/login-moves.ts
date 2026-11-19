@@ -48,7 +48,6 @@ export type LoginMovesContext = Pick<
   | "movingFor"
   | "movingLogins"
   | "placedOn"
-  | "publishInstances"
   | "publishUsage"
   | "registry"
   | "sessionName"
@@ -522,7 +521,6 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       if (!why?.running) {
         ctx.db.accounts.removeMovedFrom(instanceId);
       }
-      ctx.publishInstances(machineId);
     } finally {
       repinning.delete(instanceId);
     }
@@ -668,7 +666,6 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       await settleMove(move, answer, ranFrom);
     }
     sleepMovedFrom();
-    ctx.publishInstances(machineId);
   };
 
   /**

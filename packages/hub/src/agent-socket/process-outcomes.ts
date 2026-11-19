@@ -18,7 +18,6 @@ export type ProcessOutcomesContext = Pick<
   | "losePending"
   | "processEvent"
   | "processGeneration"
-  | "publishInstances"
   | "releaseHeld"
   | "sessionAsleep"
   | "stopDispatches"
@@ -101,7 +100,6 @@ export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
       // some of it down as it stopped.
       ctx.forgetPending(message.instanceId, UNREAD.stopped);
       ctx.escalateRoutedAsks(message.instanceId);
-      ctx.publishInstances(message.machineId);
       return "stop";
     }
     return "continue";
@@ -132,7 +130,7 @@ export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
         if (died) {
           ctx.diedOnSignal(message.machineId, message.instanceId, died);
         } else {
-          ctx.sessionAsleep(message.machineId, message.instanceId);
+          ctx.sessionAsleep(message.instanceId);
         }
       }
       return "stop";
@@ -162,7 +160,6 @@ export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
       // Its held process is no longer this session's: what waited
       // for one goes to its next start.
       ctx.processEvent(message.instanceId);
-      ctx.publishInstances(message.machineId);
       return "stop";
     }
     return "continue";

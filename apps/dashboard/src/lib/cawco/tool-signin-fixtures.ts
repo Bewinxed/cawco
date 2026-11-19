@@ -85,9 +85,7 @@ export const fleetMachine = (
   os,
   status: online ? ("online" as const) : ("offline" as const),
   auth: "unknown",
-  lastSeenAt: new Date(
-    Date.now() - (online ? 0 : 180 * MINUTE_MS)
-  ).toISOString(),
+  joinedAt: 0,
   pausedUntil: null,
   pauseStopped: null,
   tools: {

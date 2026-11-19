@@ -24,7 +24,6 @@ export type TurnEndedContext = Pick<
   | "oweMoveOff"
   | "owedMoves"
   | "projectOffers"
-  | "publishInstances"
   | "push"
   | "refusedFailures"
   | "relaunchOnAccount"
@@ -55,9 +54,6 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
       ctx.lastRequestContext.delete(cacheRow.id);
       // Real turns re-arm from their own request clock.
       detach(ctx.keepAliveScheduler.wake(), "keepalive wake");
-      if (cacheRow.keepAliveEnabled) {
-        ctx.publishInstances(cacheRow.machineId);
-      }
       ctx.atLimit.turnEnded(cacheRow.id);
       // A compaction after a move: its next step, or its end.
       ctx.compactionTurnEnded(cacheRow.id);
@@ -180,7 +176,6 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
       }
       // An approval this turn read and didn't use lapses.
       ctx.hubAsks.turnEnded(turnId);
-      ctx.publishInstances(row.machineId);
       ctx.artifacts.turnEnded(turnId, before, endedAt);
       artifactLeft = unparked(ctx.artifactLane.now().needs)
         .filter(

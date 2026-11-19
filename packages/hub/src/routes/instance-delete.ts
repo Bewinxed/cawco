@@ -14,7 +14,6 @@ export const instanceDeleteRoutes = ({
   inCustody,
   machineCustody,
   moves,
-  publishInstances,
   readAgent,
 }: Pick<
   HubContext,
@@ -25,7 +24,6 @@ export const instanceDeleteRoutes = ({
   | "inCustody"
   | "machineCustody"
   | "moves"
-  | "publishInstances"
   | "readAgent"
 >) =>
   new Elysia()
@@ -103,6 +101,5 @@ export const instanceDeleteRoutes = ({
       }
       endSession(row.id, "delete", { kind: "person" });
       forgetInstances([row.id]);
-      publishInstances(row.machineId);
       return { ok: true };
     });

@@ -175,7 +175,6 @@ export type RelayControlContext = Pick<
   | "pending"
   | "pendingInstalls"
   | "projectMemory"
-  | "publishInstances"
   | "recordDelegateAnswer"
   | "registry"
   | "relaunchOnAccount"
@@ -679,7 +678,6 @@ export const createRelayControl = (ctx: RelayControlContext) => {
                 error: taken.refusal,
               }
         );
-        ctx.publishInstances(message.machineId);
       },
       (error: unknown) => {
         const reason = error instanceof Error ? error.message : String(error);
@@ -843,7 +841,6 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         startedBy: "person",
         at: Date.now(),
       });
-      ctx.publishInstances(message.machineId);
     }
     noteControl(message);
     return true;
