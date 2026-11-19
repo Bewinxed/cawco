@@ -118,6 +118,7 @@
         onact={() => undefined}
         oncancel={() => undefined}
         onconfirm={() => undefined}
+        oncalloff={() => undefined}
         ondisconnect={() => undefined}
         ontoggle={() => undefined}
         still

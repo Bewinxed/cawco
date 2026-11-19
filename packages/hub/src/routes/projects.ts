@@ -30,7 +30,6 @@ export const projectsListed = ({
 };
 
 export const projectRoutes = ({
-  addProjectPlace,
   askedProjectName,
   askerOf,
   caps,
@@ -41,6 +40,7 @@ export const projectRoutes = ({
   presenceSaid,
   previewListeners,
   projectEdits,
+  projectConnect,
   projectLocate,
   projectMoved,
   projectOut,
@@ -49,7 +49,6 @@ export const projectRoutes = ({
   tasks,
 }: Pick<
   HubContext,
-  | "addProjectPlace"
   | "askedProjectName"
   | "askerOf"
   | "caps"
@@ -60,6 +59,7 @@ export const projectRoutes = ({
   | "presenceSaid"
   | "previewListeners"
   | "projectEdits"
+  | "projectConnect"
   | "projectLocate"
   | "projectMoved"
   | "projectOut"
@@ -439,12 +439,28 @@ export const projectRoutes = ({
         return discarded;
       }
     )
-    // Another checkout of the project's repository, named by hand.
+    // Connect existing folder (project-connect.ts): what connecting a folder
+    // would do, read from its machine, before anything runs.
     .post(
-      "/api/projects/:id/places",
+      "/api/projects/:id/places/preview",
       { body: t.Object({ machineId: t.String(), path: t.String() }) },
       ({ params, body }) =>
-        addProjectPlace(params.id, body.machineId, body.path)
+        projectConnect.preview(params.id, body.machineId, body.path)
+    )
+    // Connect existing folder: another folder of the project's, named by
+    // hand. `joins` is the person's yes to the project the preview named as
+    // already having the folder's codebase.
+    .post(
+      "/api/projects/:id/places",
+      {
+        body: t.Object({
+          machineId: t.String(),
+          path: t.String(),
+          joins: t.Optional(t.String()),
+        }),
+      },
+      ({ params, body }) =>
+        projectConnect.connect(params.id, body.machineId, body.path, body.joins)
     )
     // Locate folder (project-locate.ts): what pointing a checkout at where
     // its folder is now would do, read from its machine, before anything runs.
@@ -464,6 +480,11 @@ export const projectRoutes = ({
       },
       ({ params, body }) =>
         projectLocate.locate(params.id, params.placeId, body.path, body.joins)
+    )
+    // Locate folder held for a computer that is away, called off: the folder
+    // stays as it was.
+    .delete("/api/projects/:id/places/:placeId/locate", ({ params }) =>
+      projectLocate.callOff(params.id, params.placeId)
     )
     // The accounts the project's sessions may run on; null: every account.
     .put(

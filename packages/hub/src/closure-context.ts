@@ -211,8 +211,7 @@ import type { createProjectEdits } from "./project-edit";
 import type { CreateOrJoinProject } from "./project-making";
 import type { MergeDeps } from "./project-merge";
 import type { createProjectOffers } from "./project-offers";
-import type { createProjectOut, placeAddedOf } from "./project-out";
-import type { ScratchPlaceProblem } from "./project-place-scratch";
+import type { createProjectOut } from "./project-out";
 import type { createProjectStarters } from "./project-starters";
 import type { createProjectStops } from "./project-stops";
 import type { ProjectTrash } from "./project-trash";
@@ -325,21 +324,6 @@ export interface ClosureContext {
   ) =>
     { accountId?: string; moved?: true; placed?: string } | { refusal: string };
   accountWords: (accountId: string | null | undefined) => string;
-  addProjectPlace: (
-    projectId: string,
-    machineId: string,
-    asked: string
-  ) => Promise<
-    | ReturnType<typeof placeAddedOf>
-    | ReturnType<
-        typeof problem<404, { code: "place-project-unknown"; detail: string }>
-      >
-    | ReturnType<
-        typeof problem<404, { code: "place-machine-unknown"; detail: string }>
-      >
-    | Exclude<ReturnType<ClosureContext["askedMachinePath"]>, MachinePath>
-    | ScratchPlaceProblem
-  >;
   admission: ReturnType<typeof createAdmission>;
   advanceCompaction: (instanceId: string) => void;
   advanceMove: (move: LoginMove) => Promise<void>;

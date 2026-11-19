@@ -34,6 +34,7 @@ import {
   startMove as startCopy,
 } from "#lib/cawco/move.svelte.js";
 import {
+  callOffLocate,
   locateFolder,
   previewLocate,
 } from "#lib/cawco/project-folders-locate.js";
@@ -59,6 +60,7 @@ import type { Machine } from "#lib/cawco/stores/board.svelte.js";
 import {
   addProjectPlace,
   editProject,
+  previewProjectPlace,
   readConnections,
   removeProjectPlace,
 } from "#lib/cawco/stores/projects.svelte.js";
@@ -146,8 +148,8 @@ export class DetailsHub {
   #reachedAt = $state(Date.now());
   #forecastTimer: ReturnType<typeof setTimeout> | null = null;
   #forecastFor = 0;
-  /** Locate folder: the project What will happen named as already having the folder's codebase, sent back as the person's yes. */
-  #locateJoins: string | null = null;
+  /** Connect existing folder and Locate folder: the project What will happen named as already having the folder's codebase, sent back as the person's yes. */
+  #joins: string | null = null;
 
   constructor(src: DetailsSource) {
     this.#src = src;
@@ -240,6 +242,10 @@ export class DetailsHub {
     return this.#project.places.map((place) => {
       const hub = place.kind === "hub";
       const home = hub ? hubHome : homes.get(place.machineId);
+      const shown = (path: string) =>
+        home && path.startsWith(`${home}/`)
+          ? `~${path.slice(home.length)}`
+          : path;
       let role: Folder["role"] = "extra";
       if (hub) {
         role = "builtin";
@@ -249,11 +255,9 @@ export class DetailsHub {
       return {
         id: place.id,
         machine: this.#computerOf(place.machineId, hub),
-        path:
-          home && place.path.startsWith(`${home}/`)
-            ? `~${place.path.slice(home.length)}`
-            : place.path,
+        path: shown(place.path),
         missing: place.missing,
+        locateTo: place.locateTo ? shown(place.locateTo) : null,
         readAt: null,
         role,
       };
@@ -561,6 +565,8 @@ export class DetailsHub {
       clearTimeout(this.#forecastTimer);
     }
     this.#forecastFor += 1;
+    // A yes holds only for the folder What will happen named.
+    this.#joins = null;
     const ask = this.#forecastFor;
     const machineId =
       step.act === "locate"
@@ -609,13 +615,16 @@ export class DetailsHub {
   ): Promise<Partial<FolderStepFacts>> {
     const project = this.#project;
     switch (step.act) {
-      case "connect":
-        return {
-          forecast: {
-            state: "ready",
-            lines: stepWords.connectLines(path, computer.name),
-          },
-        };
+      case "connect": {
+        const plan = await previewProjectPlace(
+          project.id,
+          computer.id,
+          path,
+          this.#client
+        );
+        this.#joins = plan.joins?.id ?? null;
+        return { forecast: plan.forecast };
+      }
       case "copy": {
         const from = this.#primary?.id ?? "";
         const estimate = await moveEstimate(
@@ -643,7 +652,7 @@ export class DetailsHub {
           path,
           this.#client
         );
-        this.#locateJoins = plan.joins?.id ?? null;
+        this.#joins = plan.joins?.id ?? null;
         return { forecast: plan.forecast, tell: plan.tell };
       }
       default:
@@ -855,7 +864,13 @@ export class DetailsHub {
     try {
       switch (step.act) {
         case "connect":
-          await addProjectPlace(project.id, step.machineId ?? "", path, client);
+          await addProjectPlace(
+            project.id,
+            step.machineId ?? "",
+            path,
+            this.#joins,
+            client
+          );
           this.#leaveStep();
           return;
         case "locate":
@@ -863,7 +878,7 @@ export class DetailsHub {
             project.id,
             step.folderId ?? "",
             path,
-            this.#locateJoins,
+            this.#joins,
             client
           );
           this.#leaveStep();
@@ -997,6 +1012,12 @@ export class DetailsHub {
     tryAgain: () => this.read(),
     signIn: () => this.#src.goSignIn(),
     folderAct: (act, folderId) => this.#openFolderAct(act, folderId),
+    callOffLocate: (folderId) => {
+      const project = this.#project;
+      this.#ask("locate", folderId, () =>
+        callOffLocate(project.id, folderId, this.#client)
+      );
+    },
     disconnect: (folderId) => {
       const project = this.#project;
       this.#ask("disconnect", folderId, () =>

@@ -209,10 +209,12 @@
                 <FilesSection
                   asOf={details.hub.reachable ? null : details.hub.readAt}
                   bind:confirming={opened.disconnect}
+                  callingOff={pending.locate}
                   disconnecting={pending.disconnect}
                   {fleet}
                   folders={details.folders}
                   onact={acts.folderAct}
+                  oncalloff={acts.callOffLocate}
                   ondisconnect={acts.disconnect}
                   bind:openFolder={opened.folder}
                   ontry={acts.tryAgain}

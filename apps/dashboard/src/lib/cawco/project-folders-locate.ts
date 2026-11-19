@@ -41,3 +41,13 @@ export const locateFolder = (
       .places({ placeId })
       .locate.post({ path, ...(joins ? { joins } : {}) })
   );
+
+/** Calls off what Locate folder holds for the folder `placeId` while its computer is away: the folder stays as it was. */
+export const callOffLocate = (
+  projectId: string,
+  placeId: string,
+  client: HubClient = hub
+): Promise<void> =>
+  hubDone(
+    client.api.projects({ id: projectId }).places({ placeId }).locate.delete()
+  );

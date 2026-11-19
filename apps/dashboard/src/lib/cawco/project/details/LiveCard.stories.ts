@@ -37,6 +37,9 @@ const FOLDER = /Folder/u;
 const LINEAR = /Connect Linear/u;
 const MORE = /More code details/u;
 const MAIN_ROW = /^obelisk/u;
+const CONNECT = /^Connect existing folder$/u;
+const STUDIO = /studio-mac/u;
+const CALL_OFF = /^Call off$/u;
 const WORK = /^One account$/u;
 
 /** The card as it opens, the task list still being read. */
@@ -111,4 +114,49 @@ export const MoreOpened = {
   beforeEach: ownStores,
   from: "Opening",
   play: presses({ role: "button", name: MORE, after: 1500 }),
+};
+
+/** Connect existing folder: studio-mac and a folder whose codebase hyucksfield-site already has, and What will happen asks first, naming both. */
+const CONNECT_ASKED: Press[] = [
+  { role: "button", name: CONNECT, after: 400 },
+  { role: "radio", name: STUDIO, after: 100 },
+  {
+    role: "textbox",
+    name: FOLDER,
+    text: "~/Work/Clients/Hyucksfield/hyucksfield-site",
+    after: 1700,
+  },
+];
+
+/** Connect existing folder on a folder another project has: the step asks before the two become one. */
+export const ConnectAsks = {
+  beforeEach: ownStores,
+  from: "Opening",
+  play: presses(...CONNECT_ASKED),
+};
+
+/** I pressed Connect existing folder after its ask, my yes to the two becoming one. */
+export const ConnectJoined = {
+  beforeEach: ownStores,
+  from: "Opening",
+  play: presses(...CONNECT_ASKED, {
+    role: "button",
+    name: CONNECT,
+    after: 1500,
+  }),
+};
+
+/** Locate folder was pointed while studio-mac was offline: its row says where the folder goes once studio-mac is back. */
+export const LocateWaiting = {
+  args: { situation: "locate-waiting" },
+  beforeEach: ownStores,
+  play: settles(2000),
+};
+
+/** I pressed Call off on studio-mac's row, and the folder stays as it was. */
+export const LocateCalledOff = {
+  args: { situation: "locate-waiting" },
+  beforeEach: ownStores,
+  from: "LocateWaiting",
+  play: presses({ role: "button", name: CALL_OFF, after: 1500 }),
 };

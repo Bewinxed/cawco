@@ -41,6 +41,9 @@ export const ExtraMissing = { args: { situation: "extra-missing" } };
 /** studio-mac is off, so its folder shows what was read at 14:02. */
 export const ComputerAway = { args: { situation: "computer-away" } };
 
+/** I located the folder on studio-mac while it was off: its row says where it goes once studio-mac is back, with Call off. */
+export const LocateWaiting = { args: { situation: "locate-waiting" } };
+
 /** The Work account is signed out, so nothing can start until I sign in. */
 export const SignedOut = { args: { situation: "signed-out" } };
 

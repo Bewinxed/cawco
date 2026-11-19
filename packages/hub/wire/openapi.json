@@ -24173,6 +24173,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "joins": {
+                    "type": "string"
+                  },
                   "machineId": {
                     "type": "string"
                   },
@@ -24220,12 +24223,101 @@
               }
             }
           },
+          "409": {
+            "description": "postApiProjectsByIdPlaces 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlaces409"
+                }
+              }
+            }
+          },
           "422": {
             "description": "postApiProjectsByIdPlaces 422",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiProjectsByIdPlaces422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/places/preview": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "machineId",
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdPlacesPreview",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdPlacesPreview 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindPlan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdPlacesPreview 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesPreview400"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdPlacesPreview 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesPreview404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdPlacesPreview 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesPreview422"
                 }
               }
             }
@@ -24387,6 +24479,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdLocate422"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "placeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiProjectsByIdPlacesByPlaceIdLocate",
+        "responses": {
+          "200": {
+            "description": "deleteApiProjectsByIdPlacesByPlaceIdLocate 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiProjectsByIdPlacesByPlaceIdLocate200"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiProjectsByIdPlacesByPlaceIdLocate 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiProjectsByIdPlacesByPlaceIdLocate409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiProjectsByIdPlacesByPlaceIdLocate 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiProjectsByIdPlacesByPlaceIdLocate422"
                 }
               }
             }
@@ -75268,6 +75413,292 @@
         ]
       },
       "deleteApiProjectsByIdPlacesByPlaceId422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "deleteApiProjectsByIdPlacesByPlaceIdLocate200": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "accountAtLimit": {
+            "$ref": "#/components/schemas/ProjectAtLimit"
+          },
+          "accounts": {
+            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "appleGate": {
+            "type": "boolean"
+          },
+          "areaId": {
+            "type": "string"
+          },
+          "attemptsHearComments": {
+            "type": "boolean"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
+          },
+          "capPeriod": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "capUsd": {
+            "type": "number"
+          },
+          "cawHarness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "cawMode": {
+            "$ref": "#/components/schemas/EventRouteViewMode"
+          },
+          "cawModel": {
+            "type": "string"
+          },
+          "conversationInstanceId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "dispatch": {
+            "type": "boolean"
+          },
+          "eventsOn": {
+            "type": "boolean"
+          },
+          "hearsTasks": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inEffect": {
+            "$ref": "#/components/schemas/SettingsInEffect",
+            "description": "Its settings in effect, each with where it came from: its own, else its\narea's, else the fleet's (core `settingsInEffect`), read with the row.\nEvery reader that acts on one of them reads it here."
+          },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
+          "lfsConnection": {
+            "type": "string"
+          },
+          "lfsUrl": {
+            "type": "string"
+          },
+          "links": {
+            "description": "Its links (`project_links`), one per repository, oldest first.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "moveDeclinedAt": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "createdAt": {
+                  "type": "string"
+                },
+                "found": {
+                  "type": "boolean"
+                },
+                "held": {
+                  "$ref": "#/components/schemas/BridgedHeldPlace"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PlaceKind"
+                },
+                "locateTo": {
+                  "anyOf": [
+                    {
+                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^projects/.*$"
+                    }
+                  ]
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "made": {
+                  "type": "boolean"
+                },
+                "missing": {
+                  "type": "boolean"
+                },
+                "path": {
+                  "$ref": "#/components/schemas/PlacePath"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "root": {
+                  "type": "string"
+                },
+                "within": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlaceProject"
+                  }
+                }
+              },
+              "required": [
+                "createdAt",
+                "found",
+                "id",
+                "isPrimary",
+                "kind",
+                "machineId",
+                "made",
+                "missing",
+                "path",
+                "projectId",
+                "within"
+              ]
+            }
+          },
+          "primaryPlaceId": {
+            "type": "string"
+          },
+          "remote": {
+            "type": "string"
+          },
+          "review": {
+            "type": "boolean"
+          },
+          "reviewLimit": {
+            "type": "number"
+          },
+          "runsOn": {
+            "type": "string"
+          },
+          "tapped": {
+            "$ref": "#/components/schemas/StagesTemplate"
+          },
+          "template": {
+            "$ref": "#/components/schemas/StagesTemplate"
+          },
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
+          }
+        },
+        "required": [
+          "accountAtLimit",
+          "appleGate",
+          "attemptsHearComments",
+          "cawHarness",
+          "createdAt",
+          "dispatch",
+          "eventsOn",
+          "hearsTasks",
+          "id",
+          "inEffect",
+          "lands",
+          "links",
+          "maxAttempts",
+          "name",
+          "places",
+          "review",
+          "reviewLimit",
+          "tracker"
+        ]
+      },
+      "deleteApiProjectsByIdPlacesByPlaceIdLocate409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "locate-not-held"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "deleteApiProjectsByIdPlacesByPlaceIdLocate422": {
         "type": "object",
         "properties": {
           "code": {
@@ -169904,6 +170335,42 @@
           }
         ]
       },
+      "postApiProjectsByIdPlaces409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "place-fold-unasked"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "postApiProjectsByIdPlaces422": {
         "anyOf": [
           {
@@ -170943,6 +171410,258 @@
         ]
       },
       "postApiProjectsByIdPlacesByPlaceIdMove422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesPreview400": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "machine-path-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "project-place-scratch"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesPreview404": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "place-machine-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "place-project-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesPreview422": {
         "anyOf": [
           {
             "type": "object",

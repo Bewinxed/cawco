@@ -393,6 +393,7 @@ const FolderMoveSessionShape = declared(
   z.object({
     accountId: z.string().nullable(),
     carried: z.boolean().optional(),
+    continuation: z.string().optional(),
     ended: MoveEndedShape.optional(),
     from: z.string(),
     harness: HarnessKindShape,

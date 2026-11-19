@@ -611,6 +611,7 @@ import { servedByMachine } from "./preview-machine";
 import { previewRoutes } from "./preview-routes";
 import { createPreviewService } from "./preview-service";
 import { createCaps } from "./project-caps";
+import { createProjectConnect } from "./project-connect";
 import {
   isTypeFile,
   makeProjectDelegateTypes,
@@ -633,8 +634,7 @@ import { createProjectJoining } from "./project-joining";
 import { createProjectLocate } from "./project-locate";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
-import { createProjectOut, placeAddedOf } from "./project-out";
-import { scratchPlaceRefusal } from "./project-place-scratch";
+import { createProjectOut } from "./project-out";
 import {
   foldPlaced,
   onPlacesChanged,
@@ -1522,7 +1522,6 @@ export const createServer = (
     workItems: () => workItems,
     workspaceArchived: () => workspaceArchived,
     workspaceRetire: () => workspaceRetire,
-    addProjectPlace: () => addProjectPlace,
     askedProjectName: () => askedProjectName,
     askerOf: () => askerOf,
     caps: () => caps,
@@ -1534,6 +1533,7 @@ export const createServer = (
     projectEdits: () => projectEdits,
     projectMoved: () => projectMoved,
     projectOut: () => projectOut,
+    projectConnect: () => projectConnect,
     projectLocate: () => projectLocate,
     projectStops: () => projectStops,
     ruleEngine: () => ruleEngine,
@@ -4526,60 +4526,6 @@ export const createServer = (
     };
   };
 
-  /**
-   * Another checkout of a project's repository: named by hand
-   * (`POST /api/projects/:id/places`) or picked on its setup page. A project
-   * or machine the hub does not have, a path that is none on the machine, or
-   * one in its scratch root (project-place-scratch.ts), is the problem it
-   * answers.
-   */
-  const addProjectPlace = async (
-    projectId: string,
-    machineId: string,
-    asked: string
-  ) => {
-    const project = db.project(projectId);
-    if (!project) {
-      return problem(404, {
-        code: "place-project-unknown",
-        detail: "No project with that id on this hub.",
-      });
-    }
-    if (!db.machineKnown(machineId)) {
-      return problem(404, {
-        code: "place-machine-unknown",
-        detail: "No machine with that id on this hub.",
-      });
-    }
-    const path = askedMachinePath(machineId, asked);
-    if (path instanceof ElysiaStatus) {
-      return path;
-    }
-    const scratch = scratchPlaceRefusal(db.machineHome(machineId), path);
-    if (scratch) {
-      return scratch;
-    }
-    const { place, added } = db.addPlace({
-      projectId: project.id,
-      machineId,
-      path,
-      kind: "checkout",
-    });
-    if (added) {
-      placesChanged(machineId, project.id);
-    }
-    // A plain folder stays one: a workspace is a private copy of any folder
-    // (agent layer.ts), a move makes it a repository with the person's yes
-    // (moves.ts `askFor`), and a publish as it reads it (repo-publish.ts).
-    // Its repository, a project's second among them, is linked by its origin.
-    await learnCheckout(place);
-    return placeAddedOf(
-      projectOut(db.project(project.id) ?? project),
-      place,
-      added
-    );
-  };
-
   // Artifacts (Projects spec §5.10): one Yjs doc each, synced on the preview
   // listener; the person's Send tells the session to read their picks, and
   // carries their marks to it (artifacts/).
@@ -6371,6 +6317,9 @@ export const createServer = (
   // Locate folder: a project's checkout pointed at where its folder is now
   // (project-locate.ts); `merging` is read as a fold runs, once it is made.
   const projectLocate = createProjectLocate(ctx);
+  // Connect existing folder: another folder of a project's, two projects
+  // made one only with the person's yes (project-connect.ts).
+  const projectConnect = createProjectConnect(ctx);
   const waitForEnd = (
     instanceId: string,
     waitMs = SPAWN_START_TIMEOUT_MS
@@ -7392,7 +7341,7 @@ export const createServer = (
     continueFromSummary: async (instanceId, target, moveId) => {
       const prepared = await prepareContinuation(instanceId);
       if (prepared instanceof ElysiaStatus) {
-        return prepared.response.detail;
+        return { why: prepared.response.detail };
       }
       const [row] = db.getInstancesByIds([instanceId]);
       const request = {
@@ -7406,9 +7355,9 @@ export const createServer = (
       const asker = { kind: "folder" as const, id: moveId };
       const refusal = await continuationRefusal(prepared, request, asker);
       if (refusal) {
-        return refusal;
+        return { why: refusal };
       }
-      startContinuation(prepared, request, asker);
+      return { job: startContinuation(prepared, request, asker).id };
     },
   });
 

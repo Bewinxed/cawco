@@ -19,7 +19,9 @@
    * name and one line saying what it does (Move files, Locate folder,
    * Disconnect folder); the Main folder has no Disconnect folder and the
    * Built-in folder is sunk, with no acts. A missing folder says so on the
-   * row, with Locate folder as its fix. Disconnect folder asks under the
+   * row, with Locate folder as its fix; a Locate folder named while its
+   * computer was offline says where the folder goes once that computer is
+   * back, with Call off, in the fix's place. Disconnect folder asks under the
    * row, in place: one line of what it does, then Disconnect folder or
    * Cancel; a refusal stands there in the hub's words.
    *
@@ -37,6 +39,7 @@
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import {
     IconChevronDown,
+    IconClock,
     IconFolder,
     IconMapPoint,
     IconMinusLinear,
@@ -54,6 +57,7 @@
     confirming = false,
     running = null,
     disconnecting,
+    callingOff,
     sunk = false,
     still = false,
     asOf = null,
@@ -62,6 +66,7 @@
     onconfirm,
     ondisconnect,
     oncancel,
+    oncalloff,
   }: {
     folder: Folder;
     /** Its computer's place in the fleet: the mark's identity hue. */
@@ -74,6 +79,8 @@
     running?: string | null;
     /** Disconnect folder was sent for it: waiting, or the hub's refusal. */
     disconnecting?: Pending;
+    /** Call off was sent for its waiting Locate folder: waiting, or the hub's refusal. */
+    callingOff?: Pending;
     /** Nothing can be sent: the row reads, and opens nothing. */
     sunk?: boolean;
     /** It only reads here (the folder a step acts on): flat, with no acts. */
@@ -86,6 +93,8 @@
     onconfirm: () => void;
     ondisconnect: () => void;
     oncancel: () => void;
+    /** Call off its waiting Locate folder. */
+    oncalloff: () => void;
   } = $props();
 
   const id = $props.id();
@@ -217,7 +226,38 @@
     </div>
   {/if}
 
-  {#if folder.missing}
+  {#if folder.locateTo}
+    <!-- Its fix, waiting for its computer, with Call off. -->
+    <div
+      class="flex flex-col gap-space-2 ms-space-2 ps-c-details-indent pe-space-2 pt-space-1 pb-space-2"
+      data-waits
+    >
+      <div class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2">
+        <!-- mark-line: the glyph stands at the top of words that may wrap -->
+        <span
+          class="flex min-w-0 flex-1 items-start gap-space-2 type-meta text-ink-muted"
+        >
+          <IconClock aria-hidden="true" class="mt-px size-icon-sm flex-none" />
+          <span class="text-pretty"
+            >{folderWords.locateWaits(
+              folder.locateTo,
+              folder.machine.name
+            )}</span
+          >
+        </span>
+        {#if !still}
+          <Button
+            disabled={sunk}
+            onclick={oncalloff}
+            pending={Boolean(callingOff && !callingOff.refused)}
+            size="sm"
+            variant="outline">{folderWords.callOff}</Button
+          >
+        {/if}
+      </div>
+      <RowFault again={oncalloff} reason={callingOff?.refused ?? null} />
+    </div>
+  {:else if folder.missing}
     <!-- What is wrong, on the row, with its fix. -->
     <div
       class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 ms-space-2 ps-c-details-indent pe-space-2 pt-space-1 pb-space-2"

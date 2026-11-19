@@ -22,6 +22,7 @@ import {
   type ProjectConversationView,
   type ProjectSpend,
 } from "@cawco/core/project-conversation";
+import type { FindPlan } from "@cawco/core/project-folders";
 import type { StagesTemplate } from "@cawco/core/views";
 import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
@@ -109,19 +110,43 @@ function keepProject(row: ProjectRow, asked: ProjectsAsked): void {
 }
 
 /**
- * Another checkout of the project's repository, named by hand: a machine
- * and an absolute folder on it (`POST /api/projects/:id/places`). Throws
- * the refusal in the hub's words; the project as it stands lands at once.
+ * What connecting a folder would do, read from its machine before anything
+ * runs (`POST /api/projects/:id/places/preview`): What will happen, and the
+ * project that already has its codebase, which connecting makes one with
+ * this one.
+ */
+export function previewProjectPlace(
+  projectId: string,
+  machineId: string,
+  path: string,
+  client: HubClient = hub
+): Promise<FindPlan> {
+  return hubData(
+    client.api
+      .projects({ id: projectId })
+      .places.preview.post({ machineId, path })
+  );
+}
+
+/**
+ * Another folder of the project's, named by hand: a machine and an absolute
+ * folder on it (`POST /api/projects/:id/places`). `joins` is the project
+ * the preview named as already having its codebase, sent back as the
+ * person's yes to the two becoming one. Throws the refusal in the hub's
+ * words; the project as it stands lands at once.
  */
 export async function addProjectPlace(
   projectId: string,
   machineId: string,
   path: string,
+  joins: string | null,
   client: HubClient = hub
 ): Promise<ProjectRow> {
   const asked = projectsLeave();
   const row = await hubData(
-    client.api.projects({ id: projectId }).places.post({ machineId, path }),
+    client.api
+      .projects({ id: projectId })
+      .places.post({ machineId, path, ...(joins ? { joins } : {}) }),
     (refused) => hubRefusal(refused, projectWords.placeNotAddedThen)
   );
   keepProject(row, asked);

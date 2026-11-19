@@ -17,7 +17,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconCopy, IconFolder, IconLink } from "#lib/icons.js";
+  import { IconCopyStroked, IconFolder, IconLink } from "#lib/icons.js";
   import { reveal } from "#lib/platform/motion/curves.svelte.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import type { Computer, Folder, FolderAct, Pending, Read } from "./details";
@@ -31,10 +31,12 @@
     confirming = $bindable(null),
     running = null,
     disconnecting,
+    callingOff,
     sunk = false,
     asOf = null,
     onact,
     ondisconnect,
+    oncalloff,
     ontry,
   }: {
     folders: Read<Folder[]>;
@@ -47,11 +49,14 @@
     running?: { folderId: string; says: string } | null;
     /** Disconnect folder sent: the folder's id, and the hub's refusal once it says no. */
     disconnecting?: Pending;
+    /** Call off sent for a folder's waiting Locate folder: the folder's id, and the hub's refusal once it says no. */
+    callingOff?: Pending;
     sunk?: boolean;
     /** CawCo is out of reach: when the details shown were read. */
     asOf?: string | null;
     onact: (act: FolderAct, folderId: string | null) => void;
     ondisconnect: (folderId: string) => void;
+    oncalloff: (folderId: string) => void;
     ontry: () => void;
   } = $props();
 
@@ -97,6 +102,9 @@
         <li data-flip>
           <FolderRow
             {asOf}
+            callingOff={callingOff?.value === folder.id
+              ? callingOff
+              : undefined}
             confirming={confirming === folder.id}
             disconnecting={disconnecting?.value === folder.id
               ? disconnecting
@@ -111,6 +119,7 @@
               confirming = folder.id;
               openFolder = null;
             }}
+            oncalloff={() => oncalloff(folder.id)}
             ondisconnect={() => ondisconnect(folder.id)}
             ontoggle={() => {
               confirming = null;
@@ -143,7 +152,7 @@
             <Button
               {...props}
               disabled={sunk}
-              icon={IconCopy}
+              icon={IconCopyStroked}
               label={actWords.copy.name}
               onclick={() => onact("copy", null)}
               size="sm"

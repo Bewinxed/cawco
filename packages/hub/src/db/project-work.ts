@@ -478,8 +478,15 @@ export interface WorkRowsDb {
     title: string;
   }) => QueuedWorkItemRow;
   readonly runningDelegateCounts: () => Map<string, number>;
-  /** A workspace's source folder, moved with it (folder-moves.ts). */
-  readonly setWorkspaceRoot: (id: string, repoRoot: MachinePath) => void;
+  /**
+   * A workspace's source folder, moved with it (folder-moves.ts): on its own
+   * machine, or, for one with no clone left, on the machine the folder went to.
+   */
+  readonly setWorkspaceRoot: (
+    id: string,
+    machineId: string,
+    repoRoot: MachinePath
+  ) => void;
   /**
    * What a session's delegate tray can still show, oldest first: of the
    * items it delegated, the live and undismissed failed ones, and any other
@@ -1062,9 +1069,9 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         .filter(
           (row) => row.repoRoot === root || row.repoRoot.startsWith(`${root}/`)
         ),
-    setWorkspaceRoot: (id, repoRoot) => {
+    setWorkspaceRoot: (id, machineId, repoRoot) => {
       db.update(workspaces)
-        .set({ repoRoot })
+        .set({ machineId, repoRoot })
         .where(eq(workspaces.id, id))
         .run();
     },

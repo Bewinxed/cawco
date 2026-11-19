@@ -85,13 +85,14 @@ export interface FolderMovesDeps {
   /**
    * Starts a session's conversation again from a summary, on `harness` in
    * `cwd` on `machineId`, as one session with it (continuations.ts, its
-   * asker the folder's move): why it did not, or nothing.
+   * asker the folder's move): the continuation's job, which summarises it
+   * where it ran and then starts it there, or why it did not start.
    */
   readonly continueFromSummary: (
     instanceId: string,
     target: { machineId: string; cwd: string; harness: HarnessKind },
     moveId: string
-  ) => Promise<string | undefined>;
+  ) => Promise<{ job: string } | { why: string }>;
   readonly db: DbShape;
   /** Interrupts a session's reply now, as the person's Stop does. */
   readonly interrupt: (instanceId: string) => Promise<void>;
@@ -153,6 +154,30 @@ const isStep = (stage: FolderMoveStage): stage is FolderMoveStep =>
 const BEFORE_RECORD: ReadonlySet<FolderMoveStep> = new Set(
   FOLDER_MOVE_STEPS.slice(0, FOLDER_MOVE_STEPS.indexOf("record"))
 );
+
+/**
+ * Whether a session's conversation goes with the folder as it is: always on
+ * one computer, where one asked to continue from a summary is summarised in
+ * the new folder once it is filed there (the old one is gone by then); across
+ * computers when its harness and account are there.
+ */
+const followsFolder = (
+  one: Pick<FolderMoveSession, "way">,
+  way: FolderMoveState["way"]
+): boolean => one.way === "same" || way !== "relay";
+
+/** Across computers, one continues from a summary: the summarise step, before the old folder is removed. */
+const withSummarise = (
+  steps: readonly FolderMoveStep[],
+  sessions: readonly FolderMoveSession[]
+): FolderMoveStep[] =>
+  steps.includes("summarise") ||
+  !steps.includes("remove") ||
+  !sessions.some((one) => one.way === "summary")
+    ? [...steps]
+    : steps.flatMap((step) =>
+        step === "remove" ? ["summarise" as const, step] : [step]
+      );
 
 export const createFolderMoves = (deps: FolderMovesDeps) => {
   const { db } = deps;
@@ -403,6 +428,26 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
       );
     if (layered) {
       const words = folderMoveWords.layered(folderMoveWords.aDelegate);
+      return refused(words.why, words.todo);
+    }
+    // A repository's workspace holds a clone on this computer and reads its
+    // source here: across computers it would point at a folder that is gone.
+    const cloned =
+      place.machineId === to.machineId
+        ? []
+        : db
+            .workspacesFrom(place.machineId, place.path)
+            .filter(
+              (workspace) =>
+                workspace.kind === "repo" && workspace.state !== "archived"
+            );
+    if (cloned.length > 0) {
+      const words = folderMoveWords.cloned(
+        cloned.map(
+          (workspace) =>
+            db.workItemsIn(workspace.id)[0]?.title ?? workspace.branch
+        )
+      );
       return refused(words.why, words.todo);
     }
     const away = [place.machineId, to.machineId].find(
@@ -686,6 +731,9 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         : [
             { key: "copy", words: words.copy },
             { key: "check", words: words.check },
+            ...(state.steps.includes("summarise")
+              ? [{ key: "summarise", words: words.summarise }]
+              : []),
             { key: "remove", words: words.remove },
           ];
     return [
@@ -709,6 +757,8 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         return state.way === "rename" ? "rename" : "check";
       case "carry":
         return state.way === "relay" ? "check" : "resume";
+      case "summarise":
+        return "summarise";
       case "remove":
         return "remove";
       case "resume":
@@ -758,6 +808,7 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
       case "copy":
         return folderMoveWords.foldersCopy;
       case "place":
+      case "summarise":
         return folderMoveWords.foldersPlaced(there);
       case "record":
         return state.way === "rename"
@@ -886,7 +937,7 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
   ): FolderMoveStep[] => {
     const pauses = sessions.some((one) => one.wasRunning);
     const carries = sessions.some(
-      (one) => one.sessionId !== null && one.way === "same"
+      (one) => one.sessionId !== null && followsFolder(one, way)
     );
     const resumes = sessions.some(
       (one) => one.wasRunning || one.way === "summary"
@@ -899,6 +950,9 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
       place: copies,
       record: true,
       carry: carries,
+      // Its summariser reads the old folder, so it runs before the removal.
+      summarise:
+        way === "relay" && sessions.some((one) => one.way === "summary"),
       remove: copies,
       resume: resumes,
     };
@@ -1009,6 +1063,7 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         return [row.sourceMachineId];
       case "copy":
       case "carry":
+      case "summarise":
         return [...new Set([row.sourceMachineId, row.targetMachineId])];
       case "place":
       case "resume":
@@ -1130,28 +1185,39 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
       db.movePlace(place.placeId, row.targetMachineId, place.to);
     }
     for (const one of state.sessions) {
-      if (one.way === "same") {
+      if (followsFolder(one, state.way)) {
         db.moveInstanceFolder(one.instanceId, row.targetMachineId, one.to);
       }
     }
-    // A repository's workspaces on one machine are clones of their own, and
-    // read their source again only to cut anew or diff a landing: that
-    // source is the new folder now. Across machines they stay where they are.
-    if (row.sourceMachineId === row.targetMachineId) {
-      for (const workspace of db.workspacesFrom(
-        row.sourceMachineId,
-        state.sourcePath
-      )) {
-        db.setWorkspaceRoot(
-          workspace.id,
-          rebased(
-            row.targetMachineId,
-            workspace.repoRoot,
-            state.sourcePath,
-            state.targetPath
-          )
-        );
+    // A repository's workspaces are clones of their own, and read their
+    // source again only to cut anew, start a delegate from it or diff a
+    // landing: that source is the new folder now. Across computers only
+    // archived ones are left (the plan refuses while one holds a clone), and
+    // they go with the folder to its computer, where a recut makes them again.
+    const across = row.sourceMachineId !== row.targetMachineId;
+    for (const workspace of db.workspacesFrom(
+      row.sourceMachineId,
+      state.sourcePath
+    )) {
+      if (across && workspace.kind !== "repo") {
+        continue;
       }
+      if (across && workspace.state !== "archived") {
+        console.warn(
+          `[folder-moves] ${row.id}: workspace ${workspace.id} was cut from ${workspace.repoRoot} during the move and keeps its clone on ${deps.machineName(row.sourceMachineId)}, its source there gone`
+        );
+        continue;
+      }
+      db.setWorkspaceRoot(
+        workspace.id,
+        row.targetMachineId,
+        rebased(
+          row.targetMachineId,
+          workspace.repoRoot,
+          state.sourcePath,
+          state.targetPath
+        )
+      );
     }
     for (const projectId of new Set(
       state.places.map((place) => place.projectId)
@@ -1167,7 +1233,7 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
   /** The conversations filed for their new folder: here, or sent and taken across machines. */
   const carry = async (row: FolderMoveRow): Promise<void> => {
     const going = row.state.sessions.filter(
-      (one) => one.way === "same" && one.sessionId !== null
+      (one) => followsFolder(one, row.state.way) && one.sessionId !== null
     );
     const sessions = going.map(carryOf);
     let carried: ControlReply<typeof CONTROL_FOLDER_SESSIONS_CARRY>;
@@ -1205,9 +1271,8 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         STEP_TIMEOUT_MS
       );
     }
-    update(row.id, undefined, (state) => ({
-      ...state,
-      sessions: state.sessions.map((one) => {
+    update(row.id, undefined, (state) => {
+      const outcomes = state.sessions.map((one): FolderMoveSession => {
         const outcome = carried[one.instanceId];
         if (!outcome) {
           return one;
@@ -1219,8 +1284,80 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         return row.state.way === "relay"
           ? { ...one, carried: false, way: "summary", why: outcome.why }
           : { ...one, carried: false, resumeWhy: outcome.why };
-      }),
-    }));
+      });
+      return {
+        ...state,
+        sessions: outcomes,
+        steps: withSummarise(state.steps, outcomes),
+      };
+    });
+  };
+
+  /** A continuation's job, read: whether its summary is still being written, or why it stopped. */
+  const summaryOf = (job: string): { writing: boolean; why?: string } => {
+    // Gone from the hub's table: it settled a while ago, its summary written.
+    const row = db.continuationRow(job);
+    if (!row) {
+      return { writing: false };
+    }
+    if (row.stage === "failed" || row.stage === "cancelled") {
+      return {
+        writing: false,
+        why: row.error ?? folderMoveWords.summaryCalledOff,
+      };
+    }
+    return {
+      writing:
+        row.stage === "waiting" ||
+        row.stage === "filing" ||
+        row.stage === "summarising",
+    };
+  };
+
+  /** One session across computers: its summary asked for, still being written, or written. */
+  const summariseOne = async (
+    row: FolderMoveRow,
+    one: FolderMoveSession
+  ): Promise<{ one: FolderMoveSession; writing: boolean }> => {
+    if (one.way !== "summary" || one.resumed || one.resumeWhy) {
+      return { one, writing: false };
+    }
+    if (!one.continuation) {
+      const started = await deps.continueFromSummary(
+        one.instanceId,
+        { machineId: row.targetMachineId, cwd: one.to, harness: one.tool },
+        row.id
+      );
+      return "job" in started
+        ? { one: { ...one, continuation: started.job }, writing: true }
+        : { one: { ...one, resumeWhy: started.why }, writing: false };
+    }
+    const { writing, why } = summaryOf(one.continuation);
+    return why
+      ? {
+          one: { ...one, resumeWhy: folderMoveWords.notResumed(why) },
+          writing,
+        }
+      : { one, writing };
+  };
+
+  /**
+   * Across computers, each conversation that continues from a summary is
+   * summarised while the old folder stands, since its summariser and the
+   * read of its changes run there (continuations.ts), and its new session
+   * then starts in the new folder, in place by now. False while a summary
+   * is still being written.
+   */
+  const summarise = async (row: FolderMoveRow): Promise<boolean> => {
+    const sessions: FolderMoveSession[] = [];
+    let writing = false;
+    for (const each of row.state.sessions) {
+      const now = await summariseOne(row, each);
+      sessions.push(now.one);
+      writing = writing || now.writing;
+    }
+    update(row.id, undefined, (state) => ({ ...state, sessions }));
+    return !writing;
   };
 
   /** The old folder removed by the copy's list; what stays is named. */
@@ -1259,13 +1396,19 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
     if (one.resumed || one.carried === false) {
       return one;
     }
+    if (one.way === "summary" && one.continuation) {
+      // Summarised before the removal: its job starts it by itself.
+      return { ...one, resumed: true };
+    }
     if (one.way === "summary") {
-      const why = await deps.continueFromSummary(
+      const started = await deps.continueFromSummary(
         one.instanceId,
         { machineId: row.targetMachineId, cwd: one.to, harness: one.tool },
         row.id
       );
-      return why ? { ...one, resumeWhy: why } : { ...one, resumed: true };
+      return "job" in started
+        ? { ...one, continuation: started.job, resumed: true }
+        : { ...one, resumeWhy: started.why };
     }
     if (one.sessionId !== null) {
       deps.tell(one.instanceId, moved);
@@ -1359,6 +1502,8 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
       case "carry":
         await carry(row);
         return true;
+      case "summarise":
+        return await summarise(row);
       case "remove":
         await remove(row);
         return true;

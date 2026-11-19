@@ -33,6 +33,7 @@ import type {
 import {
   AGENTS_HERE,
   BOARDS,
+  connectJoins,
   detailsOf,
   FLEET,
   forecastFor,
@@ -67,6 +68,7 @@ const VIEWS = [
   "move-after",
   "locate-ready",
   "connect-ready",
+  "connect-joins",
   "copy-ready",
   "tasks-github",
   "tasks-linear",
@@ -97,6 +99,10 @@ const REFUSALS: Record<Section, string> = {
   finished: "acme-bot may not open branches on acme/hyucksfield (403).",
   tasks: "GitHub refused to let the links go: Bad credentials (401).",
 };
+
+/** The hub's words when Call off comes too late. */
+const LOCATE_CALL_OFF_REFUSAL =
+  "studio-mac is back and already pointing this folder at ~/Work/Clients/Hyucksfield/hyucksfield-site (409).";
 
 export class MockHub {
   readonly fleet = FLEET;
@@ -368,6 +374,21 @@ export class MockHub {
             "render-box",
             "~/sites/hyucksfield",
             false
+          ),
+        };
+        break;
+      case "connect-joins":
+        this.#step = this.#folderStep(
+          "connect",
+          null,
+          "m-studio",
+          "~/Work/Clients/Hyucksfield/hyucksfield-site"
+        );
+        this.folderFacts = {
+          ...noFolderFacts(),
+          forecast: connectJoins(
+            "studio-mac",
+            "~/Work/Clients/Hyucksfield/hyucksfield-site"
           ),
         };
         break;
@@ -702,6 +723,34 @@ export class MockHub {
         ""
       );
     },
+    callOffLocate: (folderId) => {
+      this.pending = {
+        ...this.pending,
+        locate: { value: folderId, refused: null },
+      };
+      this.#later(WAIT, () => {
+        if (this.#refuses) {
+          this.pending = {
+            ...this.pending,
+            locate: { value: folderId, refused: LOCATE_CALL_OFF_REFUSAL },
+          };
+          return;
+        }
+        const { locate: _, ...rest } = this.pending;
+        this.pending = rest;
+        if (this.details.folders.state === "read") {
+          this.details = {
+            ...this.details,
+            folders: {
+              state: "read",
+              value: this.details.folders.value.map((f) =>
+                f.id === folderId ? { ...f, locateTo: null } : f
+              ),
+            },
+          };
+        }
+      });
+    },
     disconnect: (folderId) => {
       this.#later(WAIT, () => {
         if (this.details.folders.state === "read") {
@@ -865,7 +914,12 @@ export class MockHub {
               step.act === "locate"
                 ? kept.map((f) =>
                     f.id === step.folderId
-                      ? { ...f, path: step.path, missing: false }
+                      ? {
+                          ...f,
+                          path: step.path,
+                          missing: false,
+                          locateTo: null,
+                        }
                       : f
                   )
                 : [
@@ -875,6 +929,7 @@ export class MockHub {
                       machine: computer,
                       path: step.path,
                       missing: false,
+                      locateTo: null,
                       readAt: null,
                       role: "extra",
                     },

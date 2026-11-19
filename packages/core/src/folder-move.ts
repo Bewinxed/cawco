@@ -31,6 +31,7 @@ export const FOLDER_MOVE_STEPS = [
   "place",
   "record",
   "carry",
+  "summarise",
   "remove",
   "resume",
 ] as const;

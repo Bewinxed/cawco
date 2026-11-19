@@ -31,6 +31,7 @@ import type { createLimitMoves } from "./limit-moves";
 import type { createLoginMoves } from "./login-moves";
 import type { createMachineCalls } from "./machine-calls";
 import type { createMachineCommands } from "./machine-commands";
+import type { createProjectConnect } from "./project-connect";
 import type { createProjectLocate } from "./project-locate";
 import type { createRelayControl } from "./relay-control";
 import type { createSends } from "./sends";
@@ -41,6 +42,8 @@ import type { createStartHolds } from "./start-holds";
 
 /** Locate folder: a project's checkout pointed at where its folder is now (project-locate.ts). */
 interface ProjectLocateMember {
+  /** Connect existing folder: another folder of a project's, named by hand (project-connect.ts). */
+  projectConnect: ReturnType<typeof createProjectConnect>;
   projectLocate: ReturnType<typeof createProjectLocate>;
 }
 

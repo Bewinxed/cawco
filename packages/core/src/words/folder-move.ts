@@ -93,7 +93,7 @@ export const blockWords = (
 export const folderMoveWords = {
   /** Before it runs: one line each, in order. */
   renames: (destination: string) =>
-    `Renames the folder to ${destination} in one step: instant, nothing is copied.`,
+    `Renames the folder to ${destination}. Nothing is copied.`,
   copies: (
     walk: { files: number; bytes: number; whole: boolean },
     destination: string,
@@ -105,7 +105,7 @@ export const folderMoveWords = {
   inner: (name: string) =>
     `Also moves ${name}, a project whose folder is inside this one.`,
   outer: (name: string) =>
-    `${name} stops holding these files: this folder sits inside its wider folder today.`,
+    `This folder is inside ${name}'s folder, so ${name} no longer holds these files.`,
   links: (n: number) =>
     `${count(n, "link", "links")} inside the folder ${n === 1 ? "points" : "point"} at its old path and will break.`,
   /** What keeps a move from being checked or started. */
@@ -128,7 +128,7 @@ export const folderMoveWords = {
     todo: "Close this and pick the folder again.",
   },
   builtin: {
-    why: "The folder the hub keeps for this project moves only with the hub.",
+    why: "The built-in folder stays where it is.",
     todo: "Pick a folder on one of your computers.",
   },
   sameFolder: {
@@ -139,8 +139,12 @@ export const folderMoveWords = {
     why: "This folder is already moving.",
     todo: "Wait for that move to finish, or call it off.",
   },
+  cloned: (work: readonly string[]) => ({
+    why: `Unfinished work in ${work.length === 1 ? "a copy" : "copies"} of this code on this computer: ${named(work)}.`,
+    todo: "Let it finish and apply, or discard it, then try again.",
+  }),
   layered: (agent: string) => ({
-    why: `${agent} holds changes to this folder that aren't applied yet, and they are tied to where it is now.`,
+    why: `${agent} has changes to this folder that aren't applied yet.`,
     todo: "Apply or discard them first.",
   }),
   /** Why an agent continues from a summary on another computer. */
@@ -156,6 +160,7 @@ export const folderMoveWords = {
     copy: "Copying files",
     check: "Checking every file",
     resume: "Resuming agents",
+    summarise: "Summarising conversations",
     remove: "Removing the old folder",
   },
   copyProgress: (
@@ -188,12 +193,13 @@ export const folderMoveWords = {
   ) =>
     `${count(copied.files, "file", "files")}, ${moveSize(copied.bytes)}, checked on ${machine}.${copied.head ? ` The code stands at ${copied.head.slice(0, 7)}.` : ""}`,
   renamed: (destination: string, machine: string, head: string | null) =>
-    `Renamed to ${destination} on ${machine} in one step.${head ? ` The code stands at ${head.slice(0, 7)}.` : ""}`,
+    `Renamed to ${destination} on ${machine}.${head ? ` The code stands at ${head.slice(0, 7)}.` : ""}`,
   calledOff: (folders: string) => `Called off. ${folders}`,
   calledOffUntouched: "The old folder is untouched and still this project's.",
   resumedSummary: (tool: string) => `continues from a summary on ${tool}`,
   asleep: "was paused before the move, and wakes in the new folder",
   notResumed: (why: string) => `didn't start again: ${why}`,
+  summaryCalledOff: "its summary was called off",
   left: (left: FolderMoveLeft): string => {
     switch (left.why) {
       case "changed":

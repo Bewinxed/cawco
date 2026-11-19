@@ -286,6 +286,8 @@ export interface FolderMoveSession {
   accountId: string | null;
   /** Its process was carried, its conversation filed for the new folder. */
   carried?: boolean;
+  /** Across computers: the continuation that summarises it while the old folder stands, then starts it in the new one (continuations.ts). */
+  continuation?: string;
   /** What the pause ended with its process (background commands, wake-ups). */
   ended?: MoveEnded;
   /** The folder it ran in, and the one it runs in after. */

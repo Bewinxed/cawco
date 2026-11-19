@@ -8,6 +8,13 @@
  * of each situation the person meets.
  */
 import type { TrackerView } from "@cawco/core/trackers";
+import { folderMoveWords } from "@cawco/core/words/folder-move";
+import { stepWords } from "@cawco/core/words/project-details";
+import {
+  foldWords,
+  locateLines,
+  locateTells,
+} from "@cawco/core/words/project-locate";
 import type { ProjectRow } from "#lib/cawco/projects.js";
 import type { Machine } from "#lib/cawco/stores/board.svelte.js";
 import { codebasesOf, taskListOf } from "./card-state";
@@ -194,6 +201,7 @@ function foldersOf(project: ProjectRow, machines: Machine[]): Folder[] {
           ? `~${place.path.slice(home.length)}`
           : place.path,
       missing: false,
+      locateTo: null,
       readAt: null,
       role: place.isPrimary ? "main" : ROLE[place.kind],
     };
@@ -220,6 +228,7 @@ const SITUATIONS = [
   "main-missing",
   "extra-missing",
   "computer-away",
+  "locate-waiting",
   "signed-out",
   "tasks-refused",
   "moving",
@@ -278,6 +287,18 @@ export function detailsOf(situation: Situation): Details {
       return withFolders((f) =>
         f.role === "extra"
           ? { ...f, machine: { ...f.machine, online: false }, readAt: "14:02" }
+          : f
+      );
+    case "locate-waiting":
+      return withFolders((f) =>
+        f.role === "extra"
+          ? {
+              ...f,
+              machine: { ...f.machine, online: false },
+              missing: true,
+              locateTo: "~/Work/Clients/Hyucksfield/hyucksfield-site",
+              readAt: "14:02",
+            }
           : f
       );
     case "signed-out":
@@ -409,32 +430,32 @@ export function forecastFor(
         state: "ready",
         lines: [
           sameComputer
-            ? `Renames the folder to ${path} in one step: instant, nothing is copied.`
-            : `Copies 8,310 files (2.1 GB) to ${path} on ${machineName}, checks every one, then removes the old folder.`,
-          "Everything goes: password files, unsaved work, and files left out of the code's history.",
-          "Also moves design-kit, a project whose folder is inside this one.",
-          "client-work stops holding these files: this folder sits inside its wider folder today.",
-          "12 links inside the folder point at its old path and will break.",
+            ? folderMoveWords.renames(path)
+            : folderMoveWords.copies(
+                { files: 8310, bytes: 2_100_000_000, whole: true },
+                path,
+                machineName
+              ),
+          folderMoveWords.everything,
+          folderMoveWords.inner("design-kit"),
+          folderMoveWords.outer("client-work"),
+          folderMoveWords.links(12),
         ],
       };
     case "locate":
       return {
         state: "ready",
         lines: [
-          "None of your files move.",
-          "The 2 conversations that ran there carry on in the found folder.",
-          "Agents whose folder is gone stop now.",
-          "This project's own files are placed in the found folder.",
+          locateLines.pointed(path, machineName),
+          locateLines.oldStays("~/code/clients/hyucksfield-old"),
+          locateLines.conversations(2),
+          locateLines.placed,
         ],
       };
     case "connect":
       return {
         state: "ready",
-        lines: [
-          `Links ${path} on ${machineName} as an Extra folder. Nothing is copied.`,
-          "It holds acme/hyucksfield, the same codebase as the Main folder.",
-          "Your folder is never removed by this project.",
-        ],
+        lines: stepWords.connectLines(path, machineName),
       };
     case "copy":
       return {
@@ -448,16 +469,26 @@ export function forecastFor(
   }
 }
 
-/** What Locate folder can tell of the folder named. */
-export const LOCATE_TELL =
-  "Same codebase: acme/hyucksfield, at a41c9e2, the commit this project last saw there. This project's own files are in it.";
+/** Connect existing folder on a folder whose codebase another project already has: the ask, naming both. */
+export const connectJoins = (machineName: string, path: string): Forecast => ({
+  state: "ready",
+  lines: [
+    ...stepWords.connectLines(path, machineName),
+    foldWords.line("hyucksfield-site", "hyucksfield", "hyucksfield-site"),
+  ],
+});
 
+/** What Locate folder can tell of the folder named. */
+export const LOCATE_TELL = `${locateTells.sameCodebase} ${locateTells.sameFolder("~/code/clients/hyucksfield-old")} ${locateTells.placed}`;
+
+/** A move across computers with an agent continuing from a summary: its summary is written before the old folder goes. */
 const MOVE_STAGES = [
-  "Pausing agents",
-  "Copying files",
-  "Checking every file",
-  "Removing the old folder",
-  "Resuming agents",
+  folderMoveWords.stages.quiet,
+  folderMoveWords.stages.copy,
+  folderMoveWords.stages.check,
+  folderMoveWords.stages.summarise,
+  folderMoveWords.stages.remove,
+  folderMoveWords.stages.resume,
 ];
 
 export const runAt = (at: number): RunView => ({
@@ -474,13 +505,21 @@ export const MOVE_AFTER: AfterView = {
     "8,310 files, 2.1 GB, checked on studio-mac. The code stands at a41c9e2.",
   agents: [
     { name: "Fix the checkout total rounding", resumed: true, why: null },
-    { name: "Draft the launch post for the rebrand", resumed: true, why: null },
+    {
+      name: "Draft the launch post for the rebrand",
+      resumed: true,
+      why: folderMoveWords.resumedSummary("Claude Code"),
+    },
     { name: "Caw's conversation about hyucksfield", resumed: true, why: null },
   ],
   leftBehind: [
     {
       name: "~/code/clients/hyucksfield/.next/cache",
-      why: "Busy while the old folder was removed, so it stayed. Nothing is lost: it is a copy.",
+      why: folderMoveWords.left({
+        path: "/home/sam/code/clients/hyucksfield/.next/cache",
+        why: "busy",
+        words: "EBUSY: resource busy or locked",
+      }),
     },
   ],
   ended: [

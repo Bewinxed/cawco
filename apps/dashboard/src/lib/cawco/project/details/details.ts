@@ -38,6 +38,8 @@ export interface Computer {
 /** One folder of the project. */
 export interface Folder {
   id: string;
+  /** Locate folder named this folder while its computer was offline: it changes once that computer is back. Null: nothing waits. */
+  locateTo: string | null;
   machine: Computer;
   /** Its folder is no longer where the project expects it. */
   missing: boolean;
@@ -112,13 +114,15 @@ export interface Pending {
   value: string;
 }
 
-/** The changes each section has in flight, by section; `disconnect`'s value is the folder's id. */
+/** The changes each section has in flight, by section; `disconnect`'s and `locate`'s value is the folder's id. */
 export interface PendingChanges {
   account?: Pending;
   atLimit?: Pending;
   bigFiles?: Pending;
   disconnect?: Pending;
   finished?: Pending;
+  /** Call off of a Locate folder waiting for its computer. */
+  locate?: Pending;
   tasks?: Pending;
 }
 
@@ -147,7 +151,7 @@ export interface Details {
 }
 
 /** Which section the person picks in. */
-export type Section = Exclude<keyof PendingChanges, "disconnect">;
+export type Section = Exclude<keyof PendingChanges, "disconnect" | "locate">;
 
 /** A pick a section sends: the section and the value asked. */
 export interface Choice {
@@ -242,6 +246,8 @@ export interface CardActs {
   /** Back to the card, the step's answers kept. */
   back: () => void;
   callOff: () => void;
+  /** Call off: a Locate folder waiting for the folder's computer is let go. */
+  callOffLocate: (folderId: string) => void;
   /** Cancel: the step's answers let go, back to the card. */
   cancelStep: () => void;
   /** Done: the card closes; a step stays where it is. */

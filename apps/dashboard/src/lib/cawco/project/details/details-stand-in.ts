@@ -13,6 +13,12 @@ import { LANDS_MODES } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
 import type { MoveEstimate, MoveJob } from "@cawco/core/move";
 import type { TrackerView } from "@cawco/core/trackers";
+import { stepWords } from "@cawco/core/words/project-details";
+import {
+  foldWords,
+  locateLines,
+  locateRefusals,
+} from "@cawco/core/words/project-locate";
 import type { HubState } from "#lib/cawco/hub/socket.svelte.js";
 import type { HubSeam } from "#lib/cawco/hub-seam.js";
 import type { ProjectRow } from "#lib/cawco/projects.js";
@@ -39,6 +45,7 @@ const LIVE_SITUATIONS = [
   "tasks-refused",
   "only-here",
   "computer-away",
+  "locate-waiting",
   "no-code",
   "unreachable",
 ] as const;
@@ -147,6 +154,12 @@ const REFUSED = {
   copy: "lab-nuc has 1.2 GB free; copying needs 2.6 GB.",
 };
 
+/** A folder on studio-mac whose codebase another project, hyucksfield-site, already has: connecting it asks first. */
+const JOINS = { id: "hyucksfield-site", name: "hyucksfield-site" };
+const JOINED_FOLDER = "hyucksfield-site";
+/** Where Locate folder pointed the folder on studio-mac while it was offline. */
+const LOCATE_HELD = "/Users/sam/Work/Clients/Hyucksfield/hyucksfield-site";
+
 /** What the hub writes into the stores, as its frames would: each store's own writer. */
 export interface HubFrames {
   heardMove: (job: MoveJob) => void;
@@ -187,6 +200,16 @@ export class DetailsStandIn {
             account: null,
           }
         : { ...PROJECT, account: "acc-work" };
+    if (situation === "locate-waiting") {
+      this.project = {
+        ...this.project,
+        places: this.project.places.map((place) =>
+          place.id === "pl-studio"
+            ? { ...place, missing: true, locateTo: LOCATE_HELD }
+            : place
+        ),
+      };
+    }
     this.#tracker =
       situation === "only-here" || situation === "no-code"
         ? { tracker: "cawco", binding: null }
@@ -209,7 +232,8 @@ export class DetailsStandIn {
     const signedOut = SIGNED_OUT[situation] ?? ["acc-personal"];
     frames.holdMachines(
       MACHINES.map((row) =>
-        situation === "computer-away" && row.machineId === "m-studio"
+        (situation === "computer-away" || situation === "locate-waiting") &&
+        row.machineId === "m-studio"
           ? { ...row, status: "offline" }
           : row
       )
@@ -300,8 +324,11 @@ export class DetailsStandIn {
           ? refusal(REFUSED.project)
           : this.#keep({ ...this.project, ...this.#edit(sent) });
       case "places":
+        if (more === "preview") {
+          return this.#connectPreview(sent);
+        }
         return parts[4] === "locate"
-          ? this.#locate(more, parts[5] === "preview", sent)
+          ? this.#locate(method, more, parts[5] === "preview", sent)
           : this.#places(method, more, sent);
       case "tracker":
         return this.#trackerCall(method, more, sent);
@@ -369,6 +396,10 @@ export class DetailsStandIn {
         places: this.project.places.filter((place) => place.id !== placeId),
       });
     }
+    const path = String(sent.path);
+    if (path.includes(JOINED_FOLDER) && sent.joins !== JOINS.id) {
+      return refusal(foldWords.unasked(JOINS.name, PROJECT.name, "connect"));
+    }
     return this.#keep({
       ...this.project,
       places: [
@@ -391,21 +422,45 @@ export class DetailsStandIn {
     });
   }
 
-  /** Locate folder: What will happen for the folder named, or the place pointed there. */
+  /** Connect existing folder: What will happen for the folder named, asking first when another project has its codebase. */
+  #connectPreview(sent: Record<string, unknown>): Response {
+    const path = String(sent.path ?? "");
+    const machine =
+      MACHINES.find((row) => row.machineId === sent.machineId)?.hostname ??
+      "its computer";
+    const joins = path.includes(JOINED_FOLDER);
+    return Response.json({
+      forecast: {
+        state: "ready",
+        lines: [
+          ...stepWords.connectLines(path, machine),
+          ...(joins
+            ? [foldWords.line(JOINS.name, PROJECT.name, JOINS.name)]
+            : []),
+        ],
+      },
+      joins: joins ? JOINS : null,
+      tell: "",
+    });
+  }
+
+  /** Locate folder: What will happen for the folder named, the place pointed there, or its wait for an offline computer called off. */
   #locate(
+    method: string,
     placeId: string | undefined,
     preview: boolean,
     sent: Record<string, unknown>
   ): Response {
     const path = String(sent.path ?? "");
+    const located = this.project.places.find((one) => one.id === placeId);
+    const machine =
+      MACHINES.find((row) => row.machineId === located?.machineId)?.hostname ??
+      "its computer";
     if (preview) {
       return Response.json({
         forecast: {
           state: "ready",
-          lines: [
-            `This project's folder becomes ${path}. No file moves.`,
-            "This project's skills, servers, rules and hooks are placed in this folder.",
-          ],
+          lines: [locateLines.pointed(path, machine), locateLines.placed],
         },
         joins: null,
         tell: LOCATE_TELL,
@@ -413,6 +468,16 @@ export class DetailsStandIn {
     }
     if (this.#refuses) {
       return refusal(REFUSED.place);
+    }
+    if (method === "DELETE") {
+      return located?.locateTo
+        ? this.#keep({
+            ...this.project,
+            places: this.project.places.map((one) =>
+              one.id === placeId ? { ...one, locateTo: null } : one
+            ),
+          })
+        : refusal(locateRefusals.notHeld);
     }
     return this.#keep({
       ...this.project,

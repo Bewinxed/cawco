@@ -46,12 +46,14 @@
  * it registers again and can read the folder ({@link createProjectLocate}
  * `resumeHeld`); then it is looked at and pointed as above, or let go with
  * why in the log when what the machine reads stands in the way or would make
- * two projects one, which nobody was asked.
+ * two projects one, which nobody was asked. The card shows it on the
+ * folder's row meanwhile, and Call off lets it go (`callOff`).
  */
 
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { FindPlan, FolderForecast } from "@cawco/core/project-folders";
 import {
+  foldWords,
   locateBlocks,
   locateLines,
   locateRefusals,
@@ -93,7 +95,7 @@ const within = (path: string, folder: string): boolean =>
   path.startsWith(folder.endsWith("/") ? folder : `${folder}/`);
 
 /** Oldest first, as a fold keeps its oldest (project-merge.ts `byAge`). */
-const olderOf = (a: ProjectRow, b: ProjectRow): ProjectRow =>
+export const olderOf = (a: ProjectRow, b: ProjectRow): ProjectRow =>
   (a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)) <=
   0
     ? a
@@ -186,7 +188,7 @@ const linesOf = (what: {
   if (what.joins) {
     const kept = olderOf(what.project, what.joins);
     const goes = kept.id === what.project.id ? what.joins : what.project;
-    lines.push(locateLines.fold(what.joins.name, kept.name, goes.name));
+    lines.push(foldWords.line(what.joins.name, kept.name, goes.name));
   }
   return lines;
 };
@@ -463,7 +465,7 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
       const kept = olderOf(project, planned.joins);
       return problem(409, {
         code: "locate-fold-unasked",
-        detail: locateRefusals.foldUnasked(planned.joins.name, kept.name),
+        detail: foldWords.unasked(planned.joins.name, kept.name, "locate"),
       });
     }
     const refused = await apply(planned);
@@ -536,5 +538,23 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
     }
   };
 
-  return { preview, locate, resumeHeld };
+  /** The change held for checkout `placeId` while its machine is away, called off: the project as it is now, or the refusal. */
+  const callOff = (projectId: string, placeId: string) => {
+    const project = ctx.db.project(projectId);
+    const place = project?.places.find((one) => one.id === placeId);
+    if (!(project && place?.locateTo)) {
+      return problem(409, {
+        code: "locate-not-held",
+        detail: locateRefusals.notHeld,
+      });
+    }
+    ctx.db.holdLocate(place.id, null);
+    ctx.projectsChanged();
+    log(
+      `${project.name} (${project.id}): the change held for checkout ${place.id}, to ${place.locateTo}, is called off`
+    );
+    return ctx.projectOut(ctx.db.project(project.id) ?? project);
+  };
+
+  return { preview, locate, resumeHeld, callOff };
 };

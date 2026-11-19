@@ -66,6 +66,10 @@ export const folderWords = {
   asOf: (online: boolean, at: string) =>
     `${online ? "online" : "offline"} · as of ${at}`,
   missing: "This folder is missing, so agents can't start in it.",
+  /** Locate folder named a folder while its computer was offline. */
+  locateWaits: (path: string, machine: string) =>
+    `Becomes ${path} once ${machine} is back.`,
+  callOff: "Call off",
   actionsFor: (role: string, machine: string) =>
     `${role} on ${machine}: what you can do`,
   disconnect: "Disconnect folder",

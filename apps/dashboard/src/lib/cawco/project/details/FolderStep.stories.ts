@@ -55,6 +55,9 @@ export const LocateReady = {
 /** Linking a folder on render-box that already has these files. */
 export const ConnectReady = { args: { view: "connect-ready" } };
 
+/** Connecting a folder on studio-mac whose codebase hyucksfield-site already has: it asks first, naming both. */
+export const ConnectAsks = { args: { view: "connect-joins" } };
+
 /** Copying the saved code to lab-nuc, the original untouched; obelisk and studio-mac already have it. */
 export const CopyReady = { args: { view: "copy-ready" } };
 
