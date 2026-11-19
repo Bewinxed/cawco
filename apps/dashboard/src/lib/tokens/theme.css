@@ -38,6 +38,10 @@
   --container-member-setup: 35rem;
   --container-media-split: 640px;
   --container-pictures-split: 680px;
+  /* The project details card's room for its two columns (proto/details-card): under it, one column in the same order. */
+  --container-details-card: 680px;
+  /* The shell's width from which the project details card takes its wide form, so a folder's whole path stands on its row. */
+  --container-details-wide: 1280px;
   --container-decisions-900px: 900px;
   --container-project-dock: 600px;
   --container-section-row: 312px;
@@ -798,6 +802,18 @@
   --spacing-c-connect-w: 480px;
   /* A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line. */
   --spacing-c-panel-w: 380px;
+  /* The project details card hung from the head's place mark (proto/details-card): two equal columns of rows with their one-line notes; wider on a wide shell, where each folder's path stands whole. */
+  --spacing-c-details-card-w: 760px;
+  --spacing-c-details-card-w-wide: 920px;
+  /* A folder row's lines under its machine's name: the mark's width and the row's gap, so they start on the name's edge. */
+  --spacing-c-details-indent: calc(
+    var(--spacing-c-mark) + var(--spacing-space-3)
+  );
+  /* An option row's text edge in the details card: the option chip's edge and pad, its 16px glyph and the glyph's gap, so what stands under a chosen row starts on its name. */
+  --spacing-c-details-option-text: calc(
+    1px + var(--spacing-space-3) + var(--spacing-icon-md) +
+      var(--spacing-space-2)
+  );
   /* The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next. */
   --spacing-c-signin-pop-w: 340px;
   /* Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters; shorter where the room under his seat is less. */
