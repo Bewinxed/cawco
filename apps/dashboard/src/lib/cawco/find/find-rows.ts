@@ -58,7 +58,7 @@ type Tone = Extract<StatusPair, "live" | "attn" | "fail"> | "quiet";
 /**
  * One run of words a row draws: matched ones strong; one that is part of a
  * secret names it by its key ({@link secretKey}), and is drawn as dots
- * until the person shows that secret (Said.svelte).
+ * until the person shows that secret (said.ts).
  */
 export interface Run {
   matched: boolean;

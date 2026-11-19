@@ -26,7 +26,7 @@
    */
   import { IconChevronDown as ChevronDown } from "#lib/icons.js";
   import { age, type Row } from "./find-rows";
-  import Said from "./Said.svelte";
+  import { said } from "./said";
 
   let {
     row,
@@ -65,6 +65,12 @@
   } = $props();
 
   const ago = $derived(row.clock ?? age(row.at, now));
+  /** The title's runs: its own, drawn as said only when one is a secret; otherwise its words, plain. */
+  const titleRuns = $derived(
+    row.titleParts.some((part) => part.secret)
+      ? row.titleParts
+      : [{ matched: false, text: row.title }]
+  );
 </script>
 
 <div
@@ -104,8 +110,7 @@
     role="option"
     tabindex="-1"
     type="button"
-    style:--row-cols="var(--spacing-icon-md) minmax(0, 1fr) auto"
-    style:--row-rows="minmax(var(--spacing-icon-lg), auto) auto"
+    style="--row-cols: var(--spacing-icon-md) minmax(0, 1fr) auto; --row-rows: minmax(var(--spacing-icon-lg), auto) auto"
   >
     <span
       data-slot="glyph"
@@ -126,11 +131,8 @@
       data-slot="title"
       data-box={phone || undefined}
       class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-icon-lg text-ink-row group-data-phone/row:type-body group-data-phone/row:leading-icon-lg group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3 group-data-phone/row:line-clamp-std-3 group-data-phone/row:overflow-clip"
-      >{#if row.titleParts.some((part) => part.secret)}<Said
-          runs={row.titleParts}
-          {shown}
-        />{:else}{row.title}{/if}</span
-    >
+      {@attach said(titleRuns, shown)}
+    ></span>
     {#if ago}
       <span
         data-slot="num"
@@ -155,19 +157,19 @@
       </span>
     {/if}
     {#if row.reason}
+      <!-- One box, its words clipped in it: a grid item is a block, so it
+           ellipsizes (and on a phone clamps) its own line, as wide as its
+           column. -->
       <span
         data-slot="reason"
-        class="row-start-3 col-start-2 col-end-4 flex min-w-0 type-meta leading-space-5 text-ink-subtle group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md"
+        class="row-start-3 col-start-2 col-end-4 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta leading-space-5 text-ink-subtle group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-2 group-data-phone/row:line-clamp-std-2 group-data-phone/row:overflow-clip"
         aria-hidden="true"
         data-box
+        {@attach said(row.reason.parts, shown, {
+          before: ` ${row.reason.source} “`,
+          after: "”",
+        })}><span class="pe-space-1">↳</span></span
       >
-        <span
-          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-2 group-data-phone/row:line-clamp-std-2 group-data-phone/row:overflow-clip"
-          ><span class="pe-space-1">↳</span>
-          {row.reason.source}
-          “<Said runs={row.reason.parts} {shown} />”</span
-        >
-      </span>
     {/if}
   </button>
   {#if peekable}

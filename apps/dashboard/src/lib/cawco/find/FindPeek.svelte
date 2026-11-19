@@ -11,7 +11,7 @@
   import type { FindMoment, MomentAuthor } from "./find-client";
   import { age, momentParts, ownParts } from "./find-rows";
   import type { Spoken } from "./finder-state.svelte";
-  import Said from "./Said.svelte";
+  import { said } from "./said";
 
   let {
     id,
@@ -72,24 +72,25 @@
 >
   {#if conversation?.purpose}
     <span data-slot="find-peek-label" class="text-ink-subtle">purpose</span>
-    <span data-slot="value" class="min-w-0 text-ink-row"
-      ><Said
-        runs={ownParts(conversation, "purpose", conversation.purpose)}
-        {shown}
-      /></span
-    >
+    <span
+      data-slot="value"
+      class="min-w-0 text-ink-row"
+      {@attach said(
+        ownParts(conversation, "purpose", conversation.purpose),
+        shown
+      )}
+    ></span>
   {/if}
   {#if conversation?.lastReport}
     <span data-slot="find-peek-label" class="text-ink-subtle">last</span>
     <span data-slot="value" class="min-w-0 text-ink-row"
-      >report “<Said
-        runs={ownParts(
-          conversation,
-          "report",
-          conversation.lastReport.headline
+      ><span
+        {@attach said(
+          ownParts(conversation, "report", conversation.lastReport.headline),
+          shown,
+          { before: "report “", after: "”" }
         )}
-        {shown}
-      />”<span class="px-space-1">·</span><span data-slot="num" class="num"
+      ></span><span class="px-space-1">·</span><span data-slot="num" class="num"
         >{age(conversation.lastReport.at, now)}</span
       ></span
     >
@@ -121,13 +122,14 @@
         >
           <span
             class="flex-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap group-data-phone/peek:whitespace-normal group-data-phone/peek:line-clamp-2 group-data-phone/peek:line-clamp-std-2 group-data-phone/peek:overflow-clip"
+            {@attach said(momentParts(owner, moment), shown, {
+              before: "“",
+              after: "”",
+            })}
             >{AUTHOR[moment.author]}{#if moment.at !== null}<span
                 class="px-space-1">·</span
               ><span data-slot="num" class="num">{age(moment.at, now)}</span
-              >{/if}<span class="px-space-1">·</span>“<Said
-              runs={momentParts(owner, moment)}
-              {shown}
-            />”</span
+              >{/if}<span class="px-space-1">·</span></span
           >
           <span
             data-slot="enter"
