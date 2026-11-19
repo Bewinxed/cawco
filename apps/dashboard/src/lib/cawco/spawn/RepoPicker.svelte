@@ -254,6 +254,20 @@
   );
   const optionId = (row: Row) => `${uid}-${rows.indexOf(row)}`;
 
+  /** The picked row is brought into the list's view once, as the list first holds it: a popover opened again opens on it. */
+  let shownPicked = false;
+  $effect(() => {
+    const row = rows.find((one) => identityOf(one) === pickedId);
+    if (shownPicked || !(row && listbox)) {
+      return;
+    }
+    shownPicked = true;
+    const option = listbox.querySelector(`#${CSS.escape(optionId(row))}`);
+    if (option) {
+      bringIntoView(option);
+    }
+  });
+
   function take(row: Row): void {
     activeKey = row.key;
     onrepo("url" in row ? row.url : row.repo.url);
@@ -408,11 +422,13 @@
     bind:this={listbox}
     data-slot="repo-list"
     aria-label={spawnWords.location.repositories}
-    class="fai-scroll @container/repos relative grid max-h-72 auto-rows-max grid-cols-(--repo-cols) content-start overflow-y-auto overscroll-contain"
+    class="fai-scroll @container/repos relative grid max-h-72 auto-rows-max grid-cols-(--repo-cols) content-start gap-x-space-3 overflow-y-auto overscroll-contain"
     id={`${uid}-list`}
     role="listbox"
     style:--repo-cols={REPO_COLS}
     style:--repo-end={REPO_END}
+    style:--owner-track={owner ? "0fr" : "1fr"}
+    style:--owner-ink={owner ? 0 : 1}
     {@attach highlight({
       rows: "[data-repo-row]",
       hovered: "data-active",
