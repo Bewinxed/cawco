@@ -136,7 +136,12 @@
     >
       <Verdict onjump={jump} ontry={acts.tryAgain} {verdict} />
       {#if details.hasCode}
-        <span class={cn("flex min-w-0", phone ? "basis-full" : "ms-auto")}>
+        <span
+          class={cn(
+            "flex min-w-0",
+            phone ? "-ms-space-3 basis-full" : "ms-auto"
+          )}
+        >
           <MoreCodeTrigger
             bigFiles={details.bigFiles}
             codebases={details.codebases}
