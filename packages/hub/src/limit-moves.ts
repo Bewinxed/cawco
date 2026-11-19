@@ -1162,35 +1162,29 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   };
 
   /**
-   * `machineId` is connected again: each move owed to a session on it is
-   * taken up now, never left for a start that a session held at its old
-   * account's limit would not make. One held at its limit is looked at by
-   * the at-limit controller ({@link AtLimit.lookNow}), which carries out a
-   * person's move; any other owed move is carried as at a turn's end
-   * ({@link takeUpOwedMove}), and owed again by one inside a turn. A
-   * relaunch alone (`to` absent) goes now when the session is at rest, as
-   * its turn's end would have relaunched it, else at that end. This is also
-   * how a hub restart carries out what {@link owedMoves} holds: every
-   * machine registers again. Each says why in the log.
+   * `machineId` registered: each move that waited on it (`waits` is
+   * `machine`: asked or left uncarried while it was away) is taken up now,
+   * never left for a start that a session held at its old account's limit
+   * would not make, and only those say in the log that the machine was
+   * away. One held at its limit is looked at by the at-limit controller
+   * ({@link AtLimit.lookNow}), which carries out a person's move; any other
+   * is carried as at a turn's end ({@link takeUpOwedMove}). A move that
+   * waits on its session's turn or work is not the register's: that end
+   * takes it up. Only one whose session is at rest on its machine's word
+   * goes now ({@link relaunchOnAccount}), its end having passed while
+   * the link or the hub was down, as a relaunch alone (`to` absent) goes.
+   * This is also how a hub restart carries out what {@link owedMoves}
+   * holds: every machine registers again. A link that dropped and came
+   * back takes up nothing that did not wait on it.
    */
   const takeUpMovesOn = (machineId: string): void => {
-    const onMachine = ctx.owedMoves
-      .list()
-      .filter(
-        ([id]) => ctx.db.getInstancesByIds([id])[0]?.machineId === machineId
-      );
-    const owedHere = onMachine.filter(([, owed]) => owed.to !== undefined);
-    for (const [id] of onMachine.filter(([, owed]) => owed.to === undefined)) {
-      detach(
-        (async () => {
-          const [row] = ctx.db.getInstancesByIds([id]);
-          if (row && ctx.owedMoves.has(id) && (await ctx.sessionIdle(row))) {
-            relaunchOnAccount(id);
-          }
-        })(),
-        "owed relaunch"
-      );
-    }
+    const owed = ctx.owedMoves.list();
+    const machineOf = new Map(
+      ctx.db
+        .getInstancesByIds(owed.map(([id]) => id))
+        .map((row) => [row.id, row.machineId])
+    );
+    const onMachine = owed.filter(([id]) => machineOf.get(id) === machineId);
     const heldHere = ctx.db.atLimit
       .holds()
       .filter(
@@ -1207,13 +1201,26 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         "at-limit look"
       );
     }
-    for (const [id, owed] of owedHere) {
-      if (heldHere.some((held) => held.instanceId === id)) {
+    const heldIds = new Set(heldHere.map((one) => one.instanceId));
+    for (const [id, move] of onMachine) {
+      if (move.to !== undefined && heldIds.has(id)) {
+        continue;
+      }
+      if (move.waits !== "machine" || move.to === undefined) {
+        detach(
+          (async () => {
+            const [row] = ctx.db.getInstancesByIds([id]);
+            if (row && ctx.owedMoves.has(id) && (await ctx.sessionIdle(row))) {
+              relaunchOnAccount(id);
+            }
+          })(),
+          "owed move at rest"
+        );
         continue;
       }
       const [row] = ctx.db.getInstancesByIds([id]);
       console.info(
-        `[accounts] ${row ? ctx.sessionName(row) : id} owed a move to ${ctx.accountWords(owed.to)} while ${ctx.machineName(machineId)} was away; it is connected again, so the move is carried out now.`
+        `[accounts] ${row ? ctx.sessionName(row) : id}'s move to ${ctx.accountWords(move.to)} waited for ${ctx.machineName(machineId)}, which was away; it is connected again, so the move is carried out now.`
       );
       const going = takeUpOwedMove(id);
       if (going !== undefined) {

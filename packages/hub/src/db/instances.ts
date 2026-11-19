@@ -347,19 +347,45 @@ const keptInstances = () =>
 export const findable = () =>
   and(keptInstances(), ne(instances.kind, "summariser"));
 
+/** The statuses a kept row stays listed in however long ago it moved. */
+const LISTED_STATUSES = [
+  // A move's row is work in hand however long its yes or its copy takes;
+  // a stopping one however long its away machine takes to confirm.
+  "running",
+  "sleeping",
+  "moving",
+  "stopping",
+] satisfies InstanceStatus[];
+
 const listedInstances = () =>
   and(
     keptInstances(),
     or(
-      // A move's row is work in hand however long its yes or its copy takes;
-      // a stopping one however long its away machine takes to confirm.
-      inArray(instances.status, [
-        "running",
-        "sleeping",
-        "moving",
-        "stopping",
-      ] satisfies InstanceStatus[]),
+      inArray(instances.status, LISTED_STATUSES),
       gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
+    )
+  );
+
+/**
+ * {@link listedInstances} of one machine, each half a seek of its own: its
+ * listed statuses by machine and status (`instances_machine_status`), and
+ * what moved within {@link STALE_AFTER_MS} by its time (`instances_updated`,
+ * the machine tested on each row found, its index left out by SQLite's unary
+ * `+`). Written as one machine test beside the `or`, SQLite read every row
+ * the machine ever had.
+ */
+const listedOn = (machineId: string) =>
+  and(
+    keptInstances(),
+    or(
+      and(
+        eq(instances.machineId, machineId),
+        inArray(instances.status, LISTED_STATUSES)
+      ),
+      and(
+        sql`+${instances.machineId} = ${machineId}`,
+        gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
+      )
     )
   );
 
@@ -945,6 +971,12 @@ export interface InstancesDb {
     held: string[],
     complete: boolean
   ) => void;
+  /**
+   * The accounts a running session runs on, and nothing else of the rows:
+   * read off the running rows by status (`instances_status_harness`), where
+   * {@link listInstances} read and parsed every listed row of the fleet.
+   */
+  readonly runningAccountIds: () => string[];
   /** The listed sessions of one harness that are running. */
   readonly runningInstancesOf: (harness: HarnessKind) => PublicInstanceRow[];
   /** Every session id on `machineId`, and nothing else of them: a read of thousands of rows' every column held the hub's thread (hub-restart-load). */
@@ -2861,13 +2893,25 @@ export const instancesDb = (core: DbCore): InstancesDb => {
         .from(instances)
         .where(
           and(
-            listedInstances(),
-            eq(instances.machineId, machineId),
+            listedOn(machineId),
             inArray(instances.harness, ACCOUNT_DIR_HARNESSES),
             isNotNull(instances.sessionId)
           )
         )
         .all(),
+    runningAccountIds: () =>
+      db
+        .selectDistinct({ accountId: sql<string>`${instances.accountId}` })
+        .from(instances)
+        .where(
+          and(
+            eq(instances.status, "running"),
+            isNotNull(instances.accountId),
+            keptInstances()
+          )
+        )
+        .all()
+        .map((row) => row.accountId),
     runningInstancesOf: (harness) =>
       db
         .select(publicColumns)

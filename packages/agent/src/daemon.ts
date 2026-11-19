@@ -480,9 +480,10 @@ const activityNow = (): { activity?: MachineActivity } => {
   return activity ? { activity } : {};
 };
 /**
- * How long after a ping the hub's link may stay silent before it is dropped
- * as dead. Our choice: a whole beat's interval, so a hub that is slow under
- * load is not taken for gone.
+ * How long after a ping the hub has to be heard from before that ping counts
+ * as unanswered: a whole beat's interval. The link is dropped as dead only
+ * when two pings in a row go unanswered, about 30 s of silence, so a hub
+ * whose thread is held for a while is not taken for gone.
  */
 const HUB_SILENT_MS = 15_000;
 const USAGE_INTERVAL = Duration.seconds(60);
@@ -3027,8 +3028,9 @@ const attach = (
     // THE LINK'S DEADLINE. A socket on a network that went away (Wi-Fi, a
     // laptop that slept) reads open and delivers nothing, for as long as the
     // system lets it: with nothing heard {@link HUB_SILENT_MS} after a ping,
-    // it is dropped as dead, the reconnect below runs, and the outbox sends
-    // again what the hub did not take.
+    // and nothing after the ping before it either, it is dropped as dead,
+    // the reconnect below runs, and the outbox sends again what the hub did
+    // not take.
     //
     // A ping, not the heartbeat: the beat is a message, and it was queued in
     // this socket's outbox behind everything sent before it, and its answer
@@ -3040,9 +3042,20 @@ const attach = (
     // silent 15100 ms after a heartbeat", each request on it failing as
     // "Completion is unknown"). A ping is a control frame: it waits behind
     // at most the outbox's high water in the socket's own buffer, never the
-    // queue, and the hub's server answers it as it reads, ahead of every
-    // handler (Bun's client `ping()` and `pong` event,
+    // queue (Bun's client `ping()` and `pong` event,
     // https://bun.com/docs/runtime/http/websockets).
+    //
+    // Its pong is not sent ahead of the hub's work: Bun's server answers it
+    // from the same event loop that runs the hub's JavaScript, so while a
+    // handler or a timer holds that thread, no socket is read and no pong
+    // goes out. One unanswered ping is a busy hub as often as a dead link
+    // (2026-11-19: the hub's thread held 10–27 s by its reads, and the link
+    // to it on the same machine dropped six times in 80 minutes), so the
+    // link is dropped only when the ping after it goes unanswered too.
+    //
+    // When the first of two pings in a row went unanswered, while nothing
+    // has been heard since: unset while the hub answers.
+    let silentSince: number | undefined;
     const ping = setInterval(() => {
       if (socket.readyState !== WebSocket.OPEN) {
         return;
@@ -3050,12 +3063,25 @@ const attach = (
       const asked = Date.now();
       socket.ping();
       setTimeout(() => {
-        if (lastHeard >= asked || socket.readyState !== WebSocket.OPEN) {
+        if (socket.readyState !== WebSocket.OPEN) {
+          return;
+        }
+        if (lastHeard >= asked) {
+          silentSince = undefined;
+          return;
+        }
+        if (silentSince === undefined || lastHeard >= silentSince) {
+          silentSince = asked;
+          Effect.runFork(
+            Effect.logInfo(
+              `hub link silent ${Date.now() - asked} ms after a ping: dropping it if the next ping goes unanswered too`
+            )
+          );
           return;
         }
         Effect.runFork(
           Effect.logWarning(
-            `hub link silent ${Date.now() - asked} ms after a ping: dropping it as dead`
+            `hub link silent ${Date.now() - silentSince} ms across two pings: dropping it as dead`
           )
         );
         // Not `close()`: its handshake waits on the peer that went silent.

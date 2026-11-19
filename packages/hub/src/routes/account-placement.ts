@@ -210,13 +210,7 @@ export const accountPlacementRoutes = ({
           const history = accounts.flatMap((account) =>
             historyPoints(db, account.id, now - 7 * DAY_MS)
           );
-          const running = new Set(
-            db
-              .listInstances()
-              .flatMap((row) =>
-                row.status === "running" && row.accountId ? [row.accountId] : []
-              )
-          );
+          const running = new Set(db.runningAccountIds());
           const forecasts = accountForecasts(
             accounts,
             readings,
