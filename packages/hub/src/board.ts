@@ -203,22 +203,23 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
   const viewsOwed = createViewChanges();
   /** Which rows the board lists may have moved: worked out again. */
   let membersOwed = false;
-  let flushScheduled = false;
   /** Whether {@link BoardShape.start} ran: nothing is laid before it. */
   let started = false;
   /** Whether a flush is under way: a flush asked for meanwhile runs after it. */
   let flushing = false;
 
+  /**
+   * The publish, wanted from the hub's admission (scheduler.ts): what a
+   * screen waits on, so a person's priority, and one publish however often
+   * it is asked before it runs. A hub closed first (scripts/openapi.ts
+   * closes its scratch hub) publishes nothing after.
+   */
   const schedule = (): void => {
-    if (flushScheduled) {
-      return;
-    }
-    flushScheduled = true;
-    // On the hub's lifetime, as all its own schedule is: a hub closed first
-    // (scripts/openapi.ts closes its scratch hub) publishes nothing after.
-    ctx.lifetime.after("board publish", 0, () => {
-      flushScheduled = false;
-      flush();
+    ctx.lifetime.jobs.want({
+      key: "board publish",
+      name: "board publish",
+      priority: "person",
+      run: () => flush(),
     });
   };
 

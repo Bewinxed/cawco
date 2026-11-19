@@ -249,9 +249,8 @@ const listNow = async (
       own.push(name);
     }
   }
-  const record = JSON.stringify(own);
-  if (record !== JSON.stringify(before)) {
-    await writeStateFile(listedFileOf(ref.id), record);
+  if (!Bun.deepEquals(own, before)) {
+    await writeStateFile(listedFileOf(ref.id), JSON.stringify(own));
   }
   await excludeStandIns(clone, own);
 };

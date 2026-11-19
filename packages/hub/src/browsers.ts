@@ -102,7 +102,10 @@ export const BROWSER_CALL_MS = 15 * 60_000;
 const RELAY_TTL_MS = 7 * DAY_MS;
 
 /** What a machine says of a browser now, kept from its latest frame (core `BrowserRow`). */
-export type LiveBrowserFacts = Pick<BrowserRow, "why" | "progress" | "origin">;
+export type LiveBrowserFacts = Pick<
+  BrowserRow,
+  "why" | "progress" | "origin" | "originUnread"
+>;
 
 export interface BrowsersDeps {
   /** The browser asks waiting on the person (browser-tools.ts), made after this. */
@@ -187,6 +190,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       ...(row.why ? { why: row.why } : {}),
       ...(row.progress ? { progress: row.progress } : {}),
       ...(row.origin ? { origin: row.origin } : {}),
+      ...(row.originUnread ? { originUnread: true as const } : {}),
     };
     live.set(liveKey(machineId, row.key), facts);
   };

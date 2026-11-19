@@ -293,8 +293,7 @@ export const mcpServersDb = (core: DbCore): McpServersDb => {
         .from(mcpServers)
         .where(eq(mcpServers.name, name))
         .get();
-      const changed =
-        !previous || JSON.stringify(previous.config) !== JSON.stringify(config);
+      const changed = !(previous && Bun.deepEquals(previous.config, config));
       if (changed) {
         db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
       }

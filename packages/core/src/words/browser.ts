@@ -11,6 +11,8 @@ export const browserWords = {
   view: "Browser",
   /** The head's address: the page in front, or none. */
   noPage: "No page open",
+  /** The machine gave up reading the address of the page shown (agent front-origin.ts): the stream still shows the page. */
+  addressUnread: "Address can't be read",
   /** The head's address: who has control (its name, and More's line). */
   agentDriving: "The agent is driving",
   youHaveControl: "You have control",
@@ -63,6 +65,9 @@ export const browserWords = {
   lostTitle: "The view lost the browser",
   lostLine:
     "The link from this screen to the browser closed. It opens again on its own; Try again opens it now.",
+  /** The link's reopens gave up (dashboard browser-stream.ts `REOPENS`). */
+  lostOverLine:
+    "The link from this screen to the browser closed and didn't open again. Try again opens it.",
   refusedTitle: "The hub didn't open the browser",
   /** The stream's media found no way to this screen (ICE failed). */
   noStreamTitle: "The stream didn't connect",

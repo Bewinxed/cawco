@@ -1,7 +1,7 @@
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { SessionCommands, SessionOrigin } from "@cawco/core/protocol";
 import type { CapabilityKind } from "@cawco/core/suggest";
-import { and, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   agents,
@@ -63,11 +63,11 @@ export interface CapabilityCallsDb {
   /** The fleet's MCP servers' names, enabled or not. */
   readonly serverNames: () => string[];
   /**
-   * Each harness session id the hub keeps, the conversations a session
-   * went on from included, to its session: what a backfilled transcript's
-   * calls are kept under.
+   * The session a harness session id is the hub's for, a conversation a
+   * session went on from included, read by key: what a backfilled
+   * transcript's calls are kept under.
    */
-  readonly sessionsById: () => Map<string, string>;
+  readonly sessionOf: (sessionId: string) => string | undefined;
   /** Calls per kind, name and day on or after `day`, every session's summed. */
   readonly since: (
     day: string
@@ -159,28 +159,17 @@ export const capabilityCallsDb = (
       .from(mcpServers)
       .all()
       .map((row) => row.name),
-  sessionsById: () => {
-    const ids = new Map<string, string>();
-    for (const row of db
-      .select({ id: instances.id, sessionId: instances.sessionId })
-      .from(instances)
-      .where(isNotNull(instances.sessionId))
-      .all()) {
-      if (row.sessionId) {
-        ids.set(row.sessionId, row.id);
-      }
-    }
-    for (const row of db
-      .select({
-        id: instanceConversations.instanceId,
-        sessionId: instanceConversations.sessionId,
-      })
+  sessionOf: (sessionId) =>
+    db
+      .select({ id: instanceConversations.instanceId })
       .from(instanceConversations)
-      .all()) {
-      ids.set(row.sessionId, row.id);
-    }
-    return ids;
-  },
+      .where(eq(instanceConversations.sessionId, sessionId))
+      .get()?.id ??
+    db
+      .select({ id: instances.id })
+      .from(instances)
+      .where(eq(instances.sessionId, sessionId))
+      .get()?.id,
   since: (day) =>
     db
       .select({

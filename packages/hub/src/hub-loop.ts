@@ -139,7 +139,8 @@ const topWords = (top: NamedTime[]): string =>
  * thread's) took as a share of one core (`eventLoopUtilization()` answers
  * zeros in Bun, oven-sh/bun#38441), its heap and resident memory, and the
  * {@link TOP_NAMED} names that held it longest (core loop-watch.ts
- * `tallyNamedWork`). Answers its stop.
+ * `tallyNamedWork`), and what its admission merged and how long background
+ * work was paused (scheduler.ts). Answers its stop.
  */
 const minuteLine = (lifetime: HubLifetimeShape): (() => void) => {
   const delay = monitorEventLoopDelay({ resolution: DELAY_RESOLUTION_MS });
@@ -168,6 +169,7 @@ const minuteLine = (lifetime: HubLifetimeShape): (() => void) => {
         heapMb: Math.round(heapSize() / 1024 / 1024),
         rssMb: Math.round(process.memoryUsage.rss() / 1024 / 1024),
         top: topWords(takeTop(TOP_NAMED)),
+        admission: lifetime.jobs.minute(),
       })
     );
     delay.reset();

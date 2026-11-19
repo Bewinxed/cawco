@@ -652,9 +652,8 @@ export const createProjectSettings = ({
       ["reviewLimit", project.reviewLimit],
       ["runsOn", project.runsOn],
     ]);
-    const same = Object.entries(columns).every(
-      ([key, value]) =>
-        JSON.stringify(now.get(key) ?? null) === JSON.stringify(value ?? null)
+    const same = Object.entries(columns).every(([key, value]) =>
+      Bun.deepEquals(now.get(key) ?? null, value ?? null)
     );
     const misfit = same ? alreadyWords(change) : dispatchProblem(columns);
     return misfit
@@ -830,9 +829,7 @@ export const createProjectSettings = ({
       });
     }
     const now = projectStartingSet(project.id);
-    const same = set
-      ? JSON.stringify(now.set) === JSON.stringify(set)
-      : now.text === undefined;
+    const same = set ? Bun.deepEquals(now.set, set) : now.text === undefined;
     if (same) {
       return problem(400, {
         code: "already",

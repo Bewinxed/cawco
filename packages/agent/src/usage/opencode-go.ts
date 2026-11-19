@@ -1,5 +1,6 @@
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
-import { secondsOf } from "@cawco/core/time";
+import { MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { LimitWindow, OpenCodeGoLimits } from "@cawco/core/usage/types";
 import { z } from "zod";
@@ -33,7 +34,19 @@ const usageUrl = (): string =>
 const TIMEOUT_MS = 10_000;
 /** The same cadence the Claude reading keeps: the daemon ticks faster and is served from cache. */
 const CACHE_TTL_MS = 180_000;
-const FAILURE_BACKOFF_MS = 2 * 60_000;
+/**
+ * A failed read, read again: from 2 min, doubling to 30. Never given up: the
+ * reading is the daemon's usage tick, which a key's removal ends, and its
+ * failure is shown on the account as its last good windows marked stale.
+ */
+const FAILED_READS: BackoffPolicy = {
+  firstMs: 2 * MINUTE_MS,
+  mostMs: 30 * MINUTE_MS,
+  giveUp: {
+    never:
+      "the usage tick reads every metered key while it is held; a failure only slows it",
+  },
+};
 
 const GoWindowRaw = z.object({
   percent: z.number().optional(),
@@ -64,6 +77,8 @@ interface KeyState {
   cached: { at: number; value: OpenCodeGoLimits } | null;
   coolingUntil: number;
   failed: OpenCodeGoLimits | null;
+  /** Its reads that failed in a row ({@link FAILED_READS}). */
+  failures: Backoff;
   lastGood: OpenCodeGoLimits | null;
 }
 
@@ -95,7 +110,7 @@ function windowsOf(body: GoUsageResponse): LimitWindow[] {
  * The Go windows for one OpenCode Go key (an account's, held by the agent);
  * null for no key: no plan, so nothing to meter. A failed read is served as
  * the last good windows marked stale, with the error attached, and is not
- * retried for two minutes.
+ * read again until its wait ({@link FAILED_READS}) is out.
  */
 export async function fetchOpenCodeGoLimits(
   key: string | null
@@ -107,6 +122,7 @@ export async function fetchOpenCodeGoLimits(
     cached: null,
     coolingUntil: 0,
     failed: null,
+    failures: new Backoff(FAILED_READS),
     lastGood: null,
   };
   states.set(key, state);
@@ -146,6 +162,7 @@ export async function fetchOpenCodeGoLimits(
           state.cached = { at: value.fetchedAt, value };
           state.lastGood = value;
           state.failed = null;
+          state.failures.succeeded();
           return value;
         }
         error = `HTTP ${read.value.status}`;
@@ -167,6 +184,8 @@ export async function fetchOpenCodeGoLimits(
   state.failed = state.lastGood
     ? { ...state.lastGood, stale: true, error }
     : { error, fetchedAt: Date.now(), windows: [] };
-  state.coolingUntil = Date.now() + FAILURE_BACKOFF_MS;
+  const step = state.failures.failed();
+  state.coolingUntil =
+    Date.now() + (step.kind === "wait" ? step.ms : FAILED_READS.mostMs);
   return state.failed;
 }

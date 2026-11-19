@@ -65,10 +65,9 @@ import { AUTHOR_POINTS, MOMENT_WEIGHT, ofKinds, rankOf } from "../find-names";
 import { boardTitle, leafOf } from "../labels";
 import type { Catalogs } from "./catalogs";
 import { type FindIndex, type Names, sessionKey } from "./find-index";
+import { cursorAt, DEFAULT_LIMIT } from "./pages";
 import type { ViewMachine } from "./read";
 
-/** How many results a page holds by default, and at most. */
-export const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
 /** How long an answer that asked the machines is kept for its next pages, ms. */
@@ -244,9 +243,6 @@ const within = (
  */
 export type FindPage = FindAnswer & { total: number };
 
-/** The cursor that starts a page at `offset`. */
-export const cursorAt = (offset: number): string =>
-  Buffer.from(String(offset), "utf8").toString("base64url");
 /** One machine's part in a find: its coverage, and its answer when it gave one. */
 interface Asked {
   answer: TranscriptAnswer | null;

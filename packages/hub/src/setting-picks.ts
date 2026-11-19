@@ -227,7 +227,7 @@ export const createSettingPicks = (ctx: SettingPicksContext) => {
       <F extends keyof HeldPicks>(field: F, sent: HeldPicks[F]) =>
       () => {
         const now = ctx.db.heldPicks.get(row.id);
-        if (now && JSON.stringify(now[field]) === JSON.stringify(sent)) {
+        if (now && Bun.deepEquals(now[field], sent)) {
           const { [field]: _answered, ...rest } = now;
           ctx.db.heldPicks.put(row.id, rest);
         }

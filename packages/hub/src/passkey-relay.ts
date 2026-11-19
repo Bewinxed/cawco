@@ -26,6 +26,7 @@ import {
   type PasskeyScanArgs,
   type PasskeyStatusFrame,
 } from "@cawco/core/browser";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { AgentCall } from "./machine-answers";
 
 /** How long the relay waits for a BLE advert before timing out. */
@@ -41,7 +42,7 @@ interface RelayAttempt {
   scanning: { id: string; name: string }[];
   status: PasskeyRelayStatus;
   /** The timer that times the attempt out. */
-  timer: ReturnType<typeof setTimeout>;
+  timer: HubTimer;
 }
 
 export interface PasskeyRelayDeps {
@@ -51,6 +52,7 @@ export interface PasskeyRelayDeps {
   call: AgentCall;
   /** Whether the machine reported a BLE adapter (browsers.ts). */
   hasBle: (machineId: string) => boolean;
+  lifetime: Pick<HubLifetimeShape, "after" | "cancel">;
   /** The name a machine is called by. */
   machineName: (machineId: string) => string;
   /** The machines whose socket the hub holds now. */
@@ -79,7 +81,7 @@ export const createPasskeyRelay = (deps: PasskeyRelayDeps) => {
   };
 
   const stopScanning = (attempt: RelayAttempt): void => {
-    clearTimeout(attempt.timer);
+    deps.lifetime.cancel(attempt.timer);
     for (const machine of attempt.scanning) {
       deps
         .call(
@@ -144,7 +146,11 @@ export const createPasskeyRelay = (deps: PasskeyRelayDeps) => {
         key,
         scanning,
         status: "scanning",
-        timer: setTimeout(() => end(key, "timeout"), PASSKEY_RELAY_TIMEOUT_MS),
+        timer: deps.lifetime.after(
+          "passkey relay timed out",
+          PASSKEY_RELAY_TIMEOUT_MS,
+          () => end(key, "timeout")
+        ),
       };
       attempts.set(key, attempt);
       for (const machine of scanning) {

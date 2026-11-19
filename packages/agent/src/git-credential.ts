@@ -86,7 +86,7 @@ let ackOrigins: string[] = keptOrigins();
 /** The register ack's `gitOrigins`: what else the hub's git remote answers at, kept for the next start. */
 export const setHubGitOrigins = (origins: unknown): void => {
   const next = originsOf(origins);
-  const changed = JSON.stringify(next) !== JSON.stringify(ackOrigins);
+  const changed = !Bun.deepEquals(next, ackOrigins);
   ackOrigins = next;
   const file = originsFile();
   if (!(changed && file)) {

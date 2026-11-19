@@ -21,6 +21,8 @@ language js
 //   (a site's favicon), folder-git-unanswered (git in a project folder),
 //   hub-unanswered (a server an admin call waits on), followup-state-unanswered
 //   and image-hub-unanswered (the hub's own answer to a tool);
+// - the hub's own admission: asker-gone (a request whose asker went before
+//   the hub's turn came to work it, server.ts);
 // - a canvas's screen or a session, not its machine: artifact-canvas-no-screen,
 //   artifact-canvas-undrawn, artifact-canvas-screen-unjoined,
 //   artifact-comment-undelivered.
@@ -52,7 +54,8 @@ or {
       `code: "artifact-canvas-no-screen"`,
       `code: "artifact-canvas-undrawn"`,
       `code: "artifact-canvas-screen-unjoined"`,
-      `code: "artifact-comment-undelivered"`
+      `code: "artifact-comment-undelivered"`,
+      `code: "asker-gone"`
     },
     register_diagnostic(span=$hit, message="A 503 is a machine away and a 504 a machine silent (the owner's machine-status rule): answer awayProblem or silentProblem (packages/hub/src/machine-answers.ts). A cause that is no machine's is named, with why, in scripts/lint/machine-answers.grit.")
   },

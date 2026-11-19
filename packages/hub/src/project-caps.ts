@@ -97,14 +97,12 @@ export const createCaps = ({ db, publish }: CapsDeps) => {
   };
 
   /** What each project's dashboards were last told, so a move is said once. */
-  const told = new Map<string, string>();
+  const told = new Map<string, unknown>();
   const tell = (project: ProjectRow): void => {
     const cap = capOf(project);
     // Spend is said to the cent: a fraction of one moves nothing on screen.
-    const key = JSON.stringify(
-      cap && { ...cap, spentUsd: Math.round(cap.spentUsd * 100) }
-    );
-    if (told.get(project.id) === key) {
+    const key = cap && { ...cap, spentUsd: Math.round(cap.spentUsd * 100) };
+    if (told.has(project.id) && Bun.deepEquals(told.get(project.id), key)) {
       return;
     }
     told.set(project.id, key);

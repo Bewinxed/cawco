@@ -56,6 +56,10 @@ const main = Effect.gen(function* () {
     // A pack to the git remote and a large file to LFS stream through.
     maxRequestBodySize: MAX_REQUEST_BYTES,
   });
+  // From here on, what the hub's connection reads is the control loop's:
+  // each statement is explained once, and a whole read of a large table is
+  // a broken law (db/statement-plans.ts).
+  db.statementPlans.arm();
   server.previews.start();
   // HTTPS on the machine's tailnet name, once its preview listeners stand.
   server.tailnet.start();
@@ -68,7 +72,7 @@ const main = Effect.gen(function* () {
       profiler: server.profiler,
     })
   );
-  advertise(HUB_PORT);
+  advertise(HUB_PORT, lifetime);
   // Off the boot path: a month of transcripts is read once, then never again.
   detach(backfillUsage(db), "usage backfill");
 });

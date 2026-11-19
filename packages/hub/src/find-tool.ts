@@ -78,7 +78,8 @@ import {
   redactSecrets,
   secretRanges,
 } from "./secret-filter";
-import { cursorAt, type FindPage, type HeldMoment } from "./views/find-engine";
+import type { FindPage, HeldMoment } from "./views/find-engine";
+import { cursorAt } from "./views/pages";
 
 export const FIND_TOOL = "find";
 

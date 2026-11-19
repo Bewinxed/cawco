@@ -1,0 +1,23 @@
+language js
+
+// Every retry takes its waits from packages/core/src/backoff.ts (Backoff,
+// backoffWait, backoffStep): capped exponential with jitter, and an end it
+// names. On 2026-11-19 a daemon's browser link was opened again every 5 s
+// for ever, and an MCP sign-in renewed for ever, and nothing said a retry
+// had stopped helping (tsk-399). A wait doubled to a cap by hand, a table of
+// retry waits, or a retry's fixed wait is refused here.
+or {
+  or { `Math.min($a, $b)`, `Math.min($a, $b, $_)` } as $hit where {
+    $filename <: or { includes "packages/", includes "apps/dashboard/" },
+    $filename <: not includes "packages/core/src/backoff.ts",
+    or { $a <: contains `2 ** $_`, $b <: contains `2 ** $_`, $a <: r"(?s)\w+ \* 2", $b <: r"(?s)\w+ \* 2" },
+    register_diagnostic(span=$hit, message="A wait doubled to a cap is a retry's: take it from @cawco/core/backoff (Backoff, backoffWait), which jitters it and names when it gives up.")
+  },
+  `const $name = $value` as $hit where {
+    $filename <: or { includes "packages/", includes "apps/dashboard/" },
+    $filename <: not includes "packages/core/src/backoff.ts",
+    $name <: r"[A-Z_]*(?:RETRY|RETRIES|BACKOFF|REPROBE)[A-Z_]*_MS",
+    $name <: not r"[A-Z_]*(?:DEADLINE|BUDGET)[A-Z_]*",
+    register_diagnostic(span=$hit, message="A retry's wait is a BackoffPolicy (@cawco/core/backoff): capped exponential with jitter, and an end it names.")
+  }
+}

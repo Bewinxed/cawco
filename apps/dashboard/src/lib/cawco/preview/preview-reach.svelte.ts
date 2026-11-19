@@ -1,6 +1,7 @@
 /**
  * Whether this tab reaches the preview's origin: where the hub says an unnamed frame is served, the origin the page runs on, where a show starts, and the probe that waits out an origin that does not answer.
  */
+import { type BackoffPolicy, backoffStep } from "@cawco/core/backoff";
 import { probePreview, unreachedOf } from "@cawco/core/preview/reach";
 import {
   type PreviewAddress,
@@ -32,9 +33,17 @@ import type { PaneSubject } from "./pane-subject.svelte";
 /** The frame names an origin of its own: a port, or host mode's name. */
 const namesOrigin = (address: { origin?: string; port?: number }): boolean =>
   address.port !== undefined || !!address.origin;
-/** Our calls: the first probe again 2 s after a failure, doubling to every 30 s. */
-export const PROBE_FIRST_MS = 2000;
-export const PROBE_MOST_MS = 30_000;
+/**
+ * An origin that failed, probed again while it is on screen: from 2 s,
+ * doubling to 30 s, twenty times in a row (about ten minutes); then only
+ * its tab coming back into view probes it, the pane still saying what
+ * failed. Our calls.
+ */
+export const PROBES: BackoffPolicy = {
+  firstMs: 2000,
+  mostMs: 30_000,
+  giveUp: { afterTries: 20 },
+};
 /**
  * How long a frame has to say anything before its origin is probed, to word
  * why it hasn't: the frame's own load is the probe, and nothing waits on
@@ -184,9 +193,8 @@ export class PreviewReach {
    * own cause (core preview-reach.ts: offline, refused at once, no answer in
    * time, answered without its CORS header, the hub's word that it is down,
    * another answerer's status, and whether the hub itself reaches the
-   * origin), the fix, and probes again by itself (`PROBE_FIRST_MS`, doubling
-   * to `PROBE_MOST_MS`, and at once when its tab is back in view) until one
-   * answers, when the frame loads again ({@link recovered}).
+   * origin), the fix, and probes again by itself ({@link PROBES}, and at
+   * once when its tab is back in view) until one answers, when the frame loads again ({@link recovered}).
    */
   reached = $state<
     | { origin: string; ok: true }
@@ -297,12 +305,13 @@ export class PreviewReach {
         });
         return;
       }
-      const timer = setTimeout(
-        () => {
-          this.probe += 1;
-        },
-        Math.min(PROBE_FIRST_MS * 2 ** (failed.tries - 1), PROBE_MOST_MS)
-      );
+      const step = backoffStep(PROBES, failed.tries, 0);
+      if (step.kind === "gave-up") {
+        return;
+      }
+      const timer = setTimeout(() => {
+        this.probe += 1;
+      }, step.ms);
       return () => clearTimeout(timer);
     });
   }

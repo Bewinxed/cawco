@@ -232,7 +232,7 @@ const narrowing = (was: Policy, now: Policy): string[] => {
   return fields.flatMap((field) => {
     const rest = paired(field);
     if (rest === undefined) {
-      return JSON.stringify(before[field]) === JSON.stringify(after[field])
+      return Bun.deepEquals(before[field], after[field])
         ? []
         : [`${field} changed`];
     }

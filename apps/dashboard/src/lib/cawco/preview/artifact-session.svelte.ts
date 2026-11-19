@@ -18,6 +18,7 @@ import {
   ARTIFACT_SESSION_PATH,
   ARTIFACT_SESSION_REFUSED,
 } from "@cawco/core/artifact-session";
+import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { ListedBrowser } from "@cawco/core/browser";
 import type { ArtifactSessionFrame } from "@cawco/core/frames";
@@ -40,8 +41,15 @@ import type {
 const BEAT_MS = 15_000;
 /** Silence after which the socket is called dead and opened again. Our call: two beats and a margin. */
 const DEAD_MS = 40_000;
-/** The waits before opening again after a drop, longest last. Our call. */
-const RETRY_MS = [500, 1000, 2000, 5000, 10_000] as const;
+/** Opening again after a drop: from 0.5 s, doubling to 10 s. Our call. */
+const REOPENS: BackoffPolicy = {
+  firstMs: 500,
+  mostMs: 10_000,
+  giveUp: {
+    never:
+      "an artifact's tab reads its doc and sends its answers on this socket alone; it ends when the tab does",
+  },
+};
 /** The close codes the hub refuses this socket with. */
 const REFUSALS = new Set<number>(Object.values(ARTIFACT_SESSION_REFUSED));
 
@@ -208,9 +216,11 @@ export class ArtifactSession implements PaneFleet {
         this.end();
         return;
       }
-      const wait = RETRY_MS[Math.min(this.#tries, RETRY_MS.length - 1)];
       this.#tries += 1;
-      this.#retry = setTimeout(() => this.#open(path), wait);
+      this.#retry = setTimeout(
+        () => this.#open(path),
+        backoffWait(REOPENS, this.#tries)
+      );
     });
   }
 

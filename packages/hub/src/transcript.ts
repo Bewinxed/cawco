@@ -262,7 +262,7 @@ function restated(
           metadata: { ...read.metadata, thinkingDurationMs: duration },
         }
       : read;
-  return JSON.stringify(next) === JSON.stringify(held) ? held : next;
+  return Bun.deepEquals(next, held) ? held : next;
 }
 
 /** The longest run of `seq` that only ever rises, as a set of its values. */
@@ -671,9 +671,7 @@ export class TranscriptBuilder {
       if (!held) {
         this.branches.set(toolUseId, sink);
         this.movedBranches.add(toolUseId);
-      } else if (
-        JSON.stringify(branchState(held)) !== JSON.stringify(branchState(read))
-      ) {
+      } else if (!Bun.deepEquals(branchState(held), branchState(read))) {
         Object.assign(held, branchState(read));
         this.movedBranches.add(toolUseId);
       }
@@ -1642,13 +1640,12 @@ export class TranscriptBuilder {
         return;
       }
       const was = held.get(block.id);
-      if (was !== block && JSON.stringify(was) !== JSON.stringify(block)) {
+      if (was !== block && !Bun.deepEquals(was, block)) {
         this.events.push({ type: "block.update", block });
       }
     });
     this.placed = next;
-    const queue = JSON.stringify(queued);
-    if (queue !== JSON.stringify(this.queued)) {
+    if (!Bun.deepEquals(queued, this.queued)) {
       this.events.push({ type: "queue", blocks: queued });
     }
     this.queued = queued;
@@ -1677,12 +1674,8 @@ export class TranscriptBuilder {
 
   private setFacts(patch: Partial<TranscriptFacts>): void {
     for (const key of FACT_KEYS) {
-      moveKey(
-        this.facts,
-        this.factsPatch,
-        key,
-        patch[key],
-        (was, now) => JSON.stringify(was) === JSON.stringify(now)
+      moveKey(this.facts, this.factsPatch, key, patch[key], (was, now) =>
+        Bun.deepEquals(was, now)
       );
     }
   }

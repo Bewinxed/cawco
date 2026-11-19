@@ -17,12 +17,14 @@
  *   back. A live attempt hears a comment at once on its own path
  *   (jev-tasks.ts), under its own switch.
  */
+
 import { ACT_ORIGIN } from "@cawco/core/harness/kinds";
 import { taskLink } from "@cawco/core/references";
 import { noticeWords } from "@cawco/core/words/notices";
 import { ElysiaStatus } from "elysia";
 import type { Caw, YourAct, YourWords } from "./caw";
 import type { DbShape } from "./db";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { TaskEvent, Tasks } from "./tasks";
 
 /** How long a task's pieces wait for the next before they go together, ms. */
@@ -113,6 +115,7 @@ const inputEvent = (
 export interface TaskInputDeps {
   readonly caw: Pick<Caw, "tell">;
   readonly db: Pick<DbShape, "project">;
+  readonly lifetime: Pick<HubLifetimeShape, "after" | "cancel">;
   /** The quiet spell; {@link QUIET_MS} unless a test shortens it. */
   readonly quietMs?: number;
   readonly tasks: Pick<Tasks, "get">;
@@ -121,14 +124,12 @@ export interface TaskInputDeps {
 export const createTaskInput = ({
   caw,
   db,
+  lifetime,
   quietMs = QUIET_MS,
   tasks,
 }: TaskInputDeps) => {
   /** Each task's pieces waiting for quiet, by project and task, with the timer that sends them. */
-  const gathering = new Map<
-    string,
-    { timer: ReturnType<typeof setTimeout>; written: Written[] }
-  >();
+  const gathering = new Map<string, { timer: HubTimer; written: Written[] }>();
 
   /** Tells the conversation one task's pieces, unless the project's switch is off; what did not go is logged; the task's refused read. */
   const send = async (
@@ -163,10 +164,10 @@ export const createTaskInput = ({
     const key = `${event.projectId}\0${found.taskId}`;
     const held = gathering.get(key);
     if (held) {
-      clearTimeout(held.timer);
+      lifetime.cancel(held.timer);
     }
     const written = [...(held?.written ?? []), ...found.written];
-    const timer = setTimeout(() => {
+    const timer = lifetime.after("task input sent", quietMs, () => {
       gathering.delete(key);
       const unsent = (why: string) =>
         console.warn(
@@ -177,7 +178,7 @@ export const createTaskInput = ({
         (error: unknown) =>
           unsent(error instanceof Error ? error.message : String(error))
       );
-    }, quietMs);
+    });
     gathering.set(key, { timer, written });
   };
 

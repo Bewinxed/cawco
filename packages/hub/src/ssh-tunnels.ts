@@ -52,6 +52,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { backoffWait } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { makeFolderSync } from "@cawco/core/folders";
@@ -106,9 +107,12 @@ export const sshOptions = (port: number | null): string[] => [
   ...(port === null ? [] : ["-p", String(port)]),
 ];
 
-/** The first wait before a dropped connection is opened again, and the longest. Our choice. */
-const RETRY_FIRST_MS = 1000;
-const RETRY_MAX_MS = 60_000;
+/**
+ * A dropped connection opened again: from 1 s, doubling to a minute. Never
+ * given up: a joined machine reaches this hub only through it, and it ends
+ * when the machine is removed. Our choice.
+ */
+const REOPENS = { firstMs: 1000, mostMs: 60_000 };
 /** A connection that stayed up this long starts its next retries from the first wait. Our choice. */
 const STEADY_MS = 60_000;
 /** How long a control command (`-O check`, `-O forward`, one over the master) gets to answer. Our choice. */
@@ -813,14 +817,11 @@ export const createSshTunnels = ({
     why: string
   ): void => {
     tunnel.failures = steady ? 1 : tunnel.failures + 1;
-    const wait = Math.min(
-      RETRY_MAX_MS,
-      RETRY_FIRST_MS * 2 ** (tunnel.failures - 1)
-    );
+    const wait = backoffWait(REOPENS, tunnel.failures);
     if (tunnel.said !== why) {
       tunnel.said = why;
       console.warn(
-        `[ssh] ${row.target}: the connection that carries ${row.machineId} to this hub ended (${why}); it is opened again, from ${wait / 1000} s, until it holds`
+        `[ssh] ${row.target}: the connection that carries ${row.machineId} to this hub ended (${why}); it is opened again, from ${Math.round(wait / 1000)} s, until it holds`
       );
     }
     tunnel.retry = lifetime.after("ssh tunnel opened again", wait, () => {

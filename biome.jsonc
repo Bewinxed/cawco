@@ -79,6 +79,18 @@
     // A script a workspace runs alone (the judge, its server, the log shim)
     // imports Node's built-ins and the script beside it alone.
     "./scripts/lint/standalone-scripts.grit",
+    // Every retry takes its waits from packages/core/src/backoff.ts: capped
+    // exponential with jitter, and an end it names (tsk-399).
+    "./scripts/lint/retry-through-backoff.grit",
+    // Values are compared as values (Bun.deepEquals), never as their JSON,
+    // in the hub and the agent.
+    "./scripts/lint/no-serialise-compare.grit",
+    // Every timer of the hub's control loop runs on its lifetime, named
+    // (packages/hub/src/lifetime.ts).
+    "./scripts/lint/hub-timers-named.grit",
+    // The hub's control loop reads its large tables by key; whole-table
+    // reads are the views thread's (packages/hub/src/views/).
+    "./scripts/lint/control-loop-keyed-reads.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

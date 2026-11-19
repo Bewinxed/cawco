@@ -21,6 +21,7 @@
  * flight, an answer that arrives late, or a reload.
  */
 
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import { detach } from "@cawco/core/detach";
 import type {
   DraftStamp,
@@ -73,9 +74,17 @@ const EMPTY_DRAFT: DraftFields = {
 
 /** How long the draft waits after a keystroke before the hub keeps it. Our choice. */
 const DRAFT_SAVE_MS = 400;
-/** A save the hub didn't keep goes again after this, then twice as long each time up to the most. Our choice, as the fleet's read does. */
-const RETRY_FIRST_MS = 1000;
-const RETRY_MOST_MS = 10_000;
+/**
+ * A save the hub didn't keep, and a read that failed, go again: from 1 s,
+ * doubling to 10 s, for five minutes. Our choice, as the fleet's read does
+ * (client.svelte.ts `readFleet`). Past it, a save waits for the next edit
+ * or the page's leaving, and a read for the socket's next connect.
+ */
+const TRIES: BackoffPolicy = {
+  firstMs: 1000,
+  mostMs: 10_000,
+  giveUp: { afterMs: 5 * 60_000 },
+};
 
 /** The fields an edit may carry: what the hub's draft holds, but its code. */
 const fieldsOf = (draft: InstallDraft): DraftFields => ({
@@ -145,7 +154,7 @@ class Connect {
   /** This page's count of its draft edits and the starts made from the draft (DraftStamp `seq`). */
   #seq = 0;
   #saveTimer: ReturnType<typeof setTimeout> | undefined;
-  #saveRetryMs = RETRY_FIRST_MS;
+  readonly #saves = new Backoff(TRIES);
   #readRetry: ReturnType<typeof setTimeout> | undefined;
 
   /** The install the window stands on, as the hub has it now. */
@@ -220,11 +229,11 @@ class Connect {
 
   /**
    * The installs and the draft, read whole. A read that fails is tried again
-   * after a second, then twice as long each time up to ten, while the hub's
-   * socket stays open, as the fleet's read is (client.svelte.ts `readFleet`);
-   * a socket that closes reads them again as it is back.
+   * ({@link TRIES}) while the hub's socket stays open, as the fleet's read
+   * is (client.svelte.ts `readFleet`); a socket that closes reads them
+   * again as it is back.
    */
-  async load(delay = 1000): Promise<void> {
+  async load(tries = new Backoff(TRIES)): Promise<void> {
     clearTimeout(this.#readRetry);
     try {
       const answer = await hubData(hub.api.installs.get());
@@ -233,9 +242,13 @@ class Connect {
       if (!socketOpen()) {
         return;
       }
+      const step = tries.failed();
+      if (step.kind === "gave-up") {
+        return;
+      }
       this.#readRetry = setTimeout(() => {
-        detach(this.load(Math.min(delay * 2, 10_000)), "load");
-      }, delay);
+        detach(this.load(tries), "load");
+      }, step.ms);
     }
   }
 
@@ -382,8 +395,7 @@ class Connect {
    * The edits not yet sent go to the hub, one save at a time, so they land
    * in the order typed; the next goes as this one is answered. A save the
    * hub didn't keep (it was down, or refused it) leaves its edits standing
-   * here, under any typed since, and goes again a second later, then twice
-   * as long each time up to ten.
+   * here, under any typed since, and goes again ({@link TRIES}).
    */
   #save(): void {
     clearTimeout(this.#saveTimer);
@@ -397,7 +409,7 @@ class Connect {
     this.#send(sending)
       .then((read) => {
         this.#sending = null;
-        this.#saveRetryMs = RETRY_FIRST_MS;
+        this.#saves.succeeded();
         // An answer older than a frame already taken still ends the save.
         if (!this.take(read)) {
           this.#show();
@@ -407,8 +419,13 @@ class Connect {
       .catch(() => {
         this.#unsaved = { ...sending, ...this.#unsaved };
         this.#sending = null;
-        this.#saveTimer = setTimeout(() => this.#save(), this.#saveRetryMs);
-        this.#saveRetryMs = Math.min(this.#saveRetryMs * 2, RETRY_MOST_MS);
+        const step = this.#saves.failed();
+        if (step.kind === "gave-up") {
+          // Kept unsent: the next edit, or the page's leaving, sends it.
+          this.#saves.again();
+          return;
+        }
+        this.#saveTimer = setTimeout(() => this.#save(), step.ms);
       });
   }
 

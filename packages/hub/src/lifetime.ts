@@ -1,5 +1,6 @@
 import { doing } from "@cawco/core/loop-watch";
 import { Context, Effect, Layer } from "effect";
+import { makeScheduler, type SchedulerShape } from "./scheduler";
 
 /** A timer a hub's lifetime holds; stop it with {@link HubLifetimeShape.cancel}. */
 export type HubTimer = ReturnType<typeof setTimeout>;
@@ -9,10 +10,9 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  * lifetime: every `setTimeout` and `setInterval` in packages/hub/src is one of
  * {@link HubLifetimeShape.after}, {@link HubLifetimeShape.every} and
  * {@link HubLifetimeShape.sleep}, and every `queueMicrotask` is {@link soon}.
- * The rest only resolve a promise, so nothing in them can throw, and none is
- * the hub's own schedule: json-response's yield inside one response body;
- * jev's backoff inside one request, bounded by its deadline; the register's
- * `setImmediate` yields between restore batches (server.ts).
+ * A step that gives the loop back between its pieces awaits {@link nextTurn}.
+ * A bare timer anywhere else in the hub's control loop is a lint error
+ * (scripts/lint/hub-timers-named.grit).
  * A read with a deadline waits on `readWithin` (@cawco/core/bounded) instead,
  * handed {@link HubLifetimeShape.signal} when the hub holds the wait.
  * What holds a resource gives its release to {@link HubLifetimeShape.onClose}.
@@ -35,6 +35,11 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  * loop's work (core loop-watch.ts `doing`, as `timer: <name>`), so a hold
  * inside a timer's run names that timer, never the request that came
  * before it, and the hub's minute line counts its time under that name.
+ *
+ * Work the hub works out again after something moved is wanted through
+ * {@link HubLifetimeShape.jobs} (scheduler.ts): merged by its key, run by
+ * priority on turns with a budget, background paused while the loop is
+ * late.
  *
  * A run that throws fails that run alone: its error goes to the log with its
  * stack ({@link timerFailed}), and the hub, and every other timer, go on (an
@@ -59,6 +64,8 @@ export interface HubLifetimeShape {
    * `name` is what each run is known by when it holds the loop.
    */
   readonly every: (name: string, ms: number, run: () => void) => HubTimer;
+  /** The hub's admission (scheduler.ts): recompute work, merged by key and run by priority. */
+  readonly jobs: SchedulerShape;
   /** A release for {@link close}: run after every timer has stopped, newest first. */
   readonly onClose: (release: () => void) => void;
   /**
@@ -100,6 +107,16 @@ const named = (name: string, run: () => void) => {
 };
 
 /**
+ * Resolves on the loop's next turn, after the sockets and timers waiting
+ * have run: the hub's one way for a long step to give the loop back
+ * between its pieces (a register's restore batches, a chunk of rows).
+ */
+export const nextTurn = (): Promise<void> =>
+  new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+
+/**
  * Runs `run` once the current step ends (a microtask), its throw said as a
  * timer's is: the hub's one way to defer work to the end of a step.
  */
@@ -130,9 +147,14 @@ const makeLifetime = (): HubLifetimeShape => {
     }, ms);
     return hold(timer);
   };
+  const after = (name: string, ms: number, run: () => void): HubTimer =>
+    once(ms, named(name, run));
+  const every = (name: string, ms: number, run: () => void): HubTimer =>
+    hold(setInterval(guarded(named(name, run)), ms));
   return {
-    after: (name, ms, run) => once(ms, named(name, run)),
-    every: (name, ms, run) => hold(setInterval(guarded(named(name, run)), ms)),
+    after,
+    every,
+    jobs: makeScheduler({ after, every }),
     cancel: (timer) => {
       if (timer) {
         clearTimeout(timer);

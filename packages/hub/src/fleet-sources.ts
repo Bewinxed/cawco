@@ -39,6 +39,7 @@ import { refreshOf, skillVersion } from "./fleet-versions";
 import type { HubContext } from "./hub-context";
 import { hubHttpUrl } from "./hub-self";
 import type { FetchedCopy } from "./hub-shapes";
+import { nextTurn } from "./lifetime";
 import type { CallAnswer, FsAnswer } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { ResolvedPlugin } from "./plugins";
@@ -1065,8 +1066,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * over the fleet's rows in one go held the hub 630 ms as it started
    * (measured on a copy of the live database, 2026-10-24).
    */
-  const sourceTurn = (): Promise<void> =>
-    new Promise<void>((resolve) => setImmediate(resolve));
+  const sourceTurn = (): Promise<void> => nextTurn();
 
   /** {@link checkSources}' skills: one source at a time. */
   const checkSkillSources = async (): Promise<void> => {

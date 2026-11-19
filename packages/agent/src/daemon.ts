@@ -2293,8 +2293,7 @@ const attach = (
           old !== undefined &&
           (old.auth !== adapter.auth ||
             old.authReason !== adapter.authReason ||
-            JSON.stringify(old.signInFaults ?? []) !==
-              JSON.stringify(adapter.signInFaults))
+            !Bun.deepEquals(old.signInFaults ?? [], adapter.signInFaults))
         );
       });
       if (moved.length === 0) {

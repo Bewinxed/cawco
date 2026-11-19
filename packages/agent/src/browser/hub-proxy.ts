@@ -9,8 +9,10 @@
  * a `CONNECT` as a TCP tunnel, a plain request in absolute form as a forward.
  * It starts with the first local browser and lives as long as the agent.
  */
+
 import { createServer, request, type Server } from "node:http";
 import { connect, type Socket } from "node:net";
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import { BROWSER_PROXY_PORT } from "@cawco/core/browser";
 import { hubPorts } from "../hub-ports";
 
@@ -81,7 +83,16 @@ const server = (): Server => {
   return proxy;
 };
 
-const RETRY_MS = 1000;
+/**
+ * Binding the port an older agent holds, tried again: from 1 s, doubling to
+ * 30 s, for ten minutes (an update's handover ends the older agent within
+ * its drain); then this agent goes on without its own proxy, and says so.
+ */
+const BINDS: BackoffPolicy = {
+  firstMs: 1000,
+  mostMs: 30_000,
+  giveUp: { afterMs: 10 * 60_000 },
+};
 
 let started: Promise<void> | undefined;
 
@@ -95,13 +106,21 @@ let started: Promise<void> | undefined;
 export const startHubProxy = (): Promise<void> => {
   started ??= new Promise<void>((resolve, reject) => {
     const proxy = server();
+    const binds = new Backoff(BINDS);
     const bind = (): void => {
       proxy.listen(BROWSER_PROXY_PORT, "127.0.0.1");
     };
     proxy.on("error", (error: NodeJS.ErrnoException) => {
       if (error.code === "EADDRINUSE") {
         resolve();
-        setTimeout(bind, RETRY_MS).unref();
+        const step = binds.failed();
+        if (step.kind === "gave-up") {
+          console.warn(
+            `[browser] the hub proxy's port ${BROWSER_PROXY_PORT} is still held by another process after ${Math.round(step.failingMs / 1000)} s; this agent stops trying to bind it, and that process's proxy serves`
+          );
+          return;
+        }
+        setTimeout(bind, step.ms).unref();
         return;
       }
       started = undefined;

@@ -39,7 +39,6 @@ export interface ArtifactLaneDeps {
 
 export const createArtifactLane = (deps: ArtifactLaneDeps) => {
   let current: ArtifactNeedsRead = { needs: [], notices: [] };
-  let said: string | null = null;
   let timer: HubTimer | undefined;
   /** Whether {@link current} is the lane as it stands: nothing it is read from moved since it was read. */
   let held = false;
@@ -60,14 +59,12 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
       return current;
     }
     held = true;
-    const words = JSON.stringify(read);
-    if (words === said) {
+    if (Bun.deepEquals(read, current)) {
       return current;
     }
     const before = unparked(current.needs);
     const after = unparked(read.needs);
     current = read;
-    said = words;
     for (const need of before) {
       if (!after.some((one) => one.artifactId === need.artifactId)) {
         deps.left(need.artifactId);
@@ -80,14 +77,31 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
     return current;
   };
 
+  /** The read, wanted on the hub's admission; one asked meanwhile ({@link now}) read it already. */
+  const wantSettled = (): void => {
+    timer = undefined;
+    deps.lifetime.jobs.want({
+      key: "artifact lane",
+      name: "artifact lane settled",
+      priority: "background",
+      run: () => {
+        if (!held) {
+          settle();
+        }
+      },
+    });
+  };
+
   return {
     /** Something the lane is read from moved: read again once it is quiet. */
     moved(): void {
       held = false;
+      // Once quiet, read on the hub's admission (scheduler.ts): background,
+      // one read however often it moved meanwhile.
       timer ??= deps.lifetime.after(
-        "artifact lane settled",
+        "artifact lane quiet",
         MOVED_QUIET_MS,
-        settle
+        wantSettled
       );
     },
     /** The lane as it stands now: the read it holds, or read at once when something moved since. */

@@ -18,6 +18,7 @@
  * session aged off the board is drawn as itself, never as "Fleet", a bare
  * id or a transcript that never loads.
  */
+import { backoffWait } from "@cawco/core/backoff";
 import type { FindConversation } from "@cawco/core/find";
 import { SvelteMap } from "svelte/reactivity";
 import { browser } from "$app/env";
@@ -48,9 +49,13 @@ let failures = 0;
 
 /** The most names one request carries (the hub's own bound, find.ts `FIND_SESSIONS_BODY`). */
 const NAMES_PER_ASK = 200;
-/** The first wait after a request the hub did not answer, and the longest, ms. Our call. */
-const FIRST_WAIT_MS = 1000;
-const LONGEST_WAIT_MS = 60_000;
+/**
+ * The wait after requests the hub did not answer: from 1 s, doubling to a
+ * minute (core backoff.ts, its jitter keeping tabs that lost the hub
+ * together from asking again together). Its end is the names' answer: one
+ * request a minute at most, never on a redraw. Our call.
+ */
+const ASKS_AGAIN = { firstMs: 1000, mostMs: 60_000 };
 
 /** The id part of a name: what follows a handle's `#`, else the name. */
 const idPartOf = (name: string): string => {
@@ -99,16 +104,8 @@ function heldId(name: string): string | null {
   return now && rows.has(now) ? now : null;
 }
 
-/**
- * How long the request after `failures` unanswered ones in a row waits:
- * doubling from {@link FIRST_WAIT_MS} up to {@link LONGEST_WAIT_MS}, each
- * a random share of it from half to whole, so tabs that lost the hub
- * together do not ask again together.
- */
-const againAfter = (failed: number): number => {
-  const cap = Math.min(LONGEST_WAIT_MS, FIRST_WAIT_MS * 2 ** (failed - 1));
-  return cap / 2 + Math.random() * (cap / 2);
-};
+/** How long the request after `failed` unanswered ones in a row waits ({@link ASKS_AGAIN}). */
+const againAfter = (failed: number): number => backoffWait(ASKS_AGAIN, failed);
 
 /** The names owed asked in one request now, and what it answered kept. */
 function askOwed(): void {

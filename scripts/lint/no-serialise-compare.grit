@@ -1,0 +1,24 @@
+language js
+
+// Two values are compared as values, never as their JSON: serialising both
+// to compare them costs their whole size each time, on the hub's thread at
+// every publish (the board compared each machine's 57 to 114 KB row so,
+// tsk-391), and reads two equal values as different when their keys came in
+// another order. Compare with `Bun.deepEquals(a, b)` (or the fields that
+// matter, one by one); keep the value, not its JSON, to compare it later.
+// The hub and the agent, Bun's processes with loops the fleet waits on; core
+// also runs in the browser, where Bun's compare is not.
+or {
+  `JSON.stringify($_) === $_`,
+  `JSON.stringify($_) !== $_`,
+  `$_ === JSON.stringify($_)`,
+  `$_ !== JSON.stringify($_)`,
+  `JSON.stringify($_) == $_`,
+  `JSON.stringify($_) != $_`
+} as $hit where {
+  $filename <: or { includes "packages/hub/src/", includes "packages/agent/src/" },
+  // Pages a browser runs, where Bun is not.
+  $filename <: not includes "packages/agent/src/stage-host/canvas/",
+  $filename <: not includes "packages/agent/src/canvas-host/",
+  register_diagnostic(span=$hit, message="Serialising to compare: compare the values with Bun.deepEquals(a, b), and keep the value, not its JSON, to compare it later.")
+}

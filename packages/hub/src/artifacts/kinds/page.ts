@@ -130,7 +130,7 @@ const patchedEntries = (
 ) => {
   const next: Record<string, ChoiceEntry> = {};
   for (const [key, value] of Object.entries(after)) {
-    if (JSON.stringify(value) === JSON.stringify(before[key])) {
+    if (Bun.deepEquals(value, before[key])) {
       continue;
     }
     const given = isObject(value) ? value : {};
@@ -654,10 +654,7 @@ export const createPageKind = (ctx: PageKindContext) => {
     const carded = program
       ? readKept(program)
           .cards.map((card) => card.id)
-          .filter(
-            (card) =>
-              JSON.stringify(after[card]) !== JSON.stringify(before[card])
-          )
+          .filter((card) => !Bun.deepEquals(after[card], before[card]))
       : [];
     if (carded.length > 0) {
       return problem(409, {

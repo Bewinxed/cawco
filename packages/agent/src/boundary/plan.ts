@@ -183,7 +183,7 @@ const policyMoves = (was: Policy | undefined, now: Policy): string[] => {
             .map((path) => `${field} -${path}`),
         ];
       }
-      return JSON.stringify(before[field]) === JSON.stringify(after[field])
+      return Bun.deepEquals(before[field], after[field])
         ? []
         : [`${field} changed`];
     });

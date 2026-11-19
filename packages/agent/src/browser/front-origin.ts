@@ -19,12 +19,23 @@
  * nobody holds the browser (cdp-watch.ts), told when it moves
  * ({@link onFrontMoved}).
  */
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import type { BrowserHostKind, BrowserKey } from "@cawco/core/browser";
 import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
 
-/** How long after a link that would not open it is tried again, while the browser is live. Our call. */
-const RETRY_MS = 5000;
+/**
+ * How a link that would not open, or closed, is opened again while the
+ * browser is live: from 2 s, doubling to a minute, eight times in a row;
+ * then it gives up, and the band says the address cannot be read
+ * (`BrowserRow.originUnread`) until the browser starts again. It used to
+ * try every 5 s for ever, with a log line each time (tsk-399). Our call.
+ */
+const RELINK: BackoffPolicy = {
+  firstMs: 2000,
+  mostMs: 60_000,
+  giveUp: { afterTries: 8 },
+};
 
 interface Page {
   /** When it was made or last moved: the newest is the one in front. */
@@ -44,6 +55,8 @@ interface Watch {
   link?: CdpLink;
   origin?: string;
   pages: Map<string, Page>;
+  /** The link's opens that failed in a row ({@link RELINK}). */
+  relinks: Backoff;
   retry?: ReturnType<typeof setTimeout>;
   /** The page shown, as last told. */
   shown?: string;
@@ -64,6 +77,10 @@ export const frontTarget = (key: BrowserKey): string | undefined =>
 /** The origin `key`'s view shows now; undefined for none. */
 export const frontOrigin = (key: BrowserKey): string | undefined =>
   watches.get(key)?.origin;
+
+/** Whether reading `key`'s page shown was given up ({@link RELINK}). */
+export const frontUnread = (key: BrowserKey): boolean =>
+  watches.get(key)?.relinks.gaveUp ?? false;
 
 /** A page's origin as the band names it: a web page's alone (`about:blank`, the browser's own pages and a blank tab name none). */
 const originOf = (url: string): string | undefined => {
@@ -139,6 +156,7 @@ const open = (key: BrowserKey, watch: Watch): void => {
         return;
       }
       watch.link = link;
+      watch.relinks.succeeded();
       link.onEvent = (message) => {
         const { targetInfo, targetId } = message.params ?? {};
         let moved = false;
@@ -175,23 +193,36 @@ const open = (key: BrowserKey, watch: Watch): void => {
       await link.call("Target.setDiscoverTargets", { discover: true });
     })
     .catch((error: unknown) => {
-      console.warn(
-        `[browser] ${key}'s page origin is not read: ${error instanceof Error ? error.message : String(error)}`
-      );
-      retry(key, watch);
+      retry(key, watch, error instanceof Error ? error.message : String(error));
     });
 };
 
-const retry = (key: BrowserKey, watch: Watch): void => {
+/** The link would not open, or closed: opened again after its wait, or given up, which the hub is told. */
+const retry = (
+  key: BrowserKey,
+  watch: Watch,
+  why = "its link closed"
+): void => {
   if (watch.closed) {
     return;
   }
   clearTimeout(watch.retry);
+  const step = watch.relinks.failed();
+  if (step.kind === "gave-up") {
+    console.warn(
+      `[browser] ${key}'s page origin is not read (${why}); given up after ${step.tries} tries over ${Math.round(step.failingMs / 1000)} s, until the browser starts again`
+    );
+    watch.heard(key);
+    return;
+  }
+  console.warn(
+    `[browser] ${key}'s page origin is not read (${why}); trying again in ${Math.round(step.ms / 1000)} s`
+  );
   watch.retry = setTimeout(() => {
     if (!(watch.closed || watch.link)) {
       open(key, watch);
     }
-  }, RETRY_MS);
+  }, step.ms);
   watch.retry.unref?.();
 };
 
@@ -226,6 +257,7 @@ export const syncOrigins = (
         heard,
         host,
         pages: new Map(),
+        relinks: new Backoff(RELINK),
         closed: false,
       };
       watches.set(key, watch);

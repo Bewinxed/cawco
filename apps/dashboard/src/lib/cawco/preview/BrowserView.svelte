@@ -1267,7 +1267,9 @@
           return {
             kind: "fail",
             title: browserWords.lostTitle,
-            line: browserWords.lostLine,
+            line: streamState.over
+              ? browserWords.lostOverLine
+              : browserWords.lostLine,
             details: streamState.why,
             again: true,
           };
@@ -1514,6 +1516,7 @@
             connecting={streamState.kind !== "live"}
             {mine}
             origin={browser?.origin ?? null}
+            unread={browser?.originUnread === true}
           />
         </div>
         {#if driving}

@@ -13,6 +13,7 @@
  * nor refused, and answered 500 "couldn't be read" for the two seconds
  * before the report (host run 84ca5c0e, 20:05:27.547).
  */
+import type { HubLifetimeShape } from "./lifetime";
 
 /** One machine's connection now, and whether its tools have been said on it. */
 interface Connection {
@@ -38,7 +39,9 @@ export interface ToolFactsShape {
   readonly until: (machineId: string, ms: number) => Promise<boolean>;
 }
 
-export const createToolFacts = (): ToolFactsShape => {
+export const createToolFacts = (
+  lifetime: Pick<HubLifetimeShape, "after" | "cancel">
+): ToolFactsShape => {
   const connections = new Map<string, Connection>();
 
   const wakeAll = (connection: Connection): void => {
@@ -84,11 +87,11 @@ export const createToolFacts = (): ToolFactsShape => {
       }
       return new Promise((resolve) => {
         const done = (): void => {
-          clearTimeout(timer);
+          lifetime.cancel(timer);
           connection.wake.delete(done);
           resolve(heard(machineId));
         };
-        const timer = setTimeout(done, ms);
+        const timer = lifetime.after("tool facts waited", ms, done);
         connection.wake.add(done);
       });
     },

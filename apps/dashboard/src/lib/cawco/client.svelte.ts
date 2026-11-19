@@ -9,6 +9,7 @@
  * layout (`ensureConnected`).
  */
 
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import { detach } from "@cawco/core/detach";
 import type { BoardKeyed } from "@cawco/core/frames";
 import type {
@@ -267,6 +268,13 @@ async function refresh(): Promise<boolean> {
   return false;
 }
 
+/** The connect-time read's tries: from 1 s, doubling to 10 s, for five minutes. */
+const FLEET_READS: BackoffPolicy = {
+  firstMs: 1000,
+  mostMs: 10_000,
+  giveUp: { afterMs: 5 * 60_000 },
+};
+
 /** The pending re-read of `readFleet`; one chain per socket at most. */
 let fleetRetry: ReturnType<typeof setTimeout> | undefined;
 /** Bumped by every read and every cancel, so a read still in flight from an
@@ -284,10 +292,11 @@ function cancelFleetRead(): void {
  * The connect-time read. A deploy restarts the hub and the dashboard together,
  * and the socket can reopen through the dashboard before the hub answers REST:
  * those reads fail, and nothing else would read again until the next reconnect.
- * So while the socket stays open it reads again — 1s, 2s, 4s, 8s, then every
- * 10s — until the board's reads land.
+ * So while the socket stays open it reads again ({@link FLEET_READS}) until
+ * the board's reads land, or five minutes have passed: then the next
+ * reconnect reads again.
  */
-function readFleet(delay = 1000): void {
+function readFleet(tries = new Backoff(FLEET_READS)): void {
   cancelFleetRead();
   const chain = fleetChain;
   detach(
@@ -301,10 +310,14 @@ function readFleet(delay = 1000): void {
       if (!socketOpen()) {
         return;
       }
-      fleetRetry = setTimeout(
-        () => readFleet(Math.min(delay * 2, 10_000)),
-        delay
-      );
+      const step = tries.failed();
+      if (step.kind === "gave-up") {
+        console.warn(
+          `[fleet] the board's reads failed for ${Math.round(step.failingMs / 1000)} s with the socket open; the next reconnect reads again`
+        );
+        return;
+      }
+      fleetRetry = setTimeout(() => readFleet(tries), step.ms);
     }),
     "refresh"
   );

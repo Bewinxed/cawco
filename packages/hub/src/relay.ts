@@ -46,12 +46,14 @@
  *   owner pastes is set from the owner's terminal (`cawco relay set-secret`),
  *   never through a session.
  */
+
 import {
   createHash,
   createHmac,
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
@@ -63,7 +65,7 @@ import {
   type RelayProvider,
   type RelayView,
 } from "@cawco/core/relays";
-import { secondsOf } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { cutShort } from "@cawco/core/words/helpers";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -92,8 +94,17 @@ const RELAY_BODY_MAX = 1024 * 1024;
 const PER_MINUTE = 60;
 /** A signed timestamp's window either way: Stripe's own tolerance, 5 minutes. */
 const WINDOW_S = 5 * 60;
-/** How often the wanted state is applied again while a relay isn't live. */
-const AGAIN_MS = 60_000;
+/**
+ * The wanted state applied again while a relay isn't live: from a minute,
+ * doubling to half an hour, for a day; then the look goes on at its
+ * longest wait without applying, until every relay is live again or the
+ * person's own change applies it.
+ */
+const RELOOKS: BackoffPolicy = {
+  firstMs: 60_000,
+  mostMs: 30 * MINUTE_MS,
+  giveUp: { afterMs: DAY_MS },
+};
 /** A GitHub registration GitHub refused is tried again after this, unless asked. Our choice. */
 const REFUSED_AGAIN_MS = 10 * 60_000;
 /** How long creating a GitHub relay waits for GitHub's ping. Our choice. */
@@ -829,15 +840,33 @@ export const createRelay = ({
     return next;
   };
 
-  const tickAgain = (): void => {
+  const relooks = new Backoff(RELOOKS);
+  let saidGaveUp = false;
+  const tickAgain = (wait: number = RELOOKS.firstMs): void => {
     if (lifetime.closed()) {
       return;
     }
-    timer = lifetime.after("relay look again", AGAIN_MS, () => {
-      if (store.active().some((row) => row.state !== "live")) {
-        detach(apply(), "relay apply");
+    timer = lifetime.after("relay look again", wait, () => {
+      if (!store.active().some((row) => row.state !== "live")) {
+        relooks.succeeded();
+        saidGaveUp = false;
+        tickAgain();
+        return;
       }
-      tickAgain();
+      const step = relooks.failed();
+      if (step.kind === "gave-up") {
+        if (!saidGaveUp) {
+          saidGaveUp = true;
+          console.warn(
+            `[relay] a relay has not been live for ${Math.round(step.failingMs / HOUR_MS)} h; the hub stops applying it on its own until a change applies it`
+          );
+        }
+        tickAgain(RELOOKS.mostMs);
+        return;
+      }
+      saidGaveUp = false;
+      detach(apply(), "relay apply");
+      tickAgain(step.ms);
     });
   };
 

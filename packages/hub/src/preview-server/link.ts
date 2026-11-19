@@ -6,6 +6,7 @@
  * waits on goes over the link, and what it says meanwhile (a use, a pass's
  * use) is dropped, its next one said after.
  */
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import { openWebSocket } from "@cawco/preview/proxy";
 import { HUB_PORT } from "../config";
 import {
@@ -17,16 +18,25 @@ import {
   TOKEN_HEADER,
 } from "./wire";
 
-/** The waits before opening the link again after a drop, ms: doubling from the first to the last, each with up to a fifth again of jitter. Our calls. */
-const FIRST_MS = 250;
-const MOST_MS = 10_000;
+/**
+ * Opening the link again after a drop: from 250 ms, doubling to 10 s. Our
+ * calls.
+ */
+const REOPENS: BackoffPolicy = {
+  firstMs: 250,
+  mostMs: 10_000,
+  giveUp: {
+    never:
+      "the preview server learns of its origins from the hub on this link alone; it ends with the server",
+  },
+};
 
 /** The hub's own origin on loopback, where the preview server reaches it. */
 export const hubOrigin = (): string => `http://127.0.0.1:${HUB_PORT}`;
 
 export const openHubLink = (heard: (said: HubSays) => void) => {
   let socket: WebSocket | null = null;
-  let tries = 0;
+  const tries = new Backoff(REOPENS);
   let ended = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const token = previewServerToken();
@@ -38,7 +48,7 @@ export const openHubLink = (heard: (said: HubSays) => void) => {
     });
     socket = ws;
     ws.addEventListener("open", () => {
-      tries = 0;
+      tries.succeeded();
       console.log("[preview] the hub's link is open");
       for (const listener of listeners) {
         listener();
@@ -65,9 +75,8 @@ export const openHubLink = (heard: (said: HubSays) => void) => {
       if (ended) {
         return;
       }
-      const wait = Math.min(FIRST_MS * 2 ** tries, MOST_MS);
-      tries += 1;
-      timer = setTimeout(open, wait * (1 + Math.random() / 5));
+      const step = tries.failed();
+      timer = setTimeout(open, step.kind === "wait" ? step.ms : REOPENS.mostMs);
     });
   };
   open();

@@ -1529,14 +1529,10 @@ export const createIngress = ({
       return unfit;
     }
     // What it lists or keys by moved: its next call only looks again.
-    const relook =
-      JSON.stringify([
-        next.args,
-        next.itemsPath,
-        next.idPath,
-        next.versionPath,
-      ]) !==
-      JSON.stringify([row.args, row.itemsPath, row.idPath, row.versionPath]);
+    const relook = !Bun.deepEquals(
+      [next.args, next.itemsPath, next.idPath, next.versionPath],
+      [row.args, row.itemsPath, row.idPath, row.versionPath]
+    );
     const edited: ConnectorPollView = pollView(
       store.updateConnectorPoll(id, {
         ...next,

@@ -2345,7 +2345,7 @@ export const createTasks = (store: TaskStore) => {
       return kept;
     }
     const comments: { lines: string[] | undefined } | undefined =
-      JSON.stringify(written) === JSON.stringify(kept?.read().comments ?? [])
+      Bun.deepEquals(written, kept?.read().comments ?? [])
         ? undefined
         : { lines: kept?.commentsSection() };
     return comments;

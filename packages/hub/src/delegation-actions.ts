@@ -81,7 +81,7 @@ import {
   sessionRole,
   stopOf,
 } from "./session-list";
-import { cursorAt } from "./views/find-engine";
+import { cursorAt } from "./views/pages";
 import type { WorkItemCalls } from "./work-item-calls";
 import { type HandoffInputs, resolveSpawnType } from "./work-items";
 import type { Unlanded } from "./workspaces";

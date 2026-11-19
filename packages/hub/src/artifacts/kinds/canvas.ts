@@ -273,13 +273,14 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
         letGoHeadless(id);
       }
     };
-    const timer = setTimeout(
-      () => letGoHeadless(id),
-      CANVAS_LIMITS.screenHoldMs
+    const timer = ctx.deps.lifetime.after(
+      "canvas screen let go",
+      CANVAS_LIMITS.screenHoldMs,
+      () => letGoHeadless(id)
     );
     meta.observe(pictured);
     screen.settle = () => {
-      clearTimeout(timer);
+      ctx.deps.lifetime.cancel(timer);
       meta.unobserve(pictured);
       screen.settle = undefined;
     };

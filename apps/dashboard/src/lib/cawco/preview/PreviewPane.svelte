@@ -698,20 +698,20 @@
 {/snippet}
 
 <!-- A browser's address, in the head's centre (BrowserAddress). -->
-{#snippet addressBar()}
+{#snippet address(as: "bar" | "menu")}
   <BrowserAddress
+    {as}
     connecting={!paneBrowser.browserViewing}
     mine={!!paneBrowser.browserRow?.takeover}
     origin={paneBrowser.browserRow?.origin ?? null}
+    unread={paneBrowser.browserRow?.originUnread === true}
   />
 {/snippet}
+{#snippet addressBar()}
+  {@render address("bar")}
+{/snippet}
 {#snippet addressMenu()}
-  <BrowserAddress
-    as="menu"
-    connecting={!paneBrowser.browserViewing}
-    mine={!!paneBrowser.browserRow?.takeover}
-    origin={paneBrowser.browserRow?.origin ?? null}
-  />
+  {@render address("menu")}
 {/snippet}
 
 {#snippet undockMenu()}

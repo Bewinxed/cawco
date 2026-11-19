@@ -9,6 +9,7 @@ import {
 } from "@homebridge/ciao";
 import { BIND_HOST, HUB_VERSION } from "./config";
 import { lanInterfaces } from "./lan-interfaces";
+import type { HubLifetimeShape } from "./lifetime";
 
 /**
  * Announces the hub on the networks it sits on: the `_cawco._tcp` service
@@ -197,6 +198,7 @@ const move = async (
  * explicit URL.
  */
 const follow = async (
+  lifetime: Pick<HubLifetimeShape, "after">,
   port: number,
   addresses: Partial<ServiceOptions>,
   said: string
@@ -210,10 +212,17 @@ const follow = async (
   if (saying && saying !== said) {
     console.log(saying);
   }
-  setTimeout(() => follow(port, addresses, saying), FOLLOW_MS).unref();
+  lifetime.after("mDNS interfaces read", FOLLOW_MS, () => {
+    follow(lifetime, port, addresses, saying).catch((error: Error) =>
+      console.log(`[hub] mDNS unavailable: ${error.message}`)
+    );
+  });
 };
 
-export const advertise = (port: number): void => {
+export const advertise = (
+  port: number,
+  lifetime: Pick<HubLifetimeShape, "after">
+): void => {
   if (readEnv(CAWCO_ENV.noMdns) === "1") {
     console.log("[hub] mDNS advertisement disabled");
     return;
@@ -225,7 +234,7 @@ export const advertise = (port: number): void => {
     );
     return;
   }
-  follow(port, addresses, "").catch((error: Error) =>
+  follow(lifetime, port, addresses, "").catch((error: Error) =>
     console.log(`[hub] mDNS unavailable: ${error.message}`)
   );
 };

@@ -25,6 +25,7 @@
  * after processing is already completed", the same page); the harness drops
  * that answer, so a cancel within {@link LATE_CANCEL_MS} of it still cuts.
  */
+import type { HubLifetimeShape } from "./lifetime";
 
 /** How long after its answer a call can still be cut: the answer and the cancel crossing. */
 const LATE_CANCEL_MS = 30_000;
@@ -44,11 +45,10 @@ export type Started =
   | { kind: "queued-task"; projectId: string; taskId: string };
 
 /** The running calls, by caller (the session a connection is bound to) and JSON-RPC id. */
-export const createCallCuts = (
-  later: (run: () => void, ms: number) => void = (run, ms) => {
-    setTimeout(run, ms).unref?.();
-  }
-) => {
+export const createCallCuts = (lifetime: Pick<HubLifetimeShape, "after">) => {
+  const later = (run: () => void, ms: number): void => {
+    lifetime.after("answered call let go", ms, run);
+  };
   const calls = new Map<string, AbortController>();
   const keyOf = (caller: string, id: string | number): string =>
     `${caller}\n${typeof id}:${id}`;

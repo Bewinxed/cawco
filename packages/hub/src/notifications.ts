@@ -828,7 +828,7 @@ export const createNotifications = ({
 
   /** The person as last told, and the view the dashboards were last sent. */
   let told: Rolled = asLastTold(rolled());
-  let toldView = JSON.stringify(viewOf(told, Date.now()));
+  let toldView = viewOf(told, Date.now());
   console.log(presenceLogWords.atStart(stateOf(told), told.why));
   // Away now with no stretch open (the first start, or the clock ran out
   // while the hub was down): the stretch opens at their last input. A
@@ -870,7 +870,6 @@ export const createNotifications = ({
     const now = Date.now();
     const person = rolled(now);
     const view = viewOf(person, now);
-    const said = JSON.stringify(view);
     const before = told;
     const moved =
       person.state !== before.state ||
@@ -885,8 +884,8 @@ export const createNotifications = ({
         listener(person, before);
       }
     }
-    if (said !== toldView) {
-      toldView = said;
+    if (!Bun.deepEquals(view, toldView)) {
+      toldView = view;
       registry.broadcast({
         verb: "frames",
         machineId: "hub",

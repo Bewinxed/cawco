@@ -4,6 +4,7 @@ import { detach } from "@cawco/core/detach";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { TURN_UNRECORDED } from "../db/sends";
 import type { HubContext } from "../hub-context";
+import { nextTurn } from "../lifetime";
 import { outlivesSession } from "../pending";
 import { UNREAD } from "../sends";
 import type { MachineReturn } from "./machine-return";
@@ -517,14 +518,14 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // machine holding thousands of rows held the hub's thread for
     // 640 ms in one piece on a copy of the live database
     // (2026-10-24).
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await nextTurn();
     await ctx.readLaunchDirs(message.machineId);
     let restoreBatch = 0;
     for (const orphan of revivable) {
       ctx.restore(ws, orphan.row, heldRows.has(orphan.row.id));
       restoreBatch += 1;
       if (restoreBatch % 8 === 0) {
-        await new Promise<void>((resolve) => setImmediate(resolve));
+        await nextTurn();
       }
     }
     const restoredIds = new Set(revivable.map(({ row }) => row.id));
@@ -568,7 +569,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
           );
           restoreBatch += 1;
           if (restoreBatch % 8 === 0) {
-            await new Promise<void>((resolve) => setImmediate(resolve));
+            await nextTurn();
           }
         }
       }
@@ -689,7 +690,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // first: handing over a hundred kept sends is 200 ms of its own,
     // and a send to one of their sessions that arrives meanwhile is
     // owed behind them (`sendWaits`).
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await nextTurn();
     ctx.hubStep({
       kind: "agent-register",
       machineId: message.machineId,

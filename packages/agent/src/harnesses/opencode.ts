@@ -27,6 +27,7 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import { isGone } from "@cawco/core/absent";
 import { providersOpenedBy } from "@cawco/core/accounts";
+import { Backoff, type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
@@ -539,19 +540,44 @@ const CONFIG_SETTLE_TIMEOUT_MS = 90_000;
  * minutes outlasts it many times over. Never forever: a reattach that never
  * ends holds that session, and once held a whole machine's custody.
  */
-const RECOVERY_RETRY_BUDGET_MS = 120_000;
-/** A reattach's first wait before it tries again; each next doubles it. */
-const RECOVERY_RETRY_FIRST_MS = 1000;
+const RECOVERY_BUDGET_MS = 120_000;
 /**
- * The longest a reattach waits between tries. Our call: a server that has
- * not answered in half a minute is not hurried by a faster ask, and a
+ * A reattach's tries: from 1 s, doubling to 30 s, for
+ * {@link RECOVERY_BUDGET_MS}. The longest wait is our call: a server that
+ * has not answered in half a minute is not hurried by a faster ask, and a
  * machine's worth of sessions asking every 5 s kept a loaded machine busy
  * (2026-10-23 20:20, obelisk: 369 reattaches, 5,166 retries).
  */
-const RECOVERY_RETRY_MAX_MS = 30_000;
+const RECOVERY_TRIES: BackoffPolicy = {
+  firstMs: 1000,
+  mostMs: 30_000,
+  giveUp: { afterMs: RECOVERY_BUDGET_MS },
+};
 
-/** How long before a directory's deferred release is tried again. Ours: a held turn or a recovery is over in minutes, not seconds. */
-const DIRECTORY_RELEASE_RETRY_MS = 30_000;
+/**
+ * A directory's deferred release, tried again: from 30 s, doubling to 10
+ * min, ten times; then the location is left loaded until the next release
+ * asks for it. Ours: a held turn or a recovery is over in minutes, not
+ * seconds.
+ */
+const DIRECTORY_RELEASES: BackoffPolicy = {
+  firstMs: 30_000,
+  mostMs: 10 * 60_000,
+  giveUp: { afterTries: 10 },
+};
+
+/**
+ * A server's event feed, opened again after it ended or dropped: from 1 s,
+ * doubling to 30 s.
+ */
+const EVENT_FEED: BackoffPolicy = {
+  firstMs: 1000,
+  mostMs: 30_000,
+  giveUp: {
+    never:
+      "the event feed is every OpenCode session's only word from its server; it stops when the server does",
+  },
+};
 
 /**
  * The fingerprint of the machine's `opencode.json`: the whole document,
@@ -859,8 +885,7 @@ const toOpencodeMcp = (config: FleetMcpConfig): Record<string, unknown> => {
  * try 15 s on (a start that timed out on a loaded machine is usually moments
  * from connecting), then each wait doubled up to 5 min.
  */
-const MCP_RETRY_FIRST_MS = 15_000;
-const MCP_RETRY_MAX_MS = 5 * 60_000;
+const MCP_MENDS = { firstMs: 15_000, mostMs: 5 * 60_000 };
 
 /**
  * How many passes read the fleet's servers again after a change left one
@@ -4876,7 +4901,8 @@ class OpencodeHarness implements Harness<"opencode"> {
   #releaseDirectory(
     directory: string,
     identity: ServerIdentity,
-    caller = "directory release"
+    caller = "directory release",
+    tries = new Backoff(DIRECTORY_RELEASES)
   ): void {
     // One release of a location at a time: a second asked while one waits
     // is that one.
@@ -4888,10 +4914,18 @@ class OpencodeHarness implements Harness<"opencode"> {
     this.#disposeUnused(directory, identity, caller)
       .then((settled) => {
         if (!settled) {
+          const step = tries.failed();
+          if (step.kind === "gave-up") {
+            this.#releasing.delete(key);
+            console.info(
+              `[opencode] ${directory}: its location stays loaded after ${step.tries} deferred releases; the next release asks again`
+            );
+            return;
+          }
           setTimeout(() => {
             this.#releasing.delete(key);
-            this.#releaseDirectory(directory, identity, caller);
-          }, DIRECTORY_RELEASE_RETRY_MS).unref();
+            this.#releaseDirectory(directory, identity, caller, tries);
+          }, step.ms).unref();
           return;
         }
         this.#releasing.delete(key);
@@ -4967,7 +5001,7 @@ class OpencodeHarness implements Harness<"opencode"> {
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes every subscribed event to its owning session or child
   async #pump(identity: ServerIdentity, stopped: AbortSignal): Promise<void> {
     const key = identity.procId;
-    let delay = 1000;
+    const feedTries = new Backoff(EVENT_FEED);
     while (!stopped.aborted) {
       const slot = this.#slotOfGeneration(identity);
       if (!slot) {
@@ -5017,7 +5051,7 @@ class OpencodeHarness implements Harness<"opencode"> {
                   }
                 }
               }
-              delay = 1000;
+              feedTries.succeeded();
               this.#route(next.value, identity);
               next = await feed.next();
             }
@@ -5038,8 +5072,8 @@ class OpencodeHarness implements Harness<"opencode"> {
       if (stopped.aborted) {
         break;
       }
-      await Bun.sleep(delay);
-      delay = Math.min(delay * 2, 30_000);
+      const step = feedTries.failed();
+      await Bun.sleep(step.kind === "wait" ? step.ms : EVENT_FEED.mostMs);
     }
     this.#pumps.delete(key);
     this.#pumpReady.delete(key);
@@ -5529,8 +5563,8 @@ class OpencodeHarness implements Harness<"opencode"> {
    * `RECOVERY_TIMEOUT_MS`. A server that answers for the session with an
    * error refuses it at once. One out of reach, or one that does not answer
    * in time ({@link ReattachUnanswered}), is tried again after
-   * {@link RECOVERY_RETRY_FIRST_MS}, doubling to {@link RECOVERY_RETRY_MAX_MS},
-   * until {@link RECOVERY_RETRY_BUDGET_MS}: then the reattach fails in its
+   * its wait ({@link RECOVERY_TRIES}), until {@link RECOVERY_BUDGET_MS}:
+   * then the reattach fails in its
    * own words, and the session is settled asleep (session.ts: unavailable),
    * its sends owed to its next start, which asks OpenCode again whether it
    * runs it. Never retried for good: 369 sessions asked OpenCode every 5 s
@@ -5541,9 +5575,9 @@ class OpencodeHarness implements Harness<"opencode"> {
     ctx: HarnessContext,
     wave: RecoveryWave
   ): Promise<OpencodeSession | undefined> {
-    const deadline = Date.now() + RECOVERY_RETRY_BUDGET_MS;
-    let attempt = 0;
+    const tries = new Backoff(RECOVERY_TRIES);
     while (!this.#disposed) {
+      const attempt = tries.tries;
       if (wave.round?.attempt !== attempt) {
         wave.round = {
           attempt,
@@ -5565,27 +5599,23 @@ class OpencodeHarness implements Harness<"opencode"> {
           await this.#decideFailed(spec, round);
           throw error;
         }
-        const delay = Math.min(
-          RECOVERY_RETRY_FIRST_MS * 2 ** Math.min(attempt, 16),
-          RECOVERY_RETRY_MAX_MS
-        );
-        if (Date.now() >= deadline) {
+        const step = tries.failed();
+        if (step.kind === "gave-up") {
           await this.#decideFailed(spec, round);
           console.warn(
-            `[opencode] recovery ${ctx.instanceId} gave up after ${attempt + 1} tries in ${Math.round((Date.now() - deadline + RECOVERY_RETRY_BUDGET_MS) / 1000)} s, past its ${RECOVERY_RETRY_BUDGET_MS / 1000} s: ${errorText(error)}`
+            `[opencode] recovery ${ctx.instanceId} gave up after ${step.tries} tries in ${Math.round(step.failingMs / 1000)} s, past its ${RECOVERY_BUDGET_MS / 1000} s: ${errorText(error)}`
           );
           throw new ReattachFailed(
             error instanceof ReattachUnanswered
-              ? `${contactWords.reattachSilent(RECOVERY_RETRY_BUDGET_MS / 1000)} (${errorText(error)}). ${contactWords.reattachSilentNext}`
-              : `CawCo couldn't take this session back after a restart: OpenCode didn't answer within ${RECOVERY_RETRY_BUDGET_MS / 1000} s (${errorText(error)}). Start it again.`,
+              ? `${contactWords.reattachSilent(RECOVERY_BUDGET_MS / 1000)} (${errorText(error)}). ${contactWords.reattachSilentNext}`
+              : `CawCo couldn't take this session back after a restart: OpenCode didn't answer within ${RECOVERY_BUDGET_MS / 1000} s (${errorText(error)}). Start it again.`,
             { cause: error }
           );
         }
         console.warn(
-          `[opencode] recovery ${ctx.instanceId} waiting; retry ${attempt + 1} in ${delay}ms: ${errorText(error)}`
+          `[opencode] recovery ${ctx.instanceId} waiting; retry ${step.tries} in ${step.ms}ms: ${errorText(error)}`
         );
-        attempt += 1;
-        await Bun.sleep(delay);
+        await Bun.sleep(step.ms);
       }
     }
   }
@@ -6935,7 +6965,7 @@ class OpencodeHarness implements Harness<"opencode"> {
 
   /**
    * Schedules the next pass ({@link #mendFleetMcp}): `restart` from the first
-   * wait, else after the backoff's next one ({@link MCP_RETRY_FIRST_MS}). A
+   * wait, else after the backoff's next one ({@link MCP_MENDS}). A
    * pass already scheduled stands unless restarted. Once
    * {@link MCP_PASS_READS} passes have read, a pass is scheduled only while
    * a live session runs here, whose location it starts the failed servers
@@ -6966,10 +6996,8 @@ class OpencodeHarness implements Harness<"opencode"> {
       }
       return;
     }
-    const wait = Math.min(
-      MCP_RETRY_FIRST_MS * 2 ** this.#mendAttempt,
-      MCP_RETRY_MAX_MS
-    );
+    // Its own end: MCP_PASS_READS passes, then only while a session runs here.
+    const wait = backoffWait(MCP_MENDS, this.#mendAttempt + 1);
     this.#mendAttempt += 1;
     this.#mendTimer = setTimeout(() => {
       this.#mendTimer = null;

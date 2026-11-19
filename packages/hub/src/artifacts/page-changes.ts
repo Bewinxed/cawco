@@ -474,7 +474,7 @@ export function htmlChanges(
     const own =
       old.tag !== node.tag ||
       old.text !== node.text ||
-      JSON.stringify(old.attrs) !== JSON.stringify(node.attrs);
+      !Bun.deepEquals(old.attrs, node.attrs);
     if (own) {
       changed.add(toldAt(node));
     }
@@ -682,7 +682,7 @@ export function cardChanges(
   const was = new Map(before.map((card) => [card.id, card]));
   const now = new Set(after.map((card) => card.id));
   const items: ChangedItem[] = after
-    .filter((card) => JSON.stringify(was.get(card.id)) !== JSON.stringify(card))
+    .filter((card) => !Bun.deepEquals(was.get(card.id), card))
     .map((card) => {
       const then = was.get(card.id);
       return {

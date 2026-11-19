@@ -19,6 +19,7 @@
  */
 import { readdir, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { type BackoffPolicy, backoffStep } from "@cawco/core/backoff";
 import {
   archiveAnswered,
   type SignedRelease,
@@ -87,6 +88,7 @@ import {
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { readRecord } from "@cawco/core/state-file";
+import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
@@ -197,8 +199,18 @@ const RETIRED_FIELDS = z.object({
 const INSTALL_FENCE_MS = 10 * 60_000;
 /** How many of the last commands' ids the state keeps, so one delivered again is not acted on twice. */
 const COMMANDS_KEPT = 20;
-/** Minutes to wait before trying a failed download or verification again; the last repeats. */
-const RETRY_DELAYS_MIN = [1, 5, 30, 60];
+/**
+ * A failed download or verification of one build, tried again: from 2 min
+ * (no sooner than a failed fetch is kept at the hub, core
+ * binary-distribution.ts `FAILURE_KEPT_MS`), doubling to an hour, twelve
+ * times; then the build waits for a command (the person's Update) or the
+ * next build offered, and its failure stands on the machine's update state.
+ */
+const RETRIES: BackoffPolicy = {
+  firstMs: 2 * MINUTE_MS,
+  mostMs: HOUR_MS,
+  giveUp: { afterTries: 12 },
+};
 
 /** How often a drain looks again. */
 const DRAIN_POLL_MS = 1000;
@@ -522,6 +534,8 @@ class AttemptFailed extends Error {}
 const Failure = z.object({
   count: z.number(),
   error: z.string(),
+  /** Its retries gave up ({@link RETRIES}): only a command tries it again. */
+  gaveUp: z.literal(true).optional(),
   nextAt: z.number(),
   version: z.string(),
 });
@@ -540,13 +554,13 @@ async function readFailure(version: string): Promise<Failure | undefined> {
 async function recordFailure(version: string, error: string): Promise<void> {
   const before = await readFailure(version);
   const count = (before?.count ?? 0) + 1;
-  const minutes =
-    RETRY_DELAYS_MIN[Math.min(count, RETRY_DELAYS_MIN.length) - 1] ?? 60;
+  const step = backoffStep(RETRIES, count, 0);
   await writeJsonAtomic(failuresPath(), {
     version,
     count,
     error,
-    nextAt: Date.now() + timerMs(minutes * 60_000),
+    ...(step.kind === "gave-up" ? { gaveUp: true as const } : {}),
+    nextAt: Date.now() + (step.kind === "wait" ? timerMs(step.ms) : 0),
   } satisfies Failure);
 }
 
@@ -929,8 +943,7 @@ export class BinaryUpdater {
   /** {@link #set}, only when a value it names changes: every write moves `updatedAt`, which the board reads as news. */
   async #setChanged(update: Partial<BinaryUpdateState>): Promise<boolean> {
     const changed = Object.entries(update).some(
-      ([key, value]) =>
-        JSON.stringify(Reflect.get(this.#state, key)) !== JSON.stringify(value)
+      ([key, value]) => !Bun.deepEquals(Reflect.get(this.#state, key), value)
     );
     if (changed) {
       await this.#set(update);
@@ -1713,7 +1726,9 @@ export class BinaryUpdater {
       return undefined;
     }
     const failure = await readFailure(version);
-    return failure && Date.now() < failure.nextAt ? failure : undefined;
+    return failure && (failure.gaveUp || Date.now() < failure.nextAt)
+      ? failure
+      : undefined;
   }
 
   /**
@@ -2153,7 +2168,7 @@ export class BinaryUpdater {
     if (
       this.#state.phase !== phase ||
       this.#state.waitingSince !== waitingSince ||
-      JSON.stringify(this.#state.waitingOn) !== JSON.stringify(holds)
+      !Bun.deepEquals(this.#state.waitingOn, holds)
     ) {
       await this.#set({ phase, waitingOn: holds, waitingSince });
     }

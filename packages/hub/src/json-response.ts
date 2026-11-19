@@ -9,8 +9,10 @@
  * about every {@link YIELD_EVERY_CHARS}: the same bytes, never the whole
  * encode at once. A smaller value keeps Elysia's own native path.
  */
+
 import { encodeJson, jsonSizeEstimate } from "@cawco/core/json-stream";
 import { WIRE_PART_CHARS } from "@cawco/core/wire";
+import { nextTurn } from "./lifetime";
 
 /**
  * Above this, a response is streamed. Our choice: what one native
@@ -42,10 +44,9 @@ const jsonStream = (value: object): ReadableStream<Uint8Array> => {
     async pull(controller) {
       if (sinceYield >= YIELD_EVERY_CHARS) {
         // Pulls chain as microtasks: without a macrotask between them the
-        // whole body is written before the loop turns again. Not on the hub's
-        // lifetime (lifetime.ts): a turn of the loop inside one response
-        // body, which reads nothing of the hub.
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        // whole body is written before the loop turns again (lifetime.ts
+        // `nextTurn`: a turn of the loop inside one response body).
+        await nextTurn();
         sinceYield = 0;
       }
       const piece = pieces.next();

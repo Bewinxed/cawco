@@ -896,7 +896,7 @@ export const createPlans = (deps: PlansDeps) => {
     needsMoved(needs: readonly ArtifactNeed[]): void {
       for (const [instanceId, { plan }] of held) {
         const now = planNeedsOf(instanceId, plan.steps, needs);
-        if (JSON.stringify(now) !== JSON.stringify(plan.needs ?? [])) {
+        if (!Bun.deepEquals(now, plan.needs ?? [])) {
           settleQuietly(instanceId);
         }
       }

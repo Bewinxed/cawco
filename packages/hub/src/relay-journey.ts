@@ -477,7 +477,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   let starting = false;
   let fleetProving = false;
   let fleetProvedAt = 0;
-  let published = "";
+  let published: Omit<RelayJourneyView, "revision"> | undefined;
   let revision = 0;
   let refreshing = false;
   /** Remove relay is under way: nothing begins by itself until the journey is gone with it. */
@@ -692,9 +692,8 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
    */
   const view = (): RelayJourneyView => {
     const now = viewNow();
-    const text = JSON.stringify(now);
-    if (text !== published) {
-      published = text;
+    if (!Bun.deepEquals(now, published)) {
+      published = now;
       revision = Math.max(revision + 1, Date.now());
       deps.publish({ ...now, revision });
     }

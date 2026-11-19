@@ -19,6 +19,13 @@ export const hubFailureWords = {
    */
   unreadRequest: "The hub couldn't read the request this page sent",
   /**
+   * A request whose asker had gone (its connection closed, its page moved
+   * on) before the hub's turn came to work it: not worked (hub server.ts,
+   * admission). No one reads it; it is said for the log and a proxy.
+   */
+  askerGone:
+    "The hub didn't work this request: whoever sent it had gone before its turn came",
+  /**
    * A system law the hub broke answering (core invariant.ts): it stopped
    * before acting on what it found, logged it, and filed it for an agent to
    * fix (hub law-tasks.ts). The law's own words are for agents, never this

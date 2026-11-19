@@ -24,11 +24,11 @@ import {
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { ElysiaStatus, problem, t } from "elysia";
 import type { ViewsThread } from "./views/client";
-import {
-  DEFAULT_LIMIT,
-  type FindRequest as EngineRequest,
-  type WaitingFrom,
+import type {
+  FindRequest as EngineRequest,
+  WaitingFrom,
 } from "./views/find-engine";
+import { DEFAULT_LIMIT } from "./views/pages";
 import type { LiveFacts } from "./views/wire";
 
 /** What a page of a find is asked for (views/find-engine.ts `FindRequest`), with its asker's signal. */
@@ -80,6 +80,8 @@ export const createFind = (deps: FindDeps) => {
     /** One page of a find, or the refusal of a cursor this hub did not give. */
     async find(request: FindRequest) {
       const { signal, ...asked } = request;
+      // Its asker gone (a newer keystroke) before the log is taken: no work.
+      signal?.throwIfAborted();
       deps.settle();
       const page = await views.withRequest(signal, (requestId) =>
         views.find({ live: deps.live(), request: { ...asked, requestId } })
@@ -97,6 +99,8 @@ export const createFind = (deps: FindDeps) => {
       results: FindResult[];
     }> {
       const { signal, ...asked } = request;
+      // Its asker gone (a newer keystroke) before the log is taken: no work.
+      signal?.throwIfAborted();
       deps.settle();
       return views.withRequest(signal, (requestId) =>
         views.listing({ live: deps.live(), request: { ...asked, requestId } })

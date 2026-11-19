@@ -16,6 +16,7 @@
  *
  * Neither keeps anything of the page: the frames are drawn and dropped.
  */
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import {
   BROWSER_SCREEN,
   BROWSER_VIEW_MOVED,
@@ -32,7 +33,8 @@ export type StreamState =
   | { kind: "connecting" }
   | { kind: "live" }
   /** The socket closed: it opens again on its own, and Try again opens it now. */
-  | { kind: "lost"; why: string }
+  /** `over`: its reopens gave up ({@link REOPENS}); only Try again opens it. */
+  | { kind: "lost"; why: string; over?: true }
   /** The hub refused it (4000 plus an HTTP status, its sentence as the reason): opened again only by Try again. */
   | { kind: "refused"; why: string }
   /** The media found no way to this screen (ICE failed, past its retries). */
@@ -80,22 +82,29 @@ const closedHow = (code: number): "moved" | "refused" | "lost" => {
   }
   return code >= REFUSED_FROM && code < REFUSED_TO ? "refused" : "lost";
 };
-/** Waits before opening a lost socket again, longest last. Our call. */
-const RETRY_MS = [1000, 2000, 5000, 10_000] as const;
+/**
+ * A lost socket opened again: from 1 s, doubling to 10 s, for five
+ * minutes; then the well says so, and Try again opens it. Our call.
+ */
+const REOPENS: BackoffPolicy = {
+  firstMs: 1000,
+  mostMs: 10_000,
+  giveUp: { afterMs: 5 * 60_000 },
+};
 
 /**
  * A view's socket opened again as it closes, with what the well says: at
  * once when what it shows moved, only by Try again when the hub refused
- * it, else after the next of {@link RETRY_MS}, its tries counted until it
+ * it, else after its wait ({@link REOPENS}), its tries counted until it
  * opens (`opened`). `said` is what the far end said as it closed, when it
  * said more than the close.
  */
 const reopening = (events: StreamEvents, open: () => void) => {
-  let tries = 0;
+  const tries = new Backoff(REOPENS);
   let retry: ReturnType<typeof setTimeout> | undefined;
   return {
     opened: () => {
-      tries = 0;
+      tries.succeeded();
     },
     closed: (event: CloseEvent, said: string | null = null) => {
       const how = closedHow(event.code);
@@ -108,17 +117,24 @@ const reopening = (events: StreamEvents, open: () => void) => {
         events.state({ kind: "refused", why: event.reason || said || named });
         return;
       }
+      const step = tries.failed();
+      if (step.kind === "gave-up") {
+        tries.again();
+        events.state({ kind: "lost", why: said ?? named, over: true });
+        return;
+      }
       events.state({ kind: "lost", why: said ?? named });
-      const wait = RETRY_MS[Math.min(tries, RETRY_MS.length - 1)];
-      tries += 1;
-      retry = setTimeout(open, wait);
+      retry = setTimeout(open, step.ms);
     },
     stop: () => clearTimeout(retry),
   };
 };
 /** ICE failures in a row before the view says the stream didn't connect. Our call: neko's client gives up after 10 at a growing backoff; a person waits less. */
-const ICE_TRIES = 3;
-const ICE_BACKOFF_MS = 1500;
+const ICE_TRIES: BackoffPolicy = {
+  firstMs: 1500,
+  mostMs: 3000,
+  giveUp: { afterTries: 3 },
+};
 /** A wheel's line, px, for a wheel that counts in lines. */
 const WHEEL_LINE = 19;
 /** An answer whose video section this browser rejected (port 0), and the offer's first video codec. */
@@ -166,7 +182,7 @@ export const nekoStream = (
   let held: RTCIceCandidateInit[] = [];
   let screen: { width: number; height: number } | null = null;
   let closed = false;
-  let iceFailures = 0;
+  const iceFailures = new Backoff(ICE_TRIES);
   /** The wait before ICE is asked again. */
   let retry: ReturnType<typeof setTimeout> | undefined;
   let refusedWhy: string | null = null;
@@ -230,17 +246,18 @@ export const nekoStream = (
         return;
       }
       if (at.connectionState === "connected") {
-        iceFailures = 0;
+        iceFailures.succeeded();
         events.state({ kind: "live" });
       } else if (at.connectionState === "failed") {
         closePeer();
-        iceFailures += 1;
-        if (iceFailures >= ICE_TRIES) {
+        const step = iceFailures.failed();
+        if (step.kind === "gave-up") {
+          iceFailures.again();
           events.state({ kind: "no-stream" });
           return;
         }
         clearTimeout(retry);
-        retry = setTimeout(requestPeer, ICE_BACKOFF_MS * iceFailures);
+        retry = setTimeout(requestPeer, step.ms);
       }
     };
     await answer(String(payload.sdp ?? ""));

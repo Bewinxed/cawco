@@ -2,6 +2,7 @@
  * The page's frame: its load, its hold while its tab is off screen, the proxy's down page and the way back, the lock's turn-away, what the hub is told of it, its thumbnail, and what is posted into it.
  */
 
+import { backoffStep } from "@cawco/core/backoff";
 import type { FrameSays } from "@cawco/core/page-wire";
 import {
   PREVIEW_DOWNS,
@@ -29,7 +30,7 @@ import type { PaneNotice } from "./pane-notice.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
 import { entryTo, turnedAwayWords } from "./pass";
 import type { PreviewReach } from "./preview-reach.svelte";
-import { PROBE_FIRST_MS, PROBE_MOST_MS } from "./preview-reach.svelte";
+import { PROBES } from "./preview-reach.svelte";
 import {
   previewError,
   previewErrorOf,
@@ -165,7 +166,7 @@ export class PreviewFrame {
    * it back, as a new open; and `error` and `crashed`, whose server answers:
    * its page is what is broken, and Try again loads it once its session fixed it) in a pane
    * someone has on screen, the origin's ping is probed on the unreached
-   * state's backoff (`PROBE_FIRST_MS` doubling to `PROBE_MOST_MS`), and once
+   * state's backoff (`PROBES`), and once
    * it answers the frame loads again. Only a pane on screen asks, so a
    * machine coming back starts a listener for the previews being looked at
    * alone (the hub's register starts none). The tries count across the
@@ -339,23 +340,24 @@ export class PreviewFrame {
       if (!(hop && origin && seen && COMES_BACK.has(hop))) {
         return;
       }
+      const step = backoffStep(PROBES, this.downTries + 1, 0);
+      if (step.kind === "gave-up") {
+        return;
+      }
       let live = true;
-      const timer = setTimeout(
-        () => {
-          this.downTries += 1;
-          probePreview(origin, hubReach).then((failed) => {
-            if (!live) {
-              return;
-            }
-            if (failed) {
-              this.downProbe += 1;
-              return;
-            }
-            this.reload += 1;
-          });
-        },
-        Math.min(PROBE_FIRST_MS * 2 ** this.downTries, PROBE_MOST_MS)
-      );
+      const timer = setTimeout(() => {
+        this.downTries += 1;
+        probePreview(origin, hubReach).then((failed) => {
+          if (!live) {
+            return;
+          }
+          if (failed) {
+            this.downProbe += 1;
+            return;
+          }
+          this.reload += 1;
+        });
+      }, step.ms);
       return () => {
         live = false;
         clearTimeout(timer);

@@ -40,8 +40,7 @@ export const testedKeys = (
     })
   );
 
-const same = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+const same = (a: unknown, b: unknown): boolean => Bun.deepEquals(a, b);
 
 /**
  * The person's answers a change by the agent from `before` to `after`

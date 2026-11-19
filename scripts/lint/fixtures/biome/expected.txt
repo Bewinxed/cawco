@@ -98,3 +98,17 @@ standalone-scripts/packages/core/src/workspace-judge.ts:7:20 standalone-scripts
 runtime-dir-vanishes/packages/core/src/paths/planted.ts:6:8 runtime-dir-vanishes
 runtime-dir-vanishes/packages/core/src/paths/planted.ts:8:8 runtime-dir-vanishes
 runtime-dir-vanishes/packages/agent/src/redaction.ts:6:8 runtime-dir-vanishes
+retry-through-backoff/packages/hub/src/planted.ts:5:24 retry-through-backoff
+retry-through-backoff/packages/hub/src/planted.ts:6:22 retry-through-backoff
+retry-through-backoff/packages/hub/src/planted.ts:7:1 retry-through-backoff
+retry-through-backoff/packages/hub/src/planted.ts:8:8 retry-through-backoff
+no-serialise-compare/packages/hub/src/planted.ts:6:21 no-serialise-compare
+no-serialise-compare/packages/hub/src/planted.ts:7:22 no-serialise-compare
+no-serialise-compare/packages/hub/src/planted.ts:8:22 no-serialise-compare
+hub-timers-named/packages/hub/src/planted.ts:8:1 hub-timers-named
+hub-timers-named/packages/hub/src/planted.ts:9:1 hub-timers-named
+hub-timers-named/packages/hub/src/planted.ts:10:1 hub-timers-named
+hub-timers-named/packages/hub/src/planted.ts:11:1 hub-timers-named
+hub-timers-named/packages/hub/src/planted.ts:12:1 hub-timers-named
+control-loop-keyed-reads/packages/hub/src/planted.ts:19:22 control-loop-keyed-reads
+control-loop-keyed-reads/packages/hub/src/planted.ts:20:23 control-loop-keyed-reads

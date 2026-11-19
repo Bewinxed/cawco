@@ -1352,9 +1352,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
 
   /** Keeps a connection's tool list, telling sessions' lists when it moved. */
   const keepListing = (id: string, tools: Tool[]) => {
-    const before = JSON.stringify(listed.get(id) ?? null);
+    const before = listed.get(id);
     listed.set(id, tools);
-    if (JSON.stringify(tools) !== before) {
+    if (!Bun.deepEquals(tools, before)) {
       deps.changed();
     }
   };
@@ -1909,7 +1909,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     projectsProblem(patch.projects);
     areasProblem(patch.areas);
     const where = whereOf(next);
-    const moved = JSON.stringify(where) !== JSON.stringify(whereOf(r));
+    const moved = !Bun.deepEquals(where, whereOf(r));
     if (moved && (next.auth === "gh" || r.auth === "gh")) {
       misfit(
         `${name} reads a machine's gh: remove it and connect another way instead.`

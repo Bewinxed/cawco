@@ -2,10 +2,18 @@
  * Dashboard configuration
  */
 
-// WebSocket reconnection settings
-export const WS_RECONNECT_MAX_ATTEMPTS = 10;
-export const WS_RECONNECT_BASE_DELAY = 1000;
-export const WS_RECONNECT_MAX_DELAY = 30_000;
+/**
+ * The hub socket's reconnects (core backoff.ts): from 1 s, doubling to 30 s.
+ * It never gives up (hub/socket.svelte.ts `scheduleReconnect`).
+ */
+export const WS_RECONNECTS = {
+  firstMs: 1000,
+  mostMs: 30_000,
+  giveUp: {
+    never:
+      "a dashboard is a window left open: the hub comes back, and a page that stopped trying shows stale rows until reloaded",
+  },
+} as const;
 
 /** How long a control call waits for the frame that answers its `requestId`. */
 export const CONTROL_TIMEOUT_MS = 15_000;

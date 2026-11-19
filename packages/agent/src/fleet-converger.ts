@@ -642,8 +642,8 @@ export class FleetConverger {
       const probed = toolchain.claude ? toolchain : undefined;
       if (
         !last ||
-        (JSON.stringify(last.toolchain) === JSON.stringify(probed) &&
-          JSON.stringify(last.have) === JSON.stringify(have))
+        (Bun.deepEquals(last.toolchain, probed) &&
+          Bun.deepEquals(last.have, have))
       ) {
         return;
       }

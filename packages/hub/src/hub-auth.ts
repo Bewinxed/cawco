@@ -57,7 +57,7 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { connectWords } from "@cawco/core/words/connect";
 import { Elysia, problem, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
-import { recordHubEvent } from "./hub-record";
+import type { RecordHubEvent } from "./hub-record";
 import type { RouteSet } from "./machine-answers";
 
 import { SSH_FORWARD_HEADER, viaSshForward } from "./ssh-door";
@@ -351,6 +351,8 @@ export interface HubAuthDeps {
   readonly dashboard: () => string;
   readonly db: HubAuthDb;
   readonly hubId: () => string;
+  /** The hub's record of refusals and holds (hub-record.ts). */
+  readonly recordHubEvent: RecordHubEvent;
   /** The session a Bearer names (session-identity.ts). */
   readonly session: (
     authorization: string
@@ -381,6 +383,7 @@ export const createHubAuth = ({
   dashboard,
   db,
   hubId,
+  recordHubEvent,
   session,
   sshKeys,
 }: HubAuthDeps) => {

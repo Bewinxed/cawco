@@ -57,6 +57,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { PictureCut } from "@cawco/core/artifact-picture";
+import { backoffWait } from "@cawco/core/backoff";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { BROWSER_PORTS } from "@cawco/core/browser";
 import { browserGatePort } from "@cawco/core/env-ports";
@@ -256,8 +257,13 @@ const serveScript = (command: string): string =>
     'kill "$b" 2>/dev/null',
     'exit "$r"',
   ].join("\n");
-/** The waits before each start again, ms: past a host's beat (15 s), so a stage its last daemon left has let go of its port. Ours. */
-const BACKOFF_MS = [1000, 4000, 16_000];
+/**
+ * The waits before each start again: from 5 s, doubling, drawn between half
+ * and the whole (core backoff.ts), so the three together pass a host's beat
+ * (15 s) and a stage its last daemon left has let go of its port. Ours.
+ * They end after {@link STAGE_RESTARTS}.
+ */
+const RESTARTS = { firstMs: 5000, mostMs: 20_000 };
 /** How long a stopped stage's group has between TERM and KILL. */
 const KILL_GRACE_MS = 5000;
 /** How much of a host's stderr is kept to say why it ended. Ours. */
@@ -1014,10 +1020,10 @@ function crashed(stage: Stage, why: string): void {
     inError(stage, why);
     return;
   }
-  const wait = BACKOFF_MS[stage.restarts] ?? BACKOFF_MS.at(-1) ?? 0;
   stage.restarts += 1;
+  const wait = backoffWait(RESTARTS, stage.restarts);
   console.warn(
-    `[stage] ${stage.key}: ${why}; starting it again in ${wait / 1000}s (${stage.restarts} of ${STAGE_RESTARTS})`
+    `[stage] ${stage.key}: ${why}; starting it again in ${Math.round(wait / 1000)}s (${stage.restarts} of ${STAGE_RESTARTS})`
   );
   stage.status = "starting";
   stage.message = why;
@@ -1574,7 +1580,7 @@ export async function ensureStage(
   // The host's problems as of this answer (a states file it found missing
   // just now among them), so the state read here says them; its `errors`
   // word on stdout says the same, and may land after.
-  if (JSON.stringify(errors) !== JSON.stringify(stage.errors)) {
+  if (!Bun.deepEquals(errors, stage.errors)) {
     stage.errors = errors;
     tell(stage);
   }

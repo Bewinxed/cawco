@@ -34,8 +34,15 @@
  * it against the signed manifest before it takes its final name, and deletes
  * a partial that fails.
  */
+
 import { open, rm, stat } from "node:fs/promises";
 import { errnoCode } from "./absent";
+import {
+  Backoff,
+  type BackoffPolicy,
+  type BackoffStep,
+  backoffWait,
+} from "./backoff";
 import { downloadWords } from "./words/downloads";
 
 /**
@@ -53,9 +60,28 @@ const STALL_MS = 60_000;
 /** Attempts in a row that brought no byte before the download gives up: the progress rule's end. */
 const GIVE_UP_AFTER = 5;
 
-/** The wait before attempt n+1 after n attempts in a row brought nothing: 1, 2, 4, 8, 16 s. */
-const backoffMs = (fruitless: number): number =>
-  1000 * 2 ** Math.max(0, fruitless - 1);
+/**
+ * The wait before the next attempt after attempts in a row that brought
+ * nothing: from 1 s, doubling to 16 s; {@link GIVE_UP_AFTER} of them end
+ * the download. An attempt that brought bytes waits the first wait.
+ */
+const FRUITLESS: BackoffPolicy = {
+  firstMs: 1000,
+  mostMs: 16_000,
+  giveUp: { afterTries: GIVE_UP_AFTER },
+};
+
+/**
+ * What an attempt leads to: one that brought bytes starts the fruitless
+ * count over and waits the first wait; one that brought none counts.
+ */
+const afterAttempt = (fruitless: Backoff, progressed: boolean): BackoffStep => {
+  if (!progressed) {
+    return fruitless.failed();
+  }
+  fruitless.succeeded();
+  return { kind: "wait", ms: backoffWait(FRUITLESS, 1), tries: 0 };
+};
 
 /**
  * The `code` Bun's fetch gives a connection refused, dropped, cut or
@@ -275,7 +301,7 @@ async function attempt(
 export async function downloadResumably(
   download: ResumableDownload
 ): Promise<void> {
-  let fruitless = 0;
+  const fruitless = new Backoff(FRUITLESS);
   let attempts = 0;
   for (;;) {
     let from = await partialSize(download.partial);
@@ -308,8 +334,8 @@ export async function downloadResumably(
       why = whyStopped(error);
     }
     const now = await partialSize(download.partial);
-    fruitless = now > from ? 0 : fruitless + 1;
-    if (fruitless >= GIVE_UP_AFTER) {
+    const step = afterAttempt(fruitless, now > from);
+    if (step.kind === "gave-up") {
       throw new Error(
         downloadWords.gaveUp(
           download.what,
@@ -320,7 +346,7 @@ export async function downloadResumably(
         )
       );
     }
-    const waitMs = backoffMs(fruitless);
+    const waitMs = step.ms;
     download.log(
       downloadWords.retrying(
         download.what,

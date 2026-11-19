@@ -69,6 +69,7 @@ import {
   isClaudeImageMediaType,
   type TurnImage,
 } from "@cawco/core/attachments";
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
@@ -369,6 +370,19 @@ const signalOfExit = ({ code, signal }: ProcessExit): string | undefined => {
 
 /** How much of what a CLI said on stderr its row quotes: its last lines, up to this many characters. Ours: a sentence or three. */
 const STDERR_QUOTED_CHARS = 600;
+
+/**
+ * A session's CawCo MCP slot dialled again while it reads `failed`: from 1
+ * s, doubling to 30 s, for as long as the child lives ({@link ClaudeSession.#dialCawco}).
+ */
+const CAWCO_DIALS: BackoffPolicy = {
+  firstMs: 1000,
+  mostMs: 30_000,
+  giveUp: {
+    never:
+      "a session without its CawCo MCP cannot report or be asked; the dial ends when the child does",
+  },
+};
 
 /**
  * What a CLI that ended said last on stderr, as its row quotes it: the tail
@@ -4488,8 +4502,7 @@ class ClaudeSession implements HarnessSession {
     const before = this.#flagSettings;
     const patch: Record<string, unknown> = Object.fromEntries(
       Object.entries(next).filter(
-        ([key, value]) =>
-          !before || JSON.stringify(before[key]) !== JSON.stringify(value)
+        ([key, value]) => !(before && Bun.deepEquals(before[key], value))
       )
     );
     for (const key of Object.keys(before ?? {})) {
@@ -4660,7 +4673,8 @@ class ClaudeSession implements HarnessSession {
       over = true;
     };
     this.#pump.then(ended, ended);
-    for (let wait = 1000; !over; wait = Math.min(wait * 2, 30_000)) {
+    const tries = new Backoff(CAWCO_DIALS);
+    while (!over) {
       try {
         if ((await this.#dialOnce(credential)) === "done") {
           return;
@@ -4673,7 +4687,8 @@ class ClaudeSession implements HarnessSession {
           `[claude] ${this.instanceId}: its CawCo MCP is still connecting: ${error instanceof Error ? error.message : String(error)}`
         );
       }
-      await Bun.sleep(wait);
+      const step = tries.failed();
+      await Bun.sleep(step.kind === "wait" ? step.ms : CAWCO_DIALS.mostMs);
     }
   }
 

@@ -190,7 +190,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         now[frame.story] = { w: frame.box.w, h: frame.box.h };
       }
     }
-    if (JSON.stringify(now) !== JSON.stringify(had)) {
+    if (!Bun.deepEquals(now, had)) {
       docs.transact(row.id, "hub", (written) => {
         setMeta(written, "drawnShapes", now);
       });
@@ -208,7 +208,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const meta = docMeta(docs.doc(row.id));
     const had = meta.get("drawn") ?? {};
     const { kept, report } = drawsHeld(from, had);
-    if (JSON.stringify(kept) !== JSON.stringify(had)) {
+    if (!Bun.deepEquals(kept, had)) {
       docs.transact(row.id, "hub", (written) => {
         setMeta(written, "drawn", kept);
       });

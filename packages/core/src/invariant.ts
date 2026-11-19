@@ -97,6 +97,14 @@ export const LAWS = {
    */
   "artifact-notice-drawn":
     "Every message CawCo sends a session on the artifact origin is drawn as an artifact notice, never as the person's words.",
+  /**
+   * At the hub, as its connection prepares each statement after it listens
+   * (hub db/statement-plans.ts): the control loop reads its large tables by
+   * key, never whole (tsk-391, tsk-399). A scan SQLite plans for one, with
+   * no LIMIT, is named with the statement and the plan's own line.
+   */
+  "control-reads-keyed":
+    "The hub's control connection reads every large table by key: no statement on it scans one whole.",
 } as const;
 
 export type Law = keyof typeof LAWS;

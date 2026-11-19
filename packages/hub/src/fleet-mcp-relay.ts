@@ -1,3 +1,4 @@
+import { backoffWait } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
 import {
   type JsonRpcMessage,
@@ -51,8 +52,12 @@ const IDLE_MS = 30 * 60_000;
 const TOUCH_MS = HOUR_MS;
 /** A kept session unused this long is dropped from the store (CawCo's own bound: rows are small, sessions can rest for days). */
 const SESSION_TTL_MS = 30 * DAY_MS;
-const BACKOFF_FIRST_MS = 1000;
-const BACKOFF_MAX_MS = 60_000;
+/**
+ * How long an upstream that answered 429 with no wait of its own holds its
+ * requests: from 1 s, doubling to a minute while it keeps refusing. Each
+ * request's own deadline ends its wait.
+ */
+const LIMITED_HOLDS = { firstMs: 1000, mostMs: 60_000 };
 
 /** Each list method, and the key its result carries the items under. */
 const LIST_METHODS = {
@@ -164,7 +169,7 @@ interface Downstream {
 interface ServerState {
   generation: string;
   /** The last items each list method came to, to tell sessions when a fetch found them changed. */
-  known: Map<string, string>;
+  known: Map<string, unknown[]>;
   /** The upstream answered 429 and the requests since go one at a time, until none is held. */
   limited: boolean;
   listening?: AbortController;
@@ -433,13 +438,13 @@ export class FleetMcpRelay {
     const listed = this.#fetchList(name, state, upstream, method).then(
       (answer) => {
         if ("items" in answer) {
-          const now = JSON.stringify(answer.items);
+          const now = answer.items;
           const before = state.known.get(method);
           state.known.set(method, now);
           console.info(
             `[fleet-mcp] ${name}: ${method} upstream: ${answer.items.length} ${key}`
           );
-          if (before !== undefined && before !== now) {
+          if (before !== undefined && !Bun.deepEquals(before, now)) {
             broadcast(state, changedBy(method));
           }
         }
@@ -1255,8 +1260,7 @@ async function attemptUpstream<T>(
   }
   state.limited = true;
   const named = namedWait(attempted.limited);
-  const hold =
-    named ?? Math.min(BACKOFF_FIRST_MS * 2 ** state.misses, BACKOFF_MAX_MS);
+  const hold = named ?? backoffWait(LIMITED_HOLDS, state.misses + 1);
   if (named === undefined) {
     state.misses += 1;
   }

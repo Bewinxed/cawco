@@ -18,6 +18,7 @@ import {
   type SigninState,
   sameIdentity,
 } from "@cawco/core/accounts";
+import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
 import { ModelInfoSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
@@ -189,8 +190,14 @@ const probing = new Map<string, Promise<CatalogRead>>();
  * pickers meanwhile, so the wait grows to half an hour rather than meeting
  * every start with another probe that fails.
  */
+export const PROBE_RETRIES: BackoffPolicy = {
+  firstMs: MINUTE_MS / 2,
+  mostMs: 30 * MINUTE_MS,
+  // About a day at its cap: a machine's next accounts report starts over.
+  giveUp: { afterTries: 55 },
+};
 export const probeRetryDelay = (attempt: number): number =>
-  Math.min(30 * MINUTE_MS, (MINUTE_MS / 2) * 2 ** attempt);
+  backoffWait(PROBE_RETRIES, attempt + 1);
 
 /** Each account whose last probe failed: how many failed in a row, and when one may be tried again. */
 const probeFailures = new Map<string, { attempt: number; until: number }>();

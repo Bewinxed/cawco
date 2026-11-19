@@ -84,7 +84,7 @@ export const writeSettingsFile = async (
   read: WritableSettings,
   next: Record<string, unknown>
 ): Promise<boolean> => {
-  if (JSON.stringify(next) === JSON.stringify(settingsOf(read))) {
+  if (Bun.deepEquals(next, settingsOf(read))) {
     return false;
   }
   await writeOnDisk(path, JSON.stringify(next, null, 2));

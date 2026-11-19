@@ -107,6 +107,7 @@ export type CutTurnsContext = Pick<
   | "cutTasksWords"
   | "db"
   | "escalateRoutedAsks"
+  | "lifetime"
   | "losePending"
   | "machineName"
   | "noteAtLimit"
@@ -234,7 +235,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
       ) {
         return false;
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await ctx.lifetime.sleep(1000);
     }
   };
 

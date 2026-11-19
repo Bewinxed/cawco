@@ -1,4 +1,5 @@
 /** Stored decisions own lifetime; connection-local work is only delivery. */
+import { backoffWait } from "@cawco/core/backoff";
 import { traitsOf } from "@cawco/core/harness/traits";
 import {
   deletesSession,
@@ -13,6 +14,9 @@ interface Snapshot {
   attached: string[];
   custody: SessionCustody;
 }
+
+/** A held session's restore asked again while its machine has not attached it. */
+const RESTORES = { firstMs: 1000, mostMs: 30_000 };
 
 /**
  * How many failed tries of a transcript's deletion in a row before it is
@@ -244,9 +248,9 @@ export const createSessionLifecycle = (ports: {
           const attempts = (prior?.attempts ?? 0) + 1;
           attaching.set(row.id, {
             attempts,
-            at:
-              Date.now() +
-              Math.min(30_000, 1000 * 2 ** Math.min(attempts - 1, 5)),
+            // From 1 s, doubling to 30 s, while the machine holds its
+            // process and has not attached it: the machine's own beat ends it.
+            at: Date.now() + backoffWait(RESTORES, attempts),
           });
           ports.restore(row);
         }

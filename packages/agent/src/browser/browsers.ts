@@ -50,7 +50,7 @@ import { makeFolder } from "@cawco/core/folders";
 import type { AgentPorts } from "../agent-ports";
 import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
 import { followsNetwork, machineNetwork, startAgainDue } from "./egress";
-import { frontOrigin, syncOrigins } from "./front-origin";
+import { frontOrigin, frontUnread, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { startHubProxy } from "./hub-proxy";
 import { LocalHost } from "./local-host";
@@ -159,6 +159,9 @@ const rowOf = (record: BrowserRecord): BrowserRow => {
     ...(record.why ? { why: record.why } : {}),
     ...(record.state === "live" && frontOrigin(record.key)
       ? { origin: frontOrigin(record.key) }
+      : {}),
+    ...(record.state === "live" && frontUnread(record.key)
+      ? { originUnread: true as const }
       : {}),
   };
 };

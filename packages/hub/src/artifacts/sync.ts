@@ -143,8 +143,7 @@ const syncMessage = (write: (encoder: Encoder) => void) => {
   return toUint8Array(encoder);
 };
 
-const same = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+const same = (a: unknown, b: unknown): boolean => Bun.deepEquals(a, b);
 
 const sameMap = (a: YMap<unknown>, b: YMap<unknown>): boolean =>
   a.size === b.size &&
@@ -376,7 +375,7 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
   // What the doc keeps is a choice entry: this check let it in.
   const before = doc.getMap<ChoiceEntry>("state");
   for (const [key, value] of state.entries()) {
-    if (JSON.stringify(value) !== JSON.stringify(before.get(key))) {
+    if (!Bun.deepEquals(value, before.get(key))) {
       const why = isChoiceEntry(key, value)
         ? settledWriteProblem(before.get(key), value)
         : choiceEntryProblem(key, value);

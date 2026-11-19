@@ -1,3 +1,4 @@
+import { type BackoffPolicy, backoffStep } from "@cawco/core/backoff";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
@@ -154,11 +155,17 @@ const holdsWorkWords = (held: HeldWork): string => {
  */
 const ARCHIVE_STOP_WAIT_MS = 30_000;
 
-/** A failed settle's first wait before the sweep tries it again (workspaces.ts `settleFailed`): the sweep's minute. */
-const SETTLE_RETRY_MS = MINUTE_MS;
-
-/** The longest a failed settle waits between tries: an hour. */
-const SETTLE_RETRY_MAX_MS = HOUR_MS;
+/**
+ * A failed settle tried again by the sweep (workspaces.ts `settleFailed`):
+ * from the sweep's minute, doubling to an hour, thirty times in a row (about
+ * a day); then only a settle someone asks for tries it, its session told
+ * long before ({@link SETTLE_FAILS_LASTING}).
+ */
+const SETTLE_RETRIES: BackoffPolicy = {
+  firstMs: MINUTE_MS,
+  mostMs: HOUR_MS,
+  giveUp: { afterTries: 30 },
+};
 
 /** Failures in a row after which a settle's failure is lasting, and its session is told once. */
 const SETTLE_FAILS_LASTING = 3;
@@ -1152,7 +1159,7 @@ export const createWorkspaces = ({
     !items.some((item) => LIVE.has(item.state));
   /**
    * Each workspace's settle failures in a row ({@link settle}): how many,
-   * when the sweep may try it again ({@link settleBackoffMs}), and whether
+   * when the sweep may try it again ({@link SETTLE_RETRIES}), and whether
    * its session was told. On 2026-10-29 five workspaces failed every minute,
    * each failure a log line of its own (its carry's path, stamped with the
    * time, made each reason new), and nobody was told.
@@ -1161,12 +1168,9 @@ export const createWorkspaces = ({
     string,
     { count: number; retryAt: number; told: boolean }
   >();
-  /** A settle's wait after `count` failures in a row: a sweep's minute, doubled each time, an hour at most. */
-  const settleBackoffMs = (count: number): number =>
-    Math.min(SETTLE_RETRY_MS * 2 ** (count - 1), SETTLE_RETRY_MAX_MS);
   /**
    * A settle that failed: its first failure logged, the next try put off
-   * ({@link settleBackoffMs}), and once it has failed
+   * ({@link SETTLE_RETRIES}; past its end, until someone asks), and once it has failed
    * {@link SETTLE_FAILS_LASTING} times in a row, the session that started its
    * work told once, as a notice, and the log says so once.
    */
@@ -1174,15 +1178,21 @@ export const createWorkspaces = ({
     const machine = machineName(db, workspace.machineId);
     const was = settleFailures.get(workspace.id);
     const count = (was?.count ?? 0) + 1;
-    const wait = settleBackoffMs(count);
+    const step = backoffStep(SETTLE_RETRIES, count, 0);
+    const wait = step.kind === "wait" ? step.ms : Number.POSITIVE_INFINITY;
     const failure = {
       count,
       retryAt: Date.now() + wait,
       told: was?.told ?? false,
     };
+    if (step.kind === "gave-up") {
+      console.warn(
+        `[workspaces] ${workspace.id} on ${machine}: its settle failed ${count} times in a row; the sweep tries it no more, a settle asked for still does: ${reason}`
+      );
+    }
     if (count === 1) {
       console.warn(
-        `[workspaces] ${workspace.id} on ${machine}: ${workWords.notRetired(reason)} ${workWords.retriedIn(wait / MINUTE_MS)}`
+        `[workspaces] ${workspace.id} on ${machine}: ${workWords.notRetired(reason)} ${workWords.retriedIn(Math.round(wait / MINUTE_MS))}`
       );
     }
     if (count >= SETTLE_FAILS_LASTING && !failure.told) {

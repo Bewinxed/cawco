@@ -11,6 +11,7 @@ import {
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_ACCOUNT_USAGE,
 } from "@cawco/core/accounts/controls";
+import { backoffStep } from "@cawco/core/backoff";
 import { detach } from "@cawco/core/detach";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
@@ -19,6 +20,7 @@ import type { AccountProber } from "./accounts";
 import {
   checkRefusal,
   noteProviderReading,
+  PROBE_RETRIES,
   probeRetryDelay,
   REFUSAL_CHECK_EVERY_MS,
   reconcileAccounts,
@@ -372,6 +374,14 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
           ctx.dispatcher.machineOnline(machineId);
         }
         if (failed && ctx.registry.agent(machineId)) {
+          if (
+            backoffStep(PROBE_RETRIES, sync.attempt + 1, 0).kind === "gave-up"
+          ) {
+            console.warn(
+              `[accounts] ${machineId} ${harness}: probes failed ${sync.attempt + 1} times in a row; none is tried again until the machine reports its accounts anew`
+            );
+            return;
+          }
           const delay = probeRetryDelay(sync.attempt);
           sync.attempt += 1;
           sync.timer = ctx.lifetime.after("account probe retried", delay, () =>

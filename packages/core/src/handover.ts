@@ -21,6 +21,7 @@
  * - arming (the agent): every workspace a session's process runs in has its
  *   hook and judge of this build, or says by name why it has not.
  */
+import { backoffWait } from "./backoff";
 import { UPDATE_TRIAL_MS } from "./binary-updates";
 
 /**
@@ -62,9 +63,14 @@ export const KEEPERS_ASK_AGAIN_MS = 10_000;
  */
 export const REGISTER_ACK_MS = 120_000;
 
-/** The pause before the `attempt`th re-send of a register: 1 s, doubling, at most 30 s. */
+/**
+ * The pause before the `attempt`th re-send of a register: from 1 s,
+ * doubling to 30 s (core backoff.ts). It never gives up: a machine whose
+ * register is never answered is a machine off the board, so it keeps
+ * asking at its cap.
+ */
 const registerRetryMs = (attempt: number): number =>
-  Math.min(30_000, 1000 * 2 ** Math.min(attempt - 1, 5));
+  backoffWait({ firstMs: 1000, mostMs: 30_000 }, attempt);
 
 // ── State ──────────────────────────────────────────────────────────────────
 

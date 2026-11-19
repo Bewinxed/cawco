@@ -34,6 +34,7 @@ import {
 } from "@cawco/core/accounts";
 import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import { type AskAnswer, FULL_SEND_ANSWER } from "@cawco/core/asks";
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -158,6 +159,13 @@ import {
 
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
 const RECOVERY_TIMEOUT_MS = 10_000;
+
+/** A session's pending gates read back: three reads, from 250 ms apart. */
+const GATE_SNAPSHOTS: BackoffPolicy = {
+  firstMs: 250,
+  mostMs: 1000,
+  giveUp: { afterTries: 3 },
+};
 
 /**
  * One OpenCode read given {@link RECOVERY_TIMEOUT_MS} to answer: `read` gets
@@ -2362,7 +2370,8 @@ export class OpencodeSession implements HarnessSession {
         );
       }
     };
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const tries = new Backoff(GATE_SNAPSHOTS);
+    for (;;) {
       try {
         const read = await askOpencode(async (options): Promise<void> => {
           if (kind === "permission") {
@@ -2397,9 +2406,11 @@ export class OpencodeSession implements HarnessSession {
         }
         missed(errorText(error));
       }
-      if (attempt < 2) {
-        await Bun.sleep(250 * 2 ** attempt);
+      const step = tries.failed();
+      if (step.kind === "gave-up") {
+        return;
       }
+      await Bun.sleep(step.ms);
     }
   }
 

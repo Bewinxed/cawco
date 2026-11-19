@@ -7,6 +7,7 @@
  * messages it reads.
  */
 
+import { backoffWait } from "@cawco/core/backoff";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { GATED_PAGE_MARK, GATED_PAGE_PARAM } from "@cawco/core/browser-gate";
 import { detach } from "@cawco/core/detach";
@@ -29,11 +30,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { flushSync } from "svelte";
 import { on } from "svelte/events";
-import {
-  WS_RECONNECT_BASE_DELAY,
-  WS_RECONNECT_MAX_ATTEMPTS,
-  WS_RECONNECT_MAX_DELAY,
-} from "#lib/config.js";
+import { WS_RECONNECTS } from "#lib/config.js";
 import { mustPair, readAuth } from "../hub-auth.svelte";
 import { checkServedBuild, newerBuild } from "../served-build.svelte";
 import { ahead } from "../stores/clock.svelte";
@@ -353,12 +350,12 @@ export function send(envelope: ClientEnvelope): void {
  * the hub coming back, and a client that has stopped trying by then shows stale
  * rows behind a status dot until the tab is reloaded by hand. The delay is
  * capped instead of the attempts, so a long outage costs one poll per
- * `WS_RECONNECT_MAX_DELAY` and no more.
- *
- * `WS_RECONNECT_MAX_ATTEMPTS` now only decides when to stop growing the delay.
+ * `WS_RECONNECTS.mostMs` and no more; each wait is drawn with jitter (core
+ * backoff.ts), so pages that lost the hub together do not come back
+ * together.
  *
  * An update the hub announced (`connectionState.restart`) is a hub known to be on its
- * way back: until its deadline every try is `WS_RECONNECT_BASE_DELAY` apart,
+ * way back: until its deadline every try is `WS_RECONNECTS.firstMs` apart,
  * so the page hears it back within a second, not up to a whole capped delay
  * after.
  */
@@ -368,12 +365,8 @@ function scheduleReconnect(): void {
     connectionState.restart !== null &&
     connectionState.restart.until > Date.now();
   const delay = updating
-    ? WS_RECONNECT_BASE_DELAY
-    : Math.min(
-        WS_RECONNECT_BASE_DELAY *
-          2 ** Math.min(attempt, WS_RECONNECT_MAX_ATTEMPTS),
-        WS_RECONNECT_MAX_DELAY
-      );
+    ? WS_RECONNECTS.firstMs
+    : backoffWait(WS_RECONNECTS, attempt + 1);
   connectionState.retryAt = Date.now() + delay;
   hubHeld.reconnectTimeout = setTimeout(() => {
     hubHeld.reconnectAttempts += 1;

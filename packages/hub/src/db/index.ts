@@ -83,6 +83,7 @@ import { type SessionPlansDb, sessionPlansDb } from "./session-plans";
 import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
+import { explainStatements, type StatementPlans } from "./statement-plans";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import { type TaskIndexDb, taskIndexDb } from "./task-index";
 import type { TaskLinksDb } from "./task-links";
@@ -181,6 +182,11 @@ interface HubStore {
   readonly sshMachines: SshMachinesDb;
   /** A project's starters as last written, and what was done with them (project-starters.ts). */
   readonly starters: StartersDb;
+  /**
+   * Each statement the hub's connection prepares, explained once from its
+   * `arm` (at listen): a scan of a large table is heard (statement-plans.ts).
+   */
+  readonly statementPlans: StatementPlans;
   /** The fleet's stream relay (stream-relay.ts). */
   readonly streamRelay: StreamRelayDb;
   /** The external items tasks link, and the comments carried from them (task-links.ts). */
@@ -300,6 +306,8 @@ const make = async (path: string): Promise<DbShape> => {
       listener();
     }
   });
+  // Every statement prepared from here on, explained once it is armed.
+  const statementPlans = explainStatements(db.$client);
   const core: DbCore = dbCore(db, takeBoardChanges);
   // The fleet's delegate types, seeded once.
   const delegateTypes = makeDelegateTypes(db);
@@ -339,6 +347,7 @@ const make = async (path: string): Promise<DbShape> => {
     onWrite: (listener) => {
       writeListeners.push(listener);
     },
+    statementPlans,
     delegateTypes,
     atomically: (run) => db.transaction(() => run()),
     accounts: accountsDb(db),

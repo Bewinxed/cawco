@@ -358,6 +358,7 @@ import { AskCard, createAskPresenter } from "./ask-presentation";
 import { createAskRouting } from "./ask-routing";
 import { type ApprovedRunProblem, createAsks } from "./asks";
 import { createAtLimit } from "./at-limit";
+import { mergeBeats } from "./beat-merge";
 import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { createBoard } from "./board";
@@ -480,7 +481,7 @@ import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { type HubContext, hubContextOf } from "./hub-context";
 import { hubId } from "./hub-id";
 import { createHubProfiler } from "./hub-profile";
-import { recordHubEvent } from "./hub-record";
+import { createHubRecord } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
 import { type AuthSocket, type Forwarded, MachineAway } from "./hub-shapes";
@@ -1212,9 +1213,7 @@ const keptCapabilities = (
 const sameBinaryUpdate = (
   a: BinaryUpdateState | undefined,
   b: BinaryUpdateState | undefined
-): boolean =>
-  JSON.stringify({ ...a, updatedAt: 0 }) ===
-  JSON.stringify({ ...b, updatedAt: 0 });
+): boolean => Bun.deepEquals({ ...a, updatedAt: 0 }, { ...b, updatedAt: 0 });
 
 /** A partial write's field over the stored one: `null` clears it, an absent one keeps what was stored. */
 const givenOver = <T>(
@@ -2370,6 +2369,16 @@ export const createServer = (
    * tasks exist (law-tasks.ts, filled below).
    */
   const laws = createLaws();
+  // A statement on the hub's connection that reads a large table whole is a
+  // broken law, logged and filed (db/statement-plans.ts); it still runs.
+  db.statementPlans.hear((scan) => {
+    laws.holds(
+      false,
+      "control-reads-keyed",
+      () =>
+        `A statement reads ${scan.table} whole (${scan.detail}): ${scan.sql.length > 400 ? `${scan.sql.slice(0, 400)}…` : scan.sql}`
+    );
+  });
 
   /**
    * An update about to restart this hub, told to every dashboard before it
@@ -2911,6 +2920,7 @@ export const createServer = (
   // passkey adverts when a browser needs one (passkey-relay.ts).
   const passkeyRelay = createPasskeyRelay({
     call: callAgent,
+    lifetime,
     onlineMachines: () =>
       db
         .machineFacts()
@@ -3622,7 +3632,7 @@ export const createServer = (
   /** What a machine last reported of each harness, kept until its next report. */
   const capabilityReports = new Map<string, HarnessReport[]>();
   /** Whether each machine's tool cells are its connection's now: set at its register, heard at its tools report. */
-  const toolFacts = createToolFacts();
+  const toolFacts = createToolFacts(lifetime);
   registry.onAgentLeft((machineId, socketId) =>
     toolFacts.left(machineId, socketId)
   );
@@ -3915,11 +3925,13 @@ export const createServer = (
   const identities = createSessionIdentities(db);
   // Who may call the hub: the mode, the person's devices, machines' keys
   // (hub-auth.ts). Its hooks are set once the sockets they reach exist.
+  const recordHubEvent = createHubRecord(lifetime);
   const hubAuth = createHubAuth({
     // Where a pairing's code and QR send the person: https once a dashboard reached the hub over it.
     dashboard: () => secureDashboardUrl(registry) ?? dashboardUrl(registry),
     db: db.hubAuth,
     hubId,
+    recordHubEvent,
     session: (authorization) => identities.resolve(authorization),
     sshKeys: {
       pending: () => db.sshMachines.pendingKeys(),
@@ -7600,9 +7612,10 @@ export const createServer = (
       );
     const pluginsChanged =
       moved(previous?.have?.plugins, report.have?.plugins).size > 0;
-    const hooksChanged =
-      JSON.stringify(previous?.hooks ?? {}) !==
-      JSON.stringify(report.hooks ?? {});
+    const hooksChanged = !Bun.deepEquals(
+      previous?.hooks ?? {},
+      report.hooks ?? {}
+    );
     db.setAgentFleet(machineId, report);
     refreshSessions(machineId, agent, {
       skills: moved(previous?.have?.skills, report.have?.skills),
@@ -9370,7 +9383,7 @@ export const createServer = (
   tasks.listen(caw.taskChanged);
   // What the person writes on a task, to the project's conversation
   // (task-input.ts), gathered over a quiet spell and read as one.
-  tasks.listen(createTaskInput({ caw, db, tasks }).taskChanged);
+  tasks.listen(createTaskInput({ caw, db, lifetime, tasks }).taskChanged);
   // Every dashboard showing the project reads its tasks again, whoever moved
   // them; one showing the task the change names reads it again too.
   tasks.listen((event) =>
@@ -12448,9 +12461,14 @@ export const createServer = (
         notifications.machine(machineId, activity);
       }
     });
-    syncSection("beat: keep-alive woken", () =>
-      detach(keepAliveScheduler.wake(), "keepalive wake")
-    );
+    // Background on the hub's admission (scheduler.ts): one wake however
+    // many machines beat before it runs.
+    lifetime.jobs.want({
+      key: "keep-alive wake",
+      name: "keep-alive wake",
+      priority: "background",
+      run: () => detach(keepAliveScheduler.wake(), "keepalive wake"),
+    });
   };
 
   /**
@@ -12906,6 +12924,60 @@ export const createServer = (
     }
   };
 
+  /** The beats waiting for their turn, by machine ({@link admitBeat}). */
+  const beatsWaiting = new Map<
+    string,
+    { message: MachineEnvelope<"heartbeat">; ws: AgentSocket }
+  >();
+  const beatKey = (machineId: string): string => `beat ${machineId}`;
+
+  /**
+   * ONLY A MACHINE'S NEWEST BEAT COUNTS. A beat is not worked as it comes:
+   * it waits on the hub's admission (scheduler.ts) at a machine's priority,
+   * and a later beat from the same socket that comes before its turn is
+   * merged into it (beat-merge.ts), so a hub behind its loop works one beat
+   * per machine, not every late one. Order stays the machine's: any other
+   * frame from it works the waiting beat first ({@link agentMessage}). A
+   * beat whose socket is no longer its machine's by its turn is dropped: the
+   * socket after it beats again. It fails as any frame does
+   * ({@link agentFrameFailed}).
+   */
+  const admitBeat = (
+    ws: AgentSocket,
+    message: MachineEnvelope<"heartbeat">
+  ): void => {
+    const { machineId } = message;
+    const earlier = beatsWaiting.get(machineId);
+    beatsWaiting.set(machineId, {
+      ws,
+      message:
+        earlier?.ws.id === ws.id
+          ? {
+              ...message,
+              payload: mergeBeats(earlier.message.payload, message.payload),
+            }
+          : message,
+    });
+    lifetime.jobs.want({
+      key: beatKey(machineId),
+      name: "machine beat",
+      priority: "machine",
+      run: () => {
+        const taken = beatsWaiting.get(machineId);
+        beatsWaiting.delete(machineId);
+        if (!taken || registry.agent(machineId)?.id !== taken.ws.id) {
+          return;
+        }
+        doing(`heartbeat from machine ${machineId}`);
+        try {
+          heartbeatFromMachine(taken.ws, taken.message);
+        } catch (error) {
+          agentFrameFailed(taken.ws, taken.message, error);
+        }
+      },
+    });
+  };
+
   /**
    * EVERY MESSAGE ON A MACHINE'S SOCKET, in this order: one that is no
    * envelope is refused; it is parsed once into the message its verb names
@@ -12954,6 +13026,12 @@ export const createServer = (
       return;
     }
     sayLeftOut(addressed.machineId, read.dropped);
+    if (read.envelope.verb === "heartbeat") {
+      admitBeat(ws, read.envelope);
+      return;
+    }
+    // A beat still waiting is worked before what its machine sent after it.
+    lifetime.jobs.runNow(beatKey(read.envelope.machineId));
     await handleAgentVerb(ws, read.envelope);
   };
 
@@ -13181,6 +13259,20 @@ export const createServer = (
             code: "hub-answers-own-dashboard",
             detail:
               "The hub answers its own dashboard only: this request came from another page.",
+          });
+        }
+      })
+      // ADMISSION: a request carries its deadline, its signal, which aborts
+      // once its asker goes (a closed connection, a newer keystroke). One
+      // whose asker went while it waited for the hub's turn (a loop behind
+      // runs requests seconds late) is not worked: its answer would go to
+      // no one. Heavy work further in checks the same signal before it
+      // starts (find.ts, routes/find.ts).
+      .onRequest(({ request }) => {
+        if (request.signal.aborted) {
+          return problem(503, {
+            code: "asker-gone",
+            detail: hubFailureWords.askerGone,
           });
         }
       })

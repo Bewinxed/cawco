@@ -20,6 +20,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { hubDbPath } from "@cawco/core/paths/hub";
 import { writeStateFile } from "@cawco/core/state-file";
+import type { HubLifetimeShape } from "./lifetime";
 
 /** The file beside the hub's database that holds {@link HubEvent}s. */
 const HUB_RECORD_FILE = "hub-record.json";
@@ -62,30 +63,40 @@ const earlier = (): (HubEvent & { readonly at: number })[] => {
   }
 };
 
-let events: (HubEvent & { readonly at: number })[] | undefined;
-let writing: ReturnType<typeof setTimeout> | undefined;
-let written: Promise<void> = Promise.resolve();
+/** Adds an event to the record. */
+export type RecordHubEvent = (event: HubEvent) => void;
 
-/** Adds `event` to the record, written soon ({@link WRITE_AFTER_MS}); a write that fails is said, never thrown. */
-export const recordHubEvent = (event: HubEvent): void => {
-  events ??= earlier();
-  events.push({ ...event, at: Date.now() });
-  if (events.length > EVENTS_KEPT) {
-    events.splice(0, events.length - EVENTS_KEPT);
-  }
-  if (writing !== undefined) {
-    return;
-  }
-  writing = setTimeout(() => {
-    writing = undefined;
-    const text = `${JSON.stringify(events)}\n`;
-    const path = recordPath();
-    written = written
-      .then(() => writeStateFile(path, text))
-      .catch((error: unknown) => {
-        console.warn(
-          `[hub] ${path} could not be written: ${error instanceof Error ? error.message : String(error)}`
-        );
-      });
-  }, WRITE_AFTER_MS);
+/**
+ * The hub's record, written on its lifetime: each event added is written
+ * soon ({@link WRITE_AFTER_MS}); a write that fails is said, never thrown.
+ */
+export const createHubRecord = (
+  lifetime: Pick<HubLifetimeShape, "after">
+): RecordHubEvent => {
+  let events: (HubEvent & { readonly at: number })[] | undefined;
+  let writing = false;
+  let written: Promise<void> = Promise.resolve();
+  return (event) => {
+    events ??= earlier();
+    events.push({ ...event, at: Date.now() });
+    if (events.length > EVENTS_KEPT) {
+      events.splice(0, events.length - EVENTS_KEPT);
+    }
+    if (writing) {
+      return;
+    }
+    writing = true;
+    lifetime.after("hub record written", WRITE_AFTER_MS, () => {
+      writing = false;
+      const text = `${JSON.stringify(events)}\n`;
+      const path = recordPath();
+      written = written
+        .then(() => writeStateFile(path, text))
+        .catch((error: unknown) => {
+          console.warn(
+            `[hub] ${path} could not be written: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+    });
+  };
 };

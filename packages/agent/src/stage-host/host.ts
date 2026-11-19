@@ -3127,7 +3127,7 @@ function keepUnloaded(unloaded: SectionUnloaded[], drawn: PageSection[]): void {
       continue;
     }
     const next = pageProblem(file, one.error);
-    if (JSON.stringify(kept) !== JSON.stringify(next)) {
+    if (!Bun.deepEquals(kept, next)) {
       stageErrors.set(resolve(root, file), next);
       changed = true;
     }

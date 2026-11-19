@@ -335,13 +335,21 @@ interface Found {
   known: Set<string>;
   rows: Map<string, CapabilityCallsIn>;
   servers: readonly string[];
-  /** The hub's session by each harness session id it keeps. */
-  sessions: Map<string, string>;
+  sessionOf: (sessionId: string) => string | undefined;
+  /** The hub's session a harness session id names, read by key and kept. */
+  sessions: Map<string, string | undefined>;
 }
 
 /** One transcript line's calls into `found`, under the session it names. */
 function scanEntry(entry: TranscriptLine, at: Date, found: Found): void {
-  const instanceId = found.sessions.get(entry.sessionId ?? "") ?? "";
+  const sessionId = entry.sessionId ?? "";
+  if (!found.sessions.has(sessionId)) {
+    found.sessions.set(
+      sessionId,
+      sessionId ? found.sessionOf(sessionId) : undefined
+    );
+  }
+  const instanceId = found.sessions.get(sessionId) ?? "";
   if (entry.type === "assistant") {
     const uses = usesInBlocks(entry.message?.content, {
       harness: "claude",
@@ -412,7 +420,8 @@ export async function backfillUsage(db: DbShape): Promise<void> {
     known: new Set(db.listSkills().map((skill) => skill.name)),
     rows: new Map(),
     servers: knownServers(db),
-    sessions: db.capabilityCalls.sessionsById(),
+    sessions: new Map(),
+    sessionOf: db.capabilityCalls.sessionOf,
   };
   const recent = paths.filter(
     (path) => existsSync(path) && statSync(path).mtimeMs >= since

@@ -1375,6 +1375,15 @@ export function createDelegationMcp(options: {
   const hostTold = new Map<string, string>();
 
   let reconcileTimer: HubTimer | undefined;
+  /** One look, on the hub's admission (scheduler.ts): background, merged with any look still waiting. */
+  const wantReconcile = () => {
+    options.lifetime.jobs.want({
+      key: "tool lists reconciled",
+      name: "tool lists reconciled",
+      priority: "background",
+      run: reconcileLists,
+    });
+  };
   /**
    * A session's row moved (a board publish): one look, debounced. Each
    * stream's listing is found by its key ({@link listingKey}), so a look
@@ -1383,9 +1392,9 @@ export function createDelegationMcp(options: {
   const toolsMayHaveChanged = () => {
     options.lifetime.cancel(reconcileTimer);
     reconcileTimer = options.lifetime.after(
-      "tool lists reconciled (debounced)",
+      "tool lists quiet",
       LIST_DEBOUNCE_MS,
-      reconcileLists
+      wantReconcile
     );
   };
   /** Something a listing reads beside its session moved (a connection, the fleet): the listings made again, then one look. */
@@ -1397,7 +1406,7 @@ export function createDelegationMcp(options: {
   // the next sweep, which makes each listing again once.
   options.lifetime.every("tool lists swept", LIST_SWEEP_MS, () => {
     listingsStale();
-    reconcileLists();
+    wantReconcile();
   });
 
   /**
@@ -1436,7 +1445,7 @@ export function createDelegationMcp(options: {
     );
 
   /** Every MCP call running now, or answered a moment ago, that its harness can still cut (call-cuts.ts). */
-  const cuts = createCallCuts();
+  const cuts = createCallCuts(options.lifetime);
 
   /** Whether a POST's body is (or, batched, holds) an `initialize`. */
   const initializes = (body: unknown): boolean =>

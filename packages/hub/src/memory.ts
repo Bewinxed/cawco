@@ -477,7 +477,7 @@ export const createTurnWatch = (store: TaintStore) => {
       after.fromRoutine === before.fromRoutine &&
       after.delivered === before.delivered &&
       after.routine === before.routine &&
-      JSON.stringify(after.subagents) === JSON.stringify(before.subagents)
+      Bun.deepEquals(after.subagents, before.subagents)
     ) {
       return;
     }

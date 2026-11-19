@@ -359,7 +359,7 @@ export const createTailnetHttps = ({
       doors.close();
     }
     const next = stateOf(reading);
-    if (JSON.stringify(next) === JSON.stringify(state)) {
+    if (Bun.deepEquals(next, state)) {
       return;
     }
     state = next;

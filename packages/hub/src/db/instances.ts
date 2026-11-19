@@ -1,5 +1,6 @@
 /** Session rows: opening, listing, ending, settling and what keeps one on the board. */
 
+import { backoffWait } from "@cawco/core/backoff";
 import {
   ANY_TYPE,
   type MayStart,
@@ -44,6 +45,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
+import { nextTurn } from "../lifetime";
 import type { BoardChange } from "./board-log";
 import type { DbCore } from "./core";
 import type { FoldMoved } from "./owned-rows";
@@ -1229,7 +1231,7 @@ export const instancesDb = (core: DbCore): InstancesDb => {
     }
     const later = async () => {
       for (const chunk of chunks) {
-        await new Promise<void>((resolve) => setImmediate(resolve));
+        await nextTurn();
         try {
           // The transcript's mtime includes maintenance; it is not real
           // activity. Read here, a chunk's sessions at a time: all of a
@@ -1386,9 +1388,14 @@ export const instancesDb = (core: DbCore): InstancesDb => {
           lastErrorKind: null,
           endReason: error,
           endAttempts: row.endAttempts + 1,
+          // From 30 s, doubling to 5 min. Owed until done: the person asked
+          // for it, and is told once it keeps failing (session-lifecycle.ts).
           endRetryAt: new Date(
             Date.now() +
-              Math.min(300_000, 30_000 * 2 ** Math.min(row.endAttempts, 4))
+              backoffWait(
+                { firstMs: 30_000, mostMs: 300_000 },
+                row.endAttempts + 1
+              )
           ),
         })
         .where(eq(instances.id, id))

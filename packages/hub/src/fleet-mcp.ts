@@ -1,3 +1,4 @@
+import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
 import {
   CAWCO_OAUTH_URL,
@@ -5,7 +6,7 @@ import {
   type MachineFleetConfig,
 } from "@cawco/core/fleet";
 import type { ConnectAccess, ConnectAccessSet } from "@cawco/core/frames";
-import { secondsOf } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
 import { mcpWords } from "@cawco/core/words/mcp";
@@ -115,9 +116,15 @@ const identityOf = (tokens: { id_token?: unknown }): string | null => {
   return said?.trim() ?? null;
 };
 const DISCOVERY_TIMEOUT_MS = 15_000;
-/** Re-probes of a server the hub could not reach: 30 s, 1 m, 2 m, 4 m, 8 m, then every 15 m. */
-const REPROBE_FIRST_MS = 30_000;
-const REPROBE_MAX_MS = 15 * 60_000;
+/**
+ * Re-probes of a server the hub could not reach: from 30 s, doubling to 15
+ * min, for a day; then it waits for the server to be saved again.
+ */
+const REPROBES: BackoffPolicy = {
+  firstMs: 30_000,
+  mostMs: 15 * MINUTE_MS,
+  giveUp: { afterMs: DAY_MS },
+};
 /**
  * A token request's own deadline, far past what a request waiting on it
  * waits ({@link REFRESH_WAIT_MS}). A public client's refresh token is
@@ -129,11 +136,22 @@ const REPROBE_MAX_MS = 15 * 60_000;
 const TOKEN_DEADLINE_MS = 120_000;
 /** How long a request waits on a refresh before it is answered 502 to retry; the refresh itself goes on. */
 const REFRESH_WAIT_MS = 20_000;
-/** The waits between token requests that did not land: 0.5 s, 1 s, 2 s, 4 s, 8 s (CawCo's own call). */
-const REFRESH_RETRIES_MS = [500, 1000, 2000, 4000, 8000];
-/** After a refresh that landed on none of its tries, the next waits 30 s, doubling to 15 m. */
-const REFRESH_COOL_FIRST_MS = 30_000;
-const REFRESH_COOL_MAX_MS = 15 * 60_000;
+/** One renewal's token requests: six, from 0.5 s apart, doubling to 8 s (CawCo's own call). */
+const RENEW_TRIES: BackoffPolicy = {
+  firstMs: 500,
+  mostMs: 8000,
+  giveUp: { afterTries: 6 },
+};
+/**
+ * After a renewal that landed on none of its tries, the next waits from 30
+ * s, doubling to 15 min; renewals that have failed for a day end the
+ * sign-in, and the person is asked to sign in again ({@link FleetMcp.#end}).
+ */
+const RENEW_COOLING: BackoffPolicy = {
+  firstMs: 30_000,
+  mostMs: 15 * MINUTE_MS,
+  giveUp: { afterMs: DAY_MS },
+};
 /** A refresh starts this long before its access token expires, behind requests still using it. */
 const REFRESH_AHEAD_MS = 60_000;
 /** An access token with less than this left is not sent: the request waits for the refresh. */
@@ -274,9 +292,57 @@ const reach = (input: string | URL, init?: RequestInit): Promise<Response> =>
   reachWithin(input, init, wholeResponse);
 
 /**
+ * An OAuth error nested under `detail`, as a FastAPI server answers one
+ * (ElevenLabs: `{"detail":{"error":"invalid_grant"}}`), where RFC 6749 §5.2
+ * puts `error` at the top.
+ */
+const NESTED_OAUTH_ERROR = z.object({
+  detail: z.object({
+    error: z.string(),
+    error_description: z.string().optional(),
+    message: z.string().optional(),
+  }),
+});
+
+/**
+ * A token endpoint's refusal in RFC 6749 §5.2's own shape. The MCP SDK reads
+ * a refusal only as `{ "error": … }` at the top: anything else it fails as
+ * "Invalid OAuth error response", a `server_error`, so a provider that
+ * nests its error under `detail` (ElevenLabs) never said `invalid_grant`,
+ * {@link ENDING} never saw it, and a dead sign-in was renewed for ever
+ * while the person was never asked to sign in again (tsk-399). Such a body
+ * is moved to the top; any other answer is left as it came.
+ */
+const oauthShaped = async (response: Response): Promise<Response> => {
+  const whole = await wholeResponse(response);
+  if (whole.status < 400) {
+    return whole;
+  }
+  let body: unknown;
+  try {
+    body = await whole.clone().json();
+  } catch {
+    return whole;
+  }
+  const nested = NESTED_OAUTH_ERROR.safeParse(body);
+  if (!nested.success) {
+    return whole;
+  }
+  const { error, error_description, message } = nested.data.detail;
+  const description = error_description ?? message;
+  const headers = new Headers(whole.headers);
+  headers.delete("Content-Length");
+  return Response.json(
+    { error, ...(description ? { error_description: description } : {}) },
+    { status: whole.status, statusText: whole.statusText, headers }
+  );
+};
+
+/**
  * {@link reach} for the token endpoint: its own long deadline
  * ({@link TOKEN_DEADLINE_MS}), and a 429 or 408 is no answer either, tried
- * again, never a refusal. `heard` is told the status of each answer taken.
+ * again, never a refusal. A refusal reaches the SDK in RFC 6749's shape
+ * ({@link oauthShaped}). `heard` is told the status of each answer taken.
  */
 const reachToken =
   (heard: (status: number) => void) =>
@@ -290,7 +356,7 @@ const reachToken =
           throw new Unreachable(`HTTP ${response.status}.`);
         }
         heard(response.status);
-        return await wholeResponse(response);
+        return await oauthShaped(response);
       },
       TOKEN_DEADLINE_MS
     );
@@ -310,17 +376,17 @@ export class FleetMcp {
   readonly #changed: () => void;
   readonly #lifetime: HubLifetimeShape;
   readonly #probing = new Map<string, Promise<void>>();
-  /** One per server the hub could not reach: the config it tried, how many times, and the next try. */
+  /** One per server the hub could not reach: the config it tried, its tries ({@link REPROBES}), and the next. */
   readonly #reprobes = new Map<
     string,
-    { config: string; attempt: number; timer?: HubTimer }
+    { config: McpServerRow["config"]; tries: Backoff; timer?: HubTimer }
   >();
   /** The one refresh under way per server: every request that needs one waits on it. */
   readonly #refreshing = new Map<string, Promise<OAuthRow>>();
-  /** A server whose last refresh landed on none of its tries: no refresh before `until`. */
+  /** A server whose last refresh landed on none of its tries: no refresh before `until` ({@link RENEW_COOLING}). */
   readonly #cooling = new Map<
     string,
-    { round: number; until: number; why: string }
+    { rounds: Backoff; until: number; why: string }
   >();
   /** When each server's access token was issued here, to tell a fresh token's refusal from an old one's. */
   readonly #issued = new Map<string, number>();
@@ -395,20 +461,44 @@ export class FleetMcp {
   }
 
   /** What a probe can change, to tell the fleet only when a re-probe changed it. */
-  #auth(name: string): string {
+  #auth(name: string): readonly unknown[] {
     const server = this.#db.getMcpServer(name);
-    return JSON.stringify([
+    return [
       server?.authMode,
       server?.authError,
       this.#db.getMcpOauth(name)?.generation,
-    ]);
+    ];
   }
 
-  /** Backs off per server while the same config stays unreachable; another config starts over. */
-  #reprobe(name: string, config: string): void {
+  /**
+   * Backs off per server while the same config stays unreachable
+   * ({@link REPROBES}); another config starts over. Past a day it stops:
+   * a server never settled says so, and saving it again probes it again.
+   */
+  #reprobe(name: string, config: McpServerRow["config"]): void {
     const previous = this.#reprobes.get(name);
-    const attempt = previous?.config === config ? previous.attempt + 1 : 0;
-    const delay = Math.min(REPROBE_FIRST_MS * 2 ** attempt, REPROBE_MAX_MS);
+    const tries =
+      previous && Bun.deepEquals(previous.config, config)
+        ? previous.tries
+        : new Backoff(REPROBES);
+    const step = tries.failed();
+    if (step.kind === "gave-up") {
+      // Held no more: the next probe (its save) starts over.
+      this.#reprobes.delete(name);
+      console.warn(
+        `[fleet-mcp] ${name} has not answered for ${Math.round(step.failingMs / HOUR_MS)} h over ${step.tries} probes; the hub stops probing it until it is saved again`
+      );
+      const server = this.#db.getMcpServer(name);
+      if (server?.authError) {
+        this.#db.setMcpAuth(
+          name,
+          server.authMode,
+          "The hub could not reach this server for a day and stopped trying. Check its URL, then save it again."
+        );
+      }
+      return;
+    }
+    const delay = step.ms;
     const timer = this.#lifetime.after(
       "fleet MCP server probed again",
       delay,
@@ -420,7 +510,7 @@ export class FleetMcp {
         const before = this.#auth(name);
         this.probe(name).then(
           () => {
-            if (this.#auth(name) !== before) {
+            if (!Bun.deepEquals(this.#auth(name), before)) {
               this.#changed();
             }
           },
@@ -434,9 +524,9 @@ export class FleetMcp {
         );
       }
     );
-    this.#reprobes.set(name, { config, attempt, timer });
+    this.#reprobes.set(name, { config, tries, timer });
     console.info(
-      `[fleet-mcp] ${name} did not answer; probing again in ${delay / 1000} s`
+      `[fleet-mcp] ${name} did not answer; probing again in ${Math.round(delay / 1000)} s`
     );
   }
 
@@ -447,7 +537,7 @@ export class FleetMcp {
    * config was saved, or OAuth without discovered metadata) says why it is
    * still off. Either way the hub asks again.
    */
-  #unanswered(server: McpServerRow, config: string): void {
+  #unanswered(server: McpServerRow, config: McpServerRow["config"]): void {
     const settled =
       server.authError === null &&
       (server.authMode === "direct" ||
@@ -471,10 +561,9 @@ export class FleetMcp {
       this.#db.setMcpAuth(name, "direct");
       return;
     }
-    const key = JSON.stringify(config);
     const fresh = () => {
       const latest = this.#db.getMcpServer(name);
-      return latest && JSON.stringify(latest.config) === key
+      return latest && Bun.deepEquals(latest.config, config)
         ? latest
         : undefined;
     };
@@ -537,7 +626,7 @@ export class FleetMcp {
         return;
       }
       if (unreachable(error)) {
-        this.#unanswered(latest, key);
+        this.#unanswered(latest, config);
         return;
       }
       this.#reprobes.delete(name);
@@ -877,7 +966,7 @@ export class FleetMcp {
   /**
    * Renews the sign-in with its refresh token. No answer (the network, a 5xx,
    * a 429, the deadline) and any refusal but the two that end a sign-in are
-   * tried again after {@link REFRESH_RETRIES_MS}, the sign-in kept whatever
+   * tried again ({@link RENEW_TRIES}), the sign-in kept whatever
    * comes back. Only `invalid_grant` or `invalid_token` from the token
    * endpoint ends it ({@link #end}), in the provider's words.
    */
@@ -900,7 +989,8 @@ export class FleetMcp {
     /** Tries that got no answer: a rotation the provider may have made then. */
     let unanswered = 0;
     let last = "";
-    for (const wait of [...REFRESH_RETRIES_MS, null]) {
+    const tries = new Backoff(RENEW_TRIES);
+    for (;;) {
       const tried = await this.#try(row, client, spent);
       if ("kept" in tried) {
         return tried.kept;
@@ -916,31 +1006,51 @@ export class FleetMcp {
           "This server changed while its sign-in was renewed. Retry the request."
         );
       }
-      if (wait === null) {
+      const step = tries.failed();
+      if (step.kind === "gave-up") {
         break;
       }
       console.warn(
-        `[fleet-mcp] ${name}: renewing the sign-in got ${last}; the sign-in stands, and the hub tries again in ${wait / 1000} s`
+        `[fleet-mcp] ${name}: renewing the sign-in got ${last}; the sign-in stands, and the hub tries again in ${(step.ms / 1000).toFixed(1)} s`
       );
-      await this.#lifetime.sleep(wait);
+      await this.#lifetime.sleep(step.ms);
     }
-    this.#coolDown(name, last);
+    if (this.#coolDown(name, held, last, tries.tries)) {
+      throw new SignedOut("Signed out.");
+    }
     throw new NotNow(
       `This server's sign-in stands, but renewing it got ${last}. Retry the request.`
     );
   }
 
-  /** A renewal that landed on none of its tries: the next waits, longer each time, the sign-in kept. */
-  #coolDown(name: string, why: string): void {
-    const round = (this.#cooling.get(name)?.round ?? -1) + 1;
-    const pause = Math.min(
-      REFRESH_COOL_FIRST_MS * 2 ** round,
-      REFRESH_COOL_MAX_MS
-    );
-    this.#cooling.set(name, { round, until: Date.now() + pause, why });
+  /**
+   * A renewal that landed on none of its `tried` tries: the next waits,
+   * longer each time ({@link RENEW_COOLING}), the sign-in kept. Renewals
+   * that have failed for a day end it, as a refusal does, so the person is
+   * asked to sign in again: whether it ended.
+   */
+  #coolDown(
+    name: string,
+    held: NonNullable<OAuthRow["tokens"]>,
+    why: string,
+    tried: number
+  ): boolean {
+    const rounds =
+      this.#cooling.get(name)?.rounds ?? new Backoff(RENEW_COOLING);
+    const step = rounds.failed();
+    if (step.kind === "gave-up") {
+      this.#end(
+        name,
+        held,
+        `Renewing it failed for ${Math.round(step.failingMs / HOUR_MS)} h, ${step.tries} times in a row, the last with ${why}.`
+      );
+      return true;
+    }
+    this.#cooling.set(name, { rounds, until: Date.now() + step.ms, why });
     console.warn(
-      `[fleet-mcp] ${name}: renewing the sign-in got ${why} on all ${REFRESH_RETRIES_MS.length + 1} tries; the sign-in stands, requests that need it are answered 502 to retry, and the hub tries again in ${pause / 1000} s`
+      `[fleet-mcp] ${name}: renewing the sign-in got ${why} on all ${tried} tries; the sign-in stands, requests that need it are answered 502 to retry, and the hub tries again in ${Math.round(step.ms / 1000)} s`
     );
+    return false;
   }
 
   /**

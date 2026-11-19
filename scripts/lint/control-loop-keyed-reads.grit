@@ -1,0 +1,31 @@
+language js
+
+// The hub's control loop reads by key. A read of a large table with no
+// `where` (and no `limit`) costs the table, on the thread every request,
+// machine frame and timer waits on: the hub sat pinned at 100% on
+// 2026-11-18/19 doing work sized to the fleet's history on small events
+// (tsk-391). A whole-table read belongs to the views thread
+// (packages/hub/src/views/), which reads on a connection of its own, or to a
+// boot step (packages/hub/src/db/migrate.ts and the data migrations). The
+// runtime law (packages/hub/src/db/statement-plans.ts) catches what this
+// cannot see: a `where` that still scans.
+`$read.all()` as $hit where {
+  $filename <: includes "packages/hub/src/",
+  $filename <: not includes "packages/hub/src/views/",
+  $filename <: not includes "packages/hub/src/preview-server/",
+  $filename <: not includes "packages/hub/src/db/migrat",
+  $filename <: not includes "packages/hub/src/db/data-migrations",
+  $read <: contains `$_.from($table)`,
+  $table <: or {
+    `instances`, `instanceTooling`, `instanceConversations`,
+    `sentMessages`, `sentMessageBodies`,
+    `workItems`, `workItemTexts`, `delegateEvents`, `completedTurns`,
+    `artifacts`, `artifactUpdates`, `artifactChanges`,
+    `turnUsage`, `usageBuckets`, `usageLimitHistory`, `limitEvents`,
+    `sessionLines`, `capabilityCalls`, `toolCallKeys`,
+    `inboundEvents`, `routineRuns`
+  },
+  $read <: not contains `$_.where($_)`,
+  $read <: not contains `$_.limit($_)`,
+  register_diagnostic(span=$hit, message="An unkeyed read of a large table on the hub's control loop: read it by key (a `where` on an indexed column, or a `limit`), or move it to the views thread (packages/hub/src/views/).")
+}

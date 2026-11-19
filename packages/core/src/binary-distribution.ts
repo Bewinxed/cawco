@@ -318,8 +318,8 @@ interface Fetch {
 
 /**
  * How long a failed fetch is the answer to every ask of its archive before
- * an ask starts the next one: as long as an agent waits before its own
- * first retry (agent binary-update.ts `RETRY_DELAYS_MIN`), so the agents
+ * an ask starts the next one: no longer than an agent waits before its own
+ * first retry (agent binary-update.ts `RETRIES`), so the agents
  * that waited on the failed fetch each hear why, rather than the first
  * starting another under the rest.
  */

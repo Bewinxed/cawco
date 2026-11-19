@@ -9,6 +9,7 @@ import {
   desc,
   eq,
   getTableColumns,
+  gt,
   inArray,
   isNotNull,
   isNull,
@@ -28,6 +29,9 @@ import type { Tx } from "./tx";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
 const SENDS_FOR_BATCH = 500;
+
+/** Bodies a start's rewrite reads at a time ({@link SendsDb.migrateSendsOnce}). */
+const MIGRATE_BATCH = 500;
 
 /** A send's record with its body, read by key from `sent_message_bodies` ({@link sendColumns}). */
 export type SentMessageRow = typeof sentMessages.$inferSelect & {
@@ -297,12 +301,29 @@ export const sendsDb = (core: DbCore): SendsDb => {
           return null;
         }
         let changed = 0;
-        for (const send of tx.select().from(sentMessageBodies).all()) {
-          const body = rewrite(send.body);
-          if (body) {
-            writeBody(tx, send.uuid, body);
-            changed += 1;
+        // By key, a batch at a time: the bodies are the hub's largest table
+        // (188 MB on 2026-11-19), and one read of them all held them all.
+        let after = "";
+        for (;;) {
+          const batch = tx
+            .select()
+            .from(sentMessageBodies)
+            .where(gt(sentMessageBodies.uuid, after))
+            .orderBy(sentMessageBodies.uuid)
+            .limit(MIGRATE_BATCH)
+            .all();
+          for (const send of batch) {
+            const body = rewrite(send.body);
+            if (body) {
+              writeBody(tx, send.uuid, body);
+              changed += 1;
+            }
           }
+          const last = batch.at(-1);
+          if (!last || batch.length < MIGRATE_BATCH) {
+            break;
+          }
+          after = last.uuid;
         }
         tx.insert(dataMigrations).values({ name, at: new Date() }).run();
         return changed;

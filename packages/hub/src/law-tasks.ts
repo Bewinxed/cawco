@@ -48,6 +48,8 @@ const LAW_TITLES: Record<Law, string> = {
     "Stop keeping a send for a machine that reads offline with no deadline",
   "artifact-notice-drawn":
     "Draw every artifact message as an artifact notice, never as the person's words",
+  "control-reads-keyed":
+    "Read the hub's large tables by key on its control connection, never whole",
 };
 
 /** The task's own field naming its law: how a later break finds it open. */

@@ -401,7 +401,7 @@ const mirror = async (
  */
 const step = async (boundary: WorkspaceRef, kept: Kept): Promise<string[]> => {
   const { changed, kept: now } = await mirror(boundary, kept);
-  if (JSON.stringify(now) !== JSON.stringify(kept)) {
+  if (!Bun.deepEquals(now, kept)) {
     await keep(boundary.id, now);
   }
   return changed;

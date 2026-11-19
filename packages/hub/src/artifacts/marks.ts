@@ -337,9 +337,7 @@ export const createMarks = (ctx: MarksContext) => {
       const ink = live.getMap<InkGroup>("ink");
       for (const group of [...ink.values()]) {
         const was = went.get(group.id);
-        const unchanged =
-          !!was &&
-          JSON.stringify(was.strokes) === JSON.stringify(group.strokes);
+        const unchanged = !!was && Bun.deepEquals(was.strokes, group.strokes);
         if (unchanged && !group.sentAt) {
           ink.set(group.id, { ...group, sentAt: at });
         }

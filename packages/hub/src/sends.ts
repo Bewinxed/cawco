@@ -10,6 +10,7 @@ import {
   attachedPictureLine,
   pictureName,
 } from "@cawco/core/attachments";
+import { backoffWait } from "@cawco/core/backoff";
 import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
@@ -236,10 +237,12 @@ const SETTLE_READS_PER_MACHINE = 4;
 const storedContent = ({ message }: SessionMessage): unknown =>
   isRecord(message) ? message.content : undefined;
 
-/** After a settle read its machine left unanswered, the session's next waits this long, doubling each time. */
-const SETTLE_BACKOFF_FIRST_MS = 15_000;
-/** The longest a session's next settle read waits. Our call: eight heartbeats. */
-const SETTLE_BACKOFF_MAX_MS = 120_000;
+/**
+ * After a settle read its machine left unanswered, the session's next waits:
+ * from 15 s, doubling to two minutes (our call: eight heartbeats). Its end is
+ * the session's: an answered read, or the session gone.
+ */
+const SETTLE_READS = { firstMs: 15_000, mostMs: 120_000 };
 
 /**
  * A `send` whose turn carries pasted material. The agent folds attachments into
@@ -813,7 +816,7 @@ export const createSends = (ctx: SendsContext) => {
   /** Each session's settle read in flight, or waiting its turn behind one: one at a time per session. */
   const settleReads = new Map<string, Promise<unknown>>();
   /** A session whose last settle read went unanswered: its next is asked no sooner than `until`. */
-  const settleBackoff = new Map<string, { ms: number; until: number }>();
+  const settleBackoff = new Map<string, { tries: number; until: number }>();
   /** Settle reads each machine is being asked now ({@link SETTLE_READS_PER_MACHINE} at most). */
   const settleAsked = new Map<string, number>();
   /** Settle reads waiting for one of their machine's turns, oldest first. */
@@ -904,8 +907,8 @@ export const createSends = (ctx: SendsContext) => {
    * One settle read of the session's transcript tail, asked once its backoff
    * is over and its machine has a turn for it. One its machine left
    * unanswered is logged with when it was asked and how long it waited, and
-   * puts the session's next read off (doubling, {@link SETTLE_BACKOFF_MAX_MS}
-   * at most); one answered clears that.
+   * puts the session's next read off ({@link SETTLE_READS}); one answered
+   * clears that.
    */
   const askSettle = async (row: InstanceRow & { sessionId: string }) => {
     const backoff = settleBackoff.get(row.id);
@@ -920,14 +923,12 @@ export const createSends = (ctx: SendsContext) => {
         settleBackoff.delete(row.id);
         return answer;
       }
-      const ms = Math.min(
-        backoff ? backoff.ms * 2 : SETTLE_BACKOFF_FIRST_MS,
-        SETTLE_BACKOFF_MAX_MS
-      );
+      const tries = (backoff?.tries ?? 0) + 1;
+      const ms = backoffWait(SETTLE_READS, tries);
       const until = Date.now() + ms;
-      settleBackoff.set(row.id, { ms, until });
+      settleBackoff.set(row.id, { tries, until });
       console.warn(
-        `[hub] ${row.id}: settle read on ${ctx.machineName(row.machineId)} not answered (asked at ${askedAt}, waited ${Date.now() - askedAt} ms); its next is asked no sooner than ${until}, ${ms / 1000} s on`
+        `[hub] ${row.id}: settle read on ${ctx.machineName(row.machineId)} not answered (asked at ${askedAt}, waited ${Date.now() - askedAt} ms); its next is asked no sooner than ${until}, ${Math.round(ms / 1000)} s on`
       );
       return answer;
     } finally {

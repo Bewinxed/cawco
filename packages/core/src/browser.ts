@@ -103,6 +103,13 @@ export interface BrowserRow {
    * never sends it to an agent.
    */
   origin?: string;
+  /**
+   * The machine gave up reading the page shown: its DevTools link to the
+   * browser would not open, tried with backoff until it gave up (agent
+   * front-origin.ts). The band says the address cannot be read; the next
+   * start of the browser reads it afresh.
+   */
+  originUnread?: true;
   ports?: BrowserPorts;
   /** How far an image build is, while `state` is `pulling` or `building`. */
   progress?: { done: number; total: number; what: "image" };
@@ -411,6 +418,8 @@ export interface ListedBrowser {
   name: string;
   /** The origin of the page the person's view shows; absent while it shows none. */
   origin?: string;
+  /** Its machine gave up reading the page shown ({@link BrowserRow.originUnread}). */
+  originUnread?: true;
   /** What this browser's machine can do for passkey relay; absent when neither is available. */
   passkeyRelay?: PasskeyRelayCapability;
   /** How far an image build is, while `state` is `pulling` or `building`. */

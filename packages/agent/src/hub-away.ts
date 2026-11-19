@@ -1,3 +1,4 @@
+import { backoffWait } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
 
 /**
@@ -45,7 +46,7 @@ export const throughHubAway = async (
   // The bound is the hub's to use: time this process was held (a wait
   // that ran late) is given back, so a loop blocked here never spends it.
   let deadline = Date.now() + HUB_AWAY_BOUND_MS;
-  let wait = 500;
+  let tries = 0;
   for (;;) {
     let away: string;
     try {
@@ -59,13 +60,15 @@ export const throughHubAway = async (
       away =
         error instanceof Error ? error.message || error.name : String(error);
     }
+    // From 0.5 s, doubling to 5 s; it gives up at its deadline.
+    tries += 1;
+    const wait = backoffWait({ firstMs: 500, mostMs: 5000 }, tries);
     if (stopped?.aborted || Date.now() + wait >= deadline) {
       return { away };
     }
     const slept = Date.now();
     await Bun.sleep(wait);
     deadline += Math.max(0, Date.now() - slept - wait);
-    wait = Math.min(wait * 2, 5000);
   }
 };
 

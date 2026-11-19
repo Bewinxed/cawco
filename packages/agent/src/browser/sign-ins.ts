@@ -394,13 +394,13 @@ export const missingSignIns = async (
   const databases = new Map(
     held.databases.flatMap(({ origin, snapshot }) =>
       databasesOf(snapshot).map(
-        (one) => [`${origin} ${one.name}`, JSON.stringify(one)] as const
+        (one) => [`${origin} ${one.name}`, one] as const
       )
     )
   );
   for (const { origin, snapshot } of signIns.databases) {
     for (const one of databasesOf(snapshot)) {
-      if (databases.get(`${origin} ${one.name}`) !== JSON.stringify(one)) {
+      if (!Bun.deepEquals(databases.get(`${origin} ${one.name}`), one)) {
         missing.push(`${origin}'s IndexedDB database ${one.name}`);
       }
     }

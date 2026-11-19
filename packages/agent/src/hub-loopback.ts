@@ -378,7 +378,7 @@ async function carryElsewhere(
   return {
     follow: (next) => {
       const now = routeOf(addresses, next);
-      if (JSON.stringify(now) === JSON.stringify(route)) {
+      if (Bun.deepEquals(now, route)) {
         return false;
       }
       route = now;
