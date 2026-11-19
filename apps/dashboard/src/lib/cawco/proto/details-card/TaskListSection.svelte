@@ -170,17 +170,14 @@
                  where it updates (the codebase or team, how many tasks are
                  linked, the status board); then how it stands, with Refresh
                  now and Change…. -->
-            <dl
+            <div
               class="m-0 flex flex-col gap-space-1 ps-c-details-option-text pe-space-3 pt-space-1 pb-space-2"
               data-facts={linked.kind}
             >
               <div
                 class="flex flex-wrap items-center gap-x-space-2 gap-y-space-1"
               >
-                <dt class="sr-only">
-                  {linked.kind === "github" ? "Codebase" : "Team"}
-                </dt>
-                <dd class="m-0">
+                <span class="type-meta">
                   <a
                     class="mark-line inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
                     href={linked.target.url}
@@ -191,15 +188,18 @@
                       class="size-icon-sm flex-none"
                     /></a
                   >
-                </dd>
-                <dd class="m-0 type-meta tabular-nums text-ink-muted">
+                </span>
+                <span class="type-meta tabular-nums text-ink-muted">
                   · {taskWords.linked(linked.linked)}
-                </dd>
+                </span>
                 {#if linked.kind === "github"}
-                  <dt class="type-meta whitespace-nowrap text-ink-muted">
-                    · {taskWords.board}
-                  </dt>
-                  <dd class="m-0 min-w-0 type-meta">
+                  <!-- The board stays beside its name. -->
+                  <span
+                    class="flex min-w-0 items-center gap-x-space-2 type-meta"
+                  >
+                    <span class="whitespace-nowrap text-ink-muted"
+                      >· {taskWords.board}</span
+                    >
                     {#if linked.board && "url" in linked.board}
                       <a
                         class="mark-line inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
@@ -218,16 +218,15 @@
                     {:else}
                       <span class="text-ink-muted">{taskWords.noBoard}</span>
                     {/if}
-                  </dd>
+                  </span>
                 {/if}
               </div>
               <div
                 class="flex flex-wrap items-center gap-x-space-3 gap-y-space-1"
               >
-                <dt class="sr-only">Standing</dt>
                 <!-- mark-line: the glyph stands at the top of words that may wrap -->
-                <dd
-                  class="m-0 flex min-w-0 flex-1 items-start gap-space-2 type-meta"
+                <span
+                  class="flex min-w-0 flex-1 items-start gap-space-2 type-meta"
                   aria-live="polite"
                 >
                   {#if linked.standing.state === "reading"}
@@ -260,8 +259,8 @@
                       {linked.standing.value.words}</span
                     >
                   {/if}
-                </dd>
-                <dd class="m-0">
+                </span>
+                <span>
                   <Button
                     disabled={sunk}
                     icon={IconRefresh}
@@ -274,17 +273,17 @@
                     size="xs"
                     variant="outline"
                   />
-                </dd>
-                <dd class="m-0">
+                </span>
+                <span>
                   <Button
                     disabled={sunk}
                     onclick={onchange}
                     size="xs"
                     variant="ghost">{taskWords.change}</Button
                   >
-                </dd>
+                </span>
               </div>
-            </dl>
+            </div>
           {/if}
 
           {#if pending?.value === kind && pending.refused}
