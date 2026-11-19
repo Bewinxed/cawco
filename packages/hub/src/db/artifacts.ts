@@ -87,7 +87,7 @@ const sourceColumnsOf = (
 });
 
 /** A stored artifact with its source whole again. */
-const artifactOf = ({
+export const artifactOf = ({
   sourcePage,
   sourceDir,
   sourcePort,
@@ -467,7 +467,7 @@ export const artifactsDb = (
       })
       .returning()
       .get();
-    written();
+    written([made.id]);
     return artifactOf(made);
   },
   get: (id) => {
@@ -720,7 +720,7 @@ export const artifactsDb = (
       .returning()
       .get();
     if (row) {
-      written();
+      written([row.id]);
     }
     return row && artifactOf(row);
   },
@@ -750,12 +750,14 @@ export interface ArtifactListenersDb {
    */
   readonly onArtifactsGone: (listener: (gone: GoneArtifact[]) => void) => void;
   /**
-   * `listener` hears that an artifact row was made, changed or deleted,
+   * `listener` hears which artifact rows were made, changed or deleted,
    * as the write happens: every write of the table is one of these
    * (`artifactsDb` create and update, `dropArtifacts`). Needs you's lane
    * reads again on it (artifacts/lane.ts `moved`).
    */
-  readonly onArtifactsWritten: (listener: () => void) => void;
+  readonly onArtifactsWritten: (
+    listener: (ids: readonly string[]) => void
+  ) => void;
   /**
    * `listener` hears each artifact whose source moved to another key, with
    * what served it before, once the write that moved it is done: the one
@@ -771,7 +773,7 @@ export interface ArtifactEvents {
   /** What the store hands on as its own members (`onArtifactsGone` and the rest). */
   readonly artifactListeners: ArtifactListenersDb;
   /** Tells whoever hears of a row written (`onArtifactsWritten`). */
-  readonly artifactsWritten: () => void;
+  readonly artifactsWritten: (ids: readonly string[]) => void;
   /** {@link dropArtifactRows}, its ids told once the write is done: the one way an artifact row goes. */
   readonly dropArtifacts: (tx: Deleter, where: SQL | undefined) => void;
   /** Tells whoever hears of a source moved (`onSourceMoved`). */
@@ -780,11 +782,11 @@ export interface ArtifactEvents {
 
 export const artifactEvents = (db: BunSQLiteDatabase): ArtifactEvents => {
   /** Who hears of an artifact row written ({@link DbShape.onArtifactsWritten}). */
-  const writtenListeners = new Set<() => void>();
+  const writtenListeners = new Set<(ids: readonly string[]) => void>();
 
-  const artifactsWritten = (): void => {
+  const artifactsWritten = (ids: readonly string[]): void => {
     for (const listener of writtenListeners) {
-      listener();
+      listener(ids);
     }
   };
 
@@ -841,7 +843,7 @@ export const artifactEvents = (db: BunSQLiteDatabase): ArtifactEvents => {
     if (gone.length === 0) {
       return;
     }
-    artifactsWritten();
+    artifactsWritten(gone.map((one) => one.id));
     if (!goneNoted) {
       goneNoted = new Map();
       queueMicrotask(tellGone);

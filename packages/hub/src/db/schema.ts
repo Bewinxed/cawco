@@ -5907,6 +5907,39 @@ export const artifactUpdates = sqliteTable(
   (table) => [primaryKey({ columns: [table.artifactId, table.seq] })]
 );
 
+/**
+ * What a page's or a canvas's document carries of the hub's state, built by
+ * the hub whenever the artifact's doc, its row or what its page shows moves
+ * (artifact-documents.ts), and read by the preview server, which composes the
+ * document from it and the page's own file without asking the hub
+ * (preview-server/pages.ts): the doc's seed its overlay tag carries, a
+ * decision page's program hash, its media and its pictures' sizes, the
+ * artifacts its pieces show (its origin serves those inside it), and the
+ * key of its folder's files. `etag` names all of it: an open whose document
+ * is the same answers 304 from this one row.
+ */
+export const artifactDocuments = sqliteTable("artifact_documents", {
+  artifactId: text("artifact_id")
+    .primaryKey()
+    .references(() => artifacts.id, { onDelete: "cascade" }),
+  etag: text("etag").notNull(),
+  /** The doc as one base64 Yjs update (artifacts/docs.ts `seed`). */
+  seedState: text("seed_state").notNull(),
+  /** The doc's mirrored maps as JSON (artifacts/docs.ts `seed`). */
+  seedMaps: text("seed_maps").notNull(),
+  /** A decision page's program's hash, which its overlay carries; null for any other page and for a canvas. */
+  programHash: text("program_hash"),
+  /** A decision page's media as JSON (preview-server/document-shape.ts `DocumentMediaSchema`), an embed named by its origin's key and path; null for any other. */
+  media: text("media"),
+  /** A decision page's pictures' sizes by address, as JSON; null for any other. */
+  pictures: text("pictures"),
+  /** The artifacts its Canvas and Preview pieces show (their ids, a held version's own id), as a JSON array. */
+  shows: text("shows").notNull().default("[]"),
+  /** A page's folder's key (core `folderKey`); null for a canvas. */
+  folderKey: text("folder_key"),
+  builtAt: timestamp("built_at").notNull(),
+});
+
 /** A harness subagent a session started and that has not ended: its task, and the call that started it. */
 export interface OpenSubagent {
   call: string | null;

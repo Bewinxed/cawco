@@ -295,14 +295,19 @@ const spendTicket = (
   return spender;
 };
 
-/** The lock, as a listener holds it: where its pass is set, where passes are kept, and which sessions still run. */
-export interface PassLock {
+/** The lock as a request meets it: where its pass is set, and where a pass is read and its use written. */
+export interface PassCheck {
   /**
    * Host mode's names: the domain every name of the pattern stands under
    * (core `hostModeDomain`). Null on an origin's own port, whose pass is set
    * on the host it was reached at alone.
    */
   domain: string | null;
+  passes: Pick<PreviewPassesDb, "live" | "touch">;
+}
+
+/** The lock as an entry meets it, on the hub: where passes are kept, and which sessions still run. */
+export interface PassLock extends PassCheck {
   passes: PreviewPassesDb;
   /** Whether session `instanceId` still runs: a session's ticket opens nothing once it ended. */
   sessionLive: (instanceId: string) => boolean;
@@ -329,7 +334,7 @@ const isPersonPass = (name: string): boolean =>
   name === PREVIEW_PASS_COOKIE || name === PREVIEW_PORT_PASS_COOKIE;
 
 /** Whether a pass set in answer to `request` is `Secure`: always on host mode's names, on a port when it was reached over https. */
-const secureFor = (request: Request, lock: PassLock): boolean =>
+const secureFor = (request: Request, lock: PassCheck): boolean =>
   lock.domain !== null || new URL(request.url).protocol === "https:";
 
 /** The sha256 of each token `request` presents under a cookie name `named` takes. */
@@ -370,7 +375,7 @@ const touched = new Map<string, number>();
  */
 export const passOf = (
   request: Request,
-  lock: PassLock,
+  lock: PassCheck,
   key: string | undefined,
   now = Date.now()
 ): PreviewPassRow | null => {

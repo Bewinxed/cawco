@@ -48,7 +48,7 @@ import {
   unxml,
 } from "@cawco/core/launchd";
 import { unknownMigrations } from "@cawco/core/migration-state";
-import { hubDbPath } from "@cawco/core/paths/hub";
+import { hubDbPath, previewServerSocket } from "@cawco/core/paths/hub";
 import {
   CAWCO_HUB_PORT,
   localDashboardPort,
@@ -164,6 +164,8 @@ interface Layout {
     readonly vite: string;
   };
   readonly hub: Launch;
+  /** The preview server (hub preview-server/main.ts): every preview origin, in a process of its own. */
+  readonly preview: Launch;
   readonly root: string;
   readonly sessiond: KeeperLaunch;
 }
@@ -185,6 +187,10 @@ const checkoutLayout = (
       endpoint: sessiondSocket(),
     },
     agent: { command: [process.execPath, cliEntry, "up"], needs: cliEntry },
+    preview: {
+      command: [process.execPath, cliEntry, "preview"],
+      needs: cliEntry,
+    },
     dashboard: {
       command: [NODE ?? "node", dashboardEntry],
       needs: dashboardEntry,
@@ -237,6 +243,7 @@ const here = (): Layout => {
     return {
       root: dirname(executable),
       hub: launch("hub"),
+      preview: launch("preview"),
       agent: launch("up"),
       sessiond: buildKeeper(runtimeVersion, executable),
       dashboard: launch("dashboard"),
@@ -620,6 +627,23 @@ const probeSessiond = async (): Promise<string | undefined> => {
   return `${endpoint} accepts connections`;
 };
 
+/** The preview server answers on its own socket (core `previewServerSocket`), as sessiond's probe asks its. */
+const probePreview = async (): Promise<string | undefined> => {
+  const endpoint = previewServerSocket();
+  if (platform() === "win32") {
+    return undefined;
+  }
+  if (!existsSync(endpoint)) {
+    return `no socket at ${endpoint}`;
+  }
+  const answered = await fetch("http://preview/", { unix: endpoint })
+    .then((answer) => answer.ok)
+    .catch(() => false);
+  return answered
+    ? `${endpoint} accepts connections`
+    : `stale socket at ${endpoint}: nothing is listening`;
+};
+
 /** The browser address of a socket listening at `address`. */
 const browserUrl = ({
   host: listening,
@@ -666,6 +690,15 @@ export const awaitFirstMachineReady = async (
       },
     ],
     [
+      "preview",
+      async () => {
+        const said = await probePreview();
+        return said?.endsWith("accepts connections")
+          ? undefined
+          : (said ?? "not asked on this platform");
+      },
+    ],
+    [
       "sessiond",
       async () => {
         const said = await probeSessiond();
@@ -704,7 +737,9 @@ export const awaitFirstMachineReady = async (
       },
     ],
   ];
-  note("waiting for hub, sessiond, this machine's agent and dashboard…");
+  note(
+    "waiting for hub, preview server, sessiond, this machine's agent and dashboard…"
+  );
   const deadline = Date.now() + READY_TIMEOUT_MS;
   for (;;) {
     const standing = await Promise.all(checks.map(([, check]) => check()));
@@ -748,6 +783,38 @@ export const awaitFirstMachineReady = async (
  */
 const OWN_CPU_WEIGHT = 1000;
 
+/**
+ * What the hub's unit and the preview server's name of the machine, the
+ * same for both: the hub's port, its database, the preview ports and the
+ * dashboard's.
+ */
+const hubEnvironment = (): NonNullable<ServiceSpec["environment"]> => ({
+  [CAWCO_ENV.hubPort]: String(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT),
+  // The database the CLI resolved (core `hubDbPath`), written into the
+  // unit so the hub opens the same file whatever environment the init
+  // system gives it: the platform data dir (C9: ~/.local/share/cawco on
+  // linux, ~/Library/Application Support/cawco on darwin), or the
+  // CAWCO_DB_PATH the operator set. The hub's own boot migration
+  // (packages/hub/src/index.ts) carries an existing in-tree database
+  // there the first time it finds one. Read as the unit is written, so
+  // an update's refresh writes the path the unit already names
+  // (`refreshServices`). Where the file lives (C9, our choice):
+  // per-user, created with no sudo, and outside any git checkout — so
+  // `git clean -fdx` in a dev tree or a deploy clone can never again
+  // reach the fleet's whole memory. Every workspace boundary hides the
+  // dir (`credentialStores`).
+  [CAWCO_ENV.dbPath]: hubDbPath(),
+  // Its preview listeners' ports: the operator's range, else the
+  // hundred after the hub's own (hub config.ts `PREVIEW_PORTS`).
+  ...(readEnv(CAWCO_ENV.previewPorts)
+    ? { [CAWCO_ENV.previewPorts]: readEnv(CAWCO_ENV.previewPorts) }
+    : {}),
+  // The dashboard's port, the one its sockets listen on here
+  // (`dashboardSockets`) and the hub names to every agent; the hub's
+  // preview ports never take it (hub config.ts `FLEET_PORTS`).
+  [CAWCO_ENV.localDashboardPort]: String(localDashboardPort()),
+});
+
 const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
   const { root: LAYOUT_ROOT, dashboardBuild: DASHBOARD_BUILD } = layout;
   /** A unit whose process cannot start is refused, naming what is missing. */
@@ -768,34 +835,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // a cwd for the workspace lookup; the entry point needs neither and boots
       // the same process.
       command: layout.hub.command,
-      environment: {
-        [CAWCO_ENV.hubPort]: String(
-          readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT
-        ),
-        // The database the CLI resolved (core `hubDbPath`), written into the
-        // unit so the hub opens the same file whatever environment the init
-        // system gives it: the platform data dir (C9: ~/.local/share/cawco on
-        // linux, ~/Library/Application Support/cawco on darwin), or the
-        // CAWCO_DB_PATH the operator set. The hub's own boot migration
-        // (packages/hub/src/index.ts) carries an existing in-tree database
-        // there the first time it finds one. Read as the unit is written, so
-        // an update's refresh writes the path the unit already names
-        // (`refreshServices`). Where the file lives (C9, our choice):
-        // per-user, created with no sudo, and outside any git checkout — so
-        // `git clean -fdx` in a dev tree or a deploy clone can never again
-        // reach the fleet's whole memory. Every workspace boundary hides the
-        // dir (`credentialStores`).
-        [CAWCO_ENV.dbPath]: hubDbPath(),
-        // Its preview listeners' ports: the operator's range, else the
-        // hundred after the hub's own (hub config.ts `PREVIEW_PORTS`).
-        ...(readEnv(CAWCO_ENV.previewPorts)
-          ? { [CAWCO_ENV.previewPorts]: readEnv(CAWCO_ENV.previewPorts) }
-          : {}),
-        // The dashboard's port, the one its sockets listen on here
-        // (`dashboardSockets`) and the hub names to every agent; the hub's
-        // preview ports never take it (hub config.ts `FLEET_PORTS`).
-        [CAWCO_ENV.localDashboardPort]: String(localDashboardPort()),
-      },
+      environment: hubEnvironment(),
       workingDirectory: LAYOUT_ROOT,
       // Nothing to wait for: a user unit cannot order itself after the
       // system's network-online.target (podman-systemd.unit(5), "Implicit
@@ -858,6 +898,33 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         }
       },
       probe: probeDashboard,
+    },
+
+    /**
+     * The preview server (hub preview-server/main.ts): every preview origin,
+     * served from the hub's database read on a connection of its own and
+     * the pages' files, so nothing the hub's thread does holds a preview
+     * back. Its unit names no tie to the hub's: the hub's restart leaves
+     * every preview origin standing, and its own restart leaves the hub.
+     * Where the hub's database is and the preview ports are, it reads as
+     * the hub's unit says them.
+     */
+    preview: {
+      id: "preview",
+      name: "preview",
+      mode: "prod",
+      description: "CawCo preview server",
+      command: layout.preview.command,
+      environment: hubEnvironment(),
+      workingDirectory: LAYOUT_ROOT,
+      after: [unitName("hub")],
+      wants: [],
+      restartOnSuccess: true,
+      restartSec: 2,
+      cpuWeight: OWN_CPU_WEIGHT,
+      processType: "Interactive",
+      check: needs(layout.preview, "preview server"),
+      probe: probePreview,
     },
 
     /**
@@ -1501,6 +1568,10 @@ const specsOf = (
           command: [binaryLayout.wrapper, "up"],
           needs: binaryLayout.executable,
         },
+        preview: {
+          command: [binaryLayout.wrapper, "preview"],
+          needs: binaryLayout.executable,
+        },
         dashboard: {
           command: [binaryLayout.wrapper, "dashboard"],
           needs: binaryLayout.executable,
@@ -1701,6 +1772,38 @@ const dashboardUrlOf = (
  * restart has let the port go. launchd: a changed plist is reloaded, which
  * reopens a job's sockets on what it names now.
  */
+/**
+ * A hub installed before its previews had a server of their own: the
+ * preview server's unit written from the hub unit's own recorded environment
+ * `hub` (its database, its port, its preview ports), enabled and started.
+ * Its first stand finds the ports the hub running now holds; once that hub
+ * restarts on this build, their link opens and it stands again (hub
+ * preview-server/main.ts). Its unit's file; none when no hub is installed
+ * here, the preview server's unit is there already, or `ids` leaves it out.
+ */
+const installPreviewBeside = async (
+  {
+    hub,
+    ids,
+    installed,
+  }: {
+    hub: string | undefined;
+    ids: readonly ServiceId[];
+    installed: ReadonlyMap<ServiceId, string>;
+  },
+  at: Parameters<typeof renderInstalled>[2],
+  note: (line: string) => void
+): Promise<string[]> => {
+  if (!hub || installed.has("preview") || !ids.includes("preview")) {
+    return [];
+  }
+  const { spec } = renderInstalled("preview", hub, at);
+  await (at.mac
+    ? installLaunchAgents([spec], note)
+    : installSystemdUnits([spec], note));
+  return [at.mac ? launchAgentPath("preview") : systemdPath("preview")];
+};
+
 export const refreshServices = async (
   ids: readonly ServiceId[],
   binaryLayout: NonNullable<ServiceOptions["binaryLayout"]>,
@@ -1726,6 +1829,13 @@ export const refreshServices = async (
   const local = hub
     ? recordedEnvironment(hub, mac)[CAWCO_ENV.localDashboardPort]
     : undefined;
+  rewrote.push(
+    ...(await installPreviewBeside(
+      { hub, ids, installed },
+      { mac, local, binaryLayout },
+      note
+    ))
+  );
   let reload = false;
   let rebind: { moving: SocketSpec[]; spec: ServiceSpec } | undefined;
   for (const [id, before] of installed) {

@@ -15,6 +15,10 @@ import {
 } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
 import type { AreasDb } from "./areas";
+import {
+  type ArtifactDocumentsDb,
+  artifactDocumentsDb,
+} from "./artifact-documents";
 import type { ArtifactListenersDb } from "./artifacts";
 import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AskPartsDb, type AsksDb, askPartsDb, asksDb } from "./asks";
@@ -130,6 +134,8 @@ interface HubStore {
   readonly designChecks: DesignChecksDb;
   /** Caw's one design-system offer per project (design-offers.ts). */
   readonly designOffers: DesignOffersDb;
+  /** What each page's and canvas's document carries of the hub's state (artifact-documents.ts). */
+  readonly documents: ArtifactDocumentsDb;
   /** What the find engine reads (find.ts), and when the person last looked at each session. */
   readonly find: FindDb;
   /**
@@ -351,6 +357,7 @@ const make = async (path: string): Promise<DbShape> => {
     owedMoves: owedMovesDb(db),
     heldPicks: heldPicksDb(db),
     previewPasses: previewPassesDb(db),
+    documents: artifactDocumentsDb(db),
     streamRelay: streamRelayDb(db),
     browsers: browsersDb(db),
     actions: actionsDb(db),

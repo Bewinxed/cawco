@@ -6,6 +6,9 @@
  */
 import { originOfKey, projectOfOrigin } from "./db/previews";
 
+/** The hop a preview's listener is in a preview failure's line (core `previewFailed`): the preview server's. */
+export const HOP = "preview listener";
+
 type Origin =
   | { kind: "session"; key: string; session: string }
   | { kind: "project"; key: string; project: string }

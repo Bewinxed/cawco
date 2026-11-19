@@ -37,7 +37,6 @@
  * nothing of Tailscale's.
  */
 import { hostname, userInfo } from "node:os";
-import { errnoCode } from "@cawco/core/absent";
 import { detach } from "@cawco/core/detach";
 import type {
   TailnetHttps,
@@ -57,7 +56,12 @@ import {
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
-import { openTailnetDoor, type TailnetDoor } from "./tailnet-door";
+import {
+  createTailnetDoors,
+  type OpenSecure,
+  type Pair,
+  type TailnetLive,
+} from "./tailnet-doors";
 import { firstLine, runTailscale } from "./tailscale-cli";
 
 /** How often the hub reads Tailscale's state and certificate again, for a renewal or a change. Our choice. */
@@ -91,12 +95,6 @@ type Status = z.infer<typeof StatusSchema>;
 /** `tailscale debug prefs`: ipn.Prefs, the part read here. */
 const PrefsSchema = z.object({ OperatorUser: z.string().optional() });
 
-/** A certificate and its key, as Bun's `tls` takes them. */
-interface Pair {
-  cert: string;
-  key: string;
-}
-
 /** What one reading found: the state, and while it can serve, what it serves with. */
 type Reading =
   | { state: "absent" | "signed-out" }
@@ -110,54 +108,6 @@ type Reading =
     }
   /** It couldn't be read this time (a timeout, a refused order): what stood goes on. */
   | { state: "unread"; why: string };
-
-/** A listener as this module holds it: one it can stop. */
-interface Listening {
-  stop: (closeActiveConnections?: boolean) => Promise<void>;
-}
-
-/** A port's TLS listener, at the port it took. */
-interface Secure extends Listening {
-  readonly port: number | undefined;
-}
-
-/**
- * Opens a port's TLS listener: the caller's own `Bun.serve` with these
- * `hostname`, `port` and `tls` (loopback, a port the system picks), which
- * the port's doors on the tailnet addresses carry TLS connections to.
- */
-export type OpenSecure = (at: {
-  hostname: string;
-  port: number;
-  tls: Pair;
-}) => Secure;
-
-/** What serves a port's HTTPS: its TLS listener and its door on each tailnet address. */
-interface Held {
-  doors: TailnetDoor[];
-  secure: Secure;
-}
-
-/** A port's HTTPS on the tailnet addresses, beside its plain listener. */
-interface Beside {
-  held: Held | null;
-  open: OpenSecure;
-  port: number;
-}
-
-/** `server` stopped: at once with its connections (`now`), or once they finish. */
-const stopped = (server: Listening, now: boolean): void =>
-  detach(server.stop(now), "tailnet listener stop");
-
-/** A port's doors, then its TLS listener, stopped. */
-const stoppedHeld = (serving: Held | null, now: boolean): void => {
-  for (const door of serving?.doors ?? []) {
-    stopped(door, now);
-  }
-  if (serving) {
-    stopped(serving.secure, now);
-  }
-};
 
 /** What the person's machine is, by its sign-in. */
 const user = userInfo().username;
@@ -181,9 +131,6 @@ const pairOf = (stdout: string): Pair | null => {
   return key && cert ? { cert: `${cert}\n`, key: `${key}\n` } : null;
 };
 
-/** Whether a bind failed because another listener holds the address and port. */
-const held = (thrown: unknown): boolean => errnoCode(thrown) === "EADDRINUSE";
-
 export interface TailnetHttpsDeps {
   /** The CLI's path; `tailscale` on PATH unless named (funnel.ts's own). */
   readonly bin?: string;
@@ -200,9 +147,8 @@ export const createTailnetHttps = ({
 }: TailnetHttpsDeps) => {
   const run = (args: string[]) => runTailscale(bin, args, CALL_MS);
   let state: TailnetHttps = { state: "absent", host };
-  /** What the listeners serve with now, while serving. */
-  let live: { name: string; ips: string[]; pair: Pair } | null = null;
-  const besides = new Set<Beside>();
+  /** The dashboard's port's HTTPS (tailnet-doors.ts); the preview ports' are the preview server's, handed {@link TailnetLive} on each change. */
+  const doors = createTailnetDoors();
   const listeners: ((state: TailnetHttps) => void)[] = [];
 
   /** `tailscale status --json`, read. */
@@ -346,103 +292,23 @@ export const createTailnetHttps = ({
   };
 
   /**
-   * `beside`'s TLS listener with `at`'s pair, and its door on every tailnet
-   * address; what opened so far stops when a door is refused, and the
-   * refusal is thrown. An address this machine can't bind at all (an IPv6
-   * one with IPv6 off) is left out with a line.
-   */
-  const openOn = (
-    beside: Beside,
-    at: { name: string; ips: string[]; pair: Pair }
-  ): Held => {
-    const secure = beside.open({
-      hostname: "127.0.0.1",
-      port: 0,
-      tls: at.pair,
-    });
-    const opened: Held = { secure, doors: [] };
-    // A TCP listener on loopback: Bun names no port only for a Unix socket.
-    const tlsPort = secure.port;
-    if (tlsPort === undefined) {
-      stoppedHeld(opened, true);
-      throw new Error("the tailnet's TLS listener opened on no port");
-    }
-    for (const ip of at.ips) {
-      try {
-        opened.doors.push(
-          openTailnetDoor({
-            hostname: ip,
-            name: at.name,
-            port: beside.port,
-            tlsPort,
-          })
-        );
-      } catch (thrown) {
-        if (held(thrown)) {
-          stoppedHeld(opened, true);
-          throw thrown;
-        }
-        console.warn(
-          `[tailnet] port ${beside.port} didn't open for HTTPS on ${ip}: ${causeOf(thrown)}`
-        );
-      }
-    }
-    return opened;
-  };
-
-  /** Every door and TLS listener stopped: the tailnet addresses answer plain http again. */
-  const closeAll = (): void => {
-    for (const beside of besides) {
-      stoppedHeld(beside.held, true);
-      beside.held = null;
-    }
-    live = null;
-  };
-
-  /**
-   * Every port's HTTPS on `at`: each new TLS listener and door opens beside
-   * the one it replaces before that one stops taking connections, so a
-   * renewal drops nothing. The dashboard's refused, nothing serves and the
-   * port is the person's step; a preview port's refused, that preview keeps
-   * its plain listener alone, said in a line.
+   * The dashboard's HTTPS on `at` (tailnet-doors.ts `serve`). Its port
+   * refused, nothing serves and the port is the person's step.
    */
   const serve = (at: Extract<Reading, { state: "ready" }>): Reading => {
-    for (const beside of besides) {
-      let opened: Held | null;
-      try {
-        opened = openOn(beside, at);
-      } catch (thrown) {
-        if (beside.port === dashboardPort) {
-          closeAll();
-          return {
-            state: "needs",
-            steps: [
-              ...at.steps,
-              { step: "port", done: false, command: "cawco service install" },
-            ],
-            name: at.name,
-          };
-        }
-        console.warn(
-          `[tailnet] preview port ${beside.port} serves no HTTPS: ${causeOf(thrown)}`
-        );
-        opened = null;
-      }
-      const replaced = beside.held;
-      beside.held = opened;
-      stoppedHeld(replaced, false);
+    if (doors.serve(at).includes(dashboardPort)) {
+      doors.close();
+      return {
+        state: "needs",
+        steps: [
+          ...at.steps,
+          { step: "port", done: false, command: "cawco service install" },
+        ],
+        name: at.name,
+      };
     }
-    live = { name: at.name, ips: at.ips, pair: at.pair };
     return at;
   };
-
-  /** Whether `at` serves with what the listeners hold now. */
-  const same = (at: { name: string; ips: string[]; pair: Pair }): boolean =>
-    live !== null &&
-    live.name === at.name &&
-    live.ips.join() === at.ips.join() &&
-    live.pair.cert === at.pair.cert &&
-    live.pair.key === at.pair.key;
 
   /** The wire state a reading stands for, `unread` keeping what stood. */
   const stateOf = (reading: Reading): TailnetHttps => {
@@ -486,11 +352,11 @@ export const createTailnetHttps = ({
       return;
     }
     if (reading.state === "ready") {
-      if (!same(reading)) {
+      if (!doors.same(reading)) {
         reading = serve(reading);
       }
-    } else if (live) {
-      closeAll();
+    } else if (doors.live()) {
+      doors.close();
     }
     const next = stateOf(reading);
     if (JSON.stringify(next) === JSON.stringify(state)) {
@@ -545,6 +411,7 @@ export const createTailnetHttps = ({
 
     /** A preview port's origin on the tailnet name while serving. */
     origin(port: number): TailnetOrigin | undefined {
+      const live = doors.live();
       if (!live || state.state !== "serving") {
         return;
       }
@@ -561,36 +428,19 @@ export const createTailnetHttps = ({
      * while it isn't.
      */
     serving(): { name: string; ips: string[] } | null {
+      const live = doors.live();
       return live && state.state === "serving"
         ? { name: live.name, ips: live.ips }
         : null;
     },
 
-    /**
-     * `port`'s HTTPS on the tailnet addresses, its TLS listener opened by
-     * `open`, now while serving and whenever serving starts or renews;
-     * `close` stops it with the plain listener it stands beside.
-     */
-    beside(port: number, open: OpenSecure): { close: () => void } {
-      const beside: Beside = { port, open, held: null };
-      besides.add(beside);
-      if (live) {
-        try {
-          beside.held = openOn(beside, live);
-        } catch (thrown) {
-          console.warn(
-            `[tailnet] port ${port} serves no HTTPS: ${causeOf(thrown)}`
-          );
-        }
-      }
-      return {
-        close(): void {
-          stoppedHeld(beside.held, true);
-          beside.held = null;
-          besides.delete(beside);
-        },
-      };
+    /** The name, addresses and certificate HTTPS is served with now, for the preview server's ports; null while it isn't. */
+    live(): TailnetLive | null {
+      return state.state === "serving" ? doors.live() : null;
     },
+
+    /** `port`'s HTTPS on the tailnet addresses (tailnet-doors.ts `beside`). */
+    beside: doors.beside,
   };
 };
 

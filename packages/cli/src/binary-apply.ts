@@ -125,7 +125,7 @@ import { z } from "zod";
 import { recordApply } from "./apply-record";
 import { type HealthProblem, probeHealth } from "./binary-health";
 import { binaryLayout } from "./binary-install";
-import { installedHubDbPath, service } from "./service";
+import { installedHubDbPath, type ServiceAction, service } from "./service";
 
 /** How long a keeper handed over to gets to answer at its own endpoint. */
 const HEALTH_MS = 45_000;
@@ -203,7 +203,7 @@ const unansweredService = (what: string, after: number): string =>
 
 /** A restart or install through the service manager; one it did not answer in time throws saying so. */
 const svc = async (
-  action: "install" | "restart",
+  action: Extract<ServiceAction, "install" | "restart" | "uninstall">,
   ids: readonly ServiceId[]
 ): Promise<void> => {
   const done = await readWithin(SERVICE_TIMEOUT_MS, () =>
@@ -530,6 +530,22 @@ async function refreshServiceUnits(version: string): Promise<void> {
   } catch (error) {
     await say(`units ${version}: ${message(error)}`);
   }
+}
+
+/**
+ * Whether build `version` runs its previews in a server of their own
+ * (`cawco preview`, hub preview-server/main.ts): its help names the verb. A
+ * build from before it serves them from its hub, and finds the preview
+ * server holding their ports.
+ */
+async function runsPreviewServer(version: string): Promise<boolean> {
+  const ran = await readWithin(BINARY_UNITS_MS, (signal) =>
+    runCaptured([versionExecutable(version), "--help"], {
+      env: process.env,
+      signal,
+    })
+  );
+  return ran.kind === "answered" && ran.value.stdout.includes("cawco preview");
 }
 
 /**
@@ -1311,9 +1327,25 @@ async function rollBack(start: TrialMarker): Promise<void> {
   // the refresh refuses `--services`, which is said, and its units stay as
   // the failed build wrote them.
   await refreshServiceUnits(trial.previous);
+  // A build from before the preview server serves its previews from its
+  // hub: the preview server's unit goes, so it holds none of their ports.
+  let restarting = units;
+  if (units.includes("preview") && !(await runsPreviewServer(trial.previous))) {
+    restarting = units.filter((id) => id !== "preview");
+    try {
+      await svc("uninstall", ["preview"]);
+      await say(
+        `roll back ${trial.version}: ${trial.previous} serves its previews from its hub: the preview server's unit is gone`
+      );
+    } catch (error) {
+      await say(
+        `roll back ${trial.version}: the preview server's unit stays: ${message(error)}`
+      );
+    }
+  }
   try {
-    await svc("restart", units);
-    await say(`roll back ${trial.version}: restarted ${units.join(", ")}`);
+    await svc("restart", restarting);
+    await say(`roll back ${trial.version}: restarted ${restarting.join(", ")}`);
   } catch (error) {
     await say(`roll back ${trial.version}: restart: ${message(error)}`);
   }

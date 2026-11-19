@@ -61,6 +61,8 @@ const PROTOCOL: Record<string, string> = {
     "GitHub sign-in: GitHub redirects the browser here, and it reads one plain sentence",
   "GET /api/connections/oauth/callback":
     "OAuth sign-in: a provider redirects the browser here, and it reads one plain sentence",
+  "ALL /__cawco-preview/origin/:key/*":
+    "the preview server's relay of a browser's request on a preview origin that only the hub answers (an entry, a doc's Send, picture, pictures and canvas, a shape, a fault report): the browser reads it as the hub made it, through the server, which no Eden client is",
   "POST /api/machines/ssh":
     "its 409 stays a plain Response for the frozen iOS client, whose generated client switches over the route's typed answers only (join.ts)",
 };

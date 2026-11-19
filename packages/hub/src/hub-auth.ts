@@ -105,6 +105,9 @@ const RULES: readonly [string, RegExp, Access][] = [
   // there with a close the tab can read (server.ts, ARTIFACT_SESSION_REFUSED).
   ["GET", /^\/ws\/artifact-session\/[^/]+$/u, "open"],
   ["*", /^\/git\//u, "open"],
+  // The preview server's link and asks: each refuses all but a request on
+  // loopback with the server's token (preview-control.ts).
+  ["*", /^\/__cawco-preview\//u, "open"],
   ["POST", /^\/api\/delegation\/call\/[^/]+$/u, "open"],
   ["POST", /^\/api\/session-identities\/ack$/u, "open"],
   ["*", /^\/mcp\/cawco$/u, "open"],

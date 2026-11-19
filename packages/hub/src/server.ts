@@ -55,7 +55,6 @@ import {
 import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
 import type { AddressedControl } from "@cawco/core/control-table";
 import { decidesFileProblems } from "@cawco/core/decides";
-import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { docMeta } from "@cawco/core/doc-meta";
@@ -202,7 +201,6 @@ import type {
 } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
 import {
-  type DecisionMedia,
   isEmbedShape,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
@@ -325,6 +323,7 @@ import {
 } from "./agent-socket/wire-reads";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { createAreas } from "./areas";
+import { createArtifactDocuments } from "./artifact-documents";
 import { createArtifactEvents } from "./artifact-events";
 import { createArtifactPages } from "./artifact-pages";
 import { createArtifactSessions } from "./artifact-session";
@@ -410,7 +409,12 @@ import {
   TAG_MARKERS,
 } from "./db/migration-names";
 import type { OwedMove } from "./db/owed-moves";
-import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
+import {
+  artifactOrigin,
+  originOfKey,
+  projectOfOrigin,
+  projectOrigin,
+} from "./db/previews";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
@@ -428,11 +432,7 @@ import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
 import { decidesRoutes, type HarnessOffer } from "./decides";
 import { DECIDES_FILE, decidesTable } from "./decides-file";
-import {
-  FACE_PRELOADS,
-  refiledStatements,
-  scriptJson,
-} from "./decision-program";
+import { refiledStatements } from "./decision-program";
 import { createDecisions, decidedTasks, decisionRoutes } from "./decisions";
 import type { DelegateResult } from "./delegate-result";
 import { delegateTypesRoutes } from "./delegate-types";
@@ -571,13 +571,20 @@ import { handle as idHandle } from "./presenters/words";
 import {
   createPreviewListeners,
   noteParent,
-  type PreviewListenerDeps,
+  onParents,
   type PreviewTarget,
+  previewParents,
   previewTargets,
   shownArtifact,
 } from "./preview";
 import { mintSessionTicket } from "./preview-access";
 import { createPreviewBrowse, WORKSPACE_TIMEOUT_MS } from "./preview-browse";
+import {
+  createPreviewLink,
+  type PreviewOriginDeps,
+  previewControlRoutes,
+} from "./preview-control";
+import { servedByMachine } from "./preview-machine";
 import { previewRoutes } from "./preview-routes";
 import { createPreviewService } from "./preview-service";
 import { createCaps } from "./project-caps";
@@ -2227,7 +2234,7 @@ export const createServer = (
     summariserRun,
     unlocatedWords,
   } = createContextReads(ctx);
-  const { browseAt, embedAt, keepPicture, openDiagramAsCanvas, pictureOf } =
+  const { browseAt, keepPicture, openDiagramAsCanvas, pictureOf } =
     createPreviewBrowse(ctx);
   const {
     FORGET_CREDENTIALS_TIMEOUT_MS,
@@ -4528,6 +4535,8 @@ export const createServer = (
     // The person's own change: what of it the session hasn't heard goes once quiet.
     updated: (id, by) => {
       artifactLane.moved();
+      // Its document carries the doc's seed: built again (artifact-documents.ts).
+      artifactDocuments.moved([id]);
       if (by === "person") {
         artifacts.personMarked(id);
       }
@@ -5475,9 +5484,8 @@ export const createServer = (
   };
   restoreShownPreviews();
 
-  /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
-  const artifactListener: PreviewListenerDeps = {
-    originOf: originKeyOf,
+  /** What only the hub answers on a preview origin, relayed by the preview server (preview-control.ts). */
+  const artifactListener: PreviewOriginDeps = {
     servedOn: (artifactId, key) => {
       // A machine's preview's own origin serves its doc's socket and
       // actions, which the page's overlay joins there.
@@ -5529,59 +5537,11 @@ export const createServer = (
       const [row] = db.getInstancesByIds([instanceId]);
       return !!row && !ENDED_STATUSES.has(row.status);
     },
-    followed: (instanceId) => streams.followerCount(instanceId) > 0,
-    // Told again without their old address, once what let them go is done:
-    // a screen holding that port would load another origin there.
-    letGo: (keys) => {
-      const gone = new Set(keys);
-      queueMicrotask(() => {
-        for (const [instanceId, target] of previewTargets) {
-          const key = frameKey(instanceId, target);
-          if (key !== undefined && gone.has(key)) {
-            publishPreview(instanceId, "open", target);
-          }
-        }
-        publishInstances("");
-      });
-    },
-    reach: (row) => previewService.reach(row),
-    upstream: (row) => previewService.upstreamOf(row),
     pageFault: (report) => artifacts.pageFault(report),
-    artifactAt: (key) => {
-      const origin = originOfKey(key);
-      return origin === null ? undefined : db.artifacts.byOrigin(origin)?.id;
-    },
-    rowAt: (key) => {
-      const origin = originOfKey(key);
-      if (origin !== null) {
-        return db.artifacts.byOrigin(origin);
-      }
-      const shown = previewTargets.get(key);
-      return shown && db.artifacts.get(shown.artifact.id);
-    },
-    unreachable: (key, upstream) => previewService.unreachable(key, upstream),
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
     pictures: artifactPictures(artifacts.pictures),
     send: artifactSend(artifacts.send, artifactDocs),
     socket: artifactSocket(artifactDocs),
-    seed: artifactDocs.seed,
-    program: (artifactId, reachedAt) => {
-      const served = artifacts.programServed(artifactId);
-      if (!served) {
-        return null;
-      }
-      const media: Record<string, DecisionMedia> = {};
-      for (const [id, held] of Object.entries(served.media)) {
-        media[id] =
-          held && (held.kind === "preview" || held.kind === "component")
-            ? { ...held, ...embedAt(artifactId, held.id, reachedAt) }
-            : held;
-      }
-      return {
-        hash: served.hash,
-        media: `${FACE_PRELOADS}${scriptJson("cawco-media", media)}${scriptJson(PICTURES_TAG, served.pictures)}`,
-      };
-    },
     canvasFrom: (request, instanceId, artifactId) =>
       openDiagramAsCanvas(request, instanceId, artifactId),
     // A decision page's Preview heard a canvas of its media say its shape, or a whole screen tell its least words: kept for the next Preview of it.
@@ -5633,6 +5593,30 @@ export const createServer = (
     },
   };
   /**
+   * Each page's and canvas's document as the hub's state makes it, built as
+   * that state moves (artifact-documents.ts): the preview server composes a
+   * page from it without asking the hub.
+   */
+  const artifactDocuments = createArtifactDocuments({
+    after: lifetime.after,
+    documents: db.documents,
+    embedOf: (row) => {
+      if (!servedByMachine(row)) {
+        return;
+      }
+      const key = artifactOrigin(row.origin);
+      const opened = previewListeners.address(key);
+      return opened instanceof ElysiaStatus
+        ? { unopened: opened.response.detail }
+        : { key };
+    },
+    originOf: originKeyOf,
+    program: (id) => artifacts.programServed(id),
+    row: (id) => db.artifacts.get(id),
+    seed: artifactDocs.seed,
+  });
+  db.onArtifactsWritten((ids) => artifactDocuments.moved(ids));
+  /**
    * HTTPS on the machine's tailnet name (tailnet-https.ts): the dashboard's
    * port first, relayed to the dashboard on loopback, then every preview
    * listener's twin. `tailnet.start()` once the hub listens (index.ts). A
@@ -5654,22 +5638,53 @@ export const createServer = (
       machineId: "hub",
       payload: { kind: "tailnet.https", tailnet },
     });
+    previewLink.say({ type: "tailnet", serving: tailnetHttps.live() });
     for (const [instanceId, target] of previewTargets) {
       publishPreview(instanceId, "open", target);
     }
   });
   /**
-   * Every session's preview origin (preview.ts): `previews.start()` once the
-   * hub listens (index.ts). A hub built only to be read opens none: every
-   * ask for an origin's address is refused, and told as none.
+   * The hub's end of its preview server's link (preview-control.ts): what it
+   * is told (the dashboards that may frame a preview, the tailnet's
+   * certificate, that the port rows moved), and what its stands answered.
+   */
+  const previewLink = createPreviewLink({
+    parents: previewParents,
+    tailnet: () => tailnetHttps.live(),
+  });
+  onParents((parents) => previewLink.say({ type: "parents", parents }));
+  /**
+   * Every preview origin's port and the fleet's mode (preview.ts), which the
+   * preview server binds: `previews.start()` once the hub listens
+   * (index.ts). A hub built only to be read takes none: every ask for an
+   * origin's address is refused, and told as none.
    */
   const previewListeners = createPreviewListeners(
     BIND_HOST,
-    artifactListener,
+    {
+      followed: (instanceId) => streams.followerCount(instanceId) > 0,
+      // Told again without their old address, once what let them go is done:
+      // a screen holding that port would load another origin there.
+      letGo: (keys) => {
+        const gone = new Set(keys);
+        queueMicrotask(() => {
+          for (const [instanceId, target] of previewTargets) {
+            const key = frameKey(instanceId, target);
+            if (key !== undefined && gone.has(key)) {
+              publishPreview(instanceId, "open", target);
+            }
+          }
+          publishInstances("");
+        });
+      },
+      artifactAt: (key) => {
+        const origin = originOfKey(key);
+        return origin === null ? undefined : db.artifacts.byOrigin(origin)?.id;
+      },
+    },
     db.previews,
-    db.previewPasses,
     tailnetHttps,
-    { listens: serves, after: lifetime.after }
+    { listens: serves, server: previewLink.hand }
   );
   /** Each machine preview origin's upstream, following its artifact's row (preview-service.ts). */
   const previewService = createPreviewService({
@@ -13210,6 +13225,25 @@ export const createServer = (
       // deep it was made (machine-answers.ts `awayProblem`): its headers'
       // one setter, before every route.
       .mapResponse("global", nameAway)
+      .use(
+        previewControlRoutes(previewLink, {
+          documents: artifactDocuments,
+          listeners: previewListeners,
+          origin: artifactListener,
+          passes: db.previewPasses,
+          previews: db.previews,
+          reach: (key) => {
+            const origin = originOfKey(key);
+            const row =
+              origin === null ? undefined : db.artifacts.byOrigin(origin);
+            return row && servedByMachine(row)
+              ? previewService.reach(row)
+              : undefined;
+          },
+          unreachable: (key, upstream) =>
+            previewService.unreachable(key, upstream),
+        })
+      )
       .use(
         previewRoutes({
           deviceOf: (request) => {

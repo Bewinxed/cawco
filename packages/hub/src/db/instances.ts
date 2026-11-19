@@ -2181,13 +2181,14 @@ export const instancesDb = (core: DbCore): InstancesDb => {
           FoldMoved<typeof artifacts>["_"]["name"],
           () => { id: string }[]
         >;
-        const carriedArtifacts = new Set(
+        const carriedIds = new Set(
           Object.values(carriedByColumn).flatMap((carry) =>
             carry().map((row) => row.id)
           )
-        ).size;
+        );
+        const carriedArtifacts = carriedIds.size;
         if (carriedArtifacts > 0) {
-          artifactsWritten();
+          artifactsWritten([...carriedIds]);
         }
         return {
           artifacts: carriedArtifacts,

@@ -3088,6 +3088,13 @@
       "when": 1795073645724,
       "tag": "0448_hot_reads_apart",
       "breakpoints": true
+    },
+    {
+      "idx": 449,
+      "version": "6",
+      "when": 1795076189821,
+      "tag": "0449_artifact_documents",
+      "breakpoints": true
     }
   ]
 }

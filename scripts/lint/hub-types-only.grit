@@ -11,9 +11,10 @@ language js
 // with the rest. So are an import for its effect, a re-export, a dynamic
 // `import()` and a `require`.
 //
-// One value of the hub's is the CLI's: its `hub` verb runs the hub, by its
+// Two values of the hub's are the CLI's: its `hub` verb runs the hub, by its
 // entry loaded on demand (packages/cli/src/cli.ts `import("@cawco/hub")`),
-// so no other verb loads it.
+// and its `preview` verb runs the preview server, by its own entry
+// (`import("@cawco/hub/preview-server")`), so no other verb loads either.
 //
 // The client itself takes nothing of the hub but types, by the same rule:
 // any import of a hub module, by a relative path or by package name.
@@ -38,7 +39,7 @@ or {
       not and {
         $filename <: includes "packages/cli/src/cli.ts",
         $hit <: `import($_)`,
-        $source <: r"[\"']@cawco/hub[\"']"
+        $source <: r"[\"']@cawco/hub(?:/preview-server)?[\"']"
       },
       register_diagnostic(span=$hit, message="Import the hub's types alone here (`import type`), and its client from `@cawco/hub/client`: its other code never goes in the dashboard's bundle, the agent, the CLI or a script.")
     },

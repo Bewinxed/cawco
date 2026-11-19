@@ -122,6 +122,12 @@ async function overlayKey(parents: readonly string[]): Promise<string> {
   return keyed.key;
 }
 
+/** The overlay's address at its key now, which a page's tag names ({@link keyOverlay}). */
+export const keyedOverlayPath = async (
+  parents: readonly string[]
+): Promise<string> =>
+  `${OVERLAY_PATH}?${OVERLAY_KEY}=${await overlayKey(parents)}`;
+
 /**
  * `answer`, a page on a preview origin (the hub's own, or one a machine's
  * listener made: neither knows the hub's parents), with its overlay tag at
@@ -134,7 +140,7 @@ export async function keyOverlay(
   answer: Response,
   parents: readonly string[]
 ): Promise<Response> {
-  const at = `${OVERLAY_PATH}?${OVERLAY_KEY}=${await overlayKey(parents)}`;
+  const at = await keyedOverlayPath(parents);
   const rewritten = new HTMLRewriter()
     .on(`script[src="${OVERLAY_PATH}"]`, {
       element(element) {
@@ -1005,6 +1011,12 @@ export const notUpYet = (): Response =>
 const ProxyWebSocket = WebSocket as typeof WebSocket & {
   new (url: string, options: Bun.WebSocketOptions): WebSocket;
 };
+
+/** A client WebSocket with Bun's options (headers above all), which the DOM's declaration hides. */
+export const openWebSocket = (
+  url: string,
+  options: Bun.WebSocketOptions
+): WebSocket => new ProxyWebSocket(url, options);
 
 export function proxyHeaders(input: Headers): Headers {
   const headers = new Headers(input);

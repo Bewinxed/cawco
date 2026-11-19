@@ -153,14 +153,21 @@ export const trialPath = (): string => join(binaryRoot(), "trial.json");
 export const readTrial = (): Promise<TrialMarker | undefined> =>
   readRecord(trialPath(), TrialMarkerSchema);
 /**
- * The whole stack, as four services a machine can run, in the order they
+ * The whole stack, as five services a machine can run, in the order they
  * come up (cli service.ts installs each). A machine runs whichever of them
  * it is for: a worker wants `sessiond` and `agent`, and the box you point a
- * browser at wants all four. `sessiond` sits before `agent` on purpose — it
- * owns the harness children, so the daemon that talks to it comes up second
- * (design §11).
+ * browser at wants all five. `preview` serves every preview origin beside
+ * the hub, in a process of its own (hub preview-server/main.ts). `sessiond`
+ * sits before `agent` on purpose — it owns the harness children, so the
+ * daemon that talks to it comes up second (design §11).
  */
-export const SERVICE_IDS = ["hub", "dashboard", "sessiond", "agent"] as const;
+export const SERVICE_IDS = [
+  "hub",
+  "preview",
+  "dashboard",
+  "sessiond",
+  "agent",
+] as const;
 export type ServiceId = (typeof SERVICE_IDS)[number];
 
 /**
@@ -174,7 +181,15 @@ export type ServiceId = (typeof SERVICE_IDS)[number];
 export const trialUnits = (
   role: BinaryInstallation["role"]
 ): Exclude<ServiceId, "sessiond">[] =>
-  role === "hub" ? ["agent", "hub", "dashboard"] : ["agent"];
+  role === "hub"
+    ? [
+        "agent",
+        ...SERVICE_IDS.filter(
+          (id): id is Exclude<ServiceId, "sessiond" | "agent"> =>
+            id !== "sessiond" && id !== "agent"
+        ),
+      ]
+    : ["agent"];
 
 /**
  * Which build's session keeper is the machine's current one: a relative link

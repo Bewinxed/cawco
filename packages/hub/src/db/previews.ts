@@ -10,7 +10,7 @@ import {
 } from "./schema";
 
 /** The fleet's preview mode as stored; no row reads as port mode. */
-interface StoredPreviewSettings {
+export interface StoredPreviewSettings {
   mode: "port" | "host";
   pattern: string | null;
 }

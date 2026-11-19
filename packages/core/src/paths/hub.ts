@@ -24,6 +24,23 @@ export const hubCredentialSocket = (): string => {
 };
 
 /**
+ * The preview server's own socket (hub preview-server/main.ts), which
+ * answers whether it stands: what `cawco service status` and the first
+ * machine's readiness probe connect to. Where {@link hubCredentialSocket}'s
+ * stands, for the same reason.
+ */
+export const previewServerSocket = (): string => {
+  const runtime = process.env.XDG_RUNTIME_DIR;
+  if (process.platform === "linux" && runtime) {
+    return join(runtime, "cawco", "preview.sock");
+  }
+  if (process.platform === "darwin") {
+    return join(darwinSocketRoot(), "preview.sock");
+  }
+  return join(homedir(), ".cawco", "preview.sock");
+};
+
+/**
  * The hub's sqlite file, as an absolute path: `CAWCO_DB_PATH`, else
  * `cawco.db` in {@link hubDataDir}. The one rule every end reads it by: the
  * hub itself, the unit the CLI writes for it, the binary installer, and the

@@ -17,8 +17,9 @@ import type { ArtifactSocketEnd } from "./artifacts/sync";
 import type { PreviewPassesDb } from "./db/preview-passes";
 import { projectOrigin } from "./db/previews";
 import { hidden } from "./hidden";
-import type { PreviewListenerDeps, PreviewListeners } from "./preview";
+import type { PreviewListeners } from "./preview";
 import { mintTicket, presentedPasses } from "./preview-access";
+import type { PreviewOriginDeps } from "./preview-control";
 
 /** A panel asked for an artifact its session doesn't see. */
 const NO_SUCH_ARTIFACT = "This session has no such artifact.";
@@ -73,7 +74,7 @@ export const previewRoutes = (deps: {
     | undefined;
   /** Whether session `instanceId`'s panel may hold artifact `artifactId`: its own, one it made, or its delegation tree's (artifacts/service.ts `panelSees`). */
   panelSees: (instanceId: string, artifactId: string) => boolean;
-  listener: PreviewListenerDeps;
+  listener: Pick<PreviewOriginDeps, "ownerOf" | "send" | "socket">;
   listeners: PreviewListeners;
   passes: PreviewPassesDb;
   /** Port mode's names: the host the hub's links name, which every session's port stands on; null for an IP. */

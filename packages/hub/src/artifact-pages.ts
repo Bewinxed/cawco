@@ -39,12 +39,8 @@ import {
 import { BUSY_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { PageBuilt, PageFolderProblem } from "./page-problems";
 import type { PreviewTarget } from "./preview";
-import {
-  previewFrame,
-  previewTargets,
-  servedByMachine,
-  shownArtifact,
-} from "./preview";
+import { previewFrame, previewTargets, shownArtifact } from "./preview";
+import { servedByMachine } from "./preview-machine";
 import type { OpenStop } from "./preview-stops";
 import {
   changeFolderFiles,
@@ -180,10 +176,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
         detail: `${target.artifact.name} is gone, so no origin serves it.`,
       });
     }
-    return ctx.previewListeners.embed(
-      key,
-      originKeyOf(target.artifact.id) ?? instanceId
-    );
+    return ctx.previewListeners.address(key);
   };
 
   /**

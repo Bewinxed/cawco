@@ -13,12 +13,8 @@ import { isFolderGone, startRefused } from "@cawco/preview/proxy";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
 import { artifactOrigin, originOfKey } from "./db/previews";
 import type { AgentCall } from "./machine-answers";
-import {
-  loadedOnce,
-  type MachineRow,
-  type PreviewReach,
-  servedByMachine,
-} from "./preview";
+import { loadedOnce, type PreviewReach } from "./preview";
+import { type MachineRow, servedByMachine } from "./preview-machine";
 import type { PreviewUnloaded } from "./preview-stops";
 
 /** What the preview service needs of the hub. */

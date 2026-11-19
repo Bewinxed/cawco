@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./app": "./src/app.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./preview-server": "./src/preview-server/main.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",

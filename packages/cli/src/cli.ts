@@ -47,6 +47,7 @@ const HELP = `cawco ${CLI_VERSION} — join this machine to a cawco fleet
 Usage
   cawco up [--hub <url>] [--verbose]      run the agent daemon on this machine
   cawco hub [--verbose]                   run the hub here
+  cawco preview                           run the hub's preview server here
   cawco sessiond                          run this machine's session keeper
   cawco dashboard                         serve the built dashboard on its inherited socket
   cawco capabilities                      report optional machine tools and install commands
@@ -555,6 +556,13 @@ const hub = async (): Promise<number> => {
   return 0;
 };
 
+/** The preview server (hub preview-server/main.ts): every preview origin, a process of its own beside the hub. */
+const preview = async (): Promise<number> => {
+  const { startPreviewServer } = await import("@cawco/hub/preview-server");
+  await startPreviewServer();
+  return 0;
+};
+
 /**
  * sessiond as a verb, so the published package — one bundled `cli.js`, no
  * source tree — can run it from a unit the way it runs the hub.
@@ -616,7 +624,7 @@ const writeBinaryUnits = async (services: boolean): Promise<void> => {
   let dashboard: { now: string; was: string | null } | null = null;
   if (services) {
     const refreshed = await refreshServices(
-      ["hub", "dashboard", "agent"],
+      SERVICE_IDS.filter((id) => id !== "sessiond"),
       binaryLayout(CLI_VERSION),
       say
     );
@@ -966,6 +974,8 @@ const run = async (argv: string[]): Promise<number> => {
       return up(args);
     case "hub":
       return hub();
+    case "preview":
+      return preview();
     case "sessiond":
       return sessiond();
     case "status":

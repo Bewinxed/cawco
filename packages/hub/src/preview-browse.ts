@@ -14,12 +14,10 @@ import { problemResponse } from "elysia/error";
 import type { Browsed } from "./artifacts/shapes";
 import { dashboardUrl } from "./dashboard-url";
 import type { ArtifactRow } from "./db/artifacts";
-import { artifactOrigin } from "./db/previews";
 import type { HubContext } from "./hub-context";
 import { awayProblem, silentProblem } from "./machine-answers";
-import { servedByMachine } from "./preview";
 import { mintSessionTicket } from "./preview-access";
-import type { AnyProblem } from "./refusal";
+import { servedByMachine } from "./preview-machine";
 import { unreachable } from "./unreachable";
 
 const NOT_NAME = /[^a-z0-9]+/gu;
@@ -145,7 +143,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
         detail: `${row.name} is served by no machine now, so it has no address to open.`,
       });
     }
-    const address = ctx.previewListeners.embed(key, owner);
+    const address = ctx.previewListeners.address(key);
     return address instanceof ElysiaStatus
       ? address
       : { key, address, path: row.source.path ?? "/" };
@@ -157,7 +155,8 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
    * one-time ticket that sets the session's own pass on that origin and a
    * decision page's embeds alone (preview-access.ts). A decision page's
    * Preview of a dev server or a sheet stands on an embed origin of its own
-   * (embedAt); its Canvas and Preview of a page stand on the page's own.
+   * (preview-server/serve.ts `servePage`); its Canvas and Preview of a page
+   * stand on the page's own.
    */
   const enteredAt = (instance: InstanceRow, row: ArtifactRow) => {
     const origin = browsedOrigin(row);
@@ -344,62 +343,10 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     return saved.path;
   };
 
-  /**
-   * A decision page's Preview of a dev-server preview, a folder's preview or
-   * a sheet of its session's, at the version its media draws (`artifactId`,
-   * artifacts service `newestVersion`): whatever machine serves it (a port
-   * or a folder), whether or not a panel shows it, on its own origin
-   * ({@link artifactOrigin}), so a next version held for the owner's panel
-   * stands on an origin apart from the one the panel shows; its origin's
-   * listener started, and its address as the page reached it, the source's
-   * start path on it. A preview no
-   * machine serves (a browser's, `{ page }`) has no embed. On the session's
-   * own port: the same name, the
-   * embed's port. On a host-mode name: the embed's name, which the browser's
-   * pass covers as it covers the page's (preview-access.ts), so no ticket
-   * is ever served in a page. Nothing when the hub no longer holds it;
-   * every port taken, the refusal in its words (`unopened`): the page
-   * says it, and its Try again serves the page again.
-   */
-  const embedAt = (
-    pageId: string,
-    artifactId: string,
-    reachedAt: URL
-  ): { embed?: string; unopened?: string } => {
-    const row = ctx.db.artifacts.get(artifactId);
-    // The origin that serves the page: its embeds are framed by it.
-    const owner = ctx.originKeyOf(pageId);
-    if (!(row && owner && servedByMachine(row))) {
-      return {};
-    }
-    const key = artifactOrigin(row.origin);
-    const unopened = ({ response }: AnyProblem) => {
-      console.warn(`[preview] ${response.detail}`);
-      return { unopened: response.detail };
-    };
-    const at = ctx.previewListeners.embed(key, owner, reachedAt);
-    if (at instanceof ElysiaStatus) {
-      return unopened(at);
-    }
-    const own = ctx.previewListeners.address(owner);
-    if (own instanceof ElysiaStatus) {
-      return unopened(own);
-    }
-    const ownPort = own.port;
-    const path = row.source.path ?? "/";
-    if (reachedAt.port === String(ownPort) || !at.origin) {
-      return {
-        embed: `${reachedAt.protocol}//${reachedAt.hostname}:${at.port}${path}`,
-      };
-    }
-    return { embed: `${at.origin}${path}` };
-  };
-
   return {
     openDiagramAsCanvas,
     browseAt,
     pictureOf,
     keepPicture,
-    embedAt,
   };
 };
