@@ -31,8 +31,17 @@ const AWAY = new Set([502, 503, 504]);
 const isHubAway = (status: number): boolean => AWAY.has(status);
 
 /**
+ * Whether `status` says the hub failed in itself (Elysia's 500 for what a
+ * route threw: its database busy with another statement, a law broken),
+ * which is no verdict on what was asked. Only a request the hub takes twice
+ * as once ({@link hubAnswer}) tries again on it.
+ */
+const isHubFault = (status: number): boolean => status === 500;
+
+/**
  * `tryOnce`'s first response that is not the hub away ({@link isHubAway}),
- * whatever its status, for the caller to read; the last reason the hub was
+ * nor one `again` says to try again past, whatever its status, for the
+ * caller to read; the last reason the hub was
  * away once {@link HUB_AWAY_BOUND_MS} from the first try has passed, or once
  * `stopped` is aborted (the asker gave up). `tryOnce` throws when no answer
  * came (refused, reset, none within its own bound). Tries every 0.5 s
@@ -41,7 +50,8 @@ const isHubAway = (status: number): boolean => AWAY.has(status);
  */
 export const throughHubAway = async (
   tryOnce: () => Promise<Response>,
-  stopped?: AbortSignal
+  stopped?: AbortSignal,
+  again: (status: number) => boolean = isHubAway
 ): Promise<Response | { away: string }> => {
   // The bound is the hub's to use: time this process was held (a wait
   // that ran late) is given back, so a loop blocked here never spends it.
@@ -51,11 +61,16 @@ export const throughHubAway = async (
     let away: string;
     try {
       const answer = await tryOnce();
-      if (!isHubAway(answer.status)) {
+      if (!again(answer.status)) {
         return answer;
       }
-      await answer.body?.cancel();
-      away = `HTTP ${answer.status}`;
+      if (isHubAway(answer.status)) {
+        await answer.body?.cancel();
+        away = `HTTP ${answer.status}`;
+      } else {
+        // The hub's own failure, in its words, for the log and a last refusal.
+        away = `HTTP ${answer.status}: ${(await answer.text()).slice(0, 300)}`;
+      }
     } catch (error) {
       away =
         error instanceof Error ? error.message || error.name : String(error);
@@ -76,7 +91,10 @@ export const throughHubAway = async (
  * The hub's answer to `url` ({@link throughHubAway}), each try bounded by
  * `tryMs`; throws `what` with the last reason the hub was away. Only for
  * requests the hub takes twice as once (an ACK of what it holds answers
- * `installed`; a read).
+ * `installed`; a read), so the hub's own failure ({@link isHubFault}) is
+ * tried again within the same bound too: a session's credential installed
+ * and proved is never stopped because the hub's bookkeeping of it failed
+ * once (its database busy with another statement, 2026-11-19).
  */
 export const hubAnswer = async (
   url: string,
@@ -84,18 +102,22 @@ export const hubAnswer = async (
   tryMs: number,
   what: string
 ): Promise<Response> => {
-  const answer = await throughHubAway(async () => {
-    const tried = await readWithin(tryMs, (signal) =>
-      fetch(url, { ...init, signal })
-    );
-    if (tried.kind === "unanswered") {
-      throw new Error(`no answer within ${tryMs / 1000} s`);
-    }
-    return tried.value;
-  });
+  const answer = await throughHubAway(
+    async () => {
+      const tried = await readWithin(tryMs, (signal) =>
+        fetch(url, { ...init, signal })
+      );
+      if (tried.kind === "unanswered") {
+        throw new Error(`no answer within ${tryMs / 1000} s`);
+      }
+      return tried.value;
+    },
+    undefined,
+    (status) => isHubAway(status) || isHubFault(status)
+  );
   if ("away" in answer) {
     throw new Error(
-      `${what}: the hub did not answer within ${HUB_AWAY_BOUND_MS / 1000} s (last: ${answer.away}).`
+      `${what}: the hub gave no answer but its being away or its own failure within ${HUB_AWAY_BOUND_MS / 1000} s (last: ${answer.away}).`
     );
   }
   return answer;

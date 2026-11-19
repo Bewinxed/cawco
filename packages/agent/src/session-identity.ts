@@ -16,7 +16,9 @@ const NOT_ACKNOWLEDGED = "Session credential installation was not acknowledged";
  * credential that failed, so it is the spawn's failure, reported on the
  * agent's own socket. A credential the hub does not know is refused with
  * {@link CredentialUnknown}; any other answer of the hub's is thrown as it
- * said it. The hub away (a restart) is waited through ({@link hubAnswer}):
+ * said it. The hub away (a restart) and the hub's own failure (a 500: its
+ * record of the ACK failed, not the credential) are waited through
+ * ({@link hubAnswer}):
  * the ACK is idempotent at the hub, which answers `installed` for one it
  * holds, so a try the hub took but whose answer was lost is the same ACK.
  */

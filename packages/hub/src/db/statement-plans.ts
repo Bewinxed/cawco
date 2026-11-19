@@ -115,13 +115,27 @@ export const explainStatements = (client: Database): StatementPlans => {
   let full = false;
   const prepare = client.prepare.bind(client);
   const query = client.query.bind(client);
-  /** Each line of `sql`'s plan, as SQLite says it. */
-  const explain = (sql: string): string[] =>
-    prepare(`EXPLAIN QUERY PLAN ${sql}`)
-      .all()
-      .flatMap((row) =>
-        isRecord(row) && typeof row.detail === "string" ? [row.detail] : []
-      );
+  /**
+   * Each line of `sql`'s plan, as SQLite says it. The EXPLAIN statement is
+   * finalized as soon as it is read: on Bun 1.4.4 (SQLite 3.53.4) an
+   * `EXPLAIN QUERY PLAN` of a write, read whole by `.all()`, still counts as
+   * a write in progress on the connection until it is finalized, so every
+   * COMMIT until the collector took it failed "cannot commit transaction -
+   * SQL statements in progress" (a session's credential ACK and a landing,
+   * 2026-11-19).
+   */
+  const explain = (sql: string): string[] => {
+    const statement = prepare(`EXPLAIN QUERY PLAN ${sql}`);
+    try {
+      return statement
+        .all()
+        .flatMap((row) =>
+          isRecord(row) && typeof row.detail === "string" ? [row.detail] : []
+        );
+    } finally {
+      statement.finalize();
+    }
+  };
 
   const look = (sql: string): void => {
     if (!armed) {
