@@ -1,5 +1,5 @@
 /**
- * The canvas page's own style (component canvas §2): the page drawn on
+ * The canvas page's own style (design graph §2): the page drawn on
  * CawCo's tokens (DESIGN.md), scoped to its own root so the project's CSS
  * never reaches it, its rules on classes no project writes: the stage
  * (stage.ts) and its rings, the column of drawings a Preview and a map's

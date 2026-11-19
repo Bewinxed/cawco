@@ -1,5 +1,5 @@
 /**
- * A component canvas as the agent's tools speak of it (component canvas
+ * A design graph as the agent's tools speak of it (design graph
  * §4): what `artifact_create` and `artifact_update` take beyond its states
  * files (`edges`, `group`, `dials`), the canvas page's address on
  * the stage that carries them, and the bounded answers `artifact_create`,
@@ -29,27 +29,27 @@ import {
 import { cutShort } from "@cawco/core/words/helpers";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 
-/** What a component canvas's create or update names beyond its files. */
+/** What a design graph's create or update names beyond its files. */
 export interface CanvasInput {
   dials?: CanvasDial[] | undefined;
   edges?: CanvasEdge[] | undefined;
   group?: Record<string, string> | undefined;
 }
 
-/** An example call, quoted by every refusal of a component canvas's shape: the live story the person operates, a dial for what no press reaches. */
+/** An example call, quoted by every refusal of a design graph's shape: the live story the person operates, a dial for what no press reaches. */
 export const COMPONENT_EXAMPLE =
   'artifact_create({ kind: "component", name: "pairing", title: "Pairing a phone", does: "judge", ask: "Judge pairing a phone: scan the code, approve it, and pin what reads wrong", file: "src/lib/Pairing.stories.ts", dials: [{ name: "answer", label: "What the phone answers", kind: "select", options: ["Approved", "Denied", "No answer"], target: { arg: "answer" } }] })';
 
 /** What `artifact_create` takes, said whole when a body is malformed or names no `title`, `does` or `ask`. */
-export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A component canvas: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials? }; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "text" | "action", label?, group?, min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
+export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A design graph: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials? }; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "text" | "action", label?, group?, min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
 
 /** Why a canvas's edges, groups or dials can't be taken, one sentence with the shape; null when they can. */
 export function canvasProblem(input: CanvasInput): string | null {
   if ((input.edges?.length ?? 0) > CANVAS_SPEC_LIMITS.edges) {
-    return `A canvas takes at most ${CANVAS_SPEC_LIMITS.edges} edges: { from: "<Story>", to: "<Story>", label? }, a story named by its export, or "file:Story" across states files.`;
+    return `A design graph takes at most ${CANVAS_SPEC_LIMITS.edges} edges: { from: "<Story>", to: "<Story>", label? }, a story named by its export, or "file:Story" across states files.`;
   }
   if ((input.dials?.length ?? 0) > CANVAS_SPEC_LIMITS.dials) {
-    return `A canvas takes at most ${CANVAS_SPEC_LIMITS.dials} dials.`;
+    return `A design graph takes at most ${CANVAS_SPEC_LIMITS.dials} dials.`;
   }
   for (const dial of input.dials ?? []) {
     const { target } = dial;
@@ -356,7 +356,7 @@ export const errorsSaid = (errors: StageError[]): ErrorSaid[] =>
     ...(one.frame ? { frame: one.frame } : {}),
   }));
 
-/** What a component canvas's answers point at next. */
+/** What a design graph's answers point at next. */
 export const READ_HINT =
   "artifact_read({ id, detail: 'story', story: 'Waiting' }) for its args; { state: { story, interaction: 'hover' } } for a state's delta; { render: true } draws it now; { png: true, state } a frame's picture.";
 

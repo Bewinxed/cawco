@@ -308,7 +308,9 @@ const doesProblem = (
 ): string | null => {
   const { kind } = input;
   if (does === "pick" && kind !== "page") {
-    return `A pick happens on a decision page: kind "page" with a program holding one Decision per question (decision-page skill). This ${kind} is an option's media: embed it with Canvas or Preview inside the Option.`;
+    return kind === "canvas"
+      ? 'A pick happens on a decision page: kind "page" with a program holding one Decision per question (decision-page skill). A canvas is an option\'s media there: embed it with Canvas inside the Option.'
+      : DESIGN_PICKED;
   }
   const program = input.program !== undefined;
   if (
@@ -320,8 +322,34 @@ const doesProblem = (
   if (does === "draw" && kind !== "canvas") {
     return 'A drawing is a canvas: kind "canvas", with elements, mermaid or nothing.';
   }
+  if (
+    kind === "canvas" &&
+    (input.elements?.length ?? 0) > 0 &&
+    SCREEN_WORDS.test(`${input.ask ?? ""} ${input.title ?? ""}`)
+  ) {
+    return CANVAS_AS_SCREEN;
+  }
   return null;
 };
+
+/** Directions of a design to pick between: where they open, and how the pick is asked. */
+const DESIGN_PICKED =
+  'Two or more directions of a design open in one design graph: kind "component", does "judge", its file one states file per direction (show skill). Which one they pick is an ask, naming each direction, with the graph open.';
+
+/** Words that name a screen's design, in a drawn canvas's ask or title. */
+const SCREEN_WORDS =
+  /\b(wireframes?|mock-?ups?|ui|screens?|layouts?|designs?)\b/iu;
+
+/** A canvas drawn as a screen: what it is for instead. */
+const CANVAS_AS_SCREEN =
+  'A canvas is a drawing of what is not a screen. A design is its real components on the design graph: kind "component", does "judge" (show skill).';
+
+/** A design judged as a preview or an HTML page where the project's designs open on the design graph. */
+const JUDGED_OFF_GRAPH = {
+  preview:
+    'This project\'s designs open on the design graph, where they switch its widths and scheme: kind "component" with the screen\'s live story, does "judge". A preview is the running app, for a flow they try (does "try").',
+  page: 'This project\'s designs open on the design graph: its real components in a live story, kind "component", does "judge". An HTML page is for a stack with no stage.',
+} as const;
 
 /** A choice in a page's HTML: a kit choice, or a field the person fills. */
 const HTML_CHOICE = /data-cawco-choice=|<(input|select|textarea)[^>]*\sname=/iu;
@@ -332,7 +360,7 @@ const NO_CHOICE =
 
 /** Check 5: a page for judging or picking that is a catalogue of desk captures. */
 const capturesRefused = (n: number): string =>
-  `${n} captures wider than ${DESK_CAPTURE_WIDTH}px on one page draw at a fraction of their size in the panel. Show one state at a time: a component canvas of the real component (does "judge"), or a decision page whose options embed them (does "pick").`;
+  `${n} captures wider than ${DESK_CAPTURE_WIDTH}px on one page draw at a fraction of their size in the panel. Show one state at a time: the design graph of the real component (kind "component", does "judge").`;
 /** A value as a JSON file a session reads. */
 const jsonFile = (value: unknown): Buffer =>
   Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
@@ -530,7 +558,7 @@ const pictureRefusal = (row: ArtifactRow, ask: PictureAsk, drawn: boolean) => {
       code: "artifact-read-link-unfit",
       detail:
         row.kind === "component"
-          ? `${row.name} is a component canvas: its state is a frame, { story, interaction?, scheme?, width? }.`
+          ? `${row.name} is a design graph: its state is a frame, { story, interaction?, scheme?, width? }.`
           : `${row.name} is a ${row.kind}: a state's link draws a preview or a page.`,
     });
   }
@@ -2593,7 +2621,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         });
   };
 
-  /** A component canvas's read ({@link readSheet}), with the verdict a round asks when `ask.verify`. */
+  /** A design graph's read ({@link readSheet}), with the verdict a round asks when `ask.verify`. */
   const sheetReadOf = async (
     instance: InstanceRow,
     row: ArtifactRow,
@@ -3130,6 +3158,35 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * A design judged as a preview or an HTML page (no program) in a project
+   * whose designs open on the design graph, refused with where it goes: a
+   * project that has made a design graph has a stage, so its designs are
+   * its real components there.
+   */
+  const judgedOffGraph = (
+    instance: InstanceRow,
+    input: ArtifactInput,
+    program: BuiltProgram | undefined
+  ) => {
+    const kind =
+      input.kind === "preview" || (input.kind === "page" && !program)
+        ? input.kind
+        : null;
+    if (input.does !== "judge" || kind === null || !instance.projectId) {
+      return;
+    }
+    const onGraph = db
+      .ofProject(instance.projectId)
+      .some((row) => row.kind === "component");
+    if (onGraph) {
+      return problem(400, {
+        code: "artifact-ask-unfit",
+        detail: JUDGED_OFF_GRAPH[kind],
+      });
+    }
+  };
+
+  /**
    * What a page's or a preview's create is made from: its page built
    * ({@link createdPage}) or its source named ({@link previewSource}), a
    * folder weighed, and checked against what it asks
@@ -3153,6 +3210,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       "source" in from ? from.source : { page: input.name };
     const html = page?.html ?? null;
     const program = page?.program;
+    const offGraph = judgedOffGraph(instance, input, program);
+    if (offGraph) {
+      return offGraph;
+    }
     const weight =
       "dir" in source && machineId
         ? await deps.folderWeight(machineId, source.dir, source.path)
@@ -4620,12 +4681,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * The shape an embed of component canvas `id` said at rest for the
+     * The shape an embed of design graph `id` said at rest for the
      * stories a Preview names at the width it names (core `storiesKey`), as
      * a decision page's Preview heard it, kept in the canvas's doc (`meta.saidShapes`): the page's media
      * carries it from then on, so the next Preview of it, in any browser,
      * stands its skeleton at that shape from its first paint. Changed only
-     * when it differs. False for an artifact that is no component canvas.
+     * when it differs. False for an artifact that is no design graph.
      */
     keepSaidShape: (id: string, key: string, shape: EmbedShape): boolean => {
       const row = db.get(id);
@@ -4754,7 +4815,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * `artifact_update` of a component canvas's edges, groups or dials: its
+     * `artifact_update` of a design graph's edges, groups or dials: its
      * page's address changes, so the panel draws it again at the next
      * revision. Answers what changed and the canvas's new spec.
      */
@@ -4775,7 +4836,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!(sheet && "port" in row.source)) {
         return problem(409, {
           code: "artifact-canvas-spec-not-sheet",
-          detail: `${row.name} is a ${row.kind}: edges, group and dials are a component canvas's.`,
+          detail: `${row.name} is a ${row.kind}: edges, group and dials are a design graph's.`,
         });
       }
       const misfit = canvasProblem(input);
@@ -4904,7 +4965,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         : await writeSheet(reached.row, change, "person");
     },
 
-    /** The panel's Verify on a component canvas, from any panel that sees it ({@link panelHeld}): a round asked for the canvas's session, whose verdict reaches that session. */
+    /** The panel's Verify on a design graph, from any panel that sees it ({@link panelHeld}): a round asked for the canvas's session, whose verdict reaches that session. */
     verifyFor: async (instanceId: string, id: string) => {
       const reached = panelHeld(instanceId, id);
       return reached instanceof ElysiaStatus
@@ -5037,7 +5098,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      *   the preview's origin ({@link ArtifactServiceDeps.workspaceReach}),
      *   no pass, and why, in its place;
      * - a canvas: its scene (`.excalidraw`) and outline;
-     * - a component canvas: its stories, stage, picks and what its stage
+     * - a design graph: its stories, stage, picks and what its stage
      *   drew, read as `artifact_read` with `render` and `png` reads it, its
      *   frames as drawn the picture, and `states`, the states files for the
      *   caller to read from its workspace;

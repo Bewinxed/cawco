@@ -651,7 +651,7 @@
       // none of SvelteKit's client modules. A store is free here: a story
       // that seeds one in its `beforeEach` runs the fixture and the store in
       // a runner of its own, so what the fixture reads and writes is that
-      // story's copy (component-canvas references/mocks.md), and the states
+      // story's copy (design-graph references/mocks.md), and the states
       // file's own lint keeps a store out of its static imports.
       "includes": [
         "apps/dashboard/src/**/preview/**",

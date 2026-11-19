@@ -267,7 +267,7 @@ const loaded = (api: ExcalidrawImperativeAPI): Promise<void> =>
 /**
  * Embedded, the canvas is the frame of its drawing: it tells the page that
  * holds it the drawing's shape (`sceneBox`, its size at zoom 1 with the
- * fitted view's margin) as Preview's component canvases tell theirs
+ * fitted view's margin) as Preview's design graphs tell theirs
  * (`CANVAS_EMBED_SIZE`), on load and whenever the drawing changes, and
  * stands the drawing fitted to the frame the page sizes from it (decisions
  * /host Canvas.svelte), again whenever that frame changes size. Only an

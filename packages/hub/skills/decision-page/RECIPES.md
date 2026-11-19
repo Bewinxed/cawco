@@ -24,34 +24,18 @@ A second click on the picked option clears it. The note's field carries `id="dec
 
 Add `data-cawco-multiple` to the `[data-cawco-choice]` element; each click toggles one option. The state line reads "3 picked".
 
-## How it would look
+## How it works
 
-Put a figure last in the card, after the options, the note and the why, so every choice stands in the first screen however tall the figure; two side by side for "look" and "how it works", or `dp-show solo` for one. Each figure is a mockup, the flow drawn as one too:
+Put a figure last in the card, after the options, the note and the why, so every choice stands in the first screen however tall the figure; two side by side, or `dp-show solo` for one. Each figure explains an idea that is no screen (how a sync moves, what a limit does over a day); a design of the product's UI is on the design graph, never in a page:
 
 ```html
 <div class="dp-show">
-  <figure class="dp-pane"><figcaption>How it would look</figcaption>{{MK:lead-look}}</figure>
-  <figure class="dp-pane"><figcaption>How it works</figcaption>{{MK:lead-flow}}</figure>
+  <figure class="dp-pane"><figcaption>How a sync moves</figcaption>{{MK:sync-flow}}</figure>
+  <figure class="dp-pane"><figcaption>What the limit does over a day</figcaption>{{MK:limit-day}}</figure>
 </div>
 ```
 
 `{{MK:<id>}}` is `mockups/<id>.html`, inlined when the hub builds the page ([CONTRACT.md](CONTRACT.md)).
-
-## At its real size
-
-A design the person compares (a Settings card, a panel, a phone screen) is drawn at its real width, a real-size mockup (CONTRACT.md, Layout), and placed in a frame that never scales it:
-
-```html
-<div class="dp-reals">
-  <figure class="dp-pane dp-real"><figcaption><b>Desk</b><span>Settings › Addresses</span><span class="dp-real-more">· scroll sideways for the rest</span></figcaption><div class="dp-real-scroll">{{MK:settings-card}}</div></figure>
-  <figure class="dp-pane dp-real"><figcaption><b>Phone</b><span>The page the QR opens</span><span class="dp-real-more">· scroll sideways for the rest</span></figcaption><div class="dp-real-scroll">{{MK:phone-ok}}</div></figure>
-</div>
-```
-
-- The page's column grows to hold its widest drawing whole wherever the screen is wide enough; frames stand side by side where the card holds them and stack where it doesn't.
-- A frame narrower than its drawing scrolls sideways inside itself and shows its `.dp-real-more` words; the page never scrolls sideways. On a phone the frame runs to the card's edges.
-- The caption names what the person judges (where it lives, which state), never its size.
-- Real-size mockups go in `dp-reals`, fluid ones in `dp-show`.
 
 ## Dials
 

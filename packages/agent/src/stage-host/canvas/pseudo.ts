@@ -1,5 +1,5 @@
 /**
- * Interaction states drawn from the project's own CSS (component canvas
+ * Interaction states drawn from the project's own CSS (design graph
  * §2, A1): every rule whose selector targets `:hover`, `:active`,
  * `:focus-visible`, `:focus-within` or `:focus` gains two alternatives, the
  * pseudo-class as a class on the element (`.cawco-hover`) and as the

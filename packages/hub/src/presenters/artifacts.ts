@@ -60,7 +60,7 @@ export interface HeadChanged {
   title?: string;
 }
 
-/** What a component canvas's own change answers: a states file's write, or the canvas's new spec. */
+/** What a design graph's own change answers: a states file's write, or the canvas's new spec. */
 export type ComponentChanged =
   ComponentWritten | { id: string; revision: number; spec: CanvasSpec };
 
@@ -299,7 +299,7 @@ const findingLines = (render: ReturnType<typeof renderSaid>): string[] => [
   ...(render.alike ?? []).map(stageRenderWords.alike),
 ];
 
-/** A component canvas's read: its frames, stories, moves and the person's dials, each a line. */
+/** A design graph's read: its frames, stories, moves and the person's dials, each a line. */
 const componentLines = (read: ComponentRead): string[] => {
   const { render } = read;
   return [
@@ -328,7 +328,7 @@ const componentLines = (read: ComponentRead): string[] => {
           ...findingLines(render),
           ...(render.pageErrors?.length
             ? [
-                `The canvas page's errors: ${render.pageErrors.map(pageErrorWords).join("; ")}`,
+                `The stage's page errors: ${render.pageErrors.map(pageErrorWords).join("; ")}`,
               ]
             : []),
           ...undrawnLines(render),
@@ -615,10 +615,10 @@ const revisedWords = (revised: Revised): string => {
   );
 };
 
-/** A component canvas's change: its new spec, or a states file's write and its frames. */
+/** A design graph's change: its new spec, or a states file's write and its frames. */
 const componentChangedWords = (changed: ComponentChanged): string => {
   if ("spec" in changed) {
-    return `The canvas is at revision ${changed.revision}: ${count(changed.spec.edges?.length ?? 0, "edge")}, ${count(Object.keys(changed.spec.group ?? {}).length, "group")}, ${count(changed.spec.dials?.length ?? 0, "dial")}.`;
+    return `The design graph is at revision ${changed.revision}: ${count(changed.spec.edges?.length ?? 0, "edge")}, ${count(Object.keys(changed.spec.group ?? {}).length, "group")}, ${count(changed.spec.dials?.length ?? 0, "dial")}.`;
   }
   return lines(
     `Wrote ${changed.file}:${changed.lines.from}-${changed.lines.to}${changed.formatted ? `, formatted by ${changed.formatted}` : ""}.`,

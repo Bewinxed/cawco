@@ -5187,7 +5187,7 @@ export const designChecks = sqliteTable(
     /** The verifier's own work item, once it started. */
     verifierItemId: text("verifier_item_id"),
     /**
-     * A round asked of an artifact in a chat (component canvas E1): the
+     * A round asked of an artifact in a chat (design graph E1): the
      * artifact it judges; `itemId` is then its key (`artifact:<id>`), and
      * `projectId` and `taskId` are the empty string. Null for a task's round.
      */

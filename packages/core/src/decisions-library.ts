@@ -134,7 +134,7 @@ export const decisionLibrary = <C>(
   );
   const Diagram = define(
     "Diagram",
-    "A Mermaid diagram, drawn on the house look: any type Mermaid has (flowchart, sequenceDiagram, gantt, stateDiagram-v2, erDiagram, classDiagram, mindmap, timeline…). Never for a screen or a UI flow: those are shown as real frames, each a Preview.",
+    "A Mermaid diagram, drawn on the house look: any type Mermaid has (flowchart, sequenceDiagram, gantt, stateDiagram-v2, erDiagram, classDiagram, mindmap, timeline…). A behaviour choice's states and moves, each edge labelled by what the person does; never a screen, whose design is on the design graph.",
     z.object({
       mermaid: z
         .string()
@@ -154,22 +154,15 @@ export const decisionLibrary = <C>(
   );
   const Preview = define(
     "Preview",
-    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's or a folder's preview, or a sheet. A component canvas shows the component alone: the stories `stories` names, in that order (every story, in its file's order, when it names none), each laid out at the `width` named (else at its own `parameters.viewport`, else its content's) and drawn from its start, never scaled. An option's media is one Preview of its live story, the one story that mounts the option as the product composes it: the person operates it in the card, each press answered by its mock data, and switches its widths and turns its dials from Open full size. One wider than the room it has scrolls sideways in its well, and a card's options stand side by side only where every one fits at its width, else one under another at the card's full width. A page, a preview or a sheet is a whole screen: with no `width` it takes the card's full width at a screen's 16:10 and lays itself out to it, its card's options one under another; with a `width` it stands at that width and that screen's own height, never scaled: a phone's or a tablet's (under 768, under 1280) upright at that device's whole shape, 390×844 and 768×1024 in proportion to its width, a desk's (1280 or more) at 16:10; one wider than the room it has scrolls sideways in its well, and options stand side by side as stories do; a page taller than its frame scrolls inside it; Open full size brings it to the front of your panel.",
+    "Another artifact live in a frame, drawn only on a page kept before 2026-11-19: a new program that holds one is refused, for a design is judged on the design graph (artifact_create kind component, the show skill), never on a decision page.",
     z.object({
       artifact: z.string().describe("Its id."),
       caption,
       stories: z
         .array(z.string())
         .optional()
-        .describe(
-          "A component canvas's stories to show, by their export names, like [\"Quiet\"]: an option's live story, then a state its choice turns on; every story when left out."
-        ),
-      width: z
-        .number()
-        .optional()
-        .describe(
-          "The width in px it is drawn at, like 390: a page's or a preview's layout width, or the width a component canvas's stories are laid out at (left out: each at its own `parameters.viewport`). Its frame stands at it, 1:1, and the page widens to it where the window holds it; wider than its card it scrolls sideways in its well, never scaled."
-        ),
+        .describe("A design graph's stories it shows, by their export names."),
+      width: z.number().optional().describe("The width in px it is drawn at."),
     })
   );
   const Dials = define(
@@ -236,7 +229,7 @@ export const decisionLibrary = <C>(
         .array(media)
         .optional()
         .describe(
-          "Its design, drawn live under its pick, which the person can operate. Each piece stands on the row the other options' pieces at the same place share: one Preview per state, in the same order in every option, compares the options state beside state."
+          "What shows it under its pick: a Diagram of its states and moves, or a picture that is no UI. Each piece stands on the row the other options' pieces at the same place share, so pieces in the same order in every option compare side by side."
         ),
       cost: z.string().optional().describe("What it costs them, in one line."),
       current: z
@@ -294,7 +287,7 @@ export const decisionLibrary = <C>(
         .string()
         .optional()
         .describe(
-          "Required: what sort of choice it is, a kind's id from the Kinds your instructions list; the hub settles it by the project's Who decides. A look decision gives each option a picture (Image, Preview or Canvas), and may give itself one as media its options share; as a verdict on one design, it gives itself one and its options none."
+          "Required: what sort of choice it is, a kind's id from the Kinds your instructions list; the hub settles it by the project's Who decides. A look decision gives each option a picture that is no UI (Image or Canvas), and may give itself one as media its options share; a design of the product's UI is judged on the design graph, never here."
         ),
     })
   );
@@ -437,10 +430,10 @@ export const decisionPromptOptions = (): PromptOptions => ({
   additionalRules: [
     "Use a revision's statements for what changes only: a statement under an existing name replaces it, one under a new name is added, and the rest of the page stays as it was (the second example is a revision: a reworded decision and a new option). Use the existing names exactly. To remove a card, restate its parent without it; what only it referred to goes with it.",
     "Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets), its cost and its builds (what picking it means building or changing, never how long it takes); exactly one is recommended, and the Decision's why says why: the card shows it after that option's label (Recommended: Per machine. A machine is what the fleet costs to run.), so the why never names the option again. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.",
-    "Every Decision names its kind, the 9th argument (pass [], [], false, null before it when the others are left out). A \"look\" Decision, about how something looks, gives every Option a picture in its media (Image, Preview or Canvas); a picture in the Decision's media too is media its Options share, drawn once below them. As a verdict on one design, it puts the picture in the Decision's media and none in its Options. The hub refuses a look Decision that leaves some Options bare.",
-    "Media sits in a card: an option's design drawn live in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions.",
+    'Every Decision names its kind, the 9th argument (pass [], [], false, null before it when the others are left out). A "look" Decision, about how a picture that is no UI looks (a generated image, a logo), gives every Option a picture in its media (Image or Canvas); a picture in the Decision\'s media too is media its Options share, drawn once below them. The hub refuses a look Decision that leaves some Options bare.',
+    "Media sits in a card: an option's diagram or picture in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions. A design of the product's UI is never media: the hub refuses a Preview and names the design graph, where its directions open as one states file each.",
     'after names what a decision depends on; one naming another page\'s decision ("page#id") links the two pages, and the Decisions tab says it on each ("After: …", "Unlocks: …"). A Section groups decisions under a heading. Leave them out when the decisions stand alone.',
-    "Plain words everywhere: no URLs or markup; a CawCo link is a markdown link. Canvas and Preview name an artifact by its id; Image names a file.",
+    "Plain words everywhere: no URLs or markup; a CawCo link is a markdown link. Canvas names an artifact by its id; Image names a file.",
     'Every character is one the house face (Figtree) draws. It draws ← → ↑ ↓, … · • – —, × ÷ ± ≠ ≤ ≥, « » ‹ › and ° € £ ©; it lacks ✓ ✗ ✕, the key symbols ⌘ ⌥ ⇧ ⌃ ⎋ ↵, ↔, ≈, ′ ″ and every emoji. Say those in words ("Done", "Command-K", "a paperclip"), and name an icon in words ("Attach"). The hub refuses a program holding a character Figtree lacks, naming its card and string.',
     'A Decision\'s note is what its note field asks for, a noun phrase its button finishes: "Add <note>". Leave it out for the plain "Add a note"; give it only when the pick needs a particular note ("a reason for the rollback").',
   ],

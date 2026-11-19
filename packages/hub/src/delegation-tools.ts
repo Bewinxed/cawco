@@ -1184,7 +1184,7 @@ export function handoffTools(view: ToolView) {
         if (!changes && head) {
           return { change: "head", answer: head };
         }
-        // A component canvas's states file and its own spec have their own route.
+        // A design graph's states file and its own spec have their own route.
         const component = (
           ["args", "story", "edges", "group", "dials"] as const
         ).some((key) => change[key] !== undefined);

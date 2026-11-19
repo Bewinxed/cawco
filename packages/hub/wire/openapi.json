@@ -34170,10 +34170,10 @@
           },
           "unreached": {
             "$ref": "#/components/schemas/StageUnreached",
-            "description": "An author's read of its component canvas that couldn't reach its\nworkspace's stage (hub component.ts `stageRead`): the hop that failed, in\nthe preview proxy's kinds, and why, in the hub's words. Said in that read\nalone: the person's panel is served the version handed up (core\n`PreviewSource.pin`), whose own load says what it meets."
+            "description": "An author's read of its design graph that couldn't reach its\nworkspace's stage (hub component.ts `stageRead`): the hop that failed, in\nthe preview proxy's kinds, and why, in the hub's words. Said in that read\nalone: the person's panel is served the version handed up (core\n`PreviewSource.pin`), whose own load says what it meets."
           },
           "verify": {
-            "description": "A component canvas's design system round, as `verify: true` asked it: what the ask did.",
+            "description": "A design graph's design system round, as `verify: true` asked it: what the ask did.",
             "type": "string"
           },
           "weight": {
@@ -38466,7 +38466,7 @@
             }
           },
           "errors": {
-            "description": "A component canvas's compile errors, from the modules its states files import.",
+            "description": "A design graph's compile errors, from the modules its states files import.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ErrorSaid"
@@ -38477,7 +38477,7 @@
             "type": "string"
           },
           "hint": {
-            "description": "A component canvas's next reads, one line.",
+            "description": "A design graph's next reads, one line.",
             "type": "string"
           },
           "host": {
@@ -38502,7 +38502,7 @@
             }
           },
           "moves": {
-            "description": "A component canvas's flow moves, each with the animations it fired.",
+            "description": "A design graph's flow moves, each with the animations it fired.",
             "type": "array",
             "items": {
               "type": "object",
@@ -38581,7 +38581,7 @@
             "type": "number"
           },
           "render": {
-            "description": "What a browser drew of a component canvas (the panel's, else the daemon's): each frame's state, and what it loads.",
+            "description": "What a browser drew of a design graph (the panel's, else the daemon's): each frame's state, and what it loads.",
             "allOf": [
               {
                 "type": "object",
@@ -51465,7 +51465,7 @@
             }
           },
           "embed": {
-            "description": "The artifact whose frame holds it, when that frame shows one (a decision\npage's Preview, dashboard decisions host Preview.svelte\n`data-cawco-artifact`): a component canvas, a dev server's preview, a page.",
+            "description": "The artifact whose frame holds it, when that frame shows one (a decision\npage's Preview, dashboard decisions host Preview.svelte\n`data-cawco-artifact`): a design graph, a dev server's preview, a page.",
             "type": "object",
             "properties": {
               "artifact": {
@@ -51583,7 +51583,7 @@
             "type": "string"
           },
           "sheet": {
-            "description": "On a component canvas: its states file (from the toolchain root), the\nstory whose frame holds the element, and the frame's state: the\ninteraction it is forced into, its scheme and its width (px; null when it\nfits its content).",
+            "description": "On a design graph: its states file (from the toolchain root), the\nstory whose frame holds the element, and the frame's state: the\ninteraction it is forced into, its scheme and its width (px; null when it\nfits its content).",
             "type": "object",
             "properties": {
               "file": {
@@ -59263,7 +59263,7 @@
         ]
       },
       "StageUnreached": {
-        "description": "An author's read of its component canvas that couldn't reach its\nworkspace's stage (hub component.ts `stageRead`): the hop that failed, in\nthe preview proxy's kinds, and why, in the hub's words. Said in that read\nalone: the person's panel is served the version handed up (core\n`PreviewSource.pin`), whose own load says what it meets.",
+        "description": "An author's read of its design graph that couldn't reach its\nworkspace's stage (hub component.ts `stageRead`): the hop that failed, in\nthe preview proxy's kinds, and why, in the hub's words. Said in that read\nalone: the person's panel is served the version handed up (core\n`PreviewSource.pin`), whose own load says what it meets.",
         "type": "object",
         "properties": {
           "down": {

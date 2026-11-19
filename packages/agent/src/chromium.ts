@@ -1,7 +1,7 @@
 /**
  * The daemon's one headless browser: the machine's own Chromium
  * (capabilities.ts `browserExecutable`, the browser the person installed;
- * never an install of ours), driven by playwright-core. A component canvas's
+ * never an install of ours), driven by playwright-core. A design graph's
  * render (stage-render.ts), a canvas's unseen screen (canvas-screen.ts) and
  * an artifact's picture (artifact-picture.ts) each launch it here.
  *

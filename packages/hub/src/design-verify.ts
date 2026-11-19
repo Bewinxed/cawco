@@ -46,7 +46,7 @@
  *   builder is told; its next `finish_item` starts another. A builder that
  *   ends while checked stops its verifier. A hub that restarts keeps every
  *   round (the rows), and its chips say so again.
- * - **In a chat** (component canvas E1). A round runs by itself only on a
+ * - **In a chat** (design graph E1). A round runs by itself only on a
  *   task. In a chat, a round is asked of an artifact (`artifact_read({
  *   verify: true })`, or the panel's Verify): keyed on the artifact, on the
  *   tree of the workspace its stage runs in, when that repository holds a
@@ -227,7 +227,7 @@ const artifactsOf = (
             : "";
           const sheet =
             found.kind === "component"
-              ? " (a component canvas: open its states file with artifact_create kind component on your own stage, then read what was drawn with artifact_read, each state's delta with state)"
+              ? " (a design graph: open its states file with artifact_create kind component on your own stage, then read what was drawn with artifact_read, each state's delta with state)"
               : "";
           return `- ${found.kind} “${found.name}”${sheet}${html}`;
         }
@@ -680,7 +680,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     },
 
     /**
-     * A chat's ask (component canvas E1): a round on `artifact`, in the
+     * A chat's ask (design graph E1): a round on `artifact`, in the
      * workspace its stage runs in, judged as a task's is; its verdict goes to
      * `requester`. Answers what the ask did, one sentence.
      */

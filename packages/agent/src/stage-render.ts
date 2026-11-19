@@ -1,6 +1,6 @@
 /**
- * A component canvas drawn by the daemon when no panel has drawn it
- * (component canvas §2, C2): the machine's own Chromium (capabilities.ts
+ * A design graph drawn by the daemon when no panel has drawn it
+ * (design graph §2, C2): the machine's own Chromium (capabilities.ts
  * `browserExecutable`, the browser the person installed; never an install
  * of ours) opens the canvas page on the workspace's stage, which draws
  * each section in turn and posts its render report to the stage as a

@@ -1,5 +1,5 @@
 /**
- * A picture of one state of a component canvas: the one path every picture
+ * A picture of one state of a design graph: the one path every picture
  * of a state is taken by (the daemon's render, stage-render.ts).
  *
  * The canvas page stands the component on its stage (stage-host canvas

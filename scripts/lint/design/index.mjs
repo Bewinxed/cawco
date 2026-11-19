@@ -239,7 +239,7 @@ const INLINE_STYLES = {
   "src/lib/components/ui/section-header/section-header.svelte": ["color"],
   "src/routes/(app)/motion/delegate-tray/+page.svelte": ["width"],
   // A decision page's media measure their own box while mounted: Preview's
-  // frame takes the height its page or component canvas says it stands at,
+  // frame takes the height its page or design graph says it stands at,
   // and Canvas's frame the box its drawing's shape gives it in its well
   // (decisions/host Preview.svelte, Canvas.svelte), so each is written
   // inline as the standard property, as the files above.

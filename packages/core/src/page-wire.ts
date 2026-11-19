@@ -147,7 +147,7 @@ export interface PageSaysBodies {
   [CANVAS_EMBED_FAILED]: { why: string };
   [CANVAS_EMBED_FETCHED]: Bare;
   [CANVAS_EMBED_GRAPH]: { urls: string[] };
-  /** A canvas embed's shape; `margin` is a drawn canvas's, `rest` a component canvas's. */
+  /** A canvas embed's shape; `margin` is a drawn canvas's, `rest` a design graph's. */
   [CANVAS_EMBED_SIZE]: {
     height: number;
     margin?: number;

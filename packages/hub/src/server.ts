@@ -5098,9 +5098,9 @@ export const createServer = (
       const { machineId, workspace, result } = staged;
       return { machineId, workspace, opened: result };
     },
-    // A design system round asked of a component canvas in a chat; its verdict reaches the asker.
+    // A design system round asked of a design graph in a chat; its verdict reaches the asker.
     verify: (requester, artifact) => designVerify.ask(requester, artifact),
-    // A component canvas drawn by its workspace's daemon in the machine's own Chromium.
+    // A design graph drawn by its workspace's daemon in the machine's own Chromium.
     stageRender: async (at, ask) => {
       const staged = await onStage(at, STAGE_RENDER, (ref) => [ref, ask]);
       return staged instanceof ElysiaStatus ? staged : staged.result;
@@ -5609,8 +5609,8 @@ export const createServer = (
         ? new Response(null, { status: 204 })
         : problemResponse({
             status: 404,
-            code: "component-canvas-id",
-            detail: "No component canvas of that id.",
+            code: "design-graph-id",
+            detail: "No design graph of that id.",
           });
     },
   };

@@ -113,7 +113,7 @@ const hubOwnedControl = (method: string): string | undefined => {
     return `${method} is the hub's to send. A workspace retires on its own once its work lands; a held one is discarded with POST /api/workspaces/:id/archive and discard: true.`;
   }
   if (HUB_STAGE_CONTROLS.has(method)) {
-    return `${method} is the hub's to send. A stage runs where the hub places it, for a session's component canvas or design_map.`;
+    return `${method} is the hub's to send. A stage runs where the hub places it, for a session's design graph or design_map.`;
   }
 };
 

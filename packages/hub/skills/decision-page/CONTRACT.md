@@ -1,6 +1,6 @@
 # Mockup contract
 
-A mockup is a picture of one option, placed in a card with `{{MK:<id>}}`: a small animated one that explains the idea at a glance, or a design drawn at its real size for the person to judge. The reader is visual: almost no text beyond what the design itself shows.
+A mockup is a figure placed in a card with `{{MK:<id>}}`: a small animated one that explains an idea that is no screen at a glance (how a sync moves, what a limit does over a day). A design of the product's UI is on the design graph, never a mockup. The reader is visual: almost no text beyond what the figure itself shows.
 
 ## The fragment
 
@@ -20,12 +20,9 @@ Content is the project's real records: its own repository, projects, machines an
 
 ## Layout
 
-A mockup is one of two kinds:
+A mockup fills its container and reads right from 300px to 560px wide, 220–420px tall at 560px. A wide piece inside it wraps or scrolls in its own `overflow-x: auto` box.
 
-- **Fluid** (an idea at a glance): fills its container and reads right from 300px to 560px wide, 220–420px tall at 560px. A wide piece inside it wraps or scrolls in its own `overflow-x: auto` box.
-- **Real size** (a design the person judges at its true pixels: a 980px Settings card, a 380px panel, a 390px phone): the root declares its width, `<div class="mk mk-<id>" data-mk-width="980">`, and its style sets the same `inline-size: 980px`. It is drawn at 1 CSS px per px, never scaled (no `transform`, `zoom` or width in `%`), and placed in the kit's real-size frame (RECIPES.md, "At its real size"), which scrolls sideways inside itself where the page is narrower.
-
-Either way nothing scrolls the page sideways, and flex and grid children holding text get `min-width: 0`.
+Nothing scrolls the page sideways, and flex and grid children holding text get `min-width: 0`.
 
 ## Motion
 
@@ -37,4 +34,4 @@ A purely illustrative mockup: `role="img"` on the root with an `aria-label` stat
 
 ## Check
 
-`node <skill>/scripts/preview.mjs <work folder> <id>` renders the mockup in the kit's CSS into `<work folder>/out/` and prints overflow and script errors: a fluid one in a 560px box, light at 1000px and dark at 360px; a real-size one in its frame inside a card, light at 1440px and dark at 360px, with the width it drew, its transform, and whether the frame scrolls and its caption says so. Overflow is the page itself scrolling sideways; a real-size frame scrolling at 360px is expected. Look at both images, fix, and run once more with `--reduced` for the still state; two rounds per mockup at most.
+`node <skill>/scripts/preview.mjs <work folder> <id>` renders the mockup in the kit's CSS into `<work folder>/out/` and prints overflow and script errors: in a 560px box, light at 1000px and dark at 360px. Overflow is the page itself scrolling sideways. Look at both images, fix, and run once more with `--reduced` for the still state; two rounds per mockup at most.

@@ -23,7 +23,7 @@ export interface PageAnchor {
   /**
    * The artifact whose frame holds it, when that frame shows one (a decision
    * page's Preview, dashboard decisions host Preview.svelte
-   * `data-cawco-artifact`): a component canvas, a dev server's preview, a page.
+   * `data-cawco-artifact`): a design graph, a dev server's preview, a page.
    */
   embed?: { artifact: string };
   /**
@@ -57,7 +57,7 @@ export interface PageAnchor {
   page?: string;
   selector: string;
   /**
-   * On a component canvas: its states file (from the toolchain root), the
+   * On a design graph: its states file (from the toolchain root), the
    * story whose frame holds the element, and the frame's state: the
    * interaction it is forced into, its scheme and its width (px; null when it
    * fits its content).

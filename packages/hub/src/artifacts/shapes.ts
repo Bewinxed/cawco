@@ -53,7 +53,7 @@ export interface PageWas {
  */
 /**
  * What a decision page's media says of an artifact it shows (its program's
- * Canvas and Preview pieces): its kind; a component canvas's shapes. Never
+ * Canvas and Preview pieces): its kind; a design graph's shapes. Never
  * its name: the page names each piece by its own words (its caption, its
  * option's label, its card's question), and a name in the page's media is a
  * text node of it (a blind benchmark's arms were named there).
@@ -74,7 +74,7 @@ export interface ArtifactInput {
    * person's own composer canvas (`draft`), which asks them nothing.
    */
   ask?: string | undefined;
-  /** A component canvas's dials: a CSS variable on every frame, or an arg. */
+  /** A design graph's dials: a CSS variable on every frame, or an arg. */
   dials?: CanvasDial[] | undefined;
   dir?: string | undefined;
   /** What the person does on it (core `ARTIFACT_DOES`); named with `ask`. */
@@ -85,13 +85,13 @@ export interface ArtifactInput {
    * and not shown in the panel by being made.
    */
   draft?: boolean | undefined;
-  /** A component canvas's layout edges between frames, by story. */
+  /** A design graph's layout edges between frames, by story. */
   edges?: CanvasEdge[] | undefined;
   /** A canvas's skeleton elements (Excalidraw's `convertToExcalidrawElements`). */
   elements?: SkeletonElement[] | undefined;
-  /** A component canvas's states file (or files, one section each), from the session's clone's root or absolute. */
+  /** A design graph's states file (or files, one section each), from the session's clone's root or absolute. */
   file?: string | string[] | undefined;
-  /** A component canvas's groups: story → the parent story or heading it stands under. */
+  /** A design graph's groups: story → the parent story or heading it stands under. */
   group?: Record<string, string> | undefined;
   html?: string | undefined;
   /** A browser artifact is the hub's alone (browsers.ts): no session makes one. */
@@ -296,11 +296,11 @@ export interface ArtifactRead {
   stage?: StageState;
   /** Every key, or with `since` only those changed after it; a canvas's is empty. */
   state: Record<string, ReadEntry>;
-  /** A component canvas's stage the read couldn't reach: which hop, why, and since when; `stage` is then the doc's last word of it. */
+  /** A design graph's stage the read couldn't reach: which hop, why, and since when; `stage` is then the doc's last word of it. */
   /** What it is named by to the person. */
   title: string;
   unreached?: StageUnreached;
-  /** A component canvas's design system round, as `verify: true` asked it: what the ask did. */
+  /** A design graph's design system round, as `verify: true` asked it: what the ask did. */
   verify?: string;
   /** What a sheet loads, from its stage's module graph; null until a view has loaded it. */
   weight?: SheetWeight | null;
@@ -311,7 +311,7 @@ export interface ArtifactRead {
 }
 
 /**
- * A component canvas's read (kinds/component.ts `readSheet`): every
+ * A design graph's read (kinds/component.ts `readSheet`): every
  * artifact's read, with its stage's compile errors, and, once a browser drew
  * it, its frames, moves and stories; the person's dials and what they tuned,
  * the frame and story asked, and where to read next. `errors` is on every
@@ -469,11 +469,11 @@ export interface Created {
   decisions?: string[];
   /** Components a decision page's program names that the library does not have: dropped, never drawn. */
   dropped?: string[];
-  /** A component canvas's compile errors, from the modules its states files import. */
+  /** A design graph's compile errors, from the modules its states files import. */
   errors?: ReturnType<typeof errorsSaid>;
   /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
   held?: string;
-  /** A component canvas's next reads, one line. */
+  /** A design graph's next reads, one line. */
   hint?: string;
   /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`). */
   host?: string;
@@ -483,7 +483,7 @@ export interface Created {
   link?: string;
   /** Made again under its name: what it changed, each by its link (`[label](cawco:change/<artifact>/<anchor>)`). */
   marked?: string[];
-  /** A component canvas's flow moves, each with the animations it fired. */
+  /** A design graph's flow moves, each with the animations it fired. */
   moves?: ReturnType<typeof movesSaid>;
   /** Its slug, what every artifact tool takes. */
   name: string;
@@ -501,7 +501,7 @@ export interface Created {
   /** A canvas's outline once drawn (core `canvasOutline`). */
   outline?: string;
   port?: number;
-  /** What a browser drew of a component canvas (the panel's, else the daemon's): each frame's state, and what it loads. */
+  /** What a browser drew of a design graph (the panel's, else the daemon's): each frame's state, and what it loads. */
   render?: ReturnType<typeof renderSaid> & {
     weight: ReturnType<typeof weightSaid>;
   };
@@ -625,7 +625,7 @@ export const PROMOTED_FILES = [
 
 export type PromotedFile = (typeof PROMOTED_FILES)[number];
 
-/** What `artifact_update` answers for a component canvas's write: nothing past the story it wrote (component canvas §4, G2). */
+/** What `artifact_update` answers for a design graph's write: nothing past the story it wrote (design graph §4, G2). */
 export interface ComponentWritten {
   file: string;
   /** The project's formatter that shaped the lines, like "prettier 3.9.10"; null when the project has none. */
@@ -635,7 +635,7 @@ export interface ComponentWritten {
   story: { args: Record<string, unknown>; name: string } | null;
 }
 
-/** What `artifact_read` asks of a component canvas beyond its picks (component canvas §4). */
+/** What `artifact_read` asks of a design graph beyond its picks (design graph §4). */
 export interface ComponentReadAsk {
   /** `story`: one story's args and code too. */
   detail?: "summary" | "story";

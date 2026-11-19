@@ -1,5 +1,5 @@
 /**
- * The component canvas page (component canvas §2–3): the page a stage serves
+ * The design graph page (design graph §2–3): the page a stage serves
  * at `CANVAS_PATH`, in the project's own page and CSS. What every page of it
  * shares lives here: each states file's section and its module (loaded,
  * failed, loaded again as it is edited), the CSS rewritten so a forced

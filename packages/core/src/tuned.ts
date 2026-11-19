@@ -1,5 +1,5 @@
 /**
- * The person's tuned timing of a component canvas's moves (the design
+ * The person's tuned timing of a design graph's moves (the design
  * graph's Animation face): a machine record the panel writes into the
  * artifact's doc in a map of its own, `tuned`, each move's records under the
  * move's name, the way ink keeps its own map with its own bounds (ink.ts).

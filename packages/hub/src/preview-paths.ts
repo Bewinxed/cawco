@@ -20,7 +20,7 @@ export const CANVAS_PATH = /^\/__cawco\/canvas\/([0-9a-f-]{36})(\/.*)$/u;
 export const PAGE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})(\/.*)$/u;
 
 /**
- * Where a decision page's Preview tells the shape its component canvas
+ * Where a decision page's Preview tells the shape its design graph
  * said, relative to the page (`shape` beside `/__cawco/page/<id>/`): a POST
  * of the canvas's id, its stories and the shape (preview.ts
  * `PreviewListenerDeps.keepShape`).

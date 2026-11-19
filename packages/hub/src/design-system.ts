@@ -1389,7 +1389,7 @@ export const designSection = async (
       : `This project has a design system, at \`${DESIGN_DIR}/\` in your clone.`,
     ...(guide ? [guide] : []),
     ...(first ? [first] : []),
-    "Then `design_map` for the components it builds from: mount them, never redraw them (the `component-canvas` skill).",
+    "Then `design_map` for the components it builds from: mount them, never redraw them (the `design-graph` skill).",
   ].join("\n\n");
 };
 

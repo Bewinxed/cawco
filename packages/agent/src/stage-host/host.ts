@@ -2500,7 +2500,7 @@ const componentImports = async (file: string): Promise<string[]> =>
 const nameOf = (file: string): string => fileName(file);
 
 /**
- * The design map (component canvas §4, `design_map`): the library under
+ * The design map (design graph §4, `design_map`): the library under
  * `dir`, each component with its states, what a browser drew of them, the
  * components it renders (made of) and those that render it (used in), from
  * the frames' component chains the stage's reports keep and, before any page

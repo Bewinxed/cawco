@@ -167,7 +167,7 @@ import type { StageAnswer } from "./window-events";
 
 /** The most of a story's error a Preview's failure carries (`CANVAS_EMBED_FAILED`): its Preview says it on one line. Our call. */
 const EMBED_WHY_MAX = 200;
-/** How long a reach's play may run, then its motion (component-canvas moves.md). */
+/** How long a reach's play may run, then its motion (design-graph moves.md). */
 const PLAY_MS = 6000;
 const MOTION_MS = 3000;
 /** The quiet that ends a move: no new animation and none running for this long. */

@@ -4,7 +4,7 @@
  * a CSF 3 story file beside it (`Who.stories.ts`). One stage per workspace's
  * Vite root runs the project's own dev toolchain inside the workspace's
  * boundary with CawCo's plugin added (agent `stage.ts`, `stage-host/`), and
- * serves the component canvas at {@link CANVAS_PATH}: every story mounted
+ * serves the design graph at {@link CANVAS_PATH}: every story mounted
  * live in every interaction state its CSS reaches; the hub shows it as a
  * `component` artifact through the workspace's port preview. These are the shapes every hop speaks: the
  * daemon's answer to {@link STAGE_ENSURE}, the {@link StageFrame} it sends on
@@ -28,7 +28,7 @@ export const stageFrameworkOf = (value: unknown): StageFramework | undefined =>
   STAGE_FRAMEWORKS.find((one) => one === value);
 
 /**
- * Where a stage serves a component canvas: `?file=<states file, from the
+ * Where a stage serves a design graph: `?file=<states file, from the
  * toolchain root>`, once per section, and `spec=<CanvasSpec JSON>`. Outside
  * the hub's own `/__cawco/`, after Vite's `/@vite/`.
  */
@@ -199,7 +199,7 @@ export interface EmbedShape {
 }
 
 /**
- * A component canvas's shapes as a decision page's media carries them, so a
+ * A design graph's shapes as a decision page's media carries them, so a
  * Preview's skeleton stands at its picture's own shape from its first paint
  * (dashboard decisions host Preview.svelte):
  * - `said`: what an embed of it said at rest, by the stories its Preview
@@ -229,7 +229,7 @@ export type DecisionMedia = {
   kind: string;
   /** That version's revision: its frame loads again when it moves. */
   revision: number;
-  /** A component canvas's shapes as embeds said them and as its stage drew its stories: a Preview's skeleton stands at them. */
+  /** A design graph's shapes as embeds said them and as its stage drew its stories: a Preview's skeleton stands at them. */
   shapes?: CanvasShapes;
 } | null;
 
@@ -258,7 +258,7 @@ export const isEmbedShape = (value: unknown): value is EmbedShape => {
 };
 
 /**
- * A component canvas's address (`embed`, as the hub answers it in a
+ * A design graph's address (`embed`, as the hub answers it in a
  * decision page's media) drawn as a Preview: `by=embed`, a `story` per name
  * in `stories` (none: every story), and the width the Preview names, which
  * every story it draws is laid out at (the canvas's `width`, agent canvas
@@ -448,6 +448,18 @@ export const formNameOf = (value: unknown): FormName | undefined =>
 /** The {@link FORMS} name of a width that is one's, or undefined. */
 export const formNamed = (width: number): FormName | undefined =>
   FORM_NAMES.find((one) => FORMS[one] === width);
+
+/** The widths the design graph's View draws a frame at, each with the device it stands for: what the person switches between, and what an agent reads each frame at. Ours. */
+export const GRAPH_WIDTHS = [
+  { value: 390, device: "phone" },
+  { value: 768, device: "tablet" },
+  { value: 1440, device: "desk" },
+  { value: 1920, device: "wide" },
+] as const;
+/** The design graph's widths as a sentence names them: "390, 768, 1440, 1920". */
+export const GRAPH_WIDTHS_SAID = GRAPH_WIDTHS.map((one) => one.value).join(
+  ", "
+);
 
 /** A screen's height over its width: an upright iPhone's 390×844, an upright iPad's 768×1024, a desk window's 16:10. Ours. */
 const SCREEN_SHAPE = {
@@ -1351,7 +1363,7 @@ export interface Found {
 }
 
 /**
- * What `design_map` asks the stage (component canvas §4): the components
+ * What `design_map` asks the stage (design graph §4): the components
  * under `dir` (from the toolchain root; omitted, its source folder), those
  * whose name holds `query`, or the one card of `component` (a file);
  * `limit` at a time from `cursor`, each a count line or (`detailed`) its
@@ -1415,7 +1427,7 @@ export interface DesignMap {
 }
 
 /**
- * An author's read of its component canvas that couldn't reach its
+ * An author's read of its design graph that couldn't reach its
  * workspace's stage (hub component.ts `stageRead`): the hop that failed, in
  * the preview proxy's kinds, and why, in the hub's words. Said in that read
  * alone: the person's panel is served the version handed up (core

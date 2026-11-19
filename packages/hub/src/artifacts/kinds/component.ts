@@ -6,6 +6,7 @@ import {
   type CanvasShapes,
   type CanvasSpec,
   canvasPath,
+  GRAPH_WIDTHS_SAID,
   type RenderReport,
   type SectionUndrawn,
   type SheetRead,
@@ -84,7 +85,7 @@ export type ComponentKindContext = Pick<
   | "stampMeta"
 >;
 
-/** A component canvas: a states file's stories drawn live on its machine's stage, the draws and the sheet the hub keeps of them in the doc, and a read that waits for what a browser drew. */
+/** A design graph: a states file's stories drawn live on its machine's stage, the draws and the sheet the hub keeps of them in the doc, and a read that waits for what a browser drew. */
 export const createComponentKind = (ctx: ComponentKindContext) => {
   const {
     db,
@@ -197,7 +198,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     }
   };
   /**
-   * The stage's report of component canvas `row` with its last draws held
+   * The stage's report of design graph `row` with its last draws held
    * past the stage (component.ts `drawsHeld`): what a browser drew is kept
    * in the canvas's doc (`meta.drawn`), so a stage that slept, restarted or
    * was made again never reads as nothing drawn. Only a new draw changes
@@ -216,7 +217,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     drawnWritten(row, report);
     return report;
   };
-  /** The shapes a decision page's media carries of component canvas `row` (core `CanvasShapes`). */
+  /** The shapes a decision page's media carries of design graph `row` (core `CanvasShapes`). */
   const shapesOf = (row: ArtifactRow): CanvasShapes => {
     const meta = docMeta(docs.doc(row.id));
     return {
@@ -326,7 +327,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     return read;
   };
   /**
-   * The agent's write as `artifact_update` answers it (component canvas
+   * The agent's write as `artifact_update` answers it (design graph
    * §4): the file, the lines written, the formatter that shaped them, the
    * story with its args after, and its frames as its stage draws them now:
    * the daemon's own draw of the workspace when no browser has drawn them
@@ -393,13 +394,13 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ? await deps.stageRender(at, { files, spec })
       : drawn;
   };
-  /** What a component canvas's create names: its states files, and what the person does there; refused when it names no file or a canvas that does not hold. */
+  /** What a design graph's create names: its states files, and what the person does there; refused when it names no file or a canvas that does not hold. */
   const sheetAsked = (input: ArtifactInput) => {
     const asked = input.file === undefined ? [] : [input.file].flat();
     if (asked.length === 0) {
       return problem(400, {
         code: "artifact-sheet-file-none",
-        detail: `A component canvas takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`,
+        detail: `A design graph takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`,
       });
     }
     const misfit = canvasProblem(input);
@@ -410,7 +411,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     return said instanceof ElysiaStatus ? said : { asked, said };
   };
   /**
-   * A component canvas's row placed in its owner's panel on the version its
+   * A design graph's row placed in its owner's panel on the version its
    * create cut (`at`, its pin): the one of that name made again where it
    * stands, or its next version when its maker re-creates one its parent
    * opened (versions.ts `holdNext`), or a new one.
@@ -460,7 +461,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     return { before, holding, row: placed };
   };
   /**
-   * Makes a component canvas in `owner`'s panel (or opens the one of that
+   * Makes a design graph in `owner`'s panel (or opens the one of that
    * name) on the stage of its maker's workspace, shows it, and answers what
    * a browser drew of it: the panel's draw, else the daemon's.
    */
@@ -478,6 +479,19 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       return staged;
     }
     const { machineId, opened, workspace } = staged;
+    // One state is one story: the graph draws it at each width (show skill).
+    const widthOnly = opened.report.widthOnly ?? [];
+    if (widthOnly.length > 0) {
+      return problem(400, {
+        code: "artifact-sheet-unfit",
+        detail: widthOnly
+          .map(
+            (stories) =>
+              `${stories.join(" and ")} differ only by their width: keep one story. The design graph draws it at each width (${GRAPH_WIDTHS_SAID}).`
+          )
+          .join(" "),
+      });
+    }
     const spec = specOf(input.name, input);
     const files = opened.report.sections.map((one) => one.file);
     const source: PreviewSource = {
@@ -561,7 +575,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     }
   };
   /**
-   * A component canvas as the session reads it (component canvas §4): its
+   * A design graph as the session reads it (design graph §4): its
    * picks and pins, its stage, what a browser drew (each frame's state), its
    * moves, its stories with the interactions they reach, the person's dials
    * and tuned motion; on asking, one story's args and code, one frame's
@@ -662,14 +676,14 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     };
     return read;
   };
-  /** A design system round on component canvas `row`, asked by `requester`: what the ask did. */
+  /** A design system round on design graph `row`, asked by `requester`: what the ask did. */
   const askVerify = (requester: InstanceRow, row: ArtifactRow) => {
     const sheet = sheetOf(row);
     if (!sheet) {
       return Promise.resolve(
         problem(409, {
           code: "artifact-verify-not-sheet",
-          detail: `${row.name} is a ${row.kind}: verify is a component canvas's.`,
+          detail: `${row.name} is a ${row.kind}: verify is a design graph's.`,
         })
       );
     }

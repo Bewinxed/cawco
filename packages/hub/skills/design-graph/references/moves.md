@@ -33,7 +33,7 @@ The person opens a move on the design graph's Animation face (its title's menu, 
    "repeat": "mirror", "legs": [0.4], "values": [{ "property": "height", "from": "0px", "to": "48px" }] }]
 ```
 
-`delay` is from the move's start; `offTokens: true` means his length or curve is none of the design system's tokens, so it becomes a token first (step 8). `repeat` (`"repeat"` or `"mirror"`), `legs` and `values` stand only where he changed them. Write each into the component's CSS or motion call, then read the canvas again.
+`delay` is from the move's start; `offTokens: true` means his length or curve is none of the design system's tokens, so it becomes a token first (step 8). `repeat` (`"repeat"` or `"mirror"`), `legs` and `values` stand only where he changed them. Write each into the component's CSS or motion call, then read the graph again.
 
 To choreograph a mockup's motion yourself, write it as Web Animations in the destination story's `play`; the face reads every animation it sets off:
 

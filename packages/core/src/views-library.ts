@@ -532,7 +532,7 @@ const libraryOf = <C, N extends AnyComponentName>(
   );
   const Preview = define(
     "Preview",
-    'An HTML page artifact of this conversation, live in a frame: an animated mockup, a custom visual. Make the page first with artifact_create (kind "page", its `html`); its HTML never goes in the block.',
+    'An HTML page artifact of this conversation, live in a frame: a visual no other component draws, such as a custom chart or an explainer; a design of product UI goes on the design graph (the show skill). Make the page first with artifact_create (kind "page", its `html`); its HTML never goes in the block.',
     z.object({
       artifact: z
         .string()
@@ -754,7 +754,7 @@ Write it in your reply as a fenced code block opened with \`${BLOCK_FENCE}\`, a 
     "The block draws no title of its own: a heading is a Text in the program.",
     'A size sets a Diagram\'s, Image\'s, Video\'s or Preview\'s width on a desk: "small" about 400px, beside the words (a pie of a few short slice names, up to six bars, an upright phone screenshot or clip); "medium" the text column, about 580px; "full" the whole turn, about 1100px, for a dense diagram or a wide screen. A Diagram, Video or Preview left unsized is "medium"; an Image left unsized stands at its own size up to the text column, and pictures in a Row share the row. On a phone every size is the screen\'s width.',
     "An Image, Video or Audio names its file by its absolute path on your machine, or by its path in the project's folder, where a delegate's outputs land (assets/<item>/…). A screenshot you took, an image you generated, a narration a text-to-speech tool saved: name the file where it is, up to 50 MB. A block reaches no network, so a web address shows nothing: save the file first.",
-    'To show HTML of your own (an animated mockup, a custom visual), make it a page first: artifact_create with kind "page" and its `html`. Then Preview("<its name>") shows it live in a frame in the block. The fence holds the program alone, never HTML.',
+    'To show HTML of your own (a custom chart, an explainer), make it a page first: artifact_create with kind "page" and its `html`. Then Preview("<its name>") shows it live in a frame in the block. The fence holds the program alone, never HTML.',
     "Slides steps through its children one at a time: use it for steps read in order, or for more pictures than fit side by side (four or more). Two or three things to compare go side by side in a Row, where the eye moves between them at once.",
     "A chart's name is its Mermaid `title` (a flowchart's in a `---\\ntitle: …\\n---` header), drawn as its heading; the Diagram's caption is a meta line under it for the source or the period, or left out.",
     "Pele, the renderer, lays a chart out at its width: in under about 400px a pie's legend moves under it and an axis shows every other label (it never turns them). A left-to-right diagram too wide for its room is redrawn top to bottom, and one still too wide shrinks while its words stay readable, then scrolls sideways.",

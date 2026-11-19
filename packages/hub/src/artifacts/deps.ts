@@ -580,12 +580,12 @@ export interface ArtifactServiceDeps {
   /** Pin `pin` on machine `machineId` let go: no artifact is served from it any more (agent stage.ts `unpin`). Never throws. */
   unpin: (machineId: string, pin: string) => void;
   /**
-   * A component canvas drawn by its workspace's daemon in the machine's own
+   * A design graph drawn by its workspace's daemon in the machine's own
    * Chromium (agent stage.ts `renderStage`): the stage's report once every
    * section drew, and a picture when asked.
    */
   /**
-   * A design system round asked of a component canvas in a chat (hub
+   * A design system round asked of a design graph in a chat (hub
    * design-verify.ts `ask`): its verdict goes to `requester`. Answers what
    * the ask did, one sentence.
    */

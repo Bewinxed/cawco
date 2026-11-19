@@ -113,7 +113,7 @@ import {
  * turns it on, and routine_create points there instead of a second routine
  * (worker 30,579 measured).
  * 2026-11-13: artifact_create's `kind` says an agent looks at UI it builds
- * on the component canvas and that a preview's app holds no CawCo sign-in
+ * on the design graph and that a preview's app holds no CawCo sign-in
  * (the rule lived only in the owner's private memory documents; worker
  * 30,613, delegate 11,278 measured).
  * 2026-11-13: admin_mcp_servers' `config` says how a connector secret reads

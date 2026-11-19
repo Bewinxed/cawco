@@ -27,6 +27,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { $ } from "bun";
 import { looseObject, optional, record, safeParse, string } from "valibot";
 import { skillMdName } from "./fleet-versions";
+import { skillTextProblems } from "./skill-text-rules";
 
 /** What a `source` string names, once its scheme has been read off it. */
 export type SkillSource =
@@ -795,7 +796,9 @@ export interface CheckedFolder {
 
 /**
  * The skill folder `path` on `machine`, read through its agent and checked
- * as {@link declaredSkill} checks it. Throws its sentence when it can't be.
+ * as {@link declaredSkill} checks it, and each markdown file of it against
+ * the phrases skill-text-rules.ts bans. Throws its sentence when it can't
+ * be.
  */
 export const readCheckedFolder = async (
   machine: string,
@@ -803,6 +806,16 @@ export const readCheckedFolder = async (
   readFolder: SkillFolderReader
 ): Promise<CheckedFolder> => {
   const files = await readFolder(machine, path);
+  const banned = files
+    .filter((file) => file.path.endsWith(".md"))
+    .flatMap((file) =>
+      skillTextProblems(
+        Buffer.from(file.contentBase64, "base64").toString("utf8")
+      ).map((broken) => `${file.path} ${broken}`)
+    );
+  if (banned.length > 0) {
+    throw new Error(`${path} can't be installed: ${banned.join("; ")}`);
+  }
   return {
     declared: declaredSkill(files, path),
     files,

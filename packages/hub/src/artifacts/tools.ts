@@ -20,6 +20,7 @@ import { PREVIEW_START_PATH } from "@cawco/core/preview/protocol";
 import {
   CANVAS_SPEC_LIMITS,
   DESIGN_MAP_LIMITS,
+  GRAPH_WIDTHS_SAID,
   INTERACTIONS,
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
@@ -112,7 +113,7 @@ const title = z
   .max(ARTIFACT_TITLE_LIMIT)
   .describe('What names it to the person everywhere, like "Title bars close".');
 
-/** A component canvas's edges, groups and dials, as create and update take them. */
+/** A design graph's edges, groups and dials, as create and update take them. */
 const canvasFields = {
   edges: z
     .array(
@@ -164,16 +165,16 @@ const mermaid = z
 export const artifactCreate = {
   name: "artifact_create" as const,
   description:
-    "Something opened in the person's panel for them to act on: a page of decision cards, a live component, a preview or a canvas. " +
+    "Something opened in the person's panel for them to act on: a decision page, the design graph, a preview or a canvas. " +
     "Use it when they must pick, judge, try or draw, once the `show` skill has chosen `does`, `ask` and `kind`; proof, plans and finished work go in your own words, and a task attempt's result by task_result.",
   input: {
     kind: z
       .enum(MADE_ARTIFACT_KINDS)
       .describe(
-        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: `file`, stories drawn live and read back with artifact_read (component-canvas skill): he operates one live story; a story per state is yours. preview: a server on `port`, or a folder (`dir`), at `path`, for the person to use; the app holds no CawCo sign-in. canvas: `elements`, `mermaid`, or empty."
+        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: the design graph, `file` a states file whose live story mounts the real component or screen (design-graph skill). preview: the running app (`port`, or a folder's `dir`) at `path`, for a flow he tries; it holds no CawCo sign-in. canvas: a drawing, never a screen: `elements`, `mermaid`, or empty."
       ),
     does: does.describe(
-      "pick: a page with decision cards. judge: a component, a kept block, or a preview or page judged whole. try: a preview. draw: a canvas."
+      "pick: a decision page, never a design. judge: a design graph, a kept block, or a page where no stage runs. try: a preview. draw: a canvas."
     ),
     ask,
     title,
@@ -207,7 +208,7 @@ export const artifactCreate = {
       ])
       .optional()
       .describe(
-        "CSF 3 states files from your workspace's root; a list for your own reading."
+        "CSF 3 states files from your workspace's root: one per direction, or your reading's."
       ),
     ...canvasFields,
     dir: z.string().startsWith("/").max(4096).optional().describe("Absolute."),
@@ -373,7 +374,12 @@ export const artifactRead = {
             ),
           interaction: z.enum(INTERACTIONS).optional(),
           scheme: z.enum(["light", "dark"]).optional(),
-          width: z.number().int().positive().optional(),
+          width: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(`The graph's: ${GRAPH_WIDTHS_SAID}.`),
         }),
       ])
       .optional()

@@ -191,7 +191,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       ({ params, body }) =>
         updateArtifact(artifacts, params.id, params.artifact, body)
     )
-    // A component canvas's change by its session (artifact_update): a states file's story args or op, or the canvas's own edges, groups or dials.
+    // A design graph's change by its session (artifact_update): a states file's story args or op, or the canvas's own edges, groups or dials.
     .patch(
       "/api/instances/:id/artifacts/:artifact/component",
       // The agent's tool alone calls it: no dashboard or app reads its answer.
@@ -244,7 +244,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           : await artifacts.sheetWrite(params.id, params.artifact, change);
       }
     )
-    // The panel's Verify: a design system round on a component canvas, its verdict to the canvas's session.
+    // The panel's Verify: a design system round on a design graph, its verdict to the canvas's session.
     .post(
       "/api/instances/:id/artifacts/:artifact/verify",
       async ({ params }) => ({

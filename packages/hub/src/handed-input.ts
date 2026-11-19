@@ -13,7 +13,7 @@
  * - `report`: a work item's report, by its item id or its session's;
  * - `artifact`: a page or decision page with its picks and notes, a preview
  *   with a pass into it for the receiver's browser and its latest picture, a
- *   canvas as its scene and picture, a component canvas as its states files,
+ *   canvas as its scene and picture, a design graph as its states files,
  *   stories and frames as its stage drew them;
  * - `pins`: an artifact's pins, each with its thread;
  * - `find`: a `find` hit's ref, as the turns around it;

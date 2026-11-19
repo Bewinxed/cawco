@@ -419,7 +419,7 @@
           "artifact"
         ],
         "additionalProperties": false,
-        "description": "An HTML page artifact of this conversation, live in a frame: an animated mockup, a custom visual. Make the page first with artifact_create (kind \"page\", its `html`); its HTML never goes in the block."
+        "description": "An HTML page artifact of this conversation, live in a frame: a visual no other component draws, such as a custom chart or an explainer; a design of product UI goes on the design graph (the show skill). Make the page first with artifact_create (kind \"page\", its `html`); its HTML never goes in the block."
       }
     }
   }

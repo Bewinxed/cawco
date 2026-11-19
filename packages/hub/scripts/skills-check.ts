@@ -11,10 +11,17 @@
  *    span (or, outside one, on the same line), as `does:` or as the
  *    shorthand field `{ kind, does, ask }`: the hub refuses a create without it.
  * 3. No `artifact_create(` call carries `about`: the field is `ask`.
+ * 4. No markdown file of it holds a phrase src/skill-text-rules.ts bans
+ *    (the design graph's old names, a verdict card, a width number, a frame
+ *    per width, an animated mockup, a weight budget).
+ * 5. The skills that route a design (`DESIGN_GRAPH_NAMED`) name the design
+ *    graph, and so does artifact_create's `kind`, which every session loads.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { artifactCreate } from "../src/artifacts/tools";
 import { BUNDLED_SKILLS, TEMPLATE_SKILLS } from "../src/bundled-skills";
+import { skillTextProblems } from "../src/skill-text-rules";
 
 // Read at run time beyond its imports; check.ts keys the check on them.
 export const checkReads = ["packages/hub/"];
@@ -28,6 +35,26 @@ const ABOUT = /\babout\b/u;
 const DOES = /\bdoes\s*[:,}]/u;
 
 const ROOT = join(import.meta.dir, "../skills");
+/** The leading word every text that routes a design holds. */
+const DESIGN_GRAPH = /design graph/iu;
+/** The skills that route a design to the person: each names the design graph. */
+const DESIGN_GRAPH_NAMED = [
+  "show",
+  "design-graph",
+  "decision-page",
+  "design-explore",
+  "screen",
+];
+
+/** Every markdown file under `dir`, by its path. */
+const markdownUnder = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      return markdownUnder(path);
+    }
+    return entry.name.endsWith(".md") ? [path] : [];
+  });
 
 /** The frontmatter block parsed as YAML, the way each harness's skill loader reads it. */
 const frontmatterOf = (
@@ -56,6 +83,21 @@ const spanAround = (line: string, at: number): string => {
     }
   }
   return line;
+};
+
+/** Skill `name`'s words against the design graph's rules (checks 4 and 5); `text` is its SKILL.md. */
+const wordingProblems = (name: string, text: string): string[] => {
+  const problems = markdownUnder(join(ROOT, name)).flatMap((path) =>
+    skillTextProblems(readFileSync(path, "utf8")).map(
+      (broken) => `skill ${name}: ${relative(join(ROOT, name), path)} ${broken}`
+    )
+  );
+  if (DESIGN_GRAPH_NAMED.includes(name) && !DESIGN_GRAPH.test(text)) {
+    problems.push(
+      `skill ${name}: it routes a design and never names the design graph`
+    );
+  }
+  return problems;
 };
 
 /** What is wrong with skill `name`, one line each. */
@@ -107,6 +149,7 @@ const problemsOf = (name: string): string[] => {
       at = line.indexOf(CALL, at + CALL.length);
     }
   }
+  problems.push(...wordingProblems(name, text));
   return problems;
 };
 
@@ -114,6 +157,10 @@ const names = [
   ...new Set([...BUNDLED_SKILLS, ...Object.values(TEMPLATE_SKILLS).flat()]),
 ];
 let failed = false;
+if (!DESIGN_GRAPH.test(artifactCreate.input.kind.description ?? "")) {
+  failed = true;
+  console.error("artifact_create's kind never names the design graph");
+}
 for (const name of names) {
   const problems = problemsOf(name);
   if (problems.length === 0) {

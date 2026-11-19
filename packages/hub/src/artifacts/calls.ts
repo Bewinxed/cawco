@@ -87,7 +87,7 @@ export const sheetChangeOf = (body: {
   });
 };
 
-/** The one change an update names (a decision page's statements and a component canvas each have their own route): a page's html or patch, a canvas's elements, delete or mermaid. */
+/** The one change an update names (a decision page's statements and a design graph each have their own route): a page's html or patch, a canvas's elements, delete or mermaid. */
 const changeOf = (body: {
   delete?: string[];
   elements?: SkeletonElement[];
@@ -171,7 +171,7 @@ export const createArtifact = async (
   if (kind === "sheet") {
     return problem(400, {
       code: "artifact-kind-sheet",
-      detail: `A sheet is a component canvas now: kind "component", with does and ask, its file the live story the person operates, a dial for each situation no press reaches. Example: ${COMPONENT_EXAMPLE}.`,
+      detail: `A sheet is a design graph now: kind "component", with does and ask, its file the live story the person operates, a dial for each situation no press reaches. Example: ${COMPONENT_EXAMPLE}.`,
     });
   }
   if (body.draft && kind !== "canvas") {
@@ -196,7 +196,7 @@ export const updateArtifact = async (
     : await artifacts.update(instanceId, artifact, change);
 };
 
-/** A component canvas's change by its session, as `PATCH …/:artifact/component` answers it. */
+/** A design graph's change by its session, as `PATCH …/:artifact/component` answers it. */
 export const updateComponent = async (
   artifacts: Artifacts,
   instanceId: string,

@@ -1,8 +1,9 @@
 /**
  * What the decision-page skill's "Before you show it" table must refuse: the
  * catalogue pages agents showed the owner instead of interviewing him (one
- * question per card, each option drawn live with its gets and its cost, one
- * recommendation, nothing decided or rejected left standing). Each is the
+ * question per card, each option with its gets and its cost, one
+ * recommendation, nothing decided or rejected left standing), and the
+ * designs that belong on the design graph instead. Each is the
  * start of a row's first cell; `bun run roles:check` fails while one is
  * missing, so an edit to the skill can't drop it unseen.
  */
@@ -15,9 +16,10 @@ export const REFUSALS = [
   '"Today" frames that aren\'t a real option',
   "Legends",
   "Size or id captions",
-  "Frames outside a card",
+  "Media outside a card",
   "More than one card for a choice already made",
-  "A frame per width or scheme",
+  "A design of the product's UI",
+  "One design under a yes or no",
 ] as const;
 
 const SKILL = join(import.meta.dir, "../skills/decision-page/SKILL.md");

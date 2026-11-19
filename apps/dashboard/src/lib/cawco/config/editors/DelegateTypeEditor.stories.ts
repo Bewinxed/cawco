@@ -22,7 +22,7 @@ const designSkills = [
   "svelte-foundations:coding",
   "svelte-house-rules",
   "frontend-design",
-  "component-canvas",
+  "design-graph",
   "design-explore",
   "decision-page",
   "show",
@@ -74,7 +74,7 @@ export const RunTogether = {
     type: {
       ...build,
       startingSet: {
-        skills: ["frontend-design", "component-canvas show", "clean-copy"],
+        skills: ["frontend-design", "design-graph show", "clean-copy"],
         servers: ["context7", "", "crw"],
       },
     },

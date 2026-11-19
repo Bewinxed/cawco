@@ -65,7 +65,7 @@ export interface PreviewOriginDeps {
     instanceId: string,
     artifactId: string
   ) => Promise<Response>;
-  /** The shape a decision page's Preview heard a component canvas of page `pageId`'s media say (`POST /__cawco/page/<id>/shape`). */
+  /** The shape a decision page's Preview heard a design graph of page `pageId`'s media say (`POST /__cawco/page/<id>/shape`). */
   keepShape: (request: Request, pageId: string) => Promise<Response>;
   /** An artifact's kind; undefined when there is none. */
   kindOf: (artifactId: string) => ArtifactKind | undefined;

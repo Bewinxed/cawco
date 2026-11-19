@@ -1,5 +1,5 @@
 /**
- * What a daemon's render of a component canvas says an agent (agent
+ * What a daemon's render of a design graph says an agent (agent
  * stage-render.ts, core stage.ts `StageRendered`), and a read of sections
  * a browser was drawing as it answered: where its sweep stood
  * when its limit came, each section it did not draw and the read that draws
@@ -61,22 +61,22 @@ export const stageRenderWords = {
    * send (hub routes.ts `STATE_ASK` accepts each).
    */
   storyInSeveral: (story: string, files: readonly string[]) =>
-    `${story} is a story of ${files.length} states files on this canvas. Name the one to read with its file in state.story: ${files.map((file) => `{ story: "${file}:${story}" }`).join(" or ")}.`,
+    `${story} is a story of ${files.length} states files on this design graph. Name the one to read with its file in state.story: ${files.map((file) => `{ story: "${file}:${story}" }`).join(" or ")}.`,
   /**
    * A state read whose own section did not draw within the limit: where it
    * stood, and what to do, as its section alone needs longer than a read has.
    */
   stateUndrawn: (state: string, seconds: number, at: SweepAt | null) =>
-    `State ${state}'s section did not finish drawing within ${seconds} s${at ? `: it was still ${stageRenderWords.step(at)} in ${at.file}` : ", and its page never began it"}. That section alone needs longer than one read has: split its states file in two (each a section of the canvas, with its own moves), then read the state again.`,
+    `State ${state}'s section did not finish drawing within ${seconds} s${at ? `: it was still ${stageRenderWords.step(at)} in ${at.file}` : ", and its page never began it"}. That section alone needs longer than one read has: split its states file in two (each a section of the design graph, with its own moves), then read the state again.`,
   /** The sections a browser was drawing as a read answered, past the read's wait for them (hub component.ts `drawingUnseen`). */
   drawing: (files: readonly string[]) =>
     `A browser is drawing ${files.join(", ")} now and has not posted ${files.length === 1 ? "it" : "them"}: ${files.length === 1 ? "its" : "their"} frames read unseen until it does, within seconds. Read again.`,
   /** A move whose animations were still running when its wait for them ended (core `MoveRender.stillRunning`): what its report holds was read mid-motion. */
   moveUnsettled: (running: number) =>
     `${running} ${running === 1 ? "animation was" : "animations were"} still running when this move's wait for them ended: its read and its picture were taken mid-motion.`,
-  /** Stories that differ in nothing but their width (core `RenderReport.widthOnly`): one state, drawn at each width by the canvas's own presets. */
+  /** Stories that differ in nothing but their width (core `RenderReport.widthOnly`): one state, drawn at each width by the design graph's View. */
   widthOnly: (stories: readonly string[]) =>
-    `${stories.join(", ")} differ in nothing but their width: they are one state. Keep one story and let the canvas draw it at each width the person picks; a piece with one production width names it once, on the meta's parameters.viewport.`,
+    `${stories.join(", ")} differ in nothing but their width: they are one state. Keep one story and let the design graph draw it at each width the person picks; a piece with one production width names it once, on the meta's parameters.viewport.`,
   /** A label holding a word of code (core `RenderReport.codeNamed`). */
   codeNamed: (story: string, word: string) =>
     `${story}'s label says ${word}, a word of code: write it as the sentence the person would say about the situation.`,
@@ -89,5 +89,5 @@ export const stageRenderWords = {
   elementsRead: (read: number, of: number) => `${read} of ${of} elements read`,
   /** The page itself never loaded. */
   notLoaded: (seconds: number) =>
-    `The canvas page did not load within ${seconds} s: its stage is up but did not serve it. Read the canvas without render to see its stage's state and errors.`,
+    `The stage's page did not load within ${seconds} s: its stage is up but did not serve it. Read the design graph without render to see its stage's state and errors.`,
 };

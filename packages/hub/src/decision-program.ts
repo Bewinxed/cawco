@@ -19,11 +19,12 @@
  *   and its own on the page, every option's its own in its decision, and an
  *   `after` on the same page names a decision the page has.
  * - Every decision names its kind (core decides.ts), and a `look` one gives
- *   each option a picture (Image, Preview or Canvas), or, as a verdict on
- *   one design, the Decision a picture and its options none: a choice of
- *   how something looks reaches the person drawn, never told. A page kept
- *   before these rules still loads ({@link readKept}); its next revision
- *   meets them.
+ *   each option a picture (Image or Canvas): a choice of how a picture
+ *   looks reaches the person drawn, never told.
+ * - It holds no design of the product's UI: a Preview, wherever it stands,
+ *   is refused with the design graph named, where a design is judged and
+ *   its directions open as one states file each. A page kept before these
+ *   rules still loads ({@link readKept}); its next revision meets them.
  * - A Dials piece's every control is one the panel draws (core
  *   dial-config.ts): a spring, a curve or any shape it doesn't read is
  *   refused, named with its panel, its path and its kind.
@@ -356,7 +357,6 @@ const cardProblems = (
 /** The pieces that show the person a picture of an option: what a look decision's options each need. */
 const PICTURES: ReadonlySet<string> = new Set<DecisionComponentName>([
   "Image",
-  "Preview",
   "Canvas",
 ]);
 
@@ -387,10 +387,8 @@ const decisionsIn = (value: unknown): ElementNode[] => {
 /**
  * A look decision that doesn't show what the person judges. Every option
  * carries a picture (a choice between looks), and the Decision may carry
- * one too, as media the options share; or only the Decision carries one
- * and no option does (a verdict on one design, like the pins card's
- * "Looks right" / "Not yet"). Any other card leaves an option bare, so a
- * choice between looks never falls back to words.
+ * one too, as media the options share. Any other card leaves an option
+ * bare, so a choice between looks never falls back to words.
  */
 const lookProblems = (root: ElementNode | null): string[] =>
   decisionsIn(root).flatMap(({ props }) => {
@@ -399,13 +397,12 @@ const lookProblems = (root: ElementNode | null): string[] =>
     }
     const options = props.options.filter(isElement);
     const bare = options.filter((option) => !holdsPicture(option.props.media));
-    const verdict = holdsPicture(props.media) && bare.length === options.length;
-    if (bare.length === 0 || verdict) {
+    if (bare.length === 0) {
       return [];
     }
     const ids = bare.map((option) => `"${String(option.props.id)}"`).join(", ");
     return [
-      `Decision "${String(props.id)}" is about how something looks: give each option a picture (Image, Preview or Canvas); ${ids} ${bare.length === 1 ? "has" : "have"} none. A picture on the Decision is media its options share, or, with no option pictured, a verdict on one design.`,
+      `Decision "${String(props.id)}" is about how something looks: give each option a picture (Image or Canvas); ${ids} ${bare.length === 1 ? "has" : "have"} none. A picture on the Decision is media its options share. A design of the product's UI is judged on the design graph, not on this page.`,
     ];
   });
 
@@ -422,6 +419,18 @@ const elementsNamed = (value: unknown, name: string): ElementNode[] => {
     ...Object.values(value.props).flatMap((one) => elementsNamed(one, name)),
   ];
 };
+
+/**
+ * Each Preview in the page, wherever it stands (an option's media, the
+ * Decision's, a Row's): a design of the product's UI, or a page or preview
+ * standing for one, which a decision page never holds. Refused with where
+ * it goes instead.
+ */
+const designProblems = (root: ElementNode | null): string[] =>
+  elementsNamed(root, "Preview").map(
+    ({ props }) =>
+      `Preview("${String(props.artifact)}"): a decision page holds no design. A design is judged on the design graph (artifact_create kind "component", does "judge"), where their pins are the answer; two or more directions open in that one graph, one states file each, and which one they pick is an ask with the graph open. A go-ahead is an ask too.`
+  );
 
 /**
  * A Dials piece's controls the panel doesn't draw (core dial-config.ts,
@@ -780,6 +789,7 @@ const checkProgram = (
   const whole = wholeArtifacts(program, read, artifact);
   const ids = [
     ...idProblems(read, kinds),
+    ...designProblems(result.root),
     ...lookProblems(result.root),
     ...dialsProblems(result.root),
     ...whole.problems,

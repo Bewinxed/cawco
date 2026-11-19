@@ -44,6 +44,7 @@
   import { detach } from "@cawco/core/detach";
   import {
     type CanvasSpec,
+    GRAPH_WIDTHS,
     type PropMeta,
     STORY_FILE,
   } from "@cawco/core/stage";
@@ -1041,13 +1042,19 @@
   const keptVariant = $derived(
     keptState?.variants.find((one) => one.id === kept?.variant)
   );
+  /** Each device's glyph for the graph's widths (core `GRAPH_WIDTHS`). */
+  const DEVICE_ICONS = {
+    phone: IconPhoneLinear,
+    tablet: IconTabletLinear,
+    desk: IconMonitorLinear,
+    wide: IconWideLinear,
+  } as const;
   /** The widths the stage is drawn at, each a device's glyph; its own first. */
-  const WIDTHS = [
-    { value: 390, icon: IconPhoneLinear, name: words.phone },
-    { value: 768, icon: IconTabletLinear, name: words.tablet },
-    { value: 1440, icon: IconMonitorLinear, name: words.desk },
-    { value: 1920, icon: IconWideLinear, name: words.wide },
-  ] as const;
+  const WIDTHS = GRAPH_WIDTHS.map((one) => ({
+    value: one.value,
+    icon: DEVICE_ICONS[one.device],
+    name: words[one.device],
+  }));
   /** The stepper's name swap: it slides the way the step went (motion/list-swap). */
   const stepSwap = new ListSwap<never>();
   /** Keep `next` from the stepper, its name sliding from the side the step went toward. */

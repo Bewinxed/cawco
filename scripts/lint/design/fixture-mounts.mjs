@@ -1,5 +1,5 @@
 // house/fixture-mounts: a fixture mounts and mocks. Everything a person sees
-// or presses in a frame of the component canvas is drawn by a product
+// or presses in a frame of the design graph is drawn by a product
 // component; the fixture a states file draws holds those components, the
 // mock that feeds them, and wrappers that give the frame room.
 //
@@ -24,7 +24,7 @@
 //   reported on the call: the recipe's own component draws that look.
 //
 // What it cannot read: a card copied as plain `div`s and words. The canvas
-// report's `parts` (the component-canvas skill, step 5) names the product
+// report's `parts` (the design-graph skill, step 5) names the product
 // components a frame drew, and a missing one is that copy.
 import fs from "node:fs";
 import path from "node:path";

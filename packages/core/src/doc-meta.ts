@@ -33,7 +33,7 @@ export interface ArtifactAsked {
   step?: string;
 }
 
-/** One states file's last draw as a component canvas's doc keeps it (`meta.drawn`): the section, when and by whom, and the page's errors with it. */
+/** One states file's last draw as a design graph's doc keeps it (`meta.drawn`): the section, when and by whom, and the page's errors with it. */
 export interface DrawnKept {
   at: string;
   by: RenderReport["by"];
@@ -135,9 +135,9 @@ export interface DocMeta {
   does: ArtifactDoes;
   /** A draft: a canvas the person started, or a page not yet shown. */
   draft: boolean;
-  /** A component canvas's last draw of each states file, by file. */
+  /** A design graph's last draw of each states file, by file. */
   drawn: Record<string, DrawnKept>;
-  /** A component canvas's frames as a browser drew them, by frame. */
+  /** A design graph's frames as a browser drew them, by frame. */
   drawnShapes: CanvasShapes["drawn"];
   /** A served artifact's page errors the agent has been told of. */
   errorsHeard: string[];
@@ -184,7 +184,7 @@ export interface DocMeta {
   revisedAt: string;
   /** Its revision, copied from its row (hub `stampMeta`). */
   revision: number;
-  /** A component canvas's frames as the agent said them, by frame. */
+  /** A design graph's frames as the agent said them, by frame. */
   saidShapes: CanvasShapes["said"];
   /** A sheet's saved sections the agent has not heard yet. */
   saves: string[];
@@ -198,7 +198,7 @@ export interface DocMeta {
   sentText: string | null;
   /** The address the person's last send was made on. */
   sentUrl: string;
-  /** A component canvas's sheet as its stage last read it. */
+  /** A design graph's sheet as its stage last read it. */
   sheet: SheetRead;
   /** A preview whose folder its machine said is gone at its last start, with the daemon's words (hub `sourceSeen`). */
   sourceGone: { at: string; why: string };

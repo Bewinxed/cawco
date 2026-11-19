@@ -1,6 +1,6 @@
 /**
  * What the artifact routes take in their bodies, and the words a malformed one
- * is refused with (component canvas G3). The routes validate with them, and a
+ * is refused with (design graph G3). The routes validate with them, and a
  * session's artifact tools check what they call with the same schemas
  * (calls.ts), so a call is held to the shape whichever door it comes by.
  */
@@ -90,7 +90,7 @@ const titleField = t.String({
   maxLength: ARTIFACT_TITLE_LIMIT,
 });
 
-/** A component canvas's edges, groups and dials (core `CanvasSpec`), as create and update take them. */
+/** A design graph's edges, groups and dials (core `CanvasSpec`), as create and update take them. */
 const canvasFields = {
   edges: t.Optional(
     t.Array(
@@ -140,11 +140,11 @@ const canvasFields = {
   ),
 };
 
-/** What a malformed body was refused for, in the tool's words with its valid shape: never the validator's own text (component canvas G3). */
+/** What a malformed body was refused for, in the tool's words with its valid shape: never the validator's own text (design graph G3). */
 export const SHAPES = {
   create: CREATE_SHAPE,
   update:
-    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask or title (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
+    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a design graph\'s states file); or edges, group, dials (the canvas itself); or ask or title (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
   read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story: "Story" or, where two states files export it, "file:Story", interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render. Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
@@ -228,7 +228,7 @@ export const updateBody = t.Object({
   mermaid: t.Optional(mermaid),
 });
 
-/** A component canvas's change: a states file's story args or op, or the canvas's own edges, groups or dials. */
+/** A design graph's change: a states file's story args or op, or the canvas's own edges, groups or dials. */
 export const componentBody = t.Object({ ...sheetChange, ...canvasFields });
 
 /** Any kind's head line. */

@@ -7,8 +7,8 @@
  *   (what the person does with anything opened in their panel, before any
  *   kind's skill), `decision-page` (§5.8), `inline-block` (the block library
  *   an agent draws in its reply, tsk-330), the planning skills and the design skills,
- *   `design-explore` and `component-canvas` among them: every agent's
- *   component canvas is built by them, and one skill per kind of event the
+ *   `design-explore` and `design-graph` among them: every agent's
+ *   design graph is built by them, and one skill per kind of event the
  *   project's conversation hears (caw.ts `EVENT_SKILLS`).
  * - {@link TEMPLATE_SKILLS} are each project template's starter skills: bound
  *   to every project made from that template (`projects.template`) and
@@ -40,7 +40,7 @@ export const BUNDLED_SKILLS = [
   "drift",
   "design-explore",
   "design-system",
-  "component-canvas",
+  "design-graph",
   // One per kind of event the project's conversation hears, named in each
   // send's context line (caw.ts `EVENT_SKILLS`).
   "project-routine-run",
