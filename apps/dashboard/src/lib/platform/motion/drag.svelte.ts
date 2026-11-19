@@ -86,6 +86,8 @@ export function dragToDismiss({ edge, dismiss, fade }: DragToDismiss) {
     let settling: Animation[] = [];
     /** A drag just ended: the click it would end in is not a tap. */
     let dragged = false;
+    /** The surface's transform (and its scrim's opacity) is written inline. */
+    let written = false;
 
     const along = (event: PointerEvent) =>
       horizontal ? event.clientX : event.clientY;
@@ -102,6 +104,7 @@ export function dragToDismiss({ edge, dismiss, fade }: DragToDismiss) {
       String(1 - Math.min(1, Math.max(0, at / size)));
 
     const paint = (at: number) => {
+      written = true;
       node.style.transform = place(drawn(at));
       if (scrim) {
         scrim.style.opacity = cover(at);
@@ -109,6 +112,7 @@ export function dragToDismiss({ edge, dismiss, fade }: DragToDismiss) {
     };
 
     const clear = () => {
+      written = false;
       node.style.transform = "";
       if (scrim) {
         scrim.style.opacity = "";
@@ -292,6 +296,16 @@ export function dragToDismiss({ edge, dismiss, fade }: DragToDismiss) {
       node.removeEventListener("pointerup", onEnd);
       node.removeEventListener("pointercancel", onEnd);
       node.removeEventListener("click", onClick, { capture: true });
+      // Let go, it leaves nothing on the surface: a sheet kept between
+      // opens (sheet-content `keep`) would otherwise open again under the
+      // spring that took it out, held at its end, or where a finger left it.
+      for (const animation of settling) {
+        animation.cancel();
+      }
+      settling = [];
+      if (written) {
+        clear();
+      }
     };
   };
 }

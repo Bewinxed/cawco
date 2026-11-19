@@ -36,6 +36,7 @@
   import { dragToDismiss } from "#lib/platform/motion/drag.svelte.js";
   import { mirror } from "#lib/platform/page-marks.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
+  import { presence } from "../root-presence.svelte.js";
   import { closer } from "./sheet.svelte";
   import SheetFrame from "./sheet-frame.svelte";
   import SheetOverlay from "./sheet-overlay.svelte";
@@ -60,6 +61,7 @@
        and again as it closed. Without it the phone's sidebar, on 29 open
        tabs in WebKit, began to move about 200ms sooner. */
     preventScroll = false,
+    keep = false,
     portalProps,
     pad,
     narrow,
@@ -85,10 +87,24 @@
           row, beside that row's own controls. A Close the kit laid over the
           row's trailing corner stood on the row's own corner action. */
       titleHidden?: boolean;
+      /**
+       * Kept between opens: its content is built once and stays in the
+       * page while the sheet is closed, skipped and held still as a pane
+       * put away is (SheetFrame `rest`), so opening it only shows it. Built
+       * at each open, the phone's sidebar (every project, session and tree
+       * mark) cost the open its first frames: on 29 open tabs at 4x CPU in
+       * Chromium the tap's task fell from 871ms to 208ms kept. Its portal
+       * stays in the page too, before every surface opened since, which
+       * only a sheet nothing else stands open over may do: the burger's,
+       * which opens from under no scrim and closes as anything it opens
+       * rises (Shell).
+       */
+      keep?: boolean;
       children: Snippet;
     } = $props();
 
   const head = sheetHeadVariants();
+  const root = presence();
   /**
    * The header floats over the content (DESIGN.md, The Title Bars Follow
    * Liquid Glass Rule; as the kit Drawer's): the content runs to the
@@ -99,11 +115,12 @@
   let room = $state(0);
 
   /* A sheet goes back out the edge it came in from under the finger, its
-     scrim fading with it (motion/drag.svelte.ts). */
+     scrim fading with it (motion/drag.svelte.ts). Kept, one drag's hold
+     per open, so what a drag left on the sheet is gone as it rests. */
   const close = closer();
   let scrim = $state<HTMLElement | null>(null);
   $effect(() => {
-    if (ref) {
+    if (ref && (!keep || root.present)) {
       return dragToDismiss({ edge: side, dismiss: close, fade: () => scrim })(
         ref
       );
@@ -133,7 +150,7 @@
   });
 </script>
 
-<SheetPortal {...portalProps}>
+<SheetPortal {...portalProps} {keep}>
   <SheetOverlay bind:ref={scrim} />
   <!-- A touch is the browser's to pan only across the axis a sheet leaves by,
        on every element inside it: the browser reads touch-action from the
@@ -149,7 +166,10 @@
          --duration-exit; the entrance holds no end (no fill), since a drag writes
          the sheet's transform inline once it has landed. Asked for less
          motion, it fades in place. */
-      "motion-safe:state-closed:animate-sheet-out motion-safe:state-open:animate-sheet-in motion-reduce:state-closed:animate-sheet-fade-out motion-reduce:state-open:animate-sheet-fade-in",
+      "motion-safe:state-closed:not-data-rest:animate-sheet-out motion-safe:state-open:animate-sheet-in motion-reduce:state-closed:not-data-rest:animate-sheet-fade-out motion-reduce:state-open:animate-sheet-fade-in",
+      /* Kept and at rest it stands away, its leave not run again, so it is
+         never seen leaving at the page's first paint (SheetFrame `rest`). */
+      "data-rest:transform-(--sheet-away) data-rest:content-visibility-hidden",
       sheetContentVariants({ pad, narrow }),
       className
     )}
@@ -157,6 +177,7 @@
     data-slot="sheet-content"
     {preventOverflowTextSelection}
     {preventScroll}
+    forceMount={keep}
     bind:ref
     {...restProps}
   >
@@ -165,6 +186,7 @@
         away={AWAY[side]}
         {open}
         {props}
+        rest={keep && !root.present}
         room={titleHidden ? undefined : room}
       >
         {#if titleHidden}

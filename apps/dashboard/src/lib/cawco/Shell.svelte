@@ -892,7 +892,8 @@
      the rail, a phone's is without it, and neither waits for a script. In
      the browser only the rail that is shown is mounted: the wide screen's
      at the drawer's line and over, the drawer's under it, and neither is
-     hydrated, measured or animated while it is not drawn. A rail that was
+     hydrated, measured or animated while it is not drawn (the drawer's,
+     kept in its closed sheet once opened, is skipped there). A rail that was
      left mounted and hidden opened every tree the drawer opened, with no
      layout to open it in. What a rail shows is kept outside it (which trees
      are open, the row in front, the dialog it starts a session in), and the
@@ -907,6 +908,24 @@
      probe kit holds it to that (tabs-region-errors (g)). */
   const drawerQuery = new MediaQuery(DRAWER_QUERY);
   const railed = $derived(browser ? !drawerQuery.current : true);
+
+  /**
+   * The drawer's rail is built at its sheet's first open and kept from then
+   * on, under the drawer's line: closed, it stands skipped and held still
+   * in its kept sheet (Sheet.Content `keep`), so each later open only shows
+   * it. Built again at every open, every project, session and tree mark in
+   * it was made in the tap's own frame, and the sheet began to move only
+   * once that was done (on 29 open tabs at 4x CPU in Chromium, an 871ms
+   * task, 208ms kept). Over the line it goes, as the wide rail comes.
+   */
+  let railKept = $state(false);
+  $effect(() => {
+    if (railed) {
+      railKept = false;
+    } else if (railOpen) {
+      railKept = true;
+    }
+  });
 
   /**
    * The shadow of every card hanging from the glass (HangCard `glass`),
@@ -1473,6 +1492,7 @@
       <Sheet.Content
         data-rail-sheet
         class="w-c-rail-sheet-w"
+        keep
         narrow
         pad="none"
         onCloseAutoFocus={(event) => {
@@ -1484,7 +1504,7 @@
         title="Navigation"
         titleHidden
       >
-        {#if !railed}
+        {#if !railed && (railKept || railOpen)}
           <RegionBoundary face="line" part="sidebar">
             <Sidebar
               {narrow}
