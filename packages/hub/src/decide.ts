@@ -167,6 +167,12 @@ export interface DecideFacts {
     compactable: boolean;
     context: ContextSize;
     costs: SessionCosts;
+    /**
+     * Its work item ended (it reported, or another session took the item
+     * up): it runs no turn until a person or its parent writes, and that
+     * send decides it again (trigger `wake`). A forecast moves it nowhere.
+     */
+    ended: boolean;
     /** A fork reads its origin's cache: it never moves on its own. */
     forked: boolean;
     id: string;
@@ -271,6 +277,7 @@ export type StayWhy =
   | "fork"
   | "off"
   | "waiting"
+  | "ended"
   | "bounce"
   | "unknown"
   | "dearer"
@@ -386,6 +393,22 @@ export const runsShort = (
   }
   return soonest;
 };
+
+/**
+ * When `windows` run short with `burn` (weighted tokens an hour) added: the
+ * test a target is held to ({@link runsShort} over twice the look-ahead,
+ * `waitMs` before each reset). Every account a forecast's source test
+ * ({@link LOOK_AHEAD_MS}, no burn added) flags, this flags too, so no
+ * account is both a source and a target, and placement, which reads it for
+ * every strategy, never starts a session on an account a forecast moves
+ * sessions off. Null when they last.
+ */
+export const runsShortWith = (
+  windows: readonly FactWindow[],
+  burn: number,
+  waitMs: number,
+  now: number
+): number | null => runsShort(windows, burn, 2 * LOOK_AHEAD_MS, waitMs, now);
 
 /** What a window has left before anything new lands, percent. */
 const leftOf = (window: FactWindow): number =>
@@ -641,13 +664,7 @@ const heldOf = (
   const wide = trigger.kind === "forecast" || trigger.kind === "wake";
   const waitMs = policy.waitMinutes * MINUTE_MS;
   const out = wide
-    ? runsShort(
-        account.windows,
-        session.burn ?? 0,
-        2 * LOOK_AHEAD_MS,
-        waitMs,
-        now
-      )
+    ? runsShortWith(account.windows, session.burn ?? 0, waitMs, now)
     : runsShort(account.windows, session.burn ?? 0, waitMs, 0, now);
   return out === null
     ? target
@@ -969,7 +986,8 @@ const decideStopped = (
 /**
  * Why a session ahead of any limit stays whatever a move would cost: a
  * fork; moving off; its account forcing it onto credits; a person waiting
- * on it at a forecast (decided 2026-11-19); the hub having moved it lately;
+ * on it at a forecast (decided 2026-11-19); its work item ended, at a
+ * forecast; the hub having moved it lately;
  * an unknown cache at a forecast or a wake (unknown is never free); or, at
  * a wake, its own account still holding it. Undefined when none holds it.
  */
@@ -991,6 +1009,11 @@ const aheadHeld = (
   if (trigger.kind === "forecast" && session.personWaiting) {
     return "waiting";
   }
+  // A session nobody will wake burns nothing on its account: moving it
+  // ahead of the run-out spends a re-read and relieves no window.
+  if (trigger.kind === "forecast" && session.ended) {
+    return "ended";
+  }
   if (bounces(facts)) {
     return "bounce";
   }
@@ -1001,10 +1024,9 @@ const aheadHeld = (
     return;
   }
   const here = holdsOn(current, 0, session.burn, now);
-  const short = runsShort(
+  const short = runsShortWith(
     current.windows,
     0,
-    2 * LOOK_AHEAD_MS,
     policy.waitMinutes * MINUTE_MS,
     now
   );

@@ -17,6 +17,7 @@ import {
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { SettingsInEffect } from "@cawco/core/areas";
 import { harnessLabel } from "@cawco/core/harness/kinds";
+import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {
   aheadOfWeek,
@@ -43,7 +44,7 @@ import { projectAccountWords } from "@cawco/core/words/project-account";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { markOn } from "./account-marks";
 import type { DbShape } from "./db";
-import { runsShort } from "./decide";
+import { LOOK_AHEAD_MS, runsShortWith } from "./decide";
 import type { AccountPaces } from "./window-paces";
 
 /**
@@ -75,8 +76,8 @@ export interface PlacementInput {
   bench: AccountBench[];
   /**
    * The session's expected burn in weighted tokens an hour (a running one's
-   * own, a new one's kind's recent average), which soonest-reset adds to an
-   * account's pace in its carry test; null or absent when unmeasured.
+   * own, a new one's kind's recent average), which the run-out test adds to
+   * an account's pace ({@link runsOutBy}); null or absent when unmeasured.
    */
   burn?: number | null;
   /**
@@ -117,8 +118,9 @@ export interface PlacementInput {
    */
   outOfCredit?: readonly AccountCredit[];
   /**
-   * Each account's window paces (forecast.ts `accountPaces`), for
-   * soonest-reset's carry test; absent: no forecast, the order alone decides.
+   * Each account's window paces (forecast.ts `accountPaces`), for the
+   * run-out test every strategy reads ({@link runsOutBy}); absent: no
+   * forecast, the order alone decides.
    */
   paces?: AccountPaces;
   /**
@@ -219,66 +221,47 @@ export const arrivingBurn = (
     }, 0);
 };
 
-/**
- * When an account runs out before a window of it resets, at its pace with
- * `added` percent an hour on top, soonest first; null when it lasts to every
- * reset. The one test of running short (decide.ts `runsShort`), read here
- * with no look-ahead and no wait: placement's carry test, the strategies'
- * order. Only the account's own windows are walked, each open one to its
- * own reset: a window not open has no reset to run out before, and a window
- * the account does not have (a verified Ultra account's session window) is
- * never made up.
- */
-const runsOutWith = (
-  windows: readonly CarryWindow[],
-  added: (window: CarryWindow) => number,
-  now: number
-): number | null =>
-  runsShort(
-    windows.map((window) => ({
-      arriving: 0,
-      floorPct: 0,
-      openedAt: null,
-      pace: (window.pace ?? 0) + added(window),
-      pendingPct: null,
-      resetAt: windowResetAt(window),
-      spentPct: null,
-      tokensPerPct: null,
-      usdPerPct: null,
-      usedPct: window.percent,
-      window,
-    })),
-    0,
-    Number.POSITIVE_INFINITY,
-    0,
-    now
-  );
-
 /** A window as the run-out test reads it, and what one percent of it costs in weighted tokens (null when unmeasured). */
 export interface PacedWindow extends CarryWindow {
   tokensPerPct: number | null;
 }
 
+/** How far ahead placement reads an account for running short, in hours, as its sentences say it (decide.ts `runsShortWith`). */
+const LASTS_HOURS = (2 * LOOK_AHEAD_MS) / HOUR_MS;
+
 /**
- * When account `id` runs out before a window of it resets ({@link
- * runsOutWith}): at each window's pace, with `burn` (weighted tokens an
- * hour) and the burn arriving there ({@link arrivingBurn}) added over what a
- * percent of that window costs. Null when it lasts to every reset.
+ * When account `id` runs short with a session burning `burn` (weighted
+ * tokens an hour) on it: decide.ts `runsShortWith`, the test a move's
+ * target is held to, on the same figures a decision reads (limit-decision.ts
+ * `factsOf`): each window's use, its pace, the burn arriving there that its
+ * pace misses ({@link arrivingBurn}) and what a percent of it costs, the
+ * policy's wait before its reset. Null when it lasts. So no strategy starts
+ * a session on an account a forecast moves sessions off (rebalance.ts).
  */
 export const runsOutBy = (
   windows: readonly PacedWindow[],
   burn: number,
   arrivals: readonly Arrival[],
   id: string,
-  now: number
+  how: { now: number; waitMs: number }
 ): number | null =>
-  runsOutWith(
-    windows,
-    (window: CarryWindow & { tokensPerPct?: number | null }) =>
-      window.tokensPerPct
-        ? (burn + arrivingBurn(arrivals, id, window, now)) / window.tokensPerPct
-        : 0,
-    now
+  runsShortWith(
+    windows.map((window) => ({
+      arriving: arrivingBurn(arrivals, id, window, how.now),
+      floorPct: 0,
+      openedAt: openedAt(window),
+      pace: window.pace,
+      pendingPct: null,
+      resetAt: windowResetAt(window),
+      spentPct: null,
+      tokensPerPct: window.tokensPerPct,
+      usdPerPct: null,
+      usedPct: windowUsed(window, how.now),
+      window,
+    })),
+    burn,
+    how.waitMs,
+    how.now
   );
 
 /** An explicit pick: the account it names by id, nickname or email. */
@@ -308,7 +291,7 @@ export interface Ranked {
   order: number;
   /** The soonest reset among its bearing windows (core `earliestReset`); null when none is open. */
   reset: number | null;
-  /** When it runs out with this session on it ({@link Usage.runsOut}); null when it lasts to every reset, or nothing measures it. */
+  /** When it runs short with this session on it ({@link Usage.runsOut}); null when it lasts, or nothing measures it. */
   runsOut: number | null;
 }
 
@@ -318,7 +301,7 @@ const byFillFirst = (
   b: Pick<Ranked, "createdAt" | "order">
 ): number => a.order - b.order || a.createdAt - b.createdAt;
 
-/** Spread: the account that lasts to every reset first, then the one that runs out last. */
+/** Spread: the account that lasts first, then the one that runs out last. */
 const byLasting = (a: Ranked, b: Ranked): number => {
   if (a.runsOut === null || b.runsOut === null) {
     return Number(a.runsOut !== null) - Number(b.runsOut !== null);
@@ -339,7 +322,7 @@ const byReset = (a: Ranked, b: Ranked): number => {
  * picks from, and the order at-limit's decision (decide.ts `decide`)
  * weighs the accounts that fit in. Pinned puts the pin first, then fill-first
  * over the rest; fill-first goes by order; spread by how long it lasts with
- * the session on it (to every reset first, then the latest run-out), then
+ * the session on it (lasting first, then the latest run-out), then
  * the least used binding window, then order; soonest-reset by the earliest
  * reset among its bearing windows, then the least used binding window. Every
  * account is read on its own windows, whichever it has.
@@ -543,17 +526,16 @@ class Usage {
   }
 
   /**
-   * When the account runs out before a window of it resets ({@link
-   * runsOutWith}), at its pace with the session's burn and the burn arriving
-   * there ({@link arrivingBurn}) added, each over what a percent of that
-   * window costs; null when it lasts to every reset, or nothing measures it.
+   * When the account runs short with the session on it ({@link runsOutBy}:
+   * the test a move's target is held to), the burn arriving there counted;
+   * null when it lasts, or nothing measures it.
    */
   runsOut(id: string): number | null {
-    const { paces, burn, arrivals, now } = this.#input;
-    if (!paces) {
-      return null;
-    }
-    return runsOutBy(this.carryWindows(id), burn ?? 0, arrivals ?? [], id, now);
+    const { burn, arrivals, now, routing } = this.#input;
+    return runsOutBy(this.carryWindows(id), burn ?? 0, arrivals ?? [], id, {
+      now,
+      waitMs: routing.atLimit.waitMinutes * MINUTE_MS,
+    });
   }
 
   benched(id: string): boolean {
@@ -689,6 +671,19 @@ const movedBackWords = (
 ): string =>
   `${named} is ahead of its ${windowNoun(back.window)} (${pct(back.used)} used with ${pct(back.line)} of it gone), so it went last.`;
 
+/** The sentence placement adds when the run-out line moved back the account its strategy alone would have chosen. */
+const runsOutBackWords = (named: string, at: string): string =>
+  `${named} runs out at ${at} with the session on it, so it went last.`;
+
+/** Pinned's sentence when the run-out line moved the pin back and fill-first chose a backup. */
+const pinRunsOutWords = (
+  pin: string,
+  at: string,
+  named: string,
+  said: string
+): string =>
+  `The pinned account ${pin} runs out at ${at} with the session on it, so it went last and fill-first chose ${named}, the first backup with headroom (${said}).`;
+
 /** Pinned's sentence when the pace line moved the pin back and fill-first chose a backup. */
 const pinMovedBackWords = (
   pin: string,
@@ -737,7 +732,7 @@ const fillFirst = (candidates: Account[], usage: Usage): Choice => {
 /**
  * Spread: the account that lasts longest with this session on it ({@link
  * Usage.runsOut}, the sessions already arriving there counted): one that
- * lasts to every reset, else the one that runs out last; ties to the least
+ * lasts the router's look-ahead, else the one that runs out last; ties to the least
  * used binding window, then order. With nothing measured, the least used
  * binding window alone.
  */
@@ -762,15 +757,15 @@ const spread = (candidates: Account[], usage: Usage): Choice => {
     account,
     why:
       out === null
-        ? `${named} lasts to every reset with the session on it (${said}).`
-        : `No account lasts to every reset with the session on it; ${named} runs out last, at ${clockWords(out)} (${said}).`,
+        ? `${named} lasts the next ${LASTS_HOURS} h with the session on it (${said}).`
+        : `No account lasts the next ${LASTS_HOURS} h with the session on it; ${named} runs out last, at ${clockWords(out)} (${said}).`,
   };
 };
 
 /**
  * Soonest-reset: among those with headroom, by the earliest reset among its
  * bearing windows (one with no window open has none and goes after), ties
- * to most headroom, the first that can carry the load to its reset ({@link
+ * to most headroom, the first that lasts with the load on it ({@link
  * Usage.runsOut}, the sessions already arriving there counted). When none
  * can, a session re-placed stays where it is (`current`); a new one goes
  * where it would run out last. Without paces, the order alone decides.
@@ -796,7 +791,7 @@ const soonestReset = (
   if (stays) {
     return {
       account,
-      why: `No account with headroom lasts to every reset with it, so it stays on ${named} (${usage.said(account.id)}).`,
+      why: `No account with headroom lasts the next ${LASTS_HOURS} h with it, so it stays on ${named} (${usage.said(account.id)}).`,
     };
   }
   const resetting = usage.resetting(account.id);
@@ -808,7 +803,7 @@ const soonestReset = (
     const out = usage.runsOut(account.id);
     return {
       account,
-      why: `${named} has headroom (${usage.said(account.id)}); no account with headroom lasts to every reset with it, and ${named} runs out last, at ${out === null ? "?" : clockWords(out)}.`,
+      why: `${named} has headroom (${usage.said(account.id)}); no account with headroom lasts the next ${LASTS_HOURS} h with it, and ${named} runs out last, at ${out === null ? "?" : clockWords(out)}.`,
     };
   }
   const passed = ranked
@@ -1025,10 +1020,14 @@ const byStrategy = (
 };
 
 /**
- * The strategy's choice among the candidates, the pace line first: those
- * ahead of their week ({@link Usage.ahead}) are chosen from only when none
- * of the others can take it. When the line moved back the account the
- * strategy alone would have chosen, the sentence says so.
+ * The strategy's choice among the candidates, two lines first. The run-out
+ * line: those that run short with the session on it ({@link
+ * Usage.runsOut}, the test a move's target is held to) are chosen from only
+ * when none of the others can take it, so no strategy starts a session on
+ * an account a forecast moves sessions off. Then the pace line: those
+ * ahead of their week ({@link Usage.ahead}) after the others. When a line
+ * moved back the account the strategy alone would have chosen, the
+ * sentence says so.
  */
 const decide = (
   strategy: PlacementStrategy,
@@ -1042,29 +1041,47 @@ const decide = (
     among.length > 0
       ? byStrategy(strategy, among, pinnedId, usage, name, current)
       : undefined;
-  const ahead = candidates.filter((one) => usage.ahead(one.id) !== undefined);
+  const paced = (among: Account[]) => {
+    const ahead = among.filter((one) => usage.ahead(one.id) !== undefined);
+    return pick(among.filter((one) => !ahead.includes(one))) ?? pick(ahead);
+  };
+  const short = candidates.filter((one) => usage.runsOut(one.id) !== null);
   const chosen =
-    pick(candidates.filter((one) => !ahead.includes(one))) ?? pick(ahead);
-  const alone = ahead.length > 0 ? pick(candidates) : undefined;
-  const back =
-    chosen && alone && alone.account.id !== chosen.account.id
-      ? usage.ahead(alone.account.id)
-      : undefined;
-  if (!(chosen && alone && back)) {
+    paced(candidates.filter((one) => !short.includes(one))) ?? paced(short);
+  const alone = pick(candidates);
+  if (!(chosen && alone) || alone.account.id === chosen.account.id) {
     return chosen;
   }
   const passed = usage.name(alone.account);
-  return {
-    account: chosen.account,
-    why:
-      strategy === "pinned" && alone.account.id === pinnedId
-        ? pinMovedBackWords(
+  const out = usage.runsOut(alone.account.id);
+  const back = usage.ahead(alone.account.id);
+  const pinMoved = strategy === "pinned" && alone.account.id === pinnedId;
+  if (out !== null) {
+    return {
+      account: chosen.account,
+      why: pinMoved
+        ? pinRunsOutWords(
             passed,
-            back,
+            clockWords(out),
             usage.name(chosen.account),
             usage.said(chosen.account.id)
           )
-        : `${chosen.why} ${movedBackWords(passed, back)}`,
+        : `${chosen.why} ${runsOutBackWords(passed, clockWords(out))}`,
+    };
+  }
+  if (!back) {
+    return chosen;
+  }
+  return {
+    account: chosen.account,
+    why: pinMoved
+      ? pinMovedBackWords(
+          passed,
+          back,
+          usage.name(chosen.account),
+          usage.said(chosen.account.id)
+        )
+      : `${chosen.why} ${movedBackWords(passed, back)}`,
   };
 };
 

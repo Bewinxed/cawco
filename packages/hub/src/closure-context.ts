@@ -29,7 +29,6 @@ import type {
   RebalanceNotice,
   RefusalVerdict,
 } from "@cawco/core/accounts";
-import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { ArchiveView } from "@cawco/core/archive";
 import type { AskAnswer } from "@cawco/core/asks";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
@@ -446,7 +445,6 @@ export interface ClosureContext {
   ) => void;
   carryTestFor: (
     provider: AccountProvider,
-    strategy: PlacementStrategy,
     burnOf: (forecast: ForecastRead) => number | null,
     self?: string
   ) => Pick<PlacementInput, "arrivals" | "burn" | "paces">;

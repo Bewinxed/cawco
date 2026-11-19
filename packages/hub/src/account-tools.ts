@@ -49,7 +49,7 @@ import { sessionsUnder } from "./delegation-tree";
 import type { handMoveOf } from "./hand-move";
 import { byId } from "./handles";
 import { sessionLabel } from "./labels";
-import type { LimitRow, Outlook } from "./limit-decision";
+import { endedWorkOf, type LimitRow, type Outlook } from "./limit-decision";
 import { answered, defineTool } from "./mcp-tool";
 import { namedIn } from "./placement";
 import type { placementPreview } from "./routes/account-placement";
@@ -68,6 +68,7 @@ export interface AccountToolsDeps {
     | "getInstancesByIds"
     | "itemSessionsOfParents"
     | "liveOnAccounts"
+    | "workItem"
   >;
   /** A person's move of a session to an account (hand-move.ts). */
   handMove: ReturnType<typeof handMoveOf>;
@@ -86,6 +87,8 @@ export interface AccountRead {
   id: string;
   name: string;
   organization: string | null;
+  /** The floor it is at or past, as the percent of a window allowed; null when it keeps every floor. */
+  pastFloorPct: number | null;
   /** When a window runs out before its reset, epoch ms; null when it lasts the look-ahead. */
   runsOutAt: number | null;
   sessions: number;
@@ -147,6 +150,18 @@ const reasonWords = (
 const leftOf = (window: FactWindow): number =>
   100 - window.usedPct - (window.spentPct ?? 0) - (window.pendingPct ?? 0);
 
+/**
+ * The floor `account` is at or past, as a percent of the window allowed
+ * (decide.ts `holdsOn`'s reserve, read as placement reads its reserve: at
+ * counts); null when every window keeps its floor.
+ */
+const pastFloorOf = (account: FactAccount): number | null => {
+  const past = account.windows.find(
+    (one) => one.floorPct > 0 && leftOf(one) <= one.floorPct
+  );
+  return past ? Math.round(100 - past.floorPct) : null;
+};
+
 /** The window a floor refusal is about: the first one under its floor after `takes` percent, as the decision tests them in order. */
 const floorWindow = (
   account: FactAccount | undefined,
@@ -191,6 +206,25 @@ const windowLine = (
   return [line, accountReadWords.windowDetail(parts)];
 };
 
+/**
+ * How an account stands, in words: past a floor, then when it runs out, or
+ * that it lasts. One past a floor takes no new session and no move, so it
+ * never reads as lasting.
+ */
+const standingWords = (account: AccountRead, now: number): string[] => {
+  const words = accountReadWords;
+  const past = account.pastFloorPct;
+  if (account.runsOutAt !== null) {
+    return [
+      ...(past === null ? [] : [words.pastFloor(past)]),
+      words.runsOut(atWords(account.runsOutAt, now)),
+    ];
+  }
+  return [
+    past === null ? words.lasts(LOOK_AHEAD_HOURS) : words.pastFloor(past),
+  ];
+};
+
 /** `account_read`'s answer as an agent reads it; `detailed` adds each window's readings and pace. */
 const accountsWords =
   (detailed: boolean) =>
@@ -205,9 +239,7 @@ const accountsWords =
         ? [account.unread]
         : [
             ...windows.map(([line]) => line ?? ""),
-            account.runsOutAt === null
-              ? words.lasts(LOOK_AHEAD_HOURS)
-              : words.runsOut(atWords(account.runsOutAt, now)),
+            ...standingWords(account, now),
             ...(account.takesNone ? [words.takesNone(account.takesNone)] : []),
           ];
       return [
@@ -278,13 +310,20 @@ const ACCOUNT_MOVE = defineTool(
 export const createAccountTools = (deps: AccountToolsDeps) => {
   const { db } = deps;
 
-  /** The live sessions under `caller`: its delegates, theirs, and so on (delegation-tree.ts `sessionsUnder`). */
+  /**
+   * The live sessions under `caller`: its delegates, theirs, and so on
+   * (delegation-tree.ts `sessionsUnder`), each still running and its work
+   * item not ended (limit-decision.ts `endedWorkOf`: one that reported
+   * waits for a send, and a forecast moves it nowhere).
+   */
   const delegatesOf = (caller: InstanceRow): LimitRow[] => {
     const under = sessionsUnder(db, caller.id);
     under.delete(caller.id);
     return db
       .getInstancesByIds([...under])
-      .filter((row) => !OVER_STATUSES.has(row.status));
+      .filter(
+        (row) => !(OVER_STATUSES.has(row.status) || endedWorkOf(db, row))
+      );
   };
 
   /** An account's name among every account, or the id when it is gone. */
@@ -355,12 +394,13 @@ export const createAccountTools = (deps: AccountToolsDeps) => {
 
   /** One decision the router took for a session, in words. */
   const decisionWords = (
-    { decision, trigger }: Extract<Outlook, { kind: "decided" }>,
+    outlook: Extract<Outlook, { kind: "decided" }>,
     here: string,
     accounts: readonly Account[],
     now: number
   ): string => {
     const words = accountReadWords;
+    const { decision, trigger } = outlook;
     const because = becauseWords(trigger, here, accounts, now);
     if (decision.kind === "wait") {
       const why =
@@ -376,16 +416,38 @@ export const createAccountTools = (deps: AccountToolsDeps) => {
     }
     const [first] = decision.moves;
     return first
-      ? moveWords(first, trigger, because, accounts)
+      ? moveWords(first, trigger, because, accounts, freeWords(first, outlook))
       : words.stays(words.stayWhy.full, because);
   };
 
-  /** A move the router decided, its price beside the next best, when it goes, and why. */
+  /**
+   * Why a move ahead of a limit costs nothing waiting wouldn't (decide.ts
+   * `decideAhead`: a forecast or a wake moves only what moves for free):
+   * its cache carries, or it is cold, so staying re-reads it too. Null for
+   * a move off a limit or a person's.
+   */
+  const freeWords = (
+    move: DecidedMove,
+    { facts, trigger }: Extract<Outlook, { kind: "decided" }>
+  ): string | null => {
+    if (!(trigger.kind === "forecast" || trigger.kind === "wake")) {
+      return null;
+    }
+    if (move.carries) {
+      return accountReadWords.free.carries;
+    }
+    return facts.session.cache.kind === "cold"
+      ? accountReadWords.free.cold
+      : null;
+  };
+
+  /** A move the router decided, its price beside the next best, why it is free, when it goes, and why. */
   const moveWords = (
     move: DecidedMove,
     trigger: MoveTrigger,
     because: string,
-    accounts: readonly Account[]
+    accounts: readonly Account[],
+    free: string | null
   ): string => {
     const words = accountReadWords;
     const { next } = move.price;
@@ -403,6 +465,7 @@ export const createAccountTools = (deps: AccountToolsDeps) => {
             dollarWords(next.usd)
           )
         : words.onlyOption,
+      free,
       runs ? words.betweenTurns : words.now,
       because
     );
@@ -471,6 +534,7 @@ export const createAccountTools = (deps: AccountToolsDeps) => {
       name: accountNameAmong(account, accounts),
       organization: account.identity?.organization || null,
       sessions,
+      pastFloorPct: null,
     };
     if (!fact) {
       return {
@@ -500,6 +564,7 @@ export const createAccountTools = (deps: AccountToolsDeps) => {
     return {
       ...base,
       windows,
+      pastFloorPct: pastFloorOf(fact.account),
       // The one test of running short, as a rebalancing pass reads a source (rebalance.ts `shortOf`).
       runsOutAt: runsShort(windows, 0, LOOK_AHEAD_MS, fact.waitMs, now),
       takesNone,

@@ -502,6 +502,8 @@ export const createRebalancer = (deps: RebalancerDeps) => {
         return "moving to another account at the limit is switched off";
       case "waiting":
         return "a person waits on it, and a forecast moves no session a person waits on; its limit decides";
+      case "ended":
+        return "its work item ended, so it runs no turn until a person or its parent writes, and that send decides it again";
       case "bounce":
         return "the hub moved it lately, and it is not moved again before both accounts' 5-hour windows reset";
       case "unknown":

@@ -9,7 +9,6 @@ import {
   isChatgptPlan,
   modelScope,
 } from "@cawco/core/accounts";
-import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { ClientSpawn, HubEnvelope } from "@cawco/core/envelopes";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
@@ -654,7 +653,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       model: payload.model,
       ...asks,
       ...(fork ? { fork } : {}),
-      ...carryTestFor(provider, routing[asks.kind].strategy, (forecast) =>
+      ...carryTestFor(provider, (forecast) =>
         kindBurn(forecast, isOfKind(forecast, asks.kind), now)
       ),
       now,
@@ -662,20 +661,17 @@ export const createSpawns = (ctx: SpawnsContext) => {
   };
 
   /**
-   * What soonest-reset's carry test reads (placement `paces`, `burn` and
-   * `arrivals`): each of `provider`'s accounts' paces, the burn the session
-   * brings, and the sessions already arriving on each account but `self`.
-   * Read only for soonest-reset, which alone asks.
+   * What placement's run-out test reads (placement `paces`, `burn` and
+   * `arrivals`), for every strategy: each of `provider`'s accounts' paces,
+   * the burn the session brings, and the sessions already arriving on each
+   * account but `self`. The figures a forecast reads (rebalance.ts
+   * `readForecast`), so a start never lands where a forecast moves off.
    */
   const carryTestFor = (
     provider: AccountProvider,
-    strategy: PlacementStrategy,
     burnOf: (forecast: ForecastRead) => number | null,
     self?: string
   ): Pick<PlacementInput, "arrivals" | "burn" | "paces"> => {
-    if (strategy !== "soonest-reset") {
-      return {};
-    }
     const forecast = readForecast(ctx.db, provider, Date.now(), owedTargets());
     return {
       paces: forecast.paces,

@@ -306,7 +306,10 @@ export const accountsRead = (
       ...one.windows.map((window) => windowUsed(window, now))
     ),
     reset: earliestReset(one.windows, now),
-    runsOut: runsOutBy(one.windows, burn ?? 0, one.arrivals, one.id, now),
+    runsOut: runsOutBy(one.windows, burn ?? 0, one.arrivals, one.id, {
+      now,
+      waitMs: db.accounts.routing(provider).atLimit.waitMinutes * MINUTE_MS,
+    }),
   });
   const ranks = new Map(
     [...rows]
@@ -598,6 +601,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       dearer: `its next turn there costs ${usdWords(decision.stayUsd)} on credits, and the cheapest move that holds costs ${usdWords(decision.moveUsd)}`,
       unknown: "its next turn's price there is unknown",
       waiting: "a person waits on it",
+      ended: "its work item ended",
       bounce: "the hub moved it lately",
       holds: "its account holds it",
     };

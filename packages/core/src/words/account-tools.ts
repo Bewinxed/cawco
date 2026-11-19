@@ -63,6 +63,8 @@ export const accountReadWords = {
   takesNone: (why: string) => `takes no session: ${why}`,
   /** No window runs short within the router's look-ahead. */
   lasts: (hours: number) => `lasts the next ${hours} h`,
+  /** A window at or past its floor: the account takes no new session and no move (placement's words). */
+  pastFloor: (allowedPct: number) => `past its ${allowedPct}% reserve`,
   /** A window runs out before it resets. */
   runsOut: (at: string) => `runs out at ${at}`,
   /** Which account a new delegate starts on, and the placement's why. */
@@ -88,16 +90,23 @@ export const accountReadWords = {
   /** Its account runs short, and its sessions go on extra usage. */
   staysOnCredits: (account: string, at: string) =>
     `stays, ${account} runs out at ${at} but its sessions go on its extra usage past its plan`,
-  /** The decision moves it. */
+  /** The decision moves it; `free`: why the move costs nothing staying wouldn't, ahead of a limit. */
   moves: (
     to: string,
     usd: string,
     shape: string,
     next: string,
+    free: string | null,
     when: string,
     because: string
   ) =>
-    `moves to ${to} for ${usd} (${shape}), ${next}; ${when}. Because ${because}.`,
+    `moves to ${to} for ${usd} (${shape}), ${next}${free ? `: ${free}` : ""}; ${when}. Because ${because}.`,
+  /** Why a move ahead of a limit is free (decide.ts: a forecast or a wake moves only what is). */
+  free: {
+    cold: "its cache is cold, so its next turn re-reads its whole context wherever it runs, and moving costs nothing staying wouldn't",
+    carries:
+      "its cache carries to an account of the same organization, so moving re-reads little more than staying",
+  },
   /** What the decision passed over. */
   nextBest: (what: string, where: string | null, usd: string) =>
     `against ${usd} for ${what}${where ? ` on ${where}` : ""}`,
@@ -134,6 +143,8 @@ export const accountReadWords = {
     off: "moving to another account is switched off",
     waiting:
       "a person waits on it, and a forecast moves no session a person waits on",
+    ended:
+      "its work item ended, so it runs no turn until someone writes to it, and that send decides it again",
     bounce:
       "the hub moved it lately, and moves it again only after both accounts' 5-hour windows reset",
     unknown:

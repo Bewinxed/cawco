@@ -408,10 +408,23 @@ export interface AtLimitPorts {
 }
 
 /** Whether `row` is the session of a live work item (work-item-state.ts `isLive`). */
-export const liveWorkOf = (db: DbShape, row: LimitRow): boolean => {
+export const liveWorkOf = (
+  db: Pick<DbShape, "workItem">,
+  row: Pick<LimitRow, "id" | "workItemId">
+): boolean => {
   const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
   return item?.instanceId === row.id && isLive(item.state);
 };
+
+/**
+ * Whether `row`'s work item ended: it reported, or another session took the
+ * item up. It runs no turn until a person or its parent writes; a session
+ * with no work item never reads as ended.
+ */
+export const endedWorkOf = (
+  db: Pick<DbShape, "workItem">,
+  row: Pick<LimitRow, "id" | "workItemId">
+): boolean => row.workItemId !== null && !liveWorkOf(db, row);
 
 /** How far back a session's own turns are read for its prices. */
 const COSTS_SPAN_MS = DAY_MS;
@@ -582,6 +595,7 @@ export const factsOf = (
       costs: sessionCostsOf(db, row, context, now),
       burn: read.burn,
       compactable: ports.compactable(row),
+      ended: endedWorkOf(db, row),
       forked: row.forkedFrom !== null,
       personWaiting: ports.waitedOn(row),
       summarizerRates,
