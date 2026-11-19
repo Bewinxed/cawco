@@ -129,6 +129,8 @@
       return;
     }
     const styles = getComputedStyle(box);
+    // In px: app.css types it as a length (@property), so it computes to
+    // px however it is written.
     cardMin = Number.parseFloat(styles.getPropertyValue("--card-min")) || 1;
     gap = Number.parseFloat(styles.columnGap) || 0;
     // Its width now, so the first frame painted has its columns; a change

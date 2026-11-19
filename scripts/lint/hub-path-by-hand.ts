@@ -91,6 +91,8 @@ const HUB_PATH_USERS: Record<string, string> = {
     "the stand-in recognises the requests it answers by their path",
   "apps/dashboard/src/lib/cawco/views/routines-fixture.ts":
     "the stand-in recognises the requests it answers by their path",
+  "apps/dashboard/src/lib/cawco/files/files-fixture.ts":
+    "the stand-in recognises the requests it answers by their path",
   "packages/agent/src/binary-update.ts":
     "a build's download, written to disk as it comes and said how far it has gone",
   "packages/cli/src/binary-health.ts":

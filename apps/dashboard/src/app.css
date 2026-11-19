@@ -875,6 +875,17 @@
   syntax: "*";
   inherits: false;
 }
+
+/* A Files card's least width (ArtifactCards), which its masonry reads in px
+   to count its columns. Typed as a length, so its computed value is px
+   whatever it is written as: untyped, `calc(var(--spacing) * 37)` read back
+   as that text, parsed as no number, and the masonry counted a column per
+   pixel, each card a sliver. */
+@property --card-min {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
 @layer components {
   /* bits-ui rewrites where the card may stand a few times a frame as it opens
      and follows its tab; only the card reads those properties (its
