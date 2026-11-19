@@ -116,6 +116,97 @@ export interface InstallsRecord {
   })[];
 }
 
+/**
+ * Where a lesson of a project's memory lives (hub memory-lessons.ts): the
+ * index (`AGENTS.md`, loaded into every session of the project), a skill's
+ * lessons (`lessons/<skill>.md`, read when that skill runs), a knowledge
+ * topic (`knowledge/<topic>.md`, carried into a brief by the task's words),
+ * or nowhere (a lesson that is only in the ledger).
+ */
+export type LessonHome =
+  | { at: "index" }
+  | { at: "skill"; skill: string }
+  | { at: "knowledge"; topic: string }
+  | { at: "none" };
+
+/** What a lesson rests on, each by reference: no source keeps any words. */
+export type LessonSource =
+  /** A message the person typed, by its send's uuid. */
+  | { at: string; kind: "said"; send: string; session: string }
+  /** An agent's note, its session, the top of that session's chain, and the hub's labels on it. */
+  | {
+      id: string;
+      kind: "note";
+      labels: string[];
+      root: string;
+      session: string;
+    }
+  /** A file the hub read, and a literal match in it. */
+  | { kind: "file"; match: string; path: string; read: string; sha256: string }
+  /** A line the person approved before the nightly run, at its commit. */
+  | { commit: string; kind: "approved" }
+  /** A line the person wrote by hand, as of its commit. */
+  | { commit: string; kind: "hand" };
+
+/** One lesson of a project's memory as its ledger keeps it (hub memory-lessons.ts). */
+export interface Lesson {
+  /** Whose rule it is: the person's (a message, a line he approved or wrote), or agents' (notes). */
+  by: "owner" | "agent";
+  /** He stated it again after the run changed or removed it: never evicted, demoted or retired by the run. */
+  held?: true;
+  home: LessonHome;
+  /** Times he stated it again while it was live. */
+  repeats: number;
+  /** Removed, why and when, with its words kept for 30 days. */
+  retired?: {
+    /** The lesson that replaced it. */
+    by?: string;
+    on: string;
+    text: string;
+    why:
+      "replaced" | "expired" | "reverted" | "unneeded" | "withdrawn" | "hand";
+  };
+  /** The last day a source stated it again (YYYY-MM-DD). */
+  seen: string;
+  /** The day it became true (YYYY-MM-DD). */
+  since: string;
+  sources: LessonSource[];
+  /**
+   * A staged lesson's words and the topic it goes to once it lands: it has
+   * no line in any file until a second session or a file bears it out.
+   * `jev`: its sources wait for Jev's check (Jev was off when it was
+   * written).
+   */
+  staged?: { text: string; topic: string; waits?: "jev" };
+  state: "staged" | "live" | "enforced" | "stale" | "retired";
+}
+
+/** `memory/lessons.json`: what the hub knows of each lesson of a project's memory, by its id (`L-` and six hex characters). */
+export interface MemoryLedger {
+  lessons: Record<string, Lesson>;
+  version: 1;
+}
+
+/** `memory/state.json`: where a project's nightly memory run stands. */
+export interface MemoryRunState {
+  /** Messages a run was given and named in no operation: read once more, then dropped. */
+  carried: string[];
+  /** What the last run did, said in its line. */
+  lastRun: {
+    added: number;
+    at: string;
+    dropped: number;
+    read: number;
+    replaced: number;
+    retired: number;
+    staged: number;
+  } | null;
+  /** The day the one-time recovery run of the archived notes ran, once it has. */
+  recovered?: string;
+  /** The newest of the person's messages a run has read (an ISO time). */
+  through: string;
+}
+
 /** One file a proposal changes (proposal-base.ts). */
 export type ProposalFile = ProposedFile;
 
