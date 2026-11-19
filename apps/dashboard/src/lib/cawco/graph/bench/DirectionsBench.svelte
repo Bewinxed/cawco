@@ -80,7 +80,7 @@
     }
   };
 
-  /** The directions the stand-in page has loaded, in the order it loaded them: read by the bench's press script. */
+  /** The directions the stand-in page has loaded, in the order it loaded them: said on the bench's root (`data-loaded`) for its press script. */
   let loaded = $state<string[]>([]);
   /** The state the stand-in stands at, and the one Compare draws hidden beside it. */
   let standing = $state<StateRef | null>(null);
@@ -119,13 +119,6 @@
       waiting.delete(file);
     }, COLD_MS);
   };
-  if (typeof window !== "undefined") {
-    Object.defineProperty(window, "__benchDirectionsLoaded", {
-      configurable: true,
-      get: () => loaded,
-    });
-  }
-
   /** The tray a ref draws: its direction and the view its story jumps to. */
   const trayOf = (ref: StateRef | null) => {
     const direction = TRAY_DIRECTIONS.find((one) => one.file === ref?.file);
@@ -308,6 +301,8 @@
      floating head (SideSurface), beside the page on a desk and a sheet's on
      a phone, the graph under the head as PreviewPane hosts it. -->
 <div
+  data-loaded={loaded.join(" ")}
+  data-slot="directions-bench"
   class="flex h-dvh min-h-0 bg-surface-page p-space-2 *:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
 >
   <SideSurface

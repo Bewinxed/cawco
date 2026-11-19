@@ -1530,7 +1530,7 @@
 {#snippet pickEntry()}
   {@const name = directionOf(frontFile)?.name ?? ""}
   <DropdownMenu.Item onSelect={pickFront}>
-    <IconTick /><span
+    <span
       >{pickedFile === frontFile
         ? words.unpick(name)
         : words.pickNamed(name)}</span
