@@ -100,12 +100,19 @@ const recordOk = (value: unknown): boolean => {
   );
 };
 
-/** Why `moves`, the `tuned` map's entries after a write, may not be kept; null when they may. */
-export function tunedProblem(moves: [string, unknown][]): string | null {
-  if (moves.length > TUNED_LIMITS.moves) {
+/**
+ * Why the `tuned` map after a write may not be kept; null when it may:
+ * `moves`, the moves it holds after it, and `changed`, each move it wrote.
+ * A move it left stood within these bounds already.
+ */
+export function tunedProblem(
+  moves: number,
+  changed: Iterable<[string, unknown]>
+): string | null {
+  if (moves > TUNED_LIMITS.moves) {
     return `A canvas keeps at most ${TUNED_LIMITS.moves} tuned moves.`;
   }
-  for (const [move, kept] of moves) {
+  for (const [move, kept] of changed) {
     const one = isRecord(kept) ? kept : null;
     if (!(
       isText(move) &&

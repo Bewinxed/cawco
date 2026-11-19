@@ -21,7 +21,7 @@ import {
   splitWholePins,
 } from "@cawco/core/comments/model";
 import { RESYNC_MS } from "@cawco/core/doc-link";
-import { MIRRORED_MAPS, mapsOf } from "@cawco/core/doc-maps";
+import { mapsOf } from "@cawco/core/doc-maps";
 import { getMeta } from "@cawco/core/doc-meta";
 import { keepTuned, TUNED_MAP, type TunedRecord } from "@cawco/core/tuned";
 import {
@@ -30,27 +30,15 @@ import {
   Doc,
   encodeStateAsUpdate,
   encodeStateVector,
+  type Transaction,
   type Array as YArray,
   type YEvent,
   Map as YMap,
 } from "yjs";
 import type { ArtifactsDb } from "../db/artifacts";
 import type { HubLifetimeShape, HubTimer } from "../lifetime";
-
-/** The doc's top-level maps. */
-export const MAPS = [
-  // What a page's overlay mirrors: the decision state, meta, ink, moved
-  // groups, a pin's parts, deleted pins' tombstones (core comments.ts
-  // `goneOf`) and the person's looks at what changed (`seenOf`).
-  ...MIRRORED_MAPS,
-  "comments",
-  "files",
-  "requests",
-  // Each pin's lines of what changed for it, the hub's alone (core comments.ts `activityOf`).
-  "activity",
-  // A component's tuned timing, a move each, the panel's to write (core tuned.ts).
-  TUNED_MAP,
-] as const;
+import { addedTo, elementIdOf, elementsOf, MAPS } from "./doc-parts";
+import { createGate, type Gate } from "./gate";
 
 /**
  * A component's tuned timing written as a choice entry (the canvas page's
@@ -78,13 +66,6 @@ function moveTunedOut(doc: Doc): boolean {
   return true;
 }
 
-/** The doc's one top-level array: a canvas's scene, as y-excalidraw lays it out. */
-const ELEMENTS = "elements";
-
-/** A canvas's elements: each a `Y.Map` of `el`, `pos`, `by` and `at`. */
-export const elementsOf = (doc: Doc): YArray<YMap<unknown>> =>
-  doc.getArray<YMap<unknown>>(ELEMENTS);
-
 /** Updates kept one by one before the log becomes one snapshot. The brief's number. */
 const COMPACT_EVERY = 100;
 
@@ -108,6 +89,8 @@ export interface ArtifactClient {
 interface Loaded {
   clients: Set<ArtifactClient>;
   doc: Doc;
+  /** The check of a person's updates (gate.ts): made by the first one, let go with the last client or a refusal. */
+  gate?: Gate;
   idle?: HubTimer;
 }
 
@@ -128,6 +111,14 @@ export interface ArtifactDocs {
    * person's picks) stays beside it.
    */
   merge: (from: string, to: string, origin: ChangeOrigin) => void;
+  /**
+   * Why `update`, from a person's client, may not be applied to the
+   * artifact's doc; null when it may, the caller applying it next (sync.ts
+   * `takeUpdate`). Read by the doc's gate (gate.ts), which costs the update,
+   * not the doc: made from the doc once, it takes every update the doc
+   * takes after.
+   */
+  problem: (id: string, update: Uint8Array) => string | null;
   /** How many screens (canvas host pages) are joined to the artifact now. */
   screens: (id: string) => number;
   /**
@@ -162,17 +153,6 @@ const isClient = (value: unknown): value is ArtifactClient =>
   "send" in value &&
   typeof value.send === "function";
 
-/** The id of the element a canvas element's map holds; none when it holds none. */
-export const elementIdOf = (map: YMap<unknown>): string | undefined => {
-  const el = map.get("el");
-  return typeof el === "object" &&
-    el !== null &&
-    "id" in el &&
-    typeof el.id === "string"
-    ? el.id
-    : undefined;
-};
-
 /** The id and author of a canvas element's map, when it holds one. */
 const elementOf = (
   map: YMap<unknown>
@@ -183,23 +163,25 @@ const elementOf = (
     : { id, by: map.get("by") === "person" ? "person" : "agent" };
 };
 
-/** The canvas elements a deep event on `elements` added or changed. */
+/**
+ * The canvas elements a transaction on `elements` added or changed: the
+ * entries it inserted (read off its own structs, doc-parts.ts `addedTo`)
+ * and those its deep events changed within.
+ */
 const elementsIn = (
   elements: YArray<YMap<unknown>>,
-  events: YEvent<AbstractType<unknown>>[]
+  events: YEvent<AbstractType<unknown>>[],
+  transaction: Transaction
 ): { id: string; by: CanvasAuthor }[] =>
-  events
-    .flatMap((event) =>
-      event.target === elements
-        ? [...event.changes.added].flatMap((item): unknown[] =>
-            item.content.getContent()
-          )
-        : [event.target]
-    )
-    .flatMap((map) => {
-      const element = map instanceof YMap ? elementOf(map) : null;
-      return element ? [element] : [];
-    });
+  [
+    ...addedTo(transaction, elements),
+    ...events.flatMap((event) =>
+      event.target === elements ? [] : [event.target]
+    ),
+  ].flatMap((map) => {
+    const element = map instanceof YMap ? elementOf(map) : null;
+    return element ? [element] : [];
+  });
 
 export const createArtifactDocs = (deps: {
   /** A page's `state` changed at `keys` (a pick, a note), by `by`: its project's Decisions tab hears of it, and Who decides of a settled card picked again. */
@@ -238,9 +220,16 @@ export const createArtifactDocs = (deps: {
     entry.idle = deps.lifetime.after("doc unloaded when idle", IDLE_MS, () => {
       if (entry.clients.size === 0) {
         loaded.delete(id);
+        letGate(entry);
         entry.doc.destroy();
       }
     });
+  };
+
+  /** The doc's gate let go: a refusal left it holding what the doc never took, or nobody writes. */
+  const letGate = (entry: Loaded) => {
+    entry.gate?.destroy();
+    entry.gate = undefined;
   };
 
   /** One update the doc took: kept in the log, by who made it, and sent to every other client. */
@@ -304,8 +293,8 @@ export const createArtifactDocs = (deps: {
       tunedChanged = true;
     });
     let touched = new Map<string, CanvasAuthor>();
-    elements.observeDeep((events) => {
-      for (const element of elementsIn(elements, events)) {
+    elements.observeDeep((events, transaction) => {
+      for (const element of elementsIn(elements, events, transaction)) {
         touched.set(element.id, element.by);
       }
     });
@@ -320,6 +309,7 @@ export const createArtifactDocs = (deps: {
     });
     doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (origin !== "load") {
+        entry.gate?.follow(update);
         keep(id, entry, update, origin, changed);
       }
     });
@@ -375,6 +365,7 @@ export const createArtifactDocs = (deps: {
       for (const client of clients) {
         client.close();
       }
+      letGate(entry);
       entry.doc.destroy();
     },
     fork: (from, to) => {
@@ -399,8 +390,21 @@ export const createArtifactDocs = (deps: {
     leave: (id, client) => {
       const entry = loaded.get(id);
       if (entry?.clients.delete(client)) {
+        // Nobody joined writes: the gate's copy of the doc goes with them.
+        if (entry.clients.size === 0) {
+          letGate(entry);
+        }
         sleep(id, entry);
       }
+    },
+    problem: (id, update) => {
+      const entry = load(id);
+      entry.gate ??= createGate(entry.doc);
+      const why = entry.gate.problem(update);
+      if (why) {
+        letGate(entry);
+      }
+      return why;
     },
     screens: (id) =>
       [...(loaded.get(id)?.clients ?? [])].filter((client) => client.screen)

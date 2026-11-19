@@ -69,7 +69,7 @@
  */
 
 import { CHOICE_LIMITS } from "../choices";
-import { type MapDoc, PIN_MAPS } from "../doc-maps";
+import { type MapChange, type MapDoc, PIN_MAPS } from "../doc-maps";
 import type { ArtifactChanges, ChangedItem, HeldNote } from "../doc-meta";
 import { getMeta, setMeta } from "../doc-meta";
 import { everyOf } from "../every-of";
@@ -355,14 +355,14 @@ export type PinDelivery = Pick<Pin, "heard" | "notSent" | "sentAt">;
 const entryKey = (pin: string, entry: string): string => `${pin}:${entry}`;
 
 /** The pin an `entries` key belongs to. */
-const entryPin = (key: string): string => key.slice(0, key.indexOf(":"));
+export const entryPin = (key: string): string => key.slice(0, key.indexOf(":"));
 
-export const headsOf = (doc: MapDoc) => doc.getMap<StoredPinHead>("pins");
+const headsOf = (doc: MapDoc) => doc.getMap<StoredPinHead>("pins");
 const placesOf = (doc: MapDoc) => doc.getMap<PinPlace>("places");
 const resolvesOf = (doc: MapDoc) => doc.getMap<PinResolve>("resolves");
 const looksOf = (doc: MapDoc) => doc.getMap<string>("looks");
 const deliveriesOf = (doc: MapDoc) => doc.getMap<PinDelivery>("deliveries");
-export const entriesOf = (doc: MapDoc) => doc.getMap<ThreadEntry>("entries");
+const entriesOf = (doc: MapDoc) => doc.getMap<ThreadEntry>("entries");
 
 /** Oldest first: by when it was said, then by id. */
 const byAt = (a: ThreadEntry, b: ThreadEntry) =>
@@ -373,7 +373,12 @@ const threadsOf = (doc: MapDoc): Map<string, ThreadEntry[]> => {
   const threads = new Map<string, ThreadEntry[]>();
   for (const [key, entry] of entriesOf(doc).entries()) {
     const pin = entryPin(key);
-    threads.set(pin, [...(threads.get(pin) ?? []), entry]);
+    const thread = threads.get(pin);
+    if (thread) {
+      thread.push(entry);
+    } else {
+      threads.set(pin, [entry]);
+    }
   }
   for (const thread of threads.values()) {
     thread.sort(byAt);
@@ -404,17 +409,34 @@ const assemble = (
 };
 
 /** Pin `id` whole, as its parts stand in `doc`; undefined when it has no head or no place. */
-export const readPin = (doc: MapDoc, id: string): Pin | undefined => {
+export const readPin = (doc: MapDoc, id: string): Pin | undefined =>
+  readPinAt(doc, id, entriesOf(doc).keys());
+
+/**
+ * Pin `id` whole, as its parts stand in `doc`, its thread read from the
+ * entries at `keys` alone (a key of another pin's, or one `doc` does not
+ * hold, is passed over): one pin read without walking every pin's entries.
+ * Undefined when it has no head or no place.
+ */
+export const readPinAt = (
+  doc: MapDoc,
+  id: string,
+  keys: Iterable<string>
+): Pin | undefined => {
   const head = headsOf(doc).get(id);
   if (!head) {
     return;
   }
   const prefix = entryKey(id, "");
-  const thread = [...entriesOf(doc).entries()]
-    .filter(([key]) => key.startsWith(prefix))
-    .map(([, entry]) => entry)
-    .sort(byAt);
-  return assemble(doc, head, thread);
+  const entries = entriesOf(doc);
+  const thread: ThreadEntry[] = [];
+  for (const key of keys) {
+    const entry = key.startsWith(prefix) ? entries.get(key) : undefined;
+    if (entry !== undefined) {
+      thread.push(entry);
+    }
+  }
+  return assemble(doc, head, thread.sort(byAt));
 };
 
 /** Every pin of `doc`, whole, by id. */
@@ -1060,11 +1082,14 @@ const HONOUR_ORIGIN = "gone";
  * From now on, `doc` lets go of every pin its tombstones name, whenever
  * a pin map or `gone` changes (a merge from the device, the hub or another
  * view), and of any it holds now: a write that stood a deleted pin up again
- * is undone in the next transaction. Returns the watch's end.
+ * is undone in the next transaction. A pin map's change is read at the keys
+ * it wrote alone, so a reply costs its own keys, not every pin's; a
+ * tombstone written reads them all, once. Returns the watch's end.
  */
 export function honourDeletions(doc: MapDoc): () => void {
   const gone = goneOf(doc);
-  const maps = PIN_MAPS.map((name) => doc.getMap(name));
+  const letGoAll = () =>
+    doc.transact(() => letGo(doc, [...gone.keys()]), HONOUR_ORIGIN);
   const sweep = () => {
     const held = PIN_MAPS.some((name) =>
       [...doc.getMap(name).keys()].some((key) =>
@@ -1072,17 +1097,28 @@ export function honourDeletions(doc: MapDoc): () => void {
       )
     );
     if (held) {
-      doc.transact(() => letGo(doc, [...gone.keys()]), HONOUR_ORIGIN);
+      letGoAll();
     }
   };
-  for (const map of maps) {
-    map.observe(sweep);
-  }
+  const watches = PIN_MAPS.map((name) => {
+    const map = doc.getMap(name);
+    const watch = (change: MapChange) => {
+      const held = [...change.keysChanged].some(
+        (key) =>
+          map.has(key) && gone.has(name === "entries" ? entryPin(key) : key)
+      );
+      if (held) {
+        letGoAll();
+      }
+    };
+    map.observe(watch);
+    return () => map.unobserve(watch);
+  });
   gone.observe(sweep);
   sweep();
   return () => {
-    for (const map of maps) {
-      map.unobserve(sweep);
+    for (const unwatch of watches) {
+      unwatch();
     }
     gone.unobserve(sweep);
   };
@@ -1372,13 +1408,16 @@ export const writeAgain = (
 
 /** The bytes `pins`' threads hold, as the doc keeps them: what {@link COMMENT_LIMITS}`.bytes` bounds. */
 export const threadBytes = (pins: Iterable<Pin>): number => {
-  const encoder = new TextEncoder();
   let bytes = 0;
   for (const pin of pins) {
-    bytes += encoder.encode(JSON.stringify(pin.thread)).length;
+    bytes += threadBytesOf(pin.thread);
   }
   return bytes;
 };
+
+/** The bytes one pin's thread holds, as the doc keeps it: its part of {@link threadBytes}. */
+export const threadBytesOf = (thread: readonly ThreadEntry[]): number =>
+  new TextEncoder().encode(JSON.stringify(thread)).length;
 
 /** The bytes one entry adds to its thread. */
 export const entryBytes = (entry: ThreadEntry): number =>

@@ -97,15 +97,20 @@ function inkGroupProblem(value: unknown): string | null {
   return null;
 }
 
-/** Why an artifact's ink and moved groups after a change may not be kept; null when they may. */
+/**
+ * Why an artifact's ink and moved groups after a person's change may not be
+ * kept; null when they may: `groups`, the groups both maps hold after it,
+ * and `changed`, each group it wrote. A group it left stood within these
+ * bounds already.
+ */
 export function inkProblem(
-  ink: [string, unknown][],
-  moved: [string, unknown][]
+  groups: number,
+  changed: Iterable<unknown>
 ): string | null {
-  if (ink.length + moved.length > INK_LIMITS.groups) {
+  if (groups > INK_LIMITS.groups) {
     return `An artifact keeps at most ${INK_LIMITS.groups} stroke groups.`;
   }
-  for (const [, group] of [...ink, ...moved]) {
+  for (const group of changed) {
     const problem = inkGroupProblem(group);
     if (problem) {
       return problem;

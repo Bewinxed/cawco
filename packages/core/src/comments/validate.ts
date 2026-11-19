@@ -1,6 +1,5 @@
 /** The hub's bounds on what a writer may leave in an artifact's doc. */
 
-import type { MapDoc } from "../doc-maps";
 import { readFileSpot } from "../file-spot";
 import {
   commentsFull,
@@ -11,14 +10,9 @@ import {
   attachmentsProblem,
   CHANGES_LIMIT,
   COMMENT_LIMITS,
-  entriesOf,
-  goneOf,
-  headsOf,
   isObject,
   type Pin,
-  readPins,
   type ThreadEntry,
-  threadBytes,
 } from "./model";
 
 /** A revision's key in the `seen` map: its number. */
@@ -27,12 +21,19 @@ const REVISION_KEY = /^\d{1,9}$/u;
 /** Characters one anchor of a look holds. */
 const SEEN_ANCHOR_MAX = 500;
 
-/** Why a person's `seen` map may not be kept; null when it may. */
-export function seenProblem(seen: Map<string, unknown>): string | null {
-  if (seen.size > 2) {
+/**
+ * Why a person's `seen` map may not be kept; null when it may: `size`, the
+ * looks it holds after their change, and `changed`, each look the change
+ * wrote. A look the change left stood within these bounds already.
+ */
+export function seenProblem(
+  size: number,
+  changed: Iterable<[string, unknown]>
+): string | null {
+  if (size > 2) {
     return "The page keeps the looks of its latest revision only.";
   }
-  for (const [revision, anchors] of seen) {
+  for (const [revision, anchors] of changed) {
     if (!(
       REVISION_KEY.test(revision) &&
       Array.isArray(anchors) &&
@@ -132,15 +133,16 @@ export const FILE_SPOT_PROBLEM =
 export const fileSpotProblem = (anchor: Record<string, unknown>): boolean =>
   anchor.file !== undefined && readFileSpot(anchor.file) === null;
 
-/** Why a pin's head is not one: its parts are its own keys, never inside it. */
-const headProblem = (head: unknown): string | null =>
+/** Why a pin's head, kept under `key`, is not one: its parts are its own keys, never inside it, and it stands under its own id. */
+const headProblem = (key: string, head: unknown): string | null =>
   isObject(head) &&
   typeof head.id === "string" &&
+  head.id === key &&
   typeof head.number === "number" &&
   !("thread" in head) &&
   !("anchor" in head)
     ? null
-    : "A pin's head is its id, number, kind, when and by whom; its place, resolve and thread are their own keys.";
+    : "A pin's head is its id, number, kind, when and by whom, kept under its id; its place, resolve and thread are their own keys.";
 
 /** Why an `entries` key and its value don't belong together: the key names its pin and the entry's own id. */
 const entryKeyProblem = (key: string, entry: unknown): string | null =>
@@ -151,51 +153,66 @@ const entryKeyProblem = (key: string, entry: unknown): string | null =>
     : "An entry is kept under its pin's id and its own.";
 
 /**
- * Why a person's change of a doc's pins, `before` to `after`, may not be
- * kept; null when it may. Each part is its own key ({@link PIN_MAPS}): a
- * head holds no place or thread, and an entry stands under its pin's id and
- * its own. The agent's entries are the agent's (comment_reply), so a
- * person's change keeps every one of them as it was. A pin `gone` names is deleted,
- * whatever the change wrote of it: the doc lets it go ({@link honourDeletions}),
- * so it is not read.
+ * A person's change of a doc's pins, as {@link pinsProblem} reads it: what
+ * the change wrote, the pins it leaves standing, and each pin it touched.
+ * A part it left stood within the bounds already, so only what it wrote is
+ * read again: the hub's check costs the change, not the doc (hub
+ * artifacts/gate.ts).
  */
-export function pinsProblem(before: MapDoc, after: MapDoc): string | null {
-  const gone = goneOf(after);
-  const standing = (id: string) => !gone.has(id);
-  for (const head of headsOf(after).values()) {
-    const problem = headProblem(head);
+export interface PinsChange {
+  /** The bytes every standing pin's thread holds after it ({@link threadBytes}). */
+  bytes: number;
+  /** The thread entries it wrote, by key. */
+  entries: Iterable<[string, unknown]>;
+  /** The heads it wrote, by key. */
+  heads: Iterable<[string, unknown]>;
+  /** The pins standing after it: each with its head and its place, and no tombstone. */
+  standing: number;
+  /** Each pin it touched that stands after it, whole, with its thread before it (none when it stood nowhere). */
+  touched: Iterable<{ pin: Pin; was: readonly ThreadEntry[] | undefined }>;
+}
+
+/**
+ * Why a person's change of a doc's pins may not be kept; null when it may.
+ * Each part is its own key ({@link PIN_MAPS}): a head holds no place or
+ * thread and stands under its own id, and an entry stands under its pin's
+ * id and its own. The agent's entries are the agent's (comment_reply), so
+ * a person's change keeps every one of them as it was. A pin `gone` names
+ * is deleted, whatever the change wrote of it: the doc lets it go
+ * ({@link honourDeletions}), so it is not read.
+ */
+export function pinsProblem(change: PinsChange): string | null {
+  for (const [key, head] of change.heads) {
+    const problem = headProblem(key, head);
     if (problem) {
       return problem;
     }
   }
-  for (const [key, entry] of entriesOf(after).entries()) {
+  for (const [key, entry] of change.entries) {
     const problem = entryKeyProblem(key, entry);
     if (problem) {
       return problem;
     }
   }
-  const pins = [...readPins(after).values()].filter((pin) => standing(pin.id));
-  if (pins.length > COMMENT_LIMITS.pins) {
+  if (change.standing > COMMENT_LIMITS.pins) {
     return `An artifact keeps at most ${COMMENT_LIMITS.pins} pins.`;
   }
-  const held = threadBytes(pins);
-  if (held > COMMENT_LIMITS.bytes) {
-    return commentsFull(held, COMMENT_LIMITS.bytes, "page");
+  if (change.bytes > COMMENT_LIMITS.bytes) {
+    return commentsFull(change.bytes, COMMENT_LIMITS.bytes, "page");
   }
-  const was = readPins(before);
-  for (const pin of pins) {
+  const agents = (thread: readonly ThreadEntry[] | undefined) =>
+    new Set(
+      (thread ?? [])
+        .filter((entry) => entry.by === "agent")
+        .map((entry) => JSON.stringify(entry))
+    );
+  for (const { pin, was } of change.touched) {
     const problem = pinProblem(pin);
     if (problem) {
       return problem;
     }
-    const agents = (thread: ThreadEntry[] | undefined) =>
-      new Set(
-        (thread ?? [])
-          .filter((entry) => entry.by === "agent")
-          .map((entry) => JSON.stringify(entry))
-      );
     const now = agents(pin.thread);
-    const then = agents(was.get(pin.id)?.thread);
+    const then = agents(was);
     if ([...now].some((entry) => !then.has(entry))) {
       return "The agent's replies are written by comment_reply, not by the page.";
     }
@@ -210,28 +227,40 @@ export function pinsProblem(before: MapDoc, after: MapDoc): string | null {
 const GONE_KEY_MAX = 100;
 const GONE_AT_MAX = 40;
 
+/** A map's values by key, as the doc's `gone` is read: a Yjs map is one. */
+interface KeyedValues {
+  get: (key: string) => unknown;
+  has: (key: string) => boolean;
+}
+
 /**
- * Why a person's change from `before` to `after` (the doc's `gone`, by pin
- * id) may not be kept; null when it may. A tombstone is written once, by a
- * delete, and stays as it was: a deletion is never undone.
+ * Why a person's change of the doc's `gone` (by pin id), `before` to
+ * `after`, may not be kept; null when it may: `keys`, each key the change
+ * wrote, and `size`, the tombstones `after` holds. A tombstone is written
+ * once, by a delete, and stays as it was: a deletion is never undone.
  */
 export function goneProblem(
-  before: Map<string, unknown>,
-  after: Map<string, unknown>
+  before: KeyedValues,
+  after: KeyedValues,
+  keys: Iterable<string>,
+  size: number
 ): string | null {
-  for (const [id, at] of before) {
-    if (after.get(id) !== at) {
+  const written = [...keys];
+  for (const id of written) {
+    if (before.has(id) && after.get(id) !== before.get(id)) {
       return "A deleted comment stays deleted.";
     }
   }
-  if (after.size > COMMENT_LIMITS.gone) {
+  if (size > COMMENT_LIMITS.gone) {
     return `An artifact keeps at most ${COMMENT_LIMITS.gone} deleted comments.`;
   }
-  for (const [id, at] of after) {
+  for (const id of written) {
+    const at = after.get(id);
     if (!(
-      id.length <= GONE_KEY_MAX &&
-      typeof at === "string" &&
-      at.length <= GONE_AT_MAX
+      !after.has(id) ||
+      (id.length <= GONE_KEY_MAX &&
+        typeof at === "string" &&
+        at.length <= GONE_AT_MAX)
     )) {
       return "A deleted comment is its pin's id and when it was deleted.";
     }

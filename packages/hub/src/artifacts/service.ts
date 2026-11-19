@@ -137,7 +137,7 @@ import { decidesWords } from "@cawco/core/words/decides";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import type { Doc } from "yjs";
-import type { ArtifactRow } from "../db/artifacts";
+import type { ArtifactRow, GoneArtifact } from "../db/artifacts";
 import {
   type BuiltProgram,
   keptLinks,
@@ -3518,19 +3518,33 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       };
       const needs: ArtifactNeedsRead["needs"] = [];
       const notices: ArtifactNeedsRead["notices"] = [];
-      const rows = db.asking();
+      // Those that may wait (db `mayWait`): each read from its row and doc
+      // alone (needs.ts `mayWait`, no other row's media or held version) and
+      // found not to is marked so, and read again once its row is written.
+      const waitsNot: string[] = [];
+      const rows = db.mayWait().filter((row) => {
+        if (mayWait(row, factsOf(row, false))) {
+          return true;
+        }
+        waitsNot.push(row.id);
+        return false;
+      });
+      db.waitsNot(waitsNot);
       // Which of them a maker's change is held for, in one read.
       const heldNext = db.heldTargets();
-      // An artifact gone takes its facts with it.
-      const standing = new Set(rows.map((row) => row.id));
-      for (const id of factsKept.keys()) {
-        if (!standing.has(id)) {
-          factsKept.delete(id);
-        }
-      }
-      // Each session's pages, whose Canvases and Previews ask nothing of their own.
+      // Each of their sessions' pages, whose Canvases and Previews ask nothing of their own.
       const pages = Map.groupBy(
-        rows.filter((row) => row.kind === "page"),
+        db
+          .ofInstances([
+            ...new Set(
+              rows.flatMap((row) =>
+                row.kind === "page" || row.instanceId === null
+                  ? []
+                  : [row.instanceId]
+              )
+            ),
+          ])
+          .filter((row) => row.kind === "page"),
         (row) => row.instanceId
       );
       for (const row of rows) {
@@ -3608,7 +3622,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * machine to read as it registers (artifact-pages.ts `foldersSeen`).
      */
     foldersAsking: (machineId: string): { dir: string; id: string }[] =>
-      db.asking().flatMap((row) => {
+      db.mayWait().flatMap((row) => {
         if (
           row.machineId !== machineId ||
           row.kind !== "preview" ||
@@ -3626,8 +3640,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /** The server artifact `id`'s source moved off, let go once nothing else shows it ({@link letGoMoved}). */
     letGoMoved,
-    /** Artifact rows gone (db `onArtifactsGone`, every way a row goes): each pin one was served from let go once no row is served from it. */
-    letGoPins,
+    /**
+     * Artifact rows gone (db `onArtifactsGone`, every way a row goes): each
+     * one's facts let go, and each pin one was served from let go once no
+     * row is served from it.
+     */
+    artifactsGone: (gone: readonly GoneArtifact[]): void => {
+      for (const { id } of gone) {
+        factsKept.delete(id);
+      }
+      letGoPins(gone);
+    },
 
     /** Whether a create is making a preview from workspace `id` now, its row not yet written ({@link makingIn}). */
     makingFrom: (id: string): boolean => makingIn.has(id),
@@ -3851,7 +3874,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const from = before.toISOString();
       const steps = deps.steps(instanceId);
       let moved = false;
-      for (const row of db.asking()) {
+      // Only one that may wait is pending for anyone (`pendingFor`).
+      for (const row of db.mayWait()) {
         const facts = factsOf(row);
         const asked = askOf(row, facts);
         if (

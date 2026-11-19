@@ -5613,9 +5613,22 @@ export const artifacts = sqliteTable(
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
     shownAt: timestamp("shown_at"),
+    /**
+     * Whether it may wait on the person (artifacts/needs.ts `mayWait`, read
+     * from its row and doc): false only once Needs you's read found it may
+     * not (artifacts service `needs`), and true again on any write of its
+     * row (the `artifacts_may_wait_moved` trigger, migration 0451), every
+     * update its doc takes among them (db/artifacts.ts `append` moves its
+     * `seq`). So the lane reads the artifacts that may wait, by
+     * `artifacts_may_wait`, not every one.
+     */
+    mayWait: integer("may_wait", { mode: "boolean" }).notNull().default(true),
   },
   (table) => [
     index("artifacts_instance").on(table.instanceId, table.createdAt),
+    index("artifacts_may_wait")
+      .on(table.createdAt)
+      .where(sql`${table.mayWait} = 1 and ${table.heldFor} is null`),
     // A held next version shares its artifact's name. A project's page is
     // the project's by its name, whichever session wrote it; every other
     // artifact is its session's by kind and name, the person's composer

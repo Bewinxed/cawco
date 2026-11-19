@@ -35,7 +35,8 @@ import { Map as YMap } from "yjs";
 import { z } from "zod";
 import { CANVAS_ASSETS, canvasHostFile, canvasHostPage } from "../canvas-host";
 
-import { type ArtifactDocs, elementIdOf, elementsOf } from "./docs";
+import { elementIdOf, elementsOf } from "./doc-parts";
+import type { ArtifactDocs } from "./docs";
 
 /**
  * A canvas's host page, served by the hub as a page is: the page with the

@@ -168,7 +168,10 @@ const unanswered = (facts: ArtifactFacts): boolean =>
  * their turns, whether they ended), read only for these. One a design
  * check's verifier made never does: it is the hub's helper's working
  * material, and Needs you holds only what the session he works with put
- * there (the owner's page-route pick, 2026-11-15).
+ * there (the owner's page-route pick, 2026-11-15). Read from the row and
+ * doc alone (no held version, no other page's media), it is what the
+ * artifact's row keeps as `may_wait` (schema.ts `artifacts.mayWait`), so
+ * the lane reads only those that may.
  */
 export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
   !facts.verifier &&

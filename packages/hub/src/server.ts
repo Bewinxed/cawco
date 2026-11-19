@@ -5730,7 +5730,7 @@ export const createServer = (
     for (const { origin } of gone) {
       previewService.end(origin);
     }
-    artifacts.letGoPins(gone);
+    artifacts.artifactsGone(gone);
   });
   // Every move of an artifact's source moves the upstream of the origin it
   // stands on, and the panels showing it hear its source again.

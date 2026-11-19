@@ -1,7 +1,8 @@
 /**
  * Needs you's artifacts as every screen hears them (core artifact-needs.ts):
  * read from the artifacts service (`needs`, derived from each doc on every
- * read, nothing stored), sent whole as an `artifact.needs` frame whenever
+ * read, of the artifacts that may wait alone: schema.ts `artifacts.mayWait`),
+ * sent whole as an `artifact.needs` frame whenever
  * what it says changed, and handed to whoever asks now (`/api/pending`,
  * `GET /api/artifact-needs`). A move anything it is read from makes (a doc's
  * update, a row, a plan, a turn, a session ending, an acknowledgement) asks

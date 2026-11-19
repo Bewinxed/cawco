@@ -16,7 +16,8 @@
  * `meta`, and its claims and results on the agent's `requests`, within the
  * canvas's bounds (core `CANVAS_LIMITS`). Either may write the person's ink,
  * its moved groups and its pins (`ink`, `moved`, `pins`), within core
- * `INK_LIMITS`. An update that breaks
+ * `INK_LIMITS`. Each update is checked against what it wrote alone, on a
+ * copy of the doc kept in step with it (gate.ts). An update that breaks
  * them is not applied, and its writer is told why on its socket, which
  * stays open ({@link refusal}): never a closed socket, so nothing the writer
  * holds is let go unsaid. Nothing more that socket sends is kept: Yjs takes
@@ -26,32 +27,9 @@
  */
 import { rm } from "node:fs/promises";
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
-import {
-  CHOICE_LIMITS,
-  type ChoiceEntry,
-  choiceEntryProblem,
-  isChoiceEntry,
-  settledWriteProblem,
-} from "@cawco/core/choices";
-import {
-  goneProblem,
-  heldNoteProblem,
-  pinsProblem,
-  seenProblem,
-} from "@cawco/core/comments/validate";
 import { ARTIFACT_GONE } from "@cawco/core/doc-link";
-import { MIRRORED_MAPS } from "@cawco/core/doc-maps";
-import {
-  type ClientMetaKey,
-  docMeta,
-  getMeta,
-  type MetaMap,
-  metaWriter,
-  setMeta,
-} from "@cawco/core/doc-meta";
-import { inkProblem } from "@cawco/core/ink";
+import { getMeta, setMeta } from "@cawco/core/doc-meta";
 import { writeStateFile } from "@cawco/core/state-file";
-import { TUNED_MAP, tunedProblem } from "@cawco/core/tuned";
 import { problemResponse } from "elysia/error";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
 import {
@@ -70,20 +48,8 @@ import {
   writeSyncStep2,
   writeUpdate,
 } from "y-protocols/sync";
-import {
-  applyUpdate,
-  Doc,
-  encodeStateAsUpdate,
-  type Array as YArray,
-  Map as YMap,
-} from "yjs";
-import {
-  type ArtifactClient,
-  type ArtifactDocs,
-  elementIdOf,
-  elementsOf,
-  MAPS,
-} from "./docs";
+import { applyUpdate, Map as YMap } from "yjs";
+import type { ArtifactClient, ArtifactDocs } from "./docs";
 import { picturePath } from "./page-store";
 
 /** y-websocket's sync message type (its server's `messageSync`). */
@@ -141,264 +107,6 @@ const syncMessage = (write: (encoder: Encoder) => void) => {
   writeVarUint(encoder, MESSAGE_SYNC);
   write(encoder);
   return toUint8Array(encoder);
-};
-
-const same = (a: unknown, b: unknown): boolean => Bun.deepEquals(a, b);
-
-const sameMap = (a: YMap<unknown>, b: YMap<unknown>): boolean =>
-  a.size === b.size &&
-  [...a.entries()].every(([key, value]) => same(value, b.get(key)));
-
-/** A request's keys a screen writes: its claim (`claim-<its page's number>`, canvas-host scene.ts `PAGE_CLAIM`) and the result. */
-const SCREEN_REQUEST_KEY = /^(claim-\d+|result)$/u;
-
-/** Why a screen's change to a canvas's `requests` may not be kept, or null. */
-const requestsProblem = (
-  before: YMap<unknown>,
-  after: YMap<unknown>
-): string | null => {
-  if (!same([...before.keys()].sort(), [...after.keys()].sort())) {
-    return "A screen claims or answers the agent's requests; it does not add or remove them.";
-  }
-  for (const [id, request] of after.entries()) {
-    const was = before.get(id);
-    if (!(request instanceof YMap && was instanceof YMap)) {
-      return "A request is the hub's map.";
-    }
-    const keys = new Set([...request.keys(), ...was.keys()]);
-    for (const key of keys) {
-      if (!(
-        SCREEN_REQUEST_KEY.test(key) || same(request.get(key), was.get(key))
-      )) {
-        return `A screen changes only a request's claim and result, not its ${key}.`;
-      }
-    }
-  }
-  return null;
-};
-
-/**
- * Why a client's value for a key of `meta` it writes (core
- * `META_WRITERS`) may not be kept: Send all's note beside the comments the
- * person held (core comments.ts `sendHeld`, `HeldNote`), which the
- * delivery that carries them takes away; on a canvas, Excalidraw's pen
- * mode, once a pen touched it.
- */
-const CLIENT_META: { [K in ClientMetaKey]: (value: unknown) => string | null } =
-  {
-    heldNote: heldNoteProblem,
-    penDetected: (value) => penProblem("penDetected", value),
-    penMode: (value) => penProblem("penMode", value),
-  };
-
-/** Whether a client writes `key` of `meta` ({@link CLIENT_META}). */
-const isClientMetaKey = (key: string): key is ClientMetaKey =>
-  Object.hasOwn(CLIENT_META, key);
-
-/** Why a canvas screen's pen key `key` may not hold `value`, or null. */
-const penProblem = (key: string, value: unknown): string | null =>
-  value === undefined || typeof value === "boolean"
-    ? null
-    : `${key} is true or false.`;
-
-/**
- * Why a person's change to `meta` may not be kept: on any artifact they
- * write the keys core `META_WRITERS` gives the person, on a canvas the
- * keys it gives the canvas's screen too ({@link CLIENT_META}), and nothing
- * else.
- */
-const metaProblem = (
-  before: MetaMap,
-  after: MetaMap,
-  canvas: boolean
-): string | null => {
-  const was = new Map(before.entries());
-  const now = new Map(after.entries());
-  for (const key of new Set([...now.keys(), ...was.keys()])) {
-    const value = now.get(key);
-    if (same(value, was.get(key))) {
-      continue;
-    }
-    const writer = metaWriter(key);
-    if (!(
-      isClientMetaKey(key) &&
-      (writer === "person" || (canvas && writer === "canvas"))
-    )) {
-      return canvas
-        ? "A screen keeps only penMode, penDetected and heldNote in a canvas's meta."
-        : "A page changes its artifact's meta only by its held note.";
-    }
-    const why = CLIENT_META[key](value);
-    if (why) {
-      return why;
-    }
-  }
-  return null;
-};
-
-/** Why one entry of a canvas's elements is not one: a map of `el` (an element with its id), `pos`, and `by` and `made` when they say who. */
-const entryProblem = (entry: unknown): string | null => {
-  if (!(entry instanceof YMap)) {
-    return "An element is a map of el, pos and by.";
-  }
-  if (!(
-    elementIdOf(entry) !== undefined && typeof entry.get("pos") === "string"
-  )) {
-    return "An element is a map of el, an Excalidraw element with its id, and pos.";
-  }
-  const author = (value: unknown) =>
-    value === undefined || value === "person" || value === "agent";
-  if (!author(entry.get("by"))) {
-    return "An element's by is person or agent.";
-  }
-  return author(entry.get("made"))
-    ? null
-    : "An element's made is person or agent.";
-};
-
-/**
- * Why a screen's update changed who made an element (core
- * `CanvasEntry.made`): set once as its entry is made, it never changes, so
- * a moved or edited element stays whoever's it was.
- */
-const madeProblem = (
-  before: YArray<YMap<unknown>>,
-  after: YArray<YMap<unknown>>
-): string | null => {
-  const made = new Map(
-    before.toArray().map((entry) => [elementIdOf(entry), entry.get("made")])
-  );
-  const changed = after.toArray().find((entry) => {
-    const was = made.get(elementIdOf(entry));
-    return was !== undefined && entry.get("made") !== was;
-  });
-  return changed ? "Who made an element never changes." : null;
-};
-
-/** Why a canvas's image files after a screen's change may not be kept. */
-const filesProblem = (
-  before: YMap<unknown>,
-  after: YMap<unknown>
-): string | null => {
-  if (after.size > CANVAS_LIMITS.files) {
-    return `A canvas keeps at most ${CANVAS_LIMITS.files} files.`;
-  }
-  const large = [...after.entries()].some(
-    ([key, file]) =>
-      !same(file, before.get(key)) &&
-      JSON.stringify(file).length > CANVAS_LIMITS.fileBytes
-  );
-  return large
-    ? `A canvas's file is at most ${CANVAS_LIMITS.fileBytes / 1024 / 1024} MB.`
-    : null;
-};
-
-/**
- * The maps a person's ink, pins (each in its parts, core `PIN_MAPS`), deleted
- * pins and looks write, on any artifact (core ink.ts, comments.ts): every
- * mirrored map but the decision state and the doc's meta.
- */
-const INK_MAPS: string[] = MIRRORED_MAPS.filter(
-  (map) => map !== "state" && map !== "meta"
-);
-
-/** Why the ink, moved groups, pins, deleted pins and looks in `trial`, `doc` after a person's update, may not be kept; null when they may. */
-const inkMapsProblem = (doc: Doc, trial: Doc): string | null => {
-  const gone = new Map(trial.getMap("gone").entries());
-  return (
-    inkProblem(
-      [...trial.getMap("ink").entries()],
-      [...trial.getMap("moved").entries()]
-    ) ??
-    goneProblem(new Map(doc.getMap("gone").entries()), gone) ??
-    pinsProblem(doc, trial) ??
-    seenProblem(new Map(trial.getMap("seen").entries()))
-  );
-};
-
-/** Why `trial`, a canvas's doc after its screen's update, may not be kept; null when it may. */
-const canvasProblem = (doc: Doc, trial: Doc): string | null => {
-  const untouched = MAPS.filter(
-    (name) => !["meta", "files", "requests", ...INK_MAPS].includes(name)
-  ).find((name) => !sameMap(trial.getMap(name), doc.getMap(name)));
-  if (untouched) {
-    return `A canvas's screen changes its elements, not its ${untouched}.`;
-  }
-  const elements = elementsOf(trial);
-  if (elements.length > CANVAS_LIMITS.elements) {
-    return `A canvas keeps at most ${CANVAS_LIMITS.elements} elements.`;
-  }
-  return (
-    metaProblem(docMeta(doc), docMeta(trial), true) ??
-    elements
-      .toArray()
-      .map(entryProblem)
-      .find((why) => why !== null) ??
-    madeProblem(elementsOf(doc), elements) ??
-    filesProblem(doc.getMap("files"), trial.getMap("files")) ??
-    requestsProblem(doc.getMap("requests"), trial.getMap("requests")) ??
-    inkMapsProblem(doc, trial)
-  );
-};
-
-/** Why `trial`'s state, `doc`'s after a person's update, may not be kept; null when it may. */
-const stateProblem = (doc: Doc, trial: Doc): string | null => {
-  if (getMeta(doc, "kind") === "canvas") {
-    return canvasProblem(doc, trial);
-  }
-  const component = getMeta(doc, "kind") === "component";
-  for (const name of MAPS) {
-    if (!(
-      name === "state" ||
-      name === "meta" ||
-      INK_MAPS.includes(name) ||
-      (component && name === TUNED_MAP) ||
-      sameMap(trial.getMap(name), doc.getMap(name))
-    )) {
-      return `A page changes its artifact's state and ink only, not its ${name}.`;
-    }
-  }
-  const ink =
-    metaProblem(docMeta(doc), docMeta(trial), false) ??
-    inkMapsProblem(doc, trial) ??
-    (component ? tunedProblem([...trial.getMap(TUNED_MAP).entries()]) : null);
-  if (ink) {
-    return ink;
-  }
-  if (elementsOf(trial).length !== elementsOf(doc).length) {
-    return "A page changes its artifact's state only, not its elements.";
-  }
-  const state = trial.getMap("state");
-  if (state.size > CHOICE_LIMITS.perArtifact) {
-    return `An artifact keeps at most ${CHOICE_LIMITS.perArtifact} ids.`;
-  }
-  // What the doc keeps is a choice entry: this check let it in.
-  const before = doc.getMap<ChoiceEntry>("state");
-  for (const [key, value] of state.entries()) {
-    if (!Bun.deepEquals(value, before.get(key))) {
-      const why = isChoiceEntry(key, value)
-        ? settledWriteProblem(before.get(key), value)
-        : choiceEntryProblem(key, value);
-      if (why) {
-        return why;
-      }
-    }
-  }
-  return null;
-};
-
-/** Why `update` from a person's client may not be applied to `doc`, or null. */
-const updateProblem = (doc: Doc, update: Uint8Array): string | null => {
-  const trial = new Doc();
-  try {
-    applyUpdate(trial, encodeStateAsUpdate(doc));
-    applyUpdate(trial, update);
-    return stateProblem(doc, trial);
-  } catch {
-    return "That is not a Yjs update.";
-  } finally {
-    trial.destroy();
-  }
 };
 
 /**
@@ -577,11 +285,11 @@ const takeUpdate = (
   update: Uint8Array,
   origin: { client: ArtifactClient } | undefined
 ): string | null => {
-  const doc = docs.doc(artifactId);
-  const why = updateProblem(doc, update);
+  const why = docs.problem(artifactId, update);
   if (why) {
     return why;
   }
+  const doc = docs.doc(artifactId);
   applyUpdate(doc, update, origin);
   if (getMeta(doc, "kind") === "canvas") {
     if (origin?.client.screen) {

@@ -252,6 +252,8 @@ const LOGGED: readonly Logged[] = [
     table: "artifacts",
     key: "id",
     kind: "view_artifact",
+    // Needs you's own mark of what it may skip (schema.ts `artifacts.mayWait`): no view reads it.
+    except: ["may_wait"],
   },
   {
     name: "view_artifact_changes",

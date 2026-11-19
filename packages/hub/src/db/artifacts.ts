@@ -45,8 +45,14 @@ type SourceColumn =
  */
 export const projectPage = sql`${artifacts.kind} = 'page' and ${artifacts.projectId} is not null and ${artifacts.heldFor} is null`;
 
-/** An artifact as everything reads it: what it shows as one {@link PreviewSource}. */
-export type ArtifactRow = Omit<StoredArtifact, SourceColumn> & {
+/**
+ * An artifact as everything reads it: what it shows as one
+ * {@link PreviewSource}. Not whether it may wait on the person
+ * (`mayWait`): that is Needs you's own mark of what its read may skip,
+ * written by that read and by the trigger every write of the row fires
+ * (schema.ts `artifacts.mayWait`), read through {@link ArtifactsDb.mayWait}.
+ */
+export type ArtifactRow = Omit<StoredArtifact, SourceColumn | "mayWait"> & {
   source: PreviewSource;
 };
 
@@ -99,6 +105,7 @@ export const artifactOf = ({
   sourceServeCommand,
   sourceServeCwd,
   sourcePin,
+  mayWait: _mayWait,
   ...row
 }: StoredArtifact): ArtifactRow => {
   const path = sourcePath === null ? {} : { path: sourcePath };
@@ -239,6 +246,13 @@ export interface ArtifactsDb {
   readonly heldOf: (id: string) => ArtifactRow | undefined;
   /** Every artifact a next version is held for, in one read. */
   readonly heldTargets: () => Set<string>;
+  /**
+   * Of {@link asking}, those that may wait on the person (schema.ts
+   * `artifacts.mayWait`), oldest first, off `artifacts_may_wait`: every
+   * one that waits is among them, with those written since Needs you last
+   * read them.
+   */
+  readonly mayWait: () => ArtifactRow[];
   /** A session's artifacts, newest first; never a held next version, as no list below holds one. */
   readonly ofInstance: (instanceId: string) => ArtifactRow[];
   /**
@@ -317,6 +331,13 @@ export interface ArtifactsDb {
   readonly updateCount: (id: string) => number;
   /** An artifact's log, in order: what its document is loaded from. */
   readonly updates: (id: string) => Uint8Array[];
+  /**
+   * Artifacts `ids` may not wait on the person, as Needs you just read them
+   * from their rows and docs: its read skips them until their row is
+   * written again (the `artifacts_may_wait_moved` trigger). Tells no
+   * listener: nothing anyone reads of the row moved.
+   */
+  readonly waitsNot: (ids: readonly string[]) => void;
 }
 
 /** An artifact row that went, and the preview origin it pointed at (schema.ts `artifacts.origin`). */
@@ -569,6 +590,22 @@ export const artifactsDb = (
       .orderBy(asc(artifacts.createdAt))
       .all()
       .map(artifactOf),
+  mayWait: () =>
+    db
+      .select()
+      .from(artifacts)
+      .where(and(eq(artifacts.mayWait, true), isNull(artifacts.heldFor)))
+      .orderBy(asc(artifacts.createdAt))
+      .all()
+      .map(artifactOf),
+  waitsNot: (ids) => {
+    for (let at = 0; at < ids.length; at += 500) {
+      db.update(artifacts)
+        .set({ mayWait: false })
+        .where(inArray(artifacts.id, ids.slice(at, at + 500)))
+        .run();
+    }
+  },
   untitled: () =>
     db
       .select()

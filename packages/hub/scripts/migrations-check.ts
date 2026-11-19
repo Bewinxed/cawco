@@ -1631,6 +1631,49 @@ const foreignKeyDrift = async (path: string): Promise<string[]> => {
 };
 
 /**
+ * Every trigger a migration made (`CREATE TRIGGER`, less one a later
+ * migration drops) that the migrated database at `path` does not hold, as
+ * a sentence. drizzle-kit remakes a table it changes as `__new_<table>` and
+ * drops the old one, its triggers with it, so a migration that remakes a
+ * table makes its triggers again by hand (0104 and 0250 did for
+ * `instances_keep_alive_terminal`); one that forgets leaves a column a
+ * trigger keeps current (`artifacts.may_wait`, 0451) stale for good.
+ */
+const lostTriggers = async (path: string): Promise<string[]> => {
+  const made = new Map<string, string>();
+  for (const file of readdirSync(join(HUB, "drizzle"))
+    .filter((name) => name.endsWith(".sql"))
+    .sort()) {
+    const sql = await Bun.file(join(HUB, "drizzle", file)).text();
+    for (const [, verb, name] of sql.matchAll(
+      /\b(CREATE|DROP) TRIGGER (?:IF (?:NOT )?EXISTS )?[`"]?(\w+)/giu
+    )) {
+      if (verb.toUpperCase() === "CREATE") {
+        made.set(name, file);
+      } else {
+        made.delete(name);
+      }
+    }
+  }
+  const sqlite = new Database(path, { readonly: true });
+  const held = new Set(
+    sqlite
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger'"
+      )
+      .all()
+      .map((row) => row.name)
+  );
+  sqlite.close();
+  return [...made]
+    .filter(([name]) => !held.has(name))
+    .map(
+      ([name, file]) =>
+        `${name} (made by ${file}) is gone from the migrated database: a migration remade its table without it.`
+    );
+};
+
+/**
  * Every entry whose `when` is not after the one before it, as a sentence
  * naming both. Drizzle's migrator applies only the migrations whose `when`
  * is after the newest one a database records, so a hub that ran the earlier
@@ -2043,6 +2086,12 @@ try {
   if (drift.length) {
     throw new Error(
       `A migration's foreign keys don't match the schema (drizzle-kit 0.31 drops an added column's ON DELETE and ON UPDATE, drizzle-orm#5619: write the clause into the migration by hand):\n${drift.join("\n")}`
+    );
+  }
+  const gone = await lostTriggers(dbPath);
+  if (gone.length) {
+    throw new Error(
+      `A trigger a migration made is gone (drizzle-kit drops a remade table's triggers: write them into the migration again by hand):\n${gone.join("\n")}`
     );
   }
   // Every stored row (JSON, or a closed set of text) reads as its column's schema once migrated: a
