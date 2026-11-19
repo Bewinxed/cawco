@@ -8,6 +8,9 @@
    * `line`: the name and the meta on one line, the meta after the name (a
    * project's folder row, where the folder's own facts take the lines
    * under it).
+   *
+   * `mark`: the machine's own mark in the tile in place of `icon` (its OS
+   * mark, OsMark), drawn by the caller in the tile's ink.
    */
   import type { Component, Snippet } from "svelte";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
@@ -15,6 +18,7 @@
 
   let {
     icon: Icon,
+    mark,
     hue,
     name,
     meta,
@@ -23,7 +27,9 @@
     line = false,
     trailing,
   }: {
-    icon: Component;
+    icon?: Component;
+    /** The machine's own mark, in place of `icon`. */
+    mark?: Snippet;
     hue: string;
     name: string;
     meta: string;
@@ -41,7 +47,9 @@
   class={iconTileVariants()}
   data-ink={ink || undefined}
   style:color={ink ? undefined : hue}
-  ><Icon class="size-icon-md flex-none" /></span
+  >{#if mark}{@render mark()}{:else if Icon}<Icon
+      class="size-icon-md flex-none"
+    />{/if}</span
 >
 <span
   data-slot="text"

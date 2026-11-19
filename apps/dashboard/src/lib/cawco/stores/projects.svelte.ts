@@ -26,6 +26,7 @@ import type { StagesTemplate } from "@cawco/core/views";
 import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
+import type { HubClient } from "@cawco/hub/client";
 import { hub } from "#lib/platform/hub.js";
 import {
   hubData,
@@ -87,11 +88,12 @@ export async function editProject(
     lfs?: { connection: string; url: string } | null;
     name?: string;
     review?: boolean;
-  }
+  },
+  client: HubClient = hub
 ): Promise<ProjectRow> {
   const asked = projectsLeave();
   const row = await hubData(
-    hub.api.projects({ id: projectId }).patch(change),
+    client.api.projects({ id: projectId }).patch(change),
     (refused) => hubRefusal(refused, projectWords.notChangedThen)
   );
   keepProject(row, asked);
@@ -114,11 +116,12 @@ function keepProject(row: ProjectRow, asked: ProjectsAsked): void {
 export async function addProjectPlace(
   projectId: string,
   machineId: string,
-  path: string
+  path: string,
+  client: HubClient = hub
 ): Promise<ProjectRow> {
   const asked = projectsLeave();
   const row = await hubData(
-    hub.api.projects({ id: projectId }).places.post({ machineId, path }),
+    client.api.projects({ id: projectId }).places.post({ machineId, path }),
     (refused) => hubRefusal(refused, projectWords.placeNotAddedThen)
   );
   keepProject(row, asked);
@@ -132,13 +135,14 @@ export async function addProjectPlace(
  */
 export async function removeProjectPlace(
   projectId: string,
-  placeId: string
+  placeId: string,
+  client: HubClient = hub
 ): Promise<void> {
   await hubDone(
-    hub.api.projects({ id: projectId }).places({ placeId }).delete(),
+    client.api.projects({ id: projectId }).places({ placeId }).delete(),
     (refused) => hubRefusal(refused, projectWords.placeNotRemovedThen)
   );
-  await readProjects();
+  await readProjects(client);
 }
 
 /**
@@ -267,8 +271,8 @@ export const readRoutine = (routineId: string) =>
   hubData(hub.api.routines({ id: routineId }).get(), refusedOrUnreached);
 
 /** The fleet's connections, never their keys (`GET /api/connections`). */
-export const readConnections = async () =>
-  (await hubData(hub.api.connections.get(), refusedOrUnreached)).connections;
+export const readConnections = async (client: HubClient = hub) =>
+  (await hubData(client.api.connections.get(), refusedOrUnreached)).connections;
 
 /** Keeps a routine past its 7 days, or turns it off: the routine as it stands after. */
 export const changeRoutine = (
@@ -446,9 +450,9 @@ export async function discardHeldRows(
 }
 
 /** Reads the projects again, as the hub has them now. */
-export async function readProjects(): Promise<void> {
+export async function readProjects(client: HubClient = hub): Promise<void> {
   const asked = projectsLeave();
-  const projects = await load(hubData(hub.api.projects.get()));
+  const projects = await load(hubData(client.api.projects.get()));
   if (projects) {
     keepProjects(projects, asked);
   }

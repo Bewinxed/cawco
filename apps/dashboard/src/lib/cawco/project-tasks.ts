@@ -32,6 +32,7 @@ import type {
 import type { IssueTracker } from "@cawco/core/trackers";
 import type { StageKind } from "@cawco/core/views";
 import type { WorkItemState } from "@cawco/core/work-items";
+import type { HubClient } from "@cawco/hub/client";
 import { hub } from "#lib/platform/hub.js";
 import { type HubFile, hubFile } from "#lib/platform/hub-file.js";
 import {
@@ -242,9 +243,9 @@ export const listTasks = (projectId: string) =>
   );
 
 /** Where the project's tasks live, and its binding to GitHub Issues or Linear (the hub's tracker.ts). */
-export const readTracker = (projectId: string) =>
+export const readTracker = (projectId: string, client: HubClient = hub) =>
   hubData(
-    hub.api.projects({ id: projectId }).tracker.get(),
+    client.api.projects({ id: projectId }).tracker.get(),
     refusedOrUnreached
   );
 
@@ -262,17 +263,18 @@ export const setTracker = (
         } | null;
         target: string;
         tracker: IssueTracker;
-      }
+      },
+  client: HubClient = hub
 ) =>
   hubData(
-    hub.api.projects({ id: projectId }).tracker.put(binding),
+    client.api.projects({ id: projectId }).tracker.put(binding),
     refusedOrUnreached
   );
 
 /** The project's tasks and their issues synced now; answers where the binding stands after. */
-export const syncTracker = (projectId: string) =>
+export const syncTracker = (projectId: string, client: HubClient = hub) =>
   hubData(
-    hub.api.projects({ id: projectId }).tracker.sync.post(),
+    client.api.projects({ id: projectId }).tracker.sync.post(),
     refusedOrUnreached
   );
 
@@ -288,18 +290,26 @@ export const pollGitHub = (projectId: string): Promise<void> =>
   );
 
 /** The repositories or teams a connection reaches, for a project to be bound to one. */
-export const trackerTargets = (connection: string, search?: string) =>
+export const trackerTargets = (
+  connection: string,
+  search?: string,
+  client: HubClient = hub
+) =>
   hubData(
-    hub.api
+    client.api
       .connections({ name: connection })
       .targets.get({ query: search ? { search } : {} }),
     refusedOrUnreached
   );
 
 /** The GitHub Projects a connection reaches for a repository, or GitHub's words when it may not read them. */
-export const githubProjects = (connection: string, repo: string) =>
+export const githubProjects = (
+  connection: string,
+  repo: string,
+  client: HubClient = hub
+) =>
   hubData(
-    hub.api
+    client.api
       .connections({ name: connection })
       ["github-projects"].get({ query: { repo } }),
     refusedOrUnreached
@@ -337,8 +347,11 @@ export const listTasksWaiting = async (
     )
   ).tasks;
 
-export const readStages = (projectId: string) =>
-  hubData(hub.api.projects({ id: projectId }).stages.get(), refusedOrUnreached);
+export const readStages = (projectId: string, client: HubClient = hub) =>
+  hubData(
+    client.api.projects({ id: projectId }).stages.get(),
+    refusedOrUnreached
+  );
 
 /** What you did with a starter you pressed, as the composer sent: its words as they stood, or changed. */
 export const tellStarterOutcome = (

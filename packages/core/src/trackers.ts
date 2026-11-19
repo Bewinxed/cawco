@@ -91,7 +91,7 @@ export const statusOptionFor = (
       null);
 
 /** A project's binding: one connection and one target on it. */
-export interface TrackerBindingView {
+interface TrackerBindingView {
   /** When the project was bound, ms epoch: issues opened after it become tasks. */
   boundAt: number;
   /** The connection's name (hub connections.ts). */

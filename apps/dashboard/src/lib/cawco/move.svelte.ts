@@ -8,6 +8,7 @@
  */
 
 import type { MoveEstimate, MoveJob, MoveRequest } from "@cawco/core/move";
+import type { HubClient } from "@cawco/hub/client";
 import { hub } from "#lib/platform/hub.js";
 import { hubData } from "#lib/platform/hub-read.js";
 import { heardMove, movesStore } from "./stores/moves.svelte";
@@ -21,10 +22,11 @@ export async function moveEstimate(
   projectId: string,
   machineId: string,
   asked: { from: string; path?: string | undefined },
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  client: HubClient = hub
 ): Promise<MoveEstimate> {
   return await hubData(
-    hub.api.projects({ id: projectId })["move-estimate"].get({
+    client.api.projects({ id: projectId })["move-estimate"].get({
       query: {
         machine: machineId,
         from: asked.from,
@@ -38,9 +40,12 @@ export async function moveEstimate(
 /** Move & start: the hub records the job and answers it; it runs from there. */
 export async function startMove(
   projectId: string,
-  request: MoveRequest
+  request: MoveRequest,
+  client: HubClient = hub
 ): Promise<MoveJob> {
-  return await hubData(hub.api.projects({ id: projectId }).moves.post(request));
+  return await hubData(
+    client.api.projects({ id: projectId }).moves.post(request)
+  );
 }
 
 /**
@@ -48,12 +53,16 @@ export async function startMove(
  * (`kept`). From any stage, failed included, every screen reads it stopped
  * from the hub's answer on, not from its next frame.
  */
-export const cancelMove = (id: string): Promise<MoveJob> =>
-  moveAct(hubData(hub.api.moves({ id }).delete()));
+export const cancelMove = (
+  id: string,
+  client: HubClient = hub
+): Promise<MoveJob> => moveAct(hubData(client.api.moves({ id }).delete()));
 
 /** Retry: a failed job runs the step it failed at again, and on from there. */
-export const retryMove = (id: string): Promise<MoveJob> =>
-  moveAct(hubData(hub.api.moves({ id }).retry.post()));
+export const retryMove = (
+  id: string,
+  client: HubClient = hub
+): Promise<MoveJob> => moveAct(hubData(client.api.moves({ id }).retry.post()));
 
 /** One act on a job: the job as the hub answers it, heard at once. */
 async function moveAct(answered: Promise<MoveJob>): Promise<MoveJob> {
