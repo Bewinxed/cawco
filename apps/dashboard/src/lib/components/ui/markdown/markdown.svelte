@@ -34,6 +34,7 @@
   import { draw, stepping } from "../collapsible/draw";
   import { BREAK, literalHtml } from "./literal-html";
   import { mermaidFor } from "./mermaid.svelte";
+  import { useWordFade } from "./word-fade";
 
   let {
     source,
@@ -189,21 +190,27 @@
   /**
    * Each chunk's words fade in together: one short opacity fade per chunk
    * (--duration-menu, --ease-out: app.css), no stagger inside it, nothing
-   * that moves.
+   * that moves. A design graph tuning the fade provides its own (word-fade).
    */
+  const tuned = useWordFade();
   const animated = $derived(
     streamed && fades && motionOk.current
       ? {
           // Read as the fade runs: the token is the page's.
           get duration() {
-            return dur("--duration-menu");
+            return tuned?.duration ?? dur("--duration-menu");
           },
         }
       : false
   );
 </script>
 
-<div data-slot="md" class="contents">
+<div
+  data-slot="md"
+  class="contents"
+  style:--word-fade-duration={tuned ? `${tuned.duration}ms` : undefined}
+  style:--word-fade-ease={tuned?.ease}
+>
   <Markdown
     class={cn(
       PROSE,

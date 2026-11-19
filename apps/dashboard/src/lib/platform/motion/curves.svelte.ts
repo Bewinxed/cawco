@@ -19,7 +19,7 @@ export const motionOk = new MediaQuery(
 );
 
 /** A CSS `cubic-bezier(x1, y1, x2, y2)` as a function of progress. */
-function bezier(
+export function bezier(
   x1: number,
   y1: number,
   x2: number,
