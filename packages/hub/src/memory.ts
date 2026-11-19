@@ -43,6 +43,7 @@ import { frontMatterBlock } from "@cawco/core/fleet";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { isRecord } from "@cawco/core/is-record";
 import type { InstanceRow } from "@cawco/core/protocol";
+import type { RoutineRunView } from "@cawco/core/routine-kinds";
 import type {
   NeutralMessage,
   NeutralOrigin,
@@ -1356,12 +1357,15 @@ export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
 
 /**
  * The person's own memory acts outside a conversation: "Make a note"
- * straight into AGENTS.md; and withdrawing a note, which retires the lessons
- * resting on it alone in the same commit (memory-run.ts `withdraw`).
+ * straight into AGENTS.md; withdrawing a note, which retires the lessons
+ * resting on it alone in the same commit (memory-run.ts `withdraw`); and the
+ * one-time recovery run of the notes archived unread before the nightly
+ * run (routines.ts `recover`).
  */
 export const memoryRoutes = (
   memory: Memory,
   acts: {
+    recover: (projectId: string) => Promise<RoutineRunView | AnyProblem>;
     withdraw: (
       projectId: string,
       note: string
@@ -1384,6 +1388,11 @@ export const memoryRoutes = (
       "/api/projects/:id/memory/notes/:note/withdraw",
       { detail: { hide: true } },
       ({ params }) => acts.withdraw(params.id, params.note)
+    )
+    .post(
+      "/api/projects/:id/memory/recover",
+      { detail: { hide: true } },
+      ({ params }) => acts.recover(params.id)
     );
 
 const MEMORY_NOTE_DEFINITION = defineTool(

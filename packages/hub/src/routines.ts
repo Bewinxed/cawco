@@ -58,7 +58,8 @@
  *   in every project, as the project is made and for each one with none as
  *   the hub starts: target `curator`, daily at 06:00 in the hub's zone,
  *   kept, with no test run, its budget 40 turns, 20 minutes and $2 a run and
- *   $4 a day (one run and its retry). It runs on no other trigger. Its run reads the
+ *   $4 a day (one run and its retry). It runs on no other trigger but its
+ *   one-time recovery (slot `recovery:<n>`, `recover`). Its run reads the
  *   person's messages and the inbox first; with nothing to read it ends
  *   silent, else it is a delegate run in the `curator` role, its prompt the
  *   hub's own (core words `curatorPrompt`: an edit of the routine's prompt
@@ -135,7 +136,7 @@ import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { defineTool } from "./mcp-tool";
 import { ROUTINE_ORIGIN } from "./memory";
-import type { MemoryRun } from "./memory-run";
+import { type MemoryRun, RECOVERY_RUNS } from "./memory-run";
 import {
   routineListWords,
   routineRunWords,
@@ -148,6 +149,7 @@ import {
   type EnsureCurator,
   EVENT_SLOT,
   nextRunsOf,
+  RECOVERY_SLOT,
   slotLabel,
 } from "./routine-schedule";
 import type { RoutineView } from "./routine-view";
@@ -197,6 +199,8 @@ const CURATOR_CRON = "0 6 * * *";
 const CURATOR_BUDGET = { turns: 40, minutes: 20, usd: 2 } as const;
 /** A day's cap on the nightly memory run: one run and its retry. */
 const CURATOR_DAILY_USD = 4;
+/** Each of the two recovery runs' budget: 120 turns and $6 for the two, each reading up to 60 notes. */
+const RECOVERY_BUDGET = { turns: 60, minutes: 30, usd: 3 } as const;
 
 /** Why a change of target is refused: the memory curator's and the trim routine's stay the hub's. */
 const targetStays = (from: RoutineTarget, to: RoutineTarget) => {
@@ -329,9 +333,12 @@ export interface RoutineDeps {
   readonly lifetime: HubLifetimeShape;
   /**
    * The nightly memory run (memory-run.ts): its brief (`none` when nothing
-   * is left to read; Jev failing throws), and its end.
+   * is left to read; Jev failing throws), the recovery's, and its end.
    */
-  readonly memoryRun: Pick<MemoryRun, "brief" | "close">;
+  readonly memoryRun: Pick<
+    MemoryRun,
+    "brief" | "close" | "recoveryBrief" | "recoveryRuns" | "recoveryWaits"
+  >;
   /** Why the project's spend cap holds its work back now, or nothing (project-caps.ts). */
   readonly pauses: (projectId: string) => string | undefined;
   readonly push: Pick<Push, "routine" | "routineMade">;
@@ -1233,14 +1240,18 @@ export const createRoutines = ({
   /**
    * A nightly memory run (memory-run.ts): what it reads made ready first;
    * nothing to read ends it silent, else its delegate starts in the
-   * `curator` role on the hub's own prompt.
+   * `curator` role on the hub's own prompt. A recovery slot's run reads the
+   * recovery's inputs, on its own budget.
    */
   const fireCurator = async (routine: RoutineRow, run: RoutineRunRow) => {
     const { projectId } = routine;
     if (!projectId) {
       return noProject;
     }
-    const brief = await memoryRun.brief(projectId);
+    const recovery = run.slot.startsWith(RECOVERY_SLOT);
+    const brief = recovery
+      ? await memoryRun.recoveryBrief(projectId)
+      : await memoryRun.brief(projectId);
     if (brief instanceof ElysiaStatus) {
       return brief;
     }
@@ -1257,6 +1268,7 @@ export const createRoutines = ({
       input: brief.text,
       role: "curator",
       prompt: curatorPrompt,
+      ...(recovery ? { budget: RECOVERY_BUDGET } : {}),
     });
   };
 
@@ -2557,6 +2569,42 @@ export const createRoutines = ({
     }
   };
 
+  /**
+   * The project's one-time memory recovery (memory-run.ts
+   * `recoveryBrief`): its next run, on slot `recovery:<n>`, each once, at
+   * most {@link RECOVERY_RUNS}; refused when it has nothing left to read.
+   */
+  const recover = async (projectId: string) => {
+    const routine = curatorOf(projectId);
+    if (!routine) {
+      return problem(404, {
+        code: "memory-recovery-no-routine",
+        detail: `Project ${projectId} has no nightly memory run to recover with.`,
+      });
+    }
+    const waits = await memoryRun.recoveryWaits(projectId);
+    const runs = await memoryRun.recoveryRuns(projectId);
+    if (waits instanceof ElysiaStatus) {
+      return waits;
+    }
+    if (runs instanceof ElysiaStatus) {
+      return runs;
+    }
+    if (!waits || runs >= RECOVERY_RUNS) {
+      return problem(409, {
+        code: "memory-recovery-done",
+        detail: "The memory recovery has nothing left to read.",
+      });
+    }
+    const run = fireExtra(routine, `${RECOVERY_SLOT}${runs + 1}`, 1);
+    return run
+      ? runView(run)
+      : problem(409, {
+          code: "routine-run-asked",
+          detail: "That run was asked for already.",
+        });
+  };
+
   /** The trim routine of `projectId` (null: the fleet-level one), when there is one. */
   const trimOf = (projectId: string | null): RoutineRow | undefined =>
     store.list(projectId).find((row) => row.target === "trim");
@@ -2873,6 +2921,7 @@ export const createRoutines = ({
     fleetTrim,
     get,
     runsPage,
+    recover,
     itemEnded,
     sendLeft,
     turnEnded,

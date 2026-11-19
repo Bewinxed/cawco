@@ -19,6 +19,9 @@ export const EVENT_SLOT = "event:";
 /** A run a full inbox started before the nightly memory run (slot `inbox:<time>`): no run takes it now, and the runs kept with it read so. */
 const INBOX_SLOT = "inbox:";
 
+/** A project's one-time memory recovery run (memory-run.ts `recoveryBrief`): slot `recovery:<n>`, each once. */
+export const RECOVERY_SLOT = "recovery:";
+
 /**
  * Makes a project's nightly memory run when it has none (routines.ts
  * `ensureCurator`, declared with this): nothing, or the problem of its
@@ -98,6 +101,9 @@ export const slotLabel = (slot: string, timeZone: string): string => {
   }
   if (slot.startsWith(INBOX_SLOT)) {
     return "inbox";
+  }
+  if (slot.startsWith(RECOVERY_SLOT)) {
+    return "recovery";
   }
   return new Intl.DateTimeFormat("en-GB", {
     timeZone,

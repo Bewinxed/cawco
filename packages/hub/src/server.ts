@@ -13533,6 +13533,7 @@ export const createServer = (
         phoneRequestRoutes(jevTasks),
         memoryRoutes(projectMemory, {
           withdraw: (projectId, note) => memoryRun.withdraw(projectId, note),
+          recover: (projectId) => routines.recover(projectId),
         }),
         routineRoutes(routines),
         connectionRoutes(connections),

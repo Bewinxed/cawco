@@ -34,10 +34,10 @@
  *   this: AGENTS.md and `knowledge/` converted to lessons, every line that
  *   breaks a text rule or a cap handed to the **recovery** run
  *   (`memory/recovery.json`), with the notes archived unread before because
- *   their session had read the web.
+ *   their session had read the web ({@link recoveryBrief}).
  */
 import type { RoutineOutcome } from "@cawco/core/routine-kinds";
-import { DAY_MS } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { memoryJevWords, memoryRunWords } from "@cawco/core/words/memory-run";
 import type { Experimental_DecisionQuestion } from "ai";
 import { ElysiaStatus, problem } from "elysia";
@@ -132,6 +132,8 @@ const APPLY_OPS = 20;
 /** Lessons grep pairs with a message in the brief, at most. */
 const RELATED = 3;
 /** The recovery run's notes, and the messages before each it reads. */
+const RECOVERY_NOTES = 60;
+const RECOVERY_HOURS = 48;
 const RECOVERY_FILE = "memory/recovery.json";
 
 const CURATOR: FolderAuthor = { name: "Memory curator" };
@@ -996,7 +998,8 @@ export const createMemoryRun = ({
   };
 
   /** The night's limit on added lessons: the recovery's is its own. */
-  const adds = (_run: Run): number => CAPS.nightAdds;
+  const adds = (run: Run): number =>
+    run.kind === "recovery" ? RECOVERY_ADDS : CAPS.nightAdds;
 
   /** The brief's text: the messages, the notes, the staged lessons, the index, the files and the skills. */
   const briefText = (project: ProjectRow, tree: MemoryTree, run: Run) => {
@@ -1977,16 +1980,30 @@ export const createMemoryRun = ({
     }
     const at = new Date().toISOString();
     const next = nextState(state, run, outcome, at);
+    const recovery =
+      run.kind === "recovery" && outcome !== "failed"
+        ? await recoveryLeft(projectId, run)
+        : undefined;
+    if (recovery instanceof ElysiaStatus) {
+      return recovery;
+    }
     const read = await treeOf(projectId);
     if (read instanceof ElysiaStatus) {
       return read;
     }
+    const kept = recovery?.done ? { ...next, recovered: dayOf(at) } : next;
+    const files = [
+      ...(Bun.deepEquals(kept, state)
+        ? []
+        : [{ path: RUN_STATE_FILE, content: jsonText(kept) }]),
+      ...(recovery?.file ? [recovery.file] : []),
+    ];
     const done = await commit(projectId, read.tree, read.tree, {
       author: HUB,
       message: `memory: the ${run.kind} run's mark, ${dayOf(at)}`,
-      extra: Bun.deepEquals(next, state)
-        ? []
-        : [{ path: RUN_STATE_FILE, content: jsonText(next) }],
+      extra: files,
+      gone: recovery?.done ? [RECOVERY_FILE] : [],
+      notes: recovery?.unread ?? [],
     });
     return done instanceof ElysiaStatus ? done : undefined;
   };
@@ -2056,6 +2073,160 @@ export const createMemoryRun = ({
       RecoverySchema.nullable(),
       null
     );
+
+  /**
+   * The one-time recovery run's brief (§11): the notes archived unread
+   * before because their session had read the web, each with the person's
+   * messages in its session in the {@link RECOVERY_HOURS} before it, the
+   * inbox's notes, and the lines of AGENTS.md and `knowledge/` the cutover
+   * did not convert (each a source of its own, `approved`). At most
+   * {@link RECOVERY_NOTES} notes a run; a second run reads the rest.
+   */
+  const recoveryBrief = async (projectId: string) => {
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
+    const recovery = await recoveryOf(projectId);
+    if (recovery instanceof ElysiaStatus) {
+      return recovery;
+    }
+    if (!recovery) {
+      return { kind: "none" as const, reason: memoryRunWords.nothingToRead };
+    }
+    const notes = await recoveryNotes(project, recovery);
+    if (notes instanceof ElysiaStatus) {
+      return notes;
+    }
+    const run = newRun("recovery", jevAccess(db) !== undefined, notes, {
+      notes: notes.length,
+    });
+    const seen = new Set<string>();
+    for (const note of notes) {
+      for (const said of saidBefore(projectId, note, seen)) {
+        seen.add(said.uuid);
+        run.messages.set(`m${run.messages.size + 1}`, {
+          said,
+          text: cut(said.text),
+          session: sessionHandle(run, said.instanceId),
+        });
+        run.said.push(said.text);
+      }
+    }
+    recovery.legacy.forEach((line, at) => {
+      run.messages.set(`l${at + 1}`, {
+        legacy: line,
+        text: line.text,
+        session: line.path,
+      });
+      run.said.push(line.text);
+    });
+    run.counts.read = run.messages.size;
+    return await ready(project, run);
+  };
+
+  /** The recovery's notes for its next run, after upkeep: the archived ones it was handed, then the inbox's, at most {@link RECOVERY_NOTES}. */
+  const recoveryNotes = async (project: ProjectRow, recovery: Recovery) => {
+    const kept = await upkeep(project);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
+    const archive = await notesIn(project.id, ARCHIVE_DIR);
+    if (archive instanceof ElysiaStatus) {
+      return archive;
+    }
+    const inbox = await notesIn(project.id, INBOX_DIR);
+    if (inbox instanceof ElysiaStatus) {
+      return inbox;
+    }
+    const wanted = new Set(recovery.notes);
+    // A note a nightly run read since is no longer the recovery's.
+    return [...archive, ...inbox]
+      .filter(
+        (note) =>
+          wanted.has(note.id) &&
+          (note.outcome === null || note.outcome.startsWith("tainted"))
+      )
+      .slice(0, RECOVERY_NOTES);
+  };
+
+  /** What the person typed in a note's session in the {@link RECOVERY_HOURS} before it, long enough to be a rule, none `seen` already. */
+  const saidBefore = (
+    projectId: string,
+    note: Note,
+    seen: ReadonlySet<string>
+  ): PersonSaid[] => {
+    const at = new Date(note.time);
+    return db
+      .personSaidIn(
+        projectId,
+        new Date(at.getTime() - RECOVERY_HOURS * HOUR_MS),
+        at,
+        RUN_SAID
+      )
+      .filter(
+        (said) =>
+          said.instanceId === note.session &&
+          !seen.has(said.uuid) &&
+          wordCount(said.text) >= SAID_WORDS
+      );
+  };
+
+  /**
+   * The recovery's inputs once a recovery run ends: its notes no operation
+   * named archived unread, the legacy lines it read gone, the notes left
+   * for a second run kept; the file gone when nothing is left, and the run
+   * marked done.
+   */
+  const recoveryLeft = async (projectId: string, run: Run) => {
+    const recovery = await recoveryOf(projectId);
+    if (recovery instanceof ElysiaStatus) {
+      return recovery;
+    }
+    if (!recovery) {
+      return { done: false, unread: [], file: undefined };
+    }
+    const given = new Set([...run.notes.keys(), ...run.consumed]);
+    const left: Recovery = {
+      legacy: recovery.legacy.filter(
+        (_, at) => !run.consumed.has(`l${at + 1}`)
+      ),
+      notes: recovery.notes.filter((id) => !given.has(id)),
+      runs: recovery.runs + 1,
+    };
+    const last = left.runs >= RECOVERY_RUNS;
+    const unreadIds = new Set([
+      ...[...run.notes.keys()].filter((id) => recovery.notes.includes(id)),
+      ...(last ? left.notes : []),
+    ]);
+    const unread = await notesNamed(projectId, unreadIds);
+    if (unread instanceof ElysiaStatus) {
+      return unread;
+    }
+    const done = last || left.notes.length + left.legacy.length === 0;
+    return {
+      done,
+      unread: unread
+        .filter(
+          (note) => note.outcome === null || note.outcome.startsWith("tainted")
+        )
+        .map((note) => ({ note, outcome: "dropped: unread" })),
+      file: done ? undefined : { path: RECOVERY_FILE, content: jsonText(left) },
+    };
+  };
+
+  /** The notes of `ids`, wherever each is now (the inbox or the archive). */
+  const notesNamed = async (projectId: string, ids: ReadonlySet<string>) => {
+    const inbox = await notesIn(projectId, INBOX_DIR);
+    if (inbox instanceof ElysiaStatus) {
+      return inbox;
+    }
+    const archive = await notesIn(projectId, ARCHIVE_DIR);
+    if (archive instanceof ElysiaStatus) {
+      return archive;
+    }
+    return [...inbox, ...archive].filter((note) => ids.has(note.id));
+  };
 
   // --- a note withdrawn -----------------------------------------------------------
 
@@ -2439,6 +2610,7 @@ export const createMemoryRun = ({
   return {
     start,
     brief,
+    recoveryBrief,
     withdraw,
     purged,
     cutover,
@@ -2446,7 +2618,24 @@ export const createMemoryRun = ({
     apply,
     close,
     upkeep,
+    /** Whether project `projectId` has recovery inputs left to run. */
+    recoveryWaits: async (projectId: string) => {
+      const recovery = await recoveryOf(projectId);
+      return recovery instanceof ElysiaStatus ? recovery : recovery !== null;
+    },
+    /** How many recovery runs project `projectId` has had. */
+    recoveryRuns: async (projectId: string) => {
+      const recovery = await recoveryOf(projectId);
+      return recovery instanceof ElysiaStatus
+        ? recovery
+        : (recovery?.runs ?? 0);
+    },
   };
 };
+
+/** The recovery run's limit on added lessons, for each of its two runs. */
+const RECOVERY_ADDS = 30;
+/** The recovery's runs: two of 60 notes each read every note it was handed. */
+export const RECOVERY_RUNS = 2;
 
 export type MemoryRun = ReturnType<typeof createMemoryRun>;
