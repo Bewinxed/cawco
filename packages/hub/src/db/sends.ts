@@ -13,6 +13,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lte,
   or,
   type SQL,
   sql,
@@ -37,6 +38,26 @@ const MIGRATE_BATCH = 500;
 export type SentMessageRow = typeof sentMessages.$inferSelect & {
   body: NeutralUserMessage;
 };
+
+/**
+ * What the person typed to a session, as the hub recorded it: the send's
+ * uuid, the session it went to, when the hub accepted it, and its words
+ * (its text blocks joined; pictures left out).
+ */
+export interface PersonSaid {
+  acceptedAt: Date;
+  instanceId: string;
+  text: string;
+  uuid: string;
+}
+
+/** A send's words: its text, or its text blocks joined; pictures and other blocks left out. */
+const wordsOf = ({ message }: NeutralUserMessage): string =>
+  typeof message.content === "string"
+    ? message.content
+    : message.content
+        .flatMap((block) => (block.type === "text" ? [block.text] : []))
+        .join("\n\n");
 
 /** A send as it is recorded: its row's columns, its body, and none of the columns its body writes ({@link bodyColumns}). */
 export type NewSend = Omit<
@@ -190,6 +211,21 @@ export interface SendsDb {
   readonly owedSessionsHeld: (holds: readonly SendHold[]) => string[];
   /** Every send still pending (accepted, not yet read by its session), each session's oldest first. */
   readonly pendingSends: () => SentMessageRow[];
+  /**
+   * What the person typed to sessions of `projectId`, oldest first: sends of
+   * origin `human` (stamped by the hub where his words come in, never by a
+   * session's tools: sends.ts `SessionSend`), pending or read, not replaced
+   * by a retry, accepted after `after` and at or before `through`; a slash
+   * command (a word to the harness, as {@link personUnanswered} skips it)
+   * left out. At most `limit`. Found by each session's origin index
+   * (`sent_messages_origin`), the project's sessions first.
+   */
+  readonly personSaidIn: (
+    projectId: string,
+    after: Date,
+    through: Date,
+    limit: number
+  ) => PersonSaid[];
   /**
    * The person's last message to the session, when it has no reply after it:
    * `read`, the session has it, or `pending`, it waits to reach it. His last
@@ -528,6 +564,37 @@ export const sendsDb = (core: DbCore): SendsDb => {
       }
       return last.state === "read" ? "read" : "pending";
     },
+    personSaidIn: (projectId, after, through, limit) =>
+      db
+        .select({
+          uuid: sentMessages.uuid,
+          instanceId: sentMessages.instanceId,
+          acceptedAt: sentMessages.acceptedAt,
+          body: sentMessageBodies.body,
+        })
+        .from(instances)
+        .innerJoin(sentMessages, eq(sentMessages.instanceId, instances.id))
+        .innerJoin(
+          sentMessageBodies,
+          eq(sentMessageBodies.uuid, sentMessages.uuid)
+        )
+        .where(
+          and(
+            eq(instances.projectId, projectId),
+            eq(sentMessages.originKind, "human"),
+            gt(sentMessages.acceptedAt, after),
+            lte(sentMessages.acceptedAt, through),
+            inArray(sentMessages.state, ["pending", "read"]),
+            isNull(sentMessages.replacedBy)
+          )
+        )
+        .orderBy(asc(sentMessages.acceptedAt))
+        .limit(limit)
+        .all()
+        .flatMap(({ body, ...said }) => {
+          const text = wordsOf(body).trim();
+          return text && !text.startsWith("/") ? [{ ...said, text }] : [];
+        }),
     latestSends: (id) => {
       const [read] = sends()
         .where(

@@ -276,39 +276,48 @@ const isQuerySend = ({ message }: SendPayload): boolean =>
   message.shouldQuery !== false;
 
 /**
- * Put a relay send's `message` into the one shape every adapter reads
- * ({@link NeutralUserMessage}), or say why it cannot be — IN PLACE, because
- * the body is forwarded to the agent verbatim.
- *
- * This exists because the failure it replaces was silent and total. `message`
- * travels from here to the agent's `#send`, into the claude adapter's input
- * stream, and out to the CLI as one stream-json line. A bare string survives
- * every one of those hops — it is valid JSON — and dies at the far end, where
- * the CLI reads a JSON *string* where a message envelope belongs and drops it
- * without a word. Nothing upstream can tell: the POST answers 200, the agent
- * pushes what it was given, and the session sits at `running` forever with no
- * transcript, no frames and no error on any machine. It costs hours to find,
- * and the caller's intent was never in doubt.
- *
- * So: text is wrapped (the caller plainly meant to say it), an envelope that
- * only forgot its `type` is completed, and anything else is refused loudly
- * rather than forwarded to hang. The one outcome no longer possible is the
- * one that was happening.
+ * A session's own send, from its CawCo tools (`handoff`, `start_session`'s
+ * opening, a report): it speaks as that session or the hub, never as the
+ * person. The person's words come in at four places only, each stamped by
+ * the hub (stream.ts, caw.ts, moves.ts and {@link personsMessage}); the
+ * project's memory reads a send of origin `human` as his (db sends.ts
+ * `personSaidIn`), so no session's tool may compile one.
  */
-const normalizeRelayMessage = (body: SendPayload): string | undefined => {
+export type SessionSend = SentMessage & {
+  origin: Exclude<NeutralOrigin, { kind: "human" }>;
+};
+
+/** A send's payload as a session's tools make it ({@link SessionSend}). */
+export type SessionSendPayload = Omit<SendPayload, "message"> & {
+  message: SessionSend;
+};
+
+/** A session's send as its tools hand it to the hub ({@link SessionSend}). */
+export type SessionSendEnvelope = Omit<HubEnvelope<"send">, "payload"> & {
+  payload: SessionSendPayload;
+};
+
+/**
+ * Checks a session's send's `message` is the one shape every adapter reads
+ * ({@link NeutralUserMessage}), with a speaker that is not the person, or
+ * says why it is not, completing in place only the `type` and `uuid` a
+ * well-formed caller may leave out: the body is forwarded to the agent
+ * verbatim.
+ *
+ * A bare string is refused: it survives every hop as valid JSON and dies at
+ * the far end, where the CLI reads a JSON string where a message envelope
+ * belongs and drops it without a word, the session sitting at `running`
+ * with no transcript and no error. A message with no origin, or the
+ * person's, is refused: a session's send never speaks as him
+ * ({@link SessionSend}).
+ */
+const normalizeRelayMessage = (
+  body: SessionSendPayload
+): string | undefined => {
   const needsEnvelope =
-    "relay send needs a message: either plain text, or a {type:'user',message:{role:'user',content:…}} envelope";
-  // As it came: a caller that typed it loosely sends what it likes.
+    "a session's send needs a {type:'user',message:{role:'user',content:…},origin:{kind:'peer',…}} envelope";
+  // As it came: the type says what it is, the check holds what the wire carried.
   const message: unknown = body.message;
-  if (typeof message === "string") {
-    body.message = {
-      type: "user",
-      message: { role: "user", content: message },
-      uuid: crypto.randomUUID(),
-      origin: { kind: "human" },
-    } satisfies SentMessage;
-    return;
-  }
   if (!isRecord(message)) {
     return needsEnvelope;
   }
@@ -330,11 +339,14 @@ const normalizeRelayMessage = (body: SendPayload): string | undefined => {
   if (message.type !== "user") {
     return "relay send message.type must be 'user'";
   }
-  // Every sent message has an identity and a speaker (`SentMessage`). The hub
-  // completes the message here, so a caller that named neither gets its uuid
-  // minted here, and speaks as a dashboard send does — as the operator.
+  const { origin } = message;
+  if (!isRecord(origin) || typeof origin.kind !== "string") {
+    return "a session's send names who it is from: message.origin, like {kind:'peer',from:<its session>}";
+  }
+  if (origin.kind === "human") {
+    return "a session's send never speaks as the person: name its own origin";
+  }
   message.uuid ??= crypto.randomUUID();
-  message.origin ??= { kind: "human" };
 };
 
 /**
@@ -3123,7 +3135,7 @@ export const createSends = (ctx: SendsContext) => {
    * send path ({@link deliverSend}), and what became of it. A send that
    * failed is refused with why.
    */
-  const sessionSend = (asked: HubEnvelope<"send">, requester: InstanceRow) => {
+  const sessionSend = (asked: SessionSendEnvelope, requester: InstanceRow) => {
     const envelope = byIdNow(asked);
     const { payload } = envelope;
     const malformed = normalizeRelayMessage(payload);

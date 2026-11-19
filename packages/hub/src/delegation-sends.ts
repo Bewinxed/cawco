@@ -32,7 +32,7 @@ import {
   answerOfControl,
   type createRelayControl,
 } from "./relay-control";
-import type { createSends } from "./sends";
+import type { createSends, SessionSendEnvelope } from "./sends";
 import { type createSpawns, peekParent } from "./spawns";
 import { type HandoffInputs, mayStartRefusal } from "./work-items";
 
@@ -53,6 +53,14 @@ export type DelegationSendsDeps = Pick<
   sessionSend: ReturnType<typeof createSends>["sessionSend"];
   spawnSession: ReturnType<typeof createSpawns>["spawnSession"];
 };
+
+/**
+ * What a session's tool call emits for the hub to carry out: any envelope
+ * but a send, and a send only as a session's ({@link SessionSendEnvelope}),
+ * which never speaks as the person.
+ */
+export type SessionEmitted =
+  Exclude<HubEnvelope, { verb: "send" }> | SessionSendEnvelope;
 
 export const createDelegationSends = (deps: DelegationSendsDeps) => {
   /** The row of the session whose tool call this is, read fresh: its permission may have changed mid-call; the problem when the hub has none. */
@@ -204,7 +212,7 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
      * Hands a session's send to the hub's one send path now, and answers
      * what became of it; a send that does not go answers the hub's problem.
      */
-    deliver: (envelope: HubEnvelope<"send">, actor: InstanceRow) => {
+    deliver: (envelope: SessionSendEnvelope, actor: InstanceRow) => {
       const requester = caller(actor);
       return Promise.resolve(
         requester instanceof ElysiaStatus
@@ -220,7 +228,7 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
     handOff: async (
       target: string,
       inputs: unknown[],
-      compose: (landed: HandoffInputs) => HubEnvelope<"send">,
+      compose: (landed: HandoffInputs) => SessionSendEnvelope,
       actor: InstanceRow
     ) => {
       const requester = caller(actor);
@@ -286,7 +294,7 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
      * interrupt, or an answer to its ask), each checked in that order before
      * the answer or the control goes; the hub's problem when it may not.
      */
-    forward: async (envelope: HubEnvelope, actor: InstanceRow) => {
+    forward: async (envelope: SessionEmitted, actor: InstanceRow) => {
       // The MCP resolver supplies the caller separately, never from provenance
       // on an envelope. Recheck the row in case its permission changed mid-call.
       const requester = caller(actor);

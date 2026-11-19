@@ -129,6 +129,8 @@ export default {
         "scripts/codemods/hub-client-import.ts",
         // scripts/check.ts
         "scripts/shell-bodies-check.ts",
+        // scripts/check.ts
+        "scripts/memory-cutover-check.ts",
         // scripts/check.ts, beside spacing-ratchet.ts
         "scripts/tailwind-draws-check.ts",
         // Never imported: `golar tsc -b` type-checks its `@ts-expect-error` lines, the tool door's proof (scripts/lib/tool-call.ts).

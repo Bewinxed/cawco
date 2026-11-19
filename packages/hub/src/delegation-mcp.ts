@@ -4,7 +4,6 @@ import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/asks";
 import type { Kind } from "@cawco/core/decides";
 import { ANY_TYPE, parseConnectionTool } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
-import type { HubEnvelope } from "@cawco/core/envelopes";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -50,7 +49,7 @@ import {
   handoffActions,
   type ItemEnd,
 } from "./delegation-actions";
-import type { DelegationSends } from "./delegation-sends";
+import type { DelegationSends, SessionEmitted } from "./delegation-sends";
 import {
   handoffInstructions,
   handoffTools,
@@ -1209,7 +1208,7 @@ export function createDelegationMcp(options: {
   const actionDeps = (
     actor: InstanceRow,
     name: string,
-    emitted: HubEnvelope[],
+    emitted: SessionEmitted[],
     callId?: string,
     cut?: AbortSignal
   ): HandoffDeps => {
@@ -1250,7 +1249,7 @@ export function createDelegationMcp(options: {
     callId?: string,
     cut?: AbortSignal
   ): Promise<CallToolResult> => {
-    const emitted: HubEnvelope[] = [];
+    const emitted: SessionEmitted[] = [];
     const deps = actionDeps(actor, name, emitted, callId, cut);
     const entry = builtOf(viewOf(actor)).handoff.find(
       (tool) => tool.name === name

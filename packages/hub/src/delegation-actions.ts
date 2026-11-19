@@ -13,7 +13,6 @@
 import { readWithin } from "@cawco/core/bounded";
 import type { AddressedControl } from "@cawco/core/control-table";
 import type { DelegateType, MayStart } from "@cawco/core/delegate-types";
-import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { ForgeWrite } from "@cawco/core/forge-post";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
@@ -34,11 +33,7 @@ import {
   machinesCalled,
 } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
-import type {
-  InstanceRow,
-  SendPayload,
-  SpawnPayload,
-} from "@cawco/core/protocol";
+import type { InstanceRow, SpawnPayload } from "@cawco/core/protocol";
 import { QUESTION_DISMISSED } from "@cawco/core/question";
 import { artifactLink, sessionLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
@@ -57,7 +52,7 @@ import type {
   WorkItemSubmission,
 } from "./db/stored-types";
 import type { DelegateResult } from "./delegate-result";
-import type { DelegationSends } from "./delegation-sends";
+import type { DelegationSends, SessionEmitted } from "./delegation-sends";
 import type {
   DelegateList,
   DelegateListQuery,
@@ -68,7 +63,11 @@ import { type KeepAliveRow, provenCold } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
 import type { ProblemsOf } from "./refusal";
-import type { SendDelivery } from "./sends";
+import type {
+  SendDelivery,
+  SessionSendEnvelope,
+  SessionSendPayload,
+} from "./sends";
 import type { SessionCalls } from "./session-calls";
 import {
   activeAt,
@@ -546,7 +545,7 @@ const peerSend = (
   name: string,
   body: string,
   extra: { shouldQuery?: false } = {}
-): SendPayload => ({
+): SessionSendPayload => ({
   instanceId: to,
   message: {
     type: "user",
@@ -725,10 +724,10 @@ export interface HandoffDeps {
    * it: a send that does not go answers the hub's problem, in its reason.
    */
   readonly deliver: (
-    envelope: HubEnvelope<"send">
+    envelope: SessionSendEnvelope
   ) => ReturnType<DelegationSends["deliver"]>;
-  /** Puts an envelope on the daemon's hub socket. */
-  readonly emit: (envelope: HubEnvelope) => void;
+  /** Puts an envelope on the daemon's hub socket: a send only as this session's. */
+  readonly emit: (envelope: SessionEmitted) => void;
   /** The board and the machines, read in the hub's own process. */
   readonly fleet: Fleet;
   /**
@@ -753,7 +752,7 @@ export interface HandoffDeps {
   readonly handOff: (
     target: string,
     inputs: unknown[],
-    compose: (landed: HandoffInputs) => HubEnvelope<"send">
+    compose: (landed: HandoffInputs) => SessionSendEnvelope
   ) => ReturnType<DelegationSends["handOff"]>;
   /** Exact-id lookup includes ended/archived rows outside the live roster. */
   readonly instanceById: (id: string) => InstanceRow | undefined;
@@ -1754,7 +1753,7 @@ export const handoffActions = ({
         peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
       const from = senderName(own, cwd);
       const said = `${handoffMarker(from, instanceId)}${message}`;
-      const envelopeOf = (body: string): HubEnvelope<"send"> => ({
+      const envelopeOf = (body: string): SessionSendEnvelope => ({
         verb: "send",
         machineId: peer.row.machineId,
         instanceId: peer.row.id,

@@ -592,6 +592,8 @@ const gated: Gated[] = [
   bun("scripts/relics-check.ts"),
   bun("scripts/style-greps.ts"),
   bun("scripts/tool-answer-check.ts"),
+  // The project's memory: who may say the person's words (C2).
+  bun("scripts/memory-cutover-check.ts"),
   bun("scripts/route-families-check.ts"),
   // Every hub route answers a value Eden can type: a Response or unknown
   // only from a protocol endpoint whose client is not ours.
