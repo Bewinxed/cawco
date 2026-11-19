@@ -95,6 +95,29 @@ export const memoryRunWords = {
     `The project's memory keeps this rule (${id}): ${rule}\n\nWhat to do instead, which the check's message says: ${method}\n\nMake it a check a tool runs, a lint rule or a refusal of the hub's, so no agent has to remember it. Once this task is done, the nightly memory run takes the rule's line out of the memory: the check holds it.`,
   checkAcceptance:
     "The project's check command fails on a file that breaks the rule, and its message says what to do instead.",
+  /** The task a lesson about how CawCo itself works becomes, in a project that develops CawCo: its title, description and acceptance line. */
+  productTitle: (rule: string) => `Build into CawCo: ${rule}`,
+  productDescription: (rule: string, id: string | undefined) =>
+    `The memory run found a lesson about how CawCo itself works${id ? ` (${id}, now out of the project's memory)` : ""}: ${rule}\n\nBuild it into CawCo, so every user's sessions get it from the product: a tool's behaviour or description, a refusal, or the instructions every session starts with.`,
+  productAcceptance:
+    "Every session in every project gets this from CawCo itself, with no line in a project's memory.",
+  /** What became of a lesson about how CawCo itself works, as an operation's answer and commit say it. */
+  productFiled: (task: string) =>
+    `it says how CawCo itself works: filed as task ${task} to build into CawCo, kept out of memory`,
+  productCovered: (task: string) =>
+    `it says how CawCo itself works, and open task ${task} builds it into CawCo: kept out of memory`,
+  productElsewhere:
+    "it says how CawCo itself works, which CawCo holds: kept out of memory",
+  /** The commit that sends a new lesson about CawCo itself on, after its outcome. */
+  productSubject: (outcome: string) =>
+    `a lesson about how CawCo itself works, ${outcome}`,
+  /** A note's outcome when its lesson went to a CawCo task. */
+  productOutcome: (task: string) => `to CawCo as ${task}`,
+  /** A note's outcome when its lesson is CawCo's own and the project does not develop CawCo. */
+  productDropped: "dropped: CawCo itself holds it",
+  /** The recovery's commit taking lessons about CawCo itself out of memory. */
+  productTaken: (moved: readonly { id: string; task?: string }[]) =>
+    `take ${moved.length} lesson${moved.length === 1 ? "" : "s"} about how CawCo itself works out of memory: ${moved.map(({ id, task }) => (task ? `${id} to ${task}` : `${id}, which CawCo holds`)).join(", ")}`,
   /** A check filed, as its commit and answer say it. */
   checkFiled: (id: string, task: string) =>
     `${id} is a check: task ${task} builds it, and the rule stays as a line until it is done`,
@@ -178,6 +201,10 @@ export const memoryRunWords = {
     `${path} does not hold \`${match}\`: name a file and a match that are there.`,
   probeUnfit: (cap: number) =>
     `A probe is a situation (prompt) and what a right answer does (pass), each one line under ${cap} characters, quoting no one.`,
+  productNotFiled: (why: string) =>
+    `It says how CawCo itself works, and its task was not filed (${why}). The next run reads it again.`,
+  productReplace:
+    "The new words say how CawCo itself works, which a project's memory does not keep: add them as a lesson, and the hub sends them to CawCo.",
   checkStaged:
     "A check needs a lesson that lands: add it as a lesson, staged, and write the check once a second session or a file bears it out.",
   checkHas: (id: string, task: string) =>
@@ -271,6 +298,7 @@ export const memoryRunWords = {
       retired: number;
       reverted: number;
       staged: number;
+      product: number;
     }
   ) => {
     const parts = [
@@ -285,6 +313,9 @@ export const memoryRunWords = {
         : "",
       counts.reverted > 0
         ? `took ${counts.reverted} back that you said otherwise`
+        : "",
+      counts.product > 0
+        ? `left ${counts.product} about how CawCo works to CawCo itself`
         : "",
     ].filter(Boolean);
     if (parts[0]) {
@@ -373,6 +404,22 @@ export const memoryJevWords = {
     false:
       "They are about different things, or one asks for something the other does not.",
   },
+  /** Whether a lesson says how CawCo itself works. */
+  productQuestion:
+    "Does `lesson`, kept or about to be kept in one project's memory, say how CawCo itself works, rather than something of that project?",
+  productCriteria: {
+    true: "Its subject is CawCo: how CawCo behaves, or how an agent uses CawCo's tools, artifacts, memory, sessions or delegation. It would hold the same in any person's project.",
+    false:
+      "Its subject is this project or its people: their code and files (CawCo's own source code too, where the project develops CawCo), commands, decisions, and taste in the work itself.",
+  },
+  /** Whether an open task builds a lesson about CawCo itself into CawCo already. */
+  coversQuestion:
+    "Does `task`, the title of an open task, ask for CawCo itself to do what `lesson` asks of agents?",
+  coversCriteria: {
+    true: "Once the task is done, CawCo does what the lesson asks, or tells every agent to.",
+    false:
+      "The task is about something else, or does only part of what the lesson asks.",
+  },
   /** Whether two notes state the same lesson. */
   sameQuestion: "Do notes `a` and `b` state the same lesson about the project?",
   sameCriteria: {
@@ -395,8 +442,9 @@ For each message and each note, pick one:
 2. A rule about how one workflow is run: find the skill that runs that workflow (read its SKILL.md) and add it with home {skill}. If no skill does, home "index".
 3. A rule for all work here: home "index".
 4. A fact about the project (a command, a place, what fails): home {knowledge}. Name the file and a literal string in it that bears the fact out, as anchor: the hub reads that file in the project's checkout, and reads it again each night. An agent's note lands once the file bears it out, or a note from a second session says the same; until then it waits, staged.
-5. Already kept: "corroborate" the lesson. Changed by the person: "replace" it, and say in why what the rule was until today. Under a message, the hub says what it already did to a lesson the message states again or changes: one it put back or counted needs nothing more from you; one it took back needs what the message asks now, written as a lesson.
-6. About one task or one moment, or already said by the repository's CLAUDE.md or a skill: "drop", with the reason. A note that says what a kept lesson says is "corroborate" of it, or a "drop" with reason "duplicate" and that lesson's id in of.
+5. How CawCo itself works (its tools, artifacts, memory, sessions or delegation), the same in any project: "add" it as any lesson. The hub keeps it out of this project's memory and hands it to CawCo, and its answer says where it went.
+6. Already kept: "corroborate" the lesson. Changed by the person: "replace" it, and say in why what the rule was until today. Under a message, the hub says what it already did to a lesson the message states again or changes: one it put back or counted needs nothing more from you; one it took back needs what the message asks now, written as a lesson.
+7. About one task or one moment, or already said by the repository's CLAUDE.md or a skill: "drop", with the reason. A note that says what a kept lesson says is "corroborate" of it, or a "drop" with reason "duplicate" and that lesson's id in of.
 
 Name every message and note of your brief in some operation's sources, a drop included: a note that says what a message says goes in the sources of that message's operation. memory_apply's answer lists what is not named yet.
 

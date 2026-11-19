@@ -252,7 +252,7 @@ import {
   type UsageBucket,
   type UsageSpend,
 } from "@cawco/core/usage/types";
-import type { StageKind } from "@cawco/core/views";
+import { CLOSED_STAGE_KINDS, type StageKind } from "@cawco/core/views";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import {
   accountMoveSentence,
@@ -8943,11 +8943,22 @@ export const createServer = (
         const task = await tasks.create(
           projectId,
           draft,
-          hubActor("the nightly memory run files a lesson's check")
+          hubActor("the project's memory run files a task")
         );
         return task instanceof ElysiaStatus
           ? { refused: task.response.detail }
           : { id: task.id };
+      },
+      open: async (projectId) => {
+        const listed = await tasks.list(projectId);
+        if (listed instanceof ElysiaStatus) {
+          return { refused: listed.response.detail };
+        }
+        return listed.tasks.flatMap((task) =>
+          task.kind && isOneOf(CLOSED_STAGE_KINDS, task.kind)
+            ? []
+            : [{ id: task.id, title: task.title }]
+        );
       },
       state: async (projectId, id) => {
         const task = await tasks.get(projectId, id);

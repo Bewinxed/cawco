@@ -571,6 +571,8 @@ export type Change =
     }
   /** A knowledge lesson no brief carried for the archive's days, to `knowledge/archive/<topic>.md`. */
   | { id: string; kind: "archive" }
+  /** A lesson about how CawCo itself works, taken out of the project's memory: retired `product`, with the task that builds it into CawCo when one does. */
+  | { id: string; kind: "product"; task?: string }
   /**
    * A lesson the run took out, put back in its home as `line` (its words as
    * the folder held them before), live again; `held` when the person stated
@@ -743,7 +745,7 @@ const retireLine = (
   id: string,
   why: NonNullable<Lesson["retired"]>["why"],
   today: string,
-  by?: string
+  { by, task }: { by?: string; task?: string } = {}
 ): MemoryTree => {
   const lesson = tree.ledger.lessons[id];
   if (!lesson) {
@@ -766,6 +768,7 @@ const retireLine = (
         why,
         text: line?.text ?? staged?.text ?? "",
         ...(by ? { by } : {}),
+        ...(task ? { task } : {}),
       },
     }),
   };
@@ -1078,7 +1081,7 @@ const merged = (
       op.id,
       "merged",
       today,
-      op.into
+      { by: op.into }
     ),
   };
 };
@@ -1206,6 +1209,10 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
       return merged(now, op, today);
     case "retire":
       return { tree: retireLine(now, op.id, op.why, today) };
+    case "product":
+      return {
+        tree: retireLine(now, op.id, "product", today, { task: op.task }),
+      };
     case "restore":
       return restored(now, op, today);
     case "repeat":

@@ -524,9 +524,11 @@ const LessonShape = declared(
       .object({
         by: z.string().optional(),
         on: z.string(),
+        task: z.string().optional(),
         text: z.string(),
         why: z.enum([
           "merged",
+          "product",
           "replaced",
           "expired",
           "reverted",

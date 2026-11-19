@@ -23,7 +23,10 @@
  * are gathered into one comment per law at most every
  * {@link LAW_NOTE_GAP_MS}, which counts them and carries the newest.
  */
-import { CAWCO_ROOT_COMMIT } from "@cawco/core/binary-distribution";
+import {
+  CAWCO_ROOT_COMMIT,
+  developsCawco,
+} from "@cawco/core/binary-distribution";
 import { detach, failureOf } from "@cawco/core/detach";
 import {
   type InvariantBroken,
@@ -170,9 +173,7 @@ export const createLawTasks = (deps: LawTasksDeps) => {
     }
     const ours = deps
       .projects()
-      .filter((project) =>
-        project.places.some((place) => place.root === CAWCO_ROOT_COMMIT)
-      )
+      .filter((project) => developsCawco(project.places))
       .map((project) => project.id);
     const [only] = ours;
     if (only && ours.length === 1) {

@@ -174,10 +174,13 @@ export interface Lesson {
     /** The lesson that replaced it. */
     by?: string;
     on: string;
+    /** The task that builds it into CawCo, when it went there (`product`). */
+    task?: string;
     text: string;
-    /** `stale`: the file it rested on, or the match in it, is gone. `merged`: another lesson said the same, and holds its sources now (`by`). */
+    /** `stale`: the file it rested on, or the match in it, is gone. `merged`: another lesson said the same, and holds its sources now (`by`). `product`: it says how CawCo itself works, which CawCo holds, never a project's memory. */
     why:
       | "merged"
+      | "product"
       | "replaced"
       | "expired"
       | "reverted"
@@ -227,6 +230,8 @@ export interface MemoryRunState {
     retired: number;
     /** Lessons taken back because the person stated the opposite; none before it was counted. */
     reverted?: number;
+    /** Lessons about how CawCo itself works, left to CawCo; none before it was counted. */
+    product?: number;
     staged: number;
   } | null;
   /** The model ids the project's lessons were re-tested on (or the project's sessions ran on when it first had none): one not here is a re-test. */

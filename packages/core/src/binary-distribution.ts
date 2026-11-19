@@ -48,6 +48,11 @@ export const RELEASE_REPOSITORY = "Bewinxed/cawco";
  * tasks a broken law opens (hub law-tasks.ts).
  */
 export const CAWCO_ROOT_COMMIT = "01d2d93bd4535f060ce8972b3d85bd120bbcca7f";
+
+/** Whether a project develops CawCo: one of its places is a checkout whose root commit is {@link CAWCO_ROOT_COMMIT}. */
+export const developsCawco = (
+  places: readonly { root?: string | null }[]
+): boolean => places.some((place) => place.root === CAWCO_ROOT_COMMIT);
 export const NIGHTLY_TAG_PREFIX = "nightly-";
 
 /** The release repository as Octokit names it. */

@@ -35,7 +35,7 @@
  *   run's; a message states the lesson (Jev, at {@link SUPPORTS}); the
  *   lesson quotes no one (memory-sources.ts `quoteProblem`); a new lesson
  *   says what no lesson kept in its home or the index says (Jev, at
- *   {@link SAME}, this run's earlier adds among them: {@link keptAlready}),
+ *   {@link SAME}, this run's earlier adds among them: {@link jevOnNew}),
  *   and a note dropped as a duplicate names the live lesson it says again;
  *   an agent's
  *   lesson goes to knowledge, and lands only when notes of two sessions say
@@ -50,6 +50,16 @@
  *   a line until the task is done, when upkeep enforces it and takes the
  *   line out ({@link checksClosed}). A lesson of the index or a skill the
  *   person states again twice is filed as one by the hub.
+ * - **CawCo's own workings** ({@link toProduct}): a project's memory holds
+ *   what is true of that project and its people; how CawCo itself works
+ *   (its tools, artifacts, memory, sessions, delegation) reaches every user
+ *   from CawCo. Jev reads each new lesson for it (row `product`, in the
+ *   request that reads it as kept already, {@link jevOnNew}), and a
+ *   replace's new words. Such a lesson is never written: in a project that
+ *   develops CawCo it is filed as a task to build it into CawCo, unless an
+ *   open task does already; anywhere else it is dropped, CawCo holding it.
+ *   The recovery, asked for, takes the live ones out the same way
+ *   ({@link cawcoOut}).
  * - **Re-test on a model change** ({@link retest}, §6.3): when the
  *   project's sessions ran in the last week on a model the run's state
  *   does not hold, each index and skill lesson with a probe (a situation,
@@ -71,12 +81,14 @@
  *   archives nothing unread: a note its run names in no operation is the
  *   next run's first, and each run that judged something starts the next
  *   ({@link recoveryLeft}). Each time it is asked for, the live lessons
- *   that say the same are made one first ({@link mergedSame}), and it reads
+ *   that say the same are made one first ({@link mergedSame}), those about
+ *   how CawCo itself works leave memory ({@link cawcoOut}), and it reads
  *   on, after what it holds, every note no run judged: those earlier
  *   recovery runs archived unread, and those archived as a duplicate of no
  *   live lesson ({@link recoveryStart}).
  */
 
+import { developsCawco } from "@cawco/core/binary-distribution";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { RoutineOutcome } from "@cawco/core/routine-kinds";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -211,6 +223,8 @@ interface Counts {
   checks: number;
   dropped: number;
   notes: number;
+  /** Lessons about how CawCo itself works, left to CawCo ({@link toProduct}). */
+  product: number;
   read: number;
   replaced: number;
   /** Lessons put back because the person stated them again. */
@@ -237,7 +251,7 @@ interface CheckAsk {
   text: string;
 }
 
-/** The task field naming the lesson a check's task is for. */
+/** The task field naming the lesson a check's task, or a task building one into CawCo, is for. */
 const LESSON_FIELD = "lesson";
 
 /** A lesson a message may state again or change: a live one's line, or the words of one the run took out. */
@@ -379,9 +393,10 @@ export interface MemoryRunDeps {
     projectId: string
   ) => { description: string; name: string }[];
   /**
-   * The project's tasks, as a check's is filed and read (tasks.ts): one
-   * filed by the hub in the stage new tasks enter, answering its id; and
-   * how one has ended (`gone` when there is no such task).
+   * The project's tasks, as a check's or a lesson's for CawCo is filed and
+   * read (tasks.ts): one filed by the hub in the stage new tasks enter,
+   * answering its id; how one has ended (`gone` when there is no such
+   * task); and those not done or dropped, each by its title.
    */
   readonly tasks: {
     file: (
@@ -393,6 +408,9 @@ export interface MemoryRunDeps {
         title: string;
       }
     ) => Promise<{ id: string } | { refused: string }>;
+    open: (
+      projectId: string
+    ) => Promise<{ id: string; title: string }[] | { refused: string }>;
     state: (
       projectId: string,
       id: string
@@ -416,6 +434,7 @@ const RunStateSchema = z.object({
       at: z.string(),
       checks: z.number().optional(),
       dropped: z.number(),
+      product: z.number().optional(),
       read: z.number(),
       replaced: z.number(),
       restored: z.number().optional(),
@@ -434,6 +453,13 @@ const SAID_CRITERIA: Record<SaidKind, string> = memoryJevWords.saidKinds;
 
 const isSaidKind = (choice: string): choice is SaidKind =>
   Object.hasOwn(SAID_CRITERIA, choice);
+
+/** A task title's room for a lesson's words after its lead (tasks.ts takes 200 characters). */
+const TITLE_WORDS = 170;
+
+/** A lesson's words as a task's title carries them. */
+const titleWords = (text: string): string =>
+  text.length > TITLE_WORDS ? `${text.slice(0, TITLE_WORDS)}…` : text;
 
 /** A message's words, cut to what one read takes. */
 const cut = (text: string): string =>
@@ -505,6 +531,7 @@ const emptyCounts = (): Counts => ({
   checks: 0,
   dropped: 0,
   notes: 0,
+  product: 0,
   read: 0,
   replaced: 0,
   restored: 0,
@@ -562,13 +589,17 @@ const readQuestions = (
 /** The Jev rows a batch of questions asks, by their names' prefixes. */
 const rowsOf = (
   names: string[]
-): ("said" | "inbox" | "support" | "same" | "kept")[] => {
+): (
+  "said" | "inbox" | "support" | "same" | "kept" | "product" | "covers"
+)[] => {
   const rows = {
     "said:": "said",
     "note:": "inbox",
     "support:": "support",
     "same:": "same",
     "kept:": "kept",
+    "product:": "product",
+    "covers:": "covers",
   } as const;
   return Object.entries(rows).flatMap(([prefix, row]) =>
     names.some((name) => name.startsWith(prefix)) ? [row] : []
@@ -882,15 +913,54 @@ const keptQuestions = (
     },
   ]);
 
-/** The lesson of `beside` Jev read as saying the same as the one asked under `key`: the likeliest at or over {@link SAME}. */
-const keptAs = (
+/** Jev's question whether lesson `text` says how CawCo itself works, named under `key`. */
+const productQuestion = (
   key: string,
-  beside: readonly Beside[],
+  text: string
+): [string, Experimental_DecisionQuestion] => [
+  `product:${key}`,
+  {
+    type: "boolean",
+    instructions: { lesson: text, question: memoryJevWords.productQuestion },
+    criteria: memoryJevWords.productCriteria,
+  },
+];
+
+/** Whether Jev read the lesson asked under `key` as saying how CawCo itself works, at or over {@link SAME}. */
+const aboutCawco = (
+  key: string,
+  answers: Map<string, number> | undefined
+): boolean => (answers?.get(`product:${key}`) ?? 0) >= SAME;
+
+/** Jev's question on each task of `open`, whether it builds lesson `text` into CawCo, named under `key`. */
+const coversQuestions = (
+  key: string,
+  text: string,
+  open: readonly { id: string; title: string }[]
+): [string, Experimental_DecisionQuestion][] =>
+  open.map((task): [string, Experimental_DecisionQuestion] => [
+    `covers:${key}:${task.id}`,
+    {
+      type: "boolean",
+      instructions: {
+        lesson: text,
+        task: task.title,
+        question: memoryJevWords.coversQuestion,
+      },
+      criteria: memoryJevWords.coversCriteria,
+    },
+  ]);
+
+/** The one of `beside` Jev read yes of in `row` under `key` (`kept`: it says what the lesson asked says; `covers`: the open task builds the lesson into CawCo): the likeliest at or over {@link SAME}. */
+const likeliest = (
+  row: "kept" | "covers",
+  key: string,
+  beside: readonly { id: string }[],
   answers: Map<string, number> | undefined
 ): string | undefined => {
   let best: { id: string; score: number } | undefined;
   for (const kept of beside) {
-    const score = answers?.get(`kept:${key}:${kept.id}`) ?? 0;
+    const score = answers?.get(`${row}:${key}:${kept.id}`) ?? 0;
     if (score >= SAME && score > (best?.score ?? 0)) {
       best = { id: kept.id, score };
     }
@@ -2346,8 +2416,16 @@ export const createMemoryRun = ({
     answers: Map<string, number> | undefined
   ): boolean => pairsCount(`${index}`, notes, answers);
 
+  /** A new lesson about how CawCo itself works, checked: what it rests on, sent to CawCo once it is committed ({@link productCommitted}). */
+  interface ProductPlan {
+    consumed: string[];
+    notes: Note[];
+    product: string;
+  }
+
   /** What one checked operation commits, and the notes it consumes with their outcome; or why it is refused. */
   type Planned =
+    | ProductPlan
     | {
         /** None for a drop, which changes no lesson. */
         change?: Change;
@@ -2386,17 +2464,17 @@ export const createMemoryRun = ({
     if (typeof home === "string") {
       return home;
     }
+    if ("product" in home) {
+      return { consumed: op.sources, notes: kept.notes, product: text };
+    }
     if (run.adds >= adds(run)) {
       return memoryRunWords.nightAdds(adds(run));
     }
-    const file = op.anchor ? await anchored(projectId, op.anchor) : undefined;
-    if (typeof file === "string") {
-      return file;
+    const read = await anchorAndProbe(projectId, run, op);
+    if (typeof read === "string") {
+      return read;
     }
-    const probed = op.probe ? await probeOf(run, op.probe) : undefined;
-    if (typeof probed === "string") {
-      return probed;
-    }
+    const { file, probed } = read;
     const staged = stagingOf(run, by, file, () =>
       twoSessions(index, kept.notes, answers)
     );
@@ -2414,21 +2492,37 @@ export const createMemoryRun = ({
     });
   };
 
+  /** An `add`'s anchor read ({@link anchored}) and its probe checked ({@link probeOf}), each when it has one; why not otherwise. */
+  const anchorAndProbe = async (
+    projectId: string,
+    run: Run,
+    op: Extract<MemoryOp, { op: "add" }>
+  ) => {
+    const file = op.anchor ? await anchored(projectId, op.anchor) : undefined;
+    if (typeof file === "string") {
+      return file;
+    }
+    const probed = op.probe ? await probeOf(run, op.probe) : undefined;
+    return typeof probed === "string" ? probed : { file, probed };
+  };
+
   /**
-   * Why a new lesson may not be added, Jev reading it as saying what a kept
-   * one says ({@link keptAs}): of every live lesson in its home and the
+   * What Jev reads a new lesson as, in one request: one that says how CawCo
+   * itself works (row `product`) is CawCo's, never the project's memory's;
+   * else one that says what a kept one says ({@link likeliest}) is refused,
+   * naming the one to corroborate, of every live lesson in its home and the
    * index, and every staged one bound there, this run's earlier adds among
-   * them (each is in `tree`), the one to corroborate. Nothing when none
-   * does, or with Jev off: the lesson is staged then, and Jev reads it the
-   * first night it is on ({@link recheckStaged}). Jev failing, its words.
+   * them (each is in `tree`). Nothing when it is neither, or with Jev off:
+   * the lesson is staged then, and Jev reads it the first night it is on
+   * ({@link recheckStaged}). Jev failing, its words.
    */
-  const keptAlready = async (
+  const jevOnNew = async (
     projectId: string,
     run: Run,
     tree: MemoryTree,
     text: string,
     home: LessonHome
-  ): Promise<string | undefined> => {
+  ): Promise<{ product: true } | string | undefined> => {
     if (!run.jev) {
       return;
     }
@@ -2436,9 +2530,15 @@ export const createMemoryRun = ({
     try {
       const answers = await answersOf(
         projectId,
-        Object.fromEntries(keptQuestions("add", text, beside))
+        Object.fromEntries([
+          productQuestion("add", text),
+          ...keptQuestions("add", text, beside),
+        ])
       );
-      const id = keptAs("add", beside, answers);
+      if (aboutCawco("add", answers)) {
+        return { product: true };
+      }
+      const id = likeliest("kept", "add", beside, answers);
       return id ? memoryRunWords.keptAlready(id) : undefined;
     } catch (error) {
       return memoryRunWords.jevFailed(
@@ -2577,14 +2677,14 @@ export const createMemoryRun = ({
       : supported(run, index, resolved, answers);
   };
 
-  /** A new lesson's home as asked, and its words, checked: an agent's goes to knowledge, and no kept lesson says it already ({@link keptAlready}); the home, or why not. */
+  /** A new lesson's home as asked, and its words, checked: an agent's goes to knowledge, and no kept lesson says it already ({@link jevOnNew}); the home, `product` when it says how CawCo itself works, or why not. */
   const checkedLesson = async (
     projectId: string,
     run: Run,
     tree: MemoryTree,
     asked: Extract<MemoryOp, { op: "add" }>["home"],
     lesson: { by: Lesson["by"]; text: string; why: string | undefined }
-  ): Promise<LessonHome | string> => {
+  ): Promise<LessonHome | { product: true } | string> => {
     const home = homeAsked(projectId, tree, asked);
     if (typeof home === "string") {
       return home;
@@ -2601,9 +2701,7 @@ export const createMemoryRun = ({
       lesson.by
     );
     return (
-      bad ??
-      (await keptAlready(projectId, run, tree, lesson.text, home)) ??
-      home
+      bad ?? (await jevOnNew(projectId, run, tree, lesson.text, home)) ?? home
     );
   };
 
@@ -2632,8 +2730,33 @@ export const createMemoryRun = ({
     return resolved;
   };
 
-  /** A `replace`, checked: a live lesson's words changed, the person's own only by his message. */
+  /** Why a kept lesson's new words may not stand: Jev reads them as saying how CawCo itself works (row `product`), which no project's memory keeps. Nothing with Jev off; Jev failing, its words. */
+  const replacedAsCawco = async (
+    projectId: string,
+    run: Run,
+    text: string
+  ): Promise<string | undefined> => {
+    if (!run.jev) {
+      return;
+    }
+    try {
+      const answers = await answersOf(
+        projectId,
+        Object.fromEntries([productQuestion("replace", text)])
+      );
+      return aboutCawco("replace", answers)
+        ? memoryRunWords.productReplace
+        : undefined;
+    } catch (error) {
+      return memoryRunWords.jevFailed(
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  };
+
+  /** A `replace`, checked: a live lesson's words changed, the person's own only by his message, never into how CawCo itself works. */
   const plannedReplace = async (
+    projectId: string,
     run: Run,
     tree: MemoryTree,
     head: string,
@@ -2660,7 +2783,9 @@ export const createMemoryRun = ({
     }
     const text = op.text.trim();
     const why = op.why.trim();
-    const bad = await textProblem(run, tree, text, why, lesson.home, by);
+    const bad =
+      (await textProblem(run, tree, text, why, lesson.home, by)) ??
+      (await replacedAsCawco(projectId, run, text));
     if (bad) {
       return bad;
     }
@@ -2859,7 +2984,7 @@ export const createMemoryRun = ({
       case "add":
         return plannedAdd(projectId, run, tree, head, op, index, answers);
       case "replace":
-        return plannedReplace(run, tree, head, op, index, answers);
+        return plannedReplace(projectId, run, tree, head, op, index, answers);
       case "corroborate":
         return plannedCorroborate(run, tree, head, op, index, answers);
       case "move":
@@ -2889,6 +3014,23 @@ export const createMemoryRun = ({
       }
     });
     return answers;
+  };
+
+  /** {@link answersOf}, Jev failing its words as the caller's refusal. */
+  const answersOrRefusal = async (
+    projectId: string,
+    questions: Record<string, Experimental_DecisionQuestion>
+  ) => {
+    try {
+      return await answersOf(projectId, questions);
+    } catch (error) {
+      return problem(502, {
+        code: "memory-jev-failed",
+        detail: memoryRunWords.jevFailed(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
+    }
   };
 
   /** The run a session's call belongs to: the curator's of its project, while one is under way. */
@@ -2962,16 +3104,7 @@ export const createMemoryRun = ({
     for (const note of archive) {
       archivedNotes.set(note.id, note);
     }
-    try {
-      return await answersOf(projectId, questionsOf(run, ops, tree));
-    } catch (error) {
-      return problem(502, {
-        code: "memory-jev-failed",
-        detail: memoryRunWords.jevFailed(
-          error instanceof Error ? error.message : String(error)
-        ),
-      });
-    }
+    return await answersOrRefusal(projectId, questionsOf(run, ops, tree));
   };
 
   /** Each operation checked and, when it passes, committed alone, in order: one line each. */
@@ -2994,10 +3127,14 @@ export const createMemoryRun = ({
         index,
         answers
       );
-      const done =
-        typeof plan === "string"
-          ? plan
-          : await committed(projectId, run, read, plan, op);
+      let done: Awaited<ReturnType<typeof committed>> | string;
+      if (typeof plan === "string") {
+        done = plan;
+      } else if ("product" in plan) {
+        done = await productCommitted(projectId, run, read, plan);
+      } else {
+        done = await committed(projectId, run, read, plan, op);
+      }
       if (typeof done === "string" || done instanceof ElysiaStatus) {
         const why = typeof done === "string" ? done : done.response.detail;
         lines.push(`${index + 1}. ${memoryRunWords.refused(why)}`);
@@ -3014,7 +3151,7 @@ export const createMemoryRun = ({
     projectId: string,
     run: Run,
     read: { head: string; tree: MemoryTree },
-    plan: Exclude<Planned, string>,
+    plan: Exclude<Planned, string | ProductPlan>,
     op: MemoryOp
   ) => {
     const today = dayOf(new Date());
@@ -3041,10 +3178,7 @@ export const createMemoryRun = ({
     if (sha instanceof ElysiaStatus) {
       return sha;
     }
-    for (const handle of plan.consumed) {
-      run.consumed.add(handle);
-      run.notes.delete(handle);
-    }
+    consume(run, plan.consumed);
     count(run, plan.change, op);
     if (!plan.check) {
       return { tree: applied.tree, said, sha };
@@ -3058,6 +3192,116 @@ export const createMemoryRun = ({
       tree: filed.tree ?? applied.tree,
       said: `${said}; ${filed.said}`,
       sha: filed.sha ?? sha,
+    };
+  };
+
+  /** An operation's sources named, the run's notes among them gone from what it has left to name. */
+  const consume = (run: Run, handles: readonly string[]): void => {
+    for (const handle of handles) {
+      run.consumed.add(handle);
+      run.notes.delete(handle);
+    }
+  };
+
+  /**
+   * A new lesson about how CawCo itself works sent to CawCo
+   * ({@link toProduct}), and its notes archived with what came of it: one
+   * commit by the Memory curator, no line written. Why not when its task
+   * was not filed.
+   */
+  const productCommitted = async (
+    projectId: string,
+    run: Run,
+    read: { head: string; tree: MemoryTree },
+    plan: ProductPlan
+  ) => {
+    const sent = await toProduct(projectId, plan.product, undefined);
+    if (typeof sent === "string") {
+      return sent;
+    }
+    const sha = await commit(projectId, read.tree, read.tree, {
+      author: CURATOR,
+      message: `memory: ${memoryRunWords.productSubject(sent.outcome)}`,
+      notes: plan.notes.map((note) => ({
+        note: run.notes.get(note.id) ?? note,
+        outcome: sent.outcome,
+      })),
+    });
+    if (sha instanceof ElysiaStatus) {
+      return sha;
+    }
+    consume(run, plan.consumed);
+    run.counts.product += 1;
+    return { tree: read.tree, said: sent.said, sha };
+  };
+
+  /**
+   * A lesson about how CawCo itself works sent where it belongs: a project's
+   * memory holds what is true of that project and its people, and CawCo's
+   * own workings reach every user from CawCo. In a project that develops
+   * CawCo (core `developsCawco`: a checkout among its places whose root
+   * commit is CawCo's, the same in every clone and fork whatever its
+   * folder or remote, and the rule law-tasks.ts files CawCo's defects by),
+   * a task to build it into CawCo, filed through the path a check's task
+   * takes, unless Jev reads an open task grep pairs with it (at most
+   * {@link RELATED}) as building it already (row `covers`). Anywhere else
+   * nowhere: CawCo holds it. What came of it, as a note's outcome and an
+   * answer say it; why not when its task was not filed or Jev failed.
+   */
+  const toProduct = async (
+    projectId: string,
+    text: string,
+    id: string | undefined
+  ): Promise<{ outcome: string; said: string; task?: string } | string> => {
+    if (!developsCawco(db.project(projectId)?.places ?? [])) {
+      return {
+        outcome: memoryRunWords.productDropped,
+        said: memoryRunWords.productElsewhere,
+      };
+    }
+    const open = await tasks.open(projectId);
+    if ("refused" in open) {
+      return memoryRunWords.productNotFiled(open.refused);
+    }
+    const words = wordsOf(text);
+    const paired = open
+      .map((task) => ({ task, score: grepScore(words, task.title) }))
+      .filter(({ score }) => score >= 2)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, RELATED)
+      .map(({ task }) => task);
+    let answers: Map<string, number> | undefined;
+    try {
+      answers = await answersOf(
+        projectId,
+        Object.fromEntries(coversQuestions("lesson", text, paired))
+      );
+    } catch (error) {
+      return memoryRunWords.jevFailed(
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+    const covering = likeliest("covers", "lesson", paired, answers);
+    if (covering) {
+      return {
+        task: covering,
+        outcome: memoryRunWords.productOutcome(covering),
+        said: memoryRunWords.productCovered(covering),
+      };
+    }
+    const filed = await tasks.file(projectId, {
+      title: memoryRunWords.productTitle(titleWords(text)),
+      description: memoryRunWords.productDescription(text, id),
+      acceptance: memoryRunWords.productAcceptance,
+      fields: id ? { [LESSON_FIELD]: id } : {},
+    });
+    if ("refused" in filed) {
+      return memoryRunWords.productNotFiled(filed.refused);
+    }
+    return {
+      task: filed.id,
+      outcome: memoryRunWords.productOutcome(filed.id),
+      said: memoryRunWords.productFiled(filed.id),
     };
   };
 
@@ -3102,7 +3346,11 @@ export const createMemoryRun = ({
       index,
       answers
     );
-    if (typeof added === "string" || added.change?.kind !== "add") {
+    if (
+      typeof added === "string" ||
+      "product" in added ||
+      added.change?.kind !== "add"
+    ) {
       return added;
     }
     if (added.change.staged) {
@@ -3347,10 +3595,25 @@ export const createMemoryRun = ({
       detachedClose(projectId, run, "failed");
       return;
     }
-    const { added, dropped, replaced, restored, retired, reverted, staged } =
-      run.counts;
+    const {
+      added,
+      dropped,
+      product,
+      replaced,
+      restored,
+      retired,
+      reverted,
+      staged,
+    } = run.counts;
     if (
-      added + replaced + retired + staged + dropped + restored + reverted ===
+      added +
+        replaced +
+        retired +
+        staged +
+        dropped +
+        restored +
+        reverted +
+        product ===
       0
     ) {
       detachedClose(projectId, run, "silent");
@@ -4019,7 +4282,8 @@ export const createMemoryRun = ({
   /**
    * The recovery asked for (routines.ts `recover`): whether it has inputs
    * for a run. Asked by a person (`by: "ask"`), the lessons that say the
-   * same are made one first ({@link mergedSame}), its inputs are topped up
+   * same are made one first ({@link mergedSame}), those about how CawCo
+   * itself works leave memory ({@link cawcoOut}), its inputs are topped up
    * with every note no run judged ({@link recoveryAgain}) in one commit, and
    * its chain of runs counts again from here; by the run before
    * (`by: "chain"`), it reads on what it holds.
@@ -4037,6 +4301,10 @@ export const createMemoryRun = ({
       const merged = await mergedSame(projectId);
       if (merged instanceof ElysiaStatus) {
         return merged;
+      }
+      const out = await cawcoOut(projectId);
+      if (out instanceof ElysiaStatus) {
+        return out;
       }
     }
     return await toppedUp(projectId, recovery);
@@ -4069,7 +4337,7 @@ export const createMemoryRun = ({
 
   /**
    * The live lessons that say the same made one (the invariant an `add`
-   * keeps, {@link keptAlready}, made true of what came before it): each pair
+   * keeps, {@link jevOnNew}, made true of what came before it): each pair
    * of live lessons in one home, or one of them in the index, sharing two
    * words or more, asked of Jev ({@link keptQuestions}); each pair at or
    * over {@link SAME}, the likeliest first, merged, the lesson kept the one
@@ -4091,21 +4359,14 @@ export const createMemoryRun = ({
       return;
     }
     const pairs = samePairs(read.tree);
-    let answers: Map<string, number> | undefined;
-    try {
-      answers = await answersOf(
-        projectId,
-        Object.fromEntries(
-          pairs.flatMap(([a, b]) => keptQuestions(a.id, a.text, [b]))
-        )
-      );
-    } catch (error) {
-      return problem(502, {
-        code: "memory-jev-failed",
-        detail: memoryRunWords.jevFailed(
-          error instanceof Error ? error.message : String(error)
-        ),
-      });
+    const answers = await answersOrRefusal(
+      projectId,
+      Object.fromEntries(
+        pairs.flatMap(([a, b]) => keptQuestions(a.id, a.text, [b]))
+      )
+    );
+    if (answers instanceof ElysiaStatus) {
+      return answers;
     }
     const today = dayOf(new Date());
     const uses = usesOf(projectId);
@@ -4143,6 +4404,102 @@ export const createMemoryRun = ({
       author: HUB,
       message: `memory: ${said}`,
     });
+  };
+
+  /**
+   * The lessons that say how CawCo itself works taken out of memory (what
+   * {@link jevOnNew} keeps out of an `add`, made true of what came before
+   * it): each live lesson, and each staged one, which a second session
+   * would land, asked of Jev (row `product`), and each at
+   * or over {@link SAME} sent to CawCo ({@link toProduct}) and retired
+   * `product`, its task kept on it. One commit by the hub; nothing with Jev
+   * off (said in the log) or no such lesson. One whose task was not filed
+   * stays, said in the log, and the next ask tries it again; a task filed
+   * before a commit that did not land is the open task the next ask finds.
+   */
+  const cawcoOut = async (projectId: string) => {
+    const read = await treeOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    if (!jevAccess(db)) {
+      offLine(
+        "product",
+        projectId,
+        "lessons about how CawCo itself works wait for Jev to leave memory"
+      );
+      return;
+    }
+    const kept = Object.entries(read.tree.ledger.lessons).flatMap(
+      ([id, lesson]) => {
+        const live = lesson.state === "live";
+        const text = live ? lineOf(read.tree, id)?.text : lesson.staged?.text;
+        return text && (live || lesson.state === "staged")
+          ? [{ id, text }]
+          : [];
+      }
+    );
+    const answers = await answersOrRefusal(
+      projectId,
+      Object.fromEntries(kept.map((one) => productQuestion(one.id, one.text)))
+    );
+    if (answers instanceof ElysiaStatus) {
+      return answers;
+    }
+    const today = dayOf(new Date());
+    let { tree } = read;
+    for (const one of kept.filter(({ id }) => aboutCawco(id, answers))) {
+      tree = await cawcoLeaves(projectId, tree, one, today);
+    }
+    const moved = Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) =>
+      lesson.retired?.why === "product" &&
+      read.tree.ledger.lessons[id]?.retired === undefined
+        ? [
+            {
+              id,
+              ...(lesson.retired.task ? { task: lesson.retired.task } : {}),
+            },
+          ]
+        : []
+    );
+    if (moved.length === 0) {
+      return;
+    }
+    const said = memoryRunWords.productTaken(moved);
+    console.log(`[memory] ${projectId}: ${said}`);
+    return await commit(projectId, read.tree, tree, {
+      author: HUB,
+      message: `memory: ${said}`,
+    });
+  };
+
+  /**
+   * Lesson `one` (live, or staged) sent to CawCo ({@link toProduct}) and
+   * retired `product` in `tree`, its task kept on it; `tree` as it was when
+   * its task was not filed or Jev failed, said in the log: it is read again
+   * the next time.
+   */
+  const cawcoLeaves = async (
+    projectId: string,
+    tree: MemoryTree,
+    one: { id: string; text: string },
+    today: string
+  ): Promise<MemoryTree> => {
+    const sent = await toProduct(projectId, one.text, one.id);
+    if (typeof sent === "string") {
+      console.warn(`[memory] ${projectId}: ${one.id} stays as it is: ${sent}`);
+      return tree;
+    }
+    return applyOp(
+      tree,
+      checked({
+        kind: "product",
+        id: one.id,
+        ...(sent.task ? { task: sent.task } : {}),
+      }),
+      today,
+      usesOf(projectId)
+    ).tree;
   };
 
   /** Each project's recovery runs chained since it was last asked for. */
@@ -4281,7 +4638,9 @@ export const createMemoryRun = ({
 
   /**
    * The staged lessons written while Jev was off (`staged.waits`), checked
-   * on the first night it is on (§7): one that says what a live lesson in
+   * on the first night it is on (§7): one that says how CawCo itself works
+   * goes to CawCo ({@link toProduct}) and is retired `product`; one that
+   * says what a live lesson in
    * its home or the index says is merged into it; else one resting on the
    * person's message
    * lands when Jev finds the message states it and is retired when not;
@@ -4325,18 +4684,13 @@ export const createMemoryRun = ({
     const today = dayOf(new Date());
     let { tree } = read;
     for (const [id, lesson] of waiting) {
-      const change = recheckedChange(
-        id,
-        lesson,
+      tree = await rechecked(
+        project.id,
+        tree,
+        [id, lesson],
         { notes: notesOf(lesson), beside: beside.get(id) ?? [] },
-        answers
+        { answers, today }
       );
-      if (change) {
-        ({ tree } = applyOp(tree, checked(change), today, usesOf(project.id)));
-      } else if (lesson.staged) {
-        const { waits: _, ...staged } = lesson.staged;
-        tree = withLesson(tree, id, { ...lesson, staged });
-      }
     }
     return await commit(project.id, read.tree, tree, {
       author: { name: "Jev" },
@@ -4344,7 +4698,37 @@ export const createMemoryRun = ({
     });
   };
 
-  /** Jev's questions on one lesson staged while it was off: each message's support, each pair of notes' sameness, and whether it says what a lesson of `beside` says. */
+  /** `tree` with one lesson staged while Jev was off as Jev's answers make it ({@link recheckStaged}): sent to CawCo, changed ({@link recheckedChange}), or waiting on with Jev's check done. */
+  const rechecked = async (
+    projectId: string,
+    tree: MemoryTree,
+    [id, lesson]: [string, Lesson],
+    read: { beside: readonly Beside[]; notes: Note[] },
+    {
+      answers,
+      today,
+    }: { answers: Map<string, number> | undefined; today: string }
+  ): Promise<MemoryTree> => {
+    if (aboutCawco(id, answers)) {
+      return await cawcoLeaves(
+        projectId,
+        tree,
+        { id, text: lesson.staged?.text ?? "" },
+        today
+      );
+    }
+    const change = recheckedChange(id, lesson, read, answers);
+    if (change) {
+      return applyOp(tree, checked(change), today, usesOf(projectId)).tree;
+    }
+    if (!lesson.staged) {
+      return tree;
+    }
+    const { waits: _, ...staged } = lesson.staged;
+    return withLesson(tree, id, { ...lesson, staged });
+  };
+
+  /** Jev's questions on one lesson staged while it was off: whether it says how CawCo itself works, each message's support, each pair of notes' sameness, and whether it says what a lesson of `beside` says. */
   const stagedQuestions = (
     id: string,
     lesson: Lesson,
@@ -4374,6 +4758,7 @@ export const createMemoryRun = ({
       }
     );
     return [
+      productQuestion(id, text),
       ...support,
       ...pairQuestions(`${id}`, notesOf(lesson)),
       ...keptQuestions(id, text, beside),
@@ -4393,7 +4778,7 @@ export const createMemoryRun = ({
     { notes, beside }: { beside: readonly Beside[]; notes: Note[] },
     answers: Map<string, number> | undefined
   ): Change | undefined => {
-    const into = keptAs(id, beside, answers);
+    const into = likeliest("kept", id, beside, answers);
     if (into) {
       return { kind: "merge", id, into };
     }
