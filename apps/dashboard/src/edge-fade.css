@@ -15,6 +15,14 @@
   inherits: false;
   initial-value: 0px;
 }
+/* A scroller's fade length, typed so script reads it in px (Choice's
+   scroll into view) whatever token or utility set it; inherited, as an
+   untyped one is, for what stands inside a faded scroller. */
+@property --fade-len {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
 /* The run at a faded block scroller's foot its fade covers while more is
    below: its fade length, plus any `--fade-inset-end`. A box sized to the
    scroller's view that scrolls its own items (a block page's board, its

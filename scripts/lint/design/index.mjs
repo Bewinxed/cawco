@@ -34,6 +34,7 @@ import {
 } from "./shadcn.mjs";
 import { styleSpaces } from "./style-spaces.mjs";
 import { tooltipProviderAtRoot } from "./tooltip-provider.mjs";
+import { typedPropertyReads } from "./typed-property-read.mjs";
 import { variantOrder } from "./variant-order.mjs";
 
 const KIT = "src/lib/components/ui/";
@@ -342,6 +343,7 @@ const FIND = {
   "house/tooltip-provider-at-root": tooltipProviderAtRoot,
   "house/no-not-hover": notHover,
   "house/no-style-underscore-spaces": styleSpaces,
+  "house/typed-property-read": typedPropertyReads,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,

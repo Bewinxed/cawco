@@ -2,6 +2,15 @@
   import type { Component, Snippet } from "svelte";
   import type { BlockBody } from "./Block.svelte";
 
+  /**
+   * The tokens a block's measure is read from, each typed as a length in
+   * design.css so BlockPage reads it in px (house/typed-property-read).
+   */
+  type BlockMeasure =
+    | "--spacing-c-block-ledger"
+    | "--spacing-c-block-routines"
+    | "--spacing-c-block-view";
+
   /** What a page knows of one block it can hold: its face and its body. */
   export interface BlockItem {
     /** The head's own action, before its ⋯. */
@@ -19,7 +28,7 @@
     glyph: Component;
     hideable: boolean;
     /** The token holding its measure, the narrowest it reads at: `--spacing-c-block-ledger`. */
-    measure: string;
+    measure: BlockMeasure;
     /** What follows the title: a count, a needs-you mark. */
     meta?: Snippet;
     title: string;
@@ -106,17 +115,12 @@
     measures: Record<string, number>;
   } | null>(null);
 
-  /** A length token's value in px: rem or px, as the tokens write them. */
+  /**
+   * A length token's value in px: design.css types each grid and block
+   * measure token as a length, so it computes to px however it is written.
+   */
   function lengthOf(styles: CSSStyleDeclaration, token: string): number {
-    const value = styles.getPropertyValue(token).trim();
-    const n = Number.parseFloat(value);
-    if (value.endsWith("rem")) {
-      return (
-        n *
-        Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
-      );
-    }
-    return Number.isFinite(n) ? n : 0;
+    return Number.parseFloat(styles.getPropertyValue(token)) || 0;
   }
   $effect(() => {
     const node = grid;

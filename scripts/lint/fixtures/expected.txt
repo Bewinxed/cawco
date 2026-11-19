@@ -111,3 +111,11 @@ scripts/lint/fixtures/eden-answers.ts:18:30 house/eden-answers-read
 scripts/lint/fixtures/eden-answers.ts:19:36 house/eden-answers-read
 scripts/lint/fixtures/closed-text-column.ts:13:10 house/closed-text-column
 scripts/lint/fixtures/closed-text-column.ts:14:12 house/closed-text-column
+scripts/lint/fixtures/design/planted-typed-read.ts:6:21 house/typed-property-read
+scripts/lint/fixtures/design/planted-typed-read.ts:9:4 house/typed-property-read
+scripts/lint/fixtures/design/planted-typed-read.ts:12:17 house/typed-property-read
+scripts/lint/fixtures/design/planted-typed-read.ts:19:23 house/typed-property-read
+scripts/lint/fixtures/design/planted-typed-read.ts:24:19 house/typed-property-read
+scripts/lint/fixtures/design/planted.svelte:15:23 house/typed-property-read
+scripts/lint/fixtures/design/planted-render-dom.svelte:14:29 house/typed-property-read
+scripts/lint/fixtures/design/planted-render-dom.svelte:25:10 house/typed-property-read

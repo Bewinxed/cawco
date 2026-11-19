@@ -85,6 +85,7 @@
   import { frameSize } from "#lib/platform/frame-observer.js";
   import { hub } from "#lib/platform/hub.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
+  import { msOf } from "#lib/platform/motion/time.js";
   import { page } from "$app/state";
   import { ARTIFACTS, HELD, LONG, PINS } from "./records";
 
@@ -219,8 +220,9 @@
     ];
     for (const name of slowed) {
       // Read off the root as it stands, never through dur(), which would
-      // keep the token's own value for every later read.
-      const ms = Number.parseFloat(
+      // keep the token's own value for every later read; in its unit, as
+      // dur() reads it (the built sheet writes `350ms` as `.35s`).
+      const ms = msOf(
         getComputedStyle(document.documentElement).getPropertyValue(name)
       );
       document.documentElement.style.setProperty(name, `${ms * slow}ms`);

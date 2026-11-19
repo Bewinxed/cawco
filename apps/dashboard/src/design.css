@@ -150,6 +150,315 @@
   inherits: false;
 }
 
+/* The custom properties script reads as numbers (parseFloat of
+   getPropertyValue, or motion `numberOf`), each typed so it computes to px,
+   or to a plain number, however it is written: an untyped one computes to
+   its text, and `calc(var(--spacing) * 37)` or `0.75rem` parses to NaN or
+   to the wrong number (Files' cards fell to slivers so, --card-min).
+   scripts/lint/design/typed-property-read.mjs refuses a numeric read of an
+   untyped one. Each inherits, as an untyped custom property does.
+
+   The tokens theme.css declares (Tailwind's @theme writes each on :root and
+   :host, so an initial value never shows): lengths, then numbers. */
+@property --spacing-space-1 {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-space-2 {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-space-3 {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-space-4 {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-space-5 {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-space-6 {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-space-7 {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-space-8 {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-bar-item {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-block-ledger {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-block-routines {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-block-view {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-btn-h {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-btn-h-lg {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-composer-field {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-decision-page-max {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-deck-peek {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-graph-label {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-graph-node-w {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-graph-stage-min {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-grid-2 {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-grid-4 {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-head-fade-blur {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-hover-panel-room {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-pin-card-w {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-pointer-floor {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-screen-margin {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-sidebar-w {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --radius-hair {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --radius-sm {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --radius-lg {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --deck-step {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --goo-join {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --hover-panel-inset {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --hover-panel-max {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --pop-rise {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --ride-fade {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --skeleton-reveal-blur {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --text-meta {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --c-deck-scale {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --deck-shrink {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --echo-opacity {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --leave-scale {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --pop-scale {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --tab-rim-mix-subtle {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --tab-rim-taper {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --tab-rim-taper-ease {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --tab-rim-width {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+/* --echo-scale's one fallback is its own value (ConnectWindow). */
+@property --echo-scale {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1.45;
+}
+/* A folder tab track's shape (fluid-tabs TabsList, tab-strips), read by
+   its tabs and the cards that hang from them; a bar glass's join sets its
+   own --flare. Unset, each reads 0px, as each read's fallback was. */
+@property --flare {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --overlap {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --radius {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --slope-start {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --slope-end {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+/* A decision page's insets (decision-page-insets), read by its grid. */
+@property --page-in {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --card-in {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+/* How far a hung card's shadow reaches under it (motion/hung-shadow). */
+@property --hang-reach {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+/* A tab rim's stroke weight (tab-rim-w); 1 where none is set, as
+   rim-stroke-w's fallback is. */
+@property --rim-w {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+
 @layer base {
   /* The theme class is the one switch: it picks the palette through
      light-dark() and the platform's own controls, scrollbars and form

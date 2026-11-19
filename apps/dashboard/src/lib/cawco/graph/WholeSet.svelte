@@ -286,9 +286,8 @@
    * it opens whole. The fit tool frames the same way.
    */
   const READABLE = browser
-    ? LEAST_TEXT /
-      (numberOf("--text-meta") *
-        Number.parseFloat(getComputedStyle(document.documentElement).fontSize))
+    ? // In px: design.css types --text-meta as a length.
+      LEAST_TEXT / numberOf("--text-meta")
     : 1;
   /**
    * How far the map pans: the set's own bounds, a gutter round them. A view

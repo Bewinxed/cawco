@@ -113,10 +113,8 @@
   let direction = $state<Flow>("LR");
 
   onMount(() => {
-    const rem = Number.parseFloat(
-      getComputedStyle(document.documentElement).fontSize
-    );
-    floor = Math.min(1, 11 / (numberOf("--text-meta") * rem));
+    // In px: design.css types --text-meta as a length.
+    floor = Math.min(1, 11 / numberOf("--text-meta"));
     mounted = true;
   });
 
