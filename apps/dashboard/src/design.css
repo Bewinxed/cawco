@@ -2836,13 +2836,15 @@
    words are in washed, the one stepped to on the coral where you act, its
    words in the ink that stands on it (DESIGN.md, The White On Coral Rule).
    Drawn by the CSS Custom Highlight API, so no row's text is wrapped.
-   Matched only while find holds marks (`data-find-marks` on the root): a
-   ::highlight() rule that matches every element has Chromium resolve each
-   element's highlight style in every style pass (highlight inheritance),
-   a fifth of a restyle of the page (conversation-frames, 790 elements:
-   16.9ms against 13.5ms without them). WebKit as shipped resolves a
+   Matched only under a transcript's list while find holds marks there
+   (`data-find-marks` on the list): a ::highlight() rule that matches every
+   element has Chromium resolve each element's highlight style in every
+   style pass (highlight inheritance), a fifth of a restyle of the page
+   (conversation-frames, 790 elements: 16.9ms against 13.5ms without them).
+   On the page's root, the mark's arrival restyled every element on the page
+   (12k elements, 67ms, with 29 tabs open). WebKit as shipped resolves a
    highlight against its own element, so the rule still matches every
-   element under the root, rather than the root alone. */
+   element under the list, rather than the list alone. */
 @layer base {
   [data-find-marks] ::highlight(find-place) {
     background-color: var(--color-brand-wash);

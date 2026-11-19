@@ -8,7 +8,7 @@
 import { untrack } from "svelte";
 import { track } from "#lib/platform/track.js";
 import { findIn } from "../find/conversation-find.svelte";
-import { markFind, rangesOf } from "../find/find-marks";
+import { markFind, rangesOf, unmarkFind } from "../find/find-marks";
 import type { SessionState } from "../stores/sessions.svelte";
 import { recordIn, rowHolding } from "./open-at.svelte";
 import type { Row } from "./rows";
@@ -51,12 +51,9 @@ export class TranscriptFind {
   /** Read the drawn rows for the words and mark them: every place washed, the one stepped to solid. */
   markWords(): void {
     const words = this.findHere.words.trim();
-    if (!(
-      this.#host.pin.listing &&
-      words &&
-      (this.findHere.open || this.findHere.landed)
-    )) {
-      markFind(this.#host.session.instanceId, [], null);
+    const root = this.#host.pin.listing;
+    if (!(root && words && (this.findHere.open || this.findHere.landed))) {
+      unmarkFind(this.#host.session.instanceId);
       return;
     }
     const { current } = this.findHere;
@@ -94,7 +91,7 @@ export class TranscriptFind {
       this.findHere.whose === "all"
         ? null
         : this.findHere.places.flatMap((place) => drawnAt(place) ?? []);
-    const all = rangesOf(this.#host.pin.listing, words).filter(
+    const all = rangesOf(root, words).filter(
       (range) =>
         kept === null || kept.some((at) => at.contains(range.startContainer))
     );
@@ -103,11 +100,12 @@ export class TranscriptFind {
       null;
     if (!this.findHere.open) {
       // Find closed here: the place keeps its wash until the reader moves on.
-      markFind(this.#host.session.instanceId, solid ? [solid] : [], null);
+      markFind(this.#host.session.instanceId, root, solid ? [solid] : [], null);
       return;
     }
     markFind(
       this.#host.session.instanceId,
+      root,
       all.filter((range) => range !== solid),
       solid
     );
@@ -176,7 +174,7 @@ export class TranscriptFind {
     $effect(() => {
       const root = this.#host.pin.listing;
       if (!(root && (this.findHere.open || this.findHere.landed))) {
-        markFind(this.#host.session.instanceId, [], null);
+        unmarkFind(this.#host.session.instanceId);
         return;
       }
       track(
@@ -213,7 +211,7 @@ export class TranscriptFind {
     // read properties of null (reading 'instanceId')", the page stopped).
     $effect(() => {
       const { instanceId } = this.#host.session;
-      return () => markFind(instanceId, [], null);
+      return () => unmarkFind(instanceId);
     });
 
     $effect(() => {

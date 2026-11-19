@@ -8,14 +8,21 @@
  * page's two highlights are every transcript's ranges together.
  *
  * Styled in design.css: `::highlight(find-place)` and `::highlight(find-current)`,
- * matched only while the root carries `data-find-marks`.
+ * matched only under a transcript's list while it holds marks
+ * (`data-find-marks` on that list). Carried by the page's root instead, the
+ * mark's arrival and its going each restyled every element on the page, the
+ * strip, the rail and the composer's places with them: 12k elements, 67ms,
+ * as the first word was typed with 29 tabs open.
  */
 
 const PLACE = "find-place";
 const CURRENT = "find-current";
 
-/** Each transcript's marks, by its view id. */
-const marks = new Map<string, { places: Range[]; current: Range | null }>();
+/** Each transcript's marks, by its view id, and the list they are under. */
+const marks = new Map<
+  string,
+  { root: Element; places: Range[]; current: Range | null }
+>();
 
 const supported = (): boolean =>
   typeof CSS !== "undefined" && "highlights" in CSS;
@@ -34,27 +41,40 @@ function draw(): void {
   }
   CSS.highlights.set(PLACE, new Highlight(...places));
   CSS.highlights.set(CURRENT, new Highlight(...current));
-  // The marks' styles match only while there are marks (design.css): a
-  // ::highlight() rule standing over every element costs every style pass.
-  document.documentElement.toggleAttribute(
-    "data-find-marks",
-    places.length > 0 || current.length > 0
-  );
 }
 
-/** Transcript `viewId`'s marks now: its places washed, `current` solid. */
+/** Transcript `viewId`'s marks gone, and their styles from its list. */
+export function unmarkFind(viewId: string): void {
+  const was = marks.get(viewId);
+  if (was) {
+    marks.delete(viewId);
+    was.root.removeAttribute("data-find-marks");
+    draw();
+  }
+}
+
+/**
+ * Transcript `viewId`'s marks now, under its list `root`: its places
+ * washed, `current` solid. The marks' styles match only under a list that
+ * holds marks (design.css): a ::highlight() rule standing over an element
+ * costs it every style pass.
+ */
 export function markFind(
   viewId: string,
+  root: Element,
   places: Range[],
   current: Range | null
 ): void {
   if (places.length === 0 && current === null) {
-    if (marks.delete(viewId)) {
-      draw();
-    }
+    unmarkFind(viewId);
     return;
   }
-  marks.set(viewId, { places, current });
+  const was = marks.get(viewId);
+  if (was && was.root !== root) {
+    was.root.removeAttribute("data-find-marks");
+  }
+  marks.set(viewId, { root, places, current });
+  root.toggleAttribute("data-find-marks", true);
   draw();
 }
 
