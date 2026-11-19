@@ -16,6 +16,8 @@ export default {
     dir: "~",
     height: 640,
     bare: true,
+    paste: "Nothing pasted",
+    lookupMs: 0,
   },
   parameters: { viewport: 1440 },
 };
@@ -39,6 +41,29 @@ export const FolderInTheWay = {
 export const PastedUrl = {
   args: { repo: "git@gitlab.com:someone/notes.git" },
 };
+
+/** A pasted URL of one of my repositories: its own row, as in the list. */
+export const PastedListed = { args: { paste: "One of my repositories" } };
+
+/** A GitHub repository pasted, with its owners' preview picture. */
+export const PastedOnGithub = { args: { paste: "GitHub, with a picture" } };
+
+/** A GitHub repository pasted, still being looked up. */
+export const PastedLookingUp = {
+  args: { paste: "GitHub, with a picture", lookupMs: 600_000 },
+};
+
+/** A GitHub repository pasted that has no preview picture of its own. */
+export const PastedNoPicture = { args: { paste: "GitHub, no picture" } };
+
+/** A GitHub URL where gh sees no repository. */
+export const PastedNotOnGithub = { args: { paste: "GitHub, nothing there" } };
+
+/** A GitLab project pasted: what its page says, and its picture. */
+export const PastedOnGitlab = { args: { paste: "GitLab" } };
+
+/** An ssh URL on our own git server: only what the URL says. */
+export const PastedSelfHosted = { args: { paste: "Our own server, over ssh" } };
 
 /** The repositories are still being read. */
 export const Reading = { args: { answer: "loading" } };

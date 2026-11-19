@@ -9,9 +9,16 @@
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { GhAccount, GhRepo, GhRepoList } from "@cawco/core/connections";
+import { readWithin } from "@cawco/core/bounded";
+import type {
+  GhAccount,
+  GhRepo,
+  GhRepoList,
+  GhRepoLookup,
+} from "@cawco/core/connections";
 import { workspaceScratchRoot } from "@cawco/core/paths/roots";
 import { workspaceCacheDir, workspacesDir } from "@cawco/core/paths/workspace";
+import { repoIdentity } from "@cawco/core/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { GhRepoSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
@@ -253,4 +260,207 @@ export const ghRepos = async (): Promise<GhRepoList> => {
   };
   await Promise.all(Array.from({ length: PAGES_AT_ONCE }, reader));
   return { kind: "listed", repos: pages.flat() };
+};
+
+/** The host whose repositories {@link ghRepo} asks gh of. */
+const GITHUB_HOST = "github.com";
+
+/**
+ * One repository, in the fields {@link GhRepo} carries and its social image
+ * (docs.github.com/graphql/reference/objects#repository: `openGraphImageUrl`,
+ * `usesCustomOpenGraphImage`; the owner's `__typename` is `User` or
+ * `Organization`).
+ */
+const REPO_QUERY = `query ($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    nameWithOwner
+    owner { login avatarUrl __typename }
+    description
+    isPrivate
+    updatedAt
+    url
+    sshUrl
+    openGraphImageUrl
+    usesCustomOpenGraphImage
+  }
+}`;
+
+/** What `gh api graphql` prints for {@link REPO_QUERY}, on its way out with 0 or, with `errors`, 1. */
+const REPO_ANSWER = z.object({
+  data: z
+    .object({
+      repository: z
+        .object({
+          nameWithOwner: z.string(),
+          owner: z.object({
+            login: z.string(),
+            avatarUrl: z.string(),
+            __typename: z.string(),
+          }),
+          description: z.string().nullable(),
+          isPrivate: z.boolean(),
+          updatedAt: z.string(),
+          url: z.string(),
+          sshUrl: z.string(),
+          openGraphImageUrl: z.string(),
+          usesCustomOpenGraphImage: z.boolean(),
+        })
+        .nullable(),
+    })
+    .nullish(),
+  errors: z.array(z.object({ type: z.string().optional() })).optional(),
+});
+
+/** GraphQL's error types for a repository gh's account cannot see: none there, or one it may not read. */
+const UNSEEN = new Set(["NOT_FOUND", "FORBIDDEN"]);
+
+/**
+ * Repository `owner/name` on GitHub as the host's gh reads it, one GraphQL
+ * call ({@link REPO_QUERY}). `-f`, not `-F`: gh reads a `-F` value as a
+ * number, a boolean or a file (`@path`), and a repository may be named `42`.
+ */
+const githubRepo = async (
+  owner: string,
+  name: string
+): Promise<GhRepoLookup> => {
+  const run = await ghRun([
+    "api",
+    "graphql",
+    "-f",
+    `query=${REPO_QUERY}`,
+    "-f",
+    `owner=${owner}`,
+    "-f",
+    `name=${name}`,
+  ]);
+  if (!run) {
+    return { kind: "no-gh" };
+  }
+  if (run.exitCode === GH_EXIT_AUTH || BAD_CREDENTIALS.test(run.stderr)) {
+    return { kind: "signed-out" };
+  }
+  let answer: z.output<typeof REPO_ANSWER> | undefined;
+  try {
+    answer = REPO_ANSWER.parse(JSON.parse(run.stdout));
+  } catch {
+    answer = undefined;
+  }
+  const found = answer?.data?.repository;
+  if (found) {
+    return {
+      kind: "found",
+      repo: {
+        nameWithOwner: found.nameWithOwner,
+        owner: {
+          login: found.owner.login,
+          avatarUrl: found.owner.avatarUrl,
+          kind: found.owner.__typename === "Organization" ? "org" : "user",
+        },
+        // GitHub's `url` is the page; the clone takes the `.git` URL `user/repos` lists as `clone_url`.
+        url: `${found.url}.git`,
+        sshUrl: found.sshUrl,
+        updatedAt: found.updatedAt,
+        description: found.description || null,
+        isPrivate: found.isPrivate,
+      },
+      socialImageUrl: found.usesCustomOpenGraphImage
+        ? found.openGraphImageUrl
+        : null,
+    };
+  }
+  if (answer?.errors?.some((error) => UNSEEN.has(error.type ?? ""))) {
+    return { kind: "not-found" };
+  }
+  throw new Error(
+    `gh api graphql failed: ${run.stderr.trim() || `exit ${run.exitCode}`}`
+  );
+};
+
+/** How long a repository's web page has to answer {@link pageSays}. */
+const PAGE_TIMEOUT_MS = 4000;
+const OG_FIELD = /^og:(?:description|image)$/u;
+const WEB_URL = /^https?:$/u;
+const DOT_GIT_END = /\.git\/?$/u;
+
+/** What a repository's web page says of itself; none of either where it says nothing. */
+interface PageSays {
+  description: string | null;
+  socialImageUrl: string | null;
+}
+
+/**
+ * The `og:description` and `og:image` of the web page an `https://` git URL
+ * names (the URL without its `.git`, its login dropped), read with Bun's
+ * HTMLRewriter as the page streams, waiting {@link PAGE_TIMEOUT_MS} at most.
+ * None of either for any other URL, or a page that fails, is not HTML or
+ * says neither; an image only at an `http(s)` address.
+ */
+const pageSays = async (url: string): Promise<PageSays> => {
+  const none: PageSays = { description: null, socialImageUrl: null };
+  const page = URL.parse(url.trim().replace(DOT_GIT_END, ""));
+  if (page?.protocol !== "https:") {
+    return none;
+  }
+  page.username = "";
+  page.password = "";
+  const read = await readWithin(PAGE_TIMEOUT_MS, (signal) =>
+    readPage(page, signal)
+  ).catch((cause: unknown) => {
+    // A page that fails says nothing: the row stands on what its URL holds.
+    console.warn(
+      `[gh-repo] ${page.host}'s page didn't answer: ${String(cause)}`
+    );
+    return { kind: "answered" as const, value: none };
+  });
+  return read.kind === "answered" ? read.value : none;
+};
+
+/** {@link pageSays}'s read of `page`, its fetch stopped by `signal`. */
+const readPage = async (page: URL, signal: AbortSignal): Promise<PageSays> => {
+  const answer = await fetch(page, {
+    headers: { accept: "text/html" },
+    signal,
+  });
+  if (!(
+    answer.ok && answer.headers.get("content-type")?.includes("text/html")
+  )) {
+    return { description: null, socialImageUrl: null };
+  }
+  const said = new Map<string, string>();
+  await new HTMLRewriter()
+    .on("meta", {
+      element(meta) {
+        const field =
+          meta.getAttribute("property") ?? meta.getAttribute("name") ?? "";
+        const content = meta.getAttribute("content")?.trim();
+        if (OG_FIELD.test(field) && content && !said.has(field)) {
+          said.set(field, content);
+        }
+      },
+    })
+    .transform(answer)
+    .text();
+  const image = said.get("og:image");
+  const at = image ? URL.parse(image, answer.url) : null;
+  return {
+    description: said.get("og:description") ?? null,
+    socialImageUrl: at && WEB_URL.test(at.protocol) ? at.href : null,
+  };
+};
+
+/**
+ * The repository at git URL `url` (core `CONTROL_GH_REPO`): on GitHub, as
+ * the host's gh reads it ({@link githubRepo}), `not-found` where the URL
+ * names no `owner/name`; on any other host, what its web page says of
+ * itself ({@link pageSays}).
+ */
+export const ghRepo = async (url: string): Promise<GhRepoLookup> => {
+  const [host = "", ...path] = repoIdentity(url).split("/");
+  if (host === GITHUB_HOST || host === `www.${GITHUB_HOST}`) {
+    const [owner, name] = path;
+    return path.length === 2 && owner && name
+      ? githubRepo(owner, name)
+      : { kind: "not-found" };
+  }
+  return { kind: "other-host", ...(await pageSays(url)) };
 };

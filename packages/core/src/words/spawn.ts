@@ -500,6 +500,11 @@ export const spawnWords = {
       `gh isn't signed in on ${machine}. Run \`gh auth login\` there, or paste a git URL.`,
     oldDaemon: (machine: string) =>
       `CawCo on ${machine} is too old to list repositories. Update it (Configure › Updates), or paste a git URL.`,
+    /** A pasted URL's host, before its `owner/name`, where the host is not GitHub. */
+    onHost: (host: string) => `${host} · `,
+    /** A pasted GitHub URL where the machine's gh sees no repository. */
+    notOnGithub: (machine: string) =>
+      `GitHub has no repository here that gh can see. Cloning uses ${machine}'s git credentials.`,
     /** What happens once the session starts, under the path box. */
     clones: (repo: string, target: string, machine: string) =>
       `Clones ${repo} into ${target} on ${machine}.`,

@@ -178,6 +178,36 @@ export type GhRepoList =
  */
 export const CONTROL_GH_REPOS = "ghRepos";
 
+/**
+ * What {@link CONTROL_GH_REPO} answers for one git URL. On GitHub: `found`,
+ * the repository as GitHub's GraphQL `repository` reads it, with its social
+ * image only where its owner set one (`usesCustomOpenGraphImage`: GitHub's
+ * generated card repeats the row's own words); `not-found` where gh sees
+ * none there (none stands there, or gh's account may not read it); `no-gh`
+ * or `signed-out` as {@link GhRepoList} says them. On any other host,
+ * `other-host`: what the repository's web page says of itself (its
+ * `og:description` and `og:image`), each none where there is no page to
+ * read (an ssh URL) or it said nothing in time.
+ */
+export type GhRepoLookup =
+  | { kind: "found"; repo: GhRepo; socialImageUrl: string | null }
+  | {
+      kind: "other-host";
+      description: string | null;
+      socialImageUrl: string | null;
+    }
+  | { kind: "not-found" }
+  | { kind: "no-gh" }
+  | { kind: "signed-out" };
+
+/**
+ * The machine control that looks up the repository at one git URL (agent
+ * host-gh.ts `ghRepo`): args `[url]`; answers {@link GhRepoLookup}. The New
+ * session form's repository picker asks it of the selected machine for a
+ * pasted URL its list does not hold.
+ */
+export const CONTROL_GH_REPO = "ghRepo";
+
 /** `signed-in`: its tools answer. `needs-sign-in`: a key or a sign-in is owed. `error`: `reason` says what failed. */
 export type ConnectionState = "signed-in" | "needs-sign-in" | "error";
 

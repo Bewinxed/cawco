@@ -3,17 +3,24 @@
  * gh lists and what its folders hold, shaped as the owner's are, answered
  * on a bench's hub (location-live.svelte). The machine's id says which
  * answer its gh gives (`mock-<answer>`), so every frame on one page shares
- * one bench.
+ * one bench. A pasted URL's repository is answered by the URL itself
+ * ({@link lookupOf}): each of {@link PASTES} as its dial names it, any
+ * other GitHub URL as one gh sees nothing at, any other host's as a page
+ * that says nothing.
  */
-import type { GhRepo, GhRepoOwner } from "@cawco/core/connections";
-import type { FsEntry } from "@cawco/core/protocol";
+import type {
+  GhRepo,
+  GhRepoLookup,
+  GhRepoOwner,
+} from "@cawco/core/connections";
+import { type FsEntry, repoIdentity } from "@cawco/core/protocol";
 import {
   DAY_MS as DAY,
   HOUR_MS as HOUR,
   MINUTE_MS as MINUTE,
 } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import type { MachineRepos } from "../stores/machines";
+import type { MachineRepo, MachineRepos } from "../stores/machines";
 
 /** What the mock machine's gh answers, as a dial names it. */
 const ANSWERS = [
@@ -109,6 +116,114 @@ const REPOS: GhRepo[] = [
     78 * DAY
   ),
 ];
+
+/** An SVG as an image's address. */
+const svg = (markup: string): string =>
+  `data:image/svg+xml;utf8,${encodeURIComponent(markup)}`;
+
+/** A square avatar: its initial on its colour. */
+const avatar = (initial: string, fill: string): string =>
+  svg(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="${fill}"/><text x="20" y="27" font-family="system-ui,sans-serif" font-size="20" font-weight="600" fill="#fff" text-anchor="middle">${initial}</text></svg>`
+  );
+
+const OXIDELABS: GhRepoOwner = {
+  login: "oxidelabs",
+  kind: "org",
+  avatarUrl: avatar("Ox", "#c2410c"),
+};
+const AYAAN: GhRepoOwner = {
+  login: "ayaanmehta",
+  kind: "user",
+  avatarUrl: avatar("A", "#0f766e"),
+};
+
+/** Quarry's own social card, 1280 by 640, as its owners would set one. */
+const QUARRY_CARD = svg(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1c1917"/><stop offset="1" stop-color="#7c2d12"/></linearGradient></defs><rect width="1280" height="640" fill="url(#g)"/><g fill="none" stroke="#fdba74" stroke-width="10" opacity="0.9"><rect x="120" y="200" width="60" height="240" rx="10"/><rect x="200" y="140" width="60" height="300" rx="10"/><rect x="280" y="260" width="60" height="180" rx="10"/></g><text x="420" y="320" font-family="system-ui,sans-serif" font-size="128" font-weight="700" fill="#fff7ed">quarry</text><text x="424" y="400" font-family="system-ui,sans-serif" font-size="34" fill="#fed7aa">Columnar queries over event logs</text></svg>`
+);
+
+/** A GitLab project's avatar, which its page gives as its `og:image`. */
+const VECTORPRESS_AVATAR = svg(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><rect width="400" height="400" fill="#4338ca"/><path d="M90 300 L200 90 L310 300 Z" fill="none" stroke="#e0e7ff" stroke-width="22" stroke-linejoin="round"/><circle cx="200" cy="230" r="34" fill="#e0e7ff"/></svg>`
+);
+
+/** The URLs the pasted-URL dial pastes, by what each one's lookup answers. */
+export const PASTES = {
+  "Nothing pasted": "",
+  "One of my repositories": "git@github.com:petralab/agent-evals.git",
+  "GitHub, with a picture": "https://github.com/oxidelabs/quarry",
+  "GitHub, no picture": "git@github.com:ayaanmehta/tidy-diff.git",
+  "GitHub, nothing there": "https://github.com/petralab/roadmap-2027",
+  GitLab: "https://gitlab.com/inkpress/vectorpress.git",
+  "Our own server, over ssh":
+    "git@git.petralab.ai:platform/billing-service.git",
+} as const;
+export type MockPaste = keyof typeof PASTES;
+
+/** What the mock machine says of each pasted URL, by its identity. */
+const LOOKUPS = new Map<string, GhRepoLookup>([
+  [
+    repoIdentity(PASTES["GitHub, with a picture"]),
+    {
+      kind: "found",
+      repo: repo(
+        OXIDELABS,
+        "quarry",
+        "Columnar query engine for append-only event logs, in Rust",
+        false,
+        2 * HOUR
+      ),
+      socialImageUrl: QUARRY_CARD,
+    },
+  ],
+  [
+    repoIdentity(PASTES["GitHub, no picture"]),
+    {
+      kind: "found",
+      repo: repo(
+        AYAAN,
+        "tidy-diff",
+        "Review a diff as a tree of moved and changed symbols",
+        false,
+        5 * DAY
+      ),
+      socialImageUrl: null,
+    },
+  ],
+  [
+    repoIdentity(PASTES.GitLab),
+    {
+      kind: "other-host",
+      description: "Print-ready SVG page layout from Markdown and a stylesheet",
+      socialImageUrl: VECTORPRESS_AVATAR,
+    },
+  ],
+]);
+
+/** GitHub's host, whose URLs the mock's gh answers. */
+const GITHUB = "github.com/";
+
+/**
+ * What the mock machine says of the repository at `url`, after `waitMs`:
+ * {@link LOOKUPS}' answer, else gh seeing nothing at a GitHub URL, else a
+ * page that says nothing.
+ */
+export async function lookupOf(
+  url: string,
+  waitMs: number
+): Promise<MachineRepo> {
+  await new Promise((done) => {
+    setTimeout(done, waitMs);
+  });
+  const id = repoIdentity(url);
+  return (
+    LOOKUPS.get(id) ??
+    (id.startsWith(GITHUB)
+      ? { kind: "not-found" }
+      : { kind: "other-host", description: null, socialImageUrl: null })
+  );
+}
 
 /** The mock machine's id, by the answer its gh gives. */
 export const mockMachine = (answer: MockAnswer): string => `mock-${answer}`;

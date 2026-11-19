@@ -5,7 +5,12 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
-import { CONTROL_GH_REPOS, type GhRepoList } from "@cawco/core/connections";
+import {
+  CONTROL_GH_REPO,
+  CONTROL_GH_REPOS,
+  type GhRepoList,
+  type GhRepoLookup,
+} from "@cawco/core/connections";
 import {
   CONTROL_REPLIES,
   type ControlReply,
@@ -133,6 +138,30 @@ export async function machineRepos(
     return await machineControl(machineId, CONTROL_GH_REPOS, []);
   } catch (error) {
     if (knowsNotControl(error, CONTROL_GH_REPOS)) {
+      return { kind: "answered", value: { kind: "old-daemon" } };
+    }
+    throw error;
+  }
+}
+
+/**
+ * What {@link machineRepo} reads: the machine's answer, or `old-daemon` as
+ * {@link MachineRepos} has it.
+ */
+export type MachineRepo = GhRepoLookup | { kind: "old-daemon" };
+
+/**
+ * The repository at git URL `url` as machine `machineId` sees it (core
+ * `CONTROL_GH_REPO`), for the repository picker's row of a pasted URL.
+ */
+export async function machineRepo(
+  machineId: string,
+  url: string
+): Promise<Bounded<MachineRepo>> {
+  try {
+    return await machineControl(machineId, CONTROL_GH_REPO, [url]);
+  } catch (error) {
+    if (knowsNotControl(error, CONTROL_GH_REPO)) {
       return { kind: "answered", value: { kind: "old-daemon" } };
     }
     throw error;

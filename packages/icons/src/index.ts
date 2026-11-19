@@ -212,6 +212,8 @@ export {
 } from "~icons/solar/ghost-smile-bold-duotone";
 /** The agent driving a browser, in its address (BrowserAddress): the agent's ghost, a bar's linear cut. */
 export { default as IconAgentLinear } from "~icons/solar/ghost-smile-linear";
+/** A git repository on a host with no mark of its own (a pasted URL's row in the repository picker). */
+export { default as IconGitRepo } from "~icons/solar/git-branch-bold-duotone";
 /** What differs between two states: Compare (bare: the scale stands on a tile, The Solar Duotone Rule). */
 export { default as IconCompare } from "~icons/solar/git-diff-bold-duotone";
 export { default as IconCompareLinear } from "~icons/solar/git-diff-linear";

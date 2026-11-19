@@ -2645,6 +2645,28 @@ const GhRepoListShape = declared(
 export const GhRepoListSchema = GhRepoListShape;
 export type GhRepoListOutput = z.output<typeof GhRepoListShape>;
 
+const GhRepoLookupShape = declared(
+  z.union([
+    z.object({
+      kind: z.literal("found"),
+      repo: GhRepoShape,
+      socialImageUrl: z.string().nullable(),
+    }),
+    z.object({
+      kind: z.literal("other-host"),
+      description: z.string().nullable(),
+      socialImageUrl: z.string().nullable(),
+    }),
+    z.object({ kind: z.literal("not-found") }),
+    z.object({ kind: z.literal("no-gh") }),
+    z.object({ kind: z.literal("signed-out") }),
+  ]),
+  "GhRepoLookup",
+  "packages/core/src/connections.ts"
+);
+export const GhRepoLookupSchema = GhRepoLookupShape;
+export type GhRepoLookupOutput = z.output<typeof GhRepoLookupShape>;
+
 const GhTokenShape = declared(
   z.object({ token: z.string() }),
   "GhToken",

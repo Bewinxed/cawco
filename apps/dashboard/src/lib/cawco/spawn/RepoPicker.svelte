@@ -1,12 +1,32 @@
 <script lang="ts" module>
   import type { GhRepo } from "@cawco/core/connections";
-  import type { MachineRepos } from "../stores/machines";
+  import { isGitUrl, repoIdentity, repoPath } from "@cawco/core/protocol";
+  import { unhandled } from "@cawco/core/unhandled";
+  import { spawnWords } from "@cawco/core/words/spawn";
+  import type { MachineRepo, MachineRepos } from "../stores/machines";
 
   /**
    * Each machine's last answer, so a popover opened again shows its list at
    * once while it is read again. The page's own: a reload reads it afresh.
    */
   const lastRead = new Map<string, MachineRepos>();
+
+  /**
+   * What each machine said of a URL's repository, by `<machine> <identity>`
+   * ({@link lookKey}): a popover opened again on a pasted URL draws its row
+   * whole at once. The page's own, as {@link lastRead} is.
+   */
+  const lastLooked = new Map<string, MachineRepo>();
+
+  /** How long a URL in the search holds still before it is looked up: a paste is one change, a URL typed is one per key. */
+  const LOOKUP_SETTLE_MS = 250;
+
+  /** The key {@link lastLooked} holds machine `machineId`'s answer for `url` by. */
+  const lookKey = (machineId: string, url: string) =>
+    `${machineId} ${repoIdentity(url)}`;
+
+  /** GitHub's host, whose repositories the machine's gh reads. */
+  const GITHUB_HOSTS = new Set(["github.com", "www.github.com"]);
 
   /** The list as the picker holds it: being read, the machine's answer, or why it has none. */
   type Listing =
@@ -26,8 +46,80 @@
   /** The owner group's value for every owner's repositories: no GitHub login holds a `*`. */
   const ALL = "*";
 
-  /** The URL row's key's prefix. */
+  /**
+   * The URL row's key: there is one at most, and it stays the same row as
+   * the URL is typed and as what the machine says of it fills it in.
+   */
   const URL_KEY = "url:";
+
+  /** The URL row as drawn: what its URL holds, filled in by what the machine says of it. */
+  interface UrlFace {
+    description: string;
+    /** On GitHub: its mark until gh's row stands. */
+    github: boolean;
+    /** The host on any other: it leads the name. */
+    host: string;
+    /** Its social image's address, "" for none. */
+    image: string;
+    name: string;
+    /** Why nothing more is shown: gh sees no repository there. */
+    note: string;
+    /** Read off the URL: the repository's `owner/` (its group's path on another host), as the row draws it apart. */
+    owner: string;
+    /** gh's own row for it, as a listed repository's. */
+    repo: GhRepo | null;
+  }
+
+  /** The row for `url`, as `answer` fills it in (none while it is asked, or when no answer came). */
+  function urlFace(
+    url: string,
+    answer: MachineRepo | undefined,
+    machineName: string
+  ): UrlFace {
+    const [host = ""] = repoIdentity(url).split("/");
+    const github = GITHUB_HOSTS.has(host);
+    const path = repoPath(url) || url;
+    const at = path.lastIndexOf("/") + 1;
+    const read: UrlFace = {
+      owner: path.slice(0, at),
+      name: path.slice(at),
+      github,
+      host: github ? "" : host,
+      repo: null,
+      description: "",
+      note: "",
+      image: "",
+    };
+    switch (answer?.kind) {
+      case "found": {
+        const slash = answer.repo.nameWithOwner.indexOf("/") + 1;
+        return {
+          ...read,
+          owner: answer.repo.nameWithOwner.slice(0, slash),
+          name: answer.repo.nameWithOwner.slice(slash),
+          repo: answer.repo,
+          description: answer.repo.description ?? "",
+          image: answer.socialImageUrl ?? "",
+        };
+      }
+      case "other-host":
+        return {
+          ...read,
+          description: answer.description ?? "",
+          image: answer.socialImageUrl ?? "",
+        };
+      case "not-found":
+        return { ...read, note: spawnWords.location.notOnGithub(machineName) };
+      // No gh to ask, or none signed in: the row is what the URL holds.
+      case "no-gh":
+      case "signed-out":
+      case "old-daemon":
+      case undefined:
+        return read;
+      default:
+        return unhandled("answer", answer);
+    }
+  }
 </script>
 
 <script lang="ts">
@@ -38,8 +130,13 @@
    * over them (WAI-ARIA APG, Combobox with listbox popup): the field keeps
    * focus, ↑ and ↓ move the active row, Enter picks it and sets the
    * location, Escape empties the search. A pasted git URL on any host is
-   * one row of its own in place of the list. Owner chips filter the list
-   * to one owner, and each row's `owner/` folds away while one is chosen.
+   * one row of its own in place of the list: a listed repository's own row
+   * where the list holds it, under any of its URLs; else a row of what the
+   * URL holds, filled in by what the machine says of it (`machineRepo`):
+   * on GitHub gh's row for it and its social image, or a line saying gh
+   * sees none there; on another host its page's description and image.
+   * Owner chips filter the list to one owner, and each row's `owner/`
+   * folds away while one is chosen.
    *
    * Motion: one list, its rows keyed by the repository, never mounted
    * again (motion/rows `reflow`). As the search or the owner changes, the
@@ -56,26 +153,31 @@
    * owner group's thumb travels to the owner picked (the kit's segmented
    * group); the rows' hover ghost and picked wash travel between rows
    * (`highlight`); the lock's tooltip is the list's one tooltip, portalled
-   * out of the scroller.
+   * out of the scroller. The URL row fills in where it stands as the
+   * machine answers: the avatar takes the host's mark's place (`icon-swap`),
+   * the age morphs in (MorphText), and the description, the line saying gh
+   * sees nothing there and the social image unfold under the name, the
+   * image's place held by a skeleton until it loads and gone quietly if it
+   * fails.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
-  import { isGitUrl, repoIdentity, repoPath } from "@cawco/core/protocol";
-  import { unhandled } from "@cawco/core/unhandled";
-  import { spawnWords } from "@cawco/core/words/spawn";
   import { untrack } from "svelte";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import Skeleton from "#lib/components/ui/skeleton/skeleton.svelte";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { provideGlide } from "#lib/components/ui/tooltip/glide.js";
   import GlideTip from "#lib/components/ui/tooltip/glide-tip.svelte";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
-    IconLink as Link,
+    IconGitRepo as GitRepo,
     IconLock as Lock,
     IconSearch as Search,
   } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
-  import { motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { motionOk, reveal } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
@@ -83,7 +185,7 @@
   import { formatAgeShort } from "#lib/utils/time.js";
   import { didntAnswer } from "../hub/control";
   import Marked from "../Marked.svelte";
-  import { machineRepos } from "../stores/machines";
+  import { machineRepo, machineRepos } from "../stores/machines";
   import { TRY_AGAIN } from "../unanswered";
 
   let {
@@ -237,20 +339,99 @@
   const listed = $derived(
     repos.find((one) => repoIdentity(one.url) === pickedId)
   );
+  /** The listed repository the pasted URL names, under any of its URLs: its own row stands alone. */
+  const pastedListed = $derived.by(() => {
+    if (!pasted) {
+      return;
+    }
+    const id = repoIdentity(typed);
+    return repos.find((one) => repoIdentity(one.url) === id);
+  });
   /**
-   * The URL row: the pasted one, or a URL picked before that the list does
-   * not hold (a popover opened again on it), heading the list.
+   * The URL row: the pasted one the list does not hold, or a URL picked
+   * before that it does not hold (a popover opened again on it), heading
+   * the list.
    */
   const urlRow = $derived.by(() => {
     if (pasted) {
-      return typed;
+      return pastedListed ? "" : typed;
     }
     return repo && listing.kind === "read" && !listed ? repo : "";
   });
+  /** What the machine said of the URL row's repository, by {@link lookKey}. */
+  let looked = $state<{ at: string; answer: MachineRepo }>();
+  const lookAt = $derived(
+    urlRow && machineId ? lookKey(machineId, urlRow) : ""
+  );
+  // The URL row's repository is looked up once the search holds still; an
+  // answer for a URL the row no longer holds is kept for when it does.
+  $effect(() => {
+    const at = lookAt;
+    if (!at || lastLooked.has(at)) {
+      return;
+    }
+    const id = machineId;
+    const url = untrack(() => urlRow);
+    let stale = false;
+    const settle = setTimeout(() => {
+      machineRepo(id, url).then(
+        (read) => {
+          if (read.kind !== "answered") {
+            return;
+          }
+          lastLooked.set(at, read.value);
+          if (!stale) {
+            looked = { at, answer: read.value };
+          }
+        },
+        // A lookup that fails leaves the row as its URL says.
+        () => undefined
+      );
+    }, LOOKUP_SETTLE_MS);
+    return () => {
+      stale = true;
+      clearTimeout(settle);
+    };
+  });
+  const urlLook = $derived(
+    urlRow
+      ? urlFace(
+          urlRow,
+          looked?.at === lookAt ? looked.answer : lastLooked.get(lookAt),
+          machineName
+        )
+      : undefined
+  );
+  /** The social image that loaded, and the one that failed: the one that failed is gone quietly. */
+  let imageLoaded = $state("");
+  let imageBroken = $state("");
+  // The social image is loaded apart from the row; the row draws it once
+  // it has loaded, its skeleton holding its place until then.
+  $effect(() => {
+    const src = urlLook?.image;
+    if (!src || untrack(() => imageLoaded === src || imageBroken === src)) {
+      return;
+    }
+    const probe = new Image();
+    probe.onload = () => {
+      imageLoaded = src;
+    };
+    probe.onerror = () => {
+      imageBroken = src;
+    };
+    probe.src = src;
+    return () => {
+      probe.onload = null;
+      probe.onerror = null;
+    };
+  });
   /** The rows shown while `login`'s repositories alone are ("" for every owner's). */
   function rowsFor(login: string): Row[] {
+    if (pastedListed) {
+      return [{ key: pastedListed.nameWithOwner, repo: pastedListed }];
+    }
     return [
-      ...(urlRow ? [{ key: `${URL_KEY}${urlRow}`, url: urlRow }] : []),
+      ...(urlRow ? [{ key: URL_KEY, url: urlRow }] : []),
       ...(pasted
         ? []
         : repos
@@ -297,7 +478,12 @@
 
   function take(row: Row): void {
     activeKey = row.key;
-    onrepo("url" in row ? row.url : row.repo.url);
+    if ("url" in row) {
+      onrepo(row.url);
+    } else {
+      // A listed repository pasted under one of its URLs clones by the one pasted.
+      onrepo(row.repo === pastedListed ? typed : row.repo.url);
+    }
   }
 
   function search(value: string): void {
@@ -599,16 +785,9 @@
     tabindex="-1"
     type="button"
   >
-    {#if "url" in row}
-      <span
-        class="col-start-1 mark-cell justify-self-center text-ink-muted"
-        data-box><Link class="size-icon-md" /></span
-      >
-      <span
-        class="col-span-3 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-ink-row group-aria-selected:text-selected-ink"
-        >{repoPath(row.url) || row.url}</span
-      >
-    {:else}
+    {#if "url" in row && urlLook}
+      {@render urlFields(urlLook)}
+    {:else if !("url" in row)}
       {@const one = row.repo}
       {@const [login, repoName] = ownerAndName(one)}
       <span class="col-start-1 mark-cell justify-self-center" data-box
@@ -631,19 +810,7 @@
         ><Marked query={q} text={repoName} /></span
       >
       {#if one.isPrivate}
-        <Tip glide={tips} label={PRIVATE} side="top">
-          {#snippet children(tip)}
-            <span
-              {...tip}
-              aria-label={PRIVATE}
-              class="col-start-3 mark-cell text-ink-muted @max-repo-narrow/repos:row-start-2"
-              data-box
-              data-slot="private"
-              role="img"
-              tabindex="-1"><Lock class="size-icon-md" /></span
-            >
-          {/snippet}
-        </Tip>
+        {@render privateMark()}
       {/if}
       <span
         data-slot="updated"
@@ -660,6 +827,108 @@
       {/if}
     {/if}
   </button>
+{/snippet}
+
+<!-- The URL row's fields on the list's columns, as a listed row's: its
+     host's mark until gh's avatar takes its place, `host · owner/name`, and
+     what the machine said of it under the name. -->
+{#snippet urlFields(look: UrlFace)}
+  <span class="col-start-1 mark-cell justify-self-center" data-box
+    ><span class="icon-swap"
+      ><span data-active={!look.repo}
+        >{#if look.github}<ProviderLogo
+            provider="github"
+            size="nav"
+          />{:else}<GitRepo
+            aria-hidden="true"
+            class="size-icon-lg text-ink-muted"
+          />{/if}</span
+      ><span data-active={Boolean(look.repo)}
+        >{#if look.repo}{@render avatar(
+            look.repo.owner,
+            "size-icon-lg"
+          )}{/if}</span
+      ></span
+    ></span
+  >
+  <span
+    data-slot="name"
+    data-box
+    class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-ink-row group-aria-selected:text-selected-ink @max-repo-narrow/repos:col-span-3"
+    ><span class="font-normal text-ink-muted"
+      >{look.host
+        ? spawnWords.location.onHost(look.host)
+        : ""}{look.owner}</span
+    >{look.name}</span
+  >
+  {#if look.repo?.isPrivate}
+    {@render privateMark()}
+  {/if}
+  <span
+    data-slot="updated"
+    class="col-start-4 num type-meta text-end whitespace-nowrap text-ink-muted @max-repo-narrow/repos:row-start-2"
+    ><MorphText
+      text={look.repo ? formatAgeShort(Date.parse(look.repo.updatedAt)) : ""}
+    /></span
+  >
+  {#if look.description}
+    <span
+      data-slot="description"
+      data-box
+      class="col-start-2 row-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
+      in:unfold
+      out:unfold>{look.description}</span
+    >
+  {:else if look.note}
+    <span
+      data-slot="not-on-github"
+      class="col-start-2 row-start-2 min-w-0 type-meta text-pretty text-ink-muted"
+      in:unfold
+      out:unfold>{look.note}</span
+    >
+  {/if}
+  {#if look.image && imageBroken !== look.image}
+    <!-- Its 2:1 card (GitHub's 1280 by 640), the whole picture in it; a
+         picture of another shape stands in its middle. -->
+    <span
+      data-slot="social-image"
+      data-box
+      class="relative col-span-3 col-start-2 row-start-3 aspect-2/1 w-full max-w-64 overflow-clip rounded-xs bg-surface-well outline-1 -outline-offset-1 outline-image-outline"
+      in:unfold
+      out:unfold
+    >
+      {#if imageLoaded === look.image}
+        <img
+          alt=""
+          class="absolute inset-0 size-full object-contain"
+          decoding="async"
+          in:reveal
+          src={look.image}
+        />
+      {:else}
+        <span aria-hidden="true" class="absolute inset-0" out:reveal
+          ><Skeleton fill="frame" radius="text" /></span
+        >
+      {/if}
+    </span>
+  {/if}
+{/snippet}
+
+<!-- A private repository's lock, in the lock's column; its tooltip the list's one. -->
+{#snippet privateMark()}
+  <Tip glide={tips} label={PRIVATE} side="top">
+    {#snippet children(tip)}
+      <span
+        {...tip}
+        aria-label={PRIVATE}
+        class="col-start-3 mark-cell text-ink-muted @max-repo-narrow/repos:row-start-2"
+        data-box
+        data-slot="private"
+        role="img"
+        tabindex="-1"><Lock class="size-icon-md" /></span
+      >
+    {/snippet}
+  </Tip>
 {/snippet}
 
 {#snippet avatar(who: GhRepo["owner"], size: string)}

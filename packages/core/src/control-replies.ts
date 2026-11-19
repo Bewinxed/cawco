@@ -82,9 +82,15 @@ import {
   CONTROL_CANCEL_COMMAND,
   CONTROL_RUN_COMMAND,
 } from "./commands/controls";
-import type { GhAccount, GhRepoList, GhToken } from "./connections";
+import type {
+  GhAccount,
+  GhRepoList,
+  GhRepoLookup,
+  GhToken,
+} from "./connections";
 import {
   CONTROL_GH_ACCOUNTS,
+  CONTROL_GH_REPO,
   CONTROL_GH_REPOS,
   CONTROL_GH_TOKEN,
 } from "./connections";
@@ -275,6 +281,7 @@ import {
   GeneratedImageSchema,
   GhAccountSchema,
   GhRepoListSchema,
+  GhRepoLookupSchema,
   GhTokenSchema,
   GitChangesSchema,
   HomeCredentialSchema,
@@ -591,6 +598,7 @@ const CONTROLS = {
   [CONTROL_GH_ACCOUNTS]: reply<GhAccount[]>(z.array(GhAccountSchema)),
   [CONTROL_GH_TOKEN]: reply<GhToken>(GhTokenSchema),
   [CONTROL_GH_REPOS]: reply<GhRepoList>(GhRepoListSchema),
+  [CONTROL_GH_REPO]: reply<GhRepoLookup>(GhRepoLookupSchema),
   [CONTROL_FORGE_POST]: reply<ForgeVerdict>(ForgeVerdictSchema),
   // A machine's tools and their sign-ins (tools.ts).
   [CONTROL_BEGIN_TOOL_SIGNIN]: reply<ToolSigninChallenge>(

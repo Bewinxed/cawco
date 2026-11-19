@@ -45,7 +45,12 @@ import type {
 import type { CanvasScreenClose, CanvasScreenOpen } from "./canvas";
 import type { MachineCapabilities } from "./capabilities";
 import type { CommandResult, CommandRun } from "./commands/controls";
-import type { GhAccount, GhRepoList, GhToken } from "./connections";
+import type {
+  GhAccount,
+  GhRepoList,
+  GhRepoLookup,
+  GhToken,
+} from "./connections";
 import type {
   ContinuationRead,
   ContinuationReadOptions,
@@ -327,6 +332,7 @@ interface ControlTable {
   >;
   getTaskOutput: Entry<[taskId: string], TaskOutput>;
   ghAccounts: Entry<[], GhAccount[]>;
+  ghRepo: Entry<[url: string], GhRepoLookup>;
   ghRepos: Entry<[], GhRepoList>;
   ghToken: Entry<[host: string, login: string], GhToken>;
   gitChanges: Entry<[dir: string, since: string], GitChanges>;
