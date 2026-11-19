@@ -2,41 +2,16 @@
  * A project's account (hub project-edit.ts `account`): the account the
  * sessions the project starts run on (its Caw conversation, its routines'
  * runs, its delegates) when the start names none of its own, and where they
- * stay. Its row in Project details (project/ProjectDetails.svelte), Caw's
- * `project_settings` change (`set_account`), and placement's words for it
+ * stay. Caw's `project_settings` change (`set_account`), and placement's words for it
  * (hub placement.ts). The app draws none of it, so these are not written
  * into it (scripts/words-swift.ts).
  */
 export const projectAccountWords = {
-  // ── Project details' row ──
-  label: "Account",
-  /** The select's name for a screen reader. */
-  select: "The account this project's sessions start on",
-  /** The option for none: today's routing. */
-  routing: "Fleet's routing",
-  /** Under the row with none set. */
-  routed: "Each session starts where the fleet's routing places it.",
-  /** Under the row with one set. */
-  set: (name: string) =>
-    `Caw, routines and delegates start on ${name}, with its connectors. A session that names its own account runs there.`,
-  /** Under the row when the one set is not signed in on any machine. */
-  signedOut: (name: string) =>
-    `${name} isn't signed in on any machine, so nothing in this project can start until it is.`,
-
   /**
    * What its sessions on its account do at that account's limit (core
-   * `ProjectAtLimit`): its row under Account, shown while one is named, and
-   * Caw's `set_account_at_limit`.
+   * `ProjectAtLimit`): Caw's `set_account_at_limit`.
    */
   atLimit: {
-    label: "At its limit",
-    wait: "Wait for the reset",
-    move: "Move",
-    /** Under the row, by what is picked. */
-    says: {
-      wait: "Its sessions hold on it until it resets, and keep its connectors.",
-      move: "Its sessions move to an account with room, and lose its connectors there.",
-    },
     change: (atLimit: "wait" | "move") =>
       atLimit === "wait"
         ? "At its account's limit, hold this project's sessions there until the reset, keeping its connectors"

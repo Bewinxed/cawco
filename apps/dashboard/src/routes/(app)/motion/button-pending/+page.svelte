@@ -155,14 +155,6 @@
   />
   <Button
     data-specimen
-    data-site="lib/cawco/project/ProjectDetails.svelte:406"
-    label="Add"
-    pendingLabel="Adding…"
-    size="sm"
-    variant="default"
-  />
-  <Button
-    data-specimen
     data-site="lib/cawco/project/ProjectHead.svelte:521"
     label="Start"
     pendingLabel="Starting…"
