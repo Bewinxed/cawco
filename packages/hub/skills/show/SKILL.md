@@ -20,7 +20,7 @@ The **design graph** is what `artifact_create` opens for `kind: "component"`: th
 2. **Pick the primitive from `does`.**
    | `does` | Build | Skill |
    | --- | --- | --- |
-   | judge | the design on the design graph (`kind: "component"`): one live story that mounts the real piece, or the whole screen in the app's shell, its presses answered by mock data, a dial for each situation no press reaches and each value he tunes, pins with `file:line`. A rough idea is the same thing less arranged: real components, quickly placed. Two or more directions open in one design graph: `directions` names one states file per direction, with its name and its line | `design-graph`; `design-explore` for directions; `screen` for a whole screen |
+   | judge | the design on the design graph (`kind: "component"`): one live story that mounts the real piece, or the whole screen in the app's shell, its presses answered by mock data, a dial for each situation no press reaches and each value they tune, pins with `file:line`. A rough idea is the same thing less arranged: real components, quickly placed. Two or more directions open in one design graph: `directions` names one states file per direction, with its name and its line | `design-graph`; `design-explore` for directions; `screen` for a whole screen |
    | pick | a decision page, for a choice that is no design (a name, a policy, a scope, a behaviour drawn as a diagram, a picture that is no UI): one card per question in dependency order, gets and costs, one Recommended with its reason | `decision-page` |
    | try | a preview of the running app, opened at the flow's first screen: `port` with `serve` in a workspace, or `dir` | the project's own run |
    | draw | a canvas (`kind: "canvas"`): a diagram of what is not a screen (a data flow, an architecture), or an empty one for their own sketch | none |
@@ -40,7 +40,7 @@ The **design graph** is what `artifact_create` opens for `kind: "component"`: th
 | One design under a yes or no ("Build this?", "Looks right now?") | The design on its design graph for them to pin; the go-ahead through `ask` |
 | A design drawn as HTML, or as boxes on a canvas, on a stack that has a stage | Its real components in a live story on the design graph |
 | A whole screen opened as a preview to be judged | The screen's live story on the design graph, where they switch its widths; a preview is the running app, for a flow they try |
-| A list of states for him to step through; every state, width and scheme stacked down one page; a second frame for another width or scheme | One live story: he reaches each state by using it and each width from the graph's View. A states file of every state is your own reading |
+| A list of states for them to step through; every state, width and scheme stacked down one page; a second frame for another width or scheme | One live story: they reach each state by using it and each width from the graph's View. A states file of every state is your own reading |
 | A value along a scale offered as separate designs (three densities, three radii) | One `number` or `select` dial on the live story, bounded to the range that holds |
 | A behaviour or flow choice told only in words | A decision card whose options each draw the states and the moves between them as a `Diagram`, each edge labelled by what the person does; where the flow is how screens look, directions on the design graph |
 | A delegate's design graph opened as it came | Read it first (`artifact_read` with `state`, and its fixture's file): it opens on one live story, its `parts` name the product components the piece ships in, and its fixture answers each event the piece sends. One that opens on a list of states, or draws the piece by hand, goes back to the delegate |
@@ -57,8 +57,8 @@ What they asked to see is a live story on the design graph: build it yourself wh
 
 A brief for something the person will judge names the outcome, and the skills name the tool:
 
-- the piece, and the one task he does in it, in plain words ("he opens the account list on a session stopped at its limit and picks another account");
-- what he reaches by pressing, in order, and the situations no press reaches, which become its dials;
+- the piece, and the one task they do in it, in plain words ("they open the account list on a session stopped at its limit and picks another account");
+- what they reach by pressing, in order, and the situations no press reaches, which become its dials;
 - the product components it ships in, by name from the map, changed in place in the delegate's workspace, and the mock data's shape (how many accounts, the longest email);
 - for a call the server lacks, that the mock stands at the store function the component calls and the report names it;
 - what comes back: one design graph (its directions as one states file each), handed up unopened, and a report that lists anything in it no product component draws.
