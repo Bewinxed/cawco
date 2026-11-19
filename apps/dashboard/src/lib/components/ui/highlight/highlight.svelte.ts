@@ -100,7 +100,7 @@ const OVERLAP = 1;
  *   parts stay off the compositor. With less motion a selection that moves
  *   cross-fades (`data-swap`) over --duration-fade.
  * - `card` (the host's `data-highlight`): a grid of icon cards (updates/ChannelCards.svelte), whose pill is the channel card's selection frame, 1px
- *   brand-solid over the recess at the card's own radius, drawn over the
+ *   brand-solid over the picked fill (option-picked) at the card's own radius, drawn over the
  *   card's border and fill and under its face (CardFace): its edges are
  *   parts of their own, a border's width thick, so no scale ever thickens
  *   them.
@@ -176,7 +176,7 @@ const LAYERS = `
 }
 :host([data-highlight="card"]) :is([data-slot="highlight-pill"], [data-slot="highlight-trail"]) {
   z-index: 1;
-  background-color: var(--color-surface-recess);
+  background-color: var(--color-option-picked);
 }
 :host([data-highlight="card"]) :is([data-part="corner-tl"], [data-part="corner-tr"]) {
   border-top: var(--border-width) solid var(--color-brand-solid);

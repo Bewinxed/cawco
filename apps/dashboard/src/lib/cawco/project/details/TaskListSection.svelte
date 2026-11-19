@@ -3,7 +3,8 @@
    * Task list: Only here, GitHub Issues or Linear, three tiles across (one
    * column on a phone), the two services in their own marks, each with its
    * line. A service not yet connected reads as its act (Connect GitHub
-   * Issues); the connected one reads as connected, with Change… under the
+   * Issues, ending on a chevron: it opens a step, it picks nothing); the
+   * connected one reads as connected, with Change… under the
    * grid. While connected, its facts stand under the tiles on the section's
    * own edge: the codebase or team as a link out, how many tasks are
    * linked, the status board or the service's reason there is none; then
@@ -146,6 +147,7 @@
               <OptionLine
                 line={taskWords[kind].line}
                 name={nameOf(kind)}
+                opens={kind !== chosen}
                 tag={kind === chosen ? taskWords.connected : undefined}
                 tile
                 waiting={pending?.value === kind && !pending.refused}

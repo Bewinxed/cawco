@@ -51,7 +51,7 @@
     chipVariants({ variant: "option" }),
     "focus-inset",
     // Gliding, the group's pill is the pick (look "card": the picked edge
-    // over the recess); the option stands over it, clear while chosen.
+    // over the picked fill); the option stands over it, clear while chosen.
     group.glide &&
       "relative z-2 bg-transparent aria-checked:border-transparent aria-checked:bg-transparent",
     group.layout === "list" &&

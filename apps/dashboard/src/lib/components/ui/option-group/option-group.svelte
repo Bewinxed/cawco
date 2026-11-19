@@ -67,7 +67,7 @@
     disabled?: boolean;
     /**
      * One pick whose mark moves: the kit's selection pill (`highlight`,
-     * `look: "card"`, the chip's own picked edge over the recess) glides
+     * `look: "card"`, the chip's own picked edge over its picked fill) glides
      * from the option left to the one chosen, across a wrap too, the way
      * the segmented control's thumb slides; the options stand over it with
      * no fill or edge of their own while chosen.

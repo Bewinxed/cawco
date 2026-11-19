@@ -377,6 +377,15 @@
     var(--color-action-hover-top),
     var(--color-action-hover-bottom)
   );
+  /* A picked option's fill (the option chip, row and tile; the gliding pick's pill): the warm recess by day; at night the apricot wash a third over raised, since the recess there is darker than raised and reads as no fill. */
+  --color-option-picked: light-dark(
+    var(--color-surface-recess),
+    color-mix(
+      in oklab,
+      var(--color-selected-bg) 30%,
+      var(--color-surface-raised)
+    )
+  );
   /* Selected nav / chosen row: warm apricot wash, coral ink, no shadow. */
   --color-selected-bg: light-dark(oklch(90.5% 0.062 48), oklch(34% 0.075 40));
   --color-selected-ink: light-dark(var(--color-coral-11), oklch(83% 0.085 34));

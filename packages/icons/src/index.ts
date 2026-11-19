@@ -149,6 +149,12 @@ export { default as IconCopy } from "~icons/solar/copy-bold-duotone";
 /** The other tabs closed (its menu's Close others). */
 export { default as IconCloseOthers } from "~icons/solar/copy-close-bold-duotone";
 /**
+ * Copy to computer on the project details card, beside Connect existing
+ * folder's link (drawn in strokes): the bold duotone's two sheets fill to
+ * one block at 16px, so it takes the stroked duotone cut.
+ */
+export { default as IconCopyStroked } from "~icons/solar/copy-line-duotone";
+/**
  * The kit's CopyButton, in Solar's linear cut: the duotone's two sheets
  * fill to one block at a button's 12px, and its result swaps to the linear
  * Tick and Close.

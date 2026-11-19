@@ -4,7 +4,9 @@
    * its name, the one line saying what picking it does, and the kit's
    * spinner at its end while the hub has not yet taken the press on it. A
    * note for trouble (Signed out) stands after the name, in the status ink;
-   * a tag (Connected) in the quiet ink.
+   * a tag (Connected) in the quiet ink. One that opens a step of its own
+   * rather than picking (Connect Linear) ends its first line on a chevron,
+   * as a row that opens more does.
    *
    * In a row (`list`), the glyph stands in a lead column and the name and
    * line share its text edge. In a tile (`tile`), the glyph and the name
@@ -14,6 +16,7 @@
   import { cardWords } from "@cawco/core/words/project-details";
   import type { Component, Snippet } from "svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { IconChevronRight } from "#lib/icons.js";
 
   let {
     name,
@@ -24,6 +27,7 @@
     tag,
     waiting = false,
     tile = false,
+    opens = false,
   }: {
     name: string;
     line?: string;
@@ -38,6 +42,8 @@
     waiting?: boolean;
     /** It stands in a tile: the line under the glyph and the name. */
     tile?: boolean;
+    /** Pressed, it opens a step of its own rather than picking. */
+    opens?: boolean;
   } = $props();
 </script>
 
@@ -66,6 +72,11 @@
 {#snippet wait()}
   {#if waiting}
     <Spinner aria-label={cardWords.sent} class="mt-px flex-none" tone="muted" />
+  {:else if opens}
+    <IconChevronRight
+      aria-hidden="true"
+      class="mt-px size-icon-sm flex-none text-ink-muted"
+    />
   {/if}
 {/snippet}
 
