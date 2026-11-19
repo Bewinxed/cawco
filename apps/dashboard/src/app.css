@@ -24,6 +24,9 @@
    behaviours and utilities), one source with the decision host's sheet
    (lib/cawco/decisions/host/host.css). */
 @import "./design.css";
+/* html's and body's edge colours, a literal per state (scripts/screen-edges.ts
+   writes it from theme.css): the screen edges below say why. */
+@import "./lib/tokens/screen-edges.css";
 /* The house's PhotoSwipe chrome, one source with the decision host's sheet. */
 @import "./lib/cawco/lightbox/photoswipe.css";
 @plugin "@tailwindcss/typography";
@@ -810,17 +813,21 @@
 
 /* ---- The screen's edges (ScreenEdges): the colours Safari extends past the
    page at the top and the foot, from what stands at each edge: the bar or
-   the shelf, a scrim, a kit sheet. Four boxes read them: html and body
-   (their backgrounds) and the two strips (`data-screen-edge`), which read
-   --edge-*-background, --edge-*-fade and --edge-shown. So each is set on
-   those four alone and none inherits: written on the root and inherited,
+   the shelf, a scrim, a kit sheet. Four boxes show them: html and body
+   (their backgrounds) and the two strips (`data-screen-edge`). The strips
+   read --edge-*-background, --edge-*-fade and --edge-shown, each set on the
+   strips alone and none inheriting: written on the root and inherited,
    every flip of the root's words (a sheet or a scrim opening, closing and
    going, the bar starting or stopping to float) restyled every element in
    the document, all the tabs held mounted included: 3,500 elements and
-   33ms a flip at 29 tabs in Chromium, 480ms in WebKit at 7,900. A state on
-   the root sets each property on `:root[…]`, `:root[…] body` and
-   `:root[…] [data-screen-edge]`, at the same weight as every other state
-   for the same box, so the states stand in the order written. */
+   33ms a flip at 29 tabs in Chromium, 480ms in WebKit at 7,900. html and
+   body take literal colours per state (lib/tokens/screen-edges.css, which
+   scripts/screen-edges.ts writes from theme.css): in Chromium a registered
+   property changing on html or body restyled every element under it, and
+   a background on html that read var() restyled the document on any flip
+   (root-flip-check.ts). A state on the root sets each strip property on
+   `:root[…] [data-screen-edge]`, at the same weight as every other state,
+   so the states stand in the order written. */
 @property --edge-top-under {
   syntax: "*";
   inherits: false;
@@ -854,8 +861,6 @@
   inherits: false;
 }
 @layer components {
-  :root,
-  body,
   [data-screen-edge] {
     --edge-top-under: var(--color-surface-raised);
     --edge-bottom-under: var(--color-surface-recess);
@@ -868,33 +873,17 @@
     --edge-shown: 1;
     --edge-show-fade: var(--duration-exit);
   }
-  :root {
-    background: var(--edge-top-background);
-  }
-  body {
-    background: var(--edge-bottom-background);
-  }
-  :root[data-bar~="floating"],
-  :root[data-bar~="floating"] body,
   :root[data-bar~="floating"] [data-screen-edge],
-  :root[data-bar~="hosting"],
-  :root[data-bar~="hosting"] body,
   :root[data-bar~="hosting"] [data-screen-edge] {
     --edge-top-under: var(--color-surface-shelf);
   }
   @media (width < --theme(--breakpoint-desk)),
     (pointer: coarse) and (orientation: portrait) {
-    :root[data-bar~="hosting"],
-    :root[data-bar~="hosting"] body,
     :root[data-bar~="hosting"] [data-screen-edge] {
       --edge-top-under: var(--color-surface-raised);
     }
   }
-  :root[data-scrim~="open"],
-  :root[data-scrim~="open"] body,
   :root[data-scrim~="open"] [data-screen-edge],
-  :root[data-scrim~="lightbox"],
-  :root[data-scrim~="lightbox"] body,
   :root[data-scrim~="lightbox"] [data-screen-edge] {
     --edge-top-background: color-mix(
       in srgb,
@@ -909,29 +898,21 @@
     --edge-top-fade: var(--duration-panel);
     --edge-bottom-fade: var(--duration-panel);
   }
-  :root[data-scrim~="closed"],
-  :root[data-scrim~="closed"] body,
   :root[data-scrim~="closed"] [data-screen-edge] {
     --edge-top-fade: var(--duration-exit);
     --edge-bottom-fade: var(--duration-exit);
   }
-  :root[data-kit-sheet~="bottom"],
-  :root[data-kit-sheet~="bottom"] body,
   :root[data-kit-sheet~="bottom"] [data-screen-edge] {
     --edge-bottom-background: var(--color-surface-raised);
     /* biome-ignore lint/plugin/no-raw-motion: a step a millisecond long is no beat: it ends in transitionend, where ScreenEdges reads the colour, and a 0s change fires none. */
     --edge-bottom-fade: 1ms;
   }
-  :root[data-kit-sheet~="side"],
-  :root[data-kit-sheet~="side"] body,
   :root[data-kit-sheet~="side"] [data-screen-edge] {
     --edge-top-background: var(--color-surface-raised);
     --edge-bottom-background: var(--color-surface-raised);
     --edge-shown: 0;
     --edge-show-fade: 0s;
   }
-  :root[data-kit-sheet~="rail"],
-  :root[data-kit-sheet~="rail"] body,
   :root[data-kit-sheet~="rail"] [data-screen-edge] {
     --edge-top-background: var(--sidebar);
     --edge-bottom-background: var(--sidebar);

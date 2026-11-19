@@ -590,6 +590,8 @@ const gated: Gated[] = [
   // Tailwind's Preflight, its box reset asked of each pseudo-element a rule
   // makes, as the CSS the house ships says them.
   inDashboard("scripts/preflight.ts", "--check"),
+  // html's and body's edge colours, literals per state, as theme.css makes them.
+  inDashboard("scripts/screen-edges.ts", "--check"),
   // The web app manifest's colours are the theme's, as the tokens make them.
   inDashboard("scripts/web-manifest.ts", "--check"),
   bun("packages/hub/scripts/skills-check.ts"),

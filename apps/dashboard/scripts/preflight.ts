@@ -38,11 +38,12 @@ import { join } from "node:path";
 import postcss, { AtRule, type Rule } from "postcss";
 import selectorParser, { type Selector } from "postcss-selector-parser";
 import { compile as compileSvelte } from "svelte/compiler";
-import { formatText, formattedAlike } from "../../../scripts/fmt";
+import { formatText } from "../../../scripts/fmt";
 import {
   VENDOR_COMPONENT_SHEETS,
   VENDOR_IMPORTED_SHEETS,
 } from "../vendor-sheets";
+import { writeOrCheck } from "./lib/generated";
 import { fullSelector, readHouseCss } from "./lib/house-css";
 
 // Read at run time beyond its imports (lib/house-css.ts); check.ts keys the
@@ -218,20 +219,10 @@ const made = await formatText(
   ].join("\n")
 );
 
-if (process.argv.includes("--check")) {
-  const committed = await Bun.file(join(DASHBOARD, OUT)).text();
-  if (await formattedAlike(OUT, committed, made)) {
-    console.log(
-      `preflight: Tailwind's, its box reset asked of ${askedOf.length} pseudo-element selectors, as the committed file says them`
-    );
-    process.exit(0);
-  }
-  console.error(
-    `preflight: ${OUT} is unlike what the build makes, which asks the reset of ${askedOf.length} pseudo-element selectors (run bun run preflight)`
-  );
-  process.exit(1);
-}
-await Bun.write(join(DASHBOARD, OUT), made);
-console.log(
-  `preflight: wrote ${OUT}, its box reset asked of ${askedOf.length} pseudo-element selectors`
-);
+await writeOrCheck({
+  made,
+  name: "preflight",
+  out: OUT,
+  standing: `Tailwind's, its box reset asked of ${askedOf.length} pseudo-element selectors, as the committed file says them`,
+  stale: `is unlike what the build makes, which asks the reset of ${askedOf.length} pseudo-element selectors`,
+});

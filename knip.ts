@@ -299,8 +299,8 @@ export default {
       project: [
         // Knip's default, with the extensions its Svelte and Tailwind compilers add here.
         "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,svelte,css}",
-        // The Tailwind theme and the selection sheet are written by hand; `bun run variants` writes variants.css (scripts/build-variants.ts), `bun run preflight` preflight.css (scripts/preflight.ts).
-        "!src/lib/tokens/{theme.css,selection.css,variants.css,preflight.css}",
+        // The Tailwind theme and the selection sheet are written by hand; `bun run variants` writes variants.css (scripts/build-variants.ts), `bun run preflight` preflight.css (scripts/preflight.ts), `bun run screen-edges` screen-edges.css (scripts/screen-edges.ts).
+        "!src/lib/tokens/{theme.css,selection.css,variants.css,preflight.css,screen-edges.css}",
         // Written by scripts/house-faces.ts.
         "!src/house-faces/**",
         // The planted mistakes scripts/outro-reads-check.ts reads, not code run.

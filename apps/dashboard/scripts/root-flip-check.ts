@@ -1,19 +1,24 @@
 /**
  * Part of `bun run check`: a word the page writes on html, body or the
- * shell (an attribute, a class, a state such as `:hover`) sets only custom
- * properties registered `inherits: false`.
+ * shell (an attribute, a class, a state such as `:hover`) restyles only the
+ * boxes it styles. So a rule that styles one of the three under such a word
+ * sets no custom property there, and one that styles html reads no `var()`.
  *
  * Every element in the document descends from those three. A custom
  * property that inherits, set on one of them under such a word, changes
- * for every element when the word comes or goes, and each flip restyles the
- * whole document, every mounted tab included. `:root[data-scrim~="open"]`
- * set the screen edges' `--edge-*` on the root (app.css): opening a sheet or
- * a scrim, closing it and its removal each restyled 3,600 elements at 29
- * tabs, 355ms a flip in WebKit, 40ms in Firefox, where the four boxes that
- * read them (html, body, the two ScreenEdges strips) were all that changed.
- * Registered `inherits: false` and set on each box that reads it
- * (`:root[…]`, `:root[…] body`, `:root[…] [data-screen-edge]`), a flip
- * restyles those boxes alone: 5ms in WebKit, 4ms in Firefox.
+ * for every element when the word comes or goes: `:root[data-scrim~="open"]`
+ * set the screen edges' `--edge-*` on the root (app.css), and opening a
+ * sheet or a scrim, closing it and its removal each restyled 3,600 elements
+ * at 29 tabs, 355ms a flip in WebKit, 40ms in Firefox. Registered
+ * `inherits: false`, WebKit and Firefox restyled the boxes that read them
+ * alone (5ms, 4ms), but Chromium still restyled every element under the box
+ * whose registered property changed, literal or not, wherever the page has
+ * a `::selection` rule (2,004 of a 2,000-row body; outputs'
+ * blink-registered-noninherited-subtree-restyle.html, work item 01a3cc2e),
+ * and every element in the document whenever html's own style read a
+ * `var()` and changed (2,010; a literal background: 4). html's and body's
+ * edge colours are literals per state for that (scripts/screen-edges.ts);
+ * the registered `--edge-*` stand on the two strips alone.
  *
  * The colour scheme's own words (`.dark`, `[data-scheme]`) are the one
  * exception: a scheme flip changes every colour token, which every element
@@ -24,8 +29,7 @@
  * `[data-slot="shell"]`) and a compound naming one of them carries anything
  * more than the name: `:root[data-x]`, `html.y`, `:root[data-x] body`.
  * At-rules around it (a viewport `@media`) are no word the page writes and
- * are not read. It reads the CSS the build ships (lib/house-css.ts), and
- * every `@property` in it.
+ * are not read. It reads the CSS the build ships (lib/house-css.ts).
  *
  * Prints `file:line: selector --property` per declaration; exits 1 on any.
  */
@@ -84,7 +88,12 @@ const onlyNames = (node: SelectorNode): boolean =>
 function flips(selector: Selector): boolean {
   const compounds = compoundsOf(selector);
   const subject = compounds.at(-1) ?? [];
-  if (!namesTop(subject)) {
+  // A pseudo-element of html (`:root::view-transition-old(root)`) is a box
+  // of its own, not html.
+  const pseudoElement = subject.some(
+    (node) => node.type === "pseudo" && node.value.startsWith("::")
+  );
+  if (!namesTop(subject) || pseudoElement) {
     return false;
   }
   return compounds
@@ -108,16 +117,22 @@ const flipping = (list: string): string[] => {
 };
 
 const house = await readHouseCss();
+const VAR = /\bvar\(/u;
 
-/** Every registered property's `inherits`, across the house's sheets. */
-const inherits = new Map<string, boolean>();
-for (const { root } of house.sheets) {
-  root.walkAtRules("property", (rule) => {
-    rule.walkDecls("inherits", (decl) => {
-      inherits.set(rule.params.trim(), decl.value.trim() !== "false");
-    });
-  });
-}
+/** Whether a selector's subject is html. */
+const stylesHtml = (selector: string): boolean => {
+  let html = false;
+  selectorParser((root) => {
+    const [only] = root.nodes;
+    const subject = only ? (compoundsOf(only).at(-1) ?? []) : [];
+    html = subject.some(
+      (node) =>
+        (node.type === "pseudo" && node.value.toLowerCase() === ":root") ||
+        (node.type === "tag" && node.value.toLowerCase() === "html")
+    );
+  }).processSync(selector);
+  return html;
+};
 
 interface Hit {
   file: string;
@@ -127,18 +142,28 @@ interface Hit {
 const hits: Hit[] = [];
 for (const sheet of house.sheets) {
   for (const rule of styleRules(sheet.root)) {
-    const inheriting = rule.nodes
-      .filter((node) => node.type === "decl" && node.prop.startsWith("--"))
-      .map((node) => (node.type === "decl" ? node.prop : ""))
-      .filter((prop) => inherits.get(prop) !== false);
-    if (inheriting.length === 0) {
+    const declarations = rule.nodes.flatMap((node) =>
+      node.type === "decl" ? [node] : []
+    );
+    if (declarations.length === 0) {
       continue;
     }
     const selector = fullSelector(rule);
     for (const flipped of flipping(selector)) {
-      for (const place of sheet.places(rule, selector)) {
-        for (const prop of inheriting) {
-          hits.push({ ...place, text: `${flipped} ${prop}` });
+      const html = stylesHtml(flipped);
+      const wrong = declarations.filter(
+        (decl) => decl.prop.startsWith("--") || (html && VAR.test(decl.value))
+      );
+      for (const place of wrong.length > 0
+        ? sheet.places(rule, selector)
+        : []) {
+        for (const decl of wrong) {
+          hits.push({
+            ...place,
+            text: decl.prop.startsWith("--")
+              ? `${flipped} ${decl.prop}`
+              : `${flipped} ${decl.prop}: ${decl.value}`,
+          });
         }
       }
     }
@@ -148,16 +173,16 @@ for (const sheet of house.sheets) {
 const unique = placedOnce(hits, (h) => h.text);
 if (unique.length > 0) {
   console.error(
-    `root-flip: ${unique.length} custom propert(ies) inherit from html, body or the shell under a word written there, so each flip restyles every element in the document:`
+    `root-flip: ${unique.length} declaration(s) under a word written on html, body or the shell set a custom property there, or read var() on html, so in Chromium each flip restyles every element under it:`
   );
   for (const h of unique) {
     console.error(`  ${h.file}:${h.line}: ${h.text}`);
   }
   console.error(
-    "Register each with `@property … { syntax: …; inherits: false }` and set it on each element that reads it, under the same word (app.css's screen edges: `:root[…]`, `:root[…] body`, `:root[…] [data-screen-edge]`) (apps/dashboard/scripts/root-flip-check.ts)."
+    "Set the property on the element that reads it, under the same word (app.css's screen edges: `:root[…] [data-screen-edge]`), and give html and body literal values per state (scripts/screen-edges.ts) (apps/dashboard/scripts/root-flip-check.ts)."
   );
   process.exit(1);
 }
 console.log(
-  `root-flip: no word written on html, body or the shell sets an inheriting custom property (${house.sheets.length} sheets, ${inherits.size} registered properties)`
+  `root-flip: no word written on html, body or the shell sets a custom property there or reads var() on html (${house.sheets.length} sheets)`
 );

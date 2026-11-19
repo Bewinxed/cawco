@@ -12,6 +12,7 @@
     "fmt": "bun ../../scripts/fmt.ts .",
     "preflight": "bun scripts/preflight.ts",
     "preview": "vite preview",
+    "screen-edges": "bun scripts/screen-edges.ts",
     "tab-icon": "bun scripts/tab-icon-art.ts",
     "variants": "bun scripts/build-variants.ts",
     "web-manifest": "bun scripts/web-manifest.ts"
