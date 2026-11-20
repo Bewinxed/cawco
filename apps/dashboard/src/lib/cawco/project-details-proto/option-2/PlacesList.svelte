@@ -56,8 +56,9 @@
     hrefOf: (page: "accounts" | "connections" | "fleetDecides") => string;
   } = $props();
 
-  const pathInputId = $props.id();
-  const lfsAddressId = $props.id();
+  const uid = $props.id();
+  const pathInputId = `${uid}-path`;
+  const lfsAddressId = `${uid}-lfs`;
 
   /** UI-local state for the inline Add place well. */
   let addingPlace = $state(false);
