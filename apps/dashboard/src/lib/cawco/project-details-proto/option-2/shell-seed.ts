@@ -12,7 +12,7 @@ import type {
 import { boardState, type Machine } from "#lib/cawco/stores/board.svelte.js";
 import { projectsState } from "#lib/cawco/stores/projects.svelte.js";
 import { page } from "$app/state";
-import type { HowItRunsRecord } from "./records";
+import { type HowItRunsRecord, SITUATIONS, type Situation } from "./records";
 
 /** The shell's rail reads the fleet's projects and machines from the stores, written here as the hub's first read would. */
 const placeRow = (
@@ -112,3 +112,14 @@ export function seedShell(record: HowItRunsRecord): void {
   boardState.machines = record.machines.map(machineRowOf);
   boardState.fleetRead = true;
 }
+
+/**
+ * What every states file of the "How it runs" frame shares: the page in
+ * desk width, its shell's stores written for the story's situation first.
+ */
+export const shellFrame = {
+  parameters: { viewport: "desk" },
+  beforeEach: ({ args }: { args: { situation: Situation } }) => {
+    seedShell(SITUATIONS[args.situation]);
+  },
+};
