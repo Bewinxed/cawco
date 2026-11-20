@@ -68,3 +68,17 @@ export type SessionChosenMode = (typeof SESSION_CHOSEN_MODES)[number];
 /** `value` as an {@link OfferedMode}, when it is one CawCo offers. */
 export const permissionModeNamed = (value: unknown): OfferedMode | undefined =>
   PERMISSION_MODES.find((mode) => mode === value);
+
+/**
+ * The modes in which a session runs a shell command without asking anyone:
+ * Claude Code's bypass and Full Send; OpenCode's adapter answers every tool
+ * ask in them (agent opencode-session.ts `autoAllows`), and Codex's asks for
+ * no approval in them (agent codex-session.ts `CODEX_MODES`, `never`). Every
+ * other mode asks the person before a command, or refuses it (plan). A
+ * harness with no modes (pi) asks nothing; hub routines.ts reads both
+ * through traits.ts `runsCommandsUnasked`.
+ */
+export const COMMANDS_UNASKED_MODES: readonly PermissionMode[] = [
+  "bypassPermissions",
+  "fullSend",
+];

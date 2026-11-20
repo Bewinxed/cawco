@@ -457,12 +457,17 @@ import type { TailnetServing } from "./tailnet-https";
  * 91: a task may wait on a date (a wait of kind `time`), and a date written
  *    that the hub does not read is refused as `wait-time-unread`. A page
  *    built for 90 reads neither, so it reloads first.
+ * 92: a routine's target may be `command`, a shell command whose exit code
+ *    answers its condition, and a routine's write and a workspace's
+ *    continue are refused under new codes (`routine-command-no-condition`,
+ *    `routine-approved-unread`, `workspace-continue-routine-run`). A page
+ *    built for 91 reads none of them, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 91;
+export const WIRE_PROTOCOL = 92;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

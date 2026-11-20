@@ -22,6 +22,7 @@ import {
   harnessNamed,
   type PluginOf,
 } from "./kinds";
+import { COMMANDS_UNASKED_MODES } from "./modes";
 
 /**
  * The facts a stored row or a frame's harness name is read for, whatever
@@ -176,3 +177,18 @@ export const compactorOf = (
   }
   throw new Error("No harness's moved lines go without a compactBy");
 };
+
+/**
+ * Whether a session of `harness` in permission mode `mode` (as its row keeps
+ * them) runs a shell command without asking the person: a harness with no
+ * permission modes always does, any other only in
+ * {@link COMMANDS_UNASKED_MODES}. What a session may set up that runs a
+ * command for it later (hub routines.ts, a `command` routine) follows this,
+ * as running the command itself would.
+ */
+export const runsCommandsUnasked = (
+  harness: unknown,
+  mode: string | null | undefined
+): boolean =>
+  !traitsOf(harness).permissionModes ||
+  COMMANDS_UNASKED_MODES.some((each) => each === mode);

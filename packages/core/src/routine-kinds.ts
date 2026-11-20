@@ -5,14 +5,18 @@ export const ROUTINE_TARGETS = [
   "conversation",
   "curator",
   "trim",
+  "command",
 ] as const;
 /**
  * What a run starts: a fresh delegate, a fresh orchestrator (a session that
  * may delegate, in the project's checkout: routines.ts `fireOrchestrator`),
  * a message to the project's conversation, Caw, the project's memory curator
- * (memory.ts), a delegate in the `curator` role that only the hub makes, or
+ * (memory.ts), a delegate in the `curator` role that only the hub makes,
  * the unused skills and servers routine (hub unused-trim.ts), a delegate in
- * the `trimmer` role that only the hub makes too.
+ * the `trimmer` role that only the hub makes too, or a shell command and no
+ * model (hub routines.ts `fireCommand`): its prompt, run in a fresh
+ * workspace's boundary on its project's machine, its exit code the verdict
+ * of the condition it must have.
  */
 export type RoutineTarget = (typeof ROUTINE_TARGETS)[number];
 
@@ -21,6 +25,7 @@ export const MADE_ROUTINE_TARGETS = [
   "delegate",
   "orchestrator",
   "conversation",
+  "command",
 ] as const satisfies readonly RoutineTarget[];
 
 /** Every {@link RoutineRunState}. */

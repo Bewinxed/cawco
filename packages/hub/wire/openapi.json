@@ -30062,6 +30062,7 @@
                   "target": {
                     "type": "string",
                     "enum": [
+                      "command",
                       "conversation",
                       "delegate",
                       "orchestrator"
@@ -30335,6 +30336,7 @@
                   "target": {
                     "type": "string",
                     "enum": [
+                      "command",
                       "conversation",
                       "delegate",
                       "orchestrator"
@@ -57017,9 +57019,10 @@
         ]
       },
       "RoutineTarget": {
-        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's conversation, Caw, the project's memory curator\n(memory.ts), a delegate in the `curator` role that only the hub makes, or\nthe unused skills and servers routine (hub unused-trim.ts), a delegate in\nthe `trimmer` role that only the hub makes too.",
+        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's conversation, Caw, the project's memory curator\n(memory.ts), a delegate in the `curator` role that only the hub makes,\nthe unused skills and servers routine (hub unused-trim.ts), a delegate in\nthe `trimmer` role that only the hub makes too, or a shell command and no\nmodel (hub routines.ts `fireCommand`): its prompt, run in a fresh\nworkspace's boundary on its project's machine, its exit code the verdict\nof the condition it must have.",
         "type": "string",
         "enum": [
+          "command",
           "conversation",
           "curator",
           "delegate",
@@ -122667,6 +122670,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "routine-command-no-condition"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "routine-condition-target"
                 ]
               },
@@ -174149,6 +174188,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "workspace-continue-routine-run"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "workspace-from-live"
                 ]
               },
@@ -184478,6 +184553,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "workspace-continue-routine-run"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "workspace-from-live"
                 ]
               },
@@ -192771,6 +192882,42 @@
                 "type": "string",
                 "enum": [
                   "workspace-continue-live"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "workspace-continue-routine-run"
                 ]
               },
               "detail": {
@@ -204633,6 +204780,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "routine-command-no-condition"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "routine-condition-target"
                 ]
               },
@@ -207976,6 +208159,9 @@
           },
           "repoRoot": {
             "$ref": "#/components/schemas/MachinePath"
+          },
+          "routineRun": {
+            "type": "string"
           },
           "stageFor": {
             "type": "string"

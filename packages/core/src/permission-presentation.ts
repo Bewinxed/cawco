@@ -15,7 +15,11 @@
 import { z } from "zod";
 import type { ProjectAtLimit } from "./accounts";
 import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./ask-tools";
-import type { SourceFacts } from "./asks";
+import {
+  ROUTINE_CREATE_TOOL,
+  ROUTINE_UPDATE_TOOL,
+  type SourceFacts,
+} from "./asks";
 import type { StartingSet } from "./delegate-types";
 import {
   SHELL_TOOLS,
@@ -31,6 +35,7 @@ import { isSecretName, looksSecret } from "./secret-shapes";
 import { DAY_MS } from "./time";
 import { areaWords } from "./words/areas";
 import { askStanceLine } from "./words/ask-lines";
+import { commandCheckWords } from "./words/conditions";
 import { scopeWords } from "./words/memory-scope";
 import { projectAccountWords } from "./words/project-account";
 import {
@@ -1670,6 +1675,31 @@ function projectSettings(
   };
 }
 
+/**
+ * A command check a session asks to make or change (hub routines.ts): what
+ * it is called, its command whole under the summary as a shell call's is,
+ * since what runs is what the person approves, and the condition its exit
+ * code answers.
+ */
+function commandCheck(
+  toolName: string,
+  input: Record<string, unknown>
+): Presented {
+  const name = text(input.name) ?? "";
+  const command = text(input.prompt);
+  const condition = text(input.condition);
+  return {
+    summary:
+      toolName === ROUTINE_CREATE_TOOL
+        ? commandCheckWords.askMake(name)
+        : commandCheckWords.askChange(name),
+    ...(condition ? { detail: commandCheckWords.askCondition(condition) } : {}),
+    changes: [],
+    ...(command?.trim() ? { command } : {}),
+    fields: fieldsOf(input, ["name", "prompt", "condition", "target", "id"]),
+  };
+}
+
 /** A file path, however the harness keys it (Claude Code, OpenCode, pi). */
 const filePathOf = (input: Record<string, unknown>): string | undefined =>
   text(input.file_path) ??
@@ -1871,6 +1901,9 @@ export function presentPermission(
   }
   if (toolName === PROJECT_SETTINGS_TOOL) {
     return { ...who, ...projectSettings(input, context) };
+  }
+  if (toolName === ROUTINE_CREATE_TOOL || toolName === ROUTINE_UPDATE_TOOL) {
+    return { ...who, ...commandCheck(toolName, input) };
   }
   // A browser ask reads as its reason, the page's origin under it.
   if (toolName === BROWSER_ASK_TOOL) {

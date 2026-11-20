@@ -8246,6 +8246,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/RoutineTarget`.
     public enum RoutineTarget: OpenEnum {
+        case command
         case conversation
         case curator
         case delegate
@@ -8256,6 +8257,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "command": self = .command
             case "conversation": self = .conversation
             case "curator": self = .curator
             case "delegate": self = .delegate
@@ -8267,6 +8269,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .command: "command"
             case .conversation: "conversation"
             case .curator: "curator"
             case .delegate: "delegate"
@@ -8280,7 +8283,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.conversation, .curator, .delegate, .orchestrator, .trim]
+        public static let allCases: [Self] = [.command, .conversation, .curator, .delegate, .orchestrator, .trim]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

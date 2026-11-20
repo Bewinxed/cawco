@@ -163,6 +163,8 @@ const targetWords = (routine: RoutineView): string => {
     case "curator":
     case "trim":
       return `a delegate${typed}, lands ${routine.lands}`;
+    case "command":
+      return `the command \`${routine.prompt}\` in a sandboxed copy of the project, no model`;
   }
 };
 

@@ -11821,7 +11821,8 @@
       "orchestrator",
       "conversation",
       "curator",
-      "trim"
+      "trim",
+      "command"
     ]
   },
   "rule_state.status": {

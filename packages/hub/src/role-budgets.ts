@@ -194,9 +194,15 @@ import {
  * routine_result take a condition, its deadline and a run's verdict
  * (worker 31,293, delegate 11,858 measured); the delegate's budget is
  * raised to it.
+ * 2026-11-20: a routine's target may be `command`, a sandboxed shell command
+ * whose exit code answers its condition (tsk-431), and routine_create says
+ * a session whose mode asks before shell commands gets the owner's approval
+ * first (the owner's "it depends on the permission mode" on card
+ * `condition-waits#who`) (worker 31,327 measured); the worker's budget is
+ * raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_300,
+  worker: 31_330,
   delegate: 11_860,
   overseer: 770,
   "web-facing": 3400,

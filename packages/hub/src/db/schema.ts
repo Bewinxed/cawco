@@ -1748,6 +1748,14 @@ export const workspaces = sqliteTable(
      */
     stageFor: text("stage_for"),
     /**
+     * The routine run whose command runs in this workspace: a `command`
+     * routine's check (routines.ts `fireCommand`), cut for that one run and
+     * let go of unread (`drop`) as it ends. It takes no work item and no
+     * session; the settle sweep drops one whose run is no longer live
+     * (workspaces.ts `settle`). Null for every other workspace.
+     */
+    routineRun: text("routine_run"),
+    /**
      * A host-scope delegate's (work-items.ts `startHost`): no clone and no
      * boundary. `path` (and `repoRoot`) is the folder on the machine its
      * session runs in, on the host, with the machine's own network, processes

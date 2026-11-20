@@ -229,6 +229,16 @@ export type AskRecord = z.infer<typeof ASK_RECORD> & {
 /** The tool that changes a project's settings, asking the person first unless it is in Full Send. */
 export const PROJECT_SETTINGS = "project_settings";
 
+/**
+ * The routine tools a session's call of reaches the person as an approval
+ * when it sets the command a check runs and the session's permission mode
+ * would ask before a shell command (hub routines.ts `createdFor`,
+ * `updatedWith`): an ask under the tool's own name, run by the hub once
+ * approved.
+ */
+export const ROUTINE_CREATE_TOOL = "routine_create";
+export const ROUTINE_UPDATE_TOOL = "routine_update";
+
 const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/u;
 
 /** Whether a tool is an admin write: the hub records an approve ask before each call runs, unless its session is in Full Send (hub asks.ts). */

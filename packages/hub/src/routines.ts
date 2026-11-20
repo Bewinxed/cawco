@@ -97,12 +97,31 @@
  *   or check it again (`/recheck`, which un-meets it); turning a stopped one
  *   back on checks it again too. Every change of where it stands tells its
  *   project's waits ({@link RoutineDeps.conditionMoved}).
+ * - **Command checks** (target `command`): a condition answered by a
+ *   shell command and no model, its prompt the command. Each run cuts a
+ *   fresh workspace at the project's place for its work, marked with the
+ *   run (workspaces.ts `routineRun`: no work item, no session), runs the
+ *   command at its root inside its boundary, never on the host
+ *   ({@link RoutineDeps.runCommand}, a minute at most, or the budget's
+ *   minutes up to ten), and lets the workspace go unread as the run ends.
+ *   The command carries no session credential, so `cawco tool` from it
+ *   is refused. Its exit code is the verdict ({@link commandEnd}): 0 met;
+ *   124 (its limit), 126, 127 and 128 + a signal could not check; any
+ *   other not yet; its last line of output the reason. A paused machine
+ *   skips the run. A session whose permission mode would ask the person
+ *   before a shell command (core harness/traits.ts `runsCommandsUnasked`)
+ *   makes or changes one only through the person's approval of that exact
+ *   call (asks.ts, {@link RoutineDeps.askPerson}), which the hub then runs
+ *   ({@link createApproved}); in a mode that runs commands unasked it is
+ *   made at once, and the person's notice shows the command whole.
  * - **Changes** (`routine_update`, `PATCH /api/routines/:id`) take any field
  *   but its project: its target, delegate type, landing and budget too,
  *   each checked as a new routine's is. A delete takes the event routes
  *   that fed it with it (`event_routes` cascades), and names each.
  */
 
+import { ROUTINE_CREATE_TOOL, ROUTINE_UPDATE_TOOL } from "@cawco/core/asks";
+import type { CommandResult } from "@cawco/core/commands/controls";
 import type { DelegateType, SessionRole } from "@cawco/core/delegate-types";
 import { ANY_TYPE } from "@cawco/core/delegate-types";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
@@ -110,6 +129,7 @@ import {
   type OfferedMode,
   SESSION_CHOSEN_MODES,
 } from "@cawco/core/harness/modes";
+import { runsCommandsUnasked } from "@cawco/core/harness/traits";
 import type { LandsMode } from "@cawco/core/injected";
 import { LANDS_MODES } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
@@ -137,10 +157,14 @@ import type {
 import { DAY_MS } from "@cawco/core/time";
 import { ROUTINE_WAIT } from "@cawco/core/wait-targets";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
-import { conditionWords } from "@cawco/core/words/conditions";
+import {
+  commandCheckWords,
+  conditionWords,
+} from "@cawco/core/words/conditions";
 import { curatorPrompt, memoryRunWords } from "@cawco/core/words/memory-run";
 import { routineToolWords } from "@cawco/core/words/routines";
 import { workWords } from "@cawco/core/words/work";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import cronstrue from "cronstrue";
 import { Cron, DateTime } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -166,6 +190,7 @@ import type { JevAccess } from "./jev";
 import { jevType, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { type CommandOptions, WouldWait } from "./machine-pause";
 import { defineTool } from "./mcp-tool";
 import { ROUTINE_ORIGIN } from "./memory";
 import type { MemoryRun, ProbeAnswer } from "./memory-run";
@@ -197,6 +222,7 @@ import {
 } from "./work-items";
 import { budgetColumns, budgetOf, budgetProblem } from "./work-limits";
 import type { WorkPlace } from "./work-place";
+import { refOf } from "./workspaces";
 
 /** What a tool definition's handler takes (mcp-tool.ts `defineTool`). */
 type ToolInput<D extends { run: (handler: never) => unknown }> = Parameters<
@@ -353,12 +379,41 @@ const merged = (row: RoutineRow, patch: RoutinePatch): Fields => ({
   deadline: patch.deadline === undefined ? row.deadline : patch.deadline,
 });
 
+/** A new routine's fields, as {@link RoutineInput} says them and its row keeps them. */
+const fieldsOf = (input: RoutineInput): Fields => ({
+  projectId: input.projectId,
+  name: input.name.trim(),
+  cron: input.cron.trim(),
+  timeZone: input.timeZone.trim(),
+  target: input.target,
+  prompt: input.prompt,
+  delegateType: input.delegateType ?? null,
+  lands: input.lands ?? "none",
+  ...budgetColumns(input.budget ?? null),
+  dailyCapUsd: input.dailyCapUsd ?? null,
+  mode: input.mode ?? null,
+  condition: input.condition?.trim() ?? null,
+  deadline: input.deadline ?? null,
+});
+
 /** Who acts: you (the dashboard), or a session through its tools. */
 export type RoutineActor = "owner" | InstanceRow;
 
 export interface RoutineDeps {
   /** Whether any machine is connected now. */
   readonly anyOnline: () => boolean;
+  /**
+   * Records a session's call as the person's ask to approve (asks.ts
+   * `ask`), the call shown as it is: the words the session reads while it
+   * waits; undefined in Full Send, when it is approved and runs now. An
+   * approved one the hub runs through {@link createApproved} or
+   * {@link updateApproved} (server.ts `ownApprovedRuns`).
+   */
+  readonly askPerson: (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ) => Promise<string | undefined>;
   /** A routine's notes and sends to the project's conversation (caw.ts). */
   readonly caw: Pick<Caw, "notice" | "tell">;
   /**
@@ -418,6 +473,20 @@ export interface RoutineDeps {
   /** Why the project's spend cap keeps its Caw from waking, or nothing (project-caps.ts). */
   readonly quiets: (projectId: string) => string | undefined;
   /**
+   * Runs a command check's command inside its workspace's boundary on its
+   * machine (machine-commands.ts `runOnMachine`): its exit code and output,
+   * or a throw when the machine could not run it; `noWait` throws
+   * {@link WouldWait} on a paused machine.
+   */
+  readonly runCommand: (
+    machineId: string,
+    cwd: string,
+    cmd: string,
+    timeoutMs: number,
+    workspace: WorkspaceRef,
+    how: CommandOptions
+  ) => Promise<CommandResult>;
+  /**
    * A trim run's findings (unused-trim.ts `brief`): `none` with what it
    * says when nothing is to be proposed, else the brief its delegate reads.
    */
@@ -426,7 +495,10 @@ export interface RoutineDeps {
   ) => { kind: "none"; said: string } | { kind: "run"; text: string };
   /** The delegate types a project's sessions see (the fleet's without one). */
   readonly types: (projectId?: string | null) => DelegateType[];
-  readonly workItems: Pick<WorkItems, "archive" | "spentBy" | "startForHub">;
+  readonly workItems: Pick<
+    WorkItems,
+    "archive" | "closeCheck" | "openCheck" | "spentBy" | "startForHub"
+  >;
   /** Where a project's work runs now (work-place.ts `workPlace`). */
   readonly workPlace: (project: ProjectRow) => WorkPlace;
 }
@@ -640,6 +712,86 @@ const verdictEnd = (verdict: RoutineVerdict, said: string): RunEnd => {
   }
 };
 
+/** A command check's limit when its budget names no minutes. */
+const COMMAND_LIMIT_MS = 60_000;
+/** The longest a command check runs, whatever its budget says. */
+const COMMAND_LIMIT_MAX_MS = 10 * 60_000;
+/** A command's exit when it ran past its limit (agent hub-command.ts, `expired`). */
+const EXIT_TIMED_OUT = 124;
+/** POSIX: a command found but not runnable. */
+const EXIT_NOT_RUNNABLE = 126;
+/** POSIX: a command not found. */
+const EXIT_NOT_FOUND = 127;
+/** POSIX: a command ended by signal n exits 128 + n. */
+const EXIT_SIGNAL = 128;
+/** The highest signal a shell reports as 128 + n. */
+const SIGNAL_MAX = 64;
+const LINES = /\r?\n/u;
+
+/** A command check's limit: its budget's minutes, up to {@link COMMAND_LIMIT_MAX_MS}; else {@link COMMAND_LIMIT_MS}. */
+const commandLimit = (routine: Pick<RoutineRow, "budgetMinutes">): number =>
+  routine.budgetMinutes
+    ? Math.min(routine.budgetMinutes * 60_000, COMMAND_LIMIT_MAX_MS)
+    : COMMAND_LIMIT_MS;
+
+/** The last line of `text` with anything on it, trimmed; null when there is none. */
+const lastLine = (text: string): string | null =>
+  text
+    .split(LINES)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1) ?? null;
+
+/**
+ * A command check's run's end, from what its command answered: exit 0 is
+ * met; a run that ran past its limit (124), could not run (126), was not
+ * found (127), was ended by a signal (128 + n) or was stopped could not
+ * check, so a typo never reads as "not yet"; any other exit is not yet.
+ * A 124 that came `tookMs` well inside its limit is the command's own
+ * timeout, said as such. The reason is the command's last line of output:
+ * its stdout's when it exited 0, its stderr's otherwise, each falling back
+ * on the other.
+ */
+const commandEnd = (
+  result: CommandResult,
+  limitMs: number,
+  tookMs: number
+): RunEnd => {
+  if (result.cancelled) {
+    return verdictEnd("unknown", commandCheckWords.stopped);
+  }
+  const code = result.exitCode;
+  const [first, second] =
+    code === 0
+      ? [result.stdout, result.stderr]
+      : [result.stderr, result.stdout];
+  const said = lastLine(first) ?? lastLine(second);
+  if (code === 0) {
+    return verdictEnd("met", commandCheckWords.met(said));
+  }
+  if (code === EXIT_TIMED_OUT) {
+    return verdictEnd(
+      "unknown",
+      tookMs >= limitMs
+        ? commandCheckWords.timedOut(Math.round(limitMs / 1000))
+        : commandCheckWords.timedOutItself(said)
+    );
+  }
+  if (code === EXIT_NOT_RUNNABLE) {
+    return verdictEnd("unknown", commandCheckWords.notRunnable(said));
+  }
+  if (code === EXIT_NOT_FOUND) {
+    return verdictEnd("unknown", commandCheckWords.notFound(said));
+  }
+  if (code > EXIT_SIGNAL && code <= EXIT_SIGNAL + SIGNAL_MAX) {
+    return verdictEnd(
+      "unknown",
+      commandCheckWords.signalled(code - EXIT_SIGNAL)
+    );
+  }
+  return verdictEnd("unmet", commandCheckWords.unmet(code, said));
+};
+
 /** A check run whose work item ended without its `routine_result`. */
 const NO_VERDICT = "it ended without saying whether the condition is met";
 
@@ -785,7 +937,7 @@ const routineRef = () =>
 const conditionParameter = z
   .string()
   .describe(
-    "Makes it a check tasks and steps wait on (routine:<handle>): a statement true once met. Runs answer met, unmet or unknown with routine_result, only while something waits, until met."
+    "Makes it a check tasks and steps wait on (routine:<handle>): a statement true once met. Runs answer met, unmet or unknown (routine_result), while something waits, until met."
   );
 
 /** A condition's deadline, as routine_create and routine_update take it. */
@@ -811,6 +963,7 @@ const deadlineOf = (written: string | null | undefined) => {
 
 export const createRoutines = ({
   anyOnline,
+  askPerson,
   caw,
   conditionMoved,
   conditionWaiters,
@@ -824,6 +977,7 @@ export const createRoutines = ({
   pauses,
   push,
   quiets,
+  runCommand,
   types,
   workItems,
   workPlace,
@@ -1013,6 +1167,13 @@ export const createRoutines = ({
       return problem(400, {
         code: "routine-condition-target",
         detail: `The ${routine.target === "curator" ? "memory curator" : "unused skills and servers"} routine is the hub's and checks no condition: make a routine of your own for it.`,
+      });
+    }
+    if (routine.target === "command" && condition === null) {
+      return problem(400, {
+        code: "routine-command-no-condition",
+        detail:
+          "A command routine answers a condition by its exit code (0 is met), so it needs one: give it condition, the statement true once the command exits 0.",
       });
     }
     if (routine.deadline !== null && condition === null) {
@@ -1308,6 +1469,17 @@ export const createRoutines = ({
     }
   };
 
+  /** A run skipped before anything started: why, said and kept on the run; the next waiting event's run goes. */
+  const skipRun = (
+    routine: RoutineRow,
+    run: RoutineRunRow,
+    reason: string
+  ): void => {
+    store.setRun(run.id, { state: "skipped", reason, endedAt: new Date() });
+    console.log(`[routines] ${routine.name} (${run.slot}) skipped: ${reason}`);
+    drain(routine.id);
+  };
+
   /**
    * A run as a work item the hub starts: skipped when the routine's budget
    * does not read or it has no place to run, else briefed with the
@@ -1339,13 +1511,7 @@ export const createRoutines = ({
       return place;
     }
     if (typeof place === "string") {
-      store.setRun(run.id, {
-        state: "skipped",
-        reason: place,
-        endedAt: new Date(),
-      });
-      console.log(`[routines] ${routine.name} (${run.slot}) skipped: ${place}`);
-      drain(routine.id);
+      skipRun(routine, run, place);
       return;
     }
     const label = slotLabel(run.slot, routine.timeZone);
@@ -1527,8 +1693,90 @@ export const createRoutines = ({
     });
   };
 
+  /**
+   * A command check's run: a fresh workspace cut at the project's place for
+   * its work, marked as this run's (work-items.ts `openCheck`), the
+   * routine's command run at its root inside its boundary, its exit code
+   * the verdict ({@link commandEnd}), and the workspace let go of unread
+   * (`closeCheck`) before the run settles. No place, or a paused machine,
+   * skips the run; a workspace that could not be cut could not check. How
+   * long the cut, the command and the close took is logged, each run.
+   */
+  const fireCommand = async (routine: RoutineRow, run: RoutineRunRow) => {
+    const place = await placeWithin(routine);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
+    if (typeof place === "string") {
+      skipRun(routine, run, place);
+      return;
+    }
+    store.setRun(run.id, { state: "running" });
+    const began = Date.now();
+    const cut = await workItems
+      .openCheck(
+        parentAt(routine, place).id,
+        place.cwd,
+        place.machineId,
+        routine.projectId,
+        run.id
+      )
+      .catch((error: unknown) =>
+        problem(502, {
+          code: "routine-command-uncut",
+          detail: error instanceof Error ? error.message : String(error),
+        })
+      );
+    if (cut instanceof ElysiaStatus) {
+      settle(run.id, {
+        ...verdictEnd("unknown", commandCheckWords.uncut(cut.response.detail)),
+        usd: null,
+      });
+      return;
+    }
+    const cutAt = Date.now();
+    const limit = commandLimit(routine);
+    let end: RunEnd | { skipped: string };
+    try {
+      const answered = await runCommand(
+        place.machineId,
+        cut.path,
+        routine.prompt,
+        limit,
+        refOf(cut),
+        { noWait: true }
+      );
+      end = commandEnd(answered, limit, Date.now() - cutAt);
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      end =
+        error instanceof WouldWait
+          ? { skipped: commandCheckWords.paused(why) }
+          : verdictEnd("unknown", commandCheckWords.unrun(why));
+    }
+    const ranAt = Date.now();
+    const closed = await workItems
+      .closeCheck(cut.id)
+      .catch((error: unknown) => ({
+        kind: "failed" as const,
+        reason: error instanceof Error ? error.message : String(error),
+      }));
+    const seconds = (took: number) => `${(took / 1000).toFixed(1)} s`;
+    console.log(
+      `[routines] ${routine.name} (${run.slot}): command check on ${place.machineId}: workspace ${cut.id.slice(0, 8)} cut in ${seconds(cutAt - began)}, command ran ${seconds(ranAt - cutAt)}, closed in ${seconds(Date.now() - ranAt)} (${closed.kind === "failed" ? `not closed: ${closed.reason}; the settle sweep tries again` : closed.kind})`
+    );
+    if ("skipped" in end) {
+      skipRun(routine, run, end.skipped);
+      return;
+    }
+    settle(run.id, { ...end, usd: null });
+  };
+
   /** A run started by its routine's target; the refusal that stopped it. */
   const runStarted = (routine: RoutineRow, run: RoutineRunRow) => {
+    if (routine.target === "command") {
+      return fireCommand(routine, run);
+    }
     if (routine.target === "conversation") {
       return fireLead(routine, run);
     }
@@ -2568,7 +2816,15 @@ export const createRoutines = ({
     const next = schedule.nextAt
       ? ` · next ${nextWords(schedule.nextAt, routine.timeZone)}`
       : "";
-    const body = [routine.madeWhy, lasts].filter(Boolean).join("\n\n");
+    const body = [
+      routine.madeWhy,
+      lasts,
+      routine.target === "command"
+        ? commandCheckWords.madeCommand(routine.prompt)
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     const unnoted = caw.notice(projectId, {
       title: `${who} set up a routine: ${routine.name} · ${schedule.words}${next}`,
       ...(body ? { body } : {}),
@@ -2823,6 +3079,15 @@ export const createRoutines = ({
    * ends failed without a retry.
    */
   const resume = (run: RoutineRunRow): void => {
+    // A command check's run ran on the hub's own clock: its command was
+    // left behind, and the sweep lets its workspace go once it is over.
+    if (store.get(run.routineId)?.target === "command") {
+      settle(run.id, {
+        ...verdictEnd("unknown", commandCheckWords.hubStopped),
+        usd: null,
+      });
+      return;
+    }
     if (run.state === "running" && run.workItemId === null) {
       if (run.instanceId) {
         armed.add(run.instanceId);
@@ -2888,22 +3153,14 @@ export const createRoutines = ({
    * when its harness names it); then it is announced to you. Yours (the
    * dashboard) is made by you, with no why and no notice.
    */
-  const create = (input: RoutineInput, by: RoutineActor, callId?: string) => {
-    const fields = {
-      projectId: input.projectId,
-      name: input.name.trim(),
-      cron: input.cron.trim(),
-      timeZone: input.timeZone.trim(),
-      target: input.target,
-      prompt: input.prompt,
-      delegateType: input.delegateType ?? null,
-      lands: input.lands ?? "none",
-      ...budgetColumns(input.budget ?? null),
-      dailyCapUsd: input.dailyCapUsd ?? null,
-      mode: input.mode ?? null,
-      condition: input.condition?.trim() ?? null,
-      deadline: input.deadline ?? null,
-    };
+  const create = (
+    input: RoutineInput,
+    by: RoutineActor,
+    callId?: string,
+    /** Made on the person's approval of its ask: announced now, with no why to wait for. */
+    approved = false
+  ) => {
+    const fields = fieldsOf(input);
     const cron = deadlinePassed(fields.deadline, Date.now()) ?? checked(fields);
     if (cron instanceof ElysiaStatus) {
       return cron;
@@ -2933,7 +3190,9 @@ export const createRoutines = ({
     console.log(
       `[routines] ${row.name} made by ${row.createdBy}: ${row.cron} (${row.timeZone}), ${row.target}${row.condition ? `, condition “${row.condition}”` : ""}`
     );
-    if (agent) {
+    if (agent && approved) {
+      madeWhy(row.id, null);
+    } else if (agent) {
       awaitWhy(by, row.id, callId);
     }
     fireExtra(row, `test:${now.toISOString()}`, 1);
@@ -3593,40 +3852,103 @@ export const createRoutines = ({
     );
   };
 
-  /** `routine_create` from `caller`: its deadline read, then the routine made in its project. */
-  const createdFor = (
+  /** `routine_create`'s input as the routine it makes in `caller`'s project, its deadline read. */
+  const madeFrom = (
     caller: InstanceRow,
-    input: ToolInput<typeof ROUTINE_CREATE_DEFINITION>,
-    toolUseId?: string
+    input: ToolInput<typeof ROUTINE_CREATE_DEFINITION>
   ) => {
     const deadline = deadlineOf(input.deadline);
     if (deadline instanceof ElysiaStatus) {
       return deadline;
     }
-    return create(
-      {
-        projectId: caller.projectId ?? null,
-        name: input.name,
-        prompt: input.prompt,
-        target: input.target,
-        cron: input.cron,
-        timeZone: input.time_zone,
-        delegateType: input.delegate_type ?? null,
-        ...(input.lands ? { lands: input.lands } : {}),
-        budget: input.budget ?? null,
-        dailyCapUsd: input.daily_cap_usd ?? null,
-        keep: input.keep ?? false,
-        ...(input.mode ? { mode: input.mode } : {}),
-        condition: input.condition ?? null,
-        deadline: deadline ?? null,
-      },
-      caller,
-      toolUseId
-    );
+    const made: RoutineInput = {
+      projectId: caller.projectId ?? null,
+      name: input.name,
+      prompt: input.prompt,
+      target: input.target,
+      cron: input.cron,
+      timeZone: input.time_zone,
+      delegateType: input.delegate_type ?? null,
+      ...(input.lands ? { lands: input.lands } : {}),
+      budget: input.budget ?? null,
+      dailyCapUsd: input.daily_cap_usd ?? null,
+      keep: input.keep ?? false,
+      ...(input.mode ? { mode: input.mode } : {}),
+      condition: input.condition ?? null,
+      deadline: deadline ?? null,
+    };
+    return made;
+  };
+
+  /**
+   * Whether `caller` must ask the person before it sets a command a routine
+   * runs: its permission mode would ask before it ran that command itself
+   * (core harness/traits.ts `runsCommandsUnasked`), read from its row now.
+   */
+  const asksForCommands = (caller: InstanceRow): boolean =>
+    !runsCommandsUnasked(caller.harness, caller.permissionMode);
+
+  /**
+   * `routine_create` from `caller`. A command routine from a session whose
+   * mode would ask before a shell command is checked as it would be made,
+   * then put to the person to approve, the call shown whole with its
+   * command (asks.ts): the answer is the words the session reads while it
+   * waits, and approved, the hub makes it ({@link createApproved}). Any
+   * other is made now; a command routine's notice shows its command.
+   */
+  const createdFor = async (
+    caller: InstanceRow,
+    input: ToolInput<typeof ROUTINE_CREATE_DEFINITION>,
+    toolUseId?: string
+  ) => {
+    const made = madeFrom(caller, input);
+    if (made instanceof ElysiaStatus) {
+      return made;
+    }
+    if (made.target === "command" && asksForCommands(caller)) {
+      const unfit = fitToMake(made);
+      if (unfit) {
+        return unfit;
+      }
+      const asked = await askPerson(caller, ROUTINE_CREATE, { ...input });
+      if (asked !== undefined) {
+        return asked;
+      }
+    }
+    return create(made, caller, toolUseId);
+  };
+
+  /**
+   * A `routine_create` the person approved (asks.ts `carryOut`, server.ts
+   * `ownApprovedRuns`), made for the session that asked with the input
+   * shown, and announced now: what was said before it is the ask's. What
+   * the session reads, or the refusal.
+   */
+  const createApproved = (
+    input: Record<string, unknown>,
+    asker: InstanceRow
+  ) => {
+    const parsed = ROUTINE_CREATE_INPUT.safeParse(input);
+    if (!parsed.success) {
+      return approvedUnread(ROUTINE_CREATE, parsed.error.message);
+    }
+    const made = madeFrom(asker, parsed.data);
+    const view =
+      made instanceof ElysiaStatus
+        ? made
+        : create(made, asker, undefined, true);
+    return view instanceof ElysiaStatus ? view : routineWords(view);
+  };
+
+  /** Why a routine as written cannot be made, as {@link create} refuses it; nothing when it can. */
+  const fitToMake = (made: RoutineInput) => {
+    const fields = fieldsOf(made);
+    const cron = deadlinePassed(fields.deadline, Date.now()) ?? checked(fields);
+    return cron instanceof ElysiaStatus ? cron : undefined;
   };
 
   /** `routine_update` from `caller`: its deadline read, then {@link updatedFor}. */
-  const updatedWith = (
+  const changedFrom = (
     caller: InstanceRow,
     id: string,
     {
@@ -3649,6 +3971,115 @@ export const createRoutines = ({
   };
 
   /**
+   * The routine `id` names for `caller`, when `change` sets the command it
+   * runs: it becomes a command routine, or a command routine's command
+   * changes. Nothing for any other change.
+   */
+  const commandSetBy = (
+    caller: InstanceRow,
+    id: string,
+    change: Omit<ToolInput<typeof ROUTINE_UPDATE_DEFINITION>, "id">
+  ): RoutineRow | undefined => {
+    const row = store.get(routineNamed(id, caller));
+    if (!row || (change.target ?? row.target) !== "command") {
+      return;
+    }
+    return row.target !== "command" ||
+      (change.prompt !== undefined && change.prompt !== row.prompt)
+      ? row
+      : undefined;
+  };
+
+  /**
+   * `routine_update` from `caller`. A change that sets the command a routine
+   * runs ({@link commandSetBy}) follows `caller`'s mode as a new command
+   * routine does: put to the person to approve, the call shown whole
+   * ({@link updateApproved} runs it), or made now with a notice in the
+   * project's conversation that shows the command. Any other change is
+   * made now.
+   */
+  const updatedWith = async (
+    caller: InstanceRow,
+    id: string,
+    change: Omit<ToolInput<typeof ROUTINE_UPDATE_DEFINITION>, "id">
+  ) => {
+    const row = commandSetBy(caller, id, change);
+    if (row && asksForCommands(caller)) {
+      // The card shows the command and condition it will run under, whole.
+      const condition = change.condition ?? row.condition;
+      const asked = await askPerson(caller, ROUTINE_UPDATE, {
+        id: row.id,
+        name: row.name,
+        ...change,
+        prompt: change.prompt ?? row.prompt,
+        ...(condition ? { condition } : {}),
+      });
+      if (asked !== undefined) {
+        return asked;
+      }
+    }
+    const updated = changedFrom(caller, id, change);
+    if (row && !(updated instanceof ElysiaStatus)) {
+      commandChanged(updated, caller);
+    }
+    return updated;
+  };
+
+  /**
+   * A `routine_update` the person approved (asks.ts `carryOut`), made for
+   * the session that asked with the change shown. What the session reads,
+   * or the refusal.
+   */
+  const updateApproved = (
+    input: Record<string, unknown>,
+    asker: InstanceRow
+  ) => {
+    const parsed = ROUTINE_UPDATE_INPUT.safeParse(input);
+    if (!parsed.success) {
+      return approvedUnread(ROUTINE_UPDATE, parsed.error.message);
+    }
+    const { id, ...change } = parsed.data;
+    const updated = changedFrom(asker, id, change);
+    return updated instanceof ElysiaStatus ? updated : routineWords(updated);
+  };
+
+  /**
+   * A session changed the command a check runs, unasked by its mode: a note
+   * in the project's conversation with the command whole, its acts the
+   * made notice's, and a push.
+   */
+  const commandChanged = (routine: RoutineView, by: InstanceRow): void => {
+    const { projectId, schedule: when } = routine;
+    if (projectId) {
+      const unnoted = caw.notice(projectId, {
+        title: commandCheckWords.changedNote(routine.name),
+        body: commandCheckWords.changedBody(routine.prompt),
+        event: {
+          kind: "routine-made",
+          by: madeByOf(by),
+          expiresAt: routine.expiresAt,
+          instanceId: by.id,
+          name: routine.name,
+          routineId: routine.id,
+          schedule: when,
+          why: null,
+        },
+      });
+      if (unnoted) {
+        console.warn(
+          `[routines] ${routine.name}'s new command was not noted: ${unnoted.response.detail}`
+        );
+      }
+    }
+    push.routineMade({
+      line: commandCheckWords.changedNote(routine.name),
+      name: routine.name,
+      projectId,
+      routineId: routine.id,
+    });
+  };
+
+  /**
    * The routine tools, bound to the calling session and, when its harness
    * names it, the call's tool_use id; with no session, the same definitions
    * for discovery.
@@ -3661,13 +4092,11 @@ export const createRoutines = ({
         detail: "Discovery cannot execute tools",
       });
     return [
-      ROUTINE_CREATE_DEFINITION.run((input) => {
+      ROUTINE_CREATE_DEFINITION.run(async (input) => {
         const caller = me();
-        return Promise.resolve(
-          caller instanceof ElysiaStatus
-            ? caller
-            : createdFor(caller, input, toolUseId)
-        );
+        return caller instanceof ElysiaStatus
+          ? caller
+          : await createdFor(caller, input, toolUseId);
       }),
       ROUTINE_LIST_DEFINITION.run(() => {
         const caller = me();
@@ -3675,13 +4104,11 @@ export const createRoutines = ({
           caller instanceof ElysiaStatus ? caller : listedFor(caller)
         );
       }),
-      ROUTINE_UPDATE_DEFINITION.run(({ id, ...change }) => {
+      ROUTINE_UPDATE_DEFINITION.run(async ({ id, ...change }) => {
         const caller = me();
-        return Promise.resolve(
-          caller instanceof ElysiaStatus
-            ? caller
-            : updatedWith(caller, id, change)
-        );
+        return caller instanceof ElysiaStatus
+          ? caller
+          : await updatedWith(caller, id, change);
       }),
       ROUTINE_DELETE_DEFINITION.run(({ id }) => {
         const caller = me();
@@ -3713,6 +4140,8 @@ export const createRoutines = ({
   return {
     answerTrim,
     create,
+    createApproved,
+    updateApproved,
     ensureCurator,
     fleetTrim,
     get,
@@ -3768,6 +4197,7 @@ const TARGET = t.Union([
   t.Literal("delegate"),
   t.Literal("orchestrator"),
   t.Literal("conversation"),
+  t.Literal("command"),
 ]);
 
 /** A deadline as a route takes it, epoch ms: a time, null for none, left out. */
@@ -3903,45 +4333,60 @@ export const routineRoutes = (routines: Routines) =>
       }
     );
 
+/** The tools that make and change a routine, as an ask of the person names them (core asks.ts). */
+const ROUTINE_CREATE = ROUTINE_CREATE_TOOL;
+const ROUTINE_UPDATE = ROUTINE_UPDATE_TOOL;
+
+/** An approved ask's input that no longer reads as its tool takes it (a hub of another build kept it). */
+const approvedUnread = (tool: string, why: string) =>
+  problem(400, {
+    code: "routine-approved-unread",
+    detail: `The approved ${tool} call does not read as this hub's ${tool} takes it, so nothing was made: ${why}`,
+  });
+
+/** What `routine_create` takes. */
+const ROUTINE_CREATE_SHAPE = {
+  name: z.string().describe("3–6 plain words."),
+  prompt: z.string().describe("What each run does."),
+  target: z
+    .enum(MADE_ROUTINE_TARGETS)
+    .describe(
+      `delegate: a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). orchestrator: the same, as a session that may delegate, in the project's checkout; it outlives you. conversation: a message to Caw. command: prompt is a sandboxed shell command, no model; needs condition; exit 0 is met; asks the owner first where your mode asks for commands.`
+    ),
+  ...scheduleParameters,
+  delegate_type: z.string().optional(),
+  lands: z
+    .enum(LANDS_MODES)
+    .optional()
+    .describe("Where a run's commits go; none when left out."),
+  budget: budgetParameter("What each run may spend.").optional(),
+  daily_cap_usd: z
+    .number()
+    .positive()
+    .optional()
+    .describe("Dollars its runs may spend a day; past it a run is skipped."),
+  keep: z
+    .boolean()
+    .optional()
+    .describe(
+      "Keep past 7 days, after which it turns off otherwise: only on the owner's word."
+    ),
+  mode: z
+    .enum(SESSION_CHOSEN_MODES)
+    .optional()
+    .describe("A conversation run's start mode; the project's when left out."),
+  condition: conditionParameter.optional(),
+  deadline: deadlineParameter.optional(),
+};
+/** `routine_create`'s input read again as an approved ask carries it. */
+const ROUTINE_CREATE_INPUT = z.object(ROUTINE_CREATE_SHAPE);
+
 const ROUTINE_CREATE_DEFINITION = defineTool(
-  "routine_create",
+  ROUTINE_CREATE,
   "Routines: prompts the hub runs for your project on a schedule, the first run at once as a test. Use it for work that should recur without you, saying why in your reply first, since the owner is told of it with what you said just before.",
-  {
-    name: z.string().describe("3–6 plain words."),
-    prompt: z.string().describe("What each run does."),
-    target: z
-      .enum(MADE_ROUTINE_TARGETS)
-      .describe(
-        `delegate: a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). orchestrator: a fresh session that may delegate, in the project's checkout, under the same contract; it outlives you. conversation: a message to the project's conversation, Caw.`
-      ),
-    ...scheduleParameters,
-    delegate_type: z.string().optional(),
-    lands: z
-      .enum(LANDS_MODES)
-      .optional()
-      .describe("Where a run's commits go; none when left out."),
-    budget: budgetParameter("What each run may spend.").optional(),
-    daily_cap_usd: z
-      .number()
-      .positive()
-      .optional()
-      .describe("Dollars its runs may spend a day; past it a run is skipped."),
-    keep: z
-      .boolean()
-      .optional()
-      .describe(
-        "Keep past 7 days, after which it turns off otherwise: only on the owner's word."
-      ),
-    mode: z
-      .enum(SESSION_CHOSEN_MODES)
-      .optional()
-      .describe(
-        "A conversation run's start mode; the project's when left out."
-      ),
-    condition: conditionParameter.optional(),
-    deadline: deadlineParameter.optional(),
-  },
-  routineWords
+  ROUTINE_CREATE_SHAPE,
+  (answer: string | RoutineView) =>
+    typeof answer === "string" ? answer : routineWords(answer)
 );
 
 const ROUTINE_LIST_DEFINITION = defineTool(
@@ -3951,37 +4396,43 @@ const ROUTINE_LIST_DEFINITION = defineTool(
   routineListWords
 );
 
+/** What `routine_update` takes. */
+const ROUTINE_UPDATE_SHAPE = {
+  id: routineRef(),
+  enabled: z
+    .boolean()
+    .optional()
+    .describe(
+      `false pauses it, true resumes it; true alone turns on the hub's ${TRIM_NAME} while off. true on a met or stopped condition checks it again.`
+    ),
+  keep: z
+    .boolean()
+    .optional()
+    .describe("Keep past 7 days: only on the owner's word."),
+  cron: scheduleParameters.cron.optional(),
+  time_zone: scheduleParameters.time_zone.optional(),
+  prompt: z.string().optional(),
+  target: z.enum(MADE_ROUTINE_TARGETS).optional(),
+  delegate_type: z.string().nullable().optional(),
+  lands: z.enum(LANDS_MODES).optional(),
+  budget: budgetParameter("Per run; null: none.").nullable().optional(),
+  mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
+  condition: z.string().optional().describe("As routine_create's."),
+  deadline: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("As routine_create's; null: none."),
+};
+/** `routine_update`'s input read again as an approved ask carries it. */
+const ROUTINE_UPDATE_INPUT = z.object(ROUTINE_UPDATE_SHAPE);
+
 const ROUTINE_UPDATE_DEFINITION = defineTool(
-  "routine_update",
+  ROUTINE_UPDATE,
   `Changes a routine, or pauses, resumes or keeps it. Use it on one of your project's routines, or to turn on the hub's ${TRIM_NAME} while off.`,
-  {
-    id: routineRef(),
-    enabled: z
-      .boolean()
-      .optional()
-      .describe(
-        `false pauses it, true resumes it; true alone turns on the hub's ${TRIM_NAME} while off. true on a met or stopped condition checks it again.`
-      ),
-    keep: z
-      .boolean()
-      .optional()
-      .describe("Keep past 7 days: only on the owner's word."),
-    cron: scheduleParameters.cron.optional(),
-    time_zone: scheduleParameters.time_zone.optional(),
-    prompt: z.string().optional(),
-    target: z.enum(MADE_ROUTINE_TARGETS).optional(),
-    delegate_type: z.string().nullable().optional(),
-    lands: z.enum(LANDS_MODES).optional(),
-    budget: budgetParameter("Per run; null: none.").nullable().optional(),
-    mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
-    condition: z.string().optional().describe("As routine_create's."),
-    deadline: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("As routine_create's; null: none."),
-  },
-  routineWords
+  ROUTINE_UPDATE_SHAPE,
+  (answer: string | RoutineView) =>
+    typeof answer === "string" ? answer : routineWords(answer)
 );
 
 const ROUTINE_DELETE_DEFINITION = defineTool(

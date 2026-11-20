@@ -2716,6 +2716,21 @@ export const createServer = (
       await discarded(asker.id, String(input.workspace ?? ""), {
         approved: true,
       }),
+    // A command check the person approved making or changing (routines.ts).
+    routine_create: (input, asker) => {
+      const made = leadRunsPort.now();
+      if (!made) {
+        throw new Error("The hub's routines aren't made yet.");
+      }
+      return Promise.resolve(made.createApproved(input, asker));
+    },
+    routine_update: (input, asker) => {
+      const made = leadRunsPort.now();
+      if (!made) {
+        throw new Error("The hub's routines aren't made yet.");
+      }
+      return Promise.resolve(made.updateApproved(input, asker));
+    },
     // An install the hub asked about while it requires paired devices (hub-tools.ts).
     update_machines: async (input) => {
       const machines = Array.isArray(input.machines)
@@ -10430,6 +10445,12 @@ export const createServer = (
   });
   // Routines (routines.ts): prompts the hub runs on a schedule, once per slot.
   const routines = createRoutines({
+    // A command check made or changed by a session whose mode would ask
+    // before a shell command: the person's approval, as an admin write's.
+    askPerson: (actor, name, input) => hubAsks.ask(actor, name, input),
+    // A command check's command, inside its own workspace's boundary.
+    runCommand: (machineId, cwd, cmd, timeoutMs, workspace, how) =>
+      runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, how),
     caw,
     // A condition moved: its project's waits are read again, as a pull request's are.
     conditionMoved: (projectId) => {
