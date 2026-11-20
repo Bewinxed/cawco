@@ -9,6 +9,7 @@ import type {
 } from "#lib/cawco/projects.js";
 import { boardState, type Machine } from "#lib/cawco/stores/board.svelte.js";
 import { projectsState } from "#lib/cawco/stores/projects.svelte.js";
+import { standSocket } from "#lib/cawco/hub/socket.svelte.js";
 import { page } from "$app/state";
 import type { HowItRunsRecord } from "./records";
 
@@ -90,6 +91,10 @@ export function atProjectPage(projectId: string): void {
 export function seedShell(record: HowItRunsRecord): void {
   const own = projectRowOf(record);
   atProjectPage(own.id);
+  // No hub stands behind a states file: the page stands on a bench whose hub
+  // takes every command and answers none, so the shell reads the hub as
+  // reached and draws no band saying it is out of reach.
+  standSocket({ control: null, hub: () => undefined, spawn: null });
   projectsState.projects = [
     own,
     ...OTHER_PROJECTS.filter(([id]) => id !== own.id).map(([id, name]) => ({
