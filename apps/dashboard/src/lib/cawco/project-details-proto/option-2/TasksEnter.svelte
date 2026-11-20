@@ -18,7 +18,6 @@
     OptionGroup,
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconAlert,
     IconChevronRight,
@@ -27,6 +26,7 @@
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
+  import ChoiceTile from "./ChoiceTile.svelte";
   import ControlRefusal from "./ControlRefusal.svelte";
   import type { Change, ChangeKey } from "./changes";
   import type { HowItRunsRecord, TaskHome } from "./records";
@@ -199,14 +199,18 @@
       class="mb-space-2 flex flex-col gap-space-1 border-b border-border-hairline pb-space-2"
       data-slot="sync"
     >
-      <div class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1">
+      <div
+        class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
+      >
         <a
           class="mark-line inline-flex min-w-0 items-center gap-space-1 type-code text-link-ink hover:underline"
           href={tie.target.url}
           rel="noreferrer"
           target="_blank"
         >
-          <span class="min-w-0 truncate">{tie.target.label}</span>
+          <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+            >{tie.target.label}</span
+          >
           <IconExternalLinear
             aria-hidden="true"
             class="size-icon-sm flex-none"
@@ -268,7 +272,9 @@
       </div>
 
       {#if tie.home === "github" && tie.githubProject !== null}
-        <div class="flex min-w-0 flex-wrap items-center gap-space-1 type-meta text-ink-muted">
+        <div
+          class="flex min-w-0 flex-wrap items-center gap-space-1 type-meta text-ink-muted"
+        >
           {#if "url" in tie.githubProject}
             <span>{words.tasks.stagesVia}</span>
             <a
@@ -292,7 +298,7 @@
       {#if tie.sync.kind === "refused" && !syncPending}
         <Alert class="mt-space-1" layout="row" variant="destructive">
           <IconAlert aria-hidden="true" />
-          <AlertDescription class="type-meta">{tie.sync.words}</AlertDescription>
+          <AlertDescription>{tie.sync.words}</AlertDescription>
           <AlertAction>
             <Button
               {disabled}
@@ -316,9 +322,9 @@
 
   <OptionGroup
     aria-label={words.tasks.groupLabel}
-    class="grid-cols-1 gap-space-2 max-phone:grid-cols-1 @setup:grid-cols-3 coarse:gap-y-space-4"
     {disabled}
     layout="tiles"
+    style="--tiles-cols: repeat(auto-fit, minmax(var(--spacing-c-decision-option-min), 1fr)); --tiles-cols-phone: minmax(0, 1fr)"
     value={[record.taskHome]}
   >
     {#each HOMES as home (home)}
@@ -327,31 +333,13 @@
         homePending &&
         (pressedHome === home ||
           (pressedHome === null && record.taskHome === home))}
-      <OptionGroupItem
-        class="px-space-2 py-space-1 @wide:px-space-3"
-        onclick={(event) => {
-          event.preventDefault();
-          handleHomeClick(home);
-        }}
+      <ChoiceTile
+        name={info.name}
+        note={info.note}
+        onpick={() => handleHomeClick(home)}
+        sending={showSpin}
         value={home}
-      >
-        <span class="flex w-full min-w-0 items-center justify-between gap-space-2">
-          <span class="type-label text-ink-strong wrap-anywhere"
-            >{info.name}</span
-          >
-          {#if showSpin}
-            <Spinner
-              aria-label={words.saving}
-              box="small"
-              class="flex-none"
-              tone="muted"
-            />
-          {/if}
-        </span>
-        <span class="type-meta text-pretty text-ink-muted wrap-anywhere"
-          >{info.note}</span
-        >
-      </OptionGroupItem>
+      />
     {/each}
   </OptionGroup>
 
@@ -384,7 +372,7 @@
         {#if setupConnections.length === 0}
           <Alert layout="row" variant="default">
             <IconAlert aria-hidden="true" />
-            <AlertDescription class="type-meta"
+            <AlertDescription
               >{words.tasks.noConnection(setupHome)}</AlertDescription
             >
             <AlertAction>
@@ -444,7 +432,7 @@
             </label>
             <Input
               id={filterInputId}
-              class="w-full max-phone:text-row coarse:text-row @kinds:w-56"
+              class="w-full"
               {disabled}
               placeholder={setupHome === "github"
                 ? words.tasks.filterRepos
@@ -480,11 +468,14 @@
                     }}
                     value={target.id}
                   >
-                    <span class={setupHome === "github" ? "type-code" : undefined}
+                    <span
+                      class={setupHome === "github" ? "type-code" : undefined}
                       >{target.label}</span
                     >
                     {#if isProjectRepo}
-                      <Badge kind="meta">{words.tasks.projectRepoTag}</Badge>
+                      <Badge kind="meta"
+                        ><span>{words.tasks.projectRepoTag}</span></Badge
+                      >
                     {/if}
                   </OptionGroupItem>
                 {/each}
@@ -537,8 +528,7 @@
                 >
                 <div class="flex flex-col gap-space-1 coarse:gap-y-space-3">
                   {#each PROJECT_STAGES as stage (stage)}
-                    {@const currentStatus =
-                      stageMapping[stage] ?? LEAVE_ALONE}
+                    {@const currentStatus = stageMapping[stage] ?? LEAVE_ALONE}
                     <div
                       class="flex flex-col gap-space-1 @kinds:flex-row @kinds:items-center @kinds:gap-space-2"
                     >
@@ -548,13 +538,12 @@
                       >
                       <OptionGroup
                         aria-label={words.tasks.stageStatusLabel(stage)}
-                        class="min-w-0 flex-1 gap-space-1 coarse:gap-y-space-4"
+                        class="min-w-0 flex-1"
                         {disabled}
                         value={[currentStatus]}
                       >
                         {#each selectedGithubProject.statuses as status (status)}
                           <OptionGroupItem
-                            class="px-space-2"
                             onclick={(event) => {
                               event.preventDefault();
                               stageMapping = {
@@ -568,7 +557,6 @@
                           </OptionGroupItem>
                         {/each}
                         <OptionGroupItem
-                          class="px-space-2"
                           onclick={(event) => {
                             event.preventDefault();
                             stageMapping = {

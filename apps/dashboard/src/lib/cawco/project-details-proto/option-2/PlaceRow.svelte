@@ -45,9 +45,7 @@
 
   const isHub = $derived(place.kind === "hub");
   const isOffline = $derived(machine !== null && !machine.online);
-  const MachineGlyph = $derived(
-    machine ? machineIcon(machine.os) : IconServer
-  );
+  const MachineGlyph = $derived(machine ? machineIcon(machine.os) : IconServer);
   const machineName = $derived(machine ? machine.name : words.places.hub);
   const actsDisabled = $derived(disabled || moving);
   const pathParts = $derived(place.path.split("/"));
@@ -58,7 +56,7 @@
     act: PlaceAct
   ) {
     if (typeof tipProps.onclick === "function") {
-      (tipProps.onclick as (e: MouseEvent) => void)(event);
+      tipProps.onclick(event);
     }
     onplace(act, place.id);
   }
@@ -151,7 +149,8 @@
           isOffline ? "text-ink-muted" : "text-ink-strong",
         ]}
       >
-        {#each pathParts as part, idx (idx)}{#if idx > 0}/<wbr />{/if}{part}{/each}
+        {#each pathParts as part, idx (idx)}{#if idx > 0}/<wbr
+            />{/if}{part}{/each}
       </code>
 
       {#if place.kind === "start"}
@@ -194,34 +193,31 @@
         </Tip>
       {/if}
 
-      <Tip label={words.places.move}>
+      <Tip label={words.places.move} tap>
         {#snippet children(props)}
           <Button
             {...props}
             aria-label={words.places.move}
-            class="can-hover:@setup:w-6 can-hover:@setup:gap-0 can-hover:@setup:px-0"
             disabled={actsDisabled}
             onclick={(event) => triggerAct(props, event, "move")}
-            size="xs"
+            size="icon-xs"
             tone="quiet"
             variant="ghost"
           >
             <IconTransfer aria-hidden="true" class="size-icon-sm flex-none" />
-            <span class="can-hover:@setup:sr-only">{words.places.move}</span>
           </Button>
         {/snippet}
       </Tip>
 
       {#if !place.missing}
-        <Tip label={words.places.findFolder}>
+        <Tip label={words.places.findFolder} tap>
           {#snippet children(props)}
             <Button
               {...props}
               aria-label={words.places.findFolder}
-              class="can-hover:@setup:w-6 can-hover:@setup:gap-0 can-hover:@setup:px-0"
               disabled={actsDisabled}
               onclick={(event) => triggerAct(props, event, "find")}
-              size="xs"
+              size="icon-xs"
               tone="quiet"
               variant="ghost"
             >
@@ -229,49 +225,40 @@
                 aria-hidden="true"
                 class="size-icon-sm flex-none"
               />
-              <span class="can-hover:@setup:sr-only"
-                >{words.places.findFolder}</span
-              >
             </Button>
           {/snippet}
         </Tip>
       {/if}
 
-      <Tip label={words.places.copyToMachine}>
+      <Tip label={words.places.copyToMachine} tap>
         {#snippet children(props)}
           <Button
             {...props}
             aria-label={words.places.copyToMachine}
-            class="can-hover:@setup:w-6 can-hover:@setup:gap-0 can-hover:@setup:px-0"
             disabled={actsDisabled}
             onclick={(event) => triggerAct(props, event, "copy")}
-            size="xs"
+            size="icon-xs"
             tone="quiet"
             variant="ghost"
           >
             <IconCopy aria-hidden="true" class="size-icon-sm flex-none" />
-            <span class="can-hover:@setup:sr-only"
-              >{words.places.copyToMachine}</span
-            >
           </Button>
         {/snippet}
       </Tip>
 
       {#if place.kind === "other"}
-        <Tip label={words.places.drop}>
+        <Tip label={words.places.drop} tap>
           {#snippet children(props)}
             <Button
               {...props}
               aria-label={words.places.drop}
-              class="can-hover:@setup:w-6 can-hover:@setup:gap-0 can-hover:@setup:px-0"
               disabled={actsDisabled}
               onclick={(event) => triggerAct(props, event, "drop")}
-              size="xs"
+              size="icon-xs"
               tone="quiet"
               variant="ghost"
             >
               <IconClose aria-hidden="true" class="size-icon-sm flex-none" />
-              <span class="can-hover:@setup:sr-only">{words.places.drop}</span>
             </Button>
           {/snippet}
         </Tip>
