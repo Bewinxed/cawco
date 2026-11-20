@@ -5,21 +5,14 @@
  */
 
 import HowItRunsLive from "./how-it-runs-live.svelte";
-import { SITUATIONS, type Situation } from "./records";
-import { seedShell } from "./shell-seed";
+import { shellFrame } from "./shell-seed";
 
 export default {
+  ...shellFrame,
   title: "How it runs, every situation",
   component: HowItRunsLive,
   args: { situation: "At rest" },
-  parameters: { viewport: "desk" },
-  beforeEach: ({ args }: { args: { situation: Situation } }) => {
-    seedShell(SITUATIONS[args.situation]);
-  },
 };
-
-/** Lantern web at rest: where it lives, who decides, where work lands, nothing in trouble. */
-export const AtRest = {};
 
 /** A folder on kestrel has gone missing and GitHub refused the last sync. */
 export const TwoStagesInTrouble = {
