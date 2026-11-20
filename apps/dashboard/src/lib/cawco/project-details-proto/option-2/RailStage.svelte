@@ -91,9 +91,9 @@
   </header>
 
   <!-- Row 2, Col 1: hairline connector down to the next node (none after last). -->
-  <div aria-hidden="true" class="flex justify-center">
+  <div aria-hidden="true" class="flex flex-col items-center">
     {#if !last}
-      <span class="my-space-1 block w-px flex-1 bg-border-hairline"></span>
+      <span class="my-space-1 w-px flex-1 bg-border-hairline"></span>
     {/if}
   </div>
 
