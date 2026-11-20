@@ -107,9 +107,11 @@
 </script>
 
 {#snippet standing(linked: Linked, service: string)}
+  <!-- Never narrower than its words: in a narrow column the line wraps
+       under the status board rather than cutting how the sync stands. -->
   <!-- mark-line: the glyph stands at the top of words that may wrap -->
   <span
-    class="flex min-w-0 flex-1 items-start gap-space-2 type-meta"
+    class="flex flex-1 items-start gap-space-2 type-meta"
     aria-live="polite"
   >
     {#if linked.standing.state === "reading"}
