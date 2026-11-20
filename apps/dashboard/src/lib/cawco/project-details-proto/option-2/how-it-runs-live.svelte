@@ -10,6 +10,16 @@
   const REFUSAL =
     "The hub could not save this: another change to this project was being written. Nothing changed. (settings_busy)";
 
+  /** How the stages were read: all at once, one still on its way, or one refused. */
+  export type Reading =
+    | "Every stage read"
+    | "Places and account still reading"
+    | "Tasks failed to read";
+
+  /** The hub's words for a read it refused. */
+  const READ_REFUSAL =
+    "The hub could not read the project's task home: its tracker connection answered 502. Nothing was changed. (tracker_read)";
+
   /** How long the mock hub takes to answer, as a hub on a tailnet does. */
   const ANSWER_MS = 900;
 </script>
@@ -23,7 +33,7 @@
    * hub holds once it has answered is the fixture's own state; the record
    * it started from is the story's arg.
    */
-  import { RESTING_LEAD } from "#lib/cawco/project/caw-lead.fixture.js";
+  import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import ViewBar from "#lib/cawco/project/ViewBar.svelte";
   import ViewTabs from "#lib/cawco/project/ViewTabs.svelte";
@@ -36,20 +46,26 @@
     type StageId,
   } from "./changes";
   import HowItRuns from "./HowItRuns.svelte";
-  import type { HowItRunsRecord } from "./records";
+  import { type HowItRunsRecord, SITUATIONS, type Situation } from "./records";
   import { projectRowOf } from "./shell-seed";
 
   let {
-    record,
+    situation,
     answer = "takes it",
-    loading = [],
-    readFailed = {},
+    reading = "Every stage read",
   }: {
-    record: HowItRunsRecord;
+    situation: Situation;
     answer?: HubAnswer;
-    loading?: StageId[];
-    readFailed?: Partial<Record<StageId, string>>;
+    reading?: Reading;
   } = $props();
+
+  const record = $derived(SITUATIONS[situation]);
+  const loading = $derived<StageId[]>(
+    reading === "Places and account still reading" ? ["sessions"] : []
+  );
+  const readFailed = $derived<Partial<Record<StageId, string>>>(
+    reading === "Tasks failed to read" ? { tasks: READ_REFUSAL } : {}
+  );
 
   /** What the mock hub holds after the changes it took, against the record it started from. */
   let held = $state<{ from: HowItRunsRecord; now: HowItRunsRecord } | null>(
@@ -67,7 +83,12 @@
       case "decides":
       case "decidesReset":
         return `decides.${change.kind}`;
-      default:
+      case "taskHome":
+      case "account":
+      case "atLimit":
+      case "review":
+      case "landing":
+      case "largeFiles":
         return change.key;
     }
   };
@@ -109,8 +130,6 @@
         return { ...base, landing: change.value };
       case "largeFiles":
         return { ...base, largeFiles: change.value };
-      default:
-        return base;
     }
   }
 
@@ -158,6 +177,14 @@
   }
 
   const row = $derived(projectRowOf(shown));
+  /** Caw's seat on the project's bar, at rest: the project's row, no tasks. */
+  const lead = new CawLead({
+    id: () => shown.project.id,
+    machinesOnline: () => true,
+    project: () => row,
+    reading: () => false,
+    tasks: () => [],
+  });
   const machine = $derived(
     boardState.machines.find(
       (m) =>
@@ -186,7 +213,7 @@
   <Shell>
     <div class="relative flex h-full min-h-0 flex-col">
       <ProjectHead
-        lead={RESTING_LEAD}
+        {lead}
         {machine}
         onask={() => undefined}
         onfilter={() => undefined}

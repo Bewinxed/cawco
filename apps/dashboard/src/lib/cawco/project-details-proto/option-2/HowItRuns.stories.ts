@@ -7,16 +7,16 @@
  */
 
 import HowItRunsLive from "./how-it-runs-live.svelte";
-import { LANTERN } from "./records";
+import { SITUATIONS, type Situation } from "./records";
 import { seedShell } from "./shell-seed";
 
 export default {
   title: "How it runs",
   component: HowItRunsLive,
-  args: { record: LANTERN },
+  args: { situation: "At rest" },
   parameters: { viewport: "desk" },
-  beforeEach: ({ args }: { args: { record: typeof LANTERN } }) => {
-    seedShell(args.record);
+  beforeEach: ({ args }: { args: { situation: Situation } }) => {
+    seedShell(SITUATIONS[args.situation]);
   },
 };
 

@@ -6,7 +6,12 @@
  * the view takes it whole as a prop and sends each change as an event.
  */
 
-export type MachineOs = "linux" | "darwin" | "windows";
+import type { AccountHue } from "@cawco/core/accounts/kinds";
+import type { BuiltInMember } from "@cawco/core/decides";
+
+export type { AccountHue } from "@cawco/core/accounts/kinds";
+
+type MachineOs = "linux" | "darwin" | "windows";
 
 export interface FleetMachine {
   /** Where its home folder is, for a path written under `~`. */
@@ -32,7 +37,7 @@ export interface ProjectPlace {
 }
 
 /** A repository the project is linked to, `host/owner/name`. */
-export interface ProjectRepo {
+interface ProjectRepo {
   host: string;
   name: string;
   owner: string;
@@ -41,14 +46,14 @@ export interface ProjectRepo {
 
 export type TaskHome = "files" | "github" | "linear";
 
-export type SyncStanding =
+type SyncStanding =
   | { kind: "first" }
   | { kind: "inStep"; at: string }
   | { kind: "syncing" }
   | { kind: "refused"; at: string; words: string };
 
 /** The tie to an outside tracker, while tasks are kept there too. */
-export interface TrackerTie {
+interface TrackerTie {
   connection: { account: string; name: string };
   /** With GitHub: the Project that carries stages, or GitHub's reason there is none. */
   githubProject: { name: string; url: string } | { none: string } | null;
@@ -59,10 +64,7 @@ export interface TrackerTie {
   target: { label: string; url: string };
 }
 
-export type AccountHue =
-  "amber" | "blue" | "cyan" | "green" | "orange" | "rose" | "violet";
-
-export interface FleetAccount {
+interface FleetAccount {
   hue: AccountHue;
   id: string;
   /** The name it carries everywhere. */
@@ -71,7 +73,8 @@ export interface FleetAccount {
   signedIn: boolean;
 }
 
-export type Decider = "you" | "caw" | "advisor" | "practice";
+/** Who settles a kind of choice here: the built-in members the person picks among, the asker aside. */
+export type Decider = Exclude<BuiltInMember, "asker">;
 
 export const CHOICE_KINDS = [
   "look",
@@ -83,7 +86,7 @@ export const CHOICE_KINDS = [
 ] as const;
 export type ChoiceKind = (typeof CHOICE_KINDS)[number];
 
-export interface KindRule {
+interface KindRule {
   by: Decider;
   /** The fleet's default for this kind, which the project follows unless it says otherwise. */
   fleet: Decider;
@@ -91,7 +94,7 @@ export interface KindRule {
   own: boolean;
 }
 
-export type WhoDecidesRead =
+type WhoDecidesRead =
   | { ok: true; rules: Record<ChoiceKind, KindRule> }
   | { error: string; ok: false };
 
@@ -175,13 +178,21 @@ const FLEET_RULE: Record<ChoiceKind, Decider> = {
 
 const rules = (
   own: Partial<Record<ChoiceKind, Decider>>
-): Record<ChoiceKind, KindRule> =>
-  Object.fromEntries(
-    Object.entries(FLEET_RULE).map(([kind, fleet]) => {
-      const mine = own[kind as ChoiceKind];
-      return [kind, { fleet, by: mine ?? fleet, own: mine !== undefined }];
-    })
-  ) as Record<ChoiceKind, KindRule>;
+): Record<ChoiceKind, KindRule> => {
+  const rule = (kind: ChoiceKind): KindRule => {
+    const fleet = FLEET_RULE[kind];
+    const mine = own[kind];
+    return { fleet, by: mine ?? fleet, own: mine !== undefined };
+  };
+  return {
+    look: rule("look"),
+    behaviour: rule("behaviour"),
+    scope: rule("scope"),
+    approach: rule("approach"),
+    rules: rule("rules"),
+    tools: rule("tools"),
+  };
+};
 
 /**
  * A code project at rest, the weekly check: two places on the fleet's
@@ -239,40 +250,46 @@ export const LANTERN: HowItRunsRecord = {
   largeFiles: { kind: "own" },
 };
 
+/** Lantern web's tie to GitHub Issues through its GitHub App, in step four minutes ago. */
+const LANTERN_TIE: TrackerTie = {
+  home: "github",
+  target: {
+    label: "lantern-studio/lantern-web",
+    url: "https://github.com/lantern-studio/lantern-web/issues",
+  },
+  connection: { name: "Lantern GitHub App", account: "lantern-studio" },
+  linked: 148,
+  sync: { kind: "inStep", at: minutesAgo(4) },
+  githubProject: {
+    name: "Lantern roadmap",
+    url: "https://github.com/orgs/lantern-studio/projects/7",
+  },
+};
+
 /**
  * The same project once its tasks are tied to GitHub Issues and the
  * tracker refused the last sync, and its folder on kestrel was renamed by
  * hand: two stages in trouble.
  */
-export const LANTERN_IN_TROUBLE: HowItRunsRecord = {
+const LANTERN_IN_TROUBLE: HowItRunsRecord = {
   ...LANTERN,
   places: LANTERN.places.map((place) =>
     place.id === "p-kestrel" ? { ...place, missing: true } : place
   ),
   taskHome: "github",
   tie: {
-    home: "github",
-    target: {
-      label: "lantern-studio/lantern-web",
-      url: "https://github.com/lantern-studio/lantern-web/issues",
-    },
-    connection: { name: "Lantern GitHub App", account: "lantern-studio" },
-    linked: 148,
+    ...LANTERN_TIE,
     sync: {
       kind: "refused",
       at: minutesAgo(42),
       words:
         "Resource not accessible by integration: the app's installation no longer includes lantern-web (403).",
     },
-    githubProject: {
-      name: "Lantern roadmap",
-      url: "https://github.com/orgs/lantern-studio/projects/7",
-    },
   },
 };
 
 /** A writing project: no repository, so its work ends at what waits for the person. */
-export const FIELD_NOTES: HowItRunsRecord = {
+const FIELD_NOTES: HowItRunsRecord = {
   project: { id: "field-notes", name: "Field notes" },
   holdsCode: false,
   hubReachable: true,
@@ -306,3 +323,46 @@ export const FIELD_NOTES: HowItRunsRecord = {
   landing: "nowhere",
   largeFiles: { kind: "own" },
 };
+
+/** Lantern web tied to GitHub Issues and in step, its Project carrying the stages. */
+const LANTERN_TIED: HowItRunsRecord = {
+  ...LANTERN,
+  taskHome: "github",
+  tie: LANTERN_TIE,
+};
+
+/** Lantern web named to an account that is signed in on no machine: nothing starts. */
+const LANTERN_SIGNED_OUT: HowItRunsRecord = {
+  ...LANTERN,
+  account: { chosen: "acc-personal", atLimit: "move" },
+};
+
+/** Lantern web whose own rule file failed to read: every choice comes to the person. */
+const LANTERN_RULES_UNREADABLE: HowItRunsRecord = {
+  ...LANTERN,
+  whoDecides: {
+    ok: false,
+    error:
+      "decides.md line 14: “Scope: Caw, then you” names two deciders for one kind (decides_parse).",
+  },
+};
+
+/** Lantern web as read 26 minutes ago, while the hub is out of reach. */
+const LANTERN_HUB_AWAY: HowItRunsRecord = {
+  ...LANTERN,
+  hubReachable: false,
+  asOf: minutesAgo(26),
+};
+
+/** Each situation the person can put the project in, by the words its dial shows. */
+export const SITUATIONS = {
+  "At rest": LANTERN,
+  "Two stages in trouble": LANTERN_IN_TROUBLE,
+  "Tied to GitHub, in step": LANTERN_TIED,
+  "Named account signed out": LANTERN_SIGNED_OUT,
+  "Who decides unreadable": LANTERN_RULES_UNREADABLE,
+  "Hub out of reach": LANTERN_HUB_AWAY,
+  "A project with no code": FIELD_NOTES,
+} satisfies Record<string, HowItRunsRecord>;
+
+export type Situation = keyof typeof SITUATIONS;
