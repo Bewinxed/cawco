@@ -64,7 +64,7 @@ interface TrackerTie {
   target: { label: string; url: string };
 }
 
-interface FleetAccount {
+export interface FleetAccount {
   hue: AccountHue;
   id: string;
   /** The name it carries everywhere. */
@@ -200,7 +200,7 @@ const rules = (
  * files, a named account, two kinds settled its own way, review on, work
  * landing on a branch with a pull request.
  */
-export const LANTERN: HowItRunsRecord = {
+const LANTERN: HowItRunsRecord = {
   project: { id: "lantern-web", name: "Lantern web" },
   holdsCode: true,
   hubReachable: true,

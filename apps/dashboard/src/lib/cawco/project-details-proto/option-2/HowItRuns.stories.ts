@@ -7,17 +7,13 @@
  */
 
 import HowItRunsLive from "./how-it-runs-live.svelte";
-import { SITUATIONS, type Situation } from "./records";
-import { seedShell } from "./shell-seed";
+import { shellFrame } from "./shell-seed";
 
 export default {
+  ...shellFrame,
   title: "How it runs",
   component: HowItRunsLive,
   args: { situation: "At rest" },
-  parameters: { viewport: "desk" },
-  beforeEach: ({ args }: { args: { situation: Situation } }) => {
-    seedShell(SITUATIONS[args.situation]);
-  },
 };
 
 /** Checking how Lantern web runs before handing it the week's work. */
