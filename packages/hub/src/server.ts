@@ -10468,11 +10468,11 @@ export const createServer = (
     // What waits on a condition: open tasks (their own or inherited waits) and live plan steps.
     conditionWaiters: {
       open: async (projectId, handle) =>
-        db.planWaiters(handle).length > 0 ||
+        db.planStepsWaiting(handle) > 0 ||
         (await tasks.openWaiter(projectId, handle)) !== false,
       listed: (projectId, handle) => ({
         tasks: tasks.waitersOf(projectId, handle),
-        steps: db.planWaiters(handle).length,
+        steps: db.planStepsWaiting(handle),
       }),
     },
     // The nightly memory run's brief and end (memory-run.ts).

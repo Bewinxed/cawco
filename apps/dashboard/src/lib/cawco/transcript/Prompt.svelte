@@ -1146,7 +1146,7 @@
       {#if presentation.detail}
         <p
           data-slot="detail"
-          class="text-size-label font-normal text-ink-muted mb-space-2"
+          class="text-size-label font-normal text-ink-muted mb-space-2 whitespace-pre-line"
         >
           {presentation.detail}
         </p>

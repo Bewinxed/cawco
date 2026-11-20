@@ -114,10 +114,10 @@ export const conditionWords = {
   conditionLabel: "Condition",
   conditionPlaceholder: "GitHub Event Streams is generally available",
   conditionHint:
-    "Optional. Each run checks whether this is true yet, and tasks can wait on it. It runs only while something waits on it, and stops for good once it is met.",
+    "Optional. Each run checks whether this is true yet, and tasks and plan steps can wait on it. It runs only while something waits on it, and stops for good once it is met.",
   deadlineLabel: "Stop checking on",
   deadlineHint:
-    "Optional. If it isn't met by then, the tasks waiting on it show as blocked and you are told once. Left empty, it checks until it is met.",
+    "Optional. If it isn't met by then, checking stops, nothing waiting on it goes ahead, and you are told once. Left empty, it checks until it is met.",
   /** A deadline the form will not send. */
   deadlinePast: "Choose a day after today.",
   /** A deadline with no condition. */
@@ -149,9 +149,9 @@ export const conditionWords = {
   /** Three failing checks in a row: said once. */
   failingNote: (statement: string) =>
     `Condition check failed 3 times · ${statement} · needs you`,
-  /** Under either: what the person can do. */
+  /** Under either: what it stops, and what the person can do, true whatever waits on it (tasks, plan steps, both, nothing). */
   stoppedNoteBody: (last: string | null) =>
-    `Checking stopped, and each task waiting on it is blocked. Open one to check the condition again, start that task anyway, or mark the condition met.${last ? `\n\nLast check: ${last}` : ""}`,
+    `Checking stopped, so no task or plan step waiting on it goes ahead. Open its routine, under Routines, to check the condition again or mark it met, or open a task waiting on it to start that task anyway.${last ? `\n\nLast check: ${last}` : ""}`,
   /** A session made a condition: its notice's line, beside the session's why. */
   madeLine: (statement: string, until: string | null) =>
     `Condition · ${statement} · ${until ? `stops checking ${until}` : "checks until met"}`,
@@ -211,6 +211,9 @@ export const commandCheckWords = {
   askMake: (name: string) => `Set up a check that runs a command: ${name}`,
   /** The approval card's line for a change to the command a check runs. */
   askChange: (name: string) => `Change the command a check runs: ${name}`,
+  /** Under either card's line: this one approval stands for every run of the command, and where each run happens. */
+  askCovers:
+    "One approval covers every run. Each check runs the command in a sandboxed copy of the project, on the project's machine.",
   /** Under it: the condition its exit code answers. */
   askCondition: (statement: string) =>
     `Condition · ${statement} · met when the command succeeds (exit 0)`,

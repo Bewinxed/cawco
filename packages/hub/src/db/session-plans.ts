@@ -10,6 +10,7 @@ import { OVER_STATUSES } from "@cawco/core/protocol";
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   inArray,
@@ -76,14 +77,14 @@ export interface SessionPlansDb {
     instanceId: string,
     limit: number
   ) => PlanChangeRow[];
+  /** How many plan steps not done, in sessions not over, wait on `target` (as a file keeps it): a condition checks while one does. */
+  readonly planStepsWaiting: (target: string) => number;
   /**
    * The sessions whose plan's spec may hold away notes (a `## Since`
    * heading; core injected.ts `awayNotesOf` reads whether it does), by id:
    * those that may hold news for the person on their return.
    */
   readonly plansWithAwayNotes: () => string[];
-  /** The sessions not over whose plan has a step not done that waits on `target` (as a file keeps it): a condition checks while one does. */
-  readonly planWaiters: (target: string) => string[];
   /** What a session's steps wait on, each once, in the list's order. */
   readonly planWaits: (instanceId: string) => string[];
   /** The person saw the session's away notes as `notes` read (`session_plans.away_seen`). A session with no plan row has none to see. */
@@ -363,9 +364,9 @@ export const sessionPlansDb = (core: DbCore): SessionPlansDb => {
       });
     },
     planWaits: (instanceId) => waitsOf(db, instanceId),
-    planWaiters: (target) =>
+    planStepsWaiting: (target) =>
       db
-        .selectDistinct({ instanceId: sessionPlanSteps.instanceId })
+        .select({ steps: count() })
         .from(sessionPlanSteps)
         .innerJoin(instances, eq(instances.id, sessionPlanSteps.instanceId))
         .where(
@@ -375,8 +376,7 @@ export const sessionPlansDb = (core: DbCore): SessionPlansDb => {
             notInArray(instances.status, [...OVER_STATUSES])
           )
         )
-        .all()
-        .map((row) => row.instanceId),
+        .get()?.steps ?? 0,
     plansWithAwayNotes: () =>
       db
         .select({ instanceId: sessionPlans.instanceId })

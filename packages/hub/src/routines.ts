@@ -1983,14 +1983,16 @@ export const createRoutines = ({
 
   /**
    * The routine's condition's checks stopped unmet by the hub, `stop` why
-   * (its deadline passed, its slots kept failing), told to you once: a note
-   * in the project's conversation, with `last`, its newest check's words,
-   * and a push. Its waits are flagged from now on.
+   * (its deadline passed, its slots kept failing). When something waits on
+   * it (`waited`), told to you once: a note in the project's conversation,
+   * with `last`, its newest check's words, and a push; its waits are
+   * flagged from now on. With nothing waiting, only its routine says so.
    */
   const stopCheck = (
     routine: RoutineRow,
     stop: Exclude<ConditionStop, "met">,
-    last: string | null
+    last: string | null,
+    waited: boolean
   ): void => {
     const date = routine.deadline
       ? dayIn(routine.deadline, routine.timeZone)
@@ -2008,21 +2010,29 @@ export const createRoutines = ({
       stop === "deadline"
         ? conditionWords.timedOutNote(statement, date)
         : conditionWords.failingNote(statement);
-    const [newest] = store.runs(routine.id, 1);
-    if (row && newest) {
-      note(row, newest, "failed", conditionWords.stoppedNoteBody(last), title);
+    if (waited) {
+      const [newest] = store.runs(routine.id, 1);
+      if (row && newest) {
+        note(
+          row,
+          newest,
+          "failed",
+          conditionWords.stoppedNoteBody(last),
+          title
+        );
+      }
+      push.routine({
+        failed: true,
+        instanceId: null,
+        name: routine.name,
+        output: title,
+        projectId: routine.projectId,
+        routineId: routine.id,
+        runId: newest?.id ?? "",
+      });
     }
-    push.routine({
-      failed: true,
-      instanceId: null,
-      name: routine.name,
-      output: title,
-      projectId: routine.projectId,
-      routineId: routine.id,
-      runId: newest?.id ?? "",
-    });
     console.log(
-      `[routines] ${routine.name}: its condition's checks stopped (${stop})`
+      `[routines] ${routine.name}: its condition's checks stopped (${stop})${waited ? "" : ", nothing waits on it"}`
     );
     moved(routine);
     schedule();
@@ -2052,7 +2062,7 @@ export const createRoutines = ({
       routine.enabled &&
       failingSlots(store, routine.id) >= FAILING_SLOTS
     ) {
-      stopCheck(routine, "failing", end.reason);
+      stopCheck(routine, "failing", end.reason, true);
       return true;
     }
     moved(routine);
@@ -2950,16 +2960,18 @@ export const createRoutines = ({
     return run;
   };
 
-  /** Conditions whose due slot waits on whether anything waits on them ({@link dueCheck}). */
+  /** Conditions whose due slot or deadline stop waits on whether anything waits on them ({@link askWaited}). */
   const asking = new Set<string>();
 
   /**
-   * A condition's due slot: it runs while an open task or a live plan step
-   * waits on it; else the slot passes with no run, `next_slot` moved on.
-   * Asked once at a time per routine; a slot another tick moved meanwhile
-   * is left as it is.
+   * Whether an open task or a live plan step waits on the routine's
+   * condition, handed to `then`. Asked once at a time per routine: while
+   * one is asked, another ask of it is dropped, and no slot of it fires.
    */
-  const dueCheck = (routine: RoutineRow): void => {
+  const askWaited = (
+    routine: RoutineRow,
+    then: (open: boolean) => void
+  ): void => {
     if (asking.has(routine.id)) {
       return;
     }
@@ -2968,24 +2980,7 @@ export const createRoutines = ({
       ? conditionWaiters.open(routine.projectId, conditionHandle(routine.id))
       : Promise.resolve(false);
     waited
-      .then((open) => {
-        const now = Date.now();
-        const fresh = store.get(routine.id);
-        if (
-          !fresh?.enabled ||
-          fresh.nextSlot.getTime() !== routine.nextSlot.getTime()
-        ) {
-          return;
-        }
-        if (open) {
-          fireDue(fresh, now);
-          return;
-        }
-        const cron = cronOf(fresh.cron, fresh.timeZone);
-        if (!(cron instanceof ElysiaStatus)) {
-          store.update(fresh.id, { nextSlot: Cron.next(cron, now) });
-        }
-      })
+      .then(then)
       .catch((error: unknown) =>
         console.warn(
           `[routines] ${routine.name}: whether anything waits on its condition was not read: ${error instanceof Error ? error.message : String(error)}`
@@ -2997,18 +2992,61 @@ export const createRoutines = ({
       });
   };
 
-  /** Stops the checks of conditions past their deadline unmet, each told to you once ({@link stopCheck}). */
+  /**
+   * A condition's due slot: it runs while something waits on it
+   * ({@link askWaited}); else the slot passes with no run, `next_slot`
+   * moved on. A slot another tick moved meanwhile is left as it is.
+   */
+  const dueCheck = (routine: RoutineRow): void => {
+    askWaited(routine, (open) => {
+      const now = Date.now();
+      const fresh = store.get(routine.id);
+      if (
+        !fresh?.enabled ||
+        fresh.nextSlot.getTime() !== routine.nextSlot.getTime()
+      ) {
+        return;
+      }
+      if (open) {
+        fireDue(fresh, now);
+        return;
+      }
+      const cron = cronOf(fresh.cron, fresh.timeZone);
+      if (!(cron instanceof ElysiaStatus)) {
+        store.update(fresh.id, { nextSlot: Cron.next(cron, now) });
+      }
+    });
+  };
+
+  /** Whether the routine is a condition still checking, unmet, past its deadline. */
+  const pastDeadline = (row: RoutineRow, now: number): boolean =>
+    row.enabled &&
+    Boolean(row.condition) &&
+    !row.metAt &&
+    row.deadline !== null &&
+    row.deadline.getTime() <= now;
+
+  /**
+   * Stops the checks of conditions past their deadline unmet
+   * ({@link stopCheck}), each told to you only while something waits on it
+   * ({@link askWaited}).
+   */
   const deadlines = (now: number): void => {
     for (const row of store.list()) {
-      if (
-        row.enabled &&
-        row.condition &&
-        !row.metAt &&
-        row.deadline &&
-        row.deadline.getTime() <= now
-      ) {
-        stopCheck(row, "deadline", conditionOf(row, store)?.reason ?? null);
+      if (!pastDeadline(row, now)) {
+        continue;
       }
+      askWaited(row, (open) => {
+        const fresh = store.get(row.id);
+        if (fresh && pastDeadline(fresh, Date.now())) {
+          stopCheck(
+            fresh,
+            "deadline",
+            conditionOf(fresh, store)?.reason ?? null,
+            open
+          );
+        }
+      });
     }
   };
 

@@ -1693,7 +1693,10 @@ function commandCheck(
       toolName === ROUTINE_CREATE_TOOL
         ? commandCheckWords.askMake(name)
         : commandCheckWords.askChange(name),
-    ...(condition ? { detail: commandCheckWords.askCondition(condition) } : {}),
+    detail: [
+      commandCheckWords.askCovers,
+      ...(condition ? [commandCheckWords.askCondition(condition)] : []),
+    ].join("\n"),
     changes: [],
     ...(command?.trim() ? { command } : {}),
     fields: fieldsOf(input, ["name", "prompt", "condition", "target", "id"]),
