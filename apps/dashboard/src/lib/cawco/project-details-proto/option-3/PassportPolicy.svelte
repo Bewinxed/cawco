@@ -5,11 +5,11 @@
    * and Large-file storage when declared on a code project). Read-only, zero
    * form controls, zero coral.
    */
-  import type { BuiltInKind } from "@cawco/core/decides";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconRules, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
+  import PassportAlert from "./PassportAlert.svelte";
   import {
     accountHueVar,
     decidesGroups,
@@ -25,18 +25,38 @@
     reading,
     acts,
     hubAway,
+    narrow,
   }: {
     reading: PassportReading;
     acts: PassportActs;
     hubAway: boolean;
+    narrow: boolean;
   } = $props();
 
-  const shortKind = (id: string): string =>
-    words.kinds[id as BuiltInKind] ?? id;
+  const KIND_LABELS = new Map<string, string>(Object.entries(words.kinds));
+  const shortKind = (id: string): string => KIND_LABELS.get(id) ?? id;
+
+  const decidesFault = $derived.by(() => {
+    if (reading.decides.state === "failed") {
+      return {
+        title: words.policy.decidesReadFailed,
+        detail: reading.decides.words,
+      };
+    }
+    if (
+      reading.decides.state === "read" &&
+      reading.decides.value.problems.length > 0
+    ) {
+      return {
+        title: words.policy.ruleFileUnreadable,
+        detail: reading.decides.value.problems.join(" "),
+      };
+    }
+    return null;
+  });
 
   const groups = $derived(
-    reading.decides.state === "read" &&
-      reading.decides.value.problems.length === 0
+    reading.decides.state === "read" && decidesFault === null
       ? decidesGroups(reading.decides.value)
       : []
   );
@@ -50,6 +70,15 @@
       ? decidesTotalCount(reading.decides.value)
       : 6
   );
+  const decidesSummary = $derived.by(() => {
+    if (ownCount === 0) {
+      return words.policy.followsFleetAll(totalCount);
+    }
+    if (ownCount >= totalCount) {
+      return words.policy.ownAll(totalCount);
+    }
+    return words.policy.ownOverFleet(ownCount, totalCount);
+  });
 </script>
 
 <section
@@ -65,6 +94,7 @@
     {#snippet right()}
       <Button
         disabled={hubAway}
+        hit={narrow ? "always" : undefined}
         onclick={() => acts.editRules()}
         size="xs"
         variant="outline"
@@ -86,12 +116,8 @@
       </h3>
       {#if reading.decides.state === "reading"}
         <Skeleton line="meta" radius="line" width="name" />
-      {:else if reading.decides.state === "read" && reading.decides.value.problems.length === 0}
-        <span class="type-meta num text-ink-muted">
-          {ownCount === 0
-            ? words.policy.followsFleetAll(totalCount)
-            : words.policy.ownOverFleet(ownCount, totalCount)}
-        </span>
+      {:else if reading.decides.state === "read" && decidesFault === null}
+        <span class="type-meta num text-ink-muted">{decidesSummary}</span>
       {/if}
     </div>
 
@@ -100,67 +126,15 @@
         <Skeleton line="meta" radius="line" width="title" />
         <Skeleton class="w-4/5" line="meta" radius="line" />
       </div>
-    {:else if reading.decides.state === "failed"}
-      <!-- mark-line: glyph aligns to first line of stacked failure copy -->
-      <div
-        class="mt-space-1 grid grid-cols-mark-fluid items-start gap-x-space-2"
-        role="alert"
-      >
-        <span class="mark-cell" data-box>
-          <IconWarningTriangle
-            aria-hidden="true"
-            class="size-icon-sm text-status-fail-glyph"
-          />
-        </span>
-        <div class="flex min-w-0 flex-col gap-space-1">
-          <p class="m-0 type-label text-status-fail-ink">
-            {words.policy.decidesReadFailed}
-          </p>
-          <p class="m-0 type-meta break-word text-ink-muted">
-            {reading.decides.words}
-          </p>
-          <div class="pt-space-row">
-            <Button
-              disabled={hubAway}
-              onclick={() => acts.retry("decides")}
-              size="xs"
-              variant="outline"
-            >
-              {words.common.tryAgain}
-            </Button>
-          </div>
-        </div>
-      </div>
-    {:else if reading.decides.value.problems.length > 0}
-      <!-- mark-line: glyph aligns to first line of stacked rule-file error -->
-      <div
-        class="mt-space-1 grid grid-cols-mark-fluid items-start gap-x-space-2"
-        role="alert"
-      >
-        <span class="mark-cell" data-box>
-          <IconWarningTriangle
-            aria-hidden="true"
-            class="size-icon-sm text-status-fail-glyph"
-          />
-        </span>
-        <div class="flex min-w-0 flex-col gap-space-1">
-          <p class="m-0 type-label text-status-fail-ink">
-            {words.policy.ruleFileUnreadable}
-          </p>
-          <p class="m-0 type-meta break-word text-ink-muted">
-            {reading.decides.value.problems.join(" ")}
-          </p>
-          <div class="pt-space-row">
-            <Button
-              disabled={hubAway}
-              onclick={() => acts.retry("decides")}
-              size="xs"
-              variant="outline"
-            >
-              {words.common.tryAgain}
-            </Button>
-          </div>
-        </div>
+    {:else if decidesFault}
+      <div class="mt-space-1">
+        <PassportAlert
+          detail={decidesFault.detail}
+          disabled={hubAway}
+          {narrow}
+          onretry={() => acts.retry("decides")}
+          title={decidesFault.title}
+        />
       </div>
     {:else}
       <div class="mt-space-1 flex flex-col gap-space-row">
@@ -200,7 +174,7 @@
   </div>
 
   <dl
-    class="m-0 grid grid-cols-auto-fluid items-baseline gap-x-space-4 gap-y-space-1"
+    class="m-0 grid grid-cols-(--passport-fact-cols) items-baseline gap-x-space-3 gap-y-space-1"
   >
     {#if reading.holdsCode}
       <dt class="type-meta text-ink-muted">{words.policy.finishedWork}</dt>
@@ -214,36 +188,13 @@
       {#if reading.account.state === "reading"}
         <Skeleton line="label" radius="line" width="title" />
       {:else if reading.account.state === "failed"}
-        <!-- mark-line: glyph aligns to first line of stacked failure copy -->
-        <div
-          class="grid grid-cols-mark-fluid items-start gap-x-space-2"
-          role="alert"
-        >
-          <span class="mark-cell" data-box>
-            <IconWarningTriangle
-              aria-hidden="true"
-              class="size-icon-sm text-status-fail-glyph"
-            />
-          </span>
-          <div class="flex min-w-0 flex-col gap-space-1">
-            <p class="m-0 type-label text-status-fail-ink">
-              {words.policy.accountReadFailed}
-            </p>
-            <p class="m-0 type-meta break-word text-ink-muted">
-              {reading.account.words}
-            </p>
-            <div>
-              <Button
-                disabled={hubAway}
-                onclick={() => acts.retry("account")}
-                size="xs"
-                variant="outline"
-              >
-                {words.common.tryAgain}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <PassportAlert
+          detail={reading.account.words}
+          disabled={hubAway}
+          {narrow}
+          onretry={() => acts.retry("account")}
+          title={words.policy.accountReadFailed}
+        />
       {:else if reading.account.value === null}
         <span class="type-label text-ink-strong">
           {words.policy.fleetRouting}
@@ -251,17 +202,19 @@
       {:else}
         {@const acct = reading.account.value}
         <div
-          class="mark-line flex flex-wrap items-center gap-x-space-2 gap-y-space-row"
+          class="mark-line flex flex-wrap items-center gap-x-space-3 gap-y-space-row"
         >
-          <span
-            aria-hidden="true"
-            class="inline-block size-space-2 flex-none rounded-pill bg-(--account-hue)"
-            data-box
-            style:--account-hue={accountHueVar(acct.hue)}
-          ></span>
-          <span class="type-label text-ink-strong">{acct.name}</span>
+          <span class="mark-line inline-flex items-center gap-space-2" data-box>
+            <span
+              aria-hidden="true"
+              class="inline-block size-space-2 flex-none rounded-pill bg-(--account-hue)"
+              data-box
+              style:--account-hue={accountHueVar(acct.hue)}
+            ></span>
+            <span class="type-label text-ink-strong">{acct.name}</span>
+          </span>
           <span class="type-meta text-ink-muted">
-            · {words.atLimit[reading.project.accountAtLimit]}
+            {words.atLimit[reading.project.accountAtLimit]}
           </span>
         </div>
 
@@ -284,6 +237,7 @@
                 </p>
                 <div class="flex flex-wrap items-center gap-space-2">
                   <Button
+                    hit={narrow ? "always" : undefined}
                     onclick={() => acts.configure("accounts")}
                     size="xs"
                     variant="ghost"
@@ -292,6 +246,7 @@
                   </Button>
                   <Button
                     disabled={hubAway}
+                    hit={narrow ? "always" : undefined}
                     onclick={() => acts.editRules("account")}
                     size="xs"
                     variant="outline"
@@ -308,13 +263,15 @@
 
     {#if reading.holdsCode && reading.project.lfsUrl}
       <dt class="type-meta text-ink-muted">{words.policy.largeFiles}</dt>
-      <dd class="m-0 flex min-w-0 flex-wrap items-baseline gap-x-space-2">
+      <dd
+        class="m-0 flex min-w-0 flex-wrap items-baseline gap-x-space-3 gap-y-space-row"
+      >
         <span class="min-w-0 break-word type-code text-ink-strong">
           {lfsHostOf(reading.project.lfsUrl)}
         </span>
         {#if reading.project.lfsConnection}
           <span class="type-meta text-ink-muted">
-            · {reading.project.lfsConnection}
+            {reading.project.lfsConnection}
           </span>
         {/if}
       </dd>

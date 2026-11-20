@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
-   * Group 2a of the Project Passport: every place of the project listed at
-   * once (starting checkout, other checkouts, hub folder) with Add place,
-   * followed by linked repositories when the project has any.
+   * Group 2a of the Project Passport: every place of the project listed in one
+   * columnar list (starting checkout, other checkouts, hub folder) with Add
+   * place, followed by linked repositories on the card's shared fact-line
+   * columns when the project has any.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -27,6 +28,13 @@
     hubAway: boolean;
   } = $props();
 
+  /**
+   * Lead glyph (padded by space-2 for row hover bleed), machine name + marks,
+   * end-anchored path, trailing acts group.
+   */
+  const PLACES_COLS =
+    "calc(var(--spacing-space-2) + var(--spacing-icon-md)) auto minmax(0, 1fr) auto";
+
   const machineById = $derived(
     new Map<string, PassportMachine>(
       reading.machines.map((machine) => [machine.id, machine])
@@ -44,6 +52,7 @@
     {#snippet right()}
       <Button
         disabled={hubAway}
+        hit={narrow ? "always" : undefined}
         onclick={() => acts.addPlace()}
         size="xs"
         variant="ghost"
@@ -54,7 +63,12 @@
     {/snippet}
   </SectionHeader>
 
-  <ul class="m-0 flex list-none flex-col gap-space-row p-0">
+  <ul
+    class={narrow
+      ? "m-0 flex list-none flex-col gap-space-2 p-0"
+      : "m-0 -mx-space-2 grid list-none grid-cols-(--places-cols) gap-x-space-2 gap-y-space-row p-0"}
+    style:--places-cols={narrow ? undefined : PLACES_COLS}
+  >
     {#each reading.project.places as place (place.id)}
       <PlaceRow
         {acts}
@@ -67,12 +81,12 @@
   </ul>
 
   {#if reading.holdsCode && reading.project.links.length > 0}
-    <div
-      class="mt-space-1 grid grid-cols-auto-fluid items-baseline gap-x-space-3 px-space-2"
+    <dl
+      class="m-0 mt-space-1 grid grid-cols-(--passport-fact-cols) items-baseline gap-x-space-3 gap-y-space-1"
     >
-      <span class="type-meta text-ink-muted">{words.places.repositories}</span>
-      <div
-        class="flex min-w-0 flex-wrap items-baseline gap-x-space-3 gap-y-space-row"
+      <dt class="type-meta text-ink-muted">{words.places.repositories}</dt>
+      <dd
+        class="m-0 flex min-w-0 flex-wrap items-baseline gap-x-space-3 gap-y-space-row"
       >
         {#each reading.project.links as link (link)}
           <a
@@ -84,7 +98,7 @@
             {link}
           </a>
         {/each}
-      </div>
-    </div>
+      </dd>
+    </dl>
   {/if}
 </section>

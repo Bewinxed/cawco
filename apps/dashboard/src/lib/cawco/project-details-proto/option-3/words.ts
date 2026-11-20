@@ -35,8 +35,8 @@ export const passportWords = {
       `Details, ${count} ${count === 1 ? "fault" : "faults"}`,
     spinOff: "Spin off",
     moreFor: (name: string) => `More for ${name}`,
-    editRulesMenu: "Edit rules…",
-    syncNowMenu: "Sync now",
+    spend: "Spend",
+    askCaw: "Ask Caw",
   },
 
   passport: {
@@ -55,8 +55,9 @@ export const passportWords = {
     editRules: "Edit rules",
     whoDecides: "Who decides",
     followsFleetAll: (total: number) => `Follows the fleet on all ${total}`,
+    ownAll: (total: number) => `Own rule on all ${total}`,
     ownOverFleet: (own: number, total: number) =>
-      `${own} of ${total} project's own`,
+      `Own rule on ${own} of ${total}, rest follow the fleet`,
     ruleFileUnreadable: "Rule file unreadable: every choice comes to you",
     decidesReadFailed: "Couldn't read Who decides",
     reviewBeforeDone: "Review before done",
@@ -115,6 +116,9 @@ export const passportWords = {
     syncNow: "Sync now",
     syncing: "Syncing…",
     refused: "Refused",
-    inStep: (polledAt: number | null) => `In step · ${polledAgo(polledAt)}`,
+    inStep: (polledAt: number | null) =>
+      polledAt === null
+        ? "In step, waiting for first sync"
+        : `In step, ${polledAgo(polledAt)}`,
   },
 } as const;
