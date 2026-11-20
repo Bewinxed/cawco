@@ -147,7 +147,7 @@ const MACHINES: FleetMachine[] = [
     id: "m-quarry",
     name: "quarry",
     os: "linux",
-    online: false,
+    online: true,
     home: "/home/mara",
   },
 ];
