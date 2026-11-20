@@ -3,6 +3,9 @@
    * One section of the project details card: the kit's section head (its
    * glyph in the section's hue, its name a heading, so the card reads as
    * its outline), the one line saying what it decides, then what it holds.
+   * Every section stands under a hairline, as the settings pages part
+   * theirs (config ToolChoice, ImageDefault), and the card's gap between
+   * sections is wider than any gap inside one.
    */
   import type { Component, Snippet } from "svelte";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -29,7 +32,7 @@
 
 <section
   aria-label={name}
-  class="flex min-w-0 flex-col gap-space-3"
+  class="flex min-w-0 flex-col gap-space-3 border-t border-border-hairline pt-space-5"
   data-section={key}
 >
   <header class="flex flex-col gap-space-1">

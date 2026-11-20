@@ -49,10 +49,6 @@
         default:
           "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         xs: "h-6 gap-(--btn-gap) px-2 type-label [--btn-gap:var(--spacing-space-1)] [--btn-icon:var(--spacing-icon-sm)] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
-        /* A button set in a line of meta facts (a connected service's facts
-           on the project details card): xs's 24px box, its words in the
-           meta size of the line it stands in, so the line keeps one size. */
-        meta: "h-6 gap-(--btn-gap) px-2 type-meta [--btn-gap:var(--spacing-space-1)] [--btn-icon:var(--spacing-icon-sm)] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
         /* In a head control's compact form (side/head.ts, `data-form`), its
            words not drawn, it stands as its glyph: the icon size's square,
            the glyph centred inside its edge, and a count it still says kept

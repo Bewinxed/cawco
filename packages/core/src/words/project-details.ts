@@ -41,11 +41,11 @@ export const sectionWords = {
     name: "Task list",
     line: "Keeps tasks only here, or also updates both ways with GitHub or Linear.",
   },
-  more: { name: "More code details" },
-  code: {
-    name: "Connected code",
-    line: "The online codebases agents work on. Nothing here can be changed.",
+  storage: {
+    name: "Codebases and big files",
+    line: "What agents work on, and where files too big for the codebase are kept.",
   },
+  code: { name: "Connected code" },
   bigFiles: {
     name: "Big file storage",
     line: "Where videos, designs and datasets are kept.",
@@ -58,8 +58,7 @@ export const folderWords = {
     extra: "Extra folder",
     builtin: "Built-in folder",
   } satisfies Record<FolderRole, string>,
-  builtinNote: (host: string) =>
-    `Kept on ${host}. Holds tasks and the files agents save.`,
+  builtinNote: "Holds tasks and the files agents save.",
   online: "online",
   offline: "offline",
   /** A computer as last read, while what is shown was read earlier. */
@@ -114,7 +113,7 @@ export const aiWords = {
   pick: "Pick an account",
   find: "Find an account",
   noMatch: "No account goes by that.",
-  signedIn: "signed in",
+  signedIn: "Signed in",
   signedOut: "Signed out",
   signIn: "Sign in",
   chosenSignedOut: (name: string) =>
@@ -164,8 +163,12 @@ export const taskWords = {
     line: "Updates both ways with Linear.",
   },
   connected: "Connected",
-  linked: (n: number) =>
-    `${n.toLocaleString("en")} ${n === 1 ? "task" : "tasks"} linked`,
+  /** The connected service's facts, under the tiles. */
+  syncing: (service: string) => `Syncing with ${service}`,
+  repository: "Repository",
+  team: "Team",
+  tasks: "Tasks",
+  linked: (n: number) => `${n.toLocaleString("en")} linked`,
   first: "First update running",
   updating: "Updating",
   upToDate: (at: string) => `Up to date as of ${at}`,
@@ -181,8 +184,6 @@ export const taskWords = {
 } as const;
 
 export const moreWords = {
-  bigDefaults: "big files: defaults",
-  bigCustom: "big files: custom location",
   defaults: {
     name: "Use defaults",
     line: "Each codebase keeps its own storage.",

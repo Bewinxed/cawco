@@ -1580,6 +1580,13 @@
 @utility grid-cols-auto-fluid {
   grid-template-columns: auto minmax(0, 1fr);
 }
+/* A folder's item on the project details card (FolderRow): its computer's
+   mark, the words that take the rest, the trailing facts (its role, whether
+   the computer answers) on one edge, and the chevron's column, kept where
+   there is no chevron so that edge holds in every item. */
+@utility grid-cols-folder-row {
+  grid-template-columns: auto minmax(0, 1fr) auto var(--spacing-icon-sm);
+}
 /* As many equal columns as fit at a least width each (never wider than
    the grid), the rest shared: `grid-cols-fit-c-decision-option-min`. */
 @utility grid-cols-fit-* {

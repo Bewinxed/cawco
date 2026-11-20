@@ -35,7 +35,6 @@ const COPY = /^Copy to computer$/u;
 const LAB = /lab-nuc/u;
 const FOLDER = /Folder/u;
 const LINEAR = /Connect Linear/u;
-const MORE = /More code details/u;
 const MAIN_ROW = /^obelisk/u;
 const CONNECT = /^Connect existing folder$/u;
 const STUDIO = /studio-mac/u;
@@ -107,13 +106,6 @@ export const LinearStep = {
   beforeEach: ownStores,
   from: "Opening",
   play: afterReads({ role: "radio", name: LINEAR, after: 3000 }),
-};
-
-/** I opened More code details at the card's foot. */
-export const MoreOpened = {
-  beforeEach: ownStores,
-  from: "Opening",
-  play: presses({ role: "button", name: MORE, after: 1500 }),
 };
 
 /** Connect existing folder: studio-mac and a folder whose codebase hyucksfield-site already has, and What will happen asks first, naming both. */

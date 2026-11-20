@@ -11,13 +11,16 @@
    * 2. The two things agents need before they start: Files and locations,
    *    and AI account, side by side.
    * 3. The two rules for what agents produce: Finished code and Task list.
-   * 4. The code details almost nobody changes: one closed row at the foot
-   *    across both columns, opening in place under itself.
+   * 4. What agents work on and where big files are kept (Codebases and big
+   *    files), across both columns at the foot.
+   *
+   * Every section stands under a hairline (Section), so each reads as its
+   * own unit.
    *
    * Two equal columns from 680 of card room, read across then down, so the
    * top line's two possible causes sit together in the first row; under
    * that, one column in the same order. A project with no code has no
-   * Finished code and no More code details.
+   * Finished code and no Codebases and big files.
    *
    * A change that needs a destination or a sign-in takes the card's body
    * as a step (FolderStep, TaskListStep), its bar "‹ Project details", the
@@ -38,6 +41,7 @@
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { cn } from "#lib/utils.js";
   import AccountSection from "./AccountSection.svelte";
+  import CodeStorageSection from "./CodeStorageSection.svelte";
   import type {
     CardActs,
     CardOpen,
@@ -51,7 +55,6 @@
   import FilesSection from "./FilesSection.svelte";
   import FinishedCodeSection from "./FinishedCodeSection.svelte";
   import FolderStep from "./FolderStep.svelte";
-  import MoreCodeDetails from "./MoreCodeDetails.svelte";
   import { stepTitle } from "./step-title";
   import TaskListSection from "./TaskListSection.svelte";
   import TaskListStep from "./TaskListStep.svelte";
@@ -261,10 +264,10 @@
                   tasks={details.tasks}
                 />
                 {#if details.hasCode}
-                  <!-- The rare code details, closed at the card's foot
-                       across both columns; open, they stand under their row. -->
+                  <!-- What agents work on and where big files are kept,
+                       across both columns at the card's foot. -->
                   <div class="col-span-full">
-                    <MoreCodeDetails
+                    <CodeStorageSection
                       bigFiles={details.bigFiles}
                       codebases={details.codebases}
                       bind:draft={opened.bigDraft}
@@ -272,12 +275,6 @@
                         acts.pick({ section: "bigFiles", value: "defaults" })}
                       onsave={acts.saveBigFiles}
                       ontry={acts.tryAgain}
-                      bind:open={
-                        () => opened.more || Boolean(pending.bigFiles?.refused),
-                        (next) => {
-                          opened.more = next;
-                        }
-                      }
                       pending={pending.bigFiles}
                       signIns={details.bigFileSignIns}
                       {sunk}

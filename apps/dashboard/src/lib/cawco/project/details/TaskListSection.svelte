@@ -4,12 +4,12 @@
    * column on a phone), the two services in their own marks, each with its
    * line. A service not yet connected reads as its act (Connect GitHub
    * Issues, ending on a chevron: it opens a step, it picks nothing); the
-   * connected one reads as connected, with Change… under the
-   * grid. While connected, its facts stand under the tiles on the section's
-   * own edge: the codebase or team as a link out, how many tasks are
-   * linked, the status board or the service's reason there is none; then
-   * how it stands (first update running, up to date as of a time, or the
-   * service's refusal in its own words), with Refresh now.
+   * connected one reads as connected. While connected, its facts stand under the tiles as one labelled
+   * unit (Syncing with GitHub Issues, with Change…): the codebase or team as
+   * a link out, how many tasks are linked, the status board or the
+   * service's reason there is none; then how it stands (first update
+   * running, up to date as of a time, or the service's refusal in its own
+   * words), with Refresh now.
    *
    * Pressing a service that is not connected changes nothing yet: it opens
    * the Connect task list step. Pressing Only here while connected asks
@@ -71,6 +71,7 @@
     ontry: () => void;
   } = $props();
 
+  const id = $props.id();
   const KINDS: Kind[] = ["here", "github", "linear"];
   const SERVICE = { github: "GitHub", linear: "Linear" } as const;
   const TILES =
@@ -199,68 +200,89 @@
 
       {#if linked}
         {@const service = SERVICE[linked.kind]}
-        <!-- The connected service's facts, on the section's own edge under
-             the tiles: where it updates (the codebase or team and how many
-             tasks are linked, with Change… at the line's end); for GitHub,
-             the status board; then how it stands, with Refresh now. One
-             button form and one size of words for the whole block: Change…
-             and Refresh now are the same ghost button in the meta size; each
-             link reaches the 24px floor (44 under a finger) round its words. -->
-        <div class="flex flex-col gap-space-1" data-facts={linked.kind}>
-          <div class="flex flex-wrap items-center gap-x-space-2 gap-y-space-1">
-            <span class="type-meta">
+        <!-- The connected service's facts, one labelled unit on the tiles'
+             radius under them: what it is (Syncing with GitHub Issues),
+             with Change… as its act at its head; then its facts as names
+             and values on two columns (the repository or team, how many
+             tasks are linked, for GitHub the status board); then how the
+             sync stands, with Refresh now. Its two acts are the kit's small
+             outlined buttons, so they read as presses. -->
+        <section
+          aria-labelledby="{id}-facts"
+          class="flex flex-col gap-space-3 rounded-sm border border-border-hairline p-space-3"
+          data-facts={linked.kind}
+        >
+          <div
+            class="mark-line flex flex-wrap items-center gap-x-space-3 gap-y-space-2"
+          >
+            <span class="flex flex-none" data-box>
+              <ProviderLogo provider={linked.kind} />
+            </span>
+            <h4
+              class="m-0 min-w-0 flex-1 type-label text-pretty text-ink-strong"
+              id="{id}-facts"
+            >
+              {taskWords.syncing(taskWords[linked.kind].name)}
+            </h4>
+            <Button
+              data-box
+              disabled={sunk}
+              onclick={onchange}
+              size="sm"
+              variant="outline">{taskWords.change}</Button
+            >
+          </div>
+          <dl
+            class="m-0 grid grid-cols-auto-fluid items-baseline gap-x-space-4 gap-y-space-1 type-meta"
+          >
+            <dt class="text-ink-muted">
+              {linked.kind === "github" ? taskWords.repository : taskWords.team}
+            </dt>
+            <dd class="m-0 min-w-0">
               <a
                 class="mark-line pointer-hit touch-hit inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
                 href={linked.target.url}
                 rel="noreferrer"
                 target="_blank"
-                ><span>{linked.target.name}</span><IconArrowUpRight
+                ><span class="wrap-anywhere">{linked.target.name}</span
+                ><IconArrowUpRight
                   aria-hidden="true"
                   class="size-icon-sm flex-none"
                 /></a
               >
-            </span>
-            <span
-              class="type-meta whitespace-nowrap tabular-nums text-ink-muted"
-            >
-              · {taskWords.linked(linked.linked)}
-            </span>
-            <Button
-              class="ms-auto"
-              disabled={sunk}
-              onclick={onchange}
-              size="meta"
-              variant="ghost">{taskWords.change}</Button
-            >
-          </div>
-          {#if linked.kind === "github"}
-            <span
-              class="flex min-w-0 flex-wrap items-center gap-x-space-2 type-meta"
-            >
-              <span class="whitespace-nowrap text-ink-muted"
-                >{taskWords.board}</span
-              >
-              {#if linked.board && "url" in linked.board}
-                <a
-                  class="mark-line pointer-hit touch-hit inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
-                  href={linked.board.url}
-                  rel="noreferrer"
-                  target="_blank"
-                  ><span>{linked.board.name}</span><IconArrowUpRight
-                    aria-hidden="true"
-                    class="size-icon-sm flex-none"
-                  /></a
-                >
-              {:else if linked.board}
-                <span class="text-pretty text-ink-muted"
-                  >{linked.board.reason}</span
-                >
-              {:else}
-                <span class="text-ink-muted">{taskWords.noBoard}</span>
-              {/if}
-            </span>
-          {/if}
-          <div class="flex flex-wrap items-center gap-x-space-3 gap-y-space-1">
+            </dd>
+            <dt class="text-ink-muted">{taskWords.tasks}</dt>
+            <dd class="m-0 tabular-nums text-ink-strong">
+              {taskWords.linked(linked.linked)}
+            </dd>
+            {#if linked.kind === "github"}
+              <dt class="text-ink-muted">{taskWords.board}</dt>
+              <dd class="m-0 min-w-0">
+                {#if linked.board && "url" in linked.board}
+                  <a
+                    class="mark-line pointer-hit touch-hit inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
+                    href={linked.board.url}
+                    rel="noreferrer"
+                    target="_blank"
+                    ><span class="wrap-anywhere">{linked.board.name}</span
+                    ><IconArrowUpRight
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none"
+                    /></a
+                  >
+                {:else if linked.board}
+                  <span class="text-pretty text-ink-muted"
+                    >{linked.board.reason}</span
+                  >
+                {:else}
+                  <span class="text-ink-muted">{taskWords.noBoard}</span>
+                {/if}
+              </dd>
+            {/if}
+          </dl>
+          <div
+            class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 border-t border-border-hairline pt-space-3"
+          >
             <!-- mark-line: the glyph stands at the top of words that may wrap -->
             <span
               class="flex min-w-0 flex-1 items-start gap-space-2 type-meta"
@@ -306,11 +328,11 @@
               onclick={onrefresh}
               pending={linked.standing.state === "read" &&
                 linked.standing.value.state === "updating"}
-              size="meta"
-              variant="ghost"
+              size="sm"
+              variant="outline"
             />
           </div>
-        </div>
+        </section>
       {/if}
     </div>
   {/if}

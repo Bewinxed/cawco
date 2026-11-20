@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
-   * Files and locations: every folder of the project, all in view, one row
-   * each (FolderRow), the Main folder first and the Built-in folder last; a
+   * Files and locations: every folder of the project, all in view, one item
+   * each (FolderRow) in one list whose items a hairline parts, so each folder
+   * reads as one thing, the Main folder first and the Built-in folder last; a
    * folder that comes or goes moves the rows round it (`reflow`, each row
    * `data-flip`). Under them, two quiet buttons that open their steps
    * (Connect existing folder, Copy to computer), each saying what it does
@@ -94,12 +95,12 @@
     <RowFault again={ontry} reason="{cardWords.couldntRead} {folders.reason}" />
   {:else}
     <ul
-      class="m-0 flex list-none flex-col gap-px p-0"
+      class="m-0 flex list-none flex-col overflow-clip rounded-sm border border-border-hairline p-0"
       in:reveal
       {@attach reflow()}
     >
       {#each rows as folder (folder.id)}
-        <li data-flip>
+        <li class="border-t border-border-hairline first:border-t-0" data-flip>
           <FolderRow
             {asOf}
             callingOff={callingOff?.value === folder.id

@@ -112,18 +112,20 @@
 >
   {#if folder}
     <StepGroup name={locating ? stepWords.thisFolder : stepWords.whatMoves}>
-      <FolderRow
-        {folder}
-        hue={hueOf(folder.machine.id)}
-        onact={() => undefined}
-        oncancel={() => undefined}
-        onconfirm={() => undefined}
-        oncalloff={() => undefined}
-        ondisconnect={() => undefined}
-        ontoggle={() => undefined}
-        still
-        {sunk}
-      />
+      <div class="overflow-clip rounded-sm border border-border-hairline">
+        <FolderRow
+          {folder}
+          hue={hueOf(folder.machine.id)}
+          onact={() => undefined}
+          oncancel={() => undefined}
+          onconfirm={() => undefined}
+          oncalloff={() => undefined}
+          ondisconnect={() => undefined}
+          ontoggle={() => undefined}
+          still
+          {sunk}
+        />
+      </div>
     </StepGroup>
   {/if}
 

@@ -51,7 +51,6 @@ export const closedCard = (): CardOpen => ({
   folder: null,
   disconnect: null,
   stopUpdating: false,
-  more: false,
   bigDraft: { open: false, address: "", signIn: null },
 });
 

@@ -2,8 +2,11 @@
   /**
    * Which account agents start on, when one account is picked: the house
    * combobox (ModelCombobox's recipe, the kit's command in a popover). Its
-   * trigger names the account in force with its provider's mark and whether
-   * it is signed in; open, every account of the fleet by its own name,
+   * trigger is one of the card's own pick rows (the option chip, its picked
+   * look while an account is in force): the account's mark, its name in the
+   * label role and whether it is signed in in the meta role (OptionLine),
+   * and a chevron that says it opens a list; open, every account of the
+   * fleet by its own name,
    * found by typing, each with its mark and whether it is signed in. A
    * signed-out account keeps its Sign in on its row. The chosen one wears
    * the item's tick.
@@ -11,11 +14,13 @@
   import { aiWords } from "@cawco/core/words/project-details";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import * as Command from "#lib/components/ui/command/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconUnfold } from "#lib/icons.js";
+  import { IconChevronDown } from "#lib/icons.js";
+  import { cn } from "#lib/utils.js";
   import type { AiAccount } from "./details";
+  import OptionLine from "./OptionLine.svelte";
 
   let {
     accounts,
@@ -64,36 +69,40 @@
 >
   <Popover.Trigger>
     {#snippet child({ props })}
-      <Button
+      <button
         {...props}
+        class={cn(
+          chipVariants({ variant: "option" }),
+          "focus-inset flex w-full items-start gap-space-2"
+        )}
         aria-expanded={open}
         aria-label={label}
-        align="trigger"
+        data-chosen={shown ? true : undefined}
         {disabled}
-        gap="loose"
         role="combobox"
-        size="sm"
-        class="w-full"
-        variant="outline"
+        type="button"
       >
-        {#if shown}
-          <ProviderLogo provider={shown.provider} size="meta" />
-          <span
-            class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-start"
-            >{shown.name}</span
-          >
-          {@render status(shown)}
-        {:else}
-          <span
-            class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-start text-ink-muted"
-            >{aiWords.pick}</span
-          >
-        {/if}
-        {#if waiting}
-          <Spinner box="small" tone="muted" />
-        {/if}
-        <IconUnfold class="size-icon-md shrink-0 opacity-50" />
-      </Button>
+        <span class="min-w-0 flex-1" data-box>
+          {#if shown}
+            <OptionLine
+              line={shown.signedIn ? aiWords.signedIn : undefined}
+              name={shown.name}
+              note={shown.signedIn ? undefined : aiWords.signedOut}
+              waiting={Boolean(waiting)}
+            >
+              {#snippet mark()}
+                <ProviderLogo provider={shown.provider} />
+              {/snippet}
+            </OptionLine>
+          {:else}
+            <OptionLine name={aiWords.pick} waiting={Boolean(waiting)} />
+          {/if}
+        </span>
+        <IconChevronDown
+          aria-hidden="true"
+          class="mt-px size-icon-sm flex-none text-ink-muted"
+        />
+      </button>
     {/snippet}
   </Popover.Trigger>
 

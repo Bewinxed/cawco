@@ -283,7 +283,6 @@ export interface CardOpen {
   disconnect: string | null;
   /** The folder whose acts stand open. */
   folder: string | null;
-  more: boolean;
   /** Only here asks before it stops updating. */
   stopUpdating: boolean;
 }

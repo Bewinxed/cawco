@@ -9,6 +9,7 @@
    * stops every agent and says so with Sign in; with Automatic and no
    * account signed in anywhere, the same. At account limit stands under it
    * only while an account is chosen, its two answers as chips on one line.
+   * Every row of the section starts on the section's edge.
    * A press waits for the hub with the old pick still chosen; a refusal
    * stands under what was pressed, with Try again.
    */
@@ -136,8 +137,9 @@
         </OptionGroupItem>
       </OptionGroup>
 
-      <!-- The account One account names, on the option's text edge. -->
-      <div class="flex flex-col gap-space-2 ps-c-details-option-text">
+      <!-- The account One account names: a pick row of its own, on the
+           section's edge under the two. -->
+      <div class="flex flex-col gap-space-2">
         <div class="flex min-w-0 items-center gap-space-2">
           <span class="min-w-0 flex-1">
             <AccountPicker
@@ -199,11 +201,11 @@
       {/if}
 
       {#if named}
-        <!-- At account limit, on one line: its name, then the two answers
-             as option chips, what each does in its tooltip. It belongs to
-             One account, so it stands on the picker's edge. -->
+        <!-- At account limit, on one line on the section's edge: its name,
+             then the two answers as option chips on its baseline, what each
+             does in its tooltip. -->
         <div
-          class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 ps-c-details-option-text"
+          class="flex flex-wrap items-baseline gap-x-space-3 gap-y-space-2"
           transition:unfold
         >
           <span class="type-meta font-medium text-ink-muted" id="{limitId}-name"

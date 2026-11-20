@@ -52,7 +52,6 @@ const VIEWS = [
   "folder-open",
   "disconnect",
   "stop-updating",
-  "more-open",
   "big-draft",
   "big-refused",
   "finished-waiting",
@@ -233,11 +232,7 @@ export class MockHub {
       case "stop-updating":
         opened.stopUpdating = true;
         break;
-      case "more-open":
-        opened.more = true;
-        break;
       case "big-draft":
-        opened.more = true;
         opened.bigDraft = {
           open: true,
           address: "https://files.acme.dev/acme/hyucksfield.git/info/lfs",
@@ -245,7 +240,6 @@ export class MockHub {
         };
         break;
       case "big-refused":
-        opened.more = true;
         opened.bigDraft = {
           open: true,
           address: "https://files.acme.dev/acme/hyucksfield.git/info/lfs",
