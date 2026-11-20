@@ -1114,6 +1114,8 @@
   --spacing-c-ledger-usd-w: 6rem;
   /* A matrix's wide column, its floor: a tool's name, its count and its Required switch over each machine's cell (Command-line tools), an update's state and its act (Updates). */
   --spacing-c-matrix-col-w: 14rem;
+  /* A rule table's kind column: a kind of choice's name and its one-line example, beside its members' chips (Who decides' rule header). */
+  --spacing-c-kind-col-w: 12rem;
   /* Where a machine ledger's words start inside its row: past the OS mark and its gap (MachineLedger's machine cell), so a phone card's own line under it starts on the machine's name (Command-line tools' Sign-in line). */
   --spacing-c-ledger-text-inset: calc(
     var(--spacing-icon-md) + var(--spacing-space-2)
