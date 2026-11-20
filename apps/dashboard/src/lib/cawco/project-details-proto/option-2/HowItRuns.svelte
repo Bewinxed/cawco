@@ -2,7 +2,7 @@
   /**
    * Option 2 ("How it runs"): the whole work-path view mounted inside the
    * project page's view region. Left-aligned on the page edge up to
-   * max-w-decisions-900px, acting as a container-query root, drawing the
+   * max-w-table-1102px, acting as a container-query root, drawing the
    * connected step rail across Tasks enter, Sessions start, What waits for
    * you, and (for code projects only) Work lands, with per-stage loading
    * skeletons, read-failure alerts, live announcements, and hub-offline
@@ -157,21 +157,20 @@
   <div aria-busy="true" class="min-w-0">
     {#if stage === "tasks"}
       <div
-        class="flex flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4 @setup:py-space-3"
+        class="flex flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
       >
         <div class="grid grid-cols-1 gap-space-2 @setup:grid-cols-3">
-          <Skeleton class="w-full" height="row" radius="tile" />
-          <Skeleton class="w-full" height="row" radius="tile" />
-          <Skeleton class="w-full" height="row" radius="tile" />
+          <Skeleton class="w-full" height="item" radius="tile" />
+          <Skeleton class="w-full" height="item" radius="tile" />
+          <Skeleton class="w-full" height="item" radius="tile" />
         </div>
-        <Skeleton line="meta" radius="text" width="title" />
       </div>
     {:else if stage === "sessions"}
       <div
-        class="grid min-w-0 grid-cols-1 gap-space-3 @setup:grid-cols-5 @setup:gap-space-4"
+        class="grid min-w-0 grid-cols-1 items-start gap-space-3 @setup:grid-cols-5"
       >
         <div
-          class="flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:col-span-3 @setup:px-space-4 @setup:py-space-3"
+          class="flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:col-span-3 @setup:px-space-4"
         >
           <Skeleton line="label" radius="text" width="label" />
           <Skeleton class="w-full" height="control-sm" radius="chip" />
@@ -179,23 +178,28 @@
           <Skeleton class="w-full" height="control-sm" radius="chip" />
         </div>
         <div
-          class="flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:col-span-2 @setup:px-space-4 @setup:py-space-3"
+          class="flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:col-span-2 @setup:px-space-4"
         >
           <Skeleton line="label" radius="text" width="label" />
-          <Skeleton class="w-full" height="control-sm" radius="chip" />
-          <Skeleton class="w-full" height="control-sm" radius="chip" />
-          <Skeleton class="w-full" height="control-sm" radius="chip" />
+          <div class="flex flex-wrap gap-space-2">
+            <Skeleton height="control-sm" radius="chip" width="name" />
+            <Skeleton height="control-sm" radius="chip" width="name" />
+            <Skeleton height="control-sm" radius="chip" width="title" />
+          </div>
+          <Skeleton line="meta" radius="text" width="title" />
         </div>
       </div>
     {:else if stage === "waits"}
       <div
-        class="flex flex-col gap-space-2 rounded-well border border-border-contrast bg-surface-well px-space-3 py-space-2 @setup:px-space-4 @setup:py-space-3"
+        class="flex flex-col gap-space-2 rounded-well border border-border-contrast bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
       >
         <div class="flex items-center justify-between gap-space-2">
           <Skeleton line="label" radius="text" width="name" />
           <Skeleton line="meta" radius="text" width="name" />
         </div>
-        <div class="flex flex-col gap-space-1">
+        <div
+          class="grid grid-cols-1 gap-y-space-row @wide:grid-cols-2 @wide:gap-x-space-5"
+        >
           {#each CHOICE_KINDS as kind (kind)}
             <div class="flex items-center gap-space-2">
               <Skeleton
@@ -221,13 +225,15 @@
       </div>
     {:else}
       <div
-        class="flex flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4 @setup:py-space-3"
+        class="flex flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
       >
-        <div class="grid grid-cols-1 gap-space-2 @field-group:grid-cols-2">
-          <Skeleton class="w-full" height="row" radius="tile" />
-          <Skeleton class="w-full" height="row" radius="tile" />
-          <Skeleton class="w-full" height="row" radius="tile" />
-          <Skeleton class="w-full" height="row" radius="tile" />
+        <div
+          class="grid grid-cols-1 gap-space-2 @field-group:grid-cols-2 @setup:grid-cols-4"
+        >
+          <Skeleton class="w-full" height="item" radius="tile" />
+          <Skeleton class="w-full" height="item" radius="tile" />
+          <Skeleton class="w-full" height="item" radius="tile" />
+          <Skeleton class="w-full" height="item" radius="tile" />
         </div>
         <Skeleton line="meta" radius="text" width="title" />
       </div>
@@ -236,12 +242,12 @@
 {/snippet}
 
 <div
-  class="h-full min-h-0 w-full overflow-y-auto overscroll-contain px-space-2 py-space-3 phone:max-wide:px-space-3 wide:px-space-5 wide:py-space-4"
+  class="h-full min-h-0 w-full overflow-y-auto overscroll-contain px-space-2 py-space-2 phone:max-wide:px-space-3 wide:px-space-5"
   data-slot="page-scroll"
 >
   <section
     aria-label={words.viewLabel}
-    class="@container flex w-full max-w-decisions-900px flex-col"
+    class="@container flex w-full max-w-table-1102px flex-col"
   >
     {#if !record.hubReachable}
       <Alert class="mb-space-3" layout="row" variant="warning">

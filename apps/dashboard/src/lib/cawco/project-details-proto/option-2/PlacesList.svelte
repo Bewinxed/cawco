@@ -27,8 +27,8 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import type { Change, ChangeKey, PlaceAct } from "./changes";
   import ControlRefusal from "./ControlRefusal.svelte";
+  import type { Change, ChangeKey, PlaceAct } from "./changes";
   import PlaceRow from "./PlaceRow.svelte";
   import type { HowItRunsRecord } from "./records";
   import { LARGE_FILE_KEY_CONNECTIONS } from "./tie-setup.fixture";
@@ -147,7 +147,7 @@
       return;
     }
     const trimmed = lfsAddressDraft.trim();
-    if (!trimmed || !lfsConnectionDraft) {
+    if (!(trimmed && lfsConnectionDraft)) {
       return;
     }
     onchange({
@@ -162,7 +162,7 @@
 </script>
 
 <div
-  class="flex min-w-0 flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4 @setup:py-space-3"
+  class="flex min-w-0 flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
   data-slot="well"
 >
   <!-- Places header + Add place button. -->
@@ -214,7 +214,7 @@
                   !machine.online && "text-machine-offline",
                 ]}
               />
-              <span class={!machine.online ? "text-ink-muted" : undefined}
+              <span class={machine.online ? undefined : "text-ink-muted"}
                 >{machine.name}</span
               >
               {#if !machine.online}
@@ -295,7 +295,7 @@
   {/if}
 
   <!-- All places listed at once. -->
-  <ul class="m-0 mt-space-2 flex list-none flex-col gap-space-row p-0">
+  <ul class="m-0 mt-space-1 flex list-none flex-col gap-space-row p-0">
     {#each record.places as place (place.id)}
       <PlaceRow
         {disabled}

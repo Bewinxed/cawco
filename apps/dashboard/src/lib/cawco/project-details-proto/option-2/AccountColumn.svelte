@@ -1,10 +1,11 @@
 <script lang="ts">
   /**
    * Stage 2 right column ("Account"): Fleet routing plus every fleet account
-   * standing open in a list OptionGroup with its identity hue dot and
-   * signed-out mark, a crimson blocker alert if the chosen account is signed
-   * out everywhere, and the At its limit two-choice group when an account is
-   * named.
+   * standing open as a wrapping row of option chips (hue dot + name; signed-out
+   * accounts wear the fail glyph with "Signed out" in their accessible name and
+   * Tip), a crimson blocker alert if the chosen account is signed out
+   * everywhere, and At its limit as two chips in one row with a connector meta
+   * line below.
    */
   import {
     Alert,
@@ -16,10 +17,11 @@
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconAlert, IconChevronRight } from "#lib/icons.js";
-  import type { Change, ChangeKey } from "./changes";
   import ControlRefusal from "./ControlRefusal.svelte";
-  import type { AccountHue, HowItRunsRecord } from "./records";
+  import type { Change, ChangeKey } from "./changes";
+  import type { AccountHue, FleetAccount, HowItRunsRecord } from "./records";
   import { howItRunsWords as words } from "./words";
 
   let {
@@ -89,11 +91,37 @@
   }
 </script>
 
+{#snippet accountChipContent(account: FleetAccount)}
+  <span
+    aria-hidden="true"
+    class={["size-space-2 flex-none rounded-pill", ACCOUNT_DOT[account.hue]]}
+    data-box
+  ></span>
+  <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+    >{account.name}</span
+  >
+  {#if !account.signedIn}
+    <IconAlert
+      aria-hidden="true"
+      class="size-icon-sm flex-none text-status-fail-glyph"
+    />
+    <span class="sr-only"> — {words.account.signedOut}</span>
+  {/if}
+  {#if accountPending && pressedAccount === account.id}
+    <Spinner
+      aria-label={words.saving}
+      box="small"
+      class="flex-none"
+      tone="muted"
+    />
+  {/if}
+{/snippet}
+
 <div
-  class="flex min-w-0 flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4 @setup:py-space-3"
+  class="flex min-w-0 flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
   data-slot="well"
 >
-  <div class="flex items-center justify-between gap-space-2">
+  <div class="mark-line flex items-center justify-between gap-space-2">
     <h3 class="m-0 type-label text-ink-strong">{words.account.heading}</h3>
     {#if accountPending && pressedAccount === null}
       <Spinner aria-label={words.saving} box="small" tone="muted" />
@@ -102,13 +130,13 @@
 
   <OptionGroup
     aria-label={words.account.groupLabel}
-    class="mt-space-2 gap-space-row coarse:gap-y-space-4"
+    class="mt-space-1"
     {disabled}
-    layout="list"
+    layout="chips"
     value={[selectedAccountValue]}
   >
     <OptionGroupItem
-      class="items-center px-space-2 py-space-1"
+      class="mark-line px-space-2"
       onclick={(event) => {
         event.preventDefault();
         pickAccount(FLEET_VALUE);
@@ -117,68 +145,52 @@
     >
       <span
         aria-hidden="true"
-        class="size-space-2 flex-none self-center rounded-pill border border-ink-muted"
+        class="size-space-2 flex-none rounded-pill border border-ink-muted"
         data-box
       ></span>
-      <span class="flex min-w-0 items-center justify-between gap-space-2">
-        <span class="min-w-0 truncate type-label text-ink-strong"
-          >{words.account.fleetRouting}</span
-        >
-        {#if accountPending && pressedAccount === FLEET_VALUE}
-          <Spinner
-            aria-label={words.saving}
-            box="small"
-            class="flex-none"
-            tone="muted"
-          />
-        {/if}
-      </span>
+      <span>{words.account.fleetRouting}</span>
+      {#if accountPending && pressedAccount === FLEET_VALUE}
+        <Spinner
+          aria-label={words.saving}
+          box="small"
+          class="flex-none"
+          tone="muted"
+        />
+      {/if}
     </OptionGroupItem>
 
     {#each record.accounts as account (account.id)}
-      <OptionGroupItem
-        class="items-center px-space-2 py-space-1"
-        onclick={(event) => {
-          event.preventDefault();
-          pickAccount(account.id);
-        }}
-        value={account.id}
-      >
-        <span
-          aria-hidden="true"
-          class={[
-            "size-space-2 flex-none self-center rounded-pill",
-            ACCOUNT_DOT[account.hue],
-          ]}
-          data-box
-        ></span>
-        <span class="flex min-w-0 items-center justify-between gap-space-2">
-          <span class="min-w-0 truncate type-label text-ink-strong"
-            >{account.name}</span
-          >
-          <span class="flex flex-none items-center gap-space-1">
-            {#if !account.signedIn}
-              <span
-                class="mark-line inline-flex items-center gap-space-1 type-meta text-status-fail-ink"
-              >
-                <IconAlert
-                  aria-hidden="true"
-                  class="size-icon-sm flex-none text-status-fail-glyph"
-                />
-                <span>{words.account.signedOut}</span>
-              </span>
-            {/if}
-            {#if accountPending && pressedAccount === account.id}
-              <Spinner
-                aria-label={words.saving}
-                box="small"
-                class="flex-none"
-                tone="muted"
-              />
-            {/if}
-          </span>
-        </span>
-      </OptionGroupItem>
+      {#if !account.signedIn}
+        <Tip label={words.account.signedOut}>
+          {#snippet children(props)}
+            <OptionGroupItem
+              {...props}
+              class="mark-line px-space-2"
+              onclick={(event) => {
+                event.preventDefault();
+                if (typeof props.onclick === "function") {
+                  (props.onclick as (e: MouseEvent) => void)(event);
+                }
+                pickAccount(account.id);
+              }}
+              value={account.id}
+            >
+              {@render accountChipContent(account)}
+            </OptionGroupItem>
+          {/snippet}
+        </Tip>
+      {:else}
+        <OptionGroupItem
+          class="mark-line px-space-2"
+          onclick={(event) => {
+            event.preventDefault();
+            pickAccount(account.id);
+          }}
+          value={account.id}
+        >
+          {@render accountChipContent(account)}
+        </OptionGroupItem>
+      {/if}
     {/each}
   </OptionGroup>
 
@@ -216,7 +228,7 @@
     <div
       class="mt-space-2 flex flex-col gap-space-1 border-t border-border-hairline pt-space-2"
     >
-      <div class="flex items-center justify-between gap-space-2">
+      <div class="mark-line flex items-center justify-between gap-space-2">
         <span class="type-label text-ink-strong"
           >{words.account.atLimitHeading}</span
         >
@@ -227,63 +239,54 @@
 
       <OptionGroup
         aria-label={words.account.atLimitGroupLabel}
-        class="grid-cols-1 gap-space-1 max-phone:grid-cols-1 @table-766px:grid-cols-2 coarse:gap-y-space-4"
         {disabled}
-        layout="tiles"
+        layout="chips"
         value={[record.account.atLimit]}
       >
         <OptionGroupItem
-          class="px-space-2 py-space-1"
+          class="mark-line px-space-2"
           onclick={(event) => {
             event.preventDefault();
             pickAtLimit("wait");
           }}
           value="wait"
         >
-          <span class="flex w-full min-w-0 items-center justify-between gap-space-1">
-            <span class="type-label text-ink-strong wrap-anywhere"
-              >{words.account.atLimitWait.name}</span
-            >
-            {#if limitPending && pressedLimit === "wait"}
-              <Spinner
-                aria-label={words.saving}
-                box="small"
-                class="flex-none"
-                tone="muted"
-              />
-            {/if}
-          </span>
-          <span class="type-meta text-ink-muted"
-            >{words.account.atLimitWait.note}</span
-          >
+          <span>{words.account.atLimitWait.name}</span>
+          {#if limitPending && pressedLimit === "wait"}
+            <Spinner
+              aria-label={words.saving}
+              box="small"
+              class="flex-none"
+              tone="muted"
+            />
+          {/if}
         </OptionGroupItem>
 
         <OptionGroupItem
-          class="px-space-2 py-space-1"
+          class="mark-line px-space-2"
           onclick={(event) => {
             event.preventDefault();
             pickAtLimit("move");
           }}
           value="move"
         >
-          <span class="flex w-full min-w-0 items-center justify-between gap-space-1">
-            <span class="type-label text-ink-strong wrap-anywhere"
-              >{words.account.atLimitMove.name}</span
-            >
-            {#if limitPending && pressedLimit === "move"}
-              <Spinner
-                aria-label={words.saving}
-                box="small"
-                class="flex-none"
-                tone="muted"
-              />
-            {/if}
-          </span>
-          <span class="type-meta text-ink-muted"
-            >{words.account.atLimitMove.note}</span
-          >
+          <span>{words.account.atLimitMove.name}</span>
+          {#if limitPending && pressedLimit === "move"}
+            <Spinner
+              aria-label={words.saving}
+              box="small"
+              class="flex-none"
+              tone="muted"
+            />
+          {/if}
         </OptionGroupItem>
       </OptionGroup>
+
+      <p class="m-0 type-meta text-ink-muted">
+        {record.account.atLimit === "wait"
+          ? words.account.atLimitWait.note
+          : words.account.atLimitMove.note}
+      </p>
 
       <ControlRefusal
         {disabled}
