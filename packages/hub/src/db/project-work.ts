@@ -478,6 +478,8 @@ export interface WorkRowsDb {
     title: string;
   }) => QueuedWorkItemRow;
   readonly runningDelegateCounts: () => Map<string, number>;
+  /** A workspace's source folder, moved with it (folder-moves.ts). */
+  readonly setWorkspaceRoot: (id: string, repoRoot: MachinePath) => void;
   /**
    * What a session's delegate tray can still show, oldest first: of the
    * items it delegated, the live and undismissed failed ones, and any other
@@ -539,6 +541,12 @@ export interface WorkRowsDb {
   readonly workspaceOutputs: (workspaceId: string) => string[];
   /** The workspaces cut `from` workspace `workspaceId` (schema.ts `workspaces.cutFromWorkspace`), in any state. */
   readonly workspacesCutFrom: (workspaceId: string) => WorkspaceRow[];
+  /**
+   * Every workspace on `machineId` made from `root` or a folder inside it,
+   * whatever its state: what a move of that folder rewrites the source of
+   * (folder-moves.ts). Never a host-scope row.
+   */
+  readonly workspacesFrom: (machineId: string, root: string) => WorkspaceRow[];
   /** The workspaces an id names: itself exactly, else every one it prefixes. */
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
@@ -1043,6 +1051,23 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
               .get()
           : tx.select().from(workItems).where(eq(workItems.id, id)).get();
       }),
+    workspacesFrom: (machineId, root) =>
+      db
+        .select()
+        .from(workspaces)
+        .where(
+          and(eq(workspaces.machineId, machineId), eq(workspaces.host, false))
+        )
+        .all()
+        .filter(
+          (row) => row.repoRoot === root || row.repoRoot.startsWith(`${root}/`)
+        ),
+    setWorkspaceRoot: (id, repoRoot) => {
+      db.update(workspaces)
+        .set({ repoRoot })
+        .where(eq(workspaces.id, id))
+        .run();
+    },
     activeWorkspacesOn: (machineId) =>
       db
         .select()

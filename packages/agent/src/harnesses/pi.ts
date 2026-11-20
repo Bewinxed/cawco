@@ -21,6 +21,7 @@ import { procEpoch } from "../sessiond-client";
 import { resolveBin, toolGate } from "../tools";
 import { keeperCustody, liveChild } from "./keeper-custody";
 import { neutralSubagentChange } from "./neutral-subagents";
+import { piFolderCarry } from "./pi-folder";
 import { PI_SPEC, PiProfile } from "./pi-services";
 import { adoptPi, piKeepers, piSnapshot, spawnPi } from "./pi-sessiond";
 
@@ -49,6 +50,8 @@ class PiHarness extends PiProfile implements Harness<"pi"> {
   accountsChanged(): Promise<void> {
     return Promise.resolve();
   }
+
+  readonly folderCarry = piFolderCarry;
 
   /** Its sessions keep no account dir: a session on another account runs its provider from that account's credential (descriptor `accountDir`). */
   carrier(): SessionCarry {

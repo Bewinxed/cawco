@@ -11677,6 +11677,212 @@
         }
       }
     },
+    "/api/folder-moves/interrupt/{instanceId}": {
+      "post": {
+        "parameters": [
+          {
+            "name": "instanceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiFolderMovesInterruptByInstanceId",
+        "responses": {
+          "200": {
+            "description": "postApiFolderMovesInterruptByInstanceId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFolderMovesInterruptByInstanceId200"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiFolderMovesInterruptByInstanceId 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFolderMovesInterruptByInstanceId409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFolderMovesInterruptByInstanceId 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFolderMovesInterruptByInstanceId422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folder-moves/{moveId}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "moveId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiFolderMovesByMoveId",
+        "responses": {
+          "200": {
+            "description": "getApiFolderMovesByMoveId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiFolderMovesByMoveId200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiFolderMovesByMoveId 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiFolderMovesByMoveId404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiFolderMovesByMoveId 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiFolderMovesByMoveId422"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "moveId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiFolderMovesByMoveId",
+        "responses": {
+          "200": {
+            "description": "deleteApiFolderMovesByMoveId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFolderMovesByMoveId 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiFolderMovesByMoveId404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiFolderMovesByMoveId 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiFolderMovesByMoveId409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiFolderMovesByMoveId 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiFolderMovesByMoveId422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folder-moves/{moveId}/retry": {
+      "post": {
+        "parameters": [
+          {
+            "name": "moveId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiFolderMovesByMoveIdRetry",
+        "responses": {
+          "200": {
+            "description": "postApiFolderMovesByMoveIdRetry 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFolderMovesByMoveIdRetry200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiFolderMovesByMoveIdRetry 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFolderMovesByMoveIdRetry404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiFolderMovesByMoveIdRetry 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFolderMovesByMoveIdRetry409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFolderMovesByMoveIdRetry 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFolderMovesByMoveIdRetry422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/github-sign-in/gh": {
       "get": {
         "operationId": "getApiGithubSignInGh",
@@ -24092,6 +24298,156 @@
         }
       }
     },
+    "/api/projects/{id}/places/{placeId}/move": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "placeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "path": {
+                    "pattern": "^(/|~/|~$)",
+                    "type": "string"
+                  },
+                  "summaries": {
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "machineId",
+                  "path",
+                  "summaries"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdPlacesByPlaceIdMove",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdMove 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveRun"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdMove 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdMove409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdPlacesByPlaceIdMove 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlacesByPlaceIdMove422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/places/{placeId}/move-preview": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "placeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "pattern": "^(/|~/|~$)",
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdPlacesByPlaceIdMovePreview",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdPlacesByPlaceIdMovePreview 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovePlan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdPlacesByPlaceIdMovePreview 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdPlacesByPlaceIdMovePreview422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/preview-address": {
       "post": {
         "parameters": [
@@ -33561,6 +33917,54 @@
           "failed",
           "ready",
           "recovering"
+        ]
+      },
+      "AgentHere": {
+        "description": "One agent working in the folder now.",
+        "type": "object",
+        "properties": {
+          "carry": {
+            "description": "To another computer: whether it keeps its conversation, or why it continues from a summary and on which tool.",
+            "type": "object",
+            "properties": {
+              "tool": {
+                "type": "string"
+              },
+              "way": {
+                "$ref": "#/components/schemas/AgentHereWay"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "way"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "replying": {
+            "description": "In the middle of a reply: it waits, and can be interrupted.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "carry",
+          "id",
+          "name",
+          "replying"
+        ]
+      },
+      "AgentHereWay": {
+        "type": "string",
+        "enum": [
+          "same",
+          "summary"
         ]
       },
       "AgentMember": {
@@ -43736,6 +44140,55 @@
           "size"
         ]
       },
+      "FolderForecast": {
+        "description": "What will happen, written from the computer and folder named, or what stands in the way and what to do.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "blocked"
+                ]
+              },
+              "todo": {
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "todo",
+              "why"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "lines": {
+                "description": "Each line of What will happen, in order.",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ready"
+                ]
+              }
+            },
+            "required": [
+              "lines",
+              "state"
+            ]
+          }
+        ]
+      },
       "FolderHistory": {
         "type": "object",
         "properties": {
@@ -43782,6 +44235,54 @@
           "entries",
           "path",
           "truncated"
+        ]
+      },
+      "FolderMoveProgressFrame": {
+        "description": "Machine → hub: how far a folder move's step is on the machine.",
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "bytesTotal": {
+            "type": "number"
+          },
+          "files": {
+            "type": "number"
+          },
+          "filesTotal": {
+            "type": "number"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "folder_move_progress"
+            ]
+          },
+          "phase": {
+            "$ref": "#/components/schemas/FolderMoveProgressFramePhase",
+            "description": "`copy`: copying; `check`: reading the copy back; `remove`: removing the old folder."
+          }
+        },
+        "required": [
+          "bytes",
+          "bytesTotal",
+          "files",
+          "filesTotal",
+          "jobId",
+          "kind",
+          "phase"
+        ]
+      },
+      "FolderMoveProgressFramePhase": {
+        "type": "string",
+        "enum": [
+          "check",
+          "copy",
+          "remove"
         ]
       },
       "FolderWeight": {
@@ -44127,6 +44628,9 @@
             "$ref": "#/components/schemas/FleetWatchNoticesFrame"
           },
           {
+            "$ref": "#/components/schemas/FolderMoveProgressFrame"
+          },
+          {
             "$ref": "#/components/schemas/HeldSendFrame"
           },
           {
@@ -44265,6 +44769,7 @@
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
             "fleet_report": "#/components/schemas/FleetReportFrame",
             "fleet_watch.notices": "#/components/schemas/FleetWatchNoticesFrame",
+            "folder_move_progress": "#/components/schemas/FolderMoveProgressFrame",
             "frame": "#/components/schemas/MessageFrame",
             "held_send": "#/components/schemas/HeldSendFrame",
             "hub.restart": "#/components/schemas/HubRestartFrame",
@@ -49134,6 +49639,25 @@
           "path"
         ]
       },
+      "MovePlan": {
+        "description": "What moving a folder to the computer and folder named would do, before anything runs.",
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentHere"
+            }
+          },
+          "forecast": {
+            "$ref": "#/components/schemas/FolderForecast"
+          }
+        },
+        "required": [
+          "agents",
+          "forecast"
+        ]
+      },
       "MovePrice": {
         "description": "What the hub's one decision (hub decide.ts) priced for a move it made:\nthe dollars of the option it took (`usd`; null when its model or context\ncould not be priced), and the next-best option it passed over with its\ndollars (`next`; null when there was none): staying (`stay`), waiting for\nthe account's reset (`wait`), keeping on extra usage (`credits`), or\nanother way of moving, named by how it moves and, when it goes elsewhere,\nwhere (`to`).",
         "type": "object",
@@ -49228,6 +49752,140 @@
         "enum": [
           "clone",
           "lfs"
+        ]
+      },
+      "MoveResult": {
+        "description": "What a finished or called-off move did.",
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "resumed": {
+                  "type": "boolean"
+                },
+                "why": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "resumed"
+              ]
+            }
+          },
+          "checked": {
+            "type": "string"
+          },
+          "ended": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "leftBehind": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "why": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "why"
+              ]
+            }
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "done"
+            ]
+          }
+        },
+        "required": [
+          "agents",
+          "checked",
+          "ended",
+          "id",
+          "leftBehind",
+          "state"
+        ]
+      },
+      "MoveRun": {
+        "description": "A move running: its stages, in order, with the one it is on.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "callOff": {
+            "description": "Call off stands until the old folder starts to be removed.",
+            "type": "boolean"
+          },
+          "failed": {
+            "description": "A stage that failed: the tool's words, both folders' state.",
+            "type": "object",
+            "properties": {
+              "folders": {
+                "type": "string"
+              },
+              "stage": {
+                "type": "string"
+              },
+              "words": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "folders",
+              "stage",
+              "words"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "progress": {
+            "description": "How far along the stage it is on: \"1,204 of 8,310 files\".",
+            "type": "string"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running"
+            ]
+          },
+          "waitingFor": {
+            "description": "A computer away: the stage holds.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "callOff",
+          "id",
+          "stages",
+          "state"
         ]
       },
       "MoveStage": {
@@ -70868,6 +71526,114 @@
           "type"
         ]
       },
+      "deleteApiFolderMovesByMoveId404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-move-gone"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "deleteApiFolderMovesByMoveId409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-move-past-call-off"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "deleteApiFolderMovesByMoveId422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "deleteApiInstallsById404": {
         "type": "object",
         "properties": {
@@ -86949,6 +87715,88 @@
           "type"
         ]
       },
+      "getApiFolderMovesByMoveId200": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/MoveResult"
+          },
+          {
+            "$ref": "#/components/schemas/MoveRun"
+          }
+        ]
+      },
+      "getApiFolderMovesByMoveId404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-move-gone"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiFolderMovesByMoveId422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "getApiGithubSignInGh200": {
         "type": "object",
         "properties": {
@@ -101940,6 +102788,106 @@
         ]
       },
       "getApiProjectsByIdMoveEstimate422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "getApiProjectsByIdPlacesByPlaceIdMovePreview422": {
         "anyOf": [
           {
             "type": "object",
@@ -134477,6 +135425,207 @@
         ]
       },
       "postApiFleetUpdatesCheck422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiFolderMovesByMoveIdRetry200": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/MoveResult"
+          },
+          {
+            "$ref": "#/components/schemas/MoveRun"
+          }
+        ]
+      },
+      "postApiFolderMovesByMoveIdRetry404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-move-gone"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiFolderMovesByMoveIdRetry409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-move-not-failed"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiFolderMovesByMoveIdRetry422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiFolderMovesInterruptByInstanceId200": {
+        "type": "object",
+        "properties": {
+          "interrupted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "interrupted"
+        ]
+      },
+      "postApiFolderMovesInterruptByInstanceId409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-move-not-waiting"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiFolderMovesInterruptByInstanceId422": {
         "type": "object",
         "properties": {
           "code": {
@@ -167696,42 +168845,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "move-needs-harness"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "project-place-scratch"
                 ]
               },
@@ -168498,6 +169611,142 @@
         ]
       },
       "postApiProjectsByIdPlaces422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdMove409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-move-refused"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiProjectsByIdPlacesByPlaceIdMove422": {
         "anyOf": [
           {
             "type": "object",

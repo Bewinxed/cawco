@@ -159,6 +159,18 @@ const WorkspaceArchive = object({
 });
 /** A full commit id (own-commits.ts `COMMIT`). */
 const commit = pipe(text, regex(COMMIT, controlWords.notCommit));
+const FolderMoveRelay = object({
+  side: picklist(["send", "take"]),
+  token: named,
+});
+const FolderCarrySession = object({
+  accountId: nullable(text),
+  from: absolute,
+  harness: picklist(HARNESSES),
+  instanceId: named,
+  sessionId: named,
+  to: absolute,
+});
 const WorkspaceCommit = object({ bundle: nullable(text), head: commit });
 const MoveSnapshotResult = storedAs(
   MoveSnapshotResultShape,
@@ -293,6 +305,7 @@ const ARGS: {
   fleetMcpHeal: tuple([maybe(texts)]),
   fleetSettings: tuple([]),
   sleep: tuple([]),
+  pauseForMove: tuple([]),
   restless: tuple([texts]),
   workInFlight: tuple([]),
   acknowledgeSessionAddress: tuple([text, text, boolean()]),
@@ -538,6 +551,52 @@ const ARGS: {
   ]),
   moveCancel: tuple([text]),
   moveRemoteCredential: tuple([text]),
+
+  // A project's folder moved, files and all (core folder-move.ts).
+  folderMoveRead: tuple([
+    object({
+      destination: optional(absolute),
+      source: optional(absolute),
+      walk: boolean(),
+    }),
+  ]),
+  folderMoveRename: tuple([
+    object({
+      destination: absolute,
+      jobId: named,
+      made: boolean(),
+      source: absolute,
+    }),
+  ]),
+  folderMoveCopy: tuple([
+    object({
+      destination: optional(absolute),
+      jobId: named,
+      relay: optional(FolderMoveRelay),
+      source: optional(absolute),
+    }),
+  ]),
+  folderMovePlace: tuple([
+    object({ destination: absolute, jobId: named, made: boolean() }),
+  ]),
+  folderMoveRemove: tuple([
+    object({
+      jobId: named,
+      made: boolean(),
+      sessions: array(FolderCarrySession),
+      source: absolute,
+    }),
+  ]),
+  folderMoveDrop: tuple([
+    object({ destination: optional(absolute), jobId: named }),
+  ]),
+  folderSessionsCarry: tuple([
+    object({
+      jobId: named,
+      relay: optional(FolderMoveRelay),
+      sessions: array(FolderCarrySession),
+    }),
+  ]),
 
   // GitHub's sign-ins on a machine, and its forge writes.
   ghAccounts: tuple([]),

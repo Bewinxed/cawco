@@ -93,6 +93,7 @@ import {
   FleetScopeSchema,
   FleetSyncOutcomeSchema,
   FleetSyncReportSchema,
+  FolderMoveStageSchema,
   GithubProjectSchema,
   HookHandlerSchema,
   InstanceStatusSchema,
@@ -103,7 +104,7 @@ import {
   MachineStateSchema,
   McpPlatformSchema,
   ModelInfoSchema,
-  MoveEndedSchema,
+  MoveEndedShape,
   MoveStageSchema,
   NamedHarnessReportSchema,
   NamedMoveRequestSchema,
@@ -183,6 +184,7 @@ import {
   DesignFindingSchema,
   DesignOfferAnswerSchema,
   DesignProposalFileSchema,
+  FolderMoveStateSchema,
   GitHubResourceSchema,
   InboundViaSchema,
   InstanceKindSchema,
@@ -3488,7 +3490,7 @@ export const moveEndings = sqliteTable("move_endings", {
   instanceId: sessionColumn("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
-  ended: storedJson(MoveEndedSchema)("ended").notNull(),
+  ended: storedJson(MoveEndedShape)("ended").notNull(),
   createdAt: stampedNow("created_at"),
 });
 
@@ -4695,11 +4697,12 @@ export const continuations = sqliteTable(
         "session",
         "task",
         "move",
+        "folder",
       ] as const satisfies readonly ContinuationAsker["kind"][])
     )("asked_by_kind")
       .notNull()
       .default("person"),
-    /** The session or task that asked, for `session` and `task`; null otherwise. */
+    /** The session or task that asked, for `session` and `task`, and the folder move for `folder`; null otherwise. */
     askedById: text("asked_by_id"),
     /** A move's own fields, for `move`; null otherwise. */
     askedByMove: storedJson(MoveAskerSchema)("asked_by_move"),
@@ -4923,6 +4926,39 @@ export const moves = sqliteTable(
     index("moves_stop_on").on(table.stopOn),
     index("moves_target_instance").on(table.targetInstanceId),
     index("moves_ask").on(table.askId),
+  ]
+);
+
+/**
+ * Moves of a project's folder, files and all (folder-moves.ts, core
+ * folder-move.ts): the one record of each, so a hub that restarts mid-way
+ * carries the job on from its stage. A done or called-off job is kept a
+ * while for a card that was away, then deleted; a failed one stays until
+ * it is tried again or called off.
+ */
+export const folderMoves = sqliteTable(
+  "folder_moves",
+  {
+    id: text("id").primaryKey(),
+    projectId: projectKey(),
+    /** The place moved. */
+    placeId: text("place_id").notNull(),
+    /** The machine the folder is on before the move. */
+    sourceMachineId: machineColumn("source_machine_id").notNull(),
+    /** The machine it moves to: the same one, or another. */
+    targetMachineId: machineColumn("target_machine_id").notNull(),
+    stage: storedEnum(FolderMoveStageSchema)("stage").notNull(),
+    /** Everything the job learned and decided (`FolderMoveState`), read and written whole. */
+    state: storedJson(FolderMoveStateSchema)("state").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [
+    index("folder_moves_machines").on(
+      table.sourceMachineId,
+      table.targetMachineId
+    ),
+    index("folder_moves_place").on(table.placeId),
   ]
 );
 

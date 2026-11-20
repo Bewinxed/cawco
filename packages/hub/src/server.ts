@@ -53,7 +53,12 @@ import {
   pushOnlyProvider,
 } from "@cawco/core/connections";
 import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
-import type { AddressedControl } from "@cawco/core/control-table";
+import type { ControlReply } from "@cawco/core/control-replies";
+import type {
+  AddressedControl,
+  ControlArgs,
+  ControlName,
+} from "@cawco/core/control-table";
 import { decidesFileProblems } from "@cawco/core/decides";
 import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
@@ -472,6 +477,7 @@ import {
 } from "./fleet-sources";
 import { FleetSync, warmHashes } from "./fleet-sync";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
+import { createFolderMoves } from "./folder-moves";
 import { createForgePosts } from "./forge-posts";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { githubReposOf } from "./github";
@@ -685,6 +691,7 @@ import { fleetPluginRoutes } from "./routes/fleet-plugins";
 import { fleetSkillRoutes } from "./routes/fleet-skills";
 import { fleetSyncRoutes } from "./routes/fleet-sync";
 import { fleetWatchRoutes } from "./routes/fleet-watch";
+import { folderMoveRoutes } from "./routes/folder-moves";
 import { followupStateRoutes } from "./routes/followup-state";
 import { hubInfoRoutes } from "./routes/hub-info";
 import { imageSettingRoutes } from "./routes/image-settings";
@@ -1297,6 +1304,11 @@ type DashboardVerbs = {
   [V in ClientVerb]: (ws: DashboardSocket, message: ClientEnvelope<V>) => void;
 };
 
+/** How long a machine gets to interrupt a reply a folder move waits for. */
+const FOLDER_MOVE_INTERRUPT_MS = 20_000;
+/** The system origin name of the hub's word to a session whose folder moved. */
+const FOLDER_MOVE_ORIGIN = "folder-move";
+
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { serves = true }: ServerOptions = {}
@@ -1479,6 +1491,7 @@ export const createServer = (
     marketplaceLinks: () => marketplaceLinks,
     mcpReady: () => mcpReady,
     moves: () => moves,
+    folderMoves: () => folderMoves,
     noteFetch: () => noteFetch,
     notifications: () => notifications,
     pending: () => pending,
@@ -7209,6 +7222,55 @@ export const createServer = (
   keyAtStart();
 
   /**
+   * A machine's control for a job's step (moves.ts, folder-moves.ts), of a
+   * session when `session` names one: {@link awayError} when the machine is
+   * not here or went while it answered, so the job waits for its register;
+   * else silent or the machine's own failure, by its cause.
+   */
+  const stepCall = async <K extends ControlName>(
+    machineId: string,
+    method: K,
+    args: ControlArgs<K>,
+    timeoutMs: number,
+    session?: { harness: HarnessKind; instanceId: string }
+  ): Promise<ControlReply<K>> => {
+    const asked = await callAgent(
+      machineId,
+      method,
+      args,
+      timeoutMs,
+      session?.harness,
+      session?.instanceId
+    );
+    switch (asked.kind) {
+      case "unanswered":
+        throw asked.reason === "dead"
+          ? awayError(machineId)
+          : new MachineProblem(
+              silentProblem(`${silentWords(machineId, asked)}.`)
+            );
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
+    }
+    const answer = asked.value;
+    if (!answer.ok) {
+      throw answer.error === MACHINE_DISCONNECTED ||
+        answer.error === AGENT_RESTARTING
+        ? awayError(machineId)
+        : new MachineProblem(
+            failedProblem(
+              answer,
+              "machine-call-failed",
+              `${machineName(machineId)} gave no answer.`
+            )
+          );
+    }
+    return answer.result;
+  };
+
+  /**
    * Project moves (moves.ts): a machine's control throws {@link awayError}
    * when the machine is not here or went while it answered, so the job
    * waits for its register; else silent or the machine's own failure, by
@@ -7218,35 +7280,8 @@ export const createServer = (
     db,
     lifetime,
     gitRoot: GIT_ROOT,
-    call: async (machineId, method, args, timeoutMs) => {
-      const asked = await callAgent(machineId, method, args, timeoutMs);
-      switch (asked.kind) {
-        case "unanswered":
-          throw asked.reason === "dead"
-            ? awayError(machineId)
-            : new MachineProblem(
-                silentProblem(`${silentWords(machineId, asked)}.`)
-              );
-        case "answered":
-          break;
-        default:
-          throw unreachable(asked);
-      }
-      const answer = asked.value;
-      if (!answer.ok) {
-        throw answer.error === MACHINE_DISCONNECTED ||
-          answer.error === AGENT_RESTARTING
-          ? awayError(machineId)
-          : new MachineProblem(
-              failedProblem(
-                answer,
-                "machine-call-failed",
-                `${machineName(machineId)} gave no answer.`
-              )
-            );
-      }
-      return answer.result;
-    },
+    call: (machineId, method, args, timeoutMs) =>
+      stepCall(machineId, method, args, timeoutMs),
     online: (machineId) => registry.agent(machineId) !== undefined,
     machineName,
     // A move starts a new session: its mode is the one its request names.
@@ -7282,6 +7317,93 @@ export const createServer = (
           `[moves] its first message was not sent: ${sent.response.detail}`
         );
       }
+    },
+  });
+
+  /**
+   * Moves of a project's folder, files and all (folder-moves.ts): each
+   * machine's step through the same call a project's copy takes, a paused
+   * session's start through the wake every session takes, and a summary's
+   * continuation through the person's own, its asker the folder's move.
+   */
+  const folderMoves = createFolderMoves({
+    db,
+    lifetime,
+    call: stepCall,
+    online: (machineId) => registry.agent(machineId) !== undefined,
+    machineName,
+    sessionName: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      return row ? sessionName(row) : instanceId.slice(0, 8);
+    },
+    projectMoved: (projectId, machines, folderMoved) =>
+      projectMoved(projectId, machines, folderMoved),
+    resume: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!row) {
+        return "its session is gone";
+      }
+      const agent = registry.agent(row.machineId);
+      if (!agent) {
+        return `${machineName(row.machineId)} is offline`;
+      }
+      resumeSpawn(agent, row.machineId, row, true);
+    },
+    interrupt: async (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!row) {
+        return;
+      }
+      noteInterrupt(instanceId);
+      cutTurn(instanceId, turnCutWords.stop);
+      await callAgent(
+        row.machineId,
+        CONTROL_INTERRUPT,
+        [],
+        FOLDER_MOVE_INTERRUPT_MS,
+        row.harness,
+        instanceId
+      );
+    },
+    tell: (instanceId, words) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!row) {
+        return;
+      }
+      const sent = deliverSend(
+        sessionWord(
+          row,
+          words,
+          { kind: "system", name: FOLDER_MOVE_ORIGIN },
+          { shouldQuery: false }
+        )
+      );
+      if (sent instanceof ElysiaStatus) {
+        console.warn(
+          `[folder-moves] ${instanceId} wasn't told where its folder went: ${sent.response.detail}`
+        );
+      }
+    },
+    continueFromSummary: async (instanceId, target, moveId) => {
+      const prepared = await prepareContinuation(instanceId);
+      if (prepared instanceof ElysiaStatus) {
+        return prepared.response.detail;
+      }
+      const [row] = db.getInstancesByIds([instanceId]);
+      const request = {
+        target: {
+          harness: target.harness,
+          machineId: target.machineId,
+          cwd: target.cwd,
+          ...(row?.projectId ? { projectId: row.projectId } : {}),
+        },
+      };
+      const asker = { kind: "folder" as const, id: moveId };
+      const refusal = await continuationRefusal(prepared, request, asker);
+      if (refusal) {
+        return refusal;
+      }
+      startContinuation(prepared, request, asker);
     },
   });
 
@@ -12468,6 +12590,7 @@ export const createServer = (
           // Moves go on from their records: an approval is asked again, every
           // other step waits for its machine's register.
           moves.resume();
+          folderMoves.resume();
         },
       },
       {
@@ -12589,6 +12712,11 @@ export const createServer = (
   // one list of them all run the checker past it (TS2589; see the list below),
   // as `.ws` does after them, so the sockets are registered first.
 
+  // A project's moves, a statement of their own for its depth allowance.
+  const moveFamilies = new Elysia().use([
+    moveRoutes(ctx),
+    folderMoveRoutes(ctx),
+  ]);
   const hubRoutesPart1 = new Elysia().use([
     mcpRoutes(ctx, delegationMcp),
     delegationRoutes(ctx, delegationMcp),
@@ -12599,7 +12727,7 @@ export const createServer = (
     instanceMediaRoutes(ctx),
     modelWindowRoutes(ctx),
     continuationRoutes(ctx),
-    moveRoutes(ctx),
+    moveFamilies,
     instancePreviewRoutes(ctx),
     agentMediaRoutes(ctx),
     instanceDeleteRoutes(ctx),

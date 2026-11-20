@@ -209,10 +209,9 @@ export interface MoveRequest {
     account?: string;
     effort?: EffortLevel;
     /**
-     * The harness the moved session starts on; the hub refuses a move that
-     * names none. Optional on the wire only until TestFlight 20261015,
-     * 20261015.3, 20261017 and 20261018 are expired (the app they hold
-     * declares it optional); then it is required here.
+     * The harness the moved session starts on. None: the copy starts no
+     * session, and the project's new folder on the target is all it leaves
+     * (Copy to computer, the project details card).
      */
     harness?: HarnessKind;
     model?: string;
@@ -221,10 +220,11 @@ export interface MoveRequest {
   };
 }
 
-/** A move the hub took: its session's harness named. What a move's record keeps. */
-export type NamedMoveRequest = MoveRequest & {
-  spawn: MoveRequest["spawn"] & { harness: HarnessKind };
-};
+/**
+ * A move the hub took, as its record keeps it: its session's harness named,
+ * or none when it starts no session.
+ */
+export type NamedMoveRequest = MoveRequest;
 
 // ── Hub ↔ machine ──────────────────────────────────────────────────────────
 

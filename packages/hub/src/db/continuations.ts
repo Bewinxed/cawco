@@ -71,6 +71,7 @@ const askerColumnsOf = (asker: ContinuationAsker) => {
       return { askedByKind: asker.kind, askedById: null, askedByMove: null };
     case "session":
     case "task":
+    case "folder":
       return {
         askedByKind: asker.kind,
         askedById: asker.id,
@@ -108,6 +109,7 @@ const askerOf = (
       return { kind: "person" };
     case "session":
     case "task":
+    case "folder":
       return row.askedById === null
         ? null
         : { kind: row.askedByKind, id: row.askedById };

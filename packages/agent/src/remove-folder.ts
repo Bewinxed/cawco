@@ -27,7 +27,7 @@ import { forgetMade, madeStanding } from "./made-folders";
 import { removeTree } from "./remove-tree";
 
 /** Whether `inner` is `outer` or inside it. */
-const within = (inner: string, outer: string): boolean => {
+export const within = (inner: string, outer: string): boolean => {
   const way = relative(outer, inner);
   return (
     way === "" ||
@@ -43,7 +43,7 @@ export interface MachineFloor {
 }
 
 /** This machine's floor, read now. */
-const machineFloor = (): MachineFloor => {
+export const machineFloor = (): MachineFloor => {
   const home = homedir();
   return {
     carries: workspaceCarriesDir(),

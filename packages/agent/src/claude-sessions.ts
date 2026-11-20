@@ -390,3 +390,14 @@ export const transcriptIn = async (
   }
   return null;
 };
+
+/**
+ * Every entry `configDir` holds of `sessionId`, as paths relative to it:
+ * its transcript and side folder under `projects/<slug>/`, set-aside copies
+ * of it, and its per-session entries elsewhere ({@link SESSION_ENTRIES}).
+ * What a move of its folder carries to another machine (folder-carry.ts).
+ */
+export const sessionEntriesIn = async (
+  configDir: string,
+  sessionId: string
+): Promise<string[]> => (await indexConfigDir(configDir)).get(sessionId) ?? [];

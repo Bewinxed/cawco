@@ -38,6 +38,10 @@ import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { MachineInbound, MachineSend } from "@cawco/core/envelopes";
 import { FLEET_DELTA, FLEET_STATUS } from "@cawco/core/fleet";
+import {
+  CONTROL_PAUSE_FOR_MOVE,
+  type PausedForMove,
+} from "@cawco/core/folder-move";
 import { makeFolder } from "@cawco/core/folders";
 import type {
   AsleepFrame,
@@ -2063,6 +2067,67 @@ export class SessionSupervisor {
     if (awake) {
       return { asleep: false, awake: awake.why };
     }
+    const left = await this.#endAtRest(instanceId, session);
+    if (left) {
+      return { asleep: false, awake: left };
+    }
+    Effect.runFork(
+      Effect.logInfo(
+        `put ${instanceId} to sleep: at rest, its ${session.harness} processes are stopped${retire ? ", for they ran an old version and its next start runs this machine's" : ""}`
+      )
+    );
+    return { asleep: true };
+  }
+
+  /**
+   * ENDS A SESSION'S PROCESS FOR A MOVE OF ITS FOLDER (core
+   * `CONTROL_PAUSE_FOR_MOVE`), between turns: as a sleep ends it, with what
+   * it holds for later (a background command, a monitor, a one-time
+   * wake-up) ended too and answered, for it is tied to the folder that
+   * moves (claude-carry.ts `#stopForCarry` ends the same for an account
+   * move). A reply under way (a turn, an ask waiting, a subagent) or
+   * something sent to it on its way keeps it, and the move waits; the
+   * person can interrupt it. A session with no process here is paused.
+   */
+  async pauseForMove(instanceId: string): Promise<PausedForMove> {
+    const session = this.#live.sessions.get(instanceId);
+    if (!session) {
+      return { paused: true };
+    }
+    const awake = await this.#awakeForMove(instanceId, session);
+    if (awake && !awake.later) {
+      return { paused: false, replying: true, why: awake.why };
+    }
+    if (this.#queues.has(instanceId)) {
+      return {
+        paused: false,
+        replying: true,
+        why: "something sent to it is still on its way",
+      };
+    }
+    const ended = awake?.later ? await session.endedForMove() : undefined;
+    const left = await this.#endAtRest(instanceId, session);
+    if (left) {
+      return { paused: false, replying: false, why: left };
+    }
+    if (ended && ended.tasks.length > 0) {
+      await this.#endWork(instanceId, "moved");
+    }
+    console.info(
+      `[folder-move] ${instanceId}: its ${session.harness} process ended between turns for a move of its folder${ended ? `, ending ${ended.tasks.length} background task(s) and ${ended.wakeups} one-time wake-up(s)` : ""}`
+    );
+    return ended ? { paused: true, ended } : { paused: true };
+  }
+
+  /**
+   * Ends a session's process at rest, as a sleep ends it, and files it
+   * asleep: undefined once it has, else why it still runs (its process
+   * outlived its kill, and the hub hears that).
+   */
+  async #endAtRest(
+    instanceId: string,
+    session: HarnessSession
+  ): Promise<string | undefined> {
     const processGeneration = this.#generations.get(instanceId);
     // Carried, and listed on every beat, until it has stopped: a beat that no
     // longer listed it first would have the hub settle it as ended.
@@ -2084,16 +2149,10 @@ export class SessionSupervisor {
     if (left) {
       // Still running past its kill: not asleep, and the hub hears why.
       this.#fail(instanceId, left, processGeneration);
-      return { asleep: false, awake: left.message };
+      return left.message;
     }
     this.#asleep.add(instanceId);
     this.#gone(instanceId, processGeneration);
-    Effect.runFork(
-      Effect.logInfo(
-        `put ${instanceId} to sleep: at rest, its ${session.harness} processes are stopped${retire ? ", for they ran an old version and its next start runs this machine's" : ""}`
-      )
-    );
-    return { asleep: true };
   }
 
   /** The {@link CLI_OUTDATED} lines said, by their uuid: each once. */
@@ -4997,6 +5056,9 @@ export class SessionSupervisor {
     }
     if (control.method === CONTROL_SLEEP) {
       return await this.sleep(instanceId);
+    }
+    if (control.method === CONTROL_PAUSE_FOR_MOVE) {
+      return await this.pauseForMove(instanceId);
     }
     if (control.method === CONTROL_WORK_IN_FLIGHT) {
       return this.#workInFlight(instanceId);

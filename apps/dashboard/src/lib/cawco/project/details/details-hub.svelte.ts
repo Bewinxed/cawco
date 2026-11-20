@@ -251,7 +251,7 @@ export class DetailsHub {
           home && place.path.startsWith(`${home}/`)
             ? `~${place.path.slice(home.length)}`
             : place.path,
-        missing: false,
+        missing: place.missing,
         readAt: null,
         role,
       };
@@ -626,10 +626,12 @@ export class DetailsHub {
         return { forecast: this.#copyForecast(estimate, computer.name) };
       }
       case "move": {
-        const plan = await previewMove(project.id, step.folderId ?? "", {
-          machineId: computer.id,
-          path,
-        });
+        const plan = await previewMove(
+          project.id,
+          step.folderId ?? "",
+          { machineId: computer.id, path },
+          this.#client
+        );
         return { forecast: plan.forecast, agents: plan.agents };
       }
       case "locate": {
@@ -859,7 +861,8 @@ export class DetailsHub {
               from: this.#primary?.id,
               machineId: step.machineId ?? "",
               path,
-              spawn: { harness: project.cawHarness },
+              // A copy starts no session: the folder is all it leaves.
+              spawn: {},
             },
             client
           );
@@ -867,11 +870,16 @@ export class DetailsHub {
           break;
         }
         case "move":
-          this.#move = await startMove(project.id, step.folderId ?? "", {
-            machineId: step.machineId ?? "",
-            path,
-            summaries: step.summaries,
-          });
+          this.#move = await startMove(
+            project.id,
+            step.folderId ?? "",
+            {
+              machineId: step.machineId ?? "",
+              path,
+              summaries: step.summaries,
+            },
+            client
+          );
           this.#followMove();
           break;
         default:
@@ -893,7 +901,7 @@ export class DetailsHub {
     if (move?.state !== "running") {
       return;
     }
-    readMove(move.id).then(
+    readMove(move.id, this.#client).then(
       (now) => {
         this.#move = now;
         if (now.state === "running") {
@@ -911,7 +919,7 @@ export class DetailsHub {
 
   /** The move's stage that failed, or what it left behind, tried again. */
   #retryMove(id: string): void {
-    retryMoveStep(id).then(
+    retryMoveStep(id, this.#client).then(
       (run) => {
         this.#move = run;
         this.#followMove();
@@ -1043,7 +1051,7 @@ export class DetailsHub {
       }
     },
     interrupt: (agentId) => {
-      interruptSession(agentId).then(
+      interruptSession(agentId, this.#client).then(
         () => {
           this.#edit = {
             ...this.#edit,
@@ -1063,7 +1071,7 @@ export class DetailsHub {
           this.#refuse(error)
         );
       } else if (move?.state === "running") {
-        callOffMove(move.id).then(
+        callOffMove(move.id, this.#client).then(
           (result) => {
             this.#move = result;
           },

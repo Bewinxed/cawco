@@ -57,6 +57,7 @@ const FRAME_KINDS: ReadonlySet<string> = new Set(
     "desk_alert",
     "moves",
     "move_progress",
+    "folder_move_progress",
     "command_queue",
     "stage",
     "stage-clone",
