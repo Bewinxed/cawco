@@ -324,7 +324,7 @@
     aria-label={words.tasks.groupLabel}
     {disabled}
     layout="tiles"
-    style="--tiles-cols: repeat(auto-fit, minmax(var(--spacing-c-decision-option-min), 1fr)); --tiles-cols-phone: minmax(0, 1fr)"
+    style="--tiles-cols: repeat(auto-fit, minmax(var(--spacing-c-choice-tile-min), 1fr)); --tiles-cols-phone: minmax(0, 1fr)"
     value={[record.taskHome]}
   >
     {#each HOMES as home (home)}

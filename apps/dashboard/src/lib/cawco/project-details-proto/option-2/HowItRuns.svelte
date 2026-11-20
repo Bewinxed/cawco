@@ -189,9 +189,7 @@
           <Skeleton line="label" radius="text" width="name" />
           <Skeleton line="meta" radius="text" width="name" />
         </div>
-        <div
-          class="grid grid-cols-1 gap-y-space-row @wide:grid-cols-2 @wide:gap-x-space-5"
-        >
+        <div class="grid grid-cols-1 gap-y-space-row">
           {#each CHOICE_KINDS as kind (kind)}
             <div class="flex items-center gap-space-2">
               <Skeleton
