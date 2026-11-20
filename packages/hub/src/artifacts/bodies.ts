@@ -225,6 +225,7 @@ export const createBody = t.Object({
     })
   ),
   draft: t.Optional(t.Boolean()),
+  reading: t.Optional(t.Boolean()),
 });
 
 /** A page's or a canvas's change: one of html, patch, elements, delete or mermaid. */

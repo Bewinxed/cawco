@@ -13257,6 +13257,9 @@
                     "maxLength": 131072,
                     "type": "string"
                   },
+                  "reading": {
+                    "type": "boolean"
+                  },
                   "serve": {
                     "type": "object",
                     "properties": {

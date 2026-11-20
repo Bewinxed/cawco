@@ -2,8 +2,9 @@
  * A workspace lives exactly as long as its work item (workspaces.ts
  * `settle`). When the item ends, the hub settles its workspace: once nothing
  * runs in it (a session of its items attached, a stage serving from it,
- * which sleeps half an hour after its last use) and nothing it serves waits
- * on the person or on a parent's turn, its machine closes its boundary,
+ * which sleeps half an hour after its last use) and nothing it serves is
+ * still owed to the person (not seen yet, or waiting on him: artifacts
+ * service `owedToPerson`), its machine closes its boundary,
  * reads on the host what its clone holds that is nowhere else, and either
  * deletes it all (retired: its work landed, itself or through a workspace
  * cut from it, or there was none), carries it off (its items land nothing,
@@ -13,7 +14,10 @@
  * pick on 2026-11-15: "By itself, once nothing in it is unique"). A machine's disk filled on
  * 2026-10-14 because nothing removed a workspace once its work was over; on
  * 2026-10-16 the owner called keeping every finished workspace until someone
- * archived it "a terrible working model".
+ * archived it "a terrible working model". What the person has not seen
+ * holds its workspace whoever made it and whatever ended since: on
+ * 2026-11-20 he opened previews handed up to his panel and found their
+ * workspaces gone.
  *
  * A finished delegate stays continuable without its folder: a handoff or a
  * follow-up to a retired one cuts its clone again at the same path, at the
@@ -24,10 +28,12 @@
  *
  * Settling follows the events that end a hold: an item's end, its session
  * asleep or ended, an artifact removed. This sweep is the look that catches
- * what no event reached (a hub restarted, a machine away at the time): every
- * {@link RETIRE_SWEEP_MS}, each active workspace on every online machine is
- * settled (one whose clone is gone from its machine holds nothing it
- * serves), each held one whose starter will never decide it is carried off,
+ * what no event reached (a hub restarted, a machine away at the time, the
+ * person opening what a workspace serves): every {@link RETIRE_SWEEP_MS},
+ * each active workspace on every online machine is settled (one whose
+ * clone is gone from its machine holds nothing it serves), and so is each
+ * host-scope one whose scratch dir a hold kept (workspaces.ts `hostKept`);
+ * each held one whose starter will never decide it is carried off,
  * and each archived one whose clone its machine still has is closed again
  * (workspaces.ts `settleOn`). The same look keeps up the server
  * of each preview waiting on the person, which would otherwise sleep once its

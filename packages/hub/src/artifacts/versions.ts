@@ -88,6 +88,35 @@ export const createVersions = (ctx: VersionsContext) => {
    * revision before the person sees it.
    */
   const handing = ({ owner, maker }: Making): boolean => owner.id !== maker.id;
+  /**
+   * A create into its maker's own panel, marked as its maker's own reading
+   * (`meta.reading`) or not, anew by each create: a reading is readied and
+   * never shown; any other is shown, then readied ({@link handOver}).
+   */
+  const ownShown = async <Unready>(
+    row: ArtifactRow,
+    reading: boolean,
+    ready: (() => Promise<Unready | undefined>) | undefined
+  ) => {
+    if (reading !== (getMeta(docs.doc(row.id), "reading") === true)) {
+      docs.transact(row.id, "hub", (doc) => {
+        if (reading) {
+          docMeta(doc).set("reading", true);
+        } else {
+          docMeta(doc).delete("reading");
+        }
+      });
+    }
+    const shown = reading
+      ? ({
+          opened: false,
+          started: true,
+          why: artifactToolWords.keptForReading,
+        } as const)
+      : await ctx.show(row);
+    const unready = await ready?.();
+    return unready === undefined ? shown : unready;
+  };
   /** Whether an artifact waits on its parent unopened ({@link handOver}). */
   const isHanded = (row: ArtifactRow): boolean =>
     getMeta(docs.doc(row.id), "handed") === true;
@@ -147,8 +176,6 @@ export const createVersions = (ctx: VersionsContext) => {
     docs.transact(next.id, "hub", (doc) => {
       const meta = docMeta(doc);
       meta.set("handed", true);
-      // Forked whole: a pass over an earlier hand is not one of this.
-      meta.delete("passedAt");
       meta.set("forkedAt", row.seq);
     });
     return { fresh: true, next };
@@ -336,8 +363,9 @@ export const createVersions = (ctx: VersionsContext) => {
     row.heldFor === null ? { id: row.id } : { id: row.heldFor, held: row.id };
   /**
    * A create's show, and what readies the artifact after it (`ready`, a
-   * canvas's drawing). The session's own artifact is shown in its panel,
-   * then readied there. One handed to its parent ({@link handing}) is
+   * canvas's drawing). One for its maker's own reading (`making.reading`)
+   * is marked `meta.reading`, readied and never shown. The session's own
+   * artifact is shown in its panel, then readied there. One handed to its parent ({@link handing}) is
    * marked `meta.handed` and not shown, until the parent's own show opens
    * it; it is readied unopened, and only then is the parent told, once per
    * hand-off: when it wasn't waiting on them already, or came from another
@@ -353,9 +381,7 @@ export const createVersions = (ctx: VersionsContext) => {
     holding?: { fresh: boolean; next: ArtifactRow } | null
   ): Promise<Awaited<ReturnType<typeof ctx.show>> | Unready> => {
     if (!handing(making)) {
-      const shown = await ctx.show(row);
-      const unready = await ready?.();
-      return unready === undefined ? shown : unready;
+      return await ownShown(row, making.reading === true, ready);
     }
     if (holding && before) {
       const unready = await heldOver(making, before, holding, ready);
@@ -366,11 +392,7 @@ export const createVersions = (ctx: VersionsContext) => {
     const was = isHanded(row);
     const waiting = was && before?.madeBy === making.maker.id;
     const meta = docMeta(docs.doc(row.id));
-    // Handed again: its parent has its turn on it again.
-    docs.transact(row.id, "hub", () => {
-      meta.set("handed", true);
-      meta.delete("passedAt");
-    });
+    docs.transact(row.id, "hub", () => meta.set("handed", true));
     const unready = await readied(ready, () => {
       if (!was) {
         docs.transact(row.id, "hub", () => meta.delete("handed"));

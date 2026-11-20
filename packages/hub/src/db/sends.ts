@@ -136,15 +136,6 @@ export interface SendsDb {
   /** Keeps a pending send whole, as its machine was handed it. */
   readonly keepEnvelope: (uuid: string, envelope: HubEnvelope<"send">) => void;
   /**
-   * The newest send to session `to` that session `from` sent it as a peer
-   * (`origin.kind` "peer", `origin.from`): a delegate's last word to its
-   * parent, its report once its item ended (ask-routing.ts `reportTo`).
-   */
-  readonly lastPeerSend: (
-    to: string,
-    from: string
-  ) => SentMessageRow | undefined;
-  /**
    * What `id` was last sent, for `list_sessions` (session-facts.ts): the
    * newest turn it read, and the person's newest message to it in any state
    * (when the person last interacted with it). Null for none.
@@ -520,18 +511,6 @@ export const sendsDb = (core: DbCore): SendsDb => {
         )
         .run();
     },
-    lastPeerSend: (to, from) =>
-      sends()
-        .where(
-          and(
-            eq(sentMessages.instanceId, to),
-            eq(sentMessages.originKind, "peer"),
-            eq(sentMessages.originFrom, from)
-          )
-        )
-        .orderBy(desc(sentMessages.acceptedAt))
-        .limit(1)
-        .get(),
     personUnanswered: (id) => {
       const [last] = db
         .select({

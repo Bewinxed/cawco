@@ -801,102 +801,46 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
   };
 
-  /** When session `instance`'s last turn ended, ms epoch; 0 when none has. */
-  const turnEndedMs = (instance: InstanceRow): number =>
-    instance.turnEndedAt ? new Date(instance.turnEndedAt).getTime() : 0;
+  /**
+   * Whether the person has seen or acted on `row`, by what the hub records
+   * of him on it: a view of his had it on screen (`openedRevision`), he
+   * sent it ({@link sentOf}), pinned it, or changed anything on it (a pick,
+   * a note, a value: `db.changes` by the person). A held next version is
+   * never seen: it stands only until its parent opens it (promote).
+   */
+  const seenByPerson = (row: ArtifactRow): boolean =>
+    row.heldFor === null &&
+    (row.openedRevision !== null ||
+      sentOf(row) ||
+      docs.pins(row.id).size > 0 ||
+      db.changes(row.id, { by: "person" }).length > 0);
 
   /**
-   * THE ONE TEST OF WHETHER A HANDED ARTIFACT'S PARENT HAS HAD ITS TURN ON
-   * IT, read at a turn's end ({@link passOver}) and by the sweep
-   * ({@link handedOwed}) alike: `row` is handed to `owner` and not passed
-   * over yet, its maker is another session whose work item is over, and a
-   * turn of `owner` ended (its last end the hub holds, or `endedAt`, the one
-   * ending now) after it had its maker's report (`reportHeardAt`: when it
-   * read it; a report still unread waits for the turn that reads it). That
-   * turn was its move on it: it is passed over then, stamped
-   * `meta.passedAt`, and holds its maker's workspace no more. Read from
-   * those facts, not from a stamp alone, a parent that had its turn before
-   * the stamp existed, or while the hub was down, is not waited on until it
-   * happens to take another (2026-11-15: nine clones held so).
+   * THE ONE TEST OF WHETHER THE PERSON IS STILL OWED `row`, read by
+   * everything that deletes a workspace or refuses to (`servedOwed`,
+   * `waitingOnPerson`; workspaces.ts `holdsOf`): an artifact put in a
+   * panel for him, his to open, stays owed until he has seen or acted on
+   * it ({@link seenByPerson}) or it is deleted, and after that while it
+   * still waits on him ({@link waitsOnPerson}). However it reached a panel
+   * (a session's own create, a delegate's hand-up its parent has not shown
+   * yet, a maker's next version held for its parent) and whatever became
+   * of the sessions and items behind it: on 2026-11-20 the owner opened
+   * previews a delegate had handed up, unopened, and found their
+   * workspaces gone, let go when their parent's turn ended or their
+   * session's next turn did. Never owed: the person's own draft, a design
+   * check's verifier's working material, a maker's own reading
+   * (`meta.reading`), and an option's media on a decision page, which is
+   * owed through its page (`servedOwed`).
    */
-  const passedNow = (
-    row: ArtifactRow,
-    owner: InstanceRow,
-    endedAt = 0
-  ): boolean => {
-    const meta = docMeta(docs.doc(row.id));
-    const maker = row.madeBy ? deps.instance(row.madeBy) : undefined;
-    if (
-      meta.get("handed") !== true ||
-      meta.has("passedAt") ||
-      !maker ||
-      maker.id === owner.id ||
-      deps.itemLive(maker)
-    ) {
+  const owedToPerson = (row: ArtifactRow): boolean => {
+    const facts = withMedia(row, factsOf(row));
+    if (facts.draft || facts.verifier || facts.reading) {
       return false;
     }
-    const heard = deps.reportHeardAt(owner, maker);
-    const turnEnd = Math.max(turnEndedMs(owner), endedAt);
-    if (heard === "unread" || turnEnd <= heard.getTime()) {
-      return false;
+    if (waitsOnPerson(row)) {
+      return true;
     }
-    docs.transact(row.id, "hub", (doc) =>
-      setMeta(doc, "passedAt", new Date(turnEnd).toISOString())
-    );
-    return true;
-  };
-
-  /**
-   * Session `instanceId`'s turn ended at `endedAt`: each artifact handed up
-   * to it (or a next version held for it) that it has now had its turn on
-   * is passed over ({@link passedNow}). Passed over is not lost: it stays
-   * in the parent's panel menu and `delegate_list`, and a follow-up to its
-   * maker cuts the clone again.
-   */
-  const passOver = (instanceId: string, endedAt: Date): void => {
-    const owner = deps.instance(instanceId);
-    if (!owner) {
-      return;
-    }
-    const heldNext = db.heldTargets();
-    for (const row of db.ofInstance(instanceId)) {
-      const held = heldNext.has(row.id) ? db.heldOf(row.id) : undefined;
-      // Only a delegate's make is ever handed: its maker is another session.
-      for (const one of [row, ...(held ? [held] : [])]) {
-        if (one.madeBy !== null && one.madeBy !== instanceId) {
-          passedNow(one, owner, endedAt.getTime());
-        }
-      }
-    }
-  };
-
-  /**
-   * Whether `row`, or the next version held for it, is handed up to a
-   * parent that has not had its turn on it ({@link passedNow}, which
-   * stamps one that has), while that parent can still take a turn and its
-   * maker's work reports to it: one its report reaches no holder of (a
-   * project's Caw that is off, a routine's run, Caw holding it for an
-   * ended parent; work-items.ts `reportees`) is passed over at once.
-   */
-  const handedOwed = (row: ArtifactRow): boolean => {
-    const owner = holder(row);
-    if (!owner || deps.finished(owner)) {
-      return false;
-    }
-    const held = row.heldFor === null ? db.heldOf(row.id) : undefined;
-    const handed = [row, ...(held ? [held] : [])].find((one) => {
-      const meta = docMeta(docs.doc(one.id));
-      return (
-        meta.get("handed") === true &&
-        !meta.has("passedAt") &&
-        !passedNow(one, owner)
-      );
-    });
-    if (!handed) {
-      return false;
-    }
-    const maker = handed.madeBy ? deps.instance(handed.madeBy) : undefined;
-    return !!maker && (deps.itemLive(maker) || deps.reportsTo(maker, owner));
+    return !(facts.media || seenByPerson(row));
   };
 
   /**
@@ -1091,12 +1035,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * its maker reports to, unopened, for that session's own artifact_show
    * to put before the person ({@link ArtifactServiceDeps.artifactsTo}); its
    * maker's own when it reports to no one. A draft is the person's
-   * composer canvas: it stays in its own session's. The owner's pick of
+   * composer canvas, and a reading its maker's own: each stays in its own
+   * session's. The owner's pick of
    * 2026-11-15 (page-route card): "A delegate's page goes to its
    * orchestrator, which passes on only what needs you."
    */
   const ownerFor = (maker: InstanceRow, input: ArtifactInput): InstanceRow =>
-    (input.draft ? undefined : deps.artifactsTo(maker)) ?? maker;
+    (input.draft || input.reading ? undefined : deps.artifactsTo(maker)) ??
+    maker;
 
   /** Whether `row` was made by a session other than `holderId` whose work item is live. */
   const makerWorks = (row: ArtifactRow, holderId: string): boolean => {
@@ -2740,13 +2686,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * Whether `row`'s session put it in front of the person: not handed up,
    * not held for a parent, not a design check's verifier's working
-   * material (needs.ts `mayWait`); a try only while its session can still run
+   * material (needs.ts `mayWait`), not its maker's own reading; a try only while its session can still run
    * it (not ended, not moved on from), since a try nobody saw is nothing to
    * keep. Whether it asks anything is Needs you's rule (needs.ts), not this.
    */
   const putBeforePerson = (row: ArtifactRow): boolean => {
     const kept = factsOf(row);
-    if (kept.draft || kept.handed || kept.verifier || row.heldFor !== null) {
+    if (
+      kept.draft ||
+      kept.handed ||
+      kept.verifier ||
+      kept.reading ||
+      row.heldFor !== null
+    ) {
       return false;
     }
     if (row.does !== "try") {
@@ -3719,47 +3671,43 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * Of `served` (the artifacts a workspace serves: workspaces.ts
-     * `servedFrom`), each one waiting on the person ({@link waitsOnPerson}),
-     * and every decision page waiting on him that shows one of them as a
+     * `servedFrom`), each one the person is still owed ({@link
+     * owedToPerson}), a held next version as the artifact it is held for,
+     * and every decision page he is still owed that shows one of them as a
      * Canvas or Preview piece: what a workspace's archive or discard on
      * purpose refuses on.
      */
     waitingOnPerson: (served: readonly ArtifactRow[]): ArtifactRow[] => {
-      const ids = new Set(served.map((one) => one.heldFor ?? one.id));
-      if (ids.size === 0) {
+      if (served.length === 0) {
         return [];
       }
-      const asks = new Map<string, ArtifactRow>();
+      const pages = pagesShowing();
+      const owed = new Map<string, ArtifactRow>();
       for (const one of served) {
-        if (one.heldFor === null && waitsOnPerson(one)) {
-          asks.set(one.id, one);
+        const id = one.heldFor ?? one.id;
+        if (owedToPerson(one)) {
+          owed.set(id, db.get(id) ?? one);
+        }
+        for (const page of pages.get(id) ?? []) {
+          if (owedToPerson(page)) {
+            owed.set(page.id, page);
+          }
         }
       }
-      for (const page of db.asking()) {
-        if (
-          page.kind === "page" &&
-          mediaOf(page).some((id) => ids.has(id)) &&
-          waitsOnPerson(page)
-        ) {
-          asks.set(page.id, page);
-        }
-      }
-      return [...asks.values()];
+      return [...owed.values()];
     },
 
     /**
      * Of `served` (workspaces.ts `servedFrom`), each one its workspace's
-     * retirement still waits on, with why (workspaces.ts `holdsOf`): it, or
-     * a decision page showing it, waits on the person ({@link
-     * waitsOnPerson}); it, or such a page, is handed up to a parent that has
-     * not had its turn on it yet ({@link handedOwed}); or it is a folder
-     * preview, which no stage serves, that a view of the person's had on
-     * screen less than {@link STAGE_IDLE_MS} ago, as a stage stays up that
-     * long after its last use. Nothing else of a row holds: whatever else it
-     * shows is held while its stage runs (agent stage.ts sleeps one unused
-     * for half an hour), and the artifact stays in its list, saying its
-     * workspace was archived once it was (the owner's rule, 2026-11-15:
-     * "once nothing in it is unique").
+     * retirement still waits on, with why (workspaces.ts `holdsOf`): the
+     * person is still owed it, or a decision page showing it ({@link
+     * owedToPerson}); or it is a folder preview, which no stage serves,
+     * that a view of the person's had on screen less than {@link
+     * STAGE_IDLE_MS} ago, as a stage stays up that long after its last use.
+     * Nothing else of a row holds: whatever else it shows is held while its
+     * stage runs (agent stage.ts sleeps one unused for half an hour), and
+     * the artifact stays in its list, saying its workspace was archived once
+     * it was (the owner's rule, 2026-11-15: "once nothing in it is unique").
      */
     servedOwed: (served: readonly ArtifactRow[]): ServedOwed[] => {
       if (served.length === 0) {
@@ -3768,11 +3716,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const pages = pagesShowing();
       return served.flatMap((one): ServedOwed[] => {
         const showing = pages.get(one.heldFor ?? one.id) ?? [];
-        if (waitsOnPerson(one) || showing.some(waitsOnPerson)) {
-          return [{ row: one, why: "waits" }];
-        }
-        if (handedOwed(one) || showing.some(handedOwed)) {
-          return [{ row: one, why: "handed" }];
+        if (owedToPerson(one) || showing.some(owedToPerson)) {
+          return [{ row: one, why: "owed" }];
         }
         const looked = factsOf(one).lookedAt;
         return "dir" in one.source &&
@@ -3922,15 +3867,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * its item rests on them ({@link ArtifactServiceDeps.itemLive}); nor
      * from an artifact another session made whose item is live, which it
      * showed for that maker: the ask stands while its maker works, whoever
-     * showed it. First, what its delegates handed it that it did not open
-     * is passed over ({@link passOver}).
+     * showed it.
      */
     turnEnded: (
       instanceId: string,
       before: Date | null,
       endedAt: Date
     ): void => {
-      passOver(instanceId, endedAt);
       const writer = deps.instance(instanceId);
       if (!before || (writer && deps.itemLive(writer))) {
         return;

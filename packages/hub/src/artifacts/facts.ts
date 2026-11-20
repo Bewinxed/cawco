@@ -230,6 +230,7 @@ export const createFacts = (ctx: FactsContext) => {
       media: meta.has("mediaOf"),
       revisedAt: meta.get("revisedAt") ?? null,
       handed: meta.get("handed") === true,
+      reading: meta.get("reading") === true,
       unsent: unsentChoices(state, sentAt),
       verifier: isVerifierParent(
         deps.instance(row.madeBy ?? row.instanceId ?? "")?.parentInstanceId

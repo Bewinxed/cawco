@@ -165,8 +165,12 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    * alone, a delegate in another workspace made a second artifact of the
    * same name (2026-10-31).
    */
-  const makingFor = (maker: InstanceRow, input: ArtifactInput) => {
+  const makingFor = (maker: InstanceRow, input: ArtifactInput): Making => {
     const owner = ctx.ownerFor(maker, input);
+    // A reading is its maker's own: it lands on no tree's preview.
+    if (input.reading) {
+      return { maker, owner, reading: true };
+    }
     const alone: Making = { maker, owner };
     if (
       input.kind !== "preview" ||

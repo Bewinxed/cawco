@@ -4965,19 +4965,6 @@ export const createServer = (
     stranded,
     itemEnded,
     itemLive,
-    reportsTo: (instance, to) =>
-      workItems.reportees(instance).some((one) => one.id === to.id),
-    reportHeardAt: (parent, maker) => {
-      const report = db.lastPeerSend(parent.id, maker.id);
-      if (report?.state === "pending") {
-        return "unread";
-      }
-      if (report?.state === "read" && report.readAt) {
-        return report.readAt;
-      }
-      const item = maker.workItemId ? db.workItem(maker.workItemId) : undefined;
-      return item?.endedAt ?? new Date(0);
-    },
     // Cold as handoff's check finds it: what it left, its project takes up.
     cold: (instance) => {
       const [row] = db.getInstancesByIds([instance.id]);

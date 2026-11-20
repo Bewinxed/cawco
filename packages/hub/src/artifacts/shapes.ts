@@ -108,6 +108,12 @@ export interface ArtifactInput {
   /** A decision page's OpenUI Lang program over the decision library (decision-program.ts). */
   program?: string | undefined;
   /**
+   * Made for its maker's own reading (`meta.reading`): it stays in its
+   * maker's panel, never handed up, never the person's, and it holds no
+   * workspace (service.ts `owedToPerson`).
+   */
+  reading?: boolean | undefined;
+  /**
    * What serves a workspace's port (core `ServeSpec`): the command the
    * workspace's stage runs and keeps up on `port`, in `cwd` from the clone's
    * root. A preview of a port in a workspace names it.
@@ -162,6 +168,8 @@ export interface Making {
   lands?: ArtifactRow;
   maker: InstanceRow;
   owner: InstanceRow;
+  /** Its maker's own reading ({@link ArtifactInput.reading}): its owner is its maker. */
+  reading?: true;
 }
 
 /** A skeleton element as the agent writes it: a type, an optional id, and Excalidraw's own fields. */

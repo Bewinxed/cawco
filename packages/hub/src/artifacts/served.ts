@@ -11,14 +11,13 @@ import type { ArtifactRow } from "../db/artifacts";
 
 /**
  * An artifact a workspace serves that its retirement still waits on, and
- * why (`servedOwed`): it or a page showing it waits on the person, it or
- * such a page is handed up to a parent that has not had its turn on it, or
- * it is a folder preview the person looked at within the half hour a stage
- * stays up unused.
+ * why (`servedOwed`): the person is still owed it or a page showing it
+ * (`owed`: not seen yet, or waiting on him), or it is a folder preview he
+ * looked at within the half hour a stage stays up unused (`looked`).
  */
 export interface ServedOwed {
   row: ArtifactRow;
-  why: "handed" | "looked" | "waits";
+  why: "looked" | "owed";
 }
 
 /** A workspace preview's server (core `ServeSpec`): its workspace, its port, and the pin it runs in (core `PreviewSource.pin`); null for any other artifact. */

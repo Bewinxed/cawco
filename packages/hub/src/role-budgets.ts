@@ -184,10 +184,14 @@ import {
  * right answer does, with which the hub re-tests a rule when the project's
  * sessions move to a new model (the memory build's step 10) (curator 1,528
  * measured).
+ * 2026-11-20: artifact_create takes `reading`, an artifact its maker makes
+ * to read alone, which is never handed up and holds no workspace, so a
+ * workspace stays only while the person is owed what it serves (delegate
+ * 11,850 measured); the delegate's budget is raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 31_300,
-  delegate: 11_830,
+  delegate: 11_850,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

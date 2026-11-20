@@ -49,6 +49,9 @@ export const artifactToolWords = {
   /** A create by a session that reports to another (hub artifacts/service.ts `ownerFor`) opened nothing: that session opens it. */
   handedToParent:
     "Handed to the session you report to, not opened: the person sees it only once that session calls artifact_show. Say in your report what of it needs the person.",
+  /** A create for its maker's own reading (`reading`, hub artifacts/versions.ts `handOver`) opened nothing: it is the maker's to read. */
+  keptForReading:
+    "Kept in your own panel for your reading, not opened: read it with artifact_read. The person and the session you report to never get it, and it goes with your workspace.",
   /** A create into the panel of the session its maker reports to, refused: `what` there (core `named`) is another maker's, still at work, `by` its link (hub artifacts/service.ts `nameTaken`). */
   nameTaken: (what: string, by: string) =>
     `The panel this goes to already holds ${what}, made by ${by}, which is still at work: create yours under another name.`,

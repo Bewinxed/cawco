@@ -102,6 +102,8 @@ export interface ArtifactFacts {
   lookedAt: string | null;
   /** An option's media on a decision page of its session (its Canvas or Preview piece), now or before that page went. */
   media: boolean;
+  /** Made for its maker's own reading (`meta.reading`): never the person's to act on. */
+  reading: boolean;
   /** When its session last published or changed it (`meta.revisedAt`), ISO. */
   revisedAt: string | null;
   /** What Send sends now: picks and notes since the last Send. */
@@ -168,13 +170,14 @@ const unanswered = (facts: ArtifactFacts): boolean =>
  * their turns, whether they ended), read only for these. One a design
  * check's verifier made never does: it is the hub's helper's working
  * material, and Needs you holds only what the session he works with put
- * there (the owner's page-route pick, 2026-11-15). Read from the row and
+ * there (the owner's page-route pick, 2026-11-15). Nor does one its maker
+ * made for its own reading (`facts.reading`). Read from the row and
  * doc alone (no held version, no other page's media), it is what the
  * artifact's row keeps as `may_wait` (schema.ts `artifacts.mayWait`), so
  * the lane reads only those that may.
  */
 export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
-  !facts.verifier &&
+  !(facts.verifier || facts.reading) &&
   (pinsAsk(row, facts) ||
     (!facts.draft &&
       row.heldFor === null &&
@@ -439,6 +442,7 @@ export const noticeOf = (
 ): ArtifactNeedNotice | null => {
   if (
     facts.draft ||
+    facts.reading ||
     row.heldFor !== null ||
     (row.does === "try" && !pinsAsk(row, facts))
   ) {

@@ -163,8 +163,6 @@ export interface DocMeta {
   ownSend: boolean;
   /** Its page's hash: its program's for a decision page, its HTML's for a page, its canvas address's for a component. */
   pageHash: string;
-  /** When the parent a handed artifact waits on ended its turn after its maker's report without opening it: passed over, it holds its maker's workspace no more (hub artifacts service `turnEnded`). Cleared as it is handed again. */
-  passedAt: string;
   /** Excalidraw's pen mode, once a pen touched a canvas: its screen's to write. */
   penDetected: boolean;
   penMode: boolean;
@@ -180,6 +178,8 @@ export interface DocMeta {
   promoted: ArtifactPromotion;
   /** The agent's closes of its questions, by question key: the hub's alone to write. */
   questionsClosed: Record<string, QuestionClose>;
+  /** Made for its maker's own reading (artifact_create's `reading`): never handed up, never the person's, and it holds no workspace (hub artifacts service `owedToPerson`). */
+  reading: boolean;
   /** When the session last changed it, a revision or a new ask. */
   revisedAt: string;
   /** Its revision, copied from its row (hub `stampMeta`). */
@@ -237,7 +237,6 @@ export const META_WRITERS = {
   name: "hub",
   ownSend: "hub",
   pageHash: "hub",
-  passedAt: "hub",
   penDetected: "canvas",
   penMode: "canvas",
   pictureAt: "hub",
@@ -246,6 +245,7 @@ export const META_WRITERS = {
   programMachine: "hub",
   promoted: "hub",
   questionsClosed: "hub",
+  reading: "hub",
   revision: "hub",
   revisedAt: "hub",
   saidShapes: "hub",

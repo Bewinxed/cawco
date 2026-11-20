@@ -348,10 +348,9 @@ export interface WorkspacesHub {
   readonly sendWakes: (instanceId: string) => boolean;
   /**
    * Of the artifacts a workspace serves, those its retirement still waits
-   * on, with why (artifacts service `servedOwed`): it or a page showing it
-   * waits on the person, it or such a page is handed up to a parent that has
-   * not had its turn on it, or it is a folder preview looked at within the
-   * half hour ({@link owedFrom}).
+   * on, with why (artifacts service `servedOwed`): the person is still owed
+   * it or a page showing it (not seen yet, or waiting on him), or it is a
+   * folder preview looked at within the half hour ({@link owedFrom}).
    */
   readonly servedOwed: (served: readonly ArtifactRow[]) => ServedOwed[];
   /**
@@ -373,10 +372,10 @@ export interface WorkspacesHub {
    */
   readonly starterGone: (parentInstanceId: string) => boolean;
   /**
-   * Of the artifacts a workspace serves, those waiting on the person, with
-   * the decision pages waiting on the person that show one of them
+   * Of the artifacts a workspace serves, those the person is still owed,
+   * with the decision pages he is still owed that show one of them
    * (artifacts service `waitingOnPerson`): its archive or discard refuses
-   * while any does ({@link servedFrom}).
+   * while any is ({@link servedFrom}).
    */
   readonly waitingOnPerson?: (served: readonly ArtifactRow[]) => ArtifactRow[];
   /** A workspace was settled on its machine, archived or held: the dashboards draw it so. */
@@ -910,9 +909,8 @@ export const createWorkspaces = ({
     servedOwed(servedFrom(workspace));
   /** Why an artifact owed ({@link owedFrom}) holds its workspace, in words. */
   const OWED_WORDS: Record<ServedOwed["why"], string> = {
-    handed: "is handed up to a session that has not had its turn on it yet",
     looked: "was on the person's screen less than half an hour ago",
-    waits: "waits on the person",
+    owed: "is still owed to the person: not seen yet, or waiting on them",
   };
   /**
    * THE ONE READ OF WHAT A WORKSPACE SERVES THAT HOLDS IT, in words, or
@@ -1006,12 +1004,16 @@ export const createWorkspaces = ({
    *   those sessions there, a continuation of one of them being prepared or
    *   under way (it reads the clone and its new session starts there,
    *   taking the item on);
-   * - and, but for a host-scope folder, which has no clone: what it serves
-   *   that holds it ({@link servedHold}), or a project's folder inside it
-   *   ({@link placesIn}); neither for one whose copy its machine just said
-   *   is gone (`clones`, {@link copyGone}): nothing can be served from it,
-   *   and nothing unique is in it.
+   * - and what it serves that holds it ({@link servedHold}), or a
+   *   project's folder inside it ({@link placesIn}): inside its clone or
+   *   its scratch dir, a host-scope folder's being its scratch dir, which
+   *   its settle removes ({@link settleHost}); neither for one whose copy
+   *   its machine just said is gone (`clones`, {@link copyGone}): nothing
+   *   can be served from it, and nothing unique is in it.
    *
+   * On 2026-11-20 a preview a host-scope delegate made in its
+   * `$TMPDIR/outputs/` and handed up unopened lost its folder as the
+   * delegate's item ended: a host-scope folder was held by its items alone.
    * On 2026-10-17 one was retired between the check that its clone was
    * there and a continuation's read of it (attach-continue, "could not read
    * git … ENOENT").
@@ -1027,7 +1029,7 @@ export const createWorkspaces = ({
       return stage ? [{ kind: "stage", words: stage }] : [];
     }
     const holds = heldByItems(items);
-    if (member.kind === "hostFolder" || copyGone(workspace, clones)) {
+    if (copyGone(workspace, clones)) {
       return holds;
     }
     const served = servedHold(workspace);
@@ -1499,11 +1501,43 @@ export const createWorkspaces = ({
     return await closeOrFail(workspace, items);
   };
   /**
+   * Host-scope workspaces whose scratch dir a hold kept at their last
+   * settle ({@link settleHost}), which the sweep settles again
+   * ({@link hostKeptOn}): what ends such a hold (the person opening an
+   * artifact it serves) is no event of their sessions.
+   */
+  const hostKept = new Set<string>();
+  /** Machines whose host-scope workspaces were read since this hub started ({@link hostKeptOn}). */
+  const hostRead = new Set<string>();
+  /**
+   * Machine `machineId`'s host-scope workspaces a hold kept
+   * ({@link hostKept}). At its first sweep since this hub started, each one
+   * there whose items have all ended and that serves an artifact is among
+   * them: a hold may have kept it before the restart.
+   */
+  const hostKeptOn = (machineId: string): WorkspaceRow[] => {
+    const rows = db.hostWorkspacesOn(machineId);
+    if (!hostRead.has(machineId)) {
+      hostRead.add(machineId);
+      for (const row of rows) {
+        if (
+          settlable(row, db.workItemsIn(row.id)) &&
+          servedFrom(row).length > 0
+        ) {
+          hostKept.add(row.id);
+        }
+      }
+    }
+    return rows.filter((row) => hostKept.has(row.id));
+  };
+  /**
    * A host-scope workspace settled ({@link settle}): it has no clone, so
    * nothing of it closes but its scratch dir (agent host-scratch.ts). Once
    * its items have all ended and nothing holds it (a landing that still
    * runs, a session attached or about to be woken, a continuation under
-   * way: {@link holdsOf}), what is in its `$TMPDIR/outputs/` is kept in
+   * way, an artifact it serves still owed: {@link holdsOf}; one a hold kept
+   * is settled again by the sweep, {@link hostKept}), what is in its
+   * `$TMPDIR/outputs/` is kept in
    * its project's folder ({@link keepScratchOutputs}) and its machine
    * removes the scratch dir; a later spawn of its session makes it again.
    * Its row stays active: it is where its items ran.
@@ -1512,15 +1546,17 @@ export const createWorkspaces = ({
     workspace: WorkspaceRow,
     items: readonly WorkItemRow[]
   ): Promise<Settled> => {
+    hostKept.delete(workspace.id);
     if (!settlable(workspace, items)) {
       return { kind: "none" };
     }
     const [hold] = holdsOf(workspace, items);
     if (hold) {
+      hostKept.add(workspace.id);
       return { kind: "deferred", hold: hold.words };
     }
     // A machine away keeps the dir until the session's next event settles
-    // it again: no sweep reads a host-scope row.
+    // it again: the sweep reads only a host-scope row a hold kept.
     const stays = (reason: string): Settled => {
       console.warn(
         `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: its host-scope scratch dir stays: ${reason}`
@@ -1709,6 +1745,14 @@ export const createWorkspaces = ({
       recutting.has(workspace.id) ||
       (!asked && (settleFailures.get(workspace.id)?.retryAt ?? 0) > Date.now());
     for (const workspace of db.activeWorkspacesOn(machineId)) {
+      if (!passedOver(workspace)) {
+        done.push({
+          workspace,
+          outcome: await settleNow(workspace.id, clones),
+        });
+      }
+    }
+    for (const workspace of hostKeptOn(machineId)) {
       if (!passedOver(workspace)) {
         done.push({
           workspace,

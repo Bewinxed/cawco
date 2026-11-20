@@ -426,6 +426,8 @@ export interface WorkRowsDb {
   readonly heldToldQueued: (id: string, at: Date) => void;
   /** Every machine's held workspaces (schema.ts `WorkspaceState`), newest first. */
   readonly heldWorkspaces: () => WorkspaceRow[];
+  /** A machine's host-scope workspaces (schema.ts `workspaces.host`): each row stays active, where its items ran. */
+  readonly hostWorkspacesOn: (machineId: string) => WorkspaceRow[];
   /**
    * The sessions of the work items `parentInstanceIds` delegated, each once:
    * their ids alone, never the items' briefs and reports, which a delegation
@@ -1074,6 +1076,18 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         .from(workspaces)
         .where(eq(workspaces.state, "held"))
         .orderBy(desc(workspaces.createdAt))
+        .all(),
+    hostWorkspacesOn: (machineId) =>
+      db
+        .select()
+        .from(workspaces)
+        .where(
+          and(
+            eq(workspaces.machineId, machineId),
+            eq(workspaces.state, "active"),
+            eq(workspaces.host, true)
+          )
+        )
         .all(),
     liveWorkspacesOn: (machineId) =>
       db

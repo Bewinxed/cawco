@@ -418,20 +418,6 @@ export interface ArtifactServiceDeps {
    * pointed at ends with the row (db `onArtifactsGone`), not here.
    */
   removed?: (row: ArtifactRow) => void;
-  /**
-   * When session `parent` had delegate `maker`'s report (its last word to
-   * it as a peer, db `lastPeerSend`): when it read it; `unread` while it
-   * waits to be read; the end of `maker`'s item for one that never will be
-   * (failed, cancelled) or was never sent.
-   */
-  reportHeardAt: (parent: InstanceRow, maker: InstanceRow) => Date | "unread";
-  /**
-   * Whether session `instance`'s reports reach `to` (work-items.ts
-   * `reportees`): delegated work's reach the session that started it, but
-   * not while that is its project's Caw and he is off. A routine's run's,
-   * or one whose artifacts went to Caw for an ended parent, reach no holder.
-   */
-  reportsTo: (instance: InstanceRow, to: InstanceRow) => boolean;
   /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
   root: string;
   /**

@@ -265,6 +265,12 @@ export const artifactCreate = {
       ),
     elements,
     mermaid,
+    reading: z
+      .boolean()
+      .optional()
+      .describe(
+        "true: yours to read alone. It never reaches the person or your parent, and goes with your workspace."
+      ),
   },
 };
 
