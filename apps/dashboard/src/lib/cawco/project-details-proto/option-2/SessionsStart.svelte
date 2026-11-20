@@ -33,7 +33,9 @@
   } = $props();
 </script>
 
-<div class="grid min-w-0 grid-cols-1 gap-space-3 @setup:grid-cols-5 @setup:gap-space-4">
+<div
+  class="grid min-w-0 grid-cols-1 items-start gap-space-3 @setup:grid-cols-5"
+>
   <div class="flex min-w-0 flex-col @setup:col-span-3">
     <PlacesList
       {hrefOf}

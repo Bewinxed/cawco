@@ -98,7 +98,7 @@
   </div>
 
   <!-- Row 2, Col 2: stage body aligned to the title's leading edge. -->
-  <div class={["min-w-0 pt-space-1", !last && "pb-space-3"]}>
+  <div class={["min-w-0 pt-space-1", !last && "pb-space-4"]}>
     {@render children()}
     <span class="sr-only" aria-live="polite" role="status">{announcement}</span>
   </div>
