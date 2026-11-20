@@ -1,0 +1,162 @@
+/**
+ * Contracts and derived stage-state helpers for Option 2 ("How it runs"):
+ * every change the view sends up to the project page, every place action,
+ * and the pure derivation of each pipeline stage's standing and fault count.
+ */
+
+import type {
+  ChoiceKind,
+  Decider,
+  HowItRunsRecord,
+  Landing,
+  LargeFiles,
+  TaskHome,
+} from "./records";
+
+export type StageId = "tasks" | "sessions" | "waits" | "lands";
+
+/** A key naming one control whose change can be in flight or refused. */
+export type ChangeKey =
+  | "taskHome"
+  | "account"
+  | "atLimit"
+  | `decides.${ChoiceKind}`
+  | "review"
+  | "landing"
+  | "largeFiles"
+  | "sync"
+  | "addPlace";
+
+export type Change =
+  | { key: "taskHome"; value: TaskHome }
+  | { key: "account"; value: string | null } // null: Fleet routing
+  | { key: "atLimit"; value: "wait" | "move" }
+  | { key: "decides"; kind: ChoiceKind; value: Decider }
+  | { key: "decidesReset"; kind: ChoiceKind }
+  | { key: "review"; value: boolean }
+  | { key: "landing"; value: Landing }
+  | { key: "largeFiles"; value: LargeFiles };
+
+export type PlaceAct = "move" | "find" | "copy" | "drop";
+
+/** Configure's pages the stages link to: Accounts, Connections, the fleet's Who decides. */
+export type HrefOf = (
+  page: "accounts" | "connections" | "fleetDecides"
+) => string;
+
+/** What every stage that sends a change takes: the record, the changes in flight and refused, and where a change goes. */
+export interface StageSends {
+  onchange: (change: Change) => void;
+  onretry: (key: ChangeKey) => void;
+  pending: ChangeKey[];
+  record: HowItRunsRecord;
+  refused: Partial<Record<ChangeKey, string>>;
+}
+
+/** What "Sessions start" and its places take: the stage's sends, the running move and the place acts. */
+export interface SessionsStartProps extends StageSends {
+  hrefOf: HrefOf;
+  movingPlaceId: string | null;
+  onaddplace: (machineId: string, path: string) => void;
+  onplace: (act: PlaceAct, placeId: string) => void;
+}
+
+/**
+ * How a stage's node reads: settled (neutral), busy (blue live dot: a sync or
+ * a move running), away (yellow: a machine offline or a value read earlier),
+ * fault (crimson: a real blocker).
+ */
+export type StageState = "settled" | "busy" | "away" | "fault";
+
+/**
+ * Whether the project's chosen account is signed out on every machine.
+ * Fleet routing (chosen === null) never triggers a signed-out project fault.
+ */
+export function chosenAccountSignedOut(record: HowItRunsRecord): boolean {
+  if (record.account.chosen === null) {
+    return false;
+  }
+  const chosen = record.accounts.find(
+    (account) => account.id === record.account.chosen
+  );
+  return chosen !== undefined && !chosen.signedIn;
+}
+
+/** Whether any machine place in this project sits on an offline machine. */
+function hasOfflineMachinePlace(record: HowItRunsRecord): boolean {
+  const byId = new Map(record.machines.map((machine) => [machine.id, machine]));
+  return record.places.some((place) => {
+    if (place.machineId === null) {
+      return false;
+    }
+    const machine = byId.get(place.machineId);
+    return machine !== undefined && !machine.online;
+  });
+}
+
+/**
+ * Derive the rail node state for each of the four pipeline stages from the
+ * hub's record and any active sync or move.
+ */
+export function stageStates(
+  record: HowItRunsRecord,
+  busy: { sync: boolean; movingPlaceId: string | null }
+): Record<StageId, StageState> {
+  const tasks: StageState = (() => {
+    if (
+      busy.sync ||
+      record.tie?.sync.kind === "syncing" ||
+      record.tie?.sync.kind === "first"
+    ) {
+      return "busy";
+    }
+    if (record.tie?.sync.kind === "refused") {
+      return "fault";
+    }
+    if (!record.hubReachable) {
+      return "away";
+    }
+    return "settled";
+  })();
+
+  const sessions: StageState = (() => {
+    if (busy.movingPlaceId !== null) {
+      return "busy";
+    }
+    const hasMissingPlace = record.places.some((place) => place.missing);
+    if (hasMissingPlace || chosenAccountSignedOut(record)) {
+      return "fault";
+    }
+    if (!record.hubReachable || hasOfflineMachinePlace(record)) {
+      return "away";
+    }
+    return "settled";
+  })();
+
+  const waits: StageState = (() => {
+    if (!record.whoDecides.ok) {
+      return "fault";
+    }
+    if (!record.hubReachable) {
+      return "away";
+    }
+    return "settled";
+  })();
+
+  const lands: StageState = record.hubReachable ? "settled" : "away";
+
+  return { tasks, sessions, waits, lands };
+}
+
+/**
+ * Number of active pipeline stages currently in fault (at most one per stage:
+ * a refused sync, a missing place or signed-out chosen account, or unreadable
+ * Who decides). Read by the project page's "How it runs" tab badge.
+ */
+export function faultCount(record: HowItRunsRecord): number {
+  const states = stageStates(record, { sync: false, movingPlaceId: null });
+  const active: StageId[] = record.holdsCode
+    ? ["tasks", "sessions", "waits", "lands"]
+    : ["tasks", "sessions", "waits"];
+  return active.filter((stage) => states[stage] === "fault").length;
+}
