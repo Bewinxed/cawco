@@ -68,7 +68,7 @@
   );
 
   /** What the mock hub holds after the changes it took, against the record it started from. */
-  let held = $state<{ from: HowItRunsRecord; now: HowItRunsRecord } | null>(
+  let held = $state.raw<{ from: HowItRunsRecord; now: HowItRunsRecord } | null>(
     null
   );
   const shown = $derived(held && held.from === record ? held.now : record);
