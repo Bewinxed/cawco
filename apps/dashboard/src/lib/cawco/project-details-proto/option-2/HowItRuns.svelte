@@ -19,15 +19,14 @@
   import { IconAlert, IconCloudCross, IconRefresh } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import {
-    type Change,
     type ChangeKey,
-    type PlaceAct,
+    type SessionsStartProps,
     type StageId,
     type StageState,
     stageStates,
   } from "./changes";
   import RailStage from "./RailStage.svelte";
-  import { CHOICE_KINDS, type HowItRunsRecord } from "./records";
+  import { CHOICE_KINDS } from "./records";
   import SessionsStart from "./SessionsStart.svelte";
   import TasksEnter from "./TasksEnter.svelte";
   import WhatWaits from "./WhatWaits.svelte";
@@ -49,8 +48,7 @@
     onplace,
     onaddplace,
     hrefOf,
-  }: {
-    record: HowItRunsRecord;
+  }: Omit<SessionsStartProps, "pending" | "refused" | "movingPlaceId"> & {
     /** Stages still being read: each draws skeleton wells, never a default value. */
     loading?: StageId[];
     /** Stages whose read failed, with the hub's words: an alert with Try again stands in place of the stage's content. */
@@ -63,14 +61,8 @@
     syncing?: boolean;
     /** The place whose Move is running (stage 2's node goes live, its row says Moving). */
     movingPlaceId?: string | null;
-    onchange: (change: Change) => void;
-    onretry: (key: ChangeKey) => void;
     onreread: (stage: StageId) => void;
     onsync: () => void;
-    onplace: (act: PlaceAct, placeId: string) => void;
-    onaddplace: (machineId: string, path: string) => void;
-    /** Configure's pages, reached from the stages (Accounts, Connections, Who decides fleet defaults). */
-    hrefOf: (page: "accounts" | "connections" | "fleetDecides") => string;
   } = $props();
 
   const baseStates = $derived(
@@ -227,9 +219,7 @@
       <div
         class="flex flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
       >
-        <div
-          class="grid grid-cols-1 gap-space-2 @field-group:grid-cols-2 @setup:grid-cols-4"
-        >
+        <div class="grid grid-cols-1 gap-space-2 @setup:grid-cols-4">
           <Skeleton class="w-full" height="item" radius="tile" />
           <Skeleton class="w-full" height="item" radius="tile" />
           <Skeleton class="w-full" height="item" radius="tile" />

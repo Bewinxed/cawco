@@ -28,9 +28,8 @@
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import ControlRefusal from "./ControlRefusal.svelte";
-  import type { Change, ChangeKey, PlaceAct } from "./changes";
+  import type { SessionsStartProps } from "./changes";
   import PlaceRow from "./PlaceRow.svelte";
-  import type { HowItRunsRecord } from "./records";
   import { LARGE_FILE_KEY_CONNECTIONS } from "./tie-setup.fixture";
   import { howItRunsWords as words } from "./words";
 
@@ -44,17 +43,7 @@
     onplace,
     onaddplace,
     hrefOf,
-  }: {
-    record: HowItRunsRecord;
-    pending: ChangeKey[];
-    refused: Partial<Record<ChangeKey, string>>;
-    movingPlaceId: string | null;
-    onchange: (change: Change) => void;
-    onretry: (key: ChangeKey) => void;
-    onplace: (act: PlaceAct, placeId: string) => void;
-    onaddplace: (machineId: string, path: string) => void;
-    hrefOf: (page: "accounts" | "connections" | "fleetDecides") => string;
-  } = $props();
+  }: SessionsStartProps = $props();
 
   const uid = $props.id();
   const pathInputId = `${uid}-path`;
@@ -207,25 +196,27 @@
               }}
               value={machine.id}
             >
-              <Glyph
-                aria-hidden="true"
-                class={[
-                  "size-icon-md flex-none",
-                  !machine.online && "text-machine-offline",
-                ]}
-              />
-              <span class={machine.online ? undefined : "text-ink-muted"}
-                >{machine.name}</span
-              >
-              {#if !machine.online}
-                <IconWarningTriangle
+              <span class="mark-line flex min-w-0 items-center gap-x-space-2">
+                <Glyph
                   aria-hidden="true"
-                  class="size-icon-sm flex-none text-status-attn-glyph"
+                  class={[
+                    "size-icon-md flex-none",
+                    !machine.online && "text-machine-offline",
+                  ]}
                 />
-                <span class="type-meta text-ink-muted"
-                  >{words.places.away}</span
+                <span class={machine.online ? undefined : "text-ink-muted"}
+                  >{machine.name}</span
                 >
-              {/if}
+                {#if !machine.online}
+                  <IconWarningTriangle
+                    aria-hidden="true"
+                    class="size-icon-sm flex-none text-status-attn-glyph"
+                  />
+                  <span class="type-meta text-ink-muted"
+                    >{words.places.away}</span
+                  >
+                {/if}
+              </span>
             </OptionGroupItem>
           {/each}
         </OptionGroup>
@@ -237,8 +228,8 @@
         >
         <Input
           id={pathInputId}
-          aria-invalid={Boolean(scratchRefusal || refused.addPlace) || undefined}
-          class="max-phone:text-row coarse:text-row"
+          aria-invalid={Boolean(scratchRefusal || refused.addPlace) ||
+            undefined}
           {disabled}
           face="mono"
           oninput={() => {
@@ -261,7 +252,7 @@
       {#if scratchRefusal}
         <Alert layout="row" variant="destructive">
           <IconAlert aria-hidden="true" />
-          <AlertDescription class="type-meta">{scratchRefusal}</AlertDescription>
+          <AlertDescription>{scratchRefusal}</AlertDescription>
         </Alert>
       {/if}
 
@@ -273,7 +264,9 @@
 
       <div class="flex flex-wrap items-center gap-space-2">
         <Button
-          disabled={disabled || !activeMachineId || pathDraft.trim().length === 0}
+          disabled={disabled ||
+            !activeMachineId ||
+            pathDraft.trim().length === 0}
           label={words.places.add}
           onclick={submitAddPlace}
           pending={addPending}
@@ -318,7 +311,9 @@
       <span class="type-meta font-medium text-ink-muted"
         >{words.places.repositories}</span
       >
-      <ul class="m-0 flex list-none flex-wrap items-center gap-x-space-3 gap-y-space-1 p-0">
+      <ul
+        class="m-0 flex list-none flex-wrap items-center gap-x-space-3 gap-y-space-1 p-0"
+      >
         {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
           <li>
             <a
@@ -349,7 +344,7 @@
       class="mt-space-2 flex flex-col gap-space-2 border-t border-border-hairline pt-space-2"
     >
       <div class="flex flex-wrap items-center justify-between gap-space-2">
-        <span class="flex items-center gap-space-2">
+        <span class="mark-line flex items-center gap-space-2">
           <span class="type-label text-ink-strong"
             >{words.places.largeFilesHeading}</span
           >
@@ -360,12 +355,10 @@
 
         <OptionGroup
           aria-label={words.places.largeFilesGroupLabel}
-          class="gap-space-1 coarse:gap-y-space-4"
           {disabled}
           value={[record.largeFiles.kind]}
         >
           <OptionGroupItem
-            class="px-space-2"
             onclick={(event) => {
               event.preventDefault();
               pickLargeFilesKind("own");
@@ -375,7 +368,6 @@
             {words.places.largeFilesOwn}
           </OptionGroupItem>
           <OptionGroupItem
-            class="px-space-2"
             onclick={(event) => {
               event.preventDefault();
               pickLargeFilesKind("declared");
@@ -400,7 +392,6 @@
             <Input
               id={lfsAddressId}
               aria-invalid={Boolean(refused.largeFiles) || undefined}
-              class="max-phone:text-row coarse:text-row"
               {disabled}
               face="mono"
               placeholder={words.places.largeFilesAddressPlaceholder}
@@ -416,7 +407,7 @@
             {#if LARGE_FILE_KEY_CONNECTIONS.length === 0}
               <Alert layout="row" variant="default">
                 <IconKey aria-hidden="true" />
-                <AlertDescription class="type-meta"
+                <AlertDescription
                   >{words.places.largeFilesNoKey}</AlertDescription
                 >
                 <AlertAction>
@@ -442,11 +433,15 @@
                     }}
                     value={conn.id}
                   >
-                    <IconKey
-                      aria-hidden="true"
-                      class="size-icon-sm flex-none text-ink-muted"
-                    />
-                    <span>{conn.name}</span>
+                    <span
+                      class="mark-line flex min-w-0 items-center gap-x-space-2"
+                    >
+                      <IconKey
+                        aria-hidden="true"
+                        class="size-icon-sm flex-none text-ink-muted"
+                      />
+                      <span>{conn.name}</span>
+                    </span>
                   </OptionGroupItem>
                 {/each}
               </OptionGroup>

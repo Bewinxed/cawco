@@ -53,7 +53,7 @@
   <span
     aria-hidden="true"
     class={[
-      "inline-grid size-icon-lg flex-none place-items-center self-center justify-self-center rounded-pill border transition-control",
+      "mark-line inline-grid size-icon-lg flex-none place-items-center self-center justify-self-center rounded-pill border transition-control",
       state === "settled" &&
         "border-border-control bg-surface-raised text-ink-muted",
       state === "busy" && "border-status-live-glyph bg-status-live-bg",
@@ -84,7 +84,9 @@
       {title}{#if stateWords}<span class="sr-only"> — {stateWords}</span>{/if}
     </h2>
     {#if meta}
-      <div class="flex min-w-0 items-center gap-space-2 type-meta text-ink-muted">
+      <div
+        class="flex min-w-0 items-center gap-space-2 type-meta text-ink-muted"
+      >
         {@render meta()}
       </div>
     {/if}
