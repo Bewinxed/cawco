@@ -7,10 +7,7 @@
    * everywhere, and At its limit as two chips in one row with a connector meta
    * line below.
    */
-  import {
-    Alert,
-    AlertDescription,
-  } from "#lib/components/ui/alert/index.js";
+  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     OptionGroup,
@@ -19,9 +16,14 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconAlert, IconChevronRight } from "#lib/icons.js";
+  import ChoiceChip from "./ChoiceChip.svelte";
   import ControlRefusal from "./ControlRefusal.svelte";
-  import type { Change, ChangeKey } from "./changes";
-  import type { AccountHue, FleetAccount, HowItRunsRecord } from "./records";
+  import {
+    chosenAccountSignedOut,
+    type HrefOf,
+    type StageSends,
+  } from "./changes";
+  import type { AccountHue, FleetAccount } from "./records";
   import { howItRunsWords as words } from "./words";
 
   let {
@@ -31,14 +33,7 @@
     onchange,
     onretry,
     hrefOf,
-  }: {
-    record: HowItRunsRecord;
-    pending: ChangeKey[];
-    refused: Partial<Record<ChangeKey, string>>;
-    onchange: (change: Change) => void;
-    onretry: (key: ChangeKey) => void;
-    hrefOf: (page: "accounts" | "connections" | "fleetDecides") => string;
-  } = $props();
+  }: StageSends & { hrefOf: HrefOf } = $props();
 
   const FLEET_VALUE = "__fleet__";
 
@@ -66,9 +61,7 @@
       : (record.accounts.find((acc) => acc.id === record.account.chosen) ??
           null)
   );
-  const chosenSignedOut = $derived(
-    chosenAccount !== null && !chosenAccount.signedIn
-  );
+  const chosenSignedOut = $derived(chosenAccountSignedOut(record));
 
   function pickAccount(value: string) {
     if (disabled) {
@@ -92,29 +85,31 @@
 </script>
 
 {#snippet accountChipContent(account: FleetAccount)}
-  <span
-    aria-hidden="true"
-    class={["size-space-2 flex-none rounded-pill", ACCOUNT_DOT[account.hue]]}
-    data-box
-  ></span>
-  <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-    >{account.name}</span
-  >
-  {#if !account.signedIn}
-    <IconAlert
+  <span class="mark-line flex min-w-0 items-center gap-x-space-2">
+    <span
       aria-hidden="true"
-      class="size-icon-sm flex-none text-status-fail-glyph"
-    />
-    <span class="sr-only"> — {words.account.signedOut}</span>
-  {/if}
-  {#if accountPending && pressedAccount === account.id}
-    <Spinner
-      aria-label={words.saving}
-      box="small"
-      class="flex-none"
-      tone="muted"
-    />
-  {/if}
+      class={["size-space-2 flex-none rounded-pill", ACCOUNT_DOT[account.hue]]}
+      data-box
+    ></span>
+    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      >{account.name}</span
+    >
+    {#if !account.signedIn}
+      <IconAlert
+        aria-hidden="true"
+        class="size-icon-sm flex-none text-status-fail-glyph"
+      />
+      <span class="sr-only"> — {words.account.signedOut}</span>
+    {/if}
+    {#if accountPending && pressedAccount === account.id}
+      <Spinner
+        aria-label={words.saving}
+        box="small"
+        class="flex-none"
+        tone="muted"
+      />
+    {/if}
+  </span>
 {/snippet}
 
 <div
@@ -136,27 +131,28 @@
     value={[selectedAccountValue]}
   >
     <OptionGroupItem
-      class="mark-line px-space-2"
       onclick={(event) => {
         event.preventDefault();
         pickAccount(FLEET_VALUE);
       }}
       value={FLEET_VALUE}
     >
-      <span
-        aria-hidden="true"
-        class="size-space-2 flex-none rounded-pill border border-ink-muted"
-        data-box
-      ></span>
-      <span>{words.account.fleetRouting}</span>
-      {#if accountPending && pressedAccount === FLEET_VALUE}
-        <Spinner
-          aria-label={words.saving}
-          box="small"
-          class="flex-none"
-          tone="muted"
-        />
-      {/if}
+      <span class="mark-line flex min-w-0 items-center gap-x-space-2">
+        <span
+          aria-hidden="true"
+          class="size-space-2 flex-none rounded-pill border border-ink-muted"
+          data-box
+        ></span>
+        <span>{words.account.fleetRouting}</span>
+        {#if accountPending && pressedAccount === FLEET_VALUE}
+          <Spinner
+            aria-label={words.saving}
+            box="small"
+            class="flex-none"
+            tone="muted"
+          />
+        {/if}
+      </span>
     </OptionGroupItem>
 
     {#each record.accounts as account (account.id)}
@@ -165,11 +161,10 @@
           {#snippet children(props)}
             <OptionGroupItem
               {...props}
-              class="mark-line px-space-2"
               onclick={(event) => {
                 event.preventDefault();
                 if (typeof props.onclick === "function") {
-                  (props.onclick as (e: MouseEvent) => void)(event);
+                  props.onclick(event);
                 }
                 pickAccount(account.id);
               }}
@@ -181,7 +176,6 @@
         </Tip>
       {:else}
         <OptionGroupItem
-          class="mark-line px-space-2"
           onclick={(event) => {
             event.preventDefault();
             pickAccount(account.id);
@@ -209,17 +203,14 @@
   {#if chosenSignedOut && chosenAccount}
     <Alert class="mt-space-2" variant="destructive">
       <IconAlert aria-hidden="true" />
-      <AlertDescription class="flex flex-col items-start gap-space-1 type-meta">
-        <span>{words.account.signedOutAlert(chosenAccount.name)}</span>
-        <Button
-          class="h-auto px-0 type-meta text-status-fail-ink underline-offset-3"
-          href={hrefOf("accounts")}
-          size="xs"
-          variant="link"
-        >
-          <span>{words.account.openAccounts}</span>
-          <IconChevronRight aria-hidden="true" class="size-icon-sm" />
-        </Button>
+      <AlertDescription>
+        <span class="flex flex-col items-start gap-space-1">
+          <span>{words.account.signedOutAlert(chosenAccount.name)}</span>
+          <Button href={hrefOf("accounts")} size="xs" variant="link">
+            <span>{words.account.openAccounts}</span>
+            <IconChevronRight aria-hidden="true" class="size-icon-sm" />
+          </Button>
+        </span>
       </AlertDescription>
     </Alert>
   {/if}
@@ -243,43 +234,19 @@
         layout="chips"
         value={[record.account.atLimit]}
       >
-        <OptionGroupItem
-          class="mark-line px-space-2"
-          onclick={(event) => {
-            event.preventDefault();
-            pickAtLimit("wait");
-          }}
+        <ChoiceChip
+          label={words.account.atLimitWait.name}
+          onpick={() => pickAtLimit("wait")}
+          sending={limitPending && pressedLimit === "wait"}
           value="wait"
-        >
-          <span>{words.account.atLimitWait.name}</span>
-          {#if limitPending && pressedLimit === "wait"}
-            <Spinner
-              aria-label={words.saving}
-              box="small"
-              class="flex-none"
-              tone="muted"
-            />
-          {/if}
-        </OptionGroupItem>
+        />
 
-        <OptionGroupItem
-          class="mark-line px-space-2"
-          onclick={(event) => {
-            event.preventDefault();
-            pickAtLimit("move");
-          }}
+        <ChoiceChip
+          label={words.account.atLimitMove.name}
+          onpick={() => pickAtLimit("move")}
+          sending={limitPending && pressedLimit === "move"}
           value="move"
-        >
-          <span>{words.account.atLimitMove.name}</span>
-          {#if limitPending && pressedLimit === "move"}
-            <Spinner
-              aria-label={words.saving}
-              box="small"
-              class="flex-none"
-              tone="muted"
-            />
-          {/if}
-        </OptionGroupItem>
+        />
       </OptionGroup>
 
       <p class="m-0 type-meta text-ink-muted">

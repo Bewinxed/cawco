@@ -5,11 +5,8 @@
    * @field-group, and one column below it, followed by the task-override and
    * CI/CD footer note.
    */
-  import {
-    OptionGroup,
-    OptionGroupItem,
-  } from "#lib/components/ui/option-group/index.js";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { OptionGroup } from "#lib/components/ui/option-group/index.js";
+  import ChoiceTile from "./ChoiceTile.svelte";
   import ControlRefusal from "./ControlRefusal.svelte";
   import type { Change, ChangeKey } from "./changes";
   import type { HowItRunsRecord, Landing } from "./records";
@@ -51,9 +48,9 @@
 >
   <OptionGroup
     aria-label={words.lands.groupLabel}
-    class="grid-cols-1 gap-space-2 max-phone:grid-cols-1 max-phone:@field-group:grid-cols-2 @field-group:grid-cols-2 @setup:grid-cols-4 coarse:gap-y-space-4"
     {disabled}
     layout="tiles"
+    style="--tiles-cols: repeat(auto-fit, minmax(var(--spacing-c-decision-option-min), 1fr)); --tiles-cols-phone: minmax(0, 1fr)"
     value={[record.landing]}
   >
     {#each LANDINGS as landing (landing)}
@@ -62,33 +59,13 @@
         landingPending &&
         (pressedLanding === landing ||
           (pressedLanding === null && record.landing === landing))}
-      <OptionGroupItem
-        class="px-space-2 py-space-1 @wide:px-space-3"
-        onclick={(event) => {
-          event.preventDefault();
-          pickLanding(landing);
-        }}
+      <ChoiceTile
+        name={info.name}
+        note={info.note}
+        onpick={() => pickLanding(landing)}
+        sending={showSpin}
         value={landing}
-      >
-        <span
-          class="mark-line flex w-full min-w-0 items-center justify-between gap-space-2"
-        >
-          <span class="type-label text-ink-strong wrap-anywhere"
-            >{info.name}</span
-          >
-          {#if showSpin}
-            <Spinner
-              aria-label={words.saving}
-              box="small"
-              class="flex-none"
-              tone="muted"
-            />
-          {/if}
-        </span>
-        <span class="type-meta text-pretty text-ink-muted wrap-anywhere"
-          >{info.note}</span
-        >
-      </OptionGroupItem>
+      />
     {/each}
   </OptionGroup>
 

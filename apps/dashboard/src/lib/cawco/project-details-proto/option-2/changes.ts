@@ -39,6 +39,28 @@ export type Change =
 
 export type PlaceAct = "move" | "find" | "copy" | "drop";
 
+/** Configure's pages the stages link to: Accounts, Connections, the fleet's Who decides. */
+export type HrefOf = (
+  page: "accounts" | "connections" | "fleetDecides"
+) => string;
+
+/** What every stage that sends a change takes: the record, the changes in flight and refused, and where a change goes. */
+export interface StageSends {
+  onchange: (change: Change) => void;
+  onretry: (key: ChangeKey) => void;
+  pending: ChangeKey[];
+  record: HowItRunsRecord;
+  refused: Partial<Record<ChangeKey, string>>;
+}
+
+/** What "Sessions start" and its places take: the stage's sends, the running move and the place acts. */
+export interface SessionsStartProps extends StageSends {
+  hrefOf: HrefOf;
+  movingPlaceId: string | null;
+  onaddplace: (machineId: string, path: string) => void;
+  onplace: (act: PlaceAct, placeId: string) => void;
+}
+
 /**
  * How a stage's node reads: settled (neutral), busy (blue live dot: a sync or
  * a move running), away (yellow: a machine offline or a value read earlier),
@@ -62,9 +84,7 @@ export function chosenAccountSignedOut(record: HowItRunsRecord): boolean {
 
 /** Whether any machine place in this project sits on an offline machine. */
 function hasOfflineMachinePlace(record: HowItRunsRecord): boolean {
-  const byId = new Map(
-    record.machines.map((machine) => [machine.id, machine])
-  );
+  const byId = new Map(record.machines.map((machine) => [machine.id, machine]));
   return record.places.some((place) => {
     if (place.machineId === null) {
       return false;
