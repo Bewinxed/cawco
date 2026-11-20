@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
    * Stage 4 ("Work lands", code projects only): the four landing options as
-   * equal tiles in two columns at @field-group (one below it), each stating
-   * where the person will find the work, followed by the task-override and
+   * equal tiles in one row of four at @setup and wider, two columns at
+   * @field-group, and one column below it, followed by the task-override and
    * CI/CD footer note.
    */
   import {
@@ -46,14 +46,14 @@
 </script>
 
 <div
-  class="flex min-w-0 flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4 @setup:py-space-3"
+  class="flex min-w-0 flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
   data-slot="well"
 >
   <OptionGroup
     aria-label={words.lands.groupLabel}
+    class="grid-cols-1 gap-space-2 max-phone:grid-cols-1 max-phone:@field-group:grid-cols-2 @field-group:grid-cols-2 @setup:grid-cols-4 coarse:gap-y-space-4"
     {disabled}
     layout="tiles"
-    style="--tiles-cols: repeat(auto-fit, minmax(max(calc(50cqi - var(--spacing-space-8) - var(--spacing-space-2)), var(--spacing-c-decision-option-min)), 1fr)); --tiles-cols-phone: repeat(auto-fit, minmax(max(calc(50cqi - var(--spacing-space-8) - var(--spacing-space-2)), var(--spacing-c-decision-option-min)), 1fr))"
     value={[record.landing]}
   >
     {#each LANDINGS as landing (landing)}
@@ -63,6 +63,7 @@
         (pressedLanding === landing ||
           (pressedLanding === null && record.landing === landing))}
       <OptionGroupItem
+        class="px-space-2 py-space-1 @wide:px-space-3"
         onclick={(event) => {
           event.preventDefault();
           pickLanding(landing);

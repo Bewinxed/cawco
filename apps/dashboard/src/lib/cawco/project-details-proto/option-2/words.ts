@@ -40,19 +40,17 @@ export const howItRunsWords = {
     homes: {
       files: {
         name: "CawCo's files",
-        note: "Tasks stay as project files; no outside mirror.",
+        note: "Project files; returning keeps issue links.",
       },
       github: {
         name: "GitHub Issues",
-        note: "Mirrors new tasks to a repo; files stay here.",
+        note: "One-way repo mirror; GitHub wins; un-vouched wait.",
       },
       linear: {
         name: "Linear",
-        note: "Mirrors new tasks to a team; files stay here.",
+        note: "One-way team mirror; Linear wins; un-vouched wait.",
       },
     } satisfies Record<TaskHome, { name: string; note: string }>,
-    implicationLine:
-      "Forward-only mirror; tracker wins ties; un-vouched issues wait on you; returning keeps issue links.",
     syncNow: "Sync now",
     syncing: "Syncing…",
     firstSync: "First sync running",
@@ -111,9 +109,7 @@ export const howItRunsWords = {
     move: "Move",
     findFolder: "Find folder",
     copyToMachine: "Copy to machine",
-    copyShort: "Copy",
     drop: "Drop",
-    actFor: (act: string, path: string) => `${act} ${path}`,
     repositories: "Repositories",
     largeFilesHeading: "Large files",
     largeFilesGroupLabel: "Large-file storage",
@@ -132,7 +128,7 @@ export const howItRunsWords = {
     groupLabel: "Project account",
     fleetRouting: "Fleet routing",
     signedOut: "Signed out",
-    scopeNamed: "Sessions start here with its connectors; Caw's chat moves.",
+    scopeNamed: "Sessions start here with connectors; Caw's chat moves.",
     scopeFleet: "Fleet routing picks an account for each session.",
     signedOutAlert: (name: string) =>
       `Nothing in this project can start until ${name} signs in.`,
@@ -141,11 +137,11 @@ export const howItRunsWords = {
     atLimitGroupLabel: "At account limit",
     atLimitWait: {
       name: "Wait for reset",
-      note: "Keeps connectors",
+      note: "Keeps this account's connectors.",
     },
     atLimitMove: {
       name: "Move to an account with room",
-      note: "Loses connectors",
+      note: "Loses this account's connectors.",
     },
   },
 
@@ -186,19 +182,19 @@ export const howItRunsWords = {
     options: {
       default: {
         name: "Default branch",
-        note: "Commits land straight on the default branch.",
+        note: "Commits land on default branch.",
       },
       branch: {
         name: "Own branch",
-        note: "Pushes a task branch to the remote.",
+        note: "Pushes a task branch to remote.",
       },
       pr: {
         name: "Branch + pull request",
-        note: "Pushes a task branch and opens a pull request.",
+        note: "Opens a pull request per task.",
       },
       nowhere: {
         name: "Nowhere",
-        note: "Nothing pushes; outputs themselves are the work.",
+        note: "No push; outputs are the work.",
       },
     } satisfies Record<Landing, { name: string; note: string }>,
     footer: "Tasks can override. Verified by the project's CI/CD.",

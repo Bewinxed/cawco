@@ -27,8 +27,8 @@
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
-  import type { Change, ChangeKey } from "./changes";
   import ControlRefusal from "./ControlRefusal.svelte";
+  import type { Change, ChangeKey } from "./changes";
   import type { HowItRunsRecord, TaskHome } from "./records";
   import {
     DEFAULT_STAGE_STATUS,
@@ -191,7 +191,7 @@
 </script>
 
 <div
-  class="flex flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4 @setup:py-space-3"
+  class="flex flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
   data-slot="well"
 >
   {#if tie}
@@ -328,7 +328,7 @@
         (pressedHome === home ||
           (pressedHome === null && record.taskHome === home))}
       <OptionGroupItem
-        class="px-space-3 py-space-1"
+        class="px-space-2 py-space-1 @wide:px-space-3"
         onclick={(event) => {
           event.preventDefault();
           handleHomeClick(home);
@@ -354,10 +354,6 @@
       </OptionGroupItem>
     {/each}
   </OptionGroup>
-
-  <p class="m-0 mt-space-1 type-meta text-ink-muted">
-    {words.tasks.implicationLine}
-  </p>
 
   <ControlRefusal
     {disabled}

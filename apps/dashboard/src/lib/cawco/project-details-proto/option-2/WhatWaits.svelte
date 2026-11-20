@@ -103,7 +103,7 @@
 </script>
 
 <div
-  class="flex min-w-0 flex-col rounded-well border border-border-contrast bg-surface-well px-space-3 py-space-2 @setup:px-space-4 @setup:py-space-3"
+  class="flex min-w-0 flex-col rounded-well border border-border-contrast bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
   data-slot="well"
 >
   <!-- Who decides header: title, standing against fleet, and link to fleet defaults. -->
@@ -151,7 +151,9 @@
     </Alert>
   {:else}
     {@const rules = record.whoDecides.rules}
-    <div class="mt-space-2 flex flex-col gap-space-1 coarse:gap-y-space-3">
+    <div
+      class="mt-space-1 grid grid-cols-1 gap-y-space-row @wide:grid-cols-2 @wide:gap-x-space-5 coarse:gap-y-space-3"
+    >
       {#each CHOICE_KINDS as kind (kind)}
         {@const rule = rules[kind]}
         {@const kindLabel = words.waits.kinds[kind]}
@@ -164,7 +166,7 @@
             data-kind={kind}
             data-slot="row"
           >
-            <span class="type-label text-ink-row @kinds:w-22 @kinds:flex-none">
+            <span class="type-label text-ink-row @kinds:w-18 @kinds:flex-none">
               {kindLabel}
             </span>
 
@@ -181,13 +183,14 @@
                   (pressed === decider ||
                     (pressed === undefined && rule.by === decider))}
                 <OptionGroupItem
+                  class="px-space-2"
                   onclick={(event) => {
                     event.preventDefault();
                     pickDecider(kind, decider);
                   }}
                   value={decider}
                 >
-                  <span class="mark-line inline-flex items-center gap-space-2">
+                  <span class="mark-line inline-flex items-center gap-space-1">
                     <span>{words.waits.deciders[decider]}</span>
                     {#if showFleet}
                       <Badge data-box kind="meta"
@@ -240,7 +243,9 @@
     <div
       class="flex min-w-0 flex-col gap-space-1 @setup:flex-row @setup:items-center @setup:justify-between @setup:gap-space-3"
     >
-      <div class="flex min-w-0 flex-col">
+      <div
+        class="flex min-w-0 flex-col @wide:flex-row @wide:items-baseline @wide:gap-space-2"
+      >
         <span class="type-label text-ink-strong"
           >{words.waits.reviewHeading}</span
         >
