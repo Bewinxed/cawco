@@ -127,6 +127,7 @@ import {
   pairingCollapseId,
   taskCollapseId,
   turnCollapseId,
+  waitFlagCollapseId,
 } from "./notifications";
 import type { Decided } from "./settling-answers";
 import type { TaskEvent } from "./tasks";
@@ -2052,6 +2053,46 @@ export const createPush = ({
           });
         });
       detach(alerted, "attempt push");
+    },
+
+    /**
+     * A task's wait on a pull request closed unmerged or an Actions run gone
+     * red (wait-flags.ts): told once per wait, opening the task. Named by
+     * the task's title, as a task in a `you` stage is; what it waits on goes
+     * sealed. Counted while the wait still reads flagged (`still`).
+     */
+    waitFlagged(flagged: {
+      /** What it waits on and why it can no longer settle, in one line. */
+      line: string;
+      projectId: string;
+      still: () => boolean | Promise<boolean>;
+      target: string;
+      taskId: string;
+      title: string;
+    }): void {
+      const { projectId, taskId } = flagged;
+      const project = projectName(projectId);
+      arrive({
+        ask: false,
+        instanceId: null,
+        landedAt: new Date(),
+        still: flagged.still,
+        notification: {
+          shown: alertOf(flagged.title, project),
+          sealed: alertOf(flagged.title, project, flagged.line),
+          category: PUSH_CATEGORIES.taskOpenOnly,
+          collapseId: waitFlagCollapseId(projectId, taskId, flagged.target),
+          group: projectId,
+          data: {
+            kind: "task",
+            instanceId: null,
+            machineId: null,
+            projectId,
+            taskId,
+          },
+        },
+      });
+      console.log(`[push] task ${projectId}/${taskId}: a wait is flagged`);
     },
 
     /**

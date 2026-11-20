@@ -791,6 +791,7 @@ import { renameViewTaskTables } from "./view-task-tables";
 import { createViews, viewRoutes } from "./views";
 import type { Listed } from "./views/catalogs";
 import { createViewsThread } from "./views/client";
+import { createWaitFlags } from "./wait-flags";
 import { createWaits } from "./waits";
 import { WelcomeConverge } from "./welcome-converge";
 import {
@@ -9928,6 +9929,16 @@ export const createServer = (
     projectIds: () => db.listProjects().map((project) => project.id),
   });
   tasks.listen(waits.taskChanged);
+  // A task's wait on a pull request closed unmerged or a run gone red is told to the person once (wait-flags.ts).
+  const waitFlags = createWaitFlags({
+    index: db.taskIndex,
+    kept: db.taskWaitFlags,
+    lifetime,
+    notice: noticeProject,
+    push,
+    tasks,
+  });
+  tasks.listen(waitFlags.taskChanged);
   /** Your words or act about a task to a session ({@link personsMessage}). */
   const sendYours = (row: InstanceRow, said: PersonsSend): void => {
     try {

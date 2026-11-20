@@ -191,7 +191,7 @@ const GITHUB_SETTLED: ReadonlySet<GitHubWaitState> = new Set([
   "green",
 ]);
 
-/** Each red state's flag. */
+/** Each red state's flag, told to the person once per task's wait (wait-flags.ts). */
 const GITHUB_FLAG: Partial<Record<GitHubWaitState, string>> = {
   closed: taskLinkWords.closedUnmerged,
   red: taskLinkWords.runFailed,

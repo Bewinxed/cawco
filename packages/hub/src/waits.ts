@@ -38,6 +38,7 @@ import { ElysiaStatus } from "elysia";
 import type { HubLifetimeShape } from "./lifetime";
 import type { Plans } from "./plans";
 import { hasProjectFolder } from "./project-folder";
+import { createProjectLooks } from "./project-looks";
 import { movesFrom, type Stages } from "./stages";
 import { routineActor, type TaskEvent, type Tasks } from "./tasks";
 
@@ -105,10 +106,6 @@ export const createWaits = ({
 }: WaitsDeps) => {
   /** Problems already said, by project and stage: said once each. */
   const said = new Set<string>();
-  /** Projects whose look is under way, and those asked again meanwhile. */
-  const looking = new Set<string>();
-  const again = new Set<string>();
-  const soon = new Map<string, ReturnType<HubLifetimeShape["after"]>>();
   /** When each project was last looked at whole: a date between then and now has passed since. */
   const lookedAt = new Map<string, number>();
   /** When the minute last ticked, for the plans' dates. */
@@ -276,28 +273,12 @@ export const createWaits = ({
     }
   };
 
-  /** One look at a project at a time; one asked for during a look runs after it. */
-  const look = (projectId: string): void => {
-    if (looking.has(projectId)) {
-      again.add(projectId);
-      return;
-    }
-    looking.add(projectId);
-    const failed = (words: string) =>
-      console.warn(`[waits] ${projectId}: ${words}`);
-    lookAt(projectId)
-      .then(
-        (refused) => refused && failed(refused.response.detail),
-        (error: unknown) =>
-          failed(error instanceof Error ? error.message : String(error))
-      )
-      .finally(() => {
-        looking.delete(projectId);
-        if (again.delete(projectId)) {
-          look(projectId);
-        }
-      });
-  };
+  const { look, soon } = createProjectLooks({
+    lifetime,
+    lookAt,
+    name: "waits",
+    settleMs: SETTLE_MS,
+  });
 
   return {
     /** Starts the minute's tick, with a first look at every project now. */
@@ -316,14 +297,7 @@ export const createWaits = ({
 
     /** A project's tasks changed (tasks.ts `listen`): it is looked at again shortly. */
     taskChanged(event: TaskEvent): void {
-      lifetime.cancel(soon.get(event.projectId));
-      soon.set(
-        event.projectId,
-        lifetime.after("waits settle", SETTLE_MS, () => {
-          soon.delete(event.projectId);
-          look(event.projectId);
-        })
-      );
+      soon(event.projectId);
     },
   };
 };

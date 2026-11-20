@@ -6891,6 +6891,30 @@ export const externalComments = sqliteTable(
 );
 
 /**
+ * A task's wait on a pull request closed unmerged, or on an Actions run gone
+ * red (task-waits.ts `GITHUB_FLAG`), once the person was told of it
+ * (wait-flags.ts): one note in the project's conversation and one push per
+ * wait, never a second while its row stands. The row goes once the wait
+ * reads open, merged, running or green again (a reopened pull request, a run
+ * run again), so its next flag is told; and once its task is closed or no
+ * longer waits on it.
+ */
+export const taskWaitFlags = sqliteTable(
+  "task_wait_flags",
+  {
+    projectId: projectKey(),
+    /** The task, `tsk-12`. */
+    taskId: text("task_id").notNull(),
+    /** The wait as its task's file keeps it: the pull request's or run's URL. */
+    target: text("target").notNull(),
+    toldAt: timestamp("told_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.taskId, table.target] }),
+  ]
+);
+
+/**
  * Where an approved action is (actions.ts): waiting for you, approved (and
  * due at its time), denied, running (claimed, its one call under way), done,
  * failed (the service answered it did not), unknown (the call went and no

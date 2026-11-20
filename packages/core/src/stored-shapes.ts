@@ -4400,6 +4400,14 @@ const ProjectNoteEventShape = declared(
       taskId: z.string(),
       title: z.string(),
     }),
+    z.object({
+      kind: z.literal("wait"),
+      label: z.string(),
+      state: z.string(),
+      target: z.string(),
+      taskId: z.string(),
+      title: z.string(),
+    }),
     z.object({ kind: z.literal("view"), name: z.string() }),
     z.object({ kind: z.literal("agents"), sha: z.string() }),
     z.object({

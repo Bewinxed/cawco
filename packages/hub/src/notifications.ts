@@ -141,6 +141,12 @@ export const messageCollapseId = (instanceId: string): string =>
 /** A task waiting on the owner: its move and its failed attempt are one notification. */
 export const taskCollapseId = (projectId: string, taskId: string): string =>
   collapseOf("task", `${projectId}:${taskId}`);
+/** A task's wait on a pull request or run that can no longer settle (wait-flags.ts): one per wait, beside its task's own. */
+export const waitFlagCollapseId = (
+  projectId: string,
+  taskId: string,
+  target: string
+): string => collapseOf("wait", `${projectId}:${taskId}:${target}`);
 /** A device asking to pair (hub-auth.ts), by the code it shows: one per pairing. */
 export const pairingCollapseId = (userCode: string): string =>
   collapseOf("pairing", userCode);

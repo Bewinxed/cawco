@@ -197,6 +197,22 @@ export type ProjectNoteEvent =
       taskId: string;
       title: string;
     }
+  | {
+      /**
+       * A task's wait on a pull request closed unmerged, or on an Actions
+       * run gone red, can no longer settle (hub wait-flags.ts): told once.
+       */
+      kind: "wait";
+      /** What it waits on, as the hub named it: `PR #418 Fix tray`. */
+      label: string;
+      /** Where the wait stands: `closed` or `red`. */
+      state: string;
+      /** The wait as the task's file keeps it: the pull request's or run's URL. */
+      target: string;
+      taskId: string;
+      /** The task's title as the hub had it. */
+      title: string;
+    }
   | { kind: "view"; name: string }
   | { kind: "agents"; sha: string }
   | {

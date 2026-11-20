@@ -48,6 +48,21 @@ export const taskLinkWords = {
   dateNotYet: "not yet",
   /** A date waited on that has passed: its wait is settled. */
   datePassed: "passed",
+  /**
+   * A pull request a task waits on was closed without merging: said once, in
+   * the project's conversation and as a push (hub wait-flags.ts). `pr` is
+   * the pull request as the hub names it (`PR #418 Fix tray chip overflow`).
+   */
+  closedUnmergedNote: (pr: string, task: string): string =>
+    `Closed unmerged · ${pr} · blocks ${task} · needs you`,
+  /** An Actions run a task waits on failed: said once, likewise. */
+  runFailedNote: (run: string, task: string): string =>
+    `Run failed · ${run} · blocks ${task} · needs you`,
+  /** Under either: what it means for the task, and what the person can do. */
+  blockedNoteBody: (kind: "pr" | "run"): string =>
+    kind === "pr"
+      ? "The task stays blocked while it waits on this pull request. Open the task to unlink the pull request, link another in its place, or move the task on yourself."
+      : "The task stays blocked until this run passes. Re-run it on GitHub, or open the task to unlink the run, link another in its place, or move the task on yourself.",
   /** Why a project cannot wait on a pull request or run. */
   noGitHub:
     "the project has no GitHub connection to read it. Connect GitHub for the project first.",

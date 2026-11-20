@@ -49,7 +49,9 @@
  *   cycle of waits or parts, a wait on itself, or a target that does not
  *   exist is refused, naming the path. That is its starter's business (the session
  *   that started it, or the project's conversation for the dispatcher's), never the person's
- *   Needs you: a task waits for you only in a stage of kind `you`. The hub
+ *   Needs you: a task waits for you only in a stage of kind `you`. A wait on
+ *   a pull request closed unmerged or a run gone red is told to the person
+ *   once, a note and a push (wait-flags.ts), and stays the task's flag. The hub
  *   moves a task as `hub`: code, which the file's moves do not bind; its
  *   commits say so.
  *

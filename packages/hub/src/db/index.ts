@@ -87,6 +87,7 @@ import { explainStatements, type StatementPlans } from "./statement-plans";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import { type TaskIndexDb, taskIndexDb } from "./task-index";
 import type { TaskLinksDb } from "./task-links";
+import { type TaskWaitFlagsDb, taskWaitFlagsDb } from "./task-wait-flags";
 import { type ToolCallKeysDb, toolCallKeysDb } from "./tool-call-keys";
 import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
@@ -193,6 +194,8 @@ interface HubStore {
   readonly streamRelay: StreamRelayDb;
   /** The external items tasks link, and the comments carried from them (task-links.ts). */
   readonly taskLinks: TaskLinksDb;
+  /** The task waits on GitHub the person was told can no longer settle (task-wait-flags.ts). */
+  readonly taskWaitFlags: TaskWaitFlagsDb;
   /** Each relayed tool call taken under an idempotency key, and its answer (tool-call-keys.ts). */
   readonly toolCallKeys: ToolCallKeysDb;
   /** Trackers: a project's binding to GitHub Issues or Linear, and what its tasks and their issues agreed on (tracker.ts). */
@@ -396,6 +399,7 @@ const make = async (path: string): Promise<DbShape> => {
     memoryFacts: memoryFactsDb(db),
     trackers: trackersDb(db),
     taskLinks: core.taskLinksOf,
+    taskWaitFlags: taskWaitFlagsDb(db),
     hubAuth: hubAuthDb(db),
     artifacts: artifactsDb(db, core),
     find: findDb(db),

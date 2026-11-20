@@ -11018,6 +11018,38 @@
             "properties": {
               "kind": {
                 "type": "string",
+                "const": "wait"
+              },
+              "label": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              },
+              "taskId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "label",
+              "state",
+              "target",
+              "taskId",
+              "title"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
                 "const": "view"
               },
               "name": {
