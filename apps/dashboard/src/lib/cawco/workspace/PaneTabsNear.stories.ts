@@ -6,7 +6,7 @@
  * (tab-switch-seed.ts), written through its own writers before each frame.
  */
 import PaneTabsLive from "./pane-tabs-live.svelte";
-import { JUMP, NEXT, switchMeta } from "./tab-switch-seed";
+import { JUMP_TO, NEXT_TO, pressTab, switchMeta } from "./tab-switch-seed";
 
 export default {
   title: "Tab switch/Nearest tabs",
@@ -19,7 +19,7 @@ export default {
 export const Live = {};
 
 /** Picking a tab four along: the tabs between them turn over at half way, 242 outlines redrawn. */
-export const Jump = JUMP;
+export const Jump = { from: "Live", play: pressTab(JUMP_TO) };
 
 /** Picking the tab beside it: the same as today, 108 outlines redrawn. */
-export const Next = NEXT;
+export const Next = { from: "Live", play: pressTab(NEXT_TO) };
