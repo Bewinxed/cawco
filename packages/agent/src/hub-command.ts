@@ -19,6 +19,7 @@ import {
   SlotWaitStopped,
   takeSlot,
 } from "@cawco/core/heavy-slots";
+import { recordedPool } from "@cawco/core/object-pool";
 import { workspaceScratchDir } from "@cawco/core/paths/workspace";
 import {
   repositoryConfigProblem,
@@ -926,7 +927,10 @@ const hostGitRefusal = async (
   if (!found?.isDirectory()) {
     return `${dotGit} is ${found?.isSymbolicLink() ? "a link" : "no folder"}, which CawCo does not run git through on the host`;
   }
-  return await repositoryConfigProblem(dotGit);
+  return await repositoryConfigProblem(
+    dotGit,
+    await recordedPool(workspace.id)
+  );
 };
 
 /** `ran`, once the large files `target` marks for LFS are pulled inside the boundary; its failure in words otherwise. */

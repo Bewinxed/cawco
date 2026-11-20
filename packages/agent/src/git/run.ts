@@ -6,6 +6,7 @@
 
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { recordedPool } from "@cawco/core/object-pool";
 import { runCaptured } from "@cawco/core/run-captured";
 import {
   repositoryConfigProblem,
@@ -22,7 +23,8 @@ import { withoutCredential } from "./hub-credential";
 /**
  * git in `dir`, on this host, as every git call there runs (`safe-git.ts`).
  * In a workspace's clone it refuses to run while the clone's own config
- * holds a key past the allowlist: the workspace writes that config. A
+ * holds a key past the allowlist, or its alternates file names a store but
+ * its recorded object pool: the workspace writes both. A
  * place is a person's own folder, whose config is theirs, and
  * is never refused. `stdin` is fed to git when given.
  */
@@ -33,7 +35,10 @@ export const hostGit = async (
 ) => {
   const workspace = await cloneHolding(dir);
   const problem = workspace
-    ? await repositoryConfigProblem(join(workspace.path, ".git"))
+    ? await repositoryConfigProblem(
+        join(workspace.path, ".git"),
+        await recordedPool(workspace.id)
+      )
     : undefined;
   if (problem) {
     throw new Error(`git did not run in ${dir}: ${problem}`);
@@ -48,7 +53,7 @@ export const hostGit = async (
 };
 
 /** Runs git, answering its stdout; its stderr is the error. */
-export const git = async (dir: string, ...args: string[]): Promise<string> => {
+const git = async (dir: string, ...args: string[]): Promise<string> => {
   const run = await hostGit(dir, args);
   if (run.exitCode !== 0) {
     throw new Error(`git ${args[0]} failed: ${run.stderr.toString().trim()}`);

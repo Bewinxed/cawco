@@ -123,6 +123,7 @@ import { isGitDir } from "../git-dir";
 import { openGithubDoor } from "../github-door";
 import { openGitDoor } from "../hub-git";
 import { ensureView, layerOf, ownFolderSync, ownModules } from "../layer";
+import { borrowFromPool } from "../object-pool";
 import { boundaryProcId, isBoundaryOf } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { hasLeftDirs, listStandIns, rewriteLeftFiles } from "../stand-ins";
@@ -229,6 +230,7 @@ import {
   stopGeneration,
 } from "./stop";
 import {
+  boundaryAlive,
   endKeepingListed,
   keepListed,
   stoppedAsGone,
@@ -361,6 +363,13 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   const holder = held ? await running(ref.id, held) : undefined;
   if (!(held && holder)) {
     await stopUnvouched(ref.id, held);
+    // A cold start, before its first sandbox: a clone cut before object
+    // pools borrows from its origin's pool from here on (object-pool.ts),
+    // converted while nothing of it runs. A retiring boundary still alive
+    // leaves it for the next.
+    if (!(await boundaryAlive(ref.id))) {
+      await borrowFromPool(ref);
+    }
     return start(client, ref);
   }
   // Access is never kept past its removal: a generation that grants what the

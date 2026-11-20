@@ -54,6 +54,7 @@ import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import { listenOrEnd } from "@cawco/core/listeners";
+import { recordedPool } from "@cawco/core/object-pool";
 import { hubCredentialSocket } from "@cawco/core/paths/hub";
 import {
   workspaceDoorDir,
@@ -1369,7 +1370,8 @@ const sameDir = (a: string, b: string): boolean => {
 const configProblem = async (ref: WorkspaceRef): Promise<string | undefined> =>
   overlaySync(ref.id) || (await cloneHolding(ref.path))
     ? await repositoryConfigProblem(
-        join(copyPathSync(ref.id, ref.path), ".git")
+        join(copyPathSync(ref.id, ref.path), ".git"),
+        await recordedPool(ref.id)
       )
     : undefined;
 

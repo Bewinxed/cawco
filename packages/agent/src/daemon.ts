@@ -396,6 +396,7 @@ import {
   clearUnmarkedHusks,
   createWorkspace,
   discardWorkspace,
+  poolHeldClones,
   workspaceApply,
   workspaceAt,
   workspaceBoundary,
@@ -3253,6 +3254,10 @@ const startDaemon = (rediscover = false) =>
     // (workspace.ts). Begun, not awaited: every create waits for it, nothing
     // else does.
     clearUnfinished();
+    // Then each clone cut before object pools, with nothing running in it,
+    // borrows from its origin's pool (workspace.ts). Begun, not awaited:
+    // nothing waits for it; a boundary's cold start converts its own clone.
+    poolHeldClones();
     // First: CLIs already running read their workspace's hook on every shell
     // call, and one an earlier build wrote runs what this build no longer has.
     // Begun, not awaited: registration and custody go on meanwhile, and each

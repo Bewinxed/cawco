@@ -199,6 +199,24 @@ export const heldBy = async (
   if (hubLive.has(ref.id)) {
     return "its work item is live on the hub";
   }
+  return await runsIn(ref);
+};
+
+/** Whether a boundary of workspace `id` is alive on any keeper, a retiring one beside the current one included. */
+export const boundaryAlive = async (id: string): Promise<boolean> =>
+  (await procsHeld()).some(
+    (proc) => proc.alive && isBoundaryOf(proc.procId, id)
+  );
+
+/**
+ * What runs in workspace `ref` on this machine, in words, or nothing: a
+ * boundary of it alive on any keeper, a session process in its clone
+ * ({@link attachedIn}), or a command on its way in ({@link executors}).
+ * {@link heldBy} without the hub's word.
+ */
+export const runsIn = async (
+  ref: WorkspaceRef
+): Promise<string | undefined> => {
   const procs = (await procsHeld()).filter((proc) => proc.alive);
   if (procs.some((proc) => isBoundaryOf(proc.procId, ref.id))) {
     return "a boundary of it runs";

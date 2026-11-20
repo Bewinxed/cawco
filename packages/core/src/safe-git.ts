@@ -13,8 +13,9 @@
  * - {@link repositoryConfigProblem} holds a repository's own config to the
  *   keys a checkout needs ({@link ALLOWED_KEYS}); a key past them (a filter
  *   or diff driver, a credential helper, `core.sshCommand`, an include) means
- *   git does not run there at all. The global and system config are the
- *   owner's, and nothing inside a workspace writes them.
+ *   git does not run there at all, and so does an alternates file naming any
+ *   store but the clone's recorded object pool. The global and system config
+ *   are the owner's, and nothing inside a workspace writes them.
  * - Which repository a git call is for is the folder it runs in, or what the
  *   call names itself: the variables git reads one from (`GIT_DIR` and the
  *   rest, which git exports to a hook or a `rebase --exec` step) leave this
@@ -175,18 +176,60 @@ const ownConfigs = (gitDir: string): string[] => [
 ];
 
 /**
+ * Why git must not run in the clone whose git directory is `gitDir` for what
+ * it borrows: its alternates file (gitrepository-layout(5)
+ * `objects/info/alternates`) names a store other than `pool`'s objects dir,
+ * the one pool its workspace's record says it borrows (core object-pool.ts
+ * `recordedPool`), or names any store when it borrows none. Host git takes
+ * a borrowed store's objects in as the clone's own (a repack, a bundle, a
+ * push), so a store a command put there would reach past the clone. Absent
+ * or empty borrows nothing.
+ */
+const alternatesProblem = async (
+  gitDir: string,
+  pool: string | undefined
+): Promise<string | undefined> => {
+  const file = join(gitDir, "objects", "info", "alternates");
+  const alternates = Bun.file(file);
+  if (!(await alternates.exists())) {
+    return;
+  }
+  let text: string;
+  try {
+    text = await alternates.text();
+  } catch (error) {
+    return `${file} could not be read: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  const lent = pool ? join(pool, "objects") : undefined;
+  const other = text
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line && line !== lent);
+  if (other !== undefined) {
+    return `${file} names ${other}, ${lent ? `where the one store its workspace borrows is ${lent}` : "and its workspace borrows no store"}, so CawCo does not run git there`;
+  }
+};
+
+/**
  * Why git must not run in the repository whose git directory is `gitDir`:
  * a `commondir` file there (a linked worktree's, gitrepository-layout(5):
  * git then reads the config of the dir it names, which this never reads; a
  * clone has none), the first key in its own config past
- * {@link ALLOWED_KEYS}, or the config git could not read. Nothing when git
- * may run there.
+ * {@link ALLOWED_KEYS}, the config git could not read, or an alternates file
+ * naming anything but `pool`'s objects ({@link alternatesProblem}): `pool` is
+ * the object pool its workspace's record names, nothing for one that borrows
+ * none. Nothing when git may run there.
  */
 export const repositoryConfigProblem = async (
-  gitDir: string
+  gitDir: string,
+  pool: string | undefined
 ): Promise<string | undefined> => {
   if (await Bun.file(join(gitDir, "commondir")).exists()) {
     return `${join(gitDir, "commondir")} names another git directory, whose config CawCo does not read, so it does not run git there`;
+  }
+  const borrowed = await alternatesProblem(gitDir, pool);
+  if (borrowed) {
+    return borrowed;
   }
   for (const file of ownConfigs(gitDir)) {
     if (!(await Bun.file(file).exists())) {

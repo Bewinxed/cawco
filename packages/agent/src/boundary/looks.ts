@@ -162,7 +162,8 @@ let narrowAgain: { readonly cause: NarrowCause } | undefined;
  *
  * What is fixed for a workspace's life (its clone, state and scratch dirs,
  * doors, caches, the gitconfig, the host's tool caches, Linux's host-private
- * paths, a place's borrowed objects dirs as recorded) needs none.
+ * paths, the objects a clone or a place borrows, as recorded: a clone's
+ * object pool, a place's alternates) needs none.
  */
 export const recheckNarrowed = (
   cause: NarrowCause,

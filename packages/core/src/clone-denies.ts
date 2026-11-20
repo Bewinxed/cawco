@@ -92,17 +92,24 @@ export const HARNESS_CONFIG: readonly string[] =
   Object.keys(HARNESS_CONFIG_EMPTY);
 
 /**
+ * A clone's alternates file, by path from its root: the one line naming the
+ * object pool it borrows from (core object-pool.ts), or nothing.
+ */
+export const CLONE_ALTERNATES = ".git/objects/info/alternates";
+
+/**
  * What host git runs or reads from a repository, by path from its work tree:
  * its config, its hooks, its submodules' git dirs, and the objects dirs it
- * borrows (`objects/info/alternates`), whose objects host git takes in as the
+ * borrows ({@link CLONE_ALTERNATES}), whose objects host git takes in as the
  * repository's own (a repack, a push through the git door). An empty
- * alternates file borrows nothing.
+ * alternates file borrows nothing; a clone that borrows a pool has its line
+ * stand in instead (workspace-policy.ts `workspaceDenies`).
  */
 const GIT_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
   ".git/config": { kind: "none" },
   ".git/hooks": DIR,
   ".git/modules": DIR,
-  ".git/objects/info/alternates": EMPTY,
+  [CLONE_ALTERNATES]: EMPTY,
 };
 
 /**

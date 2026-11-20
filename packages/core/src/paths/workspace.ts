@@ -261,3 +261,19 @@ export const workspaceBorrowedObjectsFile = (id: string): string =>
  */
 export const workspacePlaceFoldersFile = (id: string): string =>
   join(workspaceStateDir(id), "place-folders.json");
+
+/**
+ * A cut's record in its state dir (`create.json`): the clone's path, written
+ * before anything is at it, the object pool it borrows from, and the URL of
+ * `origin` it was cut from (core object-pool.ts `CreateRecordSchema`).
+ */
+export const workspaceCreateFile = (id: string): string =>
+  join(workspaceStateDir(id), "create.json");
+
+/**
+ * Where CawCo keeps one bare repository per origin whose objects every
+ * workspace clone of that origin borrows (core object-pool.ts): written only
+ * by the agent on this host, read only inside every boundary.
+ */
+export const objectPoolsDir = (): string =>
+  join(homedir(), ".cawco", "object-pools");

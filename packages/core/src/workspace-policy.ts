@@ -8,8 +8,9 @@
  *
  * - Reads: the whole home dir is denied, and back come the workspace's own
  *   trees (its clone, its state dir's read-only part and its scratch dir, the
- *   shared workspace cache, and for a place the objects dirs its
- *   repository borrows, as the agent recorded them (`borrowedObjects`)),
+ *   shared workspace cache, and the objects its git borrows as the agent
+ *   recorded them (`borrowedObjects`): a clone's object pool, a place's
+ *   repository's alternates),
  *   the `package.json` of each folder
  *   above the clone up to the home dir (`ancestorManifests`), the
  *   toolchains on PATH and the tool
@@ -61,12 +62,14 @@ import { z } from "zod";
 import { unlessGone } from "./absent";
 import { binaryRoot } from "./binary-installation";
 import {
+  CLONE_ALTERNATES,
   type CloneDeny,
   cloneDenies,
   PROTECTED_CONFIG,
   PROTECTED_PARENTS,
   protectedFindTests,
 } from "./clone-denies";
+import { alternatesText, recordedPool } from "./object-pool";
 import {
   accountConfigDir,
   claudeConfigDirs,
@@ -356,7 +359,32 @@ const protectedIn = async (root: string): Promise<string[]> =>
   );
 
 /**
- * The clone-side denies a workspace's boundary keeps ({@link cloneDenies}).
+ * `denies` with the alternates file of a clone that borrows `pool` standing
+ * in as its one line (object-pool.ts `alternatesText`), not empty: should
+ * the file be missing as a sandbox starts, the boundary's host makes it so,
+ * and git inside still finds the pool's objects. The file stays one no
+ * command inside writes. Unchanged for a clone that borrows nothing.
+ */
+const borrowing = (
+  denies: readonly CloneDeny[],
+  clone: string,
+  pool: string | undefined
+): readonly CloneDeny[] => {
+  if (!pool) {
+    return denies;
+  }
+  const alternates = join(clone, CLONE_ALTERNATES);
+  return denies.map((deny) =>
+    deny.path === alternates
+      ? { ...deny, empty: { kind: "file", text: alternatesText(pool) } }
+      : deny
+  );
+};
+
+/**
+ * The clone-side denies a workspace's boundary keeps ({@link cloneDenies}),
+ * the alternates file of a clone that borrows a pool standing in as that
+ * pool's line ({@link borrowing}).
  * A place keeps only the protected config it has
  * ({@link protectedIn}), each with nothing to stand in for it: a person's own
  * folder is never written into. At most {@link PROTECTED_MAX}, the config
@@ -367,7 +395,11 @@ export const workspaceDenies = async (
 ): Promise<readonly CloneDeny[]> => {
   const clone = resolveReal(workspace.path);
   if (!isPlace(workspace.id)) {
-    return cloneDenies(clone);
+    return borrowing(
+      cloneDenies(clone),
+      clone,
+      await recordedPool(workspace.id)
+    );
   }
   return collapsed(await protectedIn(clone), clone, PROTECTED_MAX).map(
     (path) => ({
@@ -587,34 +619,45 @@ export const borrowedObjectsOf = async (repo: string): Promise<string[]> => {
 };
 
 /**
- * The objects dirs the workspace's git borrows from, read only, as the agent
- * recorded them ({@link workspaceBorrowedObjectsFile}), never as the
- * alternates file in its folder says now: a command there can write that
- * file. A place's are what its repository borrowed when the agent first held
- * it. A clone borrows nothing: it is cut with a store of its own (agent
- * clone.ts `prepareClone`), and whatever store it is ever cut to borrow from
- * is granted here, from its own record. None that lies where the workspace
- * writes ({@link Policy.allowWrite}): it reads that already, and a link a
- * command put there would lead elsewhere.
+ * What the workspace's git borrows objects from, read only, as the agent
+ * recorded it, never as the alternates file in its folder says now: a command
+ * there can write that file. A clone's is the object pool its `create.json`
+ * names (object-pool.ts `recordedPool`), the folder whole, as a real path:
+ * its alternates file names that pool's objects dir and nothing else
+ * (safe-git.ts `repositoryConfigProblem`), and git in the clone reads it as
+ * the clone's own store. A place's are the objects dirs its repository
+ * borrowed when the agent first held it ({@link workspaceBorrowedObjectsFile}).
+ * None that lies where the workspace writes ({@link Policy.allowWrite}): it
+ * reads that already, and a link a command put there would lead elsewhere.
+ * None is in any write grant: a pool is written by the agent on the host
+ * alone, and git in the clone writes an object it finds there into its own
+ * store when it cannot freshen the pool's copy.
  */
 const borrowedObjects = async (
   id: string,
   writable: readonly string[]
 ): Promise<string[]> => {
-  if (!isPlace(id)) {
-    return [];
-  }
-  const listed =
-    (await readRecord(
-      workspaceBorrowedObjectsFile(id),
-      z.array(z.unknown())
-    )) ?? [];
+  const listed: unknown[] = isPlace(id)
+    ? ((await readRecord(
+        workspaceBorrowedObjectsFile(id),
+        z.array(z.unknown())
+      )) ?? [])
+    : await poolOf(id);
   return listed.filter(
     (dir): dir is string =>
       typeof dir === "string" &&
       isAbsolute(dir) &&
       !writable.some((root) => within(dir, root))
   );
+};
+
+/** Workspace `id`'s recorded pool ({@link borrowedObjects}) at its real path, when it is a folder there. */
+const poolOf = async (id: string): Promise<string[]> => {
+  const pool = await recordedPool(id);
+  const real = pool ? await realpath(pool).catch(() => undefined) : undefined;
+  return real && (await stat(real).catch(() => undefined))?.isDirectory()
+    ? [real]
+    : [];
 };
 
 const NODE_MODULES = "/node_modules";

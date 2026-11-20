@@ -126,38 +126,40 @@ const sourceSays = async (
  * them, copies of the source's own secret files, and what CawCo writes in a
  * clone (stand-ins.ts `straysAmong`). A file the checkout had not reached yet
  * is simply not there. Read on this host, as a closed clone is
- * (workspace.ts `closedCloneGit`): nothing runs in it meanwhile.
+ * (workspace.ts `closedCloneGit`): nothing runs in it meanwhile. `pool` is
+ * the object pool the workspace's record says its clone borrows (core
+ * object-pool.ts `recordedPool`), the one store its alternates file may name.
  */
 export const ownCutProblem = async (
-  mark: CutMark
+  mark: CutMark,
+  pool: string | undefined
 ): Promise<string | undefined> => {
   try {
-    return await readCut(mark);
+    return await readCut(mark, pool);
   } catch (error) {
     return `it could not be read: ${error instanceof Error ? error.message : String(error)}`;
   }
 };
 
 /** {@link ownCutProblem}'s reading, which may throw. */
-const readCut = async ({
-  path,
-  source,
-  at,
-}: CutMark): Promise<string | undefined> => {
+const readCut = async (
+  { path, source, at }: CutMark,
+  pool: string | undefined
+): Promise<string | undefined> => {
   const folder = await lstat(path);
   if (!folder.isDirectory()) {
     return `${path} is ${folder.isSymbolicLink() ? "a link" : "a file"}, no folder`;
   }
   const others = (await entriesAt(path)).filter((name) => name !== ".git");
   const dotGit = join(path, ".git");
-  const early = await beforeRepository(dotGit, others);
+  const early = await beforeRepository(dotGit, others, pool);
   if (early.settled) {
     return early.problem;
   }
   const git = gitAt(path);
   const wrong =
     (await originProblem(git, dotGit, source)) ??
-    (await commitsBeyond(git, source, at));
+    (await commitsBeyond(git, at));
   if (wrong || others.length === 0) {
     return wrong;
   }
@@ -173,7 +175,8 @@ const readCut = async ({
  */
 const beforeRepository = async (
   dotGit: string,
-  others: readonly string[]
+  others: readonly string[],
+  pool: string | undefined
 ): Promise<{ problem?: string; settled: boolean }> => {
   const found = await lstat(dotGit).catch(() => undefined);
   if (!found) {
@@ -191,7 +194,7 @@ const beforeRepository = async (
       problem: `its .git is ${found.isSymbolicLink() ? "a link" : "a file"}, which no cut makes`,
     };
   }
-  const problem = await repositoryConfigProblem(dotGit);
+  const problem = await repositoryConfigProblem(dotGit, pool);
   if (problem) {
     return { settled: true, problem };
   }
@@ -265,13 +268,12 @@ const filesProblem = async (
 
 /**
  * The commits on the clone's branches and stash that are nowhere else, in
- * words: tips that are neither the commit the cut starts at (`at`) nor a
- * ref tip of the source (a `git clone` copies those before the cut deletes
- * them, clone.ts `prepareClone`), counted past `origin`'s branches and `at`.
+ * words: tips that are not the commit the cut starts at (`at`), counted past
+ * `origin`'s branches and `at`. A cut makes no branch of its own before its
+ * checkout (clone.ts `prepareClone`), so any other is work.
  */
 const commitsBeyond = async (
   git: Git,
-  source: string,
   at: WorkspaceCut | null
 ): Promise<string | undefined> => {
   const tips = (
@@ -284,12 +286,7 @@ const commitsBeyond = async (
   )
     .split("\n")
     .filter(Boolean);
-  const sourceTips = new Set(
-    (await sourceSays(source, ["for-each-ref", "--format=%(objectname)"]))
-      ?.split("\n")
-      .filter(Boolean) ?? []
-  );
-  const own = tips.filter((tip) => tip !== at?.commit && !sourceTips.has(tip));
+  const own = tips.filter((tip) => tip !== at?.commit);
   if (own.length === 0) {
     return;
   }

@@ -34,12 +34,18 @@ import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
 import { folderBytes } from "@cawco/core/folder-bytes";
 import { makeFolder } from "@cawco/core/folders";
 import { processesWithin } from "@cawco/core/live-processes";
+import {
+  type CreateRecord,
+  CreateRecordSchema,
+  recordedPool,
+} from "@cawco/core/object-pool";
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import { isSecretFileName } from "@cawco/core/paths/host-policy";
 import {
   forgetWorkspaceTmp,
   workspaceCacheDir,
   workspaceCarriesDir,
+  workspaceCreateFile,
   workspaceScratchDir,
   workspacesDir,
   workspaceTmpDir,
@@ -93,14 +99,13 @@ import {
   IGNORED_STATUS,
   isPlace,
 } from "@cawco/core/workspace-policy";
-import { z } from "zod";
 import { stopWorkspaceBoundary, whileBoundaryClosed } from "./boundary/control";
 import { addAccount, addSpill } from "./boundary/decisions";
 import { ensureBoundary } from "./boundary/ensure";
 import { setProject } from "./boundary/looks";
-import { ownInodes } from "./boundary/package-managers";
+import { closeUnderWay, isStarting } from "./boundary/state";
 import { closeBoundary } from "./boundary/stop";
-import { heldBy } from "./boundary/watch";
+import { heldBy, runsIn } from "./boundary/watch";
 import {
   carryFolder,
   carryReadme,
@@ -108,7 +113,7 @@ import {
   copyStrays,
   ownFilesOnly,
 } from "./carry";
-import { prepareClone } from "./clone";
+import { poolSourceOf, prepareClone } from "./clone";
 import { firstSessionOf, firstSpill } from "./first-session";
 import { placedAsMade } from "./fleet";
 import { dropPlaceSet } from "./fleet-place-set";
@@ -159,13 +164,19 @@ import {
   viewArgv,
   viewPath,
 } from "./layer";
+import {
+  borrowFromPool,
+  conversionOf,
+  poolGitEnv,
+  reclaimPools,
+} from "./object-pool";
 import { PACKAGE_TREES } from "./package-trees";
 import { removeTree } from "./remove-tree";
 import { repoTop } from "./repo-top";
 import { keeperChildren } from "./sessiond-client";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { workspaceModulesRoot } from "./workspace-modules";
-import { cloneHolding } from "./workspace-records";
+import { cloneHolding, workspaceRefs } from "./workspace-records";
 
 const SYMREF = /^ref: refs\/heads\/(\S+)\tHEAD$/mu;
 
@@ -524,8 +535,18 @@ export const clearUnfinished = (): Promise<void> => {
   return unfinishedCleared;
 };
 
-/** {@link clearUnfinished}'s pass; never throws. */
+/**
+ * {@link clearUnfinished}'s pass, the object pools no workspace borrows from
+ * last (object-pool.ts `reclaimPools`), before any cut is served; never
+ * throws.
+ */
 const sweepUnfinished = async (): Promise<void> => {
+  await clearEachUnfinished();
+  await reclaimPools();
+};
+
+/** Each workspace's unfinished create cleared ({@link clearUnfinished}); never throws. */
+const clearEachUnfinished = async (): Promise<void> => {
   const ids = await readdir(workspacesDir()).catch(() => []);
   for (const id of ids) {
     try {
@@ -565,7 +586,9 @@ const clearInterrupted = async (id: string): Promise<void> => {
     return;
   }
   const there = await lstat(mark.path).catch(() => undefined);
-  const problem = there ? await ownCutProblem(mark) : undefined;
+  const problem = there
+    ? await ownCutProblem(mark, await recordedPool(id).catch(() => undefined))
+    : undefined;
   if (problem) {
     console.warn(
       `[workspace] ${id}: its cut at ${mark.path} was cut short when this agent's last process ended, and is left as it is: ${problem}`
@@ -580,6 +603,39 @@ const clearInterrupted = async (id: string): Promise<void> => {
   console.info(
     `[workspace] ${id}: its cut at ${mark.path}, cut short when this agent's last process ended, is cleared; its next cut is made whole`
   );
+};
+
+/**
+ * At this agent's start, once {@link clearUnfinished}'s pass is done: each
+ * repository workspace's clone cut before object pools, with nothing running
+ * in it, made to borrow from its origin's pool and keep only its own objects
+ * (object-pool.ts `borrowFromPool`). One that something runs in, whose
+ * boundary is starting or closing, or that an archive is closing, is left
+ * for its boundary's next cold start (boundary/ensure.ts). Begun, not
+ * awaited: no create waits for it. Never throws.
+ */
+export const poolHeldClones = async (): Promise<void> => {
+  try {
+    await unfinishedCleared;
+    for (const ref of await workspaceRefs()) {
+      if (isPlace(ref.id) || (await readLayer(ref.id).catch(() => undefined))) {
+        continue;
+      }
+      await borrowFromPool(ref, async () => {
+        if (archiving.has(ref.id)) {
+          return "an archive is closing it";
+        }
+        if (isStarting(ref.id) || closeUnderWay(ref.id)) {
+          return "its boundary is starting or closing";
+        }
+        return await runsIn(ref);
+      });
+    }
+  } catch (error) {
+    console.warn(
+      `[workspace] the clones cut before object pools could not all be looked at: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 };
 
 /** Whether {@link clearUnmarkedHusks}' one pass has begun. */
@@ -671,7 +727,10 @@ const clearUnmarked = async (id: string): Promise<void> => {
     keep("its .git names no origin to hold its work");
     return;
   }
-  const problem = await ownCutProblem({ path, source, at: null });
+  const problem = await ownCutProblem(
+    { path, source, at: null },
+    await recordedPool(id).catch(() => undefined)
+  );
   if (problem) {
     keep(problem);
     return;
@@ -721,7 +780,10 @@ const clearOwnCut = async (
   const mark = await cutMark(id).catch(() => undefined);
   const refusal =
     mark?.path === path || (await createdAt(id)) === path
-      ? await ownCutProblem(mark?.path === path ? mark : { path, source, at })
+      ? await ownCutProblem(
+          mark?.path === path ? mark : { path, source, at },
+          await recordedPool(id).catch(() => undefined)
+        )
       : `this machine's agent has no record of cutting workspace ${id} there, and it holds ${await heldAt(path)}`;
   if (refusal) {
     throw new Error(
@@ -891,7 +953,10 @@ const cutClone = async (
   // whose config is theirs.
   const source = await cloneHolding(repoRoot);
   const problem = source
-    ? await repositoryConfigProblem(join(source.path, ".git"))
+    ? await repositoryConfigProblem(
+        join(source.path, ".git"),
+        await recordedPool(source.id)
+      )
     : undefined;
   if (problem) {
     throw new Error(`${repoRoot} cannot have a workspace: ${problem}`);
@@ -911,7 +976,8 @@ const cutClone = async (
     deadline,
     declared
   );
-  const authed = hub ? gitUntil(deadline, hubGitEnv(hub)) : plain;
+  const remoteEnv = hub ? hubGitEnv(hub) : hostEnvironment();
+  const authed = hub ? gitUntil(deadline, remoteEnv) : plain;
   const id8 = id.slice(0, 8);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);
   const branch = `ws/${id8}`;
@@ -929,24 +995,31 @@ const cutClone = async (
     // Before anything at the path: a cut this agent's end cuts short is
     // found its own and cleared, at its start or the next cut.
     await markCut(id, { path, source: repoRoot, at: marked });
-    // Written before the clone: archive-by-id survives a lost reply or an agent restart.
+    const pooled = await poolSourceOf(repoRoot, plain, Boolean(source));
+    // Written before the clone: archive-by-id survives a lost reply or an
+    // agent restart, and the pool it borrows is on record before anything
+    // borrows it (its boundary's read grant, host git's check of its
+    // alternates file, the pools' reclaim).
     await writeStateFile(
-      join(state, "create.json"),
-      JSON.stringify({ path } satisfies CreateRecord)
+      workspaceCreateFile(id),
+      JSON.stringify({ path, pool: pooled.pool } satisfies CreateRecord)
     );
-    // git linked the source's object files into the clone (`--local`); each
-    // gets its own inode as git makes it, before the clone's first git command
-    // (prepareClone), so a cut cut short later (an agent's restart) leaves
-    // nothing linked to the source, whose place's boundary would deny every
-    // linked file. On macOS each copy is an APFS clone, so it costs no space.
-    const base = await prepareClone(repoRoot, path, authed, known, ownInodes);
+    const base = await prepareClone(
+      pooled,
+      path,
+      plain,
+      gitUntil(deadline, poolGitEnv(remoteEnv)),
+      known,
+      deadline
+    );
     // The origin it was cut from, as this host read it from the source: the
     // one URL an archive refreshes the base from ({@link refreshBase}).
     await writeStateFile(
-      join(state, "create.json"),
+      workspaceCreateFile(id),
       JSON.stringify({
         path,
         origin: await plain(path, "remote", "get-url", "origin"),
+        pool: pooled.pool,
       } satisfies CreateRecord)
     );
     if (cut) {
@@ -1036,7 +1109,7 @@ const makeFolderLayer = async (
     await makeFolder(state);
     // Written before the layer: archive-by-id survives a lost reply or an agent restart.
     await writeStateFile(
-      join(state, "create.json"),
+      workspaceCreateFile(id),
       JSON.stringify({ path } satisfies CreateRecord)
     );
     const layer = await makeLayer(id, folder, path);
@@ -1449,12 +1522,8 @@ export const workspaceBoundary = async (
  */
 const createdPath = async (id: string): Promise<string | undefined> => {
   try {
-    return (
-      await readRecord(
-        join(workspacesDir(), id, "create.json"),
-        CreateRecordSchema
-      )
-    )?.path;
+    return (await readRecord(workspaceCreateFile(id), CreateRecordSchema))
+      ?.path;
   } catch (error) {
     if (!isDamagedRecord(error)) {
       throw error;
@@ -1472,18 +1541,6 @@ const createdPath = async (id: string): Promise<string | undefined> => {
  */
 const strayEntries = async (path: string): Promise<string[]> =>
   straysIn(path, await placedAsMade(path));
-
-/**
- * A cut's record in its state dir, `create.json`: the clone's path, written
- * before anything is at it, and once the clone is made the URL of `origin` it
- * was cut from, as this host read it from the source (a clone a build before
- * this cut has none).
- */
-const CreateRecordSchema = z.object({
-  origin: z.string().optional(),
-  path: z.string().optional(),
-});
-type CreateRecord = z.infer<typeof CreateRecordSchema>;
 
 /** A branch name taken into a refspec: no option, no second refspec, no `:`. */
 const BRANCH_NAME = /^[A-Za-z0-9_][A-Za-z0-9_./-]*$/u;
@@ -1510,7 +1567,7 @@ const refreshBase = async (
     return;
   }
   const record = await readRecord(
-    join(workspacesDir(), workspace.id, "create.json"),
+    workspaceCreateFile(workspace.id),
     CreateRecordSchema
   ).catch(() => undefined);
   const origin = record?.origin;
@@ -1597,7 +1654,10 @@ const gitRefusal = async (
   if (!found.isDirectory()) {
     return `${join(workspace.path, ".git")} is ${found.isSymbolicLink() ? "a link" : "no folder"}, which CawCo does not run git through`;
   }
-  return await repositoryConfigProblem(dotGit);
+  return await repositoryConfigProblem(
+    dotGit,
+    await recordedPool(workspace.id)
+  );
 };
 
 /**
@@ -1634,42 +1694,6 @@ const closedCloneGit = async (
     }
     return ran.stdout.trim();
   };
-};
-
-/**
- * A held clone made to depend on nothing in the repository it was cut from:
- * one cut as a shared clone, before clones had stores of their own, still
- * borrows that repository's objects (`objects/info/alternates`), and a gc
- * there could take them from under its unlanded work. `git repack -a -d`
- * packs every object its refs, reflogs and index reach into its own store,
- * borrowed ones included (no `-l`), then the alternates file goes: what `git
- * clone --dissociate` does (git-clone(1): "this option can be used to stop
- * the borrowing"). Git on this host once its boundary is closed
- * ({@link closedCloneGit}). One that borrows nothing is left as it is: no
- * alternates file, or the empty one that stands in for it while a sandbox
- * runs (core clone-denies.ts `GIT_EMPTY`).
- */
-const ownObjects = async (
-  workspace: WorkspaceRef,
-  access: CopyAccess
-): Promise<void> => {
-  const alternates = access.at(
-    join(workspace.path, ".git", "objects", "info", "alternates")
-  );
-  const listed = await readFile(alternates, "utf8").catch(() => "");
-  if (
-    !listed
-      .split("\n")
-      .some((line) => line.trim() && !line.trim().startsWith("#"))
-  ) {
-    return;
-  }
-  const git = await closedCloneGit(workspace, access);
-  await git(["repack", "-a", "-d", "-q"]);
-  await rm(alternates, { force: true });
-  console.info(
-    `[workspace] ${workspace.id}: held, its clone ${workspace.path} holds every object of its own now, borrowing none from the repository it was cut from`
-  );
 };
 
 type ClosedGit = Awaited<ReturnType<typeof closedCloneGit>>;
@@ -2395,23 +2419,16 @@ const carryAway = async (
 };
 
 /**
- * A copy that holds work and is kept: one cut before clones had stores of
- * their own takes what it borrows into its own ({@link ownObjects}), and
- * what it holds is answered with its size on disk (a Linux view's: its
- * upper and work dirs).
+ * A copy that holds work and is kept, answered with its size on disk (a
+ * Linux view's: its upper and work dirs). A clone kept goes on borrowing
+ * from its object pool: its unlanded work was never in the pool, which holds
+ * only what its origin has, and nothing ever leaves the pool.
  */
 const keepHeld = async (
   workspace: WorkspaceRef,
   access: CopyAccess,
   held: Held
 ): Promise<WorkspaceHolding> => {
-  if (
-    access.layer.kind === "repo" &&
-    held.strays === undefined &&
-    held.refused === undefined
-  ) {
-    await ownObjects(workspace, access);
-  }
   const kept: WorkspaceHolding = {
     ...held,
     bytes: await folderBytes([
@@ -2424,7 +2441,33 @@ const keepHeld = async (
   return kept;
 };
 
+/** The workspaces an archive or discard is closing ({@link closeClone}): no clone of theirs is converted meanwhile ({@link poolHeldClones}). */
+const archiving = new Map<string, number>();
+
+/**
+ * {@link closeClone}'s close, once a conversion of the clone to its object
+ * pool under way has finished (object-pool.ts `borrowFromPool`), and with
+ * none begun until it ends: its git reads the clone's store as it stands.
+ */
 const closeClone = async (
+  request: WorkspaceArchive,
+  carryHeld: boolean
+): Promise<WorkspaceArchived> => {
+  archiving.set(request.id, (archiving.get(request.id) ?? 0) + 1);
+  try {
+    await conversionOf(request.id);
+    return await closeCloneNow(request, carryHeld);
+  } finally {
+    const left = (archiving.get(request.id) ?? 1) - 1;
+    if (left > 0) {
+      archiving.set(request.id, left);
+    } else {
+      archiving.delete(request.id);
+    }
+  }
+};
+
+const closeCloneNow = async (
   request: WorkspaceArchive,
   carryHeld: boolean
 ): Promise<WorkspaceArchived> => {
