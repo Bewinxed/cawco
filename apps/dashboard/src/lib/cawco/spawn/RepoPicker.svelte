@@ -47,6 +47,20 @@
   const ALL = "*";
 
   /**
+   * The skeleton rows while the list is read: as many as the list's resting
+   * height holds, each its name's bar and its description's at a share of
+   * their column as a list's names and descriptions vary, so they read as
+   * rows, not as one block repeated.
+   */
+  const SKELETON_ROWS = [
+    { name: "40%", description: "80%" },
+    { name: "60%", description: "60%" },
+    { name: "33%", description: "66%" },
+    { name: "50%", description: "75%" },
+    { name: "40%", description: "50%" },
+  ] as const;
+
+  /**
    * The URL row's key: there is one at most, and it stays the same row as
    * the URL is typed and as what the machine says of it fills it in.
    */
@@ -136,7 +150,10 @@
    * on GitHub gh's row for it and its social image, or a line saying gh
    * sees none there; on another host its page's description and image.
    * Owner chips filter the list to one owner, and each row's `owner/`
-   * folds away while one is chosen.
+   * folds away while one is chosen; a strip of them wider than the popover
+   * scrolls sideways under the wheel, its edges fading where more is past
+   * them (motion/sideways). While the list is read, skeleton rows stand in
+   * its rows' places on the rows' own columns.
    *
    * Motion: one list, its rows keyed by the repository, never mounted
    * again (motion/rows `reflow`). As the search or the owner changes, the
@@ -150,9 +167,11 @@
    * and its height travels as the new ones arrive. Through `reflow` those
    * rows left and arrived in the same slots in the same frames, each the
    * other's crossfade, under an edge shrinking over the ones leaving. The
-   * owner group's thumb travels to the owner picked (the kit's segmented
-   * group); the rows' hover ghost and picked wash travel between rows
-   * (`highlight`); the lock's tooltip is the list's one tooltip, portalled
+   * skeleton rows hand their places to the list as it arrives, in the
+   * skeleton's reveal (motion/rows `data-flip-skeleton`). The owner group's
+   * thumb travels to the owner picked (the kit's segmented group), and a
+   * chip picked or reached by the keyboard comes whole into view; the
+   * rows' hover ghost and picked wash travel between rows (`highlight`); the lock's tooltip is the list's one tooltip, portalled
    * out of the scroller. The URL row fills in where it stands as the
    * machine answers: the avatar takes the host's mark's place (`icon-swap`),
    * the age morphs in (MorphText), and the description, the line saying gh
@@ -164,7 +183,6 @@
   import { untrack } from "svelte";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import Skeleton from "#lib/components/ui/skeleton/skeleton.svelte";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
@@ -182,6 +200,7 @@
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { handOver, reflow } from "#lib/platform/motion/rows.svelte.js";
+  import { sideways } from "#lib/platform/motion/sideways.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { didntAnswer } from "../hub/control";
   import Marked from "../Marked.svelte";
@@ -334,6 +353,8 @@
   const typed = $derived(query.trim());
   /** The search is a git URL: it is the one row, cloned as it is written. */
   const pasted = $derived(isGitUrl(typed));
+  /** The list is being read: its rows' places stand as skeletons (a pasted URL is its one row meanwhile). */
+  const reading = $derived(listing.kind === "reading" && !pasted);
   const q = $derived(pasted ? "" : typed.toLowerCase());
   const pickedId = $derived(repo ? repoIdentity(repo) : "");
   const listed = $derived(
@@ -646,36 +667,39 @@
 
   {#if owners.length > 1 && !pasted}
     <!-- One pick among the owners, its thumb travelling to the one picked
-         (the kit's segmented group); a row wider than the popover scrolls. -->
-    <div
-      data-slot="owners"
-      class="fai-scroll min-w-0 overflow-x-auto overscroll-x-contain"
-      in:unfold
-      out:unfold
-    >
-      <ToggleGroup.Root
-        aria-label={spawnWords.location.owners}
-        onValueChange={(next) => {
-          // A press on the picked owner keeps it picked.
-          if (next) {
-            chooseOwner(next === ALL ? "" : next);
-          }
-        }}
-        type="single"
-        value={owner || ALL}
+         (the kit's segmented group). A row wider than the popover scrolls
+         sideways under the wheel, the house edge fade at each edge with more
+         past it and no scrollbar (motion/sideways); the scroller pads into an
+         equal negative margin, so a chip's focus ring is never cut. -->
+    <div data-slot="owners" class="grid min-w-0" in:unfold out:unfold>
+      <div
+        class="kit-edge-fade no-scrollbar -m-space-2 flex min-w-0 overflow-x-auto overscroll-x-contain p-space-2"
+        {@attach sideways('[data-slot="toggle-group-item"]')}
       >
-        <ToggleGroup.Item value={ALL}>
-          <span>{spawnWords.location.allOwners}</span>
-          <span class="num text-ink-muted">{repos.length}</span>
-        </ToggleGroup.Item>
-        {#each owners as one (one.owner.login)}
-          <ToggleGroup.Item value={one.owner.login}>
-            {@render avatar(one.owner, "size-icon-md")}
-            <span>{one.owner.login}</span>
-            <span class="num text-ink-muted">{one.count}</span>
+        <ToggleGroup.Root
+          aria-label={spawnWords.location.owners}
+          onValueChange={(next) => {
+            // A press on the picked owner keeps it picked.
+            if (next) {
+              chooseOwner(next === ALL ? "" : next);
+            }
+          }}
+          type="single"
+          value={owner || ALL}
+        >
+          <ToggleGroup.Item value={ALL}>
+            <span>{spawnWords.location.allOwners}</span>
+            <span class="num text-ink-muted">{repos.length}</span>
           </ToggleGroup.Item>
-        {/each}
-      </ToggleGroup.Root>
+          {#each owners as one (one.owner.login)}
+            <ToggleGroup.Item value={one.owner.login}>
+              {@render avatar(one.owner, "size-icon-md")}
+              <span>{one.owner.login}</span>
+              <span class="num text-ink-muted">{one.count}</span>
+            </ToggleGroup.Item>
+          {/each}
+        </ToggleGroup.Root>
+      </div>
     </div>
   {/if}
 
@@ -688,6 +712,7 @@
   <div
     bind:this={listbox}
     data-slot="repo-list"
+    aria-busy={reading || undefined}
     aria-label={spawnWords.location.repositories}
     class="fai-scroll @container/repos relative grid max-h-72 auto-rows-max grid-cols-(--repo-cols) content-start gap-x-space-3 overflow-y-auto overscroll-contain"
     id={`${uid}-list`}
@@ -740,18 +765,64 @@
           {@render face(row, true)}
         </div>
       {/each}
+      <!-- While the list is read, the rows' places on the rows' own
+           columns; they hand them to the rows in the skeleton's reveal
+           (reflow's `data-flip-skeleton`). -->
+      {#if reading}
+        {#each SKELETON_ROWS as bars, at (at)}
+          <div
+            aria-hidden="true"
+            class={ROW}
+            data-flip
+            data-flip-skeleton
+            data-slot="repo-row-skeleton"
+          >
+            <span class="col-start-1 mark-cell justify-self-center"
+              ><Skeleton cell="avatar" radius="pill" /></span
+            >
+            <span
+              class="col-start-2 flex h-lh items-center type-label @max-repo-narrow/repos:col-span-3"
+              data-box
+              style:--bar={bars.name}
+              ><Skeleton
+                class="w-(--bar)"
+                height="x-height"
+                radius="line"
+                type="label"
+              /></span
+            >
+            <span
+              class="col-start-4 flex h-lh items-center justify-end type-meta @max-repo-narrow/repos:row-start-2"
+              data-box
+              ><Skeleton
+                height="x-height"
+                radius="line"
+                type="meta"
+                width="age"
+              /></span
+            >
+            <span
+              class="col-start-2 row-start-2 flex h-lh items-center type-meta"
+              data-box
+              style:--bar={bars.description}
+              ><Skeleton
+                class="w-(--bar)"
+                height="x-height"
+                radius="line"
+                type="meta"
+              /></span
+            >
+          </div>
+        {/each}
+      {/if}
     </div>
-    {#if !rows.length}
+    {#if !(rows.length || reading)}
       <p
         data-slot="repo-list-empty"
         class="col-span-full m-0 py-space-5 type-meta text-pretty text-ink-muted"
         role="status"
       >
-        {#if listing.kind === "reading"}
-          <span class="mark-line inline-flex items-center gap-space-2"
-            ><LiveDot /><span>{spawnWords.location.loadingRepos}</span></span
-          >
-        {:else if why}
+        {#if why}
           {why}
         {:else}
           {spawnWords.location.noMatch(typed)}
@@ -759,6 +830,9 @@
       </p>
     {/if}
   </div>
+  <span class="sr-only" role="status"
+    >{reading ? spawnWords.location.loadingRepos : ""}</span
+  >
 </div>
 <GlideTip tether={tips} />
 

@@ -11,8 +11,16 @@
  * Overlays' other part, the lightbox, stays out: it is the page's one
  * (lightbox-state.svelte.ts), and a copy round each story would open one
  * lightbox per drawing.
+ *
+ * The page's one watch over the house edge fades (motion/fade-runs
+ * `watchEdgeFades`), as the app's root layout starts it: without it no
+ * scroller in a story wears its fade, edge-fade.css drawing none on one it
+ * isn't told runs past its box.
  */
 import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
+import { watchEdgeFades } from "#lib/platform/motion/fade-runs.svelte.js";
+
+watchEdgeFades();
 
 export default {
   decorators: [() => ({ Component: TooltipProvider, props: {} })],

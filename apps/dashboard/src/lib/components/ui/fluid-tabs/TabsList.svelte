@@ -79,12 +79,13 @@
   import { type Snippet, untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { motionOk } from "#lib/platform/motion/curves.svelte.js";
   import {
     type FoldPose,
     restPose,
     samePose,
   } from "#lib/platform/motion/fold-path.js";
+  import { glide } from "#lib/platform/motion/sideways.js";
   import { msOf } from "#lib/platform/motion/time.js";
   import { cn } from "#lib/utils.js";
   import { boxMoving } from "./box-runs";
@@ -1061,12 +1062,10 @@
   }
 
   /**
-   * A vertical wheel over the track moves it sideways on a spring: each
-   * notch pushes the target along and the track glides after it, carrying
-   * its speed into the next notch, instead of jumping 100px a click.
-   * Critically damped at --duration-glide's response, so it lands without
-   * overshoot. A sideways trackpad swipe is the browser's own scroll and
-   * is left alone.
+   * A vertical wheel over the track moves it sideways on the house glide
+   * (motion/sideways `glide`): it lands without overshoot, and a track at
+   * its end in the wheel's direction leaves the wheel to the page. A
+   * sideways trackpad swipe is the browser's own scroll and is left alone.
    */
   /** Whether a tab stands past the track's viewport: there is somewhere to scroll. */
   const overflows = $derived(
@@ -1079,65 +1078,8 @@
   };
 
   function sideways(el: HTMLElement) {
-    let stiffness = 0;
-    let damping = 0;
-    let target = 0;
-    let at = 0;
-    let velocity = 0;
-    let frame: number | null = null;
-    let last = 0;
-
-    const stop = () => {
-      if (frame !== null) {
-        cancelAnimationFrame(frame);
-        frame = null;
-      }
-    };
-    stopGlide = stop;
-
-    const step = (now: number) => {
-      const dt = Math.min(0.032, (now - last) / 1000);
-      last = now;
-      velocity += (stiffness * (target - at) - damping * velocity) * dt;
-      at += velocity * dt;
-      if (Math.abs(target - at) < 0.5 && Math.abs(velocity) < 10) {
-        el.scrollLeft = target;
-        frame = null;
-        return;
-      }
-      el.scrollLeft = at;
-      frame = requestAnimationFrame(step);
-    };
-
-    const onwheel = (event: WheelEvent) => {
-      if (event.deltaX !== 0) {
-        stop();
-        return;
-      }
-      event.preventDefault();
-      let delta = event.deltaY;
-      if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
-        delta *= 16;
-      } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
-        delta *= el.clientWidth;
-      }
-      if (!motionOk.current) {
-        el.scrollLeft += delta;
-        return;
-      }
-      if (frame === null) {
-        const response = dur("--duration-glide") / 1000;
-        stiffness = ((2 * Math.PI) / response) ** 2;
-        damping = (4 * Math.PI) / response;
-        at = el.scrollLeft;
-        target = at;
-        velocity = 0;
-        last = performance.now();
-        frame = requestAnimationFrame(step);
-      }
-      const max = el.scrollWidth - el.clientWidth;
-      target = Math.max(0, Math.min(max, target + delta));
-    };
+    const moves = glide(el);
+    stopGlide = moves.stop;
     // Not passive: a vertical wheel is the track's own, turned sideways, and
     // must not also scroll whatever holds the track. Held only while the
     // track overflows (its tabs' measured boxes and its viewport say when),
@@ -1155,16 +1097,16 @@
     const stopListening = $effect.root(() => {
       $effect(() => {
         if (!overflows) {
-          stop();
+          moves.stop();
           return;
         }
-        el.addEventListener("wheel", onwheel, { passive: false });
-        return () => el.removeEventListener("wheel", onwheel);
+        el.addEventListener("wheel", moves.wheel, { passive: false });
+        return () => el.removeEventListener("wheel", moves.wheel);
       });
     });
     return {
       destroy() {
-        stop();
+        moves.stop();
         stopListening();
         cancelAnimationFrame(capFrame);
         el.removeEventListener("scroll", onscroll);

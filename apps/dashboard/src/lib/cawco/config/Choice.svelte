@@ -10,6 +10,7 @@
    * segment's touch area stays whole (DESIGN.md, The 44 Touch Rule).
    */
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { clearOfFades } from "#lib/platform/motion/sideways.js";
 
   let {
     label,
@@ -36,21 +37,9 @@
     const item = row.querySelector<HTMLElement>(
       '[data-slot="toggle-group-item"][data-state="on"]'
     );
-    if (!item || row.scrollWidth <= row.clientWidth) {
-      return;
-    }
-    // The house fade's length on this row (edge-fade.css `--fade-len`).
-    const fade =
-      Number.parseFloat(getComputedStyle(row).getPropertyValue("--fade-len")) ||
-      0;
-    const box = item.getBoundingClientRect();
-    const at = box.left - row.getBoundingClientRect().left + row.scrollLeft;
-    const start = at - fade;
-    const end = at + box.width + fade - row.clientWidth;
-    if (start < row.scrollLeft) {
-      row.scrollLeft = start;
-    } else if (end > row.scrollLeft) {
-      row.scrollLeft = end;
+    const to = item ? clearOfFades(row, item) : null;
+    if (to !== null) {
+      row.scrollLeft = to;
     }
   }
 </script>

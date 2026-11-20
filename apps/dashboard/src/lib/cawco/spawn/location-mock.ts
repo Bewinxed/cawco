@@ -143,6 +143,127 @@ const QUARRY_CARD = svg(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1c1917"/><stop offset="1" stop-color="#7c2d12"/></linearGradient></defs><rect width="1280" height="640" fill="url(#g)"/><g fill="none" stroke="#fdba74" stroke-width="10" opacity="0.9"><rect x="120" y="200" width="60" height="240" rx="10"/><rect x="200" y="140" width="60" height="300" rx="10"/><rect x="280" y="260" width="60" height="180" rx="10"/></g><text x="420" y="320" font-family="system-ui,sans-serif" font-size="128" font-weight="700" fill="#fff7ed">quarry</text><text x="424" y="400" font-family="system-ui,sans-serif" font-size="34" fill="#fed7aa">Columnar queries over event logs</text></svg>`
 );
 
+/**
+ * The owners of the older repositories, and how many each holds: ten
+ * owners, so the owner strip runs past the popover's width, the person's
+ * own account in the hundreds, as a long-used gh lists them.
+ */
+const MORE_OWNERS: [GhRepoOwner, number][] = [
+  [BEWINXED, 117],
+  [
+    { login: "ProcreationAI", kind: "org", avatarUrl: avatar("P", "#7c3aed") },
+    64,
+  ],
+  [{ login: "supabase", kind: "org", avatarUrl: avatar("S", "#15803d") }, 2],
+  [PETRALAB, 38],
+  [OXIDELABS, 21],
+  [
+    {
+      login: "harbour-collective",
+      kind: "org",
+      avatarUrl: avatar("H", "#1d4ed8"),
+    },
+    14,
+  ],
+  [AYAAN, 9],
+  [
+    {
+      login: "northwind-systems",
+      kind: "org",
+      avatarUrl: avatar("N", "#b45309"),
+    },
+    6,
+  ],
+  [{ login: "inkpress", kind: "org", avatarUrl: avatar("I", "#4338ca") }, 4],
+  [
+    { login: "lantern-studio", kind: "org", avatarUrl: avatar("L", "#be123c") },
+    3,
+  ],
+];
+
+/** The words the older repositories' names are made of. */
+const NAME_PARTS = [
+  [
+    "edge",
+    "quill",
+    "relay",
+    "atlas",
+    "ember",
+    "signal",
+    "harbor",
+    "orbit",
+    "prism",
+    "tally",
+    "cinder",
+    "vault",
+    "lumen",
+  ],
+  [
+    "api",
+    "worker",
+    "sdk",
+    "cli",
+    "web",
+    "bot",
+    "docs",
+    "infra",
+    "sync",
+    "kit",
+    "lab",
+    "proxy",
+    "studio",
+  ],
+];
+/** Their descriptions, a few left out as gh lists them. */
+const DESCRIPTIONS = [
+  "Background jobs for the ingestion pipeline",
+  "Typed client generated from the OpenAPI schema",
+  null,
+  "Prototype: realtime presence over websockets",
+  "Docs site, built with Astro",
+  "Fork kept for a patch upstream hasn't merged yet",
+  null,
+  "Migration scripts and seed data for local dev",
+];
+
+/**
+ * The older repositories, behind {@link REPOS}: each owner's of
+ * {@link MORE_OWNERS}, dealt out in turn so each owner first shows up early
+ * in the list, a day or so apart, the oldest last.
+ */
+function olderRepos(): GhRepo[] {
+  const left = new Map(MORE_OWNERS);
+  const older: GhRepo[] = [];
+  const [firsts = [], seconds = []] = NAME_PARTS;
+  while ([...left.values()].some((count) => count > 0)) {
+    for (const [owner, count] of left) {
+      if (count === 0) {
+        continue;
+      }
+      left.set(owner, count - 1);
+      const at = older.length;
+      const first = firsts[at % firsts.length];
+      const second = seconds[Math.floor(at / firsts.length) % seconds.length];
+      // Past every pairing of the words, the name says it is a second one.
+      const again = at >= firsts.length * seconds.length ? "-2" : "";
+      const name = `${first}-${second}${again}`;
+      older.push(
+        repo(
+          owner,
+          name,
+          DESCRIPTIONS[at % DESCRIPTIONS.length] ?? null,
+          at % 3 === 0,
+          (80 + at * 1.5) * DAY
+        )
+      );
+    }
+  }
+  return older;
+}
+
+/** Every repository the machine's gh lists, latest updated first. */
+const LISTED: GhRepo[] = [...REPOS, ...olderRepos()];
+
 /** A GitLab project's avatar, which its page gives as its `og:image`. */
 const VECTORPRESS_AVATAR = svg(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><rect width="400" height="400" fill="#4338ca"/><path d="M90 300 L200 90 L310 300 Z" fill="none" stroke="#e0e7ff" stroke-width="22" stroke-linejoin="round"/><circle cx="200" cy="230" r="34" fill="#e0e7ff"/></svg>`
@@ -228,8 +349,37 @@ export async function lookupOf(
 /** The mock machine's id, by the answer its gh gives. */
 export const mockMachine = (answer: MockAnswer): string => `mock-${answer}`;
 
-/** What the mock machine's gh answers, read off its id; a read that never ends while it is "loading". */
-export function reposOf(machineId: string): Promise<MachineRepos> {
+/**
+ * The reads held while the dial says "loading", by their machine's id: each
+ * answers the list once {@link releaseRepos} lets it go.
+ */
+const held = new Map<string, { answer: () => void; read: Promise<void> }>();
+let holds = 0;
+
+/**
+ * A machine whose list stays being read until {@link releaseRepos} is called
+ * with its id: a new one each time, so no list read before stands for it.
+ */
+export function holdRepos(): string {
+  holds += 1;
+  const id = `${mockMachine("loading")}-${holds}`;
+  const { promise, resolve } = Promise.withResolvers<void>();
+  held.set(id, { answer: resolve, read: promise });
+  return id;
+}
+
+/** The held read of machine `machineId` answers its list. */
+export function releaseRepos(machineId: string): void {
+  held.get(machineId)?.answer();
+}
+
+/** What the mock machine's gh answers, read off its id; a held read ({@link holdRepos}) once it is let go, and one that never ends on the bare "loading" machine. */
+export async function reposOf(machineId: string): Promise<MachineRepos> {
+  const hold = held.get(machineId);
+  if (hold) {
+    await hold.read;
+    return { kind: "listed", repos: LISTED };
+  }
   const answer = ANSWERS.find((one) => machineId === mockMachine(one));
   switch (answer) {
     case "loading":
@@ -237,10 +387,10 @@ export function reposOf(machineId: string): Promise<MachineRepos> {
     case "no-gh":
     case "signed-out":
     case "old-daemon":
-      return Promise.resolve({ kind: answer });
+      return { kind: answer };
     case "listed":
     case undefined:
-      return Promise.resolve({ kind: "listed", repos: REPOS });
+      return { kind: "listed", repos: LISTED };
     default:
       return unhandled("answer", answer);
   }

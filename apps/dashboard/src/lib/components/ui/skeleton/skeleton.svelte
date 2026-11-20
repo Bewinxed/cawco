@@ -88,6 +88,8 @@
         glyph: "size-icon-md",
         /** A speaker's or a row's 18px identity mark. */
         mark: "size-c-row-mark",
+        /** An owner's avatar in a list row's lead (a repository's owner). */
+        avatar: "size-icon-lg",
         /** A comment pin's disc. */
         pin: "size-c-pin",
       },

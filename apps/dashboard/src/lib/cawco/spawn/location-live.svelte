@@ -10,17 +10,20 @@
    * person's paste would.
    */
   import { spawnWords } from "@cawco/core/words/spawn";
+  import { untrack } from "svelte";
   import { type BenchFs, standSocket } from "../hub/socket.svelte";
   import LifetimeChip from "./LifetimeChip.svelte";
   import LocationChip from "./LocationChip.svelte";
   import LocationSection from "./LocationSection.svelte";
   import {
     filesOf,
+    holdRepos,
     lookupOf,
     type MockAnswer,
     type MockPaste,
     mockMachine,
     PASTES,
+    releaseRepos,
     reposOf,
   } from "./location-mock";
   import NsPopoverGroup from "./NsPopoverGroup.svelte";
@@ -57,10 +60,10 @@
   standSocket({
     hub: () => undefined,
     spawn: null,
-    control: (machineId, method, args) => {
+    control: (askedId, method, args) => {
       switch (method) {
         case "ghRepos":
-          return reposOf(machineId);
+          return reposOf(askedId);
         case "ghRepo":
           return lookupOf(String(args[0]), lookupMs);
         default:
@@ -69,6 +72,30 @@
     },
     fs: files,
   });
+
+  /**
+   * The machine whose list is being read while gh's answer is "loading": a
+   * new one each time the dial turns to it, its read answered when the dial
+   * is back on "listed", so the list arrives in the picker that waited for it.
+   */
+  let held = $state("");
+  $effect.pre(() => {
+    const now = answer;
+    untrack(() => {
+      if (now === "loading") {
+        held = holdRepos();
+      } else if (now === "listed" && held) {
+        releaseRepos(held);
+      } else {
+        held = "";
+      }
+    });
+  });
+  const machineId = $derived(
+    held && (answer === "loading" || answer === "listed")
+      ? held
+      : mockMachine(answer)
+  );
 
   // What the form holds: the story's args, and what a press sets in place.
   let mode = $derived(startMode);
@@ -137,7 +164,7 @@
       <LocationSection
         {dir}
         locked={false}
-        machineId={mockMachine(answer)}
+        {machineId}
         machineName="obelisk-of-light"
         {mode}
         {...form}
@@ -150,7 +177,7 @@
       <LocationChip
         {dir}
         locked={false}
-        machineId={mockMachine(answer)}
+        {machineId}
         machineName="obelisk-of-light"
         {mode}
         onchange={(next) => {
