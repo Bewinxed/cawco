@@ -42,6 +42,12 @@ export const taskLinkWords = {
   closedUnmerged: "closed unmerged",
   /** An Actions run waited on, red: its wait's flag. */
   runFailed: "failed",
+  /** A date waited on (core wait-targets.ts `time`), its instant in UTC: the day and the hour, `2026-12-01`, `06:00`; midnight kept, so no viewer reads a whole day. */
+  dateLabel: (day: string, time: string): string => `${day} ${time} UTC`,
+  /** A date waited on that has not come yet. */
+  dateNotYet: "not yet",
+  /** A date waited on that has passed: its wait is settled. */
+  datePassed: "passed",
   /** Why a project cannot wait on a pull request or run. */
   noGitHub:
     "the project has no GitHub connection to read it. Connect GitHub for the project first.",

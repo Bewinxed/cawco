@@ -1924,6 +1924,7 @@ export const createTasks = (store: TaskStore) => {
       world: {
         projectId,
         ...store.waitWorld(projectId),
+        now: Date.now(),
         gone: (id) => gone.has(id),
         task: (id) => {
           const row = byId.get(id);
@@ -2991,7 +2992,8 @@ export const createTasks = (store: TaskStore) => {
   /**
    * Waits as `actor` writes them (task-waits.ts `readWait`), as a file keeps
    * them: a task the project has on its board or in its archive, or a card,
-   * a pin, a pull request, a run or a session the reader settles. Refused,
+   * a pin, a pull request, a run, a session, a condition or a date the
+   * reader settles. Refused,
    * in the reader's words, when one names nothing that exists.
    */
   const waitsFor = async (
@@ -6098,6 +6100,11 @@ export const createTasks = (store: TaskStore) => {
       }
     },
 
+    /** Every wait the project's tasks name in their own `waits_on`, each once, as a file keeps it: what waits.ts asks of a date passing. */
+    waitHandles(projectId: string): string[] {
+      return [...new Set(store.index(projectId).flatMap((row) => row.waitsOn))];
+    },
+
     /** The tasks whose own `waits_on` names `handle` (as a file keeps it), by id: what a condition's view and its delete name. */
     waitersOf(projectId: string, handle: string): string[] {
       return store
@@ -6139,20 +6146,22 @@ export const createTasks = (store: TaskStore) => {
     },
 
     /**
-     * One wait settled now (task-waits.ts `settled`), read in project
-     * `projectId` (null: none, so a task target names nothing): a plan
-     * step's wait.
+     * Waits settled now, in one read (task-waits.ts `settled`), read in
+     * project `projectId` (null: none, so a task target names nothing),
+     * each in `handles`' order: a plan step's waits, and a waiting stage's
+     * `until:` fields (waits.ts).
      */
-    async waitState(projectId: string | null, handle: string) {
+    async waitStates(projectId: string | null, handles: readonly string[]) {
+      if (handles.length === 0) {
+        return [];
+      }
       const rows = projectId ? store.index(projectId) : [];
       const stages = projectId ? await currentStages(projectId) : undefined;
       if (stages instanceof ElysiaStatus) {
         return stages;
       }
-      return settleIn(
-        contextOf(projectId ?? "", rows, stages, new Set()),
-        handle
-      );
+      const context = contextOf(projectId ?? "", rows, stages, new Set());
+      return handles.map((handle) => settleIn(context, handle));
     },
 
     /**

@@ -14,6 +14,11 @@
  * | run     | `https://github.com/<owner>/<repo>/actions/runs/<n>` | the same                     |
  * | session | `<dir>#<id8>`, the handle CawCo's tools name it by | `<dir>#<session id>`           |
  * | routine | `routine:<handle, id or name>`, a routine's condition | `routine:<routine id>`         |
+ * | time    | an ISO 8601 date or date-time (`2026-12-01`, `2026-12-01T09:00+03:00`) | the instant in UTC, `2026-12-01T06:00:00Z` |
+ *
+ * A date or date-time with no offset is UTC: the hub, the dashboard and the
+ * task file read it as the same instant wherever they run. A day that is
+ * not on the calendar (`2026-02-30`) reads as no date.
  *
  * A kept card's artifact and a kept session are whole ids, so `<uuid>#<card>`
  * and `<dir>#<uuid>` never read as each other.
@@ -21,7 +26,7 @@
 import { refOfUrl } from "./external-items";
 
 export type WaitKind =
-  "task" | "card" | "pin" | "pr" | "run" | "session" | "routine";
+  "task" | "card" | "pin" | "pr" | "run" | "session" | "routine" | "time";
 
 export type WaitTarget =
   | { kind: "task"; id: string }
@@ -37,7 +42,9 @@ export type WaitTarget =
   | { kind: "run"; id: string; repo: string; url: string }
   | { kind: "session"; dir: string; instanceId: string }
   /** A routine's condition: settled once a run says it is met. */
-  | { kind: "routine"; id: string };
+  | { kind: "routine"; id: string }
+  /** A date: settled once the instant, in ms since the epoch, has passed. */
+  | { kind: "time"; at: number };
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const TASK = /^(?:tsk-|#)?(\d{1,9})$/iu;
@@ -47,6 +54,8 @@ const SESSION = new RegExp(`^([^#\\s]*)#(${UUID})$`, "iu");
 export const ROUTINE_WAIT = "routine:";
 const ROUTINE = new RegExp(`^${ROUTINE_WAIT}(${UUID})$`, "iu");
 const PIN = new RegExp(`^(${UUID})/(\\d{1,6})$`, "iu");
+const TIME =
+  /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/iu;
 const RUN =
   /^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/actions\/runs\/(\d{1,15})(?:[/?#].*)?$/iu;
 
@@ -77,15 +86,65 @@ export const githubTarget = (
   }
 };
 
+/**
+ * An ISO 8601 date or date-time as a time target, UTC when it names no
+ * offset; undefined when it is none, or names a day or hour the calendar
+ * has not (`2026-02-30`, `24:00`). THE date reader: a `waits_on` date and a
+ * waiting stage's `until:` field (hub waits.ts) both read here.
+ */
+export const timeTarget = (
+  written: string
+): Extract<WaitTarget, { kind: "time" }> | undefined => {
+  const found = TIME.exec(written.trim());
+  if (!found) {
+    return;
+  }
+  const [, y, mo, d, h = "0", mi = "0", s = "0", fraction = "", zone] = found;
+  const parts = [y, mo, d, h, mi, s].map(Number);
+  const [year, month, day, hour, minute, second] = parts;
+  const wall = Date.UTC(year, month - 1, day, hour, minute, second);
+  const back = new Date(wall);
+  const onCalendar =
+    back.getUTCFullYear() === year &&
+    back.getUTCMonth() === month - 1 &&
+    back.getUTCDate() === day &&
+    back.getUTCHours() === hour &&
+    back.getUTCMinutes() === minute &&
+    back.getUTCSeconds() === second;
+  if (!onCalendar) {
+    return;
+  }
+  const ms = Math.floor(Number(`0.${fraction || "0"}`) * 1000);
+  return { kind: "time", at: wall + ms - offsetMs(zone) };
+};
+
+/** A written offset (`Z`, `+03:00`, `-0500`) in ms east of UTC; none is UTC. */
+const offsetMs = (zone: string | undefined): number => {
+  if (!zone || zone.toUpperCase() === "Z") {
+    return 0;
+  }
+  const digits = zone.slice(1).replace(":", "");
+  const minutes = Number(digits.slice(0, 2)) * 60 + Number(digits.slice(2));
+  return (zone[0] === "-" ? -1 : 1) * minutes * 60_000;
+};
+
+/** A time target's instant as a file keeps it: UTC, whole seconds bare (`2026-12-01T06:00:00Z`). */
+const timeHandle = (at: number): string =>
+  new Date(at).toISOString().replace(".000Z", "Z");
+
 /** A task named as a wait (`tsk-12`, `#12`, `12`), as `tsk-12`; undefined when it names none. */
 export const taskTarget = (handle: string): string | undefined => {
   const found = TASK.exec(handle.trim());
   return found ? `tsk-${Number(found[1])}` : undefined;
 };
 
-/** A wait as a file keeps it, read back; undefined when its shape is none of the seven. */
+/** A wait as a file keeps it, read back; undefined when its shape is none of the eight. */
 export const waitTarget = (handle: string): WaitTarget | undefined => {
   const kept = handle.trim();
+  const time = timeTarget(kept);
+  if (time) {
+    return time;
+  }
   const routine = ROUTINE.exec(kept);
   if (routine) {
     return { kind: "routine", id: routine[1].toLowerCase() };
@@ -141,6 +200,8 @@ export const waitHandle = (target: WaitTarget): string => {
       return `${target.dir}#${target.instanceId}`;
     case "routine":
       return `${ROUTINE_WAIT}${target.id}`;
+    case "time":
+      return timeHandle(target.at);
   }
 };
 

@@ -11,6 +11,7 @@
  * | run     | green                                              | red                            |
  * | session | its work item finished                             | its work item failed or was stopped |
  * | routine | a run said its condition is met, or the person marked it met | the hub stopped it at its deadline or after failing checks; it is paused, deleted, or has no condition |
+ * | time    | its instant has passed ({@link WaitWorld.now})     | never                          |
  *
  * A task target that was dropped (not as a duplicate) settles as `dropped`:
  * the wait is removed (tasks.ts), and the answer says so. A flag stays until
@@ -28,6 +29,10 @@
  * latched there, so the wait stays settled until someone checks it again,
  * which un-meets it. Its `value` is `met`, an attempt's witness: one
  * dispatched on it hears once if it is un-met.
+ *
+ * A date settles once the read's clock passes it and stays settled. Nothing
+ * else moves when a date passes, so the minute's tick in waits.ts tells the
+ * project (tasks.ts `waitsMoved`) and the plans that wait on one.
  */
 
 import { referenceHref } from "@cawco/core/references";
@@ -38,6 +43,7 @@ import {
   githubTarget,
   ROUTINE_WAIT,
   taskTarget,
+  timeTarget,
   type WaitTarget,
   waitHandle,
   waitTarget,
@@ -76,6 +82,8 @@ export interface WaitWorld {
   };
   /** Whether the folder's history shows the task taken out of tasks/ (archived or deleted): done with. */
   readonly gone: (id: string) => boolean;
+  /** The read's clock, ms since the epoch: one instant for every date the read settles. */
+  readonly now: number;
   /** Pin `number` of artifact `artifactId`: what it stands on, and whether it is resolved; undefined when it is gone. */
   readonly pin: (
     artifactId: string,
@@ -383,6 +391,26 @@ const routineState = (
   };
 };
 
+/** A date: settled once the read's clock has passed it. */
+const timeState = (
+  target: Extract<WaitTarget, { kind: "time" }>,
+  world: WaitWorld
+): WaitState => {
+  const passed = target.at <= world.now;
+  const iso = new Date(target.at).toISOString();
+  return {
+    target: waitHandle(target),
+    kind: target.kind,
+    href: "",
+    label: taskLinkWords.dateLabel(iso.slice(0, 10), iso.slice(11, 16)),
+    settled: passed,
+    state: passed ? taskLinkWords.datePassed : taskLinkWords.dateNotYet,
+    flag: null,
+    value: null,
+    dropped: false,
+  };
+};
+
 /**
  * Whether `target` is settled, and where it stands: THE resolver. Every
  * reader of a wait (tasks.ts readiness, dispatch, the board, the task tools,
@@ -403,6 +431,8 @@ const settled = (target: WaitTarget, world: WaitWorld): WaitState => {
       return sessionState(target, world);
     case "routine":
       return routineState(target, world);
+    case "time":
+      return timeState(target, world);
   }
 };
 
@@ -465,6 +495,8 @@ export interface WaitReader {
 const HANDLE_HEX = /^[0-9a-f-]{6,}$/iu;
 const PIN_NUMBER = /^\d{1,6}$/u;
 const WEB = /^https?:\/\//iu;
+/** What starts a written date: `2026-12-01`. */
+const DAY_FIRST = /^\d{4}-\d{2}-\d{2}/u;
 
 /** A session handle (`cockpit#5a167bde`) as a session target, refused when it names none or runs no work item. */
 const sessionWait = (written: string, reader: WaitReader) => {
@@ -490,8 +522,8 @@ const sessionWait = (written: string, reader: WaitReader) => {
  * A wait as an agent or the dashboard writes it, read into its target: a
  * task (whose being in the project the caller checks), a card or a pin of a
  * page the writer may name, a pull request or run while the project has
- * GitHub, a session that runs a work item. Otherwise its refusal, each cause
- * under its own code.
+ * GitHub, a session that runs a work item, a routine's condition, a date.
+ * Otherwise its refusal, each cause under its own code.
  */
 export const readWait = (written: string, reader: WaitReader) => {
   const said = written.trim();
@@ -502,6 +534,15 @@ export const readWait = (written: string, reader: WaitReader) => {
   if (task) {
     const target: WaitTarget = { kind: "task", id: task };
     return target;
+  }
+  if (DAY_FIRST.test(said)) {
+    return (
+      timeTarget(said) ??
+      problem(400, {
+        code: "wait-time-unread",
+        detail: `“${said}” is not a date the hub reads: write an ISO 8601 date or date-time, such as 2026-12-01 or 2026-12-01T09:00+03:00 (no offset is UTC).`,
+      })
+    );
   }
   if (WEB.test(said)) {
     return readLink(said, reader);
@@ -519,7 +560,7 @@ export const readWait = (written: string, reader: WaitReader) => {
   }
   return problem(400, {
     code: "wait-target-unknown",
-    detail: `“${said}” names nothing the hub waits on: a task (tsk-12), a card (<page>#<card>), a pin (<page>/<number>), a GitHub pull request or Actions run, a session (<dir>#<id>), or a routine's condition (routine:<handle>).`,
+    detail: `“${said}” names nothing the hub waits on: a task (tsk-12), a card (<page>#<card>), a pin (<page>/<number>), a GitHub pull request or Actions run, a session (<dir>#<id>), a routine's condition (routine:<handle>), or a date (2026-12-01, 2026-12-01T09:00+03:00).`,
   });
 };
 
@@ -529,7 +570,7 @@ const readLink = (said: string, reader: WaitReader) => {
   if (!github) {
     return problem(400, {
       code: "wait-link-unsettled",
-      detail: `“${said}” is a link the hub cannot settle: wait on a GitHub pull request or Actions run, a task, a card, a pin, a session or a routine's condition (routine:<handle>).`,
+      detail: `“${said}” is a link the hub cannot settle: wait on a GitHub pull request or Actions run, a task, a card, a pin, a session, a routine's condition (routine:<handle>) or a date.`,
     });
   }
   const refused = reader.githubRefusal();

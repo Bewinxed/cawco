@@ -550,7 +550,7 @@ const WAITS_LIKE = '[138, "<artifact id>#<card>"]';
 /**
  * What of a `waits_on:` line does not read, one sentence each, quoted: the
  * line's own ({@link listUnread}), and each entry that names no task, card,
- * pin, pull request, Actions run, session or routine's condition. Empty
+ * pin, pull request, Actions run, session, routine's condition or date. Empty
  * when it reads whole.
  */
 const waitsUnread = (line: FrontMatterLine): string[] => [
@@ -559,7 +559,7 @@ const waitsUnread = (line: FrontMatterLine): string[] => [
     .filter((item) => !waitTarget(item))
     .map(
       (item) =>
-        `waits_on: “${item}” is not a task, card, pin, pull request, Actions run, session or routine's condition.`
+        `waits_on: “${item}” is not a task, card, pin, pull request, Actions run, session, routine's condition or date.`
     ),
 ];
 

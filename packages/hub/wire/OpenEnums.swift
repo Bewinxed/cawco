@@ -10438,6 +10438,7 @@ public enum OpenEnums {
         case run
         case session
         case task
+        case time
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -10450,6 +10451,7 @@ public enum OpenEnums {
             case "run": self = .run
             case "session": self = .session
             case "task": self = .task
+            case "time": self = .time
             default: self = .unrecognized(rawValue)
             }
         }
@@ -10463,6 +10465,7 @@ public enum OpenEnums {
             case .run: "run"
             case .session: "session"
             case .task: "task"
+            case .time: "time"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -10471,7 +10474,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.card, .pin, .pr, .routine, .run, .session, .task]
+        public static let allCases: [Self] = [.card, .pin, .pr, .routine, .run, .session, .task, .time]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

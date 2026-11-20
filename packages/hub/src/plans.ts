@@ -82,7 +82,7 @@ export interface PlansDeps {
   needs: () => readonly ArtifactNeed[];
   /** Fans a plan frame out to the session's followers (stream.ts). */
   publish: (instanceId: string, message: PlanSnapshot | PlanDelta) => void;
-  tasks: Pick<Tasks, "get" | "waitState">;
+  tasks: Pick<Tasks, "get" | "waitStates">;
 }
 
 interface Held {
@@ -261,6 +261,7 @@ const waitWords = (db: Pick<DbShape, "artifacts">, handle: string): string => {
     case "task":
     case "pr":
     case "run":
+    case "time":
     case undefined:
       return handle;
   }
@@ -651,17 +652,15 @@ export const createPlans = (deps: PlansDeps) => {
    * on a card once its page's Send carried a pick, for every kind of wait.
    */
   const dropSettled = async (row: InstanceRow) => {
-    const settled: string[] = [];
-    for (const handle of db.planWaits(row.id)) {
-      const state = await deps.tasks.waitState(row.projectId ?? null, handle);
-      if (state instanceof ElysiaStatus) {
-        return state;
-      }
-      if (state.settled) {
-        settled.push(handle);
-      }
+    const handles = db.planWaits(row.id);
+    const states = await deps.tasks.waitStates(row.projectId ?? null, handles);
+    if (states instanceof ElysiaStatus) {
+      return states;
     }
-    db.dropPlanWaits(row.id, settled);
+    db.dropPlanWaits(
+      row.id,
+      handles.filter((_, at) => states[at]?.settled)
+    );
   };
 
   const settle = (instanceId: string) =>
@@ -852,6 +851,26 @@ export const createPlans = (deps: PlansDeps) => {
     /** A wait of the session's steps may have settled (a page's picks moved): the plan is read again, settled waits dropped. */
     waitsMoved(instanceId: string): void {
       settleQuietly(instanceId);
+    },
+
+    /**
+     * The clock passed from `from` to `to` (waits.ts's minute): each
+     * followed plan with a step waiting on a date in between is read again,
+     * a session in no project's among them, since no task event reaches it.
+     */
+    clockMoved(from: number, to: number): void {
+      for (const [instanceId, { plan }] of held) {
+        if (
+          plan.steps.some((step) => {
+            const target = step.waitsOn ? waitTarget(step.waitsOn) : undefined;
+            return (
+              target?.kind === "time" && from < target.at && target.at <= to
+            );
+          })
+        ) {
+          settleQuietly(instanceId);
+        }
+      }
     },
 
     /** Page `artifactId`'s picks or pins moved: each followed plan with a step waiting on a card or pin of it is read again. */

@@ -9920,9 +9920,10 @@ export const createServer = (
   });
   planChangesPort.fill(changesOfPlans);
   changesOfPlans.resume();
-  // A routine moves a task on once its stage's hold is over (waits.ts).
+  // A routine moves a task on once its stage's hold is over, and tells a project and its plans a date passed (waits.ts).
   const waits = createWaits({
     lifetime,
+    plans,
     tasks,
     projectIds: () => db.listProjects().map((project) => project.id),
   });

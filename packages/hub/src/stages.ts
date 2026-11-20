@@ -29,8 +29,8 @@
  *   starts.
  * - **Hooks** are recorded here and run by the dispatcher (slice 5), not yet:
  *   `runs: <delegate type>` starts that type when a task enters (active
- *   stages only), unless the task names its own `type:`; `until: <field>` holds a task here until the time in that
- *   field of its file; `after: <n>m|h|d|w` holds it that long; then a routine
+ *   stages only), unless the task names its own `type:`; `until: <field>` holds a task here until what that
+ *   field of its file names settles (a date passes, a condition is met: waits.ts); `after: <n>m|h|d|w` holds it that long; then a routine
  *   moves it on. `by: <who>` says who alone may move a task into the stage.
  * - **Moves** are `from → to  who, who` (`->` works too; `*` is any
  *   stage, so `* → *  you` lets you make every move).

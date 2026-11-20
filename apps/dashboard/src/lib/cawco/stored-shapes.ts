@@ -1443,6 +1443,7 @@ const WaitKindShape = z.enum([
   "run",
   "session",
   "routine",
+  "time",
 ]);
 export type WaitKindOutput = z.output<typeof WaitKindShape>;
 

@@ -454,12 +454,15 @@ import type { TailnetServing } from "./tailnet-https";
  *    `wait-routine-unknown`, `wait-routine-no-condition`,
  *    `wait-routine-no-project`). A page built for 89 reads none of them, so
  *    it reloads first.
+ * 91: a task may wait on a date (a wait of kind `time`), and a date written
+ *    that the hub does not read is refused as `wait-time-unread`. A page
+ *    built for 90 reads neither, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 90;
+export const WIRE_PROTOCOL = 91;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

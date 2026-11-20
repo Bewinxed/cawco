@@ -64409,7 +64409,8 @@
           "routine",
           "run",
           "session",
-          "task"
+          "task",
+          "time"
         ]
       },
       "WaitReason": {
@@ -165387,7 +165388,8 @@
                   "wait-routine-unknown",
                   "wait-session-no-item",
                   "wait-session-unknown",
-                  "wait-target-unknown"
+                  "wait-target-unknown",
+                  "wait-time-unread"
                 ],
                 "type": "string"
               },
@@ -178494,7 +178496,8 @@
                   "wait-routine-unknown",
                   "wait-session-no-item",
                   "wait-session-unknown",
-                  "wait-target-unknown"
+                  "wait-target-unknown",
+                  "wait-time-unread"
                 ],
                 "type": "string"
               },
@@ -188053,7 +188056,8 @@
                   "wait-routine-unknown",
                   "wait-session-no-item",
                   "wait-session-unknown",
-                  "wait-target-unknown"
+                  "wait-target-unknown",
+                  "wait-time-unread"
                 ],
                 "type": "string"
               },
