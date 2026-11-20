@@ -3,13 +3,14 @@
  * page's address), written as the hub's first read would write them, for
  * the "How it runs" frame (how-it-runs-live.svelte).
  */
+
+import { standSocket } from "#lib/cawco/hub/socket.svelte.js";
 import type {
   ProjectPlace as PlaceRow,
   ProjectRow,
 } from "#lib/cawco/projects.js";
 import { boardState, type Machine } from "#lib/cawco/stores/board.svelte.js";
 import { projectsState } from "#lib/cawco/stores/projects.svelte.js";
-import { standSocket } from "#lib/cawco/hub/socket.svelte.js";
 import { page } from "$app/state";
 import type { HowItRunsRecord } from "./records";
 
@@ -59,22 +60,20 @@ const OTHER_PROJECTS: [string, string][] = [
   ["northwind-onboarding", "Northwind onboarding"],
 ];
 
-export const machineRowOf = (
+const machineRowOf = (
   machine: HowItRunsRecord["machines"][number]
-): Machine =>
-  ({
-    auth: "unknown",
-    home: machine.home,
-    hostname: machine.name,
-    joinedAt: Date.parse("2026-08-01T09:00:00.000Z"),
-    machineId: machine.id,
-    os: machine.os,
-    pausedUntil: null,
-    pauseStopped: null,
-    status: machine.online ? "online" : "offline",
-  }) as Machine;
+): Machine => ({
+  auth: "unknown",
+  home: machine.home,
+  hostname: machine.name,
+  joinedAt: Date.parse("2026-08-01T09:00:00.000Z"),
+  machineId: machine.id,
+  os: machine.os,
+  pausedUntil: null,
+  pauseStopped: null,
+  status: machine.online ? "online" : "offline",
+});
 
-/** Writes the stores the shell reads: the project, the fleet's other projects, its machines. */
 /**
  * The stage's page stands at the states file's own address; the shell names
  * its bar from the project's. The view's address is one under the project's
@@ -82,12 +81,15 @@ export const machineRowOf = (
  * this frame's page in its page region rather than the workspace's pane.
  */
 export function atProjectPage(projectId: string): void {
-  (page as { url: URL }).url = new URL(
-    `/project/${projectId}/how`,
-    globalThis.location?.origin ?? "http://localhost/"
-  );
+  Object.assign(page, {
+    url: new URL(
+      `/project/${projectId}/how`,
+      globalThis.location?.origin ?? "http://localhost/"
+    ),
+  });
 }
 
+/** Writes the stores the shell reads: the project, the fleet's other projects, its machines. */
 export function seedShell(record: HowItRunsRecord): void {
   const own = projectRowOf(record);
   atProjectPage(own.id);
