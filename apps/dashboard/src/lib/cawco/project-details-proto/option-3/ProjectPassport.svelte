@@ -3,7 +3,8 @@
    * Read-only Project Passport body: Group 1 Standing policy (Who decides +
    * Review before done, Finished work, Account, Large-file storage), then
    * Group 2 Live fleet & mirror (every place at once, linked repositories,
-   * and task mirror). Zero form controls, zero coral, inline faults only.
+   * and task mirror). Shares one set of left edges across the card: content
+   * edge, list lead column, and one shared fact-line label/value column.
    */
   import { IconCloudCross } from "#lib/icons.js";
   import PassportPlaces from "./PassportPlaces.svelte";
@@ -22,10 +23,16 @@
     narrow?: boolean;
   } = $props();
 
+  /** Shared label/value columns for Finished work, Account, Large-file storage and Repositories. */
+  const FACT_COLS = "calc(var(--spacing) * 28) minmax(0, 1fr)";
+
   const hubAway = $derived(reading.hubAwaySince !== null);
 </script>
 
-<div class="flex min-w-0 flex-col gap-space-3 px-space-4 py-space-3">
+<div
+  class="flex min-w-0 flex-col gap-space-3 px-space-4 py-space-3"
+  style:--passport-fact-cols={FACT_COLS}
+>
   {#if reading.hubAwaySince !== null}
     <div
       aria-live="polite"
@@ -47,12 +54,12 @@
     </div>
   {/if}
 
-  <PassportPolicy {acts} {hubAway} {reading} />
+  <PassportPolicy {acts} {hubAway} {narrow} {reading} />
 
   <div class="border-t border-border-hairline"></div>
 
   <div class="flex min-w-0 flex-col gap-space-2">
     <PassportPlaces {acts} {hubAway} {narrow} {reading} />
-    <TaskMirror {acts} {hubAway} {reading} />
+    <TaskMirror {acts} {hubAway} {narrow} {reading} />
   </div>
 </div>

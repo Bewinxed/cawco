@@ -2,10 +2,11 @@
   /**
    * Option 3's project bar: project title, one compact Details trigger beside
    * it (calm icon + Details when healthy; crimson fault glyph + Details +
-   * fault count when in trouble), Caw's seat snippet, and the trailing glass
-   * group (Spin off, More). Hosts the Project Passport as a hanging card on
-   * desk (HangCard, hung from Details, bottom-start) and as a
-   * bottom sheet on narrow screens (kit Drawer).
+   * fault count when in trouble), and the trailing group (Caw's seat, Spin
+   * off and More in glass, and Ask Caw as the page's one prominent coral
+   * capsule on a desk). Hosts the Project Passport as a hanging card on desk
+   * (HangCard, hung from Details, bottom-start) and as a bottom sheet on
+   * narrow screens (kit Drawer).
    */
   import type { Snippet } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -22,9 +23,8 @@
   import {
     IconForkLinear,
     IconMoreLinear,
-    IconPen,
-    IconRefresh,
     IconTuningLinear,
+    IconUsage,
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
@@ -40,6 +40,8 @@
     narrow = false,
     seat,
     onspinoff,
+    onspend,
+    onask,
   }: {
     name: string;
     reading: PassportReading;
@@ -48,6 +50,8 @@
     narrow?: boolean;
     seat?: Snippet;
     onspinoff?: () => void;
+    onspend?: () => void;
+    onask?: () => void;
   } = $props();
 
   /** The card's tallest: the room under its anchor, at most a dialog's. */
@@ -58,14 +62,6 @@
   let trigger = $state<HTMLElement | null>(null);
 
   const faults = $derived(faultsOf(reading));
-  const hubAway = $derived(reading.hubAwaySince !== null);
-  const hasTracker = $derived(
-    reading.tracker.state === "read" && reading.tracker.value.binding !== null
-  );
-  const syncing = $derived(
-    reading.tracker.state === "read" &&
-      reading.tracker.value.binding?.state === "syncing"
-  );
 
   const passportActs = $derived<PassportActs>({
     ...acts,
@@ -82,6 +78,7 @@
       ? words.bar.detailsWithFaults(faults)
       : words.bar.details}
     expanded="unfilled"
+    hit={narrow ? "always" : undefined}
     shape="capsule"
     size="sm"
     variant="ghost"
@@ -145,6 +142,7 @@
           align="start"
           anchor={trigger}
           aria-label={words.passport.label}
+          class="w-details max-w-full"
           collisionPadding={12}
           customAnchor={trigger}
           frame="details"
@@ -152,7 +150,6 @@
           side="bottom"
           sideOffset={0}
           trapFocus={false}
-          class="w-details max-w-full"
         >
           <div
             class="flex max-h-(--passport-max-h) flex-col overflow-y-auto overscroll-contain"
@@ -187,27 +184,21 @@
           {/snippet}
         </DropdownMenu.Trigger>
         <BarMenu label={words.bar.moreFor(name)} width="compact">
-          <DropdownMenu.Item
-            disabled={hubAway}
-            onSelect={() => passportActs.editRules()}
-          >
-            <IconPen aria-hidden="true" class="size-icon-md text-ink-muted" />
-            <span>{words.bar.editRulesMenu}</span>
+          <DropdownMenu.Item onSelect={() => onspend?.()}>
+            <IconUsage aria-hidden="true" class="size-icon-md text-ink-muted" />
+            <span>{words.bar.spend}</span>
           </DropdownMenu.Item>
-          {#if hasTracker}
-            <DropdownMenu.Item
-              disabled={hubAway || syncing}
-              onSelect={() => acts.sync()}
-            >
-              <IconRefresh
-                aria-hidden="true"
-                class="size-icon-md text-ink-muted"
-              />
-              <span>{words.bar.syncNowMenu}</span>
-            </DropdownMenu.Item>
-          {/if}
         </BarMenu>
       </DropdownMenu.Root>
     </BarGlass>
+
+    {#if !narrow}
+      <Button
+        label={words.bar.askCaw}
+        onclick={() => onask?.()}
+        shape="capsule"
+        variant="default"
+      />
+    {/if}
   </div>
 </header>

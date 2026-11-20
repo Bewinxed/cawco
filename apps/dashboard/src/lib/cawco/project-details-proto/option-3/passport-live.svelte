@@ -105,6 +105,8 @@
       {acts}
       name={reading.project.name}
       {narrow}
+      onask={() => undefined}
+      onspend={() => undefined}
       {reading}
       bind:open={
         () => open,

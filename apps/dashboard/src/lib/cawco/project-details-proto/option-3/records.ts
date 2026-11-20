@@ -7,7 +7,7 @@ import type { Account, ProjectAtLimit } from "@cawco/core/accounts";
 import { ACCOUNT_HUES, type AccountHue } from "@cawco/core/accounts/kinds";
 import {
   BUILT_IN,
-  type BuiltInKind,
+  BUILT_IN_MEMBERS,
   DEFAULT_ROUTES,
   type DecidesTable,
   KIND_SEED,
@@ -19,7 +19,7 @@ import type { TrackerSyncState, TrackerView } from "@cawco/core/trackers";
 import type { ProjectPlace, ProjectRow } from "#lib/cawco/projects.js";
 
 /** One hub read in the Passport: loading, failed with words, or settled. */
-export type Read<T> =
+type Read<T> =
   | { state: "reading" }
   | { state: "failed"; words: string }
   | { state: "read"; value: T };
@@ -36,7 +36,7 @@ export interface PassportMachine {
 }
 
 /** The named account a project's sessions start on; null means fleet routing. */
-export interface PassportAccount {
+interface PassportAccount {
   hue: Account["hue"];
   name: string;
   signedIn: boolean;
@@ -54,14 +54,13 @@ export interface PassportReading {
 }
 
 /** Section anchors the separate rules sheet can open onto. */
-export type RulesSection =
-  "decides" | "landing" | "account" | "taskHome" | "lfs";
+type RulesSection = "decides" | "landing" | "account" | "taskHome" | "lfs";
 
 /** Which independent hub read a retry button refreshes. */
-export type PassportReadKey = "decides" | "account" | "tracker";
+type PassportReadKey = "decides" | "account" | "tracker";
 
 /** Which Configure destination an inline recovery link opens. */
-export type ConfigureTarget = "accounts" | "connections";
+type ConfigureTarget = "accounts" | "connections";
 
 /** Every action the Passport and its bar emit. */
 export interface PassportActs {
@@ -105,12 +104,9 @@ export function lfsHostOf(url: string): string {
   }
 }
 
-const MEMBER_ORDER = ["you", "caw", "advisor", "practice", "asker"] as const;
-
 /** Built-in kind ids in canonical display order. */
-const BUILT_IN_KIND_IDS: readonly BuiltInKind[] = KIND_SEED.map(
-  (kind) => kind.id as BuiltInKind
-);
+const BUILT_IN_KIND_IDS: readonly string[] = KIND_SEED.map((kind) => kind.id);
+const BUILT_IN_KIND_SET: ReadonlySet<string> = new Set(BUILT_IN_KIND_IDS);
 
 /** One line of the compact Who decides breakdown: who settles which kinds. */
 export interface DecidesGroup {
@@ -120,6 +116,9 @@ export interface DecidesGroup {
 }
 
 const BUILT_IN_BY_ID: Readonly<Record<string, { name: string }>> = BUILT_IN;
+const MEMBER_RANK: ReadonlyMap<string, number> = new Map(
+  BUILT_IN_MEMBERS.map((member, index) => [member, index])
+);
 
 /**
  * Groups the project's Who decides routes by the member who settles each kind,
@@ -130,9 +129,7 @@ export function decidesGroups(table: DecidesTable): DecidesGroup[] {
   const byMember = new Map<string, string[]>();
   const orderedKinds = [
     ...BUILT_IN_KIND_IDS,
-    ...Object.keys(table.routes).filter(
-      (id) => !BUILT_IN_KIND_IDS.includes(id as BuiltInKind)
-    ),
+    ...Object.keys(table.routes).filter((id) => !BUILT_IN_KIND_SET.has(id)),
   ];
   for (const kindId of orderedKinds) {
     const memberId = table.routes[kindId];
@@ -143,10 +140,8 @@ export function decidesGroups(table: DecidesTable): DecidesGroup[] {
     list.push(kindId);
     byMember.set(memberId, list);
   }
-  const rank = (id: string): number => {
-    const at = MEMBER_ORDER.indexOf(id as (typeof MEMBER_ORDER)[number]);
-    return at >= 0 ? at : MEMBER_ORDER.length;
-  };
+  const rank = (id: string): number =>
+    MEMBER_RANK.get(id) ?? BUILT_IN_MEMBERS.length;
   return [...byMember.entries()]
     .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
     .map(([memberId, kindIds]) => ({
@@ -449,9 +444,6 @@ export const SYNC_REFUSED: PassportReading = withSync(
   "refused",
   "Resource not accessible by integration (403): the GitHub App lost access to hyucks/hyucksfield"
 );
-
-/** Mirror is actively syncing right now. */
-export const SYNCING: PassportReading = withSync(RESTING, "syncing");
 
 /** Standing reads are still in flight from the hub. */
 export const READING: PassportReading = {
