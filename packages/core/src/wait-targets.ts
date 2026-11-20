@@ -13,13 +13,15 @@
  * | pr      | `https://github.com/<owner>/<repo>/pull/<n>`      | the same                        |
  * | run     | `https://github.com/<owner>/<repo>/actions/runs/<n>` | the same                     |
  * | session | `<dir>#<id8>`, the handle CawCo's tools name it by | `<dir>#<session id>`           |
+ * | routine | `routine:<handle, id or name>`, a routine's condition | `routine:<routine id>`         |
  *
  * A kept card's artifact and a kept session are whole ids, so `<uuid>#<card>`
  * and `<dir>#<uuid>` never read as each other.
  */
 import { refOfUrl } from "./external-items";
 
-export type WaitKind = "task" | "card" | "pin" | "pr" | "run" | "session";
+export type WaitKind =
+  "task" | "card" | "pin" | "pr" | "run" | "session" | "routine";
 
 export type WaitTarget =
   | { kind: "task"; id: string }
@@ -33,12 +35,17 @@ export type WaitTarget =
   | { kind: "pin"; artifactId: string; number: number }
   | { kind: "pr"; number: number; repo: string; url: string }
   | { kind: "run"; id: string; repo: string; url: string }
-  | { kind: "session"; dir: string; instanceId: string };
+  | { kind: "session"; dir: string; instanceId: string }
+  /** A routine's condition: settled once a run says it is met. */
+  | { kind: "routine"; id: string };
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const TASK = /^(?:tsk-|#)?(\d{1,9})$/iu;
 const CARD = new RegExp(`^(${UUID})#([^#=\\s]+)(?:=([^#=\\s]+))?$`, "iu");
 const SESSION = new RegExp(`^([^#\\s]*)#(${UUID})$`, "iu");
+/** What a wait on a routine's condition begins with: a bare short handle of digits would read as a task. */
+export const ROUTINE_WAIT = "routine:";
+const ROUTINE = new RegExp(`^${ROUTINE_WAIT}(${UUID})$`, "iu");
 const PIN = new RegExp(`^(${UUID})/(\\d{1,6})$`, "iu");
 const RUN =
   /^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/actions\/runs\/(\d{1,15})(?:[/?#].*)?$/iu;
@@ -76,9 +83,13 @@ export const taskTarget = (handle: string): string | undefined => {
   return found ? `tsk-${Number(found[1])}` : undefined;
 };
 
-/** A wait as a file keeps it, read back; undefined when its shape is none of the six. */
+/** A wait as a file keeps it, read back; undefined when its shape is none of the seven. */
 export const waitTarget = (handle: string): WaitTarget | undefined => {
   const kept = handle.trim();
+  const routine = ROUTINE.exec(kept);
+  if (routine) {
+    return { kind: "routine", id: routine[1].toLowerCase() };
+  }
   const task = taskTarget(kept);
   if (task) {
     return { kind: "task", id: task };
@@ -128,6 +139,8 @@ export const waitHandle = (target: WaitTarget): string => {
       return target.url;
     case "session":
       return `${target.dir}#${target.instanceId}`;
+    case "routine":
+      return `${ROUTINE_WAIT}${target.id}`;
   }
 };
 

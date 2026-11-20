@@ -450,10 +450,10 @@ export interface TaskStore {
   ) => { id: string; path: string }[];
   /** How a wait the actor writes reads in the project (task-waits.ts `readWait`): the pages, sessions and GitHub it may name. */
   readonly waitReader: (projectId: string, actor: TaskActor) => WaitReader;
-  /** What the resolver reads of the hub past the project's tasks: cards, pins, pull requests and runs, sessions. */
+  /** What the resolver reads of the hub past the project's tasks: cards, pins, pull requests and runs, sessions, routines' conditions. */
   readonly waitWorld: (
     projectId: string
-  ) => Pick<WaitWorld, "card" | "github" | "pin" | "session">;
+  ) => Pick<WaitWorld, "card" | "github" | "pin" | "routine" | "session">;
 }
 
 /** A template the dashboard offers: its stages, and the stages.md it writes. */
@@ -1124,6 +1124,13 @@ const commentGist = (text: string): string => {
 /** A stage's kind in the project's stages; null for a stage it lacks, or while stages.md does not read. */
 const kindIn = (stages: Stages | undefined, stage: string): StageKind | null =>
   (stages && stageNamed(stages, stage)?.kind) ?? null;
+
+/**
+ * A condition whose routine is gone: what was built on it stands, since
+ * nothing un-met it; only Check again does, which a deleted one never has.
+ */
+const conditionGone = (wait: WaitState): boolean =>
+  wait.kind === "routine" && wait.condition === undefined;
 
 /** How long a failure's first line may run in its task's sentence. */
 const WHY_LIMIT = 200;
@@ -2016,7 +2023,7 @@ export const createTasks = (store: TaskStore) => {
     }
     const moved = attempt.waitedOn.flatMap((witness): BuiltOn[] => {
       const now = settleIn(context, witness.target);
-      if (now.value === witness.value) {
+      if (now.value === witness.value || conditionGone(now)) {
         return [];
       }
       return [
@@ -5022,7 +5029,12 @@ export const createTasks = (store: TaskStore) => {
     for (const witness of live.waitedOn) {
       const now = task.waits.find((wait) => wait.target === witness.target);
       const key = `${witness.target}\0${now?.value}`;
-      if (!now || now.value === witness.value || heard.has(key)) {
+      if (
+        !now ||
+        now.value === witness.value ||
+        conditionGone(now) ||
+        heard.has(key)
+      ) {
         continue;
       }
       heard.add(key);
@@ -6086,6 +6098,46 @@ export const createTasks = (store: TaskStore) => {
       }
     },
 
+    /** The tasks whose own `waits_on` names `handle` (as a file keeps it), by id: what a condition's view and its delete name. */
+    waitersOf(projectId: string, handle: string): string[] {
+      return store
+        .index(projectId)
+        .filter((row) => row.waitsOn.includes(handle))
+        .map((row) => row.id);
+    },
+
+    /**
+     * Whether an open task (in no done or dropped stage) waits on `handle`,
+     * its own wait or one inherited from a whole it is part of: a
+     * condition checks only while one does, or a plan step (routines.ts).
+     */
+    async openWaiter(projectId: string, handle: string) {
+      const rows = store.index(projectId);
+      const stages = await currentStages(projectId);
+      if (stages instanceof ElysiaStatus) {
+        return stages;
+      }
+      const byId = rowsById(rows);
+      const waitsOnIt = (row: TaskIndexRow): boolean => {
+        const seen = new Set<string>();
+        for (
+          let at: TaskIndexRow | undefined = row;
+          at && !seen.has(at.id);
+          at = at.partOf ? byId.get(at.partOf) : undefined
+        ) {
+          if (at.waitsOn.includes(handle)) {
+            return true;
+          }
+          seen.add(at.id);
+        }
+        return false;
+      };
+      return rows.some((row) => {
+        const kind = kindIn(stages, row.stage);
+        return kind !== "done" && kind !== "dropped" && waitsOnIt(row);
+      });
+    },
+
     /**
      * One wait settled now (task-waits.ts `settled`), read in project
      * `projectId` (null: none, so a task target names nothing): a plan
@@ -6349,7 +6401,7 @@ export const taskRoutes = (tasks: Tasks) =>
           title: t.String(),
           stage: t.Optional(t.String()),
           type: t.Optional(t.String()),
-          /** What it waits on: tasks (tsk-12), cards (<page>#<card>), pins (<page>/<n>), GitHub pull requests and Actions runs, sessions. */
+          /** What it waits on: tasks (tsk-12), cards (<page>#<card>), pins (<page>/<n>), GitHub pull requests and Actions runs, sessions, conditions (routine:<handle>). */
           waitsOn: t.Optional(t.Array(t.String())),
           /** The whole it is a part of, like tsk-12: it inherits its waits. */
           partOf: t.Optional(t.String()),

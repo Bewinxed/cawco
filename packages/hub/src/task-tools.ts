@@ -203,7 +203,7 @@ const namesTasks = (task: TaskView): boolean =>
 
 /** What a wait names, as every task tool takes it: the one grammar task-waits.ts reads. */
 const WAIT_TARGETS =
-  "tsk-12, a card <page>#<card> (any pick settles it; <page>#<card>=<option> only that option, another leaves it held), a pin <page>/<number>, a GitHub pull request or Actions run URL, or a session handle (cockpit#5a167bde)";
+  "tsk-12, a card <page>#<card> (any pick settles it; <page>#<card>=<option> only that option, another leaves it held), a pin <page>/<number>, a GitHub pull request or Actions run URL, a session handle (cockpit#5a167bde), or a condition routine:<handle>";
 const landsParameter = () =>
   z
     .enum(LANDS_MODES)
@@ -692,7 +692,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           .array(z.string())
           .optional()
           .describe(
-            `Targets the hub holds it on until every one settles (a task done, a card picked or picked as named, a pin resolved, a pull request merged, a run green, a session's work finished); then dispatch may start it: ${WAIT_TARGETS}.`
+            `Targets the hub holds it on until every one settles (a task done, a card picked or picked as named, a pin resolved, a pull request merged, a run green, a session's work finished, a condition met); then dispatch may start it: ${WAIT_TARGETS}.`
           ),
         part_of: taskRef()
           .optional()

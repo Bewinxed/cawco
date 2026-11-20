@@ -381,6 +381,7 @@ import {
 } from "./caw";
 import { stallOffer } from "./chatgpt-offer";
 import { createCompaction } from "./compaction";
+import { conditionOf, routineForWait } from "./conditions";
 import {
   ARTIFACTS_ROOT,
   BIND_HOST,
@@ -8388,6 +8389,8 @@ export const createServer = (
         dispatcher.itemEnded(item);
         push.itemEnded(item);
         routines.itemEnded(item);
+        // A plan step waiting on its session settles now.
+        plans.itemEnded(item);
         projectStarters.itemEnded(item);
         designVerify.itemEnded(item);
         // A design proposal made in its clone has nowhere to land now.
@@ -8682,6 +8685,13 @@ export const createServer = (
         const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
         return { title: boardTitle(row), item: item?.state ?? null };
       },
+      // A condition is one of the project's routines (conditions.ts); another project's reads as gone.
+      routine: (id) => {
+        const row = db.routines.get(id);
+        return row?.projectId === projectId
+          ? { name: row.name, condition: conditionOf(row, db.routines) }
+          : undefined;
+      },
     }),
     waitReader: (projectId, actor) => ({
       page: (asked) =>
@@ -8690,6 +8700,7 @@ export const createServer = (
       pinHeld: (artifactId, number) =>
         artifacts.waitPin(artifactId, number) !== undefined,
       session: sessionByHandle,
+      routine: (asked) => routineForWait(db.routines, projectId, asked),
       githubRefusal: () =>
         githubWaitsPort.now()?.githubWaitRefusal(projectId) ??
         "the hub's GitHub poll is not up yet; try again in a moment.",
@@ -10408,6 +10419,29 @@ export const createServer = (
   // Routines (routines.ts): prompts the hub runs on a schedule, once per slot.
   const routines = createRoutines({
     caw,
+    // A condition moved: its project's waits are read again, as a pull request's are.
+    conditionMoved: (projectId) => {
+      detach(
+        tasks.waitsMoved(projectId).then((refused) => {
+          if (refused) {
+            console.warn(
+              `[condition moved] failed: ${refused.response.detail}`
+            );
+          }
+        }),
+        "condition moved"
+      );
+    },
+    // What waits on a condition: open tasks (their own or inherited waits) and live plan steps.
+    conditionWaiters: {
+      open: async (projectId, handle) =>
+        db.planWaiters(handle).length > 0 ||
+        (await tasks.openWaiter(projectId, handle)) !== false,
+      listed: (projectId, handle) => ({
+        tasks: tasks.waitersOf(projectId, handle),
+        steps: db.planWaiters(handle).length,
+      }),
+    },
     // The nightly memory run's brief and end (memory-run.ts).
     memoryRun,
     // A run's report lists what it handed Caw unopened.

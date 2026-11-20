@@ -29998,10 +29998,19 @@
                       }
                     }
                   },
+                  "condition": {
+                    "type": "string"
+                  },
                   "cron": {
                     "type": "string"
                   },
                   "dailyCapUsd": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "deadline": {
                     "type": [
                       "number",
                       "null"
@@ -30265,10 +30274,19 @@
                       }
                     }
                   },
+                  "condition": {
+                    "type": "string"
+                  },
                   "cron": {
                     "type": "string"
                   },
                   "dailyCapUsd": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "deadline": {
                     "type": [
                       "number",
                       "null"
@@ -30443,6 +30461,158 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/deleteApiRoutinesById422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/routines/{id}/met": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiRoutinesByIdMet",
+        "responses": {
+          "200": {
+            "description": "postApiRoutinesByIdMet 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiRoutinesByIdMet 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRoutinesByIdMet400"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiRoutinesByIdMet 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRoutinesByIdMet404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiRoutinesByIdMet 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRoutinesByIdMet409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiRoutinesByIdMet 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRoutinesByIdMet422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/routines/{id}/recheck": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "deadline": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiRoutinesByIdRecheck",
+        "responses": {
+          "200": {
+            "description": "postApiRoutinesByIdRecheck 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRoutinesByIdRecheck200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiRoutinesByIdRecheck 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRoutinesByIdRecheck400"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiRoutinesByIdRecheck 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRoutinesByIdRecheck404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiRoutinesByIdRecheck 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRoutinesByIdRecheck409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiRoutinesByIdRecheck 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRoutinesByIdRecheck422"
                 }
               }
             }
@@ -37797,6 +37967,66 @@
           "checked",
           "jsdoc",
           "unknown"
+        ]
+      },
+      "ConditionState": {
+        "description": "Where a condition stands (hub routines.ts `conditionOf`): no verdict yet,\nits newest verdict unmet, its newest check failed, met (by a run or by\nthe person), or stopped by the hub at its deadline or after three failing\nslots, paused by someone, or deleted. Only `met` settles a wait; the last\nfour flag it.",
+        "type": "string",
+        "enum": [
+          "checking",
+          "could-not-check",
+          "deleted",
+          "failing",
+          "met",
+          "not-yet",
+          "paused",
+          "timed-out"
+        ]
+      },
+      "ConditionView": {
+        "description": "A routine's condition, as its view and a wait on it read it (times in\nms): the statement true once met, where it stands, and the facts each\nstate is told by.",
+        "type": "object",
+        "properties": {
+          "checkedAt": {
+            "description": "When its newest check ended; null before any.",
+            "type": "number"
+          },
+          "deadline": {
+            "description": "When the hub stops checking it unmet; null: never.",
+            "type": "number"
+          },
+          "evidence": {
+            "description": "The newest check's evidence when met; null when marked met, or unmet.",
+            "type": "string"
+          },
+          "markedMet": {
+            "description": "The person marked it met (no run did).",
+            "type": "boolean"
+          },
+          "metAt": {
+            "description": "When it was met; null while unmet.",
+            "type": "number"
+          },
+          "nextAt": {
+            "description": "When it checks next while it checks; null otherwise.",
+            "type": "number"
+          },
+          "reason": {
+            "description": "The newest check's reason (not yet, could not check), or the last failure's; null for none.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConditionState"
+          },
+          "statement": {
+            "description": "The statement, true once met.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "markedMet",
+          "state",
+          "statement"
         ]
       },
       "ConfigInspectionView": {
@@ -53576,6 +53806,14 @@
           "work-lands-none-them"
         ]
       },
+      "PostApiRoutinesByIdRecheck200Stopped": {
+        "type": "string",
+        "enum": [
+          "deadline",
+          "failing",
+          "met"
+        ]
+      },
       "PostApiToolsByIdUpdateAll200Why": {
         "type": "string",
         "enum": [
@@ -56581,6 +56819,70 @@
           "statements"
         ]
       },
+      "RoutineCondition": {
+        "description": "A routine's condition as its view answers it: where it stands, and what waits on it.",
+        "type": "object",
+        "properties": {
+          "checkedAt": {
+            "description": "When its newest check ended; null before any.",
+            "type": "number"
+          },
+          "deadline": {
+            "description": "When the hub stops checking it unmet; null: never.",
+            "type": "number"
+          },
+          "evidence": {
+            "description": "The newest check's evidence when met; null when marked met, or unmet.",
+            "type": "string"
+          },
+          "handle": {
+            "description": "What a task's `waits_on` or a plan step's `waitsOn` writes to wait on it.",
+            "type": "string"
+          },
+          "markedMet": {
+            "description": "The person marked it met (no run did).",
+            "type": "boolean"
+          },
+          "metAt": {
+            "description": "When it was met; null while unmet.",
+            "type": "number"
+          },
+          "nextAt": {
+            "description": "When it checks next while it checks; null otherwise.",
+            "type": "number"
+          },
+          "reason": {
+            "description": "The newest check's reason (not yet, could not check), or the last failure's; null for none.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConditionState"
+          },
+          "statement": {
+            "description": "The statement, true once met.",
+            "type": "string"
+          },
+          "steps": {
+            "description": "Plan steps not done, of sessions not over, that wait on it.",
+            "type": "number"
+          },
+          "waitedBy": {
+            "description": "The tasks whose own `waits_on` names it, by id, in any stage.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "handle",
+          "markedMet",
+          "state",
+          "statement",
+          "steps",
+          "waitedBy"
+        ]
+      },
       "RoutineMadeBy": {
         "description": "Who made a routine: a delegate, or a session in conversation.",
         "type": "string",
@@ -56654,6 +56956,10 @@
           "usd": {
             "type": "number"
           },
+          "verdict": {
+            "$ref": "#/components/schemas/RoutineRunViewVerdict",
+            "description": "What a check run answered; null for a run that gave no verdict, and every run of a routine with no condition."
+          },
           "workItemId": {
             "description": "A delegate run's work item; null for a conversation run, and before its work began.",
             "type": "string"
@@ -56674,6 +56980,14 @@
           "delivered",
           "failed",
           "silent"
+        ]
+      },
+      "RoutineRunViewVerdict": {
+        "type": "string",
+        "enum": [
+          "met",
+          "unknown",
+          "unmet"
         ]
       },
       "RoutineSchedule": {
@@ -56719,6 +57033,10 @@
         "properties": {
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
+          },
+          "condition": {
+            "description": "Its condition, which makes it a check tasks and plan steps wait on; null for a routine with none.",
+            "$ref": "#/components/schemas/RoutineCondition"
           },
           "createdAt": {
             "type": "number"
@@ -61313,6 +61631,25 @@
         "description": "One wait of a task, its own or inherited, as task-waits.ts settles it.",
         "type": "object",
         "properties": {
+          "condition": {
+            "description": "A routine's condition, as its routine holds it: where it stands and the\nfacts each state is told by, the routine's id with them. Present only\non a `routine` wait whose routine is there.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConditionView"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "routineId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "routineId"
+                ]
+              }
+            ]
+          },
           "dropped": {
             "description": "A task target dropped since (not as a duplicate): the wait is removed.",
             "type": "boolean"
@@ -61344,7 +61681,7 @@
             "type": "string"
           },
           "value": {
-            "description": "What it settled with, for a card (its pick) or a pin; null otherwise or while unsettled.",
+            "description": "What it settled with, for a card (its pick), a pin or a condition (`met`); null otherwise or while unsettled.",
             "type": "string"
           },
           "via": {
@@ -64069,6 +64406,7 @@
           "card",
           "pin",
           "pr",
+          "routine",
           "run",
           "session",
           "task"
@@ -77187,11 +77525,18 @@
             "items": {
               "type": "string"
             }
+          },
+          "waiting": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
           "deleted",
-          "routes"
+          "routes",
+          "waiting"
         ]
       },
       "deleteApiRoutinesById403": {
@@ -122321,6 +122666,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "routine-condition-target"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "routine-cron-unparsed"
                 ]
               },
@@ -122358,6 +122739,42 @@
                 "type": "string",
                 "enum": [
                   "routine-curator-stays"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "routine-deadline-unfit"
                 ]
               },
               "detail": {
@@ -164965,6 +165382,9 @@
                   "wait-option-unknown",
                   "wait-page-unknown",
                   "wait-pin-unknown",
+                  "wait-routine-no-condition",
+                  "wait-routine-no-project",
+                  "wait-routine-unknown",
                   "wait-session-no-item",
                   "wait-session-unknown",
                   "wait-target-unknown"
@@ -178069,6 +178489,9 @@
                   "wait-option-unknown",
                   "wait-page-unknown",
                   "wait-pin-unknown",
+                  "wait-routine-no-condition",
+                  "wait-routine-no-project",
+                  "wait-routine-unknown",
                   "wait-session-no-item",
                   "wait-session-unknown",
                   "wait-target-unknown"
@@ -187625,6 +188048,9 @@
                   "wait-option-unknown",
                   "wait-page-unknown",
                   "wait-pin-unknown",
+                  "wait-routine-no-condition",
+                  "wait-routine-no-project",
+                  "wait-routine-unknown",
                   "wait-session-no-item",
                   "wait-session-unknown",
                   "wait-target-unknown"
@@ -204203,7 +204629,79 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "routine-condition-target"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "routine-cron-unparsed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "routine-deadline-unfit"
                 ]
               },
               "detail": {
@@ -204344,6 +204842,606 @@
         ]
       },
       "postApiRoutines422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiRoutinesByIdMet400": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "routine-cron-unparsed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "routine-time-zone-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiRoutinesByIdMet404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "routine-unknown"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiRoutinesByIdMet409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "routine-not-a-condition"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiRoutinesByIdMet422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiRoutinesByIdRecheck200": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/RoutineView"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "announcedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "budgetMinutes": {
+                "type": "number"
+              },
+              "budgetTurns": {
+                "type": "number"
+              },
+              "budgetUnread": {
+                "type": "string"
+              },
+              "budgetUsd": {
+                "type": "number"
+              },
+              "condition": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "createdBy": {
+                "type": "string"
+              },
+              "cron": {
+                "type": "string"
+              },
+              "dailyCapUsd": {
+                "type": "number"
+              },
+              "deadline": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "delegateType": {
+                "type": "string"
+              },
+              "disabledReason": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "id": {
+                "type": "string"
+              },
+              "keep": {
+                "type": "boolean"
+              },
+              "lands": {
+                "$ref": "#/components/schemas/LandsMode"
+              },
+              "lastSlot": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "madeBy": {
+                "$ref": "#/components/schemas/RoutineMadeBy"
+              },
+              "madeInInstance": {
+                "type": "string"
+              },
+              "madeWhy": {
+                "type": "string"
+              },
+              "metAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "metBy": {
+                "type": "string"
+              },
+              "metEvidence": {
+                "type": "string"
+              },
+              "mode": {
+                "$ref": "#/components/schemas/EventRouteViewMode"
+              },
+              "name": {
+                "type": "string"
+              },
+              "nextSlot": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "prompt": {
+                "type": "string"
+              },
+              "stopped": {
+                "$ref": "#/components/schemas/PostApiRoutinesByIdRecheck200Stopped"
+              },
+              "target": {
+                "$ref": "#/components/schemas/RoutineTarget"
+              },
+              "timeZone": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "createdAt",
+              "createdBy",
+              "cron",
+              "enabled",
+              "id",
+              "keep",
+              "lands",
+              "name",
+              "nextSlot",
+              "prompt",
+              "target",
+              "timeZone"
+            ]
+          }
+        ]
+      },
+      "postApiRoutinesByIdRecheck400": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "routine-cron-unparsed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "routine-deadline-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "routine-time-zone-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiRoutinesByIdRecheck404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "routine-unknown"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiRoutinesByIdRecheck409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "routine-not-a-condition"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiRoutinesByIdRecheck422": {
         "anyOf": [
           {
             "type": "object",

@@ -110,6 +110,10 @@ import type {
 import type { PreviewSource as PreviewSourceType } from "@cawco/core/preview/protocol";
 import type { SendPayload as SendPayloadType } from "@cawco/core/protocol";
 import type {
+  ConditionState as ConditionStateType,
+  ConditionView as ConditionViewType,
+} from "@cawco/core/routine-kinds";
+import type {
   RuleDraft as RuleDraftType,
   RuleMatchKind as RuleMatchKindType,
   RuleScope as RuleScopeType,
@@ -245,6 +249,8 @@ import type {
   CompactionOutput,
   CompactMethodOutput,
   ComposeTargetOutput,
+  ConditionStateOutput,
+  ConditionViewOutput,
   ConnectFaultOutput,
   ConnectSignInOutput,
   ContinueSourceOutput,
@@ -566,6 +572,8 @@ prove<
     Same<WaitWitnessOutput, WaitWitnessType>,
     Same<TaskAttemptOutput, TaskAttemptType>,
     Same<BuiltOnOutput, BuiltOnType>,
+    Same<ConditionStateOutput, ConditionStateType>,
+    Same<ConditionViewOutput, ConditionViewType>,
     Same<WaitKindOutput, WaitKindType>,
     Same<WaitStateOutput, WaitStateType>,
     Same<TaskWaitOutput, TaskWaitType>,

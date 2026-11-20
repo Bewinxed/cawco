@@ -150,7 +150,7 @@ export interface TaskFields {
   runsOn: string | null;
   stage: string | null;
   type: string | null;
-  /** What it waits on (`waits_on`), each as wait-targets.ts keeps it: `tsk-12`, a card, a pin, a PR, a run, a session. */
+  /** What it waits on (`waits_on`), each as wait-targets.ts keeps it: `tsk-12`, a card, a pin, a PR, a run, a session, a condition. */
   waitsOn: string[];
 }
 
@@ -550,7 +550,8 @@ const WAITS_LIKE = '[138, "<artifact id>#<card>"]';
 /**
  * What of a `waits_on:` line does not read, one sentence each, quoted: the
  * line's own ({@link listUnread}), and each entry that names no task, card,
- * pin, pull request, Actions run or session. Empty when it reads whole.
+ * pin, pull request, Actions run, session or routine's condition. Empty
+ * when it reads whole.
  */
 const waitsUnread = (line: FrontMatterLine): string[] => [
   ...listUnread("waits_on", line, WAITS_LIKE),
@@ -558,7 +559,7 @@ const waitsUnread = (line: FrontMatterLine): string[] => [
     .filter((item) => !waitTarget(item))
     .map(
       (item) =>
-        `waits_on: “${item}” is not a task, card, pin, pull request, Actions run or session.`
+        `waits_on: “${item}” is not a task, card, pin, pull request, Actions run, session or routine's condition.`
     ),
 ];
 

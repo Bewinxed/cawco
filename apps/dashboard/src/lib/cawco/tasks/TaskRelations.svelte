@@ -6,10 +6,11 @@
    * pin's chip, a session's, a pull request's or run's link) and where it
    * stands, a flagged one as "Blocked: … closed unmerged". Part of, Parts,
    * Found in and Duplicate of stand only when the task has one. One "Link ▾"
-   * writes a link: pick what, then the task, or paste a card, a pin or a
-   * GitHub link. Unblocks and Parts are other tasks' links, read off the
+   * writes a link: pick what, then the task or one of the project's
+   * conditions, or paste a card, a pin or a GitHub link. Unblocks and Parts are other tasks' links, read off the
    * hub's flags, so they are opened, not unlinked, here.
    */
+  import { conditionWords } from "@cawco/core/words/conditions";
   import Choice from "#lib/cawco/config/Choice.svelte";
   import type {
     TaskLinks,
@@ -18,19 +19,27 @@
     TaskWait,
   } from "#lib/cawco/project-tasks.js";
   import { referenceOf } from "#lib/cawco/references.js";
+  import {
+    type ConditionChoice,
+    readConditions,
+  } from "#lib/cawco/routines/routines-api.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconChevronDown, IconClose, IconLink } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
 
   let {
+    projectId,
     task,
     tasks,
     onlink,
     onopen,
   }: {
+    /** The task's project: its conditions are offered as waits. */
+    projectId: string;
     task: TaskView;
     tasks: TaskSummary[];
     /** Writes one link change; throws the hub's refusal. */
@@ -53,11 +62,43 @@
         `${each.id} ${each.title}`.toLowerCase().includes(query.toLowerCase())
     )
   );
-  /** A pasted card (`page#card`), pin (`page/3`), session or GitHub link: only a wait takes one. */
+  /** A pasted card (`page#card`), pin (`page/3`), session, condition (`routine:…`) or GitHub link: only a wait takes one. */
   const pasted = $derived(
-    kind === "waitsOn" && /[#/]|^https?:/iu.test(query.trim())
+    kind === "waitsOn" && /[#/]|^https?:|^routine:/iu.test(query.trim())
       ? query.trim()
       : null
+  );
+  /** The project's conditions not met yet, read as the picker first opens; none while unread or refused. */
+  let conditions = $state<ConditionChoice[]>([]);
+  /** Why they couldn't be read, said in the list; the next open reads them again. */
+  let conditionsFault = $state<string | null>(null);
+  let conditionsRead = false;
+  $effect(() => {
+    if (!open || conditionsRead) {
+      return;
+    }
+    conditionsRead = true;
+    readConditions(projectId).then(
+      (read) => {
+        conditions = read;
+        conditionsFault = null;
+      },
+      (error: unknown) => {
+        conditionsRead = false;
+        conditionsFault = failureWords(error);
+      }
+    );
+  });
+  const conditionCandidates = $derived(
+    kind === "waitsOn"
+      ? conditions.filter(
+          (each) =>
+            !task.waitsOn.includes(each.handle) &&
+            `${each.name} ${each.statement}`
+              .toLowerCase()
+              .includes(query.toLowerCase())
+        )
+      : []
   );
 
   const KINDS: { value: LinkKind; label: string }[] = [
@@ -223,6 +264,33 @@
                 </button>
               </li>
             {/if}
+            {#if conditionsFault}
+              <li class="pt-space-1 type-meta text-ink-subtle">
+                {conditionsFault}
+              </li>
+            {/if}
+            {#each conditionCandidates as each (each.handle)}
+              <li>
+                <button
+                  class={menuItemVariants({
+                    class:
+                      "select-none flex items-center gap-space-2 w-full text-start",
+                  })}
+                  data-menu-item
+                  onclick={() => write(each.handle)}
+                  title={each.name}
+                  type="button"
+                >
+                  <span class="flex-none type-meta text-ink-muted"
+                    >{conditionWords.conditionLabel}</span
+                  >
+                  <span
+                    class="min-w-0 overflow-clip type-label text-ink-strong text-ellipsis whitespace-nowrap"
+                    >{each.statement}</span
+                  >
+                </button>
+              </li>
+            {/each}
             {#each candidates as each (each.id)}
               <li>
                 <button
@@ -245,7 +313,7 @@
                 </button>
               </li>
             {:else}
-              {#if !pasted}
+              {#if !pasted && conditionCandidates.length === 0}
                 <li class="pt-space-1 type-meta text-ink-subtle">
                   No task matches.
                 </li>

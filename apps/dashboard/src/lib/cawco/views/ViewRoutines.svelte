@@ -1120,7 +1120,11 @@
         <tr>
           <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
             <Collapsible.Content fade reveal>
-              <RoutineDetail actions={actionsOf(routine)} {routine} />
+              <RoutineDetail
+                actions={actionsOf(routine)}
+                onchanged={read}
+                {routine}
+              />
             </Collapsible.Content>
           </td>
         </tr>

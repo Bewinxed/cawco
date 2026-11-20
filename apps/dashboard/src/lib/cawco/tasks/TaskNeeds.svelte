@@ -14,7 +14,8 @@
    * - it waits on something not settled yet (a task, a card, a pin, a pull
    *   request, a run, a session; the hub's one resolver says): not yours to
    *   do, so it reads quiet, a task with Open, which shows it here in its
-   *   place, anything else by its chip, a flagged one as "Blocked: …";
+   *   place, anything else by its chip, a flagged one as "Blocked: …"; a
+   *   condition with where it stands and its acts under it (ConditionWait);
    * - it is done, and a card or pin its session built on was answered
    *   differently or reopened since: said, with Reopen where the pane
    *   offers a stage to reopen it in (`reopenTo`). Nothing reopens on its
@@ -46,6 +47,7 @@
   import RowFault from "../RowFault.svelte";
   import { referenceOf } from "../references";
   import { decideAction } from "../stores/needs.svelte";
+  import ConditionWait from "./ConditionWait.svelte";
   import { actionsOf, asksOf } from "./needs.svelte";
 
   let {
@@ -357,48 +359,58 @@
         </h3>
         <ul class="flex flex-col gap-space-1 m-0 p-0 list-none">
           {#each blockers as wait (wait.target)}
-            <li class="flex items-center gap-space-2 min-w-0">
-              {#if wait.kind === "task"}
-                <span
-                  class="flex-none type-meta font-mono liga-none text-ink-muted"
-                  >{wait.target}</span
+            <li class="flex flex-col gap-space-1 min-w-0">
+              <div class="flex items-center gap-space-2 min-w-0">
+                {#if wait.kind === "task"}
+                  <span
+                    class="flex-none type-meta font-mono liga-none text-ink-muted"
+                    >{wait.target}</span
+                  >
+                  <span
+                    class="flex-auto min-w-0 type-label text-ink-strong truncate"
+                    >{titleOf(wait.target) ?? wait.label}</span
+                  >
+                {:else}
+                  {@const drawn = wait.href.startsWith("cawco:")
+                    ? referenceOf(wait.href)
+                    : null}
+                  <span class="flex-auto min-w-0 type-label truncate">
+                    {#if drawn?.draw === "element"}
+                      <drawn.element
+                        id={drawn.id}
+                        kind={drawn.kind}
+                        label={wait.label}
+                      />
+                    {:else if wait.href.startsWith("http")}
+                      <a
+                        class="text-ink-strong"
+                        href={wait.href}
+                        rel="noreferrer"
+                        target="_blank">{wait.label}</a
+                      >
+                    {:else}
+                      <span class="text-ink-strong">{wait.label}</span>
+                    {/if}
+                  </span>
+                {/if}
+                <span class="flex-none type-meta text-ink-muted"
+                  >{wait.flag ? `Blocked: ${wait.flag}` : wait.state}</span
                 >
-                <span
-                  class="flex-auto min-w-0 type-label text-ink-strong truncate"
-                  >{titleOf(wait.target) ?? wait.label}</span
-                >
-              {:else}
-                {@const drawn = wait.href.startsWith("cawco:")
-                  ? referenceOf(wait.href)
-                  : null}
-                <span class="flex-auto min-w-0 type-label truncate">
-                  {#if drawn?.draw === "element"}
-                    <drawn.element
-                      id={drawn.id}
-                      kind={drawn.kind}
-                      label={wait.label}
-                    />
-                  {:else if wait.href.startsWith("http")}
-                    <a
-                      class="text-ink-strong"
-                      href={wait.href}
-                      rel="noreferrer"
-                      target="_blank">{wait.label}</a
-                    >
-                  {:else}
-                    <span class="text-ink-strong">{wait.label}</span>
-                  {/if}
-                </span>
-              {/if}
-              <span class="flex-none type-meta text-ink-muted"
-                >{wait.flag ? `Blocked: ${wait.flag}` : wait.state}</span
-              >
-              {#if wait.kind === "task" && titleOf(wait.target)}
-                <Button
-                  label="Open"
-                  onclick={() => onopen(wait.target)}
-                  size="xs"
-                  variant="ghost"
+                {#if wait.kind === "task" && titleOf(wait.target)}
+                  <Button
+                    label="Open"
+                    onclick={() => onopen(wait.target)}
+                    size="xs"
+                    variant="ghost"
+                  />
+                {/if}
+              </div>
+              {#if wait.kind === "routine"}
+                <ConditionWait
+                  {onchanged}
+                  {projectId}
+                  taskId={task.id}
+                  {wait}
                 />
               {/if}
             </li>

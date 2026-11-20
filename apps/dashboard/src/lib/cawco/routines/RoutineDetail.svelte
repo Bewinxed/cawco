@@ -1,5 +1,10 @@
 <script lang="ts">
   import type { ApprovedActionView } from "@cawco/core/actions";
+  import {
+    conditionStateWords,
+    conditionWords as conditions,
+    verdictWords,
+  } from "@cawco/core/words/conditions";
   import { routinesWords as words } from "@cawco/core/words/routines";
   /**
    * A routine opened in place under its row: only what the row does not say
@@ -18,6 +23,12 @@
    *    link to the run's session where it is read whole.
    * 3. Actions, when its runs proposed any: the Approved actions table
    *    (ActionsTable), without the routine's name, which is the row's.
+   *
+   * A routine with a condition shows it first: its statement, where it
+   * stands and its words, the day its checks stop, what waits on it, and
+   * Check again and Mark met (Mark met says what it reaches before it
+   * goes). Its runs' Outcome is each one's verdict: Met, Not yet, Could not
+   * check.
    */
   import { hubSeam } from "#lib/cawco/hub-live.js";
   import { rowHref } from "#lib/cawco/links.js";
@@ -27,9 +38,12 @@
   import * as Table from "#lib/components/ui/table/index.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import { failureWords } from "#lib/platform/hub-read.js";
+  import RowFault from "../RowFault.svelte";
   import ActionsTable from "./ActionsTable.svelte";
   import RunStatus, { type Status } from "./RunStatus.svelte";
   import {
+    checkConditionAgain,
+    markConditionMet,
     type Routine,
     type RoutineRun,
     readRoutineRuns,
@@ -40,11 +54,74 @@
   let {
     routine,
     actions = [],
+    onchanged = () => undefined,
   }: {
     routine: Routine;
     /** What its runs proposed and what came of it. */
     actions?: ApprovedActionView[];
+    /** The hub changed it (its condition checked again, or marked met): the page reads it again. */
+    onchanged?: () => unknown;
   } = $props();
+
+  // --- its condition -------------------------------------------------------------
+
+  const condition = $derived(routine.condition);
+  const DAY = new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  /** What it says of where it stands, by its state. */
+  const conditionSaid = $derived.by((): string | null => {
+    if (!condition) {
+      return null;
+    }
+    switch (condition.state) {
+      case "met":
+        return condition.markedMet
+          ? conditions.markedMet(since(condition.metAt))
+          : conditions.metBy(condition.evidence ?? "", since(condition.metAt));
+      case "timed-out":
+        return conditions.timedOut(
+          DAY.format(condition.deadline ?? Date.now()),
+          condition.reason
+        );
+      case "failing":
+        return conditions.failing(condition.reason);
+      case "paused":
+        return conditions.paused;
+      case "could-not-check":
+        return condition.reason
+          ? conditions.couldNotCheck(condition.reason)
+          : null;
+      case "checking":
+        return conditions.checkingLine;
+      case "not-yet":
+        return condition.reason;
+      case "deleted":
+        return conditions.deleted;
+    }
+  });
+  let conditionActing = $state<"again" | "met" | null>(null);
+  let conditionFault = $state<string | null>(null);
+  let askingMet = $state(false);
+  async function conditionAct(
+    act: "again" | "met",
+    go: () => Promise<unknown>,
+    refused: (why: string) => string
+  ) {
+    conditionActing = act;
+    conditionFault = null;
+    try {
+      await go();
+      askingMet = false;
+      await onchanged();
+    } catch (error) {
+      conditionFault = refused(failureWords(error));
+    } finally {
+      conditionActing = null;
+    }
+  }
 
   const hub = hubSeam();
 
@@ -91,8 +168,17 @@
   const runHref = (run: RoutineRun): string | null =>
     run.instanceId ? rowHref(run.instanceId) : null;
 
-  /** A run's outcome, in the page's status vocabulary. */
+  /** A run's outcome, in the page's status vocabulary: a check run's, its verdict. */
   function outcomeOf(run: RoutineRun): { status: Status; word: string } {
+    if (run.state === "ended" && run.verdict === "met") {
+      return { status: "done", word: verdictWords.met };
+    }
+    if (run.state === "ended" && run.verdict === "unmet") {
+      return { status: "neutral", word: verdictWords.unmet };
+    }
+    if (run.state === "ended" && run.verdict === "unknown") {
+      return { status: "failed", word: verdictWords.unknown };
+    }
     if (run.state === "running" || run.state === "starting") {
       return { status: "running", word: words.running };
     }
@@ -116,7 +202,11 @@
 
   /** What the run set, or why it had nothing. */
   function resultOf(run: RoutineRun): string {
-    if (run.state === "skipped" || run.outcome === "failed") {
+    if (
+      run.state === "skipped" ||
+      run.outcome === "failed" ||
+      run.verdict === "unmet"
+    ) {
       return run.reason ?? "";
     }
     return run.output ?? run.reason ?? "";
@@ -164,6 +254,108 @@
   class="flex flex-col gap-space-4 px-space-3 pb-space-4 @table-400px/table:ps-(--detail-lead)"
   style:--detail-lead={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3) * 2)"}
 >
+  {#if condition}
+    <section
+      data-slot="condition"
+      aria-labelledby="condition-{routine.id}"
+      class="flex max-w-c-measure flex-col gap-space-2 pt-space-2"
+    >
+      <h4
+        class="m-0 flex flex-wrap items-baseline gap-x-space-2 type-label text-ink-strong"
+        id="condition-{routine.id}"
+      >
+        <span>{conditions.conditionHead}</span>
+        <span class="type-meta text-ink-muted"
+          >{conditionStateWords[condition.state]}</span
+        >
+      </h4>
+      <p class="m-0 type-body text-ink-strong wrap-break-word">
+        {condition.statement}
+      </p>
+      {#if conditionSaid}
+        <p class="m-0 type-body text-ink-row wrap-break-word">
+          {conditionSaid}
+        </p>
+      {/if}
+      <p class="m-0 flex flex-wrap gap-x-space-2 type-meta text-ink-muted">
+        {#if condition.state !== "met"}
+          <span
+            >{condition.deadline === null
+              ? conditions.noDeadline
+              : conditions.stopsAt(DAY.format(condition.deadline))}</span
+          >
+        {/if}
+        <span
+          >{conditions.waitedBy(
+            condition.waitedBy.length,
+            condition.steps
+          )}</span
+        >
+      </p>
+      {#if askingMet}
+        <p class="m-0 type-body text-ink-strong">{conditions.markMetAsk}</p>
+      {/if}
+      <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
+        {#if askingMet}
+          <Button
+            label={conditions.markMet}
+            onclick={() =>
+              conditionAct(
+                "met",
+                () => markConditionMet(routine.id),
+                conditions.refusedMarkMet
+              )}
+            pending={conditionActing === "met"}
+            size="xs"
+            variant="secondary"
+          />
+          <Button
+            disabled={conditionActing !== null}
+            label={conditions.cancel}
+            onclick={() => {
+              askingMet = false;
+            }}
+            size="xs"
+            variant="ghost"
+          />
+        {:else}
+          <!-- A timed-out condition keeps checking with no day to stop:
+               its old one has passed (the task's view sets a new one). -->
+          <Button
+            disabled={conditionActing !== null}
+            label={condition.state === "timed-out"
+              ? conditions.keepChecking
+              : conditions.checkAgain}
+            onclick={() =>
+              conditionAct(
+                "again",
+                () =>
+                  checkConditionAgain(
+                    routine.id,
+                    condition.state === "timed-out" ? null : undefined
+                  ),
+                conditions.refusedCheckAgain
+              )}
+            pending={conditionActing === "again"}
+            size="xs"
+            variant="secondary"
+          />
+          {#if condition.state !== "met"}
+            <Button
+              disabled={conditionActing !== null}
+              label={conditions.markMet}
+              onclick={() => {
+                askingMet = true;
+              }}
+              size="xs"
+              variant="ghost"
+            />
+          {/if}
+        {/if}
+      </div>
+      <RowFault reason={conditionFault} />
+    </section>
+  {/if}
   <!-- The schedule drawn whole: the row's strip with its days or hours. -->
   <div data-slot="schedule-wrap" class="max-w-c-measure pt-space-2">
     <ScheduleStrip

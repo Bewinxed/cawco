@@ -63,6 +63,7 @@ import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
 import type { TASK_TOOL_NAMES } from "./task-tool-names";
+import { isRoutineParent } from "./work-item-state";
 
 /**
  * The role a session's row runs in: the one its spawn named, else derived
@@ -278,6 +279,12 @@ export const allows = (row: InstanceRow, name: string): boolean => {
   const role = roleOf(row);
   if (PROJECT_TOOLS.has(name) && !closed(role)) {
     return !!row.projectId;
+  }
+  // A routine's delegate run answers a condition's check with it, before
+  // its finish_item (routines.ts `leadResult` refuses it on a routine with
+  // no condition).
+  if (name === "routine_result" && role === "delegate") {
+    return !!row.projectId && isRoutineParent(row.parentInstanceId);
   }
   if (role === "delegate" && ORCHESTRATORS_ONLY.has(name)) {
     return orchestrates(row);

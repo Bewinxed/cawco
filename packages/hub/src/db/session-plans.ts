@@ -6,6 +6,7 @@
  */
 
 import type { OrphanedComments, PlanComment, PlanStep } from "@cawco/core/plan";
+import { OVER_STATUSES } from "@cawco/core/protocol";
 import {
   and,
   asc,
@@ -14,6 +15,8 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
+  notInArray,
   sql,
 } from "drizzle-orm";
 import type { DbCore } from "./core";
@@ -79,6 +82,8 @@ export interface SessionPlansDb {
    * those that may hold news for the person on their return.
    */
   readonly plansWithAwayNotes: () => string[];
+  /** The sessions not over whose plan has a step not done that waits on `target` (as a file keeps it): a condition checks while one does. */
+  readonly planWaiters: (target: string) => string[];
   /** What a session's steps wait on, each once, in the list's order. */
   readonly planWaits: (instanceId: string) => string[];
   /** The person saw the session's away notes as `notes` read (`session_plans.away_seen`). A session with no plan row has none to see. */
@@ -358,6 +363,20 @@ export const sessionPlansDb = (core: DbCore): SessionPlansDb => {
       });
     },
     planWaits: (instanceId) => waitsOf(db, instanceId),
+    planWaiters: (target) =>
+      db
+        .selectDistinct({ instanceId: sessionPlanSteps.instanceId })
+        .from(sessionPlanSteps)
+        .innerJoin(instances, eq(instances.id, sessionPlanSteps.instanceId))
+        .where(
+          and(
+            eq(sessionPlanSteps.waitsOn, target),
+            ne(sessionPlanSteps.status, "completed"),
+            notInArray(instances.status, [...OVER_STATUSES])
+          )
+        )
+        .all()
+        .map((row) => row.instanceId),
     plansWithAwayNotes: () =>
       db
         .select({ instanceId: sessionPlans.instanceId })

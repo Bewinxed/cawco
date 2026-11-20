@@ -57,6 +57,7 @@ typeOverrides:
     CommentAttachmentKind: OpenEnums.CommentAttachmentKind
     CompactMethod: OpenEnums.CompactMethod
     ComponentDocTypes: OpenEnums.ComponentDocTypes
+    ConditionState: OpenEnums.ConditionState
     ConnectAskFrameAccess: OpenEnums.ConnectAskFrameAccess
     ConnectionAuth: OpenEnums.ConnectionAuth
     ConnectionState: OpenEnums.ConnectionState
@@ -168,6 +169,7 @@ typeOverrides:
     PlanStepStatus: OpenEnums.PlanStepStatus
     PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State
     PostApiInstancesByIdArtifactsByArtifactSend403Code: OpenEnums.PostApiInstancesByIdArtifactsByArtifactSend403Code
+    PostApiRoutinesByIdRecheck200Stopped: OpenEnums.PostApiRoutinesByIdRecheck200Stopped
     PostApiToolsByIdUpdateAll200Why: OpenEnums.PostApiToolsByIdUpdateAll200Why
     PresenceDeviceState: OpenEnums.PresenceDeviceState
     PreviewDown: OpenEnums.PreviewDown
@@ -188,6 +190,7 @@ typeOverrides:
     RoutineMadeBy: OpenEnums.RoutineMadeBy
     RoutineRunState: OpenEnums.RoutineRunState
     RoutineRunViewOutcome: OpenEnums.RoutineRunViewOutcome
+    RoutineRunViewVerdict: OpenEnums.RoutineRunViewVerdict
     RoutineTarget: OpenEnums.RoutineTarget
     RuleMatchKind: OpenEnums.RuleMatchKind
     RuleTiming: OpenEnums.RuleTiming

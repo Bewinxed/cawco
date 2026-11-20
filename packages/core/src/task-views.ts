@@ -7,6 +7,7 @@
 import type { AttemptResult } from "./deliverables";
 import type { TaskLinkSummary } from "./external-items";
 import type { LandsMode } from "./injected";
+import type { ConditionView } from "./routine-kinds";
 import type { ProjectStarter } from "./starters";
 import type { TASK_FILE_STATES, TaskHistoryKind } from "./task-history";
 import type { Tracker } from "./trackers";
@@ -151,6 +152,12 @@ export interface TaskAttempt {
 
 /** One wait, settled or not, as every reader shows it. */
 export interface WaitState {
+  /**
+   * A routine's condition, as its routine holds it: where it stands and the
+   * facts each state is told by, the routine's id with them. Present only
+   * on a `routine` wait whose routine is there.
+   */
+  condition?: ConditionView & { routineId: string };
   /** A task target dropped since (not as a duplicate): the wait is removed. */
   dropped: boolean;
   /** Why it is blocked for good until someone removes or re-points it (`closed unmerged`); null when it is not. */
@@ -165,7 +172,7 @@ export interface WaitState {
   state: string;
   /** The wait as its file keeps it ({@link waitHandle}). */
   target: string;
-  /** What it settled with, for a card (its pick) or a pin; null otherwise or while unsettled. */
+  /** What it settled with, for a card (its pick), a pin or a condition (`met`); null otherwise or while unsettled. */
   value: string | null;
 }
 

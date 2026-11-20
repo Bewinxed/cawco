@@ -133,6 +133,28 @@ export async function readRoutinesPage(
   };
 }
 
+/** A condition a task may wait on: what its wait writes, its statement, and its routine's name. */
+export interface ConditionChoice {
+  handle: string;
+  name: string;
+  statement: string;
+}
+
+/** The project's routines that have a condition not met yet: what a task's Waits on offers. */
+export const readConditions = async (
+  projectId: string
+): Promise<ConditionChoice[]> => {
+  const routines = await hubData(
+    hub.api.routines.get({ query: { projectId } }),
+    refusedOrUnreached
+  );
+  return routines.flatMap(({ condition, name }) =>
+    condition && condition.state !== "met"
+      ? [{ handle: condition.handle, name, statement: condition.statement }]
+      : []
+  );
+};
+
 /** A page of a routine's runs after `skip` of them, newest first. */
 export const readRoutineRuns = (
   routineId: string,
@@ -157,7 +179,11 @@ export const readActions = (
 
 /** What a routine made by hand is: `POST /api/routines`'s fields the form sets. */
 export interface RoutineDraft {
+  /** A statement true once met, which makes it a check tasks wait on; blank: none. */
+  condition: string;
   cron: string;
+  /** When its condition's checks stop unmet, epoch ms; null: never. */
+  deadline: number | null;
   /** null: each run's type is the hub's pick. */
   delegateType: string | null;
   name: string;
@@ -205,6 +231,9 @@ export const routineFormHub: RoutineFormHub = {
         cron: draft.cron.trim(),
         timeZone: draft.timeZone,
         delegateType: draft.delegateType,
+        ...(draft.condition.trim()
+          ? { condition: draft.condition.trim(), deadline: draft.deadline }
+          : {}),
       }),
       refusedOrUnreached
     ),
@@ -234,6 +263,29 @@ export const updateRoutine = (
 ) =>
   hubData(
     hub.api.routines({ id: routineId }).patch(change),
+    refusedOrUnreached
+  );
+
+/**
+ * Mark met: the routine's condition counts as met, so every task and plan
+ * step waiting on it goes ahead and its check stops; the routine after.
+ */
+export const markConditionMet = (routineId: string) =>
+  hubData(hub.api.routines({ id: routineId }).met.post(), refusedOrUnreached);
+
+/**
+ * Check again: the routine's condition un-met and checked now and from now
+ * on, until `deadline` when given (epoch ms; null: until met); the routine
+ * after.
+ */
+export const checkConditionAgain = (
+  routineId: string,
+  deadline?: number | null
+) =>
+  hubData(
+    hub.api
+      .routines({ id: routineId })
+      .recheck.post(deadline === undefined ? {} : { deadline }),
     refusedOrUnreached
   );
 

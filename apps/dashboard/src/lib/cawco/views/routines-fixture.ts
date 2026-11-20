@@ -48,12 +48,14 @@ const run = (
     startedAt,
     state: "ended",
     usd: 0.42,
+    verdict: null,
     workItemId: null,
   };
 };
 
 const base = {
   budget: null,
+  condition: null,
   createdAt: now - 30 * DAY_MS,
   createdBy: "owner",
   dailyCapUsd: null,
@@ -68,6 +70,19 @@ const base = {
   mode: null,
   projectId: PROJECT.id,
   timeZone: "Europe/London",
+} as const;
+
+/** Weekly on Mondays at 09:00, its runs ahead and its words. */
+const MONDAYS_AT_NINE = {
+  cron: "0 9 * * 1",
+  nextRuns: weekOf(9, [1]),
+  nextSlot: weekOf(9, [1])[0] ?? now,
+  schedule: {
+    cron: "0 9 * * 1",
+    nextAt: weekOf(9, [1])[0] ?? now,
+    timeZone: base.timeZone,
+    words: "At 09:00, only on Monday (Europe/London)",
+  },
 } as const;
 
 /** The project's own routines. */
@@ -144,20 +159,12 @@ const TRIM = {
   ...base,
   id: "unused",
   name: routinesWords.trimName,
-  cron: "0 9 * * 1",
   createdBy: "hub",
   target: "trim",
   enabled: true,
   prompt:
     "You run the unused skills and servers routine. The hub has compared what sessions called over the last 30 days with each starting set; its findings follow.",
-  nextRuns: weekOf(9, [1]),
-  nextSlot: weekOf(9, [1])[0] ?? now,
-  schedule: {
-    cron: "0 9 * * 1",
-    nextAt: weekOf(9, [1])[0] ?? now,
-    timeZone: base.timeZone,
-    words: "At 09:00, only on Monday (Europe/London)",
-  },
+  ...MONDAYS_AT_NINE,
 } as const;
 
 /** The routine turned on: no run yet. */
@@ -183,6 +190,82 @@ export const TRIM_RAN: Routine = {
     ),
   ],
   runsTotal: 2,
+};
+
+/** A check run's answer, its words where the hub keeps them: the evidence when met, why not yet when unmet. */
+const checked = (
+  id: string,
+  ago: number,
+  verdict: "met" | "unmet",
+  said: string
+): RoutineRun => ({
+  ...run(id, ago, 3, verdict === "met" ? "delivered" : "silent", null),
+  usd: 0.18,
+  verdict,
+  ...(verdict === "met" ? { output: said } : { reason: said }),
+});
+
+const EVENT_STREAMS =
+  "GitHub Event Streams is generally available, out of public preview";
+
+/** Its condition, not met yet. */
+const NOT_YET: NonNullable<Routine["condition"]> = {
+  statement: EVENT_STREAMS,
+  state: "not-yet",
+  handle: "routine:6f1c2a90-4d3e-4b7a-9c1e-2f8a7b6d5e43",
+  checkedAt: now - 3 * DAY_MS,
+  nextAt: weekOf(9, [1])[0] ?? now,
+  deadline: now + 60 * DAY_MS,
+  reason:
+    "The changelog of 17 Nov still lists Event Streams as public preview, with GA planned for early 2027.",
+  metAt: null,
+  markedMet: false,
+  evidence: null,
+  waitedBy: ["tsk-409"],
+  steps: 1,
+};
+
+/** A weekly check tsk-409 waits on: not met yet, checking until a day it stops. */
+export const CONDITION_NOT_YET: Routine = {
+  ...base,
+  id: "6f1c2a90-4d3e-4b7a-9c1e-2f8a7b6d5e43",
+  name: "Watch GitHub Event Streams GA",
+  enabled: true,
+  createdBy: "session",
+  target: "delegate",
+  prompt:
+    "Read GitHub's changelog and the Event Streams docs page, and say whether Event Streams is generally available.",
+  ...MONDAYS_AT_NINE,
+  condition: NOT_YET,
+  runs: [
+    checked(
+      "e2",
+      3 * DAY_MS,
+      "unmet",
+      "The changelog of 17 Nov still lists Event Streams as public preview, with GA planned for early 2027."
+    ),
+    checked(
+      "e1",
+      10 * DAY_MS,
+      "unmet",
+      "The docs page carries the public preview banner."
+    ),
+  ],
+  runsTotal: 2,
+};
+
+/** The same check after its day passed unmet: the hub stopped it and told the person once. */
+export const CONDITION_TIMED_OUT: Routine = {
+  ...CONDITION_NOT_YET,
+  enabled: false,
+  disabledReason:
+    "Its condition was not met by 1 Dec 2026, so it stopped checking.",
+  condition: {
+    ...NOT_YET,
+    state: "timed-out",
+    nextAt: null,
+    deadline: now - DAY_MS,
+  },
 };
 
 /** The reads the page makes, answered: `routines` its ledger, `offered` whether Caw suggests the routine. */

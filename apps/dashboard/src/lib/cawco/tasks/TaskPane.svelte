@@ -759,7 +759,13 @@
         />
 
         <div class="flex flex-col gap-space-2">
-          <TaskRelations onlink={link} {onopen} task={shown} {tasks} />
+          <TaskRelations
+            onlink={link}
+            {onopen}
+            {projectId}
+            task={shown}
+            {tasks}
+          />
           <RowFault reason={edgeProblem} />
         </div>
 

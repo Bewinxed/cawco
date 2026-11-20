@@ -51,9 +51,11 @@ import {
 } from "@cawco/core/protocol";
 import { RELAY_PROVIDERS, RELAY_STATES } from "@cawco/core/relays";
 import {
+  CONDITION_STOPS,
   ROUTINE_OUTCOMES,
   ROUTINE_RUN_STATES,
   ROUTINE_TARGETS,
+  ROUTINE_VERDICTS,
 } from "@cawco/core/routine-kinds";
 import { SEND_STATES } from "@cawco/core/session-messages";
 import {
@@ -6284,6 +6286,26 @@ export const routines = sqliteTable(
     /** The next scheduled slot. */
     nextSlot: timestamp("next_slot").notNull(),
     createdAt: timestamp("created_at").notNull(),
+    /**
+     * Its condition: a statement true once met, which makes it a check that
+     * tasks and plan steps wait on (`routine:<id>`, core wait-targets.ts).
+     * Each run answers met, unmet or unknown. Null on every other routine.
+     */
+    condition: text("condition"),
+    /** When the hub stops a condition's checks unmet; null: never, and on every other routine. */
+    deadline: timestamp("deadline"),
+    /** When its condition was met; null while unmet. */
+    metAt: timestamp("met_at"),
+    /** Who met it: the run's id, or `owner` when the person marked it met. */
+    metBy: text("met_by"),
+    /** The meeting run's evidence, one sentence; null when the person marked it. */
+    metEvidence: text("met_evidence"),
+    /**
+     * Why the hub turned its checks off (core `ConditionStop`): met, its
+     * deadline passed, or failing slots. Null while it checks, and when a
+     * person or a session paused it.
+     */
+    stopped: storedEnum(z.enum(CONDITION_STOPS))("stopped"),
   },
   (table) => [index("routines_project").on(table.projectId)]
 );
@@ -6333,6 +6355,12 @@ export const routineRuns = sqliteTable(
     usd: real("usd"),
     startedAt: timestamp("started_at").notNull(),
     endedAt: timestamp("ended_at"),
+    /**
+     * What a check run answered (core `RoutineVerdict`): kept as its
+     * delegate's `routine_result` comes, read as its work item ends. Null
+     * for a run that gave none, and every run of a routine with no condition.
+     */
+    verdict: storedEnum(z.enum(ROUTINE_VERDICTS))("verdict"),
   },
   (table) => [
     uniqueIndex("routine_runs_slot").on(

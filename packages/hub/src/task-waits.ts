@@ -10,6 +10,7 @@
  * | pr      | merged                                             | closed unmerged                |
  * | run     | green                                              | red                            |
  * | session | its work item finished                             | its work item failed or was stopped |
+ * | routine | a run said its condition is met, or the person marked it met | the hub stopped it at its deadline or after failing checks; it is paused, deleted, or has no condition |
  *
  * A task target that was dropped (not as a duplicate) settles as `dropped`:
  * the wait is removed (tasks.ts), and the answer says so. A flag stays until
@@ -22,18 +23,29 @@
  * the project's GitHub poll reads and its events keep; a run's comes from
  * that poll itself (ingress.ts `githubWait`). A project with no GitHub
  * poller is refused either target where it is written ({@link readWait}).
+ *
+ * A condition's state is its routine's (routines.ts `conditionOf`): met is
+ * latched there, so the wait stays settled until someone checks it again,
+ * which un-meets it. Its `value` is `met`, an attempt's witness: one
+ * dispatched on it hears once if it is un-met.
  */
 
 import { referenceHref } from "@cawco/core/references";
+import type { ConditionState, ConditionView } from "@cawco/core/routine-kinds";
 import type { WaitState } from "@cawco/core/task-views";
 import type { StageKind } from "@cawco/core/views";
 import {
   githubTarget,
+  ROUTINE_WAIT,
   taskTarget,
   type WaitTarget,
   waitHandle,
   waitTarget,
 } from "@cawco/core/wait-targets";
+import {
+  conditionStateWords,
+  conditionWords,
+} from "@cawco/core/words/conditions";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { problem } from "elysia";
 import type { WorkItemState } from "./db/schema";
@@ -71,6 +83,10 @@ export interface WaitWorld {
   ) => { label: string; resolved: boolean } | undefined;
   /** The project the waits are read in: a task target is one of its tasks. */
   readonly projectId: string;
+  /** A routine by its whole id: its name and its condition (null: it has none); undefined when the hub has none. */
+  readonly routine: (
+    id: string
+  ) => { condition: ConditionView | null; name: string } | undefined;
   /** A session by its whole id: its title and its work item's state (null: it runs none); undefined when the hub has none. */
   readonly session: (
     instanceId: string
@@ -305,6 +321,68 @@ const sessionState = (
   };
 };
 
+/** Each stopped or paused condition's flag, read with its view. */
+const conditionFlag = (condition: ConditionView): string | undefined => {
+  const flags: Partial<Record<ConditionState, () => string>> = {
+    "timed-out": () =>
+      conditionWords.flagTimedOut(
+        new Date(condition.deadline ?? Date.now()).toISOString().slice(0, 10)
+      ),
+    failing: () => conditionWords.flagFailing,
+    paused: () => conditionWords.flagPaused,
+  };
+  return flags[condition.state]?.();
+};
+
+/**
+ * A routine's condition: settled once met, flagged once the hub stopped
+ * it unmet (its deadline, failing checks), it is paused, its routine is
+ * deleted, or the routine has no condition at all.
+ */
+const routineState = (
+  target: Extract<WaitTarget, { kind: "routine" }>,
+  world: WaitWorld
+): WaitState => {
+  const href = referenceHref("routine", target.id);
+  const routine = world.routine(target.id);
+  const base = { target: waitHandle(target), kind: target.kind, href };
+  if (!routine) {
+    return flagged(
+      {
+        ...base,
+        label: conditionWords.deletedLabel,
+        state: conditionStateWords.deleted,
+      },
+      conditionWords.flagDeleted
+    );
+  }
+  const { condition } = routine;
+  if (!condition) {
+    return flagged(
+      { ...base, label: routine.name, state: "no condition" },
+      conditionWords.flagNoCondition
+    );
+  }
+  const named = {
+    ...base,
+    label: condition.statement,
+    state: conditionStateWords[condition.state],
+    condition: { ...condition, routineId: target.id },
+  };
+  const flag = conditionFlag(condition);
+  if (flag) {
+    return flagged(named, flag);
+  }
+  const met = condition.state === "met";
+  return {
+    ...named,
+    settled: met,
+    flag: null,
+    value: met ? "met" : null,
+    dropped: false,
+  };
+};
+
 /**
  * Whether `target` is settled, and where it stands: THE resolver. Every
  * reader of a wait (tasks.ts readiness, dispatch, the board, the task tools,
@@ -323,6 +401,8 @@ const settled = (target: WaitTarget, world: WaitWorld): WaitState => {
       return githubState(target, world);
     case "session":
       return sessionState(target, world);
+    case "routine":
+      return routineState(target, world);
   }
 };
 
@@ -365,6 +445,17 @@ export interface WaitReader {
   readonly page: (asked: string) => { id: string; name: string } | string;
   /** Whether page `artifactId` holds pin `number`. */
   readonly pinHeld: (artifactId: string, number: number) => boolean;
+  /**
+   * The project's routine a handle, id or name names, with its condition
+   * (null: it has none); a refusal, its code and its words, when it names
+   * none or the writer is in no project.
+   */
+  readonly routine: (asked: string) =>
+    | { condition: string | null; id: string; name: string }
+    | {
+        code: "wait-routine-no-project" | "wait-routine-unknown";
+        detail: string;
+      };
   /** The session a handle names, and whether it runs a work item; a refusal in words when it names none. */
   readonly session: (
     handle: string
@@ -404,6 +495,9 @@ const sessionWait = (written: string, reader: WaitReader) => {
  */
 export const readWait = (written: string, reader: WaitReader) => {
   const said = written.trim();
+  if (said.toLowerCase().startsWith(ROUTINE_WAIT)) {
+    return readRoutine(said.slice(ROUTINE_WAIT.length).trim(), reader);
+  }
   const task = taskTarget(said);
   if (task) {
     const target: WaitTarget = { kind: "task", id: task };
@@ -425,7 +519,7 @@ export const readWait = (written: string, reader: WaitReader) => {
   }
   return problem(400, {
     code: "wait-target-unknown",
-    detail: `“${said}” names nothing the hub waits on: a task (tsk-12), a card (<page>#<card>), a pin (<page>/<number>), a GitHub pull request or Actions run, or a session (<dir>#<id>).`,
+    detail: `“${said}” names nothing the hub waits on: a task (tsk-12), a card (<page>#<card>), a pin (<page>/<number>), a GitHub pull request or Actions run, a session (<dir>#<id>), or a routine's condition (routine:<handle>).`,
   });
 };
 
@@ -435,7 +529,7 @@ const readLink = (said: string, reader: WaitReader) => {
   if (!github) {
     return problem(400, {
       code: "wait-link-unsettled",
-      detail: `“${said}” is a link the hub cannot settle: wait on a GitHub pull request or Actions run, a task, a card, a pin or a session.`,
+      detail: `“${said}” is a link the hub cannot settle: wait on a GitHub pull request or Actions run, a task, a card, a pin, a session or a routine's condition (routine:<handle>).`,
     });
   }
   const refused = reader.githubRefusal();
@@ -480,6 +574,27 @@ const readCard = (said: string, hash: number, reader: WaitReader) => {
         code: "wait-option-unknown",
         detail: `The card “${card}” on ${page.name} has no option “${option}”. Its options: ${asked.options.join(", ") || "none"}.`,
       });
+};
+
+/** `routine:<handle, id or name>` as one of the project's routines that has a condition. */
+const readRoutine = (asked: string, reader: WaitReader) => {
+  const routine = reader.routine(asked);
+  if ("code" in routine) {
+    return routine.code === "wait-routine-no-project"
+      ? problem(400, {
+          code: "wait-routine-no-project",
+          detail: routine.detail,
+        })
+      : problem(400, { code: "wait-routine-unknown", detail: routine.detail });
+  }
+  if (routine.condition === null) {
+    return problem(400, {
+      code: "wait-routine-no-condition",
+      detail: `Routine “${routine.name}” has no condition, so no run of it ever says met. Give it one (routine_update with condition: the statement that is true once met), or wait on something else.`,
+    });
+  }
+  const target: WaitTarget = { kind: "routine", id: routine.id };
+  return target;
 };
 
 /** `<page>/<number>` as a pin the page holds. */

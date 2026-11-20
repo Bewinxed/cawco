@@ -53,6 +53,68 @@ export const ROUTINE_OUTCOMES = [
  */
 export type RoutineOutcome = (typeof ROUTINE_OUTCOMES)[number];
 
+/** Every {@link RoutineVerdict}. */
+export const ROUTINE_VERDICTS = ["met", "unmet", "unknown"] as const;
+/**
+ * What a run of a routine with a condition answered (`routine_result`'s
+ * `condition`): met, not yet, or could not check. A run of any other
+ * routine has none.
+ */
+export type RoutineVerdict = (typeof ROUTINE_VERDICTS)[number];
+
+/** Every {@link ConditionStop}. */
+export const CONDITION_STOPS = ["met", "deadline", "failing"] as const;
+/**
+ * Why the hub stopped a condition's checks (hub routines.ts): it was met,
+ * its deadline passed unmet, or three slots in a row failed.
+ */
+export type ConditionStop = (typeof CONDITION_STOPS)[number];
+
+/** Every {@link ConditionState}. */
+export const CONDITION_STATES = [
+  "checking",
+  "not-yet",
+  "could-not-check",
+  "met",
+  "timed-out",
+  "failing",
+  "paused",
+  "deleted",
+] as const;
+/**
+ * Where a condition stands (hub routines.ts `conditionOf`): no verdict yet,
+ * its newest verdict unmet, its newest check failed, met (by a run or by
+ * the person), or stopped by the hub at its deadline or after three failing
+ * slots, paused by someone, or deleted. Only `met` settles a wait; the last
+ * four flag it.
+ */
+export type ConditionState = (typeof CONDITION_STATES)[number];
+
+/**
+ * A routine's condition, as its view and a wait on it read it (times in
+ * ms): the statement true once met, where it stands, and the facts each
+ * state is told by.
+ */
+export interface ConditionView {
+  /** When its newest check ended; null before any. */
+  checkedAt: number | null;
+  /** When the hub stops checking it unmet; null: never. */
+  deadline: number | null;
+  /** The newest check's evidence when met; null when marked met, or unmet. */
+  evidence: string | null;
+  /** The person marked it met (no run did). */
+  markedMet: boolean;
+  /** When it was met; null while unmet. */
+  metAt: number | null;
+  /** When it checks next while it checks; null otherwise. */
+  nextAt: number | null;
+  /** The newest check's reason (not yet, could not check), or the last failure's; null for none. */
+  reason: string | null;
+  state: ConditionState;
+  /** The statement, true once met. */
+  statement: string;
+}
+
 /**
  * One run, as the hub's routes and tools answer it (times in ms), with what
  * actually ran it: a delegate run's work item, or a conversation run's
@@ -71,6 +133,8 @@ export interface RoutineRunView {
   startedAt: number;
   state: RoutineRunState;
   usd: number | null;
+  /** What a check run answered; null for a run that gave no verdict, and every run of a routine with no condition. */
+  verdict: RoutineVerdict | null;
   /** A delegate run's work item; null for a conversation run, and before its work began. */
   workItemId: string | null;
 }

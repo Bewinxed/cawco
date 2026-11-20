@@ -7,7 +7,9 @@
    * (DESIGN.md, The Open Page Rule), and blocks nothing.
    *
    * Its fields, on Configure's editor parts (Field, Input, Textarea, the
-   * kit NativeSelect): a name, what each run does, when, what each run
+   * kit NativeSelect): a name, what each run does, a condition and the day
+   * its checks stop (both optional: a condition makes it a check tasks wait
+   * on, hub routines.ts), when, what each run
    * starts (a delegate or an orchestrator), and the delegate type. When is a choice of common schedules, as a calendar's repeat
    * picker offers them (every hour; every day, every weekday or every week
    * on a day, at a time), or Custom, its five values typed (when.ts); each
@@ -28,6 +30,7 @@
    * person types holds until the prop is set again, and a state set in
    * place on a mounted form is the state it shows.
    */
+  import { conditionWords as conditions } from "@cawco/core/words/conditions";
   import { routinesWords as words } from "@cawco/core/words/routines";
   import Field from "#lib/cawco/config/Field.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -104,6 +107,12 @@
       timeZone: opening.timeZone ?? readerZone(),
       delegateType: opening.delegateType ?? null,
       target: opening.target ?? "delegate",
+      condition: opening.condition ?? "",
+      /** The day its condition's checks stop, as the date field holds it ("2026-12-01"); blank: never. */
+      until:
+        opening.deadline === null || opening.deadline === undefined
+          ? ""
+          : new Date(opening.deadline).toISOString().slice(0, 10),
     });
     return fields;
   });
@@ -273,6 +282,19 @@
     }
     return unread ? words.customUnread : undefined;
   });
+  /** The day its condition's checks stop, as the end of that day on your clock; null: none. */
+  const deadline = $derived(
+    draft.until ? new Date(`${draft.until}T23:59:59`).getTime() : null
+  );
+  const deadlineProblem = $derived.by((): string | undefined => {
+    if (deadline === null) {
+      return;
+    }
+    if (draft.condition.trim() === "") {
+      return conditions.deadlineNeedsCondition;
+    }
+    return deadline <= Date.now() ? conditions.deadlinePast : undefined;
+  });
   /** A common schedule is always readable: a refusal is its zone's. */
   const zoneProblem = $derived(
     unread && !custom ? words.zoneUnread : undefined
@@ -282,7 +304,8 @@
       draft.name.trim().length <= NAME_MAX &&
       draft.prompt.trim() !== "" &&
       cron !== "" &&
-      !unread
+      !unread &&
+      deadlineProblem === undefined
   );
 
   /** The zones a schedule may be read in, yours among them. */
@@ -337,7 +360,8 @@
     saving = true;
     failure = null;
     try {
-      oncreated(await hub.create(projectId, { ...draft, cron }));
+      const { until: _, ...fields } = draft;
+      oncreated(await hub.create(projectId, { ...fields, cron, deadline }));
     } catch (error) {
       failure = refusal(error);
     } finally {
@@ -380,6 +404,36 @@
       bind:value={draft.prompt}
     />
   </Field>
+
+  <!-- Its condition and the day its checks stop, two to a row where they
+       hold: a condition makes it a check tasks wait on. -->
+  <div class="grid min-w-0 gap-space-3 @field-group:grid-cols-2">
+    <Field
+      hint={conditions.conditionHint}
+      id="routine-condition"
+      label={conditions.conditionLabel}
+    >
+      <Input
+        autocomplete="off"
+        id="routine-condition"
+        placeholder={conditions.conditionPlaceholder}
+        bind:value={draft.condition}
+      />
+    </Field>
+    <Field
+      hint={conditions.deadlineHint}
+      id="routine-deadline"
+      label={conditions.deadlineLabel}
+      problem={deadlineProblem}
+    >
+      <Input
+        aria-invalid={deadlineProblem ? "true" : undefined}
+        id="routine-deadline"
+        type="date"
+        bind:value={draft.until}
+      />
+    </Field>
+  </div>
 
   <!-- When: its choice, then what that choice asks (the day, the time, or
        the custom schedule's five values), and the time zone it is read in,

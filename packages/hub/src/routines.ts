@@ -79,6 +79,24 @@
  *   delegate run in the `trimmer` role, its brief the hub's findings, which
  *   proposes each trimmed set through that set's own approval. Its result is
  *   a note, as the curator's is. Its target stays `trim`.
+ * - **Conditions** (condition waits): a routine with a `condition`, a
+ *   statement true once met, is a check that tasks and plan steps wait on
+ *   with `routine:<handle>` (core wait-targets.ts; task-waits.ts settles
+ *   it from conditions.ts `conditionOf`). Each run answers with
+ *   `routine_result`'s `condition`, met, unmet or unknown, and one sentence
+ *   (a delegate run calls it before finish_item, whose headline is not
+ *   read); a run that ends without one failed. A due slot runs only while
+ *   an open task or a live plan step waits on it, else it passes with no
+ *   run. Met is latched: the hub keeps when, by which run and on what, turns
+ *   it off (`stopped: met`) and writes one quiet line in the project's
+ *   conversation; nobody is woken. Unknown is a failure, retried once; three
+ *   slots in a row failing stop it (`stopped: failing`), and its deadline,
+ *   the agent's to set or none, passed unmet stops it (`stopped: deadline`):
+ *   either is told to you once, a note and a push. It never expires: its
+ *   deadline is its one clock. You mark it met (`POST /api/routines/:id/met`)
+ *   or check it again (`/recheck`, which un-meets it); turning a stopped one
+ *   back on checks it again too. Every change of where it stands tells its
+ *   project's waits ({@link RoutineDeps.conditionMoved}).
  * - **Changes** (`routine_update`, `PATCH /api/routines/:id`) take any field
  *   but its project: its target, delegate type, landing and budget too,
  *   each checked as a new routine's is. A delete takes the event routes
@@ -103,10 +121,13 @@ import type {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { routineLink, sessionLink } from "@cawco/core/references";
 import {
+  type ConditionStop,
   MADE_ROUTINE_TARGETS,
+  ROUTINE_VERDICTS,
   type RoutineOutcome,
   type RoutineRunView,
   type RoutineTarget,
+  type RoutineVerdict,
 } from "@cawco/core/routine-kinds";
 import { standalone } from "@cawco/core/runtime";
 import type {
@@ -114,7 +135,9 @@ import type {
   NeutralOrigin,
 } from "@cawco/core/session-messages";
 import { DAY_MS } from "@cawco/core/time";
+import { ROUTINE_WAIT } from "@cawco/core/wait-targets";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
+import { conditionWords } from "@cawco/core/words/conditions";
 import { curatorPrompt, memoryRunWords } from "@cawco/core/words/memory-run";
 import { routineToolWords } from "@cawco/core/words/routines";
 import { workWords } from "@cawco/core/words/work";
@@ -124,6 +147,12 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Artifacts } from "./artifacts/service";
 import { type Caw, isProjectConversation } from "./caw";
+import {
+  conditionOf,
+  FAILING_SLOTS,
+  failingSlots,
+  routineKeys,
+} from "./conditions";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
@@ -131,7 +160,7 @@ import type { ProjectRow } from "./db/projects";
 import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { SentMessageRow } from "./db/sends";
 import type { WorkBudget } from "./db/stored-types";
-import { byHandle, type Handled, namesAny } from "./handles";
+import { byHandle, namesAny } from "./handles";
 import { eventData } from "./inbound-event";
 import type { JevAccess } from "./jev";
 import { jevType, offLine } from "./jev-placement";
@@ -168,6 +197,11 @@ import {
 } from "./work-items";
 import { budgetColumns, budgetOf, budgetProblem } from "./work-limits";
 import type { WorkPlace } from "./work-place";
+
+/** What a tool definition's handler takes (mcp-tool.ts `defineTool`). */
+type ToolInput<D extends { run: (handler: never) => unknown }> = Parameters<
+  Parameters<D["run"]>[0]
+>[0];
 
 /** What a delegate's headline says to stay silent. */
 const NO_REPLY = "NO_REPLY";
@@ -231,8 +265,12 @@ const targetStays = (from: RoutineTarget, to: RoutineTarget) => {
 /** What a new routine is made of. */
 export interface RoutineInput {
   budget?: WorkBudget | null;
+  /** A statement true once met: makes it a check tasks wait on. */
+  condition?: string | null;
   cron: string;
   dailyCapUsd?: number | null;
+  /** When a condition's checks stop unmet; none: never. */
+  deadline?: Date | null;
   delegateType?: string | null;
   keep?: boolean;
   lands?: LandsMode;
@@ -248,8 +286,12 @@ export interface RoutineInput {
 /** A change to a routine; what is left out stays. */
 export interface RoutinePatch {
   budget?: WorkBudget | null;
+  /** Its condition's statement; a routine with a condition keeps one. */
+  condition?: string;
   cron?: string;
   dailyCapUsd?: number | null;
+  /** When its condition's checks stop unmet; null: never. */
+  deadline?: Date | null;
   delegateType?: string | null;
   enabled?: boolean;
   keep?: boolean;
@@ -270,8 +312,10 @@ type Fields = Pick<
   | "budgetTurns"
   | "budgetUnread"
   | "budgetUsd"
+  | "condition"
   | "cron"
   | "dailyCapUsd"
+  | "deadline"
   | "delegateType"
   | "lands"
   | "mode"
@@ -305,6 +349,8 @@ const merged = (row: RoutineRow, patch: RoutinePatch): Fields => ({
   dailyCapUsd:
     patch.dailyCapUsd === undefined ? row.dailyCapUsd : patch.dailyCapUsd,
   mode: patch.mode === undefined ? row.mode : patch.mode,
+  condition: patch.condition?.trim() ?? row.condition,
+  deadline: patch.deadline === undefined ? row.deadline : patch.deadline,
 });
 
 /** Who acts: you (the dashboard), or a session through its tools. */
@@ -315,6 +361,26 @@ export interface RoutineDeps {
   readonly anyOnline: () => boolean;
   /** A routine's notes and sends to the project's conversation (caw.ts). */
   readonly caw: Pick<Caw, "notice" | "tell">;
+  /**
+   * A condition of the project moved (a check answered, it was met,
+   * stopped, paused, resumed, changed or deleted): its waits are read
+   * again (tasks.ts `waitsMoved`), so dispatch looks, the board redraws
+   * and plans re-settle.
+   */
+  readonly conditionMoved: (projectId: string) => void;
+  /**
+   * What waits on a condition, by the handle a wait keeps (`routine:<id>`):
+   * whether an open task or a live plan step does (a due slot runs only
+   * then; a refusal reading the project's tasks counts as one), and the
+   * tasks and steps that do, for its view.
+   */
+  readonly conditionWaiters: {
+    open: (projectId: string, handle: string) => Promise<boolean>;
+    listed: (
+      projectId: string,
+      handle: string
+    ) => { steps: number; tasks: string[] };
+  };
   readonly db: Pick<
     DbShape,
     | "accounts"
@@ -457,7 +523,19 @@ const runView = (run: RoutineRunRow): RoutineRunView => ({
   usd: run.usd,
   startedAt: run.startedAt.getTime(),
   endedAt: ms(run.endedAt),
+  verdict: run.verdict,
 });
+
+/** What a wait on routine `id` keeps (core wait-targets.ts). */
+const conditionHandle = (id: string): string => `${ROUTINE_WAIT}${id}`;
+
+/** A condition un-met, its checks no longer stopped: checked again. */
+const UNMET = {
+  metAt: null,
+  metBy: null,
+  metEvidence: null,
+  stopped: null,
+} as const satisfies Partial<RoutineRow>;
 
 /** The output contract's first two answers, as every run is told them. */
 const SILENT_OR_FAILED = `say exactly ${NO_REPLY} when there is nothing worth telling, which wakes nobody; ${AUTOMATION_FAILED}: <one sentence on why> when the work could not be done (the owner reads that sentence; the hub retries once, then asks the owner);`;
@@ -511,15 +589,59 @@ const reportsToLead = (
   routine.target !== "curator" &&
   routine.target !== "trim";
 
-/** What a delegate run is told about its output, after the routine's prompt: one that reports to Caw is told so. */
-const contractOf = (
-  routine: Pick<RoutineRow, "projectId" | "target">
+/**
+ * What a check run is told about its answer, after the routine's prompt:
+ * the condition, and `routine_result` with its verdict and one sentence,
+ * before finish_item for a delegate's, before its turn ends for Caw's.
+ */
+const checkContract = (
+  condition: string,
+  runId: string,
+  delegate: boolean
 ): string =>
-  `## Your answer\n\nWhen you are done, call finish_item. Its headline is this run's output, read by the hub: ${reportsToLead(routine) ? LEAD_ANSWERS : ANSWERS}`;
+  `## Your answer\n\nThis run checks a condition: “${condition}”. Find out whether it is true now, from sources you can cite. Then call routine_result with run "${runId}", condition met, unmet or unknown, and result one sentence: the evidence when met, why it is not true yet when unmet, why you could not tell when unknown. Say met only on evidence: once a run says met, the tasks waiting on it start and the hub stops checking. Say unknown when the check itself failed (a source unreachable, a tool refused), never unmet. ${delegate ? "Then call finish_item; its headline is not read. A run that finishes without routine_result failed." : "Call it before your turn ends: a turn that ends without it fails the run."}`;
+
+/** What a delegate run is told about its output, after the routine's prompt: one that reports to Caw is told so, a check run its own. */
+const contractOf = (
+  routine: Pick<RoutineRow, "condition" | "projectId" | "target">,
+  runId: string
+): string =>
+  routine.condition
+    ? checkContract(routine.condition, runId, true)
+    : `## Your answer\n\nWhen you are done, call finish_item. Its headline is this run's output, read by the hub: ${reportsToLead(routine) ? LEAD_ANSWERS : ANSWERS}`;
 
 /** What the project's conversation is told about a run's output, after the routine's prompt. */
-const leadContract = (runId: string): string =>
-  `## Your answer\n\nWhen you are done, call routine_result with run "${runId}". Its result is this run's output, read by the hub: ${ANSWERS} Call it before your turn ends: a turn that ends without it fails the run.`;
+const leadContract = (
+  routine: Pick<RoutineRow, "condition">,
+  runId: string
+): string =>
+  routine.condition
+    ? checkContract(routine.condition, runId, false)
+    : `## Your answer\n\nWhen you are done, call routine_result with run "${runId}". Its result is this run's output, read by the hub: ${ANSWERS} Call it before your turn ends: a turn that ends without it fails the run.`;
+
+/**
+ * A check run's answer as its run's end: met is delivered with its
+ * evidence, unmet silent with its reason, unknown a failure with its why.
+ */
+const verdictEnd = (verdict: RoutineVerdict, said: string): RunEnd => {
+  const words = clipReason(said);
+  switch (verdict) {
+    case "met":
+      return { outcome: "delivered", output: words, reason: null, verdict };
+    case "unmet":
+      return { outcome: "silent", output: null, reason: words, verdict };
+    case "unknown":
+      return {
+        outcome: "failed",
+        output: null,
+        reason: words || "the check could not tell",
+        verdict,
+      };
+  }
+};
+
+/** A check run whose work item ended without its `routine_result`. */
+const NO_VERDICT = "it ended without saying whether the condition is met";
 
 /** A conversation run's end when Caw's turn that took its wake ends with no `routine_result`. */
 const NO_RESULT = "Caw ended its turn without saying how the run went";
@@ -529,6 +651,8 @@ export interface RunEnd {
   outcome: RoutineOutcome;
   output: string | null;
   reason: string | null;
+  /** A check run's answer; absent for every other run. */
+  verdict?: RoutineVerdict | null;
 }
 
 /** What {@link surfaceRun} tells and where. */
@@ -657,9 +781,39 @@ const scheduleParameters = {
 const routineRef = () =>
   z.string().trim().min(1).describe("Its handle, id or name.");
 
+/** A routine's condition, as routine_create and routine_update take it. */
+const conditionParameter = z
+  .string()
+  .describe(
+    "Makes it a check tasks and steps wait on (routine:<handle>): a statement true once met. Runs answer met, unmet or unknown with routine_result, only while something waits, until met."
+  );
+
+/** A condition's deadline, as routine_create and routine_update take it. */
+const deadlineParameter = z
+  .string()
+  .describe(
+    "When a condition's checks stop unmet, an ISO 8601 date: its waits are flagged and the owner told once. Left out: until met."
+  );
+
+/** A deadline as a tool writes it: a time, null for none, left out; refused when it does not read. */
+const deadlineOf = (written: string | null | undefined) => {
+  if (written === undefined || written === null) {
+    return written;
+  }
+  const at = new Date(written.trim());
+  return Number.isNaN(at.getTime())
+    ? problem(400, {
+        code: "routine-deadline-unfit",
+        detail: `deadline “${written}” is not a date: write an ISO 8601 date or date-time, like 2026-12-01 or 2026-12-01T09:00:00Z.`,
+      })
+    : at;
+};
+
 export const createRoutines = ({
   anyOnline,
   caw,
+  conditionMoved,
+  conditionWaiters,
   memoryRun,
   handedUnopened,
   trimBrief,
@@ -762,8 +916,27 @@ export const createRoutines = ({
       : viewWith(row, nextRuns);
   };
 
+  /** A routine's condition as its view answers it, with what waits on it; null for one with none. */
+  const conditionView = (row: RoutineRow): RoutineView["condition"] => {
+    const condition = conditionOf(row, store);
+    if (!condition) {
+      return null;
+    }
+    const kept = conditionHandle(row.id);
+    const waiting = row.projectId
+      ? conditionWaiters.listed(row.projectId, kept)
+      : { steps: 0, tasks: [] };
+    return {
+      ...condition,
+      handle: kept,
+      steps: waiting.steps,
+      waitedBy: waiting.tasks,
+    };
+  };
+
   const viewWith = (row: RoutineRow, nextRuns: number[]): RoutineView => ({
     id: row.id,
+    condition: conditionView(row),
     projectId: row.projectId,
     name: row.name,
     cron: row.cron,
@@ -826,11 +999,66 @@ export const createRoutines = ({
     return `No delegate type “${type}”. Available: ${names || "none are configured"}.`;
   };
 
+  /**
+   * Why its condition cannot stand as written, under its code: on a routine
+   * of the hub's (the curator's, the trim's), with a deadline and no
+   * condition, blank, or in no project.
+   */
+  const conditionProblem = (routine: Fields) => {
+    const { condition } = routine;
+    if (
+      condition !== null &&
+      (routine.target === "curator" || routine.target === "trim")
+    ) {
+      return problem(400, {
+        code: "routine-condition-target",
+        detail: `The ${routine.target === "curator" ? "memory curator" : "unused skills and servers"} routine is the hub's and checks no condition: make a routine of your own for it.`,
+      });
+    }
+    if (routine.deadline !== null && condition === null) {
+      return problem(400, {
+        code: "routine-deadline-unfit",
+        detail:
+          "deadline is when a condition's checks stop unmet, and this routine has no condition: give it one, or leave deadline out.",
+      });
+    }
+    if (condition === null) {
+      return;
+    }
+    if (!condition) {
+      return problem(400, {
+        code: "routine-unfit",
+        detail:
+          "condition is blank: write the statement that is true once met, like “GitHub Event Streams is generally available”.",
+      });
+    }
+    return routine.projectId
+      ? undefined
+      : problem(400, {
+          code: "routine-unfit",
+          detail:
+            "A condition is waited on by its project's tasks, and this routine is in no project: make it from a session in the project.",
+        });
+  };
+
+  /** A deadline written now, refused when it has passed: a check stopped at once would tell you of nothing. */
+  const deadlinePassed = (deadline: Date | null | undefined, now: number) =>
+    deadline && deadline.getTime() <= now
+      ? problem(400, {
+          code: "routine-deadline-unfit",
+          detail: `deadline ${deadline.toISOString()} has passed: give one ahead of now, or none (null) to check until it is met.`,
+        })
+      : undefined;
+
   /** Refuses a routine that cannot run as written: names the field and how to fix it; its schedule parsed when it can. */
   const checked = (routine: Fields) => {
     const cron = cronOf(routine.cron, routine.timeZone);
     if (cron instanceof ElysiaStatus) {
       return cron;
+    }
+    const unfit = conditionProblem(routine);
+    if (unfit) {
+      return unfit;
     }
     const project = routine.projectId ? projectOf(routine.projectId) : null;
     if (project instanceof ElysiaStatus) {
@@ -1007,19 +1235,20 @@ export const createRoutines = ({
     failed: () => " failed twice · needs you",
   };
 
-  /** Notes a run in the project's conversation, waking no one. */
+  /** Notes a run in the project's conversation, waking no one; `title` in place of the routine's own line. */
   const note = (
     routine: RoutineRow,
     run: RoutineRunRow,
     phase: keyof typeof NOTE_WHAT,
-    body?: string
+    body?: string,
+    title?: string
   ): void => {
     if (!routine.projectId) {
       return;
     }
     const label = slotLabel(run.slot, routine.timeZone);
     const unnoted = caw.notice(routine.projectId, {
-      title: `Routine · ${routine.name}${NOTE_WHAT[phase](label)}`,
+      title: title ?? `Routine · ${routine.name}${NOTE_WHAT[phase](label)}`,
       ...(body ? { body } : {}),
       event: {
         kind: "routine",
@@ -1125,7 +1354,7 @@ export const createRoutines = ({
     const begun = await workItems.startForHub(
       {
         title: routine.name,
-        prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. ${kind.lead}Its prompt:\n\n${kind.prompt ?? routine.prompt}${kind.input}\n\n${contractOf(routine)}`,
+        prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. ${kind.lead}Its prompt:\n\n${kind.prompt ?? routine.prompt}${kind.input}\n\n${contractOf(routine, run.id)}`,
         ...(type ? { type } : {}),
         ...kind.fields,
         ...(budget ? { budget } : {}),
@@ -1216,7 +1445,7 @@ export const createRoutines = ({
       routine: routine.id,
       ...(route ? { route } : {}),
       trigger: `the routine ${routineLink(routine.id, routine.name)}, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}`,
-      text: `Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\n${leadContract(run.id)}`,
+      text: `Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\n${leadContract(routine, run.id)}`,
     });
     if (!(woke instanceof ElysiaStatus)) {
       store.setRun(run.id, { state: "running" });
@@ -1377,12 +1606,7 @@ export const createRoutines = ({
    */
   const settle = (
     runId: string,
-    ended: {
-      outcome: RoutineOutcome;
-      output: string | null;
-      reason: string | null;
-      usd: number | null;
-    },
+    ended: RunEnd & { usd: number | null },
     /** The session its work item ran, when it had one: a push's Reply writes to it. */
     instanceId: string | null = null
   ): void => {
@@ -1400,6 +1624,7 @@ export const createRoutines = ({
       reason: end.reason,
       usd: end.usd,
       endedAt: new Date(),
+      ...(end.verdict === undefined ? {} : { verdict: end.verdict }),
     });
     const routine = run ? store.get(run.routineId) : undefined;
     if (!(run && routine)) {
@@ -1415,40 +1640,197 @@ export const createRoutines = ({
     drain(routine.id);
   };
 
-  /** What a run came to, told ({@link surfaceRun}). Answers whether it needs you. */
+  /** What a run came to, told ({@link surfaceRun}; a check run's, {@link surfaceCheck}). Answers whether it needs you. */
   const surface = (
     routine: RoutineRow,
     run: RoutineRunRow,
     end: RunEnd,
     instanceId: string | null
   ): boolean =>
-    surfaceRun(
-      {
-        caw,
-        note,
-        push,
-        reportOf: (ran) => {
-          const item = ran.workItemId ? db.workItem(ran.workItemId) : undefined;
-          const lead = routine.projectId
-            ? db.project(routine.projectId)?.conversationInstanceId
-            : null;
-          return item
-            ? {
-                handed: artifactToolWords.handedInReport(
-                  lead ? handedUnopened(lead, item.instanceId) : []
-                ),
-                session: sessionLink(item.instanceId, item.title),
-                summary: db.workItemTexts(item.id).summary,
-              }
-            : undefined;
-        },
-        retry: (again, failed) => fireExtra(again, failed.slot, 2),
-      },
-      routine,
-      run,
-      end,
-      instanceId
+    routine.condition
+      ? surfaceCheck(routine, run, end)
+      : surfaceRun(
+          {
+            caw,
+            note,
+            push,
+            reportOf: (ran) => {
+              const item = ran.workItemId
+                ? db.workItem(ran.workItemId)
+                : undefined;
+              const lead = routine.projectId
+                ? db.project(routine.projectId)?.conversationInstanceId
+                : null;
+              return item
+                ? {
+                    handed: artifactToolWords.handedInReport(
+                      lead ? handedUnopened(lead, item.instanceId) : []
+                    ),
+                    session: sessionLink(item.instanceId, item.title),
+                    summary: db.workItemTexts(item.id).summary,
+                  }
+                : undefined;
+            },
+            retry: (again, failed) => fireExtra(again, failed.slot, 2),
+          },
+          routine,
+          run,
+          end,
+          instanceId
+        );
+
+  // --- conditions ---------------------------------------------------------------
+
+  /** A condition of the routine's project moved: its waits are read again. */
+  const moved = (routine: Pick<RoutineRow, "projectId">): void => {
+    if (routine.projectId) {
+      conditionMoved(routine.projectId);
+    }
+  };
+
+  /** A day in the routine's zone, as its notes say it: "1 Dec 2026". */
+  const dayIn = (at: Date, timeZone: string): string =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).format(at);
+
+  /**
+   * The routine's condition met, latched: when, by which run (or you) and
+   * on what, its checks off (`stopped: met`). A run's meeting it writes one
+   * line in the project's conversation, waking no one; yours writes none,
+   * you did it. Its project's waits are read again: its to-do tasks turn
+   * ready, and dispatch starts them while it is on.
+   */
+  const meet = (
+    routine: RoutineRow,
+    by: { evidence: string | null; run: RoutineRunRow } | "owner"
+  ): RoutineRow | undefined => {
+    const met = store.update(routine.id, {
+      metAt: new Date(),
+      metBy: by === "owner" ? "owner" : by.run.id,
+      metEvidence: by === "owner" ? null : by.evidence,
+      stopped: "met",
+      enabled: false,
+      disabledReason: conditionWords.offMet,
+    });
+    if (met && by !== "owner" && met.condition) {
+      note(
+        met,
+        by.run,
+        "delivered",
+        by.evidence ? conditionWords.metNoteBody(by.evidence) : undefined,
+        conditionWords.metNote(met.condition)
+      );
+    }
+    console.log(
+      `[routines] ${routine.name}: its condition is met (${by === "owner" ? "marked by you" : `run ${by.run.id}`})`
     );
+    moved(routine);
+    schedule();
+    return met;
+  };
+
+  /**
+   * The routine's condition's checks stopped unmet by the hub, `stop` why
+   * (its deadline passed, its slots kept failing), told to you once: a note
+   * in the project's conversation, with `last`, its newest check's words,
+   * and a push. Its waits are flagged from now on.
+   */
+  const stopCheck = (
+    routine: RoutineRow,
+    stop: Exclude<ConditionStop, "met">,
+    last: string | null
+  ): void => {
+    const date = routine.deadline
+      ? dayIn(routine.deadline, routine.timeZone)
+      : "";
+    const row = store.update(routine.id, {
+      enabled: false,
+      stopped: stop,
+      disabledReason:
+        stop === "deadline"
+          ? conditionWords.offTimedOut(date)
+          : conditionWords.offFailing,
+    });
+    const statement = routine.condition ?? routine.name;
+    const title =
+      stop === "deadline"
+        ? conditionWords.timedOutNote(statement, date)
+        : conditionWords.failingNote(statement);
+    const [newest] = store.runs(routine.id, 1);
+    if (row && newest) {
+      note(row, newest, "failed", conditionWords.stoppedNoteBody(last), title);
+    }
+    push.routine({
+      failed: true,
+      instanceId: null,
+      name: routine.name,
+      output: title,
+      projectId: routine.projectId,
+      routineId: routine.id,
+      runId: newest?.id ?? "",
+    });
+    console.log(
+      `[routines] ${routine.name}: its condition's checks stopped (${stop})`
+    );
+    moved(routine);
+    schedule();
+  };
+
+  /**
+   * What a check run came to: met latches its condition ({@link meet});
+   * unmet changes nothing but where it stands; a failure is retried once
+   * at once, and the slot that fails a third time in a row stops its checks
+   * and tells you ({@link stopCheck}). Answers whether it needs you.
+   */
+  const surfaceCheck = (
+    routine: RoutineRow,
+    run: RoutineRunRow,
+    end: RunEnd
+  ): boolean => {
+    if (end.verdict === "met") {
+      if (!routine.metAt) {
+        meet(routine, { run, evidence: end.output });
+      }
+      return false;
+    }
+    if (end.outcome === "failed" && run.attempt === 1) {
+      fireExtra(routine, run.slot, 2);
+    } else if (
+      end.outcome === "failed" &&
+      routine.enabled &&
+      failingSlots(store, routine.id) >= FAILING_SLOTS
+    ) {
+      stopCheck(routine, "failing", end.reason);
+      return true;
+    }
+    moved(routine);
+    return false;
+  };
+
+  /**
+   * A check's run's work item ended: its end is the verdict its
+   * `routine_result` kept on the run (unless it was stopped), else the
+   * item's own failure or stop, else a failure that it gave none. Its
+   * headline is read only for an `AUTOMATION_FAILED` reason.
+   */
+  const checkEndOf = (run: RoutineRunRow, item: WorkItemRow): RunEnd => {
+    if (run.verdict !== null && item.state !== "cancelled") {
+      return verdictEnd(
+        run.verdict,
+        (run.verdict === "met" ? run.output : run.reason) ?? ""
+      );
+    }
+    const ended = outcomeOf(item);
+    return ended !== "bare" &&
+      ended.outcome !== "delivered" &&
+      ended.outcome !== "silent"
+      ? ended
+      : { outcome: "failed", output: null, reason: NO_VERDICT, verdict: null };
+  };
 
   /**
    * A settled run's workspace, archived: its session ended and its clone
@@ -1838,25 +2220,66 @@ export const createRoutines = ({
   };
 
   /**
-   * Caw's answer for a conversation run (`routine_result`): settled as a delegate's
-   * headline is. Refused for a run that is not its project's, not a
-   * conversation run, or not going.
+   * The verdict a check run's delegate gave (`routine_result` before its
+   * finish_item): kept on its run, read as its work item ends
+   * ({@link checkEndOf}); a later call while it runs replaces it.
    */
-  const leadResult = (actor: InstanceRow, runId: string, result: string) => {
-    const run = store.run(runId);
-    const routine = run ? store.get(run.routineId) : undefined;
-    if (!(run && routine) || routine.projectId !== (actor.projectId ?? null)) {
-      return problem(404, {
-        code: "routine-run-unknown",
-        detail: `Run ${runId} is not a run of this project's routines.`,
+  const keepVerdict = (
+    actor: InstanceRow,
+    run: RoutineRunRow,
+    verdict: RoutineVerdict,
+    result: string
+  ) => {
+    const item = run.workItemId ? db.workItem(run.workItemId) : undefined;
+    if (item?.instanceId !== actor.id) {
+      return problem(403, {
+        code: "routine-run-not-yours",
+        detail: `Run ${run.id} is another session's: only the delegate doing it answers it.`,
       });
     }
-    if (routine.target !== "conversation") {
+    const end = verdictEnd(verdict, result);
+    return runView(
+      store.setRun(run.id, {
+        verdict,
+        output: end.output,
+        reason: end.reason,
+      }) ?? run
+    );
+  };
+
+  /**
+   * Why `routine_result` cannot answer run `runId` of `routine` as asked: a
+   * check run with no verdict, a verdict for a routine with no condition, a
+   * delegate run of a routine with no condition (its delegate answers with
+   * finish_item); nothing when it can.
+   */
+  const answerProblem = (
+    routine: RoutineRow,
+    runId: string,
+    condition: RoutineVerdict | undefined
+  ) => {
+    if (routine.condition && !condition) {
+      return problem(400, {
+        code: "routine-result-condition-missing",
+        detail: `Run ${runId} checks a condition (“${routine.condition}”): answer with condition met, unmet or unknown, and result one sentence on why.`,
+      });
+    }
+    if (!routine.condition && condition) {
+      return problem(400, {
+        code: "routine-result-not-a-condition",
+        detail: `Routine “${routine.name}” has no condition, so its runs give no verdict: leave condition out.`,
+      });
+    }
+    if (routine.target !== "conversation" && !routine.condition) {
       return problem(409, {
         code: "routine-run-delegate",
         detail: `Run ${runId} is a delegate run: its delegate answers with finish_item.`,
       });
     }
+  };
+
+  /** Why run `runId` takes no answer now: it ended (or is held failed), or has not reached its answerer; nothing while it runs. */
+  const notGoing = (run: RoutineRunRow, runId: string) => {
     const ended =
       run.state === "ended" || run.state === "skipped"
         ? `${run.outcome ?? run.state}`
@@ -1873,9 +2296,40 @@ export const createRoutines = ({
         detail: `Run ${runId} has not reached you yet.`,
       });
     }
+  };
+
+  /**
+   * A run's answer (`routine_result`): Caw's for a conversation run,
+   * settled as a delegate's headline is; a check run's, Caw's or its
+   * delegate's, with its `condition` verdict, which a check run must give
+   * and no other may. Refused for a run that is not its project's, a
+   * delegate run of a routine with no condition, or a run not going.
+   */
+  const leadResult = (
+    actor: InstanceRow,
+    runId: string,
+    result: string,
+    condition?: RoutineVerdict
+  ) => {
+    const run = store.run(runId);
+    const routine = run ? store.get(run.routineId) : undefined;
+    if (!(run && routine) || routine.projectId !== (actor.projectId ?? null)) {
+      return problem(404, {
+        code: "routine-run-unknown",
+        detail: `Run ${runId} is not a run of this project's routines.`,
+      });
+    }
+    const unfit =
+      answerProblem(routine, runId, condition) ?? notGoing(run, runId);
+    if (unfit) {
+      return unfit;
+    }
+    if (condition && routine.target !== "conversation") {
+      return keepVerdict(actor, run, condition, result);
+    }
     answered(
       run.id,
-      resultOf(result),
+      condition ? verdictEnd(condition, result) : resultOf(result),
       boardTitle(actor),
       null,
       actor.id,
@@ -1915,9 +2369,10 @@ export const createRoutines = ({
     if (!run || run.state === "ended") {
       return;
     }
+    const checks = store.get(run.routineId)?.condition;
     answered(
       run.id,
-      outcomeOf(item),
+      checks ? checkEndOf(run, item) : outcomeOf(item),
       "its delegate",
       workItems.spentBy(item),
       item.instanceId,
@@ -2135,6 +2590,19 @@ export const createRoutines = ({
     }
   };
 
+  /** How long a session's routine lasts, as its notice says it: a condition until its day or met, else 7 days unless kept. */
+  const lastsOf = (routine: RoutineRow): string | null => {
+    if (routine.condition) {
+      return conditionWords.madeLine(
+        routine.condition,
+        routine.deadline ? dayIn(routine.deadline, routine.timeZone) : null
+      );
+    }
+    return routine.expiresAt && !routine.keep
+      ? "Off in 7 days unless you keep it."
+      : null;
+  };
+
   /**
    * A session made `routine`, and you hear of it once: a note in the
    * project's conversation, naming it, its schedule and its next run, with what was said
@@ -2149,10 +2617,7 @@ export const createRoutines = ({
     }
     store.update(routine.id, { announcedAt: new Date() });
     const schedule = scheduleOf(routine);
-    const lasts =
-      routine.expiresAt && !routine.keep
-        ? "Off in 7 days unless you keep it."
-        : null;
+    const lasts = lastsOf(routine);
     if (routine.projectId) {
       madeNotice(routine, routine.projectId, maker, by, lasts);
     }
@@ -2189,11 +2654,6 @@ export const createRoutines = ({
   };
 
   /**
-   * One look: expired routines turn off, then every routine whose next slot
-   * is due fires its newest due slot, once (db/routines.ts `claimSlot`).
-   * Answers the runs it filed.
-   */
-  /**
    * A due routine's newest due slot, claimed (db/routines.ts `claimSlot`):
    * the run it filed, or nothing when the slot was claimed already.
    */
@@ -2218,29 +2678,105 @@ export const createRoutines = ({
     });
   };
 
-  const tick = (now: number = Date.now()): RoutineRunRow[] => {
-    expire(now);
-    // A project made while the fleet switch is on gets the trim routine.
-    everyProjectTrimmed();
-    const filed: RoutineRunRow[] = [];
-    for (const routine of store.list()) {
-      const run =
-        routine.enabled && routine.nextSlot.getTime() <= now
-          ? claimDue(routine, now)
-          : undefined;
-      if (!run) {
-        continue;
-      }
-      filed.push(run);
-      if (run.state === "starting") {
-        fire(routine, run);
-      } else {
-        console.log(
-          `[routines] ${routine.name} (${run.slot}) skipped: ${run.reason}`
-        );
+  /** A due routine's slot claimed ({@link claimDue}), and its run fired or its skip said. */
+  const fireDue = (
+    routine: RoutineRow,
+    now: number
+  ): RoutineRunRow | undefined => {
+    const run = claimDue(routine, now);
+    if (run?.state === "starting") {
+      fire(routine, run);
+    } else if (run) {
+      console.log(
+        `[routines] ${routine.name} (${run.slot}) skipped: ${run.reason}`
+      );
+    }
+    return run;
+  };
+
+  /** Conditions whose due slot waits on whether anything waits on them ({@link dueCheck}). */
+  const asking = new Set<string>();
+
+  /**
+   * A condition's due slot: it runs while an open task or a live plan step
+   * waits on it; else the slot passes with no run, `next_slot` moved on.
+   * Asked once at a time per routine; a slot another tick moved meanwhile
+   * is left as it is.
+   */
+  const dueCheck = (routine: RoutineRow): void => {
+    if (asking.has(routine.id)) {
+      return;
+    }
+    asking.add(routine.id);
+    const waited = routine.projectId
+      ? conditionWaiters.open(routine.projectId, conditionHandle(routine.id))
+      : Promise.resolve(false);
+    waited
+      .then((open) => {
+        const now = Date.now();
+        const fresh = store.get(routine.id);
+        if (
+          !fresh?.enabled ||
+          fresh.nextSlot.getTime() !== routine.nextSlot.getTime()
+        ) {
+          return;
+        }
+        if (open) {
+          fireDue(fresh, now);
+          return;
+        }
+        const cron = cronOf(fresh.cron, fresh.timeZone);
+        if (!(cron instanceof ElysiaStatus)) {
+          store.update(fresh.id, { nextSlot: Cron.next(cron, now) });
+        }
+      })
+      .catch((error: unknown) =>
+        console.warn(
+          `[routines] ${routine.name}: whether anything waits on its condition was not read: ${error instanceof Error ? error.message : String(error)}`
+        )
+      )
+      .finally(() => {
+        asking.delete(routine.id);
+        schedule();
+      });
+  };
+
+  /** Stops the checks of conditions past their deadline unmet, each told to you once ({@link stopCheck}). */
+  const deadlines = (now: number): void => {
+    for (const row of store.list()) {
+      if (
+        row.enabled &&
+        row.condition &&
+        !row.metAt &&
+        row.deadline &&
+        row.deadline.getTime() <= now
+      ) {
+        stopCheck(row, "deadline", conditionOf(row, store)?.reason ?? null);
       }
     }
-    return filed;
+  };
+
+  /**
+   * One look: expired routines turn off and conditions past their deadline
+   * stop, then every routine whose next slot is due fires its newest due
+   * slot, once (db/routines.ts `claimSlot`); a condition only while
+   * something waits on it ({@link dueCheck}).
+   */
+  const tick = (now: number = Date.now()): void => {
+    expire(now);
+    deadlines(now);
+    // A project made while the fleet switch is on gets the trim routine.
+    everyProjectTrimmed();
+    for (const routine of store.list()) {
+      if (!routine.enabled || routine.nextSlot.getTime() > now) {
+        continue;
+      }
+      if (routine.condition) {
+        dueCheck(routine);
+      } else {
+        fireDue(routine, now);
+      }
+    }
   };
 
   /** Sleeps until the earliest next slot or expiry, at most {@link NAP_MS}, then looks. */
@@ -2256,6 +2792,9 @@ export const createRoutines = ({
         wake = Math.min(wake, row.nextSlot.getTime());
         if (row.expiresAt && !row.keep) {
           wake = Math.min(wake, row.expiresAt.getTime());
+        }
+        if (row.condition && row.deadline) {
+          wake = Math.min(wake, row.deadline.getTime());
         }
       }
     }
@@ -2362,8 +2901,10 @@ export const createRoutines = ({
       ...budgetColumns(input.budget ?? null),
       dailyCapUsd: input.dailyCapUsd ?? null,
       mode: input.mode ?? null,
+      condition: input.condition?.trim() ?? null,
+      deadline: input.deadline ?? null,
     };
-    const cron = checked(fields);
+    const cron = deadlinePassed(fields.deadline, Date.now()) ?? checked(fields);
     if (cron instanceof ElysiaStatus) {
       return cron;
     }
@@ -2379,14 +2920,18 @@ export const createRoutines = ({
       madeWhy: null,
       announcedAt: null,
       keep,
+      // A condition's one clock is its deadline: it never expires.
       expiresAt:
-        agent && !keep ? new Date(now.getTime() + AGENT_LIFETIME_MS) : null,
+        agent && !keep && fields.condition === null
+          ? new Date(now.getTime() + AGENT_LIFETIME_MS)
+          : null,
       lastSlot: null,
       nextSlot: Cron.next(cron, now),
       createdAt: now,
+      ...UNMET,
     });
     console.log(
-      `[routines] ${row.name} made by ${row.createdBy}: ${row.cron} (${row.timeZone}), ${row.target}`
+      `[routines] ${row.name} made by ${row.createdBy}: ${row.cron} (${row.timeZone}), ${row.target}${row.condition ? `, condition “${row.condition}”` : ""}`
     );
     if (agent) {
       awaitWhy(by, row.id, callId);
@@ -2396,27 +2941,71 @@ export const createRoutines = ({
     return viewOf(store.get(row.id) ?? row);
   };
 
+  /**
+   * Why a change cannot go, or the schedule it leaves: a target the hub
+   * keeps, a deadline written or kept that has passed while its condition
+   * would check again, a field `checked` refuses, or an expired routine
+   * turned on unkept.
+   */
+  const changeChecked = (
+    row: RoutineRow,
+    patch: RoutinePatch,
+    next: Fields,
+    now: number
+  ) => {
+    const turnsOn = (patch.enabled ?? row.enabled) && !row.enabled;
+    const cron =
+      targetStays(row.target, next.target) ??
+      deadlinePassed(
+        next.condition !== null && turnsOn ? next.deadline : patch.deadline,
+        now
+      ) ??
+      checked(next);
+    if (cron instanceof ElysiaStatus) {
+      return cron;
+    }
+    const expired =
+      !(patch.keep ?? row.keep) &&
+      row.expiresAt !== null &&
+      row.expiresAt.getTime() <= now;
+    return turnsOn && expired
+      ? problem(409, {
+          code: "routine-expired",
+          detail: `Routine “${row.name}” expired; keep it (keep: true) to turn it back on.`,
+        })
+      : cron;
+  };
+
+  /**
+   * What a change writes of a condition: a routine that becomes one never
+   * expires (its deadline is its one clock), and one turned back on is
+   * un-met and checks again.
+   */
+  const conditionColumns = (
+    row: RoutineRow,
+    next: Fields,
+    enabled: boolean
+  ): Partial<RoutineRow> => {
+    if (next.condition === null) {
+      return {};
+    }
+    return enabled && !row.enabled
+      ? { expiresAt: null, ...UNMET }
+      : { expiresAt: null };
+  };
+
   const update = (id: string, patch: RoutinePatch, by: RoutineActor) => {
     const row = touchable(id, by);
     if (row instanceof ElysiaStatus) {
       return row;
     }
     const next = merged(row, patch);
-    const cron = targetStays(row.target, next.target) ?? checked(next);
+    const now = Date.now();
+    const cron = changeChecked(row, patch, next, now);
     if (cron instanceof ElysiaStatus) {
       return cron;
     }
-    const now = Date.now();
-    const keep = patch.keep ?? row.keep;
     const enabled = patch.enabled ?? row.enabled;
-    const expired =
-      !keep && row.expiresAt !== null && row.expiresAt.getTime() <= now;
-    if (enabled && !row.enabled && expired) {
-      return problem(409, {
-        code: "routine-expired",
-        detail: `Routine “${row.name}” expired; keep it (keep: true) to turn it back on.`,
-      });
-    }
     // A new schedule, or a routine turned back on, starts from now: the
     // slots it was off for, or the old schedule's, never fire.
     const rescheduled =
@@ -2425,13 +3014,77 @@ export const createRoutines = ({
       (enabled && !row.enabled);
     const updated = store.update(id, {
       ...next,
-      keep,
+      keep: patch.keep ?? row.keep,
       enabled,
       ...(enabled ? { disabledReason: null } : {}),
       ...(rescheduled ? { nextSlot: Cron.next(cron, now) } : {}),
+      ...conditionColumns(row, next, enabled),
     });
+    if (row.condition !== null || next.condition !== null) {
+      moved(row);
+    }
     schedule();
     return viewOf(updated ?? row);
+  };
+
+  /**
+   * Check again (the person's, `POST /api/routines/:id/recheck`): its
+   * condition un-met and its checks on from now, until `deadline` when
+   * given (null: until met), its run asked for at once. Refused for a
+   * routine with no condition, or a deadline that has passed.
+   */
+  const recheck = (id: string, deadline?: Date | null) => {
+    const row = conditionRow(id);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
+    const now = Date.now();
+    const until = deadline === undefined ? row.deadline : deadline;
+    const cron = deadlinePassed(until, now) ?? cronOf(row.cron, row.timeZone);
+    if (cron instanceof ElysiaStatus) {
+      return cron;
+    }
+    const checking = store.update(id, {
+      ...UNMET,
+      deadline: until,
+      enabled: true,
+      disabledReason: null,
+      nextSlot: Cron.next(cron, now),
+    });
+    if (!checking) {
+      return routineOf(id);
+    }
+    console.log(`[routines] ${row.name}: its condition is checked again`);
+    fireExtra(checking, `now:${new Date(now).toISOString()}`, 1);
+    moved(row);
+    schedule();
+    return viewOf(store.get(id) ?? checking);
+  };
+
+  /**
+   * Mark met (the person's, `POST /api/routines/:id/met`): its condition
+   * met by you, its checks off, and every task and plan step waiting on it
+   * free to go. A condition met already stays as it was met.
+   */
+  const markMet = (id: string) => {
+    const row = conditionRow(id);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
+    const met = row.metAt ? row : (meet(row, "owner") ?? row);
+    return viewOf(met);
+  };
+
+  /** Routine `id`, refused when there is none or it has no condition. */
+  const conditionRow = (id: string) => {
+    const row = routineOf(id);
+    if (row instanceof ElysiaStatus || row.condition !== null) {
+      return row;
+    }
+    return problem(409, {
+      code: "routine-not-a-condition",
+      detail: `Routine “${row.name}” has no condition to check or mark met.`,
+    });
   };
 
   /**
@@ -2453,11 +3106,19 @@ export const createRoutines = ({
               `${handle(route.id)} · ${route.source}${route.kinds.length > 0 ? ` ${route.kinds.join(", ")}` : " any kind"}`
           )
       : [];
+    const waiting =
+      row.condition && row.projectId
+        ? conditionWaiters.listed(row.projectId, conditionHandle(row.id)).tasks
+        : [];
     const deleted = store.delete(id);
+    if (deleted && row.condition) {
+      moved(row);
+    }
     schedule();
-    const removed: { deleted: boolean; routes: string[] } = {
+    const removed: { deleted: boolean; routes: string[]; waiting: string[] } = {
       deleted,
       routes: deleted ? routes : [],
+      waiting: deleted ? waiting : [],
     };
     return removed;
   };
@@ -2532,6 +3193,9 @@ export const createRoutines = ({
       lastSlot: null,
       nextSlot: Cron.next(cron, now),
       createdAt: now,
+      condition: null,
+      deadline: null,
+      ...UNMET,
     });
   };
 
@@ -2851,13 +3515,6 @@ export const createRoutines = ({
 
   // --- tools -------------------------------------------------------------------
 
-  /** How a tool's `id` names a routine: its id, handle or name (handles.ts). */
-  const routineKeys: Handled<RoutineRow> = {
-    id: (routine) => routine.id,
-    names: (routine) => [routine.name],
-    said: (routine) => `${routine.name} ${routine.id.slice(0, 8)}`,
-  };
-
   /** The id of the routine `asked` names among the caller's project's. */
   const routineNamed = (asked: string, caller: InstanceRow): string =>
     byHandle(
@@ -2936,6 +3593,61 @@ export const createRoutines = ({
     );
   };
 
+  /** `routine_create` from `caller`: its deadline read, then the routine made in its project. */
+  const createdFor = (
+    caller: InstanceRow,
+    input: ToolInput<typeof ROUTINE_CREATE_DEFINITION>,
+    toolUseId?: string
+  ) => {
+    const deadline = deadlineOf(input.deadline);
+    if (deadline instanceof ElysiaStatus) {
+      return deadline;
+    }
+    return create(
+      {
+        projectId: caller.projectId ?? null,
+        name: input.name,
+        prompt: input.prompt,
+        target: input.target,
+        cron: input.cron,
+        timeZone: input.time_zone,
+        delegateType: input.delegate_type ?? null,
+        ...(input.lands ? { lands: input.lands } : {}),
+        budget: input.budget ?? null,
+        dailyCapUsd: input.daily_cap_usd ?? null,
+        keep: input.keep ?? false,
+        ...(input.mode ? { mode: input.mode } : {}),
+        condition: input.condition ?? null,
+        deadline: deadline ?? null,
+      },
+      caller,
+      toolUseId
+    );
+  };
+
+  /** `routine_update` from `caller`: its deadline read, then {@link updatedFor}. */
+  const updatedWith = (
+    caller: InstanceRow,
+    id: string,
+    {
+      time_zone,
+      delegate_type,
+      deadline: written,
+      ...fields
+    }: Omit<ToolInput<typeof ROUTINE_UPDATE_DEFINITION>, "id">
+  ) => {
+    const deadline = deadlineOf(written);
+    if (deadline instanceof ElysiaStatus) {
+      return deadline;
+    }
+    return updatedFor(caller, id, {
+      ...fields,
+      time_zone,
+      delegate_type,
+      ...(deadline === undefined ? {} : { deadline }),
+    });
+  };
+
   /**
    * The routine tools, bound to the calling session and, when its harness
    * names it, the call's tool_use id; with no session, the same definitions
@@ -2954,24 +3666,7 @@ export const createRoutines = ({
         return Promise.resolve(
           caller instanceof ElysiaStatus
             ? caller
-            : create(
-                {
-                  projectId: caller.projectId ?? null,
-                  name: input.name,
-                  prompt: input.prompt,
-                  target: input.target,
-                  cron: input.cron,
-                  timeZone: input.time_zone,
-                  delegateType: input.delegate_type ?? null,
-                  ...(input.lands ? { lands: input.lands } : {}),
-                  budget: input.budget ?? null,
-                  dailyCapUsd: input.daily_cap_usd ?? null,
-                  keep: input.keep ?? false,
-                  ...(input.mode ? { mode: input.mode } : {}),
-                },
-                caller,
-                toolUseId
-              )
+            : createdFor(caller, input, toolUseId)
         );
       }),
       ROUTINE_LIST_DEFINITION.run(() => {
@@ -2980,16 +3675,14 @@ export const createRoutines = ({
           caller instanceof ElysiaStatus ? caller : listedFor(caller)
         );
       }),
-      ROUTINE_UPDATE_DEFINITION.run(
-        ({ id, time_zone, delegate_type, ...fields }) => {
-          const caller = me();
-          return Promise.resolve(
-            caller instanceof ElysiaStatus
-              ? caller
-              : updatedFor(caller, id, { ...fields, time_zone, delegate_type })
-          );
-        }
-      ),
+      ROUTINE_UPDATE_DEFINITION.run(({ id, ...change }) => {
+        const caller = me();
+        return Promise.resolve(
+          caller instanceof ElysiaStatus
+            ? caller
+            : updatedWith(caller, id, change)
+        );
+      }),
       ROUTINE_DELETE_DEFINITION.run(({ id }) => {
         const caller = me();
         return Promise.resolve(
@@ -3006,12 +3699,12 @@ export const createRoutines = ({
             : runNow(routineNamed(id, caller), caller)
         );
       }),
-      ROUTINE_RESULT_DEFINITION.run(({ run, result }) => {
+      ROUTINE_RESULT_DEFINITION.run(({ run, result, condition }) => {
         const caller = me();
         return Promise.resolve(
           caller instanceof ElysiaStatus
             ? caller
-            : leadResult(caller, run, result)
+            : leadResult(caller, run, result, condition)
         );
       }),
     ];
@@ -3027,6 +3720,8 @@ export const createRoutines = ({
     recover,
     probe,
     itemEnded,
+    markMet,
+    recheck,
     sendLeft,
     turnEnded,
     list,
@@ -3058,6 +3753,10 @@ export const ROUTINE_TOOLS: ReadonlySet<string> = new Set(ROUTINE_TOOL_NAMES);
 
 /** How a routine's runs are made and what they may spend, as a route sets them. */
 const RUN_FIELDS = {
+  /** A statement true once met: makes it a check tasks wait on. */
+  condition: t.Optional(t.String()),
+  /** When its condition's checks stop unmet, epoch ms; null: never. */
+  deadline: t.Optional(t.Nullable(t.Number())),
   delegateType: t.Optional(t.Nullable(t.String())),
   lands: t.Optional(LANDS),
   budget: t.Optional(t.Nullable(BUDGET)),
@@ -3070,6 +3769,14 @@ const TARGET = t.Union([
   t.Literal("orchestrator"),
   t.Literal("conversation"),
 ]);
+
+/** A deadline as a route takes it, epoch ms: a time, null for none, left out. */
+const deadlineAt = (at: number | null | undefined): Date | null | undefined => {
+  if (at === undefined || at === null) {
+    return at;
+  }
+  return new Date(at);
+};
 
 /** The dashboard's routes for routines (its Routines view and its routine form). */
 export const routineRoutes = (routines: Routines) =>
@@ -3109,7 +3816,8 @@ export const routineRoutes = (routines: Routines) =>
           keep: t.Optional(t.Boolean()),
         }),
       },
-      ({ body }) => routines.create(body, "owner")
+      ({ body: { deadline, ...body } }) =>
+        routines.create({ ...body, deadline: deadlineAt(deadline) }, "owner")
     )
     .get("/api/routines/:id", ({ params }) => routines.get(params.id))
     .get(
@@ -3136,13 +3844,36 @@ export const routineRoutes = (routines: Routines) =>
           keep: t.Optional(t.Boolean()),
         }),
       },
-      ({ params, body }) => routines.update(params.id, body, "owner")
+      ({ params, body: { deadline, ...body } }) =>
+        routines.update(
+          params.id,
+          {
+            ...body,
+            ...(deadline === undefined
+              ? {}
+              : { deadline: deadlineAt(deadline) }),
+          },
+          "owner"
+        )
     )
     .delete("/api/routines/:id", ({ params }) =>
       routines.remove(params.id, "owner")
     )
     .post("/api/routines/:id/run", ({ params }) =>
       routines.runNow(params.id, "owner")
+    )
+    // A condition's two acts of the person's: Mark met, and Check again
+    // (with Keep checking's new deadline, epoch ms; null: none).
+    .post("/api/routines/:id/met", ({ params }) => routines.markMet(params.id))
+    .post(
+      "/api/routines/:id/recheck",
+      {
+        body: t.Optional(
+          t.Object({ deadline: t.Optional(t.Nullable(t.Number())) })
+        ),
+      },
+      ({ params, body }) =>
+        routines.recheck(params.id, deadlineAt(body?.deadline))
     )
     // Caw's suggestion of the unused skills and servers routine (unused-trim.ts).
     .get("/api/projects/:id/trim-routine", ({ params }) => {
@@ -3207,6 +3938,8 @@ const ROUTINE_CREATE_DEFINITION = defineTool(
       .describe(
         "A conversation run's start mode; the project's when left out."
       ),
+    condition: conditionParameter.optional(),
+    deadline: deadlineParameter.optional(),
   },
   routineWords
 );
@@ -3227,7 +3960,7 @@ const ROUTINE_UPDATE_DEFINITION = defineTool(
       .boolean()
       .optional()
       .describe(
-        `false pauses it, true resumes it; true alone turns on the hub's ${TRIM_NAME} while off.`
+        `false pauses it, true resumes it; true alone turns on the hub's ${TRIM_NAME} while off. true on a met or stopped condition checks it again.`
       ),
     keep: z
       .boolean()
@@ -3241,6 +3974,12 @@ const ROUTINE_UPDATE_DEFINITION = defineTool(
     lands: z.enum(LANDS_MODES).optional(),
     budget: budgetParameter("Per run; null: none.").nullable().optional(),
     mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
+    condition: z.string().optional().describe("As routine_create's."),
+    deadline: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("As routine_create's; null: none."),
   },
   routineWords
 );
@@ -3249,8 +3988,18 @@ const ROUTINE_DELETE_DEFINITION = defineTool(
   "routine_delete",
   "Deletes a routine with its runs and the event routes that feed it. Use it for a routine no longer wanted; to stop one for a while, pause it with routine_update.",
   { id: routineRef() },
-  ({ deleted, routes }: { deleted: boolean; routes: string[] }) =>
-    deleted ? routineToolWords.deleted(routes) : routineToolWords.notThere
+  ({
+    deleted,
+    routes,
+    waiting,
+  }: {
+    deleted: boolean;
+    routes: string[];
+    waiting: string[];
+  }) =>
+    deleted
+      ? `${routineToolWords.deleted(routes)}${waiting.length > 0 ? `\n\nIts condition was deleted with it, so ${waiting.join(", ")} ${waiting.length === 1 ? "waits" : "wait"} on a condition that will never be met, flagged blocked: remove ${waiting.length === 1 ? "that wait" : "those waits"} with task_update, or point ${waiting.length === 1 ? "it" : "them"} at another.` : ""}`
+      : routineToolWords.notThere
 );
 
 const ROUTINE_RUN_NOW_DEFINITION = defineTool(
@@ -3262,7 +4011,7 @@ const ROUTINE_RUN_NOW_DEFINITION = defineTool(
 
 const ROUTINE_RESULT_DEFINITION = defineTool(
   "routine_result",
-  "How the routine's run that woke you went, said once. Use it before your turn ends on a routine's run.",
+  "How a routine's run you are doing went, said once. Use it before your turn ends on a run that woke you, and on a condition's check before finish_item.",
   {
     run: z
       .string()
@@ -3272,7 +4021,13 @@ const ROUTINE_RESULT_DEFINITION = defineTool(
     result: z
       .string()
       .describe(
-        `The run's output: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <why> fails it, anything else is noted in the project's conversation.`
+        `The run's output: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <why> fails it, anything else is noted in the project's conversation. With condition: why, in a sentence.`
+      ),
+    condition: z
+      .enum(ROUTINE_VERDICTS)
+      .optional()
+      .describe(
+        "Required on a condition's check: met, unmet, or unknown (the check failed)."
       ),
   },
   routineRunWords

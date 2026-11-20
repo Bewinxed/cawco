@@ -188,10 +188,16 @@ import {
  * to read alone, which is never handed up and holds no workspace, so a
  * workspace stays only while the person is owed what it serves (delegate
  * 11,850 measured); the delegate's budget is raised to it.
+ * 2026-11-20: a task and a plan step wait on a routine's condition
+ * (`routine:<handle>`, tsk-430, the owner's "a routine returning true"):
+ * every wait list names it, and routine_create, routine_update and
+ * routine_result take a condition, its deadline and a run's verdict
+ * (worker 31,293, delegate 11,858 measured); the delegate's budget is
+ * raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 31_300,
-  delegate: 11_850,
+  delegate: 11_860,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

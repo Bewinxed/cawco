@@ -9,7 +9,11 @@ import type {
   RoutineMadeEvent,
   RoutineSchedule,
 } from "@cawco/core/project-conversation";
-import type { RoutineRunView, RoutineTarget } from "@cawco/core/routine-kinds";
+import type {
+  ConditionView,
+  RoutineRunView,
+  RoutineTarget,
+} from "@cawco/core/routine-kinds";
 import type { WorkBudget } from "./db/stored-types";
 
 /**
@@ -21,9 +25,21 @@ interface RoutineMadeIn {
   instanceId: string;
 }
 
+/** A routine's condition as its view answers it: where it stands, and what waits on it. */
+export interface RoutineCondition extends ConditionView {
+  /** What a task's `waits_on` or a plan step's `waitsOn` writes to wait on it. */
+  handle: string;
+  /** Plan steps not done, of sessions not over, that wait on it. */
+  steps: number;
+  /** The tasks whose own `waits_on` names it, by id, in any stage. */
+  waitedBy: string[];
+}
+
 /** A routine, as the routes and tools answer it (times in ms), with its newest runs. */
 export interface RoutineView {
   budget: WorkBudget | null;
+  /** Its condition, which makes it a check tasks and plan steps wait on; null for a routine with none. */
+  condition: RoutineCondition | null;
   createdAt: number;
   createdBy: string;
   cron: string;

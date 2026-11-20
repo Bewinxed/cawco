@@ -139,7 +139,7 @@ const runState = (run: RoutineRunView, now: number): string => {
 
 /** A routine's run, a line: its slot as the dashboard says it (`09:00`, test, by-hand). */
 const runLine = (run: RoutineRunView, timeZone: string, now: number): string =>
-  `  - ${slotLabel(run.slot, timeZone)} run ${handle(run.id)}: ${runState(run, now)}${run.usd === null ? "" : `, $${run.usd.toFixed(2)}`}${run.reason ? `; ${run.reason}` : ""}${run.output ? `: ${quote(run.output, 300)}` : ""}`;
+  `  - ${slotLabel(run.slot, timeZone)} run ${handle(run.id)}: ${runState(run, now)}${run.verdict ? `, condition ${run.verdict}` : ""}${run.usd === null ? "" : `, $${run.usd.toFixed(2)}`}${run.reason ? `; ${run.reason}` : ""}${run.output ? `: ${quote(run.output, 300)}` : ""}`;
 
 /** Whether a routine is kept past its week, or when it turns itself off. */
 const keptWords = (routine: RoutineView, now: number): string => {
@@ -166,9 +166,22 @@ const targetWords = (routine: RoutineView): string => {
   }
 };
 
+/** A condition, a line: its statement, where it stands, its deadline, and what waits on it. */
+const conditionLine = (
+  condition: NonNullable<RoutineView["condition"]>,
+  now: number
+): string => {
+  const waits = [
+    condition.waitedBy.length > 0 ? `tasks ${listed(condition.waitedBy)}` : "",
+    condition.steps > 0 ? count(condition.steps, "plan step") : "",
+  ].filter(Boolean);
+  return `  Condition: ${quote(condition.statement, 300)} · ${condition.state}${condition.state === "met" && condition.evidence ? `: ${quote(condition.evidence, 300)}` : ""}${condition.markedMet ? " (marked met by the owner)" : ""}${condition.state !== "met" && condition.reason ? `; last: ${quote(condition.reason, 300)}` : ""} · ${condition.deadline === null ? "no deadline" : `deadline ${ahead(condition.deadline, now)}`} · ${waits.length > 0 ? `waited on by ${waits.join(" and ")}` : "nothing waits on it, so its slots pass unchecked"} · wait on it with ${condition.handle}`;
+};
+
 /** One routine, its schedule and newest runs; its name its link, which the person's dashboard draws as its chip. */
 const routineLines = (routine: RoutineView, now: number): string[] => [
   `- ${routineLink(routine.id, routine.name)} ${handle(routine.id)} · ${routine.enabled ? "on" : `off${routine.disabledReason ? `: ${routine.disabledReason}` : ""}`} · ${routine.schedule.words}${routine.schedule.nextAt === null ? "" : `, next ${ahead(routine.schedule.nextAt, now)}`} · ${targetWords(routine)}${keptWords(routine, now)}${routine.dailyCapUsd === null ? "" : ` · $${routine.dailyCapUsd} a day`}${routine.budget ? ` · each run ${valueWords(routine.budget)}` : ""}`,
+  ...(routine.condition ? [conditionLine(routine.condition, now)] : []),
   `  Prompt: ${quote(routine.prompt, 400)}`,
   ...(routine.runs.length > 0
     ? routine.runs.map((run) => runLine(run, routine.timeZone, now))

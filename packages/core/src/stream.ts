@@ -448,12 +448,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    would not remove one of its folders (`delete-folder-refused`, 409) or
  *    did not say (`delete-folder-unasked`, 502). A page built for 88 reads
  *    neither code, so it reloads first.
+ * 90: a routine may carry a condition that tasks wait on (`routine:<id>`),
+ *    and a routine's write and a task's wait are refused under new codes
+ *    (`routine-condition-target`, `routine-deadline-unfit`,
+ *    `wait-routine-unknown`, `wait-routine-no-condition`,
+ *    `wait-routine-no-project`). A page built for 89 reads none of them, so
+ *    it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 89;
+export const WIRE_PROTOCOL = 90;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

@@ -17,6 +17,7 @@ import {
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
 } from "@cawco/core/plan";
+import { CONDITION_STATES } from "@cawco/core/routine-kinds";
 import { HARNESS_BLOCK_TYPES } from "@cawco/core/session-messages";
 import { STAGE_TOOLCHAINS } from "@cawco/core/stage";
 import { STAGE_KINDS, TASK_MOVERS } from "@cawco/core/views";
@@ -1418,10 +1419,35 @@ const BuiltOnShape = z.object({
 });
 export type BuiltOnOutput = z.output<typeof BuiltOnShape>;
 
-const WaitKindShape = z.enum(["task", "card", "pin", "pr", "run", "session"]);
+const ConditionStateShape = z.enum(CONDITION_STATES);
+export type ConditionStateOutput = z.output<typeof ConditionStateShape>;
+
+const ConditionViewShape = z.object({
+  checkedAt: z.number().nullable(),
+  deadline: z.number().nullable(),
+  evidence: z.string().nullable(),
+  markedMet: z.boolean(),
+  metAt: z.number().nullable(),
+  nextAt: z.number().nullable(),
+  reason: z.string().nullable(),
+  state: ConditionStateShape,
+  statement: z.string(),
+});
+export type ConditionViewOutput = z.output<typeof ConditionViewShape>;
+
+const WaitKindShape = z.enum([
+  "task",
+  "card",
+  "pin",
+  "pr",
+  "run",
+  "session",
+  "routine",
+]);
 export type WaitKindOutput = z.output<typeof WaitKindShape>;
 
 const WaitStateShape = z.object({
+  condition: ConditionViewShape.extend({ routineId: z.string() }).optional(),
   dropped: z.boolean(),
   flag: z.string().nullable(),
   href: z.string(),

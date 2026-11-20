@@ -55,6 +55,7 @@ import { waitArtifact, waitTarget } from "@cawco/core/wait-targets";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
+import type { WorkItemRow } from "./db/project-work";
 import type { PlanChangeRow, StoredPlan } from "./db/session-plans";
 
 import type { TaskEvent, Tasks } from "./tasks";
@@ -255,6 +256,8 @@ const waitWords = (db: Pick<DbShape, "artifacts">, handle: string): string => {
       return `pin ${target.number} on ${pageNamed(db, target.artifactId)}`;
     case "session":
       return "a session's work";
+    case "routine":
+      return "a routine's condition";
     case "task":
     case "pr":
     case "run":
@@ -934,18 +937,52 @@ export const createPlans = (deps: PlansDeps) => {
       settleQuietly(instanceId);
     },
 
-    /** A project's tasks changed: an attempt's to-dos may have ticked. */
+    /**
+     * A project's tasks changed, or what they wait on moved (tasks.ts
+     * `waitsMoved` emits it for a task, a card, a pull request, a run or a
+     * condition): an attempt's to-dos may have ticked, and any step of a
+     * session in the project that waits on something may have settled. Each
+     * such followed plan is read again.
+     */
     taskChanged(event: TaskEvent): void {
       for (const [instanceId, { plan }] of held) {
-        if (!plan.taskId) {
+        const waits = plan.steps.some((step) => step.waitsOn !== undefined);
+        if (!(plan.taskId || waits)) {
           continue;
         }
         const [row] = db.getInstancesByIds([instanceId]);
+        if (waits && row?.projectId === event.projectId) {
+          settleQuietly(instanceId);
+          continue;
+        }
         const item = row?.workItemId ? db.workItem(row.workItemId) : undefined;
         const task = event.id;
         if (
+          plan.taskId &&
           item?.projectId === event.projectId &&
           (task === undefined || task === item.taskId)
+        ) {
+          settleQuietly(instanceId);
+        }
+      }
+    },
+
+    /**
+     * A work item ended: each followed plan with a step waiting on its
+     * session (`<dir>#<session id>`, core wait-targets.ts) is read again,
+     * so the step settles, or is flagged, as the item ends.
+     */
+    itemEnded(item: Pick<WorkItemRow, "instanceId">): void {
+      for (const [instanceId, { plan }] of held) {
+        if (
+          plan.steps.some((step) => {
+            const target =
+              step.waitsOn === undefined ? undefined : waitTarget(step.waitsOn);
+            return (
+              target?.kind === "session" &&
+              target.instanceId === item.instanceId
+            );
+          })
         ) {
           settleQuietly(instanceId);
         }

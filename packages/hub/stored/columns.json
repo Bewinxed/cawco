@@ -11740,6 +11740,14 @@
       "skipped"
     ]
   },
+  "routine_runs.verdict": {
+    "type": "string",
+    "enum": [
+      "met",
+      "unmet",
+      "unknown"
+    ]
+  },
   "routines.lands": {
     "type": "string",
     "enum": [
@@ -11764,6 +11772,14 @@
       "plan",
       "bypassPermissions",
       "fullSend"
+    ]
+  },
+  "routines.stopped": {
+    "type": "string",
+    "enum": [
+      "met",
+      "deadline",
+      "failing"
     ]
   },
   "routines.target": {
