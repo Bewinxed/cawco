@@ -61662,7 +61662,7 @@
         "type": "object",
         "properties": {
           "command": {
-            "description": "The install command, run through the Bun shell.",
+            "description": "The install command, run through the Bun shell. `{platform}` in it, or\nin {@link pinnedCommand}, becomes the machine's `<os>-<cpu>` as Node\nnames them (`process.platform`, `process.arch`: `darwin-arm64`,\n`linux-x64`), the suffix npm packages that ship a native binary per\nplatform are named with.",
             "type": "string"
           },
           "footprint": {

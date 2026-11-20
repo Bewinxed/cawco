@@ -1278,14 +1278,15 @@ const refusal = async (
     : undefined;
 };
 
-/** The command a method runs for `version`. */
+/** The command a method runs for `version` on this machine (core `ToolInstallMethod.command`'s `{platform}`). */
 const commandOf = (
   method: ToolInstallMethod,
   version: string | undefined
 ): string =>
-  version && method.pinnedCommand
+  (version && method.pinnedCommand
     ? method.pinnedCommand.replaceAll("{version}", version)
-    : method.command;
+    : method.command
+  ).replaceAll("{platform}", `${process.platform}-${process.arch}`);
 
 /**
  * What putting a catalog tool on this machine runs, at the version CawCo runs

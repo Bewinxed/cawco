@@ -25,7 +25,13 @@ export type ToolPlatform = "linux" | "darwin" | "win32";
  * honest failure.
  */
 export interface ToolInstallMethod {
-  /** The install command, run through the Bun shell. */
+  /**
+   * The install command, run through the Bun shell. `{platform}` in it, or
+   * in {@link pinnedCommand}, becomes the machine's `<os>-<cpu>` as Node
+   * names them (`process.platform`, `process.arch`: `darwin-arm64`,
+   * `linux-x64`), the suffix npm packages that ship a native binary per
+   * platform are named with.
+   */
   command: string;
   /**
    * How a binary this method put on a machine is told apart, from where it
@@ -782,9 +788,23 @@ export const TOOL_CATALOG: ToolSpec[] = [
     // config omits optional dependencies ("Dependency types specified in
     // --include will not be omitted, regardless of the order in which
     // omit/include are specified on the command-line", `npm help install`,
-    // npm 11.19.1);
-    // bun installs them unless its bunfig says `optional = false`, and its
-    // CLI has no flag over that.
+    // npm 11.19.1), and npm resolves a missing optional edge again on every
+    // install.
+    //
+    // bun names the machine's platform package itself, a dependency of its
+    // global folder beside the launcher, at the same alias the launcher's
+    // `optionalDependencies` give it: bun hoists both to the one
+    // `node_modules/@openai/codex-<platform>` the launcher (and agent
+    // codex-native.ts) looks in. bun leaves an optional dependency it could
+    // not resolve (a manifest request that failed, a launcher published
+    // before its platform packages) out of its global `bun.lock`, and every
+    // later install reuses that lockfile and never asks for it again: it
+    // exits 0 and the launcher stays without its binary
+    // (oven-sh/bun#45464, open; its fix #45942 closed unmerged; read on bun
+    // 1.4.4 and 1.4.5 with a lockfile missing the row, 2026-11-20). A
+    // dependency of the folder's own is resolved whenever its spec changes
+    // and fails the install when it can't be, so the install either puts the
+    // binary on or says why.
     install: [
       {
         label: "npm",
@@ -800,8 +820,10 @@ export const TOOL_CATALOG: ToolSpec[] = [
         platforms: ["linux", "darwin"],
         needs: "bun",
         footprint: { kind: "bun-global" },
-        command: "bun install -g --trust @openai/codex@{version}",
-        pinnedCommand: "bun install -g --trust @openai/codex@{version}",
+        command:
+          "bun install -g --trust @openai/codex@{version} @openai/codex-{platform}@npm:@openai/codex@{version}-{platform}",
+        pinnedCommand:
+          "bun install -g --trust @openai/codex@{version} @openai/codex-{platform}@npm:@openai/codex@{version}-{platform}",
       },
     ],
   },
