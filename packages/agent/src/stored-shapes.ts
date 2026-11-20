@@ -327,6 +327,26 @@ export type OpencodeServerRecordOutput = z.output<
   typeof OpencodeServerRecordShape
 >;
 
+const SeenFolderShape = declared(
+  z.object({
+    at: z.number(),
+    born: z.string(),
+    dev: z.string(),
+    ino: z.string(),
+  }),
+  "SeenFolder",
+  "packages/agent/src/seen-folders.ts"
+);
+export type SeenFolderOutput = z.output<typeof SeenFolderShape>;
+
+const SeenFoldersShape = declared(
+  z.object({ folders: z.record(z.string(), SeenFolderShape) }),
+  "SeenFolders",
+  "packages/agent/src/seen-folders.ts"
+);
+export const SeenFoldersSchema = SeenFoldersShape;
+export type SeenFoldersOutput = z.output<typeof SeenFoldersShape>;
+
 const ToolInstallRecordShape = declared(
   z.object({
     at: z.number(),

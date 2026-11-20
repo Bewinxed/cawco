@@ -1091,6 +1091,12 @@ export const projectPlaces = sqliteTable(
      * makes it, as a new project's folder is made by its first session.
      */
     found: integer("found", { mode: "boolean" }).notNull().default(false),
+    /**
+     * A folder the person pointed the checkout at with its machine away
+     * (Locate folder, project-locate.ts): held until that machine can read
+     * it, at its next register, and pointed there then. Null: none held.
+     */
+    locateTo: text("locate_to").$type<PlacePath>(),
     createdAt: stampedNow("created_at"),
   },
   (table) => [

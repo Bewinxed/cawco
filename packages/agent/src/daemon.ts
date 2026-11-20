@@ -179,6 +179,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import {
   CONTROL_CLONE_HOLDING,
+  CONTROL_FOLDER_LOOK,
   CONTROL_FOLDERS_STAND,
   CONTROL_HOST_OUTPUTS,
   CONTROL_HOST_SCRATCH_REMOVE,
@@ -275,6 +276,7 @@ import {
 import { damagedRecords, sweepRecords } from "./damaged-records";
 import { dropWrittenDenials } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
+import { placedCopiesIn } from "./fleet";
 import { moveLegacyFleetSidecar } from "./fleet-sidecar-move";
 import { carryConversations } from "./folder-carry";
 import {
@@ -322,7 +324,6 @@ import {
   savePicture,
   writeInputs,
 } from "./inputs";
-import { isDirectory } from "./is-directory";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
@@ -382,6 +383,7 @@ import {
   moveRedactionStores,
 } from "./runtime-dir-move";
 import { TranscriptSearchService } from "./search";
+import { folderStands, foldersStand, sameFolderAs } from "./seen-folders";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
 import {
@@ -3572,9 +3574,22 @@ const startDaemon = (rediscover = false) =>
       CONTROL_REMOVE_FOLDER_REFUSAL,
       async (asked) => (await removalRefusal(asked)) ?? null
     );
-    // Whether each checkout's folder stands, read at the register: read only.
+    // Whether each checkout's folder stands, read at the register; each
+    // one standing is recorded as seen there (seen-folders.ts).
     supervisor.declareControl(CONTROL_FOLDERS_STAND, (paths) =>
-      Promise.all(paths.map((path) => isDirectory(path)))
+      foldersStand(paths)
+    );
+    // What this machine can tell of a folder a checkout is to point at: read only.
+    supervisor.declareControl(
+      CONTROL_FOLDER_LOOK,
+      async ({ path, placeId, was }) => {
+        const stands = await folderStands(path);
+        return {
+          stands,
+          sameFolder: stands ? await sameFolderAs(path, was) : null,
+          placed: stands ? await placedCopiesIn(placeId, path) : false,
+        };
+      }
     );
     // The checkout a folder is in, as a workspace cut there reads it: read only.
     supervisor.declareControl(CONTROL_REPO_ROOT, (path) => repoRoot(path));

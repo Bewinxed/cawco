@@ -630,6 +630,7 @@ import {
   readFolderFile,
 } from "./project-folder";
 import { createProjectJoining } from "./project-joining";
+import { createProjectLocate } from "./project-locate";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
 import { createProjectOut, placeAddedOf } from "./project-out";
@@ -1533,6 +1534,7 @@ export const createServer = (
     projectEdits: () => projectEdits,
     projectMoved: () => projectMoved,
     projectOut: () => projectOut,
+    projectLocate: () => projectLocate,
     projectStops: () => projectStops,
     ruleEngine: () => ruleEngine,
     ruleRowsOf: () => ruleRowsOf,
@@ -6366,6 +6368,9 @@ export const createServer = (
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
     timeoutMs: READ_TIMEOUT_MS,
   });
+  // Locate folder: a project's checkout pointed at where its folder is now
+  // (project-locate.ts); `merging` is read as a fold runs, once it is made.
+  const projectLocate = createProjectLocate(ctx);
   const waitForEnd = (
     instanceId: string,
     waitMs = SPAWN_START_TIMEOUT_MS

@@ -2483,6 +2483,18 @@ const FolderCarriedShape = declared(
 export const FolderCarriedSchema = FolderCarriedShape;
 export type FolderCarriedOutput = z.output<typeof FolderCarriedShape>;
 
+const FolderLookShape = declared(
+  z.object({
+    placed: z.boolean(),
+    sameFolder: z.boolean().nullable(),
+    stands: z.boolean(),
+  }),
+  "FolderLook",
+  "packages/core/src/workspace/controls.ts"
+);
+export const FolderLookSchema = FolderLookShape;
+export type FolderLookOutput = z.output<typeof FolderLookShape>;
+
 export const FolderMoveCopiedShape = declared(
   z.object({
     bytes: z.number(),

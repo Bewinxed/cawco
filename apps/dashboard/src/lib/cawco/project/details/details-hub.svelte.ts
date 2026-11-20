@@ -146,6 +146,8 @@ export class DetailsHub {
   #reachedAt = $state(Date.now());
   #forecastTimer: ReturnType<typeof setTimeout> | null = null;
   #forecastFor = 0;
+  /** Locate folder: the project What will happen named as already having the folder's codebase, sent back as the person's yes. */
+  #locateJoins: string | null = null;
 
   constructor(src: DetailsSource) {
     this.#src = src;
@@ -635,7 +637,13 @@ export class DetailsHub {
         return { forecast: plan.forecast, agents: plan.agents };
       }
       case "locate": {
-        const plan = await previewLocate(project.id, step.folderId ?? "", path);
+        const plan = await previewLocate(
+          project.id,
+          step.folderId ?? "",
+          path,
+          this.#client
+        );
+        this.#locateJoins = plan.joins?.id ?? null;
         return { forecast: plan.forecast, tell: plan.tell };
       }
       default:
@@ -851,7 +859,13 @@ export class DetailsHub {
           this.#leaveStep();
           return;
         case "locate":
-          await locateFolder(project.id, step.folderId ?? "", path);
+          await locateFolder(
+            project.id,
+            step.folderId ?? "",
+            path,
+            this.#locateJoins,
+            client
+          );
           this.#leaveStep();
           return;
         case "copy": {

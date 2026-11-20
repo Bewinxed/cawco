@@ -23,6 +23,7 @@ import { Timers } from "./card-state";
 import {
   BIG_FILE_SIGN_INS,
   BOARDS,
+  LOCATE_TELL,
   MACHINES,
   PROJECT,
   STAGES,
@@ -299,7 +300,9 @@ export class DetailsStandIn {
           ? refusal(REFUSED.project)
           : this.#keep({ ...this.project, ...this.#edit(sent) });
       case "places":
-        return this.#places(method, more, sent);
+        return parts[4] === "locate"
+          ? this.#locate(more, parts[5] === "preview", sent)
+          : this.#places(method, more, sent);
       case "tracker":
         return this.#trackerCall(method, more, sent);
       case "stages":
@@ -382,8 +385,40 @@ export class DetailsStandIn {
           missing: false,
           projectId: this.project.id,
           within: [],
+          locateTo: null,
         },
       ],
+    });
+  }
+
+  /** Locate folder: What will happen for the folder named, or the place pointed there. */
+  #locate(
+    placeId: string | undefined,
+    preview: boolean,
+    sent: Record<string, unknown>
+  ): Response {
+    const path = String(sent.path ?? "");
+    if (preview) {
+      return Response.json({
+        forecast: {
+          state: "ready",
+          lines: [
+            `This project's folder becomes ${path}. No file moves.`,
+            "This project's skills, servers, rules and hooks are placed in this folder.",
+          ],
+        },
+        joins: null,
+        tell: LOCATE_TELL,
+      });
+    }
+    if (this.#refuses) {
+      return refusal(REFUSED.place);
+    }
+    return this.#keep({
+      ...this.project,
+      places: this.project.places.map((place) =>
+        place.id === placeId ? { ...place, path, missing: false } : place
+      ),
     });
   }
 

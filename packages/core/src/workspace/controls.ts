@@ -132,6 +132,31 @@ export const CONTROL_REMOVE_FOLDER_REFUSAL = "removeFolderRefusal";
 export const CONTROL_FOLDERS_STAND = "foldersStand";
 
 /**
+ * What a machine can tell of a folder a project's checkout is to point at
+ * (hub project-locate.ts, Locate folder): whether a folder stands at `path`,
+ * whether it is the folder this machine last saw at the checkout's folder
+ * `was` (by its identity on disk, kept each time {@link CONTROL_FOLDERS_STAND}
+ * finds that folder standing: agent seen-folders.ts), and whether it holds
+ * the copies CawCo placed for checkout `placeId` as they were placed (agent
+ * fleet.ts). Reads only. Args `[FolderLookAsk]`; answers {@link FolderLook}.
+ * Machine-scoped.
+ */
+export const CONTROL_FOLDER_LOOK = "folderLook";
+export interface FolderLookAsk {
+  path: string;
+  placeId: string;
+  was: string;
+}
+export interface FolderLook {
+  /** It holds a copy CawCo placed for the checkout, as placed. */
+  placed: boolean;
+  /** It is the folder last seen at `was`; null: no folder was recorded there. */
+  sameFolder: boolean | null;
+  /** A folder stands at `path` (a link to one counts); false: nothing, or a file. */
+  stands: boolean;
+}
+
+/**
  * The delegation workspace whose clone holds a folder, by the machine's own
  * workspace records: the boundary a spawn naming no workspace would run in
  * there (agent workspace-records.ts `cloneHolding`), or null when none

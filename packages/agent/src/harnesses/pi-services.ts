@@ -1,7 +1,8 @@
 /** Pi metadata, history and fleet profile. Shared with the host; no turn factory. */
-import { readdir, rm } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { readdir, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
 import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
 import type {
@@ -11,6 +12,7 @@ import type {
   FleetSyncReport,
   PlacedFleetConfig,
 } from "@cawco/core/fleet";
+import { makeFolder } from "@cawco/core/folders";
 import type { HarnessCapabilities, HarnessReport } from "@cawco/core/harness";
 import type { EffortLevel, ModelInfo } from "@cawco/core/harness/kinds";
 import { EFFORT_LEVELS, isEffortLevel } from "@cawco/core/harness/kinds";
@@ -829,17 +831,11 @@ async function piWindow(
 const piUnlocated = (sessionKey: string): string =>
   `pi keeps conversation ${sessionKey} under the folder it ran in, and this ask named none, so it can't be found`;
 
-/**
- * The file pi stores a session in: `<timestamp>_<id>.jsonl` in the folder pi
- * keeps its sessions for `cwd` (named by pi itself: `getSessionDir` of a
- * session not yet written, which writes nothing). Found by its name alone:
- * pi's own listing reads every session file in the folder through.
- */
-export async function piSessionPath(
-  sessionKey: string,
-  cwd: string
-): Promise<string | undefined> {
-  const dir = SessionManager.create(cwd).getSessionDir();
+/** Session `sessionKey`'s file in pi's session folder `dir`, by its name alone. */
+const sessionFileIn = async (
+  dir: string,
+  sessionKey: string
+): Promise<string | undefined> => {
   // Nothing there is no session; a folder that couldn't be read fails with
   // why, never answered as a conversation that was never stored.
   const names = await readdir(dir).catch(unlessGone<string[]>([]));
@@ -847,6 +843,63 @@ export async function piSessionPath(
     (one) => one.endsWith(".jsonl") && one.includes(sessionKey)
   );
   return name ? join(dir, name) : undefined;
+};
+
+/**
+ * The file pi stores a session in: `<timestamp>_<id>.jsonl` in the folder pi
+ * keeps its sessions for `cwd` (named by pi itself: `getSessionDir` of a
+ * session not yet written, which writes nothing). Found by its name alone:
+ * pi's own listing reads every session file in the folder through. One whose
+ * project folder changed (Locate folder, hub project-locate.ts) is still
+ * under its old folder's until its next start files it here
+ * ({@link piFileUnder}), so the other folders are looked through then.
+ */
+export async function piSessionPath(
+  sessionKey: string,
+  cwd: string
+): Promise<string | undefined> {
+  const dir = SessionManager.create(cwd).getSessionDir();
+  const here = await sessionFileIn(dir, sessionKey);
+  if (here) {
+    return here;
+  }
+  const root = dirname(dir);
+  const folders = await readdir(root, { withFileTypes: true }).catch(
+    unlessGone<Dirent[]>([])
+  );
+  for (const folder of folders) {
+    const there = folder.isDirectory()
+      ? await sessionFileIn(join(root, folder.name), sessionKey)
+      : undefined;
+    if (there) {
+      return there;
+    }
+  }
+}
+
+/**
+ * Session `sessionKey`'s file, filed in the folder pi keeps sessions for
+ * `cwd`, where it runs now: moved there, its name kept, from whichever
+ * folder holds it, so pi's own listing for that folder finds it, as pi's
+ * `/import` carries a session file into a folder. Undefined when pi keeps
+ * none of that id.
+ */
+export async function piFileUnder(
+  sessionKey: string,
+  cwd: string
+): Promise<string | undefined> {
+  const found = await piSessionPath(sessionKey, cwd);
+  const dir = SessionManager.create(cwd).getSessionDir();
+  if (!found || dirname(found) === dir) {
+    return found;
+  }
+  const filed = join(dir, basename(found));
+  await makeFolder(dir);
+  await rename(found, filed);
+  console.info(
+    `[pi] session ${sessionKey}: filed under ${dir}, from ${dirname(found)}`
+  );
+  return filed;
 }
 
 /** An act on a pi conversation whose folder holds no session file of that id. */

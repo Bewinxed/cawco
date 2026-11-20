@@ -77,6 +77,7 @@ export const PROJECT: ProjectRow = {
       missing: false,
       projectId: "hyucksfield",
       within: [],
+      locateTo: null,
     },
     {
       createdAt: "2026-10-11T16:40:00.000Z",
@@ -90,6 +91,7 @@ export const PROJECT: ProjectRow = {
       missing: false,
       projectId: "hyucksfield",
       within: [],
+      locateTo: null,
     },
     {
       createdAt: "2026-09-02T09:14:00.000Z",
@@ -103,6 +105,7 @@ export const PROJECT: ProjectRow = {
       missing: false,
       projectId: "hyucksfield",
       within: [],
+      locateTo: null,
     },
   ],
   primaryPlaceId: "pl-main",

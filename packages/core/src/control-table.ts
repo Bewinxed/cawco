@@ -171,6 +171,8 @@ import type {
 import type { ToolSigninChallenge, ToolStatus } from "./tools";
 import type { TranscriptWindow } from "./transcript-types";
 import type {
+  FolderLook,
+  FolderLookAsk,
   FolderRemoved,
   HostOutputs,
   HostScratchAsk,
@@ -309,6 +311,7 @@ interface ControlTable {
     [cwd: string, account?: string | null, model?: string | null],
     SupportedCommands
   >;
+  folderLook: Entry<[asked: FolderLookAsk], FolderLook>;
   folderMoveCopy: Entry<[ask: FolderMoveCopyAsk], FolderMoveCopied>;
   folderMoveDrop: Entry<[ask: FolderMoveDropAsk], { dropped: boolean }>;
   folderMovePlace: Entry<[ask: FolderMovePlaceAsk], { placed: true }>;

@@ -19,6 +19,8 @@ export interface ProjectPlace {
   isPrimary: boolean;
   /** A `hub` place is the project's folder on the hub (machine `hub`, path `projects/<id>`). */
   kind: "checkout" | "hub";
+  /** A folder Locate folder pointed it at with its machine away, held until that machine can read it; null: none. */
+  locateTo: string | null;
   machineId: string;
   /** CawCo made the checkout's folder (a move's clone): a delete with its files removes it; any other stays on disk. */
   made: boolean;

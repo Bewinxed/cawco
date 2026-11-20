@@ -55,6 +55,7 @@ export type MachineReturnContext = Pick<
   | "keptOn"
   | "launchingOn"
   | "learnCheckout"
+  | "projectLocate"
   | "lifecycle"
   | "locations"
   | "losePending"
@@ -159,17 +160,21 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     const { message } = ret;
     // Each checkout's repository is linked to its project from
     // its origin here, now that the machine can run git.
+    // Then each folder a Locate folder held for it is pointed there
+    // (project-locate.ts `resumeHeld`).
     Promise.all(
       ctx.db
         .checkoutsOn(message.machineId)
         .map((checkout) =>
           ctx.learnCheckout({ ...checkout, machineId: message.machineId })
         )
-    ).catch((error: unknown) =>
-      console.warn(
-        `[hub] reading ${message.machineId}'s project remotes failed: ${error instanceof Error ? error.message : String(error)}`
-      )
-    );
+    )
+      .then(() => ctx.projectLocate.resumeHeld(message.machineId))
+      .catch((error: unknown) =>
+        console.warn(
+          `[hub] reading ${message.machineId}'s project remotes failed: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
   };
 
   const previewsReconciled = (ret: MachineReturn): void => {

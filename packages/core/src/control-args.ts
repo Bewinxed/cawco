@@ -463,6 +463,7 @@ const ARGS: {
     object({ kind: picklist(["place", "carry"]), path: text }),
   ]),
   foldersStand: tuple([array(absolute)]),
+  folderLook: tuple([object({ path: absolute, placeId: named, was: text })]),
   cloneHolding: tuple([named]),
   placeLfs: tuple([
     absolute,

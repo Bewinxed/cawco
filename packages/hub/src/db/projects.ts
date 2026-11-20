@@ -280,7 +280,29 @@ export interface ProjectsDb {
     keepId: string,
     taskIds: ReadonlyMap<string, string>
   ) => { places: number; sessions: number; workItems: number };
+  /**
+   * Holds `path` for checkout place `id` until its machine can read it
+   * (Locate folder with the machine away, project-locate.ts); null lets
+   * what is held go.
+   */
+  readonly holdLocate: (id: string, path: MachinePath | null) => void;
   readonly listProjects: () => ProjectRow[];
+  /**
+   * Points checkout place `id` at `path` on its machine (Locate folder,
+   * project-locate.ts), in one transaction: the folder is one the person
+   * named (`made` false: a delete never removes it), it stands there, its
+   * root commit is `root` as read there, and nothing is held for it. With
+   * `sameRepository`, every live repository workspace on that machine made
+   * from the old folder, or a folder inside it, records the same folder
+   * under `path` as its source. The place as it is now; undefined when it
+   * is no checkout.
+   */
+  readonly locatePlace: (
+    id: string,
+    path: MachinePath,
+    root: string | null,
+    sameRepository: boolean
+  ) => PlaceRow | undefined;
   /**
    * Checkout place `id`'s folder moved, files and all (folder-moves.ts): the
    * place keeps its id, its root and whether CawCo made its folder, and is
@@ -658,6 +680,45 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
         .where(eq(projectPlaces.id, id))
         .run();
     },
+    holdLocate: (id, path) => {
+      db.update(projectPlaces)
+        .set({ locateTo: path })
+        .where(eq(projectPlaces.id, id))
+        .run();
+    },
+    locatePlace: (id, path, root, sameRepository) =>
+      db.transaction((tx) => {
+        const was = tx
+          .select()
+          .from(projectPlaces)
+          .where(
+            and(eq(projectPlaces.id, id), eq(projectPlaces.kind, "checkout"))
+          )
+          .get();
+        if (!was) {
+          return;
+        }
+        if (sameRepository) {
+          const from = was.path;
+          const inside = `${from.endsWith("/") ? from : `${from}/`}`;
+          tx.run(
+            sql`UPDATE ${workspaces} SET ${sql.identifier(workspaces.repoRoot.name)} = ${path} || substr(${sql.identifier(workspaces.repoRoot.name)}, ${from.length + 1}) WHERE ${sql.identifier(workspaces.machineId.name)} = ${was.machineId} AND ${sql.identifier(workspaces.kind.name)} = 'repo' AND ${sql.identifier(workspaces.state.name)} != 'archived' AND (${sql.identifier(workspaces.repoRoot.name)} = ${from} OR substr(${sql.identifier(workspaces.repoRoot.name)}, 1, ${inside.length}) = ${inside})`
+          );
+        }
+        return tx
+          .update(projectPlaces)
+          .set({
+            path,
+            root,
+            made: false,
+            missing: false,
+            found: true,
+            locateTo: null,
+          })
+          .where(eq(projectPlaces.id, id))
+          .returning()
+          .get();
+      }),
     setPlaceRoot: (id, commit) => {
       db.update(projectPlaces)
         .set({ root: commit })
