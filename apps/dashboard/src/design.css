@@ -1584,6 +1584,11 @@
    mark, the words that take the rest, the trailing facts (its role, whether
    the computer answers) on one edge, and the chevron's column, kept where
    there is no chevron so that edge holds in every item. */
+/* The details card's three-column layout (project/details/card-layout.ts):
+   the folders' column wider than the two beside it, 330 : 265 : 265. */
+@utility grid-cols-details-three {
+  grid-template-columns: minmax(0, 330fr) minmax(0, 265fr) minmax(0, 265fr);
+}
 @utility grid-cols-folder-row {
   grid-template-columns: auto minmax(0, 1fr) auto var(--spacing-icon-sm);
 }

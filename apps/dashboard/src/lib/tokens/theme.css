@@ -816,6 +816,12 @@
   /* The project details card hung from the head's place mark (proto/details-card): two equal columns of rows with their one-line notes; wider on a wide shell, where each folder's path stands whole. */
   --spacing-c-details-card-w: 760px;
   --spacing-c-details-card-w-wide: 920px;
+  /* The card's layouts the owner is choosing between (project/details/card-layout.ts), each sized to fit a 1024×768 laptop: two independent columns, three columns, three bands. */
+  --spacing-c-details-card-w-two-columns: 820px;
+  --spacing-c-details-card-w-three-columns: 940px;
+  --spacing-c-details-card-w-bands: 780px;
+  /* A 1024×768 laptop's screen height: the details card layouts' live stories stand in it, so the card's fit can be judged. */
+  --spacing-c-laptop-h: 768px;
   /* A folder row's lines under its machine's name: the mark's width and the row's gap, so they start on the name's edge. */
   --spacing-c-details-indent: calc(
     var(--spacing-c-mark) + var(--spacing-space-3)

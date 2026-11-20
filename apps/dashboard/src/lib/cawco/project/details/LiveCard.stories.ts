@@ -4,18 +4,9 @@
  * as the live story mounts it (project-details-live.svelte), each story's
  * `play` making the press and its frame showing the answer.
  */
+import { liveStores } from "./live-story";
 import { afterReads, type Press, presses, refused, settles } from "./plays";
 import ProjectDetailsLive from "./project-details-live.svelte";
-
-/** The stores the card reads, taken so each frame's stand-in writes its own. */
-async function ownStores(): Promise<void> {
-  await Promise.all([
-    import("../../stores/board.svelte"),
-    import("../../stores/accounts.svelte"),
-    import("../../stores/projects.svelte"),
-    import("../../stores/moves.svelte"),
-  ]);
-}
 
 export default {
   title: "Project details/Presses on the live card",
@@ -42,18 +33,18 @@ const CALL_OFF = /^Call off$/u;
 const WORK = /^One account$/u;
 
 /** The card as it opens, the task list still being read. */
-export const Opening = { beforeEach: ownStores };
+export const Opening = { beforeEach: liveStores };
 
 /** The card has read the task list: GitHub Issues, up to date. */
 export const Read = {
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "Opening",
   play: settles(2000),
 };
 
 /** I picked Ask for review, and CawCo took it. */
 export const ReviewPicked = {
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "Opening",
   play: presses({ role: "radio", name: REVIEW, after: 2000 }),
 };
@@ -61,21 +52,21 @@ export const ReviewPicked = {
 /** I picked Keep separate, and CawCo refused it in its own words. */
 export const SeparateRefused = {
   args: { answer: "refuse" },
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "Opening",
   play: refused({ role: "radio", name: SEPARATE, after: 2000 }),
 };
 
 /** I opened the account picker: every account, signed in or not. */
 export const AccountsListed = {
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "Opening",
   play: presses({ role: "combobox", name: WORK, after: 800 }),
 };
 
 /** I pressed my main folder, and its acts opened under it. */
 export const FolderActs = {
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "Opening",
   play: presses({ role: "button", name: MAIN_ROW, after: 800 }),
 };
@@ -89,21 +80,21 @@ const COPY_ASKED: Press[] = [
 
 /** Copy to computer: lab-nuc and a folder named, and what will happen. */
 export const CopyAsked = {
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "Opening",
   play: presses(...COPY_ASKED),
 };
 
 /** I pressed Copy to computer in the step, and it runs. */
 export const Copying = {
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "Opening",
   play: presses(...COPY_ASKED, { role: "button", name: COPY, after: 1500 }),
 };
 
 /** I pressed Connect Linear: its step, with its sign-in and teams read. */
 export const LinearStep = {
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "Opening",
   play: afterReads({ role: "radio", name: LINEAR, after: 3000 }),
 };
@@ -122,14 +113,14 @@ const CONNECT_ASKED: Press[] = [
 
 /** Connect existing folder on a folder another project has: the step asks before the two become one. */
 export const ConnectAsks = {
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "Opening",
   play: presses(...CONNECT_ASKED),
 };
 
 /** I pressed Connect existing folder after its ask, my yes to the two becoming one. */
 export const ConnectJoined = {
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "Opening",
   play: presses(...CONNECT_ASKED, {
     role: "button",
@@ -141,14 +132,14 @@ export const ConnectJoined = {
 /** Locate folder was pointed while studio-mac was offline: its row says where the folder goes once studio-mac is back. */
 export const LocateWaiting = {
   args: { situation: "locate-waiting" },
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   play: settles(2000),
 };
 
 /** I pressed Call off on studio-mac's row, and the folder stays as it was. */
 export const LocateCalledOff = {
   args: { situation: "locate-waiting" },
-  beforeEach: ownStores,
+  beforeEach: liveStores,
   from: "LocateWaiting",
   play: presses({ role: "button", name: CALL_OFF, after: 1500 }),
 };

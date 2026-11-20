@@ -40,6 +40,7 @@
   } from "#lib/icons.js";
   import { reveal } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { cardForms } from "./card-layout";
   import type { Choice, Pending, Read, TaskList } from "./details";
   import OptionLine from "./OptionLine.svelte";
   import Section from "./Section.svelte";
@@ -72,11 +73,15 @@
   } = $props();
 
   const id = $props.id();
+  const forms = cardForms();
+  /** Its options as tiles, or as rows (one line each where the form says `lines`). */
+  const form = $derived(forms().tasks);
   const KINDS: Kind[] = ["here", "github", "linear"];
   const SERVICE = { github: "GitHub", linear: "Linear" } as const;
   const TILES =
     "--tiles-cols: repeat(3, minmax(0, 1fr)); --tiles-cols-phone: minmax(0, 1fr)";
   const chosen = $derived(tasks.state === "read" ? tasks.value.kind : null);
+  type Linked = Exclude<TaskList, { kind: "here" }>;
   const linked = $derived(
     tasks.state === "read" && tasks.value.kind !== "here" ? tasks.value : null
   );
@@ -100,6 +105,80 @@
     onconnect(next);
   }
 </script>
+
+{#snippet standing(linked: Linked, service: string)}
+  <!-- mark-line: the glyph stands at the top of words that may wrap -->
+  <span
+    class="flex min-w-0 flex-1 items-start gap-space-2 type-meta"
+    aria-live="polite"
+  >
+    {#if linked.standing.state === "reading"}
+      <Skeleton line="meta" width="title" />
+    {:else if linked.standing.state === "failed"}
+      <span class="text-status-fail-ink"
+        >{cardWords.couldntRead} {linked.standing.reason}</span
+      >
+    {:else if linked.standing.value.state === "first"}
+      <LiveDot />
+      <span class="text-ink-strong">{taskWords.first}</span>
+    {:else if linked.standing.value.state === "updating"}
+      <Spinner box="small" tone="muted" />
+      <span class="text-ink-strong">{taskWords.updating}</span>
+    {:else if linked.standing.value.state === "up-to-date"}
+      <IconSuccess
+        aria-hidden="true"
+        class="mt-px size-icon-sm flex-none text-status-done-ink"
+      />
+      <span class="whitespace-nowrap text-ink-strong"
+        >{taskWords.upToDate(linked.standing.value.at)}</span
+      >
+    {:else}
+      <IconError
+        aria-hidden="true"
+        class="mt-px size-icon-sm flex-none text-status-fail-ink"
+      />
+      <span class="text-pretty text-status-fail-ink"
+        >{taskWords.refused(service)}
+        {linked.standing.value.words}</span
+      >
+    {/if}
+  </span>
+  <Button
+    disabled={sunk}
+    icon={IconRefresh}
+    label={linked.standing.state === "failed"
+      ? cardWords.tryAgain
+      : taskWords.refresh}
+    onclick={onrefresh}
+    pending={linked.standing.state === "read" &&
+      linked.standing.value.state === "updating"}
+    size="sm"
+    variant="outline"
+  />
+{/snippet}
+
+{#snippet boardOf(linked: Linked)}
+  {#if linked.board && "url" in linked.board}
+    {@render out(linked.board)}
+  {:else if linked.board}
+    <span class="text-pretty text-ink-muted">{linked.board.reason}</span>
+  {:else}
+    <span class="text-ink-muted">{taskWords.noBoard}</span>
+  {/if}
+{/snippet}
+
+{#snippet out(target: { name: string; url: string })}
+  <a
+    class="mark-line pointer-hit touch-hit inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
+    href={target.url}
+    rel="noreferrer"
+    target="_blank"
+    ><span class="wrap-anywhere">{target.name}</span><IconArrowUpRight
+      aria-hidden="true"
+      class="size-icon-sm flex-none"
+    /></a
+  >
+{/snippet}
 
 <Section
   hue="var(--color-mark-4)"
@@ -131,26 +210,28 @@
         }
         disabled={sunk}
         glide
-        layout="tiles"
-        style={TILES}
+        layout={form === "tiles" ? "tiles" : "list"}
+        style={form === "tiles" ? TILES : undefined}
       >
         {#each KINDS as kind (kind)}
           <OptionGroupItem value={kind}>
             {#if kind === "here"}
               <OptionLine
                 glyph={IconFolder}
+                inline={form === "lines"}
                 line={taskWords.here.line}
                 name={nameOf(kind)}
-                tile
+                tile={form === "tiles"}
                 waiting={pending?.value === kind && !pending.refused}
               />
             {:else}
               <OptionLine
+                inline={form === "lines"}
                 line={taskWords[kind].line}
                 name={nameOf(kind)}
                 opens={kind !== chosen}
                 tag={kind === chosen ? taskWords.connected : undefined}
-                tile
+                tile={form === "tiles"}
                 waiting={pending?.value === kind && !pending.refused}
               >
                 {#snippet mark()}
@@ -200,13 +281,6 @@
 
       {#if linked}
         {@const service = SERVICE[linked.kind]}
-        <!-- The connected service's facts, one labelled unit on the tiles'
-             radius under them: what it is (Syncing with GitHub Issues),
-             with Change… as its act at its head; then its facts as names
-             and values on two columns (the repository or team, how many
-             tasks are linked, for GitHub the status board); then how the
-             sync stands, with Refresh now. Its two acts are the kit's small
-             outlined buttons, so they read as presses. -->
         <section
           aria-labelledby="{id}-facts"
           class="flex flex-col gap-space-3 rounded-sm border border-border-hairline p-space-3"
@@ -232,106 +306,70 @@
               variant="outline">{taskWords.change}</Button
             >
           </div>
-          <dl
-            class="m-0 grid grid-cols-auto-fluid items-baseline gap-x-space-4 gap-y-space-1 type-meta"
-          >
-            <dt class="text-ink-muted">
-              {linked.kind === "github" ? taskWords.repository : taskWords.team}
-            </dt>
-            <dd class="m-0 min-w-0">
-              <a
-                class="mark-line pointer-hit touch-hit inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
-                href={linked.target.url}
-                rel="noreferrer"
-                target="_blank"
-                ><span class="wrap-anywhere">{linked.target.name}</span
-                ><IconArrowUpRight
-                  aria-hidden="true"
-                  class="size-icon-sm flex-none"
-                /></a
-              >
-            </dd>
-            <dt class="text-ink-muted">{taskWords.tasks}</dt>
-            <dd class="m-0 tabular-nums text-ink-strong">
-              {taskWords.linked(linked.linked)}
-            </dd>
-            {#if linked.kind === "github"}
-              <dt class="text-ink-muted">{taskWords.board}</dt>
-              <dd class="m-0 min-w-0">
-                {#if linked.board && "url" in linked.board}
-                  <a
-                    class="mark-line pointer-hit touch-hit inline-flex items-center gap-space-1 rounded-xs text-link-ink underline-offset-4 hover:underline"
-                    href={linked.board.url}
-                    rel="noreferrer"
-                    target="_blank"
-                    ><span class="wrap-anywhere">{linked.board.name}</span
-                    ><IconArrowUpRight
-                      aria-hidden="true"
-                      class="size-icon-sm flex-none"
-                    /></a
-                  >
-                {:else if linked.board}
-                  <span class="text-pretty text-ink-muted"
-                    >{linked.board.reason}</span
-                  >
-                {:else}
-                  <span class="text-ink-muted">{taskWords.noBoard}</span>
-                {/if}
-              </dd>
-            {/if}
-          </dl>
-          <div
-            class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 border-t border-border-hairline pt-space-3"
-          >
-            <!-- mark-line: the glyph stands at the top of words that may wrap -->
-            <span
-              class="flex min-w-0 flex-1 items-start gap-space-2 type-meta"
-              aria-live="polite"
+          {#if forms().sync === "full"}
+            <dl
+              class="m-0 grid grid-cols-auto-fluid items-baseline gap-x-space-4 gap-y-space-1 type-meta"
             >
-              {#if linked.standing.state === "reading"}
-                <Skeleton line="meta" width="title" />
-              {:else if linked.standing.state === "failed"}
-                <span class="text-status-fail-ink"
-                  >{cardWords.couldntRead} {linked.standing.reason}</span
-                >
-              {:else if linked.standing.value.state === "first"}
-                <LiveDot />
-                <span class="text-ink-strong">{taskWords.first}</span>
-              {:else if linked.standing.value.state === "updating"}
-                <Spinner box="small" tone="muted" />
-                <span class="text-ink-strong">{taskWords.updating}</span>
-              {:else if linked.standing.value.state === "up-to-date"}
-                <IconSuccess
-                  aria-hidden="true"
-                  class="mt-px size-icon-sm flex-none text-status-done-ink"
-                />
-                <span class="whitespace-nowrap text-ink-strong"
-                  >{taskWords.upToDate(linked.standing.value.at)}</span
-                >
-              {:else}
-                <IconError
-                  aria-hidden="true"
-                  class="mt-px size-icon-sm flex-none text-status-fail-ink"
-                />
-                <span class="text-pretty text-status-fail-ink"
-                  >{taskWords.refused(service)}
-                  {linked.standing.value.words}</span
-                >
+              <dt class="text-ink-muted">
+                {linked.kind === "github"
+                  ? taskWords.repository
+                  : taskWords.team}
+              </dt>
+              <dd class="m-0 min-w-0">
+                {@render out(linked.target)}
+              </dd>
+              <dt class="text-ink-muted">{taskWords.tasks}</dt>
+              <dd class="m-0 tabular-nums text-ink-strong">
+                {taskWords.linked(linked.linked)}
+              </dd>
+              {#if linked.kind === "github"}
+                <dt class="text-ink-muted">{taskWords.board}</dt>
+                <dd class="m-0 min-w-0">
+                  {@render boardOf(linked)}
+                </dd>
               {/if}
-            </span>
-            <Button
-              disabled={sunk}
-              icon={IconRefresh}
-              label={linked.standing.state === "failed"
-                ? cardWords.tryAgain
-                : taskWords.refresh}
-              onclick={onrefresh}
-              pending={linked.standing.state === "read" &&
-                linked.standing.value.state === "updating"}
-              size="sm"
-              variant="outline"
-            />
-          </div>
+            </dl>
+            <div
+              class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 border-t border-border-hairline pt-space-3"
+            >
+              {@render standing(linked, service)}
+            </div>
+          {:else}
+            <!-- Three tiers: its head; where it updates beside how many
+                 tasks are linked; the status board beside how it stands,
+                 with Refresh now. -->
+            <div
+              class="flex flex-wrap items-baseline gap-x-space-4 gap-y-space-1 type-meta"
+            >
+              <span class="flex min-w-0 items-baseline gap-x-space-2">
+                <span class="text-ink-muted"
+                  >{linked.kind === "github"
+                    ? taskWords.repository
+                    : taskWords.team}</span
+                >
+                {@render out(linked.target)}
+              </span>
+              <span class="flex items-baseline gap-x-space-2">
+                <span class="text-ink-muted">{taskWords.tasks}</span>
+                <span class="tabular-nums text-ink-strong"
+                  >{taskWords.linked(linked.linked)}</span
+                >
+              </span>
+            </div>
+            <div
+              class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 border-t border-border-hairline pt-space-2"
+            >
+              {#if linked.kind === "github"}
+                <span
+                  class="flex min-w-0 items-baseline gap-x-space-2 type-meta"
+                >
+                  <span class="text-ink-muted">{taskWords.board}</span>
+                  {@render boardOf(linked)}
+                </span>
+              {/if}
+              {@render standing(linked, service)}
+            </div>
+          {/if}
         </section>
       {/if}
     </div>

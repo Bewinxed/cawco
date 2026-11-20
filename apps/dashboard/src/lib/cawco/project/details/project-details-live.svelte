@@ -27,6 +27,7 @@
   } from "#lib/cawco/stores/projects.svelte.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
   import { hubThrough } from "#lib/platform/hub.js";
+  import { type CardLayout, chooseCardLayout } from "./card-layout";
   import { detailsOpen } from "./details-open.svelte";
   import {
     type Answer,
@@ -41,6 +42,8 @@
     answer = "yes",
     open = true,
     again = 0,
+    layout = "stacked",
+    laptop = false,
   }: {
     situation?: LiveSituation;
     answer?: Answer;
@@ -48,7 +51,13 @@
     open?: boolean;
     /** Starts it over: counts the person's presses of Start again. */
     again?: number;
+    /** How the card places its sections (card-layout.ts). */
+    layout?: CardLayout;
+    /** The screen is a 1024×768 laptop's: 768 tall on a desk, so the card's fit can be judged; a phone's own height under it. */
+    laptop?: boolean;
   } = $props();
+
+  chooseCardLayout(() => layout);
 
   /** The hub's frames, written through each store's own writer. */
   const FRAMES: HubFrames = {
@@ -119,7 +128,12 @@
 </script>
 
 <div
-  class="@container/shell relative flex min-h-dvh w-full flex-col bg-surface-recess contain-layout"
+  class={[
+    "@container/shell relative flex w-full flex-col bg-surface-recess contain-layout",
+    laptop
+      ? "h-c-laptop-h overflow-clip max-phone:h-auto max-phone:min-h-dvh"
+      : "min-h-dvh",
+  ]}
   data-details-live
   data-hang-layer={layer.id}
 >

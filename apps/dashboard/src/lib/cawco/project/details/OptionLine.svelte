@@ -27,6 +27,7 @@
     tag,
     waiting = false,
     tile = false,
+    inline = false,
     opens = false,
   }: {
     name: string;
@@ -42,6 +43,8 @@
     waiting?: boolean;
     /** It stands in a tile: the line under the glyph and the name. */
     tile?: boolean;
+    /** A row of one line: its name, its tag and its line on one line, wrapping only where they must. */
+    inline?: boolean;
     /** Pressed, it opens a step of its own rather than picking. */
     opens?: boolean;
   } = $props();
@@ -58,13 +61,16 @@
   {/if}
 {/snippet}
 
-{#snippet title()}
+{#snippet title(withLine: boolean)}
   <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-space-2">
     <span class="type-label text-pretty text-ink-strong">{name}</span>
     {#if note}
       <span class="type-meta text-status-attn-ink">{note}</span>
     {:else if tag}
       <span class="type-meta text-ink-muted">{tag}</span>
+    {/if}
+    {#if withLine && line}
+      <span class="type-meta text-pretty text-ink-muted">{line}</span>
     {/if}
   </span>
 {/snippet}
@@ -80,7 +86,13 @@
   {/if}
 {/snippet}
 
-{#if tile}
+{#if inline}
+  <span class="flex min-w-0 items-start gap-space-2">
+    {@render lead()}
+    {@render title(true)}
+    {@render wait()}
+  </span>
+{:else if tile}
   <span class="flex w-full min-w-0 flex-col gap-space-1 text-start">
     <span class="flex min-w-0 items-start gap-space-2">
       {@render lead()}
@@ -102,7 +114,7 @@
   <span class="flex min-w-0 items-start gap-space-2">
     {@render lead()}
     <span class="flex min-w-0 flex-1 flex-col gap-px">
-      {@render title()}
+      {@render title(false)}
       {#if line}
         <span class="type-meta text-pretty text-ink-muted">{line}</span>
       {/if}

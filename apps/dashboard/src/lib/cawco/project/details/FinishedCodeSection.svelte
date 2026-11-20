@@ -29,6 +29,7 @@
     IconFileCode,
   } from "#lib/icons.js";
   import { reveal } from "#lib/platform/motion/curves.svelte.js";
+  import { cardForms } from "./card-layout";
   import type { Choice, Pending, Read } from "./details";
   import OptionLine from "./OptionLine.svelte";
   import { pickOne } from "./pick-one";
@@ -54,8 +55,13 @@
     pr: IconCompare,
     none: IconDocument,
   } as const;
+  const forms = cardForms();
+  /** Its tiles' columns: two by two, or the four in one strip; one on a phone. */
   const TILES =
     "--tiles-cols: repeat(2, minmax(0, 1fr)); --tiles-cols-phone: minmax(0, 1fr)";
+  const STRIP =
+    "--tiles-cols: repeat(4, minmax(0, 1fr)); --tiles-cols-phone: minmax(0, 1fr)";
+  const form = $derived(forms().finished);
   const chosen = $derived(finished.state === "read" ? finished.value : null);
   const pick = pickOne(
     () => chosen,
@@ -69,6 +75,7 @@
 <Section
   hue="var(--color-mark-6)"
   icon={IconFileCode}
+  inline={forms().finishedInline}
   key="finished"
   line={sectionWords.finished.line}
   name={sectionWords.finished.name}
@@ -91,8 +98,8 @@
         bind:value={pick.get, pick.set}
         disabled={sunk}
         glide
-        layout="tiles"
-        style={TILES}
+        layout={form === "rows" ? "list" : "tiles"}
+        style={form === "strip" ? STRIP : TILES}
       >
         {#each LANDS_MODES as mode (mode)}
           <OptionGroupItem value={mode}>
@@ -100,7 +107,7 @@
               glyph={GLYPHS[mode]}
               line={finishedWords[mode].line}
               name={finishedWords[mode].name}
-              tile
+              tile={form !== "rows"}
               waiting={pending?.value === mode && !pending.refused}
             />
           </OptionGroupItem>

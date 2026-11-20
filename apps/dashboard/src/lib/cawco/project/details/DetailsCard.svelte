@@ -42,6 +42,7 @@
   import { cn } from "#lib/utils.js";
   import AccountSection from "./AccountSection.svelte";
   import CodeStorageSection from "./CodeStorageSection.svelte";
+  import { type CardLayout, provideCardLayout } from "./card-layout";
   import type {
     CardActs,
     CardOpen,
@@ -70,6 +71,7 @@
     folderFacts,
     taskFacts,
     phone = false,
+    layout = "stacked",
     acts,
   }: {
     details: Details;
@@ -81,9 +83,27 @@
     taskFacts: TaskStepFacts;
     /** It stands in the kit's bottom sheet: the sheet's bar is its bar. */
     phone?: boolean;
+    /** How its sections are placed (card-layout.ts): the shipping card, or one of the layouts the owner is choosing between. */
+    layout?: CardLayout;
     acts: CardActs;
   } = $props();
 
+  provideCardLayout(() => layout);
+  /** Between one section's foot and the next one's hairline. */
+  const GAP = {
+    stacked: "gap-y-space-6",
+    "two-columns": "gap-y-space-3",
+    "three-columns": "gap-y-space-4",
+    bands: "gap-y-space-3",
+  } as const satisfies Record<CardLayout, string>;
+  /** The card's width on a desk. */
+  const WIDTH = {
+    stacked:
+      "w-c-details-card-w @min-details-wide/shell:w-c-details-card-w-wide",
+    "two-columns": "w-c-details-card-w-two-columns",
+    "three-columns": "w-c-details-card-w-three-columns",
+    bands: "w-c-details-card-w-bands",
+  } as const satisfies Record<CardLayout, string>;
   const verdict = $derived(verdictOf(details));
   const sunk = $derived(!details.hub.reachable);
   const folders = $derived(
@@ -118,12 +138,190 @@
   }
 </script>
 
+{#snippet filesSection()}
+  <FilesSection
+    asOf={details.hub.reachable ? null : details.hub.readAt}
+    bind:confirming={opened.disconnect}
+    callingOff={pending.locate}
+    disconnecting={pending.disconnect}
+    {fleet}
+    folders={details.folders}
+    onact={acts.folderAct}
+    oncalloff={acts.callOffLocate}
+    ondisconnect={acts.disconnect}
+    bind:openFolder={opened.folder}
+    ontry={acts.tryAgain}
+    running={details.running}
+    {sunk}
+  />
+{/snippet}
+
+{#snippet aiSection()}
+  <AccountSection
+    ai={details.ai}
+    onpick={acts.pick}
+    onsignin={acts.signIn}
+    ontry={acts.tryAgain}
+    pending={pending.account}
+    pendingLimit={pending.atLimit}
+    bind:picking
+    {sunk}
+  />
+{/snippet}
+
+{#snippet finishedSection()}
+  {#if details.hasCode}
+    <FinishedCodeSection
+      finished={details.finished}
+      onpick={acts.pick}
+      ontry={acts.tryAgain}
+      pending={pending.finished}
+      {sunk}
+    />
+  {/if}
+{/snippet}
+
+{#snippet tasksSection()}
+  <TaskListSection
+    bind:confirmStop={opened.stopUpdating}
+    onchange={() => {
+      const kind =
+        details.tasks.state === "read" ? details.tasks.value.kind : "here";
+      acts.connectTasks(kind === "linear" ? "linear" : "github", true);
+    }}
+    onconnect={(provider) => acts.connectTasks(provider, false)}
+    onpick={acts.pick}
+    onrefresh={acts.refreshTasks}
+    ontry={acts.tryAgain}
+    pending={pending.tasks}
+    {sunk}
+    tasks={details.tasks}
+  />
+{/snippet}
+
+{#snippet storageSection()}
+  {#if details.hasCode}
+    <CodeStorageSection
+      bigFiles={details.bigFiles}
+      codebases={details.codebases}
+      bind:draft={opened.bigDraft}
+      ondefaults={() => acts.pick({ section: "bigFiles", value: "defaults" })}
+      onsave={acts.saveBigFiles}
+      ontry={acts.tryAgain}
+      pending={pending.bigFiles}
+      signIns={details.bigFileSignIns}
+      {sunk}
+    />
+  {/if}
+{/snippet}
+
+{#snippet sections()}
+  {#if layout === "stacked"}
+    <div
+      class="grid grid-cols-1 gap-x-space-7 gap-y-space-6 @min-details-card/card:grid-cols-2"
+    >
+      {@render filesSection()}
+      {@render aiSection()}
+      {@render finishedSection()}
+      {@render tasksSection()}
+      {#if details.hasCode}
+        <!-- What agents work on and where big files are kept,
+             across both columns at the card's foot. -->
+        <div class="col-span-full">{@render storageSection()}</div>
+      {/if}
+    </div>
+  {:else if phone}
+    <!-- On a phone every layout is one column, in its own reading order. -->
+    <div class={["flex flex-col", GAP[layout]]}>
+      {#if layout === "two-columns"}
+        {@render filesSection()}
+        {@render aiSection()}
+        {@render tasksSection()}
+        {@render finishedSection()}
+        {@render storageSection()}
+      {:else if layout === "three-columns"}
+        {@render filesSection()}
+        {@render aiSection()}
+        {@render tasksSection()}
+        {@render finishedSection()}
+        {@render storageSection()}
+      {:else}
+        {@render filesSection()}
+        {@render tasksSection()}
+        {@render finishedSection()}
+        {@render aiSection()}
+        {@render storageSection()}
+      {/if}
+    </div>
+  {:else if layout === "two-columns"}
+    <!-- Two columns that stand apart, a hairline between them: neither
+         waits for the other's height. -->
+    <div class="grid grid-cols-2">
+      <div class={["flex min-w-0 flex-col pe-space-3", GAP[layout]]}>
+        {@render filesSection()}
+        {@render tasksSection()}
+      </div>
+      <div
+        class={[
+          "flex min-w-0 flex-col border-s border-border-hairline ps-space-3",
+          GAP[layout],
+        ]}
+      >
+        {@render aiSection()}
+        {@render finishedSection()}
+        {@render storageSection()}
+      </div>
+    </div>
+  {:else if layout === "three-columns"}
+    <div class="grid grid-cols-details-three">
+      <div class={["flex min-w-0 flex-col pe-space-3", GAP[layout]]}>
+        {@render filesSection()}
+        {@render storageSection()}
+      </div>
+      <div
+        class={[
+          "flex min-w-0 flex-col border-s border-border-hairline px-space-3",
+          GAP[layout],
+        ]}
+      >
+        {@render aiSection()}
+        {@render finishedSection()}
+      </div>
+      <div
+        class={[
+          "flex min-w-0 flex-col border-s border-border-hairline ps-space-3",
+          GAP[layout],
+        ]}
+      >
+        {@render tasksSection()}
+      </div>
+    </div>
+  {:else}
+    <!-- Bands: the two tallest side by side, Finished code across, the two
+         shortest side by side. -->
+    <div class={["flex flex-col", GAP[layout]]}>
+      <div class="grid grid-cols-2 gap-x-space-7">
+        {@render filesSection()}
+        {@render tasksSection()}
+      </div>
+      {@render finishedSection()}
+      <div class="grid grid-cols-2 gap-x-space-7">
+        {@render aiSection()}
+        {@render storageSection()}
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
 <div
   class={cn(
     "@container/card flex min-h-0 min-w-0 flex-col",
     phone
       ? "w-full flex-1 pt-(--sheet-room)"
-      : "relative max-h-(--details-room) w-c-details-card-w max-w-full timeline-scope-transcript-head @min-details-wide/shell:w-c-details-card-w-wide"
+      : [
+          "relative max-h-(--details-room) max-w-full timeline-scope-transcript-head",
+          WIDTH[layout],
+        ]
   )}
   data-details-card
   data-project-details
@@ -206,82 +404,7 @@
         {#key step === null ? "card" : step.kind}
           <div in:crossIn>
             {#if step === null}
-              <div
-                class="grid grid-cols-1 gap-x-space-7 gap-y-space-6 @min-details-card/card:grid-cols-2"
-              >
-                <FilesSection
-                  asOf={details.hub.reachable ? null : details.hub.readAt}
-                  bind:confirming={opened.disconnect}
-                  callingOff={pending.locate}
-                  disconnecting={pending.disconnect}
-                  {fleet}
-                  folders={details.folders}
-                  onact={acts.folderAct}
-                  oncalloff={acts.callOffLocate}
-                  ondisconnect={acts.disconnect}
-                  bind:openFolder={opened.folder}
-                  ontry={acts.tryAgain}
-                  running={details.running}
-                  {sunk}
-                />
-                <AccountSection
-                  ai={details.ai}
-                  onpick={acts.pick}
-                  onsignin={acts.signIn}
-                  ontry={acts.tryAgain}
-                  pending={pending.account}
-                  pendingLimit={pending.atLimit}
-                  bind:picking
-                  {sunk}
-                />
-                {#if details.hasCode}
-                  <FinishedCodeSection
-                    finished={details.finished}
-                    onpick={acts.pick}
-                    ontry={acts.tryAgain}
-                    pending={pending.finished}
-                    {sunk}
-                  />
-                {/if}
-                <TaskListSection
-                  bind:confirmStop={opened.stopUpdating}
-                  onchange={() => {
-                    const kind =
-                      details.tasks.state === "read"
-                        ? details.tasks.value.kind
-                        : "here";
-                    acts.connectTasks(
-                      kind === "linear" ? "linear" : "github",
-                      true
-                    );
-                  }}
-                  onconnect={(provider) => acts.connectTasks(provider, false)}
-                  onpick={acts.pick}
-                  onrefresh={acts.refreshTasks}
-                  ontry={acts.tryAgain}
-                  pending={pending.tasks}
-                  {sunk}
-                  tasks={details.tasks}
-                />
-                {#if details.hasCode}
-                  <!-- What agents work on and where big files are kept,
-                       across both columns at the card's foot. -->
-                  <div class="col-span-full">
-                    <CodeStorageSection
-                      bigFiles={details.bigFiles}
-                      codebases={details.codebases}
-                      bind:draft={opened.bigDraft}
-                      ondefaults={() =>
-                        acts.pick({ section: "bigFiles", value: "defaults" })}
-                      onsave={acts.saveBigFiles}
-                      ontry={acts.tryAgain}
-                      pending={pending.bigFiles}
-                      signIns={details.bigFileSignIns}
-                      {sunk}
-                    />
-                  </div>
-                {/if}
-              </div>
+              {@render sections()}
             {:else if step.kind === "folder"}
               <FolderStep
                 facts={folderFacts}

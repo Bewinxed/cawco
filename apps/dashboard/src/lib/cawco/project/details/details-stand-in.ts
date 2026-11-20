@@ -45,6 +45,7 @@ const LIVE_SITUATIONS = [
   "tasks-refused",
   "only-here",
   "computer-away",
+  "four-folders",
   "locate-waiting",
   "no-code",
   "unreachable",
@@ -200,6 +201,29 @@ export class DetailsStandIn {
             account: null,
           }
         : { ...PROJECT, account: "acc-work" };
+    if (situation === "four-folders") {
+      this.project = {
+        ...this.project,
+        places: [
+          ...this.project.places.filter((place) => place.kind !== "hub"),
+          {
+            createdAt: "2026-11-02T08:30:00.000Z",
+            found: true,
+            id: "pl-lab",
+            isPrimary: false,
+            kind: "checkout",
+            locateTo: null,
+            machineId: "m-lab",
+            made: false,
+            missing: false,
+            path: "/home/sam/renders/hyucksfield-hero-shots",
+            projectId: this.project.id,
+            within: [],
+          },
+          ...this.project.places.filter((place) => place.kind === "hub"),
+        ],
+      };
+    }
     if (situation === "locate-waiting") {
       this.project = {
         ...this.project,

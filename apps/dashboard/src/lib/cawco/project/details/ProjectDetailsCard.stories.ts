@@ -8,6 +8,7 @@
  * (the board, the accounts, the projects, the moves), so the frame's
  * stand-in writes stores of its own.
  */
+import { liveStores } from "./live-story";
 import ProjectDetailsLive from "./project-details-live.svelte";
 
 export default {
@@ -23,13 +24,4 @@ export default {
 };
 
 /** My project's details at a glance: agents can start, and how it is set. */
-export const Live = {
-  async beforeEach() {
-    await Promise.all([
-      import("../../stores/board.svelte"),
-      import("../../stores/accounts.svelte"),
-      import("../../stores/projects.svelte"),
-      import("../../stores/moves.svelte"),
-    ]);
-  },
-};
+export const Live = { beforeEach: liveStores };

@@ -7,6 +7,7 @@
    */
   import { MediaQuery } from "svelte/reactivity";
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import { chosenCardLayout } from "./card-layout";
   import DetailsCard from "./DetailsCard.svelte";
   import DetailsHang from "./DetailsHang.svelte";
   import type { CardSource } from "./details";
@@ -24,6 +25,7 @@
   } = $props();
 
   const narrow = new MediaQuery(PHONE_QUERY);
+  const layout = chosenCardLayout();
 </script>
 
 <DetailsHang
@@ -38,6 +40,7 @@
     details={source.details}
     fleet={source.fleet}
     folderFacts={source.folderFacts}
+    layout={layout()}
     bind:opened={source.opened}
     pending={source.pending}
     phone={narrow.current}

@@ -30,6 +30,7 @@
     IconServerSquare,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { cardForms } from "./card-layout";
   import type {
     BigDraft,
     BigFiles,
@@ -75,6 +76,9 @@
     return kept?.mode === "custom" ? kept.address : undefined;
   });
   const id = $props.id();
+  const forms = cardForms();
+  /** In a column of its own: its parts stacked, big files' two options as tiles side by side. */
+  const compact = $derived(forms().storage === "compact");
   const canSave = $derived(
     draft.address.trim() !== "" && draft.signIn !== null && !sunk
   );
@@ -88,7 +92,12 @@
   name={sectionWords.storage.name}
 >
   <div
-    class="grid grid-cols-1 gap-x-space-7 gap-y-space-5 @min-details-card/card:grid-cols-2"
+    class={[
+      "grid grid-cols-1 gap-x-space-7",
+      compact
+        ? "gap-y-space-3"
+        : "gap-y-space-5 @min-details-card/card:grid-cols-2",
+    ]}
     {id}
   >
     {#if codebases.length > 0}
@@ -170,7 +179,10 @@
           }
           disabled={sunk}
           glide
-          layout="list"
+          layout={compact ? "tiles" : "list"}
+          style={compact
+            ? "--tiles-cols: repeat(2, minmax(0, 1fr)); --tiles-cols-phone: minmax(0, 1fr)"
+            : undefined}
         >
           <OptionGroupItem title={moreWords.defaults.line} value="defaults">
             <OptionLine
@@ -179,6 +191,7 @@
                 ? moreWords.defaults.line
                 : undefined}
               name={moreWords.defaults.name}
+              tile={compact}
               waiting={pending?.value === "defaults" && !pending.refused}
             />
           </OptionGroupItem>
@@ -187,6 +200,7 @@
               glyph={IconGlobe}
               line={customLine}
               name={moreWords.custom.name}
+              tile={compact}
               waiting={pending?.value === "custom" && !pending.refused}
             />
           </OptionGroupItem>
