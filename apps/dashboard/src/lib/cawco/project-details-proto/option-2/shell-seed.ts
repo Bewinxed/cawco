@@ -90,7 +90,7 @@ export function atProjectPage(projectId: string): void {
 }
 
 /** Writes the stores the shell reads: the project, the fleet's other projects, its machines. */
-export function seedShell(record: HowItRunsRecord): void {
+function seedShell(record: HowItRunsRecord): void {
   const own = projectRowOf(record);
   atProjectPage(own.id);
   // No hub stands behind a states file: the page stands on a bench whose hub

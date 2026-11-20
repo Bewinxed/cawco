@@ -24,6 +24,7 @@
     IconRefresh,
     IconReset,
   } from "#lib/icons.js";
+  import ChoiceChip from "./ChoiceChip.svelte";
   import ControlRefusal from "./ControlRefusal.svelte";
   import type { Change, ChangeKey } from "./changes";
   import {
@@ -183,7 +184,6 @@
                   (pressed === decider ||
                     (pressed === undefined && rule.by === decider))}
                 <OptionGroupItem
-                  class="px-space-2"
                   onclick={(event) => {
                     event.preventDefault();
                     pickDecider(kind, decider);
@@ -258,44 +258,22 @@
         {disabled}
         value={[record.reviewBeforeDone ? "on" : "off"]}
       >
-        <OptionGroupItem
-          onclick={(event) => {
-            event.preventDefault();
-            pickReview(true);
-          }}
+        <ChoiceChip
+          label={words.waits.reviewOn}
+          onpick={() => pickReview(true)}
+          sending={reviewPending &&
+            (pressedReview === true ||
+              (pressedReview === null && record.reviewBeforeDone))}
           value="on"
-        >
-          <span class="mark-line inline-flex items-center gap-space-2">
-            <span>{words.waits.reviewOn}</span>
-            {#if reviewPending && (pressedReview === true || (pressedReview === null && record.reviewBeforeDone))}
-              <Spinner
-                aria-label={words.saving}
-                box="small"
-                class="flex-none"
-                tone="muted"
-              />
-            {/if}
-          </span>
-        </OptionGroupItem>
-        <OptionGroupItem
-          onclick={(event) => {
-            event.preventDefault();
-            pickReview(false);
-          }}
+        />
+        <ChoiceChip
+          label={words.waits.reviewOff}
+          onpick={() => pickReview(false)}
+          sending={reviewPending &&
+            (pressedReview === false ||
+              (pressedReview === null && !record.reviewBeforeDone))}
           value="off"
-        >
-          <span class="mark-line inline-flex items-center gap-space-2">
-            <span>{words.waits.reviewOff}</span>
-            {#if reviewPending && (pressedReview === false || (pressedReview === null && !record.reviewBeforeDone))}
-              <Spinner
-                aria-label={words.saving}
-                box="small"
-                class="flex-none"
-                tone="muted"
-              />
-            {/if}
-          </span>
-        </OptionGroupItem>
+        />
       </OptionGroup>
     </div>
 
