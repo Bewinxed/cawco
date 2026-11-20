@@ -29,6 +29,16 @@ import type { Attachment } from "svelte/attachments";
  * the other things a site hears (a scroll, rows arriving, the window) share
  * its one frame.
  *
+ * `readInFrame()` asks for them in the delivery of the frame about to be
+ * drawn instead (from its callbacks, or a task before it): a run that
+ * moves each frame (a hang's glide or growth) draws from the layout that
+ * frame does, and paints in it. Measured in the callback itself, before
+ * that layout, each frame laid the page out ahead of it under everything
+ * else animating (a tab switch's hang card: ~48 forced passes a switch,
+ * 60ms at 29 tabs). Once that delivery has passed (inside it, or in the
+ * microtasks after it), it says so and asks for nothing: the frame's
+ * layout is done there, and what is drawn then is read then.
+ *
  * `readNext()` asks for `read` and `inside` in the next frame's delivery
  * with nothing resized, then the answer in the frame after: a change no
  * box's size reports (a tab moved, not resized; a row's `top` written, a
@@ -86,6 +96,15 @@ export interface FrameObserver {
     parent: Element,
     options?: ResizeObserverOptions
   ) => () => void;
+  /**
+   * `read` and `inside` in the delivery of the frame about to be drawn, on
+   * its layout, with nothing resized: true when asked before it (the frame's
+   * callbacks, or a task between frames), as the root reports in that
+   * delivery. False, asking nothing, once the frame's delivery has passed
+   * (inside it, or the microtasks after): the root's report would come at a
+   * depth the frame had already passed, and be held back as a loop.
+   */
+  readInFrame: () => boolean;
   /** `read` and `inside` in the next frame's delivery, on that frame's layout, then the answer in the frame after, with nothing resized. */
   readNext: () => void;
   /** The answer in the next frame, with nothing resized (`changed` empty unless something also was). */
@@ -294,23 +313,48 @@ const readInNextDelivery = (site: Site) => {
 
 /**
  * Whether a delivery has come in this frame's rendering, whose later rounds
- * reach only boxes deeper than it reached: from the delivery until the task
- * after the frame (a message posted from the delivery is that task).
+ * reach only boxes deeper than it reached: from the delivery until the
+ * frame is drawn. A frame is drawn in one task, and its timeline's time is
+ * set as it starts and holds until the next starts (Web Animations, "update
+ * animations and send events"), so a call made with the time the delivery
+ * came at (the delivery's own callbacks, the microtasks after it) is in its
+ * rendering; a new frame's callbacks see a new time. A task after the frame
+ * ends it too: the platform scheduler's at its highest priority
+ * (`user-blocking`), so it runs ahead of a timer a frame callback queued
+ * (PaneTabs' move of the session card, `moveTask`); with no scheduler
+ * (Safari), a message, which a timer can come before, and that timer reads
+ * as still in the rendering.
  */
-let rendering = false;
+let deliveredAt: number | null = null;
+const frameTime = () => Number(document.timeline.currentTime ?? 0);
+const rendering = () => deliveredAt !== null && frameTime() === deliveredAt;
 let frameDone: MessageChannel | null = null;
+const frameDrawn = () => {
+  deliveredAt = null;
+};
+/** A delivery came: in its frame's rendering until the frame is drawn. */
+const delivered = () => {
+  const already = deliveredAt !== null;
+  deliveredAt = frameTime();
+  if (already) {
+    return;
+  }
+  // The DOM's types say every window has a scheduler; Safari's has none.
+  if (typeof scheduler !== "undefined") {
+    scheduler
+      .postTask(frameDrawn, { priority: "user-blocking" })
+      .catch(frameDrawn);
+    return;
+  }
+  if (!frameDone) {
+    frameDone = new MessageChannel();
+    frameDone.port1.onmessage = frameDrawn;
+  }
+  frameDone.port2.postMessage(null);
+};
 
 const deliver = (entries: ResizeObserverEntry[]) => {
-  if (!rendering) {
-    rendering = true;
-    if (!frameDone) {
-      frameDone = new MessageChannel();
-      frameDone.port1.onmessage = () => {
-        rendering = false;
-      };
-    }
-    frameDone.port2.postMessage(null);
-  }
+  delivered();
   const sites = [...sitesOf(entries)];
   const asked: Site[] = [];
   if (entries.some((entry) => entry.target === document.documentElement)) {
@@ -562,7 +606,7 @@ class ForeignResizeObserver {
       this.#holds.observe(target, options);
       return;
     }
-    if (!rendering) {
+    if (!rendering()) {
       this.#holds.observe(target, options);
       deliverWithRoot();
       return;
@@ -720,6 +764,14 @@ export function frameObserver(
   return {
     observe: held.observe,
     observeChildren,
+    readInFrame: () => {
+      if (rendering()) {
+        return false;
+      }
+      askedToRead.add(site);
+      deliverWithRoot();
+      return true;
+    },
     readNext: () => readInNextDelivery(site),
     request,
     unobserve,

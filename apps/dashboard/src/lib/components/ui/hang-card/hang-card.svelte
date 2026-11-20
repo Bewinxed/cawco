@@ -143,6 +143,7 @@
   import PopoverContent, {
     floatingSurface,
   } from "#lib/components/ui/popover/popover-content.svelte";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
   import {
     hang,
     type Neck,
@@ -335,28 +336,50 @@
       return;
     }
     read(at);
-    // A card that keeps its x while the anchor grows (the glass's trailing
-    // card) gets no placement and no resize of its own: its neck is drawn
-    // again from the new span here.
-    // biome-ignore lint/style/noRestrictedGlobals: draws the neck only (custom properties, a corner radius, an absolutely placed cut), which resize no box watched; the neck follows its anchor in the frame the anchor grew
-    const sized = new ResizeObserver(() => {
-      read(at);
-      if (card && placedAt !== null) {
-        const neck = neckAt(card, placedAt, flared);
-        if (neck) {
-          draw(card, neck);
+    // The span is read again in the delivery of the frame the anchor moved
+    // in (its size, the window's, a scroll), on the layout that frame has
+    // just done, and the neck drawn again from it there: a card that keeps
+    // its x while the anchor grows (the glass's trailing card) gets no
+    // placement and no resize of its own. Read in the placement that
+    // followed a scroll instead, it laid the page out there (a tab switch
+    // scrolling the strip). A card not standing out of its anchor (shut, or
+    // never placed) reads it at its next placement (`moved`), so a scroll
+    // under a shut card reads nothing.
+    const anew = frameObserver(null, {
+      inside: () => {
+        read(at);
+        const placed = card;
+        if (!placed || placedAt === null) {
+          return;
         }
-      }
+        const neck = neckAt(placed, placedAt, flared);
+        return neck ? () => draw(placed, neck) : undefined;
+      },
     });
-    sized.observe(at);
+    anew.observe(at);
+    // What starts a change in a tab's strip or on the page's root starts a
+    // glided tab's hang following again (`followOn`).
+    const changes = new MutationObserver(() => followCard?.());
+    if (tab && at.parentElement) {
+      changes.observe(at.parentElement, {
+        attributes: true,
+        characterData: true,
+        childList: true,
+        subtree: true,
+      });
+      changes.observe(document.documentElement, { attributes: true });
+    }
     const away = () => {
-      moved = true;
+      if (!(joined && card && placedAt !== null && anew.readInFrame())) {
+        moved = true;
+      }
     };
     const options = { capture: true, passive: true } as const;
     addEventListener("resize", away);
     addEventListener("scroll", away, options);
     return () => {
-      sized.disconnect();
+      anew.disconnect();
+      changes.disconnect();
       removeEventListener("resize", away);
       removeEventListener("scroll", away, options);
     };
@@ -364,6 +387,8 @@
 
   /** The card's width, kept by its own observer. */
   let width = 0;
+  /** Starts a glided tab's hang following what moves under it again (`hung`'s `followOn`). */
+  let followCard: (() => void) | null = null;
   /** Where the card's left edge stood at its last placement. */
   let placedAt: number | null = null;
   /** The neck last written onto the card. */
@@ -449,55 +474,117 @@
 
   /**
    * The silhouette a tab's hang (`tab`) is one shape with its tab in, where
-   * it stands now: the tab's own box and fold measures, the card's box, the
-   * sides it stands flush on (within a pixel of the tab's flank).
+   * it stands now, and what its drawing takes with it: the tab's own box and
+   * fold measures, the card's box, the sides it stands flush on (within a
+   * pixel of the tab's flank), the card's top-left (its surface's clip is
+   * drawn in its own box) and the tab's rim. It only reads.
    */
-  function shapeOf(node: HTMLElement): HangGeometry | null {
+  interface Standing {
+    origin: { x: number; y: number };
+    rim: string;
+    shape: HangGeometry;
+  }
+  function standingOf(node: HTMLElement): Standing | null {
     const at = tabOf();
     if (!at) {
       return null;
     }
-    const ff = at.querySelector<HTMLElement>('[data-slot="ff-tab"]') ?? at;
-    const t = ff.getBoundingClientRect();
-    const style = getComputedStyle(ff);
+    const ff = at.querySelector<HTMLElement>('[data-slot="ff-tab"]');
+    const fold = ff ?? at;
+    const t = fold.getBoundingClientRect();
+    const style = getComputedStyle(fold);
     const px = (name: string) =>
       Number.parseFloat(style.getPropertyValue(name)) || 0;
     const c = node.getBoundingClientRect();
     return {
-      box: {
-        width: t.width,
-        height: t.height,
-        flare: px("--flare"),
-        radius: px("--radius"),
-        slopeStart: px("--slope-start"),
-        slopeEnd: px("--slope-end"),
+      shape: {
+        box: {
+          width: t.width,
+          height: t.height,
+          flare: px("--flare"),
+          radius: px("--radius"),
+          slopeStart: px("--slope-start"),
+          slopeEnd: px("--slope-end"),
+        },
+        corner: Number.parseFloat(
+          getComputedStyle(node).borderBottomLeftRadius
+        ),
+        flush: {
+          start: Math.abs(c.left - t.left) <= 1,
+          end: Math.abs(c.right - t.right) <= 1,
+        },
+        hang: { left: c.left, right: c.right, height: c.bottom - t.bottom },
+        tab: { left: t.left, right: t.right, top: t.top, bottom: t.bottom },
       },
-      corner: Number.parseFloat(getComputedStyle(node).borderBottomLeftRadius),
-      flush: {
-        start: Math.abs(c.left - t.left) <= 1,
-        end: Math.abs(c.right - t.right) <= 1,
-      },
-      hang: { left: c.left, right: c.right, height: c.bottom - t.bottom },
-      tab: { left: t.left, right: t.right, top: t.top, bottom: t.bottom },
+      origin: { x: c.left, y: c.top },
+      rim: ff ? style.getPropertyValue("--hang-rim").trim() : "",
     };
   }
 
   const hung = (node: HTMLElement) => {
     const layer = tab ? outlineLayer() : null;
-    /** A tab's hang drawn `p` of the way out: its surface cut to the silhouette, the outline drawn over both. */
-    const grow = (p: number) => {
-      const shape = layer ? shapeOf(node) : null;
-      if (!(layer && shape)) {
+    /** What the shape was last drawn from, and the frames in a row drawn from the same since (`follow`). */
+    let drawnFrom = "";
+    let still = 0;
+    /**
+     * A tab's hang drawn `p` of the way out where it stands: its surface cut
+     * to the silhouette, the outline drawn over both. Drawn from what it was
+     * last drawn from, it writes nothing (unless the primitive wrote the
+     * card's style over its cut). It only writes.
+     */
+    const paint = (at: Standing, p: number) => {
+      const now = hangAt(at.shape, p);
+      const clip = `path("${hangClip(now, at.origin)}")`;
+      const from = JSON.stringify([now, at.origin, at.rim]);
+      if (from === drawnFrom && node.style.clipPath === clip) {
+        still += 1;
         return;
       }
-      const now = hangAt(shape, p);
-      const box = node.getBoundingClientRect();
-      node.style.clipPath = `path("${hangClip(now, { x: box.left, y: box.top })}")`;
-      const ff = tabOf()?.querySelector<HTMLElement>('[data-slot="ff-tab"]');
-      layer.draw(
-        now,
-        ff ? getComputedStyle(ff).getPropertyValue("--hang-rim").trim() : ""
-      );
+      drawnFrom = from;
+      still = 0;
+      node.style.clipPath = clip;
+      layer?.draw(now, at.rim);
+    };
+    /** How far out the drawing due in the frame's delivery stands, until that delivery draws it. */
+    let due: number | null = null;
+    // Every drawing reads where the tab and the card stand in the delivery
+    // of the frame it is drawn in, on the layout that frame has just done,
+    // and paints in it: each frame of the run's clock and of a glide's
+    // follow, a placement, a pull. Read where it was asked, in the frame's
+    // callbacks ahead of that layout, every frame of a glide or a growth laid
+    // the page out under all else animating with it: ~48 forced passes a tab
+    // switch, 60ms at 29 tabs.
+    const framer = layer
+      ? frameObserver(null, {
+          inside: () => {
+            if (due === null) {
+              return;
+            }
+            const p = due;
+            due = null;
+            const at = standingOf(node);
+            return at ? () => paint(at, p) : undefined;
+          },
+        })
+      : null;
+    /**
+     * A tab's hang drawn `p` of the way out (motion/hang `Hang.grow`): in the
+     * delivery of the frame about to be drawn; asked once that has passed
+     * (from inside it, where the layout is the frame's own, or after it), at
+     * once.
+     */
+    const grow = (p: number) => {
+      if (!layer) {
+        return;
+      }
+      if (due !== null || framer?.readInFrame()) {
+        due = p;
+        return;
+      }
+      const at = standingOf(node);
+      if (at) {
+        paint(at, p);
+      }
     };
     // A placement can land before this hears the card's new width (a face
     // of another width, a morph): its neck was measured from the old one,
@@ -518,25 +605,40 @@
       }
     });
     sized.observe(node);
-    // A glide to another anchor (`data-morph`, the site's transition of its
-    // wrapper's move) writes no style per frame: the shape follows it frame
-    // by frame for as long as it runs.
-    let gliding = 0;
+    // A card that glides between anchors (`data-morph`, the site's
+    // transition of its wrapper's move) follows what moves under it frame by
+    // frame, none of which writes a style it hears: the glide, the tab
+    // coming forward under it (its box, its rim on the choice's clock), the
+    // strip riding to show it. It follows for as long as what it draws
+    // from changes, and stops once that has stood for `STILL` frames;
+    // whatever starts a change starts it again (`followOn`): the glide, a
+    // placement, a change in the anchor's strip or to the page's root (a
+    // tab's status or choice, a neighbour come or gone, the theme).
+    // Followed on every frame for as long as the card stood glided, it drew
+    // a frame on every frame at rest: 60 frame callbacks a second.
+    const STILL = 3;
+    let following = 0;
     const follow = () => {
-      regrow(node);
-      gliding = node.hasAttribute("data-morph")
-        ? requestAnimationFrame(follow)
-        : 0;
-    };
-    const glide = new MutationObserver(() => {
-      if (layer && !gliding && node.hasAttribute("data-morph")) {
-        gliding = requestAnimationFrame(follow);
+      following = 0;
+      if (!node.hasAttribute("data-morph") || still > STILL) {
+        return;
       }
-    });
+      regrow(node);
+      following = requestAnimationFrame(follow);
+    };
+    const followOn = () => {
+      still = 0;
+      if (layer && !following && node.hasAttribute("data-morph")) {
+        following = requestAnimationFrame(follow);
+      }
+    };
+    followCard = followOn;
+    const glide = new MutationObserver(followOn);
     glide.observe(node, { attributes: true, attributeFilter: ["data-morph"] });
     const motion = hang({
       neckAt: (left) => {
         placedAt = left;
+        followOn();
         return neckAt(node, left, flared);
       },
       onneck: (neck) => draw(node, neck),
@@ -552,7 +654,11 @@
     return () => {
       sized.disconnect();
       glide.disconnect();
-      cancelAnimationFrame(gliding);
+      cancelAnimationFrame(following);
+      if (followCard === followOn) {
+        followCard = null;
+      }
+      framer?.disconnect();
       motion?.();
       layer?.remove();
       placedAt = null;
