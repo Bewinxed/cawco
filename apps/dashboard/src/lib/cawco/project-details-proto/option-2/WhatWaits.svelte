@@ -153,7 +153,7 @@
   {:else}
     {@const rules = record.whoDecides.rules}
     <div
-      class="mt-space-1 grid grid-cols-1 gap-y-space-row @wide:grid-cols-2 @wide:gap-x-space-5 coarse:gap-y-space-3"
+      class="mt-space-1 grid grid-cols-1 gap-y-space-row coarse:gap-y-space-3"
     >
       {#each CHOICE_KINDS as kind (kind)}
         {@const rule = rules[kind]}
