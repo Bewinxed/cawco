@@ -125,8 +125,13 @@ interface PlayKit {
   userEvent: { click: (el: Element) => Promise<void> };
 }
 
+/** The tab four along from the one chosen as the strip opens. */
+export const JUMP_TO = "Fix the relay's reconnect";
+/** The tab beside the one chosen as the strip opens. */
+export const NEXT_TO = "Port the usage meter";
+
 /** A `play` that presses the tab whose name starts with `title`, as a person does. */
-const pressTab =
+export const pressTab =
   (title: string) =>
   async ({ canvas, userEvent }: PlayKit): Promise<void> => {
     await userEvent.click(
@@ -145,12 +150,3 @@ export const switchMeta = (forward: ForwardStyle) => ({
     holdSwitch(await import("../stores/board.svelte"));
   },
 });
-
-/** The press four tabs along, from the live strip. */
-export const JUMP = {
-  from: "Live",
-  play: pressTab("Fix the relay's reconnect"),
-};
-
-/** The press on the tab beside the chosen one, from the live strip. */
-export const NEXT = { from: "Live", play: pressTab("Port the usage meter") };
