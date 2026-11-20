@@ -231,10 +231,10 @@ export function hang(options: Hang): Attachment<HTMLElement> {
 /** The clock a tab's hang grows and folds on: one run on the card, whose time each frame's shape is read at. */
 const GROW = "hang-grow";
 
-/** Each growing card's drawing: `to` draws it there and holds it (a finger's pull), `again` draws it where it stands (a placement, a resize). */
+/** Each growing card's drawing: `to` draws it there and holds it (a finger's pull), `again` draws it where it stands (a placement), `at` is how far out it stands. */
 const growers = new WeakMap<
   HTMLElement,
-  { again: () => void; to: (p: number) => void }
+  { again: () => void; at: () => number; to: (p: number) => void }
 >();
 
 /** Draws a tab's hang `p` of the way out of its tab and holds it there, its own motion stopped: a finger drawing it out (PaneTabs). */
@@ -245,6 +245,11 @@ export function growTo(node: HTMLElement, p: number): void {
 /** Draws a tab's hang again where it stands: its tab or its box moved. */
 export function regrow(node: HTMLElement): void {
   growers.get(node)?.again();
+}
+
+/** How far out a tab's hang is drawn, 0 to 1; nothing for a card that does not grow. */
+export function grownOf(node: HTMLElement): number | undefined {
+  return growers.get(node)?.at();
 }
 
 /**
@@ -278,6 +283,7 @@ function growMotion(
   };
   growers.set(node, {
     again: () => draw(p),
+    at: () => p,
     to: (v) => {
       halt();
       set(v);

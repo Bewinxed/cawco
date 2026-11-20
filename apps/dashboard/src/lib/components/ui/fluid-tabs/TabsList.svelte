@@ -87,6 +87,7 @@
   } from "#lib/platform/motion/fold-path.js";
   import { msOf } from "#lib/platform/motion/time.js";
   import { cn } from "#lib/utils.js";
+  import { boxMoving } from "./box-runs";
   import {
     provideList,
     restRank,
@@ -338,17 +339,6 @@
   const STILL_FRAMES = 3;
   let watching = 0;
   /**
-   * The runs moving the tabs' boxes, found once a watch: asking every tab
-   * for its animations restyles the page, and asked on every frame it
-   * restyled the page on every frame. Asked again only until some are found
-   * (a slide starts a frame after the change that watches for it), and
-   * after a new change while a watch runs (`watchFolds` drops them).
-   */
-  let boxRuns: Animation[] = [];
-  /** A run that still stands somewhere between its ends: playing, or held there. */
-  const underWay = (run: Animation) =>
-    run.playState === "running" || run.playState === "paused";
-  /**
    * Keeps the folds on the tabs as drawn, each frame, while anything moves
    * them: a lifted tab, or a slide or settle of a tab's box. A frame with
    * nothing moving them folds them where the track measured them
@@ -356,23 +346,15 @@
    * every re-measure of the tabs (a streamed reply resizing one) watches,
    * and read as drawn on each of its frames the boxes had the page laid
    * out in the frame's callbacks (two-pane-perf's stream, 184–279ms of
-   * `getBoundingClientRect`).
+   * `getBoundingClientRect`). What moves them is known without asking the
+   * page: the lift, and the runs their starters keep (`moveBox`).
    */
   function watchFolds(track: HTMLElement) {
-    boxRuns = [];
     if (watching) {
       return;
     }
     let still = 0;
-    const moving = () => {
-      if (lifted !== null) {
-        return true;
-      }
-      if (boxRuns.length === 0) {
-        boxRuns = [...track.children].flatMap((laid) => laid.getAnimations());
-      }
-      return boxRuns.some(underWay);
-    };
+    const moving = () => lifted !== null || boxMoving(track);
     const step = () => {
       const moves = moving();
       fold(rects.items, moves ? drawnNow : laidOut);

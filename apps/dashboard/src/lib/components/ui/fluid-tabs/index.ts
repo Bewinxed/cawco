@@ -1,3 +1,4 @@
+export { moveBox } from "./box-runs";
 export { restRank, type TabsStrip, type TabsTravel } from "./context.svelte";
 export { default as TabItem } from "./TabItem.svelte";
 export { default as Tabs } from "./Tabs.svelte";

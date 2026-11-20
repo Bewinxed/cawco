@@ -145,6 +145,7 @@
   } from "#lib/components/ui/popover/popover-content.svelte";
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import {
+    grownOf,
     hang,
     type Neck,
     regrow,
@@ -589,22 +590,34 @@
     // A placement can land before this hears the card's new width (a face
     // of another width, a morph): its neck was measured from the old one,
     // so a card standing flush read as not, and its cut ran a flare past
-    // its side. Drawn again from where it stands, with the width it has.
-    // biome-ignore lint/style/noRestrictedGlobals: draws the card's cut and neck only (its clip-path, its outline layer, its neck's properties), which resize no box watched; the cut follows the card in the frame it took its width
-    const sized = new ResizeObserver(([entry]) => {
-      const next = entry?.borderBoxSize[0]?.inlineSize ?? node.offsetWidth;
-      const resized = next !== width;
-      width = next;
-      if (layer) {
-        regrow(node);
-      }
-      const neck =
-        resized && placedAt !== null ? neckAt(node, placedAt, flared) : null;
-      if (neck) {
-        draw(node, neck);
-      }
+    // its side. Drawn again from where it stands, with the width it has: read
+    // with the delivery's reads and drawn with its writes, in the frame it
+    // took its width. Drawn in a ResizeObserver of its own, delivered among
+    // the page's other observers (`ForeignResizeObserver`), it wrote the cut
+    // between their reads: floating-ui's, which places the card (bits-ui's
+    // `autoUpdate`), read the card's box after it on every frame the card
+    // resized, a style and a layout pass each (a tab switch's height morph:
+    // 11–16 a switch, 4–5ms).
+    const sized = frameObserver(null, {
+      inside: ([entry]) => {
+        const next = entry?.borderBoxSize[0]?.inlineSize ?? node.offsetWidth;
+        const resized = next !== width;
+        width = next;
+        const at = layer ? standingOf(node) : null;
+        const p = grownOf(node);
+        const neck =
+          resized && placedAt !== null ? neckAt(node, placedAt, flared) : null;
+        return () => {
+          if (at && p !== undefined) {
+            paint(at, p);
+          }
+          if (neck) {
+            draw(node, neck);
+          }
+        };
+      },
     });
-    sized.observe(node);
+    sized.observe(node, { box: "border-box" });
     // A card that glides between anchors (`data-morph`, the site's
     // transition of its wrapper's move) follows what moves under it frame by
     // frame, none of which writes a style it hears: the glide, the tab

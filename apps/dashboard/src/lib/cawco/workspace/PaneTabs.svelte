@@ -48,6 +48,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
+    moveBox,
     restRank,
     TabItem,
     Tabs,
@@ -908,9 +909,12 @@
       el,
       dx: was - el.getBoundingClientRect().left,
     }));
+    // Kept as started (`moveBox`): the track's fold watch reads from there
+    // whether a tab's box moves, asking no tab for its runs.
     for (const { el, dx } of moves) {
       if (Math.abs(dx) > 0.5) {
-        el.animate(
+        moveBox(
+          el,
           [{ transform: `translateX(${dx}px)` }, { transform: "none" }],
           { id: SLIDE, duration, easing }
         );
