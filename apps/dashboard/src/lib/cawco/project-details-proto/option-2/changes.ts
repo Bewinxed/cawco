@@ -44,14 +44,92 @@ export type HrefOf = (
   page: "accounts" | "connections" | "fleetDecides"
 ) => string;
 
-/** What every stage that sends a change takes: the record, the changes in flight and refused, and where a change goes. */
+/**
+ * What every stage that sends a change takes: the record as the person sees
+ * it (the hub's, with every change still being asked already in it:
+ * {@link withAsked}), the acts still running, the changes refused, and where
+ * a change goes.
+ */
 export interface StageSends {
   onchange: (change: Change) => void;
   onretry: (key: ChangeKey) => void;
+  /** Acts still running (a sync, a place being added): a choice is never pending, it has moved already. */
   pending: ChangeKey[];
   record: HowItRunsRecord;
   refused: Partial<Record<ChangeKey, string>>;
 }
+
+/** The control a change belongs to: where its refusal stands. */
+export function keyOf(change: Change): ChangeKey {
+  switch (change.key) {
+    case "decides":
+    case "decidesReset":
+      return `decides.${change.kind}`;
+    case "taskHome":
+    case "account":
+    case "atLimit":
+    case "review":
+    case "landing":
+    case "largeFiles":
+      return change.key;
+  }
+}
+
+/** The record once the hub has taken `change`. */
+export function applied(
+  base: HowItRunsRecord,
+  change: Change
+): HowItRunsRecord {
+  switch (change.key) {
+    case "taskHome":
+      return {
+        ...base,
+        taskHome: change.value,
+        tie: change.value === "files" ? null : base.tie,
+      };
+    case "account":
+      return { ...base, account: { ...base.account, chosen: change.value } };
+    case "atLimit":
+      return { ...base, account: { ...base.account, atLimit: change.value } };
+    case "decides":
+    case "decidesReset": {
+      if (!base.whoDecides.ok) {
+        return base;
+      }
+      const rule = base.whoDecides.rules[change.kind];
+      const by = change.key === "decides" ? change.value : rule.fleet;
+      return {
+        ...base,
+        whoDecides: {
+          ok: true,
+          rules: {
+            ...base.whoDecides.rules,
+            [change.kind]: { ...rule, by, own: by !== rule.fleet },
+          },
+        },
+      };
+    }
+    case "review":
+      return { ...base, reviewBeforeDone: change.value };
+    case "landing":
+      return { ...base, landing: change.value };
+    case "largeFiles":
+      return { ...base, largeFiles: change.value };
+  }
+}
+
+/**
+ * The one way every choice on the work path moves: the dashboard's
+ * `asked ?? record` (ProjectDetails' lands, account and at-its-limit, Who
+ * decides' review), for every control at once. A change the person asked
+ * stands in the record from the press until the hub answers: taken, the
+ * hub's record carries it and the ask goes; refused, the ask goes, the
+ * hub's value shows again, and the refusal stands at the control.
+ */
+export const withAsked = (
+  record: HowItRunsRecord,
+  asked: Iterable<Change>
+): HowItRunsRecord => [...asked].reduce(applied, record);
 
 /** What "Sessions start" and its places take: the stage's sends, the running move and the place acts. */
 export interface SessionsStartProps extends StageSends {

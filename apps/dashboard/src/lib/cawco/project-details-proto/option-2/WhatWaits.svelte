@@ -1,286 +1,225 @@
 <script lang="ts">
   /**
-   * Stage 3 ("What waits for you"): the strongest-framed gate on the rail,
-   * unifying Who decides (all six kinds standing open against the fleet's
-   * defaults, with per-row Reset and unreadable-file blocker alert) and
-   * Review before done in one place.
+   * Stage 3 ("What waits for you"): the project's Who decides as its own
+   * page draws it, on the stage's ground with no box of its own. The head
+   * is the page's: the lede (the project follows the fleet, or how many
+   * kinds it set itself, with the way to put them all back), the legend of
+   * the tiles' scope glyphs, Review before done as its switch (SwitchField),
+   * and the link to the fleet's defaults. Under it the page's roster
+   * (Roster): every decider a card holding the kinds it decides, a press on
+   * a kind's tile handing it to another.
+   *
+   * Every hand-over, put-back and the review switch move at the press
+   * (changes.ts `withAsked`): the tile flies to its new card at once; a
+   * refusal flies it back and stands under it in the hub's words with Try
+   * again (KindTile's RowFault), the switch's under the switch.
+   *
+   * A rule file that doesn't read stands in the roster's place with the
+   * hub's words and Try again: every choice is the person's until it reads.
    */
   import {
-    Alert,
-    AlertAction,
-    AlertDescription,
-    AlertTitle,
-  } from "#lib/components/ui/alert/index.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import {
-    OptionGroup,
-    OptionGroupItem,
-  } from "#lib/components/ui/option-group/index.js";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import {
-    IconAlert,
-    IconChevronRight,
-    IconRefresh,
-    IconReset,
-  } from "#lib/icons.js";
-  import ChoiceChip from "./ChoiceChip.svelte";
-  import ControlRefusal from "./ControlRefusal.svelte";
-  import type { Change, ChangeKey } from "./changes";
-  import {
-    CHOICE_KINDS,
-    type ChoiceKind,
-    type Decider,
-    type HowItRunsRecord,
-  } from "./records";
+    BUILT_IN,
+    KIND_SEED,
+    type Kind,
+    type Member,
+  } from "@cawco/core/decides";
+  import SwitchField from "#lib/cawco/config/SwitchField.svelte";
+  import type { Fault } from "#lib/cawco/decides/decides.svelte.js";
+  import Roster from "#lib/cawco/decides/Roster.svelte";
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import { IconChevronRight, IconFolder, IconGlobe } from "#lib/icons.js";
+  import type { HrefOf, StageSends } from "./changes";
+  import { CHOICE_KINDS, type ChoiceKind, type Decider } from "./records";
   import { howItRunsWords as words } from "./words";
 
   let {
     record,
-    pending,
     refused,
     onchange,
     onretry,
     onreread,
     hrefOf,
-  }: {
-    record: HowItRunsRecord;
-    pending: ChangeKey[];
-    refused: Partial<Record<ChangeKey, string>>;
-    onchange: (change: Change) => void;
-    onretry: (key: ChangeKey) => void;
+  }: StageSends & {
     /** Re-read Who decides when its rule file could not be read. */
     onreread: () => void;
-    hrefOf: (page: "accounts" | "connections" | "fleetDecides") => string;
+    hrefOf: HrefOf;
   } = $props();
 
   const DECIDERS: readonly Decider[] = ["you", "caw", "advisor", "practice"];
 
-  /** UI-local state: which decider chip (or Reset) was pressed per kind, and which review option was pressed. */
-  let pressedKind = $state<Partial<Record<ChoiceKind, Decider | "reset">>>({});
-  let pressedReview = $state<boolean | null>(null);
-
-  const disabled = $derived(!record.hubReachable);
-  const reviewPending = $derived(pending.includes("review"));
-
-  const ownCount = $derived.by(() => {
-    if (!record.whoDecides.ok) {
-      return 0;
-    }
-    const { rules } = record.whoDecides;
-    return CHOICE_KINDS.filter((kind) => rules[kind].own).length;
+  /** The deciders as the roster's cards name them, in this view's words. */
+  const members: Member[] = DECIDERS.map((id) => ({
+    ...BUILT_IN[id],
+    name: words.waits.members[id].name,
+    job: words.waits.members[id].job,
+  }));
+  /** The kinds as the tiles name them, in this view's words. */
+  const kinds: Kind[] = CHOICE_KINDS.flatMap((id) => {
+    const seed = KIND_SEED.find((kind) => kind.id === id);
+    return seed
+      ? [
+          {
+            ...seed,
+            name: words.waits.kinds[id].name,
+            example: words.waits.kinds[id].example,
+          },
+        ]
+      : [];
   });
 
-  function keyFor(kind: ChoiceKind): ChangeKey {
-    return `decides.${kind}`;
+  /** The kind whose hand-over stands open. */
+  let handing = $state<string | null>(null);
+
+  const rules = $derived(record.whoDecides.ok ? record.whoDecides.rules : null);
+  /** Each kind's decider; with the rule file unread, every kind is the person's (as Who decides draws it). */
+  const routes = $derived(
+    Object.fromEntries(
+      CHOICE_KINDS.map((kind) => [
+        kind,
+        rules === null ? "you" : rules[kind].by,
+      ])
+    )
+  );
+  const fleetRoutes = $derived(
+    Object.fromEntries(
+      CHOICE_KINDS.map((kind) => [
+        kind,
+        rules === null ? "you" : rules[kind].fleet,
+      ])
+    )
+  );
+  const own = $derived(
+    rules === null ? [] : CHOICE_KINDS.filter((kind) => rules[kind].own)
+  );
+
+  const isKind = (id: string): id is ChoiceKind =>
+    CHOICE_KINDS.some((one) => one === id);
+  const isDecider = (id: string): id is Decider =>
+    DECIDERS.some((one) => one === id);
+
+  /** The first refused hand-over or put-back, as the roster stands it under its tile. */
+  const fault = $derived.by((): Fault | null => {
+    for (const kind of CHOICE_KINDS) {
+      const reason = refused[`decides.${kind}`];
+      if (reason) {
+        return {
+          kinds: [kind],
+          reason,
+          again: () => {
+            onretry(`decides.${kind}`);
+            return Promise.resolve(true);
+          },
+        };
+      }
+    }
+    return null;
+  });
+
+  function hand(kind: string, member: string): Promise<boolean> {
+    if (rules === null || !(isKind(kind) && isDecider(member))) {
+      return Promise.resolve(false);
+    }
+    onchange({ key: "decides", kind, value: member });
+    return Promise.resolve(true);
   }
 
-  function pickDecider(kind: ChoiceKind, decider: Decider) {
-    if (disabled || !record.whoDecides.ok) {
-      return;
+  function putBack(kind: string): Promise<boolean> {
+    if (rules === null || !isKind(kind)) {
+      return Promise.resolve(false);
     }
-    if (record.whoDecides.rules[kind].by === decider) {
-      return;
-    }
-    pressedKind = { ...pressedKind, [kind]: decider };
-    onchange({ key: "decides", kind, value: decider });
-  }
-
-  function resetKind(kind: ChoiceKind) {
-    if (disabled || !record.whoDecides.ok) {
-      return;
-    }
-    pressedKind = { ...pressedKind, [kind]: "reset" };
     onchange({ key: "decidesReset", kind });
-  }
-
-  function pickReview(value: boolean) {
-    if (disabled || value === record.reviewBeforeDone) {
-      return;
-    }
-    pressedReview = value;
-    onchange({ key: "review", value });
+    return Promise.resolve(true);
   }
 </script>
 
-<div
-  class="flex min-w-0 flex-col rounded-well border border-border-contrast bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
-  data-slot="well"
->
-  <!-- Who decides header: title, standing against fleet, and link to fleet defaults. -->
+<div class="flex min-w-0 flex-col gap-space-4">
   <div
-    class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1"
+    class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
+    style:--head-cols="minmax(0, 1fr) auto"
   >
-    <h3 class="m-0 type-label text-ink-strong">{words.waits.heading}</h3>
-    <div class="flex flex-wrap items-center gap-x-space-3 gap-y-space-1">
-      {#if record.whoDecides.ok}
-        <span class="type-meta text-ink-muted num">
-          {ownCount === 0
+    <header class="flex min-w-0 flex-col gap-space-2">
+      {#if rules !== null}
+        <p class="m-0 type-body text-pretty text-ink-muted">
+          {own.length === 0
             ? words.waits.followingFleet
-            : words.waits.projectRules(ownCount)}
-        </span>
-      {/if}
-      <a
-        class="mark-line inline-flex items-center gap-space-1 type-meta text-link-ink hover:underline"
-        href={hrefOf("fleetDecides")}
-      >
-        <span>{words.waits.fleetDefaults}</span>
-        <IconChevronRight aria-hidden="true" class="size-icon-sm flex-none" />
-      </a>
-    </div>
-  </div>
-
-  <!-- Unreadable rule file alert, or the six-kind open chip matrix. -->
-  {#if !record.whoDecides.ok}
-    <Alert class="mt-space-2" variant="destructive">
-      <IconAlert aria-hidden="true" />
-      <AlertTitle>{words.waits.unreadTitle}</AlertTitle>
-      <AlertDescription
-        ><span class="wrap-anywhere">{record.whoDecides.error}</span
-        ></AlertDescription
-      >
-      <AlertAction class="row-span-2 self-center">
-        <Button
-          {disabled}
-          icon={IconRefresh}
-          label={words.tryAgain}
-          onclick={onreread}
-          size="xs"
-          variant="outline"
-        />
-      </AlertAction>
-    </Alert>
-  {:else}
-    {@const rules = record.whoDecides.rules}
-    <div
-      class="mt-space-1 grid grid-cols-1 gap-y-space-row coarse:gap-y-space-3"
-    >
-      {#each CHOICE_KINDS as kind (kind)}
-        {@const rule = rules[kind]}
-        {@const kindLabel = words.waits.kinds[kind]}
-        {@const changeKey = keyFor(kind)}
-        {@const rowPending = pending.includes(changeKey)}
-        {@const pressed = pressedKind[kind]}
-        <div class="flex min-w-0 flex-col">
-          <div
-            class="flex min-w-0 flex-col gap-space-1 @kinds:flex-row @kinds:items-center @kinds:gap-space-2"
-            data-kind={kind}
-            data-slot="row"
-          >
-            <span class="type-label text-ink-row @kinds:w-18 @kinds:flex-none">
-              {kindLabel}
-            </span>
-
-            <OptionGroup
-              aria-label={words.waits.kindGroupLabel(kindLabel)}
-              class="min-w-0 flex-1"
-              {disabled}
-              value={[rule.by]}
+            : words.waits.projectRules(own.length)}
+          {#if own.length > 0}
+            <button
+              class="rounded-xs text-brand-ink underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid disabled:text-ink-muted can-hover:hover:not-disabled:text-brand-ink-strong"
+              disabled={!record.hubReachable}
+              onclick={() => {
+                for (const kind of own) {
+                  putBack(kind);
+                }
+              }}
+              type="button">{words.waits.putAllBack}</button
             >
-              {#each DECIDERS as decider (decider)}
-                {@const showFleet = rule.own && decider === rule.fleet}
-                {@const showSpin =
-                  rowPending &&
-                  (pressed === decider ||
-                    (pressed === undefined && rule.by === decider))}
-                <OptionGroupItem
-                  onclick={(event) => {
-                    event.preventDefault();
-                    pickDecider(kind, decider);
-                  }}
-                  value={decider}
-                >
-                  <span class="mark-line inline-flex items-center gap-space-1">
-                    <span>{words.waits.deciders[decider]}</span>
-                    {#if showFleet}
-                      <Badge data-box kind="meta"
-                        ><span>{words.waits.fleetMark}</span></Badge
-                      >
-                    {/if}
-                    {#if showSpin}
-                      <Spinner
-                        aria-label={words.saving}
-                        box="small"
-                        class="flex-none"
-                        tone="muted"
-                      />
-                    {/if}
-                  </span>
-                </OptionGroupItem>
-              {/each}
-            </OptionGroup>
-
-            {#if rule.own}
-              <Button
-                aria-label={words.waits.resetKind(kindLabel)}
-                class="self-start @kinds:self-center"
-                {disabled}
-                icon={IconReset}
-                label={words.waits.reset}
-                onclick={() => resetKind(kind)}
-                pending={rowPending && pressed === "reset"}
-                size="xs"
-                tone="quiet"
-                variant="ghost"
-              />
-            {/if}
-          </div>
-
-          <ControlRefusal
-            {disabled}
-            onretry={() => onretry(changeKey)}
-            reason={refused[changeKey]}
-          />
-        </div>
-      {/each}
-    </div>
-  {/if}
-
-  <!-- Hairline divider + Review before done (the second half of "What waits for you"). -->
-  <div
-    class="mt-space-2 flex flex-col gap-space-1 border-t border-border-hairline pt-space-2"
-  >
-    <div
-      class="flex min-w-0 flex-col gap-space-1 @setup:flex-row @setup:items-center @setup:justify-between @setup:gap-space-3"
-    >
-      <div
-        class="flex min-w-0 flex-col @wide:flex-row @wide:items-baseline @wide:gap-space-2"
-      >
-        <span class="type-label text-ink-strong"
-          >{words.waits.reviewHeading}</span
+          {/if}
+        </p>
+        <ul
+          class="m-0 flex list-none flex-wrap items-center gap-x-space-4 gap-y-space-1 p-0 type-meta text-ink-muted"
         >
-        <span class="type-meta text-ink-muted">{words.waits.reviewNote}</span>
+          <li class="mark-line flex items-center gap-x-space-1">
+            <IconGlobe aria-hidden="true" class="size-icon-sm" />
+            <span>{words.waits.legendFleet}</span>
+          </li>
+          <li class="mark-line flex min-w-0 items-center gap-x-space-1">
+            <IconFolder aria-hidden="true" class="size-icon-sm flex-none" />
+            <span class="wrap-anywhere">{words.waits.legendOwn}</span>
+          </li>
+        </ul>
+      {/if}
+      <div class="flex min-w-0 flex-col gap-space-1 pt-space-2">
+        <SwitchField
+          bind:checked={
+            () => record.reviewBeforeDone,
+            (next) => {
+              if (next !== record.reviewBeforeDone) {
+                onchange({ key: "review", value: next });
+              }
+            }
+          }
+          disabled={!record.hubReachable}
+          hint={words.waits.reviewNote}
+          id="work-path-review"
+          label={words.waits.reviewLabel}
+        />
+        <RowFault
+          again={() => onretry("review")}
+          againLabel={words.retryChange}
+          reason={refused.review}
+        />
       </div>
-
-      <OptionGroup
-        aria-label={words.waits.reviewGroupLabel}
-        class="min-w-0 max-w-full @setup:flex-none"
-        {disabled}
-        value={[record.reviewBeforeDone ? "on" : "off"]}
-      >
-        <ChoiceChip
-          label={words.waits.reviewOn}
-          onpick={() => pickReview(true)}
-          sending={reviewPending &&
-            (pressedReview === true ||
-              (pressedReview === null && record.reviewBeforeDone))}
-          value="on"
-        />
-        <ChoiceChip
-          label={words.waits.reviewOff}
-          onpick={() => pickReview(false)}
-          sending={reviewPending &&
-            (pressedReview === false ||
-              (pressedReview === null && !record.reviewBeforeDone))}
-          value="off"
-        />
-      </OptionGroup>
-    </div>
-
-    <ControlRefusal
-      {disabled}
-      onretry={() => onretry("review")}
-      reason={refused.review}
-    />
+    </header>
+    <a
+      class="mark-line inline-flex items-center gap-space-1 rounded-xs type-label text-link-ink underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid can-hover:hover:underline"
+      href={hrefOf("fleetDecides")}
+    >
+      <span>{words.waits.fleetDefaults}</span>
+      <IconChevronRight aria-hidden="true" class="size-icon-sm flex-none" />
+    </a>
   </div>
+
+  {#if !record.whoDecides.ok}
+    <RowFault
+      again={onreread}
+      details={record.whoDecides.error}
+      reason={words.waits.unreadTitle}
+    />
+  {/if}
+  <Roster
+    asking={null}
+    facts={() => null}
+    {fault}
+    {fleetRoutes}
+    bind:handing
+    {kinds}
+    {members}
+    onhand={hand}
+    onputback={putBack}
+    {own}
+    project={record.project.name}
+    {routes}
+    said={words.waits.roster}
+  />
 </div>

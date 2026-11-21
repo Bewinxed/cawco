@@ -1,35 +1,45 @@
 <script lang="ts">
   /**
-   * Stage 2 left column: every place the project lives in at once, inline
-   * Add place well (refusing scratch areas, accepting offline machines),
-   * linked Repositories (when any exist on code projects), and Large-file
-   * storage (code projects only).
+   * Stage 2's places: every folder the project lives in at once, as a
+   * section's rows (RowList, SectionRow): the machine's glyph and name, the
+   * whole path under it, where work starts and what is wrong as badges, and
+   * the place's acts in its ⋯ menu (Find folder standing out on a folder
+   * gone missing). The list's last row adds a place: pressed, it becomes
+   * the add form in its own place (the house's add row: a to-do list's,
+   * Who decides' Add a member). Under the list the linked repositories, and
+   * for a code project where its large files are kept, as two of the
+   * house's tiles each led by its glyph; the second opens its address and
+   * key under the tiles.
    */
-  import {
-    Alert,
-    AlertAction,
-    AlertDescription,
-  } from "#lib/components/ui/alert/index.js";
+  import RowList from "#lib/cawco/config/RowList.svelte";
+  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { machineIcon } from "#lib/components/ui/machine-row/index.js";
   import {
     OptionGroup,
     OptionGroupItem,
+    OptionTiles,
   } from "#lib/components/ui/option-group/index.js";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import {
-    IconAlert,
+    IconClose,
+    IconCopy,
     IconExternalLinear,
+    IconFolderGit,
+    IconFolderOpen,
     IconGitRepo,
     IconKey,
+    IconLargeFilesServer,
     IconPlus,
-    IconWarningTriangle,
+    IconServer,
+    IconTransfer,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import ControlRefusal from "./ControlRefusal.svelte";
-  import type { SessionsStartProps } from "./changes";
-  import PlaceRow from "./PlaceRow.svelte";
+  import type { PlaceAct, SessionsStartProps } from "./changes";
+  import type { ProjectPlace } from "./records";
   import { LARGE_FILE_KEY_CONNECTIONS } from "./tie-setup.fixture";
   import { howItRunsWords as words } from "./words";
 
@@ -46,36 +56,20 @@
   }: SessionsStartProps = $props();
 
   const uid = $props.id();
-  const pathInputId = `${uid}-path`;
-  const lfsAddressId = `${uid}-lfs`;
-
-  /** UI-local state for the inline Add place well. */
-  let addingPlace = $state(false);
-  let machinePick = $state<string | null>(null);
-  let pathDraft = $state("");
-  let scratchRefusal = $state<string | null>(null);
-
-  /** UI-local state for declaring a large-file storage address. */
-  let declaringLargeFiles = $state(false);
-  let lfsAddressDraft = $derived(
-    record.largeFiles.kind === "declared" ? record.largeFiles.address : ""
-  );
-  let lfsConnectionDraft = $derived(
-    record.largeFiles.kind === "declared"
-      ? record.largeFiles.connection
-      : (LARGE_FILE_KEY_CONNECTIONS[0]?.id ?? "")
-  );
 
   const disabled = $derived(!record.hubReachable);
-  const addPending = $derived(pending.includes("addPlace"));
-  const lfsPending = $derived(pending.includes("largeFiles"));
-
   const machinesById = $derived(
     new Map(record.machines.map((machine) => [machine.id, machine]))
   );
 
+  /* ── Adding a place ─────────────────────────────────────────────── */
+
+  let adding = $state(false);
+  let machinePick = $state<string | null>(null);
+  let pathDraft = $state("");
+  let scratchRefusal = $state<string | null>(null);
   const activeMachineId = $derived(
-    machinePick && record.machines.some((m) => m.id === machinePick)
+    machinePick && machinesById.has(machinePick)
       ? machinePick
       : (record.machines[0]?.id ?? null)
   );
@@ -83,30 +77,13 @@
     activeMachineId ? (machinesById.get(activeMachineId) ?? null) : null
   );
 
-  const showLargeFileEditor = $derived(
-    record.largeFiles.kind === "declared" || declaringLargeFiles
-  );
-
-  const lfsDirty = $derived.by(() => {
-    const trimmed = lfsAddressDraft.trim();
-    if (record.largeFiles.kind !== "declared") {
-      return trimmed.length > 0 && lfsConnectionDraft.length > 0;
-    }
-    return (
-      trimmed !== record.largeFiles.address ||
-      lfsConnectionDraft !== record.largeFiles.connection
-    );
-  });
-
   const SCRATCH_PATH =
     /^(?:\/(?:private\/)?tmp(?:\/|$)|\/var\/tmp(?:\/|$))|\/(?:\.cawco\/)?scratch(?:\/|$)/iu;
 
-  function submitAddPlace() {
-    if (disabled || !activeMachineId) {
-      return;
-    }
+  function submitAddPlace(event: SubmitEvent) {
+    event.preventDefault();
     const trimmed = pathDraft.trim();
-    if (!trimmed) {
+    if (disabled || !activeMachineId || !trimmed) {
       return;
     }
     if (SCRATCH_PATH.test(trimmed)) {
@@ -117,207 +94,282 @@
     onaddplace(activeMachineId, trimmed);
   }
 
-  function pickLargeFilesKind(kind: "own" | "declared") {
-    if (disabled) {
-      return;
-    }
+  function stopAdding() {
+    adding = false;
+    pathDraft = "";
+    scratchRefusal = null;
+  }
+
+  /* ── Large files ────────────────────────────────────────────────── */
+
+  /** The address being written: the pick moves to it at the press, the record once it is saved. */
+  let declaring = $state(false);
+  let lfsAddressDraft = $derived(
+    record.largeFiles.kind === "declared" ? record.largeFiles.address : ""
+  );
+  let lfsConnectionDraft = $derived(
+    record.largeFiles.kind === "declared"
+      ? record.largeFiles.connection
+      : (LARGE_FILE_KEY_CONNECTIONS[0]?.id ?? "")
+  );
+  const largeFilesShown = $derived(
+    declaring ? "declared" : record.largeFiles.kind
+  );
+  const lfsDirty = $derived(
+    record.largeFiles.kind !== "declared" ||
+      lfsAddressDraft.trim() !== record.largeFiles.address ||
+      lfsConnectionDraft !== record.largeFiles.connection
+  );
+
+  function pickLargeFiles(kind: "own" | "declared" | null) {
     if (kind === "own") {
-      declaringLargeFiles = false;
+      declaring = false;
       if (record.largeFiles.kind !== "own") {
         onchange({ key: "largeFiles", value: { kind: "own" } });
       }
-      return;
+    } else if (kind === "declared" && record.largeFiles.kind !== "declared") {
+      declaring = true;
     }
-    declaringLargeFiles = true;
   }
 
-  function saveLargeFiles() {
-    if (disabled) {
+  function saveLargeFiles(event: SubmitEvent) {
+    event.preventDefault();
+    const address = lfsAddressDraft.trim();
+    if (disabled || !(address && lfsConnectionDraft)) {
       return;
     }
-    const trimmed = lfsAddressDraft.trim();
-    if (!(trimmed && lfsConnectionDraft)) {
-      return;
-    }
+    declaring = false;
     onchange({
       key: "largeFiles",
-      value: {
-        kind: "declared",
-        address: trimmed,
-        connection: lfsConnectionDraft,
-      },
+      value: { kind: "declared", address, connection: lfsConnectionDraft },
     });
   }
+
+  /** A place's acts, its ⋯ menu's rows. */
+  const actsOf = (place: ProjectPlace) => {
+    const off = disabled || movingPlaceId === place.id;
+    const act = (kind: PlaceAct) => () => onplace(kind, place.id);
+    return [
+      {
+        label: words.places.move,
+        icon: IconTransfer,
+        disabled: off,
+        onselect: act("move"),
+      },
+      ...(place.missing
+        ? []
+        : [
+            {
+              label: words.places.findFolder,
+              icon: IconFolderOpen,
+              disabled: off,
+              onselect: act("find"),
+            },
+          ]),
+      {
+        label: words.places.copyToMachine,
+        icon: IconCopy,
+        disabled: off,
+        onselect: act("copy"),
+      },
+      ...(place.kind === "other"
+        ? [
+            {
+              label: words.places.drop,
+              icon: IconClose,
+              destructive: true,
+              disabled: off,
+              onselect: act("drop"),
+            },
+          ]
+        : []),
+    ];
+  };
 </script>
 
-<div
-  class="flex min-w-0 flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
-  data-slot="well"
->
-  <!-- Places header + Add place button. -->
-  <div class="flex items-center justify-between gap-space-2">
-    <h3 class="m-0 type-label text-ink-strong">{words.places.heading}</h3>
-    <Button
-      aria-expanded={addingPlace}
-      {disabled}
-      icon={IconPlus}
-      label={words.places.addPlace}
-      onclick={() => {
-        addingPlace = !addingPlace;
-        scratchRefusal = null;
-      }}
-      size="xs"
-      variant="outline"
+{#snippet largeFilesGlyph(kind: "own" | "declared")}
+  {#if kind === "own"}
+    <IconFolderGit aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {:else}
+    <IconLargeFilesServer
+      aria-hidden="true"
+      class="size-icon-md text-ink-muted"
     />
-  </div>
-
-  <!-- Inline expandable Add place well. -->
-  {#if addingPlace}
-    <div
-      class="mt-space-2 flex flex-col gap-space-2 rounded-sm border border-border-control bg-surface-raised p-space-3"
-      data-slot="setup-asks"
-      transition:unfold
-    >
-      <div class="flex flex-col gap-space-1">
-        <span class="type-meta font-medium text-ink-muted"
-          >{words.places.machineLabel}</span
-        >
-        <OptionGroup
-          aria-label={words.places.machineLabel}
-          {disabled}
-          value={activeMachineId ? [activeMachineId] : []}
-        >
-          {#each record.machines as machine (machine.id)}
-            {@const Glyph = machineIcon(machine.os)}
-            <OptionGroupItem
-              onclick={(event) => {
-                event.preventDefault();
-                machinePick = machine.id;
-              }}
-              value={machine.id}
-            >
-              <span class="mark-line flex min-w-0 items-center gap-x-space-2">
-                <Glyph
-                  aria-hidden="true"
-                  class={[
-                    "size-icon-md flex-none",
-                    !machine.online && "text-machine-offline",
-                  ]}
-                />
-                <span class={machine.online ? undefined : "text-ink-muted"}
-                  >{machine.name}</span
-                >
-                {#if !machine.online}
-                  <IconWarningTriangle
-                    aria-hidden="true"
-                    class="size-icon-sm flex-none text-status-attn-glyph"
-                  />
-                  <span class="type-meta text-ink-muted"
-                    >{words.places.away}</span
-                  >
-                {/if}
-              </span>
-            </OptionGroupItem>
-          {/each}
-        </OptionGroup>
-      </div>
-
-      <div class="flex flex-col gap-space-1">
-        <label class="type-meta font-medium text-ink-muted" for={pathInputId}
-          >{words.places.folderPath}</label
-        >
-        <Input
-          id={pathInputId}
-          aria-invalid={Boolean(scratchRefusal || refused.addPlace) ||
-            undefined}
-          {disabled}
-          face="mono"
-          oninput={() => {
-            if (scratchRefusal) {
-              scratchRefusal = null;
-            }
-          }}
-          placeholder={activeMachine
-            ? `${activeMachine.home}/code/${record.project.id}`
-            : `/path/to/${record.project.id}`}
-          bind:value={pathDraft}
-        />
-        {#if activeMachine && !activeMachine.online}
-          <p class="m-0 type-meta text-ink-muted">
-            {words.places.offlineNote}
-          </p>
-        {/if}
-      </div>
-
-      {#if scratchRefusal}
-        <Alert layout="row" variant="destructive">
-          <IconAlert aria-hidden="true" />
-          <AlertDescription>{scratchRefusal}</AlertDescription>
-        </Alert>
-      {/if}
-
-      <ControlRefusal
-        {disabled}
-        onretry={() => onretry("addPlace")}
-        reason={refused.addPlace}
-      />
-
-      <div class="flex flex-wrap items-center gap-space-2">
-        <Button
-          disabled={disabled ||
-            !activeMachineId ||
-            pathDraft.trim().length === 0}
-          label={words.places.add}
-          onclick={submitAddPlace}
-          pending={addPending}
-          pendingLabel={words.places.adding}
-          size="xs"
-          variant="outline"
-        />
-        <Button
-          label={words.cancel}
-          onclick={() => {
-            addingPlace = false;
-            scratchRefusal = null;
-          }}
-          size="xs"
-          variant="ghost"
-        />
-      </div>
-    </div>
   {/if}
+{/snippet}
 
-  <!-- All places listed at once. -->
-  <ul class="m-0 mt-space-1 flex list-none flex-col gap-space-row p-0">
+<section
+  aria-labelledby="{uid}-places"
+  class="flex min-w-0 flex-col gap-space-2"
+>
+  <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-places">
+    {words.places.heading}
+  </h3>
+
+  <RowList label={words.places.heading}>
     {#each record.places as place (place.id)}
-      <PlaceRow
-        {disabled}
-        machine={place.machineId
-          ? (machinesById.get(place.machineId) ?? null)
-          : null}
-        moving={movingPlaceId === place.id}
-        {onplace}
-        {place}
-      />
+      {@const machine = place.machineId
+        ? (machinesById.get(place.machineId) ?? null)
+        : null}
+      {@const offline = machine !== null && !machine.online}
+      {@const moving = movingPlaceId === place.id}
+      <SectionRow
+        actions={place.kind === "hub" ? [] : actsOf(place)}
+        icon={machine ? machineIcon(machine.os) : IconServer}
+        meta={place.path}
+        name={machine ? machine.name : words.places.hub}
+      >
+        {#snippet badge()}
+          {#if place.missing}
+            <Badge variant="fail"><span>{words.places.missing}</span></Badge>
+          {:else if moving}
+            <Badge variant="live"><span>{words.places.moving}</span></Badge>
+          {:else if offline}
+            <Badge variant="attn"><span>{words.places.away}</span></Badge>
+          {/if}
+          {#if place.kind === "start"}
+            <Badge kind="meta"><span>{words.places.startsHere}</span></Badge>
+          {/if}
+        {/snippet}
+        {#snippet trailing()}
+          {#if place.missing}
+            <Button
+              {disabled}
+              icon={IconFolderOpen}
+              label={words.places.findFolder}
+              onclick={() => onplace("find", place.id)}
+              size="xs"
+              variant="outline"
+            />
+          {/if}
+        {/snippet}
+      </SectionRow>
     {/each}
-  </ul>
 
-  <!-- Repositories (code projects with at least one link only). -->
+    <li class="flex min-w-0 flex-col" data-slot="item">
+      {#if adding}
+        <form
+          aria-label={words.places.addPlace}
+          class="flex min-w-0 flex-col gap-space-3 rounded-sm px-space-2 py-space-2"
+          data-slot="add"
+          onsubmit={submitAddPlace}
+          transition:unfold
+        >
+          <OptionGroup
+            aria-label={words.places.machineLabel}
+            bind:value={
+              () => (activeMachineId ? [activeMachineId] : []),
+              (next) => {
+                machinePick = next[0] ?? null;
+              }
+            }
+            {disabled}
+          >
+            {#each record.machines as machine (machine.id)}
+              {@const Glyph = machineIcon(machine.os)}
+              <OptionGroupItem value={machine.id}>
+                <span class="mark-line flex min-w-0 items-center gap-x-space-2">
+                  <Glyph aria-hidden="true" class="size-icon-md flex-none" />
+                  <span>{machine.name}</span>
+                  {#if !machine.online}
+                    <Badge data-box variant="attn"
+                      ><span>{words.places.away}</span></Badge
+                    >
+                  {/if}
+                </span>
+              </OptionGroupItem>
+            {/each}
+          </OptionGroup>
+          <div class="flex min-w-0 flex-col gap-space-1">
+            <label class="type-meta font-medium text-ink-muted" for="{uid}-path"
+              >{words.places.folderPath}</label
+            >
+            <Input
+              id="{uid}-path"
+              aria-invalid={Boolean(scratchRefusal || refused.addPlace) ||
+                undefined}
+              autocomplete="off"
+              {disabled}
+              face="mono"
+              oninput={() => {
+                scratchRefusal = null;
+              }}
+              placeholder={activeMachine
+                ? `${activeMachine.home}/code/${record.project.id}`
+                : `/path/to/${record.project.id}`}
+              spellcheck="false"
+              bind:value={pathDraft}
+            />
+            {#if activeMachine && !activeMachine.online && words.places.offlineNote}
+              <p class="m-0 type-meta text-pretty text-ink-muted">
+                {words.places.offlineNote}
+              </p>
+            {/if}
+          </div>
+          <RowFault reason={scratchRefusal} />
+          <RowFault
+            again={() => onretry("addPlace")}
+            reason={refused.addPlace}
+          />
+          <div class="flex flex-wrap items-center gap-space-2">
+            <Button
+              disabled={disabled ||
+                !activeMachineId ||
+                pathDraft.trim().length === 0}
+              label={words.places.add}
+              pending={pending.includes("addPlace")}
+              pendingLabel={words.places.adding}
+              size="sm"
+              type="submit"
+              variant="outline"
+            />
+            <Button
+              label={words.cancel}
+              onclick={stopAdding}
+              size="sm"
+              variant="ghost"
+            />
+          </div>
+        </form>
+      {:else}
+        <button
+          class="group/add mark-line flex min-h-c-row-h min-w-0 items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start transition-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid disabled:text-ink-muted"
+          data-add-place
+          data-slot="row"
+          {disabled}
+          onclick={() => {
+            adding = true;
+          }}
+          type="button"
+        >
+          <span
+            class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm border border-dashed border-border-control text-ink-muted"
+            data-box
+          >
+            <IconPlus aria-hidden="true" class="size-icon-md" />
+          </span>
+          <span
+            class="type-label text-link-ink group-disabled/add:text-ink-muted"
+            >{words.places.addPlace}</span
+          >
+        </button>
+      {/if}
+    </li>
+  </RowList>
+
   {#if record.holdsCode && record.repos.length > 0}
     <div
-      class="mt-space-2 flex flex-wrap items-center gap-x-space-3 gap-y-space-1 border-t border-border-hairline pt-space-2"
+      class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-1 pt-space-1"
       data-slot="repo"
     >
-      <span class="type-meta font-medium text-ink-muted"
-        >{words.places.repositories}</span
-      >
+      <span class="type-meta text-ink-muted">{words.places.repositories}</span>
       <ul
         class="m-0 flex list-none flex-wrap items-center gap-x-space-3 gap-y-space-1 p-0"
       >
         {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
           <li>
             <a
-              class="mark-line inline-flex items-center gap-space-1 type-code text-link-ink hover:underline"
+              class="mark-line inline-flex items-center gap-space-1 rounded-xs type-code text-link-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid can-hover:hover:underline"
               href={repo.url}
               rel="noreferrer"
               target="_blank"
@@ -337,160 +389,133 @@
       </ul>
     </div>
   {/if}
+</section>
 
-  <!-- Large-file storage (code projects only). -->
-  {#if record.holdsCode}
-    <div
-      class="mt-space-2 flex flex-col gap-space-2 border-t border-border-hairline pt-space-2"
-    >
-      <div class="flex flex-wrap items-center justify-between gap-space-2">
-        <span class="mark-line flex items-center gap-space-2">
-          <span class="type-label text-ink-strong"
-            >{words.places.largeFilesHeading}</span
-          >
-          {#if lfsPending}
-            <Spinner aria-label={words.saving} box="small" tone="muted" />
-          {/if}
-        </span>
+{#if record.holdsCode}
+  <section
+    aria-labelledby="{uid}-lfs"
+    class="flex min-w-0 flex-col gap-space-2"
+  >
+    <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-lfs">
+      {words.places.largeFilesHeading}
+    </h3>
+    <OptionTiles
+      bind:value={() => largeFilesShown, pickLargeFiles}
+      cols={2}
+      {disabled}
+      glyph={largeFilesGlyph}
+      label={words.places.largeFilesGroupLabel}
+      options={[
+        {
+          id: "own",
+          name: words.places.largeFilesOwn.name,
+          note: words.places.largeFilesOwn.note,
+        },
+        {
+          id: "declared",
+          name: words.places.largeFilesDeclared.name,
+          note: words.places.largeFilesDeclared.note,
+        },
+      ]}
+    />
+    <RowFault
+      again={() => onretry("largeFiles")}
+      againLabel={words.retryChange}
+      reason={refused.largeFiles}
+    />
 
-        <OptionGroup
-          aria-label={words.places.largeFilesGroupLabel}
-          {disabled}
-          value={[record.largeFiles.kind]}
-        >
-          <OptionGroupItem
-            onclick={(event) => {
-              event.preventDefault();
-              pickLargeFilesKind("own");
-            }}
-            value="own"
+    {#if largeFilesShown === "declared"}
+      <form
+        aria-label={words.places.largeFilesDeclared.name}
+        class="flex min-w-0 flex-col gap-space-3 pt-space-1"
+        onsubmit={saveLargeFiles}
+        transition:unfold
+      >
+        <div class="flex min-w-0 flex-col gap-space-1">
+          <label
+            class="type-meta font-medium text-ink-muted"
+            for="{uid}-lfs-url">{words.places.largeFilesAddress}</label
           >
-            {words.places.largeFilesOwn}
-          </OptionGroupItem>
-          <OptionGroupItem
-            onclick={(event) => {
-              event.preventDefault();
-              pickLargeFilesKind("declared");
-            }}
-            value="declared"
+          <Input
+            id="{uid}-lfs-url"
+            autocomplete="off"
+            {disabled}
+            face="mono"
+            placeholder={words.places.largeFilesAddressPlaceholder}
+            spellcheck="false"
+            type="url"
+            bind:value={lfsAddressDraft}
+          />
+        </div>
+        <div class="flex min-w-0 flex-col gap-space-1">
+          <span class="type-meta font-medium text-ink-muted"
+            >{words.places.largeFilesKey}</span
           >
-            {words.places.largeFilesDeclared}
-          </OptionGroupItem>
-        </OptionGroup>
-      </div>
-
-      {#if showLargeFileEditor}
-        <div
-          class="flex flex-col gap-space-2 rounded-sm border border-border-control bg-surface-raised p-space-3"
-          transition:unfold
-        >
-          <div class="flex flex-col gap-space-1">
-            <label
-              class="type-meta font-medium text-ink-muted"
-              for={lfsAddressId}>{words.places.largeFilesAddress}</label
-            >
-            <Input
-              id={lfsAddressId}
-              aria-invalid={Boolean(refused.largeFiles) || undefined}
-              {disabled}
-              face="mono"
-              placeholder={words.places.largeFilesAddressPlaceholder}
-              type="url"
-              bind:value={lfsAddressDraft}
+          {#if LARGE_FILE_KEY_CONNECTIONS.length === 0}
+            <RowFault
+              goTo={{
+                href: hrefOf("connections"),
+                label: words.tasks.openConnections,
+              }}
+              reason={words.places.largeFilesNoKey}
             />
-          </div>
-
-          <div class="flex flex-col gap-space-1">
-            <span class="type-meta font-medium text-ink-muted"
-              >{words.places.largeFilesKey}</span
+          {:else}
+            <OptionGroup
+              aria-label={words.places.largeFilesKey}
+              bind:value={
+                () => (lfsConnectionDraft ? [lfsConnectionDraft] : []),
+                (next) => {
+                  lfsConnectionDraft = next[0] ?? "";
+                }
+              }
+              {disabled}
             >
-            {#if LARGE_FILE_KEY_CONNECTIONS.length === 0}
-              <Alert layout="row" variant="default">
-                <IconKey aria-hidden="true" />
-                <AlertDescription
-                  >{words.places.largeFilesNoKey}</AlertDescription
-                >
-                <AlertAction>
-                  <Button
-                    href={hrefOf("connections")}
-                    label={words.tasks.openConnections}
-                    size="xs"
-                    variant="outline"
-                  />
-                </AlertAction>
-              </Alert>
-            {:else}
-              <OptionGroup
-                aria-label={words.places.largeFilesKey}
-                {disabled}
-                value={lfsConnectionDraft ? [lfsConnectionDraft] : []}
-              >
-                {#each LARGE_FILE_KEY_CONNECTIONS as conn (conn.id)}
-                  <OptionGroupItem
-                    onclick={(event) => {
-                      event.preventDefault();
-                      lfsConnectionDraft = conn.id;
-                    }}
-                    value={conn.id}
+              {#each LARGE_FILE_KEY_CONNECTIONS as conn (conn.id)}
+                <OptionGroupItem value={conn.id}>
+                  <span
+                    class="mark-line flex min-w-0 items-center gap-x-space-2"
                   >
-                    <span
-                      class="mark-line flex min-w-0 items-center gap-x-space-2"
-                    >
-                      <IconKey
-                        aria-hidden="true"
-                        class="size-icon-sm flex-none text-ink-muted"
-                      />
-                      <span>{conn.name}</span>
-                    </span>
-                  </OptionGroupItem>
-                {/each}
-              </OptionGroup>
-            {/if}
-          </div>
-
-          <p class="m-0 type-meta text-ink-muted">
-            {words.places.largeFilesOverrideNote}
-          </p>
-
-          {#if lfsDirty || record.largeFiles.kind !== "declared"}
-            <div class="flex flex-wrap items-center gap-space-2">
-              <Button
-                disabled={disabled ||
-                  lfsAddressDraft.trim().length === 0 ||
-                  lfsConnectionDraft.length === 0}
-                label={words.save}
-                onclick={saveLargeFiles}
-                pending={lfsPending}
-                pendingLabel={words.saving}
-                size="xs"
-                variant="outline"
-              />
-              <Button
-                label={words.cancel}
-                onclick={() => {
-                  declaringLargeFiles = false;
-                  lfsAddressDraft =
-                    record.largeFiles.kind === "declared"
-                      ? record.largeFiles.address
-                      : "";
-                  lfsConnectionDraft =
-                    record.largeFiles.kind === "declared"
-                      ? record.largeFiles.connection
-                      : (LARGE_FILE_KEY_CONNECTIONS[0]?.id ?? "");
-                }}
-                size="xs"
-                variant="ghost"
-              />
-            </div>
+                    <IconKey
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none text-ink-muted"
+                    />
+                    <span>{conn.name}</span>
+                  </span>
+                </OptionGroupItem>
+              {/each}
+            </OptionGroup>
           {/if}
         </div>
-      {/if}
-
-      <ControlRefusal
-        {disabled}
-        onretry={() => onretry("largeFiles")}
-        reason={refused.largeFiles}
-      />
-    </div>
-  {/if}
-</div>
+        {#if lfsDirty || declaring}
+          <div class="flex flex-wrap items-center gap-space-2">
+            <Button
+              disabled={disabled ||
+                lfsAddressDraft.trim().length === 0 ||
+                lfsConnectionDraft.length === 0}
+              label={words.save}
+              size="sm"
+              type="submit"
+              variant="outline"
+            />
+            <Button
+              label={words.cancel}
+              onclick={() => {
+                declaring = false;
+                lfsAddressDraft =
+                  record.largeFiles.kind === "declared"
+                    ? record.largeFiles.address
+                    : "";
+                lfsConnectionDraft =
+                  record.largeFiles.kind === "declared"
+                    ? record.largeFiles.connection
+                    : (LARGE_FILE_KEY_CONNECTIONS[0]?.id ?? "");
+              }}
+              size="sm"
+              variant="ghost"
+            />
+          </div>
+        {/if}
+      </form>
+    {/if}
+  </section>
+{/if}

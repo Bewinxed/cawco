@@ -80,7 +80,7 @@
   <header
     class="flex min-w-0 flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1"
   >
-    <h2 id={headingId} class="m-0 type-label text-ink-strong">
+    <h2 id={headingId} class="m-0 type-body font-medium text-ink-strong">
       {title}{#if stateWords}<span class="sr-only"> — {stateWords}</span>{/if}
     </h2>
     {#if meta}
@@ -100,7 +100,7 @@
   </div>
 
   <!-- Row 2, Col 2: stage body aligned to the title's leading edge. -->
-  <div class={["min-w-0 pt-space-1", !last && "pb-space-4"]}>
+  <div class={["min-w-0 pt-space-3", !last && "pb-space-7"]}>
     {@render children()}
     <span class="sr-only" aria-live="polite" role="status">{announcement}</span>
   </div>

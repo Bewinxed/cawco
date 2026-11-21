@@ -11,6 +11,7 @@
   import type { Snippet } from "svelte";
   import type { Facts } from "./decides.svelte";
   import MemberFace from "./MemberFace.svelte";
+  import { ROSTER_WORDS, type RosterWords } from "./roster-words";
 
   let {
     member,
@@ -21,6 +22,7 @@
     parked = false,
     card = $bindable(),
     pencil,
+    said = ROSTER_WORDS,
   }: {
     /** What it runs on, or why it can't be reached; null for members with none. */
     facts: Facts | null;
@@ -37,6 +39,8 @@
     card?: HTMLElement | null;
     /** The pencil that opens its settings; none for members with none. */
     pencil?: Snippet;
+    /** Its words: Who decides' unless the surface drawing it says its own. */
+    said?: RosterWords;
   } = $props();
 
   const factsLine = $derived(
@@ -96,7 +100,7 @@
       >
         {project === null
           ? decidesWords.holdsNothingFleet
-          : decidesWords.holdsNothing(project)}
+          : said.holdsNothing(project)}
       </p>
     {/if}
   </div>

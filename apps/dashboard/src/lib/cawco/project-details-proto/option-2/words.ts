@@ -1,202 +1,236 @@
 /**
- * Every user-facing string for Option 2 ("How it runs"): calm ledger voice,
- * canonical terms (project, place, task, stage, connection, account), and
- * concise implications under ten words each.
+ * Every word the work path says, written from the person's side (Gemini
+ * Neon's one run, 2026-11-21): one label and at most one short line each.
+ * A line that told the person nothing they act on was cut, not reworded.
  */
 
+import type { RosterWords } from "#lib/cawco/decides/roster-words.js";
 import type { StageState } from "./changes";
 import type { ChoiceKind, Decider, Landing, TaskHome } from "./records";
 
 export const howItRunsWords = {
-  viewLabel: "How this project runs",
+  /** The view's tab in the project's views strip. */
+  tab: "Settings",
+  viewLabel: "Project settings",
   cancel: "Cancel",
   save: "Save",
-  saving: "Saving…",
-  tryAgain: "Try again",
+  tryAgain: "Retry",
+  /** A refused change's way on, beside the hub's words: the control is back where it was. */
+  retryChange: "Retry change",
 
-  /** Hub out-of-reach banner shown once at the top of the view. */
+  /** The hub out of reach: what shows was read `age` ago, and nothing can change. */
   hubOutOfReach: (age: string) =>
-    `As of ${age} — hub out of reach. Changes cannot be sent until it returns.`,
+    `Server is offline, leaving settings from ${age} read-only.`,
 
   stages: {
-    tasks: "Tasks enter",
-    sessions: "Sessions start",
-    waits: "What waits for you",
-    lands: "Work lands",
+    tasks: "Where tasks live",
+    sessions: "Where agents run",
+    waits: "What needs you",
+    lands: "Where code goes",
   },
 
   stageState: {
     settled: "",
-    busy: "In progress",
-    away: "Needs attention",
-    fault: "Blocked",
+    busy: "Updating",
+    away: "Offline",
+    fault: "Needs fixing",
   } satisfies Record<StageState, string>,
 
-  readFailedTitle: (stageTitle: string) => `Could not read ${stageTitle}`,
+  readFailedTitle: (stageTitle: string) => `Could not load ${stageTitle}`,
   stageLoading: (stageTitle: string) => `Loading ${stageTitle}`,
 
   tasks: {
-    groupLabel: "Where tasks are kept",
+    groupLabel: "Where tasks live",
     homes: {
       files: {
-        name: "CawCo's files",
-        note: "Project files; returning keeps issue links.",
+        name: "Local files",
+        note: "Tasks stay local, keeping any past issue links.",
       },
       github: {
         name: "GitHub Issues",
-        note: "One-way repo mirror; GitHub wins; un-vouched wait.",
+        note: "Both sides sync, GitHub wins, and outside issues wait.",
       },
       linear: {
         name: "Linear",
-        note: "One-way team mirror; Linear wins; un-vouched wait.",
+        note: "Both sides sync, Linear wins, and outside issues wait.",
       },
     } satisfies Record<TaskHome, { name: string; note: string }>,
     syncNow: "Sync now",
     syncing: "Syncing…",
-    firstSync: "First sync running",
-    inStep: (age: string) => `In step · ${age}`,
-    syncRefused: (age: string) => `Sync refused · ${age}`,
-    linkedCount: (count: number) => `${count.toLocaleString()} linked`,
-    stagesVia: "Stages via",
-    stagesNone: "Stages:",
-    changeTie: "Change tie",
+    firstSync: "Running first sync…",
+    inStep: (age: string) => `Synced ${age}`,
+    syncRefused: (age: string) => `Sync failed ${age}`,
+    linkedCount: (count: number) => `${count.toLocaleString()} synced`,
+    stagesVia: "Columns from",
+    stagesNone: "Columns:",
+    changeTie: "Change sync",
     setupTitle: (home: "github" | "linear") =>
-      home === "github" ? "Tie to GitHub Issues" : "Tie to Linear",
+      home === "github" ? "Sync with GitHub Issues" : "Sync with Linear",
     setupFieldsNote:
-      "Title, body, labels, stage and comments sync; order, links, attempts and checks stay in CawCo.",
-    connectionLabel: "Connection",
+      "Only new items sync, sharing details, labels, and comments.",
+    connectionLabel: "Sign-in",
     noConnection: (home: "github" | "linear") =>
       home === "github"
-        ? "Add a GitHub App or token connection to mirror issues."
-        : "Add a Linear app or API key connection to mirror issues.",
-    openConnections: "Configure → Connections",
+        ? "Add a GitHub App or token to sync."
+        : "Add a Linear app or API key to sync.",
+    openConnections: "Manage sign-ins",
     repoLabel: "Repository",
     teamLabel: "Team",
-    projectRepoTag: "Project repo",
-    filterRepos: "Filter repositories…",
-    filterTeams: "Filter teams…",
-    noMatches: "No matching target.",
-    githubProjectLabel: "GitHub Project for stages (optional)",
-    githubProjectNone: "None — open and closed only",
-    stageMapLabel: "Map stages to Status",
-    leaveAlone: "Leave alone",
-    stageStatusLabel: (stage: string) => `${stage} status`,
-    saveTie: "Save tie",
-    savingTie: "Saving tie…",
+    projectRepoTag: "This project",
+    filterRepos: "Search repositories",
+    filterTeams: "Search teams",
+    noMatches: "No matches",
+    githubProjectLabel: "GitHub Project for columns",
+    githubProjectNone: "Open and closed only",
+    stageMapLabel: "Match columns to Status",
+    leaveAlone: "Leave unchanged",
+    stageStatusLabel: (stage: string) => `GitHub Status for ${stage}`,
+    saveTie: "Start syncing",
   },
 
   places: {
-    heading: "Places",
-    addPlace: "Add place",
-    addHeading: "Add a place",
+    heading: "Folders",
+    addPlace: "Add folder",
     machineLabel: "Machine",
-    folderPath: "Folder path",
+    folderPath: "Path",
     add: "Add",
     adding: "Adding…",
-    offlineNote:
-      "Machine is away — accepted now, repository read once it returns.",
+    offlineNote: "Adds now while offline, then checks when back online.",
     scratchRefused:
-      "A folder in a machine's scratch area is removed when its session ends. Nothing was added; choose another path.",
-    startsHere: "Starts here",
-    hub: "Hub",
-    hubStore: "Hub store",
-    missing: "Missing",
-    missingTip: "Folder not found at this path; nothing can start here.",
-    away: "Away",
-    awayTip: "Machine is offline; starts wait until it returns.",
-    moving: "Moving",
-    movingTip: "Move in progress for this place.",
+      "Not added because temporary folders get deleted after runs.",
+    startsHere: "Runs here",
+    hub: "CawCo server",
+    missing: "Not found",
+    missingTip: "Folder not found here, so agents cannot start.",
+    away: "Offline",
+    awayTip: "Machine is offline, so agents wait until it reconnects.",
+    moving: "Moving…",
     move: "Move",
-    findFolder: "Find folder",
-    copyToMachine: "Copy to machine",
-    drop: "Drop",
+    findFolder: "Change path",
+    copyToMachine: "Copy elsewhere",
+    drop: "Stop using",
     repositories: "Repositories",
-    largeFilesHeading: "Large files",
-    largeFilesGroupLabel: "Large-file storage",
-    largeFilesOwn: "Each repository's own",
-    largeFilesDeclared: "Declared address",
-    largeFilesAddress: "Storage address",
+    largeFilesHeading: "Git LFS",
+    largeFilesGroupLabel: "Git LFS storage",
+    largeFilesOwn: {
+      name: "Repository default",
+      note: "Uses each repo's Git host for large files.",
+    },
+    largeFilesDeclared: {
+      name: "Custom server",
+      note: "Overrides every repo to use one server you set.",
+    },
+    largeFilesAddress: "Server URL",
     largeFilesAddressPlaceholder: "https://lfs.example.com/project",
-    largeFilesKey: "Key connection",
-    largeFilesNoKey: "Add a connection holding a key to sign in there.",
-    largeFilesOverrideNote:
-      "Overrides each repository's own large-file configuration.",
+    largeFilesKey: "Sign-in key",
+    largeFilesNoKey: "Add a saved key to sign in here.",
   },
 
   account: {
     heading: "Account",
-    groupLabel: "Project account",
-    fleetRouting: "Fleet routing",
+    groupLabel: "Subscription account",
+    fleetRouting: "Any available",
     signedOut: "Signed out",
-    scopeNamed: "Sessions start here with connectors; Caw's chat moves.",
-    scopeFleet: "Fleet routing picks an account for each session.",
+    /** What naming an account does, under the chips; leaving it to any available says nothing more. */
+    scopeNamed: "Caw moves here, and agents use its connected tools.",
     signedOutAlert: (name: string) =>
-      `Nothing in this project can start until ${name} signs in.`,
-    openAccounts: "Configure → Accounts",
-    atLimitHeading: "At its limit",
-    atLimitGroupLabel: "At account limit",
+      `${name} is signed out, so nothing can start.`,
+    openAccounts: "Manage accounts",
+    atLimitHeading: "When usage runs out",
+    atLimitGroupLabel: "When usage runs out",
     atLimitWait: {
-      name: "Wait for reset",
-      note: "Keeps this account's connectors.",
+      name: "Pause until reset",
+      note: "Agents wait here and keep this account's tools.",
     },
     atLimitMove: {
-      name: "Move to an account with room",
-      note: "Loses this account's connectors.",
+      name: "Use another account",
+      note: "Agents continue elsewhere without this account's tools.",
     },
   },
 
   waits: {
-    heading: "Who decides",
-    followingFleet: "Following fleet",
-    projectRules: (count: number) =>
-      count === 1 ? "1 project rule" : `${count} project rules`,
-    fleetDefaults: "Fleet defaults",
-    unreadTitle: "Every choice comes to you until this reads",
-    fleetMark: "Fleet",
-    reset: "Reset",
-    resetKind: (kind: string) => `Reset ${kind} to fleet default`,
-    kindGroupLabel: (kind: string) => `Who decides ${kind}`,
+    heading: "Who makes the call",
+    followingFleet: "Using defaults",
+    projectRules: (count: number) => `${count} custom`,
+    putAllBack: "Reset to defaults",
+    legendFleet: "Default",
+    legendOwn: "Custom here",
+    fleetDefaults: "Manage defaults",
+    unreadTitle: "Rules failed to load, so agents ask you everything.",
+    members: {
+      you: { name: "You", job: "Waits for your answer before moving on." },
+      caw: { name: "Caw", job: "Answers as project lead in its thread." },
+      advisor: {
+        name: "Advisor",
+        job: "Checks your code, docs, and brief, then answers.",
+      },
+      practice: {
+        name: "Standard practice",
+        job: "Follows industry norms and cites a source.",
+      },
+    } satisfies Record<Decider, { name: string; job: string }>,
     kinds: {
-      look: "Look",
-      behaviour: "Behaviour",
-      scope: "Scope",
-      approach: "Approach",
-      rules: "Rules",
-      tools: "Tools",
-    } satisfies Record<ChoiceKind, string>,
-    deciders: {
-      you: "You",
-      caw: "Caw",
-      advisor: "Advisor",
-      practice: "Common practice",
-    } satisfies Record<Decider, string>,
-    reviewHeading: "Review before done",
-    reviewGroupLabel: "Review before done",
-    reviewOn: "Only you move to done",
-    reviewOff: "Agents mark done",
-    reviewNote: "Switching updates the stages tasks move through.",
+      look: {
+        name: "Design and copy",
+        example: "Covers layout, colors, motion, wording, and screen labels.",
+      },
+      behaviour: {
+        name: "Behavior",
+        example: "Covers user flows, notifications, and how agents act.",
+      },
+      scope: {
+        name: "Scope changes",
+        example: "Covers what to cut or save for later.",
+      },
+      approach: {
+        name: "Implementation",
+        example: "Covers picking how to build among valid options.",
+      },
+      rules: {
+        name: "Rule exceptions",
+        example: "Covers disabled lint, skipped checks, and spec deviations.",
+      },
+      tools: {
+        name: "Libraries and style",
+        example: "Covers packages, versions, config values, and code names.",
+      },
+    } satisfies Record<ChoiceKind, { name: string; example: string }>,
+    /** The roster's own parts (its tiles, their hand-over, an empty card), in this view's words. */
+    roster: {
+      handOver: "Reassign",
+      handOverKind: (kind: string) => `Reassign ${kind}`,
+      handTo: (kind: string) => `Assign future ${kind.toLowerCase()} to`,
+      fleetsChoice: "Default",
+      followsFleetTip: (subject: string) =>
+        `Uses your default, assigned to ${subject}.`,
+      ownTip: (_project: string, subject: string) =>
+        `Custom here, overriding your default of ${subject}.`,
+      giveBack: "Reset to default",
+      holdsNothing: (_project: string) => "Nothing assigned",
+    } satisfies RosterWords,
+    reviewLabel: "Require your review",
+    reviewNote: "Only you mark tasks done, using a review column.",
   },
 
   lands: {
-    groupLabel: "Where finished work lands",
+    groupLabel: "Where code goes",
     options: {
       default: {
         name: "Default branch",
-        note: "Commits land on default branch.",
+        note: "Pushes commits straight to your default branch.",
       },
       branch: {
-        name: "Own branch",
-        note: "Pushes a task branch to remote.",
+        name: "Separate branch",
+        note: "Pushes a task branch, leaving your default untouched.",
       },
       pr: {
-        name: "Branch + pull request",
-        note: "Opens a pull request per task.",
+        name: "Pull request",
+        note: "Pushes a task branch and opens a pull request.",
       },
       nowhere: {
-        name: "Nowhere",
-        note: "No push; outputs are the work.",
+        name: "Files only",
+        note: "Saves output files without committing or pushing anything.",
       },
     } satisfies Record<Landing, { name: string; note: string }>,
-    footer: "Tasks can override. Verified by the project's CI/CD.",
   },
 };
