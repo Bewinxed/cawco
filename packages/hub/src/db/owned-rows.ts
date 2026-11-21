@@ -508,7 +508,7 @@ export const KNOWN_UNOWNED: readonly {
   {
     column: routineRuns.instanceId,
     reason:
-      "A conversation run's session: the run's record outlives the session.",
+      "The session that did a routine's run: the run's record outlives the session.",
   },
   {
     column: routines.createdBy,

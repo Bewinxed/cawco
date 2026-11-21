@@ -56921,7 +56921,7 @@
         ]
       },
       "RoutineRunView": {
-        "description": "One run, as the hub's routes and tools answer it (times in ms), with what\nactually ran it: a delegate run's work item, or a conversation run's\nsession.",
+        "description": "One run, as the hub's routes and tools answer it (times in ms), with what\nactually ran it: the session that did it, and a delegate run's work item.",
         "type": "object",
         "properties": {
           "attempt": {
@@ -56934,7 +56934,7 @@
             "type": "string"
           },
           "instanceId": {
-            "description": "A conversation run's session, once its harness read the run; null for a delegate run.",
+            "description": "The session that did the run, where it is read whole (`/session/<id>`):\na delegate, orchestrator, curator or trim run's work item's session, from\nits start; a conversation run's, once its harness read the run. Null for\na run no session took (skipped, a command check's, one that ended before\nany began).",
             "type": "string"
           },
           "outcome": {

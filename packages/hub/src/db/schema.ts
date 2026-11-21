@@ -6349,9 +6349,11 @@ export const routineRuns = sqliteTable(
     state: storedEnum(z.enum(ROUTINE_RUN_STATES))("state").notNull(),
     workItemId: text("work_item_id"),
     /**
-     * A conversation run's session, once its harness read the run's wake:
-     * the turn that took it ends the run, with its `routine_result` or
-     * failed.
+     * The session that did the run: a work item run's (delegate,
+     * orchestrator, curator, trim) its item's session, from its start; a
+     * conversation run's once its harness read the run's wake, the turn that
+     * took it then ending the run, with its `routine_result` or failed. A
+     * conversation run is the one with no work item.
      */
     instanceId: sessionColumn("instance_id"),
     outcome: storedEnum(z.enum(ROUTINE_OUTCOMES))("outcome"),

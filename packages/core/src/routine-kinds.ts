@@ -122,14 +122,19 @@ export interface ConditionView {
 
 /**
  * One run, as the hub's routes and tools answer it (times in ms), with what
- * actually ran it: a delegate run's work item, or a conversation run's
- * session.
+ * actually ran it: the session that did it, and a delegate run's work item.
  */
 export interface RoutineRunView {
   attempt: number;
   endedAt: number | null;
   id: string;
-  /** A conversation run's session, once its harness read the run; null for a delegate run. */
+  /**
+   * The session that did the run, where it is read whole (`/session/<id>`):
+   * a delegate, orchestrator, curator or trim run's work item's session, from
+   * its start; a conversation run's, once its harness read the run. Null for
+   * a run no session took (skipped, a command check's, one that ended before
+   * any began).
+   */
   instanceId: string | null;
   outcome: RoutineOutcome | null;
   output: string | null;

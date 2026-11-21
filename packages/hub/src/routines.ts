@@ -1532,7 +1532,11 @@ export const createRoutines = ({
     if (begun instanceof ElysiaStatus) {
       return begun;
     }
-    store.setRun(run.id, { state: "running", workItemId: begun.item.id });
+    store.setRun(run.id, {
+      state: "running",
+      workItemId: begun.item.id,
+      instanceId: begun.item.instanceId,
+    });
     running.add(begun.item.instanceId);
     console.log(
       `[routines] ${routine.name} (${run.slot}, attempt ${run.attempt}): ${kind.noted}work item ${begun.item.id}`
