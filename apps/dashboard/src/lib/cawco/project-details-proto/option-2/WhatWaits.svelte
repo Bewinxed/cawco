@@ -1,3 +1,13 @@
+<script lang="ts" module>
+  /**
+   * The deciders' four cards balanced on their lines, inside a
+   * `@container/deciders`: four across where four fit, else two by two,
+   * never one alone on a line.
+   */
+  export const DECIDERS_COLS =
+    "grid-cols-1 @min-roster-two/deciders:@max-roster-four/deciders:grid-cols-2 @min-roster-four/deciders:grid-cols-4";
+</script>
+
 <script lang="ts">
   /**
    * Stage 3 ("What waits for you"): the project's Who decides as its own
@@ -132,7 +142,7 @@
   }
 </script>
 
-<div class="flex min-w-0 flex-col gap-space-4">
+<div class="@container/deciders flex min-w-0 flex-col gap-space-4">
   <div
     class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
     style:--head-cols="minmax(0, 1fr) auto"
@@ -220,6 +230,7 @@
     {own}
     project={record.project.name}
     {routes}
+    cols={DECIDERS_COLS}
     said={words.waits.roster}
   />
 </div>

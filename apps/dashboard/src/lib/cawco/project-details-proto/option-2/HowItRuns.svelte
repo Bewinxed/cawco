@@ -28,7 +28,7 @@
   import RailStage from "./RailStage.svelte";
   import SessionsStart from "./SessionsStart.svelte";
   import TasksEnter from "./TasksEnter.svelte";
-  import WhatWaits from "./WhatWaits.svelte";
+  import WhatWaits, { DECIDERS_COLS } from "./WhatWaits.svelte";
   import WorkLands from "./WorkLands.svelte";
   import { howItRunsWords as words } from "./words";
 
@@ -146,11 +146,13 @@
         </div>
       </div>
     {:else if stage === "waits"}
-      <!-- The roster's four cards, as many to a line as fit. -->
-      <div class="grid grid-cols-fit-c-roster-card-min gap-space-3">
-        {#each [0, 1, 2, 3] as at (at)}
-          <Skeleton height="board" radius="card" />
-        {/each}
+      <!-- The deciders' four cards, on the lines they stand on once read. -->
+      <div class="@container/deciders">
+        <div class={["grid gap-space-3", DECIDERS_COLS]}>
+          {#each [0, 1, 2, 3] as at (at)}
+            <Skeleton height="board" radius="card" />
+          {/each}
+        </div>
       </div>
     {:else}
       <div
