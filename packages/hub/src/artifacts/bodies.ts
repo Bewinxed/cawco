@@ -22,6 +22,7 @@ import {
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
   STORY_NAME,
+  STORY_REF,
 } from "@cawco/core/stage";
 import { t } from "elysia";
 import { PAGE_LIMIT } from "../decision-page";
@@ -64,6 +65,8 @@ const operation = t.Union([
 ]);
 
 const storyName = t.String({ pattern: STORY_NAME.source });
+/** A story a write or a read names in any states file of the design graph: `Story`, or `file:Story`. */
+const storyNamed = t.String({ pattern: STORY_REF.source, maxLength: 1100 });
 const argValues = t.Record(
   t.String({ minLength: 1, maxLength: 100 }),
   t.Unknown(),
@@ -166,7 +169,7 @@ export const SHAPES = {
 const sheetChange = {
   args: t.Optional(
     t.Object({
-      story: storyName,
+      story: storyNamed,
       values: argValues,
       unset: t.Optional(
         t.Array(t.String({ minLength: 1, maxLength: 100 }), {
@@ -177,10 +180,10 @@ const sheetChange = {
   ),
   story: t.Optional(
     t.Union([
-      t.Object({ add: storyName, args: t.Optional(argValues) }),
-      t.Object({ duplicate: storyName, as: storyName }),
-      t.Object({ remove: storyName }),
-      t.Object({ move: storyName, before: t.Union([storyName, t.Null()]) }),
+      t.Object({ add: storyNamed, args: t.Optional(argValues) }),
+      t.Object({ duplicate: storyNamed, as: storyName }),
+      t.Object({ remove: storyNamed }),
+      t.Object({ move: storyNamed, before: t.Union([storyName, t.Null()]) }),
     ])
   ),
 };
@@ -293,7 +296,7 @@ export const sheetBody = t.Object(sheetChange);
 
 /** The fields of an artifact read's query that a bound or a pattern holds (its numbers and flags are held by their types). */
 export const readFields = t.Object({
-  story: t.Optional(storyName),
+  story: t.Optional(storyNamed),
   // JSON: a frame { story, interaction?, scheme?, width? }, or a state link's "?query" or "#hash".
   state: t.Optional(t.String({ maxLength: 1400 })),
   // Where the picture is kept in the session's workspace.

@@ -1698,6 +1698,11 @@ function freshName(file: string, exports: Export[], name: string): void {
   }
 }
 
+/** The stories story file `file` (`text`) exports, by export name, in its order. */
+export function storyNames(file: string, text: string): string[] {
+  return exportsOf(parsed(file, text)).map((one) => one.name);
+}
+
 /**
  * Where story `name`'s statement stands in `text`, from its first character
  * to its last: what the stage formats in the project's style after a write

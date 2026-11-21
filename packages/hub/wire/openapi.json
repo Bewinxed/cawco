@@ -14134,7 +14134,8 @@
             "in": "query",
             "required": false,
             "schema": {
-              "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+              "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
+              "maxLength": 1100,
               "type": "string"
             }
           },
@@ -15269,7 +15270,8 @@
                     "type": "object",
                     "properties": {
                       "story": {
-                        "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                        "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
+                        "maxLength": 1100,
                         "type": "string"
                       },
                       "unset": {
@@ -15300,7 +15302,8 @@
                         "type": "object",
                         "properties": {
                           "add": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
+                            "maxLength": 1100,
                             "type": "string"
                           },
                           "args": {
@@ -15323,7 +15326,8 @@
                             "type": "string"
                           },
                           "duplicate": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
+                            "maxLength": 1100,
                             "type": "string"
                           }
                         },
@@ -15343,7 +15347,8 @@
                             ]
                           },
                           "move": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
+                            "maxLength": 1100,
                             "type": "string"
                           }
                         },
@@ -15356,7 +15361,8 @@
                         "type": "object",
                         "properties": {
                           "remove": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
+                            "maxLength": 1100,
                             "type": "string"
                           }
                         },

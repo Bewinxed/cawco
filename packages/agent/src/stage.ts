@@ -1817,8 +1817,9 @@ async function sheetWeight(
 }
 
 /**
- * A write to a sheet's story file (core `SheetWrite`, `file` from the
- * clone's root), made by its stage inside the workspace's boundary: the
+ * A write to a sheet's story file (core `SheetWrite`, `files` from the
+ * clone's root; the stage writes the one holding the story it names), made
+ * by its stage inside the workspace's boundary: the
  * lines it changed and the sheet as it reads after. The stage's watcher
  * sees the file change, and every page of the sheet redraws. A place's
  * stage writes its clone, and the file is copied to the place's checkout in
@@ -1836,14 +1837,22 @@ export async function writeSheet(
   pin?: string
 ): Promise<SheetWritten> {
   const tree = await treeOf(workspace, ports, pin);
-  const story = storyPath(tree, write.file);
-  const stage = await storyStage(tree, story, "a write");
-  const rel = relative(stage.root, story);
+  const stories = write.files.map((file) => storyPath(tree, file));
+  const [first] = stories;
+  if (first === undefined) {
+    throw new StageRefusal("A write names the canvas's states files.");
+  }
+  const stage = await storyStage(tree, first, "a write");
+  const files = stories.map((story) => relative(stage.root, story));
   const written = () =>
-    answerOf(stage, WRITE_PATH, "moving", `write ${rel}`, SheetWrittenSchema, {
-      ...write,
-      file: rel,
-    });
+    answerOf(
+      stage,
+      WRITE_PATH,
+      "moving",
+      `write ${files.join(", ")}`,
+      SheetWrittenSchema,
+      { ...write, files }
+    );
   const done =
     pin !== undefined || isPlace(workspace.id)
       ? await inCloneTurn(tree.boundary.id, async () => {

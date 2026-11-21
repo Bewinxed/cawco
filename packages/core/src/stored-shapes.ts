@@ -5239,9 +5239,9 @@ const SheetWriteShape = declared(
         unset: z.array(z.string()).optional(),
         values: z.record(z.string(), z.unknown()),
       }),
-      file: z.string(),
+      files: z.array(z.string()),
     }),
-    z.object({ file: z.string(), story: StoryOpShape }),
+    z.object({ files: z.array(z.string()), story: StoryOpShape }),
   ]),
   "SheetWrite",
   "packages/core/src/stage.ts"

@@ -351,6 +351,10 @@ export const storyRefOf = (
     : { file: undefined, story: name };
 };
 
+/** Story `story` named with the states file that exports it (`file` from the toolchain root), as {@link storyRefOf} reads it back. */
+export const fileStoryRef = (file: string, story: string): string =>
+  `${file}:${story}`;
+
 /** The states files of `files` whose plan has story `name` (`Story`, or `file:Story` naming one file). */
 export const holdersOf = (
   files: readonly string[],
@@ -1356,6 +1360,13 @@ export interface SheetRead {
  * set, `unset` dropped back to the meta's or the component's default), or a
  * story added (from args), duplicated, removed or moved. CawCo writes only
  * these (the owner, 2026-10-16); everything else in a sheet is a pin.
+ *
+ * `files` are the canvas's states files, each a direction of its design
+ * or a section of it. The write is made in the one that exports the story
+ * it names (`args.story`, or the op's `add`, `duplicate`, `remove` or
+ * `move`): `file:Story` ({@link storyRefOf}) names that file outright, a
+ * bare `Story` is the one file exporting it. A story added names its file
+ * so, unless the canvas has one states file.
  */
 export type SheetWrite =
   | {
@@ -1364,9 +1375,9 @@ export type SheetWrite =
         unset?: string[];
         values: Record<string, unknown>;
       };
-      file: string;
+      files: string[];
     }
-  | { file: string; story: StoryOp };
+  | { files: string[]; story: StoryOp };
 
 /** A story export added, duplicated, removed, or moved before another (`before: null` to the end). */
 export type StoryOp =
@@ -1557,5 +1568,10 @@ export const STORY_NAME_LENGTH = 100;
 /** A story's export name in a CSF file: `Roomy`. */
 export const STORY_NAME = new RegExp(
   `^[A-Z][A-Za-z0-9_]{0,${STORY_NAME_LENGTH - 1}}$`,
+  "u"
+);
+/** A story as a write or a read names it ({@link storyRefOf}): its export, or `file:Story` with its states file from the toolchain root. */
+export const STORY_REF = new RegExp(
+  `^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?${STORY_NAME.source.slice(1)}`,
   "u"
 );

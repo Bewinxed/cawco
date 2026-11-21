@@ -229,7 +229,7 @@ export function exportCanvasWithin(
   );
 }
 
-/** A sheet's write from its inspector, as its Save and story buttons make it (core `SheetWrite` less its file). */
+/** A sheet's write from its inspector, as its Save and story buttons make it (core `SheetWrite` less its files; a story is named `file:Story`, core `fileStoryRef`). */
 export type SheetChange =
   | {
       args: {

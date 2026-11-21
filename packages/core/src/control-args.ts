@@ -183,9 +183,9 @@ const SheetWrite = union([
       unset: optional(texts),
       values: StoryValues,
     }),
-    file: text,
+    files: texts,
   }),
-  object({ file: text, story: StoryOp }),
+  object({ files: texts, story: StoryOp }),
 ]);
 const RenderAsk = object({
   files: texts,

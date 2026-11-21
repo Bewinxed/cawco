@@ -101,9 +101,11 @@ import {
   type StageError,
   type StageFramework,
   type StageToolchain,
+  type StoryOp,
   sectionName,
   stageFrameworkOf,
   stageToolchainOf,
+  storyRefOf,
   sweptFiles,
   WEIGHT_PATH,
   WRITE_PATH,
@@ -130,6 +132,7 @@ import {
   codeWordOf,
   readStoryFile,
   StoryRefusal,
+  storyNames,
   storyStatement,
   writeArgs,
   writeStoryOp,
@@ -2290,16 +2293,113 @@ function misfit(
   return null;
 }
 
+/** A write made in one states file, every story it names bare. */
+type FileWrite =
+  | { args: Extract<SheetWrite, { args: unknown }>["args"]; file: string }
+  | { file: string; story: StoryOp };
+
+/** The story a write names (core `SheetWrite`): the one whose args it sets, or the one its op adds, duplicates, removes or moves. */
+const namedStory = (write: SheetWrite): string => {
+  if ("args" in write) {
+    return write.args.story;
+  }
+  const op = write.story;
+  if ("add" in op) {
+    return op.add;
+  }
+  if ("duplicate" in op) {
+    return op.duplicate;
+  }
+  return "remove" in op ? op.remove : op.move;
+};
+
+/** `write` with the story it names set to `story`. */
+const withStory = (
+  write: SheetWrite,
+  story: string,
+  file: string
+): FileWrite => {
+  if ("args" in write) {
+    return { file, args: { ...write.args, story } };
+  }
+  const op = write.story;
+  if ("add" in op) {
+    return { file, story: { ...op, add: story } };
+  }
+  if ("duplicate" in op) {
+    return { file, story: { ...op, duplicate: story } };
+  }
+  return {
+    file,
+    story: "remove" in op ? { remove: story } : { ...op, move: story },
+  };
+};
+
+/**
+ * The states file a write is made in (core `SheetWrite`), from the
+ * toolchain root, and the write with the story it names bare: the file its
+ * `file:Story` names, one of the canvas's; else the one of the canvas's
+ * files that exports the story, or for a story added the canvas's one
+ * file. Refused in words that name the `file:Story` to send where the bare
+ * name can't settle it.
+ */
+function writeTarget(asked: SheetWrite): { file: string; write: FileWrite } {
+  const files = asked.files.map((given) => {
+    const file = storyFile(given);
+    if (!file) {
+      throw new StoryRefusal(`${given} is no story file in ${root}.`);
+    }
+    return file;
+  });
+  const { file: named, story } = storyRefOf(namedStory(asked));
+  const adding = "story" in asked && "add" in asked.story;
+  if (named !== undefined) {
+    const file = storyFile(named);
+    if (!(file && files.includes(file))) {
+      throw new StoryRefusal(
+        `${named} is no states file of this design graph; its states files are ${files.join(", ")}.`
+      );
+    }
+    return { file, write: withStory(asked, story, file) };
+  }
+  if (adding) {
+    const [only] = files;
+    if (only === undefined || files.length > 1) {
+      throw new StoryRefusal(
+        `This design graph has ${files.length} states files: name the one ${story} is added to as file:Story, one of ${files.map((file) => `${file}:${story}`).join(", ")}.`
+      );
+    }
+    return { file: only, write: withStory(asked, story, only) };
+  }
+  const stories = files.map((file) => {
+    const abs = resolve(root, file);
+    return {
+      file,
+      names: existsSync(abs) ? storyNames(file, readFileSync(abs, "utf8")) : [],
+    };
+  });
+  const holders = stories.filter((one) => one.names.includes(story));
+  const [holder] = holders;
+  if (holder === undefined) {
+    throw new StoryRefusal(
+      `No states file of this design graph has a story ${story}; its stories are ${stories.map((one) => `${one.names.join(", ") || "none"} (${one.file})`).join("; ")}.`
+    );
+  }
+  if (holders.length > 1) {
+    throw new StoryRefusal(
+      `${story} is a story of ${holders.length} states files on this design graph: name the one to write as file:Story, one of ${holders.map((one) => `${one.file}:${story}`).join(", ")}.`
+    );
+  }
+  return { file: holder.file, write: withStory(asked, story, holder.file) };
+}
+
 /**
  * Writes a sheet's story file as `write` says (story-file.ts), refused by
  * name when a value doesn't fit its prop's type or the file can't take it.
  * The project's watcher sees the file change and the sheet redraws.
  */
-async function written(write: SheetWrite): Promise<SheetWritten> {
-  const file = storyFile(write.file);
-  if (!file) {
-    throw new StoryRefusal(`${write.file} is no story file in ${root}.`);
-  }
+async function written(asked: SheetWrite): Promise<SheetWritten> {
+  const { file, write } = writeTarget(asked);
   const abs = resolve(root, file);
   const text = readFileSync(abs, "utf8");
   let out: { lines: { from: number; to: number }; text: string };
@@ -2352,7 +2452,7 @@ async function written(write: SheetWrite): Promise<SheetWritten> {
 }
 
 /** The story whose statement a write printed values into: an args write's, an added or duplicated one's; none for a removal or a move, which only move text. */
-const printedStory = (write: SheetWrite): string | null => {
+const printedStory = (write: FileWrite): string | null => {
   if ("args" in write) {
     return write.args.story;
   }

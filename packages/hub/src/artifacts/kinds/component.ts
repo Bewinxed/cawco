@@ -1,4 +1,4 @@
-import { join, relative } from "node:path";
+import { relative } from "node:path";
 import { docMeta, getMeta, setMeta } from "@cawco/core/doc-meta";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -16,6 +16,7 @@ import {
   type StageState,
   type StageUnreached,
   type StoryOp,
+  storyRefOf,
 } from "@cawco/core/stage";
 import { pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
@@ -55,15 +56,15 @@ import type {
 import { routeOf } from "../sync";
 import type { KindContext } from "./context";
 
-/** The story a story op names. */
+/** The story a story op leaves standing, by its export name: the one it added, the duplicate it made, the one it moved; none for a removal. */
 const storyOfOp = (op: StoryOp): string | null => {
   if ("add" in op) {
-    return op.add;
+    return storyRefOf(op.add).story;
   }
   if ("duplicate" in op) {
     return op.as;
   }
-  return "move" in op ? op.move : null;
+  return "move" in op ? storyRefOf(op.move).story : null;
 };
 
 /** What ComponentKind reads of the artifact service ({@link KindContext}). */
@@ -298,21 +299,25 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         detail: `${row.name} is a ${row.kind}: args and story are for a sheet.`,
       });
     }
-    const file = join(sheet.dir, sheet.file);
+    // Made in the states file that holds the story it names, whichever direction it is (core `SheetWrite`).
+    const { files } = sheet;
     const edit = await deps.stageWrite(
       by === "person" && sheet.pin !== undefined
         ? { workspace: sheet.workspace, pin: sheet.pin }
         : { workspace: sheet.workspace },
       "args" in change
-        ? { file, args: change.args }
-        : { file, story: change.story }
+        ? { files, args: change.args }
+        : { files, story: change.story }
     );
     if (edit instanceof ElysiaStatus) {
       return edit;
     }
     docs.transact(row.id, "hub", (doc) => {
       const meta = docMeta(doc);
-      meta.set("sheet", edit.sheet);
+      // The doc keeps its first states file's sheet, as the stage's reads set it: a write to another direction's file leaves it.
+      if (edit.file === files[0]) {
+        meta.set("sheet", edit.sheet);
+      }
       if (by === "person") {
         const owed = meta.get("saves") ?? [];
         meta.set("saves", [...owed, saveSection(change, edit)]);
@@ -340,7 +345,10 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     change: SheetChange,
     written: ArtifactRead
   ) => {
-    const name = "args" in change ? change.args.story : storyOfOp(change.story);
+    const name =
+      "args" in change
+        ? storyRefOf(change.args.story).story
+        : storyOfOp(change.story);
     const story = written.sheet?.stories.find((one) => one.name === name);
     const sheet = sheetOf(row);
     let frames: ComponentWritten["render"] = "unseen";
@@ -592,6 +600,66 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     }
   };
   /**
+   * Each states file of design graph `sheet` with its sheet as its stage
+   * reads it, in the canvas's order, `file` from the toolchain root: every
+   * direction and section, the first file's already read (`opened`).
+   */
+  const sheetsRead = async (
+    sheet: NonNullable<ReturnType<typeof sheetOf>>,
+    opened: StageOpened
+  ) => {
+    const read: { file: string; sheet: SheetRead }[] = [];
+    for (const file of sheet.files) {
+      if (file === sheet.files[0]) {
+        read.push({ file: relative(sheet.dir, file), sheet: opened.sheet });
+        continue;
+      }
+      // Its stories alone: the first read answered every file's report.
+      const staged = await deps.stage({ workspace: sheet.workspace }, file);
+      if (staged instanceof ElysiaStatus) {
+        return staged;
+      }
+      read.push({
+        file: relative(sheet.dir, file),
+        sheet: staged.opened.sheet,
+      });
+    }
+    return read;
+  };
+  /**
+   * Story `name` (`Story`, or `file:Story`) of design graph `row` and the
+   * sheet of the states file that exports it, whichever direction or
+   * section it is. Refused where no file exports it, or where a bare name
+   * is a story of several.
+   */
+  const storyHeld = (
+    row: ArtifactRow,
+    sheets: { file: string; sheet: SheetRead }[],
+    name: string
+  ) => {
+    const { file: named, story } = storyRefOf(name);
+    const holders = sheets.flatMap((one) => {
+      const found = one.sheet.stories.find((each) => each.name === story);
+      return found && (named === undefined || one.file === named)
+        ? [{ ...one, story: found }]
+        : [];
+    });
+    const [holder] = holders;
+    if (holders.length > 1) {
+      return problem(409, {
+        code: "artifact-state-ambiguous",
+        detail: `${story} is a story of ${holders.length} states files on ${row.name}: name the one to read as file:Story, one of ${holders.map((one) => `${one.file}:${story}`).join(", ")}.`,
+      });
+    }
+    if (!holder) {
+      return problem(404, {
+        code: "artifact-sheet-story-unknown",
+        detail: `${row.name} has no story ${name}; its stories are ${sheets.map((one) => `${one.sheet.stories.map((each) => each.name).join(", ") || "none"} (${one.file})`).join("; ") || "none"}.`,
+      });
+    }
+    return { sheet: holder.sheet, story: holder.story };
+  };
+  /**
    * A design graph as the session reads it (design graph §4): its
    * picks and pins, its stage, what a browser drew (each frame's state), its
    * moves, its stories with the interactions they reach, the person's dials
@@ -649,7 +717,6 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const stage = opened ? sheetState(row, opened.state) : undefined;
     const unreached =
       reached && "unreached" in reached ? reached.unreached : undefined;
-    const sheetNow = opened?.sheet;
     const base = ctx.read(row, since, ownersRead);
     const { dials, tuned, picked, layout: _layout, ...picks } = base.state;
     // His pick among the design's directions, by its states file: the direction it names, or none taken back.
@@ -659,15 +726,15 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
           typeof picked.value === "string" ? picked.value : undefined
         )
       : undefined;
-    const story = ask.story
-      ? sheetNow?.stories.find((one) => one.name === ask.story)
-      : undefined;
-    if (ask.story && !story) {
-      return problem(404, {
-        code: "artifact-sheet-story-unknown",
-        detail: `${row.name} has no story ${ask.story}; its stories are ${sheetNow?.stories.map((one) => one.name).join(", ") || "none"}.`,
-      });
+    const sheets = sheet && opened ? await sheetsRead(sheet, opened) : [];
+    if (sheets instanceof ElysiaStatus) {
+      return sheets;
     }
+    const held = ask.story ? storyHeld(row, sheets, ask.story) : undefined;
+    if (held instanceof ElysiaStatus) {
+      return held;
+    }
+    const story = held?.story;
     const read: ComponentRead = {
       ...base,
       state: picks,
@@ -684,7 +751,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
               sheet?.spec
             ),
             moves: movesSaid(report),
-            stories: storiesSaid(sheetNow, report),
+            stories: sheets.flatMap((one) => storiesSaid(one.sheet, report)),
             ...(ask.state ? { frame: stateSaid(report, ask.state) } : {}),
           }
         : {}),
@@ -704,7 +771,10 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
               name: story.name,
               args: story.args,
               code: story.code,
-              meta: { args: sheetNow?.meta.args, code: sheetNow?.meta.code },
+              meta: {
+                args: held?.sheet.meta.args,
+                code: held?.sheet.meta.code,
+              },
             },
           }
         : {}),

@@ -14,6 +14,7 @@ import type { FrameSays } from "@cawco/core/page-wire";
 import {
   type ComponentDoc,
   fileSets,
+  fileStoryRef,
   inspectedProps,
   type PropMeta,
   type SheetOnPage,
@@ -148,14 +149,17 @@ export class SheetInspector {
 
   /** Save: the chosen story's values written into its `args`; the page redraws from the file. */
   async save(): Promise<void> {
-    const name = this.chosen;
-    if (!(name && this.#dirty(name)) || this.writing) {
+    const { chosen: name, sheet } = this;
+    if (!(name && sheet && this.#dirty(name)) || this.writing) {
       return;
     }
     const values = { ...this.edits[name] };
     this.writing = "save";
     try {
-      await this.#write({ args: { story: name, values } });
+      // Named with its states file: the design graph's directions are a file each.
+      await this.#write({
+        args: { story: fileStoryRef(sheet.file, name), values },
+      });
       // The file holds them now; its edit runs the sheet again with no override.
       this.#forget(name);
     } catch (error) {
@@ -180,7 +184,10 @@ export class SheetInspector {
       from,
       sheet.stories.map((one) => one.name)
     );
-    const op: StoryOp = { add, args: this.#current() };
+    const op: StoryOp = {
+      add: fileStoryRef(sheet.file, add),
+      args: this.#current(),
+    };
     this.writing = "new";
     try {
       await this.#write({ story: op });
