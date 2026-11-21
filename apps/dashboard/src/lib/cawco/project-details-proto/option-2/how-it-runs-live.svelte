@@ -1,14 +1,11 @@
 <script lang="ts" module>
   import { atProjectPage } from "./shell-seed";
+  import { REFUSED_WORDS as REFUSAL } from "./stage-args";
 
   atProjectPage("lantern-web");
 
   /** How the mock hub answers a change: it takes it, or refuses it. */
   export type HubAnswer = "takes it" | "refuses it";
-
-  /** The hub's words for a refused change, as the hub words a refusal. */
-  const REFUSAL =
-    "The hub could not save this: another change to this project was being written. Nothing changed. (settings_busy)";
 
   /** How the stages were read: all at once, one still on its way, or one refused. */
   export type Reading =
