@@ -141,6 +141,13 @@
 </script>
 
 <div class="grid gap-space-3">
+  <p
+    class="ps-space-7 pe-space-6 type-body text-pretty max-desk:ps-space-5 max-desk:pe-space-5"
+  >
+    {tuned
+      ? "Watch each new word as it appears: move the dials until it visibly fades up instead of popping in."
+      : "Watch each new word as it appears: on iPhone today it pops in near full ink."}
+  </p>
   <StreamingReplyLive {again} {pace} />
   {#if frames.length > 0}
     <p
