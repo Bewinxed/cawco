@@ -8,6 +8,9 @@ import type { RosterWords } from "#lib/cawco/decides/roster-words.js";
 import type { StageState } from "./changes";
 import type { ChoiceKind, Decider, Landing, TaskHome } from "./records";
 
+/** A refused change's way on, beside the hub's words: the control is back where it was. */
+const RETRY_CHANGE = "Retry change";
+
 export const howItRunsWords = {
   /** The view's tab in the project's views strip. */
   tab: "Settings",
@@ -15,8 +18,7 @@ export const howItRunsWords = {
   cancel: "Cancel",
   save: "Save",
   tryAgain: "Retry",
-  /** A refused change's way on, beside the hub's words: the control is back where it was. */
-  retryChange: "Retry change",
+  retryChange: RETRY_CHANGE,
 
   /** The hub out of reach: what shows was read `age` ago, and nothing can change. */
   hubOutOfReach: (age: string) =>
@@ -207,6 +209,7 @@ export const howItRunsWords = {
         `Custom here, overriding your default of ${subject}.`,
       giveBack: "Reset to default",
       holdsNothing: (_project: string) => "Nothing assigned",
+      tryAgain: RETRY_CHANGE,
     } satisfies RosterWords,
     reviewLabel: "Require your review",
     reviewNote: "Only you mark tasks done, using a review column.",

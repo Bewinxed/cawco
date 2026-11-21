@@ -68,10 +68,17 @@
   let machinePick = $state<string | null>(null);
   let pathDraft = $state("");
   let scratchRefusal = $state<string | null>(null);
+  /** The machines the project has no folder on yet: where a new folder most likely goes. */
+  const freeMachines = $derived(
+    record.machines.filter(
+      (machine) =>
+        !record.places.some((place) => place.machineId === machine.id)
+    )
+  );
   const activeMachineId = $derived(
     machinePick && machinesById.has(machinePick)
       ? machinePick
-      : (record.machines[0]?.id ?? null)
+      : (freeMachines[0]?.id ?? record.machines[0]?.id ?? null)
   );
   const activeMachine = $derived(
     activeMachineId ? (machinesById.get(activeMachineId) ?? null) : null
@@ -218,6 +225,7 @@
         icon={machine ? machineIcon(machine.os) : IconServer}
         meta={place.path}
         name={machine ? machine.name : words.places.hub}
+        whole
       >
         {#snippet badge()}
           {#if place.missing}
@@ -294,9 +302,7 @@
               oninput={() => {
                 scratchRefusal = null;
               }}
-              placeholder={activeMachine
-                ? `${activeMachine.home}/code/${record.project.id}`
-                : `/path/to/${record.project.id}`}
+              placeholder={activeMachine ? `${activeMachine.home}/` : "/"}
               spellcheck="false"
               bind:value={pathDraft}
             />

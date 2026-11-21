@@ -32,6 +32,7 @@
     hue,
     tile,
     mono = false,
+    whole = false,
     badge,
     rollout,
     enabled,
@@ -53,6 +54,8 @@
     /** Replaces the icon tile, for a harness logo or an OS mark. */
     tile?: Snippet;
     mono?: boolean;
+    /** Its meta read whole, wrapping at any character, never cut short (a folder's path). */
+    whole?: boolean;
     badge?: Snippet;
     rollout?: Snippet;
     /** Present only for rows that can be switched off. */
@@ -142,8 +145,9 @@
       {#if meta !== undefined}
         <span
           data-slot="meta"
-          class="truncate type-meta text-ink-muted transition-opacity duration-(--duration-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:-col-end-1 max-phone:row-start-2"
-          title={meta}>{meta}</span
+          data-whole={whole || undefined}
+          class="truncate type-meta text-ink-muted data-whole:overflow-visible data-whole:whitespace-normal data-whole:wrap-anywhere transition-opacity duration-(--duration-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:-col-end-1 max-phone:row-start-2"
+          title={whole ? undefined : meta}>{meta}</span
         >
       {/if}
     </span>
