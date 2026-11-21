@@ -1,4 +1,8 @@
-import { type ChoiceEntry, unsentChoices } from "@cawco/core/choices";
+import {
+  answersIn,
+  type ChoiceEntry,
+  unsentChoices,
+} from "@cawco/core/choices";
 import { pinsToTell } from "@cawco/core/comments/deliver";
 import { newAnswer, type Pin, seenOf } from "@cawco/core/comments/model";
 import type { DecisionCard } from "@cawco/core/decisions";
@@ -35,8 +39,8 @@ export const stillThere = (
 /**
  * An artifact's choices as everything reads them: its doc's `state`, and a
  * component's tuned timing (the doc's `tuned` map, core tuned.ts) as the one
- * `tuned` entry, so it answers the judgement and goes with a Send as a pick
- * does.
+ * `tuned` entry, so it goes with a Send as a pick does (a value he is
+ * trying out, never an answer by itself: core `answersIn`).
  */
 export const stateOf = (doc: Doc): Record<string, ChoiceEntry> => {
   const state = Object.fromEntries(doc.getMap<ChoiceEntry>("state").entries());
@@ -60,18 +64,19 @@ export const metaOf = (doc: Doc) => {
 
 /**
  * The person's newest act on an artifact, ISO (needs.ts
- * `ArtifactFacts.actedAt`): of its `state` entries, each one no member of
- * Who decides settled (`settled`); of its pins, each one's making, their
- * entries on its thread and their resolve; and its last Send. Null when
- * they never acted on it.
+ * `ArtifactFacts.actedAt`): of its answers (core `answersIn`: no value he
+ * is only trying out, like a dial), each one no member of Who decides
+ * settled (`settled`); of its pins, each one's making, their entries on
+ * its thread and their resolve; and its last Send. Null when they never
+ * acted on it.
  */
 const actedAtOf = (
-  state: Readonly<Record<string, ChoiceEntry>>,
+  answers: Readonly<Record<string, ChoiceEntry>>,
   pins: readonly Pin[],
   sentAt: string | null
 ): string | null => {
   const acts = [
-    ...Object.values(state).flatMap((entry) =>
+    ...Object.values(answers).flatMap((entry) =>
       entry.settled ? [] : [entry.at]
     ),
     ...pins.flatMap((pin) => [
@@ -192,7 +197,8 @@ export const createFacts = (ctx: FactsContext) => {
       judged: row.does === "judge",
       media: row.kind === "page" ? mediaCards(row) : new Map(),
       pins,
-      state: stateOf(doc),
+      // His answers alone: a dial he moves answers nothing.
+      state: answersIn(stateOf(doc)),
       closes: closesOf(doc),
     });
   /** A decision page's questions counted, its first open one, and whether a canvas to judge has its answer (needs.ts). */
@@ -236,6 +242,7 @@ export const createFacts = (ctx: FactsContext) => {
     const doc = docs.doc(row.id);
     const meta = docMeta(doc);
     const state = stateOf(doc);
+    const answers = answersIn(state);
     const { sentAt } = metaOf(doc);
     const allPins = [...docs.pins(row.id).values()];
     const pins = pinsToTell(allPins).sort((a, b) => a.number - b.number);
@@ -251,7 +258,7 @@ export const createFacts = (ctx: FactsContext) => {
     );
     const asking = pins.filter((pin) => open.has(`pin:${pin.id}`));
     const facts: ArtifactFacts = {
-      actedAt: actedAtOf(state, allPins, sentAt),
+      actedAt: actedAtOf(answers, allPins, sentAt),
       ...answersFacts(questions),
       asked: meta.get("asked") ?? null,
       asking: asking.map((pin) => pin.number),
@@ -272,6 +279,7 @@ export const createFacts = (ctx: FactsContext) => {
       handed: meta.get("handed") === true,
       reading: meta.get("reading") === true,
       unsent: unsentChoices(state, sentAt),
+      unsentAnswers: unsentChoices(answers, sentAt),
       verifier: isVerifierParent(
         deps.instance(row.madeBy ?? row.instanceId ?? "")?.parentInstanceId
       ),

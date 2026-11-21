@@ -812,7 +812,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * (`askingAt`). A decision page is acted on once it is answered: no card
    * open, or a Send since its put. Anything else is acted on by an act of
    * theirs since its put (`actedAt`): a pick, note or value, a pin, an
-   * entry on a pin or its resolve, or a Send. A look is no act.
+   * entry on a pin or its resolve, or a Send. A look is no act, nor a dial
+   * moved (core `answersIn`): a design graph he is still tuning holds its
+   * workspace.
    */
   const actedOn = (facts: ArtifactFacts): boolean => {
     const put = Math.max(

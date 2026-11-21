@@ -79,8 +79,9 @@ import { isSetupPage } from "../setup";
 /** What an artifact's doc and row say, read once per change of either. */
 export interface ArtifactFacts {
   /**
-   * The person's newest act on it, ISO: a pick, note or value of theirs (a
-   * `state` entry no member of Who decides settled), a pin of theirs, their
+   * The person's newest act on it, ISO: a pick, note or value of theirs (an
+   * answer in its `state`, core `answersIn`, that no member of Who decides
+   * settled; a dial he moves is none), a pin of theirs, their
    * entry on a pin or their resolve of one, or a Send (`meta.sentAt`); null
    * when they never acted on it (service.ts `actedOn`).
    */
@@ -103,7 +104,7 @@ export interface ArtifactFacts {
   gone: string | null;
   /** Handed up to a parent session that hasn't opened it, or a maker's change held for it: not the person's yet. */
   handed: boolean;
-  /** A canvas to judge has its answer: a value, pick or note set on it, or the agent took or withdrew it. */
+  /** A canvas to judge has its answer: a value, pick or note set on it (never a dial or a tuned move alone, core `answersIn`), or the agent took or withdrew it. */
   judged: boolean;
   /** When the person last had it on screen (a view's word), ISO. */
   lookedAt: string | null;
@@ -115,8 +116,10 @@ export interface ArtifactFacts {
   revisedAt: string | null;
   /** When it was last sent, by the person or by the hub for them (`meta.sentAt`), ISO; null when never. */
   sentAt: string | null;
-  /** What Send sends now: picks and notes since the last Send. */
+  /** What Send sends now: picks, notes and values since the last Send, dials too. */
   unsent: number;
+  /** Of those, his answers (core `answersIn`): what may send the page by itself ({@link answeredWhole}). */
+  unsentAnswers: number;
   /** Made by a design check's verifier (hub work-item-state.ts `isVerifierParent`): the hub's own helper's working material, never the person's to act on. */
   verifier: boolean;
 }
@@ -203,16 +206,18 @@ export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
  * Whether what the person wrote on `row` goes to its session by itself
  * (the owner, 2026-11-05: no Send once he has answered; artifacts/service.ts
  * `sendAnswered`): a page to pick on with every question answered, taken or
- * withdrawn, or a canvas to judge with its answer set, its picks, notes or
- * values not sent yet. A project's setup page never does: its Send sets
- * the project up. Nor does one not the person's (a draft, handed up or
- * held, an option's media).
+ * withdrawn, or a canvas to judge with its answer set, an answer of his not
+ * sent yet. Values he is only trying out (core `answersIn`: a dial, a tuned
+ * move) never send it: they go with the next pick or Send (the owner,
+ * 2026-11-21: "Only Pick or Send wakes it"). A project's setup page never
+ * does: its Send sets the project up. Nor does one not the person's (a
+ * draft, handed up or held, an option's media).
  */
 export const answeredWhole = (
   row: ArtifactRow,
   facts: ArtifactFacts
 ): boolean => {
-  if (!asks(row, facts) || isSetupPage(row) || facts.unsent === 0) {
+  if (!asks(row, facts) || isSetupPage(row) || facts.unsentAnswers === 0) {
     return false;
   }
   return facts.answers

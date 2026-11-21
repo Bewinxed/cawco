@@ -14,7 +14,9 @@
  *   HTML page). Answered by a pick (core `pickMade`), a note on it, or a pin
  *   standing on it ({@link pinCard}) that the agent replied to and resolved.
  * - **judge**: a canvas or preview to judge, the artifact itself. Answered
- *   by any value, pick or note the person set on it (a tune, `cawco.set`).
+ *   by any value, pick or note the person set on it (a direction picked,
+ *   `cawco.set`), never by one he is only trying out (core `answersIn`:
+ *   a dial, a tuned move).
  *
  * Any artifact of the person's (not a draft, not handed up or held, not an
  * option's media, not a working canvas: `draw`) also asks on each pin the agent's reply asked on
@@ -89,6 +91,7 @@ export interface QuestionsInput {
   pins: readonly Pin[];
   /** Its pins may ask the person: not a draft, not handed up or held, not an option's media. */
   pinsMayAsk: boolean;
+  /** His answers in its `state` (core `answersIn`): what he is only trying out, like a dial, left out. */
   state: Readonly<Record<string, ChoiceEntry>>;
 }
 

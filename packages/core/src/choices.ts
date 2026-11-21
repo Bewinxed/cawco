@@ -89,14 +89,39 @@ export interface ArtifactChoices {
 
 /**
  * The person's picks and notes written since their last Send (`sentAt`,
- * ISO; null before one): what Send sends of a page's choices. The hub's
- * record of a Send, read alike by artifact_read and the page's own Send.
+ * ISO; null before one): what Send sends of a page's choices, the values
+ * he is trying out too. The hub's record of a Send, read alike by
+ * artifact_read and the page's own Send.
  */
 export const unsentChoices = (
   state: Record<string, ChoiceEntry>,
   sentAt: string | null
 ): number =>
   Object.values(state).filter((entry) => !sentAt || entry.at > sentAt).length;
+
+/**
+ * The keys of an artifact's `state` that hold values the person is trying
+ * out: a design graph's or a decision page's dials (`dials`) and a design
+ * graph's tuned motion (`tuned`, tuned.ts). Each is kept as he moves it, so
+ * a reload keeps it, and goes with whatever he sends (a pick, a Send, a
+ * pin, a note), but none is an answer by itself.
+ */
+const TRIAL_KEYS: ReadonlySet<string> = new Set(["dials", "tuned"]);
+
+/**
+ * THE ONE RULE OF WHAT IN AN ARTIFACT'S `state` IS THE PERSON'S ANSWER:
+ * every entry but the values he is trying out ({@link TRIAL_KEYS}). Only
+ * these answer a question, count as his act on it, and send it by
+ * themselves, so a dial he moves never wakes the session that made the
+ * artifact; it hears his values when he picks or sends (the owner,
+ * 2026-11-21: "Only Pick or Send wakes it").
+ */
+export const answersIn = <Entry>(
+  state: Readonly<Record<string, Entry>>
+): Record<string, Entry> =>
+  Object.fromEntries(
+    Object.entries(state).filter(([key]) => !TRIAL_KEYS.has(key))
+  );
 
 const isChoiceId = (value: unknown, max: number): value is string =>
   typeof value === "string" && value.length <= max && CHOICE_ID.test(value);

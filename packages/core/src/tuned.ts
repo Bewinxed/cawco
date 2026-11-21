@@ -9,8 +9,9 @@
  *
  * The hub answers the map as the one `tuned` entry it always answered
  * ({@link tunedEntryOf}): every move's records in order, and the newest
- * move's moment, so it counts as the judgement's answer and goes with a
- * Send as a choice entry does.
+ * move's moment, so it goes with a Send as a choice entry does. Like a
+ * dial, it is a value he is trying out, never an answer by itself
+ * (choices.ts `answersIn`).
  */
 
 import { type ChoiceEntry, PAGE_HASH } from "./choices";
