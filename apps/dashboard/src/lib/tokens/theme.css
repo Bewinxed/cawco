@@ -44,6 +44,10 @@
   --container-project-dock: 600px;
   --container-section-row: 312px;
   --container-suggestion-rows-narrow: 340px;
+  /* A list of routines this wide or wider reads down columns (routine, last run, next run); narrower, each routine reads as lines. */
+  --container-routine-row: 44rem;
+  /* A routine opened beside the list this wide or wider sets its parts in two columns: what it looks for and its runs on the left, when it runs and the rest on the right. */
+  --container-routine-page: 46rem;
 
   /* Warm neutrals (hue ~85 paper by day, ~70 roost at night). Chroma stays low so chrome reads neutral; colour is reserved for action, status and identity. */
   --color-neutral-1: light-dark(oklch(99.3% 0.004 85), oklch(18.4% 0.004 70));
