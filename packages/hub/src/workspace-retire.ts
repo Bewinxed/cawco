@@ -36,9 +36,10 @@
  * host-scope one whose scratch dir a hold kept (workspaces.ts `hostKept`);
  * each held one whose starter will never decide it is carried off,
  * and each archived one whose clone its machine still has is closed again
- * (workspaces.ts `settleOn`). The same look keeps up the server
- * of each preview waiting on the person, which would otherwise sleep once its
- * idle half hour ran out (artifacts service `keepWaitingUp`).
+ * (workspaces.ts `settleOn`). The same look keeps up each stage serving the
+ * person an artifact waiting on him (a preview's server, a design graph's or
+ * a page's sheet), which would otherwise sleep once its idle half hour ran
+ * out (artifacts service `keepWaitingUp`).
  */
 import type { HubLifetimeShape } from "./lifetime";
 import type { WorkItems } from "./work-items";
@@ -63,7 +64,7 @@ export interface RetireSweep {
 }
 
 export interface WorkspaceRetireDeps {
-  /** Keeps up the servers of the previews waiting on the person on `online` machines (artifacts service `keepWaitingUp`). */
+  /** Keeps up the stages serving the person what waits on him on `online` machines (artifacts service `keepWaitingUp`). */
   keepUp: (online: ReadonlySet<string>) => void;
   lifetime: HubLifetimeShape;
   machineName: (machineId: string) => string;
@@ -83,7 +84,7 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
       deps.keepUp(new Set(online));
     } catch (error) {
       console.warn(
-        `[workspace-retire] keeping the waiting previews up failed: ${error instanceof Error ? error.message : String(error)}`
+        `[workspace-retire] keeping the waiting stages up failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
     for (const machineId of online) {

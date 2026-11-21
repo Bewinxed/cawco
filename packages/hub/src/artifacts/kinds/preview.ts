@@ -120,34 +120,54 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     return status === "starting" || status === "running";
   };
 
-  /** The served preview waiting on the person for each server on a machine in `online`, by its workspace and port: waiting itself, or on a decision page that does, its maker awake ({@link makerAwake}) and its workspace active to run it in. */
-  const waitingServers = (
+  /**
+   * THE ONE READ OF WHAT THE HUB KEEPS UP FOR THE PERSON: each stage on a
+   * machine in `online` that serves him an artifact waiting on him (itself,
+   * or a decision page showing it, {@link waitsOnPerson}), its maker awake
+   * ({@link makerAwake}) and its workspace active to run it in, by the
+   * stage's key, with the use that keeps it up: a served preview's server
+   * started or woken ({@link serveFirst}), a sheet's stage (a design graph's,
+   * or a component a page's Preview shows) started or woken with its
+   * canvases compiled (agent stage.ts `warmStage`), each a use that restarts
+   * the stage's idle time. Read off served previews alone, a design graph
+   * waiting on the person slept under him where a preview did not.
+   */
+  const waitingStages = (
     online: ReadonlySet<string>
-  ): Map<string, ArtifactRow> => {
+  ): Map<string, () => Promise<unknown>> => {
     const pages = pagesShowing();
-    const servers = new Map<string, ArtifactRow>();
+    const stages = new Map<string, () => Promise<unknown>>();
     for (const row of db.asking()) {
+      const sheet = sheetOf(row);
       const served = servedOf(row);
+      const workspace = sheet?.workspace ?? served?.workspace;
       if (!(
-        served &&
+        workspace &&
         row.machineId &&
         online.has(row.machineId) &&
-        makerAwake(row)
+        makerAwake(row) &&
+        (waitsOnPerson(row) || (pages.get(row.id) ?? []).some(waitsOnPerson)) &&
+        deps.workspaces(workspace).some((one) => one.state === "active")
       )) {
         continue;
       }
-      const waits =
-        waitsOnPerson(row) || (pages.get(row.id) ?? []).some(waitsOnPerson);
-      if (
-        waits &&
-        deps.workspaces(served.workspace).some((one) => one.state === "active")
-      ) {
-        servers.set(`${served.pin ?? served.workspace}@${served.port}`, row);
+      if (sheet) {
+        const { at, key } = stageOf(sheet);
+        stages.set(key, () =>
+          deps.warmStage(at, {
+            by: `${row.name} waiting on the person`,
+            canvases: [sheet.files],
+          })
+        );
+      } else if (served) {
+        stages.set(`${served.pin ?? served.workspace}@${served.port}`, () =>
+          serveFirst(row.source, row.machineId)
+        );
       }
     }
-    return servers;
+    return stages;
   };
-  /** When each waiting server was last asked to stay up, by its workspace and port (../service.ts `keepWaitingUp`). */
+  /** When each waiting stage was last asked to stay up, by its key ({@link waitingStages}, ../service.ts `keepWaitingUp`). */
   const keptUpAt = new Map<string, number>();
   /**
    * Who makes a create and whose panel it lands in: the caller's own, or
@@ -442,7 +462,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     previewSource,
     releasePin,
     serveFirst,
-    waitingServers,
+    waitingStages,
     warmPreviews,
   };
 };

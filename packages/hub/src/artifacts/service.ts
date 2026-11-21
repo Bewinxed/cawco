@@ -578,7 +578,8 @@ const pictureRefusal = (row: ArtifactRow, ask: PictureAsk, drawn: boolean) => {
   }
 };
 /**
- * How often a server of a preview waiting on the person is asked to stay up
+ * How often a stage serving the person an artifact waiting on him (a
+ * preview's server, a sheet's stage) is asked to stay up
  * ({@link Artifacts.keepWaitingUp}): a third of what sleeps it, so two asks
  * can fail before it does (agent stage.ts `IDLE_MS`, shortened the same way
  * in a probe's scratch fleet).
@@ -777,8 +778,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Whether `row` waits on the person now, read by what keeps the server of
-   * a preview up for him (preview.ts `waitingServers`) and by what rests a
+   * Whether `row` waits on the person now, read by what keeps the stage
+   * serving it up for him (preview.ts `waitingStages`) and by what rests a
    * maker's item on him (`madeWaiting`): Needs you lists it (needs.ts
    * `needOf`, so an ask of an ended session waits on no one), or it is a
    * `try` its session put before him ({@link putBeforePerson}: not handed
@@ -888,7 +889,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     previewSource,
     releasePin,
     serveFirst,
-    waitingServers,
+    waitingStages,
     warmPreviews,
   } = createPreviewKind({
     above,
@@ -3744,13 +3745,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Keeps up the server of each served preview on a machine in `online`
-     * that waits on the person, itself or by a decision page showing it:
-     * started or woken as a page going out warms it (`serveFirst`), which
-     * also restarts its idle time (agent stage.ts `used`), so it never
-     * sleeps under a page he has yet to answer. On 2026-11-08 the frames of
-     * plan page fdbe3bf8 were asleep when he opened it. Each server is
-     * asked once per {@link KEEP_UP_MS}, a third of what puts it to sleep:
+     * Keeps up each stage on a machine in `online` that serves the person
+     * an artifact waiting on him, itself or by a decision page showing it
+     * (preview.ts `waitingStages`): a preview's server or a sheet's stage,
+     * a design graph's among them, started or woken as a page going out
+     * warms it, which also restarts its idle time (agent stage.ts `used`),
+     * so it never sleeps under something he has yet to answer. On
+     * 2026-11-08 the frames of plan page fdbe3bf8 were asleep when he
+     * opened it; on 2026-11-21 design graph 4a3c2d92 was dark, its sheet
+     * no server. Each stage is asked once per {@link KEEP_UP_MS}, a third of what puts it to sleep:
      * the stage logs a line for a use after a quiet minute (the workspace
      * sweep, workspace-retire.ts, comes every minute and would say so every
      * minute). One whose workspace is not active has nothing to run in;
@@ -3758,17 +3761,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * open (preview.ts `makerAwake`).
      */
     keepWaitingUp: (online: ReadonlySet<string>): void => {
-      const up = waitingServers(online);
+      const up = waitingStages(online);
       for (const key of keptUpAt.keys()) {
         if (!up.has(key)) {
           keptUpAt.delete(key);
         }
       }
       const now = Date.now();
-      for (const [key, row] of up) {
+      for (const [key, keep] of up) {
         if (now - (keptUpAt.get(key) ?? 0) >= KEEP_UP_MS) {
           keptUpAt.set(key, now);
-          detach(serveFirst(row.source, row.machineId), "keeping a preview up");
+          detach(keep(), "keeping a waiting stage up");
         }
       }
     },
