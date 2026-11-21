@@ -1,11 +1,4 @@
 <script lang="ts">
-  /**
-   * The live story's fixture: Option 2's Routines tab under the project page's
-   * head and its view strip as they ship, Routines chosen.
-   * Its own state is what the stand-in hub would hold: what stands open
-   * beside the view, where each routine stands after a choice, and which
-   * failed outside actions were looked at.
-   */
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import ViewTabs from "#lib/cawco/project/ViewTabs.svelte";
@@ -13,6 +6,14 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconMore, IconPen, IconPlus, IconSparkles } from "#lib/icons.js";
+  /**
+   * The live story's fixture: Option 2's Routines tab under the project page's
+   * head and its view strip as they ship, Routines chosen.
+   * Its own state is what the stand-in hub would hold: what stands open
+   * beside the view, where each routine stands after a choice, and which
+   * failed outside actions were looked at.
+   */
+  import { routineViews } from "../views";
   import { type Routine, type Run, type Source, STANDINGS } from "./day";
   import type { Standing } from "./RoutineRow.svelte";
   import RoutinesScreen from "./RoutinesScreen.svelte";
@@ -47,12 +48,7 @@
   let standings = $state<Record<string, Standing>>({ ...STANDINGS });
   let looked = $state<string[]>([]);
 
-  const VIEWS = [
-    { value: "board", label: "Board", draft: false, count: 0 },
-    { value: "table", label: "Table", draft: false, count: 0 },
-    { value: "routines", label: "Routines", draft: false, count: 0 },
-    { value: "decisions", label: "Decisions", draft: false, count: 0 },
-  ];
+  const VIEWS = routineViews(0);
 
   /** What a choice moves the routine to, as the hub would answer it. */
   const MOVES: Record<string, Standing> = {

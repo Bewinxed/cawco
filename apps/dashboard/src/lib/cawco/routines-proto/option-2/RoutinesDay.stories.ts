@@ -6,7 +6,7 @@
  * Open session, Earlier run and Later run stand; a routine's Open puts the
  * routine there; a choice in Needs you moves the routine as the hub would.
  */
-import { HARBOR, NOW, ROUTINES, RUNS, SOURCES } from "./day";
+import { HARBOR, NOW, PICK_ROUTINES, PICK_RUNS, SOURCES } from "./day";
 import RoutinesDayLive from "./routines-day-live.svelte";
 
 export default {
@@ -14,8 +14,8 @@ export default {
   component: RoutinesDayLive,
   args: {
     project: HARBOR,
-    routines: ROUTINES,
-    runs: RUNS,
+    routines: PICK_ROUTINES,
+    runs: PICK_RUNS,
     sources: SOURCES,
     now: NOW,
     live: true,

@@ -653,3 +653,29 @@ export const HARBOR: ProjectRow = {
   primaryPlaceId: null,
   review: true,
 };
+
+/**
+ * The routines the pick frame draws, the same eight option 1's first frame
+ * draws, so the day fits one desk screen's height under the head: the two
+ * stopped or failed (the staging check, the changelog), four on (the npm
+ * look, the digest, triage, the memory run), and the two not running
+ * (paused, finished). Every run in RUNS belongs to one of them.
+ */
+const PICK_FRAME = new Set([
+  "staging",
+  "changelog",
+  "npm",
+  "digest",
+  "triage",
+  "memory",
+  "skills",
+  "pr412",
+]);
+
+export const PICK_ROUTINES: Routine[] = ROUTINES.filter((one) =>
+  PICK_FRAME.has(one.id)
+);
+
+export const PICK_RUNS: Run[] = RUNS.filter((one) =>
+  PICK_FRAME.has(one.routineId)
+);

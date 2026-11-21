@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { CawLead } from "../../project/caw-lead.svelte";
+  import ProjectHead from "../../project/ProjectHead.svelte";
+  import { projectsStore } from "../../stores/projects.svelte";
   /**
    * Fixture for Routines.stories.ts: Harbor's project page on Routines, in
    * the app's shell (shell-frame: the Shell's rail and top bar round the
@@ -8,9 +11,7 @@
    * earlier run's result stands open, and the choices and acts the hub has
    * taken. Harbor's row is in the projects store, written by the story.
    */
-  import { CawLead } from "../../project/caw-lead.svelte";
-  import ProjectHead from "../../project/ProjectHead.svelte";
-  import { projectsStore } from "../../stores/projects.svelte";
+  import { routineViews } from "../views";
   import { ACTIONS, ONE_SCREEN, SOURCES } from "./harbor";
   import RoutinesStrip from "./RoutinesStrip.svelte";
   import RoutinesView from "./RoutinesView.svelte";
@@ -48,12 +49,7 @@
   });
   const none = () => undefined;
 
-  const VIEWS = [
-    { value: "board", label: "Board", draft: false, count: 0 },
-    { value: "table", label: "Table", draft: false, count: 0 },
-    { value: "routines", label: "Routines", draft: false, count: 0 },
-    { value: "decisions", label: "Decisions", draft: false, count: 1 },
-  ];
+  const VIEWS = routineViews(1);
 </script>
 
 <ShellFrame crumb={project?.name ?? "Project"}>
