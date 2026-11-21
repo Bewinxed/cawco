@@ -487,6 +487,12 @@ export const spawnWords = {
     search: "Search repositories or paste a git URL",
     owners: "Owner",
     allOwners: "All",
+    /** The owner strip's last chip: the owners it has no room for, in a searchable list. */
+    moreOwners: (count: number) => `+${count}`,
+    moreOwnersLabel: (count: number) =>
+      `${count} more ${count === 1 ? "owner" : "owners"}`,
+    searchOwners: "Search owners",
+    noOwnerMatch: (query: string) => `No owner matches “${query}”`,
     repositories: "Repositories",
     private: "Private",
     loadingRepos: "Reading repositories…",

@@ -137,6 +137,11 @@ const AYAAN: GhRepoOwner = {
   kind: "user",
   avatarUrl: avatar("A", "#0f766e"),
 };
+const LANTERN: GhRepoOwner = {
+  login: "lantern-studio",
+  kind: "org",
+  avatarUrl: avatar("L", "#be123c"),
+};
 
 /** Quarry's own social card, 1280 by 640, as its owners would set one. */
 const QUARRY_CARD = svg(
@@ -145,8 +150,8 @@ const QUARRY_CARD = svg(
 
 /**
  * The owners of the older repositories, and how many each holds: ten
- * owners, so the owner strip runs past the popover's width, the person's
- * own account in the hundreds, as a long-used gh lists them.
+ * owners, more than the owner strip has room for, the person's own
+ * account in the hundreds, as a long-used gh lists them.
  */
 const MORE_OWNERS: [GhRepoOwner, number][] = [
   [BEWINXED, 117],
@@ -175,10 +180,7 @@ const MORE_OWNERS: [GhRepoOwner, number][] = [
     6,
   ],
   [{ login: "inkpress", kind: "org", avatarUrl: avatar("I", "#4338ca") }, 4],
-  [
-    { login: "lantern-studio", kind: "org", avatarUrl: avatar("L", "#be123c") },
-    3,
-  ],
+  [LANTERN, 3],
 ];
 
 /** The words the older repositories' names are made of. */
@@ -261,8 +263,31 @@ function olderRepos(): GhRepo[] {
   return older;
 }
 
+/**
+ * Repositories of owners with few, updated lately: the owner strip's
+ * latest-active order then differs from its most-repositories order.
+ */
+const LATELY: GhRepo[] = [
+  repo(
+    LANTERN,
+    "storyboard",
+    "Shot lists and boards for the spring campaign",
+    true,
+    40 * MINUTE
+  ),
+  repo(
+    AYAAN,
+    "tidy-diff-action",
+    "GitHub Action that posts tidy-diff's tree on a pull request",
+    false,
+    5 * HOUR
+  ),
+];
+
 /** Every repository the machine's gh lists, latest updated first. */
-const LISTED: GhRepo[] = [...REPOS, ...olderRepos()];
+const LISTED: GhRepo[] = [...REPOS, ...LATELY, ...olderRepos()].sort(
+  (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)
+);
 
 /** A GitLab project's avatar, which its page gives as its `og:image`. */
 const VECTORPRESS_AVATAR = svg(

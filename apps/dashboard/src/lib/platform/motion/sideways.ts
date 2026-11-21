@@ -1,25 +1,19 @@
 /**
  * A row that scrolls sideways under the house edge fade (`kit-edge-fade`,
- * edge-fade.css): a strip of chips wider than its box, its scrollbar hidden
- * (`no-scrollbar`), so the fades alone say there is more past an edge.
+ * edge-fade.css): a strip wider than its box, its scrollbar hidden
+ * (`no-scrollbar`), so the fades alone say there is more past an edge (the
+ * fluid tabs' track).
  *
- * `sideways(item)` is its attachment:
- * - A vertical wheel or trackpad scroll over the row moves it sideways on a
- *   spring ({@link glide}, the tab track's too). A scroll it can't use is
- *   never held: a row that
+ * - {@link glide}: a vertical wheel or trackpad scroll over the row moves it
+ *   sideways on a spring. A scroll it can't use is never held: a row that
  *   doesn't overflow, or stands at its end in the scroll's direction, leaves
- *   the wheel to what holds it (the popover's own scroll). A sideways swipe
- *   is the browser's own scroll and is left alone.
- * - An `item` picked, or reached by the keyboard, glides whole into view,
- *   clear of the fades ({@link clearOfFades}). The group's arrow keys focus
- *   an item without scrolling to it (bits-ui's roving focus, `preventScroll`),
- *   so the focus brings it. Pressed by a pointer it moves once the press has
- *   landed (`click`), never on the press, so it never slides out from under
- *   the pointer first.
+ *   the wheel to what holds it. A sideways swipe is the browser's own scroll
+ *   and is left alone.
+ * - {@link clearOfFades}: where the row scrolls so an item stands whole in
+ *   it, clear of the fades.
  *
  * With reduced motion every move is instant.
  */
-import type { Attachment } from "svelte/attachments";
 import { dur, motionOk } from "./curves.svelte";
 
 /** A line's worth of wheel, px: a wheel that counts in lines (Firefox's). */
@@ -162,63 +156,4 @@ export function glide(row: HTMLElement): Glide {
     to(next);
   };
   return { stop, to, wheel };
-}
-
-/** The sideways row's attachment; `item` selects the row's items (its chips). */
-export function sideways(item: string): Attachment<HTMLElement> {
-  return (row) => {
-    const moves = glide(row);
-
-    /** Brings the item `event` names whole into view, clear of the fades. */
-    const bring = (event: Event) => {
-      const one =
-        event.target instanceof Element
-          ? event.target.closest<HTMLElement>(item)
-          : null;
-      if (!(one && row.contains(one))) {
-        return;
-      }
-      const to = clearOfFades(row, one);
-      if (to !== null) {
-        moves.to(to);
-      }
-    };
-    /**
-     * A pointer pressed on the row: the focus its press gives an item waits
-     * for the press to land (`click`), so the item never slides out from
-     * under it.
-     */
-    let pressing = false;
-    const onpointerdown = () => {
-      pressing = true;
-    };
-    const onpointerup = () => {
-      pressing = false;
-    };
-    /** Focus the keyboard moved (the group's arrows focus without scrolling). */
-    const onfocusin = (event: FocusEvent) => {
-      if (!pressing) {
-        bring(event);
-      }
-    };
-
-    // Not passive: a vertical wheel the row can use is its own, turned
-    // sideways, and must not also scroll what holds the row.
-    row.addEventListener("wheel", moves.wheel, { passive: false });
-    row.addEventListener("click", bring);
-    row.addEventListener("focusin", onfocusin);
-    row.addEventListener("pointerdown", onpointerdown);
-    // The press ends wherever the pointer is let go.
-    window.addEventListener("pointerup", onpointerup);
-    window.addEventListener("pointercancel", onpointerup);
-    return () => {
-      moves.stop();
-      row.removeEventListener("wheel", moves.wheel);
-      row.removeEventListener("click", bring);
-      row.removeEventListener("focusin", onfocusin);
-      row.removeEventListener("pointerdown", onpointerdown);
-      window.removeEventListener("pointerup", onpointerup);
-      window.removeEventListener("pointercancel", onpointerup);
-    };
-  };
 }

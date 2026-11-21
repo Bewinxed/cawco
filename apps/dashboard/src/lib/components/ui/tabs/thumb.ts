@@ -51,7 +51,8 @@ export const segmentedVariants = tv({
  * its selected item, gliding its position and its size together over
  * --duration-pop on --ease-in-out, the way the new-session ghost follows the
  * hover. A change caught mid-glide starts from where the thumb is on
- * screen, not from where it was headed, and width and height tween rather
+ * screen, not from where it was headed (a resize of the group mid-glide
+ * included), and width and height tween rather
  * than scale, so the thumb's corners never stretch.
  */
 export function slideThumb(
@@ -89,8 +90,19 @@ export function slideThumb(
       w: on.offsetWidth,
       h: on.offsetHeight,
     };
-    const glide = animate && last && (last.x !== next.x || last.y !== next.y);
-    const from = glide && run?.playState === "running" ? onScreen() : last;
+    // A resize while it glides (the group taking a new segment's width)
+    // turns the glide toward the new place, never cutting it to the end.
+    const moving = run?.playState === "running";
+    const moved =
+      last !== undefined &&
+      (last.x !== next.x ||
+        last.y !== next.y ||
+        (moving && (last.w !== next.w || last.h !== next.h)));
+    if (moving && !moved) {
+      return;
+    }
+    const glide = (animate || moving) && moved;
+    const from = glide && moving ? onScreen() : last;
     run?.cancel();
     thumb.style.opacity = "1";
     thumb.style.width = `${next.w}px`;

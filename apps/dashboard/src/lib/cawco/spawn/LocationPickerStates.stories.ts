@@ -2,7 +2,9 @@
  * The location popover's states, read one frame each (Component Story
  * Format 3, live components): the popover's form itself on the live
  * story's bench (location-live, `bare`), on what each situation leaves the
- * form holding.
+ * form holding. The owner strip's presses (its "+N" list is portalled out
+ * of the frame, so its rows are found in the document) run from the strip
+ * at rest.
  */
 import LocationLive from "./location-live.svelte";
 
@@ -79,3 +81,61 @@ export const OldDaemon = { args: { answer: "old-daemon" } };
 
 /** Working in a folder that isn't on the machine. */
 export const FolderMissing = { args: { mode: "dir", dir: "~/code/new-thing" } };
+
+interface Play {
+  canvas: {
+    getByRole: (role: string, options: { name: RegExp }) => HTMLElement;
+  };
+  userEvent: {
+    click: (element: Element) => Promise<void>;
+    type: (element: Element, text: string) => Promise<void>;
+    wait: (ms: number) => Promise<void>;
+  };
+}
+
+const MORE = /more owners/u;
+const SEARCH = "Search owners";
+const HARBOUR = "harbour-collective";
+/** Longer than the popover takes to open, and a list to settle. */
+const SETTLED_MS = 500;
+
+/** "+N" pressed once the location popover stands open: the owners there's no room for in the strip, listed. */
+const openMore = async ({ canvas, userEvent }: Play): Promise<void> => {
+  await userEvent.wait(SETTLED_MS);
+  await userEvent.click(canvas.getByRole("button", { name: MORE }));
+  await userEvent.wait(SETTLED_MS);
+};
+
+/** The strip at rest: the owners latest active first, as many as fit. */
+export const Owners = {};
+
+/** The other owners, opened from "+N". */
+export const MoreOwners = { from: "Owners", play: openMore };
+
+/** Searching the other owners by name. */
+export const SearchingOwners = {
+  from: "Owners",
+  play: async (play: Play) => {
+    await openMore(play);
+    const search = document.querySelector(`[aria-label="${SEARCH}"]`);
+    if (search) {
+      await play.userEvent.type(search, "har");
+    }
+    await play.userEvent.wait(SETTLED_MS);
+  },
+};
+
+/** An owner picked from the list: it stands last in the strip, picked. */
+export const OwnerFromList = {
+  from: "Owners",
+  play: async (play: Play) => {
+    await openMore(play);
+    const row = document.querySelector(
+      `[role="option"][data-value="${HARBOUR}"]`
+    );
+    if (row) {
+      await play.userEvent.click(row);
+    }
+    await play.userEvent.wait(SETTLED_MS);
+  },
+};

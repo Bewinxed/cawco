@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { segmentedVariants } from "#lib/components/ui/tabs/thumb.js";
   import { tv } from "#lib/utils.js";
 
   /**
@@ -29,6 +30,10 @@
    * - `swatch`: a colour's swatch that opens its picker (the design graph's
    *   colour control): the swatch drawn inside it is its whole look, its
    *   focus ring hugging it.
+   * - `segment`: a segment of a segmented group that opens what the group
+   *   has no room for (the repository picker's "+N" owners): the kit's
+   *   segment (tabs/thumb), pressed with the tint as a toggle item is, its
+   *   groove hover held while it is open, its words numerals.
    */
   export const popoverTriggerVariants = tv({
     variants: {
@@ -45,6 +50,7 @@
         mark: "pressable inline-flex rounded-xs",
         swatch:
           "pointer-hit grid place-items-center rounded-xs outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-1",
+        segment: `${segmentedVariants().segment()} num press-tint focus-inset shrink-0 aria-expanded:bg-groove-hover`,
         meter:
           "mark-line flex h-c-bar-item items-center gap-space-2 rounded-sm px-space-2 text-ink-muted type-label tabular-nums transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover data-compacting:text-ink-strong data-critical:not-data-compacting:text-error-9 data-warn:not-data-critical:not-data-compacting:text-warning-9",
       },

@@ -34,10 +34,109 @@
     | { kind: "read"; answer: MachineRepos }
     | { kind: "unread"; words: string };
 
-  /** One owner of the listed repositories, in the order the list first names them. */
+  /** One owner of the listed repositories. */
   interface Owner {
     count: number;
+    /** When its latest repository was last updated, ms: owners stand latest first. */
+    latest: number;
     owner: GhRepo["owner"];
+  }
+
+  /**
+   * The owner strip's chips as laid out at their own widths, px: the
+   * groove's inset (both sides) and the gap between chips, "All", the
+   * "+N" chip at its widest, and each owner's chip by its login.
+   */
+  interface ChipSizes {
+    all: number;
+    gap: number;
+    more: number;
+    owners: ReadonlyMap<string, number>;
+    pad: number;
+  }
+
+  /** The owners whose chips stand in the strip, and the rest, each in activity order. */
+  interface Strip {
+    hidden: Owner[];
+    shown: Owner[];
+  }
+
+  /**
+   * The owners whose chips fit `room` beside "All" (and "+N" while any is
+   * left out), latest active first. `keep` (the owner picked) always stands:
+   * where it would not fit in its own place, it takes the last place that
+   * fits. Before the chips are measured, none stands.
+   */
+  function fitOwners(
+    order: readonly Owner[],
+    keep: string,
+    room: number,
+    sizes: ChipSizes | undefined
+  ): Strip {
+    if (!sizes || room <= 0) {
+      return { shown: [], hidden: [...order] };
+    }
+    const widthOf = (one: Owner) =>
+      sizes.owners.get(one.owner.login) ?? Number.POSITIVE_INFINITY;
+    const fits = (chips: readonly Owner[]) => {
+      let total =
+        sizes.pad +
+        sizes.all +
+        (chips.length < order.length ? sizes.gap + sizes.more : 0);
+      for (const one of chips) {
+        total += sizes.gap + widthOf(one);
+      }
+      return total <= room;
+    };
+    /** The most of `from`'s first chips that fit, with `last` after them. */
+    const most = (from: readonly Owner[], last: Owner[]) => {
+      for (let count = from.length; count > 0; count -= 1) {
+        const chips = [...from.slice(0, count), ...last];
+        if (fits(chips)) {
+          return chips;
+        }
+      }
+      return last;
+    };
+    const natural = most(order, []);
+    const kept = order.find((one) => one.owner.login === keep);
+    const shown =
+      !kept || natural.includes(kept)
+        ? natural
+        : most(
+            order.filter((one) => one !== kept),
+            [kept]
+          );
+    return { shown, hidden: order.filter((one) => !shown.includes(one)) };
+  }
+
+  /** The chips' widths off the measuring strip (each against the strip's own scale, so a popover scaling in measures true). */
+  function chipSizes(row: HTMLElement): ChipSizes | undefined {
+    const group = row.querySelector<HTMLElement>('[data-slot="toggle-group"]');
+    const more = row.querySelector<HTMLElement>("[data-more]");
+    const drawn = group?.getBoundingClientRect().width ?? 0;
+    if (!(group && more && drawn > 0)) {
+      return;
+    }
+    const scale = group.offsetWidth / drawn;
+    const widthOf = (element: Element) =>
+      element.getBoundingClientRect().width * scale;
+    const owners = new Map<string, number>();
+    for (const item of group.querySelectorAll<HTMLElement>("[data-login]")) {
+      owners.set(item.dataset.login ?? "", widthOf(item));
+    }
+    const style = getComputedStyle(group);
+    return {
+      all: owners.get(ALL) ?? 0,
+      gap: Number.parseFloat(style.columnGap) || 0,
+      more: widthOf(more),
+      owners,
+      pad:
+        Number.parseFloat(style.paddingInlineStart) +
+        Number.parseFloat(style.paddingInlineEnd) +
+        Number.parseFloat(style.borderInlineStartWidth) +
+        Number.parseFloat(style.borderInlineEndWidth),
+    };
   }
 
   /** A row of the list: a listed repository, or a git URL taken as it is written. */
@@ -150,10 +249,13 @@
    * on GitHub gh's row for it and its social image, or a line saying gh
    * sees none there; on another host its page's description and image.
    * Owner chips filter the list to one owner, and each row's `owner/`
-   * folds away while one is chosen; a strip of them wider than the popover
-   * scrolls sideways under the wheel, its edges fading where more is past
-   * them (motion/sideways). While the list is read, skeleton rows stand in
-   * its rows' places on the rows' own columns.
+   * folds away while one is chosen. The strip never scrolls: "All", then
+   * the owners latest active first, as many as its width holds, and a
+   * "+N" chip opening a combobox over the rest (searched by login, ↑ ↓
+   * Enter, Escape closing it alone). The owner picked always stands in the
+   * strip: one picked from the list takes its last place, and keeps it
+   * until another owner is picked. While the list is read, skeleton rows
+   * stand in its rows' places on the rows' own columns.
    *
    * Motion: one list, its rows keyed by the repository, never mounted
    * again (motion/rows `reflow`). As the search or the owner changes, the
@@ -169,9 +271,10 @@
    * other's crossfade, under an edge shrinking over the ones leaving. The
    * skeleton rows hand their places to the list as it arrives, in the
    * skeleton's reveal (motion/rows `data-flip-skeleton`). The owner group's
-   * thumb travels to the owner picked (the kit's segmented group), and a
-   * chip picked or reached by the keyboard comes whole into view; the
-   * rows' hover ghost and picked wash travel between rows (`highlight`); the lock's tooltip is the list's one tooltip, portalled
+   * thumb travels to the owner picked (the kit's segmented group), and
+   * chips entering or leaving the strip, as it narrows or as one comes
+   * from the list, pop in and out while the rest slide (`reflow`,
+   * `data-flip="pop"`); the rows' hover ghost and picked wash travel between rows (`highlight`); the lock's tooltip is the list's one tooltip, portalled
    * out of the scroller. The URL row fills in where it stands as the
    * machine answers: the avatar takes the host's mark's place (`icon-swap`),
    * the age morphs in (MorphText), and the description, the line saying gh
@@ -182,8 +285,10 @@
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { untrack } from "svelte";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
+  import * as Command from "#lib/components/ui/command/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import Skeleton from "#lib/components/ui/skeleton/skeleton.svelte";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { provideGlide } from "#lib/components/ui/tooltip/glide.js";
@@ -194,13 +299,13 @@
     IconLock as Lock,
     IconSearch as Search,
   } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import { motionOk, reveal } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { handOver, reflow } from "#lib/platform/motion/rows.svelte.js";
-  import { sideways } from "#lib/platform/motion/sideways.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { didntAnswer } from "../hub/control";
   import Marked from "../Marked.svelte";
@@ -334,22 +439,45 @@
         return unhandled("answer", listing.answer);
     }
   });
+  /** The owners, latest active first (the newest update among their repositories), the most repositories first among equals. */
   const owners = $derived.by(() => {
     const byLogin = new Map<string, Owner>();
     for (const one of repos) {
+      const at = Date.parse(one.updatedAt) || 0;
       const known = byLogin.get(one.owner.login);
       if (known) {
         known.count += 1;
+        known.latest = Math.max(known.latest, at);
       } else {
-        byLogin.set(one.owner.login, { owner: one.owner, count: 1 });
+        byLogin.set(one.owner.login, {
+          owner: one.owner,
+          count: 1,
+          latest: at,
+        });
       }
     }
-    return [...byLogin.values()];
+    return [...byLogin.values()].sort(
+      (a, b) => b.latest - a.latest || b.count - a.count
+    );
   });
   /** The chosen owner, while it still owns something listed. */
   const owner = $derived(
     owners.some((one) => one.owner.login === ownerPick) ? ownerPick : ""
   );
+  /** The last owner picked: it keeps its place in the strip, "All" picked after it included, until another owner is picked. */
+  let pinned = $state("");
+  /** The strip's width, px, and its chips' own (off the measuring strip). */
+  let room = $state(0);
+  let sizes = $state<ChipSizes>();
+  const strip = $derived(fitOwners(owners, owner || pinned, room, sizes));
+  /** The combobox over the owners the strip has no room for stands open. */
+  let moreOpen = $state(false);
+  /** Its search, by login (the kit's Command filters its rows by it). */
+  let ownerQuery = $state("");
+  /** An owner was picked in it: focus goes to that owner's chip as it closes. */
+  let pickedFromList = false;
+  /** The strip, whose picked chip takes the focus from the list. */
+  let stripBox = $state<HTMLElement>();
   const typed = $derived(query.trim());
   /** The search is a git URL: it is the one row, cloned as it is written. */
   const pasted = $derived(isGitUrl(typed));
@@ -519,9 +647,17 @@
     }
   }
 
-  /** Where an owner stands in the owner group, All first: the side a swap moves toward. */
-  const ownerAt = (login: string) =>
-    login ? 1 + owners.findIndex((one) => one.owner.login === login) : 0;
+  /**
+   * Where an owner stands in the strip, All first: the side a swap moves
+   * toward. One the strip has no room for comes to its last place.
+   */
+  const ownerAt = (login: string) => {
+    if (!login) {
+      return 0;
+    }
+    const at = strip.shown.findIndex((one) => one.owner.login === login);
+    return at < 0 ? strip.shown.length : at + 1;
+  };
 
   function chooseOwner(login: string): void {
     const next = rowsFor(login);
@@ -550,7 +686,18 @@
       }
     }
     ownerPick = login;
+    if (login) {
+      pinned = login;
+    }
     activeKey = "";
+  }
+
+  /** An owner picked in the combobox: it closes, and the owner is picked in the strip. */
+  function pickFromList(login: string): void {
+    pickedFromList = true;
+    moreOpen = false;
+    ownerQuery = "";
+    chooseOwner(login);
   }
 
   /** Where each row the last swap brought is drawn while it still comes in, by its key. */
@@ -667,38 +814,151 @@
 
   {#if owners.length > 1 && !pasted}
     <!-- One pick among the owners, its thumb travelling to the one picked
-         (the kit's segmented group). A row wider than the popover scrolls
-         sideways under the wheel, the house edge fade at each edge with more
-         past it and no scrollbar (motion/sideways); the scroller pads into an
-         equal negative margin, so a chip's focus ring is never cut. -->
-    <div data-slot="owners" class="grid min-w-0" in:unfold out:unfold>
+         (the kit's segmented group). It never scrolls: the owners whose
+         chips fit its width stand in it (measured off a copy of the strip
+         at the chips' own widths, out of sight), and "+N" opens the rest. -->
+    <div data-slot="owners" class="relative grid min-w-0" in:unfold out:unfold>
       <div
-        class="kit-edge-fade no-scrollbar -m-space-2 flex min-w-0 overflow-x-auto overscroll-x-contain p-space-2"
-        {@attach sideways('[data-slot="toggle-group-item"]')}
+        bind:this={stripBox}
+        class="min-w-0"
+        {@attach frameSize(
+          (node) => node.clientWidth,
+          (width) => {
+            room = width;
+          }
+        )}
+        {@attach reflow()}
       >
         <ToggleGroup.Root
           aria-label={spawnWords.location.owners}
-          onValueChange={(next) => {
-            // A press on the picked owner keeps it picked.
-            if (next) {
-              chooseOwner(next === ALL ? "" : next);
+          bind:value={
+            () => owner || ALL,
+            (next) => {
+              // A press on the picked owner keeps it picked.
+              if (next) {
+                chooseOwner(next === ALL ? "" : next);
+              }
             }
-          }}
+          }
           type="single"
-          value={owner || ALL}
         >
           <ToggleGroup.Item value={ALL}>
-            <span>{spawnWords.location.allOwners}</span>
-            <span class="num text-ink-muted">{repos.length}</span>
+            {@render allChip()}
           </ToggleGroup.Item>
-          {#each owners as one (one.owner.login)}
-            <ToggleGroup.Item value={one.owner.login}>
-              {@render avatar(one.owner, "size-icon-md")}
-              <span>{one.owner.login}</span>
-              <span class="num text-ink-muted">{one.count}</span>
+          {#each strip.shown as one (one.owner.login)}
+            <ToggleGroup.Item data-flip="pop" value={one.owner.login}>
+              {@render ownerChip(one)}
             </ToggleGroup.Item>
           {/each}
+          {#if strip.hidden.length}
+            <Popover.Root
+              bind:open={moreOpen}
+              onOpenChange={(open) => {
+                if (!open) {
+                  ownerQuery = "";
+                }
+              }}
+            >
+              <Popover.Trigger
+                aria-label={spawnWords.location.moreOwnersLabel(
+                  strip.hidden.length
+                )}
+                data-flip="pop"
+                look="segment"
+              >
+                <span
+                  >{spawnWords.location.moreOwners(strip.hidden.length)}</span
+                >
+              </Popover.Trigger>
+              <Popover.Content
+                align="end"
+                onCloseAutoFocus={(event) => {
+                  const chip = stripBox?.querySelector<HTMLElement>(
+                    '[data-slot="toggle-group-item"][data-state="on"]'
+                  );
+                  if (pickedFromList && chip) {
+                    event.preventDefault();
+                    chip.focus();
+                  }
+                  pickedFromList = false;
+                }}
+                pad="none"
+                width="narrow"
+              >
+                <Command.Root
+                  filter={(value, search) =>
+                    value.toLowerCase().includes(search.trim().toLowerCase())
+                      ? 1
+                      : 0}
+                  label={spawnWords.location.owners}
+                >
+                  <Command.Input
+                    aria-label={spawnWords.location.searchOwners}
+                    placeholder={spawnWords.location.searchOwners}
+                    bind:value={ownerQuery}
+                  />
+                  <Command.List>
+                    <Command.Empty
+                      >{spawnWords.location.noOwnerMatch(
+                        ownerQuery.trim()
+                      )}</Command.Empty
+                    >
+                    {#each strip.hidden as one (one.owner.login)}
+                      <Command.Item
+                        onSelect={() => pickFromList(one.owner.login)}
+                        value={one.owner.login}
+                      >
+                        {@render avatar(one.owner, "size-icon-lg")}
+                        <span
+                          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
+                          >{one.owner.login}</span
+                        >
+                        <span class="num type-meta text-ink-muted"
+                          >{one.count}</span
+                        >
+                      </Command.Item>
+                    {/each}
+                  </Command.List>
+                </Command.Root>
+              </Popover.Content>
+            </Popover.Root>
+          {/if}
         </ToggleGroup.Root>
+      </div>
+      <!-- The strip at every chip's own width, out of sight and out of the
+           layout (a box of no size clips it): what the chips above are
+           fitted from. -->
+      <div
+        aria-hidden="true"
+        class="pointer-events-none invisible absolute start-0 top-0 size-0 overflow-hidden"
+        inert
+      >
+        <div
+          class="w-max"
+          {@attach frameSize(chipSizes, (measured) => {
+            sizes = measured;
+          })}
+        >
+          <ToggleGroup.Root type="single" value="">
+            <ToggleGroup.Item data-login={ALL} value={ALL}>
+              {@render allChip()}
+            </ToggleGroup.Item>
+            {#each owners as one (one.owner.login)}
+              <ToggleGroup.Item
+                data-login={one.owner.login}
+                value={one.owner.login}
+              >
+                {@render ownerChip(one)}
+              </ToggleGroup.Item>
+            {/each}
+            <Popover.Root>
+              <Popover.Trigger data-more look="segment"
+                ><span>{spawnWords.location.moreOwners(owners.length)}</span
+                ></Popover.Trigger
+              >
+            </Popover.Root>
+          </ToggleGroup.Root>
+        </div>
       </div>
     </div>
   {/if}
@@ -1003,6 +1263,20 @@
       >
     {/snippet}
   </Tip>
+{/snippet}
+
+<!-- The owner strip's chips' insides, as the strip and its measuring copy draw them. -->
+{#snippet allChip()}
+  <span>{spawnWords.location.allOwners}</span>
+  <span class="num text-ink-muted">{repos.length}</span>
+{/snippet}
+
+{#snippet ownerChip(one: Owner)}
+  {@render avatar(one.owner, "size-icon-md")}
+  <span class="max-w-40 overflow-clip text-ellipsis" title={one.owner.login}
+    >{one.owner.login}</span
+  >
+  <span class="num text-ink-muted">{one.count}</span>
 {/snippet}
 
 {#snippet avatar(who: GhRepo["owner"], size: string)}
