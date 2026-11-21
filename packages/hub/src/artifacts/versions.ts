@@ -238,7 +238,12 @@ export const createVersions = (ctx: VersionsContext) => {
    * The version of `row` its author hands up again (its artifact_update, its
    * own artifact_show), cut ({@link pinnedSource}) and served to the person
    * from now on; the row as it stood, and the person's pin with it, when it
-   * is refused.
+   * is refused. A version cut is a revision, as every other move of a
+   * row's source is (a create in place, a design graph's canvas update, a
+   * next version opened): the revision is written before the source, so
+   * whoever hears the move (server.ts `onSourceMoved`) reads them together,
+   * and the artifact's own tab and the decision pages that show it load
+   * the version (server.ts `tabTarget`, {@link VersionsContext.versionMoved}).
    */
   const cutVersion = async (row: ArtifactRow) => {
     const cut = await pinnedSource(row.machineId, row.source);
@@ -248,8 +253,11 @@ export const createVersions = (ctx: VersionsContext) => {
     if (cut.source === row.source) {
       return row;
     }
+    db.update(row.id, { revision: row.revision + 1, updatedAt: new Date() });
     db.resource(row.id, { machineId: row.machineId, source: cut.source });
-    return stillThere(db.get(row.id), row.id);
+    const moved = stillThere(db.get(row.id), row.id);
+    ctx.versionMoved(moved);
+    return moved;
   };
   /**
    * An owner's own create of an artifact its maker's next version is held

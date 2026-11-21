@@ -5765,14 +5765,38 @@ export const createServer = (
       }
     });
   });
+  /**
+   * Session `instanceId`'s panel loads what it shows again: its target at a
+   * new revision, which names its frame (dashboard preview-frame.svelte.ts
+   * `frameKey`), its show kept, so a tab that closed it stays closed.
+   */
+  const loadAgain = (instanceId: string, target: PreviewTarget) => {
+    const moved = { ...target, revision: crypto.randomUUID() };
+    previewTargets.set(instanceId, moved);
+    db.artifacts.show(
+      instanceId,
+      target.artifact.id,
+      moved.revision,
+      moved.show
+    );
+    publishPreview(instanceId, "open", moved);
+  };
   // Every move of an artifact's source moves the upstream of the origin it
-  // stands on, and the panels showing it hear its source again.
+  // stands on, and every frame showing it loads what it serves now. A
+  // frame's address is its origin's, which a move keeps, so only a new
+  // revision loads it again: published at the revision it had, a panel kept
+  // the page it loaded from the server the row moved off (an author's
+  // hand-up of a sheet, its args or story written and its pin cut, never
+  // reached the person's open panel). So each panel showing it loads again
+  // (`loadAgain`), and every artifact tab reads its target again once the
+  // move's writer has written the row's revision beside it (`tabTarget`).
   db.onSourceMoved((move) => {
     for (const [instanceId, target] of previewTargets) {
       if (target.artifact.id === move.id) {
-        publishPreview(instanceId, "open", target);
+        loadAgain(instanceId, target);
       }
     }
+    soon(() => artifactSessions.moved({ kind: "shown" }));
     detach(previewService.moved(move), "preview source move");
     // A newer version served from elsewhere holds the old one's workspace no longer.
     const { machineId } = move.before;
@@ -11274,15 +11298,7 @@ export const createServer = (
   /** Every shown preview again, at its address now: how previews are reached changed. */
   const republishPreviews = () => {
     for (const [instanceId, target] of previewTargets) {
-      const moved = { ...target, revision: crypto.randomUUID() };
-      previewTargets.set(instanceId, moved);
-      db.artifacts.show(
-        instanceId,
-        target.artifact.id,
-        moved.revision,
-        moved.show
-      );
-      publishPreview(instanceId, "open", moved);
+      loadAgain(instanceId, target);
     }
     // The board carries the mode (`previewSettings`, which a
     // dashboard's Decisions page follows) and refreshes every
