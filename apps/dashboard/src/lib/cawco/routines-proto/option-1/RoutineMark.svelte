@@ -17,7 +17,11 @@
   let { state, words }: { state: RoutineState; words: string } = $props();
 </script>
 
-<span class="grid size-icon-md flex-none place-items-center" data-state={state}>
+<span
+  class="grid size-icon-md flex-none place-items-center"
+  data-box
+  data-state={state}
+>
   <span class="sr-only">{words}</span>
   {#if state === "running"}
     <LiveDot />

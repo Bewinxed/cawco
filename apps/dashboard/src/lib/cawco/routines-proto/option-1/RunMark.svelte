@@ -11,6 +11,12 @@
     met: "Met",
     couldNot: "Could not check",
   };
+
+  const TODAY = /^Today/u;
+
+  /** How a run ended and when, as one phrase: "Not yet, today 13:34". */
+  export const endedWhen = (how: RunHow, when: string): string =>
+    `${RUN_WORDS[how]}, ${when.replace(TODAY, "today")}`;
 </script>
 
 <script lang="ts">
@@ -32,7 +38,11 @@
   let { how }: { how: RunHow } = $props();
 </script>
 
-<span class="grid size-icon-md flex-none place-items-center" data-how={how}>
+<span
+  class="grid size-icon-md flex-none place-items-center"
+  data-box
+  data-how={how}
+>
   <span class="sr-only">{RUN_WORDS[how]}</span>
   {#if how === "running"}
     <LiveDot />

@@ -19,11 +19,14 @@
   let {
     opened = null,
     run = null,
+    stale = false,
   }: {
     /** The routine the page opens with beside the view. */
     opened?: string | null;
     /** The earlier run whose result stands open as it opens. */
     run?: string | null;
+    /** The hub is away: the page shows the last reading it had. */
+    stale?: boolean;
   } = $props();
 
   const PROJECT = "harbor";
@@ -87,6 +90,7 @@
         runId = id;
       }}
       {openId}
+      readAt={stale ? "13:31" : null}
       routines={ONE_SCREEN}
       {runId}
       sources={SOURCES}

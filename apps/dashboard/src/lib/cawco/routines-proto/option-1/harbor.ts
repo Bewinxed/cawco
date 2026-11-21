@@ -29,7 +29,7 @@ export interface Run {
   retry?: boolean;
   /** The session that did it; absent for a command or a skip. */
   sessionId?: string;
-  /** What started it: its time, an event, the test on creation, the person. */
+  /** What started it, as a phrase after its time: "at its set time", "when issue #805 was opened". */
   started: string;
   /** How long it took. */
   took?: string;
@@ -96,7 +96,9 @@ export interface Routine {
 
 /** One exact call a run asked to make outside CawCo. */
 export interface OutsideAction {
-  /** Where it stands and when. */
+  /** The account it acts as. */
+  account: string;
+  /** When it came to stand where it stands. */
   at: string;
   /** From which routine. */
   from: string;
@@ -144,7 +146,7 @@ const ROUTINES: Routine[] = [
     id: "rtn-staging",
     instruction:
       "Follow the instructions, then answer met or not yet, with the one line of the page that decides it.",
-    limits: "Up to $0.40 a look · $6 a day · today $0.31",
+    limits: "Up to $0.40 a look and $6 a day; $0.31 so far today",
     upcoming: ["Stopped until you choose"],
     name: "Check the staging deploy is green",
     sentence: "Looks for: “The staging deploy of main finished without errors”",
@@ -177,7 +179,7 @@ const ROUTINES: Routine[] = [
         fresh: true,
         when: "Today 13:20",
         how: "couldNot",
-        started: "Its time",
+        started: "at its set time",
         took: "38 s",
         words: "The deploy page asked for a sign-in.",
         sessionId: "8f2c41d0",
@@ -186,7 +188,7 @@ const ROUTINES: Routine[] = [
         id: "run-s2",
         when: "Today 13:10",
         how: "couldNot",
-        started: "Its time",
+        started: "at its set time",
         took: "41 s",
         words: "The deploy page asked for a sign-in.",
         sessionId: "8f2c41a9",
@@ -195,7 +197,7 @@ const ROUTINES: Routine[] = [
         id: "run-s1",
         when: "Today 13:00",
         how: "couldNot",
-        started: "Its time",
+        started: "at its set time",
         took: "35 s",
         words: "The deploy page asked for a sign-in.",
         sessionId: "8f2c4172",
@@ -206,7 +208,7 @@ const ROUTINES: Routine[] = [
     id: "rtn-deps",
     instruction:
       "List every package in harbor-app and harbor-cli that is behind its latest release, and every security advisory against one. Group them by how far behind. Open no pull request.",
-    limits: "Up to $2 a run · $4 a day · its test run $0.84",
+    limits: "Up to $2 a run and $4 a day; its test run cost $0.84",
     upcoming: [
       "Mon 23 Nov 08:00",
       "Mon 30 Nov 08:00 · turned off by then unless kept",
@@ -232,7 +234,7 @@ const ROUTINES: Routine[] = [
         id: "run-d1",
         when: "Tue 17 Nov 11:04",
         how: "delivered",
-        started: "The test when it was made",
+        started: "as its test when it was made",
         took: "6 min",
         words: "14 packages behind, 2 with security advisories.",
         sessionId: "3b91e7c2",
@@ -243,7 +245,7 @@ const ROUTINES: Routine[] = [
     id: "rtn-changelog",
     instruction:
       "Draft this week's changelog from the merged pull requests, and propose posting it on X from @harborapp. Post nothing yourself.",
-    limits: "Up to $3 a run · $6 a day · Friday $1.92",
+    limits: "Up to $3 a run and $6 a day; Friday's runs cost $1.92",
     upcoming: [
       "Fri 27 Nov 16:00",
       "Fri 4 Dec 16:00",
@@ -268,7 +270,7 @@ const ROUTINES: Routine[] = [
         id: "run-c2",
         when: "Fri 16:09",
         how: "failed",
-        started: "Retry",
+        started: "as the retry",
         retry: true,
         took: "3 min",
         words: "X refused the post: token expired (401).",
@@ -278,7 +280,7 @@ const ROUTINES: Routine[] = [
         id: "run-c1",
         when: "Fri 16:00",
         how: "failed",
-        started: "Its time",
+        started: "at its set time",
         took: "7 min",
         words: "X refused the post: token expired (401).",
         sessionId: "a40d7302",
@@ -320,7 +322,7 @@ const ROUTINES: Routine[] = [
         fresh: true,
         when: "Today 13:34",
         how: "notYet",
-        started: "Its time",
+        started: "at its set time",
         took: "2 s",
         words: "npm error code E404",
         by: "A shell command, no session",
@@ -329,7 +331,7 @@ const ROUTINES: Routine[] = [
         id: "run-n8",
         when: "Today 13:19",
         how: "notYet",
-        started: "Its time",
+        started: "at its set time",
         took: "2 s",
         words: "npm error code E404",
         by: "A shell command, no session",
@@ -340,7 +342,7 @@ const ROUTINES: Routine[] = [
     id: "rtn-memory",
     instruction:
       "Curate the project's memory: keep what later sessions need, drop what no longer holds.",
-    limits: "CawCo's own · today $0.22",
+    limits: "$0.22 so far today",
     upcoming: [
       "Tomorrow 03:00",
       "Mon 03:00",
@@ -363,7 +365,7 @@ const ROUTINES: Routine[] = [
         fresh: true,
         when: "Today 03:00",
         how: "delivered",
-        started: "Its time",
+        started: "at its set time",
         took: "2 min",
         words: "Kept 4 notes, dropped 2 stale lines.",
         sessionId: "c7e05b18",
@@ -374,7 +376,7 @@ const ROUTINES: Routine[] = [
     id: "rtn-summary",
     instruction:
       "Read every session of this project from yesterday and write a digest: what finished, what waits on me, what failed and why.",
-    limits: "Up to $1.50 a run · $3 a day · Friday $0.96",
+    limits: "Up to $1.50 a run and $3 a day; Friday's run cost $0.96",
     upcoming: [
       "Tomorrow 13:30",
       "Mon 13:30",
@@ -396,7 +398,7 @@ const ROUTINES: Routine[] = [
         fresh: true,
         when: "Today 13:30",
         how: "running",
-        started: "Its time",
+        started: "at its set time",
         words: "Reading 14 sessions from yesterday…",
         sessionId: "e1a96c30",
       },
@@ -404,7 +406,7 @@ const ROUTINES: Routine[] = [
         id: "run-y1",
         when: "Fri 13:30",
         how: "delivered",
-        started: "Its time",
+        started: "at its set time",
         took: "5 min",
         words: "14 sessions yesterday: 9 finished, 3 waiting on you, 2 failed.",
         result: SUMMARY_RESULT,
@@ -416,10 +418,10 @@ const ROUTINES: Routine[] = [
     id: "rtn-triage",
     instruction:
       "Read the issues opened since the last run. Label each by kind and area, flag likely duplicates with the issue they repeat, and propose closing a duplicate. Ask the reporter for steps when an issue has none.",
-    limits: "Up to $1 a run · $5 a day · Friday $0.58",
+    limits: "Up to $1 a run and $5 a day; Friday's run cost $0.58",
     upcoming: ["Mon 09:00", "Tue 09:00", "Wed 09:00", "Thu 09:00", "Fri 09:00"],
     starts:
-      "When an issue is opened in harbor/harbor-app · last Thu 14:12, #805",
+      "When an issue is opened in harbor/harbor-app; last on Thu 14:12, for #805",
     name: "Triage new GitHub issues",
     sentence: "Labels new issues and flags duplicates",
     state: "on",
@@ -433,7 +435,7 @@ const ROUTINES: Routine[] = [
         id: "run-t4",
         when: "Fri 09:00",
         how: "delivered",
-        started: "Its time",
+        started: "at its set time",
         took: "4 min",
         words: "Labelled 6 new issues; 2 look like duplicates of #812.",
         result: TRIAGE_RESULT,
@@ -443,7 +445,7 @@ const ROUTINES: Routine[] = [
         id: "run-t3",
         when: "Thu 14:12",
         how: "delivered",
-        started: "Issue #805 was opened",
+        started: "when issue #805 was opened",
         took: "1 min",
         words: "Labelled #805 bug and area:sync.",
         sessionId: "5d0e1c07",
@@ -452,7 +454,7 @@ const ROUTINES: Routine[] = [
         id: "run-t2",
         when: "Thu 09:00",
         how: "delivered",
-        started: "Its time",
+        started: "at its set time",
         took: "3 min",
         words: "Labelled 3 new issues; none look like duplicates.",
         sessionId: "5d0e0a66",
@@ -461,7 +463,7 @@ const ROUTINES: Routine[] = [
         id: "run-t1",
         when: "Wed 09:00",
         how: "nothing",
-        started: "Its time",
+        started: "at its set time",
         took: "40 s",
         words: "No new issues since Tuesday 09:00.",
         sessionId: "5d0df812",
@@ -472,10 +474,10 @@ const ROUTINES: Routine[] = [
     id: "rtn-notes",
     instruction:
       "Draft release notes from the merged pull request's description and commits, and comment them on the pull request.",
-    limits: "Up to $1 a run · $4 a day · Thursday $0.41",
+    limits: "Up to $1 a run and $4 a day; Thursday's run cost $0.41",
     upcoming: [],
     starts:
-      "When a pull request is merged into main in harbor/harbor-app · last Thu 17:12, PR 409",
+      "When a pull request is merged into main in harbor/harbor-app; last on Thu 17:12, for PR 409",
     name: "Draft release notes on merge",
     sentence: "Drafts notes from the merged pull request",
     state: "on",
@@ -489,7 +491,7 @@ const ROUTINES: Routine[] = [
         id: "run-r1",
         when: "Thu 17:12",
         how: "delivered",
-        started: "Pull request 409 was merged",
+        started: "when pull request 409 was merged",
         took: "3 min",
         words: "Drafted notes for PR 409 “Retry sync after the phone wakes”.",
         sessionId: "9c3f5a20",
@@ -500,7 +502,7 @@ const ROUTINES: Routine[] = [
     id: "rtn-appstore",
     instruction:
       "Follow the instructions, then answer met or not yet, with the line of the page that decides it.",
-    limits: "Up to $0.30 a look · $3 a day",
+    limits: "Up to $0.30 a look and $3 a day",
     upcoming: ["No look runs while nothing waits on it"],
     name: "Wait for the App Store review",
     sentence: "Looks for: “Build 81 is approved for sale”",
@@ -526,7 +528,7 @@ const ROUTINES: Routine[] = [
     id: "rtn-unused",
     instruction:
       "Count which skills and servers this project's sessions called in 30 days, and propose unlisting the ones none called.",
-    limits: "CawCo's own",
+    limits: "Nothing spent since it was paused",
     upcoming: ["Paused"],
     name: "Find unused skills and servers",
     sentence: "Counts what sessions call, proposes unlisting",
@@ -542,7 +544,7 @@ const ROUTINES: Routine[] = [
         id: "run-u1",
         when: "Mon 9 Nov 09:00",
         how: "delivered",
-        started: "Its time",
+        started: "at its set time",
         took: "3 min",
         words:
           "4 skills and 1 server unused for 30 days; proposed unlisting them.",
@@ -578,7 +580,7 @@ const ROUTINES: Routine[] = [
         id: "run-p1",
         when: "19 Nov 14:02",
         how: "met",
-        started: "Its time",
+        started: "at its set time",
         took: "1 s",
         words: "merged by mira at 14:01",
         by: "A shell command, no session",
@@ -591,15 +593,17 @@ export const ACTIONS: OutsideAction[] = [
   {
     id: "act-790",
     what: "Close #790 as a duplicate of #812",
-    service: "GitHub · harbor-bot",
+    service: "GitHub",
+    account: "harbor-bot",
     from: "Triage new GitHub issues",
     standing: "waits",
-    at: "Since Fri 09:04",
+    at: "since Fri 09:04",
   },
   {
     id: "act-post",
     what: "Post the 2.3.1 changelog on X",
-    service: "X · @harborapp",
+    service: "X",
+    account: "@harborapp",
     from: "Post the weekly changelog",
     standing: "failed",
     at: "Fri 16:09",
@@ -608,7 +612,8 @@ export const ACTIONS: OutsideAction[] = [
   {
     id: "act-805",
     what: "Label #805 bug and area:sync",
-    service: "GitHub · harbor-bot",
+    service: "GitHub",
+    account: "harbor-bot",
     from: "Triage new GitHub issues",
     standing: "ran",
     at: "Thu 14:13",
@@ -620,7 +625,7 @@ export const SOURCES: OutsideSource[] = [
     id: "src-gh",
     service: "GitHub",
     what: "harbor/harbor-app",
-    read: "As they happen · last read 13:31, 3 items",
+    read: "As they happen; last read at 13:31, 3 items",
   },
   {
     id: "src-linear",

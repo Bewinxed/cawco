@@ -14,7 +14,7 @@
   import { sessionHref } from "./harbor";
   import OpenButton from "./OpenButton.svelte";
   import RoutineMark from "./RoutineMark.svelte";
-  import RunMark, { RUN_WORDS } from "./RunMark.svelte";
+  import RunMark, { endedWhen } from "./RunMark.svelte";
 
   let {
     routine,
@@ -104,7 +104,7 @@
         <span class="flex min-w-0 flex-col gap-space-1">
           <span
             class="type-meta num text-ink-muted group-data-open/row:text-selected-ink whitespace-nowrap"
-            >{RUN_WORDS[last.how]} · {last.when}</span
+            >{endedWhen(last.how, last.when)}</span
           >
           <span
             class={[

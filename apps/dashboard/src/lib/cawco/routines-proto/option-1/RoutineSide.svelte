@@ -10,6 +10,7 @@
    * (`@routine-page/routine`), what it looks for and its runs take the wide
    * column and the rest the narrow one.
    */
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -31,8 +32,9 @@
   import { sessionHref } from "./harbor";
   import OpenButton from "./OpenButton.svelte";
   import RoutineMark from "./RoutineMark.svelte";
-  import RunMark, { RUN_WORDS } from "./RunMark.svelte";
+  import RunMark, { endedWhen } from "./RunMark.svelte";
   import RunResult from "./RunResult.svelte";
+  import RunWords from "./RunWords.svelte";
 
   let {
     routine,
@@ -53,6 +55,11 @@
     /** An act on the routine, by its words: "Run now", "Edit", "Keep". */
     onact: (act: string) => void;
   } = $props();
+
+  /** A run's result opened in place is brought into view, as near as it lies. */
+  const reveal = (node: HTMLElement) => {
+    bringIntoView(node);
+  };
 
   const looks = $derived(routine.looksFor);
   const latest = $derived(routine.runs[0]);
@@ -237,8 +244,12 @@
         <div
           class="flex flex-wrap items-center gap-x-space-4 gap-y-space-1 type-meta text-ink-muted"
         >
-          <span class="mark-line inline-flex items-center gap-space-2">
-            <RoutineMark state={routine.state} words={routine.stateWords} />
+          <!-- mark-line: the mark stands in its own lead box at the line's
+               height, as a row's does. -->
+          <span class="flex items-start gap-space-2">
+            <span class="flex h-lh items-center type-label">
+              <RoutineMark state={routine.state} words={routine.stateWords} />
+            </span>
             <span class="type-label text-ink-strong">{routine.stateWords}</span>
           </span>
           <span class="num">{nextWords}</span>
@@ -344,9 +355,9 @@
                   <p class="m-0 type-body text-ink-muted">No answer yet.</p>
                 {/if}
                 <p class="m-0 type-meta num text-ink-muted">
-                  {nextWords} · stops looking {looks.stops === "Until met"
-                    ? "once met"
-                    : `on ${looks.stops}`}
+                  {routine.needs
+                    ? nextWords
+                    : `${nextWords}; it stops looking ${looks.stops === "Until met" ? "once met" : `on ${looks.stops}`}.`}
                 </p>
               </div>
               <div class="flex flex-col gap-space-2">
@@ -429,9 +440,18 @@
                       >
                       <div class="flex min-w-0 flex-auto flex-col gap-space-1">
                         <span class="type-meta num text-ink-muted"
-                          >{RUN_WORDS[run.how]} · {run.when} · {run.started}</span
+                          >{endedWhen(run.how, run.when)}, {run.started}{opened &&
+                          run.took
+                            ? `, took ${run.took}`
+                            : ""}</span
                         >
-                        {#if !opened}
+                        {#if opened}
+                          <!-- Opened, its whole result stands under its
+                               line, brought into view. -->
+                          <div class="pt-space-2" {@attach reveal}>
+                            <RunWords {run} />
+                          </div>
+                        {:else}
                           <span
                             class="type-body text-ink-strong line-clamp-1 wrap-anywhere"
                             >{run.words}</span
@@ -453,16 +473,13 @@
                         <OpenButton
                           kind="here"
                           label={opened
-                            ? "Close this run's result"
-                            : "Open this run's whole result"}
+                            ? `Close the run of ${run.when}`
+                            : `Open the run of ${run.when}`}
                           onopen={() => onrun(opened ? null : run.id)}
                           open={opened}
                         />
                       </div>
                     </div>
-                    {#if opened}
-                      <RunResult {run} />
-                    {/if}
                   </li>
                 {/each}
               </ul>
@@ -514,7 +531,7 @@
                   <li class="flex flex-col gap-space-1">
                     <span class="type-body text-ink-strong">{action.what}</span>
                     <span class="type-meta num text-ink-muted"
-                      >{action.service} · {action.at}</span
+                      >{action.account} on {action.service}, {action.at}</span
                     >
                     {#if action.said}
                       <span class="type-body text-status-fail-ink"
