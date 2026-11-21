@@ -200,6 +200,11 @@ import {
  * first (the owner's "it depends on the permission mode" on card
  * `condition-waits#who`) (worker 31,327 measured); the worker's budget is
  * raised to it.
+ * 2026-11-21: memory_withdraw, so a session takes back a wrong note of its
+ * own before the nightly run reads it (the owner that day); paid for by
+ * memory_note's answer becoming a sentence and artifact_update pointing at
+ * artifact_create's elements and ask in place of repeating them (worker
+ * 31,314, delegate 11,845 measured). No budget is raised.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 31_330,

@@ -9069,6 +9069,7 @@ export const createServer = (
       ensure: (projectId) => routines.ensureCurator(projectId),
     }),
     apply: (actor, ops) => memoryRun.apply(actor, ops),
+    unnote: (actor, id) => memoryRun.unnote(actor, id),
     folderChanged: (projectId) => tasks.touched(projectId),
   });
   // A project's delegate type proposals (type-proposals.ts): Caw's

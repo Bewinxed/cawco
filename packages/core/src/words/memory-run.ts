@@ -38,13 +38,19 @@ export const memoryRunWords = {
 
   /** `memory_note`'s description. */
   noteTool:
-    "A note for this project's nightly memory run. Use it when you learn a lasting fact about the project (a command, a place, what fails), naming the file or test it is about, or when the person corrects how you work: say the rule in your own words and the day it was said.",
+    "A note for this project's nightly memory run. Use it when you learn a lasting fact about the project (a command, a place, what fails), naming the file or test it is about, or when the person corrects how you work: say the rule in your own words and the day it was said. Withdraw a wrong note with memory_withdraw, never a second note.",
+  /** `memory_withdraw`'s description. */
+  withdrawTool:
+    "Takes back a note you left, before the nightly run reads it. Use it when your note is wrong.",
+  /** `memory_withdraw`'s answer: the note left the inbox. */
+  withdrawn: (id: string, text: string) =>
+    `Withdrew ${id}; the memory run will not read it. It said: ${text}`,
   /** The line every session that may note is told at its start. */
   noteLine:
     "A lasting fact for this project's later sessions, or a correction the person gives about how to work, goes through memory_note as you learn it, in your own words.",
   /** `memory_note`'s answer: the run reads it. */
   notedForRun: (id: string) =>
-    `Noted as ${id}. The nightly memory run reads it. It is kept if it restates something the person said, if a second session notes the same, or if the file it names bears it out.`,
+    `Noted as ${id}. The nightly memory run reads it. It is kept if it restates something the person said, if a second session notes the same, or if the file it names bears it out. If it is wrong, withdraw it with memory_withdraw.`,
   /** `memory_note`'s answer: a secret was taken out. */
   notedSecret: (id: string) =>
     `Noted as ${id} with a secret removed. It will not be kept.`,

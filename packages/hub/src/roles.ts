@@ -50,7 +50,7 @@
  * on its decision.
  *
  * Memory (§5.4): the worker and the delegate write notes into their
- * project's inbox (`memory_note`); only the nightly run's curator reads
+ * project's inbox (`memory_note`) and take back their own (`memory_withdraw`); only the nightly run's curator reads
  * and writes the memory files (`memory_read`, `memory_apply`).
  */
 import {
@@ -197,6 +197,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     "task_result",
     ...ORCHESTRATOR_TASKS,
     "memory_note",
+    "memory_withdraw",
     // Anything said or made, as the dashboard's Find finds it (find-tool.ts).
     "find",
     // Its own project's folder, read only (caw.ts): what an earlier delegate

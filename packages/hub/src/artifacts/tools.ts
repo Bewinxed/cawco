@@ -281,7 +281,7 @@ export const artifactUpdate = {
   input: {
     id,
     elements: elements.describe(
-      `${elements.description} One whose id is there replaces it.`
+      "Excalidraw skeletons as artifact_create takes them; one whose id is there replaces it."
     ),
     mermaid,
     args: z
@@ -325,8 +325,8 @@ export const artifactUpdate = {
       .max(PAGE_LIMIT)
       .optional()
       .describe("Replaces a page's whole document, picks kept."),
-    ask: ask.optional(),
-    title: title.optional(),
+    ask: ask.optional().describe("A new ask, as artifact_create's."),
+    title: title.optional().describe("A new title."),
     ...canvasFields,
     patch: z
       .array(

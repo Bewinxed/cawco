@@ -1304,6 +1304,28 @@ export const createMemoryRun = ({
 }: MemoryRunDeps) => {
   /** Each project's run under way. */
   const runs = new Map<string, Run>();
+  /** The projects whose run is being briefed: their inbox is being read. */
+  const briefing = new Set<string>();
+  /** Each project's session withdrawals under way, which a brief waits for before it reads the inbox. */
+  const unnoting = new Map<string, Set<Promise<unknown>>>();
+
+  /**
+   * `read` run as the inbox's reader: from its first step a session's
+   * withdrawal is refused, and it starts once the withdrawals already under
+   * way have committed, so it reads each note either withdrawn or whole.
+   */
+  const asReader = async <T>(
+    projectId: string,
+    read: () => Promise<T>
+  ): Promise<T> => {
+    briefing.add(projectId);
+    try {
+      await Promise.allSettled(unnoting.get(projectId) ?? []);
+      return await read();
+    } finally {
+      briefing.delete(projectId);
+    }
+  };
 
   const projectOf = (projectId: string) => {
     const project = db.project(projectId);
@@ -1851,7 +1873,10 @@ export const createMemoryRun = ({
    * notes it sorted out archived. `none` when nothing is left for the run,
    * its mark kept; else the brief. Jev failing throws its words.
    */
-  const brief = async (projectId: string) => {
+  const brief = (projectId: string) =>
+    asReader(projectId, () => briefOf(projectId));
+
+  const briefOf = async (projectId: string) => {
     const project = projectOf(projectId);
     if (project instanceof ElysiaStatus) {
       return project;
@@ -4231,7 +4256,10 @@ export const createMemoryRun = ({
    * did not convert (each a source of its own, `approved`). At most
    * {@link RECOVERY_NOTES} notes a run; a second run reads the rest.
    */
-  const recoveryBrief = async (projectId: string) => {
+  const recoveryBrief = (projectId: string) =>
+    asReader(projectId, () => recoveryBriefOf(projectId));
+
+  const recoveryBriefOf = async (projectId: string) => {
     const project = projectOf(projectId);
     if (project instanceof ElysiaStatus) {
       return project;
@@ -4811,13 +4839,19 @@ export const createMemoryRun = ({
 
   // --- a note withdrawn -----------------------------------------------------------
 
+  const idUnfit = (id: string) =>
+    NOTE_ID.test(id)
+      ? undefined
+      : problem(400, {
+          code: "memory-note-id-unfit",
+          detail: `${id} is not a note id (n-YYYYMMDD-HHMMSS-xxxxxx).`,
+        });
+
   /** The note `id` names, in the inbox or the archive; refused when it is no note's id, no note of the project's, or withdrawn already. */
   const withdrawable = async (projectId: string, id: string) => {
-    if (!NOTE_ID.test(id)) {
-      return problem(400, {
-        code: "memory-note-id-unfit",
-        detail: `${id} is not a note id (n-YYYYMMDD-HHMMSS-xxxxxx).`,
-      });
+    const unfit = idUnfit(id);
+    if (unfit) {
+      return unfit;
     }
     const inbox = await notesIn(projectId, INBOX_DIR);
     if (inbox instanceof ElysiaStatus) {
@@ -4893,6 +4927,114 @@ export const createMemoryRun = ({
       return sha;
     }
     return { withdrawn: id, sha: sha ?? "", retires, keeps };
+  };
+
+  const notYours = (id: string) =>
+    problem(403, {
+      code: "memory-note-not-yours",
+      detail: `${id} was left by another session; a session withdraws only its own notes.`,
+    });
+
+  /** The inbox note `id` that session `sessionId` left, or why it is not one it may withdraw. */
+  const ownInboxNote = async (
+    projectId: string,
+    sessionId: string,
+    id: string
+  ) => {
+    const inbox = await notesIn(projectId, INBOX_DIR);
+    if (inbox instanceof ElysiaStatus) {
+      return inbox;
+    }
+    const waiting = inbox.find((each) => each.id === id);
+    if (waiting) {
+      return waiting.session === sessionId ? waiting : notYours(id);
+    }
+    const archive = await notesIn(projectId, ARCHIVE_DIR);
+    if (archive instanceof ElysiaStatus) {
+      return archive;
+    }
+    const archived = archive.find((each) => each.id === id);
+    if (!archived) {
+      return problem(404, {
+        code: "memory-note-unknown",
+        detail: `${id} is no note of this project.`,
+      });
+    }
+    return archived.session === sessionId
+      ? problem(409, {
+          code: "memory-note-read",
+          detail: `${id} has left the inbox (${archived.outcome ?? "archived"}), so it can no longer be withdrawn.`,
+        })
+      : notYours(id);
+  };
+
+  /** `change` run as one of the project's withdrawals under way, which a brief waits for ({@link asReader}). */
+  const asUnnoting = async <T>(
+    projectId: string,
+    change: () => Promise<T>
+  ): Promise<T> => {
+    const pending = unnoting.get(projectId) ?? new Set<Promise<unknown>>();
+    unnoting.set(projectId, pending);
+    const done = change();
+    pending.add(done);
+    try {
+      return await done;
+    } finally {
+      pending.delete(done);
+      if (pending.size === 0) {
+        unnoting.delete(projectId);
+      }
+    }
+  };
+
+  /**
+   * A session takes back a note it left (`memory_withdraw`): the note leaves
+   * the inbox for the archive `withdrawn`, one commit by its author, so no
+   * run reads it. Refused for a note another session left, and for one a
+   * run has read: archived already, or in the brief of a run being made or
+   * under way. No lesson rests on a note no run read, so none changes.
+   */
+  const unnote = async (
+    actor: { id: string; projectId?: string | null },
+    id: string
+  ) => {
+    const { projectId } = actor;
+    if (!projectId) {
+      return problem(409, {
+        code: "memory-session-no-project",
+        detail: "This session is in no project, so it left no note.",
+      });
+    }
+    const unfit = idUnfit(id);
+    if (unfit) {
+      return unfit;
+    }
+    const note = await ownInboxNote(projectId, actor.id, id);
+    if (note instanceof ElysiaStatus) {
+      return note;
+    }
+    // Checked with no await before asUnnoting registers the withdrawal: a
+    // brief that starts later waits for it, one already started refuses it.
+    if (briefing.has(projectId) || runs.get(projectId)?.notes.has(id)) {
+      return problem(409, {
+        code: "memory-note-read",
+        detail: `The memory run is reading ${id} now, so it can no longer be withdrawn.`,
+      });
+    }
+    const sha = await asUnnoting(projectId, async () => {
+      const read = await treeOf(projectId);
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      return await commit(projectId, read.tree, read.tree, {
+        author: { name: note.author },
+        message: `memory: ${id} withdrawn by the session that left it`,
+        notes: [{ note, outcome: "withdrawn" }],
+      });
+    });
+    return sha instanceof ElysiaStatus
+      ? sha
+      : { withdrawn: id, text: note.text };
   };
 
   /**
@@ -5244,6 +5386,7 @@ export const createMemoryRun = ({
     brief,
     recoveryBrief,
     withdraw,
+    unnote,
     purged,
     cutover,
     recheckStaged,

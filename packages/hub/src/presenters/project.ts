@@ -99,6 +99,12 @@ export const memoryNotedWords = (noted: Noted): string => {
     : memoryRunWords.notedDuplicate(noted.id, noted.lesson);
 };
 
+/** `memory_withdraw`: the note withdrawn, and what it said. */
+export const memoryWithdrawnWords = (gone: {
+  text: string;
+  withdrawn: string;
+}): string => memoryRunWords.withdrawn(gone.withdrawn, quote(gone.text, 300));
+
 /** `memory_apply`: one line per operation, what it committed or why it was refused. */
 export const memoryAppliedWords = (applied: { lines: string[] }): string =>
   applied.lines.join("\n");

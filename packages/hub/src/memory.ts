@@ -59,7 +59,7 @@ import type { SessionTaintRow } from "./db/projects";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
-import { defineTool } from "./mcp-tool";
+import { defineTool, answered as isAnswer, sentence } from "./mcp-tool";
 import {
   BRAND,
   dayOf,
@@ -80,6 +80,7 @@ import {
   memoryAppliedWords,
   memoryNotedWords,
   memoryReadWords,
+  memoryWithdrawnWords,
   type Noted,
 } from "./presenters/project";
 import {
@@ -861,6 +862,11 @@ export interface MemoryDeps {
   >;
   /** The project's folder changed under its tasks (a commit landed). */
   readonly folderChanged: (projectId: string) => void;
+  /** A session takes back a note it left (memory-run.ts `unnote`). */
+  readonly unnote: (
+    actor: InstanceRow,
+    id: string
+  ) => Promise<{ text: string; withdrawn: string } | AnyProblem>;
   readonly watch: TurnWatch;
 }
 
@@ -869,6 +875,7 @@ export const createMemory = ({
   curator,
   db,
   folderChanged,
+  unnote,
   watch,
 }: MemoryDeps) => {
   /**
@@ -1398,9 +1405,14 @@ export const createMemory = ({
         return actor;
       };
       return [
-        MEMORY_NOTE_DEFINITION.run(({ text, since }) =>
-          note(me(), text, since)
-        ),
+        MEMORY_NOTE_DEFINITION.run(async ({ text, since }) => {
+          const noted = await note(me(), text, since);
+          return isAnswer(noted) ? memoryNotedWords(noted) : noted;
+        }),
+        MEMORY_WITHDRAW_DEFINITION.run(async ({ note: id }) => {
+          const gone = await unnote(me(), id);
+          return isAnswer(gone) ? memoryWithdrawnWords(gone) : gone;
+        }),
         MEMORY_READ_DEFINITION.run(({ path }) => read(me(), path)),
         MEMORY_APPLY_DEFINITION.run(({ ops }) => apply(me(), ops)),
       ];
@@ -1413,6 +1425,7 @@ export type Memory = ReturnType<typeof createMemory>;
 /** Every memory tool, by name. */
 export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
   "memory_note",
+  "memory_withdraw",
   "memory_read",
   "memory_apply",
 ]);
@@ -1496,7 +1509,14 @@ const MEMORY_NOTE_DEFINITION = defineTool(
       .optional()
       .describe("YYYY-MM-DD it became true, if before today."),
   },
-  memoryNotedWords
+  sentence
+);
+
+const MEMORY_WITHDRAW_DEFINITION = defineTool(
+  "memory_withdraw",
+  memoryRunWords.withdrawTool,
+  { note: z.string().describe("Its id from memory_note.") },
+  sentence
 );
 
 const MEMORY_READ_DEFINITION = defineTool(
@@ -1531,6 +1551,7 @@ const MEMORY_APPLY_DEFINITION = defineTool(
 /** The tools as a listing reads them, before any session's handlers are bound. */
 export const MEMORY_DEFINITIONS = [
   MEMORY_NOTE_DEFINITION.listed(),
+  MEMORY_WITHDRAW_DEFINITION.listed(),
   MEMORY_READ_DEFINITION.listed(),
   MEMORY_APPLY_DEFINITION.listed(),
 ];
