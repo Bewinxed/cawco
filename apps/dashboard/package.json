@@ -36,6 +36,7 @@
     "@pierre/words": "0.2.2",
     "@rive-app/canvas": "2.44.0",
     "@tanstack/svelte-table": "9.2.6",
+    "@tanstack/svelte-virtual": "3.13.52",
     "@videojs/html": "10.3.0",
     "@xyflow/svelte": "^1.7.0",
     "bits-ui": "^2.20.6",
