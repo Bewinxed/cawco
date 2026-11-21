@@ -831,6 +831,7 @@
       >
         <ToggleGroup.Root
           aria-label={spawnWords.location.owners}
+          class="w-full"
           bind:value={
             () => owner || ALL,
             (next) => {
@@ -863,6 +864,7 @@
                 aria-label={spawnWords.location.moreOwnersLabel(
                   strip.hidden.length
                 )}
+                class="ms-auto"
                 data-flip="pop"
                 look="segment"
               >
@@ -903,21 +905,23 @@
                         ownerQuery.trim()
                       )}</Command.Empty
                     >
-                    {#each strip.hidden as one (one.owner.login)}
-                      <Command.Item
-                        onSelect={() => pickFromList(one.owner.login)}
-                        value={one.owner.login}
-                      >
-                        {@render avatar(one.owner, "size-icon-lg")}
-                        <span
-                          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
-                          >{one.owner.login}</span
+                    <Command.Group>
+                      {#each strip.hidden as one (one.owner.login)}
+                        <Command.Item
+                          onSelect={() => pickFromList(one.owner.login)}
+                          value={one.owner.login}
                         >
-                        <span class="num type-meta text-ink-muted"
-                          >{one.count}</span
-                        >
-                      </Command.Item>
-                    {/each}
+                          {@render avatar(one.owner, "size-icon-lg")}
+                          <span
+                            class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
+                            >{one.owner.login}</span
+                          >
+                          <span class="num type-meta text-ink-muted"
+                            >{one.count}</span
+                          >
+                        </Command.Item>
+                      {/each}
+                    </Command.Group>
                   </Command.List>
                 </Command.Root>
               </Popover.Content>
