@@ -33,6 +33,9 @@
   --container-stop-tray-rail: 300px;
   --container-forgotten: 51.25rem;
   --container-kinds: 480px;
+  /* Who decides' cards two across, and four: --spacing-c-roster-card-min (17.5rem, 280px) each, with --spacing-space-3 (11px) between. */
+  --container-roster-two: 571px;
+  --container-roster-four: 1153px;
   --container-images: 44rem;
   --container-decisions-520px: 520px;
   --container-leaf: 620px;
