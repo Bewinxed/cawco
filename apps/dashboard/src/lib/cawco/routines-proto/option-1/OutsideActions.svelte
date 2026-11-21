@@ -29,7 +29,7 @@
     [...actions].sort((a, b) => ORDER[a.standing] - ORDER[b.standing])
   );
   const WORDS = {
-    waits: "Waits on you",
+    waits: "Waiting on you",
     failed: "Failed",
     ran: "Ran",
   } as const;
@@ -62,15 +62,15 @@
             >{action.what}</span
           >
           <span class="type-meta num text-ink-muted"
-            >{WORDS[action.standing]} · {action.at}</span
+            >{WORDS[action.standing]} {action.at}</span
           >
           {#if action.said}
             <span class="type-body text-status-fail-ink wrap-anywhere"
-              >{action.service.split(" · ")[0]} answered: {action.said}</span
+              >{action.service} answered: {action.said}</span
             >
           {/if}
           <span class="type-meta text-ink-muted"
-            >{action.service} · from {action.from}</span
+            >As {action.account} on {action.service}, for {action.from}</span
           >
           {#if action.standing === "waits"}
             <span class="pt-space-1"
