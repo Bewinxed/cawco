@@ -1,26 +1,20 @@
 <script lang="ts">
   import MessageBody from "#lib/cawco/MessageBody.svelte";
-  import PageSurface from "#lib/cawco/side/PageSurface.svelte";
-  import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
   import {
     TabItem,
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import {
-    IconChevronLeft,
-    IconPlay,
-    IconSparkles,
-    IconTerminal,
-  } from "#lib/icons.js";
+  import { IconPlay, IconSparkles, IconTick } from "#lib/icons.js";
+  import CommandOutputBlock from "./CommandOutputBlock.svelte";
+  import ExactCallDisclosure from "./ExactCallDisclosure.svelte";
+  import PaneFrame from "./PaneFrame.svelte";
+  import PeerAnswerRow from "./PeerAnswerRow.svelte";
   import {
     actionStateMeta,
-    attributionLabel,
-    exitCodeReading,
+    commandFailureLabel,
     runOutcomeMeta,
     serviceName,
     triggerLabel,
@@ -34,13 +28,31 @@
     type Routine,
     type RoutineRun,
   } from "./routines-data";
+  import type { ActionDecision } from "./routines-state";
   import ServiceMark from "./ServiceMark.svelte";
-  import StatusGlyph from "./StatusGlyph.svelte";
+  import SessionTranscript from "./SessionTranscript.svelte";
+  import StatusBadge from "./StatusBadge.svelte";
+
+  interface Props {
+    actions: ApprovedAction[];
+    backToList?: boolean;
+    now?: number;
+    onaction: (decision: ActionDecision, actionId: string) => void;
+    onaskcaw: (prompt: string) => void;
+    onback: () => void;
+    onclose: () => void;
+    onrunagain: (routineId: string) => void;
+    phone?: boolean;
+    routine: Routine;
+    run: RoutineRun;
+    stale?: boolean;
+  }
 
   let {
     routine,
     run,
     actions,
+    backToList = false,
     stale = false,
     now = MOCK_NOW,
     phone = false,
@@ -48,366 +60,217 @@
     onclose,
     onrunagain,
     onaskcaw,
-    onviewactions,
-  }: {
-    routine: Routine;
-    run: RoutineRun;
-    actions: ApprovedAction[];
-    stale?: boolean;
-    now?: number;
-    phone?: boolean;
-    onback: () => void;
-    onclose: () => void;
-    onrunagain: (routineId: string) => void;
-    onaskcaw: (prompt: string) => void;
-    onviewactions: () => void;
-  } = $props();
+    onaction,
+  }: Props = $props();
 
-  let tab = $state<"result" | "session">("result");
-
-  // Reset back to Result tab when switching runs.
+  let activeTab = $state<"result" | "session">("result");
   let seenRunId = "";
+
   $effect(() => {
-    const { id } = run;
-    if (seenRunId && seenRunId !== id) {
-      tab = "result";
+    if (seenRunId && seenRunId !== run.id) {
+      activeTab = "result";
     }
-    seenRunId = id;
+    seenRunId = run.id;
   });
 
-  function entryFrameClass(kind: "prompt" | "tool" | "reply"): string {
-    switch (kind) {
-      case "tool":
-        return "border border-border-well bg-code-bg";
-      case "prompt":
-        return "border border-border-hairline bg-surface-recess";
-      case "reply":
-        return "border border-border-hairline bg-surface-raised";
+  const outcome = $derived(runOutcomeMeta(run.outcome));
+  const triggeredBy = $derived(run.triggerDetail ?? triggerLabel(run.trigger));
+  const cmdFail = $derived(commandFailureLabel(run));
+  const linkedActions = $derived(
+    run.proposedActionIds
+      ? actions.filter((one) => run.proposedActionIds?.includes(one.id))
+      : []
+  );
+
+  const metaParts = $derived.by(() => {
+    const parts = [
+      `${formatRelAge(run.startedAt, now)} (${formatExactClock(run.startedAt)})`,
+      formatShortDuration(run.durationMs),
+    ];
+    if (run.turns !== undefined) {
+      parts.push(`${run.turns} ${run.turns === 1 ? "turn" : "turns"}`);
+    }
+    if (run.costDollars !== undefined) {
+      parts.push(`$${run.costDollars.toFixed(2)}`);
+    }
+    return parts;
+  });
+
+  function switchRunTab(next: string): void {
+    if (next === "result" || next === "session") {
+      activeTab = next;
     }
   }
 
-  const outcome = $derived(runOutcomeMeta(run.outcome));
-  const linkedActions = $derived(
-    run.proposedActionIds
-      ? actions.filter((action) => run.proposedActionIds?.includes(action.id))
-      : []
-  );
-  const hasSession = $derived(Boolean(run.session));
-  const isRunning = $derived(
-    routine.status === "running" ||
-      run.outcome === "running" ||
-      run.outcome === "queued"
-  );
+  function cawRunPrompt(): string {
+    return `Look at run ${run.id} of "${routine.name}" (${outcome.label}: ${run.oneLine}) and tell me what to fix.`;
+  }
 </script>
 
-{#snippet backLeading()}
-  <BarGlass form="group">
-    <BarItem
-      icon={IconChevronLeft}
-      label="Back to {routine.name}"
-      onclick={onback}
-    />
-  </BarGlass>
-{/snippet}
+<PaneFrame
+  backLabel={phone && backToList ? "Routines" : "Back to routine"}
+  backTo={phone && backToList ? "Routines" : routine.name}
+  label="Run · {formatRelAge(run.startedAt, now)}"
+  onback={phone && backToList ? onclose : onback}
+  {onclose}
+  {phone}
+  slotName="run"
+  slotValue={run.id}
+  title="Run · {formatRelAge(run.startedAt, now)}"
+>
+  <header class="flex flex-col gap-space-2">
+    <h2 class="m-0 type-title text-ink-strong wrap-anywhere">{routine.name}</h2>
 
-{#snippet body()}
-  <div
-    class="flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain pt-(--side-room) scroll-timeline-transcript-head"
-    data-run-detail={run.id}
-  >
+    <div class="flex flex-wrap items-center gap-space-2">
+      <StatusBadge
+        glyph={outcome.glyph}
+        label={outcome.label}
+        tone={outcome.tone}
+        variant={outcome.badge}
+      />
+      <Badge variant="secondary"><span>{triggeredBy}</span></Badge>
+      {#if run.retriedOnce}
+        <Badge variant="attn"><span>Retried once</span></Badge>
+      {/if}
+    </div>
+
     <div
-      class="flex flex-col gap-space-4 px-space-5 pt-space-2 pb-space-7 max-phone:px-space-4"
+      class="flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted tabular-nums"
     >
-      <!-- Run facts header -->
-      <header class="flex flex-col gap-space-2">
-        <div class="flex flex-wrap items-center gap-space-2">
-          <Badge variant={outcome.badge}>
-            <StatusGlyph glyph={outcome.glyph} size="sm" tone={outcome.tone} />
-            <span>{outcome.label}</span>
-          </Badge>
-          <Badge variant="secondary">
-            <span>{triggerLabel(run.trigger)}</span>
-          </Badge>
-          {#if run.retriedOnce}
-            <Badge variant="attn"><span>Retried once automatically</span></Badge
-            >
-          {/if}
-        </div>
-
-        <h2 class="m-0 type-title text-ink-strong wrap-anywhere">
-          {routine.name}
-        </h2>
-
-        <div
-          class="flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted tabular-nums"
-        >
-          <span>
-            Started {formatExactClock(run.startedAt)} ({formatRelAge(
-              run.startedAt,
-              now
-            )})
-          </span>
+      {#each metaParts as part, idx (part)}
+        {#if idx > 0}
           <span aria-hidden="true">·</span>
-          <span>Took {formatShortDuration(run.durationMs)}</span>
-          {#if run.turns !== undefined}
-            <span aria-hidden="true">·</span>
-            <span>
-              {run.turns}
-              {run.turns === 1 ? "turn" : "turns"}
-            </span>
-          {/if}
-          {#if run.costDollars !== undefined}
-            <span aria-hidden="true">·</span>
-            <span>${run.costDollars.toFixed(2)}</span>
-          {/if}
-        </div>
-
-        {#if run.triggerDetail}
-          <p class="m-0 type-meta text-ink-muted">
-            Triggered by: <span class="text-ink-strong"
-              >{run.triggerDetail}</span
-            >
-          </p>
         {/if}
+        <span>{part}</span>
+      {/each}
+    </div>
 
-        <!-- Task-style Result | Session switch -->
-        {#if hasSession}
-          <div class="pt-space-1">
-            <Tabs
-              onValueChange={(next) => {
-                if (next === "result" || next === "session") {
-                  tab = next;
-                }
-              }}
-              value={tab}
-            >
-              <TabsList aria-label="Run views">
-                <TabItem label="Result" value="result" />
-                <TabItem label="Session" value="session" />
-              </TabsList>
-            </Tabs>
-          </div>
-        {:else}
-          <p class="m-0 type-meta text-ink-subtle">
-            {run.attribution === "command"
-              ? "Ran as a shell command — no model session."
-              : "No delegate session recorded for this run."}
-          </p>
+    {#if run.session}
+      <nav aria-label="Run details" class="pt-space-1">
+        <Tabs onValueChange={switchRunTab} value={activeTab}>
+          <TabsList aria-label="Result or session">
+            <TabItem label="Result" value="result" />
+            <TabItem label="Session" value="session" />
+          </TabsList>
+        </Tabs>
+      </nav>
+    {/if}
+  </header>
+
+  {#if activeTab === "result" || !run.session}
+    <div class="flex flex-col gap-space-4" data-slot="run-result">
+      <article
+        class="flex flex-col gap-space-3 rounded-lg border border-border-well bg-surface-well p-space-4"
+      >
+        {#if cmdFail}
+          <p class="m-0 type-label text-status-fail-ink">{cmdFail}</p>
         {/if}
-      </header>
+        <MessageBody source={run.resultMarkdown} wrap="pretty" />
+      </article>
 
-      <!-- Result tab: full markdown output + raw stdout + linked outside actions -->
-      {#if tab === "result" || !run.session}
-        <div class="flex flex-col gap-space-4" data-slot="run-result">
-          <div
-            class="flex flex-col gap-space-3 rounded-lg border border-border-well bg-surface-well p-space-4"
-          >
-            <div
-              class="flex flex-wrap items-center justify-between gap-space-2"
-            >
-              <span class="type-meta font-medium text-ink-muted">
-                {attributionLabel(run)}
-              </span>
-              {#if run.exitCode !== undefined && run.exitCode !== null}
-                <span class="font-mono type-meta text-ink-subtle">
-                  {exitCodeReading(run.exitCode)}
-                </span>
-              {/if}
-            </div>
-
-            <MessageBody source={run.resultMarkdown} wrap="pretty" />
-          </div>
-
-          {#if run.commandStdout}
-            <div class="flex flex-col gap-space-2">
-              <div class="flex items-center justify-between gap-space-2">
-                <div
-                  class="mark-line flex items-center gap-space-2 type-label text-ink-strong"
-                >
-                  <IconTerminal class="size-icon-sm flex-none text-ink-muted" />
-                  <span>Command output</span>
-                </div>
-                <CopyButton
-                  aria-label="Copy command output"
-                  size="xs"
-                  text={run.commandStdout}
-                  variant="ghost"
-                >
-                  Copy
-                </CopyButton>
-              </div>
-              <pre
-                class="m-0 overflow-x-auto rounded-well border border-border-well bg-code-bg p-space-3 font-mono type-code text-ink-strong whitespace-pre-wrap wrap-anywhere">{run.commandStdout}</pre>
-            </div>
-          {/if}
-
-          {#if linkedActions.length > 0}
-            <div class="flex flex-col gap-space-2">
-              <div class="flex items-center justify-between gap-space-2">
-                <h3 class="m-0 type-label text-ink-strong">
-                  Outside actions proposed in this run
-                </h3>
-                <Button
-                  label="View in Approved actions"
-                  onclick={onviewactions}
-                  size="xs"
-                  variant="ghost"
-                />
-              </div>
-              <ul class="m-0 flex list-none flex-col gap-space-2 p-0">
-                {#each linkedActions as item (item.id)}
-                  {@const actMeta = actionStateMeta(item.state, item.needsLook)}
-                  <li
-                    class="flex flex-col gap-space-2 rounded-well border border-border-hairline bg-surface-raised p-space-3"
-                  >
-                    <div
-                      class="flex flex-wrap items-center justify-between gap-space-2"
-                    >
-                      <span
-                        class="mark-line inline-flex items-center gap-space-2"
-                      >
-                        <ServiceMark service={item.service} size="sm" />
-                        <span class="type-label text-ink-strong">
-                          {serviceName(item.service)}
-                        </span>
-                        <span class="font-mono type-meta text-ink-muted">
-                          {item.account}
-                        </span>
-                      </span>
-                      <Badge variant={actMeta.badge}>
-                        <StatusGlyph
-                          glyph={actMeta.glyph}
-                          size="sm"
-                          tone={actMeta.tone}
-                        />
-                        <span>{actMeta.label}</span>
-                      </Badge>
-                    </div>
-                    <p class="m-0 type-meta text-ink-strong">{item.sentence}</p>
-                    <code
-                      class="rounded-xs bg-surface-well px-space-2 py-space-1 font-mono type-code text-ink-muted wrap-anywhere"
-                    >
-                      {item.exactCall}
-                    </code>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          {/if}
-        </div>
-      {:else if run.session}
-        <!-- Session tab: full readable delegate transcript -->
-        <div class="flex flex-col gap-space-4" data-slot="run-session">
-          <div
-            class="flex flex-col gap-space-1 rounded-well border border-border-well bg-surface-well p-space-3"
-          >
-            <span class="type-label text-ink-strong">{run.session.title}</span>
-            <div
-              class="flex flex-wrap items-center gap-x-space-2 gap-y-space-row type-meta text-ink-muted"
-            >
-              <span>{run.session.harness}</span>
-              <span aria-hidden="true">·</span>
-              <span class="font-mono">{run.session.model}</span>
-              <span aria-hidden="true">·</span>
-              <span class="font-mono">{run.session.id}</span>
-            </div>
-            <span class="font-mono type-meta text-ink-subtle wrap-anywhere">
-              {run.session.place}
-            </span>
-          </div>
-
-          <ol class="m-0 flex list-none flex-col gap-space-3 p-0">
-            {#each run.session.entries as entry (entry.id)}
-              <li
-                class={[
-                  "flex flex-col gap-space-1 rounded-well p-space-3",
-                  entryFrameClass(entry.kind),
-                ]}
-              >
-                <div class="flex items-center justify-between gap-space-2">
-                  <span
-                    class={[
-                      "mark-line inline-flex min-w-0 items-center gap-space-2 type-meta",
-                      entry.kind === "tool"
-                        ? "font-mono text-ink-strong"
-                        : "font-medium text-ink-muted",
-                    ]}
-                  >
-                    {#if entry.kind === "tool"}
-                      <IconTerminal
-                        class="size-icon-sm flex-none text-ink-muted"
-                      />
-                    {/if}
-                    <span class="min-w-0 wrap-anywhere">{entry.label}</span>
-                  </span>
-                  <span
-                    class="flex-none font-mono type-meta text-ink-subtle tabular-nums"
-                  >
-                    +{entry.timeOffset}
-                  </span>
-                </div>
-                <p
-                  class={[
-                    "m-0 whitespace-pre-wrap wrap-anywhere",
-                    entry.kind === "tool"
-                      ? "font-mono type-code text-ink-muted"
-                      : "type-body text-ink-strong",
-                  ]}
-                >
-                  {entry.text}
-                </p>
-              </li>
-            {/each}
-          </ol>
-        </div>
+      {#if run.commandStdout}
+        <CommandOutputBlock
+          ariaLabel="Copy command output"
+          code={run.commandStdout}
+          heading="Command output"
+          preformatted
+        />
       {/if}
 
-      <!-- Follow-up actions -->
-      <div
-        class="flex flex-wrap items-center gap-space-2 border-t border-t-border-hairline pt-space-4"
-      >
-        <Button
-          disabled={stale || isRunning}
-          icon={IconPlay}
-          label={routine.kind === "check" ? "Check again now" : "Run again now"}
-          onclick={() => onrunagain(routine.id)}
-          size="sm"
-          variant="outline"
-        />
-        <Button
-          disabled={stale}
-          icon={IconSparkles}
-          label="Ask Caw about this run"
-          onclick={() =>
-            onaskcaw(
-              `Look at run ${run.id} of "${routine.name}" (${outcome.label}: ${run.oneLine}) and tell me what to fix.`
-            )}
-          size="sm"
-          variant="ghost"
-        />
-      </div>
-    </div>
-  </div>
-{/snippet}
+      {#if linkedActions.length > 0}
+        <section class="flex flex-col gap-space-2">
+          <h3 class="m-0 type-label text-ink-strong">
+            Outside actions from this run
+          </h3>
+          <ul class="m-0 flex list-none flex-col gap-space-2 p-0">
+            {#each linkedActions as item (item.id)}
+              {@const actMeta = actionStateMeta(item.state, item.needsLook)}
+              <li
+                class="flex flex-col gap-space-2 rounded-well border border-border-hairline bg-surface-raised p-space-3"
+                data-run-action={item.id}
+              >
+                <p class="m-0 type-label text-ink-strong wrap-anywhere">
+                  {item.sentence}
+                </p>
 
-{#if phone}
-  <PageSurface
-    backTo={routine.name}
-    label="Run result · {routine.name}"
-    onclose={onback}
-    title="Run · {formatRelAge(run.startedAt, now)}"
+                <div
+                  class="flex flex-wrap items-center justify-between gap-space-2"
+                >
+                  <span
+                    class="mark-line inline-flex items-center gap-space-2 type-meta"
+                  >
+                    <ServiceMark service={item.service} size="sm" />
+                    <span class="font-medium text-ink-strong">
+                      {serviceName(item.service)}
+                    </span>
+                    <span class="text-ink-muted">{item.whenLabel}</span>
+                  </span>
+                  <StatusBadge
+                    glyph={actMeta.glyph}
+                    label={actMeta.label}
+                    tone={actMeta.tone}
+                    variant={actMeta.badge}
+                  />
+                </div>
+
+                <ExactCallDisclosure action={item} showResponse={true} />
+
+                {#if item.state === "waiting"}
+                  <PeerAnswerRow
+                    disabled={stale}
+                    onapprove={() => onaction("approve", item.id)}
+                    ondeny={() => onaction("deny", item.id)}
+                  />
+                {:else if item.state === "approved"}
+                  <div class="flex justify-end pt-space-1">
+                    <Button
+                      disabled={stale}
+                      label="Cancel"
+                      onclick={() => onaction("cancel", item.id)}
+                      size="xs"
+                      variant="outline"
+                    />
+                  </div>
+                {:else if item.needsLook && (item.state === "unknown" || item.state === "failed")}
+                  <div class="flex justify-end pt-space-1">
+                    <Button
+                      disabled={stale}
+                      icon={IconTick}
+                      label="I've checked"
+                      onclick={() => onaction("acknowledge", item.id)}
+                      size="xs"
+                      variant="outline"
+                    />
+                  </div>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
+    </div>
+  {:else if run.session}
+    <SessionTranscript session={run.session} />
+  {/if}
+
+  <footer
+    class="flex flex-wrap items-center gap-space-2 border-t border-t-border-hairline pt-space-4"
   >
-    {@render body()}
-  </PageSurface>
-{:else}
-  <SideSurface
-    label="Run result · {routine.name}"
-    leading={backLeading}
-    of="task"
-    {onclose}
-    recessed={false}
-    title="Run · {formatRelAge(run.startedAt, now)}"
-  >
-    {@render body()}
-  </SideSurface>
-{/if}
+    <Button
+      disabled={stale || routine.status === "running"}
+      icon={IconPlay}
+      label="Run again"
+      onclick={() => onrunagain(routine.id)}
+      size="sm"
+      variant="outline"
+    />
+    <Button
+      disabled={stale}
+      icon={IconSparkles}
+      label="Ask Caw about this run"
+      onclick={() => onaskcaw(cawRunPrompt())}
+      size="sm"
+      variant="ghost"
+    />
+  </footer>
+</PaneFrame>

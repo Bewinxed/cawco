@@ -1,7 +1,19 @@
 <script lang="ts">
   import { LogoGithub, LogoLinear, LogoSlack } from "@cawco/icons/marks";
+  import type { Component } from "svelte";
+  import type { SVGAttributes } from "svelte/elements";
   import { IconGlobe } from "#lib/icons.js";
   import type { ServiceKey } from "./routines-data";
+
+  const SERVICE_MARKS: Record<
+    ServiceKey,
+    Component<SVGAttributes<SVGSVGElement>>
+  > = {
+    github: LogoGithub,
+    slack: LogoSlack,
+    linear: LogoLinear,
+    cloudflare: IconGlobe,
+  };
 
   let {
     service,
@@ -11,7 +23,8 @@
     size?: "sm" | "md";
   } = $props();
 
-  const sizeClass = $derived(size === "sm" ? "size-icon-sm" : "size-icon-md");
+  const Mark = $derived(SERVICE_MARKS[service]);
+  const iconClass = $derived(size === "sm" ? "size-icon-sm" : "size-icon-md");
 </script>
 
 <span
@@ -19,13 +32,5 @@
   class="inline-flex flex-none items-center justify-center text-ink-muted"
   data-box
 >
-  {#if service === "github"}
-    <LogoGithub class={sizeClass} />
-  {:else if service === "slack"}
-    <LogoSlack class={sizeClass} />
-  {:else if service === "linear"}
-    <LogoLinear class={sizeClass} />
-  {:else}
-    <IconGlobe class={sizeClass} />
-  {/if}
+  <Mark class={iconClass} />
 </span>
