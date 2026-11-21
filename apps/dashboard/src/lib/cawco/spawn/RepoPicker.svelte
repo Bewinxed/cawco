@@ -160,6 +160,16 @@
   ] as const;
 
   /**
+   * The rows mounted as the popover opens: the list's resting height (18rem)
+   * holds six or seven, and a screen more stands under its fold. The picked
+   * row, where it stands further down, is mounted with as many after it.
+   */
+  const FIRST_ROWS = 16;
+
+  /** The rows each idle slice mounts after them: some 7ms of mounting and layout at desk speed. */
+  const ROWS_A_SLICE = 16;
+
+  /**
    * The URL row's key: there is one at most, and it stays the same row as
    * the URL is typed and as what the machine says of it fills it in.
    */
@@ -283,7 +293,7 @@
    * fails.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
-  import { untrack } from "svelte";
+  import { flushSync, untrack } from "svelte";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import * as Command from "#lib/components/ui/command/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -301,6 +311,7 @@
   } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import { failureWords } from "#lib/platform/hub-read.js";
+  import { whenIdle } from "#lib/platform/idle-build.svelte.js";
   import { motionOk, reveal } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
@@ -611,6 +622,43 @@
   );
   const optionId = (row: Row) => `${uid}-${rows.indexOf(row)}`;
 
+  /** Where the picked row stands in the list; -1 while it holds none. */
+  const pickedAt = $derived(
+    rows.findIndex((row) => identityOf(row) === pickedId)
+  );
+  /** Rows mounted after the first ones, a slice at a time while the page is idle. */
+  let grown = $state(0);
+  /**
+   * How many rows stand mounted, from the list's head: those its resting
+   * height shows and a screen more, the picked row's included, as the
+   * popover opens; the rest come a slice at a time while the page is idle,
+   * under the list's fold (motion/rows `seenIn`: they arrive unanimated).
+   * Mounted whole, 290 rows (a machine of the owner's lists 152 to 288)
+   * held the press that opened the popover 165–215ms before its glide's
+   * first frame: each row's mount, then the style and layout of every one
+   * of them, which the popover's focus and its placement read in that task.
+   */
+  const mounted = $derived(Math.max(pickedAt, 0) + FIRST_ROWS + grown);
+  /** The rows mounted: every row once the list is whole. */
+  const built = $derived(rows.length > mounted ? rows.slice(0, mounted) : rows);
+  // The rest of the list, a slice each time the page is idle, from as the
+  // list arrives until every row the list can hold (each repository and a
+  // URL's) stands.
+  $effect(() => {
+    const whole = repos.length + 1;
+    let cancel: (() => void) | undefined;
+    const slice = () => {
+      grown += ROWS_A_SLICE;
+      if (untrack(() => mounted) < whole) {
+        cancel = whenIdle(slice);
+      }
+    };
+    if (untrack(() => mounted) < whole) {
+      cancel = whenIdle(slice);
+    }
+    return () => cancel?.();
+  });
+
   /** The picked row is brought into the list's view once, as the list first holds it: a popover opened again opens on it. */
   let shownPicked = false;
   $effect(() => {
@@ -676,7 +724,7 @@
       if (motionOk.current) {
         const drawn = comingIn(rowsBox);
         const { leaving } = swap;
-        swap.swap(rows, ownerAt(login) - ownerAt(owner), {
+        swap.swap(built, ownerAt(login) - ownerAt(owner), {
           scroller: listbox,
         });
         if (swap.leaving !== leaving) {
@@ -729,12 +777,21 @@
     if (!(active && listbox)) {
       return;
     }
-    const at = rows.indexOf(active);
-    const next = rows[Math.min(rows.length - 1, Math.max(0, at + by))];
+    const at = Math.min(
+      rows.length - 1,
+      Math.max(0, rows.indexOf(active) + by)
+    );
+    const next = rows[at];
     if (!next) {
       return;
     }
     activeKey = next.key;
+    // ↓ past the rows mounted so far: the rest are mounted now, for the
+    // row to be brought into view.
+    if (at >= built.length) {
+      grown = rows.length;
+      flushSync();
+    }
     const option = listbox.querySelector(`#${CSS.escape(optionId(next))}`);
     if (option) {
       bringIntoView(option);
@@ -1020,7 +1077,7 @@
       class="col-span-full row-start-1 grid auto-rows-max grid-cols-subgrid"
       {@attach reflow()}
     >
-      {#each rows as row (row.key)}
+      {#each built as row (row.key)}
         <div
           class="col-span-full grid grid-cols-subgrid animate-(--enter)"
           data-flip

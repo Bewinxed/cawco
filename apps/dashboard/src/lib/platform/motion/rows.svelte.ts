@@ -602,21 +602,48 @@ const closing = () => ({
   easing: ease("--ease-in-out"),
 });
 
+/** Where a container's rows can be seen, top and bottom, in the viewport. */
+interface Seen {
+  bottom: number;
+  top: number;
+}
+
 /**
- * Drawn somewhere in the viewport. An element that arrives out of sight has
- * nothing to show arriving: a long list mounting a chunk at a time past the
- * fold would otherwise start two animations a row for rows nobody sees.
+ * The band of the viewport a container's rows can be seen in: the viewport
+ * cut by the scrollport of every scroller around them, the container's own
+ * included. A row below its scroller's fold is laid out inside the viewport
+ * and seen by nobody: the location picker's repository list mounting its
+ * rows a slice at a time under a list 18rem tall started an entrance for
+ * every one of them.
  */
+function seenIn(node: HTMLElement): Seen {
+  let top = 0;
+  let bottom = window.innerHeight;
+  for (let at: HTMLElement | null = node; at; at = at.parentElement) {
+    const { overflowY } = getComputedStyle(at);
+    if (overflowY === "auto" || overflowY === "scroll") {
+      const edge = at.getBoundingClientRect().top + at.clientTop;
+      top = Math.max(top, edge);
+      bottom = Math.min(bottom, edge + at.clientHeight);
+    }
+  }
+  return { top, bottom };
+}
+
 /**
- * In the viewport and drawn: a row arriving under `visibility: hidden` (an
- * offer kept for a conversation the composer is not writing to) is laid out
- * where it would show and seen by nobody, so it arrives without an entrance.
+ * Drawn where it can be seen (`seen`, the container's `seenIn`). An element
+ * that arrives out of sight has nothing to show arriving: a long list
+ * mounting a chunk at a time past the fold would otherwise start two
+ * animations a row for rows nobody sees. A row arriving under `visibility:
+ * hidden` (an offer kept for a conversation the composer is not writing to)
+ * is laid out where it would show and seen by nobody, so it arrives without
+ * an entrance too.
  */
-function onScreen(element: HTMLElement): boolean {
+function onScreen(element: HTMLElement, seen: Seen): boolean {
   const { top, bottom } = element.getBoundingClientRect();
   return (
-    bottom > 0 &&
-    top < window.innerHeight &&
+    bottom > seen.top &&
+    top < seen.bottom &&
     element.checkVisibility({ visibilityProperty: true })
   );
 }
@@ -1281,6 +1308,12 @@ class Reflow {
     this.#view = null;
     const plan: Plan = { slides: [], stops: [], edges: [], spans: [] };
     const arrivals: [HTMLElement, number][] = [];
+    /** Where its rows can be seen: read once, for the first row arriving. */
+    let seen: Seen | undefined;
+    const seenNow = (): Seen => {
+      seen ??= seenIn(this.#node);
+      return seen;
+    };
     for (const [element, place] of now) {
       if (element.hasAttribute("data-flip-anchor")) {
         continue;
@@ -1291,7 +1324,7 @@ class Reflow {
       } else if (
         !was &&
         (place.ref === this.#node || placed.has(place.ref)) &&
-        onScreen(element)
+        onScreen(element, seenNow())
       ) {
         arrivals.push([element, place.h]);
       }
