@@ -28,18 +28,6 @@
   }
 }
 
-@layer components {
-  /* foreign DOM: bits-ui's floating wrapper (the element bits-ui renders
-     round a popover's content, `data-bits-floating-content-wrapper`) glides
-     with a morphing surface, marked while the surface morphs
-     (NsPopoverGroup `data-ns-morph`). */
-  [data-bits-floating-content-wrapper][data-ns-morph] {
-    @variant motion-safe {
-      transition: transform var(--duration-pop) var(--ease-drawer);
-    }
-  }
-}
-
 /* The dialog's thin scrollbars, the standard properties and WebKit's
    pseudo-elements together. */
 @utility fai-scroll {

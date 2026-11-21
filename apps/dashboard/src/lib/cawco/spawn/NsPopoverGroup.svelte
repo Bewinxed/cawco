@@ -17,6 +17,7 @@
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     glidePopoverVariants,
+    placementGlide,
     popoverRoom,
   } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -68,6 +69,8 @@
     shown = next;
   });
   const open = $derived(active !== undefined);
+  /** The wrapper's glide to a sibling's placement (glide-popover `placementGlide`). */
+  const glides = placementGlide(() => morphing);
 
   const reduceMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
   function panelIn(_node: Element): TransitionConfig {
@@ -154,22 +157,21 @@
         >
           {#snippet child({ props, wrapperProps, open })}
             <!-- Closing, it lets presses through to the page (floating-presence).
-                 It moves with the surface's glide while the surface morphs. -->
+                 It glides to each new placement while the surface morphs. -->
             <div
               {...wrapperProps}
-              data-ns-morph={morphing ? "" : undefined}
               style:pointer-events={pressable(open)}
+              {@attach glides}
             >
               <!-- The label names what the trigger holds, so it changes as the
-                 reader types or picks inside the surface, and the morph mark
-                 changes as the surface retargets. Both are set here, on the
-                 element: as props of Popover.Content each change re-mounts
-                 bits-ui's focus scope, and focus leaves the field for the
-                 trigger. -->
+                 reader types or picks inside the surface. It is set here, on
+                 the element: as a prop of Popover.Content each change
+                 re-mounts bits-ui's focus scope, and focus leaves the field
+                 for the trigger. -->
               <div
                 {...props}
                 aria-label={shown?.label}
-                data-morph={morphing ? "" : undefined}
+                data-room={room}
                 id={`${shown?.id}-popover`}
                 role="presentation"
                 style:--ns-pop-room={room}
@@ -181,13 +183,22 @@
                 {@attach morph({
                   ms: dur("--duration-pop"),
                   followUnfolds: true,
+                  on: ["data-room"],
+                  placed: true,
+                  width: true,
                 })}
               >
-                <!-- The surface tweens to its content's next height (motion/
-                     morph) as it glides to a sibling or its own list filters;
-                     a question unfolding in it (Full Send's) is the one
-                     motion, the surface laid out at its size frame by frame.
-                     A fresh open is drawn at its own content's size. -->
+                <!-- The surface tweens to its content's next size (motion/
+                     morph), width and height, as it glides to a sibling or
+                     its own list filters, and to its next cap as its room
+                     changes under a new trigger (`data-room`). The size it
+                     tweens to is read at the new trigger's width and cap, and
+                     the wrapper floating-ui places is held at it (`placed`),
+                     so the wrapper glides once (`glides`), to where the
+                     surface lands, on the size tween's clock. A question
+                     unfolding in it (Full Send's) is the one motion, the
+                     surface laid out at its size frame by frame. A fresh
+                     open is drawn at its own content's size. -->
                 {#key shown?.id}
                   <!-- As the surface: a row with a long path shrinks and
                        ellipsises it, never widening the set past it. -->

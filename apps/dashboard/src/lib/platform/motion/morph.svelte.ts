@@ -58,13 +58,18 @@
  * read at the end of its fold, open or gone, never at the frame the fold is
  * on, and the tween runs on that fold's clock: the edge and the row land
  * together, and the box is never held at a size the fold then leaves. With
- * `followUnfolds` the box starts no tween for it and is laid out at the
- * row's size frame by frame, as it follows a `fold`: the row's run is the
- * one motion. A floating surface takes it (the glide popover): a Svelte
- * intro builds its keyframes a frame after the row mounts (its dummy run's
- * end), and where frames came late (WebKit) the tween begun on the mount
- * had landed before the row began to open, the edge at the row's full size
- * over a row still closed.
+ * `followUnfolds` the box starts no tween for a row's run and is laid out
+ * at the row's size frame by frame, as it follows a `fold`: the row's run
+ * is the one motion. A floating surface takes it (the glide popover): a
+ * Svelte intro builds its keyframes a frame after the row mounts (its
+ * dummy run's end), and where frames came late (WebKit) the tween begun on
+ * the mount had landed before the row began to open, the edge at the row's
+ * full size over a row still closed. Only the row's run is followed: the
+ * box read with each such row where it set out from must stand at the
+ * size it is drawn at. A change of its own beside the row (the surface
+ * gliding to a sibling's content while that content's row opens) tweens
+ * to where both land, on the box's own clock. Followed, it had jumped to
+ * the sibling's size on the first frame.
  *
  * A `fold` (motion/fold) inside it is a height change no mutation
  * announces: while one runs the container starts no tween of its own and
@@ -91,21 +96,29 @@ interface Size {
 /** A container's natural size and its children's sizes in it. */
 interface Natural {
   children: { child: HTMLElement; blockSize: number; inlineSize: number }[];
-  /** The clock of the folds it was read past (`atFoldsEnd`), if any. */
+  /** The clock of the folds it was read past (`atFolds`), if any. */
   clock: { easing: string; ms: number } | null;
+  /**
+   * With `followUnfolds`, while an `unfold` moves a row inside: its size
+   * with every such row where it set out from, the size the row's run
+   * alone leaves it at.
+   */
+  set?: Size;
   size: Size;
 }
 
 /**
  * Runs `read` with every row an `unfold` is moving inside `node` held at
- * the end of its fold: open, or gone. Important inline declarations win
- * over the fold's keyframes, so the read sees the box the fold is bound for
- * instead of the frame it happens to be on; they are taken back before
- * anything is drawn. Returns the clock of the longest fold found, so the
- * box's edge and the rows inside it move together.
+ * one end of its fold: where it is bound (`end`: open, or gone), or where
+ * it set out from (closed, or open). Important inline declarations win
+ * over the fold's keyframes, so the read sees that box instead of the
+ * frame the fold happens to be on; they are taken back before anything is
+ * drawn. Returns the clock of the longest fold found, so the box's edge
+ * and the rows inside it move together.
  */
-function atFoldsEnd<T>(
+function atFolds<T>(
   node: HTMLElement,
+  end: boolean,
   read: () => T
 ): { clock: Natural["clock"]; value: T } {
   const held: { el: HTMLElement; props: [string, string, string][] }[] = [];
@@ -114,23 +127,24 @@ function atFoldsEnd<T>(
     if (el === node || !node.contains(el)) {
       continue;
     }
-    const ends: [string, string][] = leaving(el)
-      ? [["display", "none"]]
-      : [
-          ["height", `${fold.height}px`],
-          ["margin-block-end", `${fold.margin}px`],
-          ...fold.edges.map(([edge, px]): [string, string] => [
-            edge,
-            `${px}px`,
-          ]),
-        ];
-    const props = ends.map(([prop, end]): [string, string, string] => {
+    const ends: [string, string][] =
+      leaving(el) === end
+        ? [["display", "none"]]
+        : [
+            ["height", `${fold.height}px`],
+            ["margin-block-end", `${fold.margin}px`],
+            ...fold.edges.map(([edge, px]): [string, string] => [
+              edge,
+              `${px}px`,
+            ]),
+          ];
+    const props = ends.map(([prop, at]): [string, string, string] => {
       const was: [string, string, string] = [
         prop,
         el.style.getPropertyValue(prop),
         el.style.getPropertyPriority(prop),
       ];
-      el.style.setProperty(prop, end, "important");
+      el.style.setProperty(prop, at, "important");
       return was;
     });
     held.push({ el, props });
@@ -194,6 +208,17 @@ export interface Morph {
    * row) would measure the page on each.
    */
   on?: readonly string[];
+  /**
+   * Placed by its parent: a floating wrapper that floating-ui measures and
+   * places (bits-ui's, round a popover's content). The parent is held at the
+   * box's end size for the tween's length, so the box is placed once, where
+   * it lands, and the placement's own glide runs to that place. Measured as
+   * the box passed through each size, a surface aligned by its end edge, or
+   * shifted off the screen's edge, was placed again on every frame: its
+   * glide was restarted each time, chasing a place that kept moving, and
+   * went on moving after its size had landed.
+   */
+  placed?: boolean;
   rows?: boolean;
   /**
    * Read as a tween would start: true while the change should land at once
@@ -210,6 +235,7 @@ export function morph({
   on = [],
   rows = false,
   followUnfolds = false,
+  placed = false,
   still,
 }: Morph = {}) {
   return (node: HTMLElement) => {
@@ -226,16 +252,27 @@ export function morph({
     let release: (() => void) | undefined;
 
     /**
-     * Its laid-out size. Following rows, to the subpixel: they stand at
+     * Its laid-out size, to the subpixel. Following rows: they stand at
      * fractional places, and a box rounded to whole pixels cut the last of
-     * them by the difference while it slid.
+     * them by the difference while it slid. Otherwise its border box as
+     * laid out, a transform on it (a popover's entrance scale) left out: a
+     * tween that ended on a whole pixel let the box settle to its fraction
+     * a frame after it landed (a popover's 150px tween, then 149.56px).
      */
     const sizeNow = (): Size => {
       if (rows) {
         const box = node.getBoundingClientRect();
         return { w: box.width, h: box.height };
       }
-      return { w: node.offsetWidth, h: node.offsetHeight };
+      const style = getComputedStyle(node);
+      const w = Number.parseFloat(style.width);
+      const h = Number.parseFloat(style.height);
+      // An inline box has no used width to read; the house sizes borders in.
+      return Number.isNaN(w) ||
+        Number.isNaN(h) ||
+        style.boxSizing !== "border-box"
+        ? { w: node.offsetWidth, h: node.offsetHeight }
+        : { w, h };
     };
 
     /**
@@ -302,7 +339,11 @@ export function morph({
       // put it, since the content has already changed under it.
       drawn: () => (running ? sizeNow() : laid),
       natural: () => {
-        const { clock, value } = atFoldsEnd(node, () => ({
+        const set =
+          followUnfolds && unfoldsInside()
+            ? atFolds(node, false, sizeNow).value
+            : undefined;
+        const { clock, value } = atFolds(node, true, () => ({
           size: sizeNow(),
           // In the flow only: one placed out of it (a surface laid under the
           // contents, contents leaving as others come in) is not squashed by
@@ -319,7 +360,7 @@ export function morph({
               return { child, blockSize: rect.height, inlineSize: rect.width };
             }),
         }));
-        return { ...value, clock };
+        return { ...value, clock, set };
       },
       stop: () => {
         running?.cancel();
@@ -327,7 +368,7 @@ export function morph({
         release?.();
         release = undefined;
       },
-      tween: (from, { size: to, children, clock }) => {
+      tween: (from, { size: to, children, clock, set }) => {
         const moved =
           Math.abs(to.h - from.h) > 0.5 ||
           (width && Math.abs(to.w - from.w) > 0.5);
@@ -338,17 +379,38 @@ export function morph({
           from.h === 0 ||
           to.h === 0 ||
           foldsInside() ||
-          (followUnfolds && unfoldsInside())
+          (set && moves(from, set) <= 0.5)
         ) {
           return;
         }
+        // Held at exactly these sizes, past any cap of its own: a cap that
+        // changed with the content (a tall surface's room giving way to the
+        // form's cap) cut the tween's first frame to the new cap.
         const frames: Keyframe[] = [
-          { height: `${from.h}px`, overflow: "hidden" },
-          { height: `${to.h}px`, overflow: "hidden" },
+          {
+            height: `${from.h}px`,
+            minHeight: "0px",
+            maxHeight: "none",
+            overflow: "hidden",
+          },
+          {
+            height: `${to.h}px`,
+            minHeight: "0px",
+            maxHeight: "none",
+            overflow: "hidden",
+          },
         ];
         if (width) {
-          frames[0].width = `${from.w}px`;
-          frames[1].width = `${to.w}px`;
+          Object.assign(frames[0], {
+            width: `${from.w}px`,
+            minWidth: "0px",
+            maxWidth: "none",
+          });
+          Object.assign(frames[1], {
+            width: `${to.w}px`,
+            minWidth: "0px",
+            maxWidth: "none",
+          });
         }
         // Each child is held by an animation of its own, never by writing
         // its inline style: whatever its owner writes there meanwhile (a
@@ -369,7 +431,28 @@ export function morph({
             { duration: 0, fill: "forwards" }
           )
         );
-        const animation = play(frames, moves(from, to), clock);
+        // The parent floating-ui places held at the end size (`placed`):
+        // its `min-width: max-content` let go, so the box inside it is
+        // free to pass through every size.
+        const parent = placed ? node.parentElement : null;
+        if (parent) {
+          held.push(
+            parent.animate(
+              [
+                {
+                  minWidth: "0px",
+                  width: `${to.w}px`,
+                  height: `${to.h}px`,
+                },
+              ],
+              { duration: 0, fill: "forwards" }
+            )
+          );
+        }
+        // Following unfolds, a tween is the box's own change (a sibling's
+        // content glided to) and runs on its own clock, the rows' runs
+        // inside it.
+        const animation = play(frames, moves(from, to), set ? null : clock);
         running = animation;
         const letGo = () => {
           for (const hold of held) {
@@ -393,9 +476,7 @@ export function morph({
     // biome-ignore lint/style/noRestrictedGlobals: reads only: the size it was laid out at, for the next tween to start from
     const laidOut = new ResizeObserver(([entry]) => {
       const [border] = entry.borderBoxSize;
-      laid = rows
-        ? { w: border.inlineSize, h: border.blockSize }
-        : { w: Math.round(border.inlineSize), h: Math.round(border.blockSize) };
+      laid = { w: border.inlineSize, h: border.blockSize };
     });
     laidOut.observe(node, { box: "border-box" });
 
