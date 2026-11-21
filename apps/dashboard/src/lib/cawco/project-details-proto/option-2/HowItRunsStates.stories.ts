@@ -45,3 +45,6 @@ export const StillReading = {
 
 /** Where tasks are kept could not be read; Try again stands in its place. */
 export const TasksFailedToRead = { args: { reading: "Tasks failed to read" } };
+
+/** The server refuses every change I make: each pick moves, then comes back with why. */
+export const ServerRefuses = { args: { answer: "refuses it" } };
