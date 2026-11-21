@@ -9,7 +9,7 @@
    */
   import type { Snippet } from "svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import { IconAlert, IconWarningTriangle } from "#lib/icons.js";
+  import { IconError, IconWarningTriangle } from "#lib/icons.js";
   import type { StageId, StageState } from "./changes";
 
   let {
@@ -70,7 +70,7 @@
     {:else if state === "away"}
       <IconWarningTriangle class="size-icon-sm" />
     {:else if state === "fault"}
-      <IconAlert class="size-icon-sm" />
+      <IconError class="size-icon-sm" />
     {:else}
       <span class="type-meta font-medium leading-none num">{n}</span>
     {/if}

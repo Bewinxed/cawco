@@ -31,10 +31,10 @@
     IconFolderGit,
     IconFolderOpen,
     IconGitRepo,
+    IconHubFolder,
     IconKey,
     IconLargeFilesServer,
     IconPlus,
-    IconServer,
     IconTransfer,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
@@ -222,7 +222,7 @@
       {@const moving = movingPlaceId === place.id}
       <SectionRow
         actions={place.kind === "hub" ? [] : actsOf(place)}
-        icon={machine ? machineIcon(machine.os) : IconServer}
+        icon={machine ? machineIcon(machine.os) : IconHubFolder}
         meta={place.path}
         name={machine ? machine.name : words.places.hub}
         whole

@@ -24,7 +24,7 @@
   } from "#lib/components/ui/option-group/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconAlert, IconHourglass, IconTransfer } from "#lib/icons.js";
+  import { IconError, IconHourglass, IconTransfer } from "#lib/icons.js";
   import {
     chosenAccountSignedOut,
     type HrefOf,
@@ -75,9 +75,9 @@
       >{account.name}</span
     >
     {#if !account.signedIn}
-      <IconAlert
+      <IconError
         aria-hidden="true"
-        class="size-icon-sm flex-none text-status-fail-glyph"
+        class="size-icon-md flex-none text-status-fail-glyph"
       />
       <span class="sr-only"> — {words.account.signedOut}</span>
     {/if}
@@ -149,7 +149,7 @@
 
   {#if chosenSignedOut && chosenAccount}
     <Alert layout="row" variant="destructive">
-      <IconAlert aria-hidden="true" />
+      <IconError aria-hidden="true" />
       <AlertDescription>
         {words.account.signedOutAlert(chosenAccount.name)}
       </AlertDescription>

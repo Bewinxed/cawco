@@ -1,5 +1,6 @@
-import { existsSync, realpathSync } from "node:fs";
-import { dirname, join, sep } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
 
 /**
  * Package `name`'s real folder, found from `from` up as Node finds it, when
@@ -26,6 +27,46 @@ const packageName = (specifier: string): string =>
     .split("/")
     .slice(0, specifier.startsWith("@") ? 2 : 1)
     .join("/");
+
+/** The linked folders of the packages a Vite config forces into its pre-bundle, found from its root. */
+const forcedFolders = (
+  root: string,
+  include: string[] | undefined
+): string[] => [
+  ...new Set(
+    (include ?? [])
+      .filter((entry) => !entry.includes(">"))
+      .map((entry) => linkedFolder(root, packageName(entry)))
+      .filter((dir): dir is string => dir !== null)
+  ),
+];
+
+/**
+ * The files of `folders` as they stand, in a few characters: each file's
+ * path, size and last write, its own `node_modules` aside. A write that
+ * leaves a file as it was changes it too, and only bundles it again.
+ */
+const filesDigest = (folders: readonly string[]): string => {
+  const hash = createHash("sha256");
+  for (const dir of [...folders].sort()) {
+    const files = readdirSync(dir, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => join(entry.parentPath, entry.name))
+      .filter((file) => !file.split(sep).includes("node_modules"))
+      .sort();
+    for (const file of files) {
+      const { size, mtimeMs } = statSync(file);
+      hash.update(`${dir}\0${relative(dir, file)}\0${size}\0${mtimeMs}\n`);
+    }
+  }
+  return hash.digest("hex").slice(0, 16);
+};
+
+/** What the plugin uses of a Vite config, once resolved (vite.dev/guide/api-plugin#configresolved). */
+interface RebundledConfig {
+  optimizeDeps: { include?: string[] };
+  root: string;
+}
 
 /** What the plugin uses of a Vite dev server (vite.dev/guide/api-javascript). */
 interface RebundledServer {
@@ -85,21 +126,36 @@ const SETTLE_MS = 300;
  * other stands down, so one change restarts the server once.
  */
 export const linkedRebundle = () => {
+  /**
+   * The forced packages' files, named. The watcher below hears only what
+   * changes while the server runs: a package changed while it was down (a
+   * stage asleep, a server restarted) kept the bundle made before, and a
+   * page asked it for an export it lacked ("does not provide an export
+   * named 'IconHubFolder'", 2026-11-21). Vite bundles again whenever its
+   * config's hash differs from the one its cache was made under, and that
+   * hash reads every plugin's name (Vite 8.3.5 `getConfigHash`: `plugins:
+   * config.plugins.map((p) => p.name)`); so this plugin of no hooks carries
+   * the files' digest in its name, given once the config is resolved, and
+   * any start after a change bundles again by Vite's own check. The plugin
+   * that acts keeps its own name, which an older stage's copy of it looks
+   * for to stand down.
+   */
+  const fingerprint = { name: `${NAME}:files` };
   const plugin = {
     name: NAME,
+    configResolved(config: RebundledConfig) {
+      fingerprint.name = `${NAME}:files:${filesDigest(
+        forcedFolders(config.root, config.optimizeDeps.include)
+      )}`;
+    },
     configureServer(server: RebundledServer) {
       if (server.config.plugins.find((one) => one.name === NAME) !== plugin) {
         return;
       }
-      const { root } = server.config;
-      const folders = [
-        ...new Set(
-          (server.environments.client.config.optimizeDeps.include ?? [])
-            .filter((entry) => !entry.includes(">"))
-            .map((entry) => linkedFolder(root, packageName(entry)))
-            .filter((dir): dir is string => dir !== null)
-        ),
-      ];
+      const folders = forcedFolders(
+        server.config.root,
+        server.environments.client.config.optimizeDeps.include
+      );
       if (folders.length === 0) {
         return;
       }
@@ -126,5 +182,5 @@ export const linkedRebundle = () => {
       }
     },
   };
-  return plugin;
+  return [plugin, fingerprint];
 };
