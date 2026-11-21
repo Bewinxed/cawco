@@ -1313,7 +1313,7 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  /* Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%), which reads as the change lurching. */
+  /* Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal; a streamed reply's words fading in, whose first frames iOS Safari never shows. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%), which reads as the change lurching. */
   --ease-crossfade: cubic-bezier(0.42, 0, 0.58, 1);
   /* A shape pouring out of another as one drawn silhouette (goo-join): a comment's card out of its pill. It overshoots a little and settles, the liquid's give. transitions.dev Gooey plus menu, its open curve (--pv3i). */
   --ease-goo: cubic-bezier(0.34, 1.56, 0.64, 1);

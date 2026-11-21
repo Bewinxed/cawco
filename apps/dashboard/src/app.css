@@ -160,10 +160,13 @@
 
   /* A streamed chunk's words, faded in by the markdown (@pierre/words marks
      them `data-animated` while they fade): one opacity fade at the menu's
-     duration on the house ease-out, no stagger, nothing that moves
-     (ui/markdown `animated`, which hands Words the same duration). */
+     duration, no stagger, nothing that moves (ui/markdown `animated`, which
+     hands Words the same duration). On the crossfade curve, whose first
+     frames hold little of the fade: iOS Safari first shows an accelerated
+     animation about two frames after its start time, and the house ease-out
+     has done 76% of its change by then, so the words landed at full ink. */
   [data-slot="md"] [data-markdown][data-animated="true"] {
-    animation: kit-fade-in var(--duration-menu) var(--ease-out) backwards;
+    animation: kit-fade-in var(--duration-menu) var(--ease-crossfade) backwards;
   }
   /* A Mermaid diagram in the markdown (ui/markdown/mermaid.svelte.ts):
      Words sets it in its code block frame, whose header names the language

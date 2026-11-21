@@ -188,7 +188,7 @@
 
   /**
    * Each chunk's words fade in together: one short opacity fade per chunk
-   * (--duration-menu, --ease-out: app.css), no stagger inside it, nothing
+   * (--duration-menu, --ease-crossfade: app.css), no stagger inside it, nothing
    * that moves.
    */
   const animated = $derived(
