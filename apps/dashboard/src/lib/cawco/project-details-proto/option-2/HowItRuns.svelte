@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
    * Option 2 ("How it runs"): the whole work-path view mounted inside the
-   * project page's view region. Left-aligned on the page edge up to
-   * max-w-table-1102px, acting as a container-query root, drawing the
+   * project page's pane, which gives it the page's side edges and its
+   * scroller as it gives every view. Up to max-w-table-1102px, acting as a
+   * container-query root, drawing the
    * connected step rail across Tasks enter, Sessions start, What waits for
    * you, and (for code projects only) Work lands, with per-stage loading
    * skeletons, read-failure alerts, live announcements, and hub-offline
@@ -16,7 +17,7 @@
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconAlert, IconCloudCross, IconRefresh } from "#lib/icons.js";
+  import { IconCloudCross, IconError, IconRefresh } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import {
     type ChangeKey,
@@ -103,7 +104,7 @@
 
 {#snippet stageReadFailed(stage: StageId, reason: string)}
   <Alert variant="destructive">
-    <IconAlert aria-hidden="true" />
+    <IconError aria-hidden="true" />
     <AlertTitle>
       {words.readFailedTitle(words.stages[stage])}
     </AlertTitle>
@@ -167,126 +168,121 @@
   </div>
 {/snippet}
 
-<!-- The view's own scroller, on the project page's edges (its head, its views strip, Who decides' page). -->
-<div
-  class="min-h-0 w-full flex-1 overflow-y-auto overscroll-contain pt-space-5 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 max-phone:py-space-4"
-  data-slot="page-scroll"
+<!-- A view of the project page: its pane gives it the page's side edges and its scroller (ProjectPage `viewPane`, pane-inset `PANE_INSET`). -->
+<section
+  aria-label={words.viewLabel}
+  class="@container flex w-full max-w-table-1102px flex-col pt-space-5 pb-space-6 max-phone:py-space-4"
 >
-  <section
-    aria-label={words.viewLabel}
-    class="@container flex w-full max-w-table-1102px flex-col"
+  {#if !record.hubReachable}
+    <Alert class="mb-space-5" layout="row" variant="warning">
+      <IconCloudCross aria-hidden="true" />
+      <AlertDescription>
+        {words.hubOutOfReach(asOfAge)}
+      </AlertDescription>
+    </Alert>
+  {/if}
+
+  <!-- Stage 1: Tasks enter -->
+  <RailStage
+    announcement={announcementOf("tasks")}
+    id="tasks"
+    n={1}
+    state={tasksState}
+    stateWords={words.stageState[tasksState]}
+    title={words.stages.tasks}
   >
-    {#if !record.hubReachable}
-      <Alert class="mb-space-5" layout="row" variant="warning">
-        <IconCloudCross aria-hidden="true" />
-        <AlertDescription>
-          {words.hubOutOfReach(asOfAge)}
-        </AlertDescription>
-      </Alert>
+    {#if loading.includes("tasks")}
+      {@render stageSkeleton("tasks")}
+    {:else if readFailed.tasks}
+      {@render stageReadFailed("tasks", readFailed.tasks)}
+    {:else}
+      <TasksEnter
+        {hrefOf}
+        {onchange}
+        {onretry}
+        {onsync}
+        {pending}
+        {record}
+        {refused}
+        {syncing}
+      />
     {/if}
+  </RailStage>
 
-    <!-- Stage 1: Tasks enter -->
-    <RailStage
-      announcement={announcementOf("tasks")}
-      id="tasks"
-      n={1}
-      state={tasksState}
-      stateWords={words.stageState[tasksState]}
-      title={words.stages.tasks}
-    >
-      {#if loading.includes("tasks")}
-        {@render stageSkeleton("tasks")}
-      {:else if readFailed.tasks}
-        {@render stageReadFailed("tasks", readFailed.tasks)}
-      {:else}
-        <TasksEnter
-          {hrefOf}
-          {onchange}
-          {onretry}
-          {onsync}
-          {pending}
-          {record}
-          {refused}
-          {syncing}
-        />
-      {/if}
-    </RailStage>
-
-    <!-- Stage 2: Sessions start -->
-    <RailStage
-      announcement={announcementOf("sessions")}
-      id="sessions"
-      n={2}
-      state={sessionsState}
-      stateWords={words.stageState[sessionsState]}
-      title={words.stages.sessions}
-    >
-      {#if loading.includes("sessions")}
-        {@render stageSkeleton("sessions")}
-      {:else if readFailed.sessions}
-        {@render stageReadFailed("sessions", readFailed.sessions)}
-      {:else}
-        <SessionsStart
-          {hrefOf}
-          {movingPlaceId}
-          {onaddplace}
-          {onchange}
-          {onplace}
-          {onretry}
-          {pending}
-          {record}
-          {refused}
-        />
-      {/if}
-    </RailStage>
-
-    <!-- Stage 3: What waits for you (ends the rail when the project holds no code) -->
-    <RailStage
-      announcement={announcementOf("waits")}
-      id="waits"
-      last={!record.holdsCode}
-      n={3}
-      state={waitsState}
-      stateWords={words.stageState[waitsState]}
-      title={words.stages.waits}
-    >
-      {#if loading.includes("waits")}
-        {@render stageSkeleton("waits")}
-      {:else if readFailed.waits}
-        {@render stageReadFailed("waits", readFailed.waits)}
-      {:else}
-        <WhatWaits
-          {hrefOf}
-          {onchange}
-          onreread={() => onreread("waits")}
-          {onretry}
-          {pending}
-          {record}
-          {refused}
-        />
-      {/if}
-    </RailStage>
-
-    <!-- Stage 4: Work lands (code projects only) -->
-    {#if record.holdsCode}
-      {@const landsState = stageStateOf("lands")}
-      <RailStage
-        announcement={announcementOf("lands")}
-        id="lands"
-        last
-        n={4}
-        state={landsState}
-        stateWords={words.stageState[landsState]}
-        title={words.stages.lands}
-      >
-        {#if loading.includes("lands")}
-          {@render stageSkeleton("lands")}
-        {:else if readFailed.lands}
-          {@render stageReadFailed("lands", readFailed.lands)}
-        {:else}
-          <WorkLands {onchange} {onretry} {pending} {record} {refused} />
-        {/if}
-      </RailStage>
+  <!-- Stage 2: Sessions start -->
+  <RailStage
+    announcement={announcementOf("sessions")}
+    id="sessions"
+    n={2}
+    state={sessionsState}
+    stateWords={words.stageState[sessionsState]}
+    title={words.stages.sessions}
+  >
+    {#if loading.includes("sessions")}
+      {@render stageSkeleton("sessions")}
+    {:else if readFailed.sessions}
+      {@render stageReadFailed("sessions", readFailed.sessions)}
+    {:else}
+      <SessionsStart
+        {hrefOf}
+        {movingPlaceId}
+        {onaddplace}
+        {onchange}
+        {onplace}
+        {onretry}
+        {pending}
+        {record}
+        {refused}
+      />
     {/if}
-  </section>
-</div>
+  </RailStage>
+
+  <!-- Stage 3: What waits for you (ends the rail when the project holds no code) -->
+  <RailStage
+    announcement={announcementOf("waits")}
+    id="waits"
+    last={!record.holdsCode}
+    n={3}
+    state={waitsState}
+    stateWords={words.stageState[waitsState]}
+    title={words.stages.waits}
+  >
+    {#if loading.includes("waits")}
+      {@render stageSkeleton("waits")}
+    {:else if readFailed.waits}
+      {@render stageReadFailed("waits", readFailed.waits)}
+    {:else}
+      <WhatWaits
+        {hrefOf}
+        {onchange}
+        onreread={() => onreread("waits")}
+        {onretry}
+        {pending}
+        {record}
+        {refused}
+      />
+    {/if}
+  </RailStage>
+
+  <!-- Stage 4: Work lands (code projects only) -->
+  {#if record.holdsCode}
+    {@const landsState = stageStateOf("lands")}
+    <RailStage
+      announcement={announcementOf("lands")}
+      id="lands"
+      last
+      n={4}
+      state={landsState}
+      stateWords={words.stageState[landsState]}
+      title={words.stages.lands}
+    >
+      {#if loading.includes("lands")}
+        {@render stageSkeleton("lands")}
+      {:else if readFailed.lands}
+        {@render stageReadFailed("lands", readFailed.lands)}
+      {:else}
+        <WorkLands {onchange} {onretry} {pending} {record} {refused} />
+      {/if}
+    </RailStage>
+  {/if}
+</section>

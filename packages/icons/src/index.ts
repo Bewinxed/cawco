@@ -375,6 +375,8 @@ export { default as IconJev } from "~icons/solar/scale-bold-duotone";
 export { default as IconServer } from "~icons/solar/server-2-bold-duotone";
 export { default as IconServerLinear } from "~icons/solar/server-2-linear";
 export { default as IconServerAlt } from "~icons/solar/server-bold-duotone";
+/** A project's own folder on the hub, among its places on the machines (the work path's folders): a path on a server, apart from a machine's `server-square`. */
+export { default as IconHubFolder } from "~icons/solar/server-path-bold-duotone";
 export { default as IconServerSquare } from "~icons/solar/server-square-bold-duotone";
 export { default as IconSettings } from "~icons/solar/settings-bold-duotone";
 export { default as IconShield } from "~icons/solar/shield-bold-duotone";
