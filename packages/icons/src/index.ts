@@ -136,6 +136,8 @@ export {
   default as IconError,
 } from "~icons/solar/close-bold-duotone";
 export { default as IconCloudCross } from "~icons/solar/cloud-cross-bold-duotone";
+/** Large files kept at one address of the person's own (the work path's Large files). */
+export { default as IconLargeFilesServer } from "~icons/solar/cloud-storage-bold-duotone";
 export { default as IconToolCode } from "~icons/solar/code-2-bold-duotone";
 export {
   default as IconTerminal,
@@ -194,6 +196,8 @@ export { default as IconFire } from "~icons/solar/fire-bold-duotone";
 export { default as IconFiles } from "~icons/solar/folder-2-bold-duotone";
 export { default as IconFilesLinear } from "~icons/solar/folder-2-linear";
 export { default as IconFolder } from "~icons/solar/folder-bold-duotone";
+/** Where finished work goes: nowhere, the files it made stay where they are. */
+export { default as IconLandKept } from "~icons/solar/folder-check-bold-duotone";
 export { default as IconFolderGit } from "~icons/solar/folder-git-bold-duotone";
 export { default as IconFolderLinear } from "~icons/solar/folder-linear";
 export { default as IconFolderOpen } from "~icons/solar/folder-open-bold-duotone";
@@ -213,13 +217,21 @@ export {
 /** The agent driving a browser, in its address (BrowserAddress): the agent's ghost, a bar's linear cut. */
 export { default as IconAgentLinear } from "~icons/solar/ghost-smile-linear";
 /** A git repository on a host with no mark of its own (a pasted URL's row in the repository picker). */
-export { default as IconGitRepo } from "~icons/solar/git-branch-bold-duotone";
+/** Where finished work goes: a branch of the task's own. */
+export {
+  default as IconGitRepo,
+  default as IconLandBranch,
+} from "~icons/solar/git-branch-bold-duotone";
+/** Where finished work goes (the work path's Work lands): commits straight onto the default branch. */
+export { default as IconLandCommit } from "~icons/solar/git-commit-bold-duotone";
 /** What differs between two states: Compare (bare: the scale stands on a tile, The Solar Duotone Rule). */
 export { default as IconCompare } from "~icons/solar/git-diff-bold-duotone";
 export { default as IconCompareLinear } from "~icons/solar/git-diff-linear";
 /** Fork, Spin off: a session forked from another (the bare cut, no enclosure). */
 export { default as IconFork } from "~icons/solar/git-fork-bold-duotone";
 export { default as IconForkLinear } from "~icons/solar/git-fork-linear";
+/** Where finished work goes: its branch, with a pull request. */
+export { default as IconLandPullRequest } from "~icons/solar/git-pull-request-bold-duotone";
 export {
   default as IconGlobe,
   default as IconToolWeb,

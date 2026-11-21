@@ -23,6 +23,7 @@
   import HandOver, { handOverWidth } from "./HandOver.svelte";
   import KindTile from "./KindTile.svelte";
   import MemberCard from "./MemberCard.svelte";
+  import { ROSTER_WORDS, type RosterWords } from "./roster-words";
   import SetupPopover from "./SetupPopover.svelte";
   import { NEW } from "./setup.svelte";
 
@@ -40,6 +41,7 @@
     onhand,
     onputback,
     who = null,
+    said = ROSTER_WORDS,
   }: {
     /** Who decides' state, whose settings and Add a member open from the cards; null draws neither. */
     who?: WhoDecides | null;
@@ -65,6 +67,8 @@
     project: string | null;
     /** This table's member for each kind, by kind id. */
     routes: Record<string, string>;
+    /** Its parts' words: Who decides' unless the surface drawing it says its own. */
+    said?: RosterWords;
   } = $props();
 
   /** Each card, which its settings hang from. */
@@ -129,6 +133,7 @@
         >
           {#snippet list(headId: string)}
             <HandOver
+              {said}
               fleetChoice={project === null ? null : fleetRoutes[kind.id]}
               {headId}
               {kind}
@@ -165,6 +170,7 @@
             onputback={() => land(kind.id, onputback(kind.id))}
             own={own.includes(kind.id)}
             {project}
+            {said}
             width={handOverWidth(others.length)}
           />
         </div>
@@ -199,6 +205,7 @@
       parked={who?.parked[member.id] !== undefined}
       pencil={who && editable(member) ? pencil : undefined}
       {project}
+      {said}
       tiles={holds.length > 0 ? tiles : undefined}
     />
   {/each}

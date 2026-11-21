@@ -26,7 +26,6 @@
     stageStates,
   } from "./changes";
   import RailStage from "./RailStage.svelte";
-  import { CHOICE_KINDS } from "./records";
   import SessionsStart from "./SessionsStart.svelte";
   import TasksEnter from "./TasksEnter.svelte";
   import WhatWaits from "./WhatWaits.svelte";
@@ -53,9 +52,9 @@
     loading?: StageId[];
     /** Stages whose read failed, with the hub's words: an alert with Try again stands in place of the stage's content. */
     readFailed?: Partial<Record<StageId, string>>;
-    /** Changes asked and not yet in force: the pressed control shows a spinner; the record still shows the hub's value. */
+    /** Acts still running (a place being added). A choice is never pending: `record` carries it from the press (changes.ts `withAsked`). */
     pending?: ChangeKey[];
-    /** Changes the hub refused, with its words: the record's value stands, the words beside that control with Try again. */
+    /** Changes the hub refused, with its words: the hub's value is back, the words under that control with Try again. */
     refused?: Partial<Record<ChangeKey, string>>;
     /** A sync now running (stage 1's node goes live). */
     syncing?: boolean;
@@ -84,6 +83,7 @@
   const sessionsState = $derived(stageStateOf("sessions"));
   const waitsState = $derived(stageStateOf("waits"));
 
+  /** Said to a screen reader as a stage starts or stops something; a pick says itself on its own control. */
   const announcementOf = (stage: StageId): string => {
     if (loading.includes(stage)) {
       return words.stageLoading(words.stages[stage]);
@@ -91,33 +91,11 @@
     if (readFailed[stage]) {
       return "";
     }
-    if (stage === "tasks") {
-      if (syncing || record.tie?.sync.kind === "syncing") {
-        return words.tasks.syncing;
-      }
-      if (pending.includes("taskHome") || pending.includes("sync")) {
-        return words.saving;
-      }
-    } else if (stage === "sessions") {
-      if (movingPlaceId !== null) {
-        return words.places.movingTip;
-      }
-      if (
-        pending.includes("account") ||
-        pending.includes("atLimit") ||
-        pending.includes("largeFiles") ||
-        pending.includes("addPlace")
-      ) {
-        return words.saving;
-      }
-    } else if (stage === "waits") {
-      if (
-        pending.some((key) => key === "review" || key.startsWith("decides."))
-      ) {
-        return words.saving;
-      }
-    } else if (stage === "lands" && pending.includes("landing")) {
-      return words.saving;
+    if (stage === "tasks" && (syncing || record.tie?.sync.kind === "syncing")) {
+      return words.tasks.syncing;
+    }
+    if (stage === "sessions" && movingPlaceId !== null) {
+      return words.places.moving;
     }
     return "";
   };
@@ -146,91 +124,50 @@
 {/snippet}
 
 {#snippet stageSkeleton(stage: StageId)}
+  <!-- Each stage's own shape, on the ground it stands on: its tiles, its rows, its cards. -->
   <div aria-busy="true" class="min-w-0">
-    {#if stage === "tasks"}
+    {#if stage === "sessions"}
       <div
-        class="flex flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
+        class="grid min-w-0 grid-cols-1 items-start gap-x-space-6 gap-y-space-5 @setup:grid-cols-5"
       >
-        <div class="grid grid-cols-1 gap-space-2 @setup:grid-cols-3">
-          <Skeleton class="w-full" height="item" radius="tile" />
-          <Skeleton class="w-full" height="item" radius="tile" />
-          <Skeleton class="w-full" height="item" radius="tile" />
-        </div>
-      </div>
-    {:else if stage === "sessions"}
-      <div
-        class="grid min-w-0 grid-cols-1 items-start gap-space-3 @setup:grid-cols-5"
-      >
-        <div
-          class="flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:col-span-3 @setup:px-space-4"
-        >
+        <div class="flex min-w-0 flex-col gap-space-2 @setup:col-span-3">
           <Skeleton line="label" radius="text" width="label" />
-          <Skeleton class="w-full" height="control-sm" radius="chip" />
-          <Skeleton class="w-full" height="control-sm" radius="chip" />
-          <Skeleton class="w-full" height="control-sm" radius="chip" />
+          {#each [0, 1, 2] as row (row)}
+            <Skeleton class="w-full" height="row" radius="chip" />
+          {/each}
         </div>
-        <div
-          class="flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:col-span-2 @setup:px-space-4"
-        >
+        <div class="flex min-w-0 flex-col gap-space-2 @setup:col-span-2">
           <Skeleton line="label" radius="text" width="label" />
           <div class="flex flex-wrap gap-space-2">
             <Skeleton height="control-sm" radius="chip" width="name" />
             <Skeleton height="control-sm" radius="chip" width="name" />
             <Skeleton height="control-sm" radius="chip" width="title" />
           </div>
-          <Skeleton line="meta" radius="text" width="title" />
         </div>
       </div>
     {:else if stage === "waits"}
-      <div
-        class="flex flex-col gap-space-2 rounded-well border border-border-contrast bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
-      >
-        <div class="flex items-center justify-between gap-space-2">
-          <Skeleton line="label" radius="text" width="name" />
-          <Skeleton line="meta" radius="text" width="name" />
-        </div>
-        <div class="grid grid-cols-1 gap-y-space-row">
-          {#each CHOICE_KINDS as kind (kind)}
-            <div class="flex items-center gap-space-2">
-              <Skeleton
-                class="flex-none"
-                line="label"
-                radius="text"
-                width="label"
-              />
-              <Skeleton
-                class="min-w-0 flex-1"
-                height="control-sm"
-                radius="chip"
-              />
-            </div>
-          {/each}
-        </div>
-        <div
-          class="flex items-center justify-between gap-space-2 border-t border-border-hairline pt-space-2"
-        >
-          <Skeleton line="label" radius="text" width="title" />
-          <Skeleton height="control-sm" radius="chip" width="title" />
-        </div>
+      <!-- The roster's four cards, as many to a line as fit. -->
+      <div class="grid grid-cols-fit-c-roster-card-min gap-space-3">
+        {#each [0, 1, 2, 3] as at (at)}
+          <Skeleton height="board" radius="card" />
+        {/each}
       </div>
     {:else}
       <div
-        class="flex flex-col gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
+        class="grid grid-cols-(--tiles-cols) gap-space-2 max-phone:grid-cols-1"
+        style:--tiles-cols="repeat({stage === 'tasks' ? 3 : 4}, minmax(0, 1fr))"
       >
-        <div class="grid grid-cols-1 gap-space-2 @setup:grid-cols-4">
+        {#each stage === "tasks" ? [0, 1, 2] : [0, 1, 2, 3] as at (at)}
           <Skeleton class="w-full" height="item" radius="tile" />
-          <Skeleton class="w-full" height="item" radius="tile" />
-          <Skeleton class="w-full" height="item" radius="tile" />
-          <Skeleton class="w-full" height="item" radius="tile" />
-        </div>
-        <Skeleton line="meta" radius="text" width="title" />
+        {/each}
       </div>
     {/if}
   </div>
 {/snippet}
 
+<!-- The view's own scroller, on the project page's edges (its head, its views strip, Who decides' page). -->
 <div
-  class="h-full min-h-0 w-full overflow-y-auto overscroll-contain px-space-2 py-space-2 phone:max-wide:px-space-3 wide:px-space-5"
+  class="min-h-0 w-full flex-1 overflow-y-auto overscroll-contain pt-space-5 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 max-phone:py-space-4"
   data-slot="page-scroll"
 >
   <section
@@ -238,7 +175,7 @@
     class="@container flex w-full max-w-table-1102px flex-col"
   >
     {#if !record.hubReachable}
-      <Alert class="mb-space-3" layout="row" variant="warning">
+      <Alert class="mb-space-5" layout="row" variant="warning">
         <IconCloudCross aria-hidden="true" />
         <AlertDescription>
           {words.hubOutOfReach(asOfAge)}

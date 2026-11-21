@@ -14,8 +14,8 @@
    * line (a phone).
    */
   import type { Kind, Member } from "@cawco/core/decides";
-  import { decidesWords } from "@cawco/core/words/decides";
   import MemberFace from "./MemberFace.svelte";
+  import { ROSTER_WORDS, type RosterWords } from "./roster-words";
 
   let {
     headId,
@@ -23,6 +23,7 @@
     members,
     fleetChoice,
     onpick,
+    said = ROSTER_WORDS,
   }: {
     /** The member the fleet names for this kind; null on the fleet's page, where every choice is the fleet's. */
     fleetChoice: string | null;
@@ -32,6 +33,8 @@
     /** Every member but the one holding it now. */
     members: Member[];
     onpick: (member: string) => void;
+    /** Its words: Who decides' unless the surface drawing it says its own. */
+    said?: RosterWords;
   } = $props();
 </script>
 
@@ -40,7 +43,7 @@
     class="px-space-2 pt-space-1 type-meta text-ink-muted text-pretty"
     id={headId}
   >
-    {decidesWords.handTo(kind.name)}
+    {said.handTo(kind.name)}
   </p>
   <ul
     class="m-0 grid list-none grid-cols-(--rows) gap-x-space-3 gap-y-space-1 p-0"
@@ -59,7 +62,7 @@
               {member.name}
               {#if member.id === fleetChoice}
                 <span class="font-normal text-ink-muted">
-                  · {decidesWords.fleetsChoice}</span
+                  · {said.fleetsChoice}</span
                 >
               {/if}
             </span>

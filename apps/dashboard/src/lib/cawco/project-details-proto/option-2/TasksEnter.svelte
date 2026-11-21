@@ -1,9 +1,14 @@
 <script lang="ts">
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   /**
-   * Stage 1 ("Tasks enter"): shows live tracker sync standing when tied to
-   * GitHub Issues or Linear, the three task homes standing open as equal
-   * option tiles with concise implications, and the inline tie-setup well
-   * when connecting or changing an outside tracker.
+   * Stage 1 ("Tasks enter"): the three homes for the project's tasks as the
+   * house's equal tiles (OptionTiles), each led by its mark (CawCo's own
+   * files, GitHub's and Linear's own logos); while tied to one, how the two
+   * sides stand above them; and pressed on GitHub or Linear, the tie's setup
+   * opening under the tiles. Files moves at the press (changes.ts
+   * `withAsked`); GitHub or Linear moves at the setup's Save. A refusal
+   * puts it back and stands under the tiles (RowFault).
    */
   import {
     Alert,
@@ -17,17 +22,17 @@
   import {
     OptionGroup,
     OptionGroupItem,
+    OptionTiles,
   } from "#lib/components/ui/option-group/index.js";
   import {
     IconAlert,
     IconChevronRight,
+    IconDocument,
     IconExternalLinear,
     IconRefresh,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
-  import ChoiceTile from "./ChoiceTile.svelte";
-  import ControlRefusal from "./ControlRefusal.svelte";
   import type { Change, ChangeKey } from "./changes";
   import type { HowItRunsRecord, TaskHome } from "./records";
   import {
@@ -67,9 +72,8 @@
 
   const filterInputId = $props.id();
 
-  /** UI-local state: inline tie setup open for GitHub or Linear, and last pressed chip. */
+  /** The tie's setup standing open, for GitHub or Linear: the pick shows it from the press. */
   let setupHome = $state<"github" | "linear" | null>(null);
-  let pressedHome = $state<TaskHome | null>(null);
   let connectionPick = $state<string | null>(null);
   let targetPick = $state<string | null>(null);
   let targetQuery = $state("");
@@ -79,7 +83,6 @@
   });
 
   const disabled = $derived(!record.hubReachable);
-  const homePending = $derived(pending.includes("taskHome"));
   const syncPending = $derived(syncing || pending.includes("sync"));
   const tie = $derived(record.tie);
 
@@ -160,7 +163,6 @@
     if (home === "files") {
       closeSetup();
       if (record.taskHome !== "files") {
-        pressedHome = "files";
         onchange({ key: "taskHome", value: "files" });
       }
       return;
@@ -181,8 +183,8 @@
     if (!canSaveTie || setupHome === null) {
       return;
     }
-    pressedHome = setupHome;
     onchange({ key: "taskHome", value: setupHome });
+    closeSetup();
   }
 
   function formatAge(iso: string): string {
@@ -190,15 +192,17 @@
   }
 </script>
 
-<div
-  class="flex flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
-  data-slot="well"
->
+{#snippet homeGlyph(home: TaskHome)}
+  {#if home === "files"}
+    <IconDocument aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {:else}
+    <ProviderLogo provider={home} />
+  {/if}
+{/snippet}
+
+<div class="flex min-w-0 flex-col gap-space-2">
   {#if tie}
-    <div
-      class="mb-space-2 flex flex-col gap-space-1 border-b border-border-hairline pb-space-2"
-      data-slot="sync"
-    >
+    <div class="flex flex-col gap-space-1" data-slot="sync">
       <div
         class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
       >
@@ -312,46 +316,42 @@
         </Alert>
       {/if}
 
-      <ControlRefusal
-        {disabled}
-        onretry={() => onretry("sync")}
+      <RowFault
+        again={() => onretry("sync")}
+        againLabel={words.retryChange}
         reason={refused.sync}
       />
     </div>
   {/if}
 
-  <OptionGroup
-    aria-label={words.tasks.groupLabel}
+  <OptionTiles
+    bind:value={
+      () => setupHome ?? record.taskHome,
+      (next) => {
+        if (next !== null) {
+          handleHomeClick(next);
+        }
+      }
+    }
+    cols={3}
     {disabled}
-    layout="tiles"
-    style="--tiles-cols: repeat(auto-fit, minmax(var(--spacing-c-choice-tile-min), 1fr)); --tiles-cols-phone: minmax(0, 1fr)"
-    value={[record.taskHome]}
-  >
-    {#each HOMES as home (home)}
-      {@const info = words.tasks.homes[home]}
-      {@const showSpin =
-        homePending &&
-        (pressedHome === home ||
-          (pressedHome === null && record.taskHome === home))}
-      <ChoiceTile
-        name={info.name}
-        note={info.note}
-        onpick={() => handleHomeClick(home)}
-        sending={showSpin}
-        value={home}
-      />
-    {/each}
-  </OptionGroup>
-
-  <ControlRefusal
-    {disabled}
-    onretry={() => onretry("taskHome")}
+    glyph={homeGlyph}
+    label={words.tasks.groupLabel}
+    options={HOMES.map((home) => ({
+      id: home,
+      name: words.tasks.homes[home].name,
+      note: words.tasks.homes[home].note,
+    }))}
+  />
+  <RowFault
+    again={() => onretry("taskHome")}
+    againLabel={words.retryChange}
     reason={refused.taskHome}
   />
 
   {#if setupHome !== null}
     <div
-      class="mt-space-2 flex flex-col gap-space-3 rounded-sm border border-border-control bg-surface-raised p-space-3"
+      class="flex min-w-0 flex-col gap-space-3 pt-space-2"
       data-slot="setup-asks"
       transition:unfold
     >
@@ -520,9 +520,7 @@
             </div>
 
             {#if selectedGithubProject}
-              <div
-                class="flex flex-col gap-space-1 border-t border-border-hairline pt-space-2"
-              >
+              <div class="flex flex-col gap-space-1 pt-space-1">
                 <span class="type-meta font-medium text-ink-muted"
                   >{words.tasks.stageMapLabel}</span
                 >
@@ -578,15 +576,11 @@
         {/if}
       {/if}
 
-      <div
-        class="flex flex-wrap items-center gap-space-2 border-t border-border-hairline pt-space-2"
-      >
+      <div class="flex flex-wrap items-center gap-space-2">
         <Button
           disabled={!canSaveTie}
           label={words.tasks.saveTie}
           onclick={saveTie}
-          pending={homePending && pressedHome === setupHome}
-          pendingLabel={words.tasks.savingTie}
           size="sm"
           variant="outline"
         />

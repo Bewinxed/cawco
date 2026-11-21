@@ -40,14 +40,18 @@
   import Shell from "#lib/cawco/Shell.svelte";
   import { boardState } from "#lib/cawco/stores/board.svelte.js";
   import {
+    applied,
     type Change,
     type ChangeKey,
     faultCount,
+    keyOf,
     type StageId,
+    withAsked,
   } from "./changes";
   import HowItRuns from "./HowItRuns.svelte";
   import { type HowItRunsRecord, SITUATIONS, type Situation } from "./records";
   import { projectRowOf } from "./shell-seed";
+  import { howItRunsWords as words } from "./words";
 
   let {
     situation,
@@ -71,86 +75,49 @@
   let held = $state.raw<{ from: HowItRunsRecord; now: HowItRunsRecord } | null>(
     null
   );
-  const shown = $derived(held && held.from === record ? held.now : record);
-  let pending = $state<ChangeKey[]>([]);
-  let refused = $state<Partial<Record<ChangeKey, string>>>({});
-  let syncing = $state(false);
-  /** The last change asked of each key, so Try again sends the same one. */
-  const asked = new Map<ChangeKey, Change>();
-
-  const keyOf = (change: Change): ChangeKey => {
-    switch (change.key) {
-      case "decides":
-      case "decidesReset":
-        return `decides.${change.kind}`;
-      case "taskHome":
-      case "account":
-      case "atLimit":
-      case "review":
-      case "landing":
-      case "largeFiles":
-        return change.key;
-    }
-  };
-
-  /** The record once the hub has taken `change`. */
-  function applied(base: HowItRunsRecord, change: Change): HowItRunsRecord {
-    switch (change.key) {
-      case "taskHome":
-        return {
-          ...base,
-          taskHome: change.value,
-          tie: change.value === "files" ? null : base.tie,
-        };
-      case "account":
-        return { ...base, account: { ...base.account, chosen: change.value } };
-      case "atLimit":
-        return { ...base, account: { ...base.account, atLimit: change.value } };
-      case "decides":
-      case "decidesReset": {
-        if (!base.whoDecides.ok) {
-          return base;
-        }
-        const rule = base.whoDecides.rules[change.kind];
-        const by = change.key === "decides" ? change.value : rule.fleet;
-        return {
-          ...base,
-          whoDecides: {
-            ok: true,
-            rules: {
-              ...base.whoDecides.rules,
-              [change.kind]: { ...rule, by, own: by !== rule.fleet },
-            },
-          },
-        };
-      }
-      case "review":
-        return { ...base, reviewBeforeDone: change.value };
-      case "landing":
-        return { ...base, landing: change.value };
-      case "largeFiles":
-        return { ...base, largeFiles: change.value };
-    }
-  }
-
   /** What the hub holds now, read against the record the story gives. */
   const heldNow = (from: HowItRunsRecord): HowItRunsRecord =>
     held && held.from === from ? held.now : from;
+  /** Each control's change asked and not yet answered, with the ask's ticket: a newer ask on the same control outlives an older answer. */
+  let asked = $state.raw<
+    Partial<Record<ChangeKey, { change: Change; ticket: number }>>
+  >({});
+  let tickets = 0;
+  /** The record as the person sees it: the hub's, every ask already in it. */
+  const shown = $derived(
+    withAsked(
+      heldNow(record),
+      Object.values(asked).map((one) => one.change)
+    )
+  );
+  let refused = $state<Partial<Record<ChangeKey, string>>>({});
+  let syncing = $state(false);
+  /** The last change asked of each key, so Try again sends the same one. */
+  const last = new Map<ChangeKey, Change>();
 
   function send(change: Change) {
     const key = keyOf(change);
-    asked.set(key, change);
-    pending = [...pending.filter((k) => k !== key), key];
+    tickets += 1;
+    const ticket = tickets;
+    last.set(key, change);
+    asked = { ...asked, [key]: { change, ticket } };
     const { [key]: _gone, ...rest } = refused;
     refused = rest;
     const from = record;
+    const verdict = answer;
     setTimeout(() => {
-      pending = pending.filter((k) => k !== key);
-      if (answer === "refuses it") {
+      if (asked[key]?.ticket !== ticket) {
+        // A newer ask on this control stands; its own answer settles it.
+        return;
+      }
+      const { [key]: _done, ...still } = asked;
+      if (verdict === "refuses it") {
+        asked = still;
         refused = { ...refused, [key]: REFUSAL };
         return;
       }
       held = { from, now: applied(heldNow(from), change) };
+      asked = still;
     }, ANSWER_MS);
   }
 
@@ -201,7 +168,7 @@
     { value: "decisions", label: "Decisions", count: 2, draft: false },
     {
       value: "how",
-      label: "How it runs",
+      label: words.tab,
       count: faultCount(shown),
       draft: false,
     },
@@ -234,29 +201,27 @@
           {views}
         />
       </div>
-      <div class="min-h-0 flex-1 overflow-auto">
-        <HowItRuns
-          hrefOf={(page) => `/config/${page}`}
-          {loading}
-          movingPlaceId={null}
-          onaddplace={() => undefined}
-          onchange={send}
-          onplace={() => undefined}
-          onreread={() => undefined}
-          onretry={(key) => {
-            const again = asked.get(key);
-            if (again) {
-              send(again);
-            }
-          }}
-          onsync={syncNow}
-          {pending}
-          {readFailed}
-          record={shown}
-          {refused}
-          {syncing}
-        />
-      </div>
+      <HowItRuns
+        hrefOf={(page) => `/config/${page}`}
+        {loading}
+        movingPlaceId={null}
+        onaddplace={() => undefined}
+        onchange={send}
+        onplace={() => undefined}
+        onreread={() => undefined}
+        onretry={(key) => {
+          const again = last.get(key);
+          if (again) {
+            send(again);
+          }
+        }}
+        onsync={syncNow}
+        pending={[]}
+        {readFailed}
+        record={shown}
+        {refused}
+        {syncing}
+      />
       <ViewBar
         current={view}
         needs={0}
