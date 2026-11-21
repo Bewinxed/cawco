@@ -9,11 +9,9 @@
 import type { AccountHue } from "@cawco/core/accounts/kinds";
 import type { BuiltInMember } from "@cawco/core/decides";
 
-export type { AccountHue } from "@cawco/core/accounts/kinds";
-
 type MachineOs = "linux" | "darwin" | "windows";
 
-export interface FleetMachine {
+interface FleetMachine {
   /** Where its home folder is, for a path written under `~`. */
   home: string;
   id: string;

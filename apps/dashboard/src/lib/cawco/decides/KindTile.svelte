@@ -13,7 +13,6 @@
    * a refusal stands under the tile in the hub's words, with Try again.
    */
   import type { Kind, Member } from "@cawco/core/decides";
-  import { decidesWords } from "@cawco/core/words/decides";
   import type { Snippet } from "svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -22,6 +21,7 @@
   import { IconFolder, IconGlobe, IconTransfer } from "#lib/icons.js";
   import type { Fault } from "./decides.svelte";
   import { kindGlyph } from "./kind-glyph";
+  import { ROSTER_WORDS, type RosterWords } from "./roster-words";
 
   let {
     kind,
@@ -36,6 +36,7 @@
     onhanding,
     onputback,
     list,
+    said = ROSTER_WORDS,
   }: {
     /** A write the hub has not answered moves it. */
     asking: string | null;
@@ -59,6 +60,8 @@
     project: string | null;
     /** The popover's width, for the rows it holds. */
     width: string;
+    /** Its words: Who decides' unless the surface drawing it says its own. */
+    said?: RosterWords;
   } = $props();
 
   const uid = $props.id();
@@ -81,12 +84,10 @@
       return null;
     }
     const subject = fleetWho?.subject ?? "";
-    return own
-      ? decidesWords.ownTip(project, subject)
-      : decidesWords.followsFleetTip(subject);
+    return own ? said.ownTip(project, subject) : said.followsFleetTip(subject);
   });
   const tip = $derived(
-    scopeTip ? `${decidesWords.handOver} · ${scopeTip}` : decidesWords.handOver
+    scopeTip ? `${said.handOver} · ${scopeTip}` : said.handOver
   );
 </script>
 
@@ -145,8 +146,8 @@
                 <button
                   {...props}
                   aria-label={scopeTip
-                    ? `${decidesWords.handOverKind(kind.name)}. ${scopeTip}`
-                    : decidesWords.handOverKind(kind.name)}
+                    ? `${said.handOverKind(kind.name)}. ${scopeTip}`
+                    : said.handOverKind(kind.name)}
                   class="absolute inset-0 rounded-well can-hover:hover:bg-ink-strong/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
                   aria-disabled={asking !== null || undefined}
                   data-kind-press={kind.id}
@@ -191,7 +192,7 @@
           onputback();
         }
       }}
-      type="button">{decidesWords.giveBack}</button
+      type="button">{said.giveBack}</button
     >
   {/if}
   <RowFault again={fault?.again} reason={fault?.reason} />

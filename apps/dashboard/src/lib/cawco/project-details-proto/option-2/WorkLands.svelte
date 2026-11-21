@@ -1,81 +1,63 @@
 <script lang="ts">
   /**
-   * Stage 4 ("Work lands", code projects only): the four landing options as
-   * equal tiles in one row of four at @setup and wider, two columns at
-   * @field-group, and one column below it, followed by the task-override and
-   * CI/CD footer note.
+   * Stage 4 ("Work lands", code projects only): the four ways finished code
+   * goes, as the house's equal tiles (OptionTiles), each led by the glyph of
+   * what happens to the code: a commit onto the main line, a branch of its
+   * own, a branch with a pull request, kept here. A press moves the pick at
+   * once (changes.ts `withAsked`); a refusal puts it back and stands under
+   * the tiles in the hub's words, with Try again (RowFault).
    */
-  import { OptionGroup } from "#lib/components/ui/option-group/index.js";
-  import ChoiceTile from "./ChoiceTile.svelte";
-  import ControlRefusal from "./ControlRefusal.svelte";
-  import type { Change, ChangeKey } from "./changes";
-  import type { HowItRunsRecord, Landing } from "./records";
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import { OptionTiles } from "#lib/components/ui/option-group/index.js";
+  import {
+    IconLandBranch,
+    IconLandCommit,
+    IconLandKept,
+    IconLandPullRequest,
+  } from "#lib/icons.js";
+  import type { StageSends } from "./changes";
+  import type { Landing } from "./records";
   import { howItRunsWords as words } from "./words";
 
-  let {
-    record,
-    pending,
-    refused,
-    onchange,
-    onretry,
-  }: {
-    record: HowItRunsRecord;
-    pending: ChangeKey[];
-    refused: Partial<Record<ChangeKey, string>>;
-    onchange: (change: Change) => void;
-    onretry: (key: ChangeKey) => void;
-  } = $props();
+  let { record, refused, onchange, onretry }: StageSends = $props();
 
+  const GLYPHS = {
+    default: IconLandCommit,
+    branch: IconLandBranch,
+    pr: IconLandPullRequest,
+    nowhere: IconLandKept,
+  } as const;
   const LANDINGS: readonly Landing[] = ["default", "branch", "pr", "nowhere"];
-
-  let pressedLanding = $state<Landing | null>(null);
-
-  const disabled = $derived(!record.hubReachable);
-  const landingPending = $derived(pending.includes("landing"));
-
-  function pickLanding(landing: Landing) {
-    if (disabled || landing === record.landing) {
-      return;
-    }
-    pressedLanding = landing;
-    onchange({ key: "landing", value: landing });
-  }
 </script>
 
-<div
-  class="flex min-w-0 flex-col rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 @setup:px-space-4"
-  data-slot="well"
->
-  <OptionGroup
-    aria-label={words.lands.groupLabel}
-    {disabled}
-    layout="tiles"
-    style="--tiles-cols: repeat(auto-fit, minmax(var(--spacing-c-choice-tile-min), 1fr)); --tiles-cols-phone: minmax(0, 1fr)"
-    value={[record.landing]}
-  >
-    {#each LANDINGS as landing (landing)}
-      {@const info = words.lands.options[landing]}
-      {@const showSpin =
-        landingPending &&
-        (pressedLanding === landing ||
-          (pressedLanding === null && record.landing === landing))}
-      <ChoiceTile
-        name={info.name}
-        note={info.note}
-        onpick={() => pickLanding(landing)}
-        sending={showSpin}
-        value={landing}
-      />
-    {/each}
-  </OptionGroup>
+{#snippet glyph(landing: Landing)}
+  {@const Glyph = GLYPHS[landing]}
+  <Glyph aria-hidden="true" class="size-icon-md text-ink-muted" />
+{/snippet}
 
-  <ControlRefusal
-    {disabled}
-    onretry={() => onretry("landing")}
+<div class="flex min-w-0 flex-col gap-space-1">
+  <OptionTiles
+    bind:value={
+      () => record.landing,
+      (next) => {
+        if (next !== null && next !== record.landing) {
+          onchange({ key: "landing", value: next });
+        }
+      }
+    }
+    cols={4}
+    disabled={!record.hubReachable}
+    {glyph}
+    label={words.lands.groupLabel}
+    options={LANDINGS.map((landing) => ({
+      id: landing,
+      name: words.lands.options[landing].name,
+      note: words.lands.options[landing].note,
+    }))}
+  />
+  <RowFault
+    again={() => onretry("landing")}
+    againLabel={words.retryChange}
     reason={refused.landing}
   />
-
-  <p class="m-0 mt-space-1 type-meta text-ink-muted">
-    {words.lands.footer}
-  </p>
 </div>
