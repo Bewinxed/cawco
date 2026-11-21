@@ -213,6 +213,7 @@
   {#if !record.whoDecides.ok}
     <RowFault
       again={onreread}
+      againLabel={words.tryAgain}
       details={record.whoDecides.error}
       reason={words.waits.unreadTitle}
     />

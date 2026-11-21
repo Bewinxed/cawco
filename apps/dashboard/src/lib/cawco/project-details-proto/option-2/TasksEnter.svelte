@@ -25,10 +25,11 @@
     OptionTiles,
   } from "#lib/components/ui/option-group/index.js";
   import {
-    IconAlert,
     IconChevronRight,
     IconDocument,
+    IconError,
     IconExternalLinear,
+    IconInfo,
     IconRefresh,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
@@ -242,7 +243,7 @@
               >{words.tasks.inStep(formatAge(tie.sync.at))}</span
             >
           {:else}
-            <IconAlert
+            <IconError
               aria-hidden="true"
               class="size-icon-sm flex-none text-status-fail-glyph"
             />
@@ -301,7 +302,7 @@
 
       {#if tie.sync.kind === "refused" && !syncPending}
         <Alert class="mt-space-1" layout="row" variant="destructive">
-          <IconAlert aria-hidden="true" />
+          <IconError aria-hidden="true" />
           <AlertDescription>{tie.sync.words}</AlertDescription>
           <AlertAction>
             <Button
@@ -371,7 +372,7 @@
         >
         {#if setupConnections.length === 0}
           <Alert layout="row" variant="default">
-            <IconAlert aria-hidden="true" />
+            <IconInfo aria-hidden="true" />
             <AlertDescription
               >{words.tasks.noConnection(setupHome)}</AlertDescription
             >
@@ -448,7 +449,7 @@
             </p>
           {:else}
             <div
-              class="kit-edge-fade-block max-h-36 overflow-y-auto overscroll-contain rounded-sm border border-border-hairline bg-surface-well p-space-2"
+              class="kit-edge-fade-block max-h-36 overflow-y-auto overscroll-contain py-space-1"
             >
               <OptionGroup
                 aria-label={setupHome === "github"

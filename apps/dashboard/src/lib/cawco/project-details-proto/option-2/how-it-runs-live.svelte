@@ -32,6 +32,7 @@
    */
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
+  import { PANE_INSET } from "#lib/cawco/project/pane-inset.js";
   import ViewBar from "#lib/cawco/project/ViewBar.svelte";
   import ViewTabs from "#lib/cawco/project/ViewTabs.svelte";
   import Shell from "#lib/cawco/Shell.svelte";
@@ -175,50 +176,69 @@
 <!-- The frame is the window: the shell fills it, as it fills the page. -->
 <div class="flex h-dvh w-dvw min-w-0">
   <Shell>
-    <div class="relative flex h-full min-h-0 flex-col">
-      <ProjectHead
-        {lead}
-        {machine}
-        onask={() => undefined}
-        onfilter={() => undefined}
-        onnewtask={() => undefined}
-        project={row}
-        seated
-        setup={null}
-      />
+    <!-- The frame the phone's views bar docks in, over the page's foot (ProjectPage). -->
+    <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
+      <!-- The page, as ProjectPage draws it: on a phone the one scroller, its foot clear of the views bar (--bar-reach). -->
       <div
-        class="flex w-full min-w-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 max-phone:hidden"
+        class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)"
+        data-project-page
+        data-safe-bottom
+        data-slot="project-page"
+        style:--bar-reach={"calc(var(--spacing-c-composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-3))"}
       >
-        <ViewTabs
-          current={view}
-          hrefOf={(next) => `/project/${shown.project.id}?view=${next}`}
-          onchoose={(next) => {
-            view = next;
-          }}
-          {views}
+        <ProjectHead
+          {lead}
+          {machine}
+          onask={() => undefined}
+          onfilter={() => undefined}
+          onnewtask={() => undefined}
+          project={row}
+          seated
+          setup={null}
         />
+        <div
+          class="flex w-full min-w-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 max-phone:hidden"
+        >
+          <ViewTabs
+            current={view}
+            hrefOf={(next) => `/project/${shown.project.id}?view=${next}`}
+            onchoose={(next) => {
+              view = next;
+            }}
+            {views}
+          />
+        </div>
+        <!-- The pane (ProjectPage `viewPane`): the view in the page's inset, scrolling on its own from 640px. -->
+        <div
+          class={[
+            "flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto max-phone:shrink-0 max-phone:overflow-visible",
+            PANE_INSET,
+          ]}
+          data-slot="pane"
+        >
+          <HowItRuns
+            hrefOf={(page) => `/config/${page}`}
+            {loading}
+            movingPlaceId={null}
+            onaddplace={() => undefined}
+            onchange={send}
+            onplace={() => undefined}
+            onreread={() => undefined}
+            onretry={(key) => {
+              const again = last.get(key);
+              if (again) {
+                send(again);
+              }
+            }}
+            onsync={syncNow}
+            pending={[]}
+            {readFailed}
+            record={shown}
+            {refused}
+            {syncing}
+          />
+        </div>
       </div>
-      <HowItRuns
-        hrefOf={(page) => `/config/${page}`}
-        {loading}
-        movingPlaceId={null}
-        onaddplace={() => undefined}
-        onchange={send}
-        onplace={() => undefined}
-        onreread={() => undefined}
-        onretry={(key) => {
-          const again = last.get(key);
-          if (again) {
-            send(again);
-          }
-        }}
-        onsync={syncNow}
-        pending={[]}
-        {readFailed}
-        record={shown}
-        {refused}
-        {syncing}
-      />
       <ViewBar
         current={view}
         needs={0}
