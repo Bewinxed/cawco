@@ -335,6 +335,7 @@
     onrepo,
     oncommit,
     focus = false,
+    shown = true,
   }: {
     machineId: string;
     machineName: string;
@@ -346,6 +347,13 @@
     oncommit?: () => void;
     /** The search takes focus as the picker opens: it is what the popover opened for. */
     focus?: boolean;
+    /**
+     * It stands shown. Kept built while it is put away (its popover closed,
+     * or the surface turned to another chip: NsPopoverGroup), shown again it
+     * starts as a fresh one would: its search empty, every owner's list, the
+     * picked row in view.
+     */
+    shown?: boolean;
   } = $props();
 
   /**
@@ -709,7 +717,25 @@
   }
 
   /** The picked row is brought into the list's view once, as the list first holds it: a popover opened again opens on it. */
-  let shownPicked = false;
+  let shownPicked = $state(false);
+  /** It stood shown at the last look: shown again, it starts afresh. */
+  let wasShown = untrack(() => shown);
+  $effect.pre(() => {
+    const now = shown;
+    if (now && !wasShown) {
+      untrack(() => {
+        query = "";
+        ownerPick = "";
+        pinned = "";
+        activeKey = "";
+        shownPicked = false;
+        if (listbox) {
+          listbox.scrollTop = 0;
+        }
+      });
+    }
+    wasShown = now;
+  });
   $effect(() => {
     const at = pickedAt;
     if (shownPicked || at < 0 || !listbox) {
@@ -755,16 +781,16 @@
 
   function chooseOwner(login: string): void {
     const next = rowsFor(login);
-    const shown = new Set(rows.map((row) => row.key));
+    const showing = new Set(rows.map((row) => row.key));
     // Lists that share no row are swapped: in `reflow`, every row shown
     // would close in the slot a new one is uncovered in. Lists that share
     // one move as one list, their shared rows sliding (One Object). With
     // reduced motion the new list is simply there.
     if (
       rowsBox &&
-      shown.size > 0 &&
+      showing.size > 0 &&
       next.length > 0 &&
-      !next.some((row) => shown.has(row.key))
+      !next.some((row) => showing.has(row.key))
     ) {
       handOver(rowsBox);
       if (motionOk.current) {
@@ -909,6 +935,7 @@
       autocomplete="off"
       autocorrect="off"
       class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 type-body text-ink-strong placeholder:text-ink-muted"
+      data-autofocus={focus || undefined}
       oninput={(event) => search(event.currentTarget.value)}
       {onkeydown}
       placeholder={spawnWords.location.search}

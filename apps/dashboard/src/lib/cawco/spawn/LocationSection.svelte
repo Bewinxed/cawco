@@ -189,6 +189,7 @@
     reading,
     informational = false,
     oncommit,
+    shown = true,
   }: LocationFields & {
     /**
      * The location is set: Enter in the search or the path box, or "Use
@@ -196,6 +197,8 @@
      * keys go back where the reader was typing.
      */
     oncommit?: () => void;
+    /** It stands shown; put away and shown again, its repository picker starts afresh (RepoPicker `shown`). */
+    shown?: boolean;
   } = $props();
   const uid = $props.id();
   function commitOnEnter(event: KeyboardEvent) {
@@ -459,6 +462,7 @@
       {oncommit}
       {onrepo}
       {repo}
+      {shown}
     />
   </div>
 
