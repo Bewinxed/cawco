@@ -1581,7 +1581,7 @@ export const createRoutines = ({
    */
   const fireOrchestrator = (routine: RoutineRow, run: RoutineRunRow) =>
     fireWorkItem(routine, run, {
-      lead: "You orchestrate it: delegate its work, read your delegates' reports, and decide. ",
+      lead: "",
       input: inputOf(run),
       fields: { mayStart: [ANY_TYPE], host: true },
       noted: "orchestrator, ",
