@@ -58,6 +58,45 @@ export const metaOf = (doc: Doc) => {
   };
 };
 
+/**
+ * The person's newest act on an artifact, ISO (needs.ts
+ * `ArtifactFacts.actedAt`): of its `state` entries, each one no member of
+ * Who decides settled (`settled`); of its pins, each one's making, their
+ * entries on its thread and their resolve; and its last Send. Null when
+ * they never acted on it.
+ */
+const actedAtOf = (
+  state: Readonly<Record<string, ChoiceEntry>>,
+  pins: readonly Pin[],
+  sentAt: string | null
+): string | null => {
+  const acts = [
+    ...Object.values(state).flatMap((entry) =>
+      entry.settled ? [] : [entry.at]
+    ),
+    ...pins.flatMap((pin) => [
+      pin.at,
+      ...pin.thread.flatMap((entry) =>
+        entry.by === "person" ? [entry.at] : []
+      ),
+      ...(pin.resolvedBy === "person" && pin.resolvedAt
+        ? [pin.resolvedAt]
+        : []),
+    ]),
+    ...(sentAt === null ? [] : [sentAt]),
+  ];
+  let newest: string | null = null;
+  let newestMs = Number.NEGATIVE_INFINITY;
+  for (const at of acts) {
+    const ms = Date.parse(at);
+    if (!Number.isNaN(ms) && ms > newestMs) {
+      newest = at;
+      newestMs = ms;
+    }
+  }
+  return newest;
+};
+
 /** What the lane reads of an artifact's holder: whether it is over for good, and its harness and machine. */
 export type HolderRead = Pick<
   ArtifactSessions,
@@ -198,9 +237,8 @@ export const createFacts = (ctx: FactsContext) => {
     const meta = docMeta(doc);
     const state = stateOf(doc);
     const { sentAt } = metaOf(doc);
-    const pins = pinsToTell(docs.pins(row.id).values()).sort(
-      (a, b) => a.number - b.number
-    );
+    const allPins = [...docs.pins(row.id).values()];
+    const pins = pinsToTell(allPins).sort((a, b) => a.number - b.number);
     const questions = questionsFrom(row, doc, pins, {
       asked: true,
       pinsMayAsk: true,
@@ -213,6 +251,7 @@ export const createFacts = (ctx: FactsContext) => {
     );
     const asking = pins.filter((pin) => open.has(`pin:${pin.id}`));
     const facts: ArtifactFacts = {
+      actedAt: actedAtOf(state, allPins, sentAt),
       ...answersFacts(questions),
       asked: meta.get("asked") ?? null,
       asking: asking.map((pin) => pin.number),
@@ -229,6 +268,7 @@ export const createFacts = (ctx: FactsContext) => {
       // Its page gone; one standing now is read beside the facts (mediaNow).
       media: meta.has("mediaOf"),
       revisedAt: meta.get("revisedAt") ?? null,
+      sentAt,
       handed: meta.get("handed") === true,
       reading: meta.get("reading") === true,
       unsent: unsentChoices(state, sentAt),

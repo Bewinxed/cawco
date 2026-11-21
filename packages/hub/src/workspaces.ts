@@ -357,8 +357,8 @@ export interface WorkspacesHub {
   /**
    * Of the artifacts a workspace serves, those its retirement still waits
    * on, with why (artifacts service `servedOwed`): the person is still owed
-   * it or a page showing it (not seen yet, or waiting on him), or it is a
-   * folder preview looked at within the half hour ({@link owedFrom}).
+   * it or a page showing it (not acted on since it was put before them), or
+   * it is a folder preview looked at within the half hour ({@link owedFrom}).
    */
   readonly servedOwed: (served: readonly ArtifactRow[]) => ServedOwed[];
   /**
@@ -918,7 +918,7 @@ export const createWorkspaces = ({
   /** Why an artifact owed ({@link owedFrom}) holds its workspace, in words. */
   const OWED_WORDS: Record<ServedOwed["why"], string> = {
     looked: "was on the person's screen less than half an hour ago",
-    owed: "is still owed to the person: not seen yet, or waiting on them",
+    owed: "is still owed to the person: they have not acted on it since it was put before them",
   };
   /**
    * THE ONE READ OF WHAT A WORKSPACE SERVES THAT HOLDS IT, in words, or

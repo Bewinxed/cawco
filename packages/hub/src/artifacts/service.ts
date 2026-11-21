@@ -176,6 +176,7 @@ import {
   answeredWhole,
   answersUnheard,
   heardSeq,
+  ms as isoMs,
   mayWait,
   movedOn,
   needOf,
@@ -776,15 +777,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * THE ONE TEST OF WHETHER `row` WAITS ON THE PERSON, read by everything
-   * that keeps a workspace or its server for him (`waitingOnPerson`,
-   * `servedOwed`, preview.ts `waitingServers`): Needs you lists it (needs.ts
+   * Whether `row` waits on the person now, read by what keeps the server of
+   * a preview up for him (preview.ts `waitingServers`) and by what rests a
+   * maker's item on him (`madeWaiting`): Needs you lists it (needs.ts
    * `needOf`, so an ask of an ended session waits on no one), or it is a
    * `try` its session put before him ({@link putBeforePerson}: not handed
    * up or held, its session neither ended nor moved on) that he hasn't sent
    * since its last revision ({@link sentOf}), the owner's rule of
-   * 2026-11-04 that a preview he hasn't sent is still his to judge. Both
-   * end as he answers, it is deleted, or its session ends.
+   * 2026-11-04 that a preview he hasn't sent is still his to judge. What
+   * holds a workspace is {@link owedToPerson}, not this.
    */
   const waitsOnPerson = (row: ArtifactRow): boolean => {
     if (row.does === "try" && !sentOf(row) && putBeforePerson(row)) {
@@ -802,45 +803,55 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Whether the person has seen or acted on `row`, by what the hub records
-   * of him on it: a view of his had it on screen (`openedRevision`), he
-   * sent it ({@link sentOf}), pinned it, or changed anything on it (a pick,
-   * a note, a value: `db.changes` by the person). A held next version is
-   * never seen: it stands only until its parent opens it (promote).
+   * Whether the person has acted on an artifact, by its `facts`, since its
+   * session last put it before them. Its put is the newest of its revision
+   * (`meta.revisedAt`), its create or show (its ask, `meta.asked`; never
+   * the row's `updatedAt`, which the person's own marks move), and an
+   * agent's reply on one of its pins that asks them something
+   * (`askingAt`). A decision page is acted on once it is answered: no card
+   * open, or a Send since its put. Anything else is acted on by an act of
+   * theirs since its put (`actedAt`): a pick, note or value, a pin, an
+   * entry on a pin or its resolve, or a Send. A look is no act.
    */
-  const seenByPerson = (row: ArtifactRow): boolean =>
-    row.heldFor === null &&
-    (row.openedRevision !== null ||
-      sentOf(row) ||
-      docs.pins(row.id).size > 0 ||
-      db.changes(row.id, { by: "person" }).length > 0);
+  const actedOn = (facts: ArtifactFacts): boolean => {
+    const put = Math.max(
+      isoMs(facts.revisedAt),
+      isoMs(facts.asked?.at),
+      isoMs(facts.askingAt)
+    );
+    if (facts.answers !== null) {
+      return (
+        facts.answers.answered === facts.answers.asked ||
+        isoMs(facts.sentAt) > put
+      );
+    }
+    return facts.actedAt !== null && isoMs(facts.actedAt) > put;
+  };
 
   /**
-   * THE ONE TEST OF WHETHER THE PERSON IS STILL OWED `row`, read by
+   * THE ONE RULE OF WHAT HOLDS A WORKSPACE FOR THE PERSON, read by
    * everything that deletes a workspace or refuses to (`servedOwed`,
-   * `waitingOnPerson`; workspaces.ts `holdsOf`): an artifact put in a
-   * panel for him, his to open, stays owed until he has seen or acted on
-   * it ({@link seenByPerson}) or it is deleted, and after that while it
-   * still waits on him ({@link waitsOnPerson}). However it reached a panel
-   * (a session's own create, a delegate's hand-up its parent has not shown
-   * yet, a maker's next version held for its parent) and whatever became
-   * of the sessions and items behind it: on 2026-11-20 the owner opened
-   * previews a delegate had handed up, unopened, and found their
-   * workspaces gone, let go when their parent's turn ended or their
-   * session's next turn did. Never owed: the person's own draft, a design
-   * check's verifier's working material, a maker's own reading
-   * (`meta.reading`), and an option's media on a decision page, which is
-   * owed through its page (`servedOwed`).
+   * `waitingOnPerson`; workspaces.ts `holdsOf`): an artifact a session put
+   * in a panel is owed to the person until they act on it
+   * ({@link actedOn}) or it is deleted. Every put owes it again: a
+   * revision, a show, a reply that asks. A next version held for its
+   * parent is owed until its parent opens it, as the version the person
+   * will see then. A newer version releases the older one's workspace by
+   * moving the artifact's source off it (db artifacts.ts `resource`), and
+   * nothing else does: not a view having it on screen, not a session's
+   * turn ending or its item ending, not time. On 2026-11-21 a design graph
+   * the owner had not judged lost its workspace 22 s after a view
+   * acknowledged its show, when a look counted as seen. Never owed: the
+   * person's own draft, a design check's verifier's working material, a
+   * maker's own reading (`meta.reading`), and an option's media on a
+   * decision page, which is owed through its page (`servedOwed`).
    */
   const owedToPerson = (row: ArtifactRow): boolean => {
     const facts = withMedia(row, factsOf(row));
-    if (facts.draft || facts.verifier || facts.reading) {
+    if (facts.draft || facts.verifier || facts.reading || facts.media) {
       return false;
     }
-    if (waitsOnPerson(row)) {
-      return true;
-    }
-    return !(facts.media || seenByPerson(row));
+    return row.heldFor !== null || !actedOn(facts);
   };
 
   /**
@@ -1157,12 +1168,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       discard(next);
     }
     // Its Canvases and Previews stay its pictures once it is gone (needs.ts).
-    keptAsMedia(row, mediaOf(row));
+    const media = mediaOf(row);
+    keptAsMedia(row, media);
     letGoHeadless(row.id);
     docs.drop(row.id);
     db.remove(row.id);
     store.remove(row.id);
-    deps.removed?.(row);
+    const served = media.flatMap((id) => db.get(id)?.machineId ?? []);
+    if (served.length > 0) {
+      deps.mediaFreed?.([...new Set(served)]);
+    }
     if (row.heldFor !== null) {
       versionMoved(row);
     }

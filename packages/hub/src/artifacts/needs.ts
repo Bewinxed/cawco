@@ -78,6 +78,13 @@ import { isSetupPage } from "../setup";
 
 /** What an artifact's doc and row say, read once per change of either. */
 export interface ArtifactFacts {
+  /**
+   * The person's newest act on it, ISO: a pick, note or value of theirs (a
+   * `state` entry no member of Who decides settled), a pin of theirs, their
+   * entry on a pin or their resolve of one, or a Send (`meta.sentAt`); null
+   * when they never acted on it (service.ts `actedOn`).
+   */
+  actedAt: string | null;
   /** A decision page's questions (questions.ts `answersOf`): answered or taken, of those not withdrawn; none for any other artifact. */
   answers: { answered: number; asked: number } | null;
   asked: ArtifactAsked | null;
@@ -106,6 +113,8 @@ export interface ArtifactFacts {
   reading: boolean;
   /** When its session last published or changed it (`meta.revisedAt`), ISO. */
   revisedAt: string | null;
+  /** When it was last sent, by the person or by the hub for them (`meta.sentAt`), ISO; null when never. */
+  sentAt: string | null;
   /** What Send sends now: picks and notes since the last Send. */
   unsent: number;
   /** Made by a design check's verifier (hub work-item-state.ts `isVerifierParent`): the hub's own helper's working material, never the person's to act on. */
@@ -126,7 +135,8 @@ export interface ArtifactSessions {
   steps: readonly PlanStep[];
 }
 
-const ms = (iso: string | null | undefined): number => {
+/** An ISO time as ms since the epoch; 0 for none or one that does not parse. */
+export const ms = (iso: string | null | undefined): number => {
   const at = iso ? Date.parse(iso) : Number.NaN;
   return Number.isNaN(at) ? 0 : at;
 };

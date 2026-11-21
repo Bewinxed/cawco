@@ -303,6 +303,13 @@ export interface ArtifactServiceDeps {
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
   /**
+   * A decision page went, and its Canvas and Preview media, served on these
+   * machines, are owed through it no longer: each machine's workspaces are
+   * settled again (work-items.ts `settleShown`). A row that goes itself
+   * settles its machine's by db `onArtifactsGone`, every way a row goes.
+   */
+  mediaFreed?: (machineIds: readonly string[]) => void;
+  /**
    * Something an artifact's Needs-you item is read from moved (its row, its
    * ask, the person's look): the lane is read again and every screen told.
    */
@@ -412,12 +419,6 @@ export interface ArtifactServiceDeps {
    * when the panel shows nothing.
    */
   relist: (instanceId: string) => void;
-  /**
-   * An artifact was taken out: a preview it was no longer holds the
-   * workspace it showed (work-items.ts `settleShown`). The origin its row
-   * pointed at ends with the row (db `onArtifactsGone`), not here.
-   */
-  removed?: (row: ArtifactRow) => void;
   /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
   root: string;
   /**

@@ -5060,11 +5060,10 @@ export const createServer = (
         publishPreview(instanceId, "open", now);
       }
     },
-    // A preview gone holds the workspace it showed no longer (its own
-    // origin ends with its row: db `onArtifactsGone`).
-    removed: (row) => {
-      if (row.kind === "preview" && row.machineId) {
-        workItems.settleShown(row.machineId);
+    // A page gone owes its media no longer: their workspaces settle now.
+    mediaFreed: (machineIds) => {
+      for (const machineId of machineIds) {
+        workItems.settleShown(machineId);
       }
     },
     browse: (instance, row) => browseAt(instance, row),
@@ -5752,12 +5751,19 @@ export const createServer = (
     shownWaitMs: SHOWN_WAIT_MS,
     sourceSeen: (id, gone) => artifacts.sourceSeen(id, gone),
   });
-  // Every way an artifact row goes ends its own origin.
+  // Every way an artifact row goes ends its own origin, and the workspace
+  // that served it is held by it no longer: its machine's settle soon.
   db.onArtifactsGone((gone) => {
     for (const { origin } of gone) {
       previewService.end(origin);
     }
     artifacts.artifactsGone(gone);
+    const machines = new Set(gone.flatMap((one) => one.machineId ?? []));
+    soon(() => {
+      for (const machineId of machines) {
+        workItems.settleShown(machineId);
+      }
+    });
   });
   // Every move of an artifact's source moves the upstream of the origin it
   // stands on, and the panels showing it hear its source again.
@@ -5768,6 +5774,11 @@ export const createServer = (
       }
     }
     detach(previewService.moved(move), "preview source move");
+    // A newer version served from elsewhere holds the old one's workspace no longer.
+    const { machineId } = move.before;
+    if (machineId) {
+      soon(() => workItems.settleShown(machineId));
+    }
   });
 
   /**

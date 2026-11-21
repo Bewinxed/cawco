@@ -6532,8 +6532,9 @@ export const createWorkItems = ({
     },
 
     /**
-     * Each active workspace on `machineId` that an artifact showed settled
-     * soon (workspaces.ts `settleSoon`): the artifact went, and with it a hold.
+     * Each active workspace on `machineId` settled soon (workspaces.ts
+     * `settleSoon`): an artifact served there went, moved its source off,
+     * or a page owing it went, and with it a hold.
      */
     settleShown(machineId: string): void {
       for (const workspace of db.activeWorkspacesOn(machineId)) {
