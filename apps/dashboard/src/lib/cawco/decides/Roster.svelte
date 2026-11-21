@@ -42,6 +42,7 @@
     onputback,
     who = null,
     said = ROSTER_WORDS,
+    cols,
   }: {
     /** Who decides' state, whose settings and Add a member open from the cards; null draws neither. */
     who?: WhoDecides | null;
@@ -69,6 +70,8 @@
     routes: Record<string, string>;
     /** Its parts' words: Who decides' unless the surface drawing it says its own. */
     said?: RosterWords;
+    /** Its grid's columns as classes, where the surface lays its cards out its own way; none: as many a line as fit, four at most. */
+    cols?: string;
   } = $props();
 
   /** Each card, which its settings hang from. */
@@ -117,8 +120,10 @@
 </script>
 
 <div
-  class="grid grid-cols-(--roster-cols) gap-space-3"
-  style:--roster-cols={"repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
+  class={["grid gap-space-3", cols ?? "grid-cols-(--roster-cols)"]}
+  style:--roster-cols={cols
+    ? undefined
+    : "repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
 >
   {#each members as member (member.id)}
     {@const holds = kindsOf(member.id)}
