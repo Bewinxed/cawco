@@ -167,8 +167,12 @@ interface Box {
   drawn: () => Size | null;
   /** Its natural size now, read with nothing holding it. */
   natural: () => Natural;
-  /** Lets go of the tween in flight and the children it held. */
-  stop: () => void;
+  /**
+   * Lets go of the tween in flight and the children it held. `carry`: the
+   * tween is only taken off the box, its clock running on, for the tween
+   * that follows to put back where the box is still bound where it was.
+   */
+  stop: (carry?: boolean) => void;
   /** Tweens from `from` to its natural size, its children held at theirs. */
   tween: (from: Size, to: Natural) => void;
 }
@@ -186,13 +190,15 @@ function measure() {
   changed.clear();
   const from = boxes.map((box) => box.drawn());
   for (const box of boxes) {
-    box.stop();
+    box.stop(true);
   }
   const to = boxes.map((box) => box.natural());
   boxes.forEach((box, at) => {
     const start = from[at];
     if (start) {
       box.tween(start, to[at]);
+    } else {
+      box.stop();
     }
   });
 }
@@ -248,6 +254,10 @@ export function morph({
      */
     let laid: Size | null = null;
     let running: Animation | undefined;
+    /** Where the tween in flight brings the box. */
+    let bound: Size | undefined;
+    /** The tween taken off the box (`stop(true)`), and where it was bringing it. */
+    let lifted: { animation: Animation; to: Size } | undefined;
     /** Gives the children of the tween in flight back their own sizes. */
     let release: (() => void) | undefined;
 
@@ -330,9 +340,71 @@ export function morph({
       }
     };
 
+    /**
+     * The tween taken off the box (`stop(true)`), put back on it where the
+     * box is still bound where that tween was bringing it; else cancelled.
+     * A change that leaves the box's size where it was heading (a long list
+     * mounting its rows a slice a frame under its fold) carries the tween
+     * on, its clock never stopped. Started again from where the box was
+     * drawn, each frame's tween was stopped before it had drawn a frame, and
+     * the location popover's glide stood still until the rows stopped
+     * coming; started again on the stopped one's time, it lost the frame its
+     * start was still being resolved on.
+     */
+    const takeLifted = (to: Size): Animation | undefined => {
+      const taken = lifted;
+      lifted = undefined;
+      const effect = taken?.animation.effect;
+      if (
+        taken &&
+        effect instanceof KeyframeEffect &&
+        Math.abs(taken.to.h - to.h) <= 0.5 &&
+        !(width && Math.abs(taken.to.w - to.w) > 0.5)
+      ) {
+        effect.target = node;
+        return taken.animation;
+      }
+      taken?.animation.cancel();
+      return undefined;
+    };
+
+    /**
+     * A new tween, let go with the holds made for it once it ends. One
+     * cancelled by the next has been let go by `stop`; one put back
+     * (`takeLifted`) lets go of the holds made with it.
+     */
+    const begin = (animation: Animation): Animation => {
+      const done = () => {
+        if (running === animation) {
+          running = undefined;
+          bound = undefined;
+          release?.();
+          release = undefined;
+        }
+      };
+      animation.finished.then(done, done);
+      return animation;
+    };
+
     /** How far its edge moves: down, or across too (`width`). */
     const moves = (from: Size, to: Size) =>
       Math.max(Math.abs(to.h - from.h), width ? Math.abs(to.w - from.w) : 0);
+
+    /** The change lands at once, with no tween: nothing to move, or no tween wanted now. */
+    const lands = (from: Size, to: Size, set: Size | undefined): boolean => {
+      const moved =
+        Math.abs(to.h - from.h) > 0.5 ||
+        (width && Math.abs(to.w - from.w) > 0.5);
+      return (
+        !(moved && motionOk.current) ||
+        keyed.current ||
+        Boolean(still?.()) ||
+        from.h === 0 ||
+        to.h === 0 ||
+        foldsInside() ||
+        Boolean(set && moves(from, set) <= 0.5)
+      );
+    };
 
     const box: Box = {
       // In flight, where the tween has it right now; else where layout last
@@ -362,25 +434,26 @@ export function morph({
         }));
         return { ...value, clock, set };
       },
-      stop: () => {
-        running?.cancel();
+      stop: (carry = false) => {
+        lifted?.animation.cancel();
+        lifted = undefined;
+        const effect = running?.effect;
+        if (carry && running && bound && effect instanceof KeyframeEffect) {
+          // Off the box for the natural size to be read, its clock untouched.
+          effect.target = null;
+          lifted = { animation: running, to: bound };
+        } else {
+          running?.cancel();
+        }
         running = undefined;
+        bound = undefined;
         release?.();
         release = undefined;
       },
       tween: (from, { size: to, children, clock, set }) => {
-        const moved =
-          Math.abs(to.h - from.h) > 0.5 ||
-          (width && Math.abs(to.w - from.w) > 0.5);
-        if (
-          !(moved && motionOk.current) ||
-          keyed.current ||
-          still?.() ||
-          from.h === 0 ||
-          to.h === 0 ||
-          foldsInside() ||
-          (set && moves(from, set) <= 0.5)
-        ) {
+        const carried = takeLifted(to);
+        if (lands(from, to, set)) {
+          carried?.cancel();
           return;
         }
         // Held at exactly these sizes, past any cap of its own: a cap that
@@ -452,23 +525,14 @@ export function morph({
         // Following unfolds, a tween is the box's own change (a sibling's
         // content glided to) and runs on its own clock, the rows' runs
         // inside it.
-        const animation = play(frames, moves(from, to), set ? null : clock);
-        running = animation;
-        const letGo = () => {
+        running =
+          carried ?? begin(play(frames, moves(from, to), set ? null : clock));
+        bound = to;
+        release = () => {
           for (const hold of held) {
             hold.cancel();
           }
         };
-        release = letGo;
-        // A tween cancelled by the next one has been let go by `stop`.
-        const done = () => {
-          if (running === animation) {
-            running = undefined;
-            release = undefined;
-            letGo();
-          }
-        };
-        animation.finished.then(done, done);
       },
     };
 
