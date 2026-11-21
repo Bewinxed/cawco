@@ -660,11 +660,12 @@ function onScreen(element: HTMLElement, seen: Seen): boolean {
  * container's content, so `view` is where that content's top is in the
  * viewport, scroll included (the rail): unscrolled, a row half a rail down
  * was taken for one below the viewport, and jumped where it should have
- * slid.
+ * slid. Where it can be seen is the container's `seenIn`: a row a
+ * virtualized list keeps drawn past its scroller's fold is seen by nobody.
  */
-function unseen(view: number, place: Placed, dy: number): boolean {
+function unseen(view: number, place: Placed, dy: number, seen: Seen): boolean {
   const top = view + place.cy;
-  const off = (at: number) => at + place.h <= 0 || at >= window.innerHeight;
+  const off = (at: number) => at + place.h <= seen.top || at >= seen.bottom;
   return off(top) && off(top + dy);
 }
 
@@ -1308,7 +1309,7 @@ class Reflow {
     this.#view = null;
     const plan: Plan = { slides: [], stops: [], edges: [], spans: [] };
     const arrivals: [HTMLElement, number][] = [];
-    /** Where its rows can be seen: read once, for the first row arriving. */
+    /** Where its rows can be seen: read once, for the first row that moves, arrives or leaves. */
     let seen: Seen | undefined;
     const seenNow = (): Seen => {
       seen ??= seenIn(this.#node);
@@ -1320,7 +1321,15 @@ class Reflow {
       }
       const was = placed.get(element);
       if (was && !still) {
-        this.#travel(element, was, place, drawn.get(element), scrolled, plan);
+        this.#travel(
+          element,
+          was,
+          place,
+          drawn.get(element),
+          scrolled,
+          plan,
+          seenNow
+        );
       } else if (
         !was &&
         (place.ref === this.#node || placed.has(place.ref)) &&
@@ -1329,20 +1338,7 @@ class Reflow {
         arrivals.push([element, place.h]);
       }
     }
-    const departures: [HTMLElement, Placed, { x: number; y: number }][] = [];
-    for (const [element, was] of placed) {
-      const gone = !(
-        now.has(element) ||
-        element.isConnected ||
-        element.hasAttribute("data-flip-anchor")
-      );
-      if (gone && (was.ref === this.#node || now.has(was.ref))) {
-        // Where it was drawn: a scroll this change made moves the content
-        // under the viewport, and the copy with it.
-        const held = heldBy(this.#moves.get(element));
-        departures.push([element, was, { x: held.x, y: held.y + scrolled }]);
-      }
-    }
+    const departures = this.#departures(placed, now, scrolled, seenNow);
     // Every style the writes need, in one pass. An element under a slide or
     // its hold has its own transforms as the slide began (`Move.own`,
     // `Move.bare`): read with its hold dropped instead, the drop laid the
@@ -1375,6 +1371,38 @@ class Reflow {
         spans,
         still,
       });
+  }
+
+  /**
+   * The rows this change took away where they could be seen, each with where
+   * it was drawn: a scroll this change made moves the content under the
+   * viewport, and the copy with it. One drawn where nobody saw it leaves no
+   * copy.
+   */
+  #departures(
+    placed: Map<HTMLElement, Placed>,
+    now: Map<HTMLElement, Placed>,
+    scrolled: number,
+    seen: () => Seen
+  ): [HTMLElement, Placed, { x: number; y: number }][] {
+    const departures: [HTMLElement, Placed, { x: number; y: number }][] = [];
+    for (const [element, was] of placed) {
+      const gone = !(
+        now.has(element) ||
+        element.isConnected ||
+        element.hasAttribute("data-flip-anchor")
+      );
+      if (gone && (was.ref === this.#node || now.has(was.ref))) {
+        const held = heldBy(this.#moves.get(element));
+        const at = { x: held.x, y: held.y + scrolled };
+        const top = this.#viewTop() + was.cy + at.y;
+        const band = seen();
+        if (top + was.h > band.top && top < band.bottom) {
+          departures.push([element, was, at]);
+        }
+      }
+    }
+    return departures;
   }
 
   /** A change's writes (`plan`), in the delivery once every site there has read. */
@@ -1578,7 +1606,8 @@ class Reflow {
     place: Placed,
     drawn: { carry?: Carry; h?: number; w?: number } | undefined,
     scrolled: number,
-    plan: Plan
+    plan: Plan,
+    seen: () => Seen
   ) {
     const step = heldBy(this.#moves.get(element));
     // Read against the container itself, a place is in its content: a scroll
@@ -1591,7 +1620,7 @@ class Reflow {
       was.ref === place.ref &&
       (was.x !== place.x || Math.abs(was.y + shift - place.y) > 0.01);
     if (moved && (Math.abs(x) > 0.5 || Math.abs(y) > 0.5)) {
-      if (unseen(this.#viewTop(), place, y)) {
+      if (unseen(this.#viewTop(), place, y, seen())) {
         plan.stops.push(element);
       } else {
         plan.slides.push({ element, x, y });

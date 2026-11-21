@@ -78,7 +78,7 @@
     class: "min-w-0",
   })}
   tall
-  width={520}
+  width="calc(var(--spacing) * 80)"
 >
   {#snippet trigger()}
     {#if mode === "repo" && onGithub}

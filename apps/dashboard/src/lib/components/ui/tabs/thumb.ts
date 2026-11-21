@@ -132,9 +132,13 @@ export function slideThumb(
   };
 
   place(false);
+  // The choice turning, or the segments put in another order (the owner
+  // strip's pick from "+N" taking a place on its line): the thumb follows
+  // the chosen one to wherever it now stands.
   const changes = new MutationObserver(() => place(true));
   changes.observe(group, {
     subtree: true,
+    childList: true,
     attributes: true,
     attributeFilter: ["data-state"],
   });

@@ -88,6 +88,7 @@
         "@pierre/words": "0.2.2",
         "@rive-app/canvas": "2.44.0",
         "@tanstack/svelte-table": "9.2.6",
+        "@tanstack/svelte-virtual": "3.13.52",
         "@videojs/html": "10.3.0",
         "@xyflow/svelte": "^1.7.0",
         "bits-ui": "^2.20.6",
@@ -1634,7 +1635,11 @@
 
     "@tanstack/svelte-table": ["@tanstack/svelte-table@9.2.6", "", { "dependencies": { "@tanstack/svelte-store": "^0.12.2", "@tanstack/table-core": "9.2.6" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-+enojkMPHDwX9W1D9R2ZeBQt2K+6vWp6mhHdsapGtLgmXb7sDLQmYPvq/rE4K9o+MBUVqmaq++UV/1h2/Iw83Q=="],
 
+    "@tanstack/svelte-virtual": ["@tanstack/svelte-virtual@3.13.52", "", { "dependencies": { "@tanstack/virtual-core": "3.19.11" }, "peerDependencies": { "svelte": "^3.48.0 || ^4.0.0 || ^5.0.0" } }, "sha512-GBP08+GfuAtrcfCEkhZ8qg7At0m1ty82WTVC92YDjmYuU9yU+XD9LoCGUbrwl5m0V05ySgDS6JzmxqwoVdlt5Q=="],
+
     "@tanstack/table-core": ["@tanstack/table-core@9.2.6", "", { "dependencies": { "@tanstack/store": "^0.11.2" } }, "sha512-t5LaLx8gDCgzjvwtZo5xtLklJP11D9zaKOW8q6jOCyuQYhkqpTK1heqMfgTQwDlhl0dU8f1X66Xurbj3jpCUSw=="],
+
+    "@tanstack/virtual-core": ["@tanstack/virtual-core@3.19.11", "", {}, "sha512-/5iHb0RHBvj8Di59FDs4ESNm45jls33aZAi4zccVXZjc/6ZvwQP6nzEYeT6weXjTf9E6/vrp2JhYWRyO+ZP13A=="],
 
     "@topcli/prompts": ["@topcli/prompts@4.0.0", "", {}, "sha512-kkKYPb4k/6kRdnESt77B5vJrrYnYHIYczwv0P1c+tfN/IWEx3KZeKEHoUq7sImIyBEXWdA2uakIroD9pmRJziQ=="],
 

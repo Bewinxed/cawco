@@ -12,9 +12,16 @@
     ref = $bindable(null),
     value = $bindable(),
     class: className,
+    fill = false,
     children,
     ...restProps
-  }: ToggleGroupPrimitive.RootProps = $props();
+  }: ToggleGroupPrimitive.RootProps & {
+    /**
+     * The groove runs its row's width, its segments sharing the room (each
+     * site's segments grow); else it is as wide as its segments.
+     */
+    fill?: boolean;
+  } = $props();
 
   let thumb = $state<HTMLSpanElement>();
   $effect(() => {
@@ -36,7 +43,7 @@ wraps, its groove holds every segment (as wide as they are), and a group
 wider than its row stands in its caller's scroller.
 -->
 <ToggleGroupPrimitive.Root
-  class={cn(group(), "w-max", className)}
+  class={cn(group(), fill ? "flex w-full" : "w-max", className)}
   data-slot="toggle-group"
   bind:ref
   bind:value={value as never}
