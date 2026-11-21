@@ -195,5 +195,9 @@
       type="button">{said.giveBack}</button
     >
   {/if}
-  <RowFault again={fault?.again} reason={fault?.reason} />
+  <RowFault
+    again={fault?.again}
+    againLabel={said.tryAgain}
+    reason={fault?.reason}
+  />
 </div>
