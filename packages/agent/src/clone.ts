@@ -16,6 +16,7 @@
  */
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { alternatesText, poolAt } from "@cawco/core/object-pool";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { Git } from "./git/run";
@@ -51,7 +52,12 @@ export const poolSourceOf = async (
  * as the pool's one line, `origin` at the source's remote, and
  * `origin/<base>` at the commit the pool fetched, with `origin/HEAD` naming
  * it. No `git clone` and no fetch in the clone: it reads every object its
- * origin holds from the pool, and its own store starts empty. Answers that
+ * origin holds from the pool, and its own store starts empty. `git init`
+ * runs in the folder above `dir`, made first: on a machine that never had a
+ * workspace (`~/.worktrees` not there yet) a spawn in a missing folder fails
+ * as Bun's `ENOENT … posix_spawn 'git'`, which names git, not the folder.
+ * `git clone`, which the cut ran before pools, made the folders above its
+ * target itself and ran in the source. Answers that
  * branch's name. A clone that cannot be set up is deleted again. Its
  * workspace's record names the pool before this runs (workspace.ts
  * `cutClone`), so the pool is granted to its boundary and its alternates
@@ -67,6 +73,7 @@ export const prepareClone = async (
 ): Promise<string> => {
   const { base, tip } = await readyPool(source, inPool, known, deadline);
   try {
+    await makeFolder(dirname(dir));
     await run(
       dirname(dir),
       "init",

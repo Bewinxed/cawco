@@ -4,7 +4,9 @@
  * own CLI) takes before its caller reads the answer its way.
  */
 
+import { lstat } from "node:fs/promises";
 import type { Subprocess } from "bun";
+import { isGone } from "./absent";
 import { readWithin } from "./bounded";
 import { hostEnvironment } from "./session-env";
 import { secondsOf } from "./time";
@@ -19,11 +21,35 @@ export interface Ran {
   stdout: string;
 }
 
+/** `spawn`'s child; a spawn of `program` that failed because folder `cwd` is not there throws naming the folder. */
+const spawnedIn = async <T>(
+  program: string | undefined,
+  cwd: string | undefined,
+  spawn: () => T
+): Promise<T> => {
+  try {
+    return spawn();
+  } catch (error) {
+    if (cwd && isGone(error) && !(await lstat(cwd).catch(() => undefined))) {
+      throw new Error(
+        `${program} did not start: no folder is at ${cwd}, where it was to run`,
+        {
+          cause: error,
+        }
+      );
+    }
+    throw error;
+  }
+};
+
 /**
  * Runs `argv` with `env`, `input` its stdin, and reads both streams to their
  * end. A `signal` abort kills it with `killSignal`. `env` is the caller's to
  * name: a Bun spawn without one gets the environment its process started
- * with (scripts/lint/spawn-names-env.grit).
+ * with (scripts/lint/spawn-names-env.grit). A `cwd` that is not there fails
+ * naming the folder: Bun's own error names only the program (`ENOENT: no
+ * such file or directory, posix_spawn 'git'`), which read as a git the
+ * machine lacks when it was a `~/.worktrees` not made yet.
  */
 export const runCaptured = async (
   argv: readonly string[],
@@ -37,13 +63,15 @@ export const runCaptured = async (
   }
 ): Promise<Ran> => {
   const { input, env, ...spawned } = options;
-  const child = Bun.spawn([...argv], {
-    ...spawned,
-    env,
-    stdin: input === undefined ? "ignore" : Buffer.from(input),
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const child = await spawnedIn(argv[0], spawned.cwd, () =>
+    Bun.spawn([...argv], {
+      ...spawned,
+      env,
+      stdin: input === undefined ? "ignore" : Buffer.from(input),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+  );
   const [stdout, stderr, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
