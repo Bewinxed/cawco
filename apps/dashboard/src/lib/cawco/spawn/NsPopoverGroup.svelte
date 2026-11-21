@@ -11,10 +11,13 @@
    * opening a second surface beside theirs.
    */
   import { Popover } from "bits-ui";
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import type { TransitionConfig } from "svelte/transition";
-  import { pressable } from "#lib/components/ui/floating-presence.js";
+  import {
+    drawn,
+    own,
+    pressable,
+  } from "#lib/components/ui/floating-presence.js";
   import {
     glidePopoverVariants,
     placementGlide,
@@ -22,7 +25,8 @@
   } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
-  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
+  import { whenIdle } from "#lib/platform/idle-build.svelte.js";
+  import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { cn } from "#lib/utils.js";
   import {
@@ -67,33 +71,92 @@
     }
     last = next;
     shown = next;
+    if (!kept.includes(next)) {
+      kept = [...kept, next];
+    }
+  });
+  /**
+   * Every member the surface has shown or built ahead, its content kept
+   * built while the form stands, the surface itself kept as it closes:
+   * shown again, it is drawn as it was left, nothing mounted. Built again on
+   * each press, the location chip's (its repository list, owner strip,
+   * tabs, tooltips) held a switch to it 45–50ms and a first open 78–82ms,
+   * frames dropped before the surface's glide began.
+   */
+  let kept = $state.raw<PopoverMember[]>([]);
+  /** The kept members still in the group, in the order they were first shown. */
+  const keptNow = $derived(
+    kept.filter((member) => group.members.includes(member))
+  );
+  /**
+   * The member the surface stands for: the one shown, else (before any is)
+   * the first built ahead, the surface standing closed around it.
+   */
+  const surface = $derived(shown ?? keptNow[0]);
+  // A member that builds ahead (`prebuild`) is built once the page is idle,
+  // the surface standing closed around it: the first press that opens it
+  // finds it built, as a second does.
+  $effect(() => {
+    if (outer) {
+      return;
+    }
+    const ahead = group.members.filter(
+      (member) => member.prebuild && !untrack(() => kept).includes(member)
+    );
+    if (ahead.length === 0) {
+      return;
+    }
+    return whenIdle(() => {
+      kept = [...kept, ...ahead.filter((member) => !kept.includes(member))];
+    });
   });
   const open = $derived(active !== undefined);
   /** The wrapper's glide to a sibling's placement (glide-popover `placementGlide`). */
   const glides = placementGlide(() => morphing);
 
   const reduceMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
-  function panelIn(_node: Element): TransitionConfig {
-    if (!morphing || reduceMotion.current) {
-      return { duration: 0 };
+  /**
+   * A member's content as it is shown: on a retarget, it fades in after
+   * the surface sets out, and takes the focus the way a fresh open does.
+   */
+  const showing = (member: PopoverMember) => (node: HTMLElement) => {
+    if (shown !== member || !open) {
+      return;
     }
-    return {
-      duration: dur("--duration-morph"),
-      delay: dur("--duration-stagger"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}`,
-    };
-  }
-  /** A retargeted surface focuses its new content the way a fresh open does. */
-  function focusFirst(node: HTMLElement) {
-    if (morphing && shown?.trapFocus) {
+    // What its content asks focus for (`data-autofocus`: the repository
+    // search), once the surface's own focus scope has placed it.
+    const asked = node.querySelector<HTMLElement>("[data-autofocus]");
+    const frame = asked
+      ? requestAnimationFrame(() => asked.focus())
+      : undefined;
+    if (!morphing) {
+      return () => {
+        if (frame !== undefined) {
+          cancelAnimationFrame(frame);
+        }
+      };
+    }
+    if (!reduceMotion.current) {
+      node.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: dur("--duration-morph"),
+        delay: dur("--duration-stagger"),
+        easing: ease("--ease-out"),
+        fill: "backwards",
+      });
+    }
+    if (member.trapFocus && !asked) {
       node
         .querySelector<HTMLElement>(
           'input:not([disabled]), button:not([disabled]), [tabindex="0"]'
         )
         ?.focus();
     }
-  }
+    return () => {
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame);
+      }
+    };
+  };
 </script>
 
 {@render children()}
@@ -110,21 +173,22 @@
     {open}
   >
     <Popover.Portal>
-      {#if shown}
+      {#if surface}
         <Popover.Content
           data-ns-pop
+          forceMount
           preventOverflowTextSelection={false}
           strategy="fixed"
-          align={shown.align}
+          align={surface.align}
           class={cn(
             "ns-theme",
-            glidePopoverVariants({ height: shown?.tall ? "room" : "cap" })
+            glidePopoverVariants({ height: surface?.tall ? "room" : "cap" })
           )}
           collisionPadding={inset}
-          customAnchor={shown.trigger}
+          customAnchor={surface.trigger}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            if (shown?.onclosefocus?.()) {
+            if (surface?.onclosefocus?.()) {
               return;
             }
             const focused = document.activeElement;
@@ -133,7 +197,7 @@
               focused === document.body ||
               focused.closest("[data-ns-pop]")
             ) {
-              shown?.trigger?.focus();
+              surface?.trigger?.focus();
             }
           }}
           onInteractOutside={(event) => {
@@ -146,20 +210,26 @@
             }
           }}
           onOpenAutoFocus={(event) => {
-            if (!shown?.trapFocus) {
+            if (!surface?.trapFocus) {
               event.preventDefault();
             }
           }}
           side="bottom"
           sideOffset={6}
-          style={`--ns-pop-width:${popoverWidth(shown.width)}`}
-          trapFocus={shown.trapFocus}
+          style={`--ns-pop-width:${popoverWidth(surface.width)}`}
+          trapFocus={surface.trapFocus}
         >
           {#snippet child({ props, wrapperProps, open })}
+            {@const seen = drawn(props)}
             <!-- Closing, it lets presses through to the page (floating-presence).
-                 It glides to each new placement while the surface morphs. -->
+                 It glides to each new placement while the surface morphs.
+                 Closed and gone, it stands kept (bits-ui's forceMount), its
+                 content built, unseen, unrendered and out of reach: the next
+                 press draws it as it was left, nothing mounted. -->
             <div
               {...wrapperProps}
+              class={seen ? undefined : "invisible content-visibility-hidden"}
+              inert={!seen}
               style:pointer-events={pressable(open)}
               {@attach glides}
             >
@@ -169,16 +239,16 @@
                  re-mounts bits-ui's focus scope, and focus leaves the field
                  for the trigger. -->
               <div
-                {...props}
-                aria-label={shown?.label}
+                {...own(props)}
+                aria-label={surface?.label}
                 data-room={room}
-                id={`${shown?.id}-popover`}
+                id={`${surface?.id}-popover`}
                 role="presentation"
                 style:--ns-pop-room={room}
                 style:pointer-events={pressable(open)}
                 {@attach roomed}
-                {@attach shown?.rows
-                  ? highlight({ rows: shown.rows })
+                {@attach surface?.rows
+                  ? highlight({ rows: surface.rows })
                   : undefined}
                 {@attach morph({
                   ms: dur("--duration-pop"),
@@ -199,20 +269,23 @@
                      unfolding in it (Full Send's) is the one motion, the
                      surface laid out at its size frame by frame. A fresh
                      open is drawn at its own content's size. -->
-                {#key shown?.id}
+                {#each keptNow as member (member.id)}
+                  {@const on = member === shown}
                   <!-- As the surface: a row with a long path shrinks and
-                       ellipsises it, never widening the set past it. -->
+                       ellipsises it, never widening the set past it. One
+                       not shown stands out of the flow at its own width,
+                       unseen and unrendered, its layout kept. -->
                   <div
-                    class="grid grid-cols-1 content-start gap-(--ns-pop-gap,0px)"
-                    style={`--ns-pop-gap:${shown?.gap ?? 0}px`}
-                    use:focusFirst
-                    in:panelIn
+                    class={on
+                      ? "grid grid-cols-1 content-start gap-(--ns-pop-gap,0px)"
+                      : "invisible absolute start-0 top-0 grid w-(--kept-w) grid-cols-1 content-start gap-(--ns-pop-gap,0px) content-visibility-hidden"}
+                    inert={!on}
+                    style={`--ns-pop-gap:${member.gap}px;--kept-w:${popoverWidth(member.width)}`}
+                    {@attach showing(member)}
                   >
-                    {#if shown}
-                      {@render shown.children()}
-                    {/if}
+                    {@render member.children()}
                   </div>
-                {/key}
+                {/each}
               </div>
             </div>
           {/snippet}

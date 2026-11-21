@@ -45,6 +45,7 @@
     haspopup,
     rows,
     follows = false,
+    prebuild = false,
     ...rest
   }: {
     id: string;
@@ -100,6 +101,8 @@
      */
     follows?: boolean;
     "aria-label"?: string;
+    /** Its content is built while the page is idle, before any press opens it (`PopoverMember.prebuild`). */
+    prebuild?: boolean;
   } = $props();
 
   /** Its inset from the screen's edge (`screenInset`). */
@@ -144,6 +147,9 @@
     },
     get open() {
       return open;
+    },
+    get prebuild() {
+      return prebuild;
     },
     get tall() {
       return tall;

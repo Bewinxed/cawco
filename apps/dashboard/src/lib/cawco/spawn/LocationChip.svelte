@@ -71,6 +71,7 @@
   {onchange}
   {onclosefocus}
   {open}
+  prebuild
   triggerClass={chipVariants({
     variant: "setting",
     tone: empty ? "muted" : undefined,
@@ -112,5 +113,6 @@
     {onrepo}
     {reading}
     {repo}
+    shown={open}
   />
 </NsPopover>
