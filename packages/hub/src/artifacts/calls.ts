@@ -138,6 +138,7 @@ export const readAsked = async (
   id: string,
   query: {
     detail?: "summary" | "story";
+    layout?: boolean;
     png?: boolean;
     render?: boolean;
     save?: string;
@@ -158,6 +159,7 @@ export const readAsked = async (
     ...(state ?? {}),
     ...(query.save ? { save: query.save } : {}),
     ...(query.render ? { render: true } : {}),
+    ...(query.layout ? { layout: true } : {}),
     ...(query.verify ? { verify: true } : {}),
     ...(query.width === undefined ? {} : { width: query.width }),
   });

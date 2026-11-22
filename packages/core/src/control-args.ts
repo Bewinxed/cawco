@@ -189,6 +189,7 @@ const SheetWrite = union([
 ]);
 const RenderAsk = object({
   files: texts,
+  layout: optional(boolean()),
   png: optional(boolean()),
   spec: optional(pipe(unknown(), transform(canvasSpecOf))),
   state: optional(

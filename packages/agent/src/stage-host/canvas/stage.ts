@@ -66,6 +66,7 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
+import type { LayoutRead } from "@cawco/core/layout-guides";
 import type { PageBody } from "@cawco/core/page-wire";
 import {
   type AnimationRead,
@@ -93,6 +94,7 @@ import {
   STAGE_DIALS_WRITTEN,
   STAGE_DIFFERENCES,
   STAGE_FAULT,
+  STAGE_GUIDES,
   STAGE_LAID,
   STAGE_LOAD,
   STAGE_REACH,
@@ -111,6 +113,7 @@ import {
   shownName,
   stageCompareOf,
   stageDialsOf,
+  stageGuidesOf,
   stageLoadOf,
   stageReachOf,
   stageRevealOf,
@@ -122,6 +125,7 @@ import { graphWords as words } from "@cawco/core/words/graph";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { differences } from "./diff";
 import { tellHolder } from "./embed";
+import { drawGuides, readLayout } from "./guides";
 import {
   drew,
   elementsUnread,
@@ -188,6 +192,8 @@ const GUTTER = "--spacing-space-4";
 const STAGE_GUTTER_VAR = "--stage-gutter";
 /** The room the stage's floating head takes over the page's top (page-style.ts), px as the panel said it. */
 const STAGE_ROOM_VAR = "--stage-room";
+/** How long the drawing holds still before the guides read it again. Ours: past a frame's burst of records, short of a person's notice. */
+const GUIDES_QUIET_MS = 120;
 /** The gap between the kept drawing and the compared one where the two stand side by side. */
 const BESIDE_GAP = "--spacing-space-6";
 /**
@@ -736,7 +742,12 @@ export function bootStage(page: Page): Mode {
   const litRing = document.createElement("span");
   litRing.className = "cawco-lit-ring";
   litRing.hidden = true;
-  frame.append(rings, litRing);
+  /** The alignment guides (guides.ts): the drawing's edges, near-misses and spacing, in a layer of the stage's own over it, taking no press. */
+  const guides = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  guides.setAttribute("class", "cawco-guides");
+  guides.setAttribute("aria-hidden", "true");
+  guides.toggleAttribute("hidden", true);
+  frame.append(rings, litRing, guides);
   /** Compare side by side: each drawing named over its own column. */
   const names = document.createElement("div");
   names.className = "cawco-stage-names";
@@ -1519,6 +1530,7 @@ export function bootStage(page: Page): Mode {
       tell(STAGE_LAID, laidOut);
     }
     reread();
+    guidesSoon();
   }
 
   /**
@@ -2131,6 +2143,63 @@ export function bootStage(page: Page): Mode {
     );
   }
 
+  /** The guides are on: the panel's head turned them on, or a picture's read asked for them (`layout`). */
+  let guidesOn = false;
+  /** A read of the guides waiting its turn, after the drawing last changed. */
+  let guidesDue: ReturnType<typeof setTimeout> | null = null;
+  /** The drawing's every change read again while the guides are on: its args, a reach, a dial, its own motion. */
+  const guidesWatch = new MutationObserver(() => guidesSoon());
+
+  /** The guides drawn over the drawing as it stands now, and what they read; none while they are off or no drawing stands. */
+  function guidesNow(): LayoutRead | null {
+    if (guidesDue !== null) {
+      clearTimeout(guidesDue);
+      guidesDue = null;
+    }
+    if (!(guidesOn && live && !frame.hidden)) {
+      guides.toggleAttribute("hidden", true);
+      return null;
+    }
+    // Drawn in the drawing's own scheme: the colours' light-dark() reads it.
+    guides.style.colorScheme = getComputedStyle(drawing).colorScheme;
+    const read = readLayout(
+      frame,
+      drawing,
+      guides,
+      document.querySelector("style[data-cawco-canvas]"),
+      page.root
+    );
+    drawGuides(guides, read);
+    guides.toggleAttribute("hidden", false);
+    return read;
+  }
+
+  /** The guides read again once the drawing has held still a moment: a change comes as many records at once. */
+  function guidesSoon(): void {
+    if (!guidesOn || guidesDue !== null) {
+      return;
+    }
+    guidesDue = setTimeout(() => {
+      guidesDue = null;
+      guidesNow();
+    }, GUIDES_QUIET_MS);
+  }
+
+  /** The guides turned on or off (core `STAGE_GUIDES`). */
+  function showGuides(on: boolean): void {
+    guidesOn = on;
+    guidesWatch.disconnect();
+    if (on) {
+      guidesWatch.observe(drawing, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        characterData: true,
+      });
+    }
+    guidesNow();
+  }
+
   new ResizeObserver(() => laid()).observe(drawing);
   addEventListener("resize", () => relay());
   // Each layer the drawing opens collides with the drawing, as with the app's window at its width.
@@ -2159,6 +2228,12 @@ export function bootStage(page: Page): Mode {
     const asking = stageCompareOf(event.detail);
     if (asking) {
       compare(asking);
+    }
+  });
+  window.addEventListener(STAGE_GUIDES, (event) => {
+    const asking = stageGuidesOf(event.detail);
+    if (asking) {
+      showGuides(asking.on);
     }
   });
 
@@ -2499,7 +2574,16 @@ export function bootStage(page: Page): Mode {
     };
   }
 
-  Object.assign(state, { stateNamed, pose, lacks, picture, settled });
+  /** The guides on over the drawing posed at `key`, for its picture, and what they read; null when it isn't posed there. */
+  function layout(key: string): LayoutRead | null {
+    if (posed?.key !== key) {
+      return null;
+    }
+    showGuides(true);
+    return guidesNow();
+  }
+
+  Object.assign(state, { stateNamed, pose, lacks, picture, settled, layout });
 
   /* --- The first drawing --------------------------------------------------- */
 

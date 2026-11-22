@@ -244,10 +244,16 @@ import {
  * artifact-events.ts `placeFor`): a session in its home folder previews an
  * app in any folder (worker 31,477, delegate 12,293 measured); both budgets
  * are raised to it.
+ * 2026-11-22: artifact_read takes `layout`, a design graph frame's
+ * alignment guides drawn on its picture and their numbers, the layout gate
+ * the redesign skill asks for (the owner's pick on tsk-473: guides "native
+ * to the design graph so that the agent can use it to debug"), its legend
+ * and findings said in the answer rather than the description (worker
+ * 31,527, delegate 12,344 measured); both budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_477,
-  delegate: 12_293,
+  worker: 31_527,
+  delegate: 12_344,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

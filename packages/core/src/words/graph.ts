@@ -386,6 +386,8 @@ export const graphWords = {
   light: "Light",
   dark: "Dark",
   reduceMotion: "Reduce motion",
+  /** The head's More: the alignment guides over the drawing (stage guides.ts), each kind of edge in its colour, near-misses and off-token spacing in red. */
+  alignmentGuides: "Alignment guides",
   /** The view card's switch: a width wider than the stage drawn 1:1 (Apple's Actual Size), not scaled to fit. */
   actualSize: "Actual size",
   /** A phone twin's name (stage-graph.ts `shownName`): its state's, the width a qualifier after a comma, so "Hub didn't answer" stays whole. */

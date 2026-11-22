@@ -2,7 +2,7 @@
  * The design graph's line to its stage page (core stage-graph.ts), the
  * page that holds the component on its stage's origin inside the panel's
  * frame: what the graph posts it (a reach, Compare, a reveal, the view, the
- * move's play, pause, scrub and timing, a row's ring, the dials), and what
+ * alignment guides, the move's play, pause, scrub and timing, a row's ring, the dials), and what
  * it last said (its sheets, how its drawing is laid out, the reach that
  * landed, a fault, what differs, the move's clock, the dials as written, a
  * press), held as state the graph reads. One per component artifact's pane (PreviewPane), which hears the
@@ -13,6 +13,7 @@ import type { SheetOnPage } from "@cawco/core/stage";
 import {
   STAGE_COMPARE,
   STAGE_DIALS,
+  STAGE_GUIDES,
   STAGE_LET_GO,
   STAGE_LOAD,
   STAGE_PAUSE,
@@ -141,6 +142,11 @@ export class StageLink {
   /** States file `file` brought in on the page before any of its states is reached: its sheet comes, naming them (the direction in front). */
   load(file: string): void {
     this.#post({ type: STAGE_LOAD, file });
+  }
+
+  /** The alignment guides laid over the drawing, or taken off (core layout-guides.ts). */
+  guides(on: boolean): void {
+    this.#post({ type: STAGE_GUIDES, on });
   }
 
   /** The room the stage's floating head takes over the page's top, px. */

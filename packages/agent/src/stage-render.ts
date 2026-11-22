@@ -43,7 +43,7 @@ import type { Page } from "playwright-core";
 import { chromiumSandboxed } from "./capabilities";
 import { launchChromium } from "./chromium";
 import { findState, poseState, statePicture } from "./frame-picture";
-import { sweepNow } from "./in-page/page";
+import { layoutNow, sweepNow } from "./in-page/page";
 
 /** How long a render may take, Chromium's launch to its answer: one limit, which every wait of the render shares (the hub waits this long on it). */
 const RENDER_WAIT_MS = STAGE_RENDER_MS;
@@ -253,7 +253,8 @@ async function sweepUntil(
  * Draws the canvas of `ask.files` on the stage reached at `reached` (a
  * unix socket, or `"host"` with the stage's own `port`) in the machine's
  * Chromium, and answers the page's report once every section is drawn,
- * with a picture when asked.
+ * with a picture when asked; with `layout`, the state's alignment guides
+ * laid over its picture and their read beside it.
  */
 export async function renderCanvas(
   reached: string,
@@ -337,10 +338,16 @@ export async function renderCanvas(
     }
     const key = await findState(page, state.story, state.interaction);
     await poseState(page, key, deadline);
+    // The guides laid over the state as it stands posed, so the picture shows what the read says.
+    const layout = ask.layout ? await page.evaluate(layoutNow, key) : null;
+    if (ask.layout && !layout) {
+      throw new Error(words.layoutUnread(state.story));
+    }
     return {
       report,
       undrawn,
       ...unread,
+      ...(layout ? { layout } : {}),
       png: (await statePicture(page, key)).png.toString("base64"),
     };
   } finally {

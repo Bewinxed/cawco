@@ -13,6 +13,7 @@
  * supervision, and its preview's doc keeps its state the same way.
  */
 
+import type { LayoutRead } from "./layout-guides";
 import type {
   PreviewDown,
   PreviewSource,
@@ -336,6 +337,8 @@ interface RenderState {
 /** What {@link STAGE_RENDER} is asked: the canvas's states files and spec, and a picture of one state, or of the stage in view. */
 export interface RenderAsk {
   files: string[];
+  /** The alignment guides (core layout-guides.ts) laid over `state`'s picture, and their read answered. */
+  layout?: boolean;
   /** A picture: of `state` when it names one, else the stage in view. */
   png?: boolean;
   spec?: CanvasSpec;
@@ -428,6 +431,8 @@ export interface SectionUndrawn {
  * draw before its limit; and the state's picture when one was asked.
  */
 export interface StageRendered {
+  /** The state's layout as its alignment guides read it, when `layout` was asked. */
+  layout?: LayoutRead;
   /** True when the page's plan (each states file's first story) could not be read: no section's `first` is known, which is not the same as none having one. */
   plansUnread?: true;
   png?: string;

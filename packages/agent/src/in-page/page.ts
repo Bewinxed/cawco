@@ -5,6 +5,7 @@
  * where the rest of the agent is checked against Bun; it closes over nothing
  * but its arguments and the page's own globals, declared below.
  */
+import type { LayoutRead } from "@cawco/core/layout-guides";
 import type { FramePictureRead, Interaction, SweepAt } from "@cawco/core/stage";
 
 declare global {
@@ -32,6 +33,7 @@ declare global {
 interface PageCanvas {
   drawn: string[];
   lacks?: (key: string) => { h: number; w: number } | null;
+  layout?: (key: string) => LayoutRead | null;
   picture?: (key: string) => FramePictureRead | null;
   pose?: (key: string) => Promise<{ h: number; w: number } | null>;
   reports: number;
@@ -184,3 +186,7 @@ export const settledNow = (key: string) =>
 /** State `key`'s drawing as it stands, for its picture. */
 export const pictureNow = (key: string) =>
   window.__cawcoCanvas?.picture?.(key) ?? null;
+
+/** The alignment guides on over state `key`'s drawing, and what they read; null where the stage doesn't stand at it. */
+export const layoutNow = (key: string) =>
+  window.__cawcoCanvas?.layout?.(key) ?? null;

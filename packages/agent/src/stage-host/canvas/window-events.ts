@@ -20,6 +20,7 @@ import type {
   STAGE_DIALS_WRITTEN,
   STAGE_DIFFERENCES,
   STAGE_FAULT,
+  STAGE_GUIDES,
   STAGE_LAID,
   STAGE_LET_GO,
   STAGE_LOAD,
@@ -40,6 +41,7 @@ import type {
 type StageAsk =
   | typeof STAGE_COMPARE
   | typeof STAGE_DIALS
+  | typeof STAGE_GUIDES
   | typeof STAGE_LET_GO
   | typeof STAGE_LOAD
   | typeof STAGE_PAUSE

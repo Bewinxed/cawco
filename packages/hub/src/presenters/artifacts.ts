@@ -19,6 +19,7 @@ import {
 } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { decidedByLine } from "@cawco/core/words/decides-lines";
+import { layoutWords } from "@cawco/core/words/layout-guides";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import type { renderSaid } from "../artifacts/component";
 import type {
@@ -378,6 +379,7 @@ const componentLines = (read: ComponentRead): string[] => {
       : [`What they tuned: ${valueWords(read.tuned, 600)}`]),
     ...pickedLines(read.picked),
     ...(read.frame ? [`The frame asked: ${valueWords(read.frame, 2000)}`] : []),
+    ...(read.layout ? layoutWords.lines(read.layout) : []),
     ...(read.story
       ? [
           `Story ${read.story.name}: args ${valueWords(read.story.args, 1500)}; code ${valueWords(read.story.code, 1500)}`,

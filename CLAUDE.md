@@ -7,7 +7,11 @@ Guidance for Claude Code (and other agents) working in this repository.
 When analyzing, critiquing, or reviewing UI/UX in this repository, use the
 `interface-craft` skill (its Design Critique methodology) as the analytical
 frame. It composes with, not replaces, the measurement tools: clearshot for
-incoming screenshots, and for rendered-layout ground truth `impeccable detect`.
+incoming screenshots; for a design graph frame's rendered layout,
+`artifact_read` with `layout: true` and its `state` (each group's distinct
+text edges, near-misses with their file:line, every padding and gap against
+the spacing tokens, the guides drawn on its picture); for any other page,
+`impeccable detect`.
 
 ## Project
 

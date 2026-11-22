@@ -644,7 +644,7 @@ export const stageSaid = ({
 
 /** What a design graph's answers point at next. */
 export const READ_HINT =
-  "artifact_read({ id, detail: 'story', story: 'Waiting' }) for its args; { state: { story, interaction: 'hover' } } for a state's delta; { render: true } draws it now; { png: true, state } a frame's picture.";
+  "artifact_read({ id, detail: 'story', story: 'Waiting' }) for its args; { state: { story, interaction: 'hover' } } for a state's delta; { render: true } draws it now; { png: true, state } a frame's picture; { layout: true, state } its alignment guides and their numbers.";
 
 /** Whether every frame a report lists for `story` (or all) is unseen: no browser drew it since its file changed. */
 export const unseen = (report: RenderReport, story?: string): boolean => {
