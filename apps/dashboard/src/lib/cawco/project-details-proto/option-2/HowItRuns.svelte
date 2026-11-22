@@ -123,27 +123,28 @@
   /** The sections in their reading order, row by row: Repository & Git only for code. */
   const SECTIONS = $derived<SectionId[]>(
     record.holdsCode
-      ? ["tasks", "account", "places", "git", "waits"]
+      ? ["tasks", "account", "git", "places", "waits"]
       : ["tasks", "account", "places", "waits"]
   );
 
   /**
    * Where each section's card stands (SettingsSection names its area by its
-   * id), at the view's three widths. Full width: two columns each as wide as
-   * the widest option row (--spacing-c-settings-col), Task sync beside the
-   * account, the places beside Repository & Git, What needs you across both,
-   * each row's cards sharing its edges and height. Two narrower columns:
-   * every card still in the first screen at 1024, the left column Task sync,
-   * the places and What needs you, the right the account and Repository &
-   * Git, each spanning the rows that level the two columns' feet. One column
-   * (a phone): one card under another, in reading order.
+   * id), at the view's three widths, each card spanning the rows that level
+   * its column's foot with the other's, so the short cards stack beside the
+   * tall ones and no card stands far taller than what it holds. Full width:
+   * two columns each as wide as the widest option row
+   * (--spacing-c-settings-col), Task sync over Repository & Git beside the
+   * account over the places, What needs you across both. Two narrower
+   * columns (every card still in the first screen at 1024): Task sync, the
+   * places and What needs you beside the account over Repository & Git. One
+   * column (a phone): one card under another, in reading order.
    */
   const AREAS = $derived(
     record.holdsCode
       ? {
-          one: '"tasks" "account" "places" "git" "waits"',
+          one: '"tasks" "account" "git" "places" "waits"',
           two: '"tasks account" "places account" "places git" "waits git"',
-          pair: '"tasks account" "places git" "waits waits"',
+          pair: '"tasks account" "git account" "git places" "waits waits"',
         }
       : {
           one: '"tasks" "account" "places" "waits"',
