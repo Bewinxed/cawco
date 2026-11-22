@@ -61,7 +61,7 @@
   bind:this={card}
   aria-labelledby="member-{member.id}"
   class={[
-    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-surface-raised p-space-3 text-ink-strong shadow-tile transition-control data-over:bg-surface-hover",
+    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-surface-raised p-space-3 text-ink-strong shadow-tile transition-control data-over:bg-surface-hover data-over:inset-ring-1 data-over:inset-ring-brand-solid",
     editing && "inset-ring-2 inset-ring-brand-solid",
   ]}
   data-editing={editing || undefined}

@@ -18,6 +18,8 @@
  */
 
 import { draggable } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
+import { disableNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/disable-native-drag-preview";
+import { preventUnhandled } from "@atlaskit/pragmatic-drag-and-drop/prevent-unhandled";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
 
 /** The private type every internal drag carries, and nothing a field reads. */
@@ -48,21 +50,39 @@ export function bareDrag(node: HTMLElement): () => void {
   return () => node.removeEventListener("dragstart", empty);
 }
 
+/** Where the pointer is, in the viewport, at a step of a drag. */
+export interface DragPoint {
+  x: number;
+  y: number;
+}
+
 /**
  * One of the dashboard's own drag sources (a task card, a kind's tile) on
  * Pragmatic drag and drop: the browser's data emptied ({@link bareDrag}),
  * {@link internalData} alone carried, and `data-dragging` on `node` while it
- * is in the air. Returns its removal.
+ * is in the air. A source that draws its own ghost passes `ghost`: the
+ * browser's snapshot is turned off, every step of the pointer reaches
+ * `onMove`, and `onEnd` hears where it was let go and the drop targets
+ * under it, innermost first. Returns its removal.
  */
 export function internalDraggable(
   node: HTMLElement,
   source: {
     canDrag?: () => boolean;
     data: () => Record<string, unknown>;
-    onEnd: () => void;
-    onStart: () => void;
+    ghost?: boolean;
+    onEnd: (drop: {
+      at: DragPoint;
+      targets: { data: Record<string | symbol, unknown>; element: Element }[];
+    }) => void;
+    onMove?: (at: DragPoint) => void;
+    onStart: (at: DragPoint) => void;
   }
 ): () => void {
+  const point = (input: { clientX: number; clientY: number }): DragPoint => ({
+    x: input.clientX,
+    y: input.clientY,
+  });
   return combine(
     bareDrag(node),
     draggable({
@@ -70,13 +90,36 @@ export function internalDraggable(
       canDrag: source.canDrag,
       getInitialData: source.data,
       getInitialDataForExternal: internalData,
-      onDragStart: () => {
-        node.dataset.dragging = "";
-        source.onStart();
+      onGenerateDragPreview: ({ nativeSetDragImage }) => {
+        if (source.ghost) {
+          disableNativeDragPreview({ nativeSetDragImage });
+        }
       },
-      onDrop: () => {
+      onDragStart: ({ location }) => {
+        node.dataset.dragging = "";
+        // A ghost the page draws lands where it is let go: the browser's
+        // own put-back (a dragend held while its snapshot slides home) is
+        // not drawn, so a drop anywhere is taken at once.
+        if (source.ghost) {
+          preventUnhandled.start();
+        }
+        source.onStart(point(location.current.input));
+      },
+      onDrag: ({ location }) => {
+        source.onMove?.(point(location.current.input));
+      },
+      onDrop: ({ location }) => {
         delete node.dataset.dragging;
-        source.onEnd();
+        if (source.ghost) {
+          preventUnhandled.stop();
+        }
+        source.onEnd({
+          at: point(location.current.input),
+          targets: location.current.dropTargets.map(({ data, element }) => ({
+            data,
+            element,
+          })),
+        });
       },
     })
   );

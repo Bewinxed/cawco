@@ -4,8 +4,9 @@
    * decides. A press on a kind's tile opens who it can go to in a popover
    * hung from that tile (KindTile): nothing on the page moves. A press on a
    * member hands it over, as dragging the tile onto that member's card does
-   * (kind-dnd.svelte.ts); the tile flies to its new card once the hub has
-   * written it, and the focus follows it there. Props in, events out: what a
+   * (kind-dnd.svelte.ts): pressed, the tile flies to its new card once the
+   * hub has written it; dragged, the ghost carries it there and the tile
+   * stands in its place. The focus follows it. Props in, events out: what a
    * hand-over writes is its owner's.
    */
   import type { Kind, Member } from "@cawco/core/decides";
@@ -19,6 +20,7 @@
     easeOut,
     motionOk,
   } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import AddCard from "./AddCard.svelte";
   import type { Facts, Fault, WhoDecides } from "./decides.svelte";
   import HandOver, { handOverWidth } from "./HandOver.svelte";
@@ -87,10 +89,12 @@
   /** Each card, which its settings hang from and a dragged tile drops on. */
   const cards = $state<Record<string, HTMLElement | null>>({});
 
-  /** Hands `kind` to `to`, from its tile's list or a drop on `to`'s card. */
-  function hand(kind: string, to: string) {
+  /** Hands `kind` to `to`, from its tile's list or a drop on `to`'s card; answers whether it went. */
+  function hand(kind: string, to: string): Promise<boolean> {
     handing = null;
-    land(kind, onhand(kind, to));
+    const went = onhand(kind, to);
+    land(kind, went);
+    return went;
   }
 
   // Every member's card takes a dragged tile, which hands its kind over.
@@ -117,13 +121,22 @@
     member.type !== "you" && member.type !== "asker";
   const parkedNew = $derived(who?.parked[NEW]);
 
-  const kindsOf = (member: string) =>
-    kinds.filter((kind) => routes[kind.id] === member);
-
   const [send, receive] = crossfade({
     duration: () => (motionOk.current ? dur("--duration-morph") : 0),
     easing: easeOut,
   });
+  /** A tile's flight between cards, but for one the drag's ghost carried there. */
+  const leave = (node: Element, params: { key: string }) =>
+    kindDrag.carried(params.key) ? { duration: 0 } : send(node, params);
+  const arrive = (node: Element, params: { key: string }) =>
+    kindDrag.carried(params.key) ? { duration: 0 } : receive(node, params);
+  /** `member`'s tiles, with the slot a tile in the hand would stand in, in the kinds' order. */
+  const shownOn = (member: string) => {
+    const slot = kindDrag.slotIn(member);
+    return kinds.filter(
+      (kind) => routes[kind.id] === member || kind.id === slot?.kind
+    );
+  };
 
   /**
    * After a write moved `kind`, its tile in its new place takes the focus
@@ -162,65 +175,82 @@
     : "repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
 >
   {#each members as member (member.id)}
-    {@const holds = kindsOf(member.id)}
+    {@const shown = shownOn(member.id)}
     {@const others = members.filter((one) => one.id !== member.id)}
     {#snippet tiles()}
-      {#each holds as kind (kind.id)}
-        <div
-          class="min-w-0 transition-opacity duration-(--duration-control) ease-out data-dragging:opacity-40"
-          data-kind={kind.id}
-          in:receive={{ key: kind.id }}
-          out:send={{ key: kind.id }}
-          {@attach dragKind(() => ({
-            kind: kind.id,
-            from: member.id,
-            held: !asking?.kinds.includes(kind.id),
-          }))}
-        >
-          {#snippet list(headId: string)}
-            <HandOver
-              describe={brief}
-              {said}
-              fleetChoice={project === null ? null : fleetRoutes[kind.id]}
-              {headId}
+      {#each shown as kind (kind.id)}
+        {#if routes[kind.id] !== member.id}
+          <!-- Where the tile in the hand will stand: its height, in its place. -->
+          <div
+            class="h-(--slot-h) rounded-well border border-dashed border-brand-solid bg-surface-hover"
+            data-slot-for={kind.id}
+            style:--slot-h="{kindDrag.slotIn(member.id)?.height ?? 0}px"
+            in:unfold
+            out:unfold={{ ms: kindDrag.carried(kind.id) ? 0 : undefined }}
+          ></div>
+        {:else}
+          <div
+            class={[
+              "min-w-0 rounded-well data-lifted:outline-1 data-lifted:outline-dashed data-lifted:outline-border-control data-lifted:-outline-offset-1 data-lifted:[&>*]:invisible",
+              kindDrag.carried(kind.id) &&
+                !kindDrag.lifted(kind.id, member.id) &&
+                "invisible",
+            ]}
+            data-kind={kind.id}
+            data-lifted={kindDrag.lifted(kind.id, member.id) || undefined}
+            in:arrive={{ key: kind.id }}
+            out:leave={{ key: kind.id }}
+            {@attach dragKind(() => ({
+              kind: kind.id,
+              from: member.id,
+              held: !asking?.kinds.includes(kind.id),
+            }))}
+          >
+            {#snippet list(headId: string)}
+              <HandOver
+                describe={brief}
+                {said}
+                fleetChoice={project === null ? null : fleetRoutes[kind.id]}
+                {headId}
+                {kind}
+                members={others}
+                onpick={(to) => {
+                  document
+                    .querySelector<HTMLElement>(
+                      `[data-kind-press="${CSS.escape(kind.id)}"]`
+                    )
+                    ?.focus({ preventScroll: true });
+                  hand(kind.id, to);
+                }}
+              />
+            {/snippet}
+            <KindTile
+              {brief}
+              asking={asking?.kinds.includes(kind.id) ? asking.said : null}
+              fault={fault?.kinds.includes(kind.id) ? fault : null}
+              fleetWho={members.find((one) => one.id === fleetRoutes[kind.id])}
+              handing={handing === kind.id}
+              holder={member}
               {kind}
-              members={others}
-              onpick={(to) => {
-                document
-                  .querySelector<HTMLElement>(
-                    `[data-kind-press="${CSS.escape(kind.id)}"]`
-                  )
-                  ?.focus({ preventScroll: true });
-                hand(kind.id, to);
+              {list}
+              onhanding={(open) => {
+                if (open && asking !== null) {
+                  return;
+                }
+                if (open) {
+                  handing = kind.id;
+                } else if (handing === kind.id) {
+                  handing = null;
+                }
               }}
+              onputback={() => land(kind.id, onputback(kind.id))}
+              own={own.includes(kind.id)}
+              {project}
+              {said}
+              width={handOverWidth(others.length)}
             />
-          {/snippet}
-          <KindTile
-            {brief}
-            asking={asking?.kinds.includes(kind.id) ? asking.said : null}
-            fault={fault?.kinds.includes(kind.id) ? fault : null}
-            fleetWho={members.find((one) => one.id === fleetRoutes[kind.id])}
-            handing={handing === kind.id}
-            holder={member}
-            {kind}
-            {list}
-            onhanding={(open) => {
-              if (open && asking !== null) {
-                return;
-              }
-              if (open) {
-                handing = kind.id;
-              } else if (handing === kind.id) {
-                handing = null;
-              }
-            }}
-            onputback={() => land(kind.id, onputback(kind.id))}
-            own={own.includes(kind.id)}
-            {project}
-            {said}
-            width={handOverWidth(others.length)}
-          />
-        </div>
+          </div>
+        {/if}
       {/each}
     {/snippet}
     {#snippet pencil()}
@@ -250,12 +280,12 @@
       editing={who?.setup?.from === member.id}
       facts={facts(member)}
       {member}
-      over={kindDrag.over === member.id && kindDrag.from !== member.id}
+      over={kindDrag.over === member.id && kindDrag.slotIn(member.id) !== null}
       parked={who?.parked[member.id] !== undefined}
       pencil={who && editable(member) ? pencil : undefined}
       {project}
       {said}
-      tiles={holds.length > 0 ? tiles : undefined}
+      tiles={shown.length > 0 ? tiles : undefined}
     />
   {/each}
   {#if who}
