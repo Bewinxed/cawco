@@ -228,7 +228,7 @@
 <!-- A view of the project page: its pane gives it the page's side edges and its scroller (ProjectPage `viewPane`, pane-inset `PANE_INSET`). -->
 <section
   aria-label={words.viewLabel}
-  class="@container flex w-full flex-col pt-space-4 pb-space-6 max-phone:py-space-4"
+  class="@container/work-path flex w-full flex-col pt-space-4 pb-space-6 max-phone:py-space-4"
 >
   {#if !record.hubReachable}
     <Alert
@@ -247,7 +247,7 @@
        one gap between cards both ways, a row's cards stretched to its
        height, the pair left on the page's edge under the tabs. -->
   <div
-    class="grid min-w-0 max-w-c-settings-max grid-cols-1 grid-areas-(--areas-one) gap-space-4 @min-settings-two:@max-settings-pair:grid-cols-2 @min-settings-two:@max-settings-pair:grid-areas-(--areas-two) @min-settings-pair:grid-cols-(--pair-cols) @min-settings-pair:grid-areas-(--areas-pair)"
+    class="grid min-w-0 max-w-c-settings-max grid-cols-1 grid-areas-(--areas-one) gap-space-4 @min-settings-two/work-path:@max-settings-pair/work-path:grid-cols-2 @min-settings-two/work-path:@max-settings-pair/work-path:grid-areas-(--areas-two) @min-settings-pair/work-path:grid-cols-(--pair-cols) @min-settings-pair/work-path:grid-areas-(--areas-pair)"
     style:--areas-one={AREAS.one}
     style:--areas-pair={AREAS.pair}
     style:--areas-two={AREAS.two}
