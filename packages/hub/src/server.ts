@@ -14205,6 +14205,13 @@ export const createServer = (
         },
       })
       .use([hubRoutes]),
-    { previews: previewListeners, profiler, tailnet: tailnetHttps }
+    {
+      previews: previewListeners,
+      profiler,
+      tailnet: tailnetHttps,
+      // Routines made before routines were tasks, filed (routine-carry.ts):
+      // the boot's own pass, and a check's on a copy of a hub's database.
+      routinesCarried,
+    }
   );
 };

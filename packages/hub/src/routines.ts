@@ -1974,6 +1974,9 @@ export const createRoutines = ({
     wasOpen: boolean
   ): void => {
     const routine = store.byTask(projectId, taskId);
+    if (routine && toOpen) {
+      closed.delete(routine.id);
+    }
     if (!routine?.target || from === null || !toOpen || wasOpen) {
       return;
     }
@@ -2234,40 +2237,83 @@ export const createRoutines = ({
   /** Routines past their deadline with no stop: each stands in Needs you, held off, told once. */
   const deadlines = (now: number): void => {
     for (const row of store.list()) {
-      if (!(
+      if (
         firing(row) &&
         row.deadline !== null &&
-        row.deadline.getTime() <= now
-      )) {
-        continue;
+        row.deadline.getTime() <= now &&
+        !closed.has(row.id)
+      ) {
+        whenOpen(row, (open) => (open ? holdAtDeadline(open) : undefined));
       }
-      const date = dayIn(row.deadline, zoneOf(row));
-      const updated = store.update(row.id, {
-        held: "deadline",
-        disabledReason: conditionWords.offTimedOut(date),
-      });
-      const [newest] = store.runs(row.id, 1);
-      if (updated && newest) {
-        note(
-          updated,
-          newest,
-          "failed",
-          newest.reason ?? undefined,
-          conditionWords.timedOutNote(row.stop ?? row.name, date)
-        );
-      }
-      push.routine({
-        failed: true,
-        instanceId: null,
-        name: row.name,
-        output: conditionWords.timedOutNote(row.stop ?? row.name, date),
-        projectId: row.projectId,
-        routineId: row.id,
-        runId: newest?.id ?? null,
-        taskId: row.taskId,
-      });
-      waitsMoved(row.projectId);
     }
+  };
+
+  /** A routine whose deadline passed with no stop: it stands in Needs you, held off, told once. */
+  const holdAtDeadline = (row: RoutineRow): void => {
+    if (!row.deadline) {
+      return;
+    }
+    const date = dayIn(row.deadline, zoneOf(row));
+    const updated = store.update(row.id, {
+      held: "deadline",
+      disabledReason: conditionWords.offTimedOut(date),
+    });
+    const line = conditionWords.timedOutNote(row.stop ?? row.name, date);
+    const [newest] = store.runs(row.id, 1);
+    if (updated && newest) {
+      note(updated, newest, "failed", newest.reason ?? undefined, line);
+    }
+    push.routine({
+      failed: true,
+      instanceId: null,
+      name: row.name,
+      output: line,
+      projectId: row.projectId,
+      routineId: row.id,
+      runId: newest?.id ?? null,
+      taskId: row.taskId,
+    });
+    waitsMoved(row.projectId);
+  };
+
+  /** Routines whose task was read closed (done, dropped) or gone: no deadline of theirs is looked at until it opens again ({@link taskMoved}). */
+  const closed = new Set<string>();
+
+  /**
+   * Whether routine `row`'s task is open now, handed to `then` with the
+   * routine as it stands (undefined when it is not, or is no longer
+   * firing); asked once at a time per routine.
+   */
+  const whenOpen = (
+    row: RoutineRow,
+    then: (open: RoutineRow | undefined) => void
+  ): void => {
+    if (asking.has(row.id) || !row.taskId) {
+      return;
+    }
+    asking.add(row.id);
+    tasks()
+      .get(row.projectId, row.taskId)
+      .then((task) => {
+        const fresh = store.get(row.id);
+        const shut =
+          task instanceof ElysiaStatus
+            ? task.status === 404
+            : task.kind === "done" || task.kind === "dropped";
+        if (shut) {
+          closed.add(row.id);
+        }
+        then(fresh && firing(fresh) && !shut ? fresh : undefined);
+      })
+      .catch((error: unknown) =>
+        console.warn(
+          `[routines] ${row.name}: its task did not read: ${error instanceof Error ? error.message : String(error)}`
+        )
+      )
+      .finally(() => {
+        asking.delete(row.id);
+        schedule();
+      });
   };
 
   /** Routines whose due slot waits on whether its task is open. */
