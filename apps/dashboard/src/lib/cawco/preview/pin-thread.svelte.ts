@@ -290,8 +290,10 @@ export class PinThread {
       : location.href;
 
   /**
-   * The place the address names, opened once its page is ready and its pins
-   * are read: a pin's thread (`?pin=N`), or a decision card (`?card=<id>`).
+   * The place the address names, opened once its pins are read: a pin's
+   * thread (`?pin=N`) once the frame has settled, its page up or its down
+   * page standing; a decision card (`?card=<id>`) or a change once its page
+   * is up.
    */
   linkedFor: string | null = null;
 
@@ -304,12 +306,16 @@ export class PinThread {
       return;
     }
     const card = asked.get("card");
+    const change = asked.get("change");
+    // A card or a change is shown on the page: it waits for the page to be up.
+    if ((card || change) && !this.#deps.previewFrame.connected) {
+      return;
+    }
     if (card) {
       this.linkedFor = this.#deps.paneSubject.artifactId;
       this.showCard(card);
       return;
     }
-    const change = asked.get("change");
     if (change) {
       this.linkedFor = this.#deps.paneSubject.artifactId;
       this.#deps.changeTour.stepToChange(change);
@@ -475,14 +481,16 @@ export class PinThread {
       }
     });
     $effect(() => {
-      if (this.#deps.previewFrame.connected && this.#deps.paneDoc.view) {
+      if (this.#deps.previewFrame.settled && this.#deps.paneDoc.view) {
         untrack(this.openLinkedPin);
       }
     });
     /*
-     * A chip's press (artifact-names.svelte.ts `askOpen`): once the page is
-     * up and its pins are read, the place it names opens, once: a pin's
-     * thread, a decision card, or the artifact as it is.
+     * A chip's press (artifact-names.svelte.ts `askOpen`): once its pins are
+     * read, the place it names opens, once: a pin's thread as soon as the
+     * frame has settled (its page up, or its down page standing: a thread is
+     * the hub's, read from the pane's doc), a decision card or a change once
+     * the page is up to show it, or the artifact as it is.
      */
     $effect(() => {
       const id = this.#deps.paneSubject.artifactId;
@@ -490,8 +498,10 @@ export class PinThread {
       if (!(
         id &&
         at &&
-        this.#deps.previewFrame.connected &&
-        this.#deps.paneDoc.view
+        this.#deps.paneDoc.view &&
+        ("pin" in at
+          ? this.#deps.previewFrame.settled
+          : this.#deps.previewFrame.connected)
       )) {
         return;
       }
@@ -665,8 +675,9 @@ export class PinThread {
     if (!pin) {
       return false;
     }
-    if (pin.resolvedAt || pin.movedAt) {
-      // Off the page: its thread opens from its row, in Resolved or Open.
+    if (pin.resolvedAt || pin.movedAt || !this.#deps.previewFrame.connected) {
+      // Off the page, or no page stands (its down page, a gone workspace's):
+      // its thread opens from its row, in Resolved or Open.
       this.listFilter = pin.resolvedAt ? "resolved" : "open";
       this.#deps.paneMode.showList(true);
     }

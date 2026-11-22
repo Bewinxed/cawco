@@ -28,6 +28,7 @@ import {
 } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { changeLink } from "@cawco/core/references";
+import { htmlDesignOf } from "@cawco/core/stage";
 import { pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import { applyPatch } from "rfc6902";
@@ -513,7 +514,9 @@ export const createPageKind = (ctx: PageKindContext) => {
     if (row.kind !== "page") {
       return problem(409, {
         code: "artifact-html-not-page",
-        detail: `${row.name} is a ${row.kind}: only a page takes new HTML.`,
+        detail: htmlDesignOf(row)
+          ? `${row.name} is an HTML design: artifact_create it again under its name with the new html, picks and pins kept.`
+          : `${row.name} is a ${row.kind}: only a page takes new HTML.`,
       });
     }
     if (programOf(row) !== undefined) {

@@ -45,6 +45,8 @@ import {
   ORIGIN_PATH,
   PREVIEW_SERVER_PREFIX,
   REACHED_HEADER,
+  REVIVE_PATH,
+  type RevivedAnswer,
   SYNC_PATH,
   serverSaid,
   TOKEN_HEADER,
@@ -91,6 +93,12 @@ export interface PreviewControlDeps {
   previews: Pick<PreviewsDb, "used">;
   /** Where machine origin `key`'s preview is served now, its listener started when none serves it (preview-service.ts `reach`); undefined for an origin no machine serves. */
   reach: (key: string) => Promise<UpstreamAnswer> | undefined;
+  /**
+   * The workspace machine origin `key`'s preview is served from, which its
+   * machine said is gone, cut again (server.ts `reviveServed`, workspaces.ts
+   * `revive`); undefined for an origin no machine serves.
+   */
+  revive: (key: string) => Promise<RevivedAnswer> | undefined;
   /** The listener at `upstream` didn't answer (preview-service.ts `unreachable`). */
   unreachable: (key: string, upstream: Upstream) => void;
 }
@@ -520,6 +528,26 @@ export const previewControlRoutes = (
               stop: { kind: "closed" },
             }
           : await reached;
+      }
+    )
+    .post(
+      `${REVIVE_PATH}:key`,
+      hidden,
+      async ({
+        params,
+        request,
+        server,
+      }): Promise<RevivedAnswer | ReturnType<typeof notServer>> => {
+        if (!requestFromServer(request, server)) {
+          return notServer();
+        }
+        return (
+          (await deps.revive(params.key)) ?? {
+            ok: false,
+            down: "gone",
+            why: null,
+          }
+        );
       }
     )
     .post(`${OPEN_PATH}:key`, hidden, ({ params, request, server }) => {

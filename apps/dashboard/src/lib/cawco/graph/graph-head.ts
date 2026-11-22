@@ -26,8 +26,8 @@ export interface GraphHead {
   directions: HeadControl | null;
   /** What the agent wrote of the kept state, the title's description. */
   line: string;
-  /** What the drawing's view keeps out of sight, as entries of the head's More (Reduce motion). */
-  more: Snippet;
+  /** What the drawing's view keeps out of sight, as entries of the head's More (Reduce motion); null where it keeps nothing (an HTML design). */
+  more: Snippet | null;
   /** Pick, the head's one prominent action, on a design with directions; null with none. */
   pick: HeadControl | null;
   /** The component's name, the head's title. */

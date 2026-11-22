@@ -35,7 +35,7 @@ import {
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { InstanceRow, SpawnPayload } from "@cawco/core/protocol";
 import { QUESTION_DISMISSED } from "@cawco/core/question";
-import { artifactLink, sessionLink } from "@cawco/core/references";
+import { sessionLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
@@ -178,7 +178,7 @@ const onlineNames = (machines: Machine[]): string =>
  * ambiguous or (unless `offline`) offline name is refused with the machines
  * online now.
  */
-function resolveMachine(
+export function resolveMachine(
   machines: Machine[],
   target: string,
   offline = false
@@ -1227,15 +1227,13 @@ function repeatOfRefused(
  * held, with what it holds and its two ways out (continue it, or discard it
  * to a carry), the hold being its stopper's to decide (workspaces.ts
  * `carriesOff`); or retiring, holding nothing that is nowhere else, with a
- * handoff cutting it again; or, holding nothing but serving an artifact
- * (`serving`, work-items.ts `serving`: the hold `servedHold` reads), staying
- * while it serves that, each by its link. A read that failed says so, and
- * that a hold is told as it comes (workspaces.ts `heldNotice`).
+ * handoff cutting it again (what it serves comes back as it is opened,
+ * workspaces.ts `revive`). A read that failed says so, and that a hold is
+ * told as it comes (workspaces.ts `heldNotice`).
  */
 function stoppedHoldWords(
   workspaceId: string,
-  unlanded: Unlanded | { error: string } | null,
-  serving: readonly { id: string; title: string }[]
+  unlanded: Unlanded | { error: string } | null
 ): string {
   const ws = idHandle(workspaceId);
   if (!unlanded) {
@@ -1253,12 +1251,7 @@ function stoppedHoldWords(
   if (held.length > 0) {
     return `${workWords.stopHolds(ws, held.join(" and "))} ${workWords.holdWays(ws)}`;
   }
-  return serving.length > 0
-    ? workWords.stopServes(
-        ws,
-        serving.map((one) => artifactLink(one.id, one.title))
-      )
-    : workWords.stopRetires(ws);
+  return workWords.stopRetires(ws);
 }
 
 /** The refusal for a cold session whose clean workspace holds commits on no remote: `from` reaches them for a brief's price. */
@@ -1977,17 +1970,15 @@ export const handoffActions = ({
         return stopping;
       }
       const itemId = peer.row.workItemId;
-      const said = (await work.unlandedOf(itemId)) ?? {
+      const { unlanded } = (await work.unlandedOf(itemId)) ?? {
         unlanded: { error: `no work item ${itemId}` },
-        serving: [],
       };
-      const { unlanded, serving } = said;
       const item = work.item(itemId);
       if (!item) {
         throw new Error(`no work item ${itemId}`);
       }
       const { workspaceId } = item;
-      return `${stopping} ${stoppedHoldWords(workspaceId, unlanded, serving)}`;
+      return `${stopping} ${stoppedHoldWords(workspaceId, unlanded)}`;
     },
 
     interruptDelegate(target: string): string {

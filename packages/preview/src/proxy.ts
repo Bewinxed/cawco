@@ -85,6 +85,37 @@ export function loadOverlay(): Promise<string> {
   return overlay;
 }
 
+let designStage: Promise<string> | undefined;
+
+/**
+ * An HTML design's stage script (design-stage/stage.ts) as a minified
+ * browser IIFE, which the stage's document carries inline (hub
+ * preview-server serve.ts `serveDesign`). `build-binary.ts` writes it out
+ * to embed; a source checkout bundles it on first request.
+ */
+export async function bundleDesignStage(): Promise<string> {
+  const result = await bundled("An HTML design's stage", {
+    entrypoints: [new URL("./design-stage/stage.ts", import.meta.url).pathname],
+    target: "browser",
+    minify: true,
+    format: "iife",
+  });
+  return result.outputs[0].text();
+}
+
+/** {@link bundleDesignStage}'s script, built once per process and kept as {@link loadOverlay} keeps the overlay. */
+export function loadDesignStage(): Promise<string> {
+  designStage ??= (
+    standalone
+      ? Bun.file(embeddedFile("preview/design-stage.js")).text()
+      : bundleDesignStage()
+  ).catch((error: unknown) => {
+    designStage = undefined;
+    throw error;
+  });
+  return designStage;
+}
+
 /** The window global the overlay reads its host's allowed origins from (host-origin.ts). */
 const PARENTS_GLOBAL = "__cawcoParents";
 

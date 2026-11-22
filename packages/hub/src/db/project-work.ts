@@ -426,7 +426,7 @@ export interface WorkRowsDb {
   readonly heldToldQueued: (id: string, at: Date) => void;
   /** Every machine's held workspaces (schema.ts `WorkspaceState`), newest first. */
   readonly heldWorkspaces: () => WorkspaceRow[];
-  /** A machine's host-scope workspaces (schema.ts `workspaces.host`): each row stays active, where its items ran. */
+  /** A machine's active host-scope workspaces (schema.ts `workspaces.host`): an item there is live, or the hub has not settled it since. */
   readonly hostWorkspacesOn: (machineId: string) => WorkspaceRow[];
   /**
    * The sessions of the work items `parentInstanceIds` delegated, each once:

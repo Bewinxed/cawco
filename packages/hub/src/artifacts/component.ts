@@ -17,6 +17,7 @@ import {
   type CanvasSpec,
   type FrameRender,
   framesAlike,
+  GRAPH_WIDTHS_SAID,
   type Interaction,
   type RenderReport,
   type SectionRender,
@@ -44,7 +45,7 @@ export const COMPONENT_EXAMPLE =
   'artifact_create({ kind: "component", name: "pairing", title: "Pairing a phone", does: "judge", ask: "Judge pairing a phone: scan the code, approve it, and pin what reads wrong", file: "src/lib/Pairing.stories.ts", dials: [{ name: "answer", label: "What the phone answers", kind: "select", options: ["Approved", "Denied", "No answer"], target: { arg: "answer" } }] })';
 
 /** What `artifact_create` takes, said whole when a body is malformed or names no `title`, `does` or `ask`. */
-export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A design graph: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials?, directions? }; directions [{ file, name, line }], one per states file of one design, two or more (file may then be left out; a direction that differs only by a value is a dial); edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "text" | "action", label?, group?, min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
+export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A design graph: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials?, directions? }; directions [{ file, name, line }], one per states file of one design, two or more (file may then be left out; a direction that differs only by a value is a dial); an HTML design, for what is not in the codebase yet or a throwaway mockup: { kind: "component", name, title, does: "judge", ask, html or dir (holding page.html), dials?, directions? }, each direction { html or dir, name, line }, its dials cssVar alone; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "text" | "action", label?, group?, min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
 
 /** An example of a design's directions, quoted by their refusals. */
 const DIRECTIONS_EXAMPLE =
@@ -111,6 +112,156 @@ export function canvasProblem(
   }
   return null;
 }
+
+/**
+ * One direction of a design as a create names it: its states file (a live
+ * story's design), or its page (an HTML design's): `html`, or `dir`, a
+ * folder on the session's machine holding page.html, as a page's.
+ */
+export interface DirectionInput {
+  dir?: string | undefined;
+  file?: string | undefined;
+  html?: string | undefined;
+  line: string;
+  name: string;
+}
+
+/** Whether a design graph's create names HTML pages (`html`, `dir`, or a direction's) instead of states files: an HTML design (core stage.ts `htmlDesignOf`). */
+export const pagesAsked = (input: {
+  dir?: string | undefined;
+  directions?: readonly DirectionInput[] | undefined;
+  html?: string | undefined;
+}): boolean =>
+  input.html !== undefined ||
+  input.dir !== undefined ||
+  (input.directions ?? []).some(
+    (one) => one.html !== undefined || one.dir !== undefined
+  );
+
+/** An example of an HTML design, quoted by its refusals. */
+const DESIGN_EXAMPLE =
+  'artifact_create({ kind: "component", name: "inbox-empty", title: "An empty inbox", does: "judge", ask: "Judge the empty inbox at each width and pin what reads wrong", html: "<!doctype html>…", dials: [{ name: "radius", kind: "number", min: 0, max: 24, unit: "px", target: { cssVar: "--radius" } }] })';
+
+/** An HTML design's directions example, quoted by their refusals. */
+const DESIGN_DIRECTIONS_EXAMPLE =
+  'directions: [{ html: "<!doctype html>…", name: "Quiet list", line: "Every thread a row" }, { dir: "/tmp/mockups/cards", name: "Cards", line: "Each thread a card" }]';
+
+/** One page of an HTML design: what it is built from, its name and line as a direction's. */
+export interface DesignPageAsked {
+  from: { html: string } | { dir: string };
+  line?: string;
+  name?: string;
+}
+
+/** Why an HTML design can't take `dials`: one sets an arg, which a page has none of; null when none does. */
+export function designDialsProblem(
+  dials: readonly CanvasDial[]
+): string | null {
+  const args = dials.filter((one) => "arg" in one.target);
+  return args.length > 0
+    ? `An HTML design has no props, so dial ${args.map((one) => one.name).join(", ")} has no arg to set. Dial a CSS variable the page reads ({ cssVar: "--radius" }), or show a live story of the component to dial its props.`
+    : null;
+}
+
+/**
+ * An HTML design's pages as its create names them: its `html` or `dir`, or
+ * each direction's; or why they can't be taken, one sentence with the shape.
+ */
+export function designPagesOf(input: {
+  dials?: readonly CanvasDial[] | undefined;
+  dir?: string | undefined;
+  directions?: readonly DirectionInput[] | undefined;
+  file?: string | string[] | undefined;
+  html?: string | undefined;
+}): DesignPageAsked[] | string {
+  if (input.file !== undefined) {
+    return `A design graph shows live stories (file) or HTML pages (html, dir, or each direction's), never both. Example: ${DESIGN_EXAMPLE}.`;
+  }
+  const dialed = designDialsProblem(input.dials ?? []);
+  if (dialed) {
+    return dialed;
+  }
+  const directions = input.directions ?? [];
+  if (directions.length === 0) {
+    if (input.html !== undefined && input.dir !== undefined) {
+      return "An HTML design takes one of html or dir.";
+    }
+    return [
+      {
+        from:
+          input.html === undefined
+            ? { dir: input.dir ?? "" }
+            : { html: input.html },
+      },
+    ];
+  }
+  if (input.html !== undefined || input.dir !== undefined) {
+    return `An HTML design with directions takes each page on its direction: leave html and dir out. Example: ${DESIGN_DIRECTIONS_EXAMPLE}.`;
+  }
+  if (directions.length === 1) {
+    return `A design's directions are two or more of one design: one alone is the design, given as html or dir. Example: ${DESIGN_DIRECTIONS_EXAMPLE}.`;
+  }
+  if (directions.length > CANVAS_SPEC_LIMITS.files) {
+    return `A design graph takes at most ${CANVAS_SPEC_LIMITS.files} directions.`;
+  }
+  const names = new Set(directions.map((one) => one.name.trim()));
+  const unpaged = directions.filter(
+    (one) =>
+      one.file !== undefined ||
+      (one.html === undefined) === (one.dir === undefined)
+  );
+  if (names.size < directions.length || unpaged.length > 0) {
+    return `Each direction of an HTML design has a name of its own and its page: html, or dir holding page.html. Example: ${DESIGN_DIRECTIONS_EXAMPLE}.`;
+  }
+  return directions.map((one) => ({
+    from: one.html === undefined ? { dir: one.dir ?? "" } : { html: one.html },
+    name: one.name,
+    line: one.line,
+  }));
+}
+
+/** Each page's file in an HTML design's folder (core `DESIGN_PAGES_DIR`): its direction's name as a slug, else the design's, each once. */
+export const designFiles = (
+  name: string,
+  pages: readonly DesignPageAsked[],
+  folder: string
+): string[] => {
+  const taken = new Set<string>();
+  return pages.map((page, at) => {
+    const base =
+      (page.name ?? name)
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9]+/gu, "-")
+        .replaceAll(/^-+|-+$/gu, "")
+        .slice(0, 60) || `direction-${at + 1}`;
+    let slug = base;
+    for (let n = 2; taken.has(slug); n += 1) {
+      slug = `${base}-${n}`;
+    }
+    taken.add(slug);
+    return `${folder}/${slug}.html`;
+  });
+};
+
+/** A live story's design's directions as its canvas takes them, each naming its states file; or why one names none. */
+export function storyDirectionsOf(
+  directions: readonly DirectionInput[] | undefined
+): CanvasDirection[] | undefined | string {
+  if (directions === undefined) {
+    return;
+  }
+  const taken: CanvasDirection[] = [];
+  for (const one of directions) {
+    if (one.file === undefined) {
+      return `Each direction of a design is a states file: { file, name, line }. Example: ${DIRECTIONS_EXAMPLE}.`;
+    }
+    taken.push({ file: one.file, name: one.name, line: one.line });
+  }
+  return taken;
+}
+
+/** What an HTML design's create answers beside its link: what the person can do there, and its next reads. */
+export const DESIGN_HINT = `The design graph shows each page at ${GRAPH_WIDTHS_SAID} wide, light and dark, with its cssVar dials and the person's pins. artifact_read({ id }) answers their pins, dials and pick; artifact_create again under the same name replaces the pages, picks kept.`;
 
 /** The canvas's spec its page is given: its name, edges, groups, dials and directions (each its states file as the stage names it). */
 export const specOf = (name: string, input: CanvasInput): CanvasSpec => ({

@@ -1,6 +1,6 @@
 /**
  * An artifact's files under the artifacts' root (`ARTIFACTS_ROOT/<id>/`): a
- * page's HTML (`index.html`), a decision page's program (decision-program.ts
+ * page's HTML (`index.html`), an HTML design's pages (`pages/`), a decision page's program (decision-program.ts
  * `PROGRAM_FILE`) and the pictures it shows (`files/`), a canvas's or a
  * delivered page's latest picture, a page's or preview's thumbnails. The
  * artifact service reads and writes that folder through this alone; a
@@ -8,6 +8,7 @@
  */
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { DESIGN_PAGES_DIR } from "@cawco/core/stage";
 import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
 import {
@@ -101,6 +102,31 @@ export const createPageStore = (root: string) => {
       }
     },
 
+    /**
+     * An HTML design's pages written (core `DESIGN_PAGES_DIR`), each at its
+     * file from the artifact's folder: a design's pages are its revision's
+     * alone, so the last revision's go first.
+     */
+    writeDesign: (
+      id: string,
+      pages: readonly { file: string; html: string }[]
+    ) => {
+      rmSync(join(folder(id), DESIGN_PAGES_DIR), {
+        recursive: true,
+        force: true,
+      });
+      for (const page of pages) {
+        writeStateFileSync(join(folder(id), page.file), page.html);
+      }
+    },
+
+    /** An HTML design's pages as it keeps them, by its files, in their order; an empty one for a file it has not. */
+    designPages: (id: string, files: readonly string[]): string[] =>
+      files.map((file) => {
+        const path = join(folder(id), file);
+        return existsSync(path) ? readFileSync(path, "utf8") : "";
+      }),
+
     /** The pictures decision page `id` shows, by the name each Image of its kept program `program` gives. */
     shownPictures: (id: string, program: string): Map<string, Uint8Array> => {
       const shown = new Map<string, Uint8Array>();
@@ -128,6 +154,10 @@ export const createPageStore = (root: string) => {
       if (existsSync(folder(version))) {
         rmSync(join(folder(id), "files"), { recursive: true, force: true });
         rmSync(join(folder(id), PROGRAM_FILE), { force: true });
+        rmSync(join(folder(id), DESIGN_PAGES_DIR), {
+          recursive: true,
+          force: true,
+        });
         cpSync(folder(version), folder(id), { recursive: true, force: true });
       }
     },

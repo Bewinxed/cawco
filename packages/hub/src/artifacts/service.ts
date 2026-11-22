@@ -125,6 +125,7 @@ import {
   canvasPath,
   type DesignQuery,
   type EmbedShape,
+  htmlDesignOf,
   STAGE_IDLE_MS,
   type StageFrame,
   type StageState,
@@ -160,7 +161,9 @@ import {
   type CanvasInput,
   CREATE_SHAPE,
   canvasProblem,
+  designDialsProblem,
   directionsStaged,
+  pagesAsked,
   specOf,
 } from "./component";
 import type { ArtifactServiceDeps, HandedArtifactFile } from "./deps";
@@ -176,7 +179,6 @@ import {
   answeredWhole,
   answersUnheard,
   heardSeq,
-  ms as isoMs,
   mayWait,
   movedOn,
   needOf,
@@ -190,7 +192,7 @@ import {
 import { answersReplaced } from "./overwrite";
 import { createPageStore } from "./page-store";
 import { type Question, stillAsked } from "./questions";
-import { type ServedOwed, servedOf, servedPin, sheetOf } from "./served";
+import { servedOf, servedPin, sheetOf } from "./served";
 import {
   type ArtifactInput,
   type ArtifactList,
@@ -247,7 +249,10 @@ const KIND_FIELDS = {
     takes: "port or dir",
   },
   canvas: { fields: ["elements", "mermaid"], takes: "elements or mermaid" },
-  component: { fields: ["file"], takes: "file" },
+  component: {
+    fields: ["file", "html", "dir"],
+    takes: "file (live stories), or html or dir (an HTML design)",
+  },
 } as const;
 
 const INPUT_FIELDS = [
@@ -346,11 +351,11 @@ const SCREEN_WORDS =
 const CANVAS_AS_SCREEN =
   'A canvas is a drawing of what is not a screen. A design is its real components on the design graph: kind "component", does "judge" (show skill).';
 
-/** A design judged as a preview or an HTML page where the project's designs open on the design graph. */
+/** A design judged as a preview or an HTML page: where it goes instead, the design graph, which takes an HTML page too. */
 const JUDGED_OFF_GRAPH = {
   preview:
-    'This project\'s designs open on the design graph, where they switch its widths and scheme: kind "component" with the screen\'s live story, does "judge". A preview is the running app, for a flow they try (does "try").',
-  page: 'This project\'s designs open on the design graph: its real components in a live story, kind "component", does "judge". An HTML page is for a stack with no stage.',
+    'A design is judged on the design graph, where the person switches its widths and scheme: kind "component", does "judge", with file (a live story of a component in the codebase) or html or dir (an HTML page, for what is not in the codebase yet or a throwaway mockup). A preview is the running app, for a flow they try (does "try").',
+  page: 'A design is judged on the design graph, at its widths, light and dark, with pins and dials: send this HTML as kind "component" with html (or dir holding page.html), does "judge". A component in the codebase is shown as its live story (file) instead.',
 } as const;
 
 /** A choice in a page's HTML: a kit choice, or a field the person fills. */
@@ -786,8 +791,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * `try` its session put before him ({@link putBeforePerson}: not handed
    * up or held, its session neither ended nor moved on) that he hasn't sent
    * since its last revision ({@link sentOf}), the owner's rule of
-   * 2026-11-04 that a preview he hasn't sent is still his to judge. What
-   * holds a workspace is {@link owedToPerson}, not this.
+   * 2026-11-04 that a preview he hasn't sent is still his to judge. No
+   * artifact holds its workspace: one opened after its workspace went
+   * brings it back (workspaces.ts `revive`). What refuses a workspace's
+   * archive or discard on purpose (`waitingOnPerson`).
    */
   const waitsOnPerson = (row: ArtifactRow): boolean => {
     if (row.does === "try" && !sentOf(row) && putBeforePerson(row)) {
@@ -802,60 +809,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         sessionsOf(row, kept)
       ) !== null
     );
-  };
-
-  /**
-   * Whether the person has acted on an artifact, by its `facts`, since its
-   * session last put it before them. Its put is the newest of its revision
-   * (`meta.revisedAt`), its create or show (its ask, `meta.asked`; never
-   * the row's `updatedAt`, which the person's own marks move), and an
-   * agent's reply on one of its pins that asks them something
-   * (`askingAt`). A decision page is acted on once it is answered: no card
-   * open, or a Send since its put. Anything else is acted on by an act of
-   * theirs since its put (`actedAt`): a pick, note or value, a pin, an
-   * entry on a pin or its resolve, or a Send. A look is no act, nor a dial
-   * moved (core `answersIn`): a design graph he is still tuning holds its
-   * workspace.
-   */
-  const actedOn = (facts: ArtifactFacts): boolean => {
-    const put = Math.max(
-      isoMs(facts.revisedAt),
-      isoMs(facts.asked?.at),
-      isoMs(facts.askingAt)
-    );
-    if (facts.answers !== null) {
-      return (
-        facts.answers.answered === facts.answers.asked ||
-        isoMs(facts.sentAt) > put
-      );
-    }
-    return facts.actedAt !== null && isoMs(facts.actedAt) > put;
-  };
-
-  /**
-   * THE ONE RULE OF WHAT HOLDS A WORKSPACE FOR THE PERSON, read by
-   * everything that deletes a workspace or refuses to (`servedOwed`,
-   * `waitingOnPerson`; workspaces.ts `holdsOf`): an artifact a session put
-   * in a panel is owed to the person until they act on it
-   * ({@link actedOn}) or it is deleted. Every put owes it again: a
-   * revision, a show, a reply that asks. A next version held for its
-   * parent is owed until its parent opens it, as the version the person
-   * will see then. A newer version releases the older one's workspace by
-   * moving the artifact's source off it (db artifacts.ts `resource`), and
-   * nothing else does: not a view having it on screen, not a session's
-   * turn ending or its item ending, not time. On 2026-11-21 a design graph
-   * the owner had not judged lost its workspace 22 s after a view
-   * acknowledged its show, when a look counted as seen. Never owed: the
-   * person's own draft, a design check's verifier's working material, a
-   * maker's own reading (`meta.reading`), and an option's media on a
-   * decision page, which is owed through its page (`servedOwed`).
-   */
-  const owedToPerson = (row: ArtifactRow): boolean => {
-    const facts = withMedia(row, factsOf(row));
-    if (facts.draft || facts.verifier || facts.reading || facts.media) {
-      return false;
-    }
-    return row.heldFor !== null || !actedOn(facts);
   };
 
   /**
@@ -1192,10 +1145,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     docs.drop(row.id);
     db.remove(row.id);
     store.remove(row.id);
-    const served = media.flatMap((id) => db.get(id)?.machineId ?? []);
-    if (served.length > 0) {
-      deps.mediaFreed?.([...new Set(served)]);
-    }
     if (row.heldFor !== null) {
       versionMoved(row);
     }
@@ -1439,6 +1388,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     askVerify,
     componentHash,
     componentWritten,
+    createDesign,
     createSheet,
     readSheet,
     shapesOf,
@@ -1467,6 +1417,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
     relistOf,
     stampMeta,
+    store,
   });
 
   /** A new ask in the doc, as a revision is: every open view's head morphs to it, and a Send before it is answered. */
@@ -2242,7 +2193,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? Promise.resolve(createDraft(making.owner, input))
         : createCanvas(making, input);
     }
-    return input.kind === "component" ? createSheet(making, input) : null;
+    if (input.kind !== "component") {
+      return null;
+    }
+    return pagesAsked(input)
+      ? createDesign(making, input)
+      : createSheet(making, input);
   };
 
   /**
@@ -2607,6 +2563,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ownersRead: boolean,
     ask: Omit<PictureAsk, "link"> & { png: boolean }
   ) => {
+    // An HTML design keeps no stage: no frame to draw, no story, no states file to verify.
+    if (
+      htmlDesignOf(row) &&
+      (ask.png || ask.render || ask.state || ask.story || ask.verify)
+    ) {
+      return problem(400, {
+        code: "artifact-read-state-unfit",
+        detail: `${row.name} is an HTML design: the hub keeps no frames, stories or render of it. artifact_read({ id }) answers its pins, dials and pick.`,
+      });
+    }
     const answer = await readSheet(row, since, ownersRead, ask);
     if (answer instanceof ElysiaStatus || !ask.verify) {
       return answer;
@@ -3212,10 +3178,51 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * A design judged as a preview or an HTML page (no program) in a project
-   * whose designs open on the design graph, refused with where it goes: a
-   * project that has made a design graph has a stage, so its designs are
-   * its real components there.
+   * Design graph `row`'s files and the spec an `artifact_update` of its
+   * edges, groups, dials or directions makes, or why it can't: a row that
+   * is no design graph, or a spec that does not hold (an HTML design's
+   * dials set CSS variables alone).
+   */
+  const canvasAsked = (row: ArtifactRow, input: CanvasInput) => {
+    const design = htmlDesignOf(row);
+    const canvas = sheetOf(row) ?? design;
+    if (!canvas?.spec || row.source.path === undefined) {
+      return problem(409, {
+        code: "artifact-canvas-spec-not-sheet",
+        detail: `${row.name} is a ${row.kind}: edges, group, dials and directions are a design graph's.`,
+      });
+    }
+    const { files } = canvasOf(row.source.path);
+    // Each direction names its file as the stage does, from the toolchain
+    // root; an HTML design's, its page as the design names it.
+    const directions =
+      input.directions &&
+      (design
+        ? input.directions
+        : directionsStaged(input.directions, [], files));
+    const misfit =
+      (design && input.dials && designDialsProblem(input.dials)) ||
+      canvasProblem({ ...input, directions }, files);
+    if (misfit) {
+      return problem(400, {
+        code: "artifact-canvas-spec-unfit",
+        detail: misfit,
+      });
+    }
+    const spec = specOf(row.name, {
+      edges: input.edges ?? canvas.spec.edges,
+      group: input.group ?? canvas.spec.group,
+      dials: input.dials ?? canvas.spec.dials,
+      directions: directions ?? canvas.spec.directions,
+    });
+    return { files, spec };
+  };
+
+  /**
+   * A design judged as a preview or an HTML page (no program) in a project,
+   * refused with where it goes: the design graph, which opens a live story
+   * of a component in the codebase, or an HTML page the hub keeps for what
+   * is not (the owner's pick on design-workspace-release#html, 2026-11-22).
    */
   const judgedOffGraph = (
     instance: InstanceRow,
@@ -3226,13 +3233,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       input.kind === "preview" || (input.kind === "page" && !program)
         ? input.kind
         : null;
-    if (input.does !== "judge" || kind === null || !instance.projectId) {
-      return;
-    }
-    const onGraph = db
-      .ofProject(instance.projectId)
-      .some((row) => row.kind === "component");
-    if (onGraph) {
+    if (input.does === "judge" && kind !== null && instance.projectId) {
       return problem(400, {
         code: "artifact-ask-unfit",
         detail: JUDGED_OFF_GRAPH[kind],
@@ -3773,70 +3774,42 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * Of `served` (the artifacts a workspace serves: workspaces.ts
-     * `servedFrom`), each one the person is still owed ({@link
-     * owedToPerson}), a held next version as the artifact it is held for,
-     * and every decision page he is still owed that shows one of them as a
+     * `servedFrom`), each one waiting on the person ({@link
+     * waitsOnPerson}), a held next version as the artifact it is held for,
+     * and every decision page waiting on him that shows one of them as a
      * Canvas or Preview piece: what a workspace's archive or discard on
-     * purpose refuses on.
+     * purpose refuses on. Nothing here holds a workspace.
      */
     waitingOnPerson: (served: readonly ArtifactRow[]): ArtifactRow[] => {
       if (served.length === 0) {
         return [];
       }
       const pages = pagesShowing();
-      const owed = new Map<string, ArtifactRow>();
+      const onPerson = new Map<string, ArtifactRow>();
       for (const one of served) {
         const id = one.heldFor ?? one.id;
-        if (owedToPerson(one)) {
-          owed.set(id, db.get(id) ?? one);
+        const shown = db.get(id) ?? one;
+        if (waitsOnPerson(shown)) {
+          onPerson.set(id, shown);
         }
         for (const page of pages.get(id) ?? []) {
-          if (owedToPerson(page)) {
-            owed.set(page.id, page);
+          if (waitsOnPerson(page)) {
+            onPerson.set(page.id, page);
           }
         }
       }
-      return [...owed.values()];
+      return [...onPerson.values()];
     },
 
     /**
-     * Of `served` (workspaces.ts `servedFrom`), each one its workspace's
-     * retirement still waits on, with why (workspaces.ts `holdsOf`): the
-     * person is still owed it, or a decision page showing it ({@link
-     * owedToPerson}); or it is a folder preview, which no stage serves,
-     * that a view of the person's had on screen less than {@link
-     * STAGE_IDLE_MS} ago, as a stage stays up that long after its last use.
-     * Nothing else of a row holds: whatever else it shows is held while its
-     * stage runs (agent stage.ts sleeps one unused for half an hour), and
-     * the artifact stays in its list, saying its workspace was archived once
-     * it was (the owner's rule, 2026-11-15: "once nothing in it is unique").
-     */
-    servedOwed: (served: readonly ArtifactRow[]): ServedOwed[] => {
-      if (served.length === 0) {
-        return [];
-      }
-      const pages = pagesShowing();
-      return served.flatMap((one): ServedOwed[] => {
-        const showing = pages.get(one.heldFor ?? one.id) ?? [];
-        if (owedToPerson(one) || showing.some(owedToPerson)) {
-          return [{ row: one, why: "owed" }];
-        }
-        const looked = factsOf(one).lookedAt;
-        return "dir" in one.source &&
-          looked !== null &&
-          Date.now() - Date.parse(looked) < STAGE_IDLE_MS
-          ? [{ row: one, why: "looked" }]
-          : [];
-      });
-    },
-
-    /**
-     * Keeps up each stage on a machine in `online` that serves the person
-     * an artifact waiting on him, itself or by a decision page showing it
-     * (preview.ts `waitingStages`): a preview's server or a sheet's stage,
-     * a design graph's among them, started or woken as a page going out
-     * warms it, which also restarts its idle time (agent stage.ts `used`),
-     * so it never sleeps under something he has yet to answer. On
+     * Keeps up each live stage on a machine in `online` that serves the
+     * person an artifact waiting on him, itself or by a decision page
+     * showing it (preview.ts `waitingStages`): a preview's server or a
+     * sheet's stage, a design graph's among them, its idle time restarted
+     * (agent stage.ts `used`), so it never sleeps for want of use under
+     * something he has yet to answer while its maker is awake. One asleep
+     * (its machine's 8 live previews, agent stage.ts `roomFor`) is woken by
+     * his next open, never here. On
      * 2026-11-08 the frames of plan page fdbe3bf8 were asleep when he
      * opened it; on 2026-11-21 design graph 4a3c2d92 was dark, its sheet
      * no server. Each stage is asked once per {@link KEEP_UP_MS}, a third of what puts it to sleep:
@@ -4909,6 +4882,82 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
+     * Artifact `id`'s source moved to workspace `to`, the later workspace its
+     * own workspace's work went on in and landed, as it is opened after its
+     * own workspace went with no head to cut it again at (workspaces.ts
+     * `revive`, `moved`). A design graph's sheet is opened on `to`'s stage
+     * at the same states files, its port and toolchain root as that stage
+     * names them; a served preview's server runs in `to` from now on, its
+     * pin cut there by the open (agent stage.ts `sourceTree`). Written as
+     * every move of a row's source is: a revision, then the source (db
+     * artifacts.ts `resource`), so every panel and tab showing it loads it
+     * again (server.ts `onSourceMoved`). Refused, the row as it was, when
+     * `to`'s stage can't open it.
+     */
+    moveServed: async (id: string, to: { id: string; machineId: string }) => {
+      const row = db.get(id);
+      if (!(row && "port" in row.source)) {
+        return problem(404, {
+          code: "artifact-not-served",
+          detail: `No design or served preview ${id} to move.`,
+        });
+      }
+      const sheet = sheetOf(row);
+      const [first] = sheet?.files ?? [];
+      let moved: {
+        machineId: string;
+        source: PreviewSource;
+        stage?: StageState;
+      };
+      if (sheet && first !== undefined) {
+        const staged = await deps.stage(
+          { workspace: to.id },
+          first,
+          sheet.files
+        );
+        if (staged instanceof ElysiaStatus) {
+          return staged;
+        }
+        moved = {
+          machineId: staged.machineId,
+          source: {
+            ...row.source,
+            port: staged.opened.port,
+            workspace: to.id,
+            stage: { dir: staged.opened.dir, file: staged.opened.file },
+          },
+          stage: staged.opened.state,
+        };
+      } else if (servedOf(row)) {
+        const { pin: _pin, ...unpinned } = row.source;
+        moved = {
+          machineId: to.machineId,
+          source: { ...unpinned, workspace: to.id },
+        };
+      } else {
+        return problem(409, {
+          code: "artifact-not-served",
+          detail: `${row.name} is no design graph or served preview, so it is not served from a workspace.`,
+        });
+      }
+      const next = stillThere(
+        db.update(row.id, {
+          revision: row.revision + 1,
+          updatedAt: new Date(),
+        }),
+        row.id
+      );
+      db.resource(row.id, { machineId: moved.machineId, source: moved.source });
+      if (moved.stage) {
+        writeStage(next, moved.stage);
+      }
+      console.log(
+        `[artifacts] ${row.name} (${row.id.slice(0, 8)}): moved to workspace ${to.id.slice(0, 8)}, where its workspace's work went on and landed`
+      );
+      return next;
+    },
+
+    /**
      * `artifact_update` of a design graph's edges, groups, dials or directions: its
      * page's address changes, so the panel draws it again at the next
      * revision. Answers what changed and the canvas's new spec.
@@ -4926,30 +4975,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row instanceof ElysiaStatus) {
         return row;
       }
-      const sheet = sheetOf(row);
-      if (!(sheet && "port" in row.source)) {
-        return problem(409, {
-          code: "artifact-canvas-spec-not-sheet",
-          detail: `${row.name} is a ${row.kind}: edges, group, dials and directions are a design graph's.`,
-        });
+      const asked = canvasAsked(row, input);
+      if (asked instanceof ElysiaStatus) {
+        return asked;
       }
-      const { files } = canvasOf(row.source.path ?? "");
-      // Each direction names its file as the stage does, from the toolchain root.
-      const directions =
-        input.directions && directionsStaged(input.directions, [], files);
-      const misfit = canvasProblem({ ...input, directions }, files);
-      if (misfit) {
-        return problem(400, {
-          code: "artifact-canvas-spec-unfit",
-          detail: misfit,
-        });
-      }
-      const spec = specOf(row.name, {
-        edges: input.edges ?? sheet.spec.edges,
-        group: input.group ?? sheet.spec.group,
-        dials: input.dials ?? sheet.spec.dials,
-        directions: directions ?? sheet.spec.directions,
-      });
+      const { files, spec } = asked;
       // Its new address on the same live stage (served.ts `pinTarget`).
       const answer = await changedBy(instance, row, async (target) => {
         db.resource(target.id, {
@@ -5112,11 +5142,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Machine `machineId`'s agent registered again: it is sent every pin an
-     * artifact on it is served from (core `STAGE_PINS`), and lets go of every
-     * other one it holds, one whose unpin it missed while it was away among
-     * them (agent stage.ts `keepPins`). The pins are the hub's: its rows
-     * keep them.
+     * Machine `machineId`'s agent registered again, or the workspace sweep
+     * looked at it (workspace-retire.ts): it is sent every pin an artifact
+     * on it is served from (core `STAGE_PINS`), and lets go of every other
+     * one it holds, one whose unpin it missed while it was away, or whose
+     * artifact went with its session, among them (agent stage.ts
+     * `keepPins`). The pins are the hub's: its rows keep them.
      */
     pinsBack: (machineId: string): void => {
       deps.keepPins(machineId, db.pinsOn(machineId));

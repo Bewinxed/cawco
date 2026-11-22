@@ -19,6 +19,7 @@ export const LONG_CALLS: Readonly<Record<string, string>> = {
   finish_item: "Landing the work item",
   task_start: "Creating the attempt's workspace",
   start_session: "Waiting for the machine to start the session",
+  project_create: "Starting the project's conversation",
 };
 
 /**

@@ -6,9 +6,12 @@ import type { PlaceRow, ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { HubContext } from "./hub-context";
 import { createLeadHome } from "./lead-home";
+import { projectName } from "./project-edit";
 import { projectRoot } from "./project-folder";
 import type {
   CreateOrJoinProject,
+  NewProject,
+  NewProjectBody,
   ProjectAsk,
   ProjectMade,
   ProjectMakeProblem,
@@ -35,6 +38,63 @@ export type ProjectJoiningContext = Pick<
   | "routines"
   | "runOnMachine"
 >;
+
+/**
+ * The name `POST /api/projects` makes a project under: the one asked, else
+ * for New project's words the placeholder Caw names it from (caw.ts
+ * `project_name`); none when neither was sent.
+ */
+const askedProjectName = (body: {
+  name?: string;
+  prompt?: string;
+}): string | undefined =>
+  body.name ?? (body.prompt?.trim() ? projectWords.placeholderName : undefined);
+
+/** The name a project is asked under, kept as a rename keeps it, or why the ask is refused before anything is read. */
+const nameAsked = (body: NewProjectBody) => {
+  if ((body.machineId === undefined) !== (body.cwd === undefined)) {
+    return problem(400, {
+      code: "checkout-machine-folder-send",
+      detail:
+        "A checkout is a machine and a folder: send both machineId and cwd, or neither.",
+    });
+  }
+  const asked = askedProjectName(body);
+  if (asked === undefined) {
+    return problem(400, {
+      code: "project-needs-name",
+      detail: "A project needs a name.",
+    });
+  }
+  const name = projectName(asked);
+  // Said as every refusal of a project's making is, the shape the shipped
+  // apps read (wire-compat.ts).
+  return typeof name === "string"
+    ? name
+    : problem(400, {
+        code: "project-not-made",
+        detail: name.response.detail,
+      });
+};
+
+/** `POST /api/projects`' body as the ask {@link createProjectJoining}'s `createOrJoinProject` takes, under `name`. */
+const projectAsk = (body: NewProjectBody, name: string): ProjectAsk => ({
+  name,
+  ...(body.machineId && body.cwd
+    ? { checkout: { machineId: body.machineId, cwd: body.cwd } }
+    : {}),
+  ...(body.caw === undefined ? {} : { caw: body.caw }),
+  ...(body.template ? { tapped: body.template } : {}),
+  ...(body.newOnly ? { newOnly: body.newOnly } : {}),
+  ...(body.prompt?.trim()
+    ? {
+        setup: {
+          prompt: body.prompt,
+          ...(body.promptId ? { promptId: body.promptId } : {}),
+        },
+      }
+    : {}),
+});
 
 export const createProjectJoining = (ctx: ProjectJoiningContext) => {
   /** Where a project's Caw starts before any checkout of it is online (lead-home.ts). */
@@ -68,8 +128,8 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * template tapped on New project is kept as `tapped`, and its setup page's
    * Send applies the shape picked (setup.ts `setupPicksOf`). Given `setup`
    * (your prompt), its conversation starts with it and sets it up, on or off
-   * (caw.ts `setup`). The dashboard's "New project" and an accepted project
-   * offer come here.
+   * (caw.ts `setup`). The dashboard's "New project", an accepted project
+   * offer and a session's `project_create` come here.
    */
   /** A paused machine's folder is read nothing: the person is told now (project-machine-paused), not kept waiting for the pause's end. */
   const folderUnread = (machineId: string | undefined) => {
@@ -81,18 +141,6 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
         })
       : undefined;
   };
-
-  /**
-   * The name `POST /api/projects` makes a project under: the one asked, else
-   * for New project's words the placeholder Caw names it from (caw.ts
-   * `project_name`); none when neither was sent.
-   */
-  const askedProjectName = (body: {
-    name?: string;
-    prompt?: string;
-  }): string | undefined =>
-    body.name ??
-    (body.prompt?.trim() ? projectWords.placeholderName : undefined);
 
   /** Each project being made now, by the id its prompt went as ({@link createOrJoinProject}). */
   const projectsMaking = new Map<
@@ -142,6 +190,17 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     }
   };
 
+  /** A new project only ({@link ProjectAsk.newOnly}): a folder `holder` holds already, by place or by its repository's remote, refused. */
+  const folderHeld = (
+    holder: ProjectRow,
+    checkout: { machineId: string; path: MachinePath },
+    remote?: string | null
+  ) =>
+    problem(409, {
+      code: "project-folder-held",
+      detail: `${checkout.path} on ${ctx.machineName(checkout.machineId)} belongs to the project “${holder.name}” already${remote ? `, which has its repository ${remote}` : ""}: one folder or repository is one project. Work in that project, or name another folder.`,
+    });
+
   /** A folder of a repository `known` links joins it as a checkout, its root commit kept. */
   const joinProject = (
     known: ProjectRow,
@@ -168,39 +227,54 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     };
   };
 
-  const makeOrJoinProject = async (
-    asked: ProjectAsk
-  ): Promise<ProjectMade | ProjectMakeProblem> => {
-    const path =
-      asked.checkout &&
-      ctx.db.machinePathOn(asked.checkout.machineId, asked.checkout.cwd);
+  /**
+   * The folder a project is asked at, as a place on its machine: none when
+   * none was asked, else refused for a path that is no absolute one there,
+   * one in its scratch root, a paused machine's, or, for a new project only,
+   * one a project holds as a place.
+   */
+  const checkoutAsked = (asked: ProjectAsk) => {
+    if (!asked.checkout) {
+      return;
+    }
+    const { machineId } = asked.checkout;
+    const path = ctx.db.machinePathOn(machineId, asked.checkout.cwd);
     if (path instanceof MachinePathRefused) {
       return problem(400, {
         code: "project-checkout-path-unfit",
         detail: path.message,
       });
     }
-    const checkout = asked.checkout &&
-      path && { machineId: asked.checkout.machineId, path };
-    const scratch =
-      checkout &&
-      scratchPlaceRefusal(
-        ctx.db.machineHome(checkout.machineId),
-        checkout.path
-      );
-    if (scratch) {
-      return scratch;
+    const refused =
+      scratchPlaceRefusal(ctx.db.machineHome(machineId), path) ??
+      folderUnread(machineId);
+    if (refused) {
+      return refused;
     }
-    const unread = folderUnread(checkout?.machineId);
-    if (unread) {
-      return unread;
+    const placed = asked.newOnly
+      ? ctx.db.projectHolding(machineId, path)
+      : undefined;
+    const holder = placed ? ctx.db.project(placed) : undefined;
+    return holder
+      ? folderHeld(holder, { machineId, path })
+      : { machineId, path };
+  };
+
+  const makeOrJoinProject = async (
+    asked: ProjectAsk
+  ): Promise<ProjectMade | ProjectMakeProblem> => {
+    const checkout = checkoutAsked(asked);
+    if (checkout instanceof ElysiaStatus) {
+      return checkout;
     }
     const { remote, root } = checkout
       ? await readCheckout(ctx.runOnMachine, checkout.machineId, checkout.path)
       : NOTHING_READ;
     const known = remote ? ctx.db.projectByRemote(remote) : undefined;
     if (known && checkout) {
-      return joinProject(known, { ...checkout, root });
+      return asked.newOnly
+        ? folderHeld(known, checkout, remote)
+        : joinProject(known, { ...checkout, root });
     }
     const created = ctx.db.createProject({
       id: crypto.randomUUID(),
@@ -212,12 +286,13 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     });
     ctx.projectsChanged();
     ctx.projectStarters.touched(created.id, "project created");
-    startProject(created, asked);
+    const conversation = startProject(created, asked);
     const made: ProjectMade = {
       project: created,
       place: madeFrom(created),
       placeAdded: false,
       joined: false,
+      ...(conversation === undefined ? {} : { conversation }),
     };
     lookFor(checkoutOf(created));
     return made;
@@ -229,9 +304,14 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * the person's press answers once the project is made, and its page shows
    * Caw starting (his view's `starting`, his session's row) and why he
    * could not (his view's `problem`, caw.ts `startProblems`). Your prompt
-   * sets the project up whether its Caw is on or off.
+   * sets the project up whether its Caw is on or off. Answers the
+   * conversation's session id as it starts (undefined when it did not),
+   * for a caller that waits on it; none without a prompt.
    */
-  const startProject = (created: ProjectRow, asked: ProjectAsk): void => {
+  const startProject = (
+    created: ProjectRow,
+    asked: ProjectAsk
+  ): Promise<string | undefined> | undefined => {
     // Its nightly memory run, made with it (routines.ts `ensureCurator`).
     const curated = ctx.routines.ensureCurator(created.id);
     if (curated) {
@@ -239,24 +319,50 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
         `[project-joining] ${created.id}: its nightly memory run was not made: ${curated.response.detail}`
       );
     }
-    if (asked.setup) {
-      detach(
-        ctx.caw.setup(created.id, asked.setup).then((set) => {
-          if (set instanceof ElysiaStatus) {
-            console.warn(
-              `[project-joining] ${created.id}: Caw did not set it up: ${set.response.detail}`
-            );
-          }
-        }),
-        `set up ${created.id} with Caw`
-      );
+    if (!asked.setup) {
+      return;
     }
+    const conversation = ctx.caw.setup(created.id, asked.setup).then((set) => {
+      if (set instanceof ElysiaStatus) {
+        console.warn(
+          `[project-joining] ${created.id}: Caw did not set it up: ${set.response.detail}`
+        );
+        return;
+      }
+      return set;
+    });
+    detach(conversation, `set up ${created.id} with Caw`);
+    return conversation;
+  };
+
+  /**
+   * One way a project is asked for, whoever asks: `POST /api/projects` and
+   * a session's `project_create` (project-create.ts). A checkout is a
+   * machine and a folder together; the name is kept as a rename keeps it
+   * (project-edit.ts `projectName`), and with none, words take the
+   * placeholder Caw names it from. Refused in the hub's words.
+   */
+  const newProject: NewProject = async (body) => {
+    const name = nameAsked(body);
+    if (name instanceof ElysiaStatus) {
+      return name;
+    }
+    // A folder that is no absolute path on its machine is refused in the
+    // hub's words (db `placePathOn`).
+    const made = await createOrJoinProject(projectAsk(body, name));
+    if ("response" in made) {
+      return problem(made.status, {
+        code: "project-not-made",
+        detail: made.response.detail,
+      });
+    }
+    return made;
   };
 
   return {
     leadHome,
     workPlaceOf,
-    askedProjectName,
+    newProject,
     createOrJoinProject,
   };
 };

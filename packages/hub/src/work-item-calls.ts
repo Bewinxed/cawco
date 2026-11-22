@@ -179,23 +179,16 @@ export const workItemCalls = (ctx: WorkItemCallsDeps) => ({
 
   /**
    * What item `id`'s workspace holds on no remote now (workspaces.ts
-   * `unlandedOf`), or why it could not be read, and what it serves, which
-   * holds its retirement; nothing when there is no such item.
+   * `unlandedOf`), or why it could not be read; nothing when there is no
+   * such item.
    */
-  async unlandedOf(id: string): Promise<
-    | {
-        serving: ReturnType<WorkItems["serving"]>;
-        unlanded: Awaited<ReturnType<WorkItemCallsDeps["coldWork"]>>;
-      }
-    | undefined
+  async unlandedOf(
+    id: string
+  ): Promise<
+    { unlanded: Awaited<ReturnType<WorkItemCallsDeps["coldWork"]>> } | undefined
   > {
     const item = ctx.workItems.item(id);
-    return item
-      ? {
-          unlanded: await ctx.coldWork(item.instanceId),
-          serving: ctx.workItems.serving(item.workspaceId),
-        }
-      : undefined;
+    return item ? { unlanded: await ctx.coldWork(item.instanceId) } : undefined;
   },
 
   /**

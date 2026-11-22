@@ -516,7 +516,7 @@
   {/if}
 {/snippet}
 
-<!-- A version whose workspace is gone fills again only as its session makes
+<!-- A version that can't come back fills again only as its session makes
      it again (The Empty Starts Work Rule): asked in that session's composer
      where it stands beside this pane, unsent; else its session opened. -->
 {#snippet goneAsk()}
@@ -970,7 +970,7 @@
     {@render paneSheet.graphHead.components()}
     <DropdownMenu.Separator />
   {/if}
-  {#if paneSheet.graphHead}
+  {#if paneSheet.graphHead?.more}
     {@render paneSheet.graphHead.more()}
     <DropdownMenu.Separator />
   {/if}
@@ -1230,6 +1230,7 @@
           changesTools={changesBar}
           modeTools={modeBar}
           {modeCompact}
+          page={!!paneSubject.htmlDesign}
           ask={paneSubject.artifact.ask ?? ""}
           files={paneSheet.sheetCanvas.files}
           frame={frameTags}
@@ -1392,7 +1393,7 @@
       role="alert"
       transition:appear
     >
-      <!-- A version whose workspace is gone is no fault that may pass: it is archived, and says so. -->
+      <!-- A version that can't come back (its workspace can't be cut again, hub workspaces.ts `revive`) is no fault that may pass: it says why, from the proxy's page. -->
       <EmptyState
         icon={previewFrame.down === "gone" ? IconArchive : IconAlert}
         title={stageCover.downTitle}
@@ -1400,7 +1401,7 @@
       >
         {#snippet line()}
           {#if previewFrame.down === "gone"}
-            {previewWords.goneLine}
+            {previewFrame.downWhy ?? previewWords.goneLine}
           {:else if previewFrame.down === "workspace"}
             Its server can't be reached until the workspace runs again. Once a
             session there is back, try again.

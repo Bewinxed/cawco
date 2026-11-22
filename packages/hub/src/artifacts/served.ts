@@ -13,17 +13,6 @@ import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { type CanvasSpec, canvasOf } from "@cawco/core/stage";
 import type { ArtifactRow } from "../db/artifacts";
 
-/**
- * An artifact a workspace serves that its retirement still waits on, and
- * why (`servedOwed`): the person is still owed it or a page showing it
- * (`owed`: not acted on since it was put before them), or it is a folder preview he
- * looked at within the half hour a stage stays up unused (`looked`).
- */
-export interface ServedOwed {
-  row: ArtifactRow;
-  why: "looked" | "owed";
-}
-
 /** A workspace preview's server (core `ServeSpec`): its workspace, its port, and the pin it runs in (core `PreviewSource.pin`); null for any other artifact. */
 export const servedOf = (
   row: Pick<ArtifactRow, "kind" | "source">

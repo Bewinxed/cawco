@@ -118,13 +118,19 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    * THE ONE READ OF WHAT THE HUB KEEPS UP FOR THE PERSON: each stage on a
    * machine in `online` that serves him an artifact waiting on him (itself,
    * or a decision page showing it, {@link waitsOnPerson}), its maker awake
-   * ({@link makerAwake}) and its workspace active to run it in, by the
-   * stage's key, with the use that keeps it up: a served preview's server
-   * started or woken ({@link serveFirst}), a sheet's stage (a design graph's,
-   * or a component a page's Preview shows) started or woken with its
+   * ({@link makerAwake}), its workspace active to run it in and the stage
+   * live now (`stageLive`), by the stage's key, with the use that keeps it
+   * up: a served preview's server ({@link serveFirst}), a sheet's stage (a
+   * design graph's, or a component a page's Preview shows) with its
    * canvases compiled (agent stage.ts `warmStage`), each a use that restarts
    * the stage's idle time. Read off served previews alone, a design graph
-   * waiting on the person slept under him where a preview did not.
+   * waiting on the person slept under him where a preview did not. A stage
+   * asleep is never woken here: one its machine put to sleep to stay within
+   * its 8 live previews, the one looked at least recently (agent stage.ts
+   * `roomFor`), stays asleep until it is opened, and no keep-up holds a
+   * stage, and so its workspace, past the owner's rules of 2026-11-22
+   * ("What stays running on a machine": a sleeping session's previews sleep
+   * after 30 quiet minutes; up to 8 live, the oldest put to sleep).
    */
   const waitingStages = (
     online: ReadonlySet<string>
@@ -132,34 +138,56 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     const pages = pagesShowing();
     const stages = new Map<string, () => Promise<unknown>>();
     for (const row of db.asking()) {
-      const sheet = sheetOf(row);
-      const served = servedOf(row);
-      const workspace = sheet?.workspace ?? served?.workspace;
-      if (!(
+      const workspace = sheetOf(row)?.workspace ?? servedOf(row)?.workspace;
+      if (
         workspace &&
         row.machineId &&
         online.has(row.machineId) &&
         makerAwake(row) &&
         (waitsOnPerson(row) || (pages.get(row.id) ?? []).some(waitsOnPerson)) &&
         deps.workspaces(workspace).some((one) => one.state === "active")
-      )) {
-        continue;
-      }
-      if (sheet) {
-        const { at, key } = stageOf(sheet);
-        stages.set(key, () =>
-          deps.warmStage(at, {
-            by: `${row.name} waiting on the person`,
-            canvases: [sheet.files],
-          })
-        );
-      } else if (served) {
-        stages.set(`${served.pin ?? served.workspace}@${served.port}`, () =>
-          serveFirst(row.source, row.machineId)
-        );
+      ) {
+        const kept = keptUp(row);
+        if (kept) {
+          stages.set(kept.key, kept.use);
+        }
       }
     }
     return stages;
+  };
+  /**
+   * The live stage serving `row` ({@link waitingStages}), by its key, with
+   * the use that keeps it up; none for one not live (asleep, starting,
+   * failed) or for a row no stage serves.
+   */
+  const keptUp = (
+    row: ArtifactRow
+  ): { key: string; use: () => Promise<unknown> } | null => {
+    const sheet = sheetOf(row);
+    const served = servedOf(row);
+    if (sheet && "port" in row.source) {
+      const { at, key } = stageOf(sheet);
+      return deps.stageLive(sheet.workspace, row.source.port)
+        ? {
+            key,
+            use: () =>
+              deps.warmStage(at, {
+                by: `${row.name} waiting on the person`,
+                canvases: [sheet.files],
+              }),
+          }
+        : null;
+    }
+    if (served) {
+      const key = served.pin ?? served.workspace;
+      return deps.stageLive(key, served.port)
+        ? {
+            key: `${key}@${served.port}`,
+            use: () => serveFirst(row.source, row.machineId),
+          }
+        : null;
+    }
+    return null;
   };
   /** When each waiting stage was last asked to stay up, by its key ({@link waitingStages}, ../service.ts `keepWaitingUp`). */
   const keptUpAt = new Map<string, number>();

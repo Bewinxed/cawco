@@ -67,6 +67,17 @@ export interface WorkspaceCut {
 }
 
 /**
+ * A cut again ({@link WorkspaceCut}) refused because `origin` no longer
+ * holds the commit its clone was on when it retired: the branch that held it
+ * is gone from `origin` (a pull request's, deleted as it merged) or no longer
+ * reaches it. Nothing brings that version back, so the agent's refusal says
+ * so typed (core frames.ts `ControlRefusal` `commit-gone`), and the hub
+ * tells the person why a design served from it can't come back (hub
+ * workspaces.ts `revive`).
+ */
+export class CutCommitGone extends Error {}
+
+/**
  * Makes a project's place a git repository on its machine when it is not one
  * yet, so a workspace can be cut from it: `git init -b main`, a `.gitignore`
  * naming everything left out, and one local commit as CawCo of every file

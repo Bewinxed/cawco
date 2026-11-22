@@ -462,12 +462,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    continue are refused under new codes (`routine-command-no-condition`,
  *    `routine-approved-unread`, `workspace-continue-routine-run`). A page
  *    built for 91 reads none of them, so it reloads first.
+ * 93: a machine's refusal of a control may be of kind `commit-gone` (a
+ *    workspace's cut again found origin no longer holds its commit, core
+ *    workspace/controls.ts `CutCommitGone`). A page built for 92 reads no
+ *    such kind, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 92;
+export const WIRE_PROTOCOL = 93;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

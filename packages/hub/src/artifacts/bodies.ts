@@ -93,20 +93,27 @@ const titleField = t.String({
   maxLength: ARTIFACT_TITLE_LIMIT,
 });
 
+/** A direction's name and its one line on what it tries. */
+const directionWords = {
+  name: t.String({ minLength: 1, maxLength: CANVAS_SPEC_LIMITS.label }),
+  line: t.String({
+    minLength: 1,
+    maxLength: CANVAS_SPEC_LIMITS.directionLine,
+  }),
+};
+
+/** A folder on the session's machine, absolute. */
+const folderField = t.String({ minLength: 2, maxLength: 4096, pattern: "^/" });
+
+/** A page's whole document. */
+const htmlField = t.String({ minLength: 1, maxLength: PAGE_LIMIT });
+
 /** A design graph's edges, groups, dials and directions (core `CanvasSpec`), as create and update take them. */
 const canvasFields = {
   directions: t.Optional(
-    t.Array(
-      t.Object({
-        file: statesFile,
-        name: t.String({ minLength: 1, maxLength: CANVAS_SPEC_LIMITS.label }),
-        line: t.String({
-          minLength: 1,
-          maxLength: CANVAS_SPEC_LIMITS.directionLine,
-        }),
-      }),
-      { maxItems: CANVAS_SPEC_LIMITS.files }
-    )
+    t.Array(t.Object({ file: statesFile, ...directionWords }), {
+      maxItems: CANVAS_SPEC_LIMITS.files,
+    })
   ),
   edges: t.Optional(
     t.Array(
@@ -197,10 +204,22 @@ export const createBody = t.Object({
   ask: t.Optional(askField),
   title: t.Optional(titleField),
   ...canvasFields,
+  // A design's directions: each its states file, or (an HTML design) its page (component.ts `designPagesOf`).
+  directions: t.Optional(
+    t.Array(
+      t.Object({
+        file: t.Optional(statesFile),
+        html: t.Optional(htmlField),
+        dir: t.Optional(folderField),
+        ...directionWords,
+      }),
+      { maxItems: CANVAS_SPEC_LIMITS.files }
+    )
+  ),
   elements: t.Optional(skeletons),
   mermaid: t.Optional(mermaid),
   name: t.String({ pattern: ARTIFACT_NAME.source }),
-  html: t.Optional(t.String({ minLength: 1, maxLength: PAGE_LIMIT })),
+  html: t.Optional(htmlField),
   program: t.Optional(t.String({ minLength: 1, maxLength: PROGRAM_MAX })),
   file: t.Optional(
     t.Union([
@@ -211,7 +230,7 @@ export const createBody = t.Object({
       }),
     ])
   ),
-  dir: t.Optional(t.String({ minLength: 2, maxLength: 4096, pattern: "^/" })),
+  dir: t.Optional(folderField),
   port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
   path: t.Optional(
     t.String({ maxLength: 2000, pattern: PREVIEW_START_PATH.source })
