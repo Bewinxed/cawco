@@ -257,16 +257,23 @@ export const cleanSpawn = ({
  * a clone of the checkout at its HEAD with its uncommitted changes, kept in
  * step with it, in a boundary of its own, so the toolchain writes its own
  * tree and never the person's, while the session's own commands stay on the
- * host. Its id names the machine and folder, so every session there shares
- * one stage.
+ * host. Its id names the machine and folder ({@link placeRefOf}), so every
+ * session there shares one stage.
  */
 export const stagePlaceRef = (
   row: Pick<InstanceRow, "machineId" | "cwd">
-): WorkspaceRef => ({
+): WorkspaceRef => placeRefOf(row.machineId, row.cwd);
+
+/**
+ * The place over folder `path` (absolute) on machine `machineId`: its id a
+ * hash of the two, so every session staging from that folder shares one
+ * stage clone.
+ */
+export const placeRefOf = (machineId: string, path: string): WorkspaceRef => ({
   id: placeIdOf(
-    createHash("sha256").update(`${row.machineId}\0${row.cwd}`).digest("hex")
+    createHash("sha256").update(`${machineId}\0${path}`).digest("hex")
   ),
-  path: row.cwd,
+  path,
 });
 
 /**

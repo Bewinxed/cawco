@@ -284,10 +284,7 @@ import type {
   SetChangeTable as SetChangeTableType,
 } from "./permission-presentation";
 import type { HubPreviewOrigins as HubPreviewOriginsType } from "./preview/hub-previews";
-import type {
-  FolderWeight as FolderWeightType,
-  PreviewStarted as PreviewStartedType,
-} from "./preview/protocol";
+import type { PreviewStarted as PreviewStartedType } from "./preview/protocol";
 import type {
   DesignOfferEvent as DesignOfferEventType,
   DesignOfferNote as DesignOfferNoteType,
@@ -569,7 +566,6 @@ import type {
   FleetToolchainOutput,
   FleetVersionedOutput,
   FolderRemovedOutput,
-  FolderWeightOutput,
   ForgeAskOutput,
   ForgeVerdictOutput,
   ForgeWriteOutput,
@@ -1137,7 +1133,6 @@ prove<
     Same<FleetToolchainOutput, FleetToolchainType>,
     Same<FleetSyncReportOutput, FleetSyncReportType>,
     Same<FolderRemovedOutput, FolderRemovedType>,
-    Same<FolderWeightOutput, FolderWeightType>,
     Same<ForgeWriteOutput, ForgeWriteType>,
     Same<ForgeAskOutput, ForgeAskType>,
     Same<ForgeVerdictOutput, ForgeVerdictType>,

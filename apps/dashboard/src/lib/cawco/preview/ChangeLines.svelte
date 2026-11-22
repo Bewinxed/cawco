@@ -32,6 +32,7 @@
    * folds it again. Nothing it says is out of reach.
    */
   import { commentWords } from "@cawco/core/words/comments";
+  import { previewWords } from "@cawco/core/words/preview";
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -99,13 +100,13 @@
     {#if line.before === undefined}
       <span class="text-ink-muted">{commentWords.added}</span>
     {:else if line.before !== line.after}
-      <span class="sr-only">from</span>
+      <span class="sr-only">{previewWords.changedFrom}</span>
       <span
         class="text-ink-muted line-through decoration-ink-subtle"
         data-slot="change-before">{line.before}</span
       >
       <span aria-hidden="true" class="text-ink-muted">→</span>
-      <span class="sr-only">to</span>
+      <span class="sr-only">{previewWords.changedTo}</span>
     {/if}
     <span class="text-ink-strong" data-slot="change-after">{line.after}</span>
   </span>

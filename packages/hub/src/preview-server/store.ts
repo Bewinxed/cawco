@@ -3,9 +3,12 @@
  * its own, opened read-only, beside the hub's writer ("readers do not block
  * writers and a writer does not block readers", sqlite.org/wal.html). Each
  * read is by key: an origin's port rows and the mode, one artifact, the
- * artifact a session's panel shows, one pass, one document.
+ * artifact a session's panel shows, one pass, one document, one machine's
+ * name.
  */
 import { Database } from "bun:sqlite";
+import { machineLabel } from "@cawco/core/machine-names";
+import { previewWords } from "@cawco/core/words/preview";
 import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { DB_PATH } from "../config";
@@ -23,7 +26,12 @@ import {
   projectOfOrigin,
   projectOrigin,
 } from "../db/previews";
-import { artifactDocuments, artifacts, shownPreviews } from "../db/schema";
+import {
+  agents,
+  artifactDocuments,
+  artifacts,
+  shownPreviews,
+} from "../db/schema";
 
 /** How long a read waits out the hub's write lock, ms: a checkpoint's. Our call. */
 const BUSY_MS = 2000;
@@ -147,6 +155,27 @@ export const openPreviewStore = (path = DB_PATH) => {
         originOfKey(key) === null &&
         (shownBy(key) === id || pageOfShows({ instanceId: key }, piece))
       );
+    },
+    /** Whether folder preview `id`'s files are still on its machine, to be moved in as it registers (db artifacts.ts `foldersToMove`). */
+    toMove: (id: string): boolean =>
+      typeof db
+        .select({ pin: artifacts.sourcePin })
+        .from(artifacts)
+        .where(eq(artifacts.id, id))
+        .get()?.pin === "string",
+    /** Machine `machineId`'s name as the person reads it inside a sentence (core `machineLabel`), or core words/preview.ts `unnamed.machine.mid` for none the hub knows. */
+    machineName: (machineId: string | null): string => {
+      const hostname =
+        machineId === null
+          ? undefined
+          : db
+              .select({ hostname: agents.hostname })
+              .from(agents)
+              .where(eq(agents.machineId, machineId))
+              .get()?.hostname;
+      return hostname
+        ? machineLabel(hostname)
+        : previewWords.unnamed.machine.mid;
     },
     close: () => client.close(),
   };

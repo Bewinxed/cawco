@@ -43,10 +43,12 @@
    * the thread is open, unfolds under its title then.
    */
   import type { CommentAttachment, Pin } from "@cawco/core/comments/model";
+  import type { Named } from "@cawco/core/named";
   import { referenceHref } from "@cawco/core/references";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
   import { commentWords as said } from "@cawco/core/words/comments";
   import { commonWords } from "@cawco/core/words/common";
+  import { previewWords } from "@cawco/core/words/preview";
   import { type Snippet, tick, untrack } from "svelte";
   import {
     BarGlass,
@@ -133,8 +135,8 @@
     name: string;
     /** Its element's nearest parent, in words; none for the whole page. */
     parent: string | null;
-    /** Who answers in the thread: the session the artifact belongs to, as its transcript names it. */
-    agentName: string;
+    /** Who answers in the thread: the session the artifact belongs to, as its transcript names it; `lead` names its replies, `mid` stands in the status line. */
+    agentName: Named;
     /** The session the comment goes to, by its id, named in the status line by its chip; none for a page no session owns. */
     session?: string | null;
     /** The page's own pill stands in view beside the card: the head doesn't repeat it. */
@@ -343,13 +345,7 @@
   /** The card's one question: Delete, asked under its foot. */
   const asks = new Asker<AskHereRequest>();
   /** What a delete takes with it, named before it runs (DESIGN.md, Voice). */
-  const deleteBody = $derived.by(() => {
-    const parts = [
-      "its thread",
-      pin.ink ? "the ink it stands on" : null,
-    ].filter(Boolean);
-    return `It goes from the page with ${parts.join(" and ")}. The other comments keep their numbers. This can't be undone.`;
-  });
+  const deleteBody = $derived(previewWords.deletePinBody(!!pin.ink));
   function askDelete() {
     asks.ask({
       at: "delete",
@@ -738,9 +734,9 @@
         {:else}
           <Turn class="group-first/entry:mt-0" {grouped}>
             {#if grouped}
-              {@render later(entry.text, entry.at, agentName, false)}
+              {@render later(entry.text, entry.at, agentName.lead, false)}
             {:else}
-              <Who name={agentName} shown timestamp={entry.at} />
+              <Who name={agentName.lead} shown timestamp={entry.at} />
               <MessageBody source={entry.text} wrap="pretty" />
             {/if}
             {#if entry.files?.length}
@@ -777,9 +773,13 @@
     >
       <span>{said.sentTo}</span>
       {#if sentTo?.draw === "element"}
-        <sentTo.element id={sentTo.id} kind={sentTo.kind} label={agentName} />
+        <sentTo.element
+          id={sentTo.id}
+          kind={sentTo.kind}
+          label={agentName.mid}
+        />
       {:else}
-        <span>{agentName}</span>
+        <span>{agentName.mid}</span>
       {/if}
       {#if live}
         <span

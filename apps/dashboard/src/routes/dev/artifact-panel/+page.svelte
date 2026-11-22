@@ -1,5 +1,6 @@
 <script lang="ts">
   import { type Pin, pinHeld } from "@cawco/core/comments/model";
+  import { named } from "@cawco/core/named";
   import { commentWords } from "@cawco/core/words/comments";
   import { hubPath } from "@cawco/hub/client";
   import { onMount } from "svelte";
@@ -626,7 +627,7 @@
 
 {#snippet card(one: Pin, pushed = false)}
   <PinCard
-    agentName={agent}
+    agentName={named(agent)}
     back={pushed
       ? {
           to: commentWords.comments,

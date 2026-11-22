@@ -56,7 +56,7 @@ export interface HubContext
       | "homeStamps"
       | "unknownAccountsOf"
     >,
-    Pick<ReturnType<typeof createArtifactPages>, "endPreviews" | "foldersSeen">,
+    Pick<ReturnType<typeof createArtifactPages>, "endPreviews">,
     Pick<
       ReturnType<typeof createAskRouting>,
       "askRefusal" | "delegateAskParent" | "settleRefusal"

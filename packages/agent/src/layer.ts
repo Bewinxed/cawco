@@ -76,6 +76,7 @@ import { constants, homedir, release } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { cloneDenies } from "@cawco/core/clone-denies";
 import { makeFolder } from "@cawco/core/folders";
+import { copiedFolderSync } from "@cawco/core/object-pool";
 import { claudeHome } from "@cawco/core/paths/claude";
 import { piAgentDir } from "@cawco/core/paths/harnesses";
 import { credentialStores } from "@cawco/core/paths/host-policy";
@@ -170,12 +171,15 @@ const writeLayer = (id: string, layer: Layer): Promise<void> =>
   writeStateFile(layerFile(id), `${JSON.stringify(layer, null, 2)}\n`);
 
 /**
- * Workspace `id`'s layer: a folder's record, or, for a repository's clone (no
- * record, a folder where workspace `id`'s clone is cut:
+ * Workspace `id`'s layer: a folder's record, or, for a tree of its own with
+ * no record (a folder where workspace `id`'s clone is cut:
  * `~/.worktrees/<repo>-<id8>`, and nowhere else, so a person's own folder is
- * never taken for one), the `clone` form, with no base and no folder of
- * origin on record. Every clone held a repository; one whose `.git` was
- * deleted since is read as a husk (stand-ins.ts `straysIn`).
+ * never taken for one), the `clone` form, with no base: a repository's
+ * clone, with no folder of origin on record; or a stage clone's
+ * copy of a folder in no repository (core object-pool.ts `copiedFolderSync`),
+ * a folder that holds no repository, with that folder as its origin. Every
+ * other clone held a repository; one whose `.git` was deleted since is read
+ * as a husk (stand-ins.ts `straysIn`).
  */
 export const layerOf = async (
   id: string,
@@ -192,10 +196,11 @@ export const layerOf = async (
   if (!there?.isDirectory()) {
     return;
   }
+  const copies = copiedFolderSync(id);
   return {
-    folder: "",
+    folder: copies ?? "",
     form: "clone",
-    kind: "repo",
+    kind: copies ? "folder" : "repo",
     made: true,
     path,
     started: 0,
@@ -210,6 +215,30 @@ const layerSync = (id: string): Layer | undefined => {
     // No record, or one cut short: no layer on record.
   }
 };
+
+/**
+ * What a stage clone's copy of a folder in no repository
+ * (stage-clone.ts `copyCut`) leaves out, by name at any depth, and never
+ * counts as its own: what the project's install or its toolchain makes again
+ * in the copy (stage-install.ts), and CawCo's own (`.cawco`, a stage's host:
+ * stage.ts `writeHost`). Never the author's own work. The copy leaves out
+ * any repository's store inside the folder too (stage-clone.ts `LEFT_OUT`).
+ */
+export const REMADE_IN_COPY: ReadonlySet<string> = new Set([
+  ".cawco",
+  "node_modules",
+  ".svelte-kit",
+  ".astro",
+  ".nuxt",
+  ".output",
+  ".next",
+  ".turbo",
+  ".vite",
+]);
+
+/** Whether path `rel` lies in what a copy of a folder leaves out ({@link REMADE_IN_COPY}). */
+const remadeInCopy = (rel: string): boolean =>
+  rel.split("/").some((part) => REMADE_IN_COPY.has(part));
 
 /** Whether workspace `id` is a Linux view of its folder (read from its record, synchronously). */
 export const overlaySync = (id: string): boolean =>
@@ -242,9 +271,23 @@ export const ownFolderSync = (id: string, path: string): boolean => {
     : clonePath(id, path);
 };
 
-/** Whether workspace `id` is a copy of a folder that is no repository (read from its record, synchronously). */
-export const folderSync = (id: string): boolean =>
-  layerSync(id)?.kind === "folder";
+/**
+ * Whether workspace `id` is a copy of a folder that is no repository (read
+ * from its records, synchronously, as {@link layerSync} reads: one that
+ * can't be read names none): a delegate's layer of one, or a stage clone's
+ * copy of one (core object-pool.ts `copiedFolderSync`).
+ */
+export const folderSync = (id: string): boolean => {
+  if (layerSync(id)?.kind === "folder") {
+    return true;
+  }
+  try {
+    return copiedFolderSync(id) !== undefined;
+  } catch {
+    // A damaged record: no copy on record, as layerSync reads one.
+    return false;
+  }
+};
 
 // ---------------------------------------------------------------- Linux view
 
@@ -1758,7 +1801,7 @@ const copyChanges = async (
 
 /** Where the delegate's version of `rel` is read on the host: the upper that holds it, or the copy. */
 const delegateFile = (layer: Layer, rel: string): string | undefined => {
-  if (layer.form === "copy") {
+  if (layer.form !== "overlay") {
     return join(layer.path, rel);
   }
   const target = join(layer.folder, rel);
@@ -1771,7 +1814,8 @@ const delegateFile = (layer: Layer, rel: string): string | undefined => {
 /**
  * Workspace `id`'s change set: every path of F the delegate wrote or
  * deleted, read on the host from its upper dirs (Linux) or its copy against
- * the base (macOS), with nothing at, under or holding a path its boundary
+ * the base (macOS), or for a stage clone's or pin's copy of F what it wrote
+ * against F itself, with nothing at, under or holding a path its boundary
  * denies the delegate writing or a harness writes for itself
  * ({@link leftOutOf}, {@link notCarried}, {@link sparing}). Every
  * reader of what a folder workspace holds reads it here: its landing
@@ -1795,6 +1839,18 @@ export const changesOf = async (
     candidates = all.flat();
   } else if (layer.base) {
     candidates = await copyChanges(layer.path, layer.base, skip);
+  } else if (layer.kind === "folder") {
+    // A stage clone's or pin's copy of a folder ({@link layerOf}), read
+    // against the folder itself: what ran in it wrote that the folder lacks
+    // or has otherwise. What the folder has that it lacks is the folder's
+    // own, which the copy mirrors (stage-clone.ts), and no change of its.
+    candidates = (
+      await copyChanges(
+        layer.path,
+        layer.folder,
+        (rel) => skip(rel) || remadeInCopy(rel)
+      )
+    ).filter((change) => change.change === "write");
   } else {
     throw new Error(
       `${layer.path} is a repository's clone, which lands by git, with no base to read changes against`

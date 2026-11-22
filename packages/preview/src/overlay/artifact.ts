@@ -810,6 +810,8 @@ export const artifact = {
       pageHash: meta.get("pageHash") ?? null,
       /** The last piece a decision page shows that moved to another version, and that version (hub artifacts service `versionMoved`); null before. */
       mediaAt: meta.get("mediaAt") ?? null,
+      /** A folder preview's files' key (hub artifacts service `folderStamped`); null before. */
+      folderKey: meta.get("folderKey") ?? null,
       revision: meta.get("revision") ?? null,
       /** When the session last changed it, a revision or a new ask; null before. */
       revisedAt: meta.get("revisedAt") ?? null,

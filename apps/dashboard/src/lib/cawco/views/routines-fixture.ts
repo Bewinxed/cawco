@@ -196,13 +196,13 @@ export const TRIM_RAN: Routine = {
 const checked = (
   id: string,
   ago: number,
-  verdict: "met" | "unmet",
+  verdict: "stop" | "keep",
   said: string
 ): RoutineRun => ({
-  ...run(id, ago, 3, verdict === "met" ? "delivered" : "silent", null),
+  ...run(id, ago, 3, verdict === "stop" ? "delivered" : "silent", null),
   usd: 0.18,
   verdict,
-  ...(verdict === "met" ? { output: said } : { reason: said }),
+  ...(verdict === "stop" ? { output: said } : { reason: said }),
 });
 
 const EVENT_STREAMS =
@@ -241,13 +241,13 @@ export const CONDITION_NOT_YET: Routine = {
     checked(
       "e2",
       3 * DAY_MS,
-      "unmet",
+      "keep",
       "The changelog of 17 Nov still lists Event Streams as public preview, with GA planned for early 2027."
     ),
     checked(
       "e1",
       10 * DAY_MS,
-      "unmet",
+      "keep",
       "The docs page carries the public preview banner."
     ),
   ],

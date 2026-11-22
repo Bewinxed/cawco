@@ -137,7 +137,7 @@
              ink-strong, as the house's PhoneQr draws its own. -->
       <svg
         class="block size-48 flex-none rounded-well bg-surface-raised text-ink-strong shadow-xs"
-        aria-label="Passkey QR code{rpDisplay ? ` for ${rpDisplay}` : ''}"
+        aria-label={passkeyWords.qrCode}
         role="img"
         viewBox="0 0 {code.size} {code.size}"
       >

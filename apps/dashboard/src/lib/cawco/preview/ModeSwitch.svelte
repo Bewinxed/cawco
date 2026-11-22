@@ -29,24 +29,24 @@
   const SEGMENTS = [
     {
       value: "interact",
-      label: "Interact",
+      label: previewWords.modes.interact,
       icon: IconInteractLinear,
       keys: "V",
-      tip: "Interact (V): the page gets every click",
+      tip: previewWords.modeTips.interact,
     },
     {
       value: "comment",
-      label: "Comment",
+      label: previewWords.modes.comment,
       icon: IconCommentLinear,
       keys: "C",
-      tip: "Comment (C): a click pins a comment",
+      tip: previewWords.modeTips.comment,
     },
     {
       value: "draw",
-      label: "Draw",
+      label: previewWords.modes.draw,
       icon: IconPenLinear,
       keys: "D",
-      tip: "Draw (D): drag to draw on the page",
+      tip: previewWords.modeTips.draw,
     },
   ] as const;
 </script>

@@ -10,8 +10,8 @@
  *   on at once).
  * - **`until:`.** The field's value is a wait as a file keeps it
  *   (wait-targets.ts), settled by the one resolver (task-waits.ts, through
- *   tasks.ts `waitStates`): a date holds the task until it passes, a
- *   `routine:<id>` until its condition is met. A field that is missing, or
+ *   tasks.ts `waitStates`): a date holds the task until it passes, a task
+ *   (a routine among them) until it is done. A field that is missing, or
  *   settles never, holds it.
  * - **`after:`.** Entering is the last move into the stage in the task's
  *   history (task-history.ts). A task whose history shows no move in is

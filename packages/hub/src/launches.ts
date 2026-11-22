@@ -516,7 +516,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
 
   /**
    * What a session's row puts on every spawn of it, whatever its caller sent:
-   * a session refused routine_create is refused its harness's durable
+   * a session refused a routine (roles.ts `makesRoutines`) is refused its harness's durable
    * schedule too (`makesRoutines`); the types it may start, so its machine
    * withholds the spawning tools from a leaf; and the set its first spawn
    * resolved ({@link startingSetOf}), so a wake or a restore starts with the

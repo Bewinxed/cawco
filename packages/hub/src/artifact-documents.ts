@@ -40,10 +40,11 @@ export interface ArtifactDocumentsDeps {
   after: (name: string, ms: number, run: () => void) => void;
   documents: ArtifactDocumentsDb;
   /**
-   * The key of the preview origin a machine-served piece stands on
-   * (db/previews.ts `artifactOrigin` of its row's origin), its port opened;
-   * undefined for a piece no machine serves; the refusal's words when no
-   * port opens.
+   * The key of the preview origin a piece with an origin of its own stands
+   * on (a machine's preview or a folder preview, preview-machine.ts
+   * `hasOwnOrigin`; db/previews.ts `artifactOrigin` of its row's origin),
+   * its port opened; undefined for any other piece; the refusal's words
+   * when no port opens.
    */
   embedOf: (
     row: ArtifactRow

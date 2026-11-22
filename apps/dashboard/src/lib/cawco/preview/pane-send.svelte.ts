@@ -1,8 +1,10 @@
 /**
  * What the person sends to the session: Send, and each comment's Try again.
  */
+
 import { type Pin, pinUnsent, writeAgain } from "@cawco/core/comments/model";
 import { commentWords } from "@cawco/core/words/comments";
+import { previewWords } from "@cawco/core/words/preview";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { retryComment, sendArtifact } from "./artifact-doc";
 import type { PaneDoc } from "./pane-doc.svelte";
@@ -157,9 +159,7 @@ export class PaneSend {
   retryRefused(artifactKey: string, id: string) {
     const kept = this.#deps.paneDoc.refusedReplies[id];
     if (!(kept && this.#deps.paneDoc.doc)) {
-      throw new Error(
-        "The pane lost the page's document, so it wasn't written again. Reload, then try again."
-      );
+      throw new Error(previewWords.lostComments.again);
     }
     const { left, why } = writeAgain(
       this.#deps.paneDoc.refusedReplies,

@@ -90,21 +90,23 @@ export const sheetChangeOf = (body: {
 /** The one change an update names (a decision page's statements and a design graph each have their own route): a page's html or patch, a canvas's elements, delete or mermaid. */
 const changeOf = (body: {
   delete?: string[];
+  dir?: string;
   elements?: SkeletonElement[];
   html?: string;
   mermaid?: string;
   patch?: Operation[];
 }) => {
   const named = (
-    ["html", "patch", "elements", "delete", "mermaid"] as const
+    ["html", "patch", "elements", "delete", "mermaid", "dir"] as const
   ).filter((key) => body[key] !== undefined);
-  return named.length === 1
-    ? oneChange(body)
-    : problem(400, {
-        code: "artifact-update-change-one",
-        detail:
-          "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements, an ask, and a component's args, story, edges, group, dials or directions go through their own routes.",
-      });
+  if (named.length !== 1) {
+    return problem(400, {
+      code: "artifact-update-change-one",
+      detail:
+        "Pass exactly one of html or patch (a page), elements, delete or mermaid (a canvas), or dir (a folder preview); a decision page's statements, an ask, and a component's args, story, edges, group, dials or directions go through their own routes.",
+    });
+  }
+  return body.dir === undefined ? oneChange(body) : { dir: body.dir };
 };
 
 /** The change a body naming exactly one ({@link changeOf}) names. */
@@ -183,7 +185,7 @@ export const createArtifact = async (
   return await artifacts.create(instanceId, { ...body, kind });
 };
 
-/** A page's or a canvas's update, as `PATCH /api/instances/:id/artifacts/:artifact` answers it. */
+/** A page's, a canvas's or a folder preview's update, as `PATCH /api/instances/:id/artifacts/:artifact` answers it. */
 export const updateArtifact = async (
   artifacts: Artifacts,
   instanceId: string,
@@ -191,8 +193,11 @@ export const updateArtifact = async (
   body: Static<typeof updateBody>
 ) => {
   const change = changeOf(body);
-  return change instanceof ElysiaStatus
-    ? change
+  if (change instanceof ElysiaStatus) {
+    return change;
+  }
+  return "dir" in change
+    ? await artifacts.folderUpdate(instanceId, artifact, change.dir)
     : await artifacts.update(instanceId, artifact, change);
 };
 

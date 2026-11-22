@@ -7,11 +7,12 @@
 export const PREVIEW_START_PATH = /^\/(?!\/)\S*$/u;
 
 /**
- * What an artifact shows (Projects spec §5.10): a dev server or a folder on
- * the session's machine (a preview), or a page the hub built and keeps under
- * its data dir at `artifacts/<id>/` and serves itself, named by the page's
- * name. A dev server or folder may name `path`, the page inside it the
- * preview opens at (`/motion/updates`); the root when absent.
+ * What an artifact shows (Projects spec §5.10): a dev server on the
+ * session's machine, a folder of files the hub keeps (each a preview), or a
+ * page the hub built and keeps under its data dir at `artifacts/<id>/` and
+ * serves itself, named by the page's name. A dev server or folder may name
+ * `path`, the page inside it the preview opens at (`/motion/updates`); the
+ * root when absent.
  */
 export type PreviewSource =
   | {
@@ -22,7 +23,7 @@ export type PreviewSource =
        * its toolchain root `dir` from the clone's root and the sheet's story file
        * `file` from that root. A request for it wakes the stage when it sleeps.
        * The person is served the workspace's stage live: every save reaches
-       * the open panel through Vite's HMR, and a sheet names no `pin`.
+       * the open panel through Vite's HMR.
        */
       stage?: { dir: string; file: string };
       /**
@@ -30,34 +31,36 @@ export type PreviewSource =
        * the stage of `workspace` runs and keeps up on `port`, in `cwd` from
        * its tree's root. A request for it wakes it when it sleeps. Every
        * port preview made since 2026-11-22 names it; one without it is a
-       * port its session kept up by hand, which nothing starts again.
+       * port its session kept up by hand, which nothing starts again. The
+       * person is served that one server live, as its author runs it: an
+       * edit to its tree reaches the open preview through the dev server's
+       * own reload (the owner's pick on 2026-11-22, "The agent's live
+       * app").
        */
       serve?: { command: string; cwd: string };
       /**
-       * The workspace whose dev server it is, or the place over its session's
-       * folder (core workspace-id.ts `place`) for a session in no workspace:
-       * it runs in that tree's own network.
+       * The workspace whose dev server it is, or for a session in no
+       * workspace the place it is staged from (core workspace-id.ts
+       * `place`): a sheet's over its session's folder, a served preview's
+       * over its app's folder's repository, or that folder in none (hub
+       * artifact-events.ts `placeFor`). It runs in that tree's own network:
+       * a workspace's clone, or a place's stage clone kept in step with its
+       * folder (agent stage-clone.ts).
        */
       workspace?: string;
-      /**
-       * A served preview's (`serve`) version the person is served: the id of
-       * a clone of `workspace` cut on its machine at its HEAD with its
-       * uncommitted changes when its author handed this version up (its
-       * `artifact_create`, its `artifact_update`, its own `artifact_show`),
-       * and changed only by the next hand-up, never by an edit to the
-       * workspace's files (agent stage-clone.ts `cutPin`). Its own server
-       * answers the artifact's preview origin, in its own network; what the
-       * author reads (`artifact_read`, its renders) is the workspace as it
-       * is now. Absent for a sheet, served live, and for a port on a
-       * machine's host, whose server is the session's own.
-       */
-      pin?: string;
     }
   | {
+      /**
+       * A folder preview's: the folder its files were read from on the
+       * row's machine, at its create or its last `artifact_update`. The hub
+       * keeps those files with the artifact (hub artifacts/preview-folder.ts,
+       * `artifacts/<id>/folder/`) and serves them itself, as they are, on
+       * the artifact's own origin: they outlive the agent's folder, and an
+       * update writes them over in place (the owner's pick on 2026-11-20,
+       * "one way of serving").
+       */
       dir: string;
       path?: string;
-      /** The version the person is served: the id of a copy of `dir` made on its machine when its author handed this version up, served in its place (agent stage-clone.ts `pinFolder`). */
-      pin?: string;
     }
   | { page: string };
 
@@ -65,6 +68,7 @@ export type PreviewSource =
 export const PREVIEW_DOWNS = [
   "server",
   "machine",
+  "hub",
   "workspace",
   "reach",
   "closed",
@@ -81,8 +85,11 @@ export const PREVIEW_DOWNS = [
  * runs for it (a sheet's stage, a served preview's command) didn't start,
  * the stage's words for why in {@link PREVIEW_WHY_META}. `machine`: the
  * machine's preview listener is not answering the hub, or the machine is
- * away. `workspace`: the port is a workspace's, and no boundary of that
- * workspace runs, so nothing in its network can answer. `reach`: the
+ * away. `hub`: the hub's own preview server could not reach the hub for
+ * what only the hub answers (an entry, an artifact's doc and its Send, a
+ * page's store), so nothing on the session's machine is at fault.
+ * `workspace`: the port is a workspace's, and no boundary of that workspace
+ * runs, so nothing in its network can answer. `reach`: the
  * machine could not open the way to the server (its listener did not start,
  * or the bridge into the workspace's network did not open); the page names
  * why in {@link PREVIEW_WHY_META}. `closed`: the session shows no preview
@@ -156,7 +163,7 @@ export interface PreviewElement {
   text: string;
   url: string;
 }
-/** What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`). {@link PREVIEW_WEIGHT}'s answer. */
+/** What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`), weighed by the hub from the files it keeps (hub artifacts/preview-folder.ts `folderWeight`). */
 export interface FolderWeight {
   bytes: number;
   /** `<img>` on the start page whose file is wider than `DESK_CAPTURE_WIDTH`. */
@@ -179,12 +186,3 @@ export interface PreviewStopArgs {
   instanceId: string;
   token?: string;
 }
-/** The daemon's control method that weighs a folder preview's folder on its machine (core preview-proxy `folderWeight`). */
-export const PREVIEW_WEIGHT = "previewWeight";
-/**
- * The daemon's control method that reads whether folder previews' folders
- * are still on its machine: a `realpath` and a `stat` each, no listener and
- * no process. Answers, per folder in the order asked, core preview-proxy
- * `folderGone`'s words for one that isn't there, or null.
- */
-export const PREVIEW_FOLDERS = "previewFolders";

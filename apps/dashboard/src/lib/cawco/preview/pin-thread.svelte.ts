@@ -1,8 +1,10 @@
 /**
  * A pin's thread: which is open and drawn, its card beside the pill or in the rail's sheet, J and K stepping through the pins, and the rail's list.
  */
+
 import { newAnswer, pinHeld } from "@cawco/core/comments/model";
 import { pinName } from "@cawco/core/pin-name";
+import { previewWords } from "@cawco/core/words/preview";
 import { tick, untrack } from "svelte";
 import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
 import { frameSize } from "#lib/platform/frame-observer.js";
@@ -352,7 +354,7 @@ export class PinThread {
     } else {
       refused = this.#deps.paneDoc.doc
         ? this.#deps.paneDoc.doc.delete(id)
-        : "The pane lost the page's document, so the comment wasn't deleted. Reload, then try again.";
+        : previewWords.lostComments.deleted;
     }
     if (refused) {
       return Promise.reject(new Error(refused));
@@ -597,7 +599,7 @@ export class PinThread {
       this.cardError =
         typeof message.error === "string"
           ? message.error
-          : "The page didn't keep that, so nothing changed. Try again.";
+          : previewWords.changeNotKept;
     }
   }
 
@@ -725,7 +727,7 @@ export class PinThread {
     }
     this.cardError = this.#deps.paneDoc.doc
       ? this.#deps.paneDoc.doc.reply(this.openPin, said)
-      : "The pane lost the page's document, so the reply wasn't kept. Reload, then reply again.";
+      : previewWords.lostComments.reply;
     if (this.cardError === null && reopens && this.#deps.paneDoc.doc) {
       this.cardError = this.#deps.paneDoc.doc.resolve(this.openPin, false);
     }
@@ -755,7 +757,7 @@ export class PinThread {
     }
     const refused = this.#deps.paneDoc.doc
       ? this.#deps.paneDoc.doc.resolve(id, resolved)
-      : `The pane lost the page's document, so the comment wasn't ${resolved ? "resolved" : "reopened"}. Reload, then try again.`;
+      : previewWords.lostComments.resolved(resolved);
     if (id === this.openPin) {
       this.cardError = refused;
     } else if (refused) {

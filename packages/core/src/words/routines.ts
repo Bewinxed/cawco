@@ -8,6 +8,8 @@
  * (CawCoCore/Words.generated.swift), and `words:check` fails the typecheck
  * chain when that file is stale. So a word is changed here or nowhere.
  */
+
+import type { RoutineVerdict } from "../routine-kinds";
 export const routinesWords = {
   /** The strip's tab, and the page's first block. */
   tab: "Routines",
@@ -344,6 +346,13 @@ export const routinesWords = {
  * What the routine tools answer a session (hub routines.ts), beside the
  * page's words: agent-facing, so none of them reach the app.
  */
+/** What follows a run's answer, by its keep, stop or ask. */
+const ANSWERED_NEXT: Record<RoutineVerdict, string> = {
+  keep: "It runs again on its trigger.",
+  stop: "Its task moves to done once the run ends.",
+  ask: "It waits for the owner's answer.",
+};
+
 export const routineToolWords = {
   /** `event_route_list`'s heading over its events, when the project has more than it lists. */
   eventsCut: (older: number, skip: number): string =>
@@ -359,23 +368,45 @@ export const routineToolWords = {
   /** A delivered output cut to fit a project note: its end, with the run's session link when it ran one. */
   noteCut: (session?: string): string =>
     `\n\n… (cut; the whole is in the run's conversation${session ? `: ${session}` : ""})`,
-  /** `routine_delete`: the routine gone, and each event route that fed it, which went with it. */
-  deleted: (routes: string[]): string =>
-    routes.length === 0
-      ? "Deleted the routine. No event route sent it events."
-      : `Deleted the routine and the ${routes.length === 1 ? "event route" : `${routes.length} event routes`} that sent it events:\n${routes.map((route) => `- ${route}`).join("\n")}`,
-  /** A delete of a routine that was gone already. */
-  notThere: "There was no such routine to delete.",
   /** The memory curator routine's target is the hub's. */
   curatorStays:
     "The memory curator routine is the hub's: its target stays curator.",
   /** The unused skills and servers routine's target is the hub's too. */
   trimStays:
     "The unused skills and servers routine is the hub's: its target stays trim.",
-  /** `routine_list` while the project has no unused skills and servers routine: what it does, and how Caw turns it on. */
-  trimOff: (name: string): string =>
-    `The hub's ${name} routine is off in this project: each Monday a delegate proposes unlisting the skills and servers no session called in 30 days, and nothing changes until the owner approves. To turn it on: routine_update with id "${name}" and enabled: true.`,
-  /** `routine_update` asked any other change of it while it is off. */
-  trimFirst: (name: string): string =>
-    `${name} is off. Turn it on first (routine_update with enabled: true alone), then change it.`,
+  /** A routine with no schedule, as its schedule reads: its event routes start it. */
+  onEvents: "When an event route sends it one",
+  /**
+   * Why a routine whose task is in a done or dropped stage (`stage`), or no
+   * longer on the board (null), is off: nothing starts it until its task
+   * moves back out, and then it runs from that moment on.
+   */
+  endedWith: (stage: string | null): string =>
+    stage
+      ? `Its task is in ${stage}, so it has ended. Move the task out of ${stage} to turn it back on.`
+      : "Its task is no longer on the board, so it has ended.",
+  /** A command check whose file's command is not the one approved: its run is skipped, saying so. */
+  commandUnapproved:
+    "its command changed since it was approved, so it runs nothing until it is approved again: the owner turns the routine back on to approve the command its file holds",
+  /** A run said stop: one quiet line in the project's conversation. */
+  stoppedNote: (name: string): string => `Routine · ${name} stopped: done`,
+  /** A run asked the owner: the line in the project's conversation, beside the question. */
+  askedNote: (name: string): string => `Routine · ${name} asks you · needs you`,
+  /** A session moved a routine to done and is none of its runs. */
+  doneNotRun: (taskId: string): string =>
+    `${taskId} is a routine: only one of its runs (with task_result routine stop) or the owner moves it to done. To end it, move it to a dropped stage; to pause it, task_update with enabled false.`,
+  /** A session's routine's notice: its stop condition, and its deadline. */
+  madeStop: (stop: string, until: string | null): string =>
+    `Stops when · ${stop}${until ? ` · needs you if not by ${until}` : ""}`,
+  /** `task_start` on a routine: its run by hand, as it was filed. */
+  ranNow: (taskId: string, state: string, reason: string | null): string =>
+    state === "skipped" || state === "queued"
+      ? `${taskId} is a routine: its run now was ${state}${reason ? `: ${reason}` : "."}`
+      : `${taskId} is a routine: it runs once now, as its trigger would run it. Its result comes as its runs' do.`,
+  /** `task_result` on a routine's run: its answer, kept. */
+  answered: (runId: string, verdict: RoutineVerdict): string =>
+    `Run ${runId}: answered ${verdict}. ${ANSWERED_NEXT[verdict]}`,
+  /** The unused skills and servers routine's task, as its description reads. */
+  trimSaid:
+    "Each Monday, proposes unlisting the skills and servers no session called in 30 days; nothing changes until you approve.",
 };

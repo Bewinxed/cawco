@@ -17,7 +17,14 @@ import {
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
 } from "@cawco/core/plan";
-import { CONDITION_STATES } from "@cawco/core/routine-kinds";
+import {
+  CONDITION_STATES,
+  ROUTINE_OUTCOMES,
+  ROUTINE_RUN_STATES,
+  ROUTINE_TARGETS,
+  ROUTINE_VERDICTS,
+  TRIGGER_HOLDS,
+} from "@cawco/core/routine-kinds";
 import { HARNESS_BLOCK_TYPES } from "@cawco/core/session-messages";
 import { STAGE_TOOLCHAINS } from "@cawco/core/stage";
 import { STAGE_KINDS, TASK_MOVERS } from "@cawco/core/views";
@@ -153,13 +160,8 @@ const PreviewSourceShape = z.union([
     stage: z.object({ dir: z.string(), file: z.string() }).optional(),
     serve: z.object({ command: z.string(), cwd: z.string() }).optional(),
     workspace: z.string().optional(),
-    pin: z.string().optional(),
   }),
-  z.object({
-    dir: z.string(),
-    path: z.string().optional(),
-    pin: z.string().optional(),
-  }),
+  z.object({ dir: z.string(), path: z.string().optional() }),
   z.object({ page: z.string() }),
 ]);
 export type PreviewSourceOutput = z.output<typeof PreviewSourceShape>;
@@ -1419,6 +1421,62 @@ const BuiltOnShape = z.object({
 });
 export type BuiltOnOutput = z.output<typeof BuiltOnShape>;
 
+const RoutineOutcomeShape = z.enum(ROUTINE_OUTCOMES);
+export type RoutineOutcomeOutput = z.output<typeof RoutineOutcomeShape>;
+
+const RoutineRunStateShape = z.enum(ROUTINE_RUN_STATES);
+export type RoutineRunStateOutput = z.output<typeof RoutineRunStateShape>;
+
+const RoutineVerdictShape = z.enum(ROUTINE_VERDICTS);
+export type RoutineVerdictOutput = z.output<typeof RoutineVerdictShape>;
+
+const RoutineRunViewShape = z.object({
+  attempt: z.number(),
+  endedAt: z.number().nullable(),
+  id: z.string(),
+  instanceId: z.string().nullable(),
+  outcome: RoutineOutcomeShape.nullable(),
+  output: z.string().nullable(),
+  reason: z.string().nullable(),
+  slot: z.string(),
+  startedAt: z.number(),
+  state: RoutineRunStateShape,
+  usd: z.number().nullable(),
+  verdict: RoutineVerdictShape.nullable(),
+  workItemId: z.string().nullable(),
+});
+export type RoutineRunViewOutput = z.output<typeof RoutineRunViewShape>;
+
+const TriggerHoldShape = z.enum(TRIGGER_HOLDS);
+export type TriggerHoldOutput = z.output<typeof TriggerHoldShape>;
+
+const RoutineScheduleShape = z.object({
+  cron: z.string(),
+  nextAt: z.number().nullable(),
+  timeZone: z.string(),
+  words: z.string(),
+});
+export type RoutineScheduleOutput = z.output<typeof RoutineScheduleShape>;
+
+const RoutineTargetShape = z.enum(ROUTINE_TARGETS);
+export type RoutineTargetOutput = z.output<typeof RoutineTargetShape>;
+
+const TaskRoutineShape = z.object({
+  deadline: z.number().nullable(),
+  disabledReason: z.string().nullable(),
+  enabled: z.boolean(),
+  id: z.string(),
+  lastRun: RoutineRunViewShape.nullable(),
+  needs: z.object({ said: z.string(), why: TriggerHoldShape }).nullable(),
+  problem: z.string().nullable(),
+  runs: z.array(RoutineRunViewShape).optional(),
+  runsTotal: z.number().optional(),
+  schedule: RoutineScheduleShape,
+  stop: z.string().nullable(),
+  target: RoutineTargetShape,
+});
+export type TaskRoutineOutput = z.output<typeof TaskRoutineShape>;
+
 const ConditionStateShape = z.enum(CONDITION_STATES);
 export type ConditionStateOutput = z.output<typeof ConditionStateShape>;
 
@@ -1442,7 +1500,6 @@ const WaitKindShape = z.enum([
   "pr",
   "run",
   "session",
-  "routine",
   "time",
 ]);
 export type WaitKindOutput = z.output<typeof WaitKindShape>;
@@ -1474,6 +1531,7 @@ const TaskFlagsShape = z.object({
   parts: z.array(z.string()),
   queuedStart: z.boolean(),
   ready: z.boolean(),
+  routine: TaskRoutineShape.nullable().optional(),
   startProblem: z.string().nullable(),
   unblocks: z.array(z.string()),
   waits: z.array(TaskWaitShape),

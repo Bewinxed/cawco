@@ -48,6 +48,7 @@
     "ai": "7.0.173",
     "bonjour-service": "^1.4.4",
     "cborg": "7.0.0",
+    "chokidar": "6.0.0",
     "dockerode": "5.0.1",
     "effect": "^4.0.0",
     "es-module-lexer": "3.0.4",

@@ -2557,20 +2557,6 @@ const FolderRemovedShape = declared(
 export const FolderRemovedSchema = FolderRemovedShape;
 export type FolderRemovedOutput = z.output<typeof FolderRemovedShape>;
 
-const FolderWeightShape = declared(
-  z.object({
-    bytes: z.number(),
-    captures: z.number(),
-    files: z.number(),
-    js: z.number(),
-    wasm: z.number(),
-  }),
-  "FolderWeight",
-  "packages/core/src/preview/protocol.ts"
-);
-export const FolderWeightSchema = FolderWeightShape;
-export type FolderWeightOutput = z.output<typeof FolderWeightShape>;
-
 const ForgeWriteShape = declared(
   z.union([
     z.object({ body: z.string(), op: z.literal("issue"), title: z.string() }),
@@ -4674,6 +4660,7 @@ const RegisterAckPayloadShape = declared(
     revokedCredentials: z.array(z.string()).optional(),
     sessionLimits: SessionLimitsShape.optional(),
     sessions: z.array(CarrySessionRequestShape).optional(),
+    sshForward: z.literal(true).optional(),
     tailnetHttps: TailnetServingShape.optional(),
     unknownAccounts: z.array(z.string()).optional(),
   }),

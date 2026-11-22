@@ -1,6 +1,7 @@
 /**
  * An artifact's files under the artifacts' root (`ARTIFACTS_ROOT/<id>/`): a
  * page's HTML (`index.html`), a design's folder (`design/`, design-folder.ts),
+ * a folder preview's files (`folder/`, preview-folder.ts),
  * a decision page's program (decision-program.ts
  * `PROGRAM_FILE`) and the pictures it shows (`files/`), a canvas's or a
  * delivered page's latest picture, a page's or preview's thumbnails. The
@@ -12,6 +13,7 @@ import { join } from "node:path";
 import { DESIGN_FOLDER, type DesignMoved } from "@cawco/core/stage";
 import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
+import { folderKey } from "@cawco/preview/proxy";
 import {
   type BuiltProgram,
   keptImagePaths,
@@ -21,9 +23,11 @@ import {
   type DesignFile,
   designFolderOf,
   writeDesignFolder,
+  writeFolderInPlace,
 } from "./design-folder";
 import { bytesHash } from "./page-changes";
 import { pagePictures } from "./page-pictures";
+import { previewFolderOf } from "./preview-folder";
 import type { PageWas } from "./shapes";
 
 /** Where a canvas's latest picture is kept: its folder under the artifacts' root. */
@@ -119,6 +123,27 @@ export const createPageStore = (root: string) => {
     /** Design tree `tree`'s folder on this disk, absolute. */
     designFolder: (tree: string): string => designFolderOf(root, tree),
 
+    /**
+     * Folder preview `id`'s files written in place in its folder
+     * (preview-folder.ts): each changed file written over, each it no
+     * longer has deleted. What it moved.
+     */
+    writeFolder: (id: string, files: readonly DesignFile[]): DesignMoved =>
+      writeFolderInPlace(previewFolderOf(root, id), files),
+
+    /** Whether folder preview `id` has its files here. */
+    hasFolder: (id: string): boolean => existsSync(previewFolderOf(root, id)),
+
+    /**
+     * The key of folder preview `id`'s files as they stand here (preview
+     * proxy.ts `folderKey`, the key its served pages' files are addressed
+     * at); null when it has none.
+     */
+    folderKey: async (id: string): Promise<string | null> =>
+      existsSync(previewFolderOf(root, id))
+        ? await folderKey(previewFolderOf(root, id))
+        : null,
+
     /** The pictures decision page `id` shows, by the name each Image of its kept program `program` gives. */
     shownPictures: (id: string, program: string): Map<string, Uint8Array> => {
       const shown = new Map<string, Uint8Array>();
@@ -148,11 +173,18 @@ export const createPageStore = (root: string) => {
       }
     },
 
-    /** A promoted version's files over its artifact's, when it has any: a page's files are its revision's alone (`write`). */
+    /**
+     * A promoted version's files over its artifact's, when it has any: a
+     * page's files are its revision's alone (`write`), and so are a folder
+     * preview's (`writeFolder`).
+     */
     takeVersion: (version: string, id: string) => {
       if (existsSync(folder(version))) {
         rmSync(join(folder(id), "files"), { recursive: true, force: true });
         rmSync(join(folder(id), PROGRAM_FILE), { force: true });
+        if (existsSync(previewFolderOf(root, version))) {
+          rmSync(previewFolderOf(root, id), { recursive: true, force: true });
+        }
         cpSync(folder(version), folder(id), { recursive: true, force: true });
       }
     },

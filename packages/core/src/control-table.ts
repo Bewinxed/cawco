@@ -91,11 +91,7 @@ import type {
   MoveSnapshotRequest,
   MoveSnapshotResult,
 } from "./move";
-import type {
-  FolderWeight,
-  PreviewStarted,
-  PreviewStopArgs,
-} from "./preview/protocol";
+import type { PreviewStarted, PreviewStopArgs } from "./preview/protocol";
 import type { PreviewStartArgs } from "./preview/upstream";
 import type { ControlPayload, UpdateAsk, UpdateReport } from "./protocol";
 import type {
@@ -407,10 +403,8 @@ interface ControlTable {
     PlacePush
   >;
   placeRepo: Entry<[path: string], PlaceRepo>;
-  previewFolders: Entry<[dirs: string[]], (string | null)[]>;
   previewStart: Entry<[ask: PreviewStartArgs], PreviewStarted>;
   previewStop: Unread<[ask: PreviewStopArgs]>;
-  previewWeight: Entry<[dir: string, path?: string | null], FolderWeight>;
   probeAccount: Entry<[account: string], AccountProbe>;
   probeCapabilities: Entry<[], MachineCapabilities>;
   readAccountUsage: Entry<[account: string], ProviderAccountReading | null>;
@@ -490,16 +484,11 @@ interface ControlTable {
   stageDesign: Entry<[ref: WorkspaceRef, look: DesignLook], DesignOpened>;
   stageEnsure: Entry<[ref: WorkspaceRef, file: StageEnsure], StageOpened>;
   stagePicture: Entry<[ref: WorkspaceRef, ask: ServedPicture], PictureTaken>;
-  stagePin: Unread<
-    [ref: WorkspaceRef, pin: string] | [ref: null, pin: string, dir: string]
-  >;
   stagePins: Entry<[served: string[]], number>;
   stageRender: Entry<[ref: WorkspaceRef, ask: RenderAsk], StageRendered>;
-  stageServe: Entry<
-    [ref: WorkspaceRef, serve: ServeSpec, pin?: string | null],
-    StageState
-  >;
-  stageUnpin: Unread<[pin: string]>;
+  stageServe: Entry<[ref: WorkspaceRef, serve: ServeSpec], StageState>;
+  stageServeStop: Entry<[workspace: string, port: number], boolean>;
+  stageUnpin: Unread<[tree: string]>;
   stageWarm: Unread<[ref: WorkspaceRef, warm: StageWarm]>;
   stageWrite: Entry<[ref: WorkspaceRef, write: SheetWrite], SheetWritten>;
   storedRun: Entry<[sessionKey: string, dir?: CatalogDir], StoredRun>;

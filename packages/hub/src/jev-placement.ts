@@ -231,6 +231,13 @@ export interface DispatchCandidate {
   id: string;
   title: string;
   todos: string[];
+  /**
+   * What it waited on (`waits_on`, its own and inherited), each settled: a
+   * frontier task waits on nothing unsettled. Its title or description
+   * often names what it waits for, which Jev would otherwise read as still
+   * holding it.
+   */
+  waitedOn: string[];
   /** How many tasks wait for it. */
   waiting: number;
 }
@@ -289,6 +296,7 @@ export async function jevDispatch(
           acceptance: head(task.acceptance, 1000),
           checks: task.checks.slice(0, 10).map((check) => head(check, 200)),
           todos: task.todos.slice(0, 20).map((todo) => head(todo, 200)),
+          waitedOn: task.waitedOn.slice(0, 10).map((wait) => head(wait, 200)),
           waiting: task.waiting,
         },
       ])
@@ -303,7 +311,7 @@ export async function jevDispatch(
       type: "score",
       instructions: {
         task: task.id,
-        question: `Is \`tasks["${task.id}"]\` ready for an agent to start now?`,
+        question: `Is \`tasks["${task.id}"]\` ready for an agent to start now? Everything in its \`waitedOn\` has settled, so nothing it waits for holds it any more.`,
       },
       criteria: READY_LEVELS,
     };

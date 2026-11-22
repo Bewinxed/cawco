@@ -6,9 +6,8 @@
  */
 
 import type { ApprovedActionView } from "@cawco/core/actions";
-import { routineLink, taskLink } from "@cawco/core/references";
+import { taskLink } from "@cawco/core/references";
 import type { RelayView } from "@cawco/core/relays";
-import type { RoutineRunView } from "@cawco/core/routine-kinds";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { routineToolWords } from "@cawco/core/words/routines";
 import type {
@@ -19,14 +18,11 @@ import type {
 import { PAYLOAD_MAX } from "../ingress-views";
 import type { FolderFile, FolderListing } from "../project-folder";
 import type { RelayCreated } from "../relay-created";
-import { slotLabel } from "../routine-schedule";
-import type { RoutineView } from "../routine-view";
 import {
   ago,
   ahead,
   count,
   handle,
-  lasted,
   lines,
   listed,
   quote,
@@ -135,102 +131,13 @@ export const memoryReadWords = (
   return folderReadWords(read);
 };
 
-/** What a run came to: its outcome once it has one, else its state. */
-const runState = (run: RoutineRunView, now: number): string => {
-  const took = run.endedAt
-    ? `, after ${lasted(run.endedAt - run.startedAt)}`
-    : "";
-  return `${run.outcome ?? run.state}, started ${ago(run.startedAt, now)}${took}`;
-};
-
-/** A routine's run, a line: its slot as the dashboard says it (`09:00`, test, by-hand). */
-const runLine = (run: RoutineRunView, timeZone: string, now: number): string =>
-  `  - ${slotLabel(run.slot, timeZone)} run ${handle(run.id)}: ${runState(run, now)}${run.verdict ? `, condition ${run.verdict}` : ""}${run.usd === null ? "" : `, $${run.usd.toFixed(2)}`}${run.reason ? `; ${run.reason}` : ""}${run.output ? `: ${quote(run.output, 300)}` : ""}`;
-
-/** Whether a routine is kept past its week, or when it turns itself off. */
-const keptWords = (routine: RoutineView, now: number): string => {
-  if (routine.keep) {
-    return " · kept";
-  }
-  return routine.expiresAt === null
-    ? ""
-    : ` · turns off ${ahead(routine.expiresAt, now)} unless kept`;
-};
-
-/** What a routine's run starts, in words. */
-const targetWords = (routine: RoutineView): string => {
-  const typed = routine.delegateType ? ` of type ${routine.delegateType}` : "";
-  switch (routine.target) {
-    case "conversation":
-      return "messages Caw, the project's conversation";
-    case "orchestrator":
-      return `an orchestrator${typed} in the project's checkout, which delegates its work`;
-    case "delegate":
-    case "curator":
-    case "trim":
-      return `a delegate${typed}, lands ${routine.lands}`;
-    case "command":
-      return `the command \`${routine.prompt}\` in a sandboxed copy of the project, no model`;
-  }
-};
-
-/** A condition, a line: its statement, where it stands, its deadline, and what waits on it. */
-const conditionLine = (
-  condition: NonNullable<RoutineView["condition"]>,
-  now: number
-): string => {
-  const waits = [
-    condition.waitedBy.length > 0 ? `tasks ${listed(condition.waitedBy)}` : "",
-    condition.steps > 0 ? count(condition.steps, "plan step") : "",
-  ].filter(Boolean);
-  return `  Condition: ${quote(condition.statement, 300)} · ${condition.state}${condition.state === "met" && condition.evidence ? `: ${quote(condition.evidence, 300)}` : ""}${condition.markedMet ? " (marked met by the owner)" : ""}${condition.state !== "met" && condition.reason ? `; last: ${quote(condition.reason, 300)}` : ""} · ${condition.deadline === null ? "no deadline" : `deadline ${ahead(condition.deadline, now)}`} · ${waits.length > 0 ? `waited on by ${waits.join(" and ")}` : "nothing waits on it, so its slots pass unchecked"} · wait on it with ${condition.handle}`;
-};
-
-/** One routine, its schedule and newest runs; its name its link, which the person's dashboard draws as its chip. */
-const routineLines = (routine: RoutineView, now: number): string[] => [
-  `- ${routineLink(routine.id, routine.name)} ${handle(routine.id)} · ${routine.enabled ? "on" : `off${routine.disabledReason ? `: ${routine.disabledReason}` : ""}`} · ${routine.schedule.words}${routine.schedule.nextAt === null ? "" : `, next ${ahead(routine.schedule.nextAt, now)}`} · ${targetWords(routine)}${keptWords(routine, now)}${routine.dailyCapUsd === null ? "" : ` · $${routine.dailyCapUsd} a day`}${routine.budget ? ` · each run ${valueWords(routine.budget)}` : ""}`,
-  ...(routine.condition ? [conditionLine(routine.condition, now)] : []),
-  `  Prompt: ${quote(routine.prompt, 400)}`,
-  ...(routine.runs.length > 0
-    ? routine.runs.map((run) => runLine(run, routine.timeZone, now))
-    : ["  No runs yet."]),
-];
-
-/** `routine_list`: the project's routines, and the hub's trim routine while the project has none (`off`, its name). */
-export const routineListWords = ({
-  routines,
-  off,
-}: {
-  routines: RoutineView[];
-  off: string | null;
-}): string => {
-  const now = Date.now();
-  return lines(
-    routines.length === 0
-      ? "No routines."
-      : lines(
-          `${count(routines.length, "routine")}; routine_update, routine_delete and routine_run_now take the handle:`,
-          routines.flatMap((routine) => routineLines(routine, now))
-        ),
-    off !== null && routineToolWords.trimOff(off)
-  );
-};
-
-/** `routine_create` and `routine_update`: the routine as it stands. */
-export const routineWords = (routine: RoutineView): string =>
-  lines(routineLines(routine, Date.now()));
-
-/** `routine_delete`, `event_route_delete`, `connector_poll_delete`. */
+/** `event_route_delete`, `connector_poll_delete`. */
 export const deletedWords =
   (what: string) =>
   (done: { deleted: boolean }): string =>
     done.deleted
       ? `Deleted the ${what}.`
       : `There was no such ${what} to delete.`;
-
-/** `routine_run_now` and `routine_result`: the run. */
-export const routineRunWords = (run: RoutineRunView): string =>
-  `Run ${handle(run.id)}: ${runState(run, Date.now())}${run.reason ? `; ${run.reason}` : ""}.`;
 
 const routeLine = (route: EventRouteView, now: number): string =>
   `- ${handle(route.id)} · ${route.enabled ? "on" : "off"} · ${route.source}${route.kinds.length > 0 ? ` ${listed(route.kinds)}` : " any kind"}${route.author ? ` by ${route.author}` : ""}${route.label ? ` labelled ${route.label}` : ""}${route.branch ? ` on ${route.branch}` : ""}${route.regex ? ` matching /${route.regex}/ ${routineToolWords.regexReads(PAYLOAD_MAX / 1024)}` : ""} → routine ${handle(route.routineId)} · ${route.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(route.lastDeliveryAt, now)}`}`;

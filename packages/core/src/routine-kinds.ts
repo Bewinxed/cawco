@@ -52,28 +52,36 @@ export const ROUTINE_OUTCOMES = [
 ] as const;
 /**
  * How a run ended, by its delegate's `finish_item` summary or Caw's
- * `routine_result`: `silent` (`NO_REPLY`), `delivered` (its words became a
+ * `task_result`: `silent` (`NO_REPLY`), `delivered` (its words became a
  * notice), `failed` (`AUTOMATION_FAILED`, an item that failed, or Caw's turn
  * ending without a result), `cancelled` (someone stopped it).
  */
 export type RoutineOutcome = (typeof ROUTINE_OUTCOMES)[number];
 
 /** Every {@link RoutineVerdict}. */
-export const ROUTINE_VERDICTS = ["met", "unmet", "unknown"] as const;
+export const ROUTINE_VERDICTS = ["keep", "stop", "ask"] as const;
 /**
- * What a run of a routine with a condition answered (`routine_result`'s
- * `condition`): met, not yet, or could not check. A run of any other
- * routine has none.
+ * What a routine's run answered in its `task_result` (Projects spec §5.5,
+ * Stopping): keep it going (it fires again on its trigger), stop it (its
+ * stop condition holds: the hub moves its task to done with the run's
+ * evidence), or ask you (it stands in Needs you with the run's question).
+ * Null on a run that gave none.
  */
 export type RoutineVerdict = (typeof ROUTINE_VERDICTS)[number];
 
-/** Every {@link ConditionStop}. */
-export const CONDITION_STOPS = ["met", "deadline", "failing"] as const;
+/** Every {@link TriggerHold}. */
+export const TRIGGER_HOLDS = [
+  "failed",
+  "deadline",
+  "failing",
+  "asked",
+] as const;
 /**
- * Why the hub stopped a condition's checks (hub routines.ts): it was met,
- * its deadline passed unmet, or three slots in a row failed.
+ * Why a routine stands in Needs you until you act (hub routines.ts): a slot
+ * failed twice; its deadline passed with no stop; three slots in a row
+ * failed; or a run asked you. All but the first hold its trigger off.
  */
-export type ConditionStop = (typeof CONDITION_STOPS)[number];
+export type TriggerHold = (typeof TRIGGER_HOLDS)[number];
 
 /** Every {@link ConditionState}. */
 export const CONDITION_STATES = [
@@ -83,22 +91,25 @@ export const CONDITION_STATES = [
   "met",
   "timed-out",
   "failing",
+  "asked",
   "paused",
   "deleted",
 ] as const;
 /**
- * Where a condition stands (hub routines.ts `conditionOf`): no verdict yet,
- * its newest verdict unmet, its newest check failed, met (by a run or by
- * the person), or stopped by the hub at its deadline or after three failing
- * slots, paused by someone, or deleted. Only `met` settles a wait; the last
- * four flag it.
+ * Where a routine's stop condition stands (hub routines.ts `conditionOf`):
+ * no run has answered yet, its newest run kept it going, its newest run
+ * failed, met (its task is done: a run stopped it, or the person moved it
+ * there), or held by the hub at its deadline, after three failing slots or
+ * while a run's question waits for the person, paused by someone, or gone
+ * (its task deleted or dropped). Only `met` settles a wait on the routine;
+ * the last five flag it.
  */
 export type ConditionState = (typeof CONDITION_STATES)[number];
 
 /**
- * A routine's condition, as its view and a wait on it read it (times in
- * ms): the statement true once met, where it stands, and the facts each
- * state is told by.
+ * A routine's stop condition, as its view and a wait on its task read it
+ * (times in ms): the statement true once it may stop, where it stands, and
+ * the facts each state is told by.
  */
 export interface ConditionView {
   /** When its newest check ended; null before any. */
@@ -143,7 +154,7 @@ export interface RoutineRunView {
   startedAt: number;
   state: RoutineRunState;
   usd: number | null;
-  /** What a check run answered; null for a run that gave no verdict, and every run of a routine with no condition. */
+  /** What the run answered in its `task_result` (keep, stop, ask); null for a run that gave none. */
   verdict: RoutineVerdict | null;
   /** A delegate run's work item; null for a conversation run, and before its work began. */
   workItemId: string | null;

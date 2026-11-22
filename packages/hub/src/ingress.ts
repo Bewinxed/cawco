@@ -115,6 +115,7 @@ import {
   routeWords,
 } from "./presenters/project";
 import type { Routines } from "./routines";
+import { normaliseTaskRef } from "./task-file";
 import type { GitHubWaitState } from "./task-waits";
 import { MODE } from "./tasks";
 
@@ -554,7 +555,8 @@ export const createIngress = ({
   /** The routes whose every condition holds for `event`, oldest first: the matcher's filter. */
   const matching = (projectId: string, event: InboundEvent) =>
     store.routes(projectId, event.kind).filter((each) => {
-      if (!(each.enabled && db.routines.get(each.routineId)?.enabled)) {
+      const routine = db.routines.get(each.routineId);
+      if (!(each.enabled && routine?.enabled && routine.target)) {
         return false;
       }
       try {
@@ -594,7 +596,15 @@ export const createIngress = ({
         routineIds.flatMap((id) => {
           const routine = db.routines.get(id);
           return routine
-            ? [{ id, name: routine.name, prompt: routine.prompt }]
+            ? [
+                {
+                  id,
+                  name: routine.name,
+                  prompt: routine.stop
+                    ? `${routine.name}; it stops when ${routine.stop}`
+                    : routine.name,
+                },
+              ]
             : [];
         })
       );
@@ -1255,10 +1265,10 @@ export const createIngress = ({
   /** Refuses a route that cannot run as written. */
   const checkedRoute = (projectId: string, input: RouteInput) => {
     const routine = db.routines.get(input.routineId);
-    if (!routine || routine.projectId !== projectId) {
+    if (!routine?.target || routine.projectId !== projectId) {
       return problem(404, {
         code: "ingress-routine-unknown",
-        detail: `The project has no routine ${input.routineId}.`,
+        detail: `The project has no routine ${input.routineId}: name a task that starts on its own (task_create with on or target makes one).`,
       });
     }
     if (!input.source.trim()) {
@@ -1601,9 +1611,20 @@ export const createIngress = ({
             "connector poll"
           ).id;
     };
+    /** The routine a route sends events to, named by its task (`tsk-12`); as written when it names none, which the route's check refuses. */
+    const routineOfTask = (task: string): string => {
+      const caller = me();
+      const projectId = caller instanceof ElysiaStatus ? null : scopeOf(caller);
+      const taskId = normaliseTaskRef(task) ?? task.trim();
+      return typeof projectId === "string"
+        ? (db.routines.byTask(projectId, taskId)?.id ?? taskId)
+        : taskId;
+    };
     return [
-      EVENT_ROUTE_CREATE_DEFINITION.run(({ routine, ...rest }) =>
-        Promise.resolve(createRoute({ ...rest, routineId: routine }, me()))
+      EVENT_ROUTE_CREATE_DEFINITION.run(({ task, ...rest }) =>
+        Promise.resolve(
+          createRoute({ ...rest, routineId: routineOfTask(task) }, me())
+        )
       ),
       EVENT_ROUTE_LIST_DEFINITION.run(({ skip }) => {
         const projectId = scopeOf(me());
@@ -1611,14 +1632,18 @@ export const createIngress = ({
           projectId instanceof ElysiaStatus ? projectId : view(projectId, skip)
         );
       }),
-      EVENT_ROUTE_UPDATE_DEFINITION.run(({ id, routine, ...rest }) => {
+      EVENT_ROUTE_UPDATE_DEFINITION.run(({ id, task, ...rest }) => {
         const named = routeNamed(id);
         return Promise.resolve(
           named instanceof ElysiaStatus
             ? named
             : updateRoute(
                 named,
-                withoutUndefined({ ...rest, routineId: routine }),
+                withoutUndefined({
+                  ...rest,
+                  routineId:
+                    task === undefined ? undefined : routineOfTask(task),
+                }),
                 me()
               )
         );
@@ -1806,7 +1831,11 @@ const EVENT_ROUTE_CREATE_DEFINITION = defineTool(
   "Event routes: your project's inbound events that match (GitHub pull requests, issues, comments; connector poll items) sent to one of its routines as a run's input, the oldest matching route taking each event. Use it when a routine should run on an event rather than a schedule.",
   {
     ...conditions,
-    routine: z.string().describe("The routine's id."),
+    task: z
+      .string()
+      .describe(
+        "The routine's task, like tsk-12: a task that starts on its own."
+      ),
     mode: z
       .enum(SESSION_CHOSEN_MODES)
       .optional()
@@ -1831,7 +1860,7 @@ const EVENT_ROUTE_UPDATE_DEFINITION = defineTool(
     id: ref(),
     ...conditions,
     source: conditions.source.optional(),
-    routine: z.string().optional(),
+    task: z.string().optional().describe("The routine's task, like tsk-12."),
     enabled: z.boolean().optional().describe("false pauses it."),
     mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
   },

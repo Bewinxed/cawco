@@ -177,7 +177,8 @@ export const repoTop = async (
 
 /**
  * {@link CONTROL_REPO_ROOT}: {@link repoTop} of the folder at `path`, asked
- * by the hub of the machine the folder is on (hub landed.ts): its checkout's
+ * by the hub of the machine the folder is on (hub landed.ts; a port
+ * preview's app folder, hub artifact-events.ts `placeFor`): its checkout's
  * top, or null when it is in no repository. Reads only. Refused for a path
  * that is no folder here, and as {@link repoTop} refuses.
  */

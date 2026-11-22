@@ -312,13 +312,8 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     created: ProjectRow,
     asked: ProjectAsk
   ): Promise<string | undefined> | undefined => {
-    // Its nightly memory run, made with it (routines.ts `ensureCurator`).
-    const curated = ctx.routines.ensureCurator(created.id);
-    if (curated) {
-      console.warn(
-        `[project-joining] ${created.id}: its nightly memory run was not made: ${curated.response.detail}`
-      );
-    }
+    // Its nightly memory run, filed with it once it is set up (routines.ts `ensureCurator`).
+    ctx.routines.ensureCurator(created.id);
     if (!asked.setup) {
       return;
     }

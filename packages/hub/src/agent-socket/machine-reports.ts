@@ -67,14 +67,20 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     // A place's stage clone is cut and in step: filed as a workspace.
     if (body.kind === "stage-clone") {
       const frame = body;
-      const by = ctx.db
-        .listInstances()
-        .find(
-          (one) =>
-            one.machineId === message.machineId &&
-            stagePlaceRef(one).id === frame.place &&
-            !ctx.workItems.workspaceOf(one)
-        );
+      // A preview's place is kept by the create that named it (db
+      // stage-places.ts); a sheet's is its session's folder.
+      const kept = ctx.db.stagePlaces.get(frame.place);
+      const by =
+        kept?.machineId === message.machineId
+          ? kept.namedBy
+          : ctx.db
+              .listInstances()
+              .find(
+                (one) =>
+                  one.machineId === message.machineId &&
+                  stagePlaceRef(one).id === frame.place &&
+                  !ctx.workItems.workspaceOf(one)
+              )?.id;
       if (!by) {
         console.warn(
           `[workspaces] ${message.machineId}: a stage clone of place ${frame.place} that no session there names was not filed`
@@ -82,7 +88,7 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
         return "stop";
       }
       detach(
-        ctx.workItems.fileStageClone(message.machineId, frame, by.id),
+        ctx.workItems.fileStageClone(message.machineId, frame, by),
         `file the stage clone ${frame.id}`
       );
       return "stop";

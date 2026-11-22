@@ -194,7 +194,7 @@ export const artifactCreate = {
     kind: z
       .enum(MADE_ARTIFACT_KINDS)
       .describe(
-        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: the design graph: `file` a states file whose live story mounts the real component or screen, or a design folder: `html` one page, or `dir` a folder whose index.html loads its files or code (design-graph skill). preview: the running app (`port`, or a folder's `dir`) at `path`, for a flow he tries; it holds no CawCo sign-in. canvas: a drawing, never a screen: `elements`, `mermaid`, or empty."
+        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: the design graph: `file` a states file whose live story mounts the real component or screen, or a design folder: `html` one page, or `dir` a folder whose index.html loads its files or code (design-graph skill). preview: the running app (`port`, or a copy of `dir`) at `path`, for a flow he tries; it holds no CawCo sign-in. canvas: a drawing, never a screen: `elements`, `mermaid`, or empty."
       ),
     does: does.describe(
       "pick: a decision page, never a design. judge: a design graph or a kept block. try: a preview. draw: a canvas."
@@ -270,7 +270,7 @@ export const artifactCreate = {
           .string()
           .max(1000)
           .optional()
-          .describe("From your working folder."),
+          .describe("The app's folder: absolute, or from yours (default)."),
       })
       .optional()
       .describe(
@@ -346,7 +346,7 @@ export const artifactUpdate = {
       .startsWith("/")
       .max(4096)
       .optional()
-      .describe("A design folder's folder again, replaced in place."),
+      .describe("A folder preview's or design folder's dir again."),
     directions: designDirections.describe(
       "A design folder's directions again, replaced in place."
     ),

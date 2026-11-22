@@ -6,7 +6,8 @@
  *
  * - `clone`: a uuid. A copy CawCo cut and owns: a delegate's workspace (the
  *   hub's row), a place's stage clone (workspace-policy.ts `stageCloneId`),
- *   a pin (agent stage-clone.ts `cutPin`), a routine's or a host delegate's.
+ *   a folder preview's pin from before the hub kept its files (agent
+ *   stage-clone.ts `dropPin`), a routine's or a host delegate's.
  * - `place`: 8 hex digits and `-caw`. The boundary over a person's own
  *   folder, never written into (hub caw.ts `stagePlaceRef`; workspace-policy.ts
  *   says what it may do). The suffix is the one it had when only Caw had a

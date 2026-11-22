@@ -21,7 +21,6 @@ import type { Memory } from "./memory";
 import type { projectFromSessionTool } from "./project-offers";
 import type { createProjectSettings } from "./project-settings";
 import type { Relay } from "./relay";
-import type { Routines } from "./routines";
 import type { taskTools } from "./task-tools";
 
 type Defined =
@@ -31,7 +30,6 @@ type Defined =
   | ReturnType<typeof projectFromSessionTool>
   | ReturnType<typeof createProjectSettings>["definition"]
   | ReturnType<Caw["tools"]>[number]
-  | ReturnType<Routines["tools"]>[number]
   | ReturnType<Ingress["tools"]>[number]
   | ReturnType<Actions["tools"]>[number]
   | ReturnType<Relay["tools"]>[number]

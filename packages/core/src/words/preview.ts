@@ -15,8 +15,8 @@ export const previewWords = {
   previewMode: "Preview mode",
   /** A preview the hub couldn't reach, and its line's end. */
   cantBeReached: "This preview can't be reached",
-  tryingAgain: "Trying again on its own.",
-  /** Its machine, when the hub's last read couldn't reach it. */
+  tryingAgain: "Trying again by itself.",
+  /** Its machine, when the hub's last read couldn't reach it: `machine` its name, or `unnamed.machine.lead`. */
   machineNotAnswering: (machine: string) => `${machine} isn't answering`,
   /**
    * A design or served preview that can't come back (core `PreviewDown`
@@ -38,7 +38,9 @@ export const previewWords = {
    * workspace was last on, `branch` the branch that held it; its workspace
    * was discarded; it went before its last version was recorded, or that
    * record can't be read; or building it again failed, `why` its machine's
-   * words.
+   * words. `filesLost`: a folder preview made before the hub kept its files,
+   * whose copy on `machine` (its machine's name, or `unnamed.machine.mid`) was gone when the hub came
+   * to move it in (hub artifacts/folder-move.ts).
    */
   goneWhy: {
     commit: (branch: string) =>
@@ -48,6 +50,8 @@ export const previewWords = {
     unrecorded:
       "Its workspace was deleted before a record of this version was kept, or that record can't be read.",
     failed: (why: string) => `Its workspace couldn't be built again (${why}).`,
+    filesLost: (machine: string) =>
+      `Its files were kept on ${machine}, and they are no longer there.`,
   },
   /**
    * Its one action, the session asked to make it
@@ -95,9 +99,66 @@ export const previewWords = {
     `A script of the page threw before it loaded (${why}), and it shows nothing. Ask its session to fix it, then try again.`,
   crashedPage:
     "A script of this page threw before it loaded, and it shows nothing. Ask its session to fix it, then reload.",
-  /** Its server is down: the port it listened on, and the way back from its session. */
-  nothingOnPort: (port: number) => `Nothing is running on port ${port}`,
-  startFromSession: "Start it again from its session, then try again.",
+  /**
+   * Every frame's down state for each hop the proxy names (core
+   * `PreviewDown`), put together by preview-down.ts `downState`. For `server`, `machine`, `workspace` and `reach` the pane
+   * probes the page's origin by itself while it is on screen and loads the
+   * page once it answers (preview-frame.svelte.ts `DOWN_PROBES`), so their
+   * lines say the page loads; `closed` comes back only when its session
+   * shows it again. `machine` is the session's machine's label. The
+   * machine's own words for a failure stand under Show details, never in
+   * the line (preview-down.ts `downState`).
+   */
+  down: {
+    /**
+     * `hub`: the hub's own preview server couldn't reach the hub for what
+     * only the hub answers (hub preview-server serve.ts).
+     */
+    hubTitle: "The hub isn't answering this preview",
+    hubLine:
+      "It didn't answer its own preview server. The page loads once it does.",
+    serverTitle: "The page's server stopped answering",
+    /** The server's port is known: `machine` its label. */
+    serverOnPort: (port: number, machine: string) =>
+      `Nothing is running on port ${port} on ${machine}.`,
+    serverOn: (machine: string) => `Nothing on ${machine} is serving the page.`,
+    /** A preview with a recorded start command (`serve`): its machine restarts the server by itself (core stage.ts). */
+    serverRestarting:
+      "The server is starting again by itself, and the page loads once it answers.",
+    /** Its session can be opened from here. */
+    serverAskSession:
+      "Ask its session to start the server again; the page loads once it answers.",
+    serverStart: "Start the server again, and the page loads once it answers.",
+    workspaceTitle: "Its workspace isn't running",
+    workspaceLine:
+      "The page's server can be reached only while a session runs there. Once one does, the page loads as soon as the server answers.",
+    /** `machine` its name, or `unnamed.machine.lead`. */
+    reachTitle: (machine: string) =>
+      `${machine} couldn't reach the page's server`,
+    reachLine:
+      "The page loads once the way to it opens; if it stays shut, ask its session to show the preview again.",
+    closedTitle: "This preview is closed",
+    closedLine:
+      "It was deleted, or its session shows something else now. Ask its session to show it again.",
+    machineLine:
+      "It serves this preview. Check that it's awake and connected; the page loads once it answers.",
+  },
+  /** `errorLine`'s and `crashedLine`'s `why` when the page named none. */
+  errorWhyUnknown: "with an error",
+  crashedWhyUnknown: "no message",
+  /**
+   * The session's machine, and the session, where their names aren't known
+   * yet: `lead` begins a sentence or stands alone as a name, `mid` stands
+   * inside one.
+   */
+  unnamed: {
+    machine: { lead: "Its machine", mid: "its machine" },
+    session: { lead: commonWords.itsSession, mid: "its session" },
+  },
+  /** A down state's link to its session, beside Try again: `name` its title. */
+  openSession: (name: string) => `Open ${name}`,
+  /** The can't-be-reached state's link to /config/previews. */
+  previewSettings: "Preview settings",
   /** A canvas's view menu, its motion choice and its check against the design system. */
   canvasView: "Canvas view",
   reducedMotion: "Reduce motion",
@@ -147,4 +208,87 @@ export const previewWords = {
    */
   portPassTurnedAway: (host: string) =>
     `This preview turned the dashboard away twice: this browser kept no pass for ${host}. Allow cookies for ${host} in this browser, then try again.`,
+  /**
+   * The hub refused this browser a pass for the preview's origin (dashboard
+   * pass.ts): `refused` the hub's reason, a whole sentence;
+   * `passNoReason` when it gave none; `passNoAnswer` when the origin's
+   * `host` never answered the entry.
+   */
+  passRefused: (refused: string) =>
+    `The hub didn't give this browser a pass for this preview. ${refused}`,
+  passNoReason: "It didn't say why.",
+  passNoAnswer: (host: string) => `${host} didn't answer this browser.`,
+  /** The page's link to the hub closed and the page named no reason. */
+  linkClosed: "The page's link to the hub closed.",
+  /** The head's Send: every held comment and reply in one press. */
+  sendUnsent: "Send everything unsent",
+  /** The head's and More's controls. */
+  undock: "Undock",
+  openInNewTab: "Open in new tab",
+  reload: "Reload",
+  /** The mode control: its menu, its name with the mode it is in, each mode and its tip (the tooltip draws the key beside it). */
+  mode: "Mode",
+  modeIs: (mode: string) => `Mode: ${mode}`,
+  modes: {
+    interact: "Interact",
+    comment: "Comment",
+    draw: "Draw",
+  },
+  modeTips: {
+    interact: "Interact: the page gets every click",
+    comment: "Comment: a click pins a comment",
+    draw: "Draw: drag to draw on the page",
+  },
+  /**
+   * The comments' link to the hub (dashboard artifact-doc.ts): down past
+   * its grace, the Comments control's name (`notReaching`), its title
+   * (`notReachingTitle`) and the Comments panel's line (`notReachingLine`);
+   * why, under Show details, each with what happens next.
+   */
+  notReaching: "Comments aren't reaching the agent",
+  notReachingTitle:
+    "Comments aren't reaching the agent. Open them to try again.",
+  notReachingLine:
+    "Comments aren't reaching the agent. They're kept on this device and go once the link to the hub is back.",
+  linkRefused: (code: number) => `The hub refused the link (${code}).`,
+  linkNeverOpened:
+    "The link to the hub hasn't opened. It keeps trying by itself; Try again tries now.",
+  linkDropped: (code: number) =>
+    `The link to the hub dropped (${code}) and hasn't come back. It keeps trying by itself; Try again tries now.`,
+  linkSilent:
+    "The link to the hub stopped answering. It keeps trying by itself; Try again tries now.",
+  /** The Comments control's title while its link is up: what ⇧C does. */
+  commentsHidePins: "Comments (⇧C hides the pins)",
+  commentsShowPins: "Comments (⇧C shows the pins)",
+  /** A write of the pane's the hub refused without a reason. */
+  hubDidntKeep: "The hub didn't keep that, and didn't say why.",
+  /** A dial or a pick kept before the pane's doc holds the page (artifact-doc.ts `keep`). */
+  notKeptYet:
+    "The hub hasn't answered for this page yet, so that wasn't kept. Make the change again in a moment.",
+  /** The page refused a comment, or a change to one, without a reason. */
+  commentNotKept: "The page didn't keep that comment. Send it again.",
+  changeNotKept: "The page didn't keep that, so nothing changed. Try again.",
+  /** The pane holds no doc of the page's comments: what didn't happen, and the way back. */
+  lostComments: {
+    deleted:
+      "This pane lost the page's comments, so the comment wasn't deleted. Reload the dashboard, then try again.",
+    reply:
+      "This pane lost the page's comments, so the reply wasn't kept. Reload the dashboard, then reply again.",
+    resolved: (resolved: boolean) =>
+      `This pane lost the page's comments, so the comment wasn't ${resolved ? "resolved" : "reopened"}. Reload the dashboard, then try again.`,
+    sent: "This pane lost the page's comments, so nothing was sent. Reload the dashboard, then send again.",
+    again:
+      "This pane lost the page's comments, so the comment didn't go. Reload the dashboard, then try again.",
+  },
+  /** A pin's Delete, asked under its card: what goes with it. */
+  deletePinBody: (ink: boolean) =>
+    ink
+      ? "It goes from the page with its thread and the ink it stands on. This can't be undone."
+      : "It goes from the page with its thread. This can't be undone.",
+  /** The composer's choice of element, as a screen reader names it. */
+  aboutElement: (element: string) =>
+    `On ${element}: change what this comment is about`,
+  /** A changed line, read aloud: "<before> from … to <after>". */
+  changedFrom: "from",
+  changedTo: "to",
 };

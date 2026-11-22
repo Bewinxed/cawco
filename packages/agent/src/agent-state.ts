@@ -30,6 +30,8 @@ export interface AgentState {
   readonly hubLoopback?: {
     /** The dashboard's port here (`local`) and on the hub (`hub`); null when nothing is carried. */
     readonly dashboard: { readonly hub: number; readonly local: number } | null;
+    /** The port of this machine's SSH forward it carries every port through; null when it carries to the hub's address. */
+    readonly forward: number | null;
     /** Why the hub is on this computer, so nothing is carried; null when it is elsewhere. */
     readonly here: HubHere | null;
     /** The hub's host as the agent reaches it. */

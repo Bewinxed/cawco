@@ -2,10 +2,8 @@ import { posix } from "node:path";
 import type { BrowserKey } from "@cawco/core/browser";
 import { isBrowserKey } from "@cawco/core/browser";
 import { deliverableKind } from "@cawco/core/deliverables";
-import { detach } from "@cawco/core/detach";
 import { blockFile } from "@cawco/core/inline-blocks";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
-import { PREVIEW_FOLDERS } from "@cawco/core/preview/protocol";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { MEDIA_LIMIT_BYTES } from "@cawco/core/protocol";
 import { transcriptWords } from "@cawco/core/words/transcript";
@@ -36,7 +34,6 @@ import {
   silentProblem,
   unansweredIn,
 } from "./machine-answers";
-import { BUSY_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { PageBuilt, PageFolderProblem } from "./page-problems";
 import type { PreviewTarget } from "./preview";
 import { previewFrame, previewTargets, shownArtifact } from "./preview";
@@ -94,7 +91,6 @@ export type ArtifactPagesContext = Pick<
   | "machineName"
   | "previewListeners"
   | "previewService"
-  | "readAgent"
   | "readMachineMedia"
   | "registry"
   | "streams"
@@ -293,42 +289,6 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     closePreview(instanceId);
     ctx.db.previewPasses.revoke({ instanceId });
     ctx.previewListeners.release(instanceId);
-  };
-
-  /**
-   * As machine `machineId` registers: the folders of its folder previews
-   * that ask the person something, read by its agent with a `stat` each
-   * (agent preview.ts `foldersThere`), so one whose folder went while the
-   * hub was away leaves Needs you now, not at its next start. A read only:
-   * no listener, no process, nothing woken. An agent that doesn't answer it
-   * leaves every record as it stands.
-   */
-  const foldersSeen = (machineId: string): void => {
-    const asking = ctx.artifacts.foldersAsking(machineId);
-    if (asking.length === 0) {
-      return;
-    }
-    detach(
-      (async () => {
-        const read = await ctx.readAgent(
-          machineId,
-          PREVIEW_FOLDERS,
-          [asking.map((one) => one.dir)],
-          BUSY_TIMEOUT_MS
-        );
-        if (read.kind !== "answered" || !read.value.ok) {
-          return;
-        }
-        const said = read.value.result;
-        for (const [n, one] of asking.entries()) {
-          ctx.artifacts.sourceSeen(one.id, said[n] ?? null);
-        }
-        console.info(
-          `[hub] ${ctx.machineName(machineId)}'s folder previews read: ${asking.length}, ${said.filter(Boolean).length} gone`
-        );
-      })(),
-      "folder previews read"
-    );
   };
 
   /**
@@ -891,7 +851,6 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     publishPreview,
     closePreview,
     endPreviews,
-    foldersSeen,
     openPreview,
     folderText,
     keepPage,

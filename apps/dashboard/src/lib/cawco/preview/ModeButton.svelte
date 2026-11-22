@@ -5,6 +5,7 @@
    * chosen mode's glyph in a glass of its own, opening the three as a menu
    * above it, as a bottom toolbar's menus open (HIG, Toolbars).
    */
+  import { previewWords } from "@cawco/core/words/preview";
   import type { Component, Snippet } from "svelte";
   import {
     BarGlass,
@@ -34,10 +35,15 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <BarItem icon={Glyph} {keys} label={`Mode: ${word}`} {props} />
+        <BarItem
+          icon={Glyph}
+          {keys}
+          label={previewWords.modeIs(word)}
+          {props}
+        />
       {/snippet}
     </DropdownMenu.Trigger>
-    <BarMenu label="Mode" rises width="compact">
+    <BarMenu label={previewWords.mode} rises width="compact">
       {@render menu()}
     </BarMenu>
   </DropdownMenu.Root>

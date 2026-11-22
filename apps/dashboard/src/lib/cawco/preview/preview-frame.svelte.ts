@@ -2,14 +2,11 @@
  * The page's frame: its load, its hold while its tab is off screen, the proxy's down page and the way back, the lock's turn-away, what the hub is told of it, its thumbnail, and what is posted into it.
  */
 
-import { backoffStep } from "@cawco/core/backoff";
+import { type BackoffPolicy, backoffStep } from "@cawco/core/backoff";
 import type { FrameSays } from "@cawco/core/page-wire";
-import {
-  PREVIEW_DOWNS,
-  type PreviewDown,
-  type ShownFailure,
-} from "@cawco/core/preview/protocol";
+import type { PreviewDown, ShownFailure } from "@cawco/core/preview/protocol";
 import { PAGE_SILENT_MS, probePreview } from "@cawco/core/preview/reach";
+import { previewWords } from "@cawco/core/words/preview";
 import { sheetWords } from "@cawco/core/words/sheet";
 import { untrack } from "svelte";
 import { frameObserver } from "#lib/platform/frame-observer.js";
@@ -20,6 +17,7 @@ import { artifactReached } from "../files/reached";
 import { pageVisible } from "../page-visible.svelte";
 import { afterPaint, warm } from "../workspace/warm.svelte";
 import { artifactSyncPath } from "./artifact-doc";
+import type { Down } from "./frame-down";
 import { hubReach } from "./hub-reach";
 import { frameHand, holdOpen } from "./open-pages";
 import type { PaneCanvas } from "./pane-canvas.svelte";
@@ -28,7 +26,6 @@ import type { PaneNotice } from "./pane-notice.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
 import { entryTo, turnedAwayWords } from "./pass";
 import type { PreviewReach } from "./preview-reach.svelte";
-import { PROBES } from "./preview-reach.svelte";
 import {
   previewError,
   previewErrorOf,
@@ -38,10 +35,25 @@ import {
 
 const frameError = (message: string | null) =>
   message ? { message, again: "reload" as const } : null;
+/**
+ * A down page's origin, probed again while the pane is on screen: from 2 s,
+ * doubling to 30 s, for as long as it stands there. Its cover tells the
+ * person the page loads once what didn't answer does (core words
+ * `previewWords.down`), so the probe keeps its word. Our calls.
+ */
+const DOWN_PROBES: BackoffPolicy = {
+  firstMs: 2000,
+  mostMs: 30_000,
+  giveUp: {
+    never:
+      "the down cover says the page loads by itself once it answers; one ping per 30 s while the pane is on screen bounds it",
+  },
+};
 /** The hops that come back by themselves once what didn't answer does. */
 const COMES_BACK: ReadonlySet<PreviewDown> = new Set([
   "server",
   "machine",
+  "hub",
   "workspace",
   "reach",
 ]);
@@ -168,8 +180,8 @@ export class PreviewFrame {
    * whose version can't be cut again: only its session making it again
    * brings it back, as a new open; and `error` and `crashed`, whose server answers:
    * its page is what is broken, and Try again loads it once its session fixed it) in a pane
-   * someone has on screen, the origin's ping is probed on the unreached
-   * state's backoff (`PROBES`), and once
+   * someone has on screen, the origin's ping is probed on its own
+   * backoff (`DOWN_PROBES`, which never gives up), and once
    * it answers the frame loads again. Only a pane on screen asks, so a
    * machine coming back starts a listener for the previews being looked at
    * alone (the hub's register starts none). The tries count across the
@@ -323,7 +335,7 @@ export class PreviewFrame {
       if (!(hop && origin && seen && COMES_BACK.has(hop))) {
         return;
       }
-      const step = backoffStep(PROBES, this.downTries + 1, 0);
+      const step = backoffStep(DOWN_PROBES, this.downTries + 1, 0);
       if (step.kind === "gave-up") {
         return;
       }
@@ -499,7 +511,7 @@ export class PreviewFrame {
     const entry = await entryTo(origin, this.#deps.previewReach.framePlace);
     if ("refused" in entry) {
       this.#deps.paneNotice.say({
-        message: `The hub didn't give this preview a pass: ${entry.refused}`,
+        message: previewWords.passRefused(entry.refused),
         again: "reload",
       });
       return;
@@ -509,14 +521,10 @@ export class PreviewFrame {
     }
   }
 
-  /** The proxy's page says which hop failed (`cawco:down`): the pane cannot read a preview origin's document. */
-  heardDown(message: { down?: unknown; why?: unknown }) {
-    const said = PREVIEW_DOWNS.find((kind) => kind === message.down);
-    if (!said) {
-      return;
-    }
-    this.down = said;
-    this.downWhy = typeof message.why === "string" ? message.why : null;
+  /** The proxy's page says which hop failed (`cawco:down`, frame-down.ts): the pane cannot read a preview origin's document. */
+  heardDown(said: Down) {
+    this.down = said.down;
+    this.downWhy = said.why;
     this.retrying = false;
     this.#shown();
   }

@@ -15,7 +15,12 @@
 import { errnoCode } from "@cawco/core/absent";
 import { detach } from "@cawco/core/detach";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
-import { causeOf, previewFailed, previewWebSocket } from "@cawco/preview/proxy";
+import {
+  causeOf,
+  previewFailed,
+  previewWebSocket,
+  untransformed,
+} from "@cawco/preview/proxy";
 import type { Server } from "bun";
 import { ElysiaStatus } from "elysia";
 import { BIND_HOST, FLEET_PORTS, PREVIEW_PORTS } from "../config";
@@ -103,17 +108,17 @@ export const createListeners = (env: ListenersEnv) => {
         env.used(key);
       }
       const answered = await env.answer(request, server, key, lock);
-      if (
-        answered &&
-        request.headers.get("upgrade")?.toLowerCase() === "websocket"
-      ) {
+      if (!answered) {
+        return;
+      }
+      if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
         previewFailed(
           HOP,
           key ?? null,
           `its socket at ${new URL(request.url).pathname} was refused (${answered.status})`
         );
       }
-      return answered;
+      return untransformed(answered);
     };
     const error = (thrown: Error) => {
       const why = `the preview server failed serving it: ${causeOf(thrown)}`;

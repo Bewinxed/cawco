@@ -9,6 +9,8 @@
  *   checks makes it a duplicate.
  * - **Triage** (choice), as a task is filed while Jev is on: its `triage`
  *   field. Off: a session triages when asked (the triage skill).
+ * - **Not a routine.** A task that starts on its own (§5.5) is filed with
+ *   neither: it is no one-off work, and only its trigger starts it.
  * - **Attach or fresh** (yes/no), as you comment on a task whose newest
  *   attempt has ended (§5.3, Attach or spawn), one of three: its session
  *   takes your words (attach, its cache warm); its history is compressed
@@ -606,6 +608,33 @@ export const createJevTasks = ({
     return to;
   };
 
+  /** A task just filed, judged: Duplicates (a session's are compared in task_create, where it reads the answer), then Triage; a routine neither. */
+  const judgeFiled = async (
+    event: Extract<TaskEvent, { kind: "created" }>,
+    bySession: boolean
+  ) => {
+    const task = await tasks.get(event.projectId, event.id);
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
+    // A routine starts on its trigger and is no one-off work to compare
+    // or triage (§5.5): its runs never come from dispatch's frontier.
+    if (task.routine) {
+      return;
+    }
+    // A session's filing is compared in task_create, where it reads the answer.
+    if (!bySession) {
+      const outcome = await filed(event.projectId, task, "none");
+      if (outcome instanceof ElysiaStatus) {
+        return outcome;
+      }
+      if ("duplicateOf" in outcome && outcome.duplicateOf) {
+        return;
+      }
+    }
+    return await triage(event.projectId, event.id);
+  };
+
   /**
    * What runs after a change to a project's tasks: Duplicates and Triage on
    * filing, Attach or fresh on your comment while the project's
@@ -614,23 +643,7 @@ export const createJevTasks = ({
   const taskChanged = (event: TaskEvent): void => {
     if (event.kind === "created") {
       const bySession = event.actor.mover === "session";
-      const work = async () => {
-        // A session's filing is compared in task_create, where it reads the answer.
-        if (!bySession) {
-          const task = await tasks.get(event.projectId, event.id);
-          if (task instanceof ElysiaStatus) {
-            return task;
-          }
-          const outcome = await filed(event.projectId, task, "none");
-          if (outcome instanceof ElysiaStatus) {
-            return outcome;
-          }
-          if ("duplicateOf" in outcome && outcome.duplicateOf) {
-            return;
-          }
-        }
-        return await triage(event.projectId, event.id);
-      };
+      const work = () => judgeFiled(event, bySession);
       const unjudged = (why: string) =>
         console.warn(
           `[tasks] ${event.id} in ${event.projectId} was filed; its duplicates and triage were not judged: ${why}`

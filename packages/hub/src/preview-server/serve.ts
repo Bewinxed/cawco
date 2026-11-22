@@ -1,8 +1,9 @@
 /**
  * One request to a preview origin, answered by the preview server: the
  * dashboard's ping, the lock (preview-access.ts), a page's document and its
- * files, the decision and file viewer hosts' files, a canvas's host page,
- * and a machine's preview relayed to its listener, each answer framed for
+ * files, a folder preview's files, the decision and file viewer hosts'
+ * files, a canvas's host page, and a machine's preview relayed to its
+ * listener, each answer framed for
  * the dashboards, its overlay tag keyed, and gzipped. What only the hub
  * answers (an entry, which writes a pass; an artifact's doc socket and its
  * Send, picture, pictures and canvas; a page's store's socket; a page's
@@ -19,7 +20,11 @@ import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { errnoCode } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
-import { FILE_VIEWER_ASSETS, fileViewerFile } from "@cawco/core/file-viewer";
+import {
+  FILE_VIEWER_ASSETS,
+  fileViewerFile,
+  opensAsFile,
+} from "@cawco/core/file-viewer";
 import type { PreviewDown } from "@cawco/core/preview/protocol";
 import {
   type HubReach,
@@ -36,6 +41,7 @@ import {
   PREVIEW_PING_PATH,
 } from "@cawco/core/preview/routes";
 import { sourceKeyOf, type Upstream } from "@cawco/core/preview/upstream";
+import { previewWords } from "@cawco/core/words/preview";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import {
   asksUpgrade,
@@ -45,10 +51,15 @@ import {
   decodedHeaders,
   downOf,
   downResponse,
+  errorPageResponse,
+  fileViewerOf,
+  folderKey,
   heldWhileServed,
   IMMUTABLE,
+  injectOverlay,
   keyedOverlayPath,
   keyOverlay,
+  loadsDocument,
   notUpYet,
   OVERLAY_KEY,
   overlayResponse,
@@ -56,12 +67,15 @@ import {
   previewFailed,
   proxyHeaders,
   RELAY_HEADER,
+  socketRefusal,
   upgradePreview,
+  versionAssets,
   versionedFile,
 } from "@cawco/preview/proxy";
 import type { Server } from "bun";
 import { ElysiaStatus } from "elysia";
 import { serveCanvas } from "../artifacts/canvas";
+import { folderFileAt, previewFolderOf } from "../artifacts/preview-folder";
 import { ARTIFACT_PATH, STORE_PATH } from "../artifacts/sync";
 import { reached as answered, dataOf, refusalText, succeeded } from "../client";
 import { ARTIFACTS_ROOT, PREVIEW_PORTS_TEXT } from "../config";
@@ -70,7 +84,12 @@ import { decisionHostFile } from "../decision-host";
 import { DECISION_ASSETS } from "../decision-program";
 import { lockedResponse, type PassCheck, passOf } from "../preview-access";
 import { type HostPattern, labelOf, originFor } from "../preview-hosts";
-import { type MachineRow, servedByMachine } from "../preview-machine";
+import {
+  type FolderRow,
+  isFolderRow,
+  type MachineRow,
+  servedByMachine,
+} from "../preview-machine";
 import { HOP, isEmbed } from "../preview-origin";
 import {
   CANVAS_PATH,
@@ -414,13 +433,12 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
           ? `${SYNC_PATH}${encodeURIComponent(key)}/${synced?.[1]}`
           : `${STORE_SYNC_PATH}${encodeURIComponent(key)}/${stored}`;
       const target = `ws${hubAt(`${route}${url.search}`).slice(4)}`;
-      return upgradePreview(request, server, target, headers, {
+      const refused = await upgradePreview(request, server, target, headers, {
         hop: "hub link",
         instanceId: key,
         viewer: () => env.watch(key),
-      })
-        ? undefined
-        : new Response("WebSocket upgrade failed", { status: 400 });
+      });
+      return refused && socketRefusal(refused);
     }
     try {
       const answer = await fetch(
@@ -439,9 +457,13 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
         headers: decodedHeaders(answer.headers),
       });
     } catch (error) {
-      const why = `the hub didn't answer the preview server: ${causeOf(error)}`;
-      previewFailed(HOP, key ?? null, why);
-      return downResponse("machine", 502, why);
+      previewFailed(
+        HOP,
+        key ?? null,
+        `the hub didn't answer the preview server: ${causeOf(error)}`
+      );
+      // The cover's parentheses take a clause: the error's code, not its sentences.
+      return downResponse("hub", 502, codeOf(error));
     }
   };
 
@@ -672,6 +694,115 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     });
   }
 
+  /**
+   * Folder preview `row`'s file at `url`, from the files the hub keeps for
+   * it (`artifacts/<id>/folder/`, artifacts/preview-folder.ts), as they are:
+   * a path that ends at a folder answered with its index.html, a file at
+   * the folder's key (core `versionAssets`) kept for good and any other
+   * address never kept, a page with its overlay, its tag naming the
+   * artifact, and its own files written to the folder's key, a frame's load
+   * of a file that is no page answered with CawCo's viewer of it (core
+   * file-viewer.ts), and a document's load
+   * of a file the folder lacks with CawCo's own error page. A path that
+   * leaves the folder, by `..` or by a link, is refused. A row with no
+   * files here is one a hub from before it kept them made: its machine is
+   * still to hand them over (artifacts/folder-move.ts), or its copy there
+   * was gone, and it can't be shown again.
+   */
+  async function serveFolder(
+    request: Request,
+    row: FolderRow,
+    url: URL
+  ): Promise<Response> {
+    const root = await folderRootOf(row);
+    if (root instanceof Response) {
+      return root;
+    }
+    const versioned = versionedFile(url.pathname);
+    const found = await folderFileOf(request, root, versioned ?? url.pathname);
+    if (found instanceof Response) {
+      return found;
+    }
+    const file = Bun.file(found.path);
+    const headers = new Headers({
+      "cache-control": versioned === null ? "no-store" : IMMUTABLE,
+      "content-type": file.type,
+    });
+    if (request.method === "HEAD") {
+      return new Response(null, { headers });
+    }
+    if (opensAsFile(request, 200, file.type)) {
+      const page = await fileViewerOf(url, headers, file.stream(), found.size);
+      return new Response(injectOverlay(page), { headers });
+    }
+    if (!file.type.startsWith("text/html")) {
+      return new Response(file, { headers });
+    }
+    // Its overlay's tag names the artifact, so a page opened alone joins its
+    // doc (preview overlay/page.ts) and loads again when its files move.
+    const page = injectOverlay(await file.text(), {
+      artifact: row.id,
+      kind: "preview",
+    });
+    return new Response(
+      versioned === null
+        ? versionAssets(page, await folderKey(root), "/", url.pathname)
+        : page,
+      { headers }
+    );
+  }
+
+  /** Where folder preview `row`'s files stand, its real path; or the page that says why it has none. */
+  async function folderRootOf(row: FolderRow): Promise<string | Response> {
+    try {
+      return await realpath(previewFolderOf(ARTIFACTS_ROOT, row.id));
+    } catch {
+      if (env.store.toMove(row.id)) {
+        previewFailed(HOP, row.id, "its files are still on its machine");
+        return downResponse("machine", STOP_STATUS.away);
+      }
+      previewFailed(HOP, row.id, "the hub keeps no files of it");
+      return downResponse(
+        "gone",
+        GONE_STATUS,
+        previewWords.goneWhy.filesLost(env.store.machineName(row.machineId))
+      );
+    }
+  }
+
+  /**
+   * The file `pathname` names in a folder preview's folder `root`, its real
+   * path inside it and its size; a path that leaves it, by `..` or by a
+   * link, refused, and one it lacks answered as missing: a document's load
+   * with CawCo's own error page.
+   */
+  async function folderFileOf(
+    request: Request,
+    root: string,
+    pathname: string
+  ): Promise<{ path: string; size: number } | Response> {
+    const missing = (status: 403 | 404, text: string): Response =>
+      loadsDocument(request)
+        ? errorPageResponse(status, text)
+        : new Response(text, { status });
+    let actual: string;
+    try {
+      actual = await realpath(
+        join(root, folderFileAt(decodeURIComponent(pathname)))
+      );
+    } catch {
+      return missing(404, "Not found");
+    }
+    const inside = relative(root, actual);
+    if (inside === ".." || inside.startsWith(`..${sep}`)) {
+      return missing(403, "Forbidden");
+    }
+    const stats = await stat(actual);
+    return stats.isFile()
+      ? { path: actual, size: stats.size }
+      : missing(404, "Not found");
+  }
+
   /** The ping on origin `key`: ok once whatever serves its page answers; a machine's preview's listener asked for its own (hub preview.ts `pingSession`, as it was). */
   async function pingOrigin(key: string): Promise<Response> {
     const row = isEmbed(key) ? env.store.rowAt(key) : undefined;
@@ -729,14 +860,19 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     const headers = upstreamHeaders(request, direct);
     headers.set(RELAY_HEADER, at.token);
     if (asksUpgrade(request)) {
-      return upgradePreview(request, server, `ws://${upstream}`, headers, {
-        hop: HOP,
-        instanceId: key,
-        nothingListens: () => upstreams.unreachable(key, at),
-        viewer: () => env.watch(key),
-      })
-        ? undefined
-        : new Response("WebSocket upgrade failed", { status: 400 });
+      const refused = await upgradePreview(
+        request,
+        server,
+        `ws://${upstream}`,
+        headers,
+        {
+          hop: HOP,
+          instanceId: key,
+          nothingListens: () => upstreams.unreachable(key, at),
+          viewer: () => env.watch(key),
+        }
+      );
+      return refused && socketRefusal(refused);
     }
     let response: Response;
     try {
@@ -845,8 +981,23 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     return relay(request, server, key, reached.upstream, direct);
   }
 
+  /**
+   * A page or canvas this origin no longer serves (deleted, or shown on
+   * another origin now): a document's load gets the proxy's own page for a
+   * closed preview, which every frame draws as its down state and a tab of
+   * its own reads as one; any other request, `text` with its 404.
+   */
+  const notServed = (request: Request, text: string): Response =>
+    loadsDocument(request)
+      ? downResponse("closed", 404)
+      : new Response(text, { status: 404 });
+
   /** A canvas by its id on origin `key` (`/__cawco/canvas/<id>/`, `?embed=1` in a decision page); null for any other path. */
-  async function canvasById(url: URL, key: string): Promise<Response | null> {
+  async function canvasById(
+    request: Request,
+    url: URL,
+    key: string
+  ): Promise<Response | null> {
     const canvas = url.pathname.match(CANVAS_PATH);
     if (!(canvas?.[1] && canvas[2])) {
       return null;
@@ -856,9 +1007,8 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
       env.store.artifact(artifactId)?.kind !== "canvas" ||
       !env.store.servedOn(artifactId, key)
     ) {
-      return new Response("This session has no such canvas.", {
-        status: 404,
-      });
+      previewFailed(HOP, key, `its origin serves no canvas ${artifactId}`);
+      return notServed(request, "This session has no such canvas.");
     }
     const row = rest === "/" ? await documentRow(artifactId) : undefined;
     return serveCanvas(
@@ -884,9 +1034,8 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
       env.store.artifact(artifactId)?.kind !== "page" ||
       !env.store.servedOn(artifactId, key)
     ) {
-      return new Response("This origin serves no such page.", {
-        status: 404,
-      });
+      previewFailed(HOP, key, `its origin serves no page ${artifactId}`);
+      return notServed(request, "This origin serves no such page.");
     }
     return servePage(
       request,
@@ -917,7 +1066,10 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
         new Response("Not found", { status: 404 })
       );
     }
-    return (await canvasById(url, key)) ?? (await pageById(request, url, key));
+    return (
+      (await canvasById(request, url, key)) ??
+      (await pageById(request, url, key))
+    );
   }
 
   /** What origin `key` shows at `url`: a page or a canvas the hub holds, or a machine's preview relayed. */
@@ -953,6 +1105,9 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
         }));
       }
       return servePage(request, row.id, pathname, key, url);
+    }
+    if (isEmbed(key) && isFolderRow(row)) {
+      return serveFolder(request, row, url);
     }
     if (!(isEmbed(key) && servedByMachine(row))) {
       previewFailed(HOP, key, "its machine's preview is on its own origin");

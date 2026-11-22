@@ -10,7 +10,8 @@
    * it grows. The page's words come here: ready, the picture drawn, its
    * doc's link to the hub and its count, kept on its stage, and the rail's
    * Dock, Undock, Done and Remove, which go to whoever holds the slot it
-   * stands in.
+   * stands in. A canvas nothing serves (the proxy's own page in its frame)
+   * draws every frame's down state over it.
    */
   import { pageSaid } from "@cawco/core/page-wire";
   import {
@@ -22,6 +23,8 @@
   import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { theme } from "#lib/theme.svelte.js";
+  import FrameDown from "../preview/FrameDown.svelte";
+  import { downIn } from "../preview/frame-down";
   import { previewShortcut, SHORTCUT_MESSAGE } from "../preview/wire";
   import { heardInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
@@ -39,6 +42,12 @@
     const stage = [...stages.values()].find(
       (one) => one.frame?.contentWindow === event.source
     );
+    // The proxy's own page in its frame, from whatever origin answered it (preview/frame-down.ts).
+    const down = downIn(event, stage?.frame);
+    if (stage && down) {
+      stage.down = down;
+      return;
+    }
     const type = event.data?.type;
     if (!stage || event.origin !== stage.origin || typeof type !== "string") {
       return;
@@ -164,6 +173,15 @@
           title="Canvas"
           bind:this={stage.frame}
         ></iframe>
+        {#if stage.down}
+          <!-- Nothing serves the canvas: every frame's down state, over its frame. -->
+          <FrameDown
+            class="absolute inset-0"
+            down={stage.down.down}
+            onretry={() => stage.reload()}
+            why={stage.down.why}
+          />
+        {/if}
       {:else if stage.unreached}
         <!-- The hub's refusal (every preview port in use, a pass not given), in its words, and Try again asks again. -->
         <div

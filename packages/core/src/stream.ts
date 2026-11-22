@@ -475,12 +475,33 @@ import type { TailnetServing } from "./tailnet-https";
  *    design graph's compile errors are the answer's own `errors`, said once
  *    (hub component.ts `stageSaid`). A page built for 94 reads a stage
  *    with `errors`, so it reloads first.
+ * 96: routines are tasks (Projects spec §5.5): a wait has no kind
+ *    `routine` (a wait on a routine is its task's, `tsk-N`, with its stop's
+ *    `condition`), a task's list row and read carry its `routine`, a
+ *    condition's state may be `asked`, a run's verdict is keep, stop or ask,
+ *    and a task's move, wait and tools refuse under new codes
+ *    (`task-routine-done-not-run`, `wait-routine-never-ends`,
+ *    `task-trigger-not-yours`, `dispatch-routine`). A page built for 95
+ *    reads a wait of kind `routine`, so it reloads first.
+ * 97: a port preview's create refuses a `serve.cwd` that names no folder
+ *    on the session's machine under a new code (`artifact-preview-folder`).
+ *    A page built for 96 does not read that refusal, so it reloads first.
+ * 98: a port preview's source names no `pin`: it is served live from the
+ *    server its workspace or place runs (hub served.ts `servedOf`). A page
+ *    built for 97 holds a port source's `pin` to a string, so it reloads
+ *    first.
+ * 99: a folder preview's source names no `pin`: the hub keeps its files and
+ *    serves them itself (hub artifacts/preview-folder.ts); `artifact_update`
+ *    takes a folder preview's `dir`, and a preview's create and update
+ *    refuse under new codes (`artifact-folder-unfit`,
+ *    `artifact-update-not-folder`, `artifact-folder-unread`). A page built
+ *    for 98 holds a folder source's `pin` to a string, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 95;
+export const WIRE_PROTOCOL = 99;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds
@@ -825,6 +846,14 @@ export interface RegisterAckPayload {
    * every start of the machine's agent.
    */
   sessions?: CarrySessionRequest[];
+  /**
+   * This connection came through the machine's SSH forward (hub
+   * ssh-door.ts), so the agent reaches the hub at that forward alone: its
+   * loopback carries the dashboard and every preview port to the forward,
+   * each request naming the hub's port it is for (core ports.ts
+   * `HUB_PORT_HEADER`). Absent on any other connection.
+   */
+  sshForward?: true;
   /**
    * The tailnet name and addresses the hub serves HTTPS on, while it does
    * ({@link TailnetServing}); every beat's ack carries it again, so the
