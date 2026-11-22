@@ -224,7 +224,6 @@
          now at its end, the rest of its acts in its ⋯. -->
     <RowList label={words.tasks.groupLabel}>
       <SectionRow
-        bare
         actions={[
           {
             label: words.tasks.changeTie,

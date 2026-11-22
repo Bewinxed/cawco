@@ -104,11 +104,11 @@ const OVERLAP = 1;
  *   card's border and fill and under its face (CardFace): its edges are
  *   parts of their own, a border's width thick, so no scale ever thickens
  *   them.
- * - `fill`: a group of controls shown by their edge on the page's ground
- *   (option chips, option tiles), whose pill is the house's pick, the
- *   selected fill on the control's own neutral edge (border-control),
- *   drawn over each control's edge and under its words (the controls'
- *   children stand over it), so the pick glides.
+ * - `fill`: a group of raised controls (option chips, option tiles), whose
+ *   pill is the house's pick, the selected fill on the control's own
+ *   neutral edge (border-control), drawn over each control's raised fill
+ *   and edge and under its words (the controls' children stand over it):
+ *   so the controls keep their raised rest, and the pick still glides.
  */
 const LAYERS = `
 [data-slot^="highlight-"] {

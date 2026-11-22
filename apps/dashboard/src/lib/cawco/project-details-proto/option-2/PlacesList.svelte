@@ -224,10 +224,7 @@
   aria-labelledby="{uid}-places"
   class="flex min-w-0 flex-col gap-space-2"
 >
-  <h3
-    class={sectionHeadVariants({ inset: "flush", rule: "group" })}
-    id="{uid}-places"
-  >
+  <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-places">
     {words.places.heading}
   </h3>
 
@@ -239,7 +236,6 @@
       {@const offline = machine !== null && !machine.online}
       {@const moving = movingPlaceId === place.id}
       <SectionRow
-        bare
         actions={place.kind === "hub" ? [] : actsOf(place)}
         icon={machine ? machineIcon(machine.os) : IconHubFolder}
         meta={place.path}
@@ -419,7 +415,6 @@
       <!-- The list's last row adds to it, in the list's own row (HIG, Lists:
            an add row ends its list). -->
       <SectionRow
-        bare
         enabled={disabled ? false : undefined}
         icon={IconPlus}
         name={words.places.addPlace}
@@ -438,20 +433,12 @@
     aria-labelledby="{uid}-repos"
     class="flex min-w-0 flex-col gap-space-2"
   >
-    <h3
-      class={sectionHeadVariants({ inset: "flush", rule: "group" })}
-      id="{uid}-repos"
-    >
+    <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-repos">
       {words.places.repositories}
     </h3>
     <RowList label={words.places.repositories}>
       {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
-        <SectionRow
-          bare
-          icon={IconGitRepo}
-          mono
-          name="{repo.owner}/{repo.name}"
-        >
+        <SectionRow icon={IconGitRepo} mono name="{repo.owner}/{repo.name}">
           {#snippet trailing()}
             <Button
               aria-label="{repo.owner}/{repo.name}"
@@ -475,10 +462,7 @@
     aria-labelledby="{uid}-lfs"
     class="flex min-w-0 flex-col gap-space-2"
   >
-    <h3
-      class={sectionHeadVariants({ inset: "flush", rule: "group" })}
-      id="{uid}-lfs"
-    >
+    <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-lfs">
       {words.places.largeFilesHeading}
     </h3>
     <OptionTiles

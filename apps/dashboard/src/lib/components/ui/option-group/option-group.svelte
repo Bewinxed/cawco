@@ -72,9 +72,9 @@
      * standing over it with no fill or edge of their own while chosen;
      * `"fill"` as the house's selected fill (`selected-bg`, as a Select's
      * trigger, a menu's radio and ChoiceChip show a pick) on the control's
-     * neutral edge, the options at rest shown by their edge alone on the
-     * page's ground, the fill under their words (highlight `look: "fill"`),
-     * the chosen one taking the selected ink.
+     * neutral edge, drawn over the options' own raised rest and under their
+     * words (highlight `look: "fill"`), the chosen one taking the selected
+     * ink.
      */
     glide?: boolean | "fill";
     layout?: OptionGroupLayout;

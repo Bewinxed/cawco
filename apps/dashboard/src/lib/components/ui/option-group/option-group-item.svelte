@@ -50,12 +50,12 @@
     chipVariants({ variant: "option" }),
     "focus-inset",
     // Gliding, the group's pill is the pick (look "card": the picked edge
-    // over the recess, the option over it, clear while chosen; "fill": an
-    // option shown by its edge alone on its page's ground, the pick the
-    // selected fill gliding under its words, which stand over it).
+    // over the recess, the option over it, clear while chosen; "fill": the
+    // selected fill on the neutral edge, over the option's raised rest and
+    // under its words, which stand over it).
     group.glide &&
       (group.fill
-        ? "bg-transparent aria-checked:border-border-control aria-checked:bg-transparent enabled:aria-checked:text-selected-ink [&>*]:relative [&>*]:z-2"
+        ? "aria-checked:border-border-control enabled:aria-checked:bg-surface-raised enabled:aria-checked:text-selected-ink [&>*]:relative [&>*]:z-2"
         : "relative z-2 bg-transparent aria-checked:border-transparent aria-checked:bg-transparent"),
     group.layout === "list" &&
       "items-box-start grid min-w-0 grid-cols-auto-fluid",

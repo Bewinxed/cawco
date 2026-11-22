@@ -9,12 +9,9 @@
    * open. Escape gives the focus back to the tile; a press elsewhere closes
    * it and lands where it lands.
    *
-   * Brief (the project's settings view), it is its glyph and name, a
-   * control on its page's ground shown by its edge alone, as the view's
-   * option tiles are: its example is its tooltip and its
-   * hand-over's head, and this project's own is told by its name in the
-   * edited ink, as a dial changed from its default is (never a fill, never
-   * its holder's hue), put back from the surface's head.
+   * Brief (the project's settings view), it is this tile with its name
+   * alone: its example is its tooltip and its hand-over's head, and it has
+   * no put-back of its own, the surface's head putting them all back.
    *
    * While the hub writes a hand-over or a put-back the swap glyph breathes;
    * a refusal stands under the tile in the hub's words, with Try again.
@@ -71,7 +68,7 @@
     width: string;
     /** Its words: Who decides' unless the surface drawing it says its own. */
     said?: RosterWords;
-    /** Its name alone, its example in its tooltip, this project's own marked by its fill alone (Roster `brief`). */
+    /** Its name alone, its example in its tooltip, no put-back of its own (Roster `brief`). */
     brief?: boolean;
   } = $props();
 
@@ -81,13 +78,10 @@
 
   const Glyph = $derived(kindGlyph(kind.id));
   const Scope = $derived(own ? IconFolder : IconGlobe);
-  /** Its surface: raised while its list is open, deeper when this project set it; brief, its edge alone. */
+  /** Its surface: raised while its list is open, deeper when this project set it. */
   const surface = $derived.by(() => {
     if (handing) {
       return "bg-surface-raised inset-ring-2 inset-ring-brand-solid";
-    }
-    if (brief) {
-      return "inset-ring inset-ring-border-control";
     }
     return own
       ? "bg-(--wash,var(--color-surface-recess-deep))"
@@ -118,31 +112,22 @@
     ]}
     data-handing={handing || undefined}
     data-slot="kind-tile"
-    style:--wash={own && !handing && !brief && holder.hue !== null
+    style:--wash={own && !handing && holder.hue !== null
       ? `color-mix(in oklab, var(--color-mark-${holder.hue}) 8%, var(--color-surface-recess))`
       : undefined}
   >
-    <!-- Its glyph on a raised square; brief, bare on the tile, which is a
-         control and holds nothing raised inside it. -->
     <span
-      class={[
-        "grid flex-none place-items-center text-ink-strong",
-        brief
-          ? "size-icon-md"
-          : "size-8 rounded-xs bg-surface-raised shadow-tile",
-      ]}
+      class="grid size-8 flex-none place-items-center rounded-xs bg-surface-raised text-ink-strong shadow-tile"
     >
       <Glyph aria-hidden="true" class="size-icon-sm" />
     </span>
     <div class="flex min-w-0 flex-auto flex-col">
       <span class="flex min-w-0 flex-wrap items-center gap-x-space-1">
         <span
-          class={[
-            "min-w-0 type-label font-medium wrap-anywhere",
-            brief && own ? "text-selected-ink" : "text-ink-strong",
-          ]}>{kind.name}</span
+          class="min-w-0 type-label font-medium text-ink-strong wrap-anywhere"
+          >{kind.name}</span
         >
-        {#if project !== null && !brief}
+        {#if project !== null}
           <Scope
             aria-hidden="true"
             class="size-icon-sm flex-none text-ink-muted"

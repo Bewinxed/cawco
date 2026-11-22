@@ -58,10 +58,7 @@
   bind:this={card}
   aria-labelledby="member-{member.id}"
   class={[
-    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 text-ink-strong transition-control",
-    // Brief, it stands on its page's ground, its head over the visible
-    // rule as every group's head there; otherwise the raised card.
-    !brief && "rounded-lg bg-surface-raised p-space-3 shadow-tile",
+    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-surface-raised p-space-3 text-ink-strong shadow-tile transition-control",
     editing && "inset-ring-2 inset-ring-brand-solid",
   ]}
   data-editing={editing || undefined}
@@ -71,14 +68,9 @@
   {#snippet head(props: Record<string, unknown> = {})}
     <div
       {...props}
-      class={[
-        "flex gap-x-space-3",
-        brief
-          ? "items-center border-b border-border pb-space-2"
-          : "items-start",
-      ]}
+      class={["flex gap-x-space-3", brief ? "items-center" : "items-start"]}
     >
-      <MemberFace {member} size={brief ? 28 : 48} />
+      <MemberFace {member} size={48} />
       <div class="flex min-w-0 flex-auto flex-col">
         <div class="flex min-w-0 items-start gap-x-space-1">
           <h2
@@ -111,9 +103,7 @@
   {/if}
   <p
     class={[
-      // Brief, on the edge of the tiles it stands over.
-      !brief && "ps-(--stand-in)",
-      "type-meta text-pretty wrap-anywhere",
+      "ps-(--stand-in) type-meta text-pretty wrap-anywhere",
       facts?.attention ? "text-status-attn-ink" : "text-ink-muted",
     ]}
   >
