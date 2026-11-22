@@ -95,7 +95,10 @@
   <!-- Row 2, Col 1: hairline connector down to the next node (none after last). -->
   <div aria-hidden="true" class="flex flex-col items-center">
     {#if !last}
-      <span class="my-space-1 w-px flex-1 bg-border-hairline"></span>
+      <!-- From the wide line the stages stand two to a row (HowItRuns): a
+           connector there would join 1 to 3, so it goes. -->
+      <span class="my-space-1 w-px flex-1 bg-border-hairline @wide:hidden"
+      ></span>
     {/if}
   </div>
 

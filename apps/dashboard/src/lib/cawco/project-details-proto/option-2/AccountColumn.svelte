@@ -1,11 +1,14 @@
 <script lang="ts">
   import { hueVar } from "#lib/cawco/accounts/model.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import AccountChip, {
+    type AccountTool,
+  } from "#lib/cawco/spawn/AccountChip.svelte";
   /**
-   * Stage 2's account: the fleet's own routing and every fleet account
-   * standing open as one row of option chips (the account's hue and name;
-   * one signed in nowhere wears the fail glyph, "Signed out" in its
-   * accessible name and tip), what the pick does under them, the alert when
+   * Stage 2's account: the New session form's account chip (AccountChip),
+   * its popover listing Any available first and every fleet account by its
+   * full name and hue (one signed in nowhere says Signed out on its line),
+   * what the pick does under it, the alert when
    * the named account is signed out everywhere, and, with an account named,
    * what its sessions do at its limit as two of the house's tiles, each led
    * by its glyph. Every pick moves at the press (changes.ts `withAsked`); a
@@ -17,20 +20,14 @@
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import {
-    OptionGroup,
-    OptionGroupItem,
-    OptionTiles,
-  } from "#lib/components/ui/option-group/index.js";
+  import { OptionTiles } from "#lib/components/ui/option-group/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconError, IconHourglass, IconTransfer } from "#lib/icons.js";
   import {
     chosenAccountSignedOut,
     type HrefOf,
     type StageSends,
   } from "./changes";
-  import type { FleetAccount } from "./records";
   import { howItRunsWords as words } from "./words";
 
   let {
@@ -41,7 +38,8 @@
     hrefOf,
   }: StageSends & { hrefOf: HrefOf } = $props();
 
-  const FLEET_VALUE = "__fleet__";
+  /** The account chip's popover stands open. */
+  let open = $state(false);
 
   const disabled = $derived(!record.hubReachable);
   const chosenAccount = $derived(
@@ -52,37 +50,27 @@
   );
   const chosenSignedOut = $derived(chosenAccountSignedOut(record));
 
-  function pickAccount(value: string | undefined) {
-    if (value === undefined) {
-      return;
-    }
-    const next = value === FLEET_VALUE ? null : value;
-    if (next !== record.account.chosen) {
-      onchange({ key: "account", value: next });
-    }
-  }
+  /** The fleet's accounts as the chip offers them: Any available first, then each by its full name and hue. */
+  const tool = $derived<AccountTool>({
+    auto: { id: null, name: words.account.fleetRouting, why: "" },
+    value: record.account.chosen,
+    onpick: (next) => {
+      if (!disabled && next !== record.account.chosen) {
+        onchange({ key: "account", value: next });
+      }
+    },
+    options: record.accounts.map((account) => ({
+      id: account.id,
+      name: account.name,
+      nick: null,
+      email: null,
+      color: hueVar(account.hue),
+      disabled: false,
+      line: account.signedIn ? [] : [words.account.signedOut],
+      ring: null,
+    })),
+  });
 </script>
-
-{#snippet accountName(account: FleetAccount)}
-  <span class="mark-line flex min-w-0 items-center gap-x-space-2">
-    <span
-      aria-hidden="true"
-      class="size-space-2 flex-none rounded-pill bg-(--hue)"
-      data-box
-      style:--hue={hueVar(account.hue)}
-    ></span>
-    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-      >{account.name}</span
-    >
-    {#if !account.signedIn}
-      <IconError
-        aria-hidden="true"
-        class="size-icon-md flex-none text-status-fail-glyph"
-      />
-      <span class="sr-only"> — {words.account.signedOut}</span>
-    {/if}
-  </span>
-{/snippet}
 
 {#snippet limitGlyph(choice: "wait" | "move")}
   {#if choice === "wait"}
@@ -100,41 +88,16 @@
     {words.account.heading}
   </h3>
 
-  <OptionGroup
-    aria-label={words.account.groupLabel}
-    bind:value={
-      () => [record.account.chosen ?? FLEET_VALUE],
-      (next) => pickAccount(next[0])
-    }
-    {disabled}
-    layout="chips"
-  >
-    <OptionGroupItem value={FLEET_VALUE}>
-      <span class="mark-line flex min-w-0 items-center gap-x-space-2">
-        <span
-          aria-hidden="true"
-          class="size-space-2 flex-none rounded-pill border border-ink-muted"
-          data-box
-        ></span>
-        <span>{words.account.fleetRouting}</span>
-      </span>
-    </OptionGroupItem>
-    {#each record.accounts as account (account.id)}
-      {#if account.signedIn}
-        <OptionGroupItem value={account.id}>
-          {@render accountName(account)}
-        </OptionGroupItem>
-      {:else}
-        <Tip label={words.account.signedOut}>
-          {#snippet children(props)}
-            <OptionGroupItem {...props} value={account.id}>
-              {@render accountName(account)}
-            </OptionGroupItem>
-          {/snippet}
-        </Tip>
-      {/if}
-    {/each}
-  </OptionGroup>
+  <div class="flex min-w-0" inert={disabled}>
+    <AccountChip
+      id="work-path"
+      onchange={(next) => {
+        open = next;
+      }}
+      {open}
+      {tool}
+    />
+  </div>
   <RowFault
     again={() => onretry("account")}
     againLabel={words.retryChange}

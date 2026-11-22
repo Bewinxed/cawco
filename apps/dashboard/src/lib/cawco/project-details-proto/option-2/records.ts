@@ -62,7 +62,7 @@ interface TrackerTie {
   target: { label: string; url: string };
 }
 
-export interface FleetAccount {
+interface FleetAccount {
   hue: AccountHue;
   id: string;
   /** The name it carries everywhere. */

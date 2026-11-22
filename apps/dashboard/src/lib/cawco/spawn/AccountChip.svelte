@@ -18,8 +18,12 @@
 
   /** The account a new session runs on: Auto (placement's pick) or one picked for it. */
   export interface AccountTool {
-    /** Where Auto places it, and placement's sentence for why. */
-    auto: { id: string | null; why: string };
+    /**
+     * Where Auto places it, and placement's sentence for why; `name` is
+     * Auto's own, where the surface calls placement's pick by another
+     * ("Any available").
+     */
+    auto: { id: string | null; name?: string; why: string };
     onpick: (id: string | null) => void;
     options: AccountOption[];
     /** The pick for this session; null: Auto. */
@@ -58,9 +62,8 @@
   const shown = $derived(
     tool.options.find((option) => option.id === (tool.value ?? tool.auto.id))
   );
-  const label = $derived(
-    shown ? (shown.nick ?? shown.name) : spawnWords.account.auto
-  );
+  const autoName = $derived(tool.auto.name ?? spawnWords.account.auto);
+  const label = $derived(shown ? (shown.nick ?? shown.name) : autoName);
 
   function pick(value: string | null) {
     tool.onpick(value);
@@ -114,7 +117,7 @@
     >
       <span aria-hidden="true"></span>
       <span data-slot="words" class="flex min-w-0 flex-col gap-space-row">
-        <span class="type-label">{spawnWords.account.auto}</span>
+        <span class="type-label">{autoName}</span>
         {#if tool.auto.why}
           <span class="type-meta text-ink-muted text-pretty"
             >{tool.auto.why}</span
