@@ -22,7 +22,7 @@
  */
 import { readWithin } from "@cawco/core/bounded";
 import { FORM_CONTROLS } from "@cawco/core/pin-name";
-import { settledMedia } from "@cawco/core/scheme-media";
+import { eachRule, settledMedia } from "@cawco/core/scheme-media";
 import { cropPicture, groundOf, SKIPPED } from "./picture";
 
 export type Scheme = "light" | "dark";
@@ -251,13 +251,13 @@ const DEFINED = ":is(:defined, [data-cawco-defined])";
 const DEFINED_MARK = "data-cawco-defined";
 
 /**
- * `rules` and every rule nested in them, as the copy reads them in
+ * `sheet`'s rules at any depth (core `eachRule`), as the copy reads them in
  * `scheme`: `:defined` as {@link DEFINED}, and a media query asking
  * `prefers-color-scheme` answered for `scheme`. By shape, as they are
  * another window's.
  */
-function settleRules(rules: CSSRuleList, scheme: Scheme) {
-  for (const rule of Array.from(rules)) {
+function settleSheet(sheet: CSSStyleSheet, scheme: Scheme) {
+  eachRule(sheet, (rule) => {
     const styled = rule as Partial<CSSStyleRule>;
     if (styled.selectorText?.includes(":defined")) {
       styled.selectorText = styled.selectorText.replaceAll(":defined", DEFINED);
@@ -267,23 +267,7 @@ function settleRules(rules: CSSRuleList, scheme: Scheme) {
     if (media && answered !== null) {
       media.mediaText = answered;
     }
-    const nested = (rule as Partial<CSSGroupingRule>).cssRules;
-    if (nested) {
-      settleRules(nested, scheme);
-    }
-    const imported = (rule as Partial<CSSImportRule>).styleSheet;
-    if (imported) {
-      settleSheet(imported, scheme);
-    }
-  }
-}
-
-function settleSheet(sheet: CSSStyleSheet, scheme: Scheme) {
-  try {
-    settleRules(sheet.cssRules, scheme);
-  } catch {
-    // Another origin's sheet keeps its rules as they are.
-  }
+  });
 }
 
 /**

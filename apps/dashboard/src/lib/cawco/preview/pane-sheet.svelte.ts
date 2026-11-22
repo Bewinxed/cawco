@@ -69,10 +69,10 @@ export class PaneSheet {
   readonly inspector = $derived.by(() => {
     const id = this.#deps.paneSubject.artifactId;
     const session = this.#deps.instanceId();
-    // An HTML design has no props to inspect, nor a states file to save them into.
+    // A design folder's pages have no props to inspect, nor a states file to save them into.
     return id &&
       this.#deps.paneSubject.isSheet &&
-      !this.#deps.paneSubject.htmlDesign
+      !this.#deps.paneSubject.design
       ? new SheetInspector(
           this.#deps.previewFrame.post,
           (change) => writeSheet(session, id, change),

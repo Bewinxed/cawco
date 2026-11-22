@@ -221,10 +221,16 @@ import {
  * homelab"): POST /api/projects' own ask, made with Caw from the person's
  * words, its conversation's link answered (worker 31,676 measured; a
  * delegate is listed none). The worker's budget is raised to it.
+ * 2026-11-22: the design graph takes a design folder the hub runs on Vite
+ * (one page, a folder of files, or a folder of code), and artifact_update
+ * changes it in place with `dir` and `directions` beside `html` (the
+ * owner's pins on graph-general-canvas: "the agent should choose as it
+ * needs", "hot reload, no versions") (worker 31,840, delegate 12,060
+ * measured); both budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_676,
-  delegate: 11_896,
+  worker: 31_840,
+  delegate: 12_060,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

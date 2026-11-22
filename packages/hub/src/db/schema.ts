@@ -5716,7 +5716,9 @@ export const artifacts = sqliteTable(
      * folder of a session with no workspace, whose stage runs there. No
      * workspace row is ever made for a place (archiving one deletes its
      * folder), so it is no key: the hub finds it through the session that
-     * names it (artifact-events.ts `stageWhere`).
+     * names it (artifact-events.ts `stageWhere`). Or a design folder's
+     * tree (core stage.ts `designOf`), the boundary over the folder the hub
+     * keeps for the artifact, found by its id alone.
      */
     sourcePlace: text("source_place"),
     /** A sheet's: the stage's toolchain root and its story file, from the clone's root. */

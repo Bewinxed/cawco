@@ -203,7 +203,29 @@ export const updateComponent = async (
   artifact: string,
   body: Static<typeof componentBody>
 ) => {
-  const { edges, group, dials, directions, args, story } = body;
+  const { edges, group, dials, directions, args, story, html, dir } = body;
+  // A design folder's pages, changed in place, the canvas's own spec beside them.
+  if (
+    html !== undefined ||
+    dir !== undefined ||
+    directions?.some((one) => one.html !== undefined || one.dir !== undefined)
+  ) {
+    if (args !== undefined || story !== undefined) {
+      return problem(400, {
+        code: "artifact-component-change-mixed",
+        detail:
+          "html, dir and directions change a design folder's pages: a states file's args and story are a live story's.",
+      });
+    }
+    return await artifacts.designUpdate(instanceId, artifact, {
+      edges,
+      group,
+      dials,
+      directions,
+      html,
+      dir,
+    });
+  }
   const canvas = [edges, group, dials, directions].some(
     (one) => one !== undefined
   );
@@ -215,11 +237,21 @@ export const updateComponent = async (
     });
   }
   if (canvas) {
+    const states = directions?.map(({ file, name, line }) =>
+      file === undefined ? null : { file, name, line }
+    );
+    if (states?.includes(null)) {
+      return problem(400, {
+        code: "artifact-canvas-spec-unfit",
+        detail:
+          "Each direction names its states file ({ file, name, line }), or a design folder's page (html or dir).",
+      });
+    }
     return await artifacts.canvasUpdate(instanceId, artifact, {
       edges,
       group,
       dials,
-      directions,
+      directions: states?.filter((one) => one !== null),
     });
   }
   const change = sheetChangeOf({ args, story });
@@ -275,6 +307,8 @@ export const artifactTools = (artifacts: Artifacts, instanceId: string) => {
         ? body
         : await updateArtifact(artifacts, instanceId, id, body);
     },
+    /** Whether `id` is a design folder, whose html goes by the component route. */
+    isDesign: (id: string) => artifacts.isDesign(instanceId, id),
     updateComponent: async (id: string, change: unknown) => {
       const body = shaped(componentBody, SHAPES.update, change);
       return body instanceof ElysiaStatus

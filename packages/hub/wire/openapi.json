@@ -54037,10 +54037,6 @@
                 "properties": {
                   "page": {
                     "type": "string"
-                  },
-                  "path": {
-                    "description": "An HTML design's (a component artifact the hub keeps, core\nstage.ts {@link htmlDesignOf}): its design graph's address on the\npage's place (`/@cawco/canvas?file=…&spec=…`), each `file` one of\nits pages under its artifact's folder. None for a page.",
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -114567,6 +114563,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "artifact-update-component"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "artifact-update-not-canvas"
                 ]
               },
@@ -135694,6 +135726,78 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "artifact-design-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-design-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "artifact-desk-captures"
                 ]
               },
@@ -139133,78 +139237,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "artifact-folder-unread"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-pin-uncut"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "artifact-preview-unstarted"
                 ]
               },
@@ -139242,42 +139274,6 @@
                 "type": "string",
                 "enum": [
                   "artifact-screen-unopened"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-serve-unstarted"
                 ]
               },
               "detail": {
@@ -139383,42 +139379,6 @@
             "type": "object",
             "properties": {
               "code": {
-                "type": "string",
-                "enum": [
-                  "stage-said-no"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
                 "enum": [
                   "artifact-canvas-elements-many",
                   "artifact-canvas-mermaid-long",
@@ -139452,6 +139412,39 @@
                   504
                 ],
                 "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
               },
               "title": {
                 "type": "string"

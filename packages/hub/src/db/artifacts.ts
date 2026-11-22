@@ -1,5 +1,6 @@
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { type SourceKey, sourceKeyOf } from "@cawco/core/preview/upstream";
+import { isDesignTree } from "@cawco/core/stage";
 import { isPlace } from "@cawco/core/workspace-policy";
 import {
   and,
@@ -70,19 +71,20 @@ const workspaceColumnsOf = (
   source: PreviewSource
 ): Pick<StoredArtifact, "sourcePlace" | "sourceWorkspace"> => {
   const named = "port" in source ? (source.workspace ?? null) : null;
-  return named !== null && isPlace(named)
+  // A place and a design folder's tree have no workspace row to name.
+  return named !== null && (isPlace(named) || isDesignTree(named))
     ? { sourceWorkspace: null, sourcePlace: named }
     : { sourceWorkspace: named, sourcePlace: null };
 };
 
-/** A source as its columns keep it: one of page, dir or port set, the rest of its kind's beside it (an HTML design's page its path). */
+/** A source as its columns keep it: one of page, dir or port set, the rest of its kind's beside it. */
 const sourceColumnsOf = (
   source: PreviewSource
 ): Pick<StoredArtifact, SourceColumn> => ({
   sourcePage: "page" in source ? source.page : null,
   sourceDir: "dir" in source ? source.dir : null,
   sourcePort: "port" in source ? source.port : null,
-  sourcePath: source.path ?? null,
+  sourcePath: "page" in source ? null : (source.path ?? null),
   ...workspaceColumnsOf(source),
   sourceStageDir: "port" in source ? (source.stage?.dir ?? null) : null,
   sourceStageFile: "port" in source ? (source.stage?.file ?? null) : null,
@@ -126,7 +128,7 @@ export const artifactOf = ({
     sourceDir === null ? port() : { dir: sourceDir, ...path, ...pin };
   return {
     ...row,
-    source: sourcePage === null ? folder() : { page: sourcePage, ...path },
+    source: sourcePage === null ? folder() : { page: sourcePage },
   };
 };
 

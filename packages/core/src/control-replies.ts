@@ -235,6 +235,7 @@ import type {
 } from "./session-messages";
 import type {
   DesignMap,
+  DesignOpened,
   SheetWritten,
   StageOpened,
   StageRendered,
@@ -242,6 +243,7 @@ import type {
 } from "./stage";
 import {
   STAGE_COMPONENTS,
+  STAGE_DESIGN,
   STAGE_ENSURE,
   STAGE_PICTURE,
   STAGE_PIN,
@@ -272,6 +274,7 @@ import {
   ContinuationReadSchema,
   CustodyPresenceSchema,
   DesignMapSchema,
+  DesignOpenedSchema,
   FleetAckSchema,
   FleetMcpTakeAnswerSchema,
   FolderRemovedSchema,
@@ -630,6 +633,7 @@ const CONTROLS = {
   [PREVIEW_FOLDERS]: z.array(z.string().nullable()),
   [CANVAS_SCREEN_OPEN]: UNREAD,
   [CANVAS_SCREEN_CLOSE]: UNREAD,
+  [STAGE_DESIGN]: reply<DesignOpened>(DesignOpenedSchema),
   [STAGE_ENSURE]: reply<StageOpened>(StageOpenedSchema),
   [STAGE_RENDER]: reply<StageRendered>(StageRenderedSchema),
   [STAGE_WRITE]: reply<SheetWritten>(SheetWrittenSchema),

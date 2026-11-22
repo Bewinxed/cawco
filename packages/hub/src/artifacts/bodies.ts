@@ -108,6 +108,19 @@ const folderField = t.String({ minLength: 2, maxLength: 4096, pattern: "^/" });
 /** A page's whole document. */
 const htmlField = t.String({ minLength: 1, maxLength: PAGE_LIMIT });
 
+/** A design's directions: each its states file, or (a design folder's) its page, `html` or a `dir` (component.ts `designPartsOf`). */
+const designDirections = t.Optional(
+  t.Array(
+    t.Object({
+      file: t.Optional(statesFile),
+      html: t.Optional(htmlField),
+      dir: t.Optional(folderField),
+      ...directionWords,
+    }),
+    { maxItems: CANVAS_SPEC_LIMITS.files }
+  )
+);
+
 /** A design graph's edges, groups, dials and directions (core `CanvasSpec`), as create and update take them. */
 const canvasFields = {
   directions: t.Optional(
@@ -204,18 +217,7 @@ export const createBody = t.Object({
   ask: t.Optional(askField),
   title: t.Optional(titleField),
   ...canvasFields,
-  // A design's directions: each its states file, or (an HTML design) its page (component.ts `designPagesOf`).
-  directions: t.Optional(
-    t.Array(
-      t.Object({
-        file: t.Optional(statesFile),
-        html: t.Optional(htmlField),
-        dir: t.Optional(folderField),
-        ...directionWords,
-      }),
-      { maxItems: CANVAS_SPEC_LIMITS.files }
-    )
-  ),
+  directions: designDirections,
   elements: t.Optional(skeletons),
   mermaid: t.Optional(mermaid),
   name: t.String({ pattern: ARTIFACT_NAME.source }),
@@ -264,8 +266,14 @@ export const updateBody = t.Object({
   mermaid: t.Optional(mermaid),
 });
 
-/** A design graph's change: a states file's story args or op, or the canvas's own edges, groups, dials or directions. */
-export const componentBody = t.Object({ ...sheetChange, ...canvasFields });
+/** A design graph's change: a states file's story args or op, the canvas's own edges, groups, dials or directions, or (a design folder's) its html, dir or each direction's. */
+export const componentBody = t.Object({
+  ...sheetChange,
+  ...canvasFields,
+  directions: designDirections,
+  html: t.Optional(htmlField),
+  dir: t.Optional(folderField),
+});
 
 /** Any kind's head line. */
 export const askBody = t.Object({ ask: askField });

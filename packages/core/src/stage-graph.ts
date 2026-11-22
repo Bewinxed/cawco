@@ -1156,3 +1156,138 @@ export const shownName = (
     ? words.onAPhone(shownName(sibling, stories))
     : storyWords(story.name);
 };
+
+/* --- Dials and scroll, as every stage's page reads them ------------------- */
+
+/** A dial as these read it (core stage.ts `CanvasDial`): its name, kind, unit and what it sets. */
+interface DialTarget {
+  kind: string;
+  name: string;
+  target: { cssVar: string } | { arg: string };
+  unit?: string | undefined;
+}
+
+/**
+ * A dial's value as written, from what the drawing holds for it: a
+ * number's figure (a plain number, or one in the dial's own unit), a
+ * toggle's state, a colour's or an option's words; null where it holds
+ * none the dial can show.
+ */
+function dialValueOf(
+  kind: string,
+  raw: unknown,
+  unit: string | undefined
+): DialSet | null {
+  if (typeof raw === "boolean") {
+    return kind === "toggle" || kind === "action" ? raw : String(raw);
+  }
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? raw : null;
+  }
+  if (typeof raw !== "string" || raw === "") {
+    return kind === "action" ? 0 : null;
+  }
+  if (kind === "number" || kind === "action") {
+    return figureOf(raw, unit);
+  }
+  return kind === "toggle" ? raw === "true" || raw === "1" : raw;
+}
+
+/** A plain number, or one in `unit`, read from its words; null for any other. */
+function figureOf(raw: string, unit: string | undefined): number | null {
+  const said = (
+    unit && raw.endsWith(unit) ? raw.slice(0, -unit.length) : raw
+  ).trim();
+  const figure = Number(said);
+  return said !== "" && Number.isFinite(figure) ? figure : null;
+}
+
+/**
+ * Each dial's value as written on `body`: a `cssVar` dial's as the body
+ * computes it with no dial set on it (each set one lifted for the read and
+ * put back), an `arg` dial's as `own`, the story's args, hold it.
+ */
+export function dialsWritten(
+  dials: readonly DialTarget[],
+  body: HTMLElement,
+  own: Record<string, unknown>
+): Record<string, DialSet> {
+  const lifted = new Map<string, string>();
+  for (const dial of dials) {
+    const now =
+      "cssVar" in dial.target
+        ? body.style.getPropertyValue(dial.target.cssVar)
+        : "";
+    if ("cssVar" in dial.target && now) {
+      lifted.set(dial.target.cssVar, now);
+      body.style.removeProperty(dial.target.cssVar);
+    }
+  }
+  const style = getComputedStyle(body);
+  const values: Record<string, DialSet> = {};
+  for (const dial of dials) {
+    const raw =
+      "cssVar" in dial.target
+        ? style.getPropertyValue(dial.target.cssVar).trim()
+        : own[dial.target.arg];
+    const value = dialValueOf(dial.kind, raw, dial.unit);
+    if (value !== null) {
+      values[dial.name] = value;
+    }
+  }
+  for (const [name, value] of lifted) {
+    body.style.setProperty(name, value);
+  }
+  return values;
+}
+
+/** The dials' values as they set the page: each `cssVar` dial's variable with its unit, each `arg` dial's arg; a dial with no value sets nothing. */
+export function dialSetOf(
+  dials: readonly DialTarget[],
+  values: Record<string, unknown>
+): { args: Record<string, unknown>; vars: Map<string, string> } {
+  const vars = new Map<string, string>();
+  const args: Record<string, unknown> = {};
+  for (const dial of dials) {
+    const value = values[dial.name];
+    if (value === undefined) {
+      continue;
+    }
+    if ("cssVar" in dial.target) {
+      vars.set(
+        dial.target.cssVar,
+        typeof value === "number" ? `${value}${dial.unit ?? ""}` : String(value)
+      );
+    } else {
+      args[dial.target.arg] = value;
+    }
+  }
+  return { vars, args };
+}
+
+/** How far a page scrolls before the tools over the stage's foot step aside, px. */
+const SCROLL_DEAD = 12;
+
+/**
+ * Which way a page scrolled, said once it turns past a dead zone
+ * ({@link SCROLL_DEAD}): fed each scroll's top, it calls `turned` with
+ * `down` when the way changes, so the panel's tools over the drawing's
+ * foot leave on the way down and come back on the way up.
+ */
+export function scrollTurns(
+  turned: (down: boolean) => void
+): (top: number) => void {
+  let from = 0;
+  let down = false;
+  return (top) => {
+    if (Math.abs(top - from) < SCROLL_DEAD) {
+      return;
+    }
+    const now = top > from && top > 0;
+    from = top;
+    if (now !== down) {
+      down = now;
+      turned(now);
+    }
+  };
+}

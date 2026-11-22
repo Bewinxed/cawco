@@ -1894,6 +1894,86 @@ const DesignMapShape = declared(
 export const DesignMapSchema = DesignMapShape;
 export type DesignMapOutput = z.output<typeof DesignMapShape>;
 
+const StageErrorKindShape = declared(
+  z.enum(["missing", "compile", "page"]),
+  "StageErrorKind",
+  "packages/core/src/stage.ts"
+);
+export type StageErrorKindOutput = z.output<typeof StageErrorKindShape>;
+
+const StageErrorShape = declared(
+  z.object({
+    column: z.number().nullable(),
+    file: z.string(),
+    frame: z.string().nullable(),
+    kind: StageErrorKindShape.optional(),
+    line: z.number().nullable(),
+    message: z.string(),
+    sheets: z.array(z.string()),
+  }),
+  "StageError",
+  "packages/core/src/stage.ts"
+);
+export const StageErrorSchema = StageErrorShape;
+export type StageErrorOutput = z.output<typeof StageErrorShape>;
+
+const StageStatusShape = declared(
+  z.enum(["starting", "waking", "live", "error", "asleep"]),
+  "StageStatus",
+  "packages/core/src/stage.ts"
+);
+export type StageStatusOutput = z.output<typeof StageStatusShape>;
+
+const StageStateOfShape = declared(
+  z.object({
+    at: z.string(),
+    dir: z.string(),
+    errors: z.array(StageErrorShape),
+    message: z.string().optional(),
+    status: StageStatusShape,
+  }),
+  "StageStateOf",
+  "packages/core/src/stage.ts"
+);
+
+const StageToolchainShape = declared(
+  z.enum(STAGE_TOOLCHAINS),
+  "StageToolchain",
+  "packages/core/src/stage.ts"
+);
+export type StageToolchainOutput = z.output<typeof StageToolchainShape>;
+
+const SheetStageStateShape = declared(
+  StageStateOfShape.extend({
+    runs: z.literal("sheet"),
+    toolchain: StageToolchainShape,
+  }),
+  "SheetStageState",
+  "packages/core/src/stage.ts"
+);
+
+const ServerStageStateShape = declared(
+  StageStateOfShape.extend({ runs: z.literal("serve") }),
+  "ServerStageState",
+  "packages/core/src/stage.ts"
+);
+
+const StageStateShape = declared(
+  z.union([SheetStageStateShape, ServerStageStateShape]),
+  "StageState",
+  "packages/core/src/stage.ts"
+);
+export const StageStateSchema = StageStateShape;
+export type StageStateOutput = z.output<typeof StageStateShape>;
+
+const DesignOpenedShape = declared(
+  z.object({ dir: z.string(), port: z.number(), state: StageStateShape }),
+  "DesignOpened",
+  "packages/core/src/stage.ts"
+);
+export const DesignOpenedSchema = DesignOpenedShape;
+export type DesignOpenedOutput = z.output<typeof DesignOpenedShape>;
+
 const DeviceKindShape = declared(
   z.enum(["browser", "app", "cli"]),
   "DeviceKind",
@@ -3762,6 +3842,14 @@ export const OwedMoveWaitSchema: z.ZodType<OwedMoveWaitType> =
   OwedMoveWaitShape;
 export type OwedMoveWaitOutput = z.output<typeof OwedMoveWaitShape>;
 
+const PagesLookedShape = declared(
+  z.object({ errors: z.array(StageErrorShape) }),
+  "PagesLooked",
+  "packages/core/src/stage.ts"
+);
+export const PagesLookedSchema = PagesLookedShape;
+export type PagesLookedOutput = z.output<typeof PagesLookedShape>;
+
 const PairingOffAnswerShape = declared(
   z.union([z.object({ ok: z.literal(true) }), z.object({ error: z.string() })]),
   "PairingOffAnswer",
@@ -4741,29 +4829,6 @@ const ReleaseManifestShape = declared(
 export const ReleaseManifestSchema = ReleaseManifestShape;
 export type ReleaseManifestOutput = z.output<typeof ReleaseManifestShape>;
 
-const StageErrorKindShape = declared(
-  z.enum(["missing", "compile", "page"]),
-  "StageErrorKind",
-  "packages/core/src/stage.ts"
-);
-export type StageErrorKindOutput = z.output<typeof StageErrorKindShape>;
-
-const StageErrorShape = declared(
-  z.object({
-    column: z.number().nullable(),
-    file: z.string(),
-    frame: z.string().nullable(),
-    kind: StageErrorKindShape.optional(),
-    line: z.number().nullable(),
-    message: z.string(),
-    sheets: z.array(z.string()),
-  }),
-  "StageError",
-  "packages/core/src/stage.ts"
-);
-export const StageErrorSchema = StageErrorShape;
-export type StageErrorOutput = z.output<typeof StageErrorShape>;
-
 const ReportAnswerShape = declared(
   RenderReportShape.extend({ errors: z.array(StageErrorShape) }),
   "ReportAnswer",
@@ -5269,55 +5334,6 @@ const SheetWrittenShape = declared(
 );
 export const SheetWrittenSchema = SheetWrittenShape;
 export type SheetWrittenOutput = z.output<typeof SheetWrittenShape>;
-
-const StageStatusShape = declared(
-  z.enum(["starting", "waking", "live", "error", "asleep"]),
-  "StageStatus",
-  "packages/core/src/stage.ts"
-);
-export type StageStatusOutput = z.output<typeof StageStatusShape>;
-
-const StageStateOfShape = declared(
-  z.object({
-    at: z.string(),
-    dir: z.string(),
-    errors: z.array(StageErrorShape),
-    message: z.string().optional(),
-    status: StageStatusShape,
-  }),
-  "StageStateOf",
-  "packages/core/src/stage.ts"
-);
-
-const StageToolchainShape = declared(
-  z.enum(STAGE_TOOLCHAINS),
-  "StageToolchain",
-  "packages/core/src/stage.ts"
-);
-export type StageToolchainOutput = z.output<typeof StageToolchainShape>;
-
-const SheetStageStateShape = declared(
-  StageStateOfShape.extend({
-    runs: z.literal("sheet"),
-    toolchain: StageToolchainShape,
-  }),
-  "SheetStageState",
-  "packages/core/src/stage.ts"
-);
-
-const ServerStageStateShape = declared(
-  StageStateOfShape.extend({ runs: z.literal("serve") }),
-  "ServerStageState",
-  "packages/core/src/stage.ts"
-);
-
-const StageStateShape = declared(
-  z.union([SheetStageStateShape, ServerStageStateShape]),
-  "StageState",
-  "packages/core/src/stage.ts"
-);
-export const StageStateSchema = StageStateShape;
-export type StageStateOutput = z.output<typeof StageStateShape>;
 
 const StageOpenedShape = declared(
   z.object({

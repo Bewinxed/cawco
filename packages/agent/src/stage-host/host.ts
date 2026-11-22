@@ -15,7 +15,9 @@
  * Its environment: `CAWCO_STAGE=1`, which a config reads to know it runs on
  * a stage (as Storybook's `STORYBOOK`); `CAWCO_STAGE_PORT`, the port it
  * listens on, on the boundary's loopback; `CAWCO_STAGE_FRAMEWORK`, whose
- * mount function each story's frame uses; `CAWCO_STAGE_KIT=1` for SvelteKit;
+ * mount function each story's frame uses (none in a design folder that names
+ * none); `CAWCO_STAGE_DESIGN=1` for a design folder's (agent stage-design.ts),
+ * whose canvas frames its pages; `CAWCO_STAGE_KIT=1` for SvelteKit;
  * `CAWCO_STAGE_TOOLCHAIN`, which toolchain it starts.
  *
  * It speaks to the daemon in JSON lines on stdout, each `{"cawco": <word>}`:
@@ -66,6 +68,7 @@ import {
   CANVAS_PLAN_ID,
   COMPONENTS_PATH,
   type ComponentDoc,
+  canvasOf,
   DESIGN_MAP_LIMITS,
   type DesignCard,
   type DesignLink,
@@ -76,8 +79,11 @@ import {
   HEALTH_PATH,
   MODULES_PATH,
   OWN_PATH,
+  PAGE_FILE,
+  PAGES_PATH,
   type PageError,
   type PageSection,
+  type PagesLooked,
   type PostedReport,
   RENDER_STATE_PARAM,
   RENDERED_PATH,
@@ -297,7 +303,10 @@ declare const __CANVAS_RUNTIME__: string;
 declare const __CANVAS_TOKENS__: string;
 declare const __CANVAS_FACES__: string;
 declare const __CANVAS_FACE_FILES__: Record<string, string>;
+/** Bundled in by build.ts: a design folder's canvas (canvas/pages.ts). */
+declare const __PAGES_STAGE__: string;
 const CANVAS_RUNTIME = __CANVAS_RUNTIME__;
+const PAGES_STAGE = __PAGES_STAGE__;
 const CANVAS_TOKENS = __CANVAS_TOKENS__;
 const CANVAS_FACES = __CANVAS_FACES__;
 const root = process.cwd();
@@ -350,10 +359,15 @@ const environed = <T>(value: T | undefined, name: string): T => {
   }
   return value;
 };
-const framework = environed(
-  stageFrameworkOf(process.env.CAWCO_STAGE_FRAMEWORK),
-  "CAWCO_STAGE_FRAMEWORK"
-);
+/** A design folder's stage (`CAWCO_STAGE_DESIGN=1`, agent stage-design.ts): its canvas frames its pages ({@link servePages}). */
+const design = process.env.CAWCO_STAGE_DESIGN === "1";
+/** The framework a story mounts on; a design folder may name none. */
+const framework: StageFramework | null = design
+  ? (stageFrameworkOf(process.env.CAWCO_STAGE_FRAMEWORK) ?? null)
+  : environed(
+      stageFrameworkOf(process.env.CAWCO_STAGE_FRAMEWORK),
+      "CAWCO_STAGE_FRAMEWORK"
+    );
 const toolchain = environed(
   stageToolchainOf(process.env.CAWCO_STAGE_TOOLCHAIN),
   "CAWCO_STAGE_TOOLCHAIN"
@@ -3104,6 +3118,192 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
   };
 }
 
+/** `text` as HTML text or an attribute's value. */
+const escapedHtml = (text: string): string =>
+  text.replaceAll(/[&<>"]/gu, (char) => HTML_ESCAPES[char] ?? char);
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+};
+
+/**
+ * A design folder's canvas (canvas/pages.ts, bundled in by build.ts): a
+ * document of its own that frames the design's pages one at a time, each
+ * page the stage's own (Vite's), so an edit reaches the frame by Vite's
+ * HMR. It runs to the window's edges, its ground the picked scheme's
+ * canvas, the frame centred in it. Never kept: the canvas's address names
+ * its pages and spec.
+ */
+function servePages(res: ServerResponse, url: URL): void {
+  const title = canvasOf(url.pathname + url.search).spec.title ?? "";
+  res.setHeader("content-type", "text/html; charset=utf-8");
+  res.setHeader("cache-control", "no-store");
+  res.end(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>${escapedHtml(title)}</title>
+<style>
+html,body{margin:0;block-size:100%}
+body{box-sizing:border-box;overflow:auto;background:Canvas;color:CanvasText}
+[data-slot="design-holder"]{margin-inline:auto;overflow:clip}
+iframe{display:block;border:0;transform-origin:0 0}
+</style>
+</head>
+<body>
+<script>${PAGES_STAGE.replaceAll("</script", "<\\/script")}</script>
+</body>
+</html>
+`);
+}
+
+/** Each tag of a page as Vite's HTML transforms leave it. */
+const TAG = /<(script|link)\b[^>]*>/giu;
+const ATTRIBUTE = /\b([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gu;
+
+/** A tag's attributes, by name, lower-cased. */
+const attributesOf = (tag: string): Map<string, string> =>
+  new Map(
+    [...tag.matchAll(ATTRIBUTE)].map((one) => [
+      (one[1] ?? "").toLowerCase(),
+      one[2] ?? one[3] ?? one[4] ?? "",
+    ])
+  );
+
+/** What a page loads through Vite, by the address it asks for each: its module scripts (an inline one Vite's `html-proxy` module) and its stylesheets, Vite's own client left out. */
+function pageModules(html: string, page: string): string[] {
+  const asked: string[] = [];
+  for (const [tag, name] of html.matchAll(TAG)) {
+    const at = attributesOf(tag);
+    const script = name?.toLowerCase() === "script";
+    const loads = script
+      ? at.get("type") === "module"
+      : at.get("rel") === "stylesheet";
+    const src = loads ? at.get(script ? "src" : "href") : undefined;
+    if (!src || src.includes("//")) {
+      continue;
+    }
+    const address = new URL(src, `http://stage${page}`);
+    if (!address.pathname.startsWith("/@vite/")) {
+      asked.push(`${address.pathname}${address.search}`);
+    }
+  }
+  return asked;
+}
+
+/** Vite's error from a transform, as its own error payload carries one. */
+const thrownPayload = (error: unknown): ErrorPayload["err"] => {
+  const one: Partial<Record<string, unknown>> =
+    typeof error === "object" && error !== null ? { ...error } : {};
+  const text = (value: unknown) =>
+    typeof value === "string" ? stripVTControlCharacters(value) : undefined;
+  const place = one.loc;
+  const loc =
+    typeof place === "object" &&
+    place !== null &&
+    "line" in place &&
+    "column" in place &&
+    typeof place.line === "number" &&
+    typeof place.column === "number"
+      ? {
+          line: place.line,
+          column: place.column,
+          ...("file" in place && typeof place.file === "string"
+            ? { file: place.file }
+            : {}),
+        }
+      : undefined;
+  return {
+    // A plugin may throw a plain object with a message (vite-plugin-svelte's compile error).
+    message: text(one.message) ?? String(error),
+    stack: "",
+    ...(text(one.id) ? { id: text(one.id) } : {}),
+    ...(text(one.frame) ? { frame: text(one.frame) } : {}),
+    ...(text(one.plugin) ? { plugin: text(one.plugin) } : {}),
+    ...(loc ? { loc } : {}),
+  };
+};
+
+/** Each kind of move a design's write makes, as Vite's watcher names it. */
+const MOVES = [
+  ["added", "add"],
+  ["changed", "change"],
+  ["removed", "unlink"],
+] as const;
+
+/**
+ * What a write of the design's folder moved (core `DesignMoved`, its paths
+ * from the root, each inside it), told Vite's watcher as its own events,
+ * so Vite's HMR takes each to the open page: the watcher folds a second
+ * write of one file a few milliseconds after the first into the first, and
+ * the page kept the first (2026-11-22). A move the watcher also saw is
+ * taken twice, an update the page takes as it took the first.
+ */
+function toldMoved(dev: DevServer, asked: URLSearchParams): void {
+  for (const [kind, event] of MOVES) {
+    for (const named of asked.getAll(kind)) {
+      const abs = resolve(root, named);
+      if (!relative(root, abs).startsWith("..")) {
+        dev.watcher.emit(event, abs);
+      }
+    }
+  }
+}
+
+/** Vite's codes for a transform it gave up as the server moved on: no fault of the page's. */
+const MOVED_ON = new Set(["ERR_OUTDATED_OPTIMIZED_DEP", "ERR_CLOSED_SERVER"]);
+
+/**
+ * A design's pages `files` (from the root) compiled as a browser loading
+ * them asks for each module: each page through Vite's HTML transforms, then
+ * each module it loads and every module those import statically
+ * ({@link staticImportsOf}), through Vite's own transform
+ * (`transformRequest`, which throws a module's compile error), the
+ * prebundled dependencies left to Vite. Each that doesn't compile is kept as Vite's
+ * error sent to a page is ({@link keepSent}); one that compiles lets its
+ * error go (the plugin's `transform`). Answers every problem kept after.
+ */
+async function pagesLooked(
+  dev: DevServer,
+  files: string[]
+): Promise<PagesLooked> {
+  const env = dev.environments.client;
+  const seen = new Set<string>();
+  const visit = async (url: string): Promise<void> => {
+    if (seen.has(url) || PREBUNDLED.test(url) || url.startsWith("/@vite/")) {
+      return;
+    }
+    seen.add(url);
+    try {
+      await env.transformRequest(url);
+    } catch (error) {
+      const code =
+        typeof error === "object" && error !== null && "code" in error
+          ? error.code
+          : undefined;
+      if (!(typeof code === "string" && MOVED_ON.has(code))) {
+        keepSent(thrownPayload(error));
+      }
+      return;
+    }
+    await Promise.all((await staticImportsOf(dev, url)).map(visit));
+  };
+  for (const file of files) {
+    const abs = resolve(root, file);
+    if (!(PAGE_FILE.test(file) && existsSync(abs))) {
+      continue;
+    }
+    const page = `/${relative(root, abs).split(sep).join("/")}`;
+    const html = await dev.transformIndexHtml(page, readFileSync(abs, "utf8"));
+    await Promise.all(pageModules(html, page).map(visit));
+  }
+  return { errors: [...stageErrors.values()] };
+}
+
 /** A refusal's answer: a write the file can't take is the person's or agent's to fix (422); anything else is the stage's. */
 const refusedWith = (res: ServerResponse, error: unknown) =>
   json(res, error instanceof StoryRefusal ? 422 : 500, {
@@ -3194,6 +3394,14 @@ async function serveStage(
       );
     return;
   }
+  if (path === PAGES_PATH) {
+    toldMoved(dev, url.searchParams);
+    await pagesLooked(dev, url.searchParams.getAll("file")).then(
+      (looked) => json(res, 200, looked),
+      (error) => refusedWith(res, error)
+    );
+    return;
+  }
   if (
     path !== CANVAS_PATH &&
     path !== STORIES_PATH &&
@@ -3205,6 +3413,10 @@ async function serveStage(
     return;
   }
   const named = url.searchParams.getAll("file");
+  if (design && path === CANVAS_PATH) {
+    servePages(res, url);
+    return;
+  }
   // The canvas's page is its viewer's: each section says what is wrong with
   // its file where its frames would stand (its module's load, `sectionProblem`),
   // never a refusal no page shows.
@@ -3605,7 +3817,7 @@ function stageModule(name: string): string | Promise<string> | null {
     case "runtime.js":
       return CANVAS_RUNTIME;
     case "adapter.js":
-      return ADAPTERS[framework];
+      return framework ? ADAPTERS[framework] : null;
     case "svelte-props.js":
       return svelteProps();
     case "svelte-boundary.js":
@@ -3617,6 +3829,100 @@ function stageModule(name: string): string | Promise<string> | null {
   }
 }
 
+/** The story files (from the root) whose sheets import `file`, read up Vite's module graph. */
+const sheetsOf = (file: string): string[] => {
+  const graph = server?.environments.client.moduleGraph;
+  const found = new Set<string>();
+  const seen = new Set<ModuleNode>();
+  const queue = [...(graph?.getModulesByFile(file) ?? [])];
+  for (let mod = queue.shift(); mod; mod = queue.shift()) {
+    if (seen.has(mod)) {
+      continue;
+    }
+    seen.add(mod);
+    if (mod.file && STORY_FILE.test(mod.file)) {
+      found.add(relative(root, mod.file));
+    }
+    if (mod.id?.startsWith(`\0${VIRTUAL}`)) {
+      found.add(
+        decodeURIComponent(mod.id.slice(VIRTUAL.length + 1, -".js".length))
+      );
+    }
+    // The canvas's entry imports the app's global CSS: an error there is every canvas's.
+    if (mod.id === `\0${VIRTUAL_STAGE}entry.js`) {
+      for (const kept of reports.keys()) {
+        found.add(kept);
+      }
+    }
+    queue.push(...mod.importers);
+  }
+  return [...found];
+};
+
+/**
+ * Whether module `id` (Vite's, its query kept) is one a canvas's page
+ * loads: the stage's own (a section's module, the entry, the runtime), a
+ * states file, or a module another module of the page's graph imports.
+ * Vite answers every request it is sent, and sends each request's error
+ * to every page (its `logError`), so a request no page made (an address
+ * typed or mangled by hand, `climb.riv?import&amp;url` read straight out
+ * of the page's HTML) makes a module no module imports: its error is the
+ * request's answer alone, neither sent to the open pages nor kept against
+ * a canvas whose own import of that file compiles. An error that names
+ * no module is sent and kept.
+ */
+const pageAsks = (id: string | undefined): boolean => {
+  // A design's page asks for its entry module by its own tag, which no module imports.
+  if (
+    design ||
+    !id ||
+    id.startsWith("\0") ||
+    STORY_FILE.test(id.split("?")[0] ?? "")
+  ) {
+    return true;
+  }
+  const mod = server?.environments.client.moduleGraph.getModuleById(id);
+  return !!mod && mod.importers.size > 0;
+};
+
+/**
+ * A compile error Vite sends the pages, kept under its module, and the
+ * states files whose sections it breaks ({@link sheetsOf}). A section's
+ * own load refusal comes with neither the section module's id nor a place
+ * when its states file isn't written: that one its load keeps
+ * (`sectionLoad`), and it is passed by here. A states file that doesn't
+ * compile stops its own section, which no module graph links it to while
+ * its load fails.
+ */
+const keepSent = (err: ErrorPayload["err"]): string[] => {
+  if (err.pluginCode === SECTION_MISSING) {
+    return [];
+  }
+  // The module's id is Vite's absolute path, or a section module's, filed
+  // under its states file as a good compile clears it ({@link errorKeyOf});
+  // a plugin's `loc.file` may be its own (vite-plugin-svelte's is the bare
+  // file name).
+  const at = err.id
+    ? resolve(root, errorKeyOf(err.id))
+    : resolve(root, pathOfId(err.loc?.file ?? ""));
+  const file = relative(root, at);
+  const sheets = notStatesFile(file)
+    ? sheetsOf(at)
+    : [...new Set([file, ...sheetsOf(at)])];
+  stageErrors.set(at, {
+    kind: "compile",
+    file,
+    line: err.loc?.line ?? null,
+    // Vite's (Rollup's) column is 0-based.
+    column: typeof err.loc?.column === "number" ? err.loc.column + 1 : null,
+    message: err.message,
+    frame: err.frame ?? null,
+    sheets,
+  });
+  tellErrors();
+  return sheets;
+};
+
 /**
  * The plugin: the sheet's page, its virtual module and its stories; every
  * compile error the client is sent, kept until its module compiles again
@@ -3625,94 +3931,6 @@ function stageModule(name: string): string | Promise<string> | null {
  * anyone who can view the preview.
  */
 function cawcoStage() {
-  /** The story files (from the root) whose sheets import `file`, read up Vite's module graph. */
-  const sheetsOf = (file: string): string[] => {
-    const graph = server?.environments.client.moduleGraph;
-    const found = new Set<string>();
-    const seen = new Set<ModuleNode>();
-    const queue = [...(graph?.getModulesByFile(file) ?? [])];
-    for (let mod = queue.shift(); mod; mod = queue.shift()) {
-      if (seen.has(mod)) {
-        continue;
-      }
-      seen.add(mod);
-      if (mod.file && STORY_FILE.test(mod.file)) {
-        found.add(relative(root, mod.file));
-      }
-      if (mod.id?.startsWith(`\0${VIRTUAL}`)) {
-        found.add(
-          decodeURIComponent(mod.id.slice(VIRTUAL.length + 1, -".js".length))
-        );
-      }
-      // The canvas's entry imports the app's global CSS: an error there is every canvas's.
-      if (mod.id === `\0${VIRTUAL_STAGE}entry.js`) {
-        for (const kept of reports.keys()) {
-          found.add(kept);
-        }
-      }
-      queue.push(...mod.importers);
-    }
-    return [...found];
-  };
-
-  /**
-   * Whether module `id` (Vite's, its query kept) is one a canvas's page
-   * loads: the stage's own (a section's module, the entry, the runtime), a
-   * states file, or a module another module of the page's graph imports.
-   * Vite answers every request it is sent, and sends each request's error
-   * to every page (its `logError`), so a request no page made (an address
-   * typed or mangled by hand, `climb.riv?import&amp;url` read straight out
-   * of the page's HTML) makes a module no module imports: its error is the
-   * request's answer alone, neither sent to the open pages nor kept against
-   * a canvas whose own import of that file compiles. An error that names
-   * no module is sent and kept.
-   */
-  const pageAsks = (id: string | undefined): boolean => {
-    if (!id || id.startsWith("\0") || STORY_FILE.test(id.split("?")[0] ?? "")) {
-      return true;
-    }
-    const mod = server?.environments.client.moduleGraph.getModuleById(id);
-    return !!mod && mod.importers.size > 0;
-  };
-
-  /**
-   * A compile error Vite sends the pages, kept under its module, and the
-   * states files whose sections it breaks ({@link sheetsOf}). A section's
-   * own load refusal comes with neither the section module's id nor a place
-   * when its states file isn't written: that one its load keeps
-   * (`sectionLoad`), and it is passed by here. A states file that doesn't
-   * compile stops its own section, which no module graph links it to while
-   * its load fails.
-   */
-  const keepSent = (err: ErrorPayload["err"]): string[] => {
-    if (err.pluginCode === SECTION_MISSING) {
-      return [];
-    }
-    // The module's id is Vite's absolute path, or a section module's, filed
-    // under its states file as a good compile clears it ({@link errorKeyOf});
-    // a plugin's `loc.file` may be its own (vite-plugin-svelte's is the bare
-    // file name).
-    const at = err.id
-      ? resolve(root, errorKeyOf(err.id))
-      : resolve(root, pathOfId(err.loc?.file ?? ""));
-    const file = relative(root, at);
-    const sheets = notStatesFile(file)
-      ? sheetsOf(at)
-      : [...new Set([file, ...sheetsOf(at)])];
-    stageErrors.set(at, {
-      kind: "compile",
-      file,
-      line: err.loc?.line ?? null,
-      // Vite's (Rollup's) column is 0-based.
-      column: typeof err.loc?.column === "number" ? err.loc.column + 1 : null,
-      message: err.message,
-      frame: err.frame ?? null,
-      sheets,
-    });
-    tellErrors();
-    return sheets;
-  };
-
   return {
     name: "cawco:stage",
     resolveId(id: string) {
@@ -4367,7 +4585,8 @@ async function startVite(): Promise<Started> {
       clearScreen: false,
       customLogger: logger,
       plugins: plugins(),
-      server: { host: HOST, port, strictPort: true, hmr: { overlay: false } },
+      // A design's page shows a compile error as Vite's own overlay; a story's section draws its own card.
+      server: { host: HOST, port, strictPort: true, hmr: { overlay: design } },
     })
     .catch((error: unknown) => {
       throw unread && configFile

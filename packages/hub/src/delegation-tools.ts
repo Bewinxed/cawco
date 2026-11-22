@@ -353,6 +353,30 @@ const handoffTool = toolOn<HandoffOn>();
 const catalogTool = toolOn<CatalogOn>();
 
 /** `list_delegate_types`: the same for every session, and read by a call that names none. */
+
+/** `artifact_update`'s fields a design graph's own route takes: a states file's, its spec's, a design folder's. */
+const COMPONENT_FIELDS = [
+  "args",
+  "story",
+  "edges",
+  "group",
+  "dials",
+  "directions",
+  "dir",
+] as const;
+
+/**
+ * Whether an `artifact_update` goes by a design graph's own route: it
+ * names a field of one ({@link COMPONENT_FIELDS}), or html for an artifact
+ * that is a design folder (`isDesign`), whose page it is.
+ */
+const componentChange = (
+  change: Partial<Record<(typeof COMPONENT_FIELDS)[number] | "html", unknown>>,
+  isDesign: () => boolean
+): boolean =>
+  COMPONENT_FIELDS.some((key) => change[key] !== undefined) ||
+  (change.html !== undefined && isDesign());
+
 export const listDelegateTypesTool = catalogTool(
   "list_delegate_types",
   "Delegate types you can start, each with what it is for and what it runs. Use it once a session, before choosing a `type` for delegate or start_session.",
@@ -1185,10 +1209,10 @@ export function handoffTools(view: ToolView) {
         if (!changes && head) {
           return { change: "head", answer: head };
         }
-        // A design graph's states file and its own spec have their own route.
-        const component = (
-          ["args", "story", "edges", "group", "dials"] as const
-        ).some((key) => change[key] !== undefined);
+        // A design graph's states file, its own spec and a design folder's pages have their own route; a page's html goes by the page's, which hands a design folder's on.
+        const component = componentChange(change, () =>
+          bound.actions.artifacts.isDesign(id)
+        );
         if (component) {
           const answer = await bound.actions.artifacts.updateComponent(
             id,

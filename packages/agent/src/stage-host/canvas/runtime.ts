@@ -43,7 +43,6 @@ import { awaySaid } from "@cawco/core/page-wire";
 import {
   type AnimationRead,
   CANVAS_PLAN_ID,
-  type CanvasDial,
   type CanvasSpec,
   canvasSpecOf,
   FORMS,
@@ -70,6 +69,7 @@ import {
   sweptFiles,
 } from "@cawco/core/stage";
 import {
+  dialSetOf,
   STAGE_COMPARE,
   STAGE_LET_GO,
   STAGE_PAUSE,
@@ -351,30 +351,6 @@ const sweepsOf = (
   // The panel's page, framed by its design graph, which asks for each file it needs; a page on its own sweeps them all.
   return by === "panel" && window.top !== window ? [] : files;
 };
-
-/** The dials' values as they set the page: each `cssVar` dial's variable with its unit, each `arg` dial's arg; a dial with no value sets nothing. */
-function dialSetOf(
-  dials: readonly CanvasDial[],
-  values: Record<string, unknown>
-): { args: Record<string, unknown>; vars: Map<string, string> } {
-  const vars = new Map<string, string>();
-  const args: Record<string, unknown> = {};
-  for (const dial of dials) {
-    const value = values[dial.name];
-    if (value === undefined) {
-      continue;
-    }
-    if ("cssVar" in dial.target) {
-      vars.set(
-        dial.target.cssVar,
-        typeof value === "number" ? `${value}${dial.unit ?? ""}` : String(value)
-      );
-    } else {
-      args[dial.target.arg] = value;
-    }
-  }
-  return { vars, args };
-}
 
 export function boot(options: BootOptions): void {
   holdFocusInFrame();

@@ -1,6 +1,7 @@
 /**
  * An artifact's files under the artifacts' root (`ARTIFACTS_ROOT/<id>/`): a
- * page's HTML (`index.html`), an HTML design's pages (`pages/`), a decision page's program (decision-program.ts
+ * page's HTML (`index.html`), a design's folder (`design/`, design-folder.ts),
+ * a decision page's program (decision-program.ts
  * `PROGRAM_FILE`) and the pictures it shows (`files/`), a canvas's or a
  * delivered page's latest picture, a page's or preview's thumbnails. The
  * artifact service reads and writes that folder through this alone; a
@@ -8,7 +9,7 @@
  */
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { DESIGN_PAGES_DIR } from "@cawco/core/stage";
+import { DESIGN_FOLDER, type DesignMoved } from "@cawco/core/stage";
 import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
 import {
@@ -16,6 +17,11 @@ import {
   keptImagePaths,
   PROGRAM_FILE,
 } from "../decision-program";
+import {
+  type DesignFile,
+  designFolderOf,
+  writeDesignFolder,
+} from "./design-folder";
 import { bytesHash } from "./page-changes";
 import { pagePictures } from "./page-pictures";
 import type { PageWas } from "./shapes";
@@ -103,29 +109,15 @@ export const createPageStore = (root: string) => {
     },
 
     /**
-     * An HTML design's pages written (core `DESIGN_PAGES_DIR`), each at its
-     * file from the artifact's folder: a design's pages are its revision's
-     * alone, so the last revision's go first.
+     * Design tree `tree`'s files written in place in its folder
+     * (design-folder.ts `writeDesignFolder`): what its stage serves, its HMR
+     * carrying each change to the open panel. What it moved.
      */
-    writeDesign: (
-      id: string,
-      pages: readonly { file: string; html: string }[]
-    ) => {
-      rmSync(join(folder(id), DESIGN_PAGES_DIR), {
-        recursive: true,
-        force: true,
-      });
-      for (const page of pages) {
-        writeStateFileSync(join(folder(id), page.file), page.html);
-      }
-    },
+    writeDesign: (tree: string, files: readonly DesignFile[]): DesignMoved =>
+      writeDesignFolder(designFolderOf(root, tree), files),
 
-    /** An HTML design's pages as it keeps them, by its files, in their order; an empty one for a file it has not. */
-    designPages: (id: string, files: readonly string[]): string[] =>
-      files.map((file) => {
-        const path = join(folder(id), file);
-        return existsSync(path) ? readFileSync(path, "utf8") : "";
-      }),
+    /** Design tree `tree`'s folder on this disk, absolute. */
+    designFolder: (tree: string): string => designFolderOf(root, tree),
 
     /** The pictures decision page `id` shows, by the name each Image of its kept program `program` gives. */
     shownPictures: (id: string, program: string): Map<string, Uint8Array> => {
@@ -142,10 +134,17 @@ export const createPageStore = (root: string) => {
     /** The sizes of the pictures a page shows (page-pictures.ts). */
     pictures: (id: string) => pagePictures(folder(id)),
 
-    /** A held next version's files: a copy of `from`'s, when it has any. */
+    /**
+     * A held next version's files: a copy of `from`'s, when it has any. A
+     * design's folder is not copied: the version's source names the same
+     * one, which its stage serves live (core stage.ts `designTreeId`).
+     */
     copy: (from: string, to: string) => {
       if (existsSync(folder(from))) {
-        cpSync(folder(from), folder(to), { recursive: true });
+        cpSync(folder(from), folder(to), {
+          recursive: true,
+          filter: (source) => source !== join(folder(from), DESIGN_FOLDER),
+        });
       }
     },
 
@@ -154,10 +153,6 @@ export const createPageStore = (root: string) => {
       if (existsSync(folder(version))) {
         rmSync(join(folder(id), "files"), { recursive: true, force: true });
         rmSync(join(folder(id), PROGRAM_FILE), { force: true });
-        rmSync(join(folder(id), DESIGN_PAGES_DIR), {
-          recursive: true,
-          force: true,
-        });
         cpSync(folder(version), folder(id), { recursive: true, force: true });
       }
     },
