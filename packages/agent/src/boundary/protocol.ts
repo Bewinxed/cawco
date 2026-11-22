@@ -146,8 +146,9 @@ export const HOST_FILES = {
  * The environment the agent starts the srt host with, besides srt's own:
  * `place`, the boundary holds a person's own folder, and nothing a command
  * starts outlives it (the runner reads it too); `folder`, it holds a
- * delegate's copy of a folder that is no repository; `sandboxCwd`, where a
- * place's srt starts, never in the place.
+ * delegate's copy of a folder that is no repository, or a design folder;
+ * `sandboxCwd`, where a place's or a design folder's srt starts, never in
+ * the folder it holds.
  */
 export const HOST_ENV = {
   folder: "CAWCO_FOLDER",

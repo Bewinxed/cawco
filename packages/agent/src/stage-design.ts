@@ -23,7 +23,7 @@ import { isDesignTree } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { z } from "zod";
-import { stopWorkspaceBoundary } from "./boundary/control";
+import { closeBoundary } from "./boundary/stop";
 import { removeTree } from "./remove-tree";
 import { forgetInstalls } from "./stage-install";
 
@@ -65,10 +65,11 @@ export const keepDesign = async (ref: WorkspaceRef): Promise<void> => {
 };
 
 /**
- * Design tree `id`'s records dropped: its boundary stopped, its installs
- * forgotten, its state dir deleted. Its folder is the hub's, and goes with
- * the artifact there. Its stages are stopped first by the caller
- * (stage.ts `unpin`). Nothing for an id no design tree has.
+ * Design tree `id`'s records dropped: its boundary closed with its scratch
+ * and door dirs (boundary/stop.ts `closeBoundary`), its installs forgotten,
+ * its state dir deleted. Its folder is the hub's, and goes with the
+ * artifact there. Its stages are stopped first by the caller (stage.ts
+ * `unpin`). Nothing for an id no design tree has.
  */
 export const dropDesign = async (id: string): Promise<void> => {
   if (!isDesignTree(id)) {
@@ -76,7 +77,7 @@ export const dropDesign = async (id: string): Promise<void> => {
   }
   const path = await recordedFolder(id);
   if (path) {
-    await stopWorkspaceBoundary({ id, path });
+    await closeBoundary({ id, path });
   }
   await forgetInstalls(id);
   await removeTree(workspaceStateDir(id));

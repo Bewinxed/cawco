@@ -113,6 +113,7 @@ import {
 } from "@cawco/core/paths/workspace";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid } from "@cawco/core/signal";
+import { isDesignTree } from "@cawco/core/stage";
 import { readRecord } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram, workspaceNeeds } from "@cawco/core/workspace-needs";
@@ -288,7 +289,10 @@ const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
  * The folder a boundary holds, ready for it: a place, whatever folder it is
  * over, which stays as the person keeps it, with its folder recorded as one a
  * sandbox writes ({@link keepPlaceFolder}) and what its repository borrows
- * recorded at its first hold ({@link keepBorrowedObjects}); or a delegate's layer of its
+ * recorded at its first hold ({@link keepBorrowedObjects}); a design folder
+ * (core stage.ts `isDesignTree`), the folder the hub keeps for a design
+ * artifact, which its stage runs over as it is, recorded by its tree
+ * (stage-design.ts `keepDesign`) and no layer of anything; or a delegate's layer of its
  * folder (layer.ts): a folder there, and on Linux its view running, which
  * the srt host then enters (decisions.ts `viewOfBoundary`). A delegate's copy that
  * held a repository and whose `.git` is no repository any more (a deleted
@@ -305,6 +309,9 @@ const placeReady = async (ref: WorkspaceRef): Promise<void> => {
   if (isPlace(ref.id)) {
     await keepPlaceFolder(ref);
     await keepBorrowedObjects(ref);
+    return;
+  }
+  if (isDesignTree(ref.id)) {
     return;
   }
   const layer = await layerOf(ref.id, ref.path);

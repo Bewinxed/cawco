@@ -1,6 +1,7 @@
 /**
  * The y-websocket protocol (y-protocols/sync) for one artifact's doc, on the
- * preview listener at `/__cawco/artifact/<id>` (preview.ts), and the
+ * preview listener at `/__cawco/artifact/<id>` (preview.ts), and for a
+ * page's store at `/__cawco/store/<scope>` ({@link storeSocket}); and the
  * person's send of their picks beside it at `/__cawco/artifact/<id>/send`,
  * and the page's pictures of their marks at `…/pictures`. Sync only:
  * awareness, auth and awareness queries are read and ignored. A client
@@ -48,9 +49,11 @@ import {
   writeSyncStep2,
   writeUpdate,
 } from "y-protocols/sync";
-import { applyUpdate, Map as YMap } from "yjs";
+import { applyUpdate, type Doc, Map as YMap } from "yjs";
+import type { StoreKey } from "../db/page-stores";
 import type { ArtifactClient, ArtifactDocs } from "./docs";
 import { picturePath } from "./page-store";
+import type { PageStores, StoreClient } from "./page-stores";
 
 /** y-websocket's sync message type (its server's `messageSync`). */
 const MESSAGE_SYNC = 0;
@@ -334,6 +337,45 @@ export interface ArtifactSocketEnd {
   send: (message: Uint8Array) => void;
 }
 
+/**
+ * One y-websocket message from a client of `doc`: its sync step 1 answered
+ * with the hub's step 2, its step 2 or update handed to `take`, and an
+ * update `take` refuses told to it as a {@link refusal}, after which nothing
+ * more it sends is kept (see the top). Awareness, auth and awareness
+ * queries are read and ignored.
+ */
+const readSync = (
+  message: Buffer,
+  doc: Doc,
+  socket: {
+    readonly data: { refused?: true };
+    send: (message: Uint8Array) => void;
+  },
+  take: (update: Uint8Array) => string | null
+): void => {
+  const decoder = createDecoder(new Uint8Array(message));
+  if (readVarUint(decoder) !== MESSAGE_SYNC) {
+    return;
+  }
+  const kind = readVarUint(decoder);
+  if (kind === messageYjsSyncStep1) {
+    const vector = readVarUint8Array(decoder);
+    socket.send(syncMessage((encoder) => writeSyncStep2(encoder, doc, vector)));
+    return;
+  }
+  if (
+    (kind !== messageYjsSyncStep2 && kind !== messageYjsUpdate) ||
+    socket.data.refused
+  ) {
+    return;
+  }
+  const why = take(readVarUint8Array(decoder));
+  if (why) {
+    socket.data.refused = true;
+    socket.send(refusal(why));
+  }
+};
+
 /** The listener's handlers for artifact sockets. */
 export const artifactSocket = (docs: ArtifactDocs) => ({
   open(socket: ArtifactSocketEnd) {
@@ -354,35 +396,9 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       return;
     }
     const { artifactId, origin } = socket.data;
-    const decoder = createDecoder(new Uint8Array(message));
-    if (readVarUint(decoder) !== MESSAGE_SYNC) {
-      return;
-    }
-    const doc = docs.doc(artifactId);
-    const kind = readVarUint(decoder);
-    if (kind === messageYjsSyncStep1) {
-      const vector = readVarUint8Array(decoder);
-      socket.send(
-        syncMessage((encoder) => writeSyncStep2(encoder, doc, vector))
-      );
-      return;
-    }
-    if (
-      (kind !== messageYjsSyncStep2 && kind !== messageYjsUpdate) ||
-      socket.data.refused
-    ) {
-      return;
-    }
-    const why = takeUpdate(
-      docs,
-      artifactId,
-      readVarUint8Array(decoder),
-      origin
+    readSync(message, docs.doc(artifactId), socket, (update) =>
+      takeUpdate(docs, artifactId, update, origin)
     );
-    if (why) {
-      socket.data.refused = true;
-      socket.send(refusal(why));
-    }
   },
   close(socket: ArtifactSocketEnd, code?: number) {
     if (socket.data.origin) {
@@ -391,6 +407,63 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       if (socket.data.screen && code !== ARTIFACT_GONE) {
         releaseClaims(docs, socket.data.artifactId, socket.data.origin.client);
       }
+    }
+  },
+});
+
+/**
+ * A page's store's socket on its own preview origin
+ * (`/__cawco/store/<scope>`): what y-websocket's `WebsocketProvider` joins
+ * with that origin's `/__cawco/store` as its server and the scope as its
+ * room (page-stores.ts).
+ */
+export const STORE_PATH = /^\/__cawco\/store\/(artifact|project)$/u;
+
+/** What the listener keeps on a store's socket. */
+export interface StoreSocket {
+  /** The client it joined as, once it has. */
+  client?: StoreClient;
+  /** The hub refused an update from it: nothing more it sends is kept (see the top). */
+  refused?: true;
+  store: StoreKey;
+}
+
+/** What of a socket a store's handlers read (preview-control.ts hands Elysia's in as these). */
+export interface StoreSocketEnd {
+  close: (code?: number, reason?: string) => void;
+  readonly data: StoreSocket;
+  send: (message: Uint8Array) => void;
+}
+
+/** The listener's handlers for pages' store sockets: y-websocket's protocol, sync only, as an artifact's. */
+export const storeSocket = (stores: PageStores) => ({
+  open(socket: StoreSocketEnd) {
+    const client: StoreClient = {
+      beat: () => socket.send(BEAT),
+      close: () =>
+        socket.close(
+          ARTIFACT_GONE,
+          "This page's design or project was removed."
+        ),
+      send: (update) =>
+        socket.send(syncMessage((encoder) => writeUpdate(encoder, update))),
+    };
+    socket.data.client = client;
+    const doc = stores.join(socket.data.store, client);
+    socket.send(syncMessage((encoder) => writeSyncStep1(encoder, doc)));
+  },
+  message(socket: StoreSocketEnd, message: string | Buffer) {
+    const { client, store } = socket.data;
+    if (typeof message === "string" || !client) {
+      return;
+    }
+    readSync(message, stores.doc(store), socket, (update) =>
+      stores.take(store, update, client)
+    );
+  },
+  close(socket: StoreSocketEnd) {
+    if (socket.data.client) {
+      stores.leave(socket.data.store, socket.data.client);
     }
   },
 });

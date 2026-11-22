@@ -28,6 +28,7 @@ The create answers `errors`: every compile error in the pages and what they impo
 - **Dark is the page's CSS.** The graph's scheme reaches the page as its preferred colour scheme: style dark with `@media (prefers-color-scheme: dark)` or `light-dark()` under `:root { color-scheme: light dark }`. A script's `matchMedia` hears the browser's own scheme in Chromium, so keep the scheme in CSS. A page that names no dark draws light in both.
 - **A dial is a CSS variable.** Each dial's target is `{ cssVar: "--radius" }`, set on the page's root; the page reads it (`border-radius: var(--radius)`) and declares its default on `:root`, which the dial shows as written. An `arg` dial is refused: a page has no props.
 - **Real words, product-shaped data**, as on any design: real names, counts and the longest text a user has.
+- **State that lasts, and the person's files**: a page that keeps state across reloads and devices, or opens a file the person hands it, reads `references/page-store.md` first.
 
 ## What comes back
 

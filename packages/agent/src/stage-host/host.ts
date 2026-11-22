@@ -3195,35 +3195,44 @@ function pageModules(html: string, page: string): string[] {
   return asked;
 }
 
-/** Vite's error from a transform, as its own error payload carries one. */
+/** Field `name` of a thrown value, read by name: an Error's own `message` is no enumerable property, so a spread of it leaves the message out. */
+const fieldOf = (from: unknown, name: string): unknown =>
+  typeof from === "object" && from !== null
+    ? Reflect.get(from, name)
+    : undefined;
+
+/**
+ * Vite's error from a transform, as its own error payload carries one. A
+ * compile error of Vite 8's (Rolldown's "Transform failed with 1 error")
+ * names each error it gathers in `errors`, each with its place in the file;
+ * its own `loc` is where Vite threw it from, a line of Vite's code (line 7673
+ * of a one-line App.tsx, 2026-11-22), so the first error's place is the
+ * one said.
+ */
 const thrownPayload = (error: unknown): ErrorPayload["err"] => {
-  const one: Partial<Record<string, unknown>> =
-    typeof error === "object" && error !== null ? { ...error } : {};
   const text = (value: unknown) =>
     typeof value === "string" ? stripVTControlCharacters(value) : undefined;
-  const place = one.loc;
+  const errors = fieldOf(error, "errors");
+  const place =
+    fieldOf(Array.isArray(errors) ? errors[0] : undefined, "loc") ??
+    fieldOf(error, "loc");
+  const line = fieldOf(place, "line");
+  const column = fieldOf(place, "column");
+  const file = fieldOf(place, "file");
   const loc =
-    typeof place === "object" &&
-    place !== null &&
-    "line" in place &&
-    "column" in place &&
-    typeof place.line === "number" &&
-    typeof place.column === "number"
-      ? {
-          line: place.line,
-          column: place.column,
-          ...("file" in place && typeof place.file === "string"
-            ? { file: place.file }
-            : {}),
-        }
+    typeof line === "number" && typeof column === "number"
+      ? { line, column, ...(typeof file === "string" ? { file } : {}) }
       : undefined;
+  const id = text(fieldOf(error, "id"));
+  const frame = text(fieldOf(error, "frame"));
+  const plugin = text(fieldOf(error, "plugin"));
   return {
     // A plugin may throw a plain object with a message (vite-plugin-svelte's compile error).
-    message: text(one.message) ?? String(error),
+    message: text(fieldOf(error, "message")) ?? text(String(error)) ?? "",
     stack: "",
-    ...(text(one.id) ? { id: text(one.id) } : {}),
-    ...(text(one.frame) ? { frame: text(one.frame) } : {}),
-    ...(text(one.plugin) ? { plugin: text(one.plugin) } : {}),
+    ...(id ? { id } : {}),
+    ...(frame ? { frame } : {}),
+    ...(plugin ? { plugin } : {}),
     ...(loc ? { loc } : {}),
   };
 };

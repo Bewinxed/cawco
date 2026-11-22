@@ -36,6 +36,11 @@
  * - Every credential store (`credentialStores`) is denied for reading and
  *   writing, even inside an allowed tree. On Linux so are the host's runtime
  *   dirs, with every daemon's socket, and the journal.
+ * - A design folder's tree (core stage.ts `isDesignTree`) writes its folder
+ *   under the hub's artifacts root, which lies in the hub's data dir, a
+ *   store: the store above that folder alone is no write deny of its
+ *   (`designStoresOpen`), the deeper entry deciding as it does for reads.
+ *   Nothing on the host loads from it, so it keeps no clone denies.
  */
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -103,6 +108,7 @@ import {
 } from "./paths/workspace";
 import { SAFE_GIT_ENV, safeGitArgv } from "./safe-git";
 import { hostEnvironment } from "./session-env";
+import { isDesignTree } from "./stage";
 import { readRecord } from "./state-file";
 import type { WorkspaceRef } from "./workspace/controls";
 import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
@@ -387,12 +393,17 @@ const borrowing = (
  * pool's line ({@link borrowing}).
  * A place keeps only the protected config it has
  * ({@link protectedIn}), each with nothing to stand in for it: a person's own
- * folder is never written into. At most {@link PROTECTED_MAX}, the config
+ * folder is never written into. A design folder keeps none: its stage alone
+ * runs there, inside its boundary, and nothing on the host loads its files
+ * as config. At most {@link PROTECTED_MAX}, the config
  * that crowds past it denied as the dirs that hold it ({@link collapsed}).
  */
 export const workspaceDenies = async (
   workspace: WorkspaceRef
 ): Promise<readonly CloneDeny[]> => {
+  if (isDesignTree(workspace.id)) {
+    return [];
+  }
   const clone = resolveReal(workspace.path);
   if (!isPlace(workspace.id)) {
     return borrowing(
@@ -697,16 +708,27 @@ const clonesDir = (home: string): string => join(home, ".worktrees");
  * Every folder a workspace on this machine writes, each at its real path:
  * every place's folder, as the agent recorded it at each hold
  * ({@link workspacePlaceFoldersFile}) and, for a place held before that
- * record was kept, as its `place.json` names it; the dir every clone and
+ * record was kept, as its `place.json` names it; every design folder, as
+ * its tree's `create.json` names it (agent stage-design.ts); the dir every clone and
  * copy is cut in ({@link clonesDir}); the scratch root; the workspaces'
  * caches. Kept for good, not only while a boundary runs: what a sandbox wrote
  * there stays after it closes. Nothing a file in one says is evidence for a
  * grant to any workspace ({@link homeToolchains}).
  */
 const workspaceWritten = async (home: string): Promise<string[]> => {
-  const places = (
-    await readdir(workspacesDir()).catch(unlessGone<string[]>([]))
-  ).filter(isPlace);
+  const ids = await readdir(workspacesDir()).catch(unlessGone<string[]>([]));
+  const places = ids.filter(isPlace);
+  const designs = await Promise.all(
+    ids.filter(isDesignTree).map(async (id) => {
+      const created = await readRecord(
+        join(workspacesDir(), id, "create.json"),
+        z.object({ path: z.unknown().optional() })
+      ).catch(() => undefined);
+      return typeof created?.path === "string" && isAbsolute(created.path)
+        ? [resolveReal(created.path)]
+        : [];
+    })
+  );
   const folders = await Promise.all(
     places.map(async (id) => {
       const [kept, held] = await Promise.all([
@@ -724,6 +746,7 @@ const workspaceWritten = async (home: string): Promise<string[]> => {
   );
   return unique([
     ...folders.flat(),
+    ...designs.flat(),
     ...[clonesDir(home), workspaceScratchRoot(home), ...workspaceCaches()].map(
       resolveReal
     ),
@@ -1361,6 +1384,24 @@ const ancestorManifests = (clone: string, home: string): string[] => {
 };
 
 /**
+ * The credential stores a workspace's writes are denied in: every one, but
+ * for a design folder's tree (core stage.ts `isDesignTree`) the stores that
+ * hold its folder (the hub's data dir, where its artifacts root lies). Its
+ * writes are its folder alone (`allowWrite`), so nothing else in those
+ * stores opens; and a deny above the folder would refuse every write in it
+ * on macOS, whose profile lets a later deny win (boundary-policy.ts
+ * `seatbeltProfile`). A store at the folder itself or inside it stays denied.
+ */
+const designStoresOpen = (
+  id: string,
+  clone: string,
+  stores: readonly string[]
+): readonly string[] =>
+  isDesignTree(id)
+    ? stores.filter((store) => !(clone !== store && within(clone, store)))
+    : stores;
+
+/**
  * The workspace's policy on this machine as it stands now, every path a real
  * path but the account layer names ({@link accountLayers}).
  */
@@ -1459,7 +1500,7 @@ export const workspacePolicy = async (
           .filter((deny) => !deny.srt)
           .map(({ path }) => path)
       ),
-      ...stores,
+      ...designStoresOpen(workspace.id, clone, stores),
       ...ownerOnly,
       ...linked,
     ]),

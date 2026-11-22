@@ -3303,6 +3303,31 @@ window.addEventListener(
   true
 );
 
+/*
+ * A drag let go over the page is the page's in Interact, where its own file
+ * drops and picker take what the person hands it (references/page-store.md
+ * of the design-graph skill), and the overlay's in Comment and Draw, as a
+ * press is: the page never hears it, and the drop finds no target (effect
+ * "none"), so the browser's own default for a file let go on a page, which
+ * opens it in the frame, never runs either.
+ */
+for (const type of ["dragenter", "dragover", "drop"] as const) {
+  window.addEventListener(
+    type,
+    (event) => {
+      if (modeNow === "interact") {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "none";
+      }
+    },
+    { capture: true, passive: false }
+  );
+}
+
 /**
  * The page's own controls: Enter on one presses it (a card's Clear, its
  * Continue, Change), and is never the pane's Enter, which opens the focused
