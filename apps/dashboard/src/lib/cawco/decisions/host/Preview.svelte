@@ -60,10 +60,14 @@
   with an error status) or its overlay's word that the page threw before it
   loaded and shows nothing (`crashed`), a canvas that says it can't
   draw what it names (core `CANVAS_EMBED_FAILED`), or one told to draw that
-  says neither its shape nor why within `DRAW_MS`. One the hub no longer
+  says neither its shape nor why within `DRAW_MS`. One the hub knows can't
+  be shown now (the page's media name it `unavailable`: its machine away,
+  its workspace retired, its version gone) draws that down state in its
+  place before any frame, and asks its origin nothing. One the hub no longer
   holds says so in words where it would stand.
 -->
 <script lang="ts">
+  import { named as called } from "@cawco/core/named";
   import {
     type FrameSays,
     type PageHeard,
@@ -927,6 +931,23 @@
         </div>
       {/if}
     </div>
+  {:else if held?.unavailable}
+    {@const unavailable = held.unavailable}
+    <!-- The hub knows it can't be shown now (its machine away or paused, its workspace retired, its version gone): every frame's down state in the picture's place and shape, no frame loaded. The page takes its media again as the hub's word moves (Host.svelte's `cawco:revision`), and it frames then. -->
+    <FrameDown
+      class={[
+        "flex w-full flex-col justify-center rounded-xs",
+        heldHeight === null
+          ? "aspect-16/10 max-h-c-media-max-h"
+          : "min-h-(--held-h)",
+      ].join(" ")}
+      down={unavailable.down}
+      names={unavailable.machine
+        ? { machine: called(unavailable.machine) }
+        : undefined}
+      style="--held-h: {heldHeight}"
+      why={unavailable.why}
+    />
   {:else if held?.embed}
     <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so its box holds its picture's own shape as the page's media knows it from its first paint (the kit's picture where none was ever drawn), its skeleton a layer over it until it stands drawn (said and loaded), its frame loading at no height under that layer, then at its own height. Past the grace the wait's line stands at the box's top over the skeleton, until it stands drawn; then the row stands over the frame, empty. An origin that can't be reached, a frame the proxy's own page stands in, a canvas that says it can't draw, or one that says nothing within DRAW_MS says why in its place and shape past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
     <div

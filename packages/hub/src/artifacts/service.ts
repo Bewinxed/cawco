@@ -1190,6 +1190,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     });
     deps.needsMoved();
+    deps.previewsMoved([id]);
   };
   const folderMove = createFolderMove({
     db,
@@ -1202,6 +1203,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     write: (id, files) => {
       store.writeFolder(id, files);
       folderStamped(id);
+      // Its files kept now: every surface showing it frames it.
+      deps.previewsMoved([id]);
     },
   });
 
@@ -1227,9 +1230,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         .filter((page) => page.kind === "page" && mediaOf(page).includes(id))
         .map((page) => [page.id, page])
     );
-    // The version it stands at now, so a move told twice is heard once.
+    // The version it stands at now, and whether it can be shown
+    // (preview-unavailable.ts), so a move told twice is heard once.
     const now = newestVersion(artifact);
-    const at = `${id}@${now.id}:${now.revision}`;
+    const at = `${id}@${now.id}:${now.revision}:${JSON.stringify(deps.unavailable(now))}`;
     for (const page of pages.values()) {
       const meta = docMeta(docs.doc(page.id));
       if (meta.get("mediaAt") !== at) {
@@ -3832,6 +3836,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   return {
+    /** Every decision page showing artifact `row` takes its media again when what it draws moved ({@link versionMoved}). */
+    versionMoved,
+
+    /** Folder preview `id`'s files: kept where the hub serves them, or why they can't be shown again (doc `meta.sourceGone`, {@link sourceSeen}). */
+    folderFiles: (id: string): { gone: string | null; kept: boolean } => {
+      if (store.hasFolder(id)) {
+        return { kept: true, gone: null };
+      }
+      const gone = db.get(id)
+        ? (docMeta(docs.doc(id)).get("sourceGone")?.why ?? null)
+        : null;
+      return { kept: false, gone };
+    },
+
     /**
      * Needs you's artifacts (needs.ts): each waiting on the person, oldest
      * first, one put away with Not now marked `parked` until it is raised

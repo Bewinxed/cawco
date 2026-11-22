@@ -109,6 +109,39 @@ export const PREVIEW_DOWNS = [
  */
 export type PreviewDown = (typeof PREVIEW_DOWNS)[number];
 
+/**
+ * The hops the hub knows are down from its own records, before any frame
+ * loads (hub preview-unavailable.ts): the preview's machine away or paused
+ * (`machine`), an unrecorded port preview's workspace retired, so nothing
+ * runs its server (`workspace`), the artifact no longer held (`closed`), and
+ * a version that can't come back (`gone`: its workspace retired with nothing
+ * to cut it again from, or a folder preview's files lost). Every other hop
+ * is the proxy's to say, from a frame's load.
+ */
+export const HUB_DOWNS = [
+  "machine",
+  "workspace",
+  "closed",
+  "gone",
+] as const satisfies readonly PreviewDown[];
+export type HubDown = (typeof HUB_DOWNS)[number];
+
+/**
+ * Why the hub knows a preview can't be shown now ({@link HUB_DOWNS}), on
+ * every record a surface frames it from (core frames.ts `PreviewFrame`, a
+ * decision page's media `DecisionMedia`): the surface draws it (dashboard
+ * FrameDown.svelte, core words `downState`) and loads no frame. Absent from
+ * a record while the hub knows nothing in its way; the record is told again
+ * as that moves.
+ */
+export interface PreviewUnavailable {
+  down: HubDown;
+  /** The machine that serves it, by its label: `downState`'s machine name (`named`). Absent where the hub has no name for it. */
+  machine?: string;
+  /** The hub's own words for why: `gone`'s reason line, any other's Show details. */
+  why: string | null;
+}
+
 /** A machine's refusal of a preview's start that names the hop that is down: its kind travels beside its words (core frames.ts `ControlRefusal`). */
 export class PreviewStartDown extends Error {
   readonly down: PreviewDown;

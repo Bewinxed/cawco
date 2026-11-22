@@ -107,7 +107,11 @@ import type {
   SessionPlan as SessionPlanType,
   TaskTodo as TaskTodoType,
 } from "@cawco/core/plan";
-import type { PreviewSource as PreviewSourceType } from "@cawco/core/preview/protocol";
+import type {
+  HubDown as HubDownType,
+  PreviewSource as PreviewSourceType,
+  PreviewUnavailable as PreviewUnavailableType,
+} from "@cawco/core/preview/protocol";
 import type { RoutineSchedule as RoutineScheduleType } from "@cawco/core/project-conversation";
 import type { SendPayload as SendPayloadType } from "@cawco/core/protocol";
 import type {
@@ -293,6 +297,7 @@ import type {
   HookHttpHandlerOutput,
   HookMcpToolHandlerOutput,
   HookPromptHandlerOutput,
+  HubDownOutput,
   ImageMediaTypeOutput,
   KeptFormOutput,
   KeptPairingOutput,
@@ -333,6 +338,7 @@ import type {
   PlanStepStatusOutput,
   PreviewFrameOutput,
   PreviewSourceOutput,
+  PreviewUnavailableOutput,
   RailLayoutOutput,
   RefusalOutput,
   RestoreHeldRowOutput,
@@ -465,6 +471,8 @@ prove<
     Same<StageToolchainOutput, StageToolchainType>,
     Same<StageStateOutput, StageStateType>,
     Same<TailnetOriginOutput, TailnetOriginType>,
+    Same<HubDownOutput, HubDownType>,
+    Same<PreviewUnavailableOutput, PreviewUnavailableType>,
     Same<PreviewFrameOutput, PreviewFrameType>,
     Same<ArtifactSessionFrameOutput, ArtifactSessionFrameType>,
     Same<ArtifactSessionHeardOutput, ArtifactSessionHeardType>,

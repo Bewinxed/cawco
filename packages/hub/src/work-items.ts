@@ -6470,6 +6470,9 @@ export const createWorkItems = ({
     /** A workspace a design is opened from cut again when it went, or why it can't come back (workspaces.ts `revive`). */
     revive: workspaces.revive,
 
+    /** Why what a workspace served can't come back as it is opened, from the hub's records alone; null when it can (workspaces.ts `wontComeBack`). */
+    wontComeBack: workspaces.wontComeBack,
+
     /**
      * The workspace of session `instanceId`'s item settled soon
      * (workspaces.ts `settleSoon`): its session went to sleep, stopped or failed, so

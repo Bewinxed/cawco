@@ -2398,6 +2398,24 @@ export const createWorkspaces = ({
     return at;
   };
   /**
+   * Why what workspace `id` served can't come back as it is opened, read
+   * from the hub's records alone, before any open asks ({@link revive}'s
+   * rule: the workspace it opens in, {@link openedIn}, stands, or is
+   * archived and {@link recuttable}); null when it can. A cut again that
+   * then fails is the open's to say. Read by every surface before it frames
+   * such a preview (hub preview-unavailable.ts).
+   */
+  const wontComeBack = (id: string): GoneWhy | null => {
+    const [named] = db.workspacesNamed(id);
+    if (!named) {
+      return { kind: "unrecorded" };
+    }
+    const target = openedIn(named);
+    return target.state !== "archived" || recuttable(target)
+      ? null
+      : goneWhyOf(target);
+  };
+  /**
    * Why cutting `workspace` again failed, for the person: its machine
    * away (it comes back once the machine answers), `origin` no longer
    * holding its commit (core `CutCommitGone`, server.ts `callMachine`), or
@@ -2995,6 +3013,7 @@ export const createWorkspaces = ({
     heldWork,
     unlandedOf,
     revive,
+    wontComeBack,
     settleOn,
     discardUnfiled,
     fileStage,

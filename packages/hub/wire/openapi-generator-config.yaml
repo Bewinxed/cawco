@@ -114,6 +114,7 @@ typeOverrides:
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell
     HookEvent: OpenEnums.HookEvent
     HubAuthMode: OpenEnums.HubAuthMode
+    HubDown: OpenEnums.HubDown
     ImageFormat: OpenEnums.ImageFormat
     ImageMediaType: OpenEnums.ImageMediaType
     ImageProviderId: OpenEnums.ImageProviderId

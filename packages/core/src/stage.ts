@@ -13,7 +13,11 @@
  * supervision, and its preview's doc keeps its state the same way.
  */
 
-import type { PreviewDown, PreviewSource } from "./preview/protocol";
+import type {
+  PreviewDown,
+  PreviewSource,
+  PreviewUnavailable,
+} from "./preview/protocol";
 import { withoutUndefined } from "./without-undefined";
 import { workspaceIdKindOf } from "./workspace-id";
 
@@ -232,6 +236,13 @@ export type DecisionMedia = {
   revision: number;
   /** A design graph's shapes as embeds said them and as its stage drew its stories: a Preview's skeleton stands at them. */
   shapes?: CanvasShapes;
+  /**
+   * Why the hub knows this version can't be shown now (hub
+   * preview-unavailable.ts): the Preview draws it in its place, and the hub
+   * opened no origin for it (no `embed`). The page's media are served
+   * again as it moves (artifacts service `versionMoved`).
+   */
+  unavailable?: PreviewUnavailable;
 } | null;
 
 /**

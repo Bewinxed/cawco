@@ -1,7 +1,11 @@
 import { readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import type { PreviewFrame } from "@cawco/core/frames";
-import type { PreviewDown, PreviewSource } from "@cawco/core/preview/protocol";
+import type {
+  PreviewDown,
+  PreviewSource,
+  PreviewUnavailable,
+} from "@cawco/core/preview/protocol";
 import type {
   PreviewAddress,
   PreviewSettings,
@@ -147,7 +151,9 @@ export function previewFrame(
   /** A sheet's stage as its doc keeps it; none for any other kind, or before it was told. */
   stage: StageState | null = null,
   /** The project whose origin serves it, `address` being that origin's: a project's page. */
-  project?: string
+  project?: string,
+  /** Why the hub knows it can't be shown now (preview-unavailable.ts); null while nothing it holds stands in the way. */
+  unavailable: PreviewUnavailable | null = null
 ): PreviewFrame {
   return {
     kind: "preview",
@@ -161,6 +167,7 @@ export function previewFrame(
     revision: target.revision,
     show: target.show,
     ...(stage ? { stage } : {}),
+    ...(unavailable ? { unavailable } : {}),
   };
 }
 

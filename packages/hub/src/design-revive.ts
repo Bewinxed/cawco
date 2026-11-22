@@ -31,35 +31,37 @@ export interface DesignReviveDeps {
 }
 
 /**
- * The proxy's page for a design that can't come back, by why: `machine`
- * while its machine is away, whose cover says so and loads the frame again
- * once it answers (the owner's word on 2026-11-22: "If its machine is off,
- * it waits for the machine"); `gone` with the reason's line for the rest.
+ * The down state of a design that can't come back, by why: `machine` while
+ * its machine is away, whose cover says so and loads the frame again once
+ * it answers (the owner's word on 2026-11-22: "If its machine is off, it
+ * waits for the machine"); `gone` with the reason's line for the rest. The
+ * proxy's page after an open (design-revive's answer) and the hub's read
+ * before any (preview-unavailable.ts) say it alike.
  */
-const goneAnswer = (why: GoneWhy): RevivedAnswer => {
+export const goneDownOf = (
+  why: GoneWhy
+): { down: "gone" | "machine"; why: string | null } => {
   switch (why.kind) {
     case "offline":
-      return { ok: false, down: "machine", why: null };
+      return { down: "machine", why: null };
     case "commit":
-      return {
-        ok: false,
-        down: "gone",
-        why: previewWords.goneWhy.commit(why.branch),
-      };
+      return { down: "gone", why: previewWords.goneWhy.commit(why.branch) };
     case "discarded":
-      return { ok: false, down: "gone", why: previewWords.goneWhy.discarded };
+      return { down: "gone", why: previewWords.goneWhy.discarded };
     case "unrecorded":
-      return { ok: false, down: "gone", why: previewWords.goneWhy.unrecorded };
+      return { down: "gone", why: previewWords.goneWhy.unrecorded };
     case "failed":
-      return {
-        ok: false,
-        down: "gone",
-        why: previewWords.goneWhy.failed(why.why),
-      };
+      return { down: "gone", why: previewWords.goneWhy.failed(why.why) };
     default:
       return why satisfies never;
   }
 };
+
+/** The proxy's page for a design that can't come back ({@link goneDownOf}). */
+const goneAnswer = (why: GoneWhy): RevivedAnswer => ({
+  ok: false,
+  ...goneDownOf(why),
+});
 
 export const createDesignRevive =
   (deps: DesignReviveDeps) =>

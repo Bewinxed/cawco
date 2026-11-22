@@ -203,6 +203,7 @@ import type { PlanChangeCalls } from "./plan-change-calls";
 import type { createPlans } from "./plans";
 import type { createPreviewListeners, PreviewTarget } from "./preview";
 import type { createPreviewService } from "./preview-service";
+import type { PreviewUnavailableOf } from "./preview-unavailable";
 import type { createCaps } from "./project-caps";
 import type { ProjectDelegateTypes } from "./project-delegate-types";
 import type { projectDelete } from "./project-delete";
@@ -1031,6 +1032,10 @@ export interface ClosureContext {
   presenceSaid: (request: Request) => string | null;
   previewListeners: ReturnType<typeof createPreviewListeners>;
   previewService: ReturnType<typeof createPreviewService>;
+  /** What machine `machineId` serves was told again where it is shown: its presence or pause moved (server.ts `previewsMoved`). */
+  previewsOnMachineMoved: (machineId: string) => void;
+  /** Why the hub knows an artifact's preview can't be shown now (preview-unavailable.ts). */
+  previewUnavailable: PreviewUnavailableOf;
   processAt: Map<string, number>;
   processEvent: (instanceId: string) => boolean;
   processFailed: (

@@ -17,6 +17,7 @@ import {
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
 } from "@cawco/core/plan";
+import { HUB_DOWNS } from "@cawco/core/preview/protocol";
 import {
   CONDITION_STATES,
   ROUTINE_OUTCOMES,
@@ -218,6 +219,16 @@ const TailnetOriginShape = z.object({
 });
 export type TailnetOriginOutput = z.output<typeof TailnetOriginShape>;
 
+const HubDownShape = z.enum(HUB_DOWNS);
+export type HubDownOutput = z.output<typeof HubDownShape>;
+
+const PreviewUnavailableShape = z.object({
+  down: HubDownShape,
+  machine: z.string().optional(),
+  why: z.string().nullable(),
+});
+export type PreviewUnavailableOutput = z.output<typeof PreviewUnavailableShape>;
+
 const PreviewFrameShape = z.object({
   artifact: z.object({
     ask: z.string().optional(),
@@ -238,6 +249,7 @@ const PreviewFrameShape = z.object({
   stage: StageStateShape.optional(),
   state: z.enum(["open", "closed"]),
   tailnet: TailnetOriginShape.optional(),
+  unavailable: PreviewUnavailableShape.optional(),
 });
 export type PreviewFrameOutput = z.output<typeof PreviewFrameShape>;
 
@@ -979,6 +991,7 @@ const DecisionMediaShape = z
     kind: z.string(),
     revision: z.number(),
     shapes: CanvasShapesShape.optional(),
+    unavailable: PreviewUnavailableShape.optional(),
   })
   .nullable();
 export type DecisionMediaOutput = z.output<typeof DecisionMediaShape>;

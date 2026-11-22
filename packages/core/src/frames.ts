@@ -32,7 +32,11 @@ import type { InstallsFrame } from "./install";
 import type { MoveJob, MoveProgressFrame, MovesFrame } from "./move";
 import type { DeskAlertFrame, PersonFrame } from "./notifications";
 import type { PermissionPresentation } from "./permission-presentation";
-import type { PreviewDown, PreviewSource } from "./preview/protocol";
+import type {
+  PreviewDown,
+  PreviewSource,
+  PreviewUnavailable,
+} from "./preview/protocol";
 import type { PreviewSettings } from "./preview/routes";
 import type {
   BuildInfo,
@@ -148,6 +152,14 @@ export interface PreviewFrame {
   state: "open" | "closed";
   /** The session's origin on the tailnet name while the hub serves HTTPS there ({@link PreviewAddress}). */
   tailnet?: TailnetOrigin;
+  /**
+   * Why the hub knows what it shows can't be shown now (hub
+   * preview-unavailable.ts): the pane draws it and loads no frame. Absent
+   * while the hub knows nothing in its way; the frame is published again,
+   * at the same revision, as that moves (its machine away or back, its
+   * workspace retired or cut again, its files moved in or lost).
+   */
+  unavailable?: PreviewUnavailable;
 }
 
 /**

@@ -46392,6 +46392,15 @@
           "mode"
         ]
       },
+      "HubDown": {
+        "type": "string",
+        "enum": [
+          "closed",
+          "gone",
+          "machine",
+          "workspace"
+        ]
+      },
       "HubReach": {
         "description": "The hub's own try of the origin's ping, now: answered by CawCo's listener, or why not.",
         "anyOf": [
@@ -54515,6 +54524,10 @@
           "tailnet": {
             "$ref": "#/components/schemas/TailnetOrigin",
             "description": "The session's origin on the tailnet name while the hub serves HTTPS there ({@link PreviewAddress})."
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/PreviewUnavailable",
+            "description": "Why the hub knows what it shows can't be shown now (hub\npreview-unavailable.ts): the pane draws it and loads no frame. Absent\nwhile the hub knows nothing in its way; the frame is published again,\nat the same revision, as that moves (its machine away or back, its\nworkspace retired or cut again, its files moved in or lost)."
           }
         },
         "required": [
@@ -54596,6 +54609,26 @@
         "required": [
           "expiresAt",
           "ticket"
+        ]
+      },
+      "PreviewUnavailable": {
+        "description": "Why the hub knows a preview can't be shown now ({@link HUB_DOWNS}), on\nevery record a surface frames it from (core frames.ts `PreviewFrame`, a\ndecision page's media `DecisionMedia`): the surface draws it (dashboard\nFrameDown.svelte, core words `downState`) and loads no frame. Absent from\na record while the hub knows nothing in its way; the record is told again\nas that moves.",
+        "type": "object",
+        "properties": {
+          "down": {
+            "$ref": "#/components/schemas/HubDown"
+          },
+          "machine": {
+            "description": "The machine that serves it, by its label: `downState`'s machine name (`named`). Absent where the hub has no name for it.",
+            "type": "string"
+          },
+          "why": {
+            "description": "The hub's own words for why: `gone`'s reason line, any other's Show details.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "down"
         ]
       },
       "ProjectAtLimit": {
