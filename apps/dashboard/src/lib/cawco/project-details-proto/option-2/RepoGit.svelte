@@ -1,8 +1,7 @@
 <script lang="ts">
   /**
-   * Repository & Git, for a code project: its linked repositories as a
-   * list (RowList `divided`), each by its slug in the code face, opening on
-   * its host; where its large files are kept, the view's one pick
+   * Repository & Git, for a code project (its repository stands in the
+   * card's head, HowItRuns `repoLink`): where its large files are kept, the view's one pick
    * (PickTiles; the custom server opening its address and key under it);
    * and where its finished code goes (WorkLands). Every
    * pick moves at the press (changes.ts `withAsked`); a refusal puts it
@@ -21,8 +20,6 @@
     type Service,
   } from "#lib/cawco/config/connection-form.js";
   import Field from "#lib/cawco/config/Field.svelte";
-  import RowList from "#lib/cawco/config/RowList.svelte";
-  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -32,9 +29,7 @@
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
   import {
-    IconExternalLinear,
     IconFolderGit,
-    IconGitRepo,
     IconKey,
     IconLargeFilesServer,
     IconPlus,
@@ -159,29 +154,6 @@
     { id: "declared" as const, ...words.places.largeFilesDeclared },
   ];
 </script>
-
-{#if record.repos.length > 0}
-  <div class={CARD_GROUP}>
-    <RowList divided label={words.places.repositories}>
-      {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
-        <SectionRow icon={IconGitRepo} mono name="{repo.owner}/{repo.name}">
-          {#snippet trailing()}
-            <Button
-              aria-label="{repo.owner}/{repo.name}"
-              href={repo.url}
-              icon={IconExternalLinear}
-              rel="noreferrer"
-              size="icon-xs"
-              target="_blank"
-              tone="quiet"
-              variant="ghost"
-            />
-          {/snippet}
-        </SectionRow>
-      {/each}
-    </RowList>
-  </div>
-{/if}
 
 {#snippet largeFilesGlyph(kind: "own" | "declared")}
   {#if kind === "own"}
