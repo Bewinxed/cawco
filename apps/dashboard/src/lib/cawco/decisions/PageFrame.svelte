@@ -26,6 +26,8 @@
 
   import { artifactReached } from "#lib/cawco/files/reached.js";
   import { pageVisible } from "#lib/cawco/page-visible.svelte.js";
+  import FrameDown from "#lib/cawco/preview/FrameDown.svelte";
+  import { type Down, hearDown } from "#lib/cawco/preview/frame-down.js";
   import { FrameLinks } from "#lib/cawco/preview/frame-links.svelte.js";
   import { frameHand, holdOpen } from "#lib/cawco/preview/open-pages.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
@@ -65,6 +67,8 @@
   let origin = $state<string | null>(null);
   let src = $state<string | null>(null);
   let problem = $state<string | null>(null);
+  /** The proxy's own page stands in its frame (`cawco:down`, frame-down.ts): nothing serves the page. */
+  let down = $state<Down | null>(null);
   /** The page said it is ready (`cawco:ready`): its overlay joined it. */
   let connected = $state(false);
   /**
@@ -121,6 +125,7 @@
     const wanted = untrack(() => place);
     let live = true;
     problem = null;
+    down = null;
     src = null;
     connected = false;
     notSent = null;
@@ -248,6 +253,16 @@
     }
   });
 
+  // Its frame's down page, from whatever origin answered it.
+  $effect(() =>
+    hearDown(
+      () => frame,
+      (heard) => {
+        down = heard;
+      }
+    )
+  );
+
   // Only its own frame, from its own origin, is heard.
   $effect(() => {
     const heard = (event: MessageEvent) => {
@@ -313,6 +328,16 @@
   <div role="alert" in:reveal>
     <EmptyState action={again} icon={IconDocument} line={problem} {title} />
   </div>
+{:else if down}
+  <!-- Nothing serves the page: every frame's down state, in its place. -->
+  <FrameDown
+    class="flex-auto"
+    down={down.down}
+    onretry={() => {
+      tries += 1;
+    }}
+    why={down.why}
+  />
 {:else if src}
   {#if notSent}
     <!-- The page's Send that didn't go: said over the page, never over its

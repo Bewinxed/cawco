@@ -4,11 +4,7 @@
 
 import { type BackoffPolicy, backoffStep } from "@cawco/core/backoff";
 import type { FrameSays } from "@cawco/core/page-wire";
-import {
-  PREVIEW_DOWNS,
-  type PreviewDown,
-  type ShownFailure,
-} from "@cawco/core/preview/protocol";
+import type { PreviewDown, ShownFailure } from "@cawco/core/preview/protocol";
 import { PAGE_SILENT_MS, probePreview } from "@cawco/core/preview/reach";
 import { previewWords } from "@cawco/core/words/preview";
 import { sheetWords } from "@cawco/core/words/sheet";
@@ -21,6 +17,7 @@ import { artifactReached } from "../files/reached";
 import { pageVisible } from "../page-visible.svelte";
 import { afterPaint, warm } from "../workspace/warm.svelte";
 import { artifactSyncPath } from "./artifact-doc";
+import type { Down } from "./frame-down";
 import { hubReach } from "./hub-reach";
 import { frameHand, holdOpen } from "./open-pages";
 import type { PaneCanvas } from "./pane-canvas.svelte";
@@ -524,14 +521,10 @@ export class PreviewFrame {
     }
   }
 
-  /** The proxy's page says which hop failed (`cawco:down`): the pane cannot read a preview origin's document. */
-  heardDown(message: { down?: unknown; why?: unknown }) {
-    const said = PREVIEW_DOWNS.find((kind) => kind === message.down);
-    if (!said) {
-      return;
-    }
-    this.down = said;
-    this.downWhy = typeof message.why === "string" ? message.why : null;
+  /** The proxy's page says which hop failed (`cawco:down`, frame-down.ts): the pane cannot read a preview origin's document. */
+  heardDown(said: Down) {
+    this.down = said.down;
+    this.downWhy = said.why;
     this.retrying = false;
     this.#shown();
   }

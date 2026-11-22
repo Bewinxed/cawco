@@ -13,7 +13,8 @@
   well. The frame takes no presses: Open to draw opens the canvas
   where a chip of it opens (the host's `openReference`, asked through the
   overlay's `cawco.open`), where it is drawn. One the hub no longer holds
-  says so in words where it would stand.
+  says so in words where it would stand; one its origin no longer serves
+  (the proxy's own page in its frame) draws every frame's down state.
 -->
 <script lang="ts">
   import { type FrameSays, pageSaid } from "@cawco/core/page-wire";
@@ -21,6 +22,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { revealHere, revealOut } from "#lib/platform/motion/curves.svelte.js";
+  import FrameDown from "../../preview/FrameDown.svelte";
+  import { type Down, downIn } from "../../preview/frame-down";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { bridge, pieceName, served } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";
@@ -77,8 +80,15 @@
   let shape = $state<{ width: number; height: number } | null>(null);
   /** The frame stood unseen under the skeleton, so its showing is the skeleton's reveal. */
   let underSkeleton = false;
+  /** The proxy's own page stands in its frame (`cawco:down`, frame-down.ts): nothing serves the canvas. */
+  let down = $state<Down | null>(null);
   $effect(() => {
     const heard = (event: MessageEvent) => {
+      const failed = downIn(event, frame);
+      if (failed) {
+        down = failed;
+        return;
+      }
       const told = pageSaid(event.data);
       if (
         event.source === frame?.contentWindow &&
@@ -110,7 +120,20 @@
   {said}
 >
   {#if held?.kind === "canvas"}
-    {#if !shape}
+    {#if down}
+      <!-- Nothing serves the canvas: every frame's down state, in its place. -->
+      <FrameDown
+        class="w-full"
+        down={down.down}
+        onretry={() => {
+          down = null;
+          if (frame) {
+            frame.src = `/__cawco/canvas/${held.id}/?embed=1`;
+          }
+        }}
+        why={down.why}
+      />
+    {:else if !shape}
       <div class="w-full" out:revealOut>
         <Skeleton class="w-full" height="view" />
       </div>
@@ -121,7 +144,7 @@
       bind:this={frame}
       class={[
         "pointer-events-none block flex-none rounded-xs border-0 outline-1 -outline-offset-1 outline-image-outline",
-        !shape && "absolute opacity-0",
+        (!shape || down) && "absolute opacity-0",
       ]}
       onload={hello}
       src={`/__cawco/canvas/${held.id}/?embed=1`}

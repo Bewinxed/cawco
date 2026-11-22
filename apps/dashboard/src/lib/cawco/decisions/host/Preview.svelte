@@ -69,7 +69,6 @@
     type PageHeard,
     pageSaid,
   } from "@cawco/core/page-wire";
-  import type { PreviewDown } from "@cawco/core/preview/protocol";
   import {
     askHubReach,
     PREVIEW_REACH_PATH,
@@ -114,6 +113,8 @@
     revealHere,
   } from "#lib/platform/motion/curves.svelte.js";
   import { track } from "#lib/platform/track.js";
+  import FrameDown from "../../preview/FrameDown.svelte";
+  import { type Down, downIn } from "../../preview/frame-down";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { type EmbedTurn, embedTurn, scrollerOf } from "./embed-turns.js";
   import { bridge, pieceName, served } from "./page.svelte.js";
@@ -305,6 +306,13 @@
         return;
       }
       frameSpoke = true;
+      // The proxy's own page stands in its frame: nothing serves it.
+      const down = downIn(event, frame);
+      if (down) {
+        failed = { kind: "down", ...down };
+        turn?.done();
+        return;
+      }
       const said = pageSaid(event.data);
       const why = failureIn(said);
       if (why !== null) {
@@ -436,12 +444,15 @@
   });
   /**
    * Why it can't stand: its origin unreached, in the shared classifier's
-   * words (core `previewUnreachedWords`), or its frame's own failure, one
-   * line (`decisionsWords.previewFailed`): the hop the proxy's page named,
-   * the canvas's own why, or a draw that never came ({@link DRAW_MS}).
+   * words (core `previewUnreachedWords`); the proxy's own page in its frame,
+   * naming the hop that didn't answer (`cawco:down`), drawn as every frame
+   * draws it (FrameDown); or its frame's own failure, one line
+   * (`decisionsWords.previewFailed`): the canvas's own why, or a draw that
+   * never came ({@link DRAW_MS}).
    */
   let failed = $state<
     | { cause: string; kind: "unreached" }
+    | ({ kind: "down" } & Down)
     | { kind: "failed"; line: string }
     | null
   >(null);
@@ -450,53 +461,9 @@
     failed = { kind: "failed", line: decisionsWords.previewFailed(why) };
     turn?.done();
   };
-  /**
-   * Why its frame's message says it can't stand, in plain words: the
-   * proxy's own page in the frame, naming the hop that didn't answer (core
-   * `downResponse`, `cawco:down`), or a canvas that can't draw what this
-   * Preview names (core `CANVAS_EMBED_FAILED`); null for any other message.
-   */
-  const failureIn = (said: PageHeard | null): string | null => {
-    if (said?.type === "cawco:down") {
-      return downWhy(said.down, said.why);
-    }
-    return said?.type === CANVAS_EMBED_FAILED ? said.why : null;
-  };
-  /** Why the proxy's page says nothing serves it, by the hop it named (core `PreviewDown`) and the machine's words for it. */
-  const downWhy = (hop: PreviewDown, why: string | null): string => {
-    switch (hop) {
-      case "server":
-        return why === null
-          ? decisionsWords.previewServerDown
-          : decisionsWords.previewServerDownWhy(why);
-      case "workspace":
-        return decisionsWords.previewWorkspaceDown;
-      case "machine":
-        return why === null
-          ? decisionsWords.previewMachineDown
-          : decisionsWords.previewMachineDownWhy(why);
-      case "hub":
-        return why === null
-          ? decisionsWords.previewHubDown
-          : decisionsWords.previewHubDownWhy(why);
-      case "reach":
-        return why === null
-          ? decisionsWords.previewReachDown
-          : decisionsWords.previewReachDownWhy(why);
-      case "closed":
-        return decisionsWords.previewClosed;
-      case "gone":
-        return why === null
-          ? decisionsWords.previewGone
-          : decisionsWords.previewGoneWhy(why);
-      case "error":
-        return decisionsWords.previewErrored(why ?? "with an error");
-      case "crashed":
-        return decisionsWords.previewCrashed(why ?? "no message");
-      default:
-        return hop satisfies never;
-    }
-  };
+  /** Why a canvas says it can't draw what this Preview names (core `CANVAS_EMBED_FAILED`), in its own words; null for any other message. */
+  const failureIn = (said: PageHeard | null): string | null =>
+    said?.type === CANVAS_EMBED_FAILED ? said.why : null;
   /** Its draw's wait ({@link drawing}) has outlasted `--duration-wait-grace`: the failure may show. */
   let slow = $state(false);
   /** Each Try again asks the origin again from the start. */
@@ -973,7 +940,23 @@
       style:--held-h={reserved ? heldHeight : undefined}
       style:inline-size={picture === undefined ? undefined : `${picture}px`}
     >
-      {#if fault}
+      {#if fault?.kind === "down"}
+        <!-- Every frame's down state, in the picture's own place and shape (`heldHeight`, else the kit picture's 16:10). -->
+        <FrameDown
+          class={[
+            "flex w-full flex-col justify-center rounded-xs",
+            heldHeight === null
+              ? "aspect-16/10 max-h-c-media-max-h"
+              : "min-h-(--held-h)",
+          ].join(" ")}
+          down={fault.down}
+          onretry={() => {
+            attempt += 1;
+          }}
+          style="--held-h: {heldHeight}"
+          why={fault.why}
+        />
+      {:else if fault}
         <!-- In the picture's own place and shape (`heldHeight`, else the kit picture's 16:10), never a box that says nothing: what happened in one line, then Try again. -->
         <div
           class={[

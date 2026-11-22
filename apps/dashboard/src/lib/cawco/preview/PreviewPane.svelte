@@ -68,6 +68,7 @@
   import { ChangeTour, lineOfActivity } from "./change-tour.svelte";
   import { CommentKit } from "./comment-kit.svelte";
   import { NEXT_COMMENT } from "./comment-rows";
+  import FrameDown from "./FrameDown.svelte";
   import ModeButton from "./ModeButton.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
   import PinFloat from "./PinFloat.svelte";
@@ -313,6 +314,13 @@
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
 
+  /** What brings a stopped server back, for its down state's line: its stage starts it again by itself, its session is asked from here, or the person starts it. */
+  const serverBack = $derived.by(() => {
+    if (paneSubject.served) {
+      return "restarting";
+    }
+    return paneSubject.offerSession ? "askSession" : "start";
+  });
   /** The down state's way back: a gone version asks its session to make it again, a closed one opens its session, the rest Try again. */
   const downAction = $derived.by(() => {
     switch (previewFrame.down) {
@@ -1443,65 +1451,18 @@
     </div>
   {/if}
   {#if previewFrame.down && !stageCover.unrecordedDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
-    <!-- What happened, why and the way back, where the page would be; a stage in error says it above. -->
-    <div
-      data-slot="down"
-      data-down={previewFrame.down}
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
-      role="alert"
-      transition:appear
-    >
-      <!-- A version that can't come back (its workspace can't be cut again, hub workspaces.ts `revive`) is no fault that may pass: it says why, from the proxy's page. -->
-      <EmptyState
-        icon={previewFrame.down === "gone" ? IconArchive : IconAlert}
-        title={stageCover.downTitle}
-        action={downAction}
-      >
-        {#snippet line()}
-          {#if previewFrame.down === "gone"}
-            {previewFrame.downWhy ?? previewWords.goneLine}
-          {:else if previewFrame.down === "workspace"}
-            {previewWords.down.workspaceLine}
-          {:else if previewFrame.down === "server"}
-            {paneSubject.downPort
-              ? previewWords.down.serverOnPort(
-                  paneSubject.downPort,
-                  paneSubject.ownerMachine.mid
-                )
-              : previewWords.down.serverOn(paneSubject.ownerMachine.mid)}
-            {#if paneSubject.served}
-              {previewWords.down.serverRestarting}
-            {:else if paneSubject.offerSession}
-              {previewWords.down.serverAskSession}
-            {:else}
-              {previewWords.down.serverStart}
-            {/if}
-          {:else if previewFrame.down === "reach"}
-            {previewFrame.downWhy
-              ? previewWords.down.reachLineWhy(previewFrame.downWhy)
-              : previewWords.down.reachLine}
-          {:else if previewFrame.down === "hub"}
-            {previewFrame.downWhy
-              ? previewWords.down.hubLineWhy(previewFrame.downWhy)
-              : previewWords.down.hubLine}
-          {:else if previewFrame.down === "closed"}
-            {previewWords.down.closedLine}
-          {:else if previewFrame.down === "error"}
-            {previewWords.errorLine(
-              previewFrame.downWhy ?? previewWords.errorWhyUnknown
-            )}
-          {:else if previewFrame.down === "crashed"}
-            {previewWords.crashedLine(
-              previewFrame.downWhy ?? previewWords.crashedWhyUnknown
-            )}
-          {:else}
-            {previewFrame.downWhy
-              ? previewWords.down.machineLineWhy(previewFrame.downWhy)
-              : previewWords.down.machineLine}
-          {/if}
-        {/snippet}
-      </EmptyState>
-    </div>
+    <!-- What happened, why and the way back, where the page would be (every frame's down state); a stage in error says it above. -->
+    <FrameDown
+      action={downAction}
+      class="absolute inset-0 pt-(--side-room,0px)"
+      down={previewFrame.down}
+      names={{
+        machine: paneSubject.ownerMachine,
+        port: paneSubject.downPort,
+        server: serverBack,
+      }}
+      why={previewFrame.downWhy}
+    />
   {/if}
   {#if previewFrame.notLoaded && !previewFrame.down && !stageCover.unrecordedDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
     <!-- The browser's own error page stands in the frame: said in words, with the way back. -->

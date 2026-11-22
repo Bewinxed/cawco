@@ -1,5 +1,5 @@
 /**
- * What stands over the page while its stage starts, compiles or fails: the cover's waiting, the down page's words, and the never-drawn time limit.
+ * What stands over the page while its stage starts, compiles or fails: the cover's waiting and the never-drawn time limit.
  */
 import { detach } from "@cawco/core/detach";
 import {
@@ -7,7 +7,6 @@ import {
   STAGE_READY_MS,
   stageErrorReason,
 } from "@cawco/core/stage";
-import { previewWords } from "@cawco/core/words/preview";
 import { sheetWords } from "@cawco/core/words/sheet";
 import { removeArtifact } from "../artifact-api";
 import { Asker, type AskHereRequest } from "../ask-here.svelte";
@@ -25,35 +24,6 @@ export interface StageCoverDeps {
 }
 export class StageCover {
   readonly #deps: StageCoverDeps;
-
-  readonly downTitle = $derived.by(() => {
-    switch (this.#deps.previewFrame.down) {
-      case "server":
-        return previewWords.down.serverTitle;
-      case "workspace":
-        return previewWords.down.workspaceTitle;
-      case "reach":
-        return previewWords.down.reachTitle(
-          this.#deps.paneSubject.ownerMachine.lead
-        );
-      case "closed":
-        return previewWords.down.closedTitle;
-      case "hub":
-        return previewWords.down.hubTitle;
-      case "gone":
-        return previewWords.goneTitle;
-      case "error":
-        return previewWords.errorTitle;
-      case "crashed":
-        return previewWords.crashedTitle;
-      case "machine":
-      case null:
-        break;
-    }
-    return previewWords.machineNotAnswering(
-      this.#deps.paneSubject.ownerMachine.lead
-    );
-  });
 
   /**
    * An unrecorded port preview's server stopped (pane-subject.svelte.ts

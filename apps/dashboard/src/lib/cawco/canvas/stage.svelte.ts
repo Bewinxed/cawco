@@ -24,6 +24,7 @@ import { on } from "svelte/events";
 import { SvelteMap } from "svelte/reactivity";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
+import type { Down } from "../preview/frame-down";
 import { originAddress } from "../preview/page-source";
 import { entryTo, turnedAwayWords } from "../preview/pass";
 
@@ -264,6 +265,16 @@ export class Stage {
   origin = $state<string | null>(null);
   /** Why the hub named none, its own sentence. */
   unreached = $state<string | null>(null);
+  /** The proxy's own page stands in its frame (`cawco:down`, preview/frame-down.ts): nothing serves the canvas. */
+  down = $state<Down | null>(null);
+
+  /** Try again on its down state: its page loaded afresh. */
+  reload(): void {
+    this.down = null;
+    if (this.frame && this.entry) {
+      this.frame.src = this.entry;
+    }
+  }
 
   /** Try again, once the hub named no origin: asked again. */
   again(): Promise<void> {

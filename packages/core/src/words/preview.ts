@@ -100,23 +100,21 @@ export const previewWords = {
   crashedPage:
     "A script of this page threw before it loaded, and it shows nothing. Ask its session to fix it, then reload.",
   /**
-   * The pane's down state for each hop the proxy names (core `PreviewDown`;
-   * dashboard PreviewPane, its title from stage-cover.svelte.ts
-   * `downTitle`). For `server`, `machine`, `workspace` and `reach` the pane
+   * Every frame's down state for each hop the proxy names (core
+   * `PreviewDown`), put together by preview-down.ts `downState`. For `server`, `machine`, `workspace` and `reach` the pane
    * probes the page's origin by itself while it is on screen and loads the
    * page once it answers (preview-frame.svelte.ts `DOWN_PROBES`), so their
    * lines say the page loads; `closed` comes back only when its session
-   * shows it again. `machine` is the session's machine's label; `why` the
-   * machine's own words, a clause with no stop.
+   * shows it again. `machine` is the session's machine's label. The
+   * machine's own words for a failure stand under Show details, never in
+   * the line (preview-down.ts `downState`).
    */
   down: {
     /**
      * `hub`: the hub's own preview server couldn't reach the hub for what
-     * only the hub answers (hub preview-server serve.ts), `why` its words.
+     * only the hub answers (hub preview-server serve.ts).
      */
     hubTitle: "The hub isn't answering this preview",
-    hubLineWhy: (why: string) =>
-      `It didn't answer its own preview server (${why}). The page loads once it does.`,
     hubLine:
       "It didn't answer its own preview server. The page loads once it does.",
     serverTitle: "The page's server stopped answering",
@@ -137,15 +135,11 @@ export const previewWords = {
     /** `machine` its name, or `unnamed.machine.lead`. */
     reachTitle: (machine: string) =>
       `${machine} couldn't reach the page's server`,
-    reachLineWhy: (why: string) =>
-      `The way to it didn't open (${why}). The page loads once it does; if it stays shut, ask its session to show the preview again.`,
     reachLine:
       "The page loads once the way to it opens; if it stays shut, ask its session to show the preview again.",
     closedTitle: "This preview is closed",
     closedLine:
       "It was deleted, or its session shows something else now. Ask its session to show it again.",
-    machineLineWhy: (why: string) =>
-      `It serves this preview, and the hub got no answer from it (${why}). Check that it's awake and connected; the page loads once it answers.`,
     machineLine:
       "It serves this preview. Check that it's awake and connected; the page loads once it answers.",
   },

@@ -17,6 +17,7 @@ import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import type { Server, WebSocketHandler } from "bun";
 import { z } from "zod";
+import { downPage, HTML_ESCAPES } from "./down-page";
 
 const HEAD_OPEN = /<head(\s[^>]*)?\s*>/iu;
 const HTML_OPEN = /<html(\s[^>]*)?\s*>/iu;
@@ -213,26 +214,19 @@ export const startRefused = (answer: {
   };
 };
 
-const HTML_ESCAPES: Record<string, string> = {
-  "&": "&amp;",
-  '"': "&quot;",
-  "<": "&lt;",
-  ">": "&gt;",
-};
-const escapeHtml = (text: string): string =>
-  text.replaceAll(/[&"<>]/gu, (char) => HTML_ESCAPES[char] ?? char);
-
 /**
- * What a proxy answers when the hop behind it does not: a page that says
- * so to a person who opened it in a tab of its own, and names the hop in
- * its `<meta name="cawco-preview-down">` for the pane, which draws its own
- * state from that ({@link PreviewDown}); `why`, the machine's own words for
- * it, goes in `<meta name="cawco-preview-why">` and under the sentence. The
- * pane, on the dashboard's origin, cannot read a preview origin's document,
- * so the page also posts both to its parent as `cawco:down`: nothing in it is
- * the page's, so any parent may hear it. `words` is the page's sentence:
- * the hop's own unless its sender knows more (agent preview.ts, a server a
- * stage starts again by itself).
+ * What a proxy answers when the hop behind it does not: CawCo's own down
+ * state as a page ({@link downPage}), which a person reads in a tab of its
+ * own and in a frame that draws none of its own, and which names the hop in
+ * its `<meta name="cawco-preview-down">` for a reader on no page
+ * ({@link downOf}); `why`, the machine's own words for it, goes in
+ * `<meta name="cawco-preview-why">` and under its Show details. A frame on
+ * the dashboard's origin cannot read a preview origin's document, so the
+ * page also posts both to its parent as `cawco:down`: nothing in it is the
+ * page's, so any parent may hear it, and every frame that shows a preview
+ * origin draws the same state from it (dashboard FrameDown.svelte). `words`
+ * is the page's sentence: the hop's own unless its sender knows more (agent
+ * preview.ts, a server a stage starts again by itself).
  */
 export function downResponse(
   down: PreviewDown,
@@ -240,27 +234,13 @@ export function downResponse(
   why?: string,
   words: string = DOWN_WORDS[down]
 ): Response {
-  const said = why
-    ? `<meta name="${PREVIEW_WHY_META}" content="${escapeHtml(why)}">`
-    : "";
-  const detail = why ? `<p>${escapeHtml(why)}</p>` : "";
-  // `<` as its escape, so nothing in `why` can close the script.
-  const message = JSON.stringify({
-    type: "cawco:down",
-    down,
-    why: why ?? null,
-  }).replaceAll("<", "\\u003c");
-  const tell = `<script>if(window.parent!==window)window.parent.postMessage(${message},"*")</script>`;
-  return new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="${PREVIEW_DOWN_META}" content="${down}">${said}<title>Preview unavailable</title></head><body><p>${escapeHtml(words)}</p>${detail}${tell}</body></html>`,
-    {
-      status,
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
-      },
-    }
-  );
+  return new Response(downPage(down, why, words), {
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
 }
 
 const DOWN_META = new RegExp(

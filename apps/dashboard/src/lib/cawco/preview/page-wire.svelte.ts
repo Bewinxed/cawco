@@ -32,6 +32,7 @@ import { heardInput } from "../reload.svelte";
 import { runShellShortcut } from "../shell-shortcut";
 import type { ChangeTour } from "./change-tour.svelte";
 import type { CommentKit } from "./comment-kit.svelte";
+import { downIn } from "./frame-down";
 import { FrameLinks } from "./frame-links.svelte";
 import type { PaneDoc } from "./pane-doc.svelte";
 import type { PaneKeys } from "./pane-keys.svelte";
@@ -163,6 +164,14 @@ export class PageWire {
       previewFrame,
       previewReach,
     } = this.#deps;
+    // The proxy's own page in the frame, from whatever origin answered
+    // the frame's load (frame-down.ts): heard by its window alone.
+    const down = downIn(event, previewFrame.iframe);
+    if (down) {
+      previewFrame.heard();
+      previewFrame.heardDown(down);
+      return;
+    }
     // The page's own frame, from its own origin: nothing else is heard.
     if (
       !previewReach.paneOrigin ||
@@ -174,10 +183,6 @@ export class PageWire {
     previewFrame.heard();
     if (event.data?.type === PAGE_TOUCHED_MESSAGE) {
       heardInput();
-      return;
-    }
-    if (event.data?.type === "cawco:down") {
-      previewFrame.heardDown(event.data);
       return;
     }
     if (event.data?.type === PREVIEW_LOCKED_MESSAGE) {

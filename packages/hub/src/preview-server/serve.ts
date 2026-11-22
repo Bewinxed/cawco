@@ -981,8 +981,23 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     return relay(request, server, key, reached.upstream, direct);
   }
 
+  /**
+   * A page or canvas this origin no longer serves (deleted, or shown on
+   * another origin now): a document's load gets the proxy's own page for a
+   * closed preview, which every frame draws as its down state and a tab of
+   * its own reads as one; any other request, `text` with its 404.
+   */
+  const notServed = (request: Request, text: string): Response =>
+    loadsDocument(request)
+      ? downResponse("closed", 404)
+      : new Response(text, { status: 404 });
+
   /** A canvas by its id on origin `key` (`/__cawco/canvas/<id>/`, `?embed=1` in a decision page); null for any other path. */
-  async function canvasById(url: URL, key: string): Promise<Response | null> {
+  async function canvasById(
+    request: Request,
+    url: URL,
+    key: string
+  ): Promise<Response | null> {
     const canvas = url.pathname.match(CANVAS_PATH);
     if (!(canvas?.[1] && canvas[2])) {
       return null;
@@ -992,9 +1007,8 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
       env.store.artifact(artifactId)?.kind !== "canvas" ||
       !env.store.servedOn(artifactId, key)
     ) {
-      return new Response("This session has no such canvas.", {
-        status: 404,
-      });
+      previewFailed(HOP, key, `its origin serves no canvas ${artifactId}`);
+      return notServed(request, "This session has no such canvas.");
     }
     const row = rest === "/" ? await documentRow(artifactId) : undefined;
     return serveCanvas(
@@ -1020,9 +1034,8 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
       env.store.artifact(artifactId)?.kind !== "page" ||
       !env.store.servedOn(artifactId, key)
     ) {
-      return new Response("This origin serves no such page.", {
-        status: 404,
-      });
+      previewFailed(HOP, key, `its origin serves no page ${artifactId}`);
+      return notServed(request, "This origin serves no such page.");
     }
     return servePage(
       request,
@@ -1053,7 +1066,10 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
         new Response("Not found", { status: 404 })
       );
     }
-    return (await canvasById(url, key)) ?? (await pageById(request, url, key));
+    return (
+      (await canvasById(request, url, key)) ??
+      (await pageById(request, url, key))
+    );
   }
 
   /** What origin `key` shows at `url`: a page or a canvas the hub holds, or a machine's preview relayed. */

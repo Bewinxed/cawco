@@ -1933,14 +1933,10 @@ public enum Words {
 
         public static let crashedPage = "A script of this page threw before it loaded, and it shows nothing. Ask its session to fix it, then reload."
 
-        /// The pane's down state for each hop the proxy names (core `PreviewDown`; dashboard PreviewPane, its title from stage-cover.svelte.ts `downTitle`). For `server`, `machine`, `workspace` and `reach` the pane probes the page's origin by itself while it is on screen and loads the page once it answers (preview-frame.svelte.ts `DOWN_PROBES`), so their lines say the page loads; `closed` comes back only when its session shows it again. `machine` is the session's machine's label; `why` the machine's own words, a clause with no stop.
+        /// Every frame's down state for each hop the proxy names (core `PreviewDown`), put together by preview-down.ts `downState`. For `server`, `machine`, `workspace` and `reach` the pane probes the page's origin by itself while it is on screen and loads the page once it answers (preview-frame.svelte.ts `DOWN_PROBES`), so their lines say the page loads; `closed` comes back only when its session shows it again. `machine` is the session's machine's label. The machine's own words for a failure stand under Show details, never in the line (preview-down.ts `downState`).
         public enum Down {
-            /// `hub`: the hub's own preview server couldn't reach the hub for what only the hub answers (hub preview-server serve.ts), `why` its words.
+            /// `hub`: the hub's own preview server couldn't reach the hub for what only the hub answers (hub preview-server serve.ts).
             public static let hubTitle = "The hub isn't answering this preview"
-
-            public static func hubLineWhy(why: String) -> String {
-                "It didn't answer its own preview server (\(why)). The page loads once it does."
-            }
 
             public static let hubLine = "It didn't answer its own preview server. The page loads once it does."
 
@@ -1972,19 +1968,11 @@ public enum Words {
                 "\(machine) couldn't reach the page's server"
             }
 
-            public static func reachLineWhy(why: String) -> String {
-                "The way to it didn't open (\(why)). The page loads once it does; if it stays shut, ask its session to show the preview again."
-            }
-
             public static let reachLine = "The page loads once the way to it opens; if it stays shut, ask its session to show the preview again."
 
             public static let closedTitle = "This preview is closed"
 
             public static let closedLine = "It was deleted, or its session shows something else now. Ask its session to show it again."
-
-            public static func machineLineWhy(why: String) -> String {
-                "It serves this preview, and the hub got no answer from it (\(why)). Check that it's awake and connected; the page loads once it answers."
-            }
 
             public static let machineLine = "It serves this preview. Check that it's awake and connected; the page loads once it answers."
         }
@@ -2957,57 +2945,9 @@ public enum Words {
             "Show \(alt) at full size"
         }
 
-        /// A Preview that can't show its design, said where it would stand (dashboard Preview.svelte): what happened, then why and the way back.
+        /// A Preview that can't show its design, said where it would stand (dashboard Preview.svelte): what happened, then why and the way back. A frame the proxy's own page stands in draws every frame's down state instead (core preview-down.ts `downState`).
         public static func previewFailed(why: String) -> String {
             "This preview didn't load: \(why)"
-        }
-
-        /// The hop its proxy named as not answering (core `PreviewDown`); `…Why` with the machine's own words for it, in parentheses.
-        public static let previewServerDown = "its server stopped answering. Start it again from its session, then try again."
-
-        public static func previewServerDownWhy(why: String) -> String {
-            "its server stopped answering (\(why)). Start it again from its session, then try again."
-        }
-
-        public static let previewWorkspaceDown = "its workspace isn't running. Once a session runs there again, try again."
-
-        /// A design that can't come back (core `PreviewDown` `gone`), its reason unsaid.
-        public static let previewGone = "its workspace can't be built again, and the hub didn't say why. Ask its session to make it again."
-
-        /// A design that can't come back, `why` its reason's line (core preview.ts `goneWhy`).
-        public static func previewGoneWhy(why: String) -> String {
-            "\(why) Ask its session to make it again."
-        }
-
-        public static let previewMachineDown = "its machine isn't answering the hub. Once it answers, try again."
-
-        public static func previewMachineDownWhy(why: String) -> String {
-            "its machine isn't answering the hub (\(why)). Once it answers, try again."
-        }
-
-        /// The hub's own preview server got no answer from the hub (core `PreviewDown` `hub`).
-        public static let previewHubDown = "the hub isn't answering its own preview server. Once it answers, try again."
-
-        public static func previewHubDownWhy(why: String) -> String {
-            "the hub isn't answering its own preview server (\(why)). Once it answers, try again."
-        }
-
-        public static let previewReachDown = "the way to its server didn't open. Try again; if it fails again, start the server again from its session."
-
-        public static func previewReachDownWhy(why: String) -> String {
-            "the way to its server didn't open (\(why)). Try again; if it fails again, start the server again from its session."
-        }
-
-        public static let previewClosed = "its session shows something else now, or has ended. Open its session to show it again."
-
-        /// Its server answered its page with an error status (core `PreviewDown` `error`), `why` the status and the error's first line.
-        public static func previewErrored(why: String) -> String {
-            "its server answered \(why). Ask its session to fix the page, or to show the address it moved to, then try again."
-        }
-
-        /// A script of its page threw before it loaded and it shows nothing (core `PreviewDown` `crashed`), `why` what it threw.
-        public static func previewCrashed(why: String) -> String {
-            "a script of its page threw before it loaded (\(why)), and it shows nothing. Ask its session to fix it, then try again."
         }
 
         /// A canvas told to draw that said neither its shape nor why within `seconds`.

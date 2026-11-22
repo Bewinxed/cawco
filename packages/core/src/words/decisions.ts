@@ -78,41 +78,10 @@ export const decisionsWords = {
   /**
    * A Preview that can't show its design, said where it would stand
    * (dashboard Preview.svelte): what happened, then why and the way back.
+   * A frame the proxy's own page stands in draws every frame's down state
+   * instead (core preview-down.ts `downState`).
    */
   previewFailed: (why: string) => `This preview didn't load: ${why}`,
-  /** The hop its proxy named as not answering (core `PreviewDown`); `…Why` with the machine's own words for it, in parentheses. */
-  previewServerDown:
-    "its server stopped answering. Start it again from its session, then try again.",
-  previewServerDownWhy: (why: string) =>
-    `its server stopped answering (${why}). Start it again from its session, then try again.`,
-  previewWorkspaceDown:
-    "its workspace isn't running. Once a session runs there again, try again.",
-  /** A design that can't come back (core `PreviewDown` `gone`), its reason unsaid. */
-  previewGone:
-    "its workspace can't be built again, and the hub didn't say why. Ask its session to make it again.",
-  /** A design that can't come back, `why` its reason's line (core preview.ts `goneWhy`). */
-  previewGoneWhy: (why: string) => `${why} Ask its session to make it again.`,
-  previewMachineDown:
-    "its machine isn't answering the hub. Once it answers, try again.",
-  previewMachineDownWhy: (why: string) =>
-    `its machine isn't answering the hub (${why}). Once it answers, try again.`,
-  /** The hub's own preview server got no answer from the hub (core `PreviewDown` `hub`). */
-  previewHubDown:
-    "the hub isn't answering its own preview server. Once it answers, try again.",
-  previewHubDownWhy: (why: string) =>
-    `the hub isn't answering its own preview server (${why}). Once it answers, try again.`,
-  previewReachDown:
-    "the way to its server didn't open. Try again; if it fails again, start the server again from its session.",
-  previewReachDownWhy: (why: string) =>
-    `the way to its server didn't open (${why}). Try again; if it fails again, start the server again from its session.`,
-  previewClosed:
-    "its session shows something else now, or has ended. Open its session to show it again.",
-  /** Its server answered its page with an error status (core `PreviewDown` `error`), `why` the status and the error's first line. */
-  previewErrored: (why: string) =>
-    `its server answered ${why}. Ask its session to fix the page, or to show the address it moved to, then try again.`,
-  /** A script of its page threw before it loaded and it shows nothing (core `PreviewDown` `crashed`), `why` what it threw. */
-  previewCrashed: (why: string) =>
-    `a script of its page threw before it loaded (${why}), and it shows nothing. Ask its session to fix it, then try again.`,
   /** A canvas told to draw that said neither its shape nor why within `seconds`. */
   previewLate: (seconds: number) =>
     `its stage didn't draw it within ${seconds} s. Try again; if it stays empty, open the canvas in its session to see why.`,
