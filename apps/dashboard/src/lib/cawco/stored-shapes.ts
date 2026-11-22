@@ -160,7 +160,7 @@ const PreviewSourceShape = z.union([
     path: z.string().optional(),
     pin: z.string().optional(),
   }),
-  z.object({ page: z.string() }),
+  z.object({ page: z.string(), path: z.string().optional() }),
 ]);
 export type PreviewSourceOutput = z.output<typeof PreviewSourceShape>;
 

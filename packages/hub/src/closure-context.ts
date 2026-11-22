@@ -207,7 +207,7 @@ import type { createCaps } from "./project-caps";
 import type { ProjectDelegateTypes } from "./project-delegate-types";
 import type { projectDelete } from "./project-delete";
 import type { createProjectEdits } from "./project-edit";
-import type { CreateOrJoinProject } from "./project-making";
+import type { CreateOrJoinProject, NewProject } from "./project-making";
 import type { MergeDeps } from "./project-merge";
 import type { createProjectOffers } from "./project-offers";
 import type { createProjectOut, placeAddedOf } from "./project-out";
@@ -374,10 +374,6 @@ export interface ClosureContext {
     | ReturnType<
         typeof problem<400, { code: "machine-path-unfit"; detail: string }>
       >;
-  askedProjectName: (body: {
-    name?: string;
-    prompt?: string;
-  }) => string | undefined;
   askedStart: (query: {
     account?: string;
     cwd?: string;
@@ -903,6 +899,8 @@ export interface ClosureContext {
   nameFromFirstTurn: (instanceId: string, raw: string) => string;
   nameFromLiveTurn: (instanceId: string, message: unknown) => void;
   nameStoredSessions: (machineId: string) => Promise<void>;
+  /** project-joining.ts `newProject`, typed from project-making.ts as `createOrJoinProject` is: `POST /api/projects` and `project_create`. */
+  newProject: NewProject;
   noteActivity: (instanceId: string) => void;
   noteAtLimit: (
     row: {

@@ -141,6 +141,7 @@
     modeTools,
     changesTools,
     modeCompact,
+    page = false,
   }: {
     /** The line to the stage page: what it said, and what the graph asks of it. */
     link: StageLink;
@@ -186,6 +187,12 @@
     modeTools?: Snippet;
     /** The mode as one button, where the tools have no room for its three segments. */
     modeCompact?: Snippet;
+    /**
+     * An HTML design (core stage.ts `htmlDesignOf`): each page one state,
+     * drawn in a frame of its own, so nothing moves between states to
+     * play or compare, and the page answers no Reduce motion of ours.
+     */
+    page?: boolean;
   } = $props();
 
   /** `n` as a figure in the page's language. */
@@ -429,7 +436,7 @@
    * agent's dials, one at a time.
    */
   let rising = $state<"map" | "move" | "dials" | null>(
-    untrack(() => startFace) ?? null
+    untrack(() => (page && startFace !== "dials" ? null : startFace)) ?? null
   );
   /** The tools' height over the drawing's foot, px: what rises stands above them. */
   let toolsHeight = $state(0);
@@ -1209,8 +1216,8 @@
   const path = $derived(review ? pathOf(review) : []);
   const at = $derived(kept ? path.indexOf(kept.state) : -1);
   const single = $derived((review?.order.length ?? 0) <= 1);
-  /** Compare has something to compare with: another state, or another direction of the design. */
-  const canCompare = $derived(directed || !single);
+  /** Compare has something to compare with: another state, or another direction of the design; an HTML design's page is read by no Compare. */
+  const canCompare = $derived(!page && (directed || !single));
   /** The states the stepper's menu lists: the direction in front's alone on a design with directions (the switch brings another in front); else every component's whose sheet has come. */
   const menuReviews = $derived.by(() => {
     if (!directed) {
@@ -1268,7 +1275,7 @@
     head = {
       title: review?.name ?? "",
       line: keptState?.note ?? "",
-      more: moreItems,
+      more: page ? null : moreItems,
       // A design's directions take the components' place.
       components: files.length > 1 && !directed ? componentsGroup : null,
       directions: directed

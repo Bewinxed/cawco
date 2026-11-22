@@ -278,6 +278,15 @@ const MCP_KIND: ToolKind = {
       renderer: "prose",
       sentence: { label: "Read how a project is set up", objectMono: false },
     },
+    // Opened, its fields: the person's words it started with, and the links.
+    {
+      when: { names: ["project_create"] },
+      sentence: {
+        label: "Made the project",
+        object: { from: ["name"], as: "one-line" },
+        objectMono: false,
+      },
+    },
   ],
 };
 

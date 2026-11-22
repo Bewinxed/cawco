@@ -303,13 +303,6 @@ export interface ArtifactServiceDeps {
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
   /**
-   * A decision page went, and its Canvas and Preview media, served on these
-   * machines, are owed through it no longer: each machine's workspaces are
-   * settled again (work-items.ts `settleShown`). A row that goes itself
-   * settles its machine's by db `onArtifactsGone`, every way a row goes.
-   */
-  mediaFreed?: (machineIds: readonly string[]) => void;
-  /**
    * Something an artifact's Needs-you item is read from moved (its row, its
    * ask, the person's look): the lane is read again and every screen told.
    */
@@ -531,6 +524,13 @@ export interface ArtifactServiceDeps {
     at: StageAt,
     ask: DesignQuery
   ) => Promise<DesignMap | StageRefused>;
+  /**
+   * Whether the stage on `port` of `key` (a workspace's id, or a served
+   * preview's pin) serves now, as its machine last said (core `StageFrame`,
+   * server.ts `workspaceStages`): what the hub keeps up, and nothing asleep
+   * (preview.ts `waitingStages`).
+   */
+  stageLive: (key: string, port: number) => boolean;
   /** A canvas drawn by its workspace's daemon in the machine's Chromium (agent stage-render.ts): within its limit, what it drew and what it did not. */
   stageRender: (
     at: StageAt,

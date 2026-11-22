@@ -31,13 +31,12 @@ export const projectsListed = ({
 
 export const projectRoutes = ({
   addProjectPlace,
-  askedProjectName,
   askerOf,
   caps,
-  createOrJoinProject,
   db,
   deletedProjects,
   forgottenProjects,
+  newProject,
   presenceSaid,
   previewListeners,
   projectEdits,
@@ -49,13 +48,12 @@ export const projectRoutes = ({
 }: Pick<
   HubContext,
   | "addProjectPlace"
-  | "askedProjectName"
   | "askerOf"
   | "caps"
-  | "createOrJoinProject"
   | "db"
   | "deletedProjects"
   | "forgottenProjects"
+  | "newProject"
   | "presenceSaid"
   | "previewListeners"
   | "projectEdits"
@@ -98,43 +96,9 @@ export const projectRoutes = ({
         }),
       },
       async ({ body }) => {
-        if ((body.machineId === undefined) !== (body.cwd === undefined)) {
-          return problem(400, {
-            code: "checkout-machine-folder-send",
-            detail:
-              "A checkout is a machine and a folder: send both machineId and cwd, or neither.",
-          });
-        }
-        const name = askedProjectName(body);
-        if (!name) {
-          return problem(400, {
-            code: "project-needs-name",
-            detail: "A project needs a name.",
-          });
-        }
-        // A folder that is no absolute path on its machine is refused in
-        // the hub's words (db `placePathOn`).
-        const made = await createOrJoinProject({
-          name,
-          ...(body.machineId && body.cwd
-            ? { checkout: { machineId: body.machineId, cwd: body.cwd } }
-            : {}),
-          ...(body.caw === undefined ? {} : { caw: body.caw }),
-          ...(body.template ? { tapped: body.template } : {}),
-          ...(body.prompt?.trim()
-            ? {
-                setup: {
-                  prompt: body.prompt,
-                  ...(body.promptId ? { promptId: body.promptId } : {}),
-                },
-              }
-            : {}),
-        });
-        if ("response" in made) {
-          return problem(made.status, {
-            code: "project-not-made",
-            detail: made.response.detail,
-          });
+        const made = await newProject(body);
+        if (made instanceof ElysiaStatus) {
+          return made;
         }
         return {
           ...projectOut(made.project),

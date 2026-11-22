@@ -14,6 +14,7 @@
     { "path": "../packages/agent/src/canvas-host" },
     { "path": "../packages/preview" },
     { "path": "../packages/preview/src/overlay" },
+    { "path": "../packages/preview/src/design-stage" },
     { "path": "../packages/auth" },
     { "path": "../packages/cli" },
     { "path": "../packages/core" },

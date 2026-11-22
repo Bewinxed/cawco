@@ -9,6 +9,6 @@
     "outDir": "../../.tsbuild/packages/preview"
   },
   "include": ["**/*"],
-  "exclude": ["node_modules", "dist", "src/overlay"],
+  "exclude": ["node_modules", "dist", "src/overlay", "src/design-stage"],
   "references": [{ "path": "../core" }]
 }

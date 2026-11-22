@@ -1867,12 +1867,27 @@ public enum Words {
             "\(machine) isn't answering"
         }
 
-        /// A preview whose workspace is gone (core `PreviewDown` `gone`: archived or discarded), so this version can't be shown again. `goneTitle` and `goneLine` are the pane's down state (dashboard PreviewPane); `gonePage` the sentence on the proxy's own page, read in an artifact's tab of its own and by the hub (core preview-proxy `DOWN_WORDS`).
-        public static let goneTitle = "This preview's workspace is gone"
+        /// A design or served preview that can't come back (core `PreviewDown` `gone`): opening it cuts its workspace again at its last version (hub workspaces.ts `revive`), and this stands only when that can't be done. `goneTitle` heads the pane's down state (dashboard PreviewPane), over the reason's line (`goneWhy`, carried on the proxy's page as its why), or `goneLine` when the page names none; `gonePage` is the sentence on the proxy's own page, read in an artifact's tab of its own (core preview-proxy `DOWN_WORDS`).
+        public static let goneTitle = "This version can't be shown again"
 
-        public static let goneLine = "This version can't be shown again. Its session can make it again from another workspace."
+        public static let goneLine = "Its workspace can't be built again, and the hub didn't say why."
 
-        public static let gonePage = "This preview's workspace is gone, so this version can't be shown again. Ask its session to make it again from another workspace."
+        public static let gonePage = "This preview's workspace can't be built again, so this version can't be shown. Ask its session to make it again."
+
+        /// Why a design can't come back (hub workspaces.ts `GoneWhy`), the pane's line under `goneTitle`: `origin` no longer holds the commit its workspace was last on, `branch` the branch that held it; its workspace was discarded; it went before its last version was recorded, or that record can't be read; or building it again failed, `why` its machine's words.
+        public enum GoneWhy {
+            public static func commit(branch: String) -> String {
+                "Its commit, on \(branch), is no longer on origin. Usually the branch was deleted after it was merged."
+            }
+
+            public static let discarded = "Its workspace was discarded, so no record of this version was kept."
+
+            public static let unrecorded = "Its workspace was deleted before a record of this version was kept, or that record can't be read."
+
+            public static func failed(why: String) -> String {
+                "Its workspace couldn't be built again (\(why))."
+            }
+        }
 
         /// Its one action, the session asked to make it again (The Empty Starts Work Rule). `goneAskLabel` the button, `agent` the session's agent by name; `goneAskWords` what goes in that session's composer, unsent, `name` the artifact's; `goneCantAsk` why it can't be asked from here (no composer of its session beside the pane), over the link that opens the session.
         public static func goneAskLabel(agent: String) -> String {
@@ -2739,8 +2754,13 @@ public enum Words {
 
         public static let previewWorkspaceDown = "its workspace isn't running. Once a session runs there again, try again."
 
-        /// Its workspace is gone (core `PreviewDown` `gone`), so this version can't be shown again.
-        public static let previewGone = "its workspace is gone, so this version can't be shown again. Ask its session to make it again from another workspace."
+        /// A design that can't come back (core `PreviewDown` `gone`), its reason unsaid.
+        public static let previewGone = "its workspace can't be built again, and the hub didn't say why. Ask its session to make it again."
+
+        /// A design that can't come back, `why` its reason's line (core preview.ts `goneWhy`).
+        public static func previewGoneWhy(why: String) -> String {
+            "\(why) Ask its session to make it again."
+        }
 
         public static let previewMachineDown = "its machine isn't answering the hub. Once it answers, try again."
 

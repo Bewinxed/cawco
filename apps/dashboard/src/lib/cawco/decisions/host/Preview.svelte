@@ -482,7 +482,9 @@
       case "closed":
         return decisionsWords.previewClosed;
       case "gone":
-        return decisionsWords.previewGone;
+        return why === null
+          ? decisionsWords.previewGone
+          : decisionsWords.previewGoneWhy(why);
       case "error":
         return decisionsWords.previewErrored(why ?? "with an error");
       case "crashed":

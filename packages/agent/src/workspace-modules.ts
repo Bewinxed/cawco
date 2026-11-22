@@ -2,15 +2,33 @@
  * A Linux workspace's `node_modules`, kept in the workspaces' cache so bun
  * hard-links what its global store cannot hold.
  *
- * With bun's global virtual store on (boundary/package-managers.ts `writeBunConfig`), a
- * package is a link into `<cache>/bun/links/` only while it is eligible:
- * "unpatched, no lifecycle scripts) *and* every dependency it links to is
- * also eligible", and since bun 1.4.4 none whose peer has an `@types`
- * package the entry does not depend on ("From the cache TypeScript cannot
- * reach the project's `@types`", src/install/isolated_install.rs at
- * bun-v1.4.4). The rest bun installs into the project's own
- * `node_modules/.bun`, hard-linking each file from its cache, and falling
- * back to copying it on EXDEV ("sys::Errno::EXDEV => InstallMethod::Copyfile",
+ * With bun's global virtual store on (boundary/package-managers.ts
+ * `writeBunConfig`), a package is a link into `<cache>/bun/links/` unless one
+ * of bun's rules keeps it project-local (bun.com/docs/pm/global-store, "What
+ * stays project-local"; src/install/isolated_install.rs at bun-v1.4.5). In
+ * cockpit (71 of 1,675 packages, 2026-11-22), each by its rule:
+ *
+ * - "the package has a patch applied": the seven `patchedDependencies`
+ *   (postcss-selector-parser's went with its 7.2.1, which fixed its types
+ *   upstream, postcss-selector-parser#350);
+ * - "listed in `trustedDependencies`" and "a direct or transitive dependency
+ *   of a trusted package" (oven-sh/bun#40239): socket-activation, whose
+ *   install script fetches or builds the native binding the dashboard's
+ *   serve.js loads, and nan, bindings, prebuilt-bindings and
+ *   file-uri-to-path;
+ * - "a peer dependency typed by an `@types/*` package" the entry does not
+ *   depend on (oven-sh/bun#36795): react-dom, the radix-ui 1.0 primitives,
+ *   use-sync-external-store, react-compiler-runtime, jotai-scope and
+ *   @pierre/words peer on react (the agent's @types/react); d3-transition on
+ *   d3-selection (@xyflow/system's @types/d3-selection); and
+ *   @babel/helper-module-transforms on @babel/core (react-docgen's
+ *   @types/babel__core);
+ * - "Ineligibility propagates" to every entry that links to one of those:
+ *   the rest, mermaid and pi-coding-agent among them.
+ *
+ * Bun installs those into the project's own `node_modules/.bun`, hard-linking
+ * each file from its cache, and falling back to copying it on EXDEV
+ * ("sys::Errno::EXDEV => InstallMethod::Copyfile",
  * src/install/isolated_install/Installer.rs). Inside a boundary the clone and
  * the workspaces' cache are each a bind mount of their own, and link(2)
  * refuses across mount points, so every such package was copied into every

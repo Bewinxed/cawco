@@ -44,7 +44,11 @@
   import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { floor } from "#lib/platform/visible-viewport.svelte.js";
   import { ARTIFACT_GLYPH } from "./artifact-glyph";
-  import { artifactNamed, pinNamed } from "./artifact-names.svelte";
+  import {
+    artifactNamed,
+    holdArtifact,
+    pinNamed,
+  } from "./artifact-names.svelte";
   import HoverPanel from "./HoverPanel.svelte";
   import { sessionName } from "./home/home-state.svelte";
   import { pressOutside } from "./press-outside";
@@ -220,12 +224,16 @@
       return;
     }
     const [session = "", artifactId = ""] = at.split(" ");
+    // Every chip naming this artifact reads the open thread's doc live: what
+    // is seen here clears their dots too (artifact-names.svelte.ts).
+    const hold = holdArtifact(artifactId);
     const joined = untrack(() =>
       joinArtifact(
         session,
         artifactId,
         (next) => {
           view = next;
+          hold.show({ pins: next.pins, choices: next.choices });
         },
         (next) => {
           sync = next;
@@ -238,6 +246,7 @@
     doc = joined;
     return () => {
       joined.destroy();
+      hold.release();
       doc = null;
       view = null;
       sync = { state: "reading" };

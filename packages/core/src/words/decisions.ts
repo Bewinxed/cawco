@@ -87,9 +87,11 @@ export const decisionsWords = {
     `its server stopped answering (${why}). Start it again from its session, then try again.`,
   previewWorkspaceDown:
     "its workspace isn't running. Once a session runs there again, try again.",
-  /** Its workspace is gone (core `PreviewDown` `gone`), so this version can't be shown again. */
+  /** A design that can't come back (core `PreviewDown` `gone`), its reason unsaid. */
   previewGone:
-    "its workspace is gone, so this version can't be shown again. Ask its session to make it again from another workspace.",
+    "its workspace can't be built again, and the hub didn't say why. Ask its session to make it again.",
+  /** A design that can't come back, `why` its reason's line (core preview.ts `goneWhy`). */
+  previewGoneWhy: (why: string) => `${why} Ask its session to make it again.`,
   previewMachineDown:
     "its machine isn't answering the hub. Once it answers, try again.",
   previewMachineDownWhy: (why: string) =>

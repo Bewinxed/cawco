@@ -87,6 +87,7 @@ import type {
 import {
   type CONTROL_WORKSPACE_AT,
   type CONTROL_WORKSPACE_CREATE,
+  CutCommitGone,
   holdsNothing,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
@@ -107,6 +108,7 @@ import { closeUnderWay, isStarting } from "./boundary/state";
 import { closeBoundary } from "./boundary/stop";
 import { heldBy, runsIn } from "./boundary/watch";
 import {
+  type CarrySource,
   carryFolder,
   carryReadme,
   carrySteps,
@@ -1275,11 +1277,15 @@ const applyCarried = async (
   }
 };
 
+/** git's words for a fetch of a branch `origin` doesn't have (git 2.x `fetch-pack`: "couldn't find remote ref refs/heads/…"). */
+const NO_REMOTE_REF = /couldn't find remote ref/iu;
+
 /**
  * A cut again's commit in the new clone at `path` ({@link WorkspaceCut}):
  * `origin`'s branch that held it fetched, unless it is `base`, which the
- * clone has; refused when that branch no longer holds it, since a cut
- * anywhere else would leave the workspace's commits behind.
+ * clone has; refused (core `CutCommitGone`) when that branch is gone from
+ * `origin` or no longer holds it, since a cut anywhere else would leave the
+ * workspace's commits behind.
  */
 const fetchCut = async (
   path: string,
@@ -1288,6 +1294,11 @@ const fetchCut = async (
   cut: WorkspaceCut,
   git: Git
 ): Promise<void> => {
+  const gone = (cause: Error, why: string) =>
+    new CutCommitGone(
+      `workspace ${id} is not cut again: ${cut.commit.slice(0, 9)}, the commit its clone was on when it retired, is not on origin (${why}), and a cut anywhere else would leave its commits behind`,
+      { cause }
+    );
   if (cut.branch !== base) {
     await git(
       path,
@@ -1296,7 +1307,11 @@ const fetchCut = async (
       "--no-tags",
       "origin",
       `+refs/heads/${cut.branch}:refs/remotes/origin/${cut.branch}`
-    );
+    ).catch((error: Error) => {
+      throw NO_REMOTE_REF.test(error.message)
+        ? gone(error, `its branch ${cut.branch} is gone from origin`)
+        : error;
+    });
   }
   await git(
     path,
@@ -1305,10 +1320,7 @@ const fetchCut = async (
     cut.commit,
     `origin/${cut.branch}`
   ).catch((error: Error) => {
-    throw new Error(
-      `workspace ${id} is not cut again: origin's ${cut.branch} no longer holds ${cut.commit.slice(0, 9)}, the commit its clone was on when it retired, and a cut anywhere else would leave its commits behind`,
-      { cause: error }
-    );
+    throw gone(error, `origin's ${cut.branch} doesn't hold it`);
   });
 };
 
@@ -1800,7 +1812,7 @@ const holding = async (
     }
     return {
       ...NOTHING_HELD,
-      dirty: (await changesOf(access.layer)).length,
+      dirty: (await changesOf(workspace.id, access.layer)).length,
     };
   }
   // A copy already deleted (an archive that died after its removal) holds nothing.
@@ -2124,7 +2136,7 @@ const carryChanged = (
   layer: Layer
 ): Promise<{ carry: string; left: string[] }> =>
   intoCarry(id, async (carry) => {
-    const changed = await changesOf(layer);
+    const changed = await changesOf(id, layer);
     const written = changed
       .filter((each) => each.change === "write")
       .map((each) => each.path);
@@ -2388,24 +2400,34 @@ const carryAway = async (
   const words = holdingWords({ ...held, bytes: 0 });
   // A folder's carry is its change set; `strays` is read only in a copy that
   // is no git clone any more: no git writes either, their entries are copied.
-  const folder = access.layer.kind === "folder" || held.strays !== undefined;
+  const { layer } = access;
   let written: { carry: string; left: string[] };
-  if (access.layer.kind === "folder") {
-    written = await carryChanged(request.id, access.layer);
+  let checkout: CarrySource;
+  if (layer.kind === "folder" && layer.form !== "clone") {
+    written = await carryChanged(request.id, layer);
+    checkout = {
+      id: request.id,
+      form: layer.form,
+      folder: layer.folder,
+      path: layer.path,
+    };
   } else if (held.strays === undefined) {
     written = await writeCarry(workspace, access, held, skip);
+    checkout = "clone";
   } else {
     written = await carryStrays(request.id, workspace.path);
+    checkout = "folder";
   }
   const { carry, left } = written;
-  const head = folder
-    ? undefined
-    : await carriedFrom(workspace, access, request.base);
+  const head =
+    checkout === "clone"
+      ? await carriedFrom(workspace, access, request.base)
+      : undefined;
   await writeFile(
     join(carry, "README.md"),
     await carryReadme({
       title: `Workspace ${request.id}, saved before it was archived`,
-      checkout: folder ? "folder" : "clone",
+      checkout,
       path: workspace.path,
       words,
       folder: carry,

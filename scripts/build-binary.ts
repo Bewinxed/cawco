@@ -39,7 +39,10 @@ import { publishedFile } from "../packages/core/src/runtime";
 import { agentReact } from "../packages/hub/src/agent-react";
 import { canvasHostAssets } from "../packages/hub/src/canvas-host";
 import { decisionHostAssets } from "../packages/hub/src/decision-host";
-import { bundleOverlay } from "../packages/preview/src/proxy";
+import {
+  bundleDesignStage,
+  bundleOverlay,
+} from "../packages/preview/src/proxy";
 import { dashboardBuild } from "./dashboard-build-cache";
 
 export const PINNED_BUN = "1.4.4";
@@ -173,6 +176,8 @@ const writeBundle = async (
 const writeWorkFiles = async (copies: [string, string][]): Promise<void> => {
   await Promise.all([
     (async () => writeFile(join(WORK, "overlay.js"), await bundleOverlay()))(),
+    (async () =>
+      writeFile(join(WORK, "design-stage.js"), await bundleDesignStage()))(),
     ...copies.map(async ([name, source]) =>
       writeFile(join(WORK, name), await Bun.file(join(ROOT, source)).bytes())
     ),
@@ -291,6 +296,7 @@ export async function prepareAssets(options: {
     ),
     ["pi/package.json", join(pi, "package.json")],
     ["preview/overlay.js", join(WORK, "overlay.js")],
+    ["preview/design-stage.js", join(WORK, "design-stage.js")],
     ["opencode/plugin.js", join(WORK, "opencode-plugin.js")],
     ["stage/host.mjs", join(WORK, "stage-host.mjs")],
     ...canvas,

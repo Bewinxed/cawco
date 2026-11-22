@@ -12,10 +12,14 @@
  * tsconfig.json'"; and a shared repository root is never a stage's to write.
  * So it runs in a clone of its own, as a delegate's does:
  *
- * - cut ({@link cut}) at the checkout's HEAD (that one commit, fetched from
- *   the checkout, its `origin`) with its uncommitted changes and its own
- *   secret files, under a workspace id of its own (core `stageCloneId`),
- *   never a place's: its `node_modules` are its own to write;
+ * - cut ({@link cut}) at the checkout's HEAD (fetched from the checkout, its
+ *   `origin`) with its uncommitted changes and its own secret files, under a
+ *   workspace id of its own (core `stageCloneId`), never a place's: its
+ *   `node_modules` are its own to write. It borrows every object of the
+ *   checkout's own origin from that origin's object pool, as a workspace's
+ *   clone does (object-pool.ts), so its `.git` holds only what the pool
+ *   lacks: 1.5 MB for cockpit cut at a commit past its pool, where a clone
+ *   of its own store took 84 MB (2026-11-22);
  * - installed by the project's own package manager inside its boundary
  *   ({@link installStage}, stage-install.ts, every stage's one install
  *   path), where its bun links from the workspaces' cache (boundary/package-managers.ts
@@ -60,6 +64,12 @@ import { readWithin } from "@cawco/core/bounded";
 import { cloneDenies } from "@cawco/core/clone-denies";
 import { makeFolder } from "@cawco/core/folders";
 import {
+  alternatesText,
+  type CreateRecord,
+  recordedPool,
+} from "@cawco/core/object-pool";
+import {
+  workspaceCreateFile,
   workspaceScratchDir,
   workspaceStateDir,
   workspacesDir,
@@ -76,11 +86,14 @@ import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
 import { stopWorkspaceBoundary } from "./boundary/control";
 import { ensureBoundary } from "./boundary/ensure";
+import { poolSourceOf } from "./clone";
 import { expandHome } from "./fs";
 import { gitUntil } from "./git/run";
+import { formatFlag, poolGitEnv, standingPool } from "./object-pool";
 import { removeTree } from "./remove-tree";
 import { forgetInstalls, installProject } from "./stage-install";
 import { copyOwnSecrets } from "./workspace";
+import { cloneHolding } from "./workspace-records";
 
 /** How often a serving place stage's clone is brought in step with its checkout. Ours: an edit shows within a second, for one `git status` (20 ms on cockpit). */
 export const MIRROR_MS = 1000;
@@ -92,8 +105,8 @@ export interface StageClone {
   readonly folder: string;
 }
 
-/** The form of the clone this build cuts: one of an earlier form (no `origin`) is cut again. */
-const FORM = 2;
+/** The form of the clone this build cuts: one of an earlier form (no `origin`, or a store of its own where its origin's pool could lend) is cut again. */
+const FORM = 3;
 
 /** What the agent keeps of a stage clone beside its `create.json`, written once its cut is whole. */
 const KeptSchema = z.object({
@@ -343,23 +356,97 @@ const keep = (id: string, kept: Kept): Promise<void> =>
 const STAGE_REF = "refs/remotes/origin/stage";
 
 /**
- * The checkout's HEAD fetched into the clone and checked out, detached: one
- * commit, from the checkout, which is the clone's `origin`. Its tracked files
- * then stand as at that commit, and the mirror lays the uncommitted changes
- * on top.
+ * The checkout's HEAD fetched into the clone and checked out, detached, from
+ * the checkout, which is the clone's `origin`. Its tracked files then stand
+ * as at that commit, and the mirror lays the uncommitted changes on top.
+ *
+ * A clone that borrows from a pool ({@link lendingPool}, its record names
+ * it) fetches HEAD whole, with the commits the pool's refs and its own last
+ * HEAD name as what it has (`--negotiation-tip`), so the checkout sends only
+ * the objects past them: its own commits and no more. Named here, since git
+ * offers no alternate's refs where CawCo runs it (safe-git.ts
+ * `core.alternateRefsCommand=`), and a whole fetch that offers none copies
+ * the checkout's every object: 781 MB of `.git` for cockpit. One that
+ * borrows none fetches one commit (`--depth=1`), whose tree is still whole:
+ * 84 MB for cockpit.
  */
-const atHead = async (clone: string): Promise<void> => {
+const atHead = async (clone: WorkspaceRef): Promise<void> => {
   const git = gitUntil(Date.now() + STAGE_CLONE_GIT_MS);
+  const pool = await recordedPool(clone.id);
+  const tips = pool
+    ? new Set(
+        (await git(pool, "for-each-ref", "--format=%(objectname)"))
+          .split("\n")
+          .filter(Boolean)
+      )
+    : new Set<string>();
+  const has =
+    tips.size > 0
+      ? [
+          "--negotiation-tip=refs/remotes/origin/*",
+          ...[...tips].map((tip) => `--negotiation-tip=${tip}`),
+        ]
+      : ["--depth=1"];
   await git(
-    clone,
+    clone.path,
     "fetch",
     "--quiet",
-    "--depth=1",
+    ...has,
     "--no-tags",
     "origin",
     `+HEAD:${STAGE_REF}`
   );
-  await git(clone, "checkout", "--quiet", "--force", "--detach", STAGE_REF);
+  await git(
+    clone.path,
+    "checkout",
+    "--quiet",
+    "--force",
+    "--detach",
+    STAGE_REF
+  );
+};
+
+/** The pool a clone cut from a checkout borrows from, and the object format it is in. */
+interface Lending {
+  format: string;
+  pool: string;
+}
+
+/**
+ * The object pool a clone cut from the checkout at `repo` borrows from, as a
+ * workspace's clone does (object-pool.ts): for a workspace's own clone (a
+ * pin cut from it) the pool its record names; for a person's repository its
+ * origin's pool, made when it is not there, seeded from the repository
+ * ({@link standingPool}). Nothing is fetched into it from the remote: the
+ * clone starts from the checkout's HEAD, never the remote's default branch,
+ * so a cut reaches no network. Nothing when no pool can lend: `repo` has no
+ * `origin` (a pool is one origin's), a workspace's clone cut before pools
+ * borrows none, or the pool holds nothing yet.
+ */
+const lendingPool = async (
+  repo: string,
+  deadline: number
+): Promise<Lending | undefined> => {
+  const git = gitUntil(deadline);
+  const format = await git(repo, "rev-parse", "--show-object-format");
+  const holder = await cloneHolding(repo);
+  if (holder) {
+    const pool = await recordedPool(holder.id);
+    return pool ? { format, pool } : undefined;
+  }
+  const origin = await git(repo, "remote", "get-url", "origin").catch(
+    () => undefined
+  );
+  if (!origin) {
+    return;
+  }
+  const source = await poolSourceOf(repo, git, false);
+  const lends = await standingPool(
+    source,
+    gitUntil(deadline, poolGitEnv(hostEnvironment())),
+    deadline
+  );
+  return lends ? { format: source.format, pool: source.pool } : undefined;
 };
 
 /**
@@ -373,7 +460,7 @@ const mirror = async (
 ): Promise<{ changed: string[]; kept: Kept }> => {
   const { head, paths } = await statusOf(kept.repo);
   if (head !== kept.head) {
-    await atHead(boundary.path);
+    await atHead(boundary);
   }
   const seen = copied.get(boundary.id) ?? new Map<string, string>();
   copied.set(boundary.id, seen);
@@ -409,8 +496,10 @@ const step = async (boundary: WorkspaceRef, kept: Kept): Promise<string[]> => {
 
 /**
  * Cuts place `place`'s stage clone at `boundary.path` from the checkout at
- * `repo` (a real path): `git init`, the checkout as its `origin`, its HEAD
- * fetched and checked out ({@link atHead}), its uncommitted changes mirrored,
+ * `repo` (a real path): `git init`, its alternates file as the one line of
+ * the pool it borrows ({@link lendingPool}, named in its record first), the
+ * checkout as its `origin`, its HEAD fetched and checked out
+ * ({@link atHead}), its uncommitted changes mirrored,
  * its own secret files copied (workspace.ts `copyOwnSecrets`), its boundary
  * started. Its projects install as its stage first needs them
  * ({@link installStage}). A cut that fails is cut again whole at the next
@@ -437,17 +526,43 @@ const cut = async (
   );
   const started = Date.now();
   try {
-    const git = gitUntil(Date.now() + STAGE_CLONE_GIT_MS);
-    await makeFolder(dirname(boundary.path));
-    await git(dirname(boundary.path), "init", "--quiet", boundary.path);
-    await git(boundary.path, "remote", "add", "origin", `file://${repo}`);
+    const deadline = Date.now() + STAGE_CLONE_GIT_MS;
+    const git = gitUntil(deadline);
     const { head } = await statusOf(repo);
     if (head === "(initial)" || !head) {
       throw new Error(
         `${repo} has no commit yet, and a sheet's stage runs in a clone cut from its HEAD: commit, then call again.`
       );
     }
-    await atHead(boundary.path);
+    const lending = await lendingPool(repo, deadline);
+    if (lending) {
+      // Before anything borrows: its boundary's read grant, host git's check
+      // of its alternates file and the pools' reclaim read the pool here.
+      await writeStateFile(
+        workspaceCreateFile(boundary.id),
+        JSON.stringify({
+          path: boundary.path,
+          pool: lending.pool,
+        } satisfies CreateRecord)
+      );
+    }
+    await makeFolder(dirname(boundary.path));
+    await git(
+      dirname(boundary.path),
+      "init",
+      "--quiet",
+      ...(lending ? formatFlag(lending.format) : []),
+      boundary.path
+    );
+    if (lending) {
+      await writeStateFile(
+        join(boundary.path, ".git", "objects", "info", "alternates"),
+        alternatesText(lending.pool),
+        { inPlace: true }
+      );
+    }
+    await git(boundary.path, "remote", "add", "origin", `file://${repo}`);
+    await atHead(boundary);
     const { kept } = await mirror(boundary, {
       form: FORM,
       repo,
@@ -458,7 +573,7 @@ const cut = async (
     await ensureBoundary(boundary);
     await keep(boundary.id, kept);
     console.info(
-      `[stage] ${place.id}: its ${made} ${boundary.path} cut from ${repo} at ${kept.head.slice(0, 9)} with ${kept.mirrored.length} uncommitted path(s), in ${((Date.now() - started) / 1000).toFixed(1)}s`
+      `[stage] ${place.id}: its ${made} ${boundary.path} cut from ${repo} at ${kept.head.slice(0, 9)} with ${kept.mirrored.length} uncommitted path(s), ${lending ? `borrowing from the object pool ${lending.pool}` : "with a store of its own"}, in ${((Date.now() - started) / 1000).toFixed(1)}s`
     );
     return kept;
   } catch (error) {

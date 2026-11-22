@@ -42,6 +42,7 @@ import { makeFolder } from "@cawco/core/folders";
 import type {
   AsleepFrame,
   CatalogMovedFrame,
+  ControlRefusal,
   FramePayload,
   HarnessFailed,
   HarnessUnanswered,
@@ -173,6 +174,7 @@ import { turnWords } from "@cawco/core/words/turns";
 import { workWords } from "@cawco/core/words/work";
 import {
   CONTROL_WORKSPACE_WORK_END,
+  CutCommitGone,
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import { Effect } from "effect";
@@ -445,6 +447,21 @@ class NotRunning extends Error {
     this.name = "NotRunning";
   }
 }
+
+/** Why a control was refused, typed (core frames.ts `ControlRefusal`), `message` its words. */
+const refusalOf = (error: unknown, message: string): ControlRefusal => {
+  if (error instanceof NotRunning) {
+    return { kind: "not-running", message };
+  }
+  if (error instanceof CutCommitGone) {
+    return { kind: "commit-gone", message };
+  }
+  return {
+    kind: "unknown",
+    message,
+    ...(error instanceof PreviewStartDown ? { down: error.down } : {}),
+  };
+};
 
 /** How many requests the hub let go before they began here are kept, to refuse each as it begins. */
 const LET_GO_KEPT = 256;
@@ -4823,16 +4840,7 @@ export class SessionSupervisor {
         requestId,
         ok: false,
         error: message,
-        refusal:
-          error instanceof NotRunning
-            ? { kind: "not-running", message }
-            : {
-                kind: "unknown",
-                message,
-                ...(error instanceof PreviewStartDown
-                  ? { down: error.down }
-                  : {}),
-              },
+        refusal: refusalOf(error, message),
       });
     }
   }
