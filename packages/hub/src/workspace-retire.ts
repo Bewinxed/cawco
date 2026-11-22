@@ -31,14 +31,18 @@
  * is the look that catches what no event reached (a hub restarted, a
  * machine away at the time): every {@link RETIRE_SWEEP_MS},
  * each active workspace on every online machine is settled (one whose
- * clone is gone from its machine holds nothing it serves), and so is each
- * host-scope one whose scratch dir a hold kept (workspaces.ts `hostKept`);
+ * clone is gone from its machine holds nothing it serves), each host-scope
+ * one among them (workspaces.ts `settleHost`);
  * each held one whose starter will never decide it is carried off,
  * and each archived one whose clone its machine still has is closed again
  * (workspaces.ts `settleOn`). The same look keeps up each stage serving the
  * person an artifact waiting on him (a preview's server, a design graph's or
  * a page's sheet), which would otherwise sleep once its idle half hour ran
- * out (artifacts service `keepWaitingUp`).
+ * out (artifacts service `keepWaitingUp`), and sends each online machine the
+ * pins an artifact is served from, so it lets go of every other pin copy
+ * under `~/.worktrees` (artifacts service `pinsBack`, agent stage.ts
+ * `keepPins`): an artifact deleted with its session tells its pin nothing,
+ * and before 2026-11-22 a machine heard the list only as it registered.
  */
 import type { HubLifetimeShape } from "./lifetime";
 import type { WorkItems } from "./work-items";
@@ -63,6 +67,8 @@ export interface RetireSweep {
 }
 
 export interface WorkspaceRetireDeps {
+  /** Sends machine `machineId` the pins an artifact on it is served from; it lets go of the rest (artifacts service `pinsBack`). */
+  keepPins: (machineId: string) => void;
   /** Keeps up the stages serving the person what waits on him on `online` machines (artifacts service `keepWaitingUp`). */
   keepUp: (online: ReadonlySet<string>) => void;
   lifetime: HubLifetimeShape;
@@ -75,17 +81,32 @@ export interface WorkspaceRetireDeps {
 export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
   let running: Promise<RetireSweep> | undefined;
 
+  /** `work` run; a failure logged as `what` failed, and the sweep goes on. */
+  const tried = (what: string, work: () => void): void => {
+    try {
+      work();
+    } catch (error) {
+      console.warn(
+        `[workspace-retire] ${what} failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
+  /** What the sweep keeps up on the `online` machines besides their workspaces: the stages waiting on the person, and each machine's pins. */
+  const keepOn = (online: readonly string[]): void => {
+    tried("keeping the waiting stages up", () => deps.keepUp(new Set(online)));
+    for (const machineId of online) {
+      tried(`sending ${deps.machineName(machineId)} its pins`, () =>
+        deps.keepPins(machineId)
+      );
+    }
+  };
+
   /** One look at every online machine; `asked`, someone asked for it, so a workspace whose settle failed is tried now. */
   const sweepOnce = async (asked: boolean): Promise<RetireSweep> => {
     const done: RetireSweep = { failed: [], held: [], kept: [], retired: [] };
     const online = deps.online();
-    try {
-      deps.keepUp(new Set(online));
-    } catch (error) {
-      console.warn(
-        `[workspace-retire] keeping the waiting stages up failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+    keepOn(online);
     for (const machineId of online) {
       const settled = await deps.workItems.settleOn(machineId, asked);
       for (const { workspace, outcome } of settled) {

@@ -5103,11 +5103,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Machine `machineId`'s agent registered again: it is sent every pin an
-     * artifact on it is served from (core `STAGE_PINS`), and lets go of every
-     * other one it holds, one whose unpin it missed while it was away among
-     * them (agent stage.ts `keepPins`). The pins are the hub's: its rows
-     * keep them.
+     * Machine `machineId`'s agent registered again, or the workspace sweep
+     * looked at it (workspace-retire.ts): it is sent every pin an artifact
+     * on it is served from (core `STAGE_PINS`), and lets go of every other
+     * one it holds, one whose unpin it missed while it was away, or whose
+     * artifact went with its session, among them (agent stage.ts
+     * `keepPins`). The pins are the hub's: its rows keep them.
      */
     pinsBack: (machineId: string): void => {
       deps.keepPins(machineId, db.pinsOn(machineId));

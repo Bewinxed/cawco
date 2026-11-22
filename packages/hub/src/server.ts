@@ -819,7 +819,7 @@ import {
   type WorkItemRequest,
 } from "./work-items";
 import { createWorkspaceRetire } from "./workspace-retire";
-import { outputsFolder, type Unlanded } from "./workspaces";
+import { isHostFolder, outputsFolder, type Unlanded } from "./workspaces";
 
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
 /**
@@ -10396,6 +10396,7 @@ export const createServer = (
   // event reached (workspace-retire.ts).
   const workspaceRetire = createWorkspaceRetire({
     keepUp: (online) => artifacts.keepWaitingUp(online),
+    keepPins: (machineId) => artifacts.pinsBack(machineId),
     lifetime,
     machineName,
     online: onlineMachines,
@@ -11149,7 +11150,11 @@ export const createServer = (
     // host-scope item's folder on the host, as its session reads it.
     workspaceText: async (workspaceId, path) => {
       const [workspace] = db.workspacesNamed(workspaceId);
-      if (!workspace || workspace.state === "archived") {
+      // A host-scope one's folder is the machine's own, there once archived.
+      if (
+        !workspace ||
+        (workspace.state === "archived" && !isHostFolder(workspace))
+      ) {
         throw new Error(
           `workspace ${workspaceId} is ${workspace?.state ?? "gone"}`
         );

@@ -2413,10 +2413,13 @@ export async function pinFolderOf(dir: string, pin: string): Promise<void> {
 const PIN_NAMED_MS = 10 * 60_000;
 
 /**
- * The pins the hub serves from, sent as this machine registers (core
- * `STAGE_PINS`): every other pin it holds let go ({@link unpin}), one whose
- * unpin was sent while it was away among them. One cut within
- * {@link PIN_NAMED_MS} stays: its create may not have named it yet.
+ * The pins the hub serves from, sent as this machine registers and on each
+ * of the hub's workspace sweeps (core `STAGE_PINS`): every other pin it
+ * holds let go ({@link unpin}), one whose unpin was sent while it was away,
+ * or whose artifact went with its session, among them. One cut within
+ * {@link PIN_NAMED_MS} stays: its create may not have named it yet. One
+ * whose removal fails is logged and tried again next time, and the rest go
+ * on: a removal that threw ended the loop, every pin after it left on disk.
  * Answers how many went.
  */
 export async function keepPins(served: readonly string[]): Promise<number> {
@@ -2424,9 +2427,16 @@ export async function keepPins(served: readonly string[]): Promise<number> {
   const now = Date.now();
   let gone = 0;
   for (const { pin, at } of await pinsHeld()) {
-    if (!kept.has(pin) && now - at > PIN_NAMED_MS) {
+    if (kept.has(pin) || now - at <= PIN_NAMED_MS) {
+      continue;
+    }
+    try {
       await unpin(pin);
       gone += 1;
+    } catch (error) {
+      console.warn(
+        `[stage] pin ${pin.slice(0, 8)}: no artifact is served from it, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
   return gone;

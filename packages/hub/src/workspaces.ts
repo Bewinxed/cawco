@@ -189,8 +189,9 @@ export const ownCopy = (workspace: WorkspaceRow): boolean =>
  * - `folderOverlay`: a delegate's view of any other folder, landed by its
  *   change set (agent layer.ts).
  * - `hostFolder`: a host-scope delegate's own folder on the host
- *   (schema.ts `workspaces.host`): no clone, no boundary, nothing landed,
- *   held or archived; its scratch dir settles alone ({@link settleHost}).
+ *   (schema.ts `workspaces.host`): no clone, no boundary, nothing landed or
+ *   held; settled, its scratch dir goes and its row is archived
+ *   ({@link settleHost}), its folder untouched.
  * - `stageClone`: the clone a place's stage runs in (core
  *   `StageCloneFrame`): no work item, settled once that stage sleeps.
  * - `routineRun`: the clone a `command` routine's run runs its one command
@@ -1589,66 +1590,35 @@ export const createWorkspaces = ({
         : { kind: "none" };
     });
   /**
-   * Host-scope workspaces whose scratch dir a hold kept at their last
-   * settle ({@link settleHost}), which the sweep settles again
-   * ({@link hostKeptOn}): what ends such a hold (the person opening an
-   * artifact it serves) is no event of their sessions.
-   */
-  const hostKept = new Set<string>();
-  /** Machines whose host-scope workspaces were read since this hub started ({@link hostKeptOn}). */
-  const hostRead = new Set<string>();
-  /**
-   * Machine `machineId`'s host-scope workspaces a hold kept
-   * ({@link hostKept}). At its first sweep since this hub started, each one
-   * there whose items have all ended and that serves an artifact is among
-   * them: a hold may have kept it before the restart.
-   */
-  const hostKeptOn = (machineId: string): WorkspaceRow[] => {
-    const rows = db.hostWorkspacesOn(machineId);
-    if (!hostRead.has(machineId)) {
-      hostRead.add(machineId);
-      for (const row of rows) {
-        if (
-          settlable(row, db.workItemsIn(row.id)) &&
-          servedFrom(row).length > 0
-        ) {
-          hostKept.add(row.id);
-        }
-      }
-    }
-    return rows.filter((row) => hostKept.has(row.id));
-  };
-  /**
    * A host-scope workspace settled ({@link settle}): it has no clone, so
-   * nothing of it closes but its scratch dir (agent host-scratch.ts). Once
-   * its items have all ended and nothing holds it (a landing that still
-   * runs, a session attached or about to be woken, a continuation under
-   * way, an artifact it serves still owed: {@link holdsOf}; one a hold kept
-   * is settled again by the sweep, {@link hostKept}), what is in its
-   * `$TMPDIR/outputs/` is kept in
-   * its project's folder ({@link keepScratchOutputs}) and its machine
-   * removes the scratch dir; a later spawn of its session makes it again.
-   * Its row stays active: it is where its items ran.
+   * nothing of it closes on its machine but its scratch dir (agent
+   * host-scratch.ts). Once its items have all ended and nothing holds it (a
+   * landing that still runs, a session attached or about to be woken, a
+   * continuation under way, an artifact it serves still owed:
+   * {@link holdsOf}; the sweep settles it again while one does), what is in
+   * its `$TMPDIR/outputs/` is kept in its project's folder
+   * ({@link keepScratchOutputs}), its machine removes the scratch dir, and
+   * its row is archived, as a repository's is once its work is over. The
+   * folder it ran in is the machine's own and stays. A handoff, a follow-up
+   * or a continuation to its session files it active again ({@link recut});
+   * that session's next spawn makes its scratch dir again. On 2026-11-22,
+   * 666 host-scope rows on one machine were still active, their 722 items
+   * long ended: a settled one stayed active, and the sweep read one only
+   * while a hold kept it.
    */
   const settleHost = async (
     workspace: WorkspaceRow,
     items: readonly WorkItemRow[]
   ): Promise<Settled> => {
-    hostKept.delete(workspace.id);
     if (!settlable(workspace, items)) {
       return { kind: "none" };
     }
     const [hold] = holdsOf(workspace, items);
     if (hold) {
-      hostKept.add(workspace.id);
       return { kind: "deferred", hold: hold.words };
     }
-    // A machine away keeps the dir until the session's next event settles
-    // it again: the sweep reads only a host-scope row a hold kept.
     const stays = (reason: string): Settled => {
-      console.warn(
-        `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: its host-scope scratch dir stays: ${reason}`
-      );
+      settleFailed(workspace, reason);
       return { kind: "failed", reason };
     };
     try {
@@ -1665,10 +1635,17 @@ export const createWorkspaces = ({
     } catch (error) {
       return stays(error instanceof Error ? error.message : String(error));
     }
+    settleFailures.delete(workspace.id);
+    const archived =
+      db.updateWorkspace(workspace.id, {
+        state: "archived",
+        boundaryPid: null,
+      }) ?? workspace;
+    workspaceChanged?.(archived);
     console.log(
-      `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: its host-scope scratch dir removed, its outputs kept`
+      `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: a host-scope delegate's folder ${workspace.path}, archived: its items have ended, its scratch dir removed, its outputs kept`
     );
-    return { kind: "none" };
+    return { kind: "retired", carry: null };
   };
   /** The last step queued in each workspace's turn ({@link inWorkspaceTurn}); it only resolves. */
   const workspaceTurns = new Map<string, Promise<void>>();
@@ -1812,7 +1789,7 @@ export const createWorkspaces = ({
   };
   /**
    * {@link settle} for each active workspace on `machineId`, one after
-   * another, then each held one whose starter will never decide it carried
+   * another, host-scope ones last ({@link settleHost}), then each held one whose starter will never decide it carried
    * off ({@link carryHeld}), then each archived one whose clone is still
    * there closed again ({@link closeLeftClones}): the sweep's look
    * (workspace-retire.ts), its machine's folders listed once for all of
@@ -1840,7 +1817,7 @@ export const createWorkspaces = ({
         });
       }
     }
-    for (const workspace of hostKeptOn(machineId)) {
+    for (const workspace of db.hostWorkspacesOn(machineId)) {
       if (!passedOver(workspace)) {
         done.push({
           workspace,
@@ -2089,7 +2066,8 @@ export const createWorkspaces = ({
   };
   /**
    * Whether a workspace is retired and may be cut again: archived, and a
-   * folder's (whose work is in its folder once it
+   * host-scope delegate's (nothing is cut: its row is filed active again,
+   * {@link reopenHost}), a folder's (whose work is in its folder once it
    * landed, so it is made again from the folder as it is), or one whose
    * machine said where its clone's HEAD was as it
    * deleted it ({@link closeWorkspace}): on a branch of its remote, or, its
@@ -2102,6 +2080,9 @@ export const createWorkspaces = ({
     const member = workspaceOf(workspace);
     if (workspace.state !== "archived" || member.kind === "routineRun") {
       return false;
+    }
+    if (member.kind === "hostFolder") {
+      return true;
     }
     if (member.kind === "folderOverlay") {
       return workspace.carry === null;
@@ -2234,6 +2215,25 @@ export const createWorkspaces = ({
     head
       ? `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: cut again at ${workspace.path}, at ${head.commit.slice(0, 9)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
       : `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: made again of ${workspace.repoRoot} as it is now, for its delegate to go on`;
+  /**
+   * A settled host-scope workspace ({@link settleHost}) filed active again
+   * for its session to go on: nothing is cut, its folder is the machine's
+   * own and still there, and the session's next spawn makes its scratch dir
+   * again (agent host-scratch.ts).
+   */
+  const reopenHost = (
+    workspace: WorkspaceRow,
+    onCut?: () => void
+  ): WorkspaceRow => {
+    const again =
+      db.updateWorkspace(workspace.id, { state: "active" }) ?? workspace;
+    onCut?.();
+    workspaceChanged?.(again);
+    console.log(
+      `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: a host-scope delegate's folder ${workspace.path}, active again for its delegate to go on`
+    );
+    return again;
+  };
   const recut = (
     workspace: WorkspaceRow,
     onCut?: () => void
@@ -2248,6 +2248,9 @@ export const createWorkspaces = ({
             return row;
           })
         : pending;
+    }
+    if (isHostFolder(workspace)) {
+      return Promise.resolve(reopenHost(workspace, onCut));
     }
     const head = headOf(workspace);
     if (!head && workspaceOf(workspace).kind !== "folderOverlay") {

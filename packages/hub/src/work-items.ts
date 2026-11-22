@@ -3210,17 +3210,20 @@ export const createWorkItems = ({
   };
 
   /**
-   * The workspace a retry goes on in, with its clone there: a retired one
-   * cut again (workspaces.ts `recut`); one that never retired as it stands, while
-   * its clone is on its machine. Undefined when that clone is gone.
+   * The workspace a retry or a continuation goes on in, with its clone
+   * there: a retired one cut again (workspaces.ts `recut`, which files a
+   * settled host-scope one active again); one that never retired as it
+   * stands, while its clone is on its machine. Undefined when that clone is
+   * gone.
    */
   const withClone = async (workspace: WorkspaceRow) => {
+    // A settled host-scope row is filed active again; nothing is cut.
+    if (workspaces.recuttable(workspace)) {
+      return await workspaces.recut(workspace);
+    }
     // A host-scope row's folder is the machine's own: there is no clone.
     if (isHostFolder(workspace)) {
       return workspace;
-    }
-    if (workspaces.recuttable(workspace)) {
-      return await workspaces.recut(workspace);
     }
     const there = await command(
       workspace.machineId,
@@ -3243,7 +3246,13 @@ export const createWorkItems = ({
    */
   const reusable = async (id: string, on: string[] | undefined) => {
     const [workspace] = db.workspacesNamed(id);
-    if (!workspace || (on && !on.includes(workspace.machineId))) {
+    // A host-scope attempt has no clone to go on in: its retry files a host
+    // row of its own (startHost).
+    if (
+      !workspace ||
+      isHostFolder(workspace) ||
+      (on && !on.includes(workspace.machineId))
+    ) {
       return;
     }
     // Before anything reaches the machine, as a new clone is stopped.
