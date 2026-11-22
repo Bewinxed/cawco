@@ -60,7 +60,8 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { lastLines } from "@cawco/core/words/helpers";
-import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
+import { stageCloneId } from "@cawco/core/workspace-policy";
 import { ElysiaStatus } from "elysia";
 import type { AskedArtifact, DesignAsk } from "./artifacts/shapes";
 import type { DbShape } from "./db";
@@ -688,12 +689,22 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       const key = `${ARTIFACT_KEY}${artifact.id}`;
       // A sheet made in a place (a session with no work item) names the
       // place; its stage runs in the place's stage clone, the workspace a
-      // round is cut from (core workspace-policy.ts `stageCloneId`).
-      const [workspace] = db.workspacesNamed(
-        isPlace(artifact.workspaceId)
-          ? stageCloneId(artifact.workspaceId)
-          : artifact.workspaceId
-      );
+      // round is cut from (core workspace-policy.ts `stageCloneId`). A
+      // design folder is no repository: no round is cut from it (a design
+      // is refused before this, kinds/component.ts `askVerify`).
+      let cutFrom: string;
+      switch (workspaceIdKindOf(artifact.workspaceId)) {
+        case "place":
+          cutFrom = stageCloneId(artifact.workspaceId);
+          break;
+        case "clone":
+        case undefined:
+          cutFrom = artifact.workspaceId;
+          break;
+        case "design":
+          return `“${artifact.name}” is a design folder, which no repository holds, so there is no design system to check it against.`;
+      }
+      const [workspace] = db.workspacesNamed(cutFrom);
       if (!workspace) {
         return `The workspace ${short(artifact.workspaceId)} its stage ran in is gone, so “${artifact.name}” can't be checked.`;
       }

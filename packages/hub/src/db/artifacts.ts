@@ -1,7 +1,6 @@
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { type SourceKey, sourceKeyOf } from "@cawco/core/preview/upstream";
-import { isDesignTree } from "@cawco/core/stage";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import {
   and,
   asc,
@@ -66,15 +65,26 @@ export type SessionArtifact = ArtifactRow & { instanceId: string };
 export const isSessionArtifact = (row: ArtifactRow): row is SessionArtifact =>
   row.instanceId !== null;
 
-/** A port source's `workspace`: a workspace's id, kept as its key, or a place's, kept as itself ({@link isPlace}). */
+/**
+ * A port source's `workspace` by its kind (core workspace-id.ts): a clone's
+ * id, kept as its key to its workspace row; a place's or a design folder's,
+ * which have no workspace row to name, kept as itself.
+ */
 const workspaceColumnsOf = (
   source: PreviewSource
 ): Pick<StoredArtifact, "sourcePlace" | "sourceWorkspace"> => {
   const named = "port" in source ? (source.workspace ?? null) : null;
-  // A place and a design folder's tree have no workspace row to name.
-  return named !== null && (isPlace(named) || isDesignTree(named))
-    ? { sourceWorkspace: null, sourcePlace: named }
-    : { sourceWorkspace: named, sourcePlace: null };
+  if (named === null) {
+    return { sourceWorkspace: null, sourcePlace: null };
+  }
+  switch (workspaceIdKindOf(named)) {
+    case "place":
+    case "design":
+      return { sourceWorkspace: null, sourcePlace: named };
+    case "clone":
+    case undefined:
+      return { sourceWorkspace: named, sourcePlace: null };
+  }
 };
 
 /** A source as its columns keep it: one of page, dir or port set, the rest of its kind's beside it. */

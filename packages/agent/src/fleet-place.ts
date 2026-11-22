@@ -32,7 +32,7 @@ import type { FleetHarnessConfig } from "@cawco/core/harness-config";
 import type { FleetHook } from "@cawco/core/hooks";
 import { workspaceProjectFile } from "@cawco/core/paths/workspace";
 import { readRecord } from "@cawco/core/state-file";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { z } from "zod";
 import { ownFolderSync } from "./layer";
 import { workspaceRefs } from "./workspace-records";
@@ -81,7 +81,7 @@ const isFolder = async (path: string): Promise<boolean> =>
  * checkout the hub named, and the clone of each workspace of one of them
  * this agent cut that is still here (an archive takes the clone and its
  * records away; a held one keeps both). Stage clones and places
- * (core `isPlace`) are none: no project's rows were ever placed there. Nor
+ * (core workspace-id.ts `place`) are none: no project's rows were ever placed there. Nor
  * is a Linux view (layer.ts `ownFolderSync`): its path is the person's
  * folder, which shows through it with what its own place holds, and which
  * nothing of CawCo's writes for the view.
@@ -94,7 +94,11 @@ export const placesNow = async (
   );
   const clones = await Promise.all(
     (await workspaceRefs())
-      .filter((ref) => !isPlace(ref.id) && ownFolderSync(ref.id, ref.path))
+      .filter(
+        (ref) =>
+          workspaceIdKindOf(ref.id) === "clone" &&
+          ownFolderSync(ref.id, ref.path)
+      )
       .map(async (ref): Promise<FleetPlace | undefined> => {
         const projectId = await readRecord(
           workspaceProjectFile(ref.id),

@@ -110,10 +110,10 @@ import {
   INPUTS_DIR,
   inputBatches,
 } from "@cawco/core/workspace/controls";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import {
   excludedPaths,
   IGNORED_STATUS,
-  isPlace,
   stageCloneId,
 } from "@cawco/core/workspace-policy";
 import { ElysiaStatus, problem } from "elysia";
@@ -6507,12 +6507,20 @@ export const createWorkItems = ({
      * place's id) is its stage clone; any other's, the workspace `key` is.
      */
     settleStagesOf(key: string): void {
-      if (!isPlace(key)) {
-        const [workspace] = db.workspacesNamed(key);
-        if (workspace?.id === key && workspace.state === "active") {
-          workspaces.settleSoon(workspace.id);
+      switch (workspaceIdKindOf(key)) {
+        // A design folder's boundary is the stage's own, no workspace row's: nothing settles.
+        case "design":
+          return;
+        case "clone":
+        case undefined: {
+          const [workspace] = db.workspacesNamed(key);
+          if (workspace?.id === key && workspace.state === "active") {
+            workspaces.settleSoon(workspace.id);
+          }
+          return;
         }
-        return;
+        case "place":
+          break;
       }
       const [workspace] = db.workspacesNamed(stageCloneId(key));
       const member = workspace && workspaceOf(workspace);

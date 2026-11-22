@@ -65,7 +65,7 @@ import { workspaceCacheDir } from "@cawco/core/paths/workspace";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { copyPathSync, folderSync, inCopySync, viewRunning } from "./layer";
 
 /** The lockfiles that say bun installs a workspace. */
@@ -108,7 +108,8 @@ const ignoredInCopy = async (ref: WorkspaceRef): Promise<boolean> => {
 export const linkWorkspaceModules = async (
   ref: WorkspaceRef
 ): Promise<void> => {
-  if (process.platform !== "linux" || isPlace(ref.id)) {
+  // Only a clone's (core workspace-id.ts): a place is a person's own folder, and a design folder's install is its own.
+  if (process.platform !== "linux" || workspaceIdKindOf(ref.id) !== "clone") {
     return;
   }
   await viewRunning(ref.id);

@@ -18,15 +18,14 @@ import { workspacesDir, workspaceTmpDir } from "@cawco/core/paths/workspace";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/preview/hub-previews";
 import { standalone } from "@cawco/core/runtime";
 import type { ProcSpec } from "@cawco/core/sessiond";
-import { isDesignTree } from "@cawco/core/stage";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import {
+  type WorkspaceIdKind,
+  workspaceIdKind,
+} from "@cawco/core/workspace-id";
 import type { Policy } from "@cawco/core/workspace-judge";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
-import {
-  isPlace,
-  workspaceDenies,
-  workspacePolicy,
-} from "@cawco/core/workspace-policy";
+import { workspaceDenies, workspacePolicy } from "@cawco/core/workspace-policy";
 import {
   membershipName,
   readOnlyDeniesBwrap,
@@ -309,7 +308,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         ["profile", profile],
         ["runner", runnerText()],
         ["exec", exec],
-        ["place", isPlace(id) ? placeGuard() : ""],
+        ["place", workspaceIdKind(id) === "place" ? placeGuard() : ""],
       ]),
       spec: {
         command: systemProgram("sandbox-exec"),
@@ -332,7 +331,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         cwd: policy.clone,
         env: {
           TMPDIR: workspaceTmpDir(id),
-          ...(isPlace(id) ? { [HOST_ENV.place]: "1" } : {}),
+          ...(workspaceIdKind(id) === "place" ? { [HOST_ENV.place]: "1" } : {}),
         },
       },
     };
@@ -372,12 +371,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     runner: join(generationDir(id, gen), "runner.sh"),
     denies: join(generationDir(id, gen), "denies.json"),
   };
-  const place = isPlace(id);
-  // A design folder (core stage.ts `isDesignTree`): the hub's folder of the
-  // design's files, no repository and no layer, which nothing of the host
-  // loads, so it gets no stand-ins; srt starts in its scratch dir, as a
-  // place's does, so none of srt's own mount points lands in it.
-  const design = isDesignTree(id);
+  const kind = workspaceIdKind(id);
   return {
     files: [
       [files.settings, settings],
@@ -395,7 +389,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       ["exec", exec],
       ["denies", denies],
       ["host", await hostText],
-      ["place", place ? `${policy.scratch}\0${placeGuard()}` : ""],
+      ["place", kind === "place" ? `${policy.scratch}\0${placeGuard()}` : ""],
     ]),
     spec: {
       command: runtime,
@@ -426,22 +420,41 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         // (proxy-relay.ts): a file of the agent's that no sandbox reads.
         [HUB_PREVIEWS_ENV]: hubPreviewsPath(),
         PATH: trustedPath(),
-        // A place is a person's own folder: srt resolves its own
-        // mandatory names against the host's working directory and makes a
-        // mount point for each one absent, so the host starts srt in the
-        // place's scratch dir, never in the place (boundary-host.ts); and
-        // what each command leaves running goes with it (`runnerText`).
-        ...(place
-          ? { [HOST_ENV.sandboxCwd]: policy.scratch, [HOST_ENV.place]: "1" }
-          : {}),
-        ...(design ? { [HOST_ENV.sandboxCwd]: policy.scratch } : {}),
-        // A delegate's copy of a folder that is no repository, or a design
-        // folder: the host holds it as a folder, never asking it for a
-        // `.git` (layer.ts).
-        ...(folderSync(id) || design ? { [HOST_ENV.folder]: "1" } : {}),
+        ...kindEnv(id, kind, policy.scratch),
       },
     },
   };
+};
+
+/**
+ * What the srt host is told of the tree a boundary of kind `kind` holds
+ * (core workspace-id.ts), by the env boundary-host.ts reads:
+ * - A place is a person's own folder: srt resolves its own mandatory names
+ *   against the host's working directory and makes a mount point for each
+ *   one absent, so the host starts srt in the place's scratch dir, never in
+ *   the place; and what each command leaves running goes with it
+ *   (`runnerText`).
+ * - A design folder is the hub's folder of the design's files, no
+ *   repository and no layer, which nothing of the host loads, so it gets no
+ *   stand-ins: srt starts in its scratch dir, as a place's does, so none of
+ *   srt's own mount points lands in it, and the host holds it as a folder,
+ *   never asking it for a `.git`.
+ * - A clone that is a delegate's copy of a folder that is no repository is
+ *   held as a folder too (layer.ts); any other clone, as the repository's.
+ */
+const kindEnv = (
+  id: string,
+  kind: WorkspaceIdKind,
+  scratch: string
+): Record<string, string> => {
+  switch (kind) {
+    case "place":
+      return { [HOST_ENV.sandboxCwd]: scratch, [HOST_ENV.place]: "1" };
+    case "design":
+      return { [HOST_ENV.sandboxCwd]: scratch, [HOST_ENV.folder]: "1" };
+    case "clone":
+      return folderSync(id) ? { [HOST_ENV.folder]: "1" } : {};
+  }
 };
 
 /** A list of a policy's as paths; undefined when it is no list of strings. */

@@ -14,7 +14,7 @@ import { commandLines } from "@cawco/core/process-identity";
 import { isDamagedRecord, readRecord } from "@cawco/core/state-file";
 import { until } from "@cawco/core/until";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { z } from "zod";
 import { closeGithubDoor } from "../github-door";
 import { closeGitDoor } from "../hub-git";
@@ -603,7 +603,7 @@ const repairJudge = async (
   const ended = await endUsers(ref);
   console.warn(
     `[workspace] ${ref.id}: ${broken}; ${started}, and still ${again.words}, so ${
-      isPlace(ref.id)
+      workspaceIdKindOf(ref.id) === "place"
         ? "nothing was ended: a place's sessions are the person's own, and each call there is refused until its next start arms it"
         : `what used it was ended: ${ended.ended.join(", ") || "nothing was left"}${ended.left.length > 0 ? `; still running after SIGKILL: ${ended.left.join(", ")}` : ""}`
     }`

@@ -15,15 +15,14 @@ import {
   workspaceStateDir,
 } from "@cawco/core/paths/workspace";
 import { shellQuote } from "@cawco/core/shell-quote";
-import { isDesignTree } from "@cawco/core/stage";
 import {
   isDamagedRecord,
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
 import { PolicySchema } from "@cawco/core/stored-shapes";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import type { Policy } from "@cawco/core/workspace-judge";
-import { isPlace } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { reportDamaged } from "../damaged-records";
 import { type HeldProc, KeeperPool } from "../keepers";
@@ -241,19 +240,21 @@ export const keeperOf = (
 /** The keeper every new boundary and judge starts on: the current one. */
 export const sessiond = (): Promise<SessiondClient> => keepers.current();
 
-/** Why a boundary can't start: a workspace's runs a delegate, a place's (core `isPlace`) a person's own folder, a design's (core stage.ts `isDesignTree`) the stage of a design folder. */
+/** Why a boundary can't start, by what it holds (core workspace-id.ts): a clone's runs a delegate, a place's a person's own folder, a design's the stage of a design folder. */
 export const refusal = (id: string, why: string): Error => {
-  if (isPlace(id)) {
-    return new Error(`place ${id} cannot be bounded on this machine: ${why}`);
+  switch (workspaceIdKindOf(id)) {
+    case "place":
+      return new Error(`place ${id} cannot be bounded on this machine: ${why}`);
+    case "design":
+      return new Error(
+        `design ${id.slice(0, 8)}'s stage cannot run on this machine: ${why}`
+      );
+    case "clone":
+    case undefined:
+      return new Error(
+        `workspace ${id.slice(0, 8)} cannot run a delegate on this machine: ${why}`
+      );
   }
-  if (isDesignTree(id)) {
-    return new Error(
-      `design ${id.slice(0, 8)}'s stage cannot run on this machine: ${why}`
-    );
-  }
-  return new Error(
-    `workspace ${id.slice(0, 8)} cannot run a delegate on this machine: ${why}`
-  );
 };
 
 /**

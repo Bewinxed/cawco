@@ -5,8 +5,8 @@
  */
 import { GUARDED_CONFIG, protectedFindTests } from "@cawco/core/clone-denies";
 import { commandLines, processLineage } from "@cawco/core/process-identity";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { systemProgram } from "@cawco/core/workspace-needs";
-import { isPlace } from "@cawco/core/workspace-policy";
 import { guardOf } from "./exec";
 import { perlQuote } from "./hook-judge";
 
@@ -189,7 +189,7 @@ exit($moved ? 3 : 0);
 
 /** A place's guard, written into the boundary's generation dir ({@link placeGuard}); none for a clone. */
 export const guardFiles = (id: string, gen: string): [string, string][] =>
-  isPlace(id) ? [[guardOf(id, gen), placeGuard()]] : [];
+  workspaceIdKindOf(id) === "place" ? [[guardOf(id, gen), placeGuard()]] : [];
 
 /** One process, as processes.ts `busyOld` reads it. */
 export interface Seen {

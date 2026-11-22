@@ -1,10 +1,10 @@
 /**
- * A design folder's stage tree (core stage.ts `designOf`): the folder the hub
- * keeps for a design artifact on its own machine (`ARTIFACTS_ROOT/<id>/design`,
- * hub design-folder.ts), served by a stage as a workspace's clone is
+ * A design folder's stage tree (core workspace-id.ts `design`, stage.ts
+ * `designOf`): the folder the hub keeps for a design artifact on its own
+ * machine (`ARTIFACTS_ROOT/<id>/design`, hub design-folder.ts), served by a stage as a workspace's clone is
  * (stage.ts), in a boundary of its own whose writes reach that folder alone:
  * its install's `node_modules` and lockfile, Vite's cache. The hub names it
- * by its tree id (core `designTreeId`) and its folder on every call; this
+ * by its tree id (core workspace-id.ts `designTreeId`) and its folder on every call; this
  * machine keeps that pair as the tree's record (`create.json`, as a pin's
  * copy does), by which its boundary and a preview's request after a daemon
  * restart find it (stage.ts `sourceWorkspace`).
@@ -19,9 +19,9 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
 import { workspaceStateDir, workspacesDir } from "@cawco/core/paths/workspace";
-import { isDesignTree } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { z } from "zod";
 import { closeBoundary } from "./boundary/stop";
 import { removeTree } from "./remove-tree";
@@ -45,7 +45,7 @@ const recordedFolder = async (id: string): Promise<string | undefined> =>
  * folder isn't there: the hub writes it before it asks for its stage.
  */
 export const keepDesign = async (ref: WorkspaceRef): Promise<void> => {
-  if (!isDesignTree(ref.id)) {
+  if (workspaceIdKindOf(ref.id) !== "design") {
     throw new Error(`${ref.id} names no design folder.`);
   }
   if (!existsSync(ref.path)) {
@@ -72,7 +72,7 @@ export const keepDesign = async (ref: WorkspaceRef): Promise<void> => {
  * `unpin`). Nothing for an id no design tree has.
  */
 export const dropDesign = async (id: string): Promise<void> => {
-  if (!isDesignTree(id)) {
+  if (workspaceIdKindOf(id) !== "design") {
     return;
   }
   const path = await recordedFolder(id);
@@ -87,7 +87,7 @@ export const dropDesign = async (id: string): Promise<void> => {
 /** Every design tree recorded here whose folder is gone: its artifact went while this machine was away. */
 export const designsGone = async (): Promise<string[]> => {
   const ids = (await readdir(workspacesDir()).catch(() => [])).filter(
-    isDesignTree
+    (id) => workspaceIdKindOf(id) === "design"
   );
   const each = await Promise.all(
     ids.map(async (id) => {

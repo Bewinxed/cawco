@@ -15,7 +15,7 @@ import {
 } from "@cawco/core/process-identity";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { until } from "@cawco/core/until";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { membershipName } from "../boundary-policy";
 import { commandsOf } from "./exec";
 import type { Seen } from "./place-guard";
@@ -197,7 +197,7 @@ const workers = async (
   work: Map<number, Worker>;
 }> => {
   const ids = (only ?? (await readdir(workspacesDir()).catch(() => []))).filter(
-    (id) => !isPlace(id)
+    (id) => workspaceIdKindOf(id) !== "place"
   );
   const [lineage, lines] = await Promise.all([
     processLineage(),
@@ -394,7 +394,7 @@ export const endSessionWork = (
   if (process.platform !== "darwin") {
     return endWork(() => sessionWork(instanceId));
   }
-  if (!workspace || isPlace(workspace)) {
+  if (!workspace || workspaceIdKindOf(workspace) === "place") {
     return Promise.resolve({ ended: [], left: [] });
   }
   return endWorkspaceWork(instanceId, workspace);

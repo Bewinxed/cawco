@@ -13,7 +13,7 @@ import {
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { until } from "@cawco/core/until";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { membershipName } from "../boundary-policy";
 import { closeWorkspaceBrowsers } from "../browser/gate";
 import { closeGithubDoor } from "../github-door";
@@ -62,7 +62,7 @@ import {
  * whether it was settled.
  */
 export const settleGonePlace = async (ref: WorkspaceRef): Promise<boolean> => {
-  if (!isPlace(ref.id)) {
+  if (workspaceIdKindOf(ref.id) !== "place") {
     return false;
   }
   const folder = await stat(ref.path).catch(() => undefined);
@@ -205,7 +205,7 @@ const signalHeld = async (
 export const endUsers = async (
   ref: WorkspaceRef
 ): Promise<{ ended: string[]; left: string[] }> => {
-  if (isPlace(ref.id)) {
+  if (workspaceIdKindOf(ref.id) === "place") {
     return { ended: [], left: [] };
   }
   const users = async () => {
@@ -307,7 +307,7 @@ const closeAll = async (ref: WorkspaceRef): Promise<void> => {
   // person's folder alone, and nothing there is the workspace's.
   if (
     process.platform === "linux" &&
-    !isPlace(ref.id) &&
+    workspaceIdKindOf(ref.id) === "clone" &&
     ownFolderSync(ref.id, ref.path)
   ) {
     if (await sandboxesGone(inners)) {
