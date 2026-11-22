@@ -33,7 +33,9 @@
    * - `segment`: a segment of a segmented group that opens what the group
    *   has no room for (the repository picker's "+N" owners): the kit's
    *   segment (tabs/thumb), pressed with the tint as a toggle item is, its
-   *   groove hover held while it is open, its words numerals.
+   *   groove hover held while it is open, its words numerals;
+   *   `segment-compact` on the compact segment, beside compact toggle
+   *   items.
    */
   export const popoverTriggerVariants = tv({
     variants: {
@@ -51,6 +53,7 @@
         swatch:
           "pointer-hit grid place-items-center rounded-xs outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-1",
         segment: `${segmentedVariants().segment()} num press-tint focus-inset shrink-0 aria-expanded:bg-groove-hover`,
+        "segment-compact": `${segmentedVariants({ compact: true }).segment()} num press-tint focus-inset shrink-0 aria-expanded:bg-groove-hover`,
         meter:
           "mark-line flex h-c-bar-item items-center gap-space-2 rounded-sm px-space-2 text-ink-muted type-label tabular-nums transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover data-compacting:text-ink-strong data-critical:not-data-compacting:text-error-9 data-warn:not-data-critical:not-data-compacting:text-warning-9",
       },

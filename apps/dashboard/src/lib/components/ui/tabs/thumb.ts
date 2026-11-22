@@ -44,6 +44,16 @@ export const segmentedVariants = tv({
     segment:
       "relative inline-flex h-(--item) items-center justify-center gap-1.5 rounded-(--shape) px-c-segment-pad-x mark-line py-0 font-sans text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control hover:not-data-[state=active]:not-data-[state=on]:bg-groove-hover data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
   },
+  variants: {
+    /**
+     * A segment carrying a mark and a count beside its words (the
+     * repository picker's owner chips): its side room the compact pad, its
+     * parts the scale's smallest step apart.
+     */
+    compact: {
+      true: { segment: "gap-space-1 px-c-segment-pad-x-compact" },
+    },
+  },
 });
 
 /**
